@@ -1,0 +1,19 @@
+[project]
+name = "dotfiles"
+channels = ["conda-forge"]
+# Use platforms provided by Chezmoi data
+platforms = {{ .platforms | toJson }}
+
+[dependencies]
+# Absolute latest stable Python
+python = "3.13"
+pip = "*"
+# Static analysis and quality tools
+ruff = "*"
+mypy = "*"
+vulture = "*"
+refurb = "*"
+pylint = "*"
+
+[environments]
+default = ["python"]

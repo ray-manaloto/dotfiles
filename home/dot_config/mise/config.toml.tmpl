@@ -1,0 +1,20 @@
+[tools]
+# Python comes from Mise's registries
+python = "latest"
+uv = "latest"
+pixi = "latest"
+bun = "latest"
+node = "latest"
+go = "latest"
+rust = "latest"
+zig = "latest"
+
+[settings]
+experimental = true
+auto_install = true
+asdf_compat = true
+
+[env]
+# Enforce system toolchains for low-level builds
+CC = "gcc"
+CXX = "g++"

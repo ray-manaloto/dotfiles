@@ -1,0 +1,10 @@
+# .zshenv - Basic environment variables
+# This file is managed by chezmoi.
+
+# Ensure ~/.local/bin and ~/.cargo/bin are in PATH
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+
+# mise environment
+if [ -x "$(command -v mise)" ]; then
+  eval "$(mise activate zsh)"
+fi

@@ -1,0 +1,29 @@
+{
+  "name": "Reproducible Dotfiles (AMD64)",
+  "containerName": "dotfiles-dev-container",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  // This should point to your GHCR image once built and pushed
+  "image": "ghcr.io/ray-manaloto/dotfiles-devcontainer:latest",
+  "runArgs": [
+    "--platform",
+    "linux/amd64"
+  ],
+  "containerEnv": {
+    "FORCE_PLATFORM": "linux-64"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/sshd:1": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python"
+      ]
+    }
+  },
+  "remoteUser": "vscode",
+  "containerUser": "vscode"
+}

@@ -1,0 +1,62 @@
+[project]
+name = "dotfiles-setup"
+version = "0.1.0"
+description = "Python orchestration library for dotfiles setup"
+requires-python = ">=3.13"
+dependencies = []
+
+[project.scripts]
+dotfiles-setup = "dotfiles_setup.main:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "D203", "D211", "D212", "D213", "COM812", "ISC001",
+    "T201", # Allow print statements for CLI output
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+
+[tool.pylint.MASTER]
+load-plugins = [
+    "pylint.extensions.docparams",
+    "pylint.extensions.mccabe",
+]
+
+[tool.pylint.MESSAGES_CONTROL]
+enable = ["all"]
+
+[tool.vulture]
+min_confidence = 80
+paths = ["src"]
+sort_by_size = true
+
+[tool.refurb]
+enable_all = true

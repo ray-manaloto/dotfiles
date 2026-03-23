@@ -1,0 +1,63 @@
+[tool.ruff]
+line-length = 88
+# Target absolute latest Python
+target-version = "py313" 
+
+[tool.ruff.lint]
+# Enable EVERY rule available in Ruff
+select = ["ALL"]
+# Only ignore mutually exclusive/conflicting formatting rules
+ignore = [
+    "D203", # one-blank-line-before-class
+    "D211", # no-blank-line-before-class
+    "D212", # multi-line-summary-first-line
+    "D213", # multi-line-summary-second-line
+    "COM812", # missing-trailing-comma (conflicts with formatter)
+    "ISC001", # single-line-implicit-string-concatenation (conflicts with formatter)
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.mccabe]
+# Code Complexity (Cyclomatic)
+max-complexity = 10
+
+[tool.mypy]
+# Total type safety targeting the latest Python
+python_version = "3.13"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+pretty = true
+show_error_codes = true
+
+[tool.pylint.MASTER]
+# Code Duplication & Deep Logic
+load-plugins = [
+    "pylint.extensions.docparams",
+    "pylint.extensions.mccabe",
+]
+
+[tool.pylint.MESSAGES_CONTROL]
+# Enforce all checks
+enable = ["all"]
+
+[tool.vulture]
+# Dead Code Detection
+min_confidence = 80
+paths = ["src"]
+sort_by_size = true
+
+[tool.refurb]
+# Code Modernization
+enable_all = true
