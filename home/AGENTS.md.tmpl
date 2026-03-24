@@ -1,0 +1,20 @@
+# Project Grounding: Reproducible Dotfiles
+
+## Target Architecture
+- Strictly **linux/amd64** for all containerized environments and builds.
+
+## Tech Stack
+- **Mise**: Runtime and tool manager.
+- **Chezmoi**: Dotfiles manager and orchestrator.
+- **Pixi**: Package management and environment isolation.
+- **UV**: Fast Python package installer and resolver.
+
+## Development Rules
+- **Zero-Bash Rule**: All non-trivial logic (environment detection, tool configuration, validation) must be implemented in **Python**. Bash is restricted to the initial bootstrap (install.sh).
+- **Quality Gates**: 
+    - **Ruff**: Must pass with zero skips/ignores (select = ["ALL"]).
+    - **Mypy**: Must pass with strict = true and zero skips.
+
+## Engineering Standards
+- Standardize on **Python 3.13**.
+- Every environment modification must be paired with an automated check in the audit module.

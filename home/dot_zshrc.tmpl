@@ -1,0 +1,18 @@
+# .zshrc - Managed by chezmoi
+
+# Load Mise environment
+if [ -x "$(command -v mise)" ]; then
+  eval "$(mise activate zsh)"
+fi
+
+# Load Starship prompt if installed
+if [ -x "$(command -v starship)" ]; then
+  eval "$(starship init zsh)"
+fi
+
+# aliases
+alias ll='eza -l --icons'
+alias la='eza -la --icons'
+alias g='git'
+alias lg='lazygit'
+alias c='chezmoi'

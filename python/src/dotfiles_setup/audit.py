@@ -204,8 +204,103 @@ class DevEnvironmentAuditor:
 
         return results
 
+    def audit_ai_agents(self) -> dict[str, Any]:
+        """Verify AI agent readiness.
+
+        Returns:
+            A dictionary containing AI agent status.
+        """
+        results = {}
+
+        # Claude
+        try:
+            res = ToolManager.run_command(["claude", "--version"], quiet=True)
+            results["claude_version"] = res.stdout.strip()
+            try:
+                ToolManager.run_command(["claude", "--help"], quiet=True)
+                results["claude_auth"] = "ok"
+                logger.info("claude: ok")
+            except SystemExit:
+                results["claude_auth"] = "failed"
+                logger.warning("claude: version ok, but help check failed")
+        except SystemExit:
+            results["claude_version"] = "failed"
+            results["claude_auth"] = "failed"
+            logger.error("claude: failed")
+
+        # Codex
+        try:
+            res = ToolManager.run_command(["codex", "--version"], quiet=True)
+            results["codex_version"] = res.stdout.strip()
+            try:
+                ToolManager.run_command(["codex", "login", "--status"], quiet=True)
+                results["codex_auth"] = "ok"
+                logger.info("codex: ok")
+            except SystemExit:
+                results["codex_auth"] = "failed"
+                logger.warning("codex: version ok, but auth failed")
+        except SystemExit:
+            results["codex_version"] = "failed"
+            results["codex_auth"] = "failed"
+            logger.error("codex: failed")
+
+        # Gemini
+        try:
+            res = ToolManager.run_command(["gemini", "--version"], quiet=True)
+            results["gemini_version"] = res.stdout.strip()
+            try:
+                ToolManager.run_command(["gemini", "--help"], quiet=True)
+                results["gemini_auth"] = "ok"
+                logger.info("gemini: ok")
+            except SystemExit:
+                results["gemini_auth"] = "failed"
+                logger.warning("gemini: version ok, but help check failed")
+        except SystemExit:
+            results["gemini_version"] = "failed"
+            results["gemini_auth"] = "failed"
+            logger.error("gemini: failed")
+
+        # GitHub Auth (for Copilot/extensions)
+        try:
+            ToolManager.run_command(["gh", "auth", "status"], quiet=True)
+            results["gh_auth"] = "ok"
+            logger.info("gh_auth: ok")
+        except SystemExit:
+            results["gh_auth"] = "failed"
+            logger.error("gh_auth: failed")
+
+        return results
+
+    def audit_shell_integration(self) -> dict[str, Any]:
+        """Verify that tools are reachable in a login shell.
+
+        Returns:
+            A dictionary containing shell integration status.
+        """
+        results = {}
+        # Simulate a login shell to verify .bashrc/.profile logic
+        shell_cmd = "bash -l -c 'which mise && which chezmoi && which uv'"
+        
+        try:
+            ToolManager.run_command(["bash", "-l", "-c", "which mise"], quiet=True)
+            results["bash_login_mise"] = "ok"
+            logger.info("bash_login_mise: ok")
+        except SystemExit:
+            results["bash_login_mise"] = "failed"
+            logger.error("bash_login_mise: failed")
+
+        try:
+            ToolManager.run_command(["bash", "-l", "-c", "chezmoi --version"], quiet=True)
+            results["bash_login_chezmoi"] = "ok"
+            logger.info("bash_login_chezmoi: ok")
+        except SystemExit:
+            results["bash_login_chezmoi"] = "failed"
+            logger.error("bash_login_chezmoi: failed")
+
+        return results
+
     def run_all(self) -> bool:
-        """Run all audit checks.
+        """Run all audit checks and print a summary report.
 
         Returns:
             True if all checks pass, False otherwise.
@@ -213,12 +308,25 @@ class DevEnvironmentAuditor:
         identity = self.audit_identity()
         toolchain = self.audit_toolchain()
         ssh = self.audit_ssh()
+        ai_agents = self.audit_ai_agents()
+        shell = self.audit_shell_integration()
 
         identity_ok = all(v["match"] for v in identity.values())
         toolchain_ok = all(v == "ok" for v in toolchain.values())
         ssh_ok = all(ssh.values())
+        ai_agents_ok = all(v != "failed" for v in ai_agents.values())
+        shell_ok = all(v == "ok" for v in shell.values())
 
-        return identity_ok and toolchain_ok and ssh_ok
+        logger.info("-" * 40)
+        logger.info("Audit Summary:")
+        logger.info("Identity:  %s", "PASS" if identity_ok else "FAIL")
+        logger.info("Toolchain: %s", "PASS" if toolchain_ok else "FAIL")
+        logger.info("SSH:       %s", "PASS" if ssh_ok else "FAIL")
+        logger.info("AI Agents: %s", "PASS" if ai_agents_ok else "FAIL")
+        logger.info("Shell:     %s", "PASS" if shell_ok else "FAIL")
+        logger.info("-" * 40)
+
+        return identity_ok and toolchain_ok and ssh_ok and ai_agents_ok and shell_ok
 
 
 def main() -> None:

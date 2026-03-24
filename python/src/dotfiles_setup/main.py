@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 from typing import ClassVar
 
+from dotfiles_setup.ai import AIOrchestrator
 from dotfiles_setup.audit import DevEnvironmentAuditor, ToolManager
 from dotfiles_setup.docker import DevContainerManager
 
@@ -83,6 +84,12 @@ def setup_parser() -> argparse.ArgumentParser:
         help="Audit the development environment"
     )
 
+    # ai-setup command
+    subparsers.add_parser(
+        "ai-setup",
+        help="Install Claude Code and AI extensions"
+    )
+
     # docker subcommands
     docker_parser = subparsers.add_parser(
         "docker",
@@ -139,6 +146,10 @@ def main() -> None:
         auditor = DevEnvironmentAuditor()
         if not auditor.run_all():
             raise SystemExit(1)
+    elif args.command == "ai-setup":
+        EnvironmentValidator.validate()
+        orchestrator = AIOrchestrator()
+        orchestrator.run_all()
     elif args.command == "docker":
         handle_docker(args, project_root)
     elif args.command == "version":

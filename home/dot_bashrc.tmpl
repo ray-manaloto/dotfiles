@@ -1,0 +1,17 @@
+# .bashrc - Managed by chezmoi
+
+# Ensure ~/.local/bin and ~/.cargo/bin are in PATH
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+
+# Load Mise environment
+if [ -x "$(command -v mise)" ]; then
+  eval "$(mise activate bash)"
+fi
+
+# If not running interactively, don't do anything else
+[[ $- != *i* ]] && return
+
+# Load Pixi completions/env if needed
+if [ -x "$(command -v pixi)" ]; then
+  export PATH="$HOME/.pixi/bin:$PATH"
+fi
