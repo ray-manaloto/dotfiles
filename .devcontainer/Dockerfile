@@ -19,6 +19,7 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     git \
     ca-certificates \
     sudo \
+    zsh \
     build-essential \
     libssl-dev \
     zlib1g-dev \
@@ -54,6 +55,9 @@ COPY --chown=$USERNAME:$USERNAME . /home/$USERNAME/.local/share/chezmoi
 # Bootstrap Mise and hand off to Chezmoi
 # The install.sh script is kept to the absolute minimum
 RUN cd /home/$USERNAME/.local/share/chezmoi && bash install.sh --local
+
+# Explicitly ensure all Mise tools are installed and shims are active
+RUN /home/$USERNAME/.local/bin/mise install --yes
 
 # Declarative PATH enforcement
 ENV PATH="/home/$USERNAME/.local/bin:/home/$USERNAME/.local/share/mise/shims:/home/$USERNAME/.cargo/bin:${PATH}"

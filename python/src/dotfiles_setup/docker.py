@@ -33,66 +33,34 @@ class DevContainerManager:
         )
 
     def build(self) -> None:
-        """Build the AMD64 image locally."""
-        logger.info("Building AMD64 devcontainer image...")
-
-        user = os.environ.get("USER") or Path.home().name
-        uid = os.getuid()
-        gid = os.getgid()
-
+        """Build the devcontainer using the official CLI."""
+        logger.info("Building devcontainer image...")
         cmd = [
-            "docker", "build",
-            "--platform", "linux/amd64",
-            "-t", self.image_name,
-            "-f", str(self.dockerfile),
-            "--build-arg", f"USERNAME={user}",
-            "--build-arg", f"USER_UID={uid}",
-            "--build-arg", f"USER_GID={gid}",
-            str(self.project_root),
+            "devcontainer", "build",
+            "--workspace-folder", str(self.project_root),
+            "--image-name", self.image_name
         ]
         subprocess.run(cmd, check=True)  # noqa: S603
 
     def run(self) -> None:
-        """Start the devcontainer in the background."""
+        """Start the devcontainer using the official CLI."""
         logger.info("Starting devcontainer...")
-        # Remove old instance if exists
+        # Ensure any old instances are gone
         subprocess.run(
             ["docker", "rm", "-f", self.CONTAINER_NAME],
             capture_output=True,
             check=False,
         )
-
-        user = os.environ.get("USER") or Path.home().name
-        uid = os.getuid()
-        gid = os.getgid()
-
+        
         cmd = [
-            "docker", "run", "-d",
-            "--name", self.CONTAINER_NAME,
-            "--platform", "linux/amd64",
-            "-v", f"{self.project_root}:/home/{user}/.local/share/chezmoi",
-            "-e", f"EXPECTED_USER={user}",
-            "-e", f"EXPECTED_UID={uid}",
-            "-e", f"EXPECTED_GID={gid}",
-            "-u", user,
+            "devcontainer", "up",
+            "--workspace-folder", str(self.project_root),
+            "--remove-existing-container"
         ]
-
-        # SSH sync
-        ssh_auth_sock = os.environ.get("SSH_AUTH_SOCK")
-        if ssh_auth_sock:
-            cmd.extend([
-                "-e", "SSH_AUTH_SOCK",
-                "-v", f"{ssh_auth_sock}:{ssh_auth_sock}",
-            ])
-
-        cmd.extend([
-            self.image_name,
-            "tail", "-f", "/dev/null",
-        ])
         subprocess.run(cmd, check=True)  # noqa: S603
 
     def test(self) -> None:
-        """Run functional tests inside the container."""
+        """Run functional tests inside the container using the official CLI."""
         logger.info("Running functional tests inside container...")
         user = os.environ.get("USER") or Path.home().name
         test_cmd = (
@@ -100,10 +68,8 @@ class DevContainerManager:
             "--with pytest pytest tests/test_bootstrap.py"
         )
         cmd = [
-            "docker", "exec",
-            "-u", user,
-            "-w", f"/home/{user}/.local/share/chezmoi",
-            self.CONTAINER_NAME,
+            "devcontainer", "exec",
+            "--workspace-folder", str(self.project_root),
             "bash", "-c", test_cmd,
         ]
         subprocess.run(cmd, check=True)  # noqa: S603

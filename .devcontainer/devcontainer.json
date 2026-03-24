@@ -1,17 +1,15 @@
 {
   "name": "Reproducible Dotfiles (AMD64)",
-  "containerName": "dotfiles-dev-${localEnv:USER}",
+  "containerName": "dotfiles-dev-container",
   "build": {
     "dockerfile": "Dockerfile",
     "context": "..",
     "args": {
       "USERNAME": "${localEnv:USER}",
-      "USER_UID": "${localEnv:UID:-1000}",
-      "USER_GID": "${localEnv:GID:-1000}"
+      "USER_UID": "${localEnv:UID:1000}",
+      "USER_GID": "${localEnv:GID:1000}"
     }
   },
-  // This should point to your GHCR image once built and pushed
-  "image": "ghcr.io/ray-manaloto/dotfiles-devcontainer:latest",
   "runArgs": [
     "--platform",
     "linux/amd64"
