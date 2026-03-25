@@ -6,9 +6,12 @@ import argparse
 import getpass
 import logging
 import os
+import re
+import shutil
 import subprocess
 import sys
-from typing import Any
+from pathlib import Path
+from typing import Any, ClassVar
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +40,7 @@ class ToolManager:
             SystemExit: If the command fails.
         """
         try:
-            return subprocess.run(  # noqa: S603
+            return subprocess.run(
                 cmd,
                 check=True,
                 capture_output=capture,
@@ -46,18 +49,18 @@ class ToolManager:
         except subprocess.CalledProcessError as e:
             if not quiet:
                 if capture:
-                    logger.error(
+                    logger.exception(
                         "Error executing command %s: %s\n%s",
                         " ".join(cmd),
                         e.stdout or "",
                         e.stderr or "",
                     )
                 else:
-                    logger.error("Error executing command %s", " ".join(cmd))
+                    logger.exception("Error executing command %s", " ".join(cmd))
             raise SystemExit(e.returncode) from e
         except FileNotFoundError:
             if not quiet:
-                logger.error("Command not found: %s", cmd[0])
+                logger.exception("Command not found: %s", cmd[0])
             raise SystemExit(1) from None
 
     def query_latest(self, tool: str) -> str:
@@ -72,8 +75,74 @@ class ToolManager:
         result = self.run_command(["mise", "latest", tool])
         return result.stdout.strip()
 
+    def sync_versions(self, project_root: Path) -> None:
+        """Update the Mise configuration template with latest versions.
+
+        Args:
+            project_root: The project root path.
+        """
+        config_path = project_root / "home" / "dot_config" / "mise" / "config.toml.tmpl"
+        if not config_path.exists():
+            logger.error("Mise config template not found: %s", config_path)
+            return
+
+        content = config_path.read_text()
+
+        # Find the [tools] section
+        tools_match = re.search(r"\[tools\](.*?)(?=\n\[|$)", content, re.DOTALL)
+        if not tools_match:
+            logger.error("[tools] section not found in %s", config_path)
+            return
+
+        tools_section = tools_match.group(1)
+        updated_section = tools_section
+
+        # Find all tool = "version" lines
+        # This regex handles both tool = "version" and "tool" = "version"
+        tool_pattern = re.compile(
+            r'^(\"?[a-zA-Z0-9:@/._-]+\"?) = \"([0-9.]+)\"', re.MULTILINE
+        )
+
+        for match in tool_pattern.finditer(tools_section):
+            tool_raw = match.group(1)
+            # Remove quotes for mise command if present
+            tool_name = tool_raw.strip('"')
+            current_version = match.group(2)
+
+            try:
+                logger.info("Querying latest version for %s...", tool_name)
+                latest_version = self.query_latest(tool_name)
+                if latest_version != current_version:
+                    logger.info(
+                        "Updating %s: %s -> %s",
+                        tool_name,
+                        current_version,
+                        latest_version,
+                    )
+                    # Replace only this specific line in the updated_section
+                    old_line = f'{tool_raw} = "{current_version}"'
+                    new_line = f'{tool_raw} = "{latest_version}"'
+                    updated_section = updated_section.replace(old_line, new_line)
+                else:
+                    logger.info(
+                        "%s is already up to date (%s)", tool_name, current_version
+                    )
+            except SystemExit:
+                logger.warning("Could not query latest version for %s", tool_name)
+
+        # Replace the old tools section with the updated one
+        new_content = content.replace(tools_section, updated_section)
+        config_path.write_text(new_content)
+        logger.info("Mise config template updated successfully.")
+
     def install(self) -> None:
         """Execute mise install and pixi install."""
+        # Enforce Mise strictness
+        os.environ["MISE_STRICT"] = "1"
+
+        logger.info("Installing node with mise (prerequisite)...")
+        self.run_command(["mise", "install", "node"], capture=False)
+
         logger.info("Installing tools with mise...")
         self.run_command(["mise", "install"], capture=False)
 
@@ -87,6 +156,13 @@ class DevEnvironmentAuditor:
     Checks identity (UID/GID/Username), toolchain status, and SSH agent
     reachability.
     """
+
+    MANAGED_PREFIXES: ClassVar[list[str]] = [
+        str(Path.home() / ".local" / "bin"),
+        str(Path.home() / ".local" / "share" / "mise"),
+        str(Path.home() / ".pixi" / "bin"),
+        str(Path.home() / ".cargo" / "bin"),
+    ]
 
     def audit_identity(self) -> dict[str, Any]:
         """Check UID, GID, and Username.
@@ -131,6 +207,78 @@ class DevEnvironmentAuditor:
 
         return identity
 
+    def _audit_tool(
+        self,
+        name: str,
+        smoke_cmd: list[str],
+        input_data: str | None = None,
+    ) -> dict[str, Any]:
+        """Audit a single tool for capability and path.
+
+        Args:
+            name: The tool name.
+            smoke_cmd: The command to run for smoke testing.
+            input_data: Optional input data to pipe to the command.
+
+        Returns:
+            A dictionary with audit results.
+        """
+        # 1. Path check
+        tool_path = shutil.which(name) or "not found"
+
+        is_managed = any(
+            tool_path.startswith(prefix) for prefix in self.MANAGED_PREFIXES
+        )
+
+        # 2. Capability (Smoke Test)
+        try:
+            subprocess.run(
+                smoke_cmd,
+                input=input_data,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            capability = "ok"
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            capability = "failed"
+
+        return {
+            "path": tool_path,
+            "is_managed": is_managed,
+            "capability": capability,
+        }
+
+    def audit_environment(self) -> dict[str, Any]:
+        """Verify environment variables and PATH.
+
+        Returns:
+            A dictionary containing environment status.
+        """
+        home = Path.home()
+        managed_paths = [
+            str(home / ".local" / "bin"),
+            str(home / ".local" / "share" / "mise" / "shims"),
+        ]
+
+        path = os.environ.get("PATH", "")
+        path_list = path.split(os.pathsep)
+
+        results = {
+            "MISE_SHELL": os.environ.get("MISE_SHELL") is not None,
+            "MISE_STRICT": os.environ.get("MISE_STRICT") == "1",
+            "PATH_managed": all(p in path_list for p in managed_paths),
+            "SHELL": os.environ.get("SHELL") is not None,
+        }
+
+        for key, val in results.items():
+            if val:
+                logger.info("Env %s: ok", key)
+            else:
+                logger.warning("Env %s: missing or incorrect", key)
+
+        return results
+
     def audit_toolchain(self) -> dict[str, Any]:
         """Run native doctor/check commands for the toolchain.
 
@@ -138,25 +286,56 @@ class DevEnvironmentAuditor:
             A dictionary containing toolchain status.
         """
         results = {}
-        tools = [
+
+        # Core toolchain checks
+        core_tools = [
             (["mise", "doctor"], "mise"),
             (["pixi", "info"], "pixi"),
             (["chezmoi", "verify"], "chezmoi"),
         ]
 
-        for cmd, name in tools:
+        for cmd, name in core_tools:
             try:
                 ToolManager.run_command(cmd)
                 results[name] = "ok"
                 logger.info("%s: ok", name)
             except SystemExit:
                 results[name] = "failed"
-                logger.error("%s: failed", name)
+                logger.error("%s: failed", name)  # noqa: TRY400
+
+        # High-rigor smoke tests
+        smoke_tests = [
+            ("fzf", ["fzf", "--filter", "test"], "test"),
+            ("rg", ["rg", "test"], "test"),
+            ("fd", ["fd", "--version"], None),
+            ("bat", ["bat", "--version"], None),
+            ("uv", ["uv", "--version"], None),
+            ("bun", ["bun", "--version"], None),
+            ("node", ["node", "--version"], None),
+            ("go", ["go", "version"], None),
+            ("rustc", ["rustc", "--version"], None),
+            ("bats", ["bats", "--version"], None),
+        ]
+
+        for name, cmd, input_data in smoke_tests:
+            res = self._audit_tool(name, cmd, input_data)
+            results[f"{name}_rigor"] = (
+                "ok" if res["capability"] == "ok" and res["is_managed"] else "failed"
+            )
+            if results[f"{name}_rigor"] == "ok":
+                logger.info("%s rigor: ok (path: %s)", name, res["path"])
+            else:
+                logger.error(
+                    "%s rigor: failed (path: %s, capability: %s)",
+                    name,
+                    res["path"],
+                    res["capability"],
+                )
 
         return results
 
     def audit_ssh(self) -> dict[str, Any]:
-        """Verify SSH agent reachability.
+        """Verify SSH agent reachability and round-trip connectivity.
 
         Returns:
             A dictionary containing SSH status.
@@ -166,6 +345,7 @@ class DevEnvironmentAuditor:
             "ssh_auth_sock": ssh_auth_sock is not None,
             "agent_keys": False,
             "connectivity": False,
+            "round_trip": False,
         }
 
         if not ssh_auth_sock:
@@ -200,9 +380,114 @@ class DevEnvironmentAuditor:
                 results["connectivity"] = True
                 logger.info("SSH connectivity: ok")
             else:
-                logger.error("SSH connectivity: failed (exit code %s)", e.code)
+                logger.error("SSH connectivity: failed (exit code %s)", e.code)  # noqa: TRY400
+
+        # Round-trip check to localhost:2222
+        try:
+            ToolManager.run_command(
+                [
+                    "ssh",
+                    "-p",
+                    "2222",
+                    "-o",
+                    "BatchMode=yes",
+                    "-o",
+                    "ConnectTimeout=5",
+                    "localhost",
+                    "true",
+                ],
+                quiet=True,
+            )
+            results["round_trip"] = True
+            logger.info("SSH round-trip: ok")
+        except SystemExit:
+            results["round_trip"] = False
+            logger.error("SSH round-trip: failed")  # noqa: TRY400
 
         return results
+
+    def _audit_claude(self) -> dict[str, str]:
+        """Audit Claude AI agent."""
+        try:
+            if not shutil.which("claude"):
+                return {"claude_version": "failed", "claude_auth": "failed"}
+
+            res = ToolManager.run_command(["claude", "--version"], quiet=True)
+            version = res.stdout.strip()
+
+            try:
+                help_res = ToolManager.run_command(["claude", "--help"], quiet=True)
+            except SystemExit:
+                logger.warning("claude: version ok, but help check failed")
+                return {"claude_version": version, "claude_auth": "failed"}
+            else:
+                output = (help_res.stdout + help_res.stderr).lower()
+                auth_fail_terms = [
+                    "not logged in",
+                    "expired",
+                    "unauthorized",
+                    "login required",
+                ]
+                if any(term in output for term in auth_fail_terms):
+                    logger.warning("claude: login required or session expired")
+                    return {"claude_version": version, "claude_auth": "failed"}
+                logger.info("claude: ok")
+                return {"claude_version": version, "claude_auth": "ok"}
+        except SystemExit:
+            logger.error("claude: failed")  # noqa: TRY400
+            return {"claude_version": "failed", "claude_auth": "failed"}
+
+    def _audit_codex(self) -> dict[str, str]:
+        """Audit Codex AI agent."""
+        try:
+            res = ToolManager.run_command(["codex", "--version"], quiet=True)
+            version = res.stdout.strip()
+            try:
+                status_res = ToolManager.run_command(
+                    ["codex", "login", "--status"], quiet=True
+                )
+            except SystemExit:
+                logger.warning("codex: version ok, but auth failed")
+                return {"codex_version": version, "codex_auth": "failed"}
+            else:
+                output = (status_res.stdout + status_res.stderr).lower()
+                if "logged in" in output or "active" in output:
+                    logger.info("codex: ok")
+                    return {"codex_version": version, "codex_auth": "ok"}
+                logger.warning("codex: not logged in")
+                return {"codex_version": version, "codex_auth": "failed"}
+        except SystemExit:
+            logger.error("codex: failed")  # noqa: TRY400
+            return {"codex_version": "failed", "codex_auth": "failed"}
+
+    def _audit_gemini(self) -> dict[str, str]:
+        """Audit Gemini AI agent."""
+        try:
+            res = ToolManager.run_command(["gemini", "--version"], quiet=True)
+            version = res.stdout.strip()
+            output = (res.stdout + res.stderr).lower()
+            auth_terms = ["auth", "login", "credential", "token"]
+            if "warning" in output and any(term in output for term in auth_terms):
+                logger.warning("gemini: auth warning detected in version output")
+                return {"gemini_version": version, "gemini_auth": "failed"}
+
+            try:
+                help_res = ToolManager.run_command(["gemini", "--help"], quiet=True)
+            except SystemExit:
+                logger.warning("gemini: version ok, but help check failed")
+                return {"gemini_version": version, "gemini_auth": "failed"}
+            else:
+                help_output = (help_res.stdout + help_res.stderr).lower()
+                if "warning" in help_output and any(
+                    term in help_output for term in auth_terms
+                ):
+                    logger.warning("gemini: auth warning detected in help output")
+                    return {"gemini_version": version, "gemini_auth": "failed"}
+                logger.info("gemini: ok")
+                return {"gemini_version": version, "gemini_auth": "ok"}
+        except SystemExit:
+            logger.error("gemini: failed")  # noqa: TRY400
+            return {"gemini_version": "failed", "gemini_auth": "failed"}
 
     def audit_ai_agents(self) -> dict[str, Any]:
         """Verify AI agent readiness.
@@ -211,54 +496,9 @@ class DevEnvironmentAuditor:
             A dictionary containing AI agent status.
         """
         results = {}
-
-        # Claude
-        try:
-            res = ToolManager.run_command(["claude", "--version"], quiet=True)
-            results["claude_version"] = res.stdout.strip()
-            try:
-                ToolManager.run_command(["claude", "--help"], quiet=True)
-                results["claude_auth"] = "ok"
-                logger.info("claude: ok")
-            except SystemExit:
-                results["claude_auth"] = "failed"
-                logger.warning("claude: version ok, but help check failed")
-        except SystemExit:
-            results["claude_version"] = "failed"
-            results["claude_auth"] = "failed"
-            logger.error("claude: failed")
-
-        # Codex
-        try:
-            res = ToolManager.run_command(["codex", "--version"], quiet=True)
-            results["codex_version"] = res.stdout.strip()
-            try:
-                ToolManager.run_command(["codex", "login", "--status"], quiet=True)
-                results["codex_auth"] = "ok"
-                logger.info("codex: ok")
-            except SystemExit:
-                results["codex_auth"] = "failed"
-                logger.warning("codex: version ok, but auth failed")
-        except SystemExit:
-            results["codex_version"] = "failed"
-            results["codex_auth"] = "failed"
-            logger.error("codex: failed")
-
-        # Gemini
-        try:
-            res = ToolManager.run_command(["gemini", "--version"], quiet=True)
-            results["gemini_version"] = res.stdout.strip()
-            try:
-                ToolManager.run_command(["gemini", "--help"], quiet=True)
-                results["gemini_auth"] = "ok"
-                logger.info("gemini: ok")
-            except SystemExit:
-                results["gemini_auth"] = "failed"
-                logger.warning("gemini: version ok, but help check failed")
-        except SystemExit:
-            results["gemini_version"] = "failed"
-            results["gemini_auth"] = "failed"
-            logger.error("gemini: failed")
+        results.update(self._audit_claude())
+        results.update(self._audit_codex())
+        results.update(self._audit_gemini())
 
         # GitHub Auth (for Copilot/extensions)
         try:
@@ -267,7 +507,7 @@ class DevEnvironmentAuditor:
             logger.info("gh_auth: ok")
         except SystemExit:
             results["gh_auth"] = "failed"
-            logger.error("gh_auth: failed")
+            logger.error("gh_auth: failed")  # noqa: TRY400
 
         return results
 
@@ -279,23 +519,42 @@ class DevEnvironmentAuditor:
         """
         results = {}
         # Simulate a login shell to verify .bashrc/.profile logic
-        shell_cmd = "bash -l -c 'which mise && which chezmoi && which uv'"
-        
         try:
             ToolManager.run_command(["bash", "-l", "-c", "which mise"], quiet=True)
             results["bash_login_mise"] = "ok"
             logger.info("bash_login_mise: ok")
         except SystemExit:
             results["bash_login_mise"] = "failed"
-            logger.error("bash_login_mise: failed")
+            logger.error("bash_login_mise: failed")  # noqa: TRY400
 
         try:
-            ToolManager.run_command(["bash", "-l", "-c", "chezmoi --version"], quiet=True)
+            ToolManager.run_command(
+                ["bash", "-l", "-c", "chezmoi --version"], quiet=True
+            )
             results["bash_login_chezmoi"] = "ok"
             logger.info("bash_login_chezmoi: ok")
         except SystemExit:
             results["bash_login_chezmoi"] = "failed"
-            logger.error("bash_login_chezmoi: failed")
+            logger.error("bash_login_chezmoi: failed")  # noqa: TRY400
+
+        # Simulate a login shell to verify .zshrc/.zprofile logic
+        try:
+            ToolManager.run_command(["zsh", "-l", "-c", "which mise"], quiet=True)
+            results["zsh_login_mise"] = "ok"
+            logger.info("zsh_login_mise: ok")
+        except SystemExit:
+            results["zsh_login_mise"] = "failed"
+            logger.error("zsh_login_mise: failed")  # noqa: TRY400
+
+        try:
+            ToolManager.run_command(
+                ["zsh", "-l", "-c", "chezmoi --version"], quiet=True
+            )
+            results["zsh_login_chezmoi"] = "ok"
+            logger.info("zsh_login_chezmoi: ok")
+        except SystemExit:
+            results["zsh_login_chezmoi"] = "failed"
+            logger.error("zsh_login_chezmoi: failed")  # noqa: TRY400
 
         return results
 
@@ -306,27 +565,50 @@ class DevEnvironmentAuditor:
             True if all checks pass, False otherwise.
         """
         identity = self.audit_identity()
+        environment = self.audit_environment()
         toolchain = self.audit_toolchain()
         ssh = self.audit_ssh()
         ai_agents = self.audit_ai_agents()
         shell = self.audit_shell_integration()
 
-        identity_ok = all(v["match"] for v in identity.values())
-        toolchain_ok = all(v == "ok" for v in toolchain.values())
-        ssh_ok = all(ssh.values())
-        ai_agents_ok = all(v != "failed" for v in ai_agents.values())
-        shell_ok = all(v == "ok" for v in shell.values())
+        categories = {
+            "Identity": identity,
+            "Environment": environment,
+            "Toolchain": toolchain,
+            "SSH": ssh,
+            "AI Agents": ai_agents,
+            "Shell": shell,
+        }
+
+        summary = {}
+        all_ok = True
+
+        for name, results in categories.items():
+            passed = 0
+            total = len(results)
+            for v in results.values():
+                if isinstance(v, dict) and "match" in v:
+                    if v["match"]:
+                        passed += 1
+                elif (
+                    v == "ok"
+                    or v is True
+                    or (isinstance(v, str) and v != "failed")
+                ):
+                    passed += 1
+
+            summary[name] = (passed, total)
+            if passed < total:
+                all_ok = False
 
         logger.info("-" * 40)
         logger.info("Audit Summary:")
-        logger.info("Identity:  %s", "PASS" if identity_ok else "FAIL")
-        logger.info("Toolchain: %s", "PASS" if toolchain_ok else "FAIL")
-        logger.info("SSH:       %s", "PASS" if ssh_ok else "FAIL")
-        logger.info("AI Agents: %s", "PASS" if ai_agents_ok else "FAIL")
-        logger.info("Shell:     %s", "PASS" if shell_ok else "FAIL")
+        for name, (passed, total) in summary.items():
+            status = "PASS" if passed == total else "FAIL"
+            logger.info("%-12s: %d/%d %s", name, passed, total, status)
         logger.info("-" * 40)
 
-        return identity_ok and toolchain_ok and ssh_ok and ai_agents_ok and shell_ok
+        return all_ok
 
 
 def main() -> None:

@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import logging
 import platform
-import subprocess
 import sys
 from pathlib import Path
 from typing import ClassVar
@@ -66,6 +65,12 @@ def setup_parser() -> argparse.ArgumentParser:
     )
     query_parser.add_argument("tool", help="Tool name (e.g., python, node, go)")
 
+    # sync-versions command
+    subparsers.add_parser(
+        "sync-versions",
+        help="Update Mise configuration template with latest versions"
+    )
+
     # install command
     subparsers.add_parser(
         "install",
@@ -79,10 +84,11 @@ def setup_parser() -> argparse.ArgumentParser:
     )
 
     # audit command
-    subparsers.add_parser(
+    audit_parser = subparsers.add_parser(
         "audit",
         help="Audit the development environment"
     )
+    audit_parser.add_argument("--all", action="store_true", help="Run all audit checks")
 
     # ai-setup command
     subparsers.add_parser(
@@ -158,6 +164,9 @@ def main() -> None:
         EnvironmentValidator.validate()
         latest = manager.query_latest(args.tool)
         sys.stdout.write(f"{latest}\n")
+    elif args.command == "sync-versions":
+        EnvironmentValidator.validate()
+        manager.sync_versions(project_root)
     elif args.command == "install":
         EnvironmentValidator.validate()
         manager.install()

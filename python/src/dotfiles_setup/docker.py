@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import subprocess
-from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -32,56 +36,98 @@ class DevContainerManager:
             or self.DEFAULT_IMAGE_NAME
         )
 
+    def _get_bin(self, name: str) -> str:
+        """Get the absolute path of a binary."""
+        path = shutil.which(name)
+        if not path:
+            msg = f"Required binary '{name}' not found in PATH"
+            raise RuntimeError(msg)
+        return path
+
     def build(self) -> None:
         """Build the devcontainer using the official CLI."""
         logger.info("Building devcontainer image...")
+        devcontainer_bin = self._get_bin("devcontainer")
         cmd = [
-            "devcontainer", "build",
+            devcontainer_bin, "build",
             "--workspace-folder", str(self.project_root),
             "--image-name", self.image_name
         ]
-        subprocess.run(cmd, check=True)  # noqa: S603
+
+        # Capture build output and scan for warnings/errors
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+
+        full_output = []
+        if process.stdout:
+            for line in process.stdout:
+                # Stream to stdout for visibility
+                print(line, end="", flush=True)
+                full_output.append(line)
+
+        process.wait()
+
+        if process.returncode != 0:
+            raise subprocess.CalledProcessError(process.returncode, cmd)
+
+        output_text = "".join(full_output)
+        # Only fail on explicit ERROR messages, allowing common installation warnings
+        forbidden_patterns = ["ERROR:"]
+        for pattern in forbidden_patterns:
+            if pattern in output_text:
+                msg = f"Build failed due to detected '{pattern}' in logs."
+                logger.error(msg)
+                raise RuntimeError(msg)
 
     def run(self) -> None:
         """Start the devcontainer using the official CLI."""
         logger.info("Starting devcontainer...")
+        docker_bin = self._get_bin("docker")
         # Ensure any old instances are gone
         subprocess.run(
-            ["docker", "rm", "-f", self.CONTAINER_NAME],
+            [docker_bin, "rm", "-f", self.CONTAINER_NAME],
             capture_output=True,
             check=False,
         )
-        
+
+        devcontainer_bin = self._get_bin("devcontainer")
         cmd = [
-            "devcontainer", "up",
+            devcontainer_bin, "up",
             "--workspace-folder", str(self.project_root),
             "--remove-existing-container"
         ]
-        subprocess.run(cmd, check=True)  # noqa: S603
+        subprocess.run(cmd, check=True)
 
     def test(self) -> None:
         """Run functional tests inside the container using the official CLI."""
         logger.info("Running functional tests inside container...")
-        user = os.environ.get("USER") or Path.home().name
+        devcontainer_bin = self._get_bin("devcontainer")
         test_cmd = (
-            f"/home/{user}/.local/share/mise/shims/uv run "
-            "--with pytest pytest tests/test_bootstrap.py"
+            "~/.local/share/mise/shims/uv run "
+            "--with pytest pytest tests/*.py && "
+            "bats tests/infra/*.bats"
         )
         cmd = [
-            "devcontainer", "exec",
+            devcontainer_bin, "exec",
             "--workspace-folder", str(self.project_root),
             "bash", "-c", test_cmd,
         ]
-        subprocess.run(cmd, check=True)  # noqa: S603
+        subprocess.run(cmd, check=True)
 
     def stop(self) -> None:
         """Stop and remove the container."""
         logger.info("Stopping devcontainer...")
+        docker_bin = self._get_bin("docker")
         subprocess.run(
-            ["docker", "stop", self.CONTAINER_NAME],
+            [docker_bin, "stop", self.CONTAINER_NAME],
             check=False,
-        )  # noqa: S603
+        )
         subprocess.run(
-            ["docker", "rm", self.CONTAINER_NAME],
+            [docker_bin, "rm", self.CONTAINER_NAME],
             check=False,
-        )  # noqa: S603
+        )

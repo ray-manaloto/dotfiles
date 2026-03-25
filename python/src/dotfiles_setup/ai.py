@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import subprocess
 from typing import Protocol
 
 from dotfiles_setup.audit import ToolManager
@@ -66,9 +65,6 @@ class AIOrchestrator:
         Currently handles gh-copilot if needed in the future.
         """
         logger.info("Setting up AI extensions...")
-        # Placeholder for future extensions like gh-copilot
-        # self.tool_manager.run_command(["gh", "extension", "install", "github/gh-copilot"], capture=False)
-        pass
 
     def run_all(self) -> None:
         """Run all AI setup steps."""

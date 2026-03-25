@@ -9,6 +9,9 @@ def main():
     Chezmoi lifecycle script to install tools using the dotfiles-setup Python library.
     This script is rendered by Chezmoi and executed after files are applied.
     """
+    # Enforce Mise strictness
+    os.environ["MISE_STRICT"] = "1"
+
     # The source directory of chezmoi is provided by the template variable
     source_dir = Path("{{ .chezmoi.sourceDir }}")
     
@@ -21,8 +24,6 @@ def main():
         print(f"Error: Python project directory not found at {python_project_dir}", file=sys.stderr)
         sys.exit(1)
     
-    print(f"Running dotfiles-setup install from {python_project_dir}...")
-    
     # Ensure ~/.local/bin and mise shims are in PATH for mise and uv
     home = Path.home()
     local_bin = home / ".local" / "bin"
@@ -34,29 +35,44 @@ def main():
     if str(mise_shims) not in os.environ.get("PATH", ""):
         os.environ["PATH"] = f"{mise_shims}:{os.environ['PATH']}"
             
-    # Use 'uv run' to execute the 'dotfiles-setup' library.
-    # We use --project to specify the directory containing pyproject.toml.
-    # The 'install' command triggers mise and pixi installations.
-    try:
-        # Attempt to run uv directly
-        subprocess.run(
-            ["uv", "run", "--project", str(python_project_dir), "dotfiles-setup", "install"],
-            check=True
-        )
-    except FileNotFoundError:
-        # If uv is not in PATH, try to use mise to run it
+    def run_dotfiles_setup(command, args=None):
+        """Helper to run dotfiles-setup commands via uv or mise."""
+        cmd = ["uv", "run", "--project", str(python_project_dir), "dotfiles-setup", command]
+        if args:
+            cmd.extend(args)
+            
         try:
-            print("uv not found in PATH, attempting to run via mise...", file=sys.stderr)
-            subprocess.run(
-                ["mise", "exec", "--", "uv", "run", "--project", str(python_project_dir), "dotfiles-setup", "install"],
-                check=True
-            )
-        except (subprocess.CalledProcessError, FileNotFoundError) as e:
-            print(f"Error: 'uv' or 'mise' command not found or failed. {e}", file=sys.stderr)
-            sys.exit(1)
-    except subprocess.CalledProcessError as e:
-        print(f"Error: dotfiles-setup install failed with exit code {e.returncode}", file=sys.stderr)
-        sys.exit(e.returncode)
+            # Attempt to run uv directly
+            subprocess.run(cmd, check=True)
+            return True
+        except FileNotFoundError:
+            # If uv is not in PATH, try to use mise to run it
+            try:
+                print(f"uv not found in PATH, attempting to run '{command}' via mise...", file=sys.stderr)
+                mise_cmd = ["mise", "exec", "--"] + cmd
+                subprocess.run(mise_cmd, check=True)
+                return True
+            except (subprocess.CalledProcessError, FileNotFoundError) as e:
+                print(f"Error: 'uv' or 'mise' command not found or failed during '{command}'. {e}", file=sys.stderr)
+                return False
+        except subprocess.CalledProcessError as e:
+            print(f"Error: dotfiles-setup {command} failed with exit code {e.returncode}", file=sys.stderr)
+            return False
+
+    # 1. Install tools
+    print(f"Running dotfiles-setup install from {python_project_dir}...")
+    if not run_dotfiles_setup("install"):
+        sys.exit(1)
+        
+    # 2. AI Setup
+    print(f"Running dotfiles-setup ai-setup from {python_project_dir}...")
+    if not run_dotfiles_setup("ai-setup"):
+        print("Warning: dotfiles-setup ai-setup failed to run.", file=sys.stderr)
+
+    # 3. Audit environment
+    print(f"Running dotfiles-setup audit from {python_project_dir}...")
+    if not run_dotfiles_setup("audit"):
+        print("Warning: dotfiles-setup audit reported issues or failed to run.", file=sys.stderr)
 
 if __name__ == "__main__":
     main()

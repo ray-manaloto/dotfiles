@@ -6,8 +6,8 @@
     "context": "..",
     "args": {
       "USERNAME": "${localEnv:USER}",
-      "USER_UID": "${localEnv:UID:1000}",
-      "USER_GID": "${localEnv:GID:1000}"
+      "USER_UID": "${localEnv:UID}",
+      "USER_GID": "${localEnv:GID}"
     }
   },
   "runArgs": [
@@ -20,15 +20,29 @@
   "forwardAgent": true,
   "mounts": [
     "source=${localEnv:HOME}/.ssh/config,target=/home/${localEnv:USER}/.ssh/config,type=bind,readonly",
-    "source=${localEnv:HOME}/.ssh/known_hosts,target=/home/${localEnv:USER}/.ssh/known_hosts,type=bind,readonly"
+    "source=${localEnv:HOME}/.ssh/known_hosts,target=/home/${localEnv:USER}/.ssh/known_hosts,type=bind,readonly",
+    "source=${localEnv:HOME}/.ssh/authorized_keys,target=/home/${localEnv:USER}/.ssh/authorized_keys,type=bind,readonly",
+    "source=${localEnv:HOME}/.claude,target=/home/${localEnv:USER}/.claude,type=bind,readonly",
+    "source=${localEnv:HOME}/.codex,target=/home/${localEnv:USER}/.codex,type=bind,readonly",
+    "source=${localEnv:HOME}/.gemini,target=/home/${localEnv:USER}/.gemini,type=bind,readonly",
+    "source=${localEnv:HOME}/.config/gcloud,target=/home/${localEnv:USER}/.config/gcloud,type=bind,readonly"
   ],
   "features": {
-    "ghcr.io/devcontainers/features/sshd:1": {}
+    "ghcr.io/devcontainers/features/sshd:1": {
+      "user": "${localEnv:USER}"
+    }
   },
+  "forwardPorts": [
+    2222
+  ],
   "customizations": {
     "vscode": {
       "extensions": [
-        "ms-python.python"
+        "ms-python.python",
+        "mend.renovate-vscode",
+        "jkillian.vscode-bats",
+        "charliermarsh.ruff",
+        "tamasfe.even-better-toml"
       ]
     }
   },

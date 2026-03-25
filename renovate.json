@@ -1,0 +1,26 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard"
+  ],
+  "mise": {
+    "enabled": true
+  },
+  "packageRules": [
+    {
+      "matchPackageNames": ["bats-core"],
+      "groupName": "bats-core"
+    }
+  ],
+  "regexManagers": [
+    {
+      "fileMatch": ["(^|/)mise\\.toml$", "(^|/)config\\.toml\\.tmpl$"],
+      "matchStrings": [
+        "(?<packageName>[\\w-]+)\\s*=\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "asdf-registry"
+    }
+  ],
+  "enabledManagers": ["npm", "cargo", "go", "pipx", "mise"]
+}
