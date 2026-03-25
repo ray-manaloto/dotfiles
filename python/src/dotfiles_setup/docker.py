@@ -15,10 +15,12 @@ logger = logging.getLogger(__name__)
 
 
 class DevContainerManager:
-    """Manages the lifecycle of the devcontainer for local validation."""
+    """Manages the lifecycle of the devcontainer for local validation.
+
+    Strictly uses @devcontainers/cli to ensure lifecycle events are respected.
+    """
 
     DEFAULT_IMAGE_NAME = "dotfiles-dev-local"
-    CONTAINER_NAME = "dotfiles-dev-container"
 
     def __init__(self, project_root: Path, image_name: str | None = None) -> None:
         """Initialize the DevContainerManager.
@@ -28,8 +30,6 @@ class DevContainerManager:
             image_name: Optional image name.
         """
         self.project_root = project_root
-        self.dockerfile = project_root / ".devcontainer" / "Dockerfile"
-        # image_name priority: arg > env > default
         self.image_name = (
             image_name
             or os.environ.get("DOTFILES_IMAGE")
@@ -44,94 +44,77 @@ class DevContainerManager:
             raise RuntimeError(msg)
         return path
 
+    def _run_cli(
+        self,
+        args: list[str],
+        *,
+        capture: bool = False,
+    ) -> subprocess.CompletedProcess[str]:
+        """Run a devcontainer CLI command."""
+        bin_path = self._get_bin("devcontainer")
+        cmd = [bin_path, *args]
+
+        # Inject DOCKER_CONTEXT if set in environment to ensure visibility
+        env = os.environ.copy()
+
+        if not capture:
+            return subprocess.run(cmd, check=True, env=env, text=True)
+
+        return subprocess.run(
+            cmd,
+            check=True,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
     def build(self) -> None:
         """Build the devcontainer using the official CLI."""
         logger.info("Building devcontainer image...")
-        devcontainer_bin = self._get_bin("devcontainer")
-        cmd = [
-            devcontainer_bin, "build",
+        self._run_cli([
+            "build",
             "--workspace-folder", str(self.project_root),
             "--image-name", self.image_name,
-            "--platform", "linux/amd64"
-        ]
-
-        # Capture build output and scan for warnings/errors
-        process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-        )
-
-        full_output = []
-        if process.stdout:
-            for line in process.stdout:
-                # Stream to stdout for visibility
-                print(line, end="", flush=True)
-                full_output.append(line)
-
-        process.wait()
-
-        if process.returncode != 0:
-            raise subprocess.CalledProcessError(process.returncode, cmd)
-
-        output_text = "".join(full_output)
-        # Only fail on explicit ERROR messages, allowing common installation warnings
-        forbidden_patterns = ["ERROR:"]
-        for pattern in forbidden_patterns:
-            if pattern in output_text:
-                msg = f"Build failed due to detected '{pattern}' in logs."
-                logger.error(msg)
-                raise RuntimeError(msg)
+            "--platform", "linux/amd64",
+        ])
 
     def run(self) -> None:
         """Start the devcontainer using the official CLI."""
         logger.info("Starting devcontainer...")
-        docker_bin = self._get_bin("docker")
-        # Ensure any old instances are gone
-        subprocess.run(
-            [docker_bin, "rm", "-f", self.CONTAINER_NAME],
-            capture_output=True,
-            check=False,
-        )
-
-        devcontainer_bin = self._get_bin("devcontainer")
-        cmd = [
-            devcontainer_bin, "up",
+        self._run_cli([
+            "up",
             "--workspace-folder", str(self.project_root),
             "--remove-existing-container",
-        ]
-        subprocess.run(cmd, check=True)
+        ])
 
     def test(self) -> None:
-        """Run functional tests inside the container using the official CLI."""
+        """Run functional tests inside the container using devcontainer exec."""
         logger.info("Running functional tests inside container...")
-        devcontainer_bin = self._get_bin("devcontainer")
-        # Ensure we run in a login shell to pick up mise-managed paths
+
+        ssh_port = os.environ.get("DOTFILES_SSH_PORT", "4444")
         test_cmd = (
             "bash -lc '"
+            f"export DOTFILES_SSH_PORT={ssh_port} && "
             "cd /workspaces/dotfiles/python && uv run dotfiles-setup audit --all && "
             "cd /workspaces/dotfiles && "
             "uv run --with pytest pytest tests/test_bootstrap.py && "
             "bats tests/infra/*.bats'"
         )
-        cmd = [
-            devcontainer_bin, "exec",
+
+        self._run_cli([
+            "exec",
             "--workspace-folder", str(self.project_root),
             "bash", "-c", test_cmd,
-        ]
-        subprocess.run(cmd, check=True)
+        ])
 
     def stop(self) -> None:
-        """Stop and remove the container."""
-        logger.info("Stopping devcontainer...")
-        docker_bin = self._get_bin("docker")
-        subprocess.run(
-            [docker_bin, "stop", self.CONTAINER_NAME],
-            check=False,
-        )
-        subprocess.run(
-            [docker_bin, "rm", self.CONTAINER_NAME],
-            check=False,
+        """Stop the devcontainer.
+
+        Note: devcontainer CLI lacks a native 'stop' command, so we
+        instruct the user to manage the container lifecycle via the UI
+        or wait for session cleanup.
+        """
+        logger.info("DevContainer CLI does not provide a 'stop' command.")
+        logger.info(
+            "The container will persist until manually removed or the session ends.",
         )

@@ -6,13 +6,15 @@
 - **Mise-Managed Runtimes**: No runtimes (Python, Node, Go, etc.) should be installed via `apt-get`. Use `mise` exclusively.
 
 ## Docker & DevContainers
-- **CLI Mandate**: Use `@devcontainers/cli` (`devcontainer`) exclusively for the container lifecycle (`up`, `build`, `exec`). **Avoid raw `docker` CLI** for these operations, as it bypasses critical lifecycle events (`onCreateCommand`, `postCreateCommand`) and configuration defined in `devcontainer.json`.
-- **Platform Enforcement**: Strictly target `linux/amd64`. Dockerfiles must use `FROM --platform=linux/amd64`. Tooling must explicitly pass `--platform linux/amd64` during builds to avoid architecture mismatches on Apple Silicon.
-- **Dynamic Identity**: DevContainers must dynamically inherit the host user's identity. Use `${localEnv:USER}`, `${localEnv:UID}`, and `${localEnv:GID}` in `devcontainer.json` and pass them as `buildArgs`.
-- **User Integrity**: Always handle UID/GID conflicts in Dockerfiles by proactively deleting or renaming existing users/groups at ID 1000 before creating the host-aligned user. Ensure home directory ownership is corrected during bootstrap if mismatched.
-- **Docker Context**: Ensure consistent Docker context usage (e.g., `desktop-linux`). Discrepancies between build and run contexts will cause "image not found" errors.
-- **SSH Synchronization**: Leverage native `forwardAgent: true` and read-only bind mounts for `~/.ssh/config` and `~/.ssh/known_hosts`. Never copy private keys into the image.
-- **Bake-in Strategy**: Tools and dotfiles must be installed during the `docker build` phase to ensure instant container startup.
+- **Strict Prohibition**: **NEVER use the raw `docker` CLI** (`run`, `exec`, `stop`, `rm`, `build`) for devcontainer-related tasks. This is a foundational mandate to ensure that `devcontainer.json` configurations and lifecycle hooks (`postCreateCommand`, etc.) are always respected.
+- **Exclusive CLI Usage**: Use `@devcontainers/cli` (`devcontainer`) exclusively for the entire container lifecycle:
+    - `devcontainer build` for image preparation.
+    - `devcontainer up` for starting the environment and triggering lifecycle events.
+    - `devcontainer exec` for running commands inside the container.
+- **Context & Visibility**: If the CLI fails to find an image, resolve the Docker context (e.g., `DOCKER_CONTEXT=desktop-linux`) or rebuild using the CLI. Do not bypass the CLI with `docker run`.
+- **Platform Enforcement**: Strictly target `linux/amd64`. Tooling must explicitly pass `--platform linux/amd64` during builds.
+- **Dynamic Identity**: DevContainers must dynamically inherit the host user's identity via `${localEnv:USER}`, `${localEnv:UID}`, and `${localEnv:GID}`.
+- **SSH Synchronization**: Leverage native `forwardAgent: true` and read-only bind mounts for SSH configuration.
 
 ## Engineering Standards
 - **Python Version**: Standardize on **Python 3.13** for the core toolchain.
