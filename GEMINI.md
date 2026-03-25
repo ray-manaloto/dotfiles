@@ -6,9 +6,11 @@
 - **Mise-Managed Runtimes**: No runtimes (Python, Node, Go, etc.) should be installed via `apt-get`. Use `mise` exclusively.
 
 ## Docker & DevContainers
-- **Platform Enforcement**: Strictly target `linux/amd64`. Dockerfiles must use `FROM --platform=linux/amd64`.
+- **CLI Mandate**: Use `@devcontainers/cli` (`devcontainer`) exclusively for the container lifecycle (`up`, `build`, `exec`). **Avoid raw `docker` CLI** for these operations, as it bypasses critical lifecycle events (`onCreateCommand`, `postCreateCommand`) and configuration defined in `devcontainer.json`.
+- **Platform Enforcement**: Strictly target `linux/amd64`. Dockerfiles must use `FROM --platform=linux/amd64`. Tooling must explicitly pass `--platform linux/amd64` during builds to avoid architecture mismatches on Apple Silicon.
 - **Dynamic Identity**: DevContainers must dynamically inherit the host user's identity. Use `${localEnv:USER}`, `${localEnv:UID}`, and `${localEnv:GID}` in `devcontainer.json` and pass them as `buildArgs`.
-- **User Integrity**: Always handle UID/GID conflicts in Dockerfiles by proactively deleting or renaming existing users/groups at ID 1000 before creating the host-aligned user.
+- **User Integrity**: Always handle UID/GID conflicts in Dockerfiles by proactively deleting or renaming existing users/groups at ID 1000 before creating the host-aligned user. Ensure home directory ownership is corrected during bootstrap if mismatched.
+- **Docker Context**: Ensure consistent Docker context usage (e.g., `desktop-linux`). Discrepancies between build and run contexts will cause "image not found" errors.
 - **SSH Synchronization**: Leverage native `forwardAgent: true` and read-only bind mounts for `~/.ssh/config` and `~/.ssh/known_hosts`. Never copy private keys into the image.
 - **Bake-in Strategy**: Tools and dotfiles must be installed during the `docker build` phase to ensure instant container startup.
 

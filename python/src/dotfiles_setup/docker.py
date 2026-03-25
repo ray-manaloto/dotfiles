@@ -101,7 +101,6 @@ class DevContainerManager:
             devcontainer_bin, "up",
             "--workspace-folder", str(self.project_root),
             "--remove-existing-container",
-            "--platform", "linux/amd64"
         ]
         subprocess.run(cmd, check=True)
 
@@ -109,10 +108,13 @@ class DevContainerManager:
         """Run functional tests inside the container using the official CLI."""
         logger.info("Running functional tests inside container...")
         devcontainer_bin = self._get_bin("devcontainer")
+        # Ensure we run in a login shell to pick up mise-managed paths
         test_cmd = (
-            "~/.local/share/mise/shims/uv run "
-            "--with pytest pytest tests/*.py && "
-            "bats tests/infra/*.bats"
+            "bash -lc '"
+            "cd /workspaces/dotfiles/python && uv run dotfiles-setup audit --all && "
+            "cd /workspaces/dotfiles && "
+            "uv run --with pytest pytest tests/test_bootstrap.py && "
+            "bats tests/infra/*.bats'"
         )
         cmd = [
             devcontainer_bin, "exec",
