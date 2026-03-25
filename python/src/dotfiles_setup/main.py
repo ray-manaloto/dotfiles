@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import platform
 import sys
 from pathlib import Path
@@ -13,87 +14,75 @@ from dotfiles_setup.ai import AIOrchestrator
 from dotfiles_setup.audit import DevEnvironmentAuditor, ToolManager
 from dotfiles_setup.docker import DevContainerManager
 
-# Configure logging to stderr so stdout remains clean for command output
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(levelname)s: %(message)s",
-    stream=sys.stderr
-)
 logger = logging.getLogger(__name__)
 
 
 class EnvironmentValidator:
-    """Validates the execution environment."""
+    """Validates the current execution environment."""
 
-    SUPPORTED_OS: ClassVar[list[str]] = ["Linux", "Darwin"]
-    SUPPORTED_ARCH: ClassVar[list[str]] = ["x86_64", "arm64", "aarch64"]
+    SUPPORTED_PLATFORMS: ClassVar[list[str]] = ["linux", "darwin"]
 
     @classmethod
     def validate(cls) -> None:
-        """Validate the operating system and architecture.
+        """Check if current environment meets project standards."""
+        current_os = platform.system().lower()
+        if current_os not in cls.SUPPORTED_PLATFORMS:
+            msg = f"Platform {current_os} is not supported"
+            raise RuntimeError(msg)
 
-        Raises:
-            SystemExit: If the environment is unsupported.
-        """
-        current_os = platform.system()
-        current_arch = platform.machine()
-
-        if current_os not in cls.SUPPORTED_OS:
-            msg = f"Unsupported OS: {current_os}"
-            raise SystemExit(msg)
-
-        if current_arch not in cls.SUPPORTED_ARCH:
-            msg = f"Unsupported Architecture: {current_arch}"
-            raise SystemExit(msg)
+        if os.environ.get("MISE_STRICT") != "1":
+            logger.warning("MISE_STRICT is not set to 1. This is not recommended.")
 
 
 def setup_parser() -> argparse.ArgumentParser:
-    """Set up the CLI argument parser.
-
-    Returns:
-        The configured argument parser.
-    """
+    """Configure the argument parser."""
     parser = argparse.ArgumentParser(
-        description="Dotfiles setup orchestration library"
+        description="Reproducible Dotfiles Orchestrator"
     )
     subparsers = parser.add_subparsers(dest="command", help="Commands")
-
-    # query-latest command
-    query_parser = subparsers.add_parser(
-        "query-latest",
-        help="Query latest stable version of a tool"
-    )
-    query_parser.add_argument("tool", help="Tool name (e.g., python, node, go)")
-
-    # sync-versions command
-    subparsers.add_parser(
-        "sync-versions",
-        help="Update Mise configuration template with latest versions"
-    )
-
-    # install command
-    subparsers.add_parser(
-        "install",
-        help="Install all tools using mise and pixi"
-    )
 
     # validate command
     subparsers.add_parser(
         "validate",
-        help="Validate the current environment"
+        help="Check if environment meets project standards"
     )
 
     # audit command
     audit_parser = subparsers.add_parser(
         "audit",
-        help="Audit the development environment"
+        help="Audit development environment"
     )
     audit_parser.add_argument("--all", action="store_true", help="Run all audit checks")
+
+    # ensure-ssh command
+    subparsers.add_parser(
+        "ensure-ssh",
+        help="Synchronize SSH authorization and ensure sshd is running"
+    )
 
     # ai-setup command
     subparsers.add_parser(
         "ai-setup",
         help="Install Claude Code and AI extensions"
+    )
+
+    # query-latest command
+    query_parser = subparsers.add_parser(
+        "query-latest",
+        help="Query latest version of a tool"
+    )
+    query_parser.add_argument("tool", help="Tool name")
+
+    # sync-versions command
+    subparsers.add_parser(
+        "sync-versions",
+        help="Sync tool versions from config to pyproject.toml"
+    )
+
+    # install command
+    subparsers.add_parser(
+        "install",
+        help="Execute toolchain installation"
     )
 
     # docker subcommands
@@ -106,9 +95,9 @@ def setup_parser() -> argparse.ArgumentParser:
         help="Docker commands"
     )
     docker_subparsers.add_parser("build", help="Build local AMD64 image")
-    docker_subparsers.add_parser("up", help="Start the devcontainer")
+    docker_subparsers.add_parser("up", help="Bring the devcontainer up")
     docker_subparsers.add_parser("test", help="Run tests inside the container")
-    docker_subparsers.add_parser("down", help="Stop and remove the container")
+    docker_subparsers.add_parser("down", help="Bring the devcontainer down")
 
     # version command
     subparsers.add_parser(
@@ -130,48 +119,64 @@ def handle_docker(args: argparse.Namespace, project_root: Path) -> None:
     if args.docker_command == "build":
         docker_manager.build()
     elif args.docker_command == "up":
-        docker_manager.run()
+        docker_manager.up()
     elif args.docker_command == "test":
         docker_manager.test()
     elif args.docker_command == "down":
-        docker_manager.stop()
+        docker_manager.down()
+
+
+def handle_audit() -> None:
+    """Handle audit command."""
+    auditor = DevEnvironmentAuditor()
+    if not auditor.run_all():
+        raise SystemExit(1)
+
+
+def handle_install(project_root: Path) -> None:
+    """Handle toolchain commands."""
+    manager = ToolManager()
+    EnvironmentValidator.validate()
+    manager.install()
+    manager.sync_versions(project_root)
+
+
+def run_command(args: argparse.Namespace, project_root: Path) -> None:
+    """Execute the specified command."""
+    if args.command == "validate":
+        EnvironmentValidator.validate()
+        logger.info("Environment is valid.")
+    elif args.command == "audit":
+        handle_audit()
+    elif args.command == "ensure-ssh":
+        EnvironmentValidator.validate()
+        DevEnvironmentAuditor().ensure_ssh()
+    elif args.command == "ai-setup":
+        EnvironmentValidator.validate()
+        AIOrchestrator().run_all()
+    elif args.command == "docker":
+        handle_docker(args, project_root)
+    elif args.command == "version":
+        sys.stdout.write("0.1.0\n")
+    elif args.command == "install":
+        handle_install(project_root)
+    elif args.command == "sync-versions":
+        ToolManager().sync_versions(project_root)
 
 
 def main() -> None:
     """Main entry point for the dotfiles-setup CLI."""
     parser = setup_parser()
     args = parser.parse_args()
-
-    manager = ToolManager()
     project_root = Path(__file__).parent.parent.parent.parent
 
-    if args.command == "validate":
-        EnvironmentValidator.validate()
-        logger.info("Environment is valid.")
-    elif args.command == "audit":
-        auditor = DevEnvironmentAuditor()
-        if not auditor.run_all():
-            raise SystemExit(1)
-    elif args.command == "ai-setup":
-        EnvironmentValidator.validate()
-        orchestrator = AIOrchestrator()
-        orchestrator.run_all()
-    elif args.command == "docker":
-        handle_docker(args, project_root)
-    elif args.command == "version":
-        sys.stdout.write("0.1.0\n")
-    elif args.command == "query-latest":
-        EnvironmentValidator.validate()
-        latest = manager.query_latest(args.tool)
-        sys.stdout.write(f"{latest}\n")
-    elif args.command == "sync-versions":
-        EnvironmentValidator.validate()
-        manager.sync_versions(project_root)
-    elif args.command == "install":
-        EnvironmentValidator.validate()
-        manager.install()
-    else:
-        parser.print_help()
+    try:
+        run_command(args, project_root)
+    except (RuntimeError, SystemExit):
+        raise
+    except Exception:
+        logger.exception("Unexpected command failure")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

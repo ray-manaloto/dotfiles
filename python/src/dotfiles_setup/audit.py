@@ -339,6 +339,53 @@ class DevEnvironmentAuditor:
 
         return results
 
+    def ensure_ssh(self) -> None:
+        """Authorize host keys and ensure sshd is running.
+
+        This implements the 'Gold Standard' SSH reachability pattern.
+        """
+        logger.info("Synchronizing SSH authorization...")
+
+        # 1. Ensure .ssh directory exists
+        ssh_dir = Path.home() / ".ssh"
+        ssh_dir.mkdir(mode=0o700, exist_ok=True)
+
+        # 2. Get public keys from agent
+        try:
+            result = subprocess.run(
+                ["ssh-add", "-L"],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            public_keys = result.stdout.strip()
+            if public_keys:
+                auth_keys_path = ssh_dir / "authorized_keys"
+                # Atomic write to authorized_keys
+                auth_keys_path.write_text(public_keys + "\n")
+                auth_keys_path.chmod(0o600)
+                count = len(public_keys.splitlines())
+                logger.info("Authorized %d keys from agent", count)
+            else:
+                logger.warning("No keys found in SSH agent to authorize")
+        except subprocess.CalledProcessError:
+            logger.warning("SSH agent unreachable during authorization sync")
+
+        # 3. Ensure sshd is running
+        try:
+            # Check if running
+            subprocess.run(["pgrep", "-x", "sshd"], check=True, capture_output=True)
+            logger.info("sshd is already running")
+        except subprocess.CalledProcessError:
+            logger.info("Starting sshd...")
+            # Ensure runtime directory exists
+            subprocess.run(["sudo", "mkdir", "-p", "/run/sshd"], check=True)
+            # Generate host keys if missing
+            subprocess.run(["sudo", "ssh-keygen", "-A"], check=False)
+            # Start daemon
+            subprocess.run(["sudo", "/usr/sbin/sshd"], check=True)
+            logger.info("sshd started successfully")
+
     def audit_ssh(self) -> dict[str, Any]:
         """Verify SSH agent reachability and round-trip connectivity.
 

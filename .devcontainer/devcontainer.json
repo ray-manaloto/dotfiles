@@ -8,7 +8,11 @@
       "USERNAME": "${localEnv:USER}",
       "USER_UID": "${localEnv:UID}",
       "USER_GID": "${localEnv:GID}"
-    }
+    },
+    "options": [
+      "--platform",
+      "linux/amd64"
+    ]
   },
   "runArgs": [
     "--platform",
@@ -29,11 +33,16 @@
   ],
   "features": {
     "ghcr.io/devcontainers/features/sshd:1": {
-      "user": "${localEnv:USER}"
+      "user": "${localEnv:USER}",
+      "port": "4444",
+      "startNow": true
     }
   },
+  "appPort": [
+    "4444:4444"
+  ],
   "forwardPorts": [
-    2222
+    4444
   ],
   "customizations": {
     "vscode": {
@@ -46,6 +55,9 @@
       ]
     }
   },
+  "onCreateCommand": "sudo chown -R ${localEnv:USER}:${localEnv:USER} /home/${localEnv:USER}/.config /home/${localEnv:USER}/.cache /home/${localEnv:USER}/.local || true",
+  "postCreateCommand": "bash install.sh --local",
+  "postStartCommand": "cd /workspaces/dotfiles/python && uv run dotfiles-setup ensure-ssh",
   "remoteUser": "${localEnv:USER}",
   "containerUser": "${localEnv:USER}"
 }
