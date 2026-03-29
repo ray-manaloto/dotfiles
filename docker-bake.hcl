@@ -36,6 +36,14 @@ variable "DEVCONTAINER_USERNAME" {
   default = "vscode"
 }
 
+// Default tags for local builds; overridden by docker/metadata-action
+// bake files in CI to inject SHA, latest, and PR tags.
+target "docker-metadata-action" {
+  tags = [
+    "${IMAGE_REF}:${TAG}",
+  ]
+}
+
 target "_common" {
   context    = "."
   dockerfile = ".devcontainer/Dockerfile"
@@ -48,15 +56,13 @@ target "_common" {
 
 # Default dev environment on ubuntu base
 target "dev" {
-  inherits = ["_common"]
+  inherits = ["_common", "docker-metadata-action"]
   target   = "final"
   args = {
     BASE_IMAGE   = BASE_IMAGE
     APT_SNAPSHOT = APT_SNAPSHOT
   }
-  tags = [
-    "${IMAGE_REF}:${TAG}",
-  ]
+  # Tags inherited from docker-metadata-action (CI overrides with SHA/latest/PR tags)
   # Registry cache: shared across CI runs and local dev
   # GHA cache: faster for same-repo CI (set ACTIONS_CACHE_URL to enable)
   cache-from = [
