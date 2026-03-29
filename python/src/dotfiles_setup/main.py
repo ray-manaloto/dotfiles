@@ -36,63 +36,46 @@ class EnvironmentValidator:
 
 def setup_parser() -> argparse.ArgumentParser:
     """Configure the argument parser."""
-    parser = argparse.ArgumentParser(
-        description="Reproducible Dotfiles Orchestrator"
-    )
+    parser = argparse.ArgumentParser(description="Reproducible Dotfiles Orchestrator")
     subparsers = parser.add_subparsers(dest="command", help="Commands")
 
     # validate command
     subparsers.add_parser(
-        "validate",
-        help="Check if environment meets project standards"
+        "validate", help="Check if environment meets project standards"
     )
 
     # audit command
-    audit_parser = subparsers.add_parser(
-        "audit",
-        help="Audit development environment"
-    )
+    audit_parser = subparsers.add_parser("audit", help="Audit development environment")
     audit_parser.add_argument("--all", action="store_true", help="Run all audit checks")
 
     # ensure-ssh command
     subparsers.add_parser(
-        "ensure-ssh",
-        help="Synchronize SSH authorization and ensure sshd is running"
+        "ensure-ssh", help="Synchronize SSH authorization and ensure sshd is running"
     )
 
     # ai-setup command
-    subparsers.add_parser(
-        "ai-setup",
-        help="Install Claude Code and AI extensions"
-    )
+    subparsers.add_parser("ai-setup", help="Install Claude Code and AI extensions")
 
     # query-latest command
     query_parser = subparsers.add_parser(
-        "query-latest",
-        help="Query latest version of a tool"
+        "query-latest", help="Query latest version of a tool"
     )
     query_parser.add_argument("tool", help="Tool name")
 
     # sync-versions command
     subparsers.add_parser(
-        "sync-versions",
-        help="Sync tool versions from config to pyproject.toml"
+        "sync-versions", help="Sync tool versions from config to pyproject.toml"
     )
 
     # install command
-    subparsers.add_parser(
-        "install",
-        help="Execute toolchain installation"
-    )
+    subparsers.add_parser("install", help="Execute toolchain installation")
 
     # docker subcommands
     docker_parser = subparsers.add_parser(
-        "docker",
-        help="Manage devcontainer for validation"
+        "docker", help="Manage devcontainer for validation"
     )
     docker_subparsers = docker_parser.add_subparsers(
-        dest="docker_command",
-        help="Docker commands"
+        dest="docker_command", help="Docker commands"
     )
     docker_subparsers.add_parser("build", help="Build local AMD64 image")
     docker_subparsers.add_parser("up", help="Bring the devcontainer up")
@@ -100,10 +83,7 @@ def setup_parser() -> argparse.ArgumentParser:
     docker_subparsers.add_parser("down", help="Bring the devcontainer down")
 
     # version command
-    subparsers.add_parser(
-        "version",
-        help="Show the version of the library"
-    )
+    subparsers.add_parser("version", help="Show the version of the library")
 
     return parser
 
@@ -166,6 +146,11 @@ def run_command(args: argparse.Namespace, project_root: Path) -> None:
 
 def main() -> None:
     """Main entry point for the dotfiles-setup CLI."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(message)s",
+        stream=sys.stderr,
+    )
     parser = setup_parser()
     args = parser.parse_args()
     project_root = Path(__file__).parent.parent.parent.parent
