@@ -23,6 +23,7 @@ hooks {
       ["check_case_conflict"] {}
       ["check_symlinks"] {}
       ["check_executables_have_shebangs"] {}
+      ["check_byte_order_marker"] {}
 
       // --- Typo detection ---
       ["typos"] {
@@ -111,9 +112,14 @@ hooks {
         glob = List(".github/workflows/*.yml")
       }
 
+      // --- HCL ---
+      ["hclfmt"] {
+        glob = List("**/*.hcl")
+      }
+
       // --- mise config validation ---
       ["mise"] {
-        glob = List("**/mise.toml", "**/config.toml.tmpl")
+        glob = List("**/mise.toml")
       }
     }
   }

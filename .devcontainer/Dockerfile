@@ -97,7 +97,13 @@ ENV USER=$USERNAME \
     PATH="/home/$USERNAME/.local/bin:/home/$USERNAME/.local/share/mise/shims:/home/$USERNAME/.cargo/bin:/usr/local/bin:${PATH}"
 
 # Copy dotfiles repo and run the single bootstrap entry point
+# Cache mounts persist tool downloads across builds (not baked into image layer)
 COPY --chown=$USERNAME:$USERNAME . /tmp/dotfiles
-RUN cd /tmp/dotfiles && bash install.sh --local
+RUN mkdir -p /home/$USERNAME/.cache
+RUN --mount=type=cache,target=/home/$USERNAME/.cache/mise,uid=1000,gid=1000 \
+    --mount=type=cache,target=/home/$USERNAME/.cache/uv,uid=1000,gid=1000 \
+    --mount=type=cache,target=/home/$USERNAME/.cache/chezmoi,uid=1000,gid=1000 \
+    --mount=type=cache,target=/home/$USERNAME/.pkl,uid=1000,gid=1000 \
+    cd /tmp/dotfiles && bash install.sh --local
 
 WORKDIR /home/$USERNAME

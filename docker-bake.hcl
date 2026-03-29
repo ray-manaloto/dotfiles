@@ -52,11 +52,15 @@ target "dev" {
     "${REGISTRY}/${IMAGE}:${TAG}",
     "${IMAGE}:${TAG}",
   ]
+  # Registry cache: shared across CI runs and local dev
+  # GHA cache: faster for same-repo CI (set ACTIONS_CACHE_URL to enable)
   cache-from = [
     "type=registry,ref=${REGISTRY}/${IMAGE}:buildcache",
+    "type=gha,scope=dotfiles-dev",
   ]
   cache-to = [
     "type=registry,ref=${REGISTRY}/${IMAGE}:buildcache,mode=max",
+    "type=gha,scope=dotfiles-dev,mode=max",
   ]
   attest = [
     "type=provenance,mode=min",
@@ -78,9 +82,11 @@ target "cpp" {
   ]
   cache-from = [
     "type=registry,ref=${REGISTRY}/${IMAGE}:cpp-buildcache",
+    "type=gha,scope=dotfiles-cpp",
   ]
   cache-to = [
     "type=registry,ref=${REGISTRY}/${IMAGE}:cpp-buildcache,mode=max",
+    "type=gha,scope=dotfiles-cpp,mode=max",
   ]
   attest = [
     "type=provenance,mode=min",

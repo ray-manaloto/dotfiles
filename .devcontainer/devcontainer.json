@@ -3,7 +3,7 @@
   "image": "ghcr.io/ray-manaloto/dotfiles-devcontainer:dev",
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/${localWorkspaceFolderBasename},type=bind,consistency=cached",
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
-  "remoteUser": "${localEnv:USER}",
+  "remoteUser": "vscode",
   "updateRemoteUserUID": true,
   "init": true,
   "overrideCommand": true,
@@ -12,19 +12,19 @@
     "MISE_STRICT": "1"
   },
   "remoteEnv": {
-    "PATH": "${containerEnv:PATH}:/home/${localEnv:USER}/.local/share/mise/shims"
+    "PATH": "${containerEnv:PATH}:/home/vscode/.local/share/mise/shims"
   },
   "runArgs": [
     "--platform=linux/amd64"
   ],
   "mounts": [
-    "type=volume,src=mise-home,target=/home/${localEnv:USER}/.local/share/mise",
-    "type=volume,src=uv-cache,target=/home/${localEnv:USER}/.cache/uv",
-    "type=volume,src=claude-home,target=/home/${localEnv:USER}/.claude",
-    "type=volume,src=codex-home,target=/home/${localEnv:USER}/.codex",
-    "type=volume,src=gemini-home,target=/home/${localEnv:USER}/.gemini",
-    "type=volume,src=gh-config,target=/home/${localEnv:USER}/.config/gh",
-    "type=bind,source=${localEnv:HOME}/.ssh,target=/home/${localEnv:USER}/.ssh,readonly"
+    "type=volume,src=mise-home,target=/home/vscode/.local/share/mise",
+    "type=volume,src=uv-cache,target=/home/vscode/.cache/uv",
+    "type=volume,src=claude-home,target=/home/vscode/.claude",
+    "type=volume,src=codex-home,target=/home/vscode/.codex",
+    "type=volume,src=gemini-home,target=/home/vscode/.gemini",
+    "type=volume,src=gh-config,target=/home/vscode/.config/gh",
+    "type=bind,source=${localEnv:HOME}/.ssh,target=/home/vscode/.ssh,readonly"
   ],
   "postStartCommand": "mise install -y"
 }

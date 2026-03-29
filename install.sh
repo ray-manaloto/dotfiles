@@ -34,8 +34,9 @@ else
     echo "Error: curl or wget is required." >&2; exit 1
 fi
 
-# 4. Install Mise (Standalone)
-$GET https://mise.run | sh
+# 4. Install Mise (Standalone) — pinned for reproducibility
+MISE_VERSION="${MISE_VERSION:-v2026.3.17}"
+$GET https://mise.run | MISE_VERSION="$MISE_VERSION" sh
 
 # 5. Handoff to Chezmoi
 # Use absolute path to ensure we use the mise we just installed
@@ -55,19 +56,24 @@ if [ "$LOCAL_MODE" = true ]; then
         cp -a "$SCRIPT_DIR" "$CHEZMOI_SOURCE"
     fi
 
+    # Trust mise configs in both source and chezmoi dirs
+    $MISE trust "$CHEZMOI_SOURCE" 2>/dev/null || true
+    $MISE trust 2>/dev/null || true
+
     # Initialize (generates config from .chezmoi.toml.tmpl)
     echo "Generating chezmoi config..."
-    $MISE x chezmoi@latest -- chezmoi init --force
+    $MISE x chezmoi@2.70.0 -- chezmoi init --force
 
     # Apply the dotfiles (triggers run_before + run_after scripts)
     echo "Applying dotfiles..."
-    $MISE x chezmoi@latest -- chezmoi apply --force
+    $MISE x chezmoi@2.70.0 -- chezmoi apply --force
 
 else
     # Remote mode: chezmoi clones the repo to its source directory
-    $MISE x chezmoi@latest -- chezmoi init --apply --force "$GITHUB_USER"
+    $MISE x chezmoi@2.70.0 -- chezmoi init --apply --force "$GITHUB_USER"
 fi
 
-# Install all tools from rendered mise config
+# Install all tools from rendered mise config (from home dir, not /tmp/dotfiles)
 echo "Installing tools via mise..."
+cd "$HOME"
 $MISE install -y
