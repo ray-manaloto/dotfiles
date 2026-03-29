@@ -25,70 +25,95 @@ hooks {
       ["check_executables_have_shebangs"] {}
 
       // --- Typo detection ---
-      ["typos"] {}
+      ["typos"] {
+        batch = true
+      }
 
-      // --- Python: ruff + ty ---
+      // --- Python: ruff + ty (keep glob — types would match .py.tmpl templates) ---
       ["ruff_format"] {
-        glob = List("python/src/**/*.py", "python/tests/**/*.py")
+        glob = List("python/src/**/*.py", "tests/**/*.py")
+        batch = true
       }
       ["ruff"] {
-        glob = List("python/src/**/*.py", "python/tests/**/*.py")
+        glob = List("python/src/**/*.py", "tests/**/*.py")
+        batch = true
+        check_first = true
       }
       ["ty"] {
-        glob = List("python/src/**/*.py", "python/tests/**/*.py")
+        glob = List("python/src/**/*.py", "tests/**/*.py")
       }
 
-      // --- Dockerfile ---
+      // --- Dockerfile (keep glob — only lint our Dockerfile, not random ones) ---
       ["hadolint"] {
         glob = List(".devcontainer/Dockerfile")
       }
 
       // --- TOML ---
       ["taplo_format"] {
-        glob = List("**/*.toml")
+        types = List("toml")
+        batch = true
       }
       ["taplo"] {
-        glob = List("**/*.toml")
+        types = List("toml")
+        batch = true
         depends = List("taplo_format")
       }
 
       // --- YAML ---
+      ["yamlfmt"] {
+        types = List("yaml")
+        batch = true
+      }
       ["yamllint"] {
-        glob = List("**/*.yml", "**/*.yaml")
+        types = List("yaml")
+        batch = true
+        depends = List("yamlfmt")
       }
 
       // --- JSON ---
       ["jq"] {
-        glob = List("**/*.json")
+        types = List("json")
+        batch = true
       }
 
       // --- Pkl ---
       ["pkl"] {
-        glob = List("**/*.pkl")
+        types = List("pkl")
       }
       ["pkl_format"] {
-        glob = List("**/*.pkl")
+        types = List("pkl")
       }
 
       // --- Shell ---
       ["shellcheck"] {
-        glob = List("**/*.sh")
+        types = List("shell")
+        batch = true
       }
       ["shfmt"] {
-        glob = List("**/*.sh")
+        types = List("shell")
+        batch = true
+        check_first = true
       }
 
       // --- Markdown ---
       ["markdown_lint"] {
-        glob = List("**/*.md")
+        types = List("markdown")
       }
 
       // --- GitHub Actions ---
       ["actionlint"] {
         glob = List(".github/workflows/*.yml")
       }
+      ["ghalint_workflow"] {
+        glob = List(".github/workflows/*.yml")
+      }
       ["zizmor"] {
         glob = List(".github/workflows/*.yml")
+      }
+
+      // --- mise config validation ---
+      ["mise"] {
+        glob = List("**/mise.toml", "**/config.toml.tmpl")
       }
     }
   }
@@ -109,7 +134,7 @@ hooks {
     steps {
       ["test"] {
         exclusive = true
-        check = "cd python && uv run pytest tests/ -x -q"
+        check = "uv run pytest tests/ -x -q"
       }
     }
   }

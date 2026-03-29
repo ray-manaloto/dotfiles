@@ -1,68 +1,30 @@
 {
-  "name": "Reproducible Dotfiles (AMD64)",
-  "containerName": "dotfiles-dev-container",
-  "build": {
-    "dockerfile": "Dockerfile",
-    "context": "..",
-    "args": {
-      "BASE_IMAGE": "ubuntu:25.10",
-      "APT_SNAPSHOT": "20260328T000000Z",
-      "MISE_VERSION": "2026.3.17",
-      "USERNAME": "${localEnv:USER}",
-      "USER_UID": "1000",
-      "USER_GID": "1000"
-    },
-    "options": [
-      "--platform",
-      "linux/amd64"
-    ]
-  },
-  "runArgs": [
-    "--platform",
-    "linux/amd64"
-  ],
+  "name": "dotfiles-devcontainer",
+  "image": "ghcr.io/ray-manaloto/dotfiles-devcontainer:dev",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/${localWorkspaceFolderBasename},type=bind,consistency=cached",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "remoteUser": "${localEnv:USER}",
+  "updateRemoteUserUID": true,
+  "init": true,
+  "overrideCommand": true,
   "containerEnv": {
-    "FORCE_PLATFORM": "linux-64",
+    "DEVCONTAINER": "true",
     "MISE_STRICT": "1"
   },
-  "forwardAgent": true,
-  "initializeCommand": "mkdir -p ~/.ssh ~/.claude ~/.codex ~/.gemini ~/.config/gcloud && touch ~/.ssh/config ~/.ssh/known_hosts ~/.ssh/authorized_keys",
+  "remoteEnv": {
+    "PATH": "${containerEnv:PATH}:/home/${localEnv:USER}/.local/share/mise/shims"
+  },
+  "runArgs": [
+    "--platform=linux/amd64"
+  ],
   "mounts": [
-    "source=${localEnv:HOME}/.ssh,target=/home/${localEnv:USER}/.ssh,type=bind,readonly",
-    "source=${localEnv:HOME}/.claude,target=/home/${localEnv:USER}/.claude,type=bind,readonly",
-    "source=${localEnv:HOME}/.codex,target=/home/${localEnv:USER}/.codex,type=bind,readonly",
-    "source=${localEnv:HOME}/.gemini,target=/home/${localEnv:USER}/.gemini,type=bind,readonly",
-    "source=${localEnv:HOME}/.config/gcloud,target=/home/${localEnv:USER}/.config/gcloud,type=bind,readonly"
+    "type=volume,src=mise-home,target=/home/${localEnv:USER}/.local/share/mise",
+    "type=volume,src=uv-cache,target=/home/${localEnv:USER}/.cache/uv",
+    "type=volume,src=claude-home,target=/home/${localEnv:USER}/.claude",
+    "type=volume,src=codex-home,target=/home/${localEnv:USER}/.codex",
+    "type=volume,src=gemini-home,target=/home/${localEnv:USER}/.gemini",
+    "type=volume,src=gh-config,target=/home/${localEnv:USER}/.config/gh",
+    "type=bind,source=${localEnv:HOME}/.ssh,target=/home/${localEnv:USER}/.ssh,readonly"
   ],
-  "features": {
-    "ghcr.io/devcontainers/features/sshd:1": {
-      "user": "${localEnv:USER}",
-      "port": "4444",
-      "startNow": true
-    },
-    "ghcr.io/anthropics/devcontainer-features/claude-code:1": {}
-  },
-  "appPort": [
-    "4444:4444"
-  ],
-  "forwardPorts": [
-    4444
-  ],
-  "customizations": {
-    "vscode": {
-      "extensions": [
-        "ms-python.python",
-        "mend.renovate-vscode",
-        "jkillian.vscode-bats",
-        "charliermarsh.ruff",
-        "tamasfe.even-better-toml"
-      ]
-    }
-  },
-  "onCreateCommand": "sudo chown -R ${localEnv:USER}:${localEnv:USER} /home/${localEnv:USER}/.config /home/${localEnv:USER}/.cache /home/${localEnv:USER}/.local || true",
-  "postCreateCommand": "bash install.sh --local",
-  "updateContentCommand": "bash -lc 'mise install -y'",
-  "postStartCommand": "bash -lc 'cd /workspaces/dotfiles/python && uv run dotfiles-setup ensure-ssh'",
-  "remoteUser": "${localEnv:USER}",
-  "containerUser": "${localEnv:USER}"
+  "postStartCommand": "mise install -y"
 }

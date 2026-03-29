@@ -1,0 +1,35 @@
+{{- /* Container and CI auto-detection — all booleans, not strings */ -}}
+{{- $isContainer := ne (env "REMOTE_CONTAINERS") "" | or (ne (env "CODESPACES") "") | or (ne (env "DEVCONTAINER") "") -}}
+{{- $isCI := ne (env "CI") "" -}}
+{{- $isInteractive := and (not $isContainer) (not $isCI) stdinIsATTY -}}
+
+{{- /* User prompts — only when interactive, safe defaults otherwise */ -}}
+{{- /* NOTE: Changes to this file require `chezmoi init --init` on existing machines */ -}}
+{{- $isDevComputer := false -}}
+{{- $isPersonal := false -}}
+{{- $isEphemeral := $isContainer -}}
+
+{{- if $isInteractive -}}
+{{-   $isDevComputer = promptBoolOnce . "is_dev_computer" "Is this a development computer" false -}}
+{{-   $isPersonal = promptBoolOnce . "is_personal" "Is this a personal machine" false -}}
+{{-   $isEphemeral = promptBoolOnce . "is_ephemeral" "Is this an ephemeral environment" false -}}
+{{- else if $isContainer -}}
+{{-   $isDevComputer = true -}}
+{{- end -}}
+
+[data]
+    is_dev_computer = {{ $isDevComputer }}
+    is_personal = {{ $isPersonal }}
+    is_ephemeral = {{ or $isEphemeral $isCI }}
+    is_container = {{ $isContainer }}
+    is_ci = {{ $isCI }}
+
+[scriptEnv]
+    PATH = "{{ .chezmoi.homeDir }}/.local/share/mise/shims:{{ .chezmoi.homeDir }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+
+[git]
+    autoCommit = false
+    commitMessageTemplate = "chezmoi: update {{ .chezmoi.os }}/{{ .chezmoi.arch }}"
+
+[diff]
+    pager = "delta"

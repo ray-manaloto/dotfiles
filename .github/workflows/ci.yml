@@ -2,7 +2,7 @@ name: CI
 
 on:
   schedule:
-    - cron: '0 0 * * 0' # Every Sunday at midnight
+    - cron: '0 0 * * 0' # Weekly Sunday midnight
   push:
     branches: [main]
     paths:
@@ -32,6 +32,9 @@ permissions:
   packages: write
 
 jobs:
+  # ============================================================
+  # Build Type 1: Project linting (hk + mise)
+  # ============================================================
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -46,6 +49,11 @@ jobs:
         env:
           HK_PKL_BACKEND: pklr
           HK_LOG: debug
+
+      - name: Run hk checks
+        run: hk check --all
+        env:
+          HK_PKL_BACKEND: pklr
 
       - name: Check for outdated tools
         run: mise outdated || true
@@ -72,6 +80,10 @@ jobs:
           grep -q 'ARG BASE_IMAGE' .devcontainer/Dockerfile || \
             { echo "FAIL: Missing BASE_IMAGE build arg"; exit 1; }
 
+          echo "--- Checking install.sh entry point ---"
+          grep -q 'install.sh' .devcontainer/Dockerfile || \
+            { echo "FAIL: Dockerfile must use install.sh as entry point"; exit 1; }
+
           echo "--- Checking docker-bake.hcl exists ---"
           test -f docker-bake.hcl || \
             { echo "FAIL: Missing docker-bake.hcl"; exit 1; }
@@ -82,14 +94,14 @@ jobs:
 
           echo "All contracts passed."
 
-      - name: Lint Dockerfile
-        uses: hadolint/hadolint-action@v3.3.0
-        with:
-          dockerfile: .devcontainer/Dockerfile
-
-  build-dev:
+  # ============================================================
+  # Build Type 2: Dotfiles environment image (Docker → ghcr.io)
+  # ============================================================
+  build:
     needs: contract-preflight
     runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -97,7 +109,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Log in to the Container registry
+      - name: Log in to Container Registry
         uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
@@ -110,34 +122,43 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
+            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/main' || github.event_name == 'schedule' }}
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || github.event_name == 'schedule' }}
+            type=sha,prefix=
             type=ref,event=pr
 
-      - name: Build and push (dev target)
+      - name: Build and push
         uses: docker/bake-action@v7
         with:
-          targets: dev
-          push: true
+          targets: ${{ github.event.inputs.target || 'dev' }}
+          push: ${{ github.event_name != 'pull_request' }}
           set: |
             dev.tags=${{ steps.meta.outputs.tags }}
             dev.labels=${{ steps.meta.outputs.labels }}
 
-  validate-setup:
-    needs: build-dev
+  # ============================================================
+  # Smoke test: validate the published image
+  # ============================================================
+  smoke-test:
+    needs: build
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
+      - name: Pull published image
+        run: docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev
 
-      - name: Install uv (pinned)
-        uses: astral-sh/setup-uv@v7
-        with:
-          version: "0.11.2"
-
-      - name: Run validation in built image
+      - name: Validate tools installed
         run: |
-          export DOTFILES_IMAGE="ghcr.io/${{ github.repository }}-devcontainer:${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || 'latest' }}"
-          cd python
-          uv run dotfiles-setup docker up
-          uv run dotfiles-setup docker test
-          uv run dotfiles-setup docker down
+          docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev bash -lc '
+            set -euo pipefail
+            echo "=== hk validate ==="
+            cd ~/.local/share/chezmoi && hk validate
+            echo "=== mise ls (check no missing) ==="
+            missing=$(mise ls 2>&1 | grep -c "(missing)" || true)
+            echo "Missing tools: $missing"
+            if [ "$missing" -gt 0 ]; then
+              mise ls 2>&1 | grep "(missing)"
+              exit 1
+            fi
+            echo "=== All checks passed ==="
+          '

@@ -26,10 +26,6 @@ variable "APT_SNAPSHOT" {
   default = "20260328T000000Z"
 }
 
-variable "MISE_VERSION" {
-  default = "2026.3.17"
-}
-
 variable "DEVCONTAINER_USERNAME" {
   default = "vscode"
 }
@@ -40,7 +36,6 @@ target "_common" {
   platforms  = ["${PLATFORM}"]
   args = {
     APT_SNAPSHOT = APT_SNAPSHOT
-    MISE_VERSION = MISE_VERSION
     USERNAME     = DEVCONTAINER_USERNAME
   }
 }
@@ -52,7 +47,6 @@ target "dev" {
   args = {
     BASE_IMAGE   = BASE_IMAGE
     APT_SNAPSHOT = APT_SNAPSHOT
-    USERNAME     = DEVCONTAINER_USERNAME
   }
   tags = [
     "${REGISTRY}/${IMAGE}:${TAG}",
@@ -77,7 +71,6 @@ target "cpp" {
   args = {
     BASE_IMAGE   = CPP_BASE_IMAGE
     APT_SNAPSHOT = APT_SNAPSHOT
-    USERNAME     = DEVCONTAINER_USERNAME
   }
   tags = [
     "${REGISTRY}/${IMAGE}:cpp-${TAG}",

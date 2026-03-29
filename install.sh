@@ -41,23 +41,33 @@ $GET https://mise.run | sh
 # Use absolute path to ensure we use the mise we just installed
 MISE="$HOME/.local/bin/mise"
 
+CHEZMOI_SOURCE="$HOME/.local/share/chezmoi"
+
 if [ "$LOCAL_MODE" = true ]; then
     echo "Local mode: Initializing from current directory..."
-    # Use the current directory as the source
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    
+
+    # Copy repo to chezmoi's standard source directory
+    if [ "$SCRIPT_DIR" != "$CHEZMOI_SOURCE" ]; then
+        echo "Copying dotfiles to $CHEZMOI_SOURCE..."
+        mkdir -p "$(dirname "$CHEZMOI_SOURCE")"
+        rm -rf "$CHEZMOI_SOURCE"
+        cp -a "$SCRIPT_DIR" "$CHEZMOI_SOURCE"
+    fi
+
     # Initialize (generates config from .chezmoi.toml.tmpl)
     echo "Generating chezmoi config..."
-    $MISE x chezmoi@latest -- chezmoi init --source "$SCRIPT_DIR" --force
-    
-    # Debug: show what data chezmoi has
-    echo "Chezmoi data:"
-    $MISE x chezmoi@latest -- chezmoi data || echo "Failed to get chezmoi data"
-    
-    # Apply the dotfiles
+    $MISE x chezmoi@latest -- chezmoi init --force
+
+    # Apply the dotfiles (triggers run_before + run_after scripts)
     echo "Applying dotfiles..."
-    $MISE x chezmoi@latest -- chezmoi apply --source "$SCRIPT_DIR" --force
+    $MISE x chezmoi@latest -- chezmoi apply --force
+
 else
-    # For remote mode
+    # Remote mode: chezmoi clones the repo to its source directory
     $MISE x chezmoi@latest -- chezmoi init --apply --force "$GITHUB_USER"
 fi
+
+# Install all tools from rendered mise config
+echo "Installing tools via mise..."
+$MISE install -y

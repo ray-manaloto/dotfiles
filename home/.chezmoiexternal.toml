@@ -1,0 +1,10 @@
+# External dependencies managed by chezmoi
+# Keep minimal — most tools are managed by mise
+# NOTE: uv and mise completions can be generated at runtime:
+#   mise completion zsh > _mise
+#   uv generate-shell-completion zsh > _uv
+
+[".config/zsh/completions/_mise"]
+    type = "file"
+    url = "https://raw.githubusercontent.com/jdx/mise/main/completions/_mise"
+    refreshPeriod = "168h"

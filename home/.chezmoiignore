@@ -1,0 +1,28 @@
+# Files that chezmoi should never manage
+README.md
+LICENSE
+.github/
+
+{{ if ne .chezmoi.os "darwin" }}
+# macOS-only files — skip on Linux
+Library/**
+.config/karabiner/**
+{{ end }}
+
+{{ if ne .chezmoi.os "linux" }}
+# Linux-only files — skip on macOS
+.config/systemd/**
+{{ end }}
+
+{{ if .is_ephemeral }}
+# Skip heavy configs in ephemeral/container environments
+.cargo/**
+.rustup/**
+.config/gcloud/**
+{{ end }}
+
+{{ if not .is_personal }}
+# Skip personal-only configs on non-personal machines
+.ssh/config
+.gnupg/**
+{{ end }}
