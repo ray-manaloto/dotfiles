@@ -14,8 +14,9 @@ uv run --directory python pytest tests/ -x -q  # Run tests
 ```
 
 ## Architecture
-- `.devcontainer/Dockerfile` — Multi-stage devcontainer (APT snapshot pinning, mise bootstrap)
-- `docker-bake.hcl` — BuildKit bake config (dev, cpp, dev-load, cpp-load targets); `IMAGE_REF` consolidates registry+image; `docker-metadata-action` target for CI tag inheritance
+- `.devcontainer/Dockerfile` — Multi-stage devcontainer (base → tools → devcontainer); APT snapshot pinning, mise bootstrap, default `devcontainer` user at UID 1000
+- `.devcontainer/Dockerfile.host-user` — Host-user overlay; renames default user to match host via `DEVCONTAINER_USERNAME` build arg
+- `docker-bake.hcl` — BuildKit bake config (dev, dev-load targets); `IMAGE_REF` consolidates registry+image; `docker-metadata-action` target for CI tag inheritance
 - `install.sh` — Single bootstrap entry point used by Dockerfile
 - `home/` — Chezmoi-managed dotfiles (shell, git, editor config)
 - `python/` — Python package (`dotfiles_setup`) for orchestration
@@ -30,17 +31,14 @@ Use native `colima` buildx driver, not `colima-builder` (QEMU).
 Benchmarks: `docs/research/trail/findings/docker-benchmarks/`
 
 ## CI Pipeline
-Registry: `ghcr.io/sortakool/dotfiles-devcontainer`
+Registry: `ghcr.io/ray-manaloto/cpp-devcontainer`
 - `CONTAINER_REGISTRY` env var (not `REGISTRY` — avoids HCL collision)
-- GitHub token passed via BuildKit secret mount (`uid=1000` for vscode user)
-- `DEVCONTAINER_USERNAME=vscode` (UID 1000) — debate-confirmed correct for VS Code usage; host-user passthrough is low-priority future work
+- GitHub token passed via BuildKit secret mount
+- `DEVCONTAINER_USERNAME=devcontainer` (UID 1000) — default user in base image; host-user overlay renames at devcontainer up time
 - `updateRemoteUserUID` is a no-op on macOS (Docker Desktop VM handles UID translation); only matters on Linux hosts
-- Bake targets: `dev` (CI push), `dev-load` (local), `cpp`, `cpp-load`
+- Bake targets: `dev` (CI push), `dev-load` (local)
 - `IMAGE_REF` variable (`${DEFAULT_REGISTRY}/${IMAGE}`) consolidates registry+image for tags and cache refs
 - `docker-metadata-action` bake target provides default tags locally; CI overrides with SHA/latest/PR tags via metadata-action bake file
-
-## Open Issues
-- **HIGH**: `devcontainer.json` image reference uses wrong registry: `ghcr.io/ray-manaloto/dotfiles-devcontainer:dev` → must be `ghcr.io/sortakool/dotfiles-devcontainer:dev` (pulls nonexistent image)
 
 ## Testing
 ```bash
@@ -53,14 +51,14 @@ Current CI smoke test (inline bash) is identified as too thin (debate 2026-03-29
 Priority: adopt structured Python-driven verification with named test suites.
 Cherry-pick verification patterns from cpp-playground; skip its full CI architecture.
 
-## Phase 2 (Future Work)
+## Phase 2 (In Progress)
 Full design spec: `docs/ultrapowers/specs/2026-03-29-devcontainer-host-user-migration-design.md`
 Adversarial review: `docs/research/trail/findings/devcontainer-spec-adversarial-review-2026-03-29.yaml`
 
-**Showstoppers to resolve before implementation (adversarial review 2026-03-29):**
-- **CRITICAL**: `devcontainer` stage must create a default user — `remoteUser: localEnv:USER` points to nonexistent user without it; use `build` block or create default user in stage
-- **CRITICAL**: `substr()` does not exist in docker-bake HCL dialect — truncate SHAs in CI workflow, pass as separate `SHORT` variables (e.g. `GCC_SHA_SHORT`)
-- **HIGH**: Compiler builds from source (GCC, Clang) belong in cpp-playground, not dotfiles — use `COPY --from` published images instead (avoids 2+ hour CI)
+**Showstoppers resolved and implemented (adversarial review 2026-03-29):**
+- **RESOLVED**: `devcontainer` stage creates default `devcontainer` user at UID 1000 — `remoteUser` now points to existing user
+- **RESOLVED**: `substr()` removed from docker-bake HCL — SHAs truncated in CI workflow, passed as separate `SHORT` variables
+- **RESOLVED**: Compiler builds from source cut; consuming from cpp-playground published images via `COPY --from`
 
 **Scope reduction (adversarial consensus: "scope monster"):**
 - Cut multi-stage compiler builds; consume from cpp-playground published images
