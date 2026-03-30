@@ -57,8 +57,6 @@ target "dev" {
   # GHA cache: faster for same-repo CI (set ACTIONS_CACHE_URL to enable)
   cache-from = [
     "type=registry,ref=${IMAGE_REF}:buildcache",
-    // Temporary: seed cache from old registry during migration (remove after first successful build)
-    "type=registry,ref=ghcr.io/sortakool/dotfiles-devcontainer:buildcache",
     "type=gha,scope=dotfiles-dev",
   ]
   cache-to = [

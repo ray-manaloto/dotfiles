@@ -19,7 +19,8 @@ def build_smoke_script() -> str:
     return """\
 set -euo pipefail
 echo "=== hk validate ==="
-cd ~/.local/share/chezmoi && hk validate
+cd /root/.local/share/chezmoi
+hk validate
 echo "=== mise ls (check no missing) ==="
 missing=$(mise ls 2>&1 | grep -c "(missing)" || true)
 echo "Missing tools: $missing"
