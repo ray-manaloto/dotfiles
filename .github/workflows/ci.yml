@@ -138,7 +138,7 @@ jobs:
         with:
           source: .
           targets: ${{ github.event.inputs.target || 'dev' }}
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           files: |
             docker-bake.hcl
             ${{ steps.meta.outputs.bake-file-tags }}
@@ -166,7 +166,6 @@ jobs:
   # ============================================================
   smoke-test:
     needs: build
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Log in to Container Registry
