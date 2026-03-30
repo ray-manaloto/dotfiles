@@ -43,8 +43,7 @@ ENV MISE_DATA_DIR=/opt/mise \
 
 # Run bootstrap as root (tools install to neutral system paths)
 COPY . /tmp/dotfiles
-RUN --mount=type=cache,id=mise-data,target=/opt/mise,sharing=locked \
-    --mount=type=cache,id=mise-cache,target=/opt/mise/cache,sharing=locked \
+RUN --mount=type=cache,id=mise-cache,target=/opt/mise/cache,sharing=locked \
     --mount=type=cache,id=uv-cache,target=/root/.cache/uv,sharing=locked \
     --mount=type=cache,id=chezmoi-cache,target=/root/.cache/chezmoi,sharing=locked \
     --mount=type=cache,id=pkl-cache,target=/root/.pkl,sharing=locked \

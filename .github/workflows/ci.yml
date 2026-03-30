@@ -126,7 +126,6 @@ jobs:
           cache-source: /tmp/buildkit-cache
           cache-map: |
             {
-              "mise-data": "/opt/mise",
               "mise-cache": "/opt/mise/cache",
               "uv-cache": "/root/.cache/uv",
               "chezmoi-cache": "/root/.cache/chezmoi",
