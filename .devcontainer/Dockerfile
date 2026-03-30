@@ -54,7 +54,9 @@ RUN --mount=type=cache,id=mise-data,target=/opt/mise,sharing=locked \
       export GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
       export MISE_GITHUB_TOKEN="$GITHUB_TOKEN"; \
     fi && \
-    cd /tmp/dotfiles && bash install.sh --local
+    cd /tmp/dotfiles && bash install.sh --local && \
+    chmod a+rX /root /root/.local /root/.local/share && \
+    chmod -R a+rX /root/.local/share/chezmoi
 
 # ---------- devcontainer (default user + SSH) ----------
 FROM tools AS devcontainer
