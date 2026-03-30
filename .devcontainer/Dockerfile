@@ -37,30 +37,33 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # ---------- dotfiles bootstrap ----------
 FROM base AS tools
 
+ARG DEVCONTAINER_USERNAME=devcontainer
+
 ENV MISE_DATA_DIR=/opt/mise \
     MISE_CACHE_DIR=/opt/mise/cache \
-    MISE_ALWAYS_KEEP_DOWNLOAD=1
+    MISE_ALWAYS_KEEP_DOWNLOAD=1 \
+    HOME=/home/${DEVCONTAINER_USERNAME}
 
-# Run bootstrap as root (tools install to neutral system paths)
+# Pre-create home so install.sh writes to the final user's home, not /root.
+# Avoids all /root permission and path issues when running as non-root user.
+RUN mkdir -p /home/${DEVCONTAINER_USERNAME}
+
 COPY . /tmp/dotfiles
 RUN --mount=type=cache,id=mise-cache,target=/opt/mise/cache,sharing=locked \
-    --mount=type=cache,id=uv-cache,target=/root/.cache/uv,sharing=locked \
-    --mount=type=cache,id=chezmoi-cache,target=/root/.cache/chezmoi,sharing=locked \
-    --mount=type=cache,id=pkl-cache,target=/root/.pkl,sharing=locked \
-    --mount=type=cache,id=npm-cache,target=/root/.npm,sharing=locked \
+    --mount=type=cache,id=uv-cache,target=${HOME}/.cache/uv,sharing=locked \
+    --mount=type=cache,id=chezmoi-cache,target=${HOME}/.cache/chezmoi,sharing=locked \
+    --mount=type=cache,id=pkl-cache,target=${HOME}/.pkl,sharing=locked \
+    --mount=type=cache,id=npm-cache,target=${HOME}/.npm,sharing=locked \
     --mount=type=secret,id=github_token \
     if [ -f /run/secrets/github_token ]; then \
       export GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
       export MISE_GITHUB_TOKEN="$GITHUB_TOKEN"; \
     fi && \
-    cd /tmp/dotfiles && bash install.sh --local && \
-    chmod a+rX /root /root/.local /root/.local/share && \
-    chmod -R a+rX /root/.local/share/chezmoi
+    cd /tmp/dotfiles && bash install.sh --local
 
 # ---------- devcontainer (default user + SSH) ----------
 FROM tools AS devcontainer
 
-ARG DEVCONTAINER_USERNAME=devcontainer
 ARG USER_UID=1000
 ARG USER_GID=1000
 
@@ -79,10 +82,10 @@ RUN existing_group="$(getent group ${USER_GID} | cut -d: -f1 || true)" && \
     existing_user="$(getent passwd ${USER_UID} | cut -d: -f1 || true)" && \
     if [ -n "${existing_user}" ] && [ "${existing_user}" != "${DEVCONTAINER_USERNAME}" ]; then \
       usermod --login "${DEVCONTAINER_USERNAME}" \
-              --home "/home/${DEVCONTAINER_USERNAME}" \
-              --move-home "${existing_user}"; \
+              --home "/home/${DEVCONTAINER_USERNAME}" "${existing_user}"; \
+      rm -rf "/home/${existing_user}"; \
     elif [ -z "${existing_user}" ]; then \
-      useradd --uid ${USER_UID} --gid ${USER_GID} -m -s /bin/bash ${DEVCONTAINER_USERNAME}; \
+      useradd --uid ${USER_UID} --gid ${USER_GID} --no-create-home -s /bin/bash ${DEVCONTAINER_USERNAME}; \
     fi && \
     usermod --shell /bin/bash "${DEVCONTAINER_USERNAME}" && \
     echo "${DEVCONTAINER_USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${DEVCONTAINER_USERNAME} && \

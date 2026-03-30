@@ -127,10 +127,10 @@ jobs:
           cache-map: |
             {
               "mise-cache": "/opt/mise/cache",
-              "uv-cache": "/root/.cache/uv",
-              "chezmoi-cache": "/root/.cache/chezmoi",
-              "pkl-cache": "/root/.pkl",
-              "npm-cache": "/root/.npm"
+              "uv-cache": "/home/devcontainer/.cache/uv",
+              "chezmoi-cache": "/home/devcontainer/.cache/chezmoi",
+              "pkl-cache": "/home/devcontainer/.pkl",
+              "npm-cache": "/home/devcontainer/.npm"
             }
           skip-extraction: ${{ steps.cache-restore.outputs.cache-hit == 'true' }}
 
@@ -216,9 +216,8 @@ jobs:
         run: |
           docker run --rm ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.smoke-tag.outputs.tag }} bash -lc '
             set -euo pipefail
-            export PATH="/root/.local/bin:/opt/mise/shims:$PATH"
             echo "=== hk validate ==="
-            cd /root/.local/share/chezmoi
+            cd ~/.local/share/chezmoi
             mise trust .
             hk validate
             echo "=== mise ls (check no missing) ==="
