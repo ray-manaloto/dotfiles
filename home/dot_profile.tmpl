@@ -12,6 +12,8 @@ fi
 export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
 
 # Load Mise shims for non-interactive login shells
-if [ -d "$HOME/.local/share/mise/shims" ]; then
-  export PATH="$HOME/.local/share/mise/shims:$PATH"
+# Uses MISE_DATA_DIR if set (devcontainer: /opt/mise), falls back to default
+MISE_SHIMS="${MISE_DATA_DIR:-$HOME/.local/share/mise}/shims"
+if [ -d "$MISE_SHIMS" ]; then
+  export PATH="$MISE_SHIMS:$PATH"
 fi

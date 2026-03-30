@@ -13,6 +13,7 @@
   "updateRemoteUserUID": true,
   "init": true,
   "overrideCommand": true,
+  "postCreateCommand": "mise trust --all",
   "postStartCommand": "cd '/workspaces/${localWorkspaceFolderBasename}' && mise install -y",
   "containerEnv": {
     "DEVCONTAINER": "true",
@@ -28,7 +29,6 @@
     "--security-opt=seccomp=unconfined"
   ],
   "mounts": [
-    "type=volume,src=mise-home,target=/opt/mise",
     "type=volume,src=uv-cache,target=/home/${localEnv:USER}/.cache/uv",
     "type=volume,src=claude-home,target=/home/${localEnv:USER}/.claude",
     "type=volume,src=codex-home,target=/home/${localEnv:USER}/.codex",

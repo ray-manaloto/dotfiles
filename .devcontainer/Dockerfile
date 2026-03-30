@@ -67,10 +67,6 @@ FROM tools AS devcontainer
 ARG USER_UID=1000
 ARG USER_GID=1000
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    openssh-server \
-    && rm -rf /var/lib/apt/lists/* /tmp/*
-
 # Create or rename existing UID/GID 1000 user/group to DEVCONTAINER_USERNAME.
 # ubuntu:25.10 ships with an 'ubuntu' user at UID/GID 1000 — handle gracefully.
 RUN existing_group="$(getent group ${USER_GID} | cut -d: -f1 || true)" && \
