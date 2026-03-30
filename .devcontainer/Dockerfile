@@ -61,13 +61,28 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openssh-server \
     && rm -rf /var/lib/apt/lists/* /tmp/*
 
-RUN groupadd --gid ${USER_GID} ${DEVCONTAINER_USERNAME} \
-    && useradd --uid ${USER_UID} --gid ${USER_GID} -m -s /bin/bash ${DEVCONTAINER_USERNAME} \
-    && echo "${DEVCONTAINER_USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${DEVCONTAINER_USERNAME} \
-    && chmod 0440 /etc/sudoers.d/${DEVCONTAINER_USERNAME} \
-    && mkdir -p /home/${DEVCONTAINER_USERNAME}/.ssh \
-    && chmod 700 /home/${DEVCONTAINER_USERNAME}/.ssh \
-    && chown ${DEVCONTAINER_USERNAME}:${DEVCONTAINER_USERNAME} /home/${DEVCONTAINER_USERNAME}/.ssh
+# Create or rename existing UID/GID 1000 user/group to DEVCONTAINER_USERNAME.
+# ubuntu:25.10 ships with an 'ubuntu' user at UID/GID 1000 — handle gracefully.
+RUN existing_group="$(getent group ${USER_GID} | cut -d: -f1 || true)" && \
+    if [ -n "${existing_group}" ] && [ "${existing_group}" != "${DEVCONTAINER_USERNAME}" ]; then \
+      groupmod -n "${DEVCONTAINER_USERNAME}" "${existing_group}"; \
+    elif [ -z "${existing_group}" ]; then \
+      groupadd --gid ${USER_GID} ${DEVCONTAINER_USERNAME}; \
+    fi && \
+    existing_user="$(getent passwd ${USER_UID} | cut -d: -f1 || true)" && \
+    if [ -n "${existing_user}" ] && [ "${existing_user}" != "${DEVCONTAINER_USERNAME}" ]; then \
+      usermod --login "${DEVCONTAINER_USERNAME}" \
+              --home "/home/${DEVCONTAINER_USERNAME}" \
+              --move-home "${existing_user}"; \
+    elif [ -z "${existing_user}" ]; then \
+      useradd --uid ${USER_UID} --gid ${USER_GID} -m -s /bin/bash ${DEVCONTAINER_USERNAME}; \
+    fi && \
+    usermod --shell /bin/bash "${DEVCONTAINER_USERNAME}" && \
+    echo "${DEVCONTAINER_USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${DEVCONTAINER_USERNAME} && \
+    chmod 0440 /etc/sudoers.d/${DEVCONTAINER_USERNAME} && \
+    mkdir -p /home/${DEVCONTAINER_USERNAME}/.ssh && \
+    chmod 700 /home/${DEVCONTAINER_USERNAME}/.ssh && \
+    chown ${DEVCONTAINER_USERNAME}:${DEVCONTAINER_USERNAME} /home/${DEVCONTAINER_USERNAME}/.ssh
 
 # Pre-stage cache directories
 RUN mkdir -p \
