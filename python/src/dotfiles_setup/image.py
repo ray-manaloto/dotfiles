@@ -19,7 +19,7 @@ def build_smoke_script() -> str:
     return """\
 set -euo pipefail
 echo "=== hk validate ==="
-cd "$(chezmoi source-path)"
+cd /tmp/dotfiles
 mise trust .
 hk validate
 echo "=== mise ls (check no missing) ==="

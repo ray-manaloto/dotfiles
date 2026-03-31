@@ -202,7 +202,7 @@ jobs:
           docker run --rm ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.smoke-tag.outputs.tag }} bash -lc '
             set -euo pipefail
             echo "=== hk validate ==="
-            cd "$(chezmoi source-path)"
+            cd /tmp/dotfiles
             mise trust .
             hk validate
 
