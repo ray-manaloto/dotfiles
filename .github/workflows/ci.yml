@@ -25,7 +25,7 @@ on:
 
 env:
   CONTAINER_REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}-devcontainer
+  IMAGE_NAME: ray-manaloto/cpp-devcontainer
 
 permissions:
   contents: read
@@ -65,34 +65,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@6b9c6063abd6010835644d4c2e1bef4cf5cd0fca # v6
+        with:
+          enable-cache: false
+
       - name: Validate Dockerfile contracts
         run: |
-          set -euo pipefail
-          echo "--- Checking Dockerfile syntax directive ---"
-          head -1 .devcontainer/Dockerfile | grep -q 'syntax=docker/dockerfile' || \
-            { echo "FAIL: Missing BuildKit syntax directive"; exit 1; }
-
-          echo "--- Checking APT snapshot pinning ---"
-          grep -q 'APT_SNAPSHOT' .devcontainer/Dockerfile || \
-            { echo "FAIL: Missing APT_SNAPSHOT build arg"; exit 1; }
-
-          echo "--- Checking BASE_IMAGE composability ---"
-          grep -q 'ARG BASE_IMAGE' .devcontainer/Dockerfile || \
-            { echo "FAIL: Missing BASE_IMAGE build arg"; exit 1; }
-
-          echo "--- Checking install.sh entry point ---"
-          grep -q 'install.sh' .devcontainer/Dockerfile || \
-            { echo "FAIL: Dockerfile must use install.sh as entry point"; exit 1; }
-
-          echo "--- Checking docker-bake.hcl exists ---"
-          test -f docker-bake.hcl || \
-            { echo "FAIL: Missing docker-bake.hcl"; exit 1; }
-
-          echo "--- Checking SBOM attestation ---"
-          grep -q 'type=sbom' docker-bake.hcl || \
-            { echo "FAIL: Missing SBOM attestation in bake config"; exit 1; }
-
-          echo "All contracts passed."
+          uv run --directory python dotfiles-setup verify run \
+            --category build --category ci --category identity --category architecture \
+            --json
 
   # ============================================================
   # Build Type 2: Dotfiles environment image (Docker → ghcr.io)
@@ -109,8 +96,28 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
 
+      - name: Restore BuildKit mount caches
+        uses: actions/cache/restore@v4
+        id: cache-restore
+        with:
+          path: /tmp/buildkit-cache
+          key: buildkit-mounts-${{ runner.os }}-${{ hashFiles('mise.lock', 'home/dot_config/mise/config.toml.tmpl', 'install.sh') }}
+          restore-keys: |
+            buildkit-mounts-${{ runner.os }}-
+
+      - name: Inject mount caches into BuildKit
+        uses: reproducible-containers/buildkit-cache-dance@v3
+        with:
+          cache-map: |
+            {
+              "mise-cache": "/opt/mise/cache",
+              "uv-cache": "/opt/data/uv/cache",
+              "npm-cache": "/opt/data/npm/cache",
+              "pkl-cache": "/opt/data/pkl"
+            }
+          skip-extraction: ${{ steps.cache-restore.outputs.cache-hit == 'true' }}
+
       - name: Log in to Container Registry
-        if: github.event_name != 'pull_request'
         uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4
         with:
           registry: ${{ env.CONTAINER_REGISTRY }}
@@ -137,7 +144,7 @@ jobs:
         with:
           source: .
           targets: ${{ github.event.inputs.target || 'dev' }}
-          push: ${{ github.event_name != 'pull_request' }}
+          push: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
           files: |
             docker-bake.hcl
             ${{ steps.meta.outputs.bake-file-tags }}
@@ -147,27 +154,42 @@ jobs:
 
       - name: Build performance summary
         if: always()
+        env:
+          BAKE_RESULT: ${{ steps.bake.outcome }}
+          CACHE_HIT: ${{ steps.cache-restore.outputs.cache-hit }}
         run: |
-          echo "## Build Performance" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
-          if docker images "${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}" --format '{{.Size}}' 2>/dev/null | head -1 | read size; then
-            echo "| Image size | $size |" >> $GITHUB_STEP_SUMMARY
-          fi
-          echo "| Cache sources | registry + gha |" >> $GITHUB_STEP_SUMMARY
-          echo "| BuildKit mount caches | mise, uv, pkl |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "_Check build logs for CACHED markers to verify cache hit rate._" >> $GITHUB_STEP_SUMMARY
+          echo "## Build Performance" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Metric | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|--------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Build result | ${BAKE_RESULT} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| BuildKit mount cache | ${CACHE_HIT:-miss} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Cache sources | registry + gha |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| BuildKit mount caches | mise, uv, npm, pkl |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "_Compare consecutive runs to verify cache effectiveness._" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Save BuildKit mount caches
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: /tmp/buildkit-cache
+          key: buildkit-mounts-${{ runner.os }}-${{ hashFiles('mise.lock', 'home/dot_config/mise/config.toml.tmpl', 'install.sh') }}
 
   # ============================================================
   # Smoke test: validate the published image
   # ============================================================
   smoke-test:
     needs: build
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
+      - name: Log in to Container Registry
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4
+        with:
+          registry: ${{ env.CONTAINER_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Derive image tag
         id: smoke-tag
         run: echo "tag=$(echo '${{ github.sha }}' | head -c 7)" >> "$GITHUB_OUTPUT"
@@ -180,13 +202,27 @@ jobs:
           docker run --rm ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.smoke-tag.outputs.tag }} bash -lc '
             set -euo pipefail
             echo "=== hk validate ==="
-            cd ~/.local/share/chezmoi && hk validate
+            cd /tmp/dotfiles
+            mise trust .
+            hk validate
+
             echo "=== mise ls (check no missing) ==="
-            missing=$(mise ls 2>&1 | grep -c "(missing)" || true)
+            mise_output=$(mise ls 2>&1)
+            missing=$(echo "$mise_output" | grep -c "(missing)" || true)
             echo "Missing tools: $missing"
             if [ "$missing" -gt 0 ]; then
-              mise ls 2>&1 | grep "(missing)"
+              echo "$mise_output" | grep "(missing)"
               exit 1
             fi
+
+            echo "=== zero-warning check ==="
+            warn_count=$(echo "$mise_output" | grep -ci "WARN" || true)
+            echo "Mise warnings: $warn_count"
+            if [ "$warn_count" -gt 0 ]; then
+              echo "FAIL: mise produced warnings (zero-warning policy)"
+              echo "$mise_output" | grep -i "WARN"
+              exit 1
+            fi
+
             echo "=== All checks passed ==="
           '

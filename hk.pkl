@@ -46,7 +46,7 @@ hooks {
 
       // --- Dockerfile (keep glob — only lint our Dockerfile, not random ones) ---
       ["hadolint"] {
-        glob = List(".devcontainer/Dockerfile")
+        glob = List(".devcontainer/Dockerfile", ".devcontainer/Dockerfile.host-user")
       }
 
       // --- TOML ---
@@ -120,6 +120,13 @@ hooks {
       // --- mise config validation ---
       ["mise"] {
         glob = List("**/mise.toml")
+      }
+
+      // --- No-vscode-user enforcement ---
+      ["no_vscode_user"] {
+        glob = List(".devcontainer/Dockerfile*", "docker-bake.hcl", ".devcontainer/devcontainer*.json")
+        batch = true
+        check = "! grep -n 'vscode' {files} || { echo 'FAIL: vscode username found'; exit 1; }"
       }
     }
   }

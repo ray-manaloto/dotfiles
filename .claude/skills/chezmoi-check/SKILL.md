@@ -70,3 +70,46 @@ grep -rn 'eq .chezmoi.os' home/*.tmpl
 - **`.tmpl` files are NOT linted by ruff/shellcheck** — hk.pkl uses type-based matching, and `.sh.tmpl` files have type `text` not `shell`
 - **Container environments skip prompts** — always test templates with both interactive and non-interactive paths
 - **`scriptEnv.PATH`** in `.chezmoi.toml.tmpl` must include mise shims for run_once/run_after scripts
+
+## Double-Escape Tera Syntax in mise Templates
+
+`home/dot_config/mise/config.toml.tmpl` contains mise's Tera syntax inside a chezmoi template.
+Double-escape with `{{ "{{ ... }}" }}` so chezmoi passes the literal string through unchanged.
+Example: `{{ "{{ env.VAR | default(value=\"fallback\") }}" }}` — chezmoi outputs the literal
+`{{ env.VAR | default(value="fallback") }}` which mise then expands at container runtime.
+Verify with: `chezmoi execute-template < home/dot_config/mise/config.toml.tmpl | grep 'env\.'`
+— output should show `{{` and `}}` literally, not interpolated values.
+
+## `.chezmoitemplates/` Snippet Pattern
+
+Reusable template fragments live in `home/.chezmoitemplates/`. Call them with:
+`{{ template "env" (dict "SHELL" "zsh") }}` where `"env"` is the filename and
+`(dict "SHELL" "zsh")` passes a map as `.` into the template. Inside the snippet,
+`.SHELL` expands to `"zsh"`. This avoids copy-pasting shell-specific blocks across
+multiple dotfiles (e.g., `.zshrc`, `.bashrc`). Validate with:
+`chezmoi execute-template '{{ template "env" (dict "SHELL" "zsh") }}'`
+
+## `run_onchange_after` with Hash Annotation
+
+Scripts named `run_onchange_after_*.sh.tmpl` re-run when their content changes.
+Add `# chezmoi:template:hash` as a comment and embed:
+`# {{ include "dot_config/mise/config.toml.tmpl" | sha256sum }}`
+This forces chezmoi to treat the included file's hash as part of the script body,
+so any change to the mise config triggers a re-run. Without the annotation, chezmoi
+only hashes the script itself, missing upstream config changes.
+
+## `chezmoi source-path` for Dynamic Path Resolution
+
+Never hardcode `~/.local/share/chezmoi` in scripts or templates. `install.sh` accepts
+`--source <path>` so the source directory varies between installs. Use:
+`chezmoi source-path` — prints the active source directory
+`chezmoi source-path home/dot_config/mise/config.toml.tmpl` — resolves a specific file
+This is critical in `run_once`/`run_onchange` scripts that reference source files directly.
+
+## `scriptEnv.PATH` with `env "MISE_DATA_DIR"` Fallback
+
+In `.chezmoi.toml.tmpl`, `scriptEnv.PATH` now uses:
+`{{ env "MISE_DATA_DIR" | default (joinPath .chezmoi.homeDir ".local/share/mise") }}/shims`
+This mirrors the pattern in `dot_zshenv.tmpl` — works in containers (MISE_DATA_DIR=/opt/mise)
+and on bare-metal (falls back to `$HOME/.local/share/mise/shims`). Never hardcode
+`/opt/mise` or `$HOME/.local/share/mise` directly in this path.
