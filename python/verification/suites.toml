@@ -1,0 +1,467 @@
+[meta]
+version = "2"
+
+# =============================================================================
+# Build Constraints (~15) — Dockerfile structure and correctness
+# =============================================================================
+
+[[suite]]
+name = "build.mise-data-dir"
+description = "MISE_DATA_DIR must be /opt/mise (neutral shared path)"
+category = "build"
+check_type = "static"
+handler = "require_tokens"
+paths = [".devcontainer/Dockerfile"]
+tokens = ["MISE_DATA_DIR=/opt/mise"]
+
+[[suite]]
+name = "build.mise-always-keep-download"
+description = "MISE_ALWAYS_KEEP_DOWNLOAD=1 for cache reuse"
+category = "build"
+check_type = "static"
+handler = "require_tokens"
+paths = [".devcontainer/Dockerfile"]
+tokens = ["MISE_ALWAYS_KEEP_DOWNLOAD=1"]
+
+[[suite]]
+name = "build.mise-cache-dir"
+description = "MISE_CACHE_DIR must be /opt/mise/cache"
+category = "build"
+check_type = "static"
+handler = "require_tokens"
+paths = [".devcontainer/Dockerfile"]
+tokens = ["MISE_CACHE_DIR=/opt/mise/cache"]
+
+[[suite]]
+name = "build.home-not-root"
+description = "HOME must not be /root in tools or devcontainer stage"
+category = "build"
+check_type = "static"
+handler = "regex_forbid"
+paths = [".devcontainer/Dockerfile"]
+pattern = '^\s*ENV\s.*HOME=/root\b'
+
+[[suite]]
+name = "build.no-warning-suppression"
+description = "Never suppress mise warnings"
+category = "build"
+check_type = "static"
+handler = "forbid_tokens"
+paths = [".devcontainer/Dockerfile", "install.sh", ".github/workflows/ci.yml"]
+tokens = ["MISE_QUIET", "MISE_LOG_LEVEL=warn", "MISE_LOG_LEVEL=error"]
+
+[[suite]]
+name = "build.no-stderr-suppression"
+description = "No blanket stderr suppression (2>/dev/null) except mise trust"
+category = "build"
+check_type = "static"
+handler = "forbid_tokens"
+paths = [".devcontainer/Dockerfile", "install.sh"]
+tokens = ["2>/dev/null"]
+allowlist = ["mise trust", "\\$MISE trust"]
+
+[[suite]]
+name = "build.cache-mount-sharing-locked"
+description = "All cache mounts must use sharing=locked"
+category = "build"
+check_type = "static"
+handler = "regex_forbid"
+paths = [".devcontainer/Dockerfile"]
+pattern = '--mount=type=cache(?!.*sharing=locked).*target='
+
+[[suite]]
+name = "build.no-mise-data-cache-mount"
+description = "MISE_DATA_DIR must not be a cache mount (tools vanish from image)"
+category = "build"
+check_type = "static"
+handler = "regex_forbid"
+paths = [".devcontainer/Dockerfile"]
+pattern = 'target=/opt/mise[,\s]'
+
+[[suite]]
+name = "build.buildkit-syntax"
+description = "BuildKit syntax directive required on first line"
+category = "build"
+check_type = "static"
+handler = "regex_match"
+paths = [".devcontainer/Dockerfile"]
+pattern = '^#\s*syntax=docker/dockerfile'
+
+[[suite]]
+name = "build.openssh-not-in-base"
+description = "openssh-server must not be in base Dockerfile (overlay only)"
+category = "build"
+check_type = "static"
+handler = "forbid_tokens"
+paths = [".devcontainer/Dockerfile"]
+tokens = ["openssh-server"]
+
+[[suite]]
+name = "build.openssh-in-overlay"
+description = "openssh-server must be installed in host-user overlay"
+category = "build"
+check_type = "static"
+handler = "require_tokens"
+paths = [".devcontainer/Dockerfile.host-user"]
+tokens = ["openssh-server"]
+
+[[suite]]
+name = "build.uv-link-mode-not-global"
+description = "UV_LINK_MODE=copy must not be a global ENV (breaks runtime)"
+category = "build"
+check_type = "static"
+handler = "regex_forbid"
+paths = [".devcontainer/Dockerfile"]
+pattern = '^\s*ENV\s.*UV_LINK_MODE'
+
+[[suite]]
+name = "build.base-image-arg"
+description = "ARG BASE_IMAGE must exist for composability"
+category = "build"
+check_type = "static"
+handler = "require_tokens"
+paths = [".devcontainer/Dockerfile"]
+tokens = ["ARG BASE_IMAGE"]
+
+[[suite]]
+name = "build.install-sh-entry"
+description = "install.sh must be referenced as entry point"
+category = "build"
+check_type = "static"
+handler = "require_tokens"
+paths = [".devcontainer/Dockerfile"]
+tokens = ["install.sh"]
+
+[[suite]]
+name = "build.gnupg-installed"
+description = "gnupg must be in apt-get install for mise signature verification"
+category = "build"
+check_type = "static"
+handler = "require_tokens"
+paths = [".devcontainer/Dockerfile"]
+tokens = ["gnupg"]
+
+[[suite]]
+name = "build.npm-no-update-notifier"
+description = "npm_config_update_notifier=false to suppress build notices"
+category = "build"
+check_type = "static"
+handler = "require_tokens"
+paths = [".devcontainer/Dockerfile"]
+tokens = ["npm_config_update_notifier=false"]
+
+[[suite]]
+name = "build.path-includes-mise-shims"
+description = "PATH must include /opt/mise/shims"
+category = "build"
+check_type = "static"
+handler = "require_tokens"
+paths = [".devcontainer/Dockerfile"]
+tokens = ["/opt/mise/shims"]
+
+[[suite]]
+name = "build.cargo-home-opt"
+description = "CARGO_HOME must be /opt/data/cargo in Dockerfile"
+category = "build"
+check_type = "static"
+handler = "require_tokens"
+paths = [".devcontainer/Dockerfile"]
+tokens = ["CARGO_HOME=/opt/data/cargo"]
+
+[[suite]]
+name = "build.rustup-home-opt"
+description = "RUSTUP_HOME must be /opt/data/rustup in Dockerfile"
+category = "build"
+check_type = "static"
+handler = "require_tokens"
+paths = [".devcontainer/Dockerfile"]
+tokens = ["RUSTUP_HOME=/opt/data/rustup"]
+
+[[suite]]
+name = "build.gopath-opt"
+description = "GOPATH must be /opt/data/go in Dockerfile"
+category = "build"
+check_type = "static"
+handler = "require_tokens"
+paths = [".devcontainer/Dockerfile"]
+tokens = ["GOPATH=/opt/data/go"]
+
+[[suite]]
+name = "build.npm-prefix-opt"
+description = "NPM_CONFIG_PREFIX must be /opt/data/npm in Dockerfile"
+category = "build"
+check_type = "static"
+handler = "require_tokens"
+paths = [".devcontainer/Dockerfile"]
+tokens = ["NPM_CONFIG_PREFIX=/opt/data/npm"]
+
+[[suite]]
+name = "build.home-opt-home"
+description = "Base image must not stage a fake /opt/home build user"
+category = "build"
+check_type = "static"
+handler = "forbid_tokens"
+paths = [".devcontainer/Dockerfile"]
+tokens = ["/opt/home"]
+
+[[suite]]
+name = "build.no-xdg-in-tools-stage"
+description = "XDG_DATA_HOME/XDG_CACHE_HOME must not be in Dockerfile"
+category = "build"
+check_type = "static"
+handler = "forbid_tokens"
+paths = [".devcontainer/Dockerfile"]
+tokens = ["XDG_DATA_HOME", "XDG_CACHE_HOME"]
+
+# =============================================================================
+# CI Constraints (~6) — Workflow correctness
+# =============================================================================
+
+[[suite]]
+name = "ci.sbom-attestation"
+description = "SBOM attestation required in bake config"
+category = "ci"
+check_type = "static"
+handler = "require_tokens"
+paths = ["docker-bake.hcl"]
+tokens = ["type=sbom"]
+
+[[suite]]
+name = "ci.provenance-attestation"
+description = "Provenance attestation required in bake config"
+category = "ci"
+check_type = "static"
+handler = "require_tokens"
+paths = ["docker-bake.hcl"]
+tokens = ["type=provenance"]
+
+[[suite]]
+name = "ci.no-mise-data-in-cache-map"
+description = "mise-data must not be in buildkit-cache-dance cache-map"
+category = "ci"
+check_type = "static"
+handler = "regex_forbid"
+paths = [".github/workflows/ci.yml"]
+pattern = '"mise-data"'
+
+[[suite]]
+name = "ci.cache-key-includes-mise-lock"
+description = "Cache key must hash mise.lock"
+category = "ci"
+check_type = "static"
+handler = "require_tokens"
+paths = [".github/workflows/ci.yml"]
+tokens = ["mise.lock"]
+
+[[suite]]
+name = "ci.cache-key-includes-config-template"
+description = "Cache key must hash chezmoi mise config template"
+category = "ci"
+check_type = "static"
+handler = "require_tokens"
+paths = [".github/workflows/ci.yml"]
+tokens = ["home/dot_config/mise/config.toml.tmpl"]
+
+[[suite]]
+name = "ci.unconditional-ghcr-login"
+description = "GHCR login must not be conditional on event type"
+category = "ci"
+check_type = "static"
+handler = "regex_forbid"
+paths = [".github/workflows/ci.yml"]
+pattern = "if:.*github\\.event_name.*!=.*pull_request"
+
+[[suite]]
+name = "ci.image-name-dotfiles-devcontainer"
+description = "CI must publish the dotfiles-devcontainer image"
+category = "ci"
+check_type = "static"
+handler = "require_tokens"
+paths = [".github/workflows/ci.yml"]
+tokens = ["ray-manaloto/dotfiles-devcontainer"]
+
+# =============================================================================
+# Identity Constraints (~6) — User/group handling
+# =============================================================================
+
+[[suite]]
+name = "identity.no-vscode-user"
+description = "No vscode username references in Docker/devcontainer files"
+category = "identity"
+check_type = "static"
+handler = "forbid_tokens"
+paths = [
+    ".devcontainer/Dockerfile",
+    ".devcontainer/Dockerfile.host-user",
+    ".devcontainer/devcontainer.json",
+    "docker-bake.hcl",
+    "install.sh",
+    ".github/workflows/ci.yml",
+]
+tokens = ["vscode"]
+
+[[suite]]
+name = "identity.user-env-set"
+description = "USER env var must be set in overlay"
+category = "identity"
+check_type = "static"
+handler = "regex_match"
+paths = [".devcontainer/Dockerfile.host-user"]
+pattern = 'USER=\$\{?DEVCONTAINER_USERNAME\}?'
+
+[[suite]]
+name = "identity.logname-env-set"
+description = "LOGNAME env var must be set in overlay"
+category = "identity"
+check_type = "static"
+handler = "regex_match"
+paths = [".devcontainer/Dockerfile.host-user"]
+pattern = 'LOGNAME=\$\{?DEVCONTAINER_USERNAME\}?'
+
+[[suite]]
+name = "identity.workdir-set"
+description = "WORKDIR must reference DEVCONTAINER_USERNAME"
+category = "identity"
+check_type = "static"
+handler = "regex_match"
+paths = [".devcontainer/Dockerfile.host-user"]
+pattern = 'WORKDIR\s+/home/\$\{?DEVCONTAINER_USERNAME\}?'
+
+[[suite]]
+name = "identity.stale-sudoers-cleanup"
+description = "Stale sudoers entry must be removed before creating new one"
+category = "identity"
+check_type = "static"
+handler = "require_tokens"
+paths = [".devcontainer/Dockerfile.host-user"]
+tokens = ["rm -f /etc/sudoers.d/devcontainer"]
+
+[[suite]]
+name = "identity.username-validation"
+description = "Username validation must check empty, root, and invalid chars"
+category = "identity"
+check_type = "static"
+handler = "regex_match"
+paths = [".devcontainer/Dockerfile.host-user"]
+pattern = 'DEVCONTAINER_USERNAME.*=.*"root"'
+
+# =============================================================================
+# Architecture Constraints (~4) — Structural invariants
+# =============================================================================
+
+[[suite]]
+name = "arch.devcontainer-remote-user-dynamic"
+description = "remoteUser must use localEnv:USER, not hardcoded"
+category = "architecture"
+check_type = "static"
+handler = "require_tokens"
+paths = [".devcontainer/devcontainer.json"]
+tokens = ["${localEnv:USER}"]
+
+[[suite]]
+name = "arch.base-image-dotfiles-devcontainer"
+description = "Host-user overlay must use dotfiles-devcontainer as base image"
+category = "architecture"
+check_type = "static"
+handler = "require_tokens"
+paths = [".devcontainer/Dockerfile.host-user", ".devcontainer/devcontainer.json"]
+tokens = ["ghcr.io/ray-manaloto/dotfiles-devcontainer:dev"]
+
+[[suite]]
+name = "arch.update-remote-user-uid-disabled"
+description = "updateRemoteUserUID must be disabled because the overlay owns identity"
+category = "architecture"
+check_type = "static"
+handler = "require_tokens"
+paths = [".devcontainer/devcontainer.json"]
+tokens = ["\"updateRemoteUserUID\": false"]
+
+[[suite]]
+name = "arch.no-mise-home-volume"
+description = "No mise-home volume mount (mise is image-baked at /opt/mise)"
+category = "architecture"
+check_type = "static"
+handler = "forbid_tokens"
+paths = [".devcontainer/devcontainer.json"]
+tokens = ["mise-home"]
+
+[[suite]]
+name = "arch.mise-strict-in-container"
+description = "MISE_STRICT=1 must be set in containerEnv"
+category = "architecture"
+check_type = "static"
+handler = "require_tokens"
+paths = [".devcontainer/devcontainer.json"]
+tokens = ["MISE_STRICT"]
+
+[[suite]]
+name = "arch.npm-package-manager-bun"
+description = "npm-backed installs must use bun via mise settings"
+category = "architecture"
+check_type = "static"
+handler = "require_tokens"
+paths = ["home/dot_config/mise/config.toml.tmpl"]
+tokens = ["npm.package_manager = \"bun\""]
+
+[[suite]]
+name = "arch.pipx-uses-uvx"
+description = "pipx-backed installs must use uvx via mise settings"
+category = "architecture"
+check_type = "static"
+handler = "require_tokens"
+paths = ["home/dot_config/mise/config.toml.tmpl"]
+tokens = ["pipx.uvx = true"]
+
+[[suite]]
+name = "arch.cargo-uses-binstall"
+description = "cargo-backed installs must prefer cargo-binstall"
+category = "architecture"
+check_type = "static"
+handler = "require_tokens"
+paths = ["home/dot_config/mise/config.toml.tmpl"]
+tokens = ["cargo.binstall = true"]
+
+[[suite]]
+name = "arch.chezmoiscripts-lifecycle"
+description = "Chezmoi lifecycle scripts must exist (run_once_before + run_onchange_after)"
+category = "architecture"
+check_type = "static"
+handler = "require_tokens"
+paths = ["home/.chezmoiscripts/run_once_before_01_install_mise.sh", "home/.chezmoiscripts/run_onchange_after_10_mise_install.sh.tmpl"]
+tokens = ["mise"]
+
+# =============================================================================
+# Policy Constraints (~4) — Human-only, not automatable
+# =============================================================================
+
+[[suite]]
+name = "policy.zero-warning"
+description = "Every warning must be fixed at root cause, never suppressed"
+category = "policy"
+check_type = "policy"
+handler = "policy_doc"
+reference = ".claude/rules/zero-skip-policy.md"
+
+[[suite]]
+name = "policy.research-before-fixing"
+description = "Research root cause before attempting fixes"
+category = "policy"
+check_type = "policy"
+handler = "policy_doc"
+reference = ".claude/rules/zero-skip-policy.md"
+
+[[suite]]
+name = "policy.no-suppression-without-approval"
+description = "No ignore rules without explicit user approval"
+category = "policy"
+check_type = "policy"
+handler = "policy_doc"
+reference = ".claude/rules/zero-skip-policy.md"
+
+[[suite]]
+name = "policy.worktree-pr-workflow"
+description = "Verify on feature branch, never merge to main for testing"
+category = "policy"
+check_type = "policy"
+handler = "policy_doc"
+reference = "CLAUDE.md"

@@ -8,11 +8,13 @@ import os
 import platform
 import sys
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from dotfiles_setup.ai import AIOrchestrator
 from dotfiles_setup.audit import DevEnvironmentAuditor, ToolManager
 from dotfiles_setup.docker import DevContainerManager
+from dotfiles_setup.image import main as image_main
+from dotfiles_setup.verify import main as verify_main
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +84,56 @@ def setup_parser() -> argparse.ArgumentParser:
     docker_subparsers.add_parser("test", help="Run tests inside the container")
     docker_subparsers.add_parser("down", help="Bring the devcontainer down")
 
+    # verify command
+    verify_parser = subparsers.add_parser("verify", help="Run verification suites")
+    verify_sub = verify_parser.add_subparsers(
+        dest="verify_command", help="Verify commands"
+    )
+    run_parser = verify_sub.add_parser("run", help="Run verification suites")
+    run_parser.add_argument("--suite", help="Run a specific suite by name")
+    run_parser.add_argument(
+        "--category",
+        action="append",
+        dest="categories",
+        help="Filter by category (repeatable)",
+    )
+    run_parser.add_argument(
+        "--json", action="store_true", dest="output_json", help="Output JSON"
+    )
+    list_parser = verify_sub.add_parser("list", help="List all verification suites")
+    list_parser.add_argument(
+        "--category",
+        action="append",
+        dest="categories",
+        help="Filter by category (repeatable)",
+    )
+
+    # image subcommands
+    image_parser = subparsers.add_parser("image", help="Image operations")
+    image_sub = image_parser.add_subparsers(dest="image_command", help="Image commands")
+    smoke_parser = image_sub.add_parser("smoke", help="Run smoke tests on an image")
+    smoke_parser.add_argument(
+        "--image-ref", required=True, help="Image reference to test"
+    )
+    smoke_parser.add_argument("--platform", default="linux/amd64", help="Platform")
+    size_parser = image_sub.add_parser("size-report", help="Report image size metrics")
+    size_parser.add_argument(
+        "--image-ref", required=True, help="Image reference to inspect"
+    )
+    size_parser.add_argument("--platform", default="linux/amd64", help="Platform")
+    benchmark_parser = image_sub.add_parser("benchmark", help="Benchmark image smoke/report timings")
+    benchmark_parser.add_argument(
+        "--image-ref", required=True, help="Image reference to benchmark"
+    )
+    benchmark_parser.add_argument("--platform", default="linux/amd64", help="Platform")
+    benchmark_parser.add_argument(
+        "--output-path",
+        help="Optional JSON output path for benchmark metrics",
+    )
+    compare_parser = image_sub.add_parser("metrics-compare", help="Compare two benchmark JSON files")
+    compare_parser.add_argument("--baseline", required=True, help="Baseline JSON path")
+    compare_parser.add_argument("--candidate", required=True, help="Candidate JSON path")
+
     # version command
     subparsers.add_parser("version", help="Show the version of the library")
 
@@ -121,27 +173,111 @@ def handle_install(project_root: Path) -> None:
     manager.sync_versions(project_root)
 
 
-def run_command(args: argparse.Namespace, project_root: Path) -> None:
-    """Execute the specified command."""
-    if args.command == "validate":
+def handle_sync_versions(project_root: Path) -> None:
+    """Handle sync-versions command.
+
+    Args:
+        project_root: The project root path.
+    """
+    ToolManager().sync_versions(project_root)
+
+
+def handle_verify(args: argparse.Namespace) -> None:
+    """Handle verify subcommands.
+
+    Args:
+        args: The parsed arguments.
+    """
+    sys.exit(
+        verify_main(
+            suite_filter=getattr(args, "suite", None),
+            category_filter=getattr(args, "categories", None),
+            output_json=getattr(args, "output_json", False),
+            list_only=getattr(args, "verify_command", None) == "list",
+        )
+    )
+
+
+def handle_image(args: argparse.Namespace) -> None:
+    """Handle image subcommands.
+
+    Args:
+        args: The parsed arguments.
+    """
+    if args.image_command == "smoke":
+        sys.exit(image_main(args.image_ref, platform=args.platform))
+    if args.image_command == "size-report":
+        sys.exit(image_main(args.image_ref, platform=args.platform, command="size-report"))
+    if args.image_command == "benchmark":
+        output_path = Path(args.output_path) if args.output_path else None
+        sys.exit(
+            image_main(
+                args.image_ref,
+                platform=args.platform,
+                command="benchmark",
+                output_path=output_path,
+            )
+        )
+    if args.image_command == "metrics-compare":
+        sys.exit(
+            image_main(
+                "",
+                command="metrics-compare",
+                baseline_path=Path(args.baseline),
+                candidate_path=Path(args.candidate),
+            )
+        )
+
+
+def _build_command_handlers(
+    args: argparse.Namespace,
+    project_root: Path,
+) -> dict[str, Any]:
+    """Build a dispatch table of command handlers.
+
+    Args:
+        args: The parsed arguments.
+        project_root: The project root path.
+
+    Returns:
+        Mapping from command name to a callable handler.
+    """
+
+    def _validate() -> None:
         EnvironmentValidator.validate()
         logger.info("Environment is valid.")
-    elif args.command == "audit":
-        handle_audit()
-    elif args.command == "ensure-ssh":
+
+    def _ensure_ssh() -> None:
         EnvironmentValidator.validate()
         DevEnvironmentAuditor().ensure_ssh()
-    elif args.command == "ai-setup":
+
+    def _ai_setup() -> None:
         EnvironmentValidator.validate()
         AIOrchestrator().run_all()
-    elif args.command == "docker":
-        handle_docker(args, project_root)
-    elif args.command == "version":
+
+    def _version() -> None:
         sys.stdout.write("0.1.0\n")
-    elif args.command == "install":
-        handle_install(project_root)
-    elif args.command == "sync-versions":
-        ToolManager().sync_versions(project_root)
+
+    return {
+        "validate": _validate,
+        "audit": handle_audit,
+        "ensure-ssh": _ensure_ssh,
+        "ai-setup": _ai_setup,
+        "docker": lambda: handle_docker(args, project_root),
+        "version": _version,
+        "install": lambda: handle_install(project_root),
+        "verify": lambda: handle_verify(args),
+        "image": lambda: handle_image(args),
+        "sync-versions": lambda: handle_sync_versions(project_root),
+    }
+
+
+def run_command(args: argparse.Namespace, project_root: Path) -> None:
+    """Execute the specified command."""
+    handlers = _build_command_handlers(args, project_root)
+    handler = handlers.get(args.command)
+    if handler is not None:
+        handler()
 
 
 def main() -> None:

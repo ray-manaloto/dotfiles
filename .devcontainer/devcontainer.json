@@ -1,30 +1,41 @@
 {
   "name": "dotfiles-devcontainer",
-  "image": "ghcr.io/ray-manaloto/dotfiles-devcontainer:dev",
+  "build": {
+    "dockerfile": "Dockerfile.host-user",
+    "args": {
+      "DEVCONTAINER_USERNAME": "${localEnv:USER}",
+      "BASE_IMAGE": "ghcr.io/ray-manaloto/dotfiles-devcontainer:dev"
+    }
+  },
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/${localWorkspaceFolderBasename},type=bind,consistency=cached",
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
-  "remoteUser": "vscode",
-  "updateRemoteUserUID": true,
+  "remoteUser": "${localEnv:USER}",
+  "updateRemoteUserUID": false,
   "init": true,
   "overrideCommand": true,
+  "postCreateCommand": "mise trust --all && chezmoi init --apply --source '/workspaces/${localWorkspaceFolderBasename}' --force && cd '/workspaces/${localWorkspaceFolderBasename}' && mise install -y",
+  "postStartCommand": "cd '/workspaces/${localWorkspaceFolderBasename}' && mise trust --all && UV_CACHE_DIR=/tmp/dotfiles-uv-cache uv run --project '/workspaces/${localWorkspaceFolderBasename}/python' dotfiles-setup ensure-ssh",
   "containerEnv": {
     "DEVCONTAINER": "true",
+    "DOTFILES_HOST_USER": "${localEnv:USER}",
     "MISE_STRICT": "1"
   },
   "remoteEnv": {
-    "PATH": "${containerEnv:PATH}:/home/vscode/.local/share/mise/shims"
+    "PATH": "${containerEnv:PATH}:/opt/mise/shims"
   },
   "runArgs": [
-    "--platform=linux/amd64"
+    "--platform=linux/amd64",
+    "--cap-add=SYS_PTRACE",
+    "--security-opt=seccomp=unconfined",
+    "--publish=127.0.0.1:4444:22"
   ],
   "mounts": [
-    "type=volume,src=mise-home,target=/home/vscode/.local/share/mise",
-    "type=volume,src=uv-cache,target=/home/vscode/.cache/uv",
-    "type=volume,src=claude-home,target=/home/vscode/.claude",
-    "type=volume,src=codex-home,target=/home/vscode/.codex",
-    "type=volume,src=gemini-home,target=/home/vscode/.gemini",
-    "type=volume,src=gh-config,target=/home/vscode/.config/gh",
-    "type=bind,source=${localEnv:HOME}/.ssh,target=/home/vscode/.ssh,readonly"
-  ],
-  "postStartCommand": "mise install -y"
+    "type=volume,src=uv-cache,target=/home/${localEnv:USER}/.cache/uv",
+    "type=volume,src=claude-project-cache,target=/home/${localEnv:USER}/.cache/claude",
+    "type=volume,src=gh-config,target=/home/${localEnv:USER}/.config/gh",
+    "type=bind,source=${localEnv:HOME}/.claude,target=/home/${localEnv:USER}/.claude",
+    "type=bind,source=${localEnv:HOME}/.codex,target=/home/${localEnv:USER}/.codex",
+    "type=bind,source=${localEnv:HOME}/.gemini,target=/home/${localEnv:USER}/.gemini",
+    "type=bind,source=${localEnv:HOME}/.ssh,target=/home/${localEnv:USER}/.ssh,readonly"
+  ]
 }

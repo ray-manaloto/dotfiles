@@ -13,12 +13,8 @@ logger = logging.getLogger(__name__)
 class AIOrchestratorInterface(Protocol):
     """Interface for AI toolchain orchestration."""
 
-    def setup_claude(self) -> None:
-        """Install Claude Code using the official installer.
-
-        This method executes the official curl-based installation script
-        in a non-interactive manner.
-        """
+    def ensure_ai_clis(self) -> None:
+        """Verify managed AI CLIs are present in PATH."""
         ...
 
     def setup_extensions(self) -> None:
@@ -27,6 +23,10 @@ class AIOrchestratorInterface(Protocol):
         This method handles the installation of GitHub extensions
         and other AI-related tools.
         """
+        ...
+
+    def setup_omx(self) -> None:
+        """Install or refresh Oh My Codex runtime files."""
         ...
 
     def run_all(self) -> None:
@@ -48,16 +48,15 @@ class AIOrchestrator:
         """Initialize the AIOrchestrator."""
         self.tool_manager = ToolManager()
 
-    def setup_claude(self) -> None:
-        """Install Claude Code using the official installer.
+    def ensure_ai_clis(self) -> None:
+        """Verify the managed AI CLIs are available.
 
-        Executes: curl -fsSL https://claude.ai/install.sh | bash
+        These CLIs are installed declaratively through mise and share host auth
+        state via mounted config directories inside the devcontainer.
         """
-        logger.info("Installing Claude Code...")
-        # We use bash -c to pipe curl to bash, following the Zero-Bash rule
-        # by encapsulating it within Python's subprocess logic.
-        cmd = ["bash", "-c", "curl -fsSL https://claude.ai/install.sh | bash"]
-        self.tool_manager.run_command(cmd, capture=False)
+        logger.info("Verifying AI CLIs are available...")
+        for tool in ("claude", "codex", "gemini"):
+            self.tool_manager.run_command(["bash", "-lc", f"command -v {tool}"], capture=False)
 
     def setup_extensions(self) -> None:
         """Install AI-related extensions.
@@ -66,8 +65,15 @@ class AIOrchestrator:
         """
         logger.info("Setting up AI extensions...")
 
+    def setup_omx(self) -> None:
+        """Run non-interactive OMX setup for the current user."""
+        logger.info("Configuring Oh My Codex...")
+        cmd = ["omx", "setup", "--force", "--scope", "user"]
+        self.tool_manager.run_command(cmd, capture=False)
+
     def run_all(self) -> None:
         """Run all AI setup steps."""
-        self.setup_claude()
+        self.ensure_ai_clis()
+        self.setup_omx()
         self.setup_extensions()
         logger.info("AI toolchain setup complete.")

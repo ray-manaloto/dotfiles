@@ -11,6 +11,10 @@ rust = "1.94.1"
 zig = "0.15.2"
 bun = "1.3.11"
 pixi = "0.66.0"
+java = "latest"
+deno = "latest"
+ruby = "latest"
+cargo-binstall = "latest"
 # Dotfiles management
 chezmoi = "2.70.0"
 # Git hooks & linting (also in project mise.toml, pinned here for image reproducibility)
@@ -33,21 +37,78 @@ fzf = "0.70.0"
 ripgrep = "15.1.0"
 fd = "10.4.2"
 bat = "0.26.1"
+# C/C++ and systems tooling
+"github:go-task/task" = "latest"
+"github:mozilla/sccache" = "latest"
+"github:facebook/infer" = "latest"
+"github:oclint/oclint" = "latest"
+"pipx:meson" = "latest"
+"pipx:conan" = "latest"
+"pipx:cpplint" = "latest"
+"pipx:flawfinder" = "latest"
+"pipx:lizard" = "latest"
+"pipx:cmakelang" = "latest"
+"pipx:codechecker" = "latest"
+"pipx:gcovr" = "latest"
+"pipx:cppclean" = "latest"
+"conda:clang" = "latest"
+"conda:clangxx" = "latest"
+"conda:cmake" = "latest"
+"conda:ninja" = "latest"
+"conda:clang-tools" = "latest"
+"conda:clang-format" = "latest"
+"conda:lld" = "latest"
+"conda:mold" = "latest"
+"conda:bear" = "latest"
+"conda:ccache" = "latest"
+"conda:cppcheck" = "latest"
+"conda:include-what-you-use" = "latest"
+"conda:gdb" = "latest"
+"conda:lldb" = "latest"
+"conda:lcov" = "latest"
+"conda:doxygen" = "latest"
+"conda:graphviz" = "latest"
+"conda:git" = "latest"
+"conda:make" = "latest"
+"conda:linux-perf" = "latest"
+"conda:gnu-tar" = "latest"
+"conda:p7zip" = "latest"
 # AI CLIs
 "npm:@google/gemini-cli" = "0.35.3"
 "npm:@openai/codex" = "0.117.0"
+"npm:@anthropic-ai/claude-code" = "latest"
 
 [settings]
 experimental = true
 auto_install = true
 asdf_compat = true
 lockfile = true
+jobs = 8
+npm.package_manager = "bun"
+pipx.uvx = true
+cargo.binstall = true
+cargo.binstall_only = false
+conda.channel = "conda-forge"
+github.github_attestations = true
+github.slsa = true
 
 [settings.status]
 show_tools = true
 missing_tools = "always"
 
 [env]
+# Per-tool paths: Dockerfile ENV provides /opt/ values in containers;
+# Tera default() provides bare-metal fallback to ~/.local/share/*.
+CARGO_HOME = "{{ "{{ env.CARGO_HOME | default(value=env.HOME ~ '/.local/share/cargo') }}" }}"
+RUSTUP_HOME = "{{ "{{ env.RUSTUP_HOME | default(value=env.HOME ~ '/.local/share/rustup') }}" }}"
+NPM_CONFIG_PREFIX = "{{ "{{ env.NPM_CONFIG_PREFIX | default(value=env.HOME ~ '/.local/share/npm') }}" }}"
+NPM_CONFIG_CACHE = "{{ "{{ env.NPM_CONFIG_CACHE | default(value=env.HOME ~ '/.cache/npm') }}" }}"
+GOPATH = "{{ "{{ env.GOPATH | default(value=env.HOME ~ '/.local/share/go') }}" }}"
+GOBIN = "{{ "{{ env.GOBIN | default(value=env.HOME ~ '/.local/share/go/bin') }}" }}"
+GOMODCACHE = "{{ "{{ env.GOMODCACHE | default(value=env.HOME ~ '/.cache/go/mod') }}" }}"
+GOCACHE = "{{ "{{ env.GOCACHE | default(value=env.HOME ~ '/.cache/go/build') }}" }}"
+
+# Build toolchain
 CC = "gcc"
 CXX = "g++"
 HK_PKL_BACKEND = "pklr"

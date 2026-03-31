@@ -27,11 +27,39 @@
   "ignoreDeps": ["CC", "CXX"],
   "regexManagers": [
     {
-      "fileMatch": ["(^|/)mise\\.toml$", "(^|/)config\\.toml\\.tmpl$"],
+      "fileMatch": ["(^|/)mise\\.toml$"],
       "matchStrings": [
         "(?<packageName>[\\w-]+)\\s*=\\s*\"(?<currentValue>[^\"]+)\""
       ],
       "datasourceTemplate": "asdf-registry"
+    },
+    {
+      "fileMatch": ["(^|/)config\\.toml\\.tmpl$"],
+      "matchStrings": [
+        "\"npm:(?<depName>[^\"]+)\"\\s*=\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "npm"
+    },
+    {
+      "fileMatch": ["(^|/)config\\.toml\\.tmpl$"],
+      "matchStrings": [
+        "\"pipx:(?<depName>[^\"]+)\"\\s*=\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "pypi"
+    },
+    {
+      "fileMatch": ["(^|/)config\\.toml\\.tmpl$"],
+      "matchStrings": [
+        "\"github:(?<depName>[^\"]+)\"\\s*=\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "fileMatch": ["(^|/)config\\.toml\\.tmpl$"],
+      "matchStrings": [
+        "\"conda:(?<depName>[^\"]+)\"\\s*=\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "conda"
     },
     {
       "fileMatch": ["docker-bake\\.hcl$", "\\.devcontainer/devcontainer\\.json$"],
@@ -41,18 +69,9 @@
       "datasourceTemplate": "docker"
     },
     {
-      "fileMatch": ["docker-bake\\.hcl$"],
-      "matchStrings": [
-        "APT_SNAPSHOT.*?\"(?<currentValue>\\d{8}T\\d{6}Z)\""
-      ],
-      "depNameTemplate": "ubuntu",
-      "datasourceTemplate": "docker",
-      "versioningTemplate": "regex:^(?<major>\\d{4})(?<minor>\\d{2})(?<patch>\\d{2})T"
-    },
-    {
       "fileMatch": ["\\.devcontainer/Dockerfile$", "docker-bake\\.hcl$", "\\.devcontainer/devcontainer\\.json$"],
       "matchStrings": [
-        "MISE_VERSION[\"=: ]+(?<currentValue>[\\d.]+)"
+        "MISE_VERSION[\"=: ]+v?(?<currentValue>[\\d.]+)"
       ],
       "depNameTemplate": "jdx/mise",
       "datasourceTemplate": "github-releases"
@@ -63,6 +82,14 @@
         "download/v(?<currentValue>[\\d.]+)/hk@"
       ],
       "depNameTemplate": "jdx/hk",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "fileMatch": ["(^|/)\\.chezmoiversion$"],
+      "matchStrings": [
+        "v?(?<currentValue>[\\d.]+)"
+      ],
+      "depNameTemplate": "twpayne/chezmoi",
       "datasourceTemplate": "github-releases"
     }
   ],

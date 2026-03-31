@@ -6,6 +6,7 @@ import argparse
 import getpass
 import logging
 import os
+import pwd
 import re
 import shutil
 import subprocess
@@ -186,6 +187,12 @@ class DevEnvironmentAuditor:
 
         current_uid = os.getuid() if hasattr(os, "getuid") else -1
         current_gid = os.getgid() if hasattr(os, "getgid") else -1
+        non_root_users = [
+            entry.pw_name
+            for entry in pwd.getpwall()
+            if entry.pw_uid >= 1000 and entry.pw_name not in {"nobody"}
+        ]
+        sole_non_root_user = len(non_root_users) == 1 and current_user in non_root_users
 
         identity: dict[str, dict[str, Any]] = {
             "uid": {"current": current_uid, "expected": expected_uid, "match": True},
@@ -194,6 +201,11 @@ class DevEnvironmentAuditor:
                 "current": current_user,
                 "expected": expected_user,
                 "match": True,
+            },
+            "sole_non_root_user": {
+                "current": non_root_users,
+                "expected": [current_user],
+                "match": sole_non_root_user,
             },
         }
 

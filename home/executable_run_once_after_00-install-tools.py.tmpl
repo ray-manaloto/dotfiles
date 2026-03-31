@@ -15,14 +15,16 @@ def main():
     # The source directory of chezmoi is provided by the template variable
     source_dir = Path("{{ .chezmoi.sourceDir }}")
     
-    # The Python library is located in the 'python' directory at the root of the repo.
-    # Since 'home' is the chezmoi root (containing .chezmoiroot), the repo root is the parent.
-    python_project_dir = source_dir.parent / "python"
+    # The Python library is located in the 'python' directory at the root of the source repo.
+    python_project_dir = source_dir / "python"
     
     # Ensure the python project directory exists
     if not python_project_dir.exists():
-        print(f"Error: Python project directory not found at {python_project_dir}", file=sys.stderr)
-        sys.exit(1)
+        print(
+            f"Skipping dotfiles-setup lifecycle helper; Python project directory not found at {python_project_dir}",
+            file=sys.stderr,
+        )
+        return
     
     # Ensure ~/.local/bin and mise shims are in PATH for mise and uv
     home = Path.home()

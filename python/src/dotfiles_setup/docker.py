@@ -6,10 +6,8 @@ import logging
 import os
 import shutil
 import subprocess
+from pathlib import Path
 from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +20,7 @@ class DevContainerManager:
     """
 
     DEFAULT_IMAGE_NAME = "dotfiles-dev-local"
+    DEFAULT_BASE_IMAGE = "ghcr.io/ray-manaloto/dotfiles-devcontainer:dev"
 
     def __init__(self, project_root: Path, image_name: str | None = None) -> None:
         """Initialize the DevContainerManager.
@@ -36,6 +35,7 @@ class DevContainerManager:
             or os.environ.get("DOTFILES_IMAGE")
             or self.DEFAULT_IMAGE_NAME
         )
+        self.base_image = os.environ.get("DOTFILES_BASE_IMAGE", self.DEFAULT_BASE_IMAGE)
 
     def _get_bin(self, name: str) -> str:
         """Get the absolute path of a binary."""
@@ -71,8 +71,16 @@ class DevContainerManager:
         )
 
     def build(self) -> None:
-        """Build the devcontainer image."""
-        logger.info("Building devcontainer image...")
+        """Pull the published base image, then build the thin local host-user overlay."""
+        logger.info("Pulling published base image %s...", self.base_image)
+        docker = self._get_bin("docker")
+        subprocess.run(
+            [docker, "pull", self.base_image],
+            check=True,
+            text=True,
+            env=os.environ.copy(),
+        )
+        logger.info("Building thin local host-user overlay...")
         self._run_cli([
             "build",
             "--workspace-folder", str(self.project_root),
@@ -81,6 +89,7 @@ class DevContainerManager:
 
     def up(self) -> None:
         """Bring the devcontainer up."""
+        self.build()
         logger.info("Bringing devcontainer up...")
         self._run_cli([
             "up",
