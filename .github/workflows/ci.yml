@@ -111,10 +111,9 @@ jobs:
           cache-map: |
             {
               "mise-cache": "/opt/mise/cache",
-              "uv-cache": "/home/devcontainer/.cache/uv",
-              "chezmoi-cache": "/home/devcontainer/.cache/chezmoi",
-              "pkl-cache": "/home/devcontainer/.pkl",
-              "npm-cache": "/home/devcontainer/.npm"
+              "uv-cache": "/opt/data/uv/cache",
+              "npm-cache": "/opt/data/npm/cache",
+              "pkl-cache": "/opt/data/pkl"
             }
           skip-extraction: ${{ steps.cache-restore.outputs.cache-hit == 'true' }}
 
@@ -166,7 +165,7 @@ jobs:
           echo "| Build result | ${BAKE_RESULT} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| BuildKit mount cache | ${CACHE_HIT:-miss} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Cache sources | registry + gha |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| BuildKit mount caches | mise, uv, chezmoi, pkl, npm |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| BuildKit mount caches | mise, uv, npm, pkl |" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "_Compare consecutive runs to verify cache effectiveness._" >> "$GITHUB_STEP_SUMMARY"
 
@@ -203,7 +202,7 @@ jobs:
           docker run --rm ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.smoke-tag.outputs.tag }} bash -lc '
             set -euo pipefail
             echo "=== hk validate ==="
-            cd ~/.local/share/chezmoi
+            cd "$(chezmoi source-path)"
             mise trust .
             hk validate
 
