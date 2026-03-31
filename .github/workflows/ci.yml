@@ -45,6 +45,11 @@ jobs:
       - name: Install mise
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4
 
+      - name: Configure git identity for hk
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
       - name: Validate hk config
         run: hk validate
         env:
