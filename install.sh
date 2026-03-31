@@ -73,7 +73,13 @@ else
     $MISE x chezmoi@2.70.0 -- chezmoi init --apply --force "$GITHUB_USER"
 fi
 
-# Install all tools from rendered mise config (from home dir, not /tmp/dotfiles)
-echo "Installing tools via mise..."
+# Install tools via mise in two phases:
+# Phase 1: Install node first — npm-based tools (e.g., @google/gemini-cli) need
+# Node.js available before mise can resolve their versions.
+# Phase 2: Install everything else.
+echo "Installing tools via mise (phase 1: node)..."
 cd "$HOME"
+$MISE install node -y
+
+echo "Installing tools via mise (phase 2: all remaining)..."
 $MISE install -y

@@ -14,8 +14,8 @@ uv run --directory python pytest tests/ -x -q  # Run tests
 ```
 
 ## Architecture
-- `.devcontainer/Dockerfile` — Multi-stage devcontainer (base → tools → devcontainer); uses default archive.ubuntu.com mirrors (no snapshot pinning), mise bootstrap; sets `MISE_DATA_DIR=/opt/mise`, `MISE_CACHE_DIR=/opt/mise/cache`, `MISE_ALWAYS_KEEP_DOWNLOAD=1`; `HOME=/home/devcontainer` in tools stage (not /root); devcontainer stage renames existing UID 1000 user/group via groupmod/usermod (handles ubuntu:25.10's built-in `ubuntu` user); cache mounts with `sharing=locked` and named IDs
-- `.devcontainer/Dockerfile.host-user` — Host-user overlay; renames default user to match host via `DEVCONTAINER_USERNAME` build arg
+- `.devcontainer/Dockerfile` — Multi-stage devcontainer (base → tools → devcontainer); uses default archive.ubuntu.com mirrors (no snapshot pinning), mise bootstrap; sets `MISE_DATA_DIR=/opt/mise`, `MISE_CACHE_DIR=/opt/mise/cache`, `MISE_ALWAYS_KEEP_DOWNLOAD=1`; `HOME=/home/devcontainer` in tools stage (not /root); devcontainer stage renames existing UID 1000 user/group via groupmod/usermod (handles ubuntu:25.10's built-in `ubuntu` user); cache mounts with `sharing=locked` and named IDs; **openssh-server NOT in base image** (moved to overlay)
+- `.devcontainer/Dockerfile.host-user` — Host-user overlay; renames UID 1000 user to match host via `DEVCONTAINER_USERNAME` build arg using `usermod --login --move-home`; installs openssh-server (local dev only, never published); validates username (empty/root/char checks); fixes stale sudoers with `rm -f /etc/sudoers.d/devcontainer`; sets `USER`, `LOGNAME`, `WORKDIR` to match renamed user; built at `devcontainer up` time, never pushed
 - `docker-bake.hcl` — BuildKit bake config (dev, dev-load targets); `IMAGE_REF` consolidates registry+image; `docker-metadata-action` target for CI tag inheritance
 - `install.sh` — Single bootstrap entry point used by Dockerfile
 - `home/` — Chezmoi-managed dotfiles (shell, git, editor config)
@@ -79,23 +79,33 @@ Agent spec: `.claude/agents/devcontainer-specialist.md` — role card for Docker
 - **DONE**: Chezmoi source readable — `chmod a+rX` on `/root/.local/share/chezmoi` so devcontainer user can run `hk validate` in smoke-test
 - **DONE**: Stale `ghcr.io/sortakool/dotfiles-devcontainer:buildcache` seed removed from docker-bake.hcl
 - **DONE**: Cache key: `hashFiles('mise.lock', 'home/dot_config/mise/config.toml.tmpl', 'install.sh')` — optimal invalidation covering both mise configs
-- **DONE**: `devcontainer.json` volume mount `mise-home`→`/opt/mise`; `remoteEnv.PATH` appends `/opt/mise/shims`
+- **DONE**: `devcontainer.json` mounts: uv-cache, claude-home, codex-home, gemini-home, gh-config (all at `/home/${localEnv:USER}/...`); **`mise-home` volume REMOVED** — `/opt/mise` is image-baked, not a runtime volume; `postCreateCommand: "mise trust --all"` added
+- **DONE**: Chezmoi template PATH fix — `home/dot_zshenv.tmpl` and `home/dot_profile.tmpl` use `${MISE_DATA_DIR:-$HOME/.local/share/mise}/shims` instead of hardcoded `$HOME/.local/share/mise/shims` (Debate 006)
+- **DONE**: Dockerfile.host-user identity fixes (Debate 004 blockers): `USER=${DEVCONTAINER_USERNAME}`, `LOGNAME=${DEVCONTAINER_USERNAME}`, `WORKDIR /home/${DEVCONTAINER_USERNAME}` in ENV block; `rm -f /etc/sudoers.d/devcontainer` before new sudoers entry; username validation (empty/root/char checks)
+- **DONE**: openssh-server moved from base Dockerfile to Dockerfile.host-user overlay (Debate 005) — removes CVE exposure from published image
 
 **Remaining (not yet implemented):**
+- **Debate 003 MUST-DO (before PR #9 merges)**:
+  1. Expand `verify.py` paths: add `install.sh`, `home/**/*.tmpl`, `.github/workflows/ci.yml` to `_handle_no_vscode_user`
+  2. Replace CI inline `grep` in contract-preflight with `dotfiles-setup verify run --suite policy.no-vscode-user`
+  3. Add image-level checks to smoke-test: `getent passwd vscode`, `getent group vscode`, `ls /home/vscode`, `env | grep -qi vscode`
+- SSH Phase 2 roadmap (follow-up PR after #9): sshd_config hardening, `--publish=127.0.0.1:4444:4444`, sshd start in postStartCommand, authorized_keys from host, SSH smoke-test assertions
 - Dynamic container naming: `{IMAGE_NAME}-{USER}-{SSH_PORT}` (default SSH port 4444)
-- SSH agent proxy: pure Python TCP relay (no socat), dynamic port, idempotent
+- TCP relay: deferred (Colima's `/run/host-services/ssh-auth.sock` + `ssh -A` + `"forwardAgent": true` may eliminate need)
 - hk pre-commit hook for no-vscode enforcement (contract-preflight covers CI; local hook deferred)
 - `localEnv` variables resolve BEFORE `initializeCommand`; wrapper script must export env vars then call `devcontainer up`
 - Candidate-promote CI (deferred to Phase 3+)
 
-**Debate 003 — no-vscode enforcement completeness (MUST DO before PR #9 merges):**
-Synthesis: `debates/003-no-vscode-enforcement/synthesis.md` — 10 rounds, 4 providers (Claude/Opus, Gemini, Codex, Sonnet), consensus 7.75/10
-1. **Expand verify.py paths**: add `install.sh`, `home/**/*.tmpl`, `.github/workflows/ci.yml` to `_handle_no_vscode_user` — unanimous finding, currently missing
-2. **Replace CI inline grep**: contract-preflight uses fragile `grep -v '#'` (removes lines with `#` anywhere, not just comments); replace with `dotfiles-setup verify run --suite policy.no-vscode-user`
-3. **Image-level check in smoke-test**: add `getent passwd vscode`, `getent group vscode`, `ls /home/vscode`, `env | grep -qi vscode` checks to the smoke script in `image.py`
-DRY target: `suites.toml` single source of truth with `globs = ["home/**/*.tmpl"]`, `allowlist = ["ms-vscode\\.", "vscode-server"]`, `case_insensitive = true` fields
+**Debates completed:**
+- Debate 003 — no-vscode enforcement completeness: `debates/003-no-vscode-enforcement/synthesis.md` — 3 MUST-DOs remain (see above)
+- Debate 004 — user identity enforcement: `debates/004-user-identity-enforcement/synthesis_v2.md` — CRITICAL fixes applied to Dockerfile.host-user (USER/LOGNAME/WORKDIR/sudoers)
+- Debate 005 — SSH access review: `debates/005-ssh-access-review/synthesis_v2.md` — openssh-server moved to overlay; TCP relay deferred
+- Debate 006 — cpp-playground parity: `debates/006-cpp-playground-parity/synthesis_v2.md` — chezmoi template PATH fixed; gap analysis vs reference
+- Deliverable: `debates/deliverable.md` — PR #9 blockers change set + 6 follow-up issues
 
 ## Policies
 See `.claude/rules/` for enforced policies:
 - `zero-skip-policy.md` — Never suppress warnings without approval
 - `ai-cli-invocation.md` — Correct CLI patterns for Codex/Gemini/OpenCode
+
+**Zero-Warning Build Policy**: Every warning in Docker build output, CI logs, smoke-test output, and runtime must be fixed at the root cause. NEVER suppress warnings with `MISE_QUIET`, `MISE_LOG_LEVEL`, stderr filtering, `2>/dev/null`, or "accept the noise." If a warning comes from upstream, file an issue — don't ignore it. This is the single most enforced policy in this project.

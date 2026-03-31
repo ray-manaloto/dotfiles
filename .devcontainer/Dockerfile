@@ -42,7 +42,9 @@ ARG DEVCONTAINER_USERNAME=devcontainer
 ENV MISE_DATA_DIR=/opt/mise \
     MISE_CACHE_DIR=/opt/mise/cache \
     MISE_ALWAYS_KEEP_DOWNLOAD=1 \
-    HOME=/home/${DEVCONTAINER_USERNAME}
+    HOME=/home/${DEVCONTAINER_USERNAME} \
+    RUSTUP_HOME=/home/${DEVCONTAINER_USERNAME}/.rustup \
+    CARGO_HOME=/home/${DEVCONTAINER_USERNAME}/.cargo
 
 # Pre-create home so install.sh writes to the final user's home, not /root.
 # Avoids all /root permission and path issues when running as non-root user.
@@ -55,6 +57,7 @@ RUN --mount=type=cache,id=mise-cache,target=/opt/mise/cache,sharing=locked \
     --mount=type=cache,id=pkl-cache,target=${HOME}/.pkl,sharing=locked \
     --mount=type=cache,id=npm-cache,target=${HOME}/.npm,sharing=locked \
     --mount=type=secret,id=github_token \
+    export UV_LINK_MODE=copy && \
     if [ -f /run/secrets/github_token ]; then \
       export GITHUB_TOKEN="$(cat /run/secrets/github_token)"; \
       export MISE_GITHUB_TOKEN="$GITHUB_TOKEN"; \
@@ -90,7 +93,9 @@ RUN existing_group="$(getent group ${USER_GID} | cut -d: -f1 || true)" && \
     chmod 700 /home/${DEVCONTAINER_USERNAME}/.ssh && \
     chown ${DEVCONTAINER_USERNAME}:${DEVCONTAINER_USERNAME} /home/${DEVCONTAINER_USERNAME}/.ssh
 
-# Pre-stage cache directories
+# Pre-stage cache directories and fix /opt/mise ownership.
+# /opt/mise was created by root in the tools stage; the devcontainer user needs
+# write access for mise cache operations at runtime.
 RUN mkdir -p \
     /home/${DEVCONTAINER_USERNAME}/.cache/uv \
     /home/${DEVCONTAINER_USERNAME}/.local/bin \
@@ -99,12 +104,15 @@ RUN mkdir -p \
     /home/${DEVCONTAINER_USERNAME}/.codex \
     /home/${DEVCONTAINER_USERNAME}/.gemini \
     /home/${DEVCONTAINER_USERNAME}/.config/gh \
-    && chown -R ${DEVCONTAINER_USERNAME}:${DEVCONTAINER_USERNAME} /home/${DEVCONTAINER_USERNAME}
+    && chown -R ${DEVCONTAINER_USERNAME}:${DEVCONTAINER_USERNAME} /home/${DEVCONTAINER_USERNAME} \
+    && chown -R ${DEVCONTAINER_USERNAME}:${DEVCONTAINER_USERNAME} /opt/mise
 
 ENV USER=${DEVCONTAINER_USERNAME} \
     HOME=/home/${DEVCONTAINER_USERNAME} \
     MISE_DATA_DIR=/opt/mise \
-    PATH="/home/${DEVCONTAINER_USERNAME}/.local/bin:/opt/mise/shims:${PATH}"
+    RUSTUP_HOME=/home/${DEVCONTAINER_USERNAME}/.rustup \
+    CARGO_HOME=/home/${DEVCONTAINER_USERNAME}/.cargo \
+    PATH="/home/${DEVCONTAINER_USERNAME}/.cargo/bin:/home/${DEVCONTAINER_USERNAME}/.local/bin:/opt/mise/shims:${PATH}"
 
 USER ${DEVCONTAINER_USERNAME}
 WORKDIR /home/${DEVCONTAINER_USERNAME}

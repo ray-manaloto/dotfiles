@@ -123,7 +123,6 @@ jobs:
       - name: Inject mount caches into BuildKit
         uses: reproducible-containers/buildkit-cache-dance@v3
         with:
-          cache-source: /tmp/buildkit-cache
           cache-map: |
             {
               "mise-cache": "/opt/mise/cache",
@@ -171,18 +170,20 @@ jobs:
 
       - name: Build performance summary
         if: always()
+        env:
+          BAKE_RESULT: ${{ steps.bake.outcome }}
+          CACHE_HIT: ${{ steps.cache-restore.outputs.cache-hit }}
         run: |
-          echo "## Build Performance" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
-          if docker images "${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}" --format '{{.Size}}' 2>/dev/null | head -1 | read size; then
-            echo "| Image size | $size |" >> $GITHUB_STEP_SUMMARY
-          fi
-          echo "| Cache sources | registry + gha |" >> $GITHUB_STEP_SUMMARY
-          echo "| BuildKit mount caches | mise, uv, pkl |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "_Check build logs for CACHED markers to verify cache hit rate._" >> $GITHUB_STEP_SUMMARY
+          echo "## Build Performance" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Metric | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|--------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Build result | ${BAKE_RESULT} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| BuildKit mount cache | ${CACHE_HIT:-miss} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Cache sources | registry + gha |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| BuildKit mount caches | mise, uv, chezmoi, pkl, npm |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "_Compare consecutive runs to verify cache effectiveness._" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Save BuildKit mount caches
         uses: actions/cache/save@v4
@@ -220,12 +221,24 @@ jobs:
             cd ~/.local/share/chezmoi
             mise trust .
             hk validate
+
             echo "=== mise ls (check no missing) ==="
-            missing=$(mise ls 2>&1 | grep -c "(missing)" || true)
+            mise_output=$(mise ls 2>&1)
+            missing=$(echo "$mise_output" | grep -c "(missing)" || true)
             echo "Missing tools: $missing"
             if [ "$missing" -gt 0 ]; then
-              mise ls 2>&1 | grep "(missing)"
+              echo "$mise_output" | grep "(missing)"
               exit 1
             fi
+
+            echo "=== zero-warning check ==="
+            warn_count=$(echo "$mise_output" | grep -ci "WARN" || true)
+            echo "Mise warnings: $warn_count"
+            if [ "$warn_count" -gt 0 ]; then
+              echo "FAIL: mise produced warnings (zero-warning policy)"
+              echo "$mise_output" | grep -i "WARN"
+              exit 1
+            fi
+
             echo "=== All checks passed ==="
           '
