@@ -1,17 +1,1 @@
-# .zshenv - Basic environment variables
-# Managed by chezmoi
-
-# Ensure ~/.local/bin and ~/.cargo/bin are in PATH
-export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
-
-# Load Mise shims for non-interactive shells
-# Uses MISE_DATA_DIR if set (devcontainer: /opt/mise), falls back to default
-MISE_SHIMS="${MISE_DATA_DIR:-$HOME/.local/share/mise}/shims"
-if [ -d "$MISE_SHIMS" ]; then
-  export PATH="$MISE_SHIMS:$PATH"
-fi
-
-# mise environment
-if [ -x "$(command -v mise)" ]; then
-  eval "$(mise activate zsh)"
-fi
+{{ template "env" (dict "SHELL" "zsh") }}

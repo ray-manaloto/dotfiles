@@ -25,7 +25,7 @@
     is_ci = {{ $isCI }}
 
 [scriptEnv]
-    PATH = "{{ .chezmoi.homeDir }}/.local/share/mise/shims:{{ .chezmoi.homeDir }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+    PATH = {{ list (joinPath .chezmoi.homeDir ".local/bin") (joinPath (env "MISE_DATA_DIR" | default (joinPath .chezmoi.homeDir ".local/share/mise")) "shims") "/usr/local/bin" "/usr/bin" "/bin" "/sbin" | join ":" | quote }}
 
 [git]
     autoCommit = false
