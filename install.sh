@@ -9,7 +9,7 @@ if ! chezmoi="$(command -v chezmoi)"; then
     script_dir="$(cd -P -- "$(dirname -- "$(command -v -- "$0")")" && pwd -P)"
     chezmoi_version="latest"
     if [ -f "${script_dir}/.chezmoiversion" ]; then
-        chezmoi_version="$(tr -d '[:space:]' < "${script_dir}/.chezmoiversion")"
+        chezmoi_version="v$(tr -d '[:space:]' < "${script_dir}/.chezmoiversion" | sed 's/^v//')"
     fi
     echo "Installing chezmoi to '${chezmoi}'" >&2
     if command -v curl >/dev/null; then

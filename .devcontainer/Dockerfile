@@ -9,8 +9,8 @@ ARG DEBIAN_FRONTEND=noninteractive
 ARG MISE_VERSION
 
 ENV DEBIAN_FRONTEND=${DEBIAN_FRONTEND} \
-    LANG=en_US.UTF-8 \
-    LC_ALL=en_US.UTF-8 \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
     MISE_DATA_DIR=/opt/mise \
     MISE_CACHE_DIR=/opt/mise/cache \
     MISE_ALWAYS_KEEP_DOWNLOAD=1 \
@@ -35,10 +35,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     ca-certificates \
     curl \
     gnupg \
-    locales \
     pkg-config \
     unzip \
-    xz-utils \
     zsh \
     libatomic1 \
     libbz2-dev \
@@ -46,7 +44,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     libsqlite3-dev \
     libssl-dev \
     zlib1g-dev \
-    && locale-gen en_US.UTF-8 \
     && rm -rf /var/lib/apt/lists/* /tmp/*
 
 RUN mkdir -p \
