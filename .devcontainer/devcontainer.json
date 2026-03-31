@@ -13,8 +13,7 @@
   "updateRemoteUserUID": true,
   "init": true,
   "overrideCommand": true,
-  "postCreateCommand": "mise trust --all",
-  "postStartCommand": "cd '/workspaces/${localWorkspaceFolderBasename}' && mise install -y",
+  "postStartCommand": "mise trust --all && cd '/workspaces/${localWorkspaceFolderBasename}' && mise install -y",
   "containerEnv": {
     "DEVCONTAINER": "true",
     "DOTFILES_HOST_USER": "${localEnv:USER}",
