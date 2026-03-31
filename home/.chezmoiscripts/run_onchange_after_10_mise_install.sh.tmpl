@@ -6,10 +6,6 @@ set -eu
 
 MISE="$HOME/.local/bin/mise"
 
-# Trust configs so mise doesn't prompt during install
-$MISE trust "$HOME/.config/mise" || true
-$MISE trust || true
-
 # Phase 1: install the fast-path package managers and Node compatibility first
 $MISE install uv bun node cargo-binstall -y
 

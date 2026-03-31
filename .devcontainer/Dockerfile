@@ -14,6 +14,7 @@ ENV DEBIAN_FRONTEND=${DEBIAN_FRONTEND} \
     MISE_DATA_DIR=/opt/mise \
     MISE_CACHE_DIR=/opt/mise/cache \
     MISE_ALWAYS_KEEP_DOWNLOAD=1 \
+    MISE_TRUSTED_CONFIG_PATHS=/root/.config/mise \
     CONDA_SUBDIR=linux-64 \
     CARGO_HOME=/opt/data/cargo \
     RUSTUP_HOME=/opt/data/rustup \

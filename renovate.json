@@ -50,6 +50,13 @@
     {
       "fileMatch": ["(^|/)config\\.toml\\.tmpl$"],
       "matchStrings": [
+        "\"pipx:(?<depName>[^\"]+)\"\\s*=\\s*\\{[^}]*version\\s*=\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "pypi"
+    },
+    {
+      "fileMatch": ["(^|/)config\\.toml\\.tmpl$"],
+      "matchStrings": [
         "\"github:(?<depName>[^\"]+)\"\\s*=\\s*\"(?<currentValue>[^\"]+)\""
       ],
       "datasourceTemplate": "github-releases"

@@ -13,11 +13,12 @@
   "updateRemoteUserUID": false,
   "init": true,
   "overrideCommand": true,
-  "postCreateCommand": "mise trust --all && chezmoi init --apply --source '/workspaces/${localWorkspaceFolderBasename}' --force && cd '/workspaces/${localWorkspaceFolderBasename}' && mise install -y",
-  "postStartCommand": "cd '/workspaces/${localWorkspaceFolderBasename}' && mise trust --all && UV_CACHE_DIR=/tmp/dotfiles-uv-cache uv run --project '/workspaces/${localWorkspaceFolderBasename}/python' dotfiles-setup ensure-ssh",
+  "postCreateCommand": "chezmoi init --apply --source '/workspaces/${localWorkspaceFolderBasename}' --force && cd '/workspaces/${localWorkspaceFolderBasename}' && mise install -y",
+  "postStartCommand": "cd '/workspaces/${localWorkspaceFolderBasename}' && UV_CACHE_DIR=/tmp/dotfiles-uv-cache uv run --project '/workspaces/${localWorkspaceFolderBasename}/python' dotfiles-setup ensure-ssh",
   "containerEnv": {
     "DEVCONTAINER": "true",
     "DOTFILES_HOST_USER": "${localEnv:USER}",
+    "MISE_TRUSTED_CONFIG_PATHS": "/home/${localEnv:USER}/.config/mise",
     "MISE_STRICT": "1"
   },
   "remoteEnv": {
