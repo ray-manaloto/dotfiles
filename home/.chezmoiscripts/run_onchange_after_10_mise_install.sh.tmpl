@@ -1,0 +1,17 @@
+#!/bin/sh
+# chezmoi:template:hash
+set -eu
+# Re-runs when mise config template changes:
+# {{ include "dot_config/mise/config.toml.tmpl" | sha256sum }}
+
+MISE="$HOME/.local/bin/mise"
+
+# Trust configs so mise doesn't prompt during install
+$MISE trust "$HOME/.config/mise" || true
+$MISE trust || true
+
+# Phase 1: node first — npm-based tools (gemini-cli, codex) need Node
+$MISE install node -y
+
+# Phase 2: all remaining tools
+$MISE install -y
