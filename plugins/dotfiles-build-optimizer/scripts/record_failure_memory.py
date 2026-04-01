@@ -23,7 +23,7 @@ def main() -> int:
     memory_path = Path(args.memory_path)
     memory_path.parent.mkdir(parents=True, exist_ok=True)
     with memory_path.open("a", encoding="utf-8") as handle:
-      handle.write(json.dumps(payload, sort_keys=True) + "\n")
+        handle.write(json.dumps(payload, sort_keys=True) + "\n")
     return 0
 
 
