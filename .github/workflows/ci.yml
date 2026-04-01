@@ -27,6 +27,9 @@ env:
   CONTAINER_REGISTRY: ghcr.io
   IMAGE_NAME: ray-manaloto/dotfiles-devcontainer
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
 
 permissions:
   contents: read

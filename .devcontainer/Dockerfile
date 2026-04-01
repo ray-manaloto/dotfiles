@@ -21,7 +21,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
-    sed -i '/path-exclude=\\/usr\\/share\\/man\\/*/d' /etc/dpkg/dpkg.cfg.d/excludes && \
+    sed -i '/^path-exclude=\/usr\/share\/man\/\*$/d' /etc/dpkg/dpkg.cfg.d/excludes && \
     apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     ca-certificates \
