@@ -213,6 +213,24 @@ handler = "forbid_tokens"
 paths = [".devcontainer/Dockerfile"]
 tokens = ["XDG_DATA_HOME", "XDG_CACHE_HOME"]
 
+[[suite]]
+name = "build.manpage-restore-sed-syntax"
+description = "Base image must remove the manpage path exclusion with a valid exact-line sed expression"
+category = "build"
+check_type = "static"
+handler = "require_tokens"
+paths = [".devcontainer/Dockerfile"]
+tokens = ["sed -i '/^path-exclude=\\/usr\\/share\\/man\\/\\*$/d' /etc/dpkg/dpkg.cfg.d/excludes"]
+
+[[suite]]
+name = "build.no-conda-graphviz"
+description = "Graphviz must stay out of the broken conda backend until issue #22 is resolved"
+category = "build"
+check_type = "static"
+handler = "forbid_tokens"
+paths = ["home/dot_config/mise/config.toml.tmpl"]
+tokens = ['"conda:graphviz"']
+
 # =============================================================================
 # CI Constraints (~6) — Workflow correctness
 # =============================================================================
@@ -279,6 +297,15 @@ check_type = "static"
 handler = "require_tokens"
 paths = [".github/workflows/ci.yml"]
 tokens = ["ray-manaloto/dotfiles-devcontainer"]
+
+[[suite]]
+name = "ci.git-init-default-branch-main"
+description = "CI must set git init.defaultBranch=main so checkout does not emit branch-name hints"
+category = "ci"
+check_type = "static"
+handler = "require_tokens"
+paths = [".github/workflows/ci.yml"]
+tokens = ["GIT_CONFIG_KEY_0: init.defaultBranch", "GIT_CONFIG_VALUE_0: main"]
 
 # =============================================================================
 # Identity Constraints (~6) — User/group handling
