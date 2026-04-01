@@ -1,0 +1,20 @@
+{
+  "name": "ray-manaloto-local",
+  "interface": {
+    "displayName": "Ray Manaloto Local"
+  },
+  "plugins": [
+    {
+      "name": "dotfiles-build-optimizer",
+      "source": {
+        "source": "local",
+        "path": "./plugins/dotfiles-build-optimizer"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

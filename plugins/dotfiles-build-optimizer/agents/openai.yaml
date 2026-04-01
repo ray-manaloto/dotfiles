@@ -1,0 +1,13 @@
+interface:
+  display_name: "Dotfiles Build Optimizer"
+  short_description: "Repo-local CI triage and fix loop"
+  default_prompt: "Use $gha-monitor-loop to triage the latest failed CI run in this repo and drive a branch-based remediation loop."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "github"
+      description: "GitHub repository, branch, PR, and issue operations"
+
+policy:
+  allow_implicit_invocation: true

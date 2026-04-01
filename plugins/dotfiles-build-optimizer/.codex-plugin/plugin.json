@@ -1,0 +1,28 @@
+{
+  "name": "dotfiles-build-optimizer",
+  "version": "0.1.0",
+  "description": "Repo-local CI build optimizer for the dotfiles Docker, devcontainer, and GitHub Actions workflow.",
+  "author": {
+    "name": "Ray Manaloto",
+    "url": "https://github.com/ray-manaloto"
+  },
+  "repository": "https://github.com/ray-manaloto/dotfiles",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Dotfiles Build Optimizer",
+    "shortDescription": "Repo-local CI triage and remediation workflows",
+    "longDescription": "Monitor failed GitHub Actions runs, normalize failure reports, launch multi-agent research, run local preflight checks, and drive branch-based remediation loops for this repo.",
+    "developerName": "Ray Manaloto",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/ray-manaloto/dotfiles",
+    "defaultPrompt": [
+      "Use $gha-monitor-loop to triage the latest failed CI run for this repo.",
+      "Use $gha-run-triage on a failed Actions run URL from this repository.",
+      "Use $local-preflight to validate likely CI failures before pushing."
+    ]
+  }
+}

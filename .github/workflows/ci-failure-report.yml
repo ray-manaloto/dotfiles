@@ -1,0 +1,43 @@
+name: ci-failure-report
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  failure-report:
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7.1.4
+        with:
+          enable-cache: true
+
+      - name: Generate normalized failure report
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          uv run --script plugins/dotfiles-build-optimizer/scripts/github_failure_report.py \
+            --repo "$REPOSITORY" \
+            --run-id "$RUN_ID" \
+            --output-dir artifacts/ci-failure
+
+      - name: Upload failure report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: failure-report-${{ github.event.workflow_run.id }}
+          path: artifacts/ci-failure
