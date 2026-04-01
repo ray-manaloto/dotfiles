@@ -280,6 +280,24 @@ handler = "require_tokens"
 paths = [".github/workflows/ci.yml"]
 tokens = ["ray-manaloto/dotfiles-devcontainer"]
 
+[[suite]]
+name = "ci.branch-dispatch-builds-do-not-push"
+description = "Only main-branch and scheduled builds may publish GHCR images"
+category = "ci"
+check_type = "static"
+handler = "require_tokens"
+paths = [".github/workflows/ci.yml"]
+tokens = ["push: ${{ github.ref == 'refs/heads/main' || github.event_name == 'schedule' }}"]
+
+[[suite]]
+name = "ci.smoke-test-requires-published-image"
+description = "Registry-backed smoke tests must only run when CI published an image"
+category = "ci"
+check_type = "static"
+handler = "require_tokens"
+paths = [".github/workflows/ci.yml"]
+tokens = ["if: github.ref == 'refs/heads/main' || github.event_name == 'schedule'"]
+
 # =============================================================================
 # Identity Constraints (~6) — User/group handling
 # =============================================================================
