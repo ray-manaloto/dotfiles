@@ -18,3 +18,9 @@ def test_smoke_docker_cmd_mounts_repo_checkout() -> None:
     assert "--volume" in cmd
     mount = cmd[cmd.index("--volume") + 1]
     assert mount.endswith(":/tmp/dotfiles:ro")
+
+
+def test_smoke_script_does_not_require_llvm_symbolizer() -> None:
+    script = build_smoke_script()
+
+    assert "llvm-symbolizer" not in script
