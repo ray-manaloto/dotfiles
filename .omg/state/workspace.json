@@ -1,0 +1,19 @@
+{
+  "primary_root": ".",
+  "lanes": [
+    {
+      "id": "main",
+      "path": ".",
+      "owner": "omg-director",
+      "purpose": "Stable mainline baseline (443b207)",
+      "health": {
+        "cleanliness": "clean",
+        "trusted": "trusted",
+        "handoff": "ready"
+      },
+      "active": true
+    }
+  ],
+  "cross_lane_policy": "explicit-handoff",
+  "source": "omg:workspace"
+}

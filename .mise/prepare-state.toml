@@ -1,0 +1,3 @@
+[providers.python]
+"python/pyproject.toml" = "485d5c5f0df2ae37c30ce0b9eae2b0dee4b6fdf9acd33066f082a6c5d461d024"
+"python/uv.lock" = "ac6f9e7f2fc74019ea56932fa83c14ac445fbc7ae0f5f7dc6dbb2f5d2214f743"

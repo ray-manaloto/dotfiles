@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-if [ "${DEVCONTAINER:-}" = "true" ] && command -v mise >/dev/null 2>&1; then
+if command -v mise >/dev/null 2>&1; then
     exit 0
 fi
 
