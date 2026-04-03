@@ -25,6 +25,17 @@ hooks {
       ["check_executables_have_shebangs"] {}
       ["check_byte_order_marker"] {}
 
+      // --- Style & Consistency ---
+      ["editorconfig-checker"] {}
+      ["prettier"] {
+        batch = true
+      }
+
+      // --- Security ---
+      ["gitleaks"] {
+        batch = true
+      }
+
       // --- Typo detection ---
       ["typos"] {
         batch = true
@@ -40,13 +51,25 @@ hooks {
         batch = true
         check_first = true
       }
+      ["python_check_ast"] {
+        glob = List("python/src/**/*.py", "tests/**/*.py")
+        batch = true
+      }
+      ["python_debug_statements"] {
+        glob = List("python/src/**/*.py", "tests/**/*.py")
+        batch = true
+      }
       ["ty"] {
         glob = List("python/src/**/*.py", "tests/**/*.py")
       }
 
-      // --- Dockerfile (keep glob — only lint our Dockerfile, not random ones) ---
+      // --- Dockerfile & Bake ---
       ["hadolint"] {
         glob = List(".devcontainer/Dockerfile")
+      }
+      ["docker_bake_check"] {
+        glob = List("docker-bake.hcl", ".devcontainer/Dockerfile")
+        check = "devcontainer read-configuration --workspace-folder ."
       }
 
       // --- TOML ---

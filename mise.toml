@@ -49,6 +49,18 @@ depends = ["lint", "test"]
 description = "Run Python test suite"
 run = "uv run pytest tests/ -x -q"
 
+[tasks.up]
+description = "Bring the devcontainer up"
+run = "uv run --directory python dotfiles-setup docker up"
+
+[tasks.stop]
+description = "Bring the devcontainer down"
+run = "uv run --directory python dotfiles-setup docker down"
+
+[tasks.build]
+description = "Build the docker image locally using docker bake"
+run = "docker buildx bake dev-load"
+
 [tasks.fmt]
 description = "Auto-fix formatting issues"
 run = "hk fix"
@@ -59,4 +71,4 @@ run = "mise outdated"
 
 [tasks.validate]
 description = "Validate Docker and CI contracts"
-run = "hk check --all"
+run = "docker buildx bake validate"

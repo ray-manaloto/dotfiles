@@ -1,4 +1,5 @@
 # syntax=docker/dockerfile:1.7
+# check=error=true
 
 ARG BASE_IMAGE=ubuntu:24.04
 ARG MISE_VERSION=v2025.2.27
