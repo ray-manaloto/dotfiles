@@ -13,19 +13,21 @@ docker buildx bake dev-load           # Build devcontainer locally
 uv run --directory python pytest tests/ -x -q  # Run tests
 mise run pin-actions                  # Verify GHA actions are SHA-pinned
 mise run lint-docs                    # Validate agent documentation
-mise run lock                         # Regenerate mise.lock for linux-x64
+mise run lock                         # Regenerate mise.lock
 ```
 
 ## Architecture
-- `.devcontainer/Dockerfile` — Multi-stage devcontainer (APT snapshot pinning, mise bootstrap)
+- `.devcontainer/Dockerfile` — Multi-stage devcontainer (mise bootstrap, known cosmetic warnings documented in comment block)
 - `.devcontainer/mise-system.toml` — Dedicated Docker system-wide mise config (installed to `/etc/mise/config.toml`); not derived from chezmoi templates; includes postinstall hook for Claude Code CLI
 - `docker-bake.hcl` — BuildKit bake config (dev, cpp, dev-load, cpp-load targets); `IMAGE_REF` consolidates registry+image; `docker-metadata-action` target for CI tag inheritance; secret mount in `_common`; `validate` (dry-run) and `help` (list targets) bake targets
 - `install.sh` — Single bootstrap entry point used by Dockerfile
 - `home/` — Chezmoi-managed dotfiles (shell, git, editor config)
 - `python/` — Python package (`dotfiles_setup`) for orchestration; requires Python 3.14; `[tool.ty]` section for ty type checker
-- `hk.pkl` — Git hook config (pre-commit via hk v1.40.0); builtins: `no_commit_to_branch`, `fix_smart_quotes`, `detect_private_key`, `check_added_large_files`, etc.
+- `hk.pkl` — Git hook config (pre-commit via hk v1.41.0); builtins: `no_commit_to_branch`, `fix_smart_quotes`, `detect_private_key`, `check_added_large_files`, etc.
 - `mise.toml` — Tool versions (hk, pkl, hadolint, shellcheck, actionlint, pinact, agnix, etc.)
-- `.github/workflows/ci.yml` — Lint → contract-preflight → build → smoke-test
+- `.github/workflows/ci.yml` — Lint → contract-preflight → build → smoke-test; includes mise doctor + build diagnostics steps
+- `.claude/agents/dockerfile-reviewer.md` — Docker/BuildKit review agent with CI warning checklist
+- `.claude/skills/ci-warning-investigator/` — Skill for systematic CI warning triage (research → fix or document)
 - `scripts/benchmark-docker.sh` — Docker runtime A/B benchmarking
 
 ## Docker Runtimes

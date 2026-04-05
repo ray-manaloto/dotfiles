@@ -90,5 +90,5 @@ description = "Validate agent documentation"
 run = "agnix ."
 
 [tasks.lock]
-description = "Generate mise lockfile for linux-x64"
-run = "mise lock --platform linux-x64"
+description = "Regenerate mise.lock"
+run = "mise lock"
