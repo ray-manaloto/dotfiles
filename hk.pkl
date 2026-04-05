@@ -142,6 +142,9 @@ hooks {
       ["pinact"] {
         glob = List(".github/workflows/*.yml")
       }
+      ["pinact_update"] {
+        glob = List(".github/workflows/*.yml")
+      }
 
       // --- HCL ---
       ["hclfmt"] {
