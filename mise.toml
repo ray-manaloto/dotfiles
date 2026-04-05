@@ -19,6 +19,7 @@ jq = "1.8.1"
 python = "3.14.3"
 uv = "0.11.3"
 pinact = "latest"
+"npm:@devcontainers/cli" = "latest"
 "npm:agnix" = "latest"
 "npm:agents-lint" = "latest"
 

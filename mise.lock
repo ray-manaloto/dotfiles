@@ -179,6 +179,10 @@ checksum = "sha256:23cb60a1354eed6bcc8d9b9735e8c7b388cd1fdcb75726b93bc299ef22dd9
 url = "https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-windows-amd64.exe"
 provenance = "github-attestations"
 
+[[tools."npm:@devcontainers/cli"]]
+version = "0.85.0"
+backend = "npm:@devcontainers/cli"
+
 [[tools."npm:agents-lint"]]
 version = "0.5.0"
 backend = "npm:agents-lint"
