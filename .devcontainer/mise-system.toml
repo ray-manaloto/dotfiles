@@ -59,6 +59,8 @@ pkl = "latest"
 # Security scanners
 pinact = "latest"
 # betterleaks: not in mise tool registry for linux-x64 (tracked in docs/hk-builtins-audit.md)
+# Claude Code CLI — uses http:claude backend (native binary, no npm)
+claude-code = "latest"
 # Conda packages (C++ toolchain for devcontainer)
 "conda:clang" = "latest"
 "conda:clangxx" = "latest"
@@ -98,6 +100,8 @@ conda.channel = "conda-forge"
 # CI passes token via secret mount; local builds hit rate limits without it.
 github.github_attestations = false
 github.slsa = false
+aqua.github_attestations = false
+aqua.slsa = false
 python.github_attestations = false
 python.uv_venv_auto = "source"
 
@@ -140,5 +144,5 @@ for keyfile in ~/.config/git/*.asc; do
 done
 """
 
-[hooks]
-postinstall = "curl -fsSL https://claude.ai/install.sh | bash"
+# [hooks] postinstall removed — Claude Code now installed via mise http:claude backend
+# For per-user native binary in overlay: run `claude install` in Dockerfile.host-user

@@ -43,8 +43,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     zlib1g-dev \
     && rm -rf /var/lib/apt/lists/* /tmp/*
 
-# Install mise globally
-RUN curl -fsSL https://mise.jdx.dev/mise-latest-linux-x64 > /usr/local/bin/mise && \
+# Install mise globally (pinned version to prevent stale CDN cache issues)
+RUN curl -fsSL "https://mise.jdx.dev/mise-${MISE_VERSION}-linux-x64" > /usr/local/bin/mise && \
     chmod +x /usr/local/bin/mise
 
 # System-wide mise config and data structure
@@ -70,6 +70,7 @@ RUN --mount=type=cache,id=mise-cache,target=/opt/mise/cache,sharing=locked \
       export GITHUB_TOKEN && \
       export MISE_GITHUB_TOKEN="$GITHUB_TOKEN"; \
     fi && \
+    rm -f /opt/rustup/settings.toml && \
     mise install -y && \
     chmod -R 777 /opt/mise /etc/mise /opt/cargo /opt/rustup
 
