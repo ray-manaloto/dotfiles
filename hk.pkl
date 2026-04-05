@@ -158,7 +158,7 @@ hooks {
 
       // --- Agent documentation ---
       ["agnix"] {
-        check = "npx agnix ."
+        check = "agnix ."
         glob = List("CLAUDE.md", "AGENTS.md", ".claude/**/*.md", ".agnix.toml")
       }
 
