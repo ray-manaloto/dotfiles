@@ -57,10 +57,19 @@ RUN groupadd --gid 2000 mise && \
 COPY .devcontainer/mise-system.toml /etc/mise/config.toml
 
 # Pre-install tools globally via mise
-# Known cosmetic warnings during install (no suppression available):
-# - rustup "existing settings file at /opt/rustup/settings.toml": rustup creates
-#   settings.toml then warns about its own file; no RUSTUP_QUIET env var exists
-# - bun "add the global bin folder to $PATH": mise shims handle resolution
+# Known cosmetic warnings during install:
+# - rustup "existing settings file": rustup-init creates settings.toml then
+#   check_existence_of_settings_file() warns about its own file. Fixed via
+#   RUSTUP_INIT_SKIP_EXISTENCE_CHECKS=yes (undocumented env var, see
+#   rust-lang/rustup/src/cli/self_update.rs). RUSTUP_INIT_SKIP_PATH_CHECK
+#   in mise-system.toml [env] is a different check (PATH validation).
+# - bun "add the global bin folder to $PATH": bun checks if its bin output
+#   directory exists on $PATH at install time. During Docker RUN, PATH only
+#   includes /opt/mise/shims — not bun's per-package bin dirs. At runtime,
+#   mise shims intercept all lookups so the warning is cosmetic. No bun env
+#   var (BUN_QUIET, BUN_LOG_LEVEL) suppresses this — it's hardcoded in bun's
+#   install reporter. Unfixable: fundamental mismatch between bun's PATH-based
+#   assumptions and mise's shim resolution model.
 RUN --mount=type=cache,id=mise-cache,target=/opt/mise/cache,sharing=locked \
     --mount=type=cache,id=uv-cache,target=/root/.cache/uv,sharing=locked \
     --mount=type=secret,id=github_token \
@@ -69,12 +78,12 @@ RUN --mount=type=cache,id=mise-cache,target=/opt/mise/cache,sharing=locked \
     export UV_LINK_MODE=copy && \
     export LANG=C.UTF-8 && \
     export LC_ALL=C.UTF-8 && \
+    export RUSTUP_INIT_SKIP_EXISTENCE_CHECKS=yes && \
     if [ -f /run/secrets/github_token ]; then \
       GITHUB_TOKEN="$(cat /run/secrets/github_token)" && \
       export GITHUB_TOKEN && \
       export MISE_GITHUB_TOKEN="$GITHUB_TOKEN"; \
     fi && \
-    rm -f /opt/rustup/settings.toml && \
     mise install -y && \
     chmod -R 777 /opt/mise /etc/mise /opt/cargo /opt/rustup
 

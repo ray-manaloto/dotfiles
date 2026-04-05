@@ -71,6 +71,12 @@ jobs:
       - name: Check for outdated tools
         run: mise outdated || true
 
+      - name: Run mise doctor
+        run: |
+          mise doctor
+          echo "## mise doctor" >> "$GITHUB_STEP_SUMMARY"
+          mise doctor -J | jq '.' >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+
       - name: Validate agent documentation
         run: agnix .
 
@@ -152,20 +158,41 @@ jobs:
             ${{ steps.meta.outputs.bake-file-labels }}
           set: |
             *.secrets=id=github_token,src=/tmp/github_token
+            *.output=type=cacheonly
 
       - name: Build performance summary
         if: always()
         env:
           BAKE_RESULT: ${{ steps.bake.outcome }}
         run: |
-          echo "## Build Performance" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Metric | Value |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|--------|-------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Build result | ${BAKE_RESULT} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Cache sources | gha |" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "_Compare consecutive runs to verify cache effectiveness._" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## Build Performance"
+            echo ""
+            echo "| Metric | Value |"
+            echo "|--------|-------|"
+            echo "| Build result | ${BAKE_RESULT} |"
+            echo "| Cache sources | gha |"
+            echo ""
+            echo "_Compare consecutive runs to verify cache effectiveness._"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build diagnostics
+        if: always() && steps.bake.outcome != 'cancelled'
+        run: |
+          {
+            echo "## Build Diagnostics"
+            echo ""
+            echo "### Resolved Bake Configuration"
+            echo '```json'
+            docker buildx bake --print -f docker-bake.hcl 2>/dev/null | head -80 || echo "bake --print unavailable"
+            echo '```'
+            echo ""
+            echo "### Known Build Warnings"
+            echo "| Warning | Status | Tracking |"
+            echo "|---------|--------|----------|"
+            echo "| mise 'npm may be required' | Deferred | jdx/mise#8923 |"
+            echo "| bun 'add global bin to PATH' | Documented | Cosmetic (mise shims handle resolution) |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # ============================================================
   # Smoke test: validate the published image
