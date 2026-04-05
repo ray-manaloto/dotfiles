@@ -43,7 +43,10 @@ Registry: `ghcr.io/sortakool/dotfiles-devcontainer`
 - `IMAGE_REF` variable (`${DEFAULT_REGISTRY}/${IMAGE}`) consolidates registry+image for tags and cache refs
 - `docker-metadata-action` bake target provides default tags locally; CI overrides with SHA/latest/PR tags via metadata-action bake file
 - lint job caches `~/.local/share/mise` keyed on `mise.lock` and uploads `mise.lock` as an artifact
-- lint job validates agent documentation via `npx agnix --target claude-code --strict .`
+- lint job validates agent documentation via `agnix --target claude-code --strict .`
+- lint job runs `mise doctor --json` for environment health check
+- build job includes diagnostics step: `docker buildx bake --print` + known warnings table
+- All GHA actions SHA-pinned via pinact (`mise run pin-actions` to verify)
 - contract-preflight and smoke-test use Python 3.14, `actions/setup-python@v6`, `astral-sh/setup-uv@v8`
 
 ## Open Issues
@@ -55,10 +58,9 @@ pytest tests/ -x -q                # All tests
 pytest tests/test_audit.py -x -q   # Single file
 ```
 
-### Smoke Test Roadmap
-Current CI smoke test (inline bash) is identified as too thin (debate 2026-03-29).
-Priority: adopt structured Python-driven verification with named test suites.
-Cherry-pick verification patterns from cpp-playground; skip its full CI architecture.
+### Smoke Test & Verification
+Structured Python-driven verification now in place via `python/verification/suites.toml` (contract-preflight).
+CI smoke-test validates clang, AI CLIs, sanitizers, and backend policies against the built image.
 
 ## Phase 2 (Future Work)
 Full design spec: `docs/ultrapowers/specs/2026-03-29-devcontainer-host-user-migration-design.md`
