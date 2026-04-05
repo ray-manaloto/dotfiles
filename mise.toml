@@ -31,6 +31,9 @@ lockfile = true
 [settings.status]
 show_prepare_stale = true
 
+[hooks]
+postinstall = "hk install --mise"
+
 [env]
 HK_PKL_BACKEND = "pklr"
 HK_MISE = "1"
