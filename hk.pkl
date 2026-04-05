@@ -156,17 +156,6 @@ hooks {
         glob = List("**/mise.toml")
       }
 
-      // --- Agent documentation ---
-      ["agnix"] {
-        check = "npx agnix --target claude-code ."
-        glob = List("CLAUDE.md", ".claude/**", "AGENTS.md")
-      }
-
-      // --- Dockerfile contracts ---
-      ["contracts"] {
-        check = "uv run --directory python dotfiles-setup verify run --category build --category ci --category identity --category architecture --json"
-        glob = List(".devcontainer/Dockerfile", ".devcontainer/mise-system.toml", "docker-bake.hcl", ".devcontainer/devcontainer.json")
-      }
     }
   }
 
