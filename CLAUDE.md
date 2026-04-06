@@ -78,3 +78,4 @@ See `rules/` under the Claude config directory for enforced policies:
 - `ci-local-parity.md` — Keep local hk checks in sync with CI
 - `clean-git-state.md` — Verify git state before validation
 - `notepad-enforcement.md` — Agents write findings to notepad during work
+- `omc-directory-conventions.md` — Use standard `.omc/` paths, no ad-hoc directories
