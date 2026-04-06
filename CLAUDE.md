@@ -22,9 +22,11 @@ mise run lock                         # Regenerate mise.lock
 - `docker-bake.hcl` — BuildKit bake config (dev, cpp, dev-load, cpp-load targets); `IMAGE_REF` consolidates registry+image; `docker-metadata-action` target for CI tag inheritance; secret mount in `_common`; `validate` (dry-run) and `help` (list targets) bake targets
 - `install.sh` — Single bootstrap entry point used by Dockerfile
 - `home/` — Chezmoi-managed dotfiles (shell, git, editor config)
-- `python/` — Python package (`dotfiles_setup`) for orchestration; requires Python 3.14; `[tool.ty]` section for ty type checker
-- `hk.pkl` — Git hook config (pre-commit via hk v1.41.0); builtins: `no_commit_to_branch`, `fix_smart_quotes`, `detect_private_key`, `check_added_large_files`, etc.
-- `mise.toml` — Tool versions (hk, pkl, hadolint, shellcheck, actionlint, pinact, agnix, etc.)
+- `python/` — Python package (`dotfiles_setup`) for orchestration; requires Python 3.14; `[tool.ty]` section for ty type checker; `DotfilesConfig(BaseSettings)` centralizes 16 env vars via Pydantic config DI
+- `hk.pkl` — Git hook config (pre-commit via hk v1.41.0); imports `hk-common.pkl` shared checks; includes `no_lint_skip` step enforcing zero inline suppressions
+- `hk-common.pkl` — Shared hook steps (hygiene, safety, security, typos) reused by `hk.pkl` and `hk-image.pkl`
+- `hk-image.pkl` — Image-only hook config for devcontainer validation; imports `hk-common.pkl`
+- `mise.toml` — Tool versions (hk, pkl, hadolint, shellcheck, actionlint, pinact, agnix, etc.); `HK_PKL_BACKEND=pkl` (not pklr — required for import/spread)
 - `.github/workflows/ci.yml` — Lint → contract-preflight → build → smoke-test; includes mise doctor + build diagnostics steps
 - `.claude/agents/dockerfile-reviewer.md` — Docker/BuildKit review agent with CI warning checklist
 - `.claude/skills/ci-warning-investigator/` — Skill for systematic CI warning triage (research → fix or document)
@@ -56,7 +58,7 @@ Registry: `ghcr.io/sortakool/dotfiles-devcontainer`
 
 ## Testing
 ```bash
-pytest tests/ -x -q                # All tests
+pytest tests/ -x -q                # All 65 tests
 pytest tests/test_audit.py -x -q   # Single file
 ```
 
@@ -89,3 +91,6 @@ Adversarial review: `docs/research/trail/findings/devcontainer-spec-adversarial-
 See `.claude/rules/` for enforced policies:
 - `zero-skip-policy.md` — Never suppress warnings without approval
 - `ai-cli-invocation.md` — Correct CLI patterns for Codex/Gemini/OpenCode
+- `ci-local-parity.md` — Keep local hk checks in sync with CI
+- `clean-git-state.md` — Verify git state before validation
+- `notepad-enforcement.md` — Agents must write findings to notepad during work
