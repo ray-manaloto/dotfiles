@@ -71,8 +71,8 @@ echo "=== path constraints ==="
 if [ ! -x /usr/local/bin/mise ]; then
   echo "FAIL: /usr/local/bin/mise missing"; exit 1
 fi
-if [ ! -d /usr/local/share/mise/installs ]; then
-  echo "FAIL: /usr/local/share/mise/installs missing"; exit 1
+if [ ! -d /opt/mise/installs ]; then
+  echo "FAIL: /opt/mise/installs missing"; exit 1
 fi
 echo "=== backend policy checks ==="
 grep -q 'npm.package_manager = "bun"' "$HOME/.config/mise/config.toml" || {
