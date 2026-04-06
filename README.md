@@ -9,7 +9,7 @@ A highly resilient, declarative dotfiles setup using **Chezmoi**, **Mise**, and 
 ```bash
 mise install                                       # Install all tools
 hk run pre-commit --all                            # Run lint checks (requires HK_PKL_BACKEND=pkl)
-uv run --directory python pytest tests/ -x -q      # Run all 65 tests
+uv run --project python pytest tests/ -x -q      # Run all 65 tests
 ```
 
 ### Docker Build
@@ -48,8 +48,8 @@ Python dependencies are managed via `uv` with `python/pyproject.toml`.
 ## Local Testing
 
 ```bash
-uv run --directory python pytest tests/ -x -q      # All tests
-uv run --directory python dotfiles-setup verify run # Contract verification
+uv run --project python pytest tests/ -x -q      # All tests
+uv run --project python dotfiles-setup verify run # Contract verification
 mise run pin-actions                                # Verify GHA SHA-pinning
 mise run lint-docs                                  # Validate agent documentation
 ```

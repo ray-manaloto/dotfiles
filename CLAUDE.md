@@ -10,7 +10,7 @@ Chezmoi-managed dotfiles with devcontainer support. Two build types:
 mise install                          # Install all tools
 hk run pre-commit --all               # Run lint checks
 docker buildx bake dev-load           # Build devcontainer locally
-uv run --directory python pytest tests/ -x -q  # Run tests
+uv run --project python pytest tests/ -x -q  # Run tests
 mise run pin-actions                  # Verify GHA actions are SHA-pinned
 mise run lint-docs                    # Validate agent documentation
 mise run lock                         # Regenerate mise.lock

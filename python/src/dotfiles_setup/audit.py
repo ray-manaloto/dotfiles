@@ -197,16 +197,16 @@ class DevEnvironmentAuditor:
         Returns:
             A dictionary containing identity information.
         """
-        expected_user = self.config.expected_user or os.environ.get("EXPECTED_USER")
+        expected_user = self.config.expected_user
         expected_uid_raw = (
             str(self.config.expected_uid)
             if self.config.expected_uid is not None
-            else os.environ.get("EXPECTED_UID")
+            else None
         )
         expected_gid_raw = (
             str(self.config.expected_gid)
             if self.config.expected_gid is not None
-            else os.environ.get("EXPECTED_GID")
+            else None
         )
 
         if sys.platform != "win32":
@@ -294,7 +294,7 @@ class DevEnvironmentAuditor:
                 check=True,
             )
             capability = "ok"
-        except subprocess.CalledProcessError, FileNotFoundError:
+        except (subprocess.CalledProcessError, FileNotFoundError):
             capability = "failed"
 
         return {
@@ -318,13 +318,8 @@ class DevEnvironmentAuditor:
         path = os.environ.get("PATH", "")
         path_list = path.split(os.pathsep)
 
-        mise_shell_set = (
-            self.config.mise.shell is not None
-            or os.environ.get("MISE_SHELL") is not None
-        )
-        mise_strict_set = (
-            self.config.mise.strict or os.environ.get("MISE_STRICT") == "1"
-        )
+        mise_shell_set = self.config.mise.shell is not None
+        mise_strict_set = self.config.mise.strict
         results = {
             "MISE_SHELL": mise_shell_set,
             "MISE_STRICT": mise_strict_set,
@@ -406,7 +401,7 @@ class DevEnvironmentAuditor:
         ssh_dir = Path.home() / ".ssh"
         ssh_dir.mkdir(mode=0o700, exist_ok=True)
 
-        if self.config.devcontainer or os.environ.get("DEVCONTAINER") == "true":
+        if self.config.devcontainer:
             proxy_socket = ensure_container_ssh_proxy()
             if proxy_socket:
                 os.environ["SSH_AUTH_SOCK"] = proxy_socket
@@ -474,7 +469,7 @@ class DevEnvironmentAuditor:
         ssh_auth_sock = (
             str(self.config.ssh_auth_sock)
             if self.config.ssh_auth_sock is not None
-            else os.environ.get("SSH_AUTH_SOCK")
+            else None
         )
         results = {
             "ssh_auth_sock": ssh_auth_sock is not None,
