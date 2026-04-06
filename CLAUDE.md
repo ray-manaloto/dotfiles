@@ -60,8 +60,8 @@ Registry: `ghcr.io/sortakool/dotfiles-devcontainer`
 
 ## Testing
 ```bash
-pytest tests/ -x -q                # All 65 tests
-pytest tests/test_audit.py -x -q   # Single file
+uv run --project python pytest tests/ -x -q                # All 65 tests
+uv run --project python pytest tests/test_audit.py -x -q   # Single file
 ```
 
 Structured verification via `python/verification/suites.toml` (contract-preflight). CI smoke-test validates clang, AI CLIs, sanitizers, and backend policies.
