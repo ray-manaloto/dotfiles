@@ -75,16 +75,16 @@ if [ ! -d /opt/mise/installs ]; then
   echo "FAIL: /opt/mise/installs missing"; exit 1
 fi
 echo "=== backend policy checks ==="
-grep -q 'npm.package_manager = "bun"' "$HOME/.config/mise/config.toml" || {
+grep -q 'npm.package_manager = "bun"' "${MISE_CONFIG_DIR:-$HOME/.config/mise}/config.toml" || {
   echo "FAIL: bun package manager policy missing"; exit 1;
 }
-grep -q 'pipx.uvx = true' "$HOME/.config/mise/config.toml" || {
+grep -q 'pipx.uvx = true' "${MISE_CONFIG_DIR:-$HOME/.config/mise}/config.toml" || {
   echo "FAIL: uvx policy missing"; exit 1;
 }
-grep -q 'cargo.binstall = true' "$HOME/.config/mise/config.toml" || {
+grep -q 'cargo.binstall = true' "${MISE_CONFIG_DIR:-$HOME/.config/mise}/config.toml" || {
   echo "FAIL: cargo-binstall policy missing"; exit 1;
 }
-grep -q 'python.uv_venv_auto = "source"' "$HOME/.config/mise/config.toml" || {
+grep -q 'python.uv_venv_auto = "source"' "${MISE_CONFIG_DIR:-$HOME/.config/mise}/config.toml" || {
   echo "FAIL: python uv venv policy missing"; exit 1;
 }
 echo "=== clang tooling checks ==="
