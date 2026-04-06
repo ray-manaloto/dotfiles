@@ -10,6 +10,8 @@ exclude = [
     "plugins/**",
     "missions/**",
     ".claude/skills.bak/**",
+    # GitButler CLI skill (upstream-controlled via `but skill install`, re-run to update)
+    ".claude/skills/but/**",
 ]
 tools = ["claude-code"]
 max_files_to_validate = 10000
