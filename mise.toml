@@ -20,6 +20,8 @@ python = "3.14.3"
 uv = "0.11.3"
 pinact = "latest"
 "npm:@devcontainers/cli" = "latest"
+colima = "0.10.1"  # Docker runtime (VZ + Rosetta) — preferred over Docker Desktop for AMD64 devcontainers on macOS ARM
+lima = "2.1.1"     # Required runtime dependency for colima (provides limactl)
 "npm:agnix" = "latest"
 "npm:agents-lint" = "latest"
 
