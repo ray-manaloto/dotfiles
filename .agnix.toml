@@ -10,6 +10,8 @@ exclude = [
     "plugins/**",
     "missions/**",
     ".claude/skills.bak/**",
+    # Third-party skill reference docs (upstream-controlled, hard-coded paths expected)
+    ".claude/skills/context7-cli/references/**",
 ]
 tools = ["claude-code"]
 max_files_to_validate = 10000
