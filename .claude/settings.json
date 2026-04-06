@@ -7,7 +7,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if echo \"$CLAUDE_TOOL_INPUT\" | jq -re '.command // empty' | grep -qw 'npx'; then echo 'BLOCKED: Do not use npx. Use the mise-installed binary directly (e.g., agnix not npx agnix). All tools should be in mise.toml.' >&2; exit 1; fi"
+            "command": "if echo \"$CLAUDE_TOOL_INPUT\" | jq -re '.command // empty' | grep -qw 'npx'; then echo 'BLOCKED: Do not use npx. Use the mise-installed binary directly (e.g., agnix not npx agnix). All tools should be in mise.toml.' >&2; exit 1; fi",
+            "timeout": 5
           }
         ]
       }
