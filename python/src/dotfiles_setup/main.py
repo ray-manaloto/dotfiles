@@ -207,7 +207,7 @@ def setup_parser() -> argparse.ArgumentParser:
     ghcr_parser.add_argument("--repo", default="dotfiles", help="Repository name")
     ghcr_parser.add_argument(
         "--package-name",
-        default="dotfiles-devcontainer",
+        default="ghcr.io/ray-manaloto/dotfiles-devcontainer",
         help="GHCR container package name",
     )
 
