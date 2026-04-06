@@ -40,5 +40,8 @@ When reviewing Docker-related changes, check:
 5. Local-only tags are only on `-load` targets (not pushed)
 6. Base image ARGs are composable (allow override via bake)
 7. `RUSTUP_INIT_SKIP_EXISTENCE_CHECKS=yes` is set in mise env when rust is in mise tools (suppresses false "existing settings file" warning)
-8. `*.output=type=cacheonly` is used in bake-action for non-push builds when attestations are enabled (prevents Rekor TUF errors)
+8. `*.output=type=cacheonly` is CONDITIONAL in bake-action `set:` — only for non-push builds. `set:` overrides `push:` (higher precedence), so unconditional cacheonly silently prevents image push on main.
 9. Docker build comment block documents all known cosmetic warnings with root cause and fix status
+10. `HK_PKL_BACKEND=pkl` is set (not `pklr`) — required for pkl `import`/spread syntax used by hk-common.pkl
+11. Smoke test validates only baked-in image content — no host `--volume` mounts (avoids mise reading host config)
+12. `hk-common.pkl` and `hk-image.pkl` are COPYed into the image at `/etc/hk/` for image-side hook validation
