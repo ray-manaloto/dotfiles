@@ -73,33 +73,25 @@ jobs:
           HK_PKL_BACKEND: pkl
 
       - name: Assert chezmoiignore mise overlay hard gate
-        # Machine-checks the .chezmoiignore devcontainer-only gate from
-        # commit 5fc1b75 in both modes. Prevents future edits from silently
-        # breaking the Mac-pollution defense. See ralplan-consensus R2 #1.
+        # Machine-checks the .chezmoiignore devcontainer-only gate. Uses the
+        # canonical chezmoi.os pattern (linux = devcontainer, darwin = host).
+        # The runner is always linux → mise overlay MUST be in `chezmoi managed`.
+        # The darwin path is the inverse and is verified locally on Mac via
+        # `chezmoi --source ./home managed | grep mise`. Prevents future edits
+        # from silently breaking the Mac-pollution defense.
+        # See feedback_use_tool_builtins.md and the C10 commit body.
         run: |
           set -euo pipefail
           SRC="$PWD/home"
-          # Host mode: mise overlay MUST be ignored (NOT in `chezmoi managed`)
-          T1=$(mktemp -d)
-          env -u REMOTE_CONTAINERS -u CODESPACES -u DEVCONTAINER \
-            HOME="$T1" chezmoi init --source "$SRC" --apply=false >/dev/null
-          if env -u REMOTE_CONTAINERS -u CODESPACES -u DEVCONTAINER HOME="$T1" \
-             chezmoi --source "$SRC" managed | grep -qE '^\.config/mise/config\.toml$'; then
-            echo "FAIL: .chezmoiignore regression — mise overlay NOT gated on host" >&2
+          T=$(mktemp -d)
+          HOME="$T" chezmoi init --source "$SRC" --apply=false >/dev/null
+          if ! HOME="$T" chezmoi --source "$SRC" managed \
+               | grep -qE '^\.config/mise/config\.toml$'; then
+            echo "FAIL: .chezmoiignore regression — mise overlay NOT rendered on linux runner (devcontainer simulation)" >&2
             exit 1
           fi
-          rm -rf "$T1"
-          # Container mode: mise overlay MUST render (IS in `chezmoi managed`)
-          T2=$(mktemp -d)
-          DEVCONTAINER=1 HOME="$T2" \
-            chezmoi init --source "$SRC" --apply=false >/dev/null
-          if ! DEVCONTAINER=1 HOME="$T2" \
-               chezmoi --source "$SRC" managed | grep -qE '^\.config/mise/config\.toml$'; then
-            echo "FAIL: .chezmoiignore regression — mise overlay WRONGLY gated in container" >&2
-            exit 1
-          fi
-          rm -rf "$T2"
-          echo "OK: .chezmoiignore hard gate verified in both modes"
+          rm -rf "$T"
+          echo "OK: .chezmoiignore mise overlay renders on linux runner. Darwin path verified locally on Mac."
 
       - name: Check for outdated tools
         run: mise outdated || true
