@@ -1,5 +1,4 @@
 {
-  "prefersReducedMotion": true,
   "hooks": {
     "PreToolUse": [
       {
@@ -49,7 +48,7 @@
     "auto-memory@claude-community": false,
     "guide@claude-code-guide": false,
     "codex@openai-codex": false,
-    "astral@astral-sh": true,
-    "gitbutler@gitbutler-tools": true
-  }
+    "astral@astral-sh": true
+  },
+  "prefersReducedMotion": true
 }
