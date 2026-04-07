@@ -54,6 +54,20 @@ postinstall = "mise reshim && hk install --mise"
 HK_PKL_BACKEND = "pkl"  # "pkl" (not pklr) required for import/spread in hk-common.pkl
 HK_MISE = "1"
 
+# Directory-scoped shell aliases — auto-activated when cwd is inside this
+# repo, deactivated on leave. Interactive-shell only (not usable inside
+# task `run` blocks per mise docs). Kept short for inner-loop muscle
+# memory; the canonical UX is still `mise run <task>`.
+[shell_alias]
+dcu     = "mise run up"
+dcd     = "mise run down"
+dcdev   = "mise run dev"
+dcpull  = "mise run pull"
+dcsh    = "mise run sh"
+dcps    = "mise run ps"
+dcsmoke = "mise run smoke"
+dcverify = "mise run verify-image"
+
 [prepare.python]
 auto = true
 dir = "python"
@@ -88,8 +102,164 @@ description = "Bring the devcontainer up via the official @devcontainers/cli (Ma
 # wires it into devcontainer.json (named volume template + sshd feature
 # port mapping). Override per-clone via mise.local.toml. Do not remove —
 # see spec C11/C12 in .omc/specs/deep-interview-devcontainer-lifecycle.md.
+#
+# --pull flag (default true) implements "pull only if missing": first run
+# pulls the base image, subsequent restarts reuse the local copy. Force a
+# fresh pull with `mise run pull` or `mise run up --no-pull=false` after
+# CI republishes :dev. Bypass entirely with `mise run up --no-pull`.
 env = { BASE_IMAGE = "ghcr.io/ray-manaloto/dotfiles-devcontainer:dev", DOCKER_DEFAULT_PLATFORM = "linux/amd64", DEVCONTAINER_SSH_PORT = "4444" }
-run = "devcontainer up --workspace-folder ."
+usage = '''
+flag "--pull" default=#true help="Pull :dev if the image is missing locally (default: true)"
+'''
+run = '''
+if [[ "${usage_pull:-true}" == "true" ]]; then
+  if ! docker image inspect "$BASE_IMAGE" >/dev/null 2>&1; then
+    echo "==> base image $BASE_IMAGE not present locally — pulling"
+    docker pull "$BASE_IMAGE"
+  fi
+fi
+devcontainer up --workspace-folder .
+'''
+
+[tasks.pull]
+description = "Force-pull the latest :dev base image from ghcr"
+env = { BASE_IMAGE = "ghcr.io/ray-manaloto/dotfiles-devcontainer:dev", DOCKER_DEFAULT_PLATFORM = "linux/amd64" }
+run = 'docker pull "$BASE_IMAGE"'
+
+[tasks.verify-image]
+description = "Spot-check cookbook paths in :dev (cargo/rustup cookbook layout + core toolchains)"
+# Source of truth for what's INSIDE :dev is .devcontainer/mise-system.toml,
+# NOT root mise.toml. Root mise.toml tools (hk, pkl, the 5 markdown
+# linters, etc.) live on the HOST, not in the image. Keep assertions here
+# scoped to what mise-system.toml actually provides.
+env = { BASE_IMAGE = "ghcr.io/ray-manaloto/dotfiles-devcontainer:dev", DOCKER_DEFAULT_PLATFORM = "linux/amd64" }
+run = '''
+docker run --rm "$BASE_IMAGE" bash -lc '
+  set -euo pipefail
+  # Cookbook cargo/rustup homes (PR-2 commit F)
+  ls /usr/local/share/cargo/bin
+  ls /usr/local/share/rustup/toolchains
+  test ! -d /opt/cargo
+  test ! -d /opt/rustup
+  # Core toolchain reachability via mise activation
+  cargo --version
+  rustc --version
+  clang --version
+'
+'''
+
+[tasks.smoke]
+description = "Run tier 1-3 smoke checks inside the running devcontainer"
+run = "devcontainer exec --workspace-folder . scripts/devcontainer-smoke.sh"
+
+[tasks.sh]
+description = "Open an interactive shell in the running devcontainer"
+alias = "shell"
+run = "devcontainer exec --workspace-folder . bash -l"
+
+[tasks.ps]
+description = "Show the running devcontainer + its named volumes"
+run = '''
+docker ps --filter "label=devcontainer.local_folder=$PWD" --format 'table {{"{{"}}.Names{{"}}"}}\t{{"{{"}}.Status{{"}}"}}\t{{"{{"}}.Ports{{"}}"}}'
+docker volume ls --format '{{"{{"}}.Name{{"}}"}}' | grep -E 'mise-user|cargo-user|rustup-user' || true
+'''
+
+[tasks.dev]
+description = "Full devloop: pull :dev → up → smoke (sequential)"
+# NOTE: `depends = [...]` in mise runs tasks in parallel when independent
+# — not what we want here. A sequential shell body forces ordering while
+# keeping each sub-task independently runnable.
+run = '''
+set -euo pipefail
+mise run pull
+mise run up
+mise run smoke
+'''
+
+[tasks.persistence]
+description = "Verify .devcontainer/mise-system.toml tools survive a devcontainer stop/up cycle"
+# Source of truth for the expected tool set is .devcontainer/mise-system.toml
+# (installed to /usr/local/share/mise/config.toml inside :dev). This task
+# takes the runtime `mise ls --json --installed` view as ground truth,
+# cross-checked against a minimum count parsed from mise-system.toml, and
+# asserts every (tool, version) entry survives a stop/up cycle unchanged.
+#
+# Requires a running devcontainer on entry; the devloop
+# `mise run dev` / `mise run verify-local` brings it up first.
+run = '''
+set -euo pipefail
+SNAPSHOT=/tmp/mise-persistence-before.json
+AFTER=/tmp/mise-persistence-after.json
+SYSTEM_TOML=.devcontainer/mise-system.toml
+
+# (0) Derive the expected minimum tool count from mise-system.toml.
+#     Python tomllib is the canonical parser; python 3.14 is pinned in
+#     project mise.toml so this is always available during local runs.
+EXPECTED_MIN=$(python3 -c "
+import tomllib, sys
+with open('$SYSTEM_TOML', 'rb') as f:
+    cfg = tomllib.load(f)
+print(len(cfg.get('tools', {})))
+")
+echo "==> mise-system.toml declares $EXPECTED_MIN tools"
+
+# (1) Pre-teardown: confirm health + snapshot resolved versions.
+echo "==> mise doctor (pre-teardown)"
+devcontainer exec --workspace-folder . bash -lc 'mise doctor'
+
+echo "==> capturing pre-teardown snapshot"
+devcontainer exec --workspace-folder . bash -lc 'mise ls --json --installed' > "$SNAPSHOT"
+PRE_COUNT=$(jq 'length' "$SNAPSHOT")
+echo "pre-teardown installed tool count: $PRE_COUNT"
+if [ "$PRE_COUNT" -lt "$EXPECTED_MIN" ]; then
+  echo "FAIL: fewer tools installed ($PRE_COUNT) than mise-system.toml declares ($EXPECTED_MIN)" >&2
+  exit 1
+fi
+
+# (2) Stop/up cycle — the actual persistence test.
+echo "==> tearing container down"
+mise run stop
+echo "==> bringing container back up"
+mise run up
+
+# (3) Post-restart: health + snapshot.
+echo "==> mise doctor (post-restart)"
+devcontainer exec --workspace-folder . bash -lc 'mise doctor'
+
+echo "==> capturing post-restart snapshot"
+devcontainer exec --workspace-folder . bash -lc 'mise ls --json --installed' > "$AFTER"
+POST_COUNT=$(jq 'length' "$AFTER")
+echo "post-restart installed tool count: $POST_COUNT"
+
+# (4) Snapshot parity: every (tool, version) in $SNAPSHOT must be in $AFTER.
+#     Host-side jq diff so we can fail with a clear drift message.
+jq -r 'to_entries[] | .key as $k | .value[] | "\($k)\t\(.version)"' "$SNAPSHOT" | sort > /tmp/mise-persistence-pre.tsv
+jq -r 'to_entries[] | .key as $k | .value[] | "\($k)\t\(.version)"' "$AFTER"    | sort > /tmp/mise-persistence-post.tsv
+if ! diff -u /tmp/mise-persistence-pre.tsv /tmp/mise-persistence-post.tsv; then
+  echo "FAIL: installed-tool set drifted across stop/up" >&2
+  exit 1
+fi
+echo "OK: $PRE_COUNT tools persisted identically across stop/up (mise-system.toml baseline: $EXPECTED_MIN)"
+'''
+
+[tasks.verify-local]
+description = "Full Priority-2 local devcontainer validation (sequential: pull → verify-image → up → ps → smoke → persistence)"
+# Turns the 7-step Priority 2 sequence from the session handoff into an
+# unattended gate. Step 7 (CLion handoff) is manual and not included.
+# Step 6 (github ssh) is already covered by tier 3 inside smoke.
+#
+# Sequential shell body (not `depends = [...]`) so mise can't parallelize
+# the steps — smoke/persistence rely on up finishing first, and
+# verify-image relies on pull finishing first.
+run = '''
+set -euo pipefail
+mise run pull
+mise run verify-image
+mise run up
+mise run ps
+mise run smoke
+mise run persistence
+'''
 
 [tasks.stop]
 description = "Tear the devcontainer down (no 'devcontainer down' verb in v0.85.0)"
