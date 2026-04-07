@@ -1,3 +1,30 @@
+// Two-layer build hierarchy:
+//
+//   .devcontainer/Dockerfile            ← base image (CI-only per
+//                                         feedback_base_image_ci_only.md).
+//                                         Published to
+//                                         ghcr.io/ray-manaloto/dotfiles-devcontainer:dev
+//                                         by .github/workflows/ci.yml on
+//                                         merges to main. Never build
+//                                         locally.
+//        │
+//        ▼ (FROM ${BASE_IMAGE})
+//
+//   .devcontainer/Dockerfile.host-user  ← thin overlay (local build on
+//                                         every `mise run up`). Adds
+//                                         host-user rename + home staging.
+//                                         ≤89 lines enforced by
+//                                         hk.pkl:dockerfile_host_user_thin_overlay.
+//
+// BASE_IMAGE default comes from mise.toml [tasks.up].env. Override
+// per-clone via mise.local.toml (see mise.local.toml.example).
+//
+// DEVCONTAINER_SSH_PORT default also comes from mise.toml [tasks.up].env
+// (default 4444). Override per-clone via mise.local.toml. Only the
+// host-side port mapping is dynamic; the internal sshd port stays
+// literal 4444 (spec Constraint 12) so the mise-user / cargo-user /
+// rustup-user named volumes (which do NOT include port in their
+// names) survive port-collision recovery without losing user installs.
 {
   "name": "dotfiles-${localWorkspaceFolderBasename}-${localEnv:USER}-${localEnv:DEVCONTAINER_SSH_PORT}",
   "build": {
