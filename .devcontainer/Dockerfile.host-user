@@ -52,6 +52,7 @@ RUN mkdir -p \
     /home/${DEVCONTAINER_USERNAME}/.cache/claude \
     /home/${DEVCONTAINER_USERNAME}/.local/bin \
     /home/${DEVCONTAINER_USERNAME}/.local/state \
+    /home/${DEVCONTAINER_USERNAME}/.local/share/mise \
     /home/${DEVCONTAINER_USERNAME}/.claude \
     /home/${DEVCONTAINER_USERNAME}/.codex \
     /home/${DEVCONTAINER_USERNAME}/.gemini \

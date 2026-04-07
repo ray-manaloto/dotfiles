@@ -1,5 +1,5 @@
 {
-  "name": "dotfiles-refactor-fresh",
+  "name": "dotfiles-${localWorkspaceFolderBasename}-${localEnv:USER}-${localEnv:DEVCONTAINER_SSH_PORT}",
   "build": {
     "dockerfile": "Dockerfile.host-user",
     "options": [
@@ -10,6 +10,10 @@
       "BASE_IMAGE": "${localEnv:BASE_IMAGE}"
     }
   },
+  "runArgs": [
+    "--name",
+    "dotfiles-${localWorkspaceFolderBasename}-${localEnv:USER}-${localEnv:DEVCONTAINER_SSH_PORT}"
+  ],
   "remoteUser": "${localEnv:USER}",
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/${localWorkspaceFolderBasename},type=bind,consistency=cached",
@@ -18,7 +22,8 @@
     "source=${localEnv:HOME}/.claude,target=/home/${localEnv:USER}/.claude,type=bind",
     "source=${localEnv:HOME}/.codex,target=/home/${localEnv:USER}/.codex,type=bind",
     "source=${localEnv:HOME}/.gemini,target=/home/${localEnv:USER}/.gemini,type=bind",
-    "source=${localEnv:HOME}/.local/state/dotfiles,target=/tmp/dotfiles-host-state,type=bind"
+    "source=${localEnv:HOME}/.local/state/dotfiles,target=/tmp/dotfiles-host-state,type=bind",
+    "source=dotfiles-${localWorkspaceFolderBasename}-${localEnv:USER}-mise-user,target=/home/${localEnv:USER}/.local/share/mise,type=volume"
   ],
   "containerEnv": {
     "MISE_ARCH": "x64",
@@ -37,7 +42,7 @@
   },
   "appPort": ["${localEnv:DEVCONTAINER_SSH_PORT}:4444"],
   "forwardPorts": [4444],
-  "onCreateCommand": "chezmoi init --apply --source=/workspaces/${localWorkspaceFolderBasename} --no-tty --force",
+  "onCreateCommand": "chezmoi init --apply --source=/workspaces/${localWorkspaceFolderBasename} --no-tty --force && sudo chown -R ${localEnv:USER}:${localEnv:USER} /home/${localEnv:USER}/.local/share/mise",
   "customizations": {
     "vscode": {
       "extensions": [
