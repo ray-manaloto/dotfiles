@@ -2,7 +2,7 @@
 # check=error=true
 
 ARG BASE_IMAGE=ubuntu:25.10
-ARG MISE_VERSION=v2026.4.4
+ARG MISE_VERSION=v2026.4.5
 
 FROM ${BASE_IMAGE} AS devcontainer
 
