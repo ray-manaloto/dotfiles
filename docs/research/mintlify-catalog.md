@@ -1,5 +1,17 @@
 # Mintlify Catalog — Probed Sites + Request Queue
 
+> ⚠️ **Read `docs/research/mintlify-catalog-validation-log.md` first.**
+> A full end-to-end validation run (2026-04-07) found that the `mcp`
+> column below (`307` for every row) is **misleading**: the redirect
+> does resolve `200`, but that URL serves only a JSON descriptor, not
+> a live MCP protocol endpoint. The real per-repo MCP servers are
+> **auth-gated** and cannot be reached via `mcp2cli` without
+> credentials. The only `mcp2cli`-against-mintlify path that actually
+> works is the central MCP at `https://mintlify.com/docs/mcp`. The
+> validation log has the per-site probe evidence, nanosecond
+> timestamps, content sha256s, and the full follow-up list (skill +
+> rule corrections needed).
+
 Single source of truth for **which repos have mintlify-hosted docs with
 working AI-optimized endpoints**, used by `.claude/skills/mintlify/` and
 `.claude/rules/research-doc-sources.md`.
@@ -13,10 +25,10 @@ and probe on the next research-tooling commit.
 | Column | Meaning |
 |---|---|
 | `owner/repo` | GitHub `owner/repo` coordinate. |
-| `llms.txt` | HTTP status from `curl https://www.mintlify.com/<owner>/<repo>/llms.txt`. |
-| `mcp` | HTTP status from `curl -A "Mozilla/5.0" https://mintlify.com/<owner>/<repo>/mcp`. A `307` entry means "redirects to `https://www.mintlify.com/<owner>/<repo>/mcp` and resolves 200 after `-L`"; this is the normal path for mintlify-hosted per-repo MCP servers. A `404` entry means "only `llms.txt` works for this repo; MCP lookups must use the central mintlify MCP fallback." |
+| `llms.txt` | HTTP status from `curl https://www.mintlify.com/<owner>/<repo>/llms.txt`. `200` means the llms.txt index is reachable and usable (this is the preferred access path per `.claude/rules/research-doc-sources.md`). |
+| `mcp` | HTTP status from `curl -A "Mozilla/5.0" https://mintlify.com/<owner>/<repo>/mcp`. **This column reports only the descriptor URL's HTTP status, NOT protocol reachability.** A `307` entry means "redirects to `https://www.mintlify.com/<owner>/<repo>/mcp` and resolves 200 after `-L`"; the response body is a JSON MCP *descriptor* listing declared tools. **The live MCP protocol endpoint behind that descriptor is auth-gated** and returns 404 to unauthenticated `mcp2cli` calls — see the validation log for full evidence. Use the **central** Mintlify MCP at `https://mintlify.com/docs/mcp` for actual queries. |
 | `verified` | Date of most recent probe (`YYYY-MM-DD`). |
-| `status` | `ok` / `llms-only` / `broken` / `queued`. |
+| `status` | `ok` / `llms-only` / `broken` / `queued`. In this catalog, `ok` means "llms.txt + descriptor JSON both return 200". It does **not** mean "MCP protocol endpoint is reachable" — that would be `ok-mcp`, which currently applies only to the central Mintlify MCP. |
 
 ## Verified sites
 
@@ -50,6 +62,15 @@ were already in the dispatch).
 `mintlify.com/<repo>/mcp` redirects to `www.mintlify.com/<repo>/mcp`
 with a 200 final response. `mcp2cli` handles the redirect
 transparently — the 307 column is informational, not a defect.
+
+## Full validation evidence
+
+Per-site nanosecond-precision probe log (llms.txt HTTP status + content
+sha256, `/mcp` descriptor tool names, `mcp2cli --list` exit code with
+failure traceback, and global follow-up list) is recorded in
+**`docs/research/mintlify-catalog-validation-log.md`**. Re-run the
+probes by executing the (transient) script documented in that log's
+"Probe methodology" section.
 
 ## Central MCP (cross-site fuzzy search)
 
