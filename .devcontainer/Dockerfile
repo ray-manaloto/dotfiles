@@ -14,11 +14,19 @@ ARG MISE_VERSION
 # .devcontainer/mise-system.toml [env] so mise owns them.
 #
 # Cookbook canonical layout per https://mise.jdx.dev/mise-cookbook/docker:
-#   - System tools baked at /usr/local/share/mise/installs (via MISE_INSTALL_MODE=system).
-#   - User installs land at ~/.local/share/mise/installs at runtime and
-#     shadow system tools per cookbook semantics.
-#   - MISE_DATA_DIR is left UNSET so mise uses XDG defaults per user.
-ENV MISE_INSTALL_PATH=/usr/local/bin/mise \
+#   - MISE_DATA_DIR pins all installs/shims/cache to one system path
+#     (the cookbook's `/mise`, our `/usr/local/share/mise`). Without this,
+#     build-time `mise install` (running as root) writes shims to
+#     /root/.local/share/mise/shims per XDG defaults — invisible to
+#     non-root users and to PATH. The cookbook explicitly sets this var
+#     and so must we.
+#   - System tools baked at /usr/local/share/mise/installs.
+#   - PR-2 will layer per-user overlays via named volumes at
+#     ~/.local/share/mise (devcontainer feature mount), so the system
+#     path remains the canonical baked location while users get mutable
+#     overlays at runtime.
+ENV MISE_DATA_DIR=/usr/local/share/mise \
+    MISE_INSTALL_PATH=/usr/local/bin/mise \
     MISE_TRUSTED_CONFIG_PATHS=/usr/local/share/mise:/workspaces/dotfiles \
     CARGO_HOME=/opt/cargo \
     RUSTUP_HOME=/opt/rustup \
