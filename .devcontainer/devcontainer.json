@@ -23,7 +23,9 @@
     "source=${localEnv:HOME}/.codex,target=/home/${localEnv:USER}/.codex,type=bind",
     "source=${localEnv:HOME}/.gemini,target=/home/${localEnv:USER}/.gemini,type=bind",
     "source=${localEnv:HOME}/.local/state/dotfiles,target=/tmp/dotfiles-host-state,type=bind",
-    "source=dotfiles-${localWorkspaceFolderBasename}-${localEnv:USER}-mise-user,target=/home/${localEnv:USER}/.local/share/mise,type=volume"
+    "source=dotfiles-${localWorkspaceFolderBasename}-${localEnv:USER}-mise-user,target=/home/${localEnv:USER}/.local/share/mise,type=volume",
+    "source=dotfiles-${localWorkspaceFolderBasename}-${localEnv:USER}-cargo-user,target=/home/${localEnv:USER}/.cargo,type=volume",
+    "source=dotfiles-${localWorkspaceFolderBasename}-${localEnv:USER}-rustup-user,target=/home/${localEnv:USER}/.rustup,type=volume"
   ],
   "containerEnv": {
     "MISE_ARCH": "x64",
@@ -44,7 +46,7 @@
   },
   "appPort": ["${localEnv:DEVCONTAINER_SSH_PORT}:4444"],
   "forwardPorts": [4444],
-  "onCreateCommand": "chezmoi init --apply --source=/workspaces/${localWorkspaceFolderBasename} --no-tty --force && sudo chown -R ${localEnv:USER}:${localEnv:USER} /home/${localEnv:USER}/.local/share/mise",
+  "onCreateCommand": "chezmoi init --apply --source=/workspaces/${localWorkspaceFolderBasename} --no-tty --force && sudo chown -R ${localEnv:USER}:${localEnv:USER} /home/${localEnv:USER}/.local/share/mise /home/${localEnv:USER}/.cargo /home/${localEnv:USER}/.rustup",
   "postCreateCommand": "scripts/devcontainer-smoke.sh",
   "customizations": {
     "vscode": {
