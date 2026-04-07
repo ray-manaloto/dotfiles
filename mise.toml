@@ -36,7 +36,10 @@ lockfile = true
 show_prepare_stale = true
 
 [hooks]
-postinstall = "hk install --mise"
+# Reshim after every tool install so `mise doctor` does not report stale
+# shims from the pipx backend (observed in CI for pipx:mcp2cli — local was
+# clean, CI failed with "unused shims: mcp2cli" on fresh install).
+postinstall = "mise reshim && hk install --mise"
 
 [env]
 HK_PKL_BACKEND = "pkl"  # "pkl" (not pklr) required for import/spread in hk-common.pkl
