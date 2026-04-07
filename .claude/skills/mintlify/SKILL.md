@@ -1,150 +1,229 @@
 ---
 name: mintlify
-description: Reach mintlify-hosted documentation sites (per-repo and central) via their AI-optimized URL surface (`llms.txt`, `.md`-suffixed pages, per-repo MCP) without registering any MCP server. Use whenever the target library's docs are hosted on mintlify.
+description: Reach mintlify-hosted documentation via its AI-optimized URL surface. For repos in our catalog this means `curl llms.txt` plus per-page `.md` fetches — NOT `mcp2cli` against per-repo URLs, which are descriptor-only previews and do not serve live MCP protocol traffic.
 ---
 
-# mintlify — AI-optimized doc access without MCP registration
+# mintlify — AI-optimized doc access via curl
 
-Mintlify hosts documentation for many OSS projects. Every mintlify-hosted
-site exposes an AI-optimized surface that returns clean markdown (not
-HTML) and a per-site MCP server reachable without `claude mcp add`.
+Mintlify hosts documentation for many OSS projects and auto-generates
+a preview under `https://www.mintlify.com/<owner>/<repo>/` for repos
+it indexes. That preview exposes two cheap, stable, LLM-friendly
+access paths that do NOT require `mcp2cli`, an API key, or any MCP
+protocol handling:
 
-**Never use `claude mcp add` to register a mintlify MCP server.** The
-per-conversation schema tax is forbidden by
-`feedback_no_mcp_registration.md` and enforced by the `no_mcp_registration`
-step in `hk.pkl`. Use `curl` or `mcp2cli` instead — both return the same
-data without touching Claude's context.
+1. **`curl https://www.mintlify.com/<owner>/<repo>/llms.txt`** — a
+   plain-text page index.
+2. **`curl https://www.mintlify.com/<owner>/<repo>/<path>.md`** — the
+   clean-markdown version of any visible page URL (append `.md` to
+   the visible page path).
 
-## The mintlify URL surface (verified in Session-I spike)
+These are the only mintlify access paths validated as working for
+every repo in `docs/research/mintlify-catalog.md`. See
+`docs/research/mintlify-catalog-validation-log.md` for the full
+probe evidence and the reasons `mcp2cli` is not useful here.
 
-### 1. Per-repo AI index — `llms.txt`
+## When to use this skill
 
-```
-https://www.mintlify.com/<owner>/<repo>/llms.txt
-```
+Use it when:
 
-Returns a plain-text index of all pages on the site, one entry per line
-as `title + URL + 1-line description`. This is the cheapest lookup:
-plain `curl`, no auth, no UA spoofing, no JS rendering.
+- You need documentation for a library/tool/project that is in
+  `docs/research/mintlify-catalog.md`.
+- You want the cheapest possible doc lookup (no MCP subprocess, no
+  auth, no rate limits beyond mintlify's generous CDN defaults).
+- You want clean markdown output that fits in agent context without
+  HTML parsing.
 
-```bash
-curl -sSL "https://www.mintlify.com/jdx/mise/llms.txt" | head -20
-```
+Do **not** use it when:
 
-**Use first.** `llms.txt` is how you discover *which* pages exist for a
-topic; you then fetch individual pages via (2) or fuzzy-search them via
-(3).
+- The target library is not in the catalog — check the catalog first,
+  then use `ctx7` / `context7-cli` skill for libraries not covered.
+- You want fuzzy semantic search across a doc site — `llms.txt` is a
+  flat index of titles + short descriptions, not a search endpoint;
+  do keyword filtering client-side.
 
-### 2. Per-page direct markdown — `.md` suffix
+## Step-by-step lookup pattern
 
-```
-https://www.mintlify.com/<owner>/<repo>/<path>.md
-```
+Pick the repo you want, then walk the two steps in order:
 
-Append `.md` to any visible mintlify page URL to get the same content in
-LLM-clean markdown (no nav, no chrome, no JS). Strictly cheaper than
-WebFetch-ing the HTML page.
-
-```bash
-curl -sSL "https://www.mintlify.com/jdx/mise/tasks/task-configuration.md"
-```
-
-### 3. Per-repo MCP server — `/mcp`
-
-```
-https://mintlify.com/<owner>/<repo>/mcp
-```
-
-Exposes namespaced tools `search_<repo>` and `get_page_<repo>` for fuzzy
-search + targeted page fetch. Reach it via `mcp2cli` — **never** via
-`claude mcp add`:
+### Step 1 — discover pages via `llms.txt`
 
 ```bash
-mcp2cli https://mintlify.com/jdx/mise/mcp search_mise --query "task dependencies"
-mcp2cli https://mintlify.com/jdx/mise/mcp get_page_mise --path "tasks/task-configuration"
+curl -sSL "https://www.mintlify.com/<owner>/<repo>/llms.txt" | head -40
 ```
 
-**Curl gotcha (spike finding):** direct probes of `https://mintlify.com/<repo>/mcp`
-sometimes 307-redirect to a Cloudflare challenge that returns 404 on
-HEAD-style probes. When probing status manually, pass a browser UA:
+Output is one line per page, each in the form:
+
+```
+- [Page title](https://www.mintlify.com/<owner>/<repo>/<path>.md): one-line description
+```
+
+Grep for the topic you want and pick a page path.
+
+### Step 2 — fetch the page content via `.md` suffix
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}" -A "Mozilla/5.0" \
-     "https://mintlify.com/jdx/mise/mcp"
+curl -sSL "https://www.mintlify.com/<owner>/<repo>/<path>.md"
 ```
 
-`mcp2cli` handles this transparently; the UA workaround only matters for
-bare `curl` status checks (e.g. the catalog probe loop in Commit 4).
+Returns clean markdown — title, headings, code blocks, tables, no
+HTML chrome. Pipe to `head -N` to bound context cost.
 
-### 4. Central Mintlify MCP — cross-site fuzzy search
-
-```
-https://mintlify.com/docs/mcp
-```
-
-Exposes `search_mintlify` and `get_page_mintlify` for fuzzy search across
-**all** mintlify-hosted sites. Use this as the fallback when the target
-site isn't in the per-repo catalog yet.
+### Worked example — looking up mise's `[shell_alias]` docs
 
 ```bash
-mcp2cli https://mintlify.com/docs/mcp search_mintlify --query "llms.txt standard"
+# Step 1: find the aliases page
+curl -sSL "https://www.mintlify.com/jdx/mise/llms.txt" | grep -i alias
+# → - [Aliases](https://www.mintlify.com/jdx/mise/dev-tools/aliases.md): ...
+
+# Step 2: fetch it
+curl -sSL "https://www.mintlify.com/jdx/mise/dev-tools/aliases.md" | head -60
 ```
 
-## Preference chain (from `.claude/rules/research-doc-sources.md`)
+This is the exact path used in
+`docs/research/devcontainer-spec-delta-2026-04-06.md` to validate
+that `[shell_alias]` is a real, current mise config key.
 
-For any mintlify-hosted site, in order:
+## Why `mcp2cli` is NOT the preferred path for this skill
 
-1. `curl <site>/llms.txt` — find the page(s) you want.
-2. `curl <site>/<path>.md` — fetch the specific page(s).
-3. `mcp2cli <per-repo-mcp> search_<repo> --query "..."` — fuzzy search if
-   llms.txt is too coarse.
-4. `mcp2cli https://mintlify.com/docs/mcp search_mintlify --query "..."` —
-   cross-site fallback.
-5. `context7-cli` — for libraries not on mintlify.
-6. Raw HTML fetch (`curl` / `npx @teng-lin/agent-fetch`) — last resort.
+Extensive probing (see `docs/research/mintlify-catalog-validation-log.md`
+for the full evidence) established four load-bearing facts:
 
-Never skip to step 3 or 4 when steps 1–2 would work — the MCP path still
-pays a subprocess spawn cost and its responses are noisier than `llms.txt`.
+1. **Per-repo `/mcp` URLs are GET-only preview descriptors, not live
+   MCP servers.** `curl GET https://www.mintlify.com/<owner>/<repo>/mcp`
+   returns a JSON descriptor listing tool schemas, but `POST` to the
+   same URL returns `404 Not found`. The descriptor advertises tools
+   that have no server behind them. `mcp2cli` POSTs the MCP
+   `initialize` JSON-RPC → 404 → fails with `Session terminated`
+   followed by an SSE-fallback 404.
+
+2. **Live mintlify MCP servers exist only at the customer's own
+   documentation domain** (e.g., `resend.com/docs/mcp`,
+   `docs.anthropic.com/mcp`, `docs.perplexity.ai/mcp`,
+   `mintlify.com/docs/mcp` for Mintlify's own platform docs). These
+   respond to POST with proper MCP protocol (`GET=405` or `200`,
+   `POST=SSE stream`).
+
+3. **None of the 16 repos in our catalog have a live MCP server**
+   at any URL we can reach. Probed their own domains
+   (`chezmoi.io/mcp`, `starship.rs/mcp`, `containers.dev/mcp`,
+   `mise.jdx.dev/mcp`, etc.) — all return plain nginx `405 Method Not
+   Allowed` or 404, no MCP protocol. An API key would not help:
+   keys are org-scoped and cannot unlock sites owned by other orgs.
+
+4. **The central Mintlify MCP at `https://mintlify.com/docs/mcp`
+   works but is scope-limited to Mintlify's own platform docs** (how
+   to build a mintlify site, MDX syntax, auth setup, agent workflows).
+   It does NOT search the per-repo customer sites in our catalog.
+   Verified with real queries: `search-mintlify --query "mise
+   shell_alias"` returned only `mintlify.com/docs/api-playground`,
+   `docs/agent/workflows`, etc. — zero results from `jdx/mise`.
+
+**Net result:** for the libraries we actually care about in this
+repo, `mcp2cli` is not a usable access path against mintlify. Use
+`curl llms.txt` + `curl <page>.md` and skip MCP entirely.
+
+If you find a live MCP server at a customer domain (e.g., a new
+library you're researching that hosts `https://<library>.com/docs/mcp`),
+you can exercise it via `mcp2cli --mcp <url> --list` — but none of
+our catalog entries qualify today.
+
+## Mintlify's own platform docs (narrow use case)
+
+If you genuinely need to look something up about how Mintlify itself
+works (authoring MDX, configuring `docs.json`, embedding their
+assistant, auth setup), the central MCP does work:
+
+```bash
+# List tools
+mcp2cli --mcp https://mintlify.com/docs/mcp --list
+
+# Fuzzy search (note: tool name uses hyphen form at the CLI layer;
+# see "Tool-name normalization" below)
+mcp2cli --head 5 --mcp https://mintlify.com/docs/mcp \
+        search-mintlify --query "llms.txt standard"
+
+# Fetch a specific Mintlify docs page
+mcp2cli --mcp https://mintlify.com/docs/mcp \
+        get-page-mintlify --page "ai/model-context-protocol"
+```
+
+These queries reach Mintlify's own platform docs only — not the
+customer sites in our catalog. Prefer `curl https://www.mintlify.com/docs/<path>.md`
+for Mintlify-platform lookups too, unless you genuinely need fuzzy
+semantic search.
+
+## Tool-name normalization gotcha (`mcp2cli` UX artifact)
+
+The mintlify MCP descriptor JSON uses **underscored** tool names over
+the wire (`search_mintlify`, `get_page_mintlify`, `search_mise`,
+`get_page_pklr`). `mcp2cli` normalizes them to hyphenated form
+(`search-mintlify`, `get-page-mintlify`) at its argparse CLI layer
+because argparse subcommand choices reject `_`. Invocation must use
+the hyphen form:
+
+```bash
+# WRONG — fails with "invalid choice: 'search_mintlify'"
+mcp2cli --mcp https://mintlify.com/docs/mcp search_mintlify --query "..."
+
+# RIGHT
+mcp2cli --mcp https://mintlify.com/docs/mcp search-mintlify --query "..."
+```
+
+Internally `mcp2cli` translates back to the wire format, so the
+server receives the correct underscored name. This is a pure UX
+artifact of `mcp2cli`; the mintlify server itself accepts the
+underscored form and nothing else.
+
+## Flag-order gotcha (`mcp2cli` global flags)
+
+Output-control flags (`--head`, `--jq`, `--pretty`, `--toon`) are
+**pre-subcommand globals**. They must appear BEFORE `--mcp <url>` and
+the tool subcommand, otherwise argparse treats them as unknown
+arguments:
+
+```bash
+# WRONG — "mcp2cli: error: unrecognized arguments: --head 5"
+mcp2cli --mcp https://mintlify.com/docs/mcp search-mintlify --query "..." --head 5
+
+# RIGHT
+mcp2cli --head 5 --mcp https://mintlify.com/docs/mcp search-mintlify --query "..."
+```
 
 ## Which repos are covered?
 
-The probed list lives in `docs/research/mintlify-catalog.md`. Each row
-records the HTTP status of both `llms.txt` and `/mcp` for that repo, so
-you can tell at a glance which lookup paths actually work for a given
-site. Add new entries there as you discover coverage; never bypass the
-catalog with ad-hoc URL guessing in agent prompts.
+See `docs/research/mintlify-catalog.md` — the 16 probed sites with
+`llms.txt` content sha256 drift indicators. Add new rows there when
+research touches a repo not yet in the catalog.
 
 ## AI-export reference pages (mintlify docs about mintlify)
 
-Authoritative mintlify docs for the AI-export features this skill relies
-on:
+If you need to re-verify the mintlify URL surface itself (e.g., after
+a mintlify platform update), fetch these directly:
 
 - <https://www.mintlify.com/docs/ai/llmstxt.md>
-- <https://www.mintlify.com/docs/ai/skillmd.md>
 - <https://www.mintlify.com/docs/ai/model-context-protocol.md>
 - <https://www.mintlify.com/docs/ai/markdown-export.md>
+- <https://www.mintlify.com/docs/api/introduction.md>
 
 > Note: the user-provided URL `https://www.mintlify.com/docs/ai/mcp.md`
 > is a 404. The working page is `model-context-protocol.md` above.
 
 ## Do NOT `claude mcp add` mintlify servers
 
-Registering the per-repo or central mintlify MCP via `claude mcp add`
-injects every tool schema into Claude's system prompt for every
-conversation forever. The per-repo server alone exposes enough schema to
-cost a noticeable context tax per turn, and mintlify's central server is
-worse.
-
-The pattern above (`curl llms.txt` → `curl .md` → `mcp2cli` for fuzzy
-search) achieves everything a registered MCP server would, pays no
-schema tax, and is enforced by `hk run pre-commit`'s
-`no_mcp_registration` step. If you find yourself wanting registration,
-read `feedback_no_mcp_registration.md` first.
+Registering any MCP server via `claude mcp add` injects every tool's
+schema into Claude's system prompt for every conversation forever.
+Forbidden in this repo by `feedback_no_mcp_registration.md` and
+enforced by the `no_mcp_registration` step in `hk.pkl`. Even if a
+live mintlify MCP were reachable (which the catalog entries are not),
+reach it via `mcp2cli` or not at all.
 
 ## See also
 
-- `.claude/skills/mcp2cli/SKILL.md` — invocation patterns, output
-  controls, auth model.
-- `.claude/rules/research-doc-sources.md` — the full preference chain.
+- `.claude/skills/mcp2cli/SKILL.md` — the mcp2cli skill itself.
+- `.claude/rules/research-doc-sources.md` — the broader preference
+  chain this skill slots into (`llms.txt` is step 1).
 - `docs/research/mintlify-catalog.md` — verified per-repo status.
-- `feedback_no_mcp_registration.md` (auto-memory).
+- `docs/research/mintlify-catalog-validation-log.md` — full probe
+  evidence for the findings summarized above.
+- `feedback_no_mcp_registration.md` (auto-memory) — why we don't
+  `claude mcp add` anything.

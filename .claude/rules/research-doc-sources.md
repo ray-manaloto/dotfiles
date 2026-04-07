@@ -9,28 +9,69 @@ worked.
 ## The chain
 
 1. **`curl <site>/llms.txt`** — AI-optimized plain-text index, one entry
-   per page. Cheapest possible lookup. Works for every mintlify-hosted
-   site and many non-mintlify sites. See
-   `docs/research/mintlify-catalog.md` for probed coverage.
+   per page. Cheapest possible lookup. Works for every repo in
+   `docs/research/mintlify-catalog.md` and for many non-mintlify sites
+   that publish an llms.txt (check the target site). Use `grep` on
+   the output to pick the page(s) you want.
 
-2. **`curl <site>/<path>.md`** — for mintlify sites, appending `.md` to
-   any visible page URL returns clean markdown (no HTML chrome, no JS).
-   Use this once step 1 has told you which page you want.
+2. **`curl <site>/<path>.md`** — for mintlify-hosted sites, appending
+   `.md` to any visible page URL returns clean markdown (no HTML
+   chrome, no JS). Use this once step 1 has told you which page you
+   want. This is the primary per-page fetch for mintlify content.
 
-3. **`mcp2cli <per-repo-mcp> search_<repo> --query "..."`** — process-
-   spawn call to a per-repo MCP server (mintlify exposes these at
-   `https://mintlify.com/<owner>/<repo>/mcp`). **No registration.** See
-   `.claude/skills/mcp2cli/SKILL.md` for invocation details.
+3. **`ctx7` / `/context7-cli` skill** — for libraries whose docs live
+   outside mintlify, or for libraries where `llms.txt`/`.md` doesn't
+   cover what you need. Invoked via the `/context7-cli` skill. Note:
+   the `ctx7` binary itself is a skill-management CLI
+   (subcommands `skills`/`login`/`whoami`/`setup`), not a direct
+   doc-fetcher — the actual doc retrieval happens through the skill
+   wrapper. See `.claude/skills/context7-cli/SKILL.md`.
 
-4. **`mcp2cli https://mintlify.com/docs/mcp search_mintlify --query "..."`** —
-   cross-site fuzzy search across all mintlify-hosted sites. Fallback
-   when the target repo is not in the catalog.
+4. **Raw HTML fetch** (`curl <url>` or `npx @teng-lin/agent-fetch <url>`) —
+   **last resort only.** Pays the full HTML-parse cost in agent
+   context. Use `defuddle` where available to clean HTML before
+   parsing.
 
-5. **`context7-cli`** — for libraries not on mintlify. See the
-   `context7-cli` skill.
+## Why `mcp2cli` against per-repo mintlify MCPs is NOT in the chain
 
-6. **Raw HTML fetch** (`curl <url>` or `npx @teng-lin/agent-fetch <url>`) —
-   **last resort only.** Pays the full HTML-parse cost in agent context.
+An earlier revision of this rule listed
+`mcp2cli https://mintlify.com/<owner>/<repo>/mcp <tool>` as a
+fuzzy-search step. **That step does not work** and has been removed.
+
+Summary of the probe evidence (full log:
+`docs/research/mintlify-catalog-validation-log.md`):
+
+- The `https://mintlify.com/<owner>/<repo>/mcp` URLs are **GET-only
+  preview descriptors** auto-generated for every repo Mintlify
+  indexes. `curl GET` returns a JSON tool-schema descriptor; POST
+  (which `mcp2cli` sends to speak MCP protocol) returns `404 Not
+  found`. There is no live MCP server behind the descriptor.
+- **Live mintlify MCP servers exist only at the customer's own
+  documentation domain** (e.g., `docs.anthropic.com/mcp`,
+  `resend.com/docs/mcp`, `docs.perplexity.ai/mcp`). None of the 16
+  repos currently in `docs/research/mintlify-catalog.md` host a
+  live MCP server anywhere — verified against their own domains
+  (`chezmoi.io/mcp`, `starship.rs/mcp`, `mise.jdx.dev/mcp`, etc.)
+  which all return plain nginx 405/404, not MCP protocol.
+- **Mintlify's central MCP** at `https://mintlify.com/docs/mcp`
+  works but is scope-limited to Mintlify's own platform docs (how
+  to build a mintlify site, MDX syntax, agent workflows). It does
+  NOT search the per-repo customer sites in our catalog. Verified
+  with real queries: `search-mintlify --query "mise shell_alias"`
+  returned zero results from `jdx/mise`.
+- **An API key does not unlock this path.** Mintlify API keys are
+  organization-scoped; they authenticate you only against docs
+  owned by the same Mintlify organization as the key. You cannot
+  use a key to access `jdx/mise`, `twpayne/chezmoi`, or any other
+  org's content.
+
+`mcp2cli` itself remains in active use in this repo for **other**
+MCP servers (e.g., `@github`, `@docker` shorthands from
+`~/CLAUDE.md`, or a customer-domain MCP like `docs.anthropic.com/mcp`
+if we need to research Anthropic docs). See
+`.claude/skills/mcp2cli/SKILL.md` for invocation patterns. The ban
+is specifically on using it against per-repo mintlify subpath URLs,
+not on `mcp2cli` in general.
 
 ## The forbidden path: `claude mcp add`
 

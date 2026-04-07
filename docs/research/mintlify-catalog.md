@@ -72,17 +72,28 @@ failure traceback, and global follow-up list) is recorded in
 probes by executing the (transient) script documented in that log's
 "Probe methodology" section.
 
-## Central MCP (cross-site fuzzy search)
+## Central MCP (Mintlify platform docs only)
 
-When a repo is not in the table above (or you don't know which repo
-holds the doc), use the central Mintlify MCP via `mcp2cli`:
+`https://mintlify.com/docs/mcp` IS a live MCP protocol endpoint and
+responds to `mcp2cli` queries — but its scope is **Mintlify's own
+platform documentation only** (how to build a mintlify site, MDX
+syntax, agent workflows, auth setup, the Mintlify REST API). It does
+**not** search the customer sites in the verified table above.
+Verified by real-query probe in
+`docs/research/mintlify-catalog-validation-log.md`.
 
+Invocation example (for Mintlify-platform lookups, not per-repo
+lookups):
+
+```bash
+mcp2cli --head 5 --mcp https://mintlify.com/docs/mcp \
+        search-mintlify --query "llms.txt standard"
 ```
-mcp2cli https://mintlify.com/docs/mcp search_mintlify --query "..."
-mcp2cli https://mintlify.com/docs/mcp get_page_mintlify --path "..."
-```
 
-See `.claude/skills/mintlify/SKILL.md` for full invocation patterns.
+For the 16 customer repos in the verified table, use `curl llms.txt`
++ `curl <page>.md` instead — the central MCP cannot serve their
+content. See `.claude/skills/mintlify/SKILL.md` for the canonical
+per-repo access pattern.
 
 ## AI-export endpoint reference (mintlify docs about mintlify)
 
@@ -111,13 +122,17 @@ the probe loop against this queue and promotes `ok`/`llms-only` rows.
 
 ## How to use this catalog
 
-1. **Check the verified table first.** If the target repo has an `ok`
-   row, the per-repo `llms.txt`/`.md`/`/mcp` path is known-good.
-2. **Prefer `llms.txt`** (cheapest): `curl https://www.mintlify.com/<owner>/<repo>/llms.txt`.
-3. **Fall back to per-page `.md`** when you know the exact page:
-   `curl https://www.mintlify.com/<owner>/<repo>/<path>.md`.
-4. **Use `mcp2cli` for fuzzy search** when `llms.txt` is too coarse:
-   `mcp2cli https://mintlify.com/<owner>/<repo>/mcp search_<repo> --query "..."`.
+1. **Check the verified table first.** If the target repo has an
+   `ok` row, its `llms.txt` + per-page `.md` paths are known-good.
+2. **Step 1 — discover pages:** `curl https://www.mintlify.com/<owner>/<repo>/llms.txt`
+   and grep for the topic you want.
+3. **Step 2 — fetch content:** `curl https://www.mintlify.com/<owner>/<repo>/<path>.md`
+   for the specific page(s) you picked.
+4. **Do NOT use `mcp2cli` against per-repo mintlify URLs.** The
+   `/mcp` column's 307 status reflects descriptor URL reachability
+   only — the URLs are GET-only previews, not live MCP servers.
+   Full probe evidence in
+   `docs/research/mintlify-catalog-validation-log.md`.
 5. **Never `claude mcp add`.** Machine-enforced by `hk.pkl`'s
    `no_mcp_registration` step. See `feedback_no_mcp_registration.md`.
 

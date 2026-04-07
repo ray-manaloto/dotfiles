@@ -49,37 +49,74 @@ transport URL and any auth plumbing.
 ### Direct MCP URL (no config entry required)
 
 ```bash
-mcp2cli <server-url> <tool> --param value [--param value ...]
+mcp2cli --mcp <server-url> <tool> --param value [--param value ...]
 ```
 
-Example — call the per-repo mintlify MCP for `jdx/mise` without
-registering anything:
+Use the `--mcp <url>` flag, followed by the tool subcommand and its
+own args. The tool subcommand must be spelled in **hyphenated form**
+(argparse normalizes `_→-` at the CLI layer — see "Tool-name
+normalization" below).
+
+Example — query Mintlify's own platform docs (the only mintlify MCP
+server reliably reachable without credentials):
 
 ```bash
-mcp2cli https://mintlify.com/jdx/mise/mcp search_mise --query "task dependencies"
-mcp2cli https://mintlify.com/jdx/mise/mcp get_page_mise --path "tasks/task-configuration"
+# List tools exposed by the server
+mcp2cli --mcp https://mintlify.com/docs/mcp --list
+
+# Fuzzy search Mintlify's platform docs
+mcp2cli --head 5 --mcp https://mintlify.com/docs/mcp \
+        search-mintlify --query "llms.txt standard"
+
+# Fetch a specific page
+mcp2cli --mcp https://mintlify.com/docs/mcp \
+        get-page-mintlify --page "ai/model-context-protocol"
 ```
 
-Example — cross-site fuzzy search via the central Mintlify MCP:
+> ⚠️ **Do not use `mcp2cli` against per-repo mintlify URLs** like
+> `https://mintlify.com/<owner>/<repo>/mcp`. Those are GET-only
+> preview descriptors, not live MCP servers. POST returns 404. See
+> `.claude/skills/mintlify/SKILL.md` for the real per-repo access
+> path (`curl llms.txt` + `curl <page>.md`) and
+> `docs/research/mintlify-catalog-validation-log.md` for the probe
+> evidence.
+
+### Output controls (pre-subcommand globals)
 
 ```bash
-mcp2cli https://mintlify.com/docs/mcp search_mintlify --query "llms.txt standard"
+mcp2cli --jq '.items[].name' --mcp <url> <tool> ...   # jq filter on JSON output
+mcp2cli --head 20            --mcp <url> <tool> ...   # truncate to first N lines
+mcp2cli --pretty             --mcp <url> <tool> ...   # pretty-print JSON
+mcp2cli --toon               --mcp <url> <tool> ...   # "toon" compact single-line mode
 ```
 
-See `.claude/skills/mintlify/SKILL.md` for the full mintlify URL surface
-and `docs/research/mintlify-catalog.md` for the list of probed repos.
+**Flag order matters:** `--jq`, `--head`, `--pretty`, `--toon` are
+**pre-subcommand globals** and must appear BEFORE `--mcp <url>` and
+the tool subcommand. Placing them after the subcommand yields
+`mcp2cli: error: unrecognized arguments: --head N`.
 
-### Output controls
+Prefer `--jq` + `--head` early — most MCP tool responses are far
+larger than the actual answer, and raw output wastes conversation
+context.
+
+### Tool-name normalization (`_ → -`)
+
+MCP servers commonly advertise tool names with underscores (e.g.,
+`search_mintlify`, `get_page_mise`), but `mcp2cli` normalizes them
+to hyphens at its argparse layer because argparse subcommand choices
+reject `_`. Invocation must use the hyphen form; `mcp2cli` translates
+back to the wire format for you:
 
 ```bash
-mcp2cli ... --jq '.items[].name'     # jq filter on JSON output
-mcp2cli ... --head 20                 # truncate to first N lines
-mcp2cli ... --pretty                  # pretty-print JSON
-mcp2cli ... --toon                    # "toon" (compact single-line) mode
+# WRONG — fails with "invalid choice: 'search_mintlify'"
+mcp2cli --mcp <url> search_mintlify --query "..."
+
+# RIGHT
+mcp2cli --mcp <url> search-mintlify --query "..."
 ```
 
-Prefer `--jq` + `--head` early — most MCP tool responses are far larger
-than the actual answer, and raw output wastes conversation context.
+This is purely a `mcp2cli` UX artifact, not a choice by the target
+MCP server.
 
 ### Auth model
 
