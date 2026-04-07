@@ -10,13 +10,6 @@ ARG DEVCONTAINER_USERNAME=devcontainer
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# SSH server — local dev only, never published to registry
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    openssh-server \
-    sudo \
-    && rm -rf /var/lib/apt/lists/* /tmp/* \
-    && mkdir -p /run/sshd
-
 # Validate username
 RUN if [ -z "${DEVCONTAINER_USERNAME}" ]; then \
       echo "ERROR: DEVCONTAINER_USERNAME is empty" >&2; exit 1; \

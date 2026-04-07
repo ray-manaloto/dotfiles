@@ -28,6 +28,15 @@
   },
   "forwardAgent": true,
   "updateRemoteUserUID": false,
+  "features": {
+    "ghcr.io/devcontainers/features/sshd:1": {
+      "username": "${localEnv:USER}",
+      "port": "4444",
+      "startNow": true
+    }
+  },
+  "appPort": ["${localEnv:DEVCONTAINER_SSH_PORT}:4444"],
+  "forwardPorts": [4444],
   "onCreateCommand": "chezmoi init --apply --source=/workspaces/${localWorkspaceFolderBasename} --no-tty --force",
   "customizations": {
     "vscode": {
