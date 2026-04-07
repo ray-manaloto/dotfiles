@@ -113,6 +113,7 @@ RUN --mount=type=cache,id=mise-cache,target=/usr/local/share/mise/cache,sharing=
       export MISE_GITHUB_TOKEN="$GITHUB_TOKEN"; \
     fi && \
     mise install -y && \
+    test "$(mise ls --installed | wc -l)" -gt 0 || { echo "ERROR: mise installed zero tools — system config not discovered (check MISE_CONFIG_DIR points at /usr/local/share/mise containing config.toml)"; exit 1; } && \
     test -d /usr/local/share/cargo/bin || { echo "ERROR: MISE_CARGO_HOME not honored — /usr/local/share/cargo/bin missing after mise install (rust cookbook regression)"; exit 1; } && \
     test -d /usr/local/share/rustup/toolchains || { echo "ERROR: MISE_RUSTUP_HOME not honored — /usr/local/share/rustup/toolchains missing after mise install (rust cookbook regression)"; exit 1; } && \
     chmod -R 777 /usr/local/share/mise /usr/local/share/cargo /usr/local/share/rustup
@@ -120,7 +121,8 @@ RUN --mount=type=cache,id=mise-cache,target=/usr/local/share/mise/cache,sharing=
 # Reshim to ensure all shims are present (aqua tools may include doc-file
 # shims like LICENSE, README — these are harmless and must not be deleted
 # or mise doctor will report them as missing)
-RUN mise reshim -f
+RUN mise reshim -f && \
+    test -n "$(find /usr/local/share/mise/shims -mindepth 1 -maxdepth 1 -print -quit)" || { echo "ERROR: /usr/local/share/mise/shims empty after reshim — mise has no installed tools to shim"; exit 1; }
 
 # Final global permissions check
 RUN chmod -R 777 /usr/local/share/mise /usr/local/share/cargo /usr/local/share/rustup
