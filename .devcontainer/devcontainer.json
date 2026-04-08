@@ -64,6 +64,22 @@
   "updateRemoteUserUID": false,
   "init": true,
   "initializeCommand": "mkdir -p ~/.ssh ~/.claude ~/.codex ~/.gemini ~/.local/state/dotfiles && touch ~/.ssh/config ~/.ssh/known_hosts ~/.ssh/authorized_keys",
+  // ⚠ BROKEN AS OF 2026-04-07 — DO NOT TRUST THIS BLOCK.
+  // The official sshd feature schema only accepts `version` and
+  // `gatewayPorts` (probed:
+  // raw.githubusercontent.com/devcontainers/features/main/src/sshd/devcontainer-feature.json).
+  // The `username`, `port`, and `startNow` options below DO NOT EXIST
+  // and are silently dropped. The feature listens on its hardcoded
+  // port 2222 — the appPort mapping below to container :4444 is wired
+  // to nothing. Verified empirically 2026-04-07: Connection reset by
+  // peer on host:4444; sshd_config inside the container shows `Port 2222`.
+  //
+  // This whole block + the appPort + the readonly ~/.ssh bind mount
+  // need to be replaced by the cpp-playground SSH-agent proxy pattern
+  // (host-TCP + container-unix-socket) per the research artifact:
+  //   .omc/research/research-20260407-ssh-devcontainer/report.md
+  //
+  // Resume plan: .omc/plans/session-2026-04-07e-ssh-rewrite-priority.md
   "features": {
     "ghcr.io/devcontainers/features/sshd:1": {
       "username": "${localEnv:USER}",

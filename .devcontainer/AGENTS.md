@@ -171,3 +171,21 @@ intact. If F itself needs revert, that triggers another `:dev` republish
 on merge (same blast radius as PR-1's hotfix cycle).
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->
+
+## ⚠ STATUS 2026-04-07: SSH MODEL BROKEN
+
+The `sshd` feature + `appPort` + readonly `~/.ssh` bind mount documented
+above do **not** work end-to-end. The feature's `port`/`username`/`startNow`
+options don't exist in its schema (silently dropped); sshd listens on
+its hardcoded **2222**, not 4444. `@devcontainers/cli` does no agent
+forwarding (Microsoft maintainer in `devcontainers/cli#441`). VS Code
+"Attach to Running Container" already auto-forwards
+(`microsoft/vscode-remote-release#11413`); only the CLI lane is broken.
+
+**Fix:** adopt cpp-playground host-TCP + container-unix-socket SSH-agent
+proxy pattern, scoped to the CLI lane only. Treat C10/C11/C12 + the
+IDE-Workflow + Dynamic-Naming sections above as historical pending the
+rewrite.
+
+- **Research:** `.omc/research/research-20260407-ssh-devcontainer/report.md`
+- **Resume plan:** `.omc/plans/session-2026-04-07e-ssh-rewrite-priority.md`

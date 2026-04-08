@@ -203,9 +203,17 @@ print(len(cfg.get('tools', {})))
 ")
 echo "==> mise-system.toml declares $EXPECTED_MIN tools"
 
-# (1) Pre-teardown: confirm health + snapshot resolved versions.
-echo "==> mise doctor (pre-teardown)"
-devcontainer exec --workspace-folder . bash -lc 'mise doctor'
+# (1) Pre-teardown: snapshot resolved versions.
+#     `mise doctor` is advisory only — inside the container it sees the
+#     workspace /workspaces/dotfiles/mise.toml which legitimately lists
+#     host-only tools (colima, lima, @devcontainers/cli, agnix, markdown
+#     linters) that are NOT in mise-system.toml. Doctor reports them as
+#     "(missing)" with a non-zero exit. The TRUE persistence invariant is
+#     the snapshot diff (step 4) being empty; doctor is logged but never
+#     fails the gate. Architectural cleanup (untrust the workspace config
+#     in-container) is tracked as a follow-up — see issue #70 thread.
+echo "==> mise doctor (pre-teardown, advisory)"
+devcontainer exec --workspace-folder . bash -lc 'mise doctor || true'
 
 echo "==> capturing pre-teardown snapshot"
 devcontainer exec --workspace-folder . bash -lc 'mise ls --json --installed' > "$SNAPSHOT"
@@ -222,9 +230,9 @@ mise run stop
 echo "==> bringing container back up"
 mise run up
 
-# (3) Post-restart: health + snapshot.
-echo "==> mise doctor (post-restart)"
-devcontainer exec --workspace-folder . bash -lc 'mise doctor'
+# (3) Post-restart: snapshot. `mise doctor` advisory only (see step 1).
+echo "==> mise doctor (post-restart, advisory)"
+devcontainer exec --workspace-folder . bash -lc 'mise doctor || true'
 
 echo "==> capturing post-restart snapshot"
 devcontainer exec --workspace-folder . bash -lc 'mise ls --json --installed' > "$AFTER"
