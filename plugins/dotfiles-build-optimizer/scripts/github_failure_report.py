@@ -13,11 +13,17 @@ from typing import Any
 
 
 def github_get(url: str, token: str) -> dict[str, Any]:
+    # Ruff S310 (audit URL for permitted schemes): addressed by boundary
+    # validation rather than an inline suppression. This script only
+    # talks to api.github.com, so allow nothing else.
+    if not url.startswith("https://api.github.com/"):
+        msg = f"refusing non-GitHub URL: {url!r}"
+        raise ValueError(msg)
     request = urllib.request.Request(url)
     request.add_header("Accept", "application/vnd.github+json")
     request.add_header("Authorization", f"Bearer {token}")
     request.add_header("X-GitHub-Api-Version", "2022-11-28")
-    with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310
+    with urllib.request.urlopen(request, timeout=30) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
