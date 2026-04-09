@@ -20,6 +20,16 @@ from dotfiles_setup.docker import ensure_container_ssh_proxy, host_authorized_ke
 logger = logging.getLogger(__name__)
 
 NON_SYSTEM_UID_MIN = 1000
+SSH_ADD_TIMEOUT_SECONDS = 3
+
+
+class AuditError(RuntimeError):
+    """Raised when an audit step fails in a way the caller must surface loudly.
+
+    Distinct from a soft "tool not configured" warning: AuditError signals a
+    real infrastructure fault (e.g., SSH bridge unresponsive) that must NOT
+    be swallowed or retried silently.
+    """
 
 
 class ToolManager:
@@ -483,11 +493,32 @@ class DevEnvironmentAuditor:
         else:
             logger.info("SSH_AUTH_SOCK is set")
 
+        # Use subprocess.run directly (not ToolManager) so we can bound
+        # the call with a timeout and distinguish "bridge unresponsive"
+        # from "agent has no identities". A hung ssh-add -l used to
+        # silently stall verify-local for 50 minutes; see #77.
         try:
-            ToolManager.run_command(["ssh-add", "-l"])
+            proc = subprocess.run(
+                ["ssh-add", "-l"],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=SSH_ADD_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired as exc:
+            msg = (
+                "SSH bridge unresponsive — see host-ssh-proxy.log and "
+                "/tmp/dotfiles-ssh-agent-proxy.log"
+            )
+            raise AuditError(msg) from exc
+
+        if proc.returncode == 0:
             results["agent_keys"] = True
             logger.info("SSH agent keys: ok")
-        except SystemExit:
+        elif "no identities" in (proc.stdout + proc.stderr).lower():
+            # Empty agent is not a bridge failure — audit continues.
+            logger.info("SSH agent keys: none loaded (not a bridge fault)")
+        else:
             logger.warning("SSH agent has no keys or is unreachable")
 
         try:

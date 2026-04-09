@@ -104,6 +104,9 @@ def _resolve_host_ssh_auth_sock() -> str:
     return ""
 
 
+UPSTREAM_CONNECT_TIMEOUT_SECONDS = 3.0
+
+
 def _proxy_connection(
     client: socket.socket,
     *,
@@ -114,14 +117,46 @@ def _proxy_connection(
         msg = "exactly one target mode must be configured"
         raise ValueError(msg)
 
+    # Bounded-fail-loud: never block indefinitely on a dead upstream.
+    # Host proxy random-port rotation + container argv hardcoding can
+    # point at a dead TCP peer across `mise run up` restarts; without a
+    # connect timeout this hung silently for 50 minutes. See #77.
     if target_unix is not None:
         upstream = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        upstream.connect(os.fspath(target_unix))
+        try:
+            upstream.settimeout(UPSTREAM_CONNECT_TIMEOUT_SECONDS)
+            upstream.connect(os.fspath(target_unix))
+        except (TimeoutError, ConnectionRefusedError, OSError) as exc:
+            errno_name = getattr(exc, "errno", None)
+            sys.stderr.write(
+                f"BRIDGE_UNREACHABLE host=unix port={target_unix} errno={errno_name}\n"
+            )
+            sys.stderr.flush()
+            with suppress(OSError):
+                upstream.close()
+            with suppress(OSError):
+                client.close()
+            return
+        upstream.settimeout(None)
     else:
         if target_tcp is None:
             msg = "TCP target must be set when no Unix target is configured"
             raise RuntimeError(msg)
-        upstream = socket.create_connection(target_tcp)
+        try:
+            upstream = socket.create_connection(
+                target_tcp, timeout=UPSTREAM_CONNECT_TIMEOUT_SECONDS
+            )
+        except (TimeoutError, ConnectionRefusedError, OSError) as exc:
+            errno_name = getattr(exc, "errno", None)
+            host, port = target_tcp
+            sys.stderr.write(
+                f"BRIDGE_UNREACHABLE host={host} port={port} errno={errno_name}\n"
+            )
+            sys.stderr.flush()
+            with suppress(OSError):
+                client.close()
+            return
+        upstream.settimeout(None)
 
     try:
         sockets = [client, upstream]
@@ -259,7 +294,11 @@ def initialize_host_ssh_runtime() -> dict[str, str]:
 
     log_file = state_dir / "host-ssh-proxy.log"
     port = _choose_host_ssh_proxy_port()
-    with log_file.open("w", encoding="utf-8") as log_fd:
+    # Append mode + stderr merged into stdout: ensures diagnostics from
+    # every `mise run up` cycle accumulate in the log, and that the
+    # BRIDGE_UNREACHABLE stderr writes from _proxy_connection land in
+    # the same file instead of being lost.
+    with log_file.open("a", encoding="utf-8") as log_fd:
         proc = subprocess.Popen(
             [
                 sys.executable,
@@ -274,7 +313,7 @@ def initialize_host_ssh_runtime() -> dict[str, str]:
             ],
             stdin=subprocess.DEVNULL,
             stdout=log_fd,
-            stderr=log_fd,
+            stderr=subprocess.STDOUT,
             start_new_session=True,
         )
     pid_file.write_text(f"{proc.pid}\n", encoding="utf-8")
