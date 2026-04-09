@@ -29,6 +29,9 @@ __pycache__/
 mise.local.toml
 mise.*.local.toml
 
+# Claude Code per-clone permission allowlist (accumulates session tool-use approvals)
+.claude/settings.local.json
+
 # OMC/OMG/OMX plugin state
 .omg/
 .omc/state/
