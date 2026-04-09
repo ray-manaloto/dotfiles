@@ -1,6 +1,6 @@
 ---
 name: omc-hud-wrapper-diagnostic
-description: When the OMC HUD statusline shows "Plugin dist/ exists but HUD not found" or similar discovery-wrapper errors, bypass the wrapper and invoke the target directly to surface the real import error. Generalizes to any Node.js wrapper script that walks fallback paths with try/catch and emits a terminal "not found" message.
+description: "Use when the OMC HUD statusline shows discovery-wrapper errors like \"Plugin dist exists but HUD not found\" - bypass the wrapper and invoke the target directly to surface the real import error."
 triggers:
   - "HUD not found"
   - "Plugin dist/ exists but"

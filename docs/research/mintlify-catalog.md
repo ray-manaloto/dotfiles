@@ -140,7 +140,8 @@ the probe loop against this queue and promotes `ok`/`llms-only` rows.
 
 | org/repo | researched-in-session | date | status |
 |----------|-----------------------|------|--------|
-| _(empty — append as research workflows discover new repos)_ | | | |
+| lima-vm/lima | research-20260409c-dockerdesktop-ssh (Stage 5) | 2026-04-09 | queued (mintlify — `www.mintlify.com/lima-vm/lima/llms.txt` returns 200) |
+| abiosoft/colima | research-20260409c-dockerdesktop-ssh (Stage 5) | 2026-04-09 | queued (NOT mintlify — docs at `colima.run/docs/configuration/` need raw HTML cache) |
 
 ## How to use this catalog
 

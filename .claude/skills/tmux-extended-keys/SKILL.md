@@ -1,7 +1,7 @@
 ---
 id: workflow-tmux-extended-keys
 name: tmux-extended-keys
-description: Enable Shift+Enter and other modified-key combinations inside TUIs running under tmux by forwarding CSI-u sequences
+description: "Use when enabling Shift+Enter and other modified-key combinations inside TUIs running under tmux - forward CSI-u sequences."
 source: conversation
 triggers:
   - "shift+enter tmux"

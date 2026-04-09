@@ -1,6 +1,6 @@
 ---
 name: git-branch-commit-push-workflow
-description: Plain git workflow for branches, commits, pushes, and PRs. Avoids virtual-branch composition bugs where commits silently depend on other applied branches.
+description: "Use when creating branches, commits, pushes, or PRs with plain git; avoids virtual-branch composition bugs where commits silently depend on other applied branches."
 disable-model-invocation: true
 ---
 

@@ -21,8 +21,8 @@ uv = "0.11.5"
 pinact = "latest"
 chezmoi = "latest"  # Used by CI lint hard-gate step to verify .chezmoiignore mise overlay gating
 "npm:@devcontainers/cli" = "0.85.0"
-colima = "0.10.1"  # Docker runtime (VZ + Rosetta) — preferred over Docker Desktop for AMD64 devcontainers on macOS ARM
-lima = "2.1.1"     # Required runtime dependency for colima (provides limactl)
+colima = "0.10.1"  # Alternate Docker runtime (VZ + Rosetta); Docker Desktop is the CURRENT supported runtime — see AGENTS.md Docker Runtimes + .omc/research/research-20260409c-dockerdesktop-ssh/
+lima = "2.1.1"     # Runtime dependency for colima (provides limactl); kept for deferred Colima follow-up
 "npm:agnix" = "latest"
 "npm:agents-lint" = "latest"
 "pipx:mcp2cli" = "3.0.1"
@@ -277,8 +277,9 @@ description = "R3: container runs as linux/amd64 x86_64 (not ARM passthrough)"
 # Proves Requirement 3: the container is AMD64 regardless of host arch.
 # Three independent signals: (1) docker image manifest architecture,
 # (2) container uname -m, (3) container arch. All three must report
-# x86_64/amd64. The host can be arm64 (macOS ARM via Colima VZ+Rosetta)
-# or amd64 (Linux CI runner); we don't check the host.
+# x86_64/amd64. The host can be arm64 (macOS ARM via Docker Desktop
+# Rosetta, or the deferred Colima VZ+Rosetta path) or amd64 (Linux CI
+# runner); we don't check the host.
 run = '''
 set -euo pipefail
 container_name="$(docker ps -q --filter "label=devcontainer.local_folder=$PWD" | head -1)"

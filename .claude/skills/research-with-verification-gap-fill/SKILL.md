@@ -1,6 +1,6 @@
 ---
 name: research-with-verification-gap-fill
-description: Run parallel-scientist research and ALWAYS follow with an opus verification stage that re-probes load-bearing claims and surfaces gaps. Skipping the verifier almost shipped a wrong recommendation in session 2026-04-07e.
+description: "Use when running parallel-scientist research - ALWAYS follow with an opus verification stage that re-probes load-bearing claims and surfaces gaps. Skipping the verifier almost shipped a wrong recommendation in session 2026-04-07e."
 type: skill-draft
 status: draft
 inspired-by: oh-my-claudecode:sciomc + lessons from session 2026-04-07e

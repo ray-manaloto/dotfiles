@@ -1,6 +1,6 @@
 ---
 name: bake-action-set-precedence-expertise
-description: "In docker/bake-action, the set parameter has higher precedence than push; unconditional *.output=type=cacheonly silently prevents image pushes on main."
+description: "Use when configuring docker/bake-action: the `set` parameter has higher precedence than `push`; an unconditional `*.output=type=cacheonly` silently prevents image pushes on main."
 ---
 
 # Bake-Action `set:` Precedence Over `push:`

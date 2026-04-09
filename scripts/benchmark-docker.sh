@@ -6,8 +6,8 @@ set -euo pipefail
 #           AMD64 correctness, memory usage
 #
 # Usage: ./scripts/benchmark-docker.sh [runtime-name]
-# Example: ./scripts/benchmark-docker.sh docker-desktop
-#          ./scripts/benchmark-docker.sh colima
+# Example: ./scripts/benchmark-docker.sh docker-desktop  # current supported runtime (2026-04-09+)
+#          ./scripts/benchmark-docker.sh colima          # deferred alternative for follow-up comparison
 
 RUNTIME="${1:?Usage: benchmark-docker.sh <runtime-name>}"
 IMAGE_REF="${IMAGE_REF:-ghcr.io/ray-manaloto/dotfiles-devcontainer:dev}"

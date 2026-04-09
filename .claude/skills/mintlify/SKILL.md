@@ -1,6 +1,6 @@
 ---
 name: mintlify
-description: Reach mintlify-hosted documentation via its AI-optimized URL surface. For repos in our catalog this means `curl llms.txt` plus per-page `.md` fetches — NOT `mcp2cli` against per-repo URLs, which are descriptor-only previews and do not serve live MCP protocol traffic.
+description: "Use when fetching mintlify-hosted documentation: curl `llms.txt` plus per-page `.md` surface, NOT `mcp2cli` against per-repo URLs (descriptor-only previews, no live MCP)."
 ---
 
 # mintlify — AI-optimized doc access via curl

@@ -1,6 +1,6 @@
 ---
 name: omc-reference
-description: OMC agent catalog, available tools, team pipeline routing, commit protocol, and skills registry. Auto-loads when delegating to agents, using OMC tools, orchestrating teams, making commits, or invoking skills.
+description: "Use when delegating to OMC agents, using OMC tools, orchestrating teams, making commits, or invoking skills - provides the OMC agent catalog, tools, team pipeline routing, commit protocol, and skills registry."
 user-invocable: false
 ---
 

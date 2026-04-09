@@ -1,6 +1,6 @@
 ---
 name: uv-project-vs-directory-expertise
-description: "uv run --project DIR locates pyproject.toml without changing cwd; --directory changes cwd and breaks relative test paths. Use --project for repo-root-relative commands."
+description: "Use when running Python tools from the repo root with uv - prefer `uv run --project python` over `uv run --directory python`. The former keeps cwd unchanged; the latter breaks relative test paths."
 ---
 
 # uv --project vs --directory: Preserving Working Directory

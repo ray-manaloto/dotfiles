@@ -1,6 +1,6 @@
 ---
 name: ssh-ignoreunknown-cross-platform
-description: Use OpenSSH's IgnoreUnknown directive to share a single ~/.ssh/config across macOS + Linux when macOS-only directives (UseKeychain, AddKeysToAgent) would otherwise be fatal on Linux.
+description: "Use when sharing a single `~/.ssh/config` across macOS + Linux - apply OpenSSH `IgnoreUnknown` to tolerate macOS-only directives (`UseKeychain`, `AddKeysToAgent`) on Linux where they would otherwise be fatal."
 type: learned-skill
 extracted-from: session 2026-04-07e (devcontainer ssh debugging)
 applicability: any time the host ~/.ssh/config is bind-mounted into a Linux container, or shared across platforms via dotfiles

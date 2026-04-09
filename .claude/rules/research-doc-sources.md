@@ -8,11 +8,29 @@ worked.
 
 ## The chain
 
+0. **Grep the local cache first.** Every repo in
+   `docs/research/mintlify-catalog.md` has both `llms.txt` and
+   `llms-full.txt` pre-fetched under
+   `docs/research/mintlify-cache/<owner>/<repo>/`. Zero latency,
+   zero round-trips, greppable across the whole cache with
+   `grep -rHi <topic> docs/research/mintlify-cache/`. Before running
+   any `curl` against a docs domain, check whether the repo is in the
+   catalog — if yes, the cache is the authoritative source and `curl`
+   is only needed for per-page `.md` fetches or cache refresh.
+
+   **Common trap (session 2026-04-09c):** do NOT guess a project's
+   docs domain (e.g., `containers.dev/llms.txt` → 404). The
+   devcontainer spec/CLI/features/images docs are all hosted on
+   mintlify at `www.mintlify.com/devcontainers/<repo>/`, not on
+   `containers.dev`. Grep the cache or the catalog to find the
+   right URL before curling anything.
+
 1. **`curl <site>/llms.txt`** — AI-optimized plain-text index, one entry
-   per page. Cheapest possible lookup. Works for every repo in
+   per page. Cheapest possible *remote* lookup. Works for every repo in
    `docs/research/mintlify-catalog.md` and for many non-mintlify sites
    that publish an llms.txt (check the target site). Use `grep` on
-   the output to pick the page(s) you want.
+   the output to pick the page(s) you want. Use this when step 0 is a
+   cache miss or when the topic needs fresh content.
 
 2. **`curl <site>/<path>.md`** — for mintlify-hosted sites, appending
    `.md` to any visible page URL returns clean markdown (no HTML

@@ -1,6 +1,6 @@
 ---
 name: devcontainer-feature-schema-probe
-description: Before configuring any devcontainer feature in devcontainer.json, fetch its devcontainer-feature.json schema and verify every option key exists. Features silently drop unknown options.
+description: "Use when adding or modifying a devcontainer feature in devcontainer.json - fetch its devcontainer-feature.json schema first and verify every option key exists, because features silently drop unknown options."
 type: learned-skill
 extracted-from: session 2026-04-07e (dotfiles SSH model debugging)
 applicability: devcontainer feature configuration in any project

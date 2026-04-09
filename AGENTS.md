@@ -131,6 +131,9 @@ locally before pushing Dockerfile changes.
   not at session end. See `.claude/rules/notepad-enforcement.md`.
 - **OMC directory conventions**: Use standard `.omc/` paths, no ad-hoc
   directories. See `.claude/rules/omc-directory-conventions.md`.
+- **Zero-bash logic**: Non-trivial logic (env detection, tool config,
+  validation) lives in `python/`. Bash is restricted to Stage 0
+  bootstrap (`install.sh`).
 
 ### Validate before committing
 
@@ -177,24 +180,19 @@ Gated by `mise run verify-local`. Sessions touching `.devcontainer/` or `mise.to
 
 ### Docker Runtimes
 
-Colima (VZ + Rosetta) is recommended over Docker Desktop for AMD64
-devcontainers. Use the native `colima` buildx driver, not `colima-builder`
-(QEMU). Benchmarks: `docs/research/trail/findings/docker-benchmarks/`.
+**Docker Desktop is the supported runtime as of 2026-04-09** (verified
+via `docker context ls` → `desktop-linux *`). It exposes
+`/run/host-services/ssh-auth.sock` natively, which R2 outbound depends
+on. Colima lacks an equivalent (`abiosoft/colima#1330`, `#942`) — do
+NOT switch context without validating R2 on the target runtime.
+Colima is a deferred alternative tracked in issue #78. Research:
+`.omc/research/research-20260409c-dockerdesktop-ssh/report.md`.
+Benchmarks: `docs/research/trail/findings/docker-benchmarks/`.
 
 ### Do not
 
-1. **Do NOT launch CLion or VS Code from the dock for devcontainer work.**
-   macOS GUI processes don't inherit terminal env, so `mise`, `uv`, and
-   `$SSH_AUTH_SOCK` are not available to `initializeCommand`, which then
-   fails to spawn the host-side SSH agent proxy. Terminal only. See
-   `.devcontainer/AGENTS.md`.
-2. **Do NOT `mise run build` or `docker buildx bake dev-load` locally.**
-   CI-only. Base image is published by `main` workflow.
-3. **Do NOT add `2>/dev/null` to the Dockerfile.** The
-   `build.no-stderr-suppression` contract rejects it. Let errors be loud.
-4. **Do NOT bulk `git add .`** — previous sessions have left phantom
-   state files under `.omc/state/**` that should not be staged.
-5. **Do NOT trust `gh run watch --exit-status`.** Verify with
-   `gh pr checks <n> --json` or `gh run list --json`.
-6. **Do NOT `claude mcp add`.** Use `mcp2cli` instead; machine-enforced
-   by the `no_mcp_registration` hk step.
+See `.claude/rules/do-not.md` for the authoritative list of project
+invariants (dock launch, local base-image builds, raw docker CLI,
+stderr suppression, bulk `git add`, `gh run watch`, `claude mcp add`,
+docker context switch). Machine-enforced items also live in
+`hk.pkl`.
