@@ -35,14 +35,17 @@
 //        container sshd can authenticate the Mac user.
 //
 // (R2) OUTBOUND agent: `ssh -T git@github.com` inside the container
-//      reaches the host's launchd SSH agent. Provided by the host-TCP
-//      + container-unix-socket proxy pattern in
-//      `python/src/dotfiles_setup/docker.py::serve_proxy`. Host half
-//      spawned by `initializeCommand`; container half by
-//      `postStartCommand` + `postCreateCommand` (idempotent).
+//      reaches the host's launchd SSH agent via Docker Desktop's
+//      native `/run/host-services/ssh-auth.sock` magic socket,
+//      bind-mounted into the container and pointed at by
+//      `containerEnv.SSH_AUTH_SOCK`. The socket arrives as
+//      root:root 0660; `postCreateCommand` chowns it to the container
+//      user. No host-side or container-side proxy required.
+//      Runtime pin: Docker Desktop only — Colima has no equivalent
+//      (`abiosoft/colima#1330`, `#942`); deferred follow-up #78.
 //
 // Research + rationale:
-//   .omc/research/research-20260407-ssh-devcontainer/report.md
+//   .omc/research/research-20260409c-dockerdesktop-ssh/report.md
 // ===============================================================
 {
   "name": "dotfiles-${localWorkspaceFolderBasename}-${localEnv:USER}-${localEnv:DEVCONTAINER_SSH_PORT}",
