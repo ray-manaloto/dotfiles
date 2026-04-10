@@ -284,6 +284,19 @@ handler = "require_tokens"
 paths = ["docker-bake.hcl"]
 tokens = ["CLANG_P2996_REF"]
 
+[[suite]]
+name = "build.doppler-secrets-wired"
+description = "S1 SECRETS: Doppler secrets injected via --env-file in runArgs. initializeCommand downloads secrets to staging area; runArgs passes the env file to docker run. DO NOT DROP — see AGENTS.md Secrets Injection section."
+category = "build"
+check_type = "static"
+handler = "require_tokens"
+paths = [".devcontainer/devcontainer.json"]
+tokens = [
+    "--env-file",
+    "doppler.env",
+    "doppler secrets download",
+]
+
 # =============================================================================
 # CI Constraints (~6) — Workflow correctness
 # =============================================================================

@@ -334,6 +334,31 @@ echo "${out}" | grep -q "${USER}" || {
 echo "OK: R1 inbound ssh ${USER}@localhost -p ${port} works"
 '''
 
+[tasks.verify-secrets]
+description = "S1: doppler env file exists and contains secrets"
+env = { DOPPLER_PROJECT = "dotfiles", DOPPLER_CONFIG = "dev" }
+run = '''
+set -euo pipefail
+envfile="${HOME}/.local/state/dotfiles/doppler.env"
+if [ ! -f "${envfile}" ]; then
+  echo "FAIL: ${envfile} does not exist (run 'mise run up' to generate)" >&2
+  exit 1
+fi
+count=$(wc -l < "${envfile}" | tr -d ' ')
+if [ "${count}" -lt 1 ]; then
+  echo "FAIL: ${envfile} is empty (doppler download failed?)" >&2
+  exit 1
+fi
+# Verify canary keys are present
+for key in DOPPLER_PROJECT DOPPLER_CONFIG; do
+  if ! grep -q "^${key}=" "${envfile}"; then
+    echo "FAIL: ${key} not found in ${envfile}" >&2
+    exit 1
+  fi
+done
+echo "OK: S1 doppler env file has ${count} secrets (project=${DOPPLER_PROJECT}, config=${DOPPLER_CONFIG})"
+'''
+
 [tasks.verify-local]
 description = "Full local devcontainer validation (pull → verify-image → up → ps → smoke → persistence → verify-ssh-inbound)"
 # Sequential shell body (not `depends = [...]`) so mise can't parallelize
