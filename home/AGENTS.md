@@ -15,7 +15,7 @@ machine (Mac host or devcontainer).
 |------|---------|
 | `dot_zshrc.tmpl`, `dot_bashrc.tmpl`, `dot_profile.tmpl`, `dot_zshenv.tmpl` | Shell init (chezmoi `dot_` prefix → `.zshrc`, `.bashrc`, etc.) |
 | `dot_config/`, `dot_local/` | XDG-compliant tool configs |
-| `CLAUDE.md.tmpl`, `AGENTS.md.tmpl` | **User-level** home agent instructions — render to `~/CLAUDE.md`, `~/AGENTS.md`. Distinct from this repo's root `AGENTS.md`. |
+| `AGENTS.md.tmpl` | **User-level** home agent instructions — renders to `~/AGENTS.md`. Distinct from this repo's root `AGENTS.md`. |
 | `pyproject.toml.tmpl`, `pixi.toml.tmpl` | User-level Python/pixi project templates |
 | `executable_run_before_00-install-runtimes.sh.tmpl` | Pre-apply chezmoi script |
 | `executable_run_once_after_00-install-tools.py.tmpl` | One-time post-apply tool install script |
