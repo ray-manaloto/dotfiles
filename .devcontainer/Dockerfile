@@ -4,7 +4,7 @@
 ARG BASE_IMAGE=ubuntu:25.10
 ARG MISE_VERSION=v2026.4.5
 
-FROM ${BASE_IMAGE} AS devcontainer
+FROM ${BASE_IMAGE} AS devcontainer-base
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG MISE_VERSION
@@ -138,3 +138,107 @@ RUN echo "eval \"\$(/usr/local/bin/mise activate bash)\"" > /etc/profile.d/mise.
     echo "eval \"\$(/usr/local/bin/mise activate zsh)\"" > /etc/profile.d/mise.zsh
 
 WORKDIR /workspaces
+
+# ── clang-p2996 builder (Bloomberg fork, built from source) ──────────
+# Runs in parallel with devcontainer-base via BuildKit DAG.
+# Only the install prefix (/opt/clang-p2996) is COPY'd into the final
+# stage — the ~20GB build tree is discarded.
+FROM devcontainer-base AS clang-builder
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG CLANG_P2996_REPO=https://github.com/bloomberg/clang-p2996.git
+ARG CLANG_P2996_REF=a5270822dede40aaaf2c62381b89f110d2cfda4c
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    export DEBIAN_FRONTEND=noninteractive && \
+    apt-get update && apt-get install -y --no-install-recommends \
+      libedit-dev \
+      libffi-dev \
+      libncurses5-dev \
+      libxml2-dev \
+      libzstd-dev \
+      swig
+
+WORKDIR /opt/clang-p2996
+
+RUN git init . && \
+    git remote add origin "${CLANG_P2996_REPO}" && \
+    git fetch --depth 1 origin "${CLANG_P2996_REF}" && \
+    git checkout FETCH_HEAD
+
+WORKDIR /opt/clang-p2996/build
+
+# cmake and ninja are available via mise shims from devcontainer-base.
+# Build only X86 target to minimize compile time and binary size.
+RUN cmake -G Ninja ../llvm \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_INSTALL_PREFIX=/opt/clang-p2996 \
+      -DCMAKE_C_COMPILER=gcc \
+      -DCMAKE_CXX_COMPILER=g++ \
+      -DLLVM_ENABLE_PROJECTS="clang;lld" \
+      -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" \
+      -DLLVM_TARGETS_TO_BUILD=X86 \
+      -DLLVM_CCACHE_BUILD=ON \
+      -DLLVM_ENABLE_BINDINGS=OFF \
+      -DLLVM_ENABLE_TERMINFO=OFF \
+      -DLLVM_INCLUDE_BENCHMARKS=OFF \
+      -DLLVM_INCLUDE_EXAMPLES=OFF \
+      -DLLVM_INCLUDE_TESTS=OFF \
+      -DCLANG_DEFAULT_CXX_STDLIB=libc++ && \
+    ninja install
+
+# Smoke test: verify clang-p2996 can parse reflection headers
+RUN printf '#include <meta>\nint main(){return 0;}\n' >/tmp/refl.cpp && \
+    /opt/clang-p2996/bin/clang++ \
+      -std=c++2c \
+      -freflection \
+      -freflection-latest \
+      -fexpansion-statements \
+      -stdlib=libc++ \
+      /tmp/refl.cpp \
+      -fsyntax-only && \
+    rm -f /tmp/refl.cpp
+
+# ── final: combine base + reflection compilers ───────────────────────
+# Stage name "devcontainer" preserves docker-bake.hcl target and
+# Dockerfile.host-user BASE_IMAGE compatibility — no downstream changes.
+FROM devcontainer-base AS devcontainer
+
+# GCC-16 with P2996 reflection (precompiled .deb from jwakely trunk snapshot,
+# post-reflection-merge commit 4b0e94b 2026-01-15).
+# Installs to /opt/gcc-latest/bin. Rolling latest — no pinned hash.
+# If this fails on Ubuntu 25.10, fall back to building from source
+# (see cpp-playground Dockerfile gcc stage for the pattern).
+RUN curl -fLOSs https://kayari.org/gcc-latest/gcc-latest.deb && \
+    dpkg -i gcc-latest.deb && \
+    rm -f gcc-latest.deb && \
+    test -x /opt/gcc-latest/bin/g++ || { echo "ERROR: gcc-latest binary missing after dpkg install"; exit 1; }
+
+# clang-p2996 (Bloomberg fork, built from source in clang-builder stage)
+COPY --from=clang-builder /opt/clang-p2996 /opt/clang-p2996
+
+# Add reflection compilers to PATH; LD_RUN_PATH for gcc-latest runtime libs
+ENV PATH="/opt/gcc-latest/bin:/opt/clang-p2996/bin:${PATH}" \
+    LD_RUN_PATH="/opt/gcc-latest/lib64"
+
+# Smoke test: GCC-16 reflection
+RUN printf '#include <meta>\nint main(){return 0;}\n' >/tmp/refl-gcc.cpp && \
+    /opt/gcc-latest/bin/g++ \
+      -std=c++26 \
+      -freflection \
+      /tmp/refl-gcc.cpp \
+      -fsyntax-only && \
+    rm -f /tmp/refl-gcc.cpp
+
+# Smoke test: clang-p2996 reflection
+RUN printf '#include <meta>\nint main(){return 0;}\n' >/tmp/refl-clang.cpp && \
+    /opt/clang-p2996/bin/clang++ \
+      -std=c++2c \
+      -freflection \
+      -freflection-latest \
+      -fexpansion-statements \
+      -stdlib=libc++ \
+      /tmp/refl-clang.cpp \
+      -fsyntax-only && \
+    rm -f /tmp/refl-clang.cpp

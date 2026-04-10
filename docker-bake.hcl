@@ -32,6 +32,12 @@ variable "DEVCONTAINER_USERNAME" {
   default = "devcontainer"
 }
 
+# Pinned commit SHA for Bloomberg's clang-p2996 fork (C++ P2996 reflection).
+# Changing this value invalidates the BuildKit cache for the clang-builder stage.
+variable "CLANG_P2996_REF" {
+  default = "a5270822dede40aaaf2c62381b89f110d2cfda4c"
+}
+
 // Default tags for local builds; overridden by docker/metadata-action
 // bake files in CI to inject SHA, latest, and PR tags.
 target "docker-metadata-action" {
@@ -58,7 +64,8 @@ target "dev" {
   inherits = ["_common", "docker-metadata-action"]
   target   = "devcontainer"
   args = {
-    BASE_IMAGE = BASE_IMAGE
+    BASE_IMAGE      = BASE_IMAGE
+    CLANG_P2996_REF = CLANG_P2996_REF
   }
   # Tags inherited from docker-metadata-action (CI overrides with SHA/latest/PR tags)
   cache-from = [
