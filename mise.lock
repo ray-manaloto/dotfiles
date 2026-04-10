@@ -68,6 +68,45 @@ backend = "pipx:azure-cli"
 [tools.azure-cli.options]
 uvx_args = "--prerelease=allow"
 
+[[tools.biome]]
+version = "2.4.11"
+backend = "aqua:biomejs/biome"
+
+[tools.biome."platforms.linux-arm64"]
+checksum = "sha256:80619897f3d0ca35e7b17413ea17f7bbaadf36393b7afdf64e66b0a52dd21991"
+url = "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.4.11/biome-linux-arm64"
+provenance = "github-attestations"
+
+[tools.biome."platforms.linux-arm64-musl"]
+checksum = "sha256:80619897f3d0ca35e7b17413ea17f7bbaadf36393b7afdf64e66b0a52dd21991"
+url = "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.4.11/biome-linux-arm64"
+provenance = "github-attestations"
+
+[tools.biome."platforms.linux-x64"]
+checksum = "sha256:e96cb8bc743df1fbd3ecaa2f18c1dd1a7d33ff73859e65a646a7d3808c837dd5"
+url = "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.4.11/biome-linux-x64"
+provenance = "github-attestations"
+
+[tools.biome."platforms.linux-x64-musl"]
+checksum = "sha256:e96cb8bc743df1fbd3ecaa2f18c1dd1a7d33ff73859e65a646a7d3808c837dd5"
+url = "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.4.11/biome-linux-x64"
+provenance = "github-attestations"
+
+[tools.biome."platforms.macos-arm64"]
+checksum = "sha256:9de8fa513c170b33933f397e4906eb4f8af21890aa5f36a36db22df3d9ed1978"
+url = "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.4.11/biome-darwin-arm64"
+provenance = "github-attestations"
+
+[tools.biome."platforms.macos-x64"]
+checksum = "sha256:9069156955cfd53efc273cfcd4ece85a7af2ed715d20a8717a63bde3e05b5a40"
+url = "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.4.11/biome-darwin-x64"
+provenance = "github-attestations"
+
+[tools.biome."platforms.windows-x64"]
+checksum = "sha256:6c626fdf119215234cbe51455b07995eb67b24ada85819d9273a02b7c6770fbd"
+url = "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.4.11/biome-win32-x64.exe"
+provenance = "github-attestations"
+
 [[tools.chezmoi]]
 version = "2.70.1"
 backend = "aqua:twpayne/chezmoi"
@@ -527,6 +566,10 @@ provenance = "github-attestations"
 checksum = "sha256:b923a567f88417d79ce183e59c2a2372d9cae9b697a472ce1f95d745932746b1"
 url = "https://github.com/suzuki-shunsuke/pinact/releases/download/v3.9.0/pinact_windows_amd64.zip"
 provenance = "github-attestations"
+
+[[tools."pipx:check-jsonschema"]]
+version = "0.37.1"
+backend = "pipx:check-jsonschema"
 
 [[tools."pipx:deepagents-cli"]]
 version = "0.0.35"

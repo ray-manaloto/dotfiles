@@ -26,6 +26,8 @@ lima = "2.1.1"     # Runtime dependency for colima (provides limactl); kept for 
 "npm:agnix" = "latest"
 "npm:agents-lint" = "latest"
 "pipx:mcp2cli" = "3.0.1"
+"pipx:check-jsonschema" = "latest"  # Full JSON Schema URL validation for .devcontainer/devcontainer.json (needs JSONC→JSON preprocessing)
+biome = "2.4.11"  # JSONC parser + duplicate-key detection for .devcontainer/devcontainer.json (native trailing-comma / comment support)
 # Markdown + Claude-docs linters. Installed now; hk.pkl integration is
 # scheduled for post-devcontainer-work review (see GH issue tracking
 # follow-up). claude_md_size_limit (below in hk.pkl) provides the
@@ -140,6 +142,20 @@ if [[ "${usage_pull:-true}" == "true" ]]; then
     docker pull "$BASE_IMAGE"
   fi
 fi
+# v6 collision guard: compute an 8-char hash of $PWD so sibling clones
+# of `dotfiles` on the same host get distinct Docker volume + container
+# names. Exported so devcontainer.json ${localEnv:DEVCONTAINER_WORKSPACE_HASH}
+# substitution picks it up. Portable hash detection: sha256sum is Linux
+# default, shasum is macOS default — try both.
+if command -v sha256sum >/dev/null 2>&1; then
+  DEVCONTAINER_WORKSPACE_HASH="$(printf '%s' "$PWD" | sha256sum | cut -c1-8)"
+elif command -v shasum >/dev/null 2>&1; then
+  DEVCONTAINER_WORKSPACE_HASH="$(printf '%s' "$PWD" | shasum -a 256 | cut -c1-8)"
+else
+  echo "ERROR: neither sha256sum nor shasum found — cannot compute workspace hash" >&2
+  exit 1
+fi
+export DEVCONTAINER_WORKSPACE_HASH
 # Clear stale host keys for the devcontainer SSH port — each container
 # recreate generates new host keys, causing "REMOTE HOST IDENTIFICATION
 # HAS CHANGED" warnings. ssh-keygen -R removes the old entry.

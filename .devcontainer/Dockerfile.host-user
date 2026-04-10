@@ -47,12 +47,15 @@ RUN rm -f /etc/sudoers.d/devcontainer && \
     chmod 0440 /etc/sudoers.d/"${DEVCONTAINER_USERNAME}"
 
 
-# Pre-stage home directories for volume mount targets and tool paths
+# Pre-stage home directories for volume mount targets and tool paths.
+# v6: ~/.local/tmp added as the TMPDIR target — tools that respect
+# $TMPDIR get persistence for free via the single home volume mount.
 RUN mkdir -p \
     /home/${DEVCONTAINER_USERNAME}/.cache/uv \
     /home/${DEVCONTAINER_USERNAME}/.local/bin \
     /home/${DEVCONTAINER_USERNAME}/.local/state \
     /home/${DEVCONTAINER_USERNAME}/.local/share/mise \
+    /home/${DEVCONTAINER_USERNAME}/.local/tmp \
     /home/${DEVCONTAINER_USERNAME}/.cargo \
     /home/${DEVCONTAINER_USERNAME}/.rustup \
     /home/${DEVCONTAINER_USERNAME}/.config/gh \
@@ -65,6 +68,7 @@ ENV DEVCONTAINER_USERNAME=${DEVCONTAINER_USERNAME} \
     LOGNAME=${DEVCONTAINER_USERNAME} \
     HOME=/home/${DEVCONTAINER_USERNAME} \
     MISE_TRUSTED_CONFIG_PATHS=/home/${DEVCONTAINER_USERNAME}/.config/mise \
+    TMPDIR=/home/${DEVCONTAINER_USERNAME}/.local/tmp \
     PATH="/home/${DEVCONTAINER_USERNAME}/.local/bin:/home/${DEVCONTAINER_USERNAME}/.local/share/mise/shims:${PATH}"
 
 WORKDIR /home/${DEVCONTAINER_USERNAME}
