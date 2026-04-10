@@ -26,9 +26,9 @@ Defines the devcontainer image and runtime lifecycle. Two layers:
 The devcontainer uses **declarative lifecycle hooks** (per containers.dev
 spec), not a bootstrap shell wrapper:
 
-- `initializeCommand` (host side): pre-creates `~/.claude`, `~/.codex`,
-  `~/.gemini`, `~/.local/state/dotfiles`, then spawns the host-side
-  SSH-agent proxy via `dotfiles-setup docker initialize-host`.
+- `initializeCommand` (host side): pre-creates
+  `~/.local/state/dotfiles`, then spawns the host-side SSH-agent proxy
+  via `dotfiles-setup docker initialize-host`.
 - `onCreateCommand` (inside container, once): runs `chezmoi init --apply`
   against `/workspaces/${localWorkspaceFolderBasename}`, then chowns the
   mise-user, cargo-user, and rustup-user named volume mountpoints to
