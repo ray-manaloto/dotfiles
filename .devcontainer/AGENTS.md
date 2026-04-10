@@ -64,20 +64,41 @@ env = { DOPPLER_CONFIG = "dev_personal" }
 Future: migrate to mise-env-fnox with doppler provider inside the
 container for runtime secret resolution (#83).
 
-## Dynamic Naming
+## Dynamic Naming (v6 single home volume)
 
-Container name and named volumes are templated so multiple projects on
-this Mac can run devcontainers side-by-side:
+Container name and home volume are templated with a workspace-path
+hash so multiple clones of `dotfiles` on the same Mac get distinct
+resources. `mise run up` computes `DEVCONTAINER_WORKSPACE_HASH` in the
+task body via portable `sha256sum`/`shasum` detection.
 
-- **Container name:** `dotfiles-${localWorkspaceFolderBasename}-${localEnv:USER}`
-- **mise-user volume:** `dotfiles-${localWorkspaceFolderBasename}-${localEnv:USER}-mise-user`
-- **cargo-user volume:** `dotfiles-${localWorkspaceFolderBasename}-${localEnv:USER}-cargo-user`
-- **rustup-user volume:** `dotfiles-${localWorkspaceFolderBasename}-${localEnv:USER}-rustup-user`
+- **Container:** `dotfiles-<basename>-<user>-<hash>-<ssh-port>`
+- **Home volume:** `dotfiles-<basename>-<user>-<hash>-home` → `/home/${USER}`
 
-SSH-agent forwarding uses a host-TCP + container-unix-socket proxy; no
-host port is reserved or bound other than the ephemeral loopback port
-chosen per-run by the host proxy (stored in
-`~/.local/state/dotfiles/ssh-agent-port`).
+The single home volume replaces the v5 per-directory volumes
+(`mise-user`, `cargo-user`, `rustup-user`). It covers the entire user
+home, so `~/.cache/mise`, `~/.cache/uv`, `~/.bash_history`,
+`~/.ssh/known_hosts`, and TMPDIR all persist across `stop/up`.
+
+**TMPDIR persistence:** `Dockerfile.host-user` sets
+`ENV TMPDIR=/home/${USER}/.local/tmp` on the home volume.
+`on-create.sh` sweeps files older than 30 days (atime) and prunes
+empty directories per container create to bound growth.
+
+**Accepted trade-off — data loss on rollout:** First `mise run up`
+after this change orphans the old 3 volumes; runtime-installed
+tools/crates/toolchains must be re-installed. `mise run prune` cleans
+orphans. Explicitly accepted during initial setup; migration script
+declined (see `.omc/plans/home-volume-consolidation-draft.md`).
+
+**Reset-on-recreate:** `onCreateCommand` runs
+`chezmoi init --apply --force` via `.devcontainer/scripts/on-create.sh`
+on every container creation. Local edits to chezmoi-managed files
+(`.bashrc`, `.zshrc`, `.profile`, `.config/mise/config.toml`) are
+wiped and re-rendered from `home/`. The home volume protects
+**unmanaged** state (caches, history, TMPDIR) — to change managed
+files, edit the `home/` source tree instead.
+
+SSH-agent forwarding uses Docker Desktop's native magic socket at `/run/host-services/ssh-auth.sock`. No host-side proxy. See `.omc/research/research-20260409c-dockerdesktop-ssh/`.
 
 ## Override Model
 
@@ -115,38 +136,26 @@ Attaching an IDE to the running container:
 
 ## Mise Cookbook Paths
 
-The base image follows the [mise docker cookbook](https://mise.jdx.dev/mise-cookbook/docker)
-canonical layout:
-
-- **System mise install:** `/usr/local/share/mise/installs/` (baked by
-  `mise install` at image build time, with `MISE_DATA_DIR` and
-  `MISE_CONFIG_DIR` both set so mise discovers the system config and
-  writes to the system path — see PRs #58/#59/#60/#61 for the rot the
-  cookbook prevents).
-- **System mise config:** `/usr/local/share/mise/config.toml` (copied
-  from `mise-system.toml`).
-- **System cargo home:** `/usr/local/share/cargo` (via `MISE_CARGO_HOME`
-  per the [rust cookbook](https://mise.jdx.dev/lang/rust.html)).
-- **System rustup home:** `/usr/local/share/rustup` (via `MISE_RUSTUP_HOME`).
-- **User mise install:** `/home/${USER}/.local/share/mise/installs/` on a
-  named Docker volume, shadows the system install at runtime.
-- **User cargo + rustup:** `/home/${USER}/.cargo` + `/home/${USER}/.rustup`
-  on named Docker volumes (standard `CARGO_HOME` / `RUSTUP_HOME`
-  intentionally unset at runtime so users get XDG defaults).
-- `mise run stop && mise run up` preserves user installs via the volumes.
-
-**No custom `/opt/mise`, `/opt/cargo`, or `/opt/rustup` paths** — all
-removed in the cookbook refactor.
+Base image follows the [mise docker cookbook](https://mise.jdx.dev/mise-cookbook/docker):
+`MISE_DATA_DIR=/usr/local/share/mise`, `MISE_CARGO_HOME=/usr/local/share/cargo`,
+`MISE_RUSTUP_HOME=/usr/local/share/rustup` (baked at image build time).
+User overlays at `~/.local/share/mise`, `~/.cargo`, `~/.rustup` shadow
+the system install at runtime. No custom `/opt/*` paths.
 
 ## Tool Persistence Matrix
 
-| Tool family | System install (baked) | User overlay (named volume) | How to add a new system tool |
+User-overlay paths live on the single home volume
+(`dotfiles-<basename>-<user>-<hash>-home`); `mise run stop && mise run up`
+preserves all state. New in v6: `~/.cache/uv`, `~/.local/tmp` (TMPDIR,
+30-day atime sweep in `on-create.sh`), `~/.bash_history`.
+
+| Tool family | System install (baked) | User overlay | How to add system |
 |---|---|---|---|
-| mise tools | `/usr/local/share/mise/installs/` | `~/.local/share/mise/installs/` (mise-user) | Add to `mise-system.toml [tools]` + base image PR |
-| cargo crates | `/usr/local/share/cargo/{bin,registry}` | `~/.cargo/{bin,registry}` (cargo-user) | Bake via mise rust + base image PR; runtime users `cargo install` themselves |
-| rust toolchains | `/usr/local/share/rustup/toolchains/` | `~/.rustup/toolchains/` (rustup-user) | Add to `mise-system.toml` `rust = "..."`; runtime users `rustup install` themselves |
-| pipx tools | `/usr/local/share/mise/installs/pipx-*` | shadowed by user's mise overlay | Add `"pipx:<name>"` to `mise-system.toml` |
-| apt packages | `/usr/{bin,lib,share}/...` | **none — not persistable** | Add to `Dockerfile` apt list + base image PR |
+| mise tools | `/usr/local/share/mise/installs/` | `~/.local/share/mise/installs/` | `mise-system.toml [tools]` + base image PR |
+| cargo crates | `/usr/local/share/cargo/{bin,registry}` | `~/.cargo/{bin,registry}` | base image PR; runtime `cargo install` |
+| rust toolchains | `/usr/local/share/rustup/toolchains/` | `~/.rustup/toolchains/` | `mise-system.toml` `rust = "..."`; runtime `rustup install` |
+| pipx tools | `/usr/local/share/mise/installs/pipx-*` | shadowed by mise overlay | `"pipx:<name>"` in `mise-system.toml` |
+| apt packages | `/usr/{bin,lib,share}/...` | **none — not persistable** | `Dockerfile` apt list + base image PR |
 
 **Apt packages have no runtime persistence story.** If a system package
 is needed, it must be added to the base `Dockerfile` apt list and shipped
