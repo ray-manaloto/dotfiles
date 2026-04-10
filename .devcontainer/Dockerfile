@@ -171,7 +171,11 @@ WORKDIR /opt/clang-p2996/build
 
 # cmake and ninja are available via mise shims from devcontainer-base.
 # Build only X86 target to minimize compile time and binary size.
-RUN cmake -G Ninja ../llvm \
+# ccache mount persists across builds — on SHA change, ~80% of objects
+# are reusable, cutting rebuild time significantly vs cold cache.
+# See issue #82 for further caching optimization (sccache, separate scope).
+RUN --mount=type=cache,target=/root/.cache/ccache,sharing=locked \
+    cmake -G Ninja ../llvm \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_INSTALL_PREFIX=/opt/clang-p2996 \
       -DCMAKE_C_COMPILER=gcc \
