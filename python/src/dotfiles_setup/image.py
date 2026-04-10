@@ -99,6 +99,26 @@ clang++ -fsanitize=address,undefined /tmp/sanitizer.cpp -o /tmp/san-au
 clang++ -fsanitize=thread /tmp/sanitizer.cpp -o /tmp/san-tsan
 /tmp/san-tsan >/dev/null
 clang++ -fsanitize=fuzzer-no-link -c /tmp/sanitizer.cpp -o /tmp/san-fuzz.o
+echo "=== reflection compiler checks ==="
+test -x /opt/gcc-latest/bin/g++ \
+  || { echo "FAIL: gcc-latest binary missing"; exit 1; }
+test -x /opt/clang-p2996/bin/clang++ \
+  || { echo "FAIL: clang-p2996 missing"; exit 1; }
+cat >/tmp/refl-func.cpp <<'CPP'
+#include <meta>
+enum class Color { Red, Green, Blue };
+consteval int count_enumerators() {
+  return static_cast<int>(enumerators_of(^^Color).size());
+}
+static_assert(count_enumerators() == 3);
+int main() { return 0; }
+CPP
+/opt/gcc-latest/bin/g++ -std=c++26 -freflection /tmp/refl-func.cpp -fsyntax-only \
+  || { echo "FAIL: gcc-latest reflection compile failed"; exit 1; }
+/opt/clang-p2996/bin/clang++ -std=c++2c -freflection -freflection-latest \
+  -fexpansion-statements -stdlib=libc++ /tmp/refl-func.cpp -fsyntax-only \
+  || { echo "FAIL: clang-p2996 reflection compile failed"; exit 1; }
+rm -f /tmp/refl-func.cpp
 echo "=== AI CLI checks ==="
 for tool in claude codex gemini; do
   command -v "$tool" >/dev/null 2>&1 || { echo "FAIL: missing $tool"; exit 1; }

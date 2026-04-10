@@ -257,6 +257,46 @@ handler = "require_tokens"
 paths = [".devcontainer/mise-system.toml"]
 tokens = ['RUSTUP_INIT_SKIP_PATH_CHECK = "yes"']
 
+[[suite]]
+name = "build.gcc-latest-reflection"
+description = "GCC-16 with P2996 reflection must be installed via precompiled .deb"
+category = "build"
+check_type = "static"
+handler = "require_tokens"
+paths = [".devcontainer/Dockerfile"]
+tokens = ["gcc-latest.deb", "/opt/gcc-latest/bin/g++", "-freflection"]
+
+[[suite]]
+name = "build.clang-p2996-reflection"
+description = "Bloomberg clang-p2996 must be built from source in clang-builder stage"
+category = "build"
+check_type = "static"
+handler = "require_tokens"
+paths = [".devcontainer/Dockerfile"]
+tokens = ["clang-p2996", "CLANG_P2996_REF", "COPY --from=clang-builder"]
+
+[[suite]]
+name = "build.clang-p2996-ref-in-bake"
+description = "CLANG_P2996_REF must be wired through docker-bake.hcl for cache invalidation"
+category = "build"
+check_type = "static"
+handler = "require_tokens"
+paths = ["docker-bake.hcl"]
+tokens = ["CLANG_P2996_REF"]
+
+[[suite]]
+name = "build.doppler-secrets-wired"
+description = "S1 SECRETS: Doppler secrets injected via --env-file in runArgs. initializeCommand downloads secrets to staging area; runArgs passes the env file to docker run. DO NOT DROP — see AGENTS.md Secrets Injection section."
+category = "build"
+check_type = "static"
+handler = "require_tokens"
+paths = [".devcontainer/devcontainer.json"]
+tokens = [
+    "--env-file",
+    "doppler.env",
+    "doppler secrets download",
+]
+
 # =============================================================================
 # CI Constraints (~6) — Workflow correctness
 # =============================================================================

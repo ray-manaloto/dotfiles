@@ -47,18 +47,14 @@ RUN rm -f /etc/sudoers.d/devcontainer && \
     chmod 0440 /etc/sudoers.d/"${DEVCONTAINER_USERNAME}"
 
 
-# Pre-stage home directories for volume mount targets
+# Pre-stage home directories for volume mount targets and tool paths
 RUN mkdir -p \
     /home/${DEVCONTAINER_USERNAME}/.cache/uv \
-    /home/${DEVCONTAINER_USERNAME}/.cache/claude \
     /home/${DEVCONTAINER_USERNAME}/.local/bin \
     /home/${DEVCONTAINER_USERNAME}/.local/state \
     /home/${DEVCONTAINER_USERNAME}/.local/share/mise \
     /home/${DEVCONTAINER_USERNAME}/.cargo \
     /home/${DEVCONTAINER_USERNAME}/.rustup \
-    /home/${DEVCONTAINER_USERNAME}/.claude \
-    /home/${DEVCONTAINER_USERNAME}/.codex \
-    /home/${DEVCONTAINER_USERNAME}/.gemini \
     /home/${DEVCONTAINER_USERNAME}/.config/gh \
     /home/${DEVCONTAINER_USERNAME}/.ssh && \
     chmod 700 /home/${DEVCONTAINER_USERNAME}/.ssh && \

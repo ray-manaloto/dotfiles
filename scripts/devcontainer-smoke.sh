@@ -25,11 +25,25 @@ which clang++ python uv hk
 HK_FILE=/etc/hk/hk.pkl hk run pre-commit --all
 echo "::endgroup::"
 
-echo "::group::Tier 2 — pytest + mounts"
+echo "::group::Tier 2 — pytest + mounts + secrets"
 uv run --project python pytest tests/ -x -q
 stat "${HOME}/.ssh"
-stat "${HOME}/.claude"
 stat "${WORKSPACE_FOLDER}"
+
+echo "[tier2] Doppler secrets injection"
+# Verify doppler secrets were injected via --env-file. DOPPLER_PROJECT and
+# DOPPLER_CONFIG are always present in any doppler download; use them as
+# canary keys. Count total doppler-sourced env vars as a sanity check.
+if [ -z "${DOPPLER_PROJECT:-}" ] || [ -z "${DOPPLER_CONFIG:-}" ]; then
+  echo "  FAIL: DOPPLER_PROJECT or DOPPLER_CONFIG not set (doppler secrets not injected — is doppler authenticated on the host?)" >&2
+  exit 1
+fi
+doppler_count=$(env | grep -cE "^(DOPPLER_PROJECT|DOPPLER_CONFIG|DOPPLER_ENVIRONMENT|EXA_API_KEY|GITHUB_TOKEN|BRAVE_API_KEY|GEMINI_API_KEY)=" || true)
+if [ "${doppler_count}" -lt 3 ]; then
+  echo "  FAIL: only ${doppler_count} doppler canary keys found (expected >= 3)" >&2
+  exit 1
+fi
+echo "  OK: doppler secrets injected (${doppler_count} canary keys, project=${DOPPLER_PROJECT}, config=${DOPPLER_CONFIG})"
 echo "::endgroup::"
 
 echo "::group::Tier 3 — sanitizers + lifecycle"
