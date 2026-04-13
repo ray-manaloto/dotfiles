@@ -1,0 +1,37 @@
+# Dependabot configuration file
+# Documentation: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+#
+# DEMO FILE: Copy to .github/dependabot.yml in your target repository.
+# This file demonstrates real-world Dependabot configuration patterns
+# used in production environments.
+
+version: 2
+
+updates:
+  # ─────────────────────────────────────────────────────────────────────────
+  # GitHub Actions
+  # Always include this ecosystem — Actions updates are important for security
+  # copied from: https://github.com/certforge/GH_500_Cert_Prep/blob/main/demos/03-dependabot/dependabot.yml
+  # ─────────────────────────────────────────────────────────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"    # Always use "/" — Dependabot scans .github/workflows/ automatically
+
+    schedule:
+      interval: "cron"
+      # This cron runs every 15 minutes (note: may be capped by GitHub)
+      cronjob: "*/15 * * * *"
+      timezone: "America/Chicago"
+
+    open-pull-requests-limit: 5
+
+    groups:
+      github-actions:
+        patterns:
+          - "*"         # Group ALL Actions updates into a single PR
+
+    labels:
+      - "dependencies"
+      - "github-actions"
+
+    commit-message:
+      prefix: "ci"
