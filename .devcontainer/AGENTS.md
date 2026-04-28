@@ -103,7 +103,7 @@ SSH-agent forwarding uses Docker Desktop's native magic socket at `/run/host-ser
 ## Override Model
 
 - `mise.toml [tasks.up].env` holds the defaults: `BASE_IMAGE`,
-  `DOCKER_DEFAULT_PLATFORM=linux/amd64`.
+  `DOCKER_DEFAULT_PLATFORM=linux/amd64/v2`.
 - `mise.local.toml` (gitignored, see `mise.local.toml.example`) overrides
   per-clone. Typical use: pin `BASE_IMAGE` to a specific SHA tag.
 - No `.env.devcontainer`, no `.miserc.toml` multi-env layering. Cloud/GHA

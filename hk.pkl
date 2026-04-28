@@ -1,4 +1,4 @@
-amends "package://github.com/jdx/hk/releases/download/v1.40.0/hk@1.40.0#/Config.pkl"
+amends "package://github.com/jdx/hk/releases/download/v1.44.2/hk@1.44.2#/Config.pkl"
 
 import "hk-common.pkl" as common
 
