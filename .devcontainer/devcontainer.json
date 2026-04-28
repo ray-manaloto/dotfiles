@@ -77,6 +77,7 @@
     "dotfiles-${localWorkspaceFolderBasename}-${localEnv:USER}-${localEnv:DEVCONTAINER_WORKSPACE_HASH}-${localEnv:DEVCONTAINER_SSH_PORT}",
     "--env-file",
     "${localEnv:HOME}/.local/state/dotfiles/doppler.env",
+    "--platform=linux/amd64/v2",
   ],
   "remoteUser": "${localEnv:USER}",
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
@@ -107,9 +108,9 @@
   "forwardPorts": [2222],
   "updateRemoteUserUID": false,
   "init": true,
-  "initializeCommand": "mkdir -p ~/.local/state/dotfiles && doppler secrets download --format docker --no-file --project \"$DOPPLER_PROJECT\" --config \"$DOPPLER_CONFIG\" > ~/.local/state/dotfiles/doppler.env && uv run --project python dotfiles-setup docker initialize-host",
+  "initializeCommand": "mkdir -p ~/.local/state/dotfiles && doppler secrets download --format docker --no-file --project \"${DOPPLER_PROJECT:-dotfiles}\" --config \"${DOPPLER_CONFIG:-dev}\" > ~/.local/state/dotfiles/doppler.env && [ -s ~/.local/state/dotfiles/doppler.env ] && uv run --project python dotfiles-setup docker initialize-host",
   "onCreateCommand": "bash /workspaces/${localWorkspaceFolderBasename}/.devcontainer/scripts/on-create.sh /workspaces/${localWorkspaceFolderBasename}",
-  "postCreateCommand": "sudo chown ${localEnv:USER}:${localEnv:USER} /run/host-services/ssh-auth.sock && install -d -m 700 ~/.ssh && install -m 600 /tmp/dotfiles-host-state/authorized_keys ~/.ssh/authorized_keys && ssh-keyscan -t rsa,ecdsa,ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null && chmod 600 ~/.ssh/known_hosts && scripts/devcontainer-smoke.sh",
+  "postCreateCommand": "sudo chown ${localEnv:USER}:${localEnv:USER} /run/host-services/ssh-auth.sock && install -d -m 700 ~/.ssh && install -m 600 /tmp/dotfiles-host-state/authorized_keys ~/.ssh/authorized_keys && ssh-keyscan -t rsa,ecdsa,ed25519 github.com >> ~/.ssh/known_hosts && [ -s ~/.ssh/known_hosts ] && chmod 600 ~/.ssh/known_hosts && scripts/devcontainer-smoke.sh",
   "customizations": {
     "vscode": {
       "extensions": [
