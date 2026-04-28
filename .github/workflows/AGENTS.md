@@ -82,6 +82,12 @@ post-failure reporting.
   build log.
 - `mise doctor --json` output in the lint job shows tool resolution
   issues.
+- **App-installed check error detail** (dependabot, CodeRabbit, etc.)
+  lives in the check-runs API, not in `gh pr checks` output. Use:
+  `gh api 'repos/OWNER/REPO/commits/BRANCH/check-runs' --jq
+  '.check_runs[] | select(.name | contains("NAME")) |
+  .output.summary'` (substitute uppercase placeholders) to surface the
+  actual rejection message.
 - For Docker warning triage, see the `ci-warning-investigator` skill
   under `.claude/skills/`.
 - Use `gh run watch <id> --exit-status` (or `gh pr checks <n> --watch`)
