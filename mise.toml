@@ -82,7 +82,7 @@ HK_MISE = "1"
 dcu     = "mise run up"
 dcd     = "mise run down"
 dcdev   = "mise run dev"
-dcpull  = "mise run pull"
+dcrb    = "mise run dev-rebuild"
 dcsh    = "mise run sh"
 dcps    = "mise run ps"
 dcsmoke = "mise run smoke"
@@ -130,46 +130,45 @@ description = "Bring the devcontainer up via the official @devcontainers/cli (Ma
 # socket proxy pattern spawned from initializeCommand/postStartCommand.
 # Research: .omc/research/research-20260407-ssh-devcontainer/report.md.
 #
-# --pull flag (default true) implements "pull only if missing": first run
-# pulls the base image, subsequent restarts reuse the local copy. Force a
-# fresh pull with `mise run pull` or `mise run up --no-pull=false` after
-# CI republishes :dev. Bypass entirely with `mise run up --no-pull`.
-env = { BASE_IMAGE = "ghcr.io/ray-manaloto/dotfiles-devcontainer:dev", DOCKER_DEFAULT_PLATFORM = "linux/amd64", DEVCONTAINER_SSH_PORT = "4444", DOPPLER_PROJECT = "dotfiles", DOPPLER_CONFIG = "dev" }
-usage = '''
-flag "--pull" default=#true help="Pull :dev if the image is missing locally (default: true)"
-'''
+# Image pull: handled inside `devcontainer up` via buildx (the
+# Dockerfile.host-user `FROM ${BASE_IMAGE}` triggers a registry pull
+# when the base layer is missing). DO NOT add a standalone `docker
+# pull` here — it bypasses the devcontainer-cli lifecycle (no
+# initializeCommand etc.) and recreates the silent-failure surface
+# from PR #86. To force-refresh, use `mise run dev-rebuild`.
+env = { BASE_IMAGE = "ghcr.io/ray-manaloto/dotfiles-devcontainer:dev", DOCKER_DEFAULT_PLATFORM = "linux/amd64/v2", DEVCONTAINER_SSH_PORT = "4444", DOPPLER_PROJECT = "dotfiles", DOPPLER_CONFIG = "dev" }
 run = '''
-if [[ "${usage_pull:-true}" == "true" ]]; then
-  if ! docker image inspect "$BASE_IMAGE" >/dev/null 2>&1; then
-    echo "==> base image $BASE_IMAGE not present locally — pulling"
-    docker pull "$BASE_IMAGE"
-  fi
-fi
+set -euo pipefail
 # v6 collision guard: compute an 8-char hash of $PWD so sibling clones
 # of `dotfiles` on the same host get distinct Docker volume + container
 # names. Exported so devcontainer.json ${localEnv:DEVCONTAINER_WORKSPACE_HASH}
-# substitution picks it up. Portable hash detection: sha256sum is Linux
-# default, shasum is macOS default — try both.
-if command -v sha256sum >/dev/null 2>&1; then
-  DEVCONTAINER_WORKSPACE_HASH="$(printf '%s' "$PWD" | sha256sum | cut -c1-8)"
-elif command -v shasum >/dev/null 2>&1; then
-  DEVCONTAINER_WORKSPACE_HASH="$(printf '%s' "$PWD" | shasum -a 256 | cut -c1-8)"
-else
-  echo "ERROR: neither sha256sum nor shasum found — cannot compute workspace hash" >&2
-  exit 1
-fi
+# substitution picks it up. Single source of truth at scripts/workspace-hash.sh.
+DEVCONTAINER_WORKSPACE_HASH="$(scripts/workspace-hash.sh)"
 export DEVCONTAINER_WORKSPACE_HASH
 # Clear stale host keys for the devcontainer SSH port — each container
 # recreate generates new host keys, causing "REMOTE HOST IDENTIFICATION
-# HAS CHANGED" warnings. ssh-keygen -R removes the old entry.
+# HAS CHANGED" warnings. ssh-keygen -R removes the old entry. The
+# `|| true` is acceptable here: keygen exits 1 when the entry doesn't
+# exist (first run on a fresh host), which is the normal case.
 ssh-keygen -R "[localhost]:${DEVCONTAINER_SSH_PORT}" 2>/dev/null || true
 devcontainer up --workspace-folder .
 '''
 
-[tasks.pull]
-description = "Force-pull the latest :dev base image from ghcr"
-env = { BASE_IMAGE = "ghcr.io/ray-manaloto/dotfiles-devcontainer:dev", DOCKER_DEFAULT_PLATFORM = "linux/amd64" }
-run = 'docker pull "$BASE_IMAGE"'
+[tasks.dev-rebuild]
+description = "Force a full rebuild + re-pull of :dev (lifecycle hooks fire)"
+# Equivalent to a force-refresh. `--remove-existing-container` ensures
+# `devcontainer up` recreates the container (which re-fetches the base
+# layer if the registry has a new digest), and `--build-no-cache` rebuilds
+# the host-user overlay without cached layers. Lifecycle hooks
+# (initializeCommand → onCreateCommand → postCreateCommand) all fire.
+env = { BASE_IMAGE = "ghcr.io/ray-manaloto/dotfiles-devcontainer:dev", DOCKER_DEFAULT_PLATFORM = "linux/amd64/v2", DEVCONTAINER_SSH_PORT = "4444", DOPPLER_PROJECT = "dotfiles", DOPPLER_CONFIG = "dev" }
+run = '''
+set -euo pipefail
+DEVCONTAINER_WORKSPACE_HASH="$(scripts/workspace-hash.sh)"
+export DEVCONTAINER_WORKSPACE_HASH
+ssh-keygen -R "[localhost]:${DEVCONTAINER_SSH_PORT}" 2>/dev/null || true
+devcontainer up --workspace-folder . --remove-existing-container --build-no-cache
+'''
 
 [tasks.verify-image]
 description = "Spot-check cookbook paths in :dev (cargo/rustup cookbook layout + core toolchains)"
@@ -177,7 +176,7 @@ description = "Spot-check cookbook paths in :dev (cargo/rustup cookbook layout +
 # NOT root mise.toml. Root mise.toml tools (hk, pkl, the 5 markdown
 # linters, etc.) live on the HOST, not in the image. Keep assertions here
 # scoped to what mise-system.toml actually provides.
-env = { BASE_IMAGE = "ghcr.io/ray-manaloto/dotfiles-devcontainer:dev", DOCKER_DEFAULT_PLATFORM = "linux/amd64" }
+env = { BASE_IMAGE = "ghcr.io/ray-manaloto/dotfiles-devcontainer:dev", DOCKER_DEFAULT_PLATFORM = "linux/amd64/v2" }
 run = '''
 docker run --rm "$BASE_IMAGE" bash -lc '
   set -euo pipefail
@@ -205,28 +204,25 @@ run = "devcontainer exec --workspace-folder . bash -l"
 [tasks.ps]
 description = "Show the running devcontainer + its named volumes"
 run = '''
-# Portable hash detection for the workspace collision suffix.
-if command -v sha256sum >/dev/null 2>&1; then
-  _hash="$(printf '%s' "$PWD" | sha256sum | cut -c1-8)"
-elif command -v shasum >/dev/null 2>&1; then
-  _hash="$(printf '%s' "$PWD" | shasum -a 256 | cut -c1-8)"
-else
-  echo "ERROR: neither sha256sum nor shasum found" >&2
-  exit 1
-fi
+set -euo pipefail
+_hash="$(scripts/workspace-hash.sh)"
 docker ps --filter "label=devcontainer.local_folder=$PWD" --format 'table {{"{{"}}.Names{{"}}"}}\t{{"{{"}}.Status{{"}}"}}\t{{"{{"}}.Ports{{"}}"}}'
 # Scoped to this clone's hashed home volume (v6 single-volume consolidation).
 docker volume ls --format '{{"{{"}}.Name{{"}}"}}' | grep -E "dotfiles-$(basename "$PWD")-${USER}-${_hash}" || true
 '''
 
 [tasks.dev]
-description = "Full devloop: pull :dev → up → smoke (sequential)"
+description = "Full devloop: up → smoke (sequential)"
 # NOTE: `depends = [...]` in mise runs tasks in parallel when independent
 # — not what we want here. A sequential shell body forces ordering while
 # keeping each sub-task independently runnable.
+#
+# Image pulling is delegated to devcontainer-cli (called by `mise run up`).
+# Standalone `docker pull` was removed — it bypassed the lifecycle and
+# masked silent failures (PR #86 review). Use `mise run dev-rebuild`
+# for an explicit force-refresh.
 run = '''
 set -euo pipefail
-mise run pull
 mise run up
 mise run smoke
 '''
@@ -427,16 +423,19 @@ echo "OK: S1 doppler env file has ${count} secrets (project=${DOPPLER_PROJECT}, 
 '''
 
 [tasks.verify-local]
-description = "Full local devcontainer validation (pull → verify-image → up → ps → smoke → persistence → verify-ssh-inbound → verify-secrets)"
+description = "Full local devcontainer validation (verify-image → up → ps → smoke → persistence → verify-ssh-inbound → verify-secrets)"
 # Sequential shell body (not `depends = [...]`) so mise can't parallelize
-# the steps — smoke/persistence rely on up finishing first, and
-# verify-image relies on pull finishing first. verify-ssh-inbound (R1)
-# runs last because it needs postCreateCommand to have installed
-# ~/.ssh/authorized_keys from the host-state bind mount. verify-secrets
-# (S1) validates the host-side doppler env file.
+# the steps — smoke/persistence rely on up finishing first.
+# verify-ssh-inbound (R1) runs last because it needs postCreateCommand
+# to have installed ~/.ssh/authorized_keys from the host-state bind
+# mount. verify-secrets (S1) validates the host-side doppler env file.
+#
+# Image pulling: verify-image's `docker run --rm` and `up`'s
+# `devcontainer up` both auto-pull when the layer is missing — no
+# standalone `docker pull` step needed. To force-refresh, use
+# `mise run dev-rebuild` instead of this task.
 run = '''
 set -euo pipefail
-mise run pull
 mise run verify-image
 mise run up
 mise run ps
@@ -454,28 +453,50 @@ set -euo pipefail
 # Portable hash for this workspace (v6 single-volume collision guard).
 # Scoped prune prevents deleting sibling-clone hashed home volumes
 # (Codex v3 finding — broad-prefix prune was cross-clone destructive).
-if command -v sha256sum >/dev/null 2>&1; then
-  _hash="$(printf '%s' "$PWD" | sha256sum | cut -c1-8)"
-elif command -v shasum >/dev/null 2>&1; then
-  _hash="$(printf '%s' "$PWD" | shasum -a 256 | cut -c1-8)"
-else
-  echo "ERROR: neither sha256sum nor shasum found" >&2
-  exit 1
-fi
+_hash="$(scripts/workspace-hash.sh)"
+
+# Differentiate "no match" (acceptable, idempotent) from "docker command
+# failed" (must be loud) per feedback_never_suppress_warnings. Pattern:
+# capture command output, check non-empty, then act. Daemon failures
+# propagate via set -e on the capturing subshell.
 echo "==> stopping container"
-docker rm -f $(docker ps -aq --filter "label=devcontainer.local_folder=$PWD") 2>/dev/null || true
+container_ids="$(docker ps -aq --filter "label=devcontainer.local_folder=$PWD")"
+if [ -n "${container_ids}" ]; then
+  # shellcheck disable=SC2086
+  docker rm -f ${container_ids}
+else
+  echo "    (no container labeled for $PWD — already stopped)"
+fi
+
 echo "==> removing named volumes (scoped to hash ${_hash})"
-docker volume ls --format '{{"{{"}}.Name{{"}}"}}' | grep -E "dotfiles-$(basename "$PWD")-${USER}-${_hash}" | xargs -r docker volume rm 2>/dev/null || true
+all_volumes="$(docker volume ls --format '{{"{{"}}.Name{{"}}"}}')"
+hashed_volumes="$(echo "${all_volumes}" | grep -E "dotfiles-$(basename "$PWD")-${USER}-${_hash}" || true)"
+if [ -n "${hashed_volumes}" ]; then
+  echo "${hashed_volumes}" | xargs docker volume rm
+else
+  echo "    (no hashed volumes for ${_hash} — already removed)"
+fi
+
 # Also clean up any ORPHANED legacy volumes from the pre-v6 per-directory
-# layout (mise-user / cargo-user / rustup-user). These were cross-clone
-# shared before the hash was introduced; once no container references
-# them they can be safely removed for ANY clone. Bounded by the
+# layout (mise-user / cargo-user / rustup-user). Bounded by the
 # basename+user prefix so only this repo's orphans are targeted.
-docker volume ls --format '{{"{{"}}.Name{{"}}"}}' | grep -E "dotfiles-$(basename "$PWD")-${USER}-(mise-user|cargo-user|rustup-user)$" | xargs -r docker volume rm 2>/dev/null || true
+legacy_volumes="$(echo "${all_volumes}" | grep -E "dotfiles-$(basename "$PWD")-${USER}-(mise-user|cargo-user|rustup-user)$" || true)"
+if [ -n "${legacy_volumes}" ]; then
+  echo "==> removing legacy v5 volumes"
+  echo "${legacy_volumes}" | xargs docker volume rm
+fi
+
 echo "==> removing overlay images"
-docker images --format '{{"{{"}}.Repository{{"}}"}}:{{"{{"}}.Tag{{"}}"}}' | grep vsc-dotfiles | xargs -r docker rmi 2>/dev/null || true
+all_images="$(docker images --format '{{"{{"}}.Repository{{"}}"}}:{{"{{"}}.Tag{{"}}"}}')"
+overlay_images="$(echo "${all_images}" | grep vsc-dotfiles || true)"
+if [ -n "${overlay_images}" ]; then
+  echo "${overlay_images}" | xargs docker rmi
+else
+  echo "    (no vsc-dotfiles overlay images — already removed)"
+fi
+
 echo "==> pruning build cache"
-docker builder prune -f 2>&1 | tail -1
+docker builder prune -f
 echo "==> done"
 '''
 
@@ -491,7 +512,14 @@ alias = "down"
 # R2 outbound now uses Docker Desktop's native magic socket — no host
 # proxy to tear down (deleted in #77 stage 2).
 run = '''
-docker rm -f $(docker ps -aq --filter "label=devcontainer.local_folder=$PWD") || true
+set -euo pipefail
+container_ids="$(docker ps -aq --filter "label=devcontainer.local_folder=$PWD")"
+if [ -n "${container_ids}" ]; then
+  # shellcheck disable=SC2086
+  docker rm -f ${container_ids}
+else
+  echo "(no container labeled for $PWD — already stopped)"
+fi
 '''
 
 [tasks.build]

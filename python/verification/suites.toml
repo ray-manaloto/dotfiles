@@ -109,6 +109,17 @@ tokens = [
 ]
 
 [[suite]]
+name = "build.amd64-platform-wired-mise"
+description = "R3 AMD64: mise.toml lifecycle tasks (up/pull/verify-image) must export DOCKER_DEFAULT_PLATFORM=linux/amd64/v2 to match devcontainer.json build.options. PR #86 missed these three task envs and shipped a split-brain (devcontainer.json said /v2, mise tasks said v1). This contract prevents the regression."
+category = "build"
+check_type = "static"
+handler = "require_tokens"
+paths = ["mise.toml"]
+tokens = [
+    "DOCKER_DEFAULT_PLATFORM = \"linux/amd64/v2\"",
+]
+
+[[suite]]
 name = "build.ssh-r1-inbound-wired"
 description = "R1 INBOUND: ssh ${USER}@localhost -p 4444 opens a shell in the container. Requires: (1) the ghcr.io/devcontainers/features/sshd feature (provides openssh-server, internal port 2222 hardcoded); (2) appPort mapping ${DEVCONTAINER_SSH_PORT}:2222; (3) postCreateCommand copies /tmp/dotfiles-host-state/authorized_keys into ~/.ssh/authorized_keys. DO NOT DROP — see AGENTS.md SSH Requirements section and .omc/plans/session-2026-04-09-ssh-rewrite.md."
 category = "build"
