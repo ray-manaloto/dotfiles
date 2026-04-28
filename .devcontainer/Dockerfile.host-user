@@ -59,6 +59,7 @@ RUN mkdir -p \
     /home/${DEVCONTAINER_USERNAME}/.cargo \
     /home/${DEVCONTAINER_USERNAME}/.rustup \
     /home/${DEVCONTAINER_USERNAME}/.config/gh \
+    /home/${DEVCONTAINER_USERNAME}/.config/mise \
     /home/${DEVCONTAINER_USERNAME}/.ssh && \
     chmod 700 /home/${DEVCONTAINER_USERNAME}/.ssh && \
     chown -R ${DEVCONTAINER_USERNAME}:${DEVCONTAINER_USERNAME} /home/${DEVCONTAINER_USERNAME}
@@ -77,10 +78,5 @@ ENV DEVCONTAINER_USERNAME=${DEVCONTAINER_USERNAME} \
 
 WORKDIR /home/${DEVCONTAINER_USERNAME}
 USER ${DEVCONTAINER_USERNAME}
-
-RUN echo 'eval "$(mise activate zsh)"' >> /home/${DEVCONTAINER_USERNAME}/.zshrc && \
-    echo 'eval "$(mise activate bash)"' >> /home/${DEVCONTAINER_USERNAME}/.bashrc && \
-    mkdir -p /home/${DEVCONTAINER_USERNAME}/.config/mise && \
-    mise install --system -y
 
 WORKDIR /home/${DEVCONTAINER_USERNAME}

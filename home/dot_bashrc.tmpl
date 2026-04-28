@@ -8,9 +8,13 @@ if [[ -d $HOME/.local/bin ]]; then
 fi
 
 {{if not .remote -}}
-# setup gpg-agent ssh — only when gpg-agent is configured for SSH
-if command -v gpgconf >/dev/null 2>&1 && \
-   gpgconf --list-options gpg-agent 2>/dev/null | grep -q '^enable-ssh-support:.*:1$'; then
+# Hand SSH_AUTH_SOCK to gpg-agent when configured for SSH. Skipped on
+# remote/container so Docker Desktop's magic socket
+# (/run/host-services/ssh-auth.sock), 1Password, and macOS Keychain
+# agents are not overridden. Also no-op when gpg-agent has
+# enable-ssh-support disabled (lets gpgconf errors surface on stderr).
+if command -v gpgconf >/dev/null && \
+   gpgconf --list-options gpg-agent | grep -q '^enable-ssh-support:.*:1$'; then
   unset SSH_AGENT_PID
   if [ "${gnupg_SSH_AUTH_SOCK_by:-0}" -ne $$ ]; then
     export SSH_AUTH_SOCK="$(gpgconf --list-dirs agent-ssh-socket)"

@@ -52,7 +52,7 @@ parsed="$(
 	DEVCONTAINER_WORKSPACE_HASH=validate \
 		BASE_IMAGE=validate \
 		DEVCONTAINER_SSH_PORT=4444 \
-		devcontainer read-configuration --workspace-folder . 2>/dev/null
+		devcontainer read-configuration --workspace-folder .
 )"
 if [ -z "${parsed}" ]; then
 	echo "FAIL: devcontainer read-configuration returned empty output" >&2

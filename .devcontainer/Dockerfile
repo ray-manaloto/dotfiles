@@ -72,7 +72,10 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     zlib1g-dev \
     && rm -rf /var/lib/apt/lists/* /tmp/*
 
-# Install mise globally (pinned version to prevent stale CDN cache issues)
+# Install latest mise via the official installer. Image is rebuilt on
+# every `main` push, so CDN drift is acceptable here. The mise.run
+# installer already chmods the binary; the explicit chmod is a belt-
+# and-braces guard against permission drift on the cache mount.
 RUN curl https://mise.run | sh && \
     chmod +x ${MISE_INSTALL_PATH} && \
     mise --version
@@ -213,8 +216,9 @@ FROM devcontainer-base AS devcontainer
 # GCC-16 with P2996 reflection (precompiled .deb from jwakely trunk snapshot,
 # post-reflection-merge commit 4b0e94b 2026-01-15).
 # Installs to /opt/gcc-latest/bin. Rolling latest — no pinned hash.
-# If this fails on Ubuntu 26.04, fall back to building from source
-# (see cpp-playground Dockerfile gcc stage for the pattern).
+# kayari.org ships a single rolling .deb tracking Ubuntu trunk; compatibility
+# with the current base image is empirical. If `dpkg -i` fails, build from
+# source (see cpp-playground Dockerfile gcc stage for the pattern).
 RUN curl -fLOSs https://kayari.org/gcc-latest/gcc-latest.deb && \
     dpkg -i gcc-latest.deb && \
     rm -f gcc-latest.deb && \
