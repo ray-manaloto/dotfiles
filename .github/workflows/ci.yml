@@ -158,20 +158,42 @@ jobs:
       image-tag: ${{ steps.meta.outputs.tags }}
     steps:
       - name: Free runner disk space
-        # The multi-stage Dockerfile + BuildKit cache pushes the
-        # default ubuntu-latest runner past its ~14 GB free-space
-        # budget mid-build. Empirically, runs 25075763960 (initial)
-        # and the 2026-04-28 rerun both died with
-        # "System.IO.IOException: No space left on device" before
-        # `Build and push` could write its layer cache. Removing
-        # bundled toolchains we don't need frees ~30-50 GB and
-        # eliminates the failure mode.
+        # The multi-stage Dockerfile + conda solve + rust toolchain push
+        # the ubuntu-latest runner past its ~14 GB free-space budget.
+        # Three separate runs on commits cabcf0d / cabcf0d-rerun /
+        # c8b79dc died with "No space left on device":
+        #   - cabcf0d (initial): died ~1m, no cleanup
+        #   - cabcf0d (rerun): died <1m
+        #   - c8b79dc (with light cleanup): died at 1h 38m mid-Build-and-push
+        # The light cleanup (bundled toolchains) gave 40 GB free; BuildKit
+        # cache wants 54 GB max. Need more aggressive cleanup.
+        # ~70-80 GB freed after this step.
         run: |
-          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android \
-                      /usr/local/share/boost /opt/hostedtoolcache/CodeQL \
-                      /opt/hostedtoolcache/PyPy /opt/hostedtoolcache/Ruby \
-                      /usr/local/lib/node_modules
-          sudo docker system prune -af || true
+          set -x
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /usr/local/lib/android \
+            /opt/ghc \
+            /usr/local/share/boost \
+            /opt/hostedtoolcache/CodeQL \
+            /opt/hostedtoolcache/PyPy \
+            /opt/hostedtoolcache/Ruby \
+            /opt/hostedtoolcache/go \
+            /usr/local/lib/node_modules \
+            /usr/share/swift \
+            /usr/local/share/powershell \
+            /usr/local/julia* \
+            /home/linuxbrew \
+            /usr/share/miniconda \
+            /opt/microsoft \
+            /opt/google \
+            /opt/az \
+            /usr/lib/firefox \
+            /usr/lib/google-cloud-sdk \
+            /usr/lib/heroku \
+            /usr/lib/mono
+          sudo apt-get clean
+          sudo docker system prune -af --volumes || true
           df -h /
 
       - name: Checkout code
