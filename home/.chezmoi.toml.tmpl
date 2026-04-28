@@ -34,12 +34,15 @@
 {{-   $isDevComputer = true -}}
 {{- end -}}
 
+{{- $remote := or (env "CODESPACES" | not | not) (env "SSH_CONNECTION" | not | not) (env "KUBERNETES_SERVICE_HOST" | not | not) (env "container" | not | not) (env "REMOTE_CONTAINERS" | not | not) (stat "/.dockerenv" | not | not) -}}
+
 [data]
     is_dev_computer = {{ $isDevComputer }}
     is_personal = {{ $isPersonal }}
     is_darwin = {{ eq .chezmoi.os "darwin" }}
     is_devcontainer = {{ eq .chezmoi.os "linux" }}
     is_ci = {{ $isCI }}
+    remote = {{ $remote }}
 
 [scriptEnv]
     PATH = {{ list (joinPath .chezmoi.homeDir ".local/bin") (joinPath (env "MISE_DATA_DIR" | default (joinPath .chezmoi.homeDir ".local/share/mise")) "shims") "/usr/local/bin" "/usr/bin" "/bin" "/sbin" | join ":" | quote }}
@@ -50,3 +53,6 @@
 
 [diff]
     pager = "delta"
+
+[warnings]
+    configFileTemplateHasChanged = false
