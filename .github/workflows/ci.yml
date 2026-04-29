@@ -158,43 +158,26 @@ jobs:
       image-tag: ${{ steps.meta.outputs.tags }}
     steps:
       - name: Free runner disk space
-        # The multi-stage Dockerfile + conda solve + rust toolchain push
-        # the ubuntu-latest runner past its ~14 GB free-space budget.
-        # Three separate runs on commits cabcf0d / cabcf0d-rerun /
-        # c8b79dc died with "No space left on device":
-        #   - cabcf0d (initial): died ~1m, no cleanup
-        #   - cabcf0d (rerun): died <1m
-        #   - c8b79dc (with light cleanup): died at 1h 38m mid-Build-and-push
-        # The light cleanup (bundled toolchains) gave 40 GB free; BuildKit
-        # cache wants 54 GB max. Need more aggressive cleanup.
-        # ~70-80 GB freed after this step.
-        run: |
-          set -x
-          sudo rm -rf \
-            /usr/share/dotnet \
-            /usr/local/lib/android \
-            /opt/ghc \
-            /usr/local/share/boost \
-            /opt/hostedtoolcache/CodeQL \
-            /opt/hostedtoolcache/PyPy \
-            /opt/hostedtoolcache/Ruby \
-            /opt/hostedtoolcache/go \
-            /usr/local/lib/node_modules \
-            /usr/share/swift \
-            /usr/local/share/powershell \
-            /usr/local/julia* \
-            /home/linuxbrew \
-            /usr/share/miniconda \
-            /opt/microsoft \
-            /opt/google \
-            /opt/az \
-            /usr/lib/firefox \
-            /usr/lib/google-cloud-sdk \
-            /usr/lib/heroku \
-            /usr/lib/mono
-          sudo apt-get clean
-          sudo docker system prune -af --volumes || true
-          df -h /
+        # The multi-stage Dockerfile (clang-p2996 builds clang from
+        # source, ~30 GB of intermediate artifacts) plus BuildKit cache
+        # exceeds the ubuntu-latest runner's ~14 GB free-space budget.
+        # Use the maintained `jlumbroso/free-disk-space` action which
+        # knows the actual ubuntu-latest image layout — frees ~30 GB
+        # reliably (vs. our hand-rolled rm -rf list which only got
+        # ~14 GB because half the paths don't exist on this image).
+        # Critically: do NOT prune docker system here — it wipes the
+        # BuildKit cache that the build NEEDS for the warm-cache path.
+        # The cache-cold path needs more disk, not less, and that's
+        # what bit ffd6b50.
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: false
+          swap-storage: true
 
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
