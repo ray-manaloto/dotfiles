@@ -171,11 +171,19 @@ jobs:
         # what bit ffd6b50.
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
         with:
-          tool-cache: false
+          # tool-cache (mise / hostedtoolcache / etc.) is only used by
+          # the lint + contract-preflight jobs, which run on separate
+          # runner VMs. The build job doesn't read from
+          # /opt/hostedtoolcache, so we can wipe it here for ~10-20 GB
+          # extra headroom on top of the standard ~30 GB.
+          tool-cache: true
           android: true
           dotnet: true
           haskell: true
           large-packages: true
+          # docker-images: false — preserve BuildKit cache (ffd6b50
+          # learned this the hard way; pruning it forces cold rebuilds
+          # which need MORE disk, not less).
           docker-images: false
           swap-storage: true
 
