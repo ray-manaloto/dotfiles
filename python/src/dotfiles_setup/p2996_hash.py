@@ -3,16 +3,11 @@
 The hash captures every input that affects the `clang-builder` Dockerfile
 stage. When inputs are unchanged, CI re-uses the cached image
 `ghcr.io/<owner>/<repo>:p2996-<hash16>` instead of recompiling clang
-from source (~80-120 minutes saved).
+from source.
 
-Inputs (canonical, sha256, truncated to 16 hex chars):
-
-1. `CLANG_P2996_REF` value parsed from `docker-bake.hcl`
-2. `BASE_IMAGE` value parsed from `docker-bake.hcl`
-3. `PLATFORM` value parsed from `docker-bake.hcl`
-4. SHA-256 of `.devcontainer/Dockerfile` content
-5. SHA-256 of `.devcontainer/mise-system-resolved.json` content
-6. SHA-256 of `docker-bake.hcl` content
+See `HashInputs` for the field set, and `compute_hash` for the canonical
+ordering that determines the output digest. The cold-compile baseline
+and operator workflow live in `.devcontainer/P2996-CACHE.md`.
 """
 
 from __future__ import annotations
@@ -28,6 +23,7 @@ if TYPE_CHECKING:
 HASH_LENGTH = 16
 SCHEMA_VERSION = 1
 RECORD_SEPARATOR = "\x1f"  # ASCII unit separator — never appears in inputs
+SHA256_HEX_LEN = 64
 
 
 @dataclass(frozen=True)
@@ -40,6 +36,30 @@ class HashInputs:
     dockerfile_digest: str
     bake_digest: str
     snapshot_digest: str
+
+    def __post_init__(self) -> None:
+        """Reject empty literals + non-64-hex digests at construction.
+
+        Catches the two highest-impact bug classes that would otherwise
+        produce a stable-but-wrong hash: empty inputs flowing through
+        and mis-shaped digests (e.g., a `_file_digest` callsite that
+        accidentally returned a path string instead of a hex digest).
+        """
+        for field_name in ("clang_p2996_ref", "base_image", "platform"):
+            value = getattr(self, field_name)
+            if not value:
+                msg = f"HashInputs.{field_name} must be non-empty"
+                raise ValueError(msg)
+        for field_name in ("dockerfile_digest", "bake_digest", "snapshot_digest"):
+            value = getattr(self, field_name)
+            if len(value) != SHA256_HEX_LEN or not all(
+                c in "0123456789abcdef" for c in value
+            ):
+                msg = (
+                    f"HashInputs.{field_name} must be {SHA256_HEX_LEN}-char "
+                    f"lowercase hex; got {len(value)} chars"
+                )
+                raise ValueError(msg)
 
 
 def _extract_bake_variable(bake_text: str, name: str) -> str:

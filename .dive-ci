@@ -1,0 +1,14 @@
+rules:
+  # Fail if image efficiency drops below 85% (i.e., >15% wasted bytes
+  # due to file duplication or over-large layers). The conda toolchain
+  # is layer-heavy; relax to 0.80 if the baseline cannot reach 0.85
+  # without false positives.
+  lowestEfficiency: 0.85
+
+  # Hard ceiling on absolute wasted bytes regardless of efficiency
+  # ratio (catches a single giant duplicated layer).
+  highestWastedBytes: 100MB
+
+  # Soft ceiling on user-attributable waste (excludes unavoidable
+  # base-image duplication). 15% mirrors the efficiency threshold.
+  highestUserWastedPercent: 0.15

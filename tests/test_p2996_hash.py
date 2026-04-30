@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import re
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -89,7 +92,7 @@ def test_extract_bake_variable_with_comment() -> None:
 
 def test_extract_bake_variable_missing_raises() -> None:
     bake = 'variable "OTHER" { default = "x" }'
-    with pytest.raises(ValueError, match="MISSING_VAR"):
+    with pytest.raises(ValueError, match="not found"):
         _extract_bake_variable(bake, "MISSING_VAR")
 
 
@@ -137,3 +140,77 @@ def test_repo_hash_changes_when_dockerfile_modified(tmp_path: Path) -> None:
     dockerfile.write_text("FROM ubuntu:26.04\nRUN echo new\n")
     after = compute_repo_hash(tmp_path)
     assert before != after
+
+
+def test_hash_inputs_rejects_empty_literal() -> None:
+    with pytest.raises(ValueError, match="must be non-empty"):
+        _stub_inputs(clang_p2996_ref="")
+
+
+def test_hash_inputs_rejects_short_digest() -> None:
+    with pytest.raises(ValueError, match="64-char"):
+        _stub_inputs(dockerfile_digest="a" * 63)
+
+
+def test_hash_inputs_rejects_uppercase_digest() -> None:
+    with pytest.raises(ValueError, match="64-char"):
+        _stub_inputs(snapshot_digest="A" * 64)
+
+
+def test_gather_inputs_missing_dockerfile_raises(tmp_path: Path) -> None:
+    bake = tmp_path / "docker-bake.hcl"
+    bake.write_text(
+        'variable "BASE_IMAGE" { default = "ubuntu:26.04" }\n'
+        'variable "PLATFORM" { default = "linux/amd64/v2" }\n'
+        'variable "CLANG_P2996_REF" { default = "abc" }\n',
+    )
+    (tmp_path / ".devcontainer").mkdir()
+    (tmp_path / ".devcontainer" / "mise-system-resolved.json").write_text("{}\n")
+    # No Dockerfile created.
+    with pytest.raises(FileNotFoundError):
+        gather_inputs(tmp_path)
+
+
+def test_gather_inputs_missing_snapshot_raises(tmp_path: Path) -> None:
+    bake = tmp_path / "docker-bake.hcl"
+    bake.write_text(
+        'variable "BASE_IMAGE" { default = "ubuntu:26.04" }\n'
+        'variable "PLATFORM" { default = "linux/amd64/v2" }\n'
+        'variable "CLANG_P2996_REF" { default = "abc" }\n',
+    )
+    (tmp_path / ".devcontainer").mkdir()
+    (tmp_path / ".devcontainer" / "Dockerfile").write_text("FROM ubuntu\n")
+    # No snapshot file created.
+    with pytest.raises(FileNotFoundError):
+        gather_inputs(tmp_path)
+
+
+def test_gather_inputs_bake_missing_required_var_raises(tmp_path: Path) -> None:
+    bake = tmp_path / "docker-bake.hcl"
+    bake.write_text('variable "BASE_IMAGE" { default = "ubuntu:26.04" }\n')
+    (tmp_path / ".devcontainer").mkdir()
+    (tmp_path / ".devcontainer" / "Dockerfile").write_text("FROM ubuntu\n")
+    (tmp_path / ".devcontainer" / "mise-system-resolved.json").write_text("{}\n")
+    with pytest.raises(ValueError, match="not found"):
+        gather_inputs(tmp_path)
+
+
+def test_cli_p2996_hash_subcommand_returns_16_char_hex() -> None:
+    # Smoke-test the CLI dispatch path that CI consumes via
+    # `hash=$(uv run --project python dotfiles-setup p2996-hash)`. A
+    # typo in the dispatch table or a refactor that switches to logger
+    # output instead of stdout would silently break CI without this.
+    result = subprocess.run(
+        [sys.executable, "-m", "dotfiles_setup.main", "p2996-hash"],
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=Path(__file__).resolve().parent.parent,
+    )
+    output = result.stdout.strip()
+    assert len(output) == HASH_LENGTH, (
+        f"expected {HASH_LENGTH}-char hex digest from CLI, got {output!r}"
+    )
+    assert re.fullmatch(r"[0-9a-f]+", output), (
+        f"expected lowercase-hex digest from CLI, got {output!r}"
+    )

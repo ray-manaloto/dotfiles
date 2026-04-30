@@ -148,7 +148,8 @@ WORKDIR /workspaces
 # stage — the ~20GB build tree is discarded.
 #
 # Three-stage pattern:
-#   1. clang-builder-cold: heavy compile from source (~80–120 min cold)
+#   1. clang-builder-cold: heavy compile from source (multi-hour cold;
+#      see .devcontainer/P2996-CACHE.md for the current baseline)
 #   2. p2996-export: scratch-based export of just /opt/clang-p2996
 #      (~500 MB — small enough for cheap GHCR push/pull as cache image)
 #   3. clang-builder: indirection layer; FROM ${P2996_SOURCE} resolves
@@ -207,7 +208,9 @@ RUN --mount=type=cache,target=/root/.cache/ccache,sharing=locked \
     ninja install
 
 # Smoke test: verify clang-p2996 can parse reflection headers.
-# Runs only on the cold compile path; cached pulls inherit this validation.
+# Runs only on the cold compile path. Cached pulls skip this step —
+# the cache image was built from this same stage, so its artifact was
+# already validated at the time of its build.
 RUN printf '#include <meta>\nint main(){return 0;}\n' >/tmp/refl.cpp && \
     /opt/clang-p2996/bin/clang++ \
       -std=c++2c \

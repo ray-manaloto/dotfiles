@@ -29,7 +29,8 @@ on:
       force_dev_tag:
         description: "Tag the build as :dev / :latest (used by promote fallback for direct-to-main pushes without an associated PR)"
         required: false
-        default: "false"
+        default: false
+        type: boolean
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -39,6 +40,16 @@ env:
   CONTAINER_REGISTRY: ghcr.io
   IMAGE_NAME: ray-manaloto/dotfiles-devcontainer
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  # Workflow-wide logging defaults so failed runs are diagnosable from
+  # the artifact-uploaded log files instead of needing a re-run with
+  # `--debug` toggled on. Console stays at default level; disk log is
+  # debug-level. Aligns with `mise.toml [env]` for local/CI parity.
+  # The lint/contract-preflight/p2996-prep/smoke-test jobs upload these
+  # via per-job `if: always()` upload-artifact steps.
+  # Refs: https://hk.jdx.dev/logging.html, https://mise.jdx.dev/configuration.html#mise-log-file-mise-log
+  HK_LOG_FILE_LEVEL: debug
+  MISE_LOG_FILE: /tmp/mise.log
+  MISE_LOG_FILE_LEVEL: debug
 
 permissions:
   contents: read
@@ -55,14 +66,11 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Install mise
+        # mise-action's default `cache: true` keys on
+        # {platform}-{install_args_hash}-{file_hash} which subsumes the
+        # earlier hand-rolled actions/cache block (keyed only on mise.lock).
+        # Granular per-platform AND per-install-args cache hygiene.
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
-
-      - name: Cache mise tools
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: ~/.local/share/mise
-          key: mise-${{ runner.os }}-${{ hashFiles('mise.lock') }}
-          restore-keys: mise-${{ runner.os }}-
 
       - name: Configure git identity for hk
         run: |
@@ -129,6 +137,20 @@ jobs:
           name: mise-lock
           path: mise.lock
 
+      - name: Upload diagnostic logs (hk + mise)
+        # Always upload so failed/hung runs are diagnosable from the
+        # artifact tab without re-running with --verbose. Aligns with
+        # the workflow-level HK_LOG_FILE_LEVEL=debug + MISE_LOG_FILE
+        # env vars at the top of this file.
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: lint-job-logs
+          path: |
+            /tmp/mise.log
+            ~/.local/state/hk/hk.log
+          if-no-files-found: ignore
+
   contract-preflight:
     needs: lint
     runs-on: ubuntu-latest
@@ -136,19 +158,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - name: Install mise (python + uv)
+        # Subset install: only python + uv, both pinned in mise.toml.
+        # Replaces the prior actions/setup-python + astral-sh/setup-uv pair.
+        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
         with:
-          python-version: "3.14"
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
-        with:
-          enable-cache: false
+          install_args: "python uv"
 
       - name: Validate Dockerfile contracts
         run: |
-          uv run --directory python dotfiles-setup verify run \
+          uv run --project python dotfiles-setup verify run \
             --category build --category ci --category identity --category architecture \
             --json
 
@@ -156,13 +175,17 @@ jobs:
   # P2996 cache prep: compute content-hash of clang-builder inputs and
   # ensure ghcr.io/<owner>/<repo>:p2996-<hash16> exists. On hash hit
   # (the typical case), this job exits in <30s with cache_ref set; the
-  # build job then skips the ~80–120 min clang compile entirely. On
-  # miss, this job builds the p2996-cache target and pushes it.
+  # build job then skips the multi-hour clang compile entirely. On
+  # miss, this job builds the p2996-cache target and pushes it. See
+  # .devcontainer/P2996-CACHE.md for the cache mechanism + baselines.
   # ============================================================
   p2996-prep:
     needs: contract-preflight
     if: github.event_name != 'push' || github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write  # explicit; do not rely on workflow-level inheritance
     outputs:
       hash: ${{ steps.hash.outputs.hash }}
       cache_ref: ${{ steps.hash.outputs.cache_ref }}
@@ -170,15 +193,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - name: Install mise (python + uv)
+        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
         with:
-          python-version: "3.14"
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
-        with:
-          enable-cache: false
+          install_args: "python uv"
 
       - name: Compute P2996 cache hash
         id: hash
@@ -204,14 +222,26 @@ jobs:
 
       - name: Probe cache
         id: probe
+        # Discriminate "manifest not found" (legitimate cache miss) from
+        # auth/network/registry failures. Capturing stderr instead of
+        # `2>/dev/null` honors `build.no-stderr-suppression`: bury a real
+        # auth bug under "miss" → trigger a multi-hour cold compile for
+        # what was actually a transient registry outage.
         run: |
           set -euo pipefail
-          if docker manifest inspect "${{ steps.hash.outputs.cache_ref }}" >/dev/null 2>&1; then
+          if out=$(docker manifest inspect "${{ steps.hash.outputs.cache_ref }}" 2>&1); then
             echo "hit=true" >> "$GITHUB_OUTPUT"
             echo "Cache HIT — skipping clang-p2996 compile" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "hit=false" >> "$GITHUB_OUTPUT"
-            echo "Cache MISS — building p2996-cache target" >> "$GITHUB_STEP_SUMMARY"
+            rc=$?
+            if printf '%s\n' "$out" | grep -qiE 'manifest unknown|not found|no such manifest'; then
+              echo "hit=false" >> "$GITHUB_OUTPUT"
+              echo "Cache MISS — building p2996-cache target" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "FAIL: docker manifest inspect failed with non-miss error (rc=$rc):" >&2
+              printf '%s\n' "$out" >&2
+              exit "$rc"
+            fi
           fi
 
       - name: Free runner disk space
@@ -234,7 +264,7 @@ jobs:
 
       - name: Build and push p2996-cache image
         if: steps.probe.outputs.hit != 'true'
-        uses: docker/bake-action@82490499d2e5613fcead7e128237ef0b0ea210f7 # v7.0.0
+        uses: docker/bake-action@a66e1c87e2eca0503c343edf1d208c716d54b8a8 # v7.1.0
         with:
           source: .
           targets: p2996-cache
@@ -303,8 +333,8 @@ jobs:
         with:
           images: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=dev,enable=${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.force_dev_tag == 'true') }}
-            type=raw,value=latest,enable=${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.force_dev_tag == 'true') }}
+            type=raw,value=dev,enable=${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.force_dev_tag) }}
+            type=raw,value=latest,enable=${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.force_dev_tag) }}
             type=sha,prefix=
             type=ref,event=pr
 
@@ -326,39 +356,10 @@ jobs:
             *.secrets=id=github_token,src=/tmp/github_token
             dev.args.P2996_SOURCE=${{ needs.p2996-prep.outputs.cache_ref }}
 
-      - name: Build performance summary
-        if: always()
-        env:
-          BAKE_RESULT: ${{ steps.bake.outcome }}
-        run: |
-          {
-            echo "## Build Performance"
-            echo ""
-            echo "| Metric | Value |"
-            echo "|--------|-------|"
-            echo "| Build result | ${BAKE_RESULT} |"
-            echo "| Cache sources | gha |"
-            echo ""
-            echo "_Compare consecutive runs to verify cache effectiveness._"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Build diagnostics
-        if: always() && steps.bake.outcome != 'cancelled'
-        run: |
-          {
-            echo "## Build Diagnostics"
-            echo ""
-            echo "### Resolved Bake Configuration"
-            echo '```json'
-            docker buildx bake --print -f docker-bake.hcl 2>/dev/null | head -80 || echo "bake --print unavailable"
-            echo '```'
-            echo ""
-            echo "### Known Build Warnings"
-            echo "| Warning | Status | Tracking |"
-            echo "|---------|--------|----------|"
-            echo "| mise 'npm may be required' | Deferred | jdx/mise#8923 |"
-            echo "| bun 'add global bin to PATH' | Documented | Cosmetic (mise shims handle resolution) |"
-          } >> "$GITHUB_STEP_SUMMARY"
+      # docker/bake-action v6.8.0+ emits a per-job build summary with inputs,
+      # errors, and a downloadable .dockerbuild record by default. The prior
+      # hand-rolled "Build performance summary" + "Build diagnostics" steps
+      # duplicated this and have been removed.
 
   # ============================================================
   # Smoke test: validate the freshly-pushed image (PR or main).
@@ -370,19 +371,18 @@ jobs:
     needs: build
     if: github.event_name != 'push' || github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+      security-events: write  # for Trivy SARIF upload to GitHub code scanning
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - name: Install mise (python + uv)
+        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
         with:
-          python-version: "3.14"
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
-        with:
-          enable-cache: false
+          install_args: "python uv"
 
       - name: Log in to Container Registry
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
@@ -400,30 +400,70 @@ jobs:
 
       - name: Smoke published image
         run: |
-          uv run --directory python dotfiles-setup image smoke \
+          uv run --project python dotfiles-setup image smoke \
             --image-ref ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.smoke-tag.outputs.tag }}
 
       - name: Benchmark published image
         run: |
-          uv run --directory python dotfiles-setup image benchmark \
+          uv run --project python dotfiles-setup image benchmark \
             --image-ref ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.smoke-tag.outputs.tag }} \
             --output-path artifacts/build/devcontainer-metrics.json > /tmp/devcontainer-metrics.stdout.json
+
+      - name: Analyze image layer efficiency (Dive)
+        # Dive --ci enforces .dive-ci thresholds (lowestEfficiency,
+        # highestWastedBytes). Pass/fail gate; replaces the dead-letter
+        # top_layers JSON dump in `dotfiles-setup image benchmark`.
+        uses: wagoodman/dive@fe98c8a2eb08c443a36e3cc7568078909e298433 # v0.13.1
+        with:
+          image: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.smoke-tag.outputs.tag }}
+          config-file: .dive-ci
+
+      - name: Scan image for CVEs (Trivy, warn-only)
+        # Day-1 mode: exit-code: '0' (warn-only). Once the baseline is
+        # clean, a follow-up PR flips to exit-code: '1' to gate PRs on
+        # regressions. SARIF still uploads to GitHub code scanning so
+        # alerts surface in the Security tab regardless.
+        # Tracked: https://github.com/ray-manaloto/dotfiles/issues/92
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          image-ref: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.smoke-tag.outputs.tag }}
+          format: sarif
+          output: trivy.sarif
+          severity: CRITICAL,HIGH
+          exit-code: "0"
+
+      - name: Upload Trivy SARIF to GitHub code scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@65216971a11ded447a6b76263d5a144519e5eee1 # codeql-bundle-v2.25.2
+        with:
+          sarif_file: trivy.sarif
+          category: trivy-image
 
       # Note: the host-user overlay (Dockerfile.host-user + `devcontainer up`)
       # is a Mac-local concern — it exists to wrap the published base image
       # with the host user's UID/GID for bind-mount permission parity on
       # macOS. CI has no meaningful "host user" to match, no ~/.ssh/.claude/
       # mount sources, and no need to rebuild the overlay. The steps above
-      # (Pull / Smoke / Benchmark) fully validate the published base image;
-      # overlay behavior is validated locally via `mise run up` on the Mac.
+      # (Pull / Smoke / Benchmark / Dive / Trivy) fully validate the
+      # published base image; overlay behavior is validated locally via
+      # `mise run up` on the Mac.
 
       - name: Upload build metrics artifact
+        # `if: always()` so artifacts upload even when Dive fails the
+        # threshold gate or Trivy bails on a malformed SARIF — the
+        # artifact is the diagnostic surface most needed exactly when
+        # the build regressed. Bundles the mise log so diagnose sequence
+        # is one-stop in the artifact tab.
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: devcontainer-metrics
           path: |
             artifacts/build/devcontainer-metrics.json
             /tmp/devcontainer-metrics.stdout.json
+            trivy.sarif
+            /tmp/mise.log
+          if-no-files-found: ignore
 
   # ============================================================
   # Promote: tag-only retag of the PR-built image as :dev / :latest.
@@ -456,12 +496,22 @@ jobs:
             }
           }
           GQL
-          pr_number=$(gh api graphql \
+          # Capture the raw GraphQL response first so we can discriminate
+          # "no PR" (legitimate fallback) from API/auth/scope failure
+          # (would silently trigger a multi-hour rebuild today).
+          resp=$(gh api graphql \
             -F query=@/tmp/associated_pr.gql \
             -F owner="${{ github.repository_owner }}" \
             -F repo="${{ github.event.repository.name }}" \
-            -F sha="${{ github.sha }}" \
-            --jq '.data.repository.object.associatedPullRequests.nodes[0].number // empty')
+            -F sha="${{ github.sha }}")
+          if jq -e '.errors' <<<"$resp" >/dev/null 2>&1; then
+            echo "FAIL: graphql returned errors:" >&2
+            jq '.errors' <<<"$resp" >&2
+            exit 1
+          fi
+          pr_number=$(jq -r \
+            '.data.repository.object.associatedPullRequests.nodes[0].number // empty' \
+            <<<"$resp")
           if [ -z "$pr_number" ]; then
             echo "No associated PR for ${{ github.sha }} — will fall back to rebuild" >&2
             echo "fallback=true" >> "$GITHUB_OUTPUT"
@@ -483,48 +533,111 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Retag PR image as :dev and :latest
+      - name: Probe source PR image exists (else fall through to rebuild)
         if: steps.pr.outputs.fallback != 'true'
-        id: retag
+        id: source_probe
         env:
           IMAGE: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}
           PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
         run: |
           set -euo pipefail
           source_ref="${IMAGE}:pr-${PR_NUMBER}"
+          # The PR image may have been pruned (GHCR retention, manual
+          # delete) by the time a long-running revert merges. If so, the
+          # promote retag would fail hard; we instead route this to the
+          # rebuild fallback path so the operator never gets stuck. We
+          # also discriminate auth/network/registry errors from the
+          # legitimate "tag not found" miss.
+          err_log=$(mktemp)
+          if source_digest=$(docker buildx imagetools inspect "${source_ref}" --format '{{.Manifest.Digest}}' 2>"${err_log}"); then
+            if [ -z "${source_digest}" ]; then
+              echo "FAIL: imagetools inspect succeeded but Manifest.Digest was empty for ${source_ref}" >&2
+              cat "${err_log}" >&2
+              exit 1
+            fi
+            {
+              echo "source_present=true"
+              echo "source_ref=${source_ref}"
+              echo "source_digest=${source_digest}"
+            } >> "$GITHUB_OUTPUT"
+          elif grep -qiE 'manifest unknown|not found|no such manifest' "${err_log}"; then
+            echo "WARN: ${source_ref} not present (retention prune?); switching to rebuild fallback" >&2
+            echo "source_present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "FAIL: imagetools inspect failed with non-miss error:" >&2
+            cat "${err_log}" >&2
+            exit 1
+          fi
+
+      - name: Retag PR image as :dev and :latest
+        if: steps.pr.outputs.fallback != 'true' && steps.source_probe.outputs.source_present == 'true'
+        env:
+          IMAGE: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}
+          SOURCE_REF: ${{ steps.source_probe.outputs.source_ref }}
+          SOURCE_DIGEST: ${{ steps.source_probe.outputs.source_digest }}
+        run: |
+          set -euo pipefail
           docker buildx imagetools create \
             --tag "${IMAGE}:dev" \
             --tag "${IMAGE}:latest" \
-            "${source_ref}"
-          # Verify both new tags resolve to a manifest digest. With
-          # set -o pipefail the awk failure (e.g., empty input) propagates.
+            "${SOURCE_REF}"
+          # Verify both new tags resolve to the source digest. Without
+          # this, `imagetools create` could no-op silently (concurrent
+          # push race) and pre-existing stale-but-equal digests would
+          # pass the dev==latest check while neither tag was updated.
           dev_digest=$(docker buildx imagetools inspect "${IMAGE}:dev" --format '{{.Manifest.Digest}}')
           latest_digest=$(docker buildx imagetools inspect "${IMAGE}:latest" --format '{{.Manifest.Digest}}')
-          if [ "${dev_digest}" != "${latest_digest}" ]; then
-            echo "FAIL: :dev and :latest resolve to different digests after retag" >&2
-            echo "  :dev    -> ${dev_digest}"    >&2
-            echo "  :latest -> ${latest_digest}" >&2
+          for d in "${dev_digest}" "${latest_digest}"; do
+            [ -n "$d" ] || { echo "FAIL: empty digest after retag" >&2; exit 1; }
+          done
+          if [ "${dev_digest}" != "${SOURCE_DIGEST}" ] || [ "${latest_digest}" != "${SOURCE_DIGEST}" ]; then
+            echo "FAIL: retag did not propagate source digest" >&2
+            echo "  source : ${SOURCE_DIGEST}" >&2
+            echo "  :dev   : ${dev_digest}"   >&2
+            echo "  :latest: ${latest_digest}" >&2
             exit 1
           fi
           {
             echo "## Promote (tag-only)"
             echo ""
-            echo "- Source: \`${source_ref}\`"
-            echo "- New tags: \`:dev\`, \`:latest\` (digest \`${dev_digest}\`)"
+            echo "- Source: \`${SOURCE_REF}\`"
+            echo "- New tags: \`:dev\`, \`:latest\` (digest \`${SOURCE_DIGEST}\`)"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Trigger fallback rebuild
-        if: steps.pr.outputs.fallback == 'true'
+        if: steps.pr.outputs.fallback == 'true' || steps.source_probe.outputs.source_present == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          # Verify the dispatch actually created a run — `gh workflow run`
+          # returns 0 on a successful queue but does not guarantee a run
+          # appears (rare API hiccup, scope misconfig, branch protection).
+          # Without verification, a green "fallback rebuild" summary could
+          # mask a missing :dev/:latest publication.
           gh workflow run ci.yml \
             --ref main \
             -f target=dev \
             -f force_dev_tag=true
+          # The dispatched run takes a moment to appear in the listing;
+          # poll briefly rather than rely on a fixed sleep.
+          run_id=""
+          for _ in 1 2 3 4 5; do
+            sleep 3
+            run_id=$(gh run list --workflow=ci.yml --branch=main \
+                       --event=workflow_dispatch --limit 1 \
+                       --json databaseId --jq '.[0].databaseId // empty')
+            [ -n "$run_id" ] && break
+          done
+          if [ -z "$run_id" ]; then
+            echo "FAIL: dispatched ci.yml but no workflow_dispatch run appeared" >&2
+            exit 1
+          fi
+          run_url="https://github.com/${{ github.repository }}/actions/runs/${run_id}"
           {
             echo "## Promote (fallback rebuild)"
             echo ""
-            echo "No PR associated with this commit; dispatched ci.yml with force_dev_tag=true."
+            echo "No PR / source image available; dispatched ci.yml with force_dev_tag=true."
+            echo ""
+            echo "Dispatched run: <${run_url}>"
           } >> "$GITHUB_STEP_SUMMARY"

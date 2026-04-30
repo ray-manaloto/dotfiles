@@ -63,7 +63,8 @@ target "dev" {
     CLANG_P2996_REF = CLANG_P2996_REF
     # Default cold-build path. CI's p2996-prep job overrides this with
     # ghcr.io/<owner>/<repo>:p2996-<hash16> on cache hit, skipping the
-    # ~80–120 min clang compile entirely. See p2996-cache target.
+    # multi-hour clang compile entirely. See p2996-cache target and
+    # .devcontainer/P2996-CACHE.md for the cache mechanism.
     P2996_SOURCE = "p2996-export"
   }
   # Tags inherited from docker-metadata-action (CI overrides with SHA/latest/PR tags)

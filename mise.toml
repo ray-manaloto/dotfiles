@@ -19,25 +19,25 @@ jq = "1.8.1"
 python = "3.14.4"
 uv = "0.11.7"
 pixi = "0.66.0"  # Pinned: 0.67.2 ships only source tarball under mise's core backend (binary missing). Bump after verifying install layout. Also in mise-system.toml; needed locally for tests/test_bootstrap.py + test_shell_integration.py.
-pinact = "latest"
+pinact = "3.9.0"
 chezmoi = "2.70.2"
 "npm:@devcontainers/cli" = "0.86.0"
 colima = "0.10.1"  # Alternate Docker runtime (VZ + Rosetta); Docker Desktop is the CURRENT supported runtime — see AGENTS.md Docker Runtimes + .omc/research/research-20260409c-dockerdesktop-ssh/
 lima = "2.1.1"     # Runtime dependency for colima (provides limactl); kept for deferred Colima follow-up
 "npm:agnix" = "0.22.1"
-"npm:agents-lint" = "latest"
+"npm:agents-lint" = "0.5.0"
 "pipx:mcp2cli" = "3.0.2"
-"pipx:check-jsonschema" = "latest"  # Full JSON Schema URL validation for .devcontainer/devcontainer.json (needs JSONC→JSON preprocessing)
+"pipx:check-jsonschema" = "0.37.1"  # Full JSON Schema URL validation for .devcontainer/devcontainer.json (needs JSONC→JSON preprocessing)
 biome = "2.4.13"
 # Markdown + Claude-docs linters. Installed now; hk.pkl integration is
 # scheduled for post-devcontainer-work review (see GH issue tracking
 # follow-up). claude_md_size_limit (below in hk.pkl) provides the
 # immediate 200-line enforcement per Claude Code memory docs.
-"npm:claude-code-lint" = "latest"       # https://github.com/pdugan20/claudelint — CLAUDE.md size limits, import syntax, frontmatter
+"npm:claude-code-lint" = "0.3.0"       # https://github.com/pdugan20/claudelint — CLAUDE.md size limits, import syntax, frontmatter
 "npm:@contextlint/cli" = "0.9.1"       # https://github.com/nozomi-koborinai/contextlint — structured markdown cross-file integrity
 "npm:markdownlint-cli2" = "0.22.1"      # https://github.com/DavidAnson/markdownlint — general markdown quality (MD013 line-length, etc.)
-"aqua:jackchuka/mdschema" = "latest"     # https://github.com/jackchuka/mdschema — markdown frontmatter schema validation
-"rumdl" = "latest"            # https://github.com/rvben/rumdl — Rust-fast markdown linter (71 rules)
+"aqua:jackchuka/mdschema" = "0.12.9"     # https://github.com/jackchuka/mdschema — markdown frontmatter schema validation
+"rumdl" = "0.1.83"            # https://github.com/rvben/rumdl — Rust-fast markdown linter (71 rules)
 "npm:oh-my-claude-sisyphus" = "4.13.4"
 "github:ast-grep/ast-grep" = "0.42.1"
 lefthook = "2.1.6"
@@ -50,7 +50,7 @@ rtk = "0.37.2"
 aws-cli = { version = "2.34.38", symlink_bins = "true" }
 azure-cli = { version = "2.85.0", uvx_args = "--prerelease=allow" }
 docker-cli = "29.4.1"
-opencode = "latest"
+opencode = "1.0.205"
 "npm:@claude-flow/cli" = "3.5.82"
 "npm:@ralph-orchestrator/ralph-cli" = "2.9.2"
 
@@ -74,6 +74,21 @@ postinstall = "mise reshim && hk install --mise"
 HK_PKL_BACKEND = "pkl"  # "pkl" (not pklr) required for import/spread in hk-common.pkl
 HK_MISE = "1"
 
+# Console stays at the default (warn) — interactive use isn't spammed —
+# but the on-disk log captures debug-level detail so a stuck/slow run
+# can be diagnosed via `tail -f` after the fact. When a hk run hangs,
+# `tail -f ~/.local/state/hk/hk.log` is the live ground truth.
+# Refs: https://hk.jdx.dev/logging.html#log-file-output
+HK_LOG_FILE_LEVEL = "debug"
+
+# Same pattern for mise: keep console quiet, write a debug-level log to
+# a stable path so `tail -f ~/.local/state/mise/mise.log` is the
+# always-on debugging surface for slow installs / failed resolutions /
+# HTTP errors. Set MISE_LOG_HTTP=1 ad hoc if needed.
+# Refs: https://mise.jdx.dev/configuration.html#mise-log-file-mise-log
+MISE_LOG_FILE = "~/.local/state/mise/mise.log"
+MISE_LOG_FILE_LEVEL = "debug"
+
 # Directory-scoped shell aliases — auto-activated when cwd is inside this
 # repo, deactivated on leave. Interactive-shell only (not usable inside
 # task `run` blocks per mise docs). Kept short for inner-loop muscle
@@ -95,13 +110,13 @@ sources = ["pyproject.toml", "uv.lock"]
 outputs = [".venv/"]
 run = "uv sync"
 
-[tasks.lint]
-description = "Run all linters via hk"
+[tasks.pre-commit]
+description = "Run all hk pre-commit checks (≡ `hk run pre-commit --all`)"
 run = "hk run pre-commit --all"
 
 [tasks.check]
-description = "Run full quality check (lint + test)"
-depends = ["lint", "test"]
+description = "Run full quality check (pre-commit + test)"
+depends = ["pre-commit", "test"]
 
 [tasks.test]
 description = "Run Python test suite"

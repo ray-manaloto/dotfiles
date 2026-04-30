@@ -449,6 +449,55 @@ tokens = [
   "P2996_SOURCE",
 ]
 
+[[suite]]
+name = "ci.regex-managers-enabled"
+description = "Renovate's customManagers must be enabled via 'custom.regex' in enabledManagers — without it, every regex manager block is silently inactive (the existing CLANG_P2996_REF tracker hit this in 2026-04)"
+category = "ci"
+check_type = "static"
+handler = "require_tokens"
+paths = ["renovate.json"]
+tokens = ["custom.regex"]
+
+[[suite]]
+name = "ci.renovate-extends-jdx-preset"
+description = "renovate.json should extend github>jdx/renovate-config (used by mise itself) for consistent automerge / lock-file maintenance / Friday schedule defaults"
+category = "ci"
+check_type = "static"
+handler = "require_tokens"
+paths = ["renovate.json"]
+tokens = ["github>jdx/renovate-config"]
+
+[[suite]]
+name = "ci.dive-config-present"
+description = ".dive-ci config must exist when ci.yml references the wagoodman/dive action — otherwise the analyze step fails on missing-config"
+category = "ci"
+check_type = "static"
+handler = "require_tokens"
+paths = [".dive-ci"]
+tokens = ["lowestEfficiency"]
+
+[[suite]]
+name = "ci.trivy-scan-wired"
+description = "smoke-test job must include the Trivy CVE scan + SARIF upload via codeql-action so vulnerabilities surface in GitHub code scanning"
+category = "ci"
+check_type = "static"
+handler = "require_tokens"
+paths = [".github/workflows/ci.yml"]
+tokens = [
+  "aquasecurity/trivy-action",
+  "github/codeql-action/upload-sarif",
+  "trivy.sarif",
+]
+
+[[suite]]
+name = "ci.mise-task-pre-commit-named"
+description = "mise.toml should expose the pre-commit gate as [tasks.pre-commit] (matching hk + mise convention) — guards against the rename being silently reverted to [tasks.lint]"
+category = "ci"
+check_type = "static"
+handler = "require_tokens"
+paths = ["mise.toml"]
+tokens = ["[tasks.pre-commit]"]
+
 # =============================================================================
 # Identity Constraints (~6) — User/group handling
 # =============================================================================

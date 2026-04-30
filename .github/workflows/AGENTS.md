@@ -34,7 +34,8 @@ PR / schedule / workflow_dispatch path:
 4. **build** — `docker buildx bake dev` with
    `dev.args.P2996_SOURCE=<cache_ref>` from p2996-prep. On cache hit
    the Dockerfile's `clang-builder` stage is `FROM <cache_ref>` instead
-   of `FROM p2996-export`, skipping the ~80–120 min clang compile.
+   of `FROM p2996-export`, skipping the multi-hour clang compile (see
+   `.devcontainer/P2996-CACHE.md` for the current baseline).
    Always pushes (`:pr-NNN` or `:sha-<sha>` for PRs; `:dev`/`:latest`
    for schedule and `force_dev_tag=true` workflow_dispatch).
 5. **smoke-test** — pulls `:sha-<github.sha>` (the freshly-built
@@ -65,7 +66,10 @@ Push-to-main path (after a PR merge):
 - **PR builds push** — every PR build pushes `:pr-NNN` and
   `:sha-<github.sha>` to GHCR so smoke-test can validate the exact
   image that promote will retag on merge. There is no
-  `cacheonly` mode anymore.
+  `cacheonly` mode anymore. (Earlier sessions referenced
+  `feedback_docker_ci_workarounds` for the previous `cacheonly`
+  conditional — that posture was deliberately removed in the cache+
+  promote rework.)
 - **Push-to-main does NOT rebuild.** `build`, `p2996-prep`, and
   `smoke-test` are all gated `if: github.event_name != 'push' ||
   github.ref != 'refs/heads/main'`. The merge commit is published

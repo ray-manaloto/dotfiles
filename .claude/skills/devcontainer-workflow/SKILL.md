@@ -24,8 +24,8 @@ mise run up      # devcontainer up --workspace-folder . (pinned @devcontainers/c
 mise run down    # alias of `mise run stop` — tears the container down
 mise run stop    # docker rm -f filtered on devcontainer.local_folder=$PWD
                  # (devcontainer CLI v0.85.0 has no `down` verb)
-mise run test    # uv run --project python pytest tests/ -x -q (HOST tests)
-mise run lint    # hk run pre-commit --all
+mise run test          # uv run --project python pytest tests/ -x -q (HOST tests)
+mise run pre-commit    # hk run pre-commit --all
 ```
 
 ## Smoke checks against a running devcontainer
