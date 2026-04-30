@@ -82,9 +82,13 @@ Push-to-main path (after a PR merge):
   bust the cache.
 - **`uv run --project python`**, not `--directory` — `--directory`
   changes cwd and breaks relative test paths.
-- **`gh run watch --exit-status` is unreliable** — always verify
-  workflow completion with `gh pr checks <n> --json` or
-  `gh run list --json conclusion`.
+- **Use `--watch` flags for waiting**, never hand-roll poll loops.
+  Canonical: `gh pr checks <n> --watch [--fail-fast] [--interval 30]`.
+  See `.claude/rules/gh-cli-watch.md` and the
+  `feedback_gh_cli_watch_flag` auto-memory.
+- **`gh run watch --exit-status` is unreliable** — verify workflow
+  completion with `gh pr checks <n> --json` or
+  `gh run view <id> --json conclusion`.
 
 ## Cron schedules (`schedule:`)
 
