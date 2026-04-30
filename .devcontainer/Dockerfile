@@ -2,6 +2,12 @@
 # check=error=true
 
 ARG BASE_IMAGE=ubuntu:26.04
+# P2996_SOURCE must be declared at file scope (before any FROM) so it
+# can interpolate into the `FROM ${P2996_SOURCE} AS clang-builder`
+# indirection downstream. ARGs declared inside a stage are stage-local
+# and don't carry to FROM lines — that's why this CAN'T move next to
+# the indirection block where it would read more naturally.
+ARG P2996_SOURCE=p2996-export
 
 FROM ${BASE_IMAGE} AS devcontainer-base
 
@@ -231,8 +237,8 @@ COPY --from=clang-builder-cold /opt/clang-p2996 /opt/clang-p2996
 # (FROM p2996-export, which transitively builds clang-builder-cold)
 # and cache-pull (FROM ghcr.io/.../:p2996-<hash16>). Whichever the bake
 # arg P2996_SOURCE resolves to, the resulting stage exposes
-# /opt/clang-p2996 for the final COPY below.
-ARG P2996_SOURCE=p2996-export
+# /opt/clang-p2996 for the final COPY below. P2996_SOURCE is declared
+# at file scope (top of Dockerfile) so it can interpolate here.
 FROM ${P2996_SOURCE} AS clang-builder
 
 # ── final: combine base + reflection compilers ───────────────────────
