@@ -235,6 +235,29 @@ hooks {
         check = "test -f .claude/skills/mcp2cli/SKILL.md && test -f .claude/skills/mintlify/SKILL.md"
       }
 
+      // --- CLAUDE.md must be a thin `@AGENTS.md` import stub.
+      //     Every tracked CLAUDE.md (excluding `.claude/**`) consists
+      //     solely of: one `@AGENTS.md` import + optional blank lines +
+      //     optional HTML comments. Prevents drift between CLAUDE.md
+      //     (Claude Code) and AGENTS.md (Codex/Gemini) — the former
+      //     should always import the latter, never duplicate content.
+      //     `.claude/**` is exempt because that scope is Claude-specific
+      //     (e.g., `.claude/CLAUDE.md` holds OMC orchestration content
+      //     that other agents don't load). ---
+      ["claude_md_import_stub"] {
+        check = "scripts/check-claude-md-stub.sh"
+      }
+
+      // --- Every CLAUDE.md must have a sibling AGENTS.md, and vice
+      //     versa. A CLAUDE.md without a sibling AGENTS.md would import
+      //     a non-existent file; an AGENTS.md without a sibling
+      //     CLAUDE.md would mean Claude doesn't load that scope's
+      //     project instructions. `.claude/**` is exempt for the same
+      //     reason as `claude_md_import_stub` above. ---
+      ["claude_agents_md_pairs"] {
+        check = "scripts/check-claude-agents-md-pairs.sh"
+      }
+
     }
   }
 
