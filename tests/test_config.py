@@ -33,7 +33,6 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "MISE_CONFIG_DIR",
         "MISE_DATA_DIR",
         "MISE_INSTALL_PATH",
-        "MISE_STRICT",
         "MISE_SHELL",
         "DOTFILES_IMAGE",
         "DOTFILES_BASE_IMAGE",
@@ -55,11 +54,6 @@ class TestMiseConfigDefaults:
         """Verify default install_path is /usr/local/bin/mise."""
         cfg = MiseConfig()
         assert cfg.install_path == Path("/usr/local/bin/mise")
-
-    def test_strict_default_false(self) -> None:
-        """Verify strict defaults to False."""
-        cfg = MiseConfig()
-        assert cfg.strict is False
 
     def test_shell_default_none(self) -> None:
         """Verify shell defaults to None."""
@@ -123,7 +117,6 @@ class TestDotfilesConfigDefaults:
         """Verify nested MiseConfig is properly initialized."""
         cfg = DotfilesConfig()
         assert isinstance(cfg.mise, MiseConfig)
-        assert cfg.mise.strict is False
 
     def test_nested_container(self) -> None:
         """Verify nested ContainerConfig is properly initialized."""
@@ -142,12 +135,6 @@ class TestContainerPathConstants:
 
 class TestEnvVarOverrides:
     """Verify that environment variables override defaults."""
-
-    def test_mise_strict_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Verify MISE_STRICT env var overrides default."""
-        monkeypatch.setenv("MISE_STRICT", "true")
-        cfg = MiseConfig()
-        assert cfg.strict is True
 
     def test_mise_shell_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Verify MISE_SHELL env var overrides default."""

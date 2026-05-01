@@ -151,19 +151,11 @@ class ToolManager:
         config_path.write_text(new_content)
         logger.info("Mise config template updated successfully.")
 
-    def install(self, config: DotfilesConfig | None = None) -> None:
+    def install(self) -> None:
         """Execute toolchain installation.
 
         Uses mise for general tools, bun for Node/NPM, and uv/pixi for Python.
-
-        Args:
-            config: Optional config; defaults to a fresh DotfilesConfig.
         """
-        if config is None:
-            config = DotfilesConfig()
-        # Enforce Mise strictness
-        os.environ["MISE_STRICT"] = "1"
-
         logger.info("Installing runtimes with mise (Node/Bun prerequisite)...")
         # Ensure bun is available for NPM installs via mise config
         self.run_command(["mise", "install", "node", "bun"], capture=False)
@@ -329,10 +321,8 @@ class DevEnvironmentAuditor:
         path_list = path.split(os.pathsep)
 
         mise_shell_set = self.config.mise.shell is not None
-        mise_strict_set = self.config.mise.strict
         results = {
             "MISE_SHELL": mise_shell_set,
-            "MISE_STRICT": mise_strict_set,
             "PATH_managed": all(p in path_list for p in managed_paths),
             "SHELL": os.environ.get("SHELL") is not None,
         }

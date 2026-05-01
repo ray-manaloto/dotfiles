@@ -650,15 +650,6 @@ paths = [".devcontainer/devcontainer.json"]
 tokens = ["mise-home"]
 
 [[suite]]
-name = "arch.mise-strict-in-container"
-description = "MISE_STRICT=1 must be set in containerEnv"
-category = "architecture"
-check_type = "static"
-handler = "require_tokens"
-paths = [".devcontainer/devcontainer.json"]
-tokens = ["MISE_STRICT"]
-
-[[suite]]
 name = "arch.npm-package-manager-bun"
 description = "npm-backed installs must use bun via mise settings"
 category = "architecture"

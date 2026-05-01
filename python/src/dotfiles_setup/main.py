@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import os
 import platform
 import sys
 from pathlib import Path
@@ -34,22 +33,12 @@ class EnvironmentValidator:
     SUPPORTED_PLATFORMS: ClassVar[list[str]] = ["linux", "darwin"]
 
     @classmethod
-    def validate(cls, config: DotfilesConfig | None = None) -> None:
-        """Check if current environment meets project standards.
-
-        Args:
-            config: Optional config; defaults to env-var lookup.
-        """
+    def validate(cls) -> None:
+        """Check if current environment meets project standards."""
         current_os = platform.system().lower()
         if current_os not in cls.SUPPORTED_PLATFORMS:
             msg = f"Platform {current_os} is not supported"
             raise RuntimeError(msg)
-
-        mise_strict = (
-            config.mise.strict if config is not None else False
-        ) or os.environ.get("MISE_STRICT") == "1"
-        if not mise_strict:
-            logger.warning("MISE_STRICT is not set to 1. This is not recommended.")
 
 
 def _add_docker_subcommands(
@@ -266,16 +255,15 @@ def handle_audit(config: DotfilesConfig | None = None) -> None:
         raise SystemExit(1)
 
 
-def handle_install(project_root: Path, config: DotfilesConfig | None = None) -> None:
+def handle_install(project_root: Path) -> None:
     """Handle toolchain commands.
 
     Args:
         project_root: The project root path.
-        config: Optional config; defaults to a fresh DotfilesConfig.
     """
     manager = ToolManager()
-    EnvironmentValidator.validate(config=config)
-    manager.install(config=config)
+    EnvironmentValidator.validate()
+    manager.install()
     manager.sync_versions(project_root)
 
 
@@ -367,15 +355,15 @@ def _build_command_handlers(
     """
 
     def _validate() -> None:
-        EnvironmentValidator.validate(config=config)
+        EnvironmentValidator.validate()
         logger.info("Environment is valid.")
 
     def _ensure_ssh() -> None:
-        EnvironmentValidator.validate(config=config)
+        EnvironmentValidator.validate()
         DevEnvironmentAuditor(config=config).ensure_ssh()
 
     def _ai_setup() -> None:
-        EnvironmentValidator.validate(config=config)
+        EnvironmentValidator.validate()
         AIOrchestrator().run_all()
 
     def _version() -> None:
@@ -401,7 +389,7 @@ def _build_command_handlers(
         "ai-setup": _ai_setup,
         "docker": lambda: handle_docker(args, project_root, config=config),
         "version": _version,
-        "install": lambda: handle_install(project_root, config=config),
+        "install": lambda: handle_install(project_root),
         "verify": lambda: handle_verify(args),
         "image": lambda: handle_image(args),
         "ghcr-check": lambda: handle_ghcr_check(args, project_root),
