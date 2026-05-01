@@ -1,9 +1,7 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended",
-    ":dependencyDashboard",
-    "docker:pinDigests"
+    "github>jdx/renovate-config"
   ],
   "mise": {
     "enabled": true
@@ -25,8 +23,9 @@
     }
   ],
   "ignoreDeps": ["CC", "CXX"],
-  "regexManagers": [
+  "customManagers": [
     {
+      "customType": "regex",
       "fileMatch": ["(^|/)mise\\.toml$"],
       "matchStrings": [
         "(?<packageName>[\\w-]+)\\s*=\\s*\"(?<currentValue>[^\"]+)\""
@@ -34,6 +33,7 @@
       "datasourceTemplate": "asdf-registry"
     },
     {
+      "customType": "regex",
       "fileMatch": ["(^|/)config\\.toml\\.tmpl$"],
       "matchStrings": [
         "\"npm:(?<depName>[^\"]+)\"\\s*=\\s*\"(?<currentValue>[^\"]+)\""
@@ -41,6 +41,7 @@
       "datasourceTemplate": "npm"
     },
     {
+      "customType": "regex",
       "fileMatch": ["(^|/)config\\.toml\\.tmpl$"],
       "matchStrings": [
         "\"pipx:(?<depName>[^\"]+)\"\\s*=\\s*\"(?<currentValue>[^\"]+)\""
@@ -48,6 +49,7 @@
       "datasourceTemplate": "pypi"
     },
     {
+      "customType": "regex",
       "fileMatch": ["(^|/)config\\.toml\\.tmpl$"],
       "matchStrings": [
         "\"pipx:(?<depName>[^\"]+)\"\\s*=\\s*\\{[^}]*version\\s*=\\s*\"(?<currentValue>[^\"]+)\""
@@ -55,6 +57,7 @@
       "datasourceTemplate": "pypi"
     },
     {
+      "customType": "regex",
       "fileMatch": ["(^|/)config\\.toml\\.tmpl$"],
       "matchStrings": [
         "\"github:(?<depName>[^\"]+)\"\\s*=\\s*\"(?<currentValue>[^\"]+)\""
@@ -62,6 +65,7 @@
       "datasourceTemplate": "github-releases"
     },
     {
+      "customType": "regex",
       "fileMatch": ["(^|/)config\\.toml\\.tmpl$"],
       "matchStrings": [
         "\"conda:(?<depName>[^\"]+)\"\\s*=\\s*\"(?<currentValue>[^\"]+)\""
@@ -69,6 +73,7 @@
       "datasourceTemplate": "conda"
     },
     {
+      "customType": "regex",
       "fileMatch": ["docker-bake\\.hcl$", "\\.devcontainer/devcontainer\\.json$"],
       "matchStrings": [
         "\"(?<depName>[\\w.-]+/[\\w.-]+):(?<currentValue>[\\w.-]+)\""
@@ -76,6 +81,7 @@
       "datasourceTemplate": "docker"
     },
     {
+      "customType": "regex",
       "fileMatch": ["\\.devcontainer/Dockerfile$", "docker-bake\\.hcl$", "\\.devcontainer/devcontainer\\.json$"],
       "matchStrings": [
         "MISE_VERSION[\"=: ]+v?(?<currentValue>[\\d.]+)"
@@ -84,6 +90,7 @@
       "datasourceTemplate": "github-releases"
     },
     {
+      "customType": "regex",
       "fileMatch": ["hk\\.pkl$"],
       "matchStrings": [
         "download/v(?<currentValue>[\\d.]+)/hk@"
@@ -92,6 +99,7 @@
       "datasourceTemplate": "github-releases"
     },
     {
+      "customType": "regex",
       "fileMatch": ["(^|/)\\.chezmoiversion$"],
       "matchStrings": [
         "v?(?<currentValue>[\\d.]+)"
@@ -100,6 +108,7 @@
       "datasourceTemplate": "github-releases"
     },
     {
+      "customType": "regex",
       "fileMatch": ["docker-bake\\.hcl$", "\\.devcontainer/Dockerfile$"],
       "matchStrings": [
         "CLANG_P2996_REF[\"= ]+(?<currentDigest>[a-f0-9]{40})"
@@ -110,7 +119,7 @@
       "datasourceTemplate": "git-refs"
     }
   ],
-  "enabledManagers": ["npm", "cargo", "go", "pipx", "mise", "dockerfile", "docker-compose", "devcontainer", "github-actions"],
+  "enabledManagers": ["npm", "cargo", "go", "pipx", "mise", "dockerfile", "docker-compose", "devcontainer", "github-actions", "custom.regex"],
   "vulnerabilityAlerts": {
     "enabled": true
   }

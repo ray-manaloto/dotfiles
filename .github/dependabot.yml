@@ -7,37 +7,13 @@
 
 version: 2
 
+# NOTE: github-actions ecosystem is intentionally NOT in `updates` here.
+# Renovate handles GHA action bumps via `enabledManagers: ["github-actions", ...]`
+# in renovate.json (extending github>jdx/renovate-config). Having both would
+# generate duplicate PRs and race-condition merge conflicts. See the
+# "SHA-pin audit" research artifact for the full rationale.
+
 updates:
-  # ─────────────────────────────────────────────────────────────────────────
-  # GitHub Actions
-  # Always include this ecosystem — Actions updates are important for security
-  # copied from: https://github.com/certforge/GH_500_Cert_Prep/blob/main/demos/03-dependabot/dependabot.yml
-  # ─────────────────────────────────────────────────────────────────────────
-  - package-ecosystem: "github-actions"
-    directory: "/"    # Always use "/" — Dependabot scans .github/workflows/ automatically
-
-    schedule:
-      interval: "cron"
-      # Daily midnight America/Chicago. Dependabot rejects cron expressions
-      # under a 24h minimum, so sub-daily intervals (e.g. "0 * * * *") fail
-      # validation against dependabot-api.githubapp.com.
-      cronjob: "0 0 * * *"
-      timezone: "America/Chicago"
-
-    open-pull-requests-limit: 5
-
-    groups:
-      github-actions:
-        patterns:
-          - "*"         # Group ALL Actions updates into a single PR
-
-    labels:
-      - "dependencies"
-      - "github-actions"
-
-    commit-message:
-      prefix: "ci"
-
   - package-ecosystem: "pip"  # Use "pip" even for pyproject.toml projects
     directory: "/python"      # Location of your pyproject.toml
     schedule:

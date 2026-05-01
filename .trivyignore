@@ -1,0 +1,17 @@
+# Trivy CVE allowlist for ghcr.io/ray-manaloto/dotfiles-devcontainer.
+#
+# Format: one CVE-XXXX-NNNNN per line. Lines starting with `#` are
+# comments. Trivy reads this file from the image-scan working directory
+# (the repo root in our CI workflow).
+#
+# When the Trivy step in `.github/workflows/ci.yml` is configured with
+# `exit-code: "0"`, this file is advisory — SARIF still uploads to
+# GitHub code scanning. When that step is flipped to `exit-code: "1"`
+# (so the scan gates PRs on regressions), entries below suppress
+# specific accepted-risk CVEs from the gate. The flip is tracked at
+# https://github.com/ray-manaloto/dotfiles/issues/92 .
+#
+# Each entry MUST include a comment line above documenting:
+#   - Why the CVE is accepted (upstream wontfix? not exploitable in
+#     our usage? mitigated by isolation?).
+#   - When to re-evaluate (e.g., "drop when ubuntu:26.05 lands").

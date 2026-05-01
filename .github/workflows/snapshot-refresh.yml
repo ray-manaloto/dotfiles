@@ -1,0 +1,113 @@
+name: Refresh mise-system snapshot
+
+# Refreshes `.devcontainer/mise-system-resolved.json` so the P2996 cache
+# hash picks up conda-forge drift on `"latest"`-pinned tools. Without
+# this, the snapshot can stale-hit the cache (binaries inside the
+# cached image are last-snapshot, not latest).
+#
+# Triggers:
+#   - Weekly cron, Mondays at 00:00 in maintainer-local timezone so the
+#     auto-PR lands at the start of the work week and bounds drift to
+#     roughly one week. The `timezone:` field is honored by GitHub
+#     Actions cron natively.
+#   - workflow_dispatch — manual trigger via `gh workflow run` or web UI.
+#
+# Outcome: opens a PR if the snapshot file changed; no-op if not.
+
+on:
+  schedule:
+    - cron: "0 0 * * MON"
+      timezone: "America/Chicago"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  # Disk-only debug-level logs for diagnosing snapshot-capture failures.
+  HK_LOG_FILE_LEVEL: debug
+  MISE_LOG_FILE: /tmp/mise.log
+  MISE_LOG_FILE_LEVEL: debug
+
+concurrency:
+  group: snapshot-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull latest devcontainer image
+        run: docker pull ghcr.io/ray-manaloto/dotfiles-devcontainer:dev
+
+      - name: Capture mise-system resolved snapshot from container
+        # Run `mise ls --json` inside the container (where the system
+        # mise config is installed and resolved), feed through our Python
+        # snapshot helper to filter + format deterministically.
+        # `--user "$(id -u):$(id -g)"` matches the runner UID so the
+        # written file is owned by the runner, not root — otherwise
+        # peter-evans/create-pull-request fails to stage the change.
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -v "$PWD:/workspaces/dotfiles" \
+            -w /workspaces/dotfiles \
+            ghcr.io/ray-manaloto/dotfiles-devcontainer:dev \
+            bash -lc 'uv run --project python dotfiles-setup mise-snapshot'
+
+      - name: Open PR if snapshot drifted
+        id: cpr
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: refresh mise-system-resolved snapshot"
+          title: "chore: refresh mise-system-resolved snapshot"
+          body: |
+            Automated weekly refresh of `.devcontainer/mise-system-resolved.json`.
+
+            Captures conda-forge resolutions of system-mise tools whose
+            `mise-system.toml` versions are pinned to `"latest"`. Diff
+            below shows the upstream version drift since the last refresh
+            — review before merging to ensure no major-version surprises.
+
+            Trigger: ${{ github.event_name }}.
+          branch: chore/snapshot-refresh
+          base: main
+          add-paths: .devcontainer/mise-system-resolved.json
+          delete-branch: true
+          labels: |
+            mise-snapshot
+
+      - name: Re-trigger CI on the auto-PR
+        # GH limitation: PRs created via secrets.GITHUB_TOKEN do NOT
+        # trigger workflows on `pull_request` events. To validate the
+        # snapshot drift via the full pipeline (including a P2996 cache
+        # probe against the new hash), explicitly dispatch ci.yml on the
+        # auto-PR's branch. Skipped when no PR was created (no drift).
+        if: steps.cpr.outputs.pull-request-number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh workflow run ci.yml --ref chore/snapshot-refresh
+          {
+            echo "## Snapshot refresh"
+            echo ""
+            echo "- PR: #${{ steps.cpr.outputs.pull-request-number }} (${{ steps.cpr.outputs.pull-request-url }})"
+            echo "- Dispatched ci.yml on \`chore/snapshot-refresh\` to validate the drift."
+          } >> "$GITHUB_STEP_SUMMARY"
