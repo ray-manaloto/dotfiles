@@ -5,7 +5,7 @@ description = "Python orchestration library for dotfiles setup"
 requires-python = ">=3.14"
 dependencies = [
     "pydantic>=2.12.5",
-    "pydantic-settings>=2.13.1",
+    "pydantic-settings>=2.14.2",
 ]
 
 [project.scripts]
