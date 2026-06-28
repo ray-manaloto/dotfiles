@@ -1,0 +1,135 @@
+name: image-analysis
+
+# Async image analysis: benchmark metrics + Trivy CVE scan, decoupled from the
+# PR critical path. Runs after a successful CI run that actually built an image
+# (pull_request / schedule / workflow_dispatch — NOT push-to-main, which skips
+# the build and lets `promote` retag instead). smoke + Dive remain the blocking
+# image gates in ci.yml; this workflow only carries the slow, non-gating checks.
+#
+# SECURITY: this is a privileged `workflow_run` context. It checks out the
+# DEFAULT branch's trusted code (no `ref:` → main), never the PR head, and runs
+# that trusted benchmark code against the PR-built *image*. So untrusted PR code
+# never executes here with the workflow token.
+#
+# GOTCHA: `workflow_run` always uses this file as it exists on the default
+# branch, so edits here only take effect once merged to main.
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  contents: read
+  packages: read
+  security-events: write # Trivy SARIF → GitHub code scanning
+
+concurrency:
+  group: image-analysis-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: true
+
+env:
+  CONTAINER_REGISTRY: ghcr.io
+  IMAGE_NAME: ray-manaloto/dotfiles-devcontainer
+
+jobs:
+  analyze:
+    # Only for successful CI runs whose event built a fresh image. push-to-main
+    # skips the build (promote retags), so there is no new :sha image to scan.
+    if: >-
+      github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event != 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout trusted code (default branch)
+        # No `ref:` — checks out the default branch (main), NOT the PR head.
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install mise (python + uv)
+        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        with:
+          install_args: "python uv"
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ${{ env.CONTAINER_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive image tag from analyzed commit
+        id: tag
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: echo "tag=$(printf '%s' "$HEAD_SHA" | head -c 7)" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve image ref (skip when no image was built)
+        id: image
+        env:
+          REF: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          # A path-gated PR (docs / root-mise / etc.) skips the build, so the
+          # :sha image will not exist — analyze nothing rather than fail.
+          if docker buildx imagetools inspect "$REF" >/dev/null 2>&1; then
+            echo "ref=$REF" >> "$GITHUB_OUTPUT"
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No image at $REF (build skipped for this run); nothing to analyze."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Pull image
+        if: steps.image.outputs.present == 'true'
+        env:
+          REF: ${{ steps.image.outputs.ref }}
+        run: docker pull "$REF"
+
+      - name: Benchmark image (size + smoke metrics)
+        # Compressed-size now comes from the registry manifest (instant), not
+        # `docker save | gzip`. See python/src/dotfiles_setup/image.py.
+        if: steps.image.outputs.present == 'true'
+        env:
+          REF: ${{ steps.image.outputs.ref }}
+        run: |
+          uv run --project python dotfiles-setup image benchmark \
+            --image-ref "$REF" \
+            --output-path artifacts/build/devcontainer-metrics.json \
+            > /tmp/devcontainer-metrics.stdout.json
+
+      - name: Scan image for CVEs (Trivy, warn-only)
+        # warn-only (exit-code 0): SARIF surfaces in the Security tab; does not
+        # gate. `scanners: vuln` + `timeout: 15m` per the heavy-image notes that
+        # previously lived in ci.yml (issue #92).
+        if: steps.image.outputs.present == 'true'
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          image-ref: ${{ steps.image.outputs.ref }}
+          format: sarif
+          output: trivy.sarif
+          severity: CRITICAL,HIGH
+          exit-code: "0"
+          scanners: vuln
+          timeout: 15m
+
+      - name: Upload Trivy SARIF to code scanning
+        # Associate the result with the analyzed commit/branch (workflow_run
+        # context defaults to the default branch otherwise).
+        if: steps.image.outputs.present == 'true' && hashFiles('trivy.sarif') != ''
+        uses: github/codeql-action/upload-sarif@65216971a11ded447a6b76263d5a144519e5eee1 # codeql-bundle-v2.25.2
+        with:
+          sarif_file: trivy.sarif
+          category: trivy-image
+          ref: refs/heads/${{ github.event.workflow_run.head_branch }}
+          sha: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Upload metrics artifact
+        if: always() && steps.image.outputs.present == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: devcontainer-metrics
+          path: |
+            artifacts/build/devcontainer-metrics.json
+            /tmp/devcontainer-metrics.stdout.json
+            trivy.sarif
+          if-no-files-found: ignore

@@ -505,11 +505,11 @@ tokens = ["lowestEfficiency"]
 
 [[suite]]
 name = "ci.trivy-scan-wired"
-description = "smoke-test job must include the Trivy CVE scan + SARIF upload via codeql-action so vulnerabilities surface in GitHub code scanning"
+description = "The async image-analysis workflow must include the Trivy CVE scan + SARIF upload via codeql-action so vulnerabilities surface in GitHub code scanning. (Moved out of ci.yml smoke-test into image-analysis.yml so the slow CVE scan is off the PR critical path.)"
 category = "ci"
 check_type = "static"
 handler = "require_tokens"
-paths = [".github/workflows/ci.yml"]
+paths = [".github/workflows/image-analysis.yml"]
 tokens = [
   "aquasecurity/trivy-action",
   "github/codeql-action/upload-sarif",
