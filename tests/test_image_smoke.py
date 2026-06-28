@@ -5,14 +5,23 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
+import json
+
 from dotfiles_setup.image import (
     _parse_human_size,
+    _repo_without_tag,
+    _sum_manifest_layer_sizes,
     build_smoke_docker_cmd,
     build_smoke_script,
 )
 
 # Named constant for plain byte values in size parsing tests.
 _PLAIN_BYTES_VALUE = 512
+
+# Layer sizes (compressed bytes) used by the manifest-sum tests.
+_LAYER_A_BYTES = 1000
+_LAYER_B_BYTES = 2500
+_LAYERS_TOTAL_BYTES = _LAYER_A_BYTES + _LAYER_B_BYTES
 
 
 def test_smoke_script_pins_hk_file() -> None:
@@ -57,3 +66,44 @@ def test_parse_human_size_handles_lowercase_kilobytes() -> None:
 def test_parse_human_size_handles_plain_bytes() -> None:
     """Verify plain byte strings without suffix are parsed correctly."""
     assert _parse_human_size("512") == _PLAIN_BYTES_VALUE
+
+
+def test_repo_without_tag_strips_tag() -> None:
+    """A :tag suffix is removed, leaving the bare repo."""
+    assert (
+        _repo_without_tag("ghcr.io/ray-manaloto/dotfiles-devcontainer:abc1234")
+        == "ghcr.io/ray-manaloto/dotfiles-devcontainer"
+    )
+
+
+def test_repo_without_tag_preserves_registry_port() -> None:
+    """A registry :port (colon before the last slash) is not mistaken for a tag."""
+    assert _repo_without_tag("localhost:5000/img") == "localhost:5000/img"
+
+
+def test_repo_without_tag_strips_digest() -> None:
+    """An @digest suffix is removed."""
+    assert (
+        _repo_without_tag("ghcr.io/owner/repo@sha256:deadbeef") == "ghcr.io/owner/repo"
+    )
+
+
+def test_sum_manifest_layer_sizes_single_manifest() -> None:
+    """Compressed size is the sum of a single manifest's layer sizes."""
+    raw = json.dumps(
+        {
+            "layers": [
+                {
+                    "size": _LAYER_A_BYTES,
+                    "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                },
+                {
+                    "size": _LAYER_B_BYTES,
+                    "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                },
+            ]
+        }
+    )
+    assert (
+        _sum_manifest_layer_sizes(raw, "ghcr.io/owner/repo:tag") == _LAYERS_TOTAL_BYTES
+    )

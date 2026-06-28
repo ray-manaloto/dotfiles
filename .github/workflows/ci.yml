@@ -553,7 +553,6 @@ jobs:
     permissions:
       contents: read
       packages: read
-      security-events: write  # for Trivy SARIF upload to GitHub code scanning
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -582,12 +581,6 @@ jobs:
           uv run --project python dotfiles-setup image smoke \
             --image-ref ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.smoke-tag.outputs.tag }}
 
-      - name: Benchmark published image
-        run: |
-          uv run --project python dotfiles-setup image benchmark \
-            --image-ref ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.smoke-tag.outputs.tag }} \
-            --output-path artifacts/build/devcontainer-metrics.json > /tmp/devcontainer-metrics.stdout.json
-
       - name: Analyze image layer efficiency (Dive)
         # Dive --ci enforces .dive-ci thresholds (lowestEfficiency,
         # highestWastedBytes). Pass/fail gate; replaces the dead-letter
@@ -612,73 +605,18 @@ jobs:
           sudo install -m 0755 /tmp/dive /usr/local/bin/dive
           dive --ci --ci-config .dive-ci "${IMAGE_REF}"
 
-      - name: Scan image for CVEs (Trivy, warn-only)
-        # Day-1 mode: exit-code: '0' (warn-only). Once the baseline is
-        # clean, a follow-up PR flips to exit-code: '1' to gate PRs on
-        # regressions. SARIF still uploads to GitHub code scanning so
-        # alerts surface in the Security tab regardless.
-        # Tracked: https://github.com/ray-manaloto/dotfiles/issues/92
-        #
-        # `scanners: vuln` narrows scope to CVE detection only —
-        # secret + misconfig scans are out of scope for this step
-        # (separate concerns, separate tooling) and Trivy's own log
-        # advises disabling secret scanning on large images. Without
-        # this scope narrowing the run on PR #93 hit the default 5min
-        # timeout exporting the multi-GB image through the Docker
-        # socket and failed with "context deadline exceeded" before
-        # producing a SARIF.
-        #
-        # `timeout: 15m` is a safety margin on top of the scope
-        # narrowing — even a vuln-only scan of a heavy image takes
-        # several minutes once the vuln-DB download is included.
-        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
-        with:
-          image-ref: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.smoke-tag.outputs.tag }}
-          format: sarif
-          output: trivy.sarif
-          severity: CRITICAL,HIGH
-          exit-code: "0"
-          scanners: vuln
-          timeout: 15m
-
-      - name: Upload Trivy SARIF to GitHub code scanning
-        # `hashFiles` guard: if Trivy was skipped or bailed without
-        # writing trivy.sarif (e.g. an earlier step failed), don't
-        # ask codeql-action to upload a missing file — that turns a
-        # benign "Trivy didn't run" into a hard "smoke-test failed".
-        # Bare `if: always()` was the previous shape and produced
-        # exactly that cascade in run 25193971770.
-        if: always() && hashFiles('trivy.sarif') != ''
-        uses: github/codeql-action/upload-sarif@65216971a11ded447a6b76263d5a144519e5eee1 # codeql-bundle-v2.25.2
-        with:
-          sarif_file: trivy.sarif
-          category: trivy-image
-
+      # smoke + Dive are the PR-blocking image gates. The benchmark metrics
+      # and the Trivy CVE scan run asynchronously in `image-analysis.yml`
+      # (triggered on CI success) so their minutes are off the PR critical
+      # path — see .github/workflows/AGENTS.md.
+      #
       # Note: the host-user overlay (Dockerfile.host-user + `devcontainer up`)
-      # is a Mac-local concern — it exists to wrap the published base image
-      # with the host user's UID/GID for bind-mount permission parity on
-      # macOS. CI has no meaningful "host user" to match, no ~/.ssh/.claude/
-      # mount sources, and no need to rebuild the overlay. The steps above
-      # (Pull / Smoke / Benchmark / Dive / Trivy) fully validate the
-      # published base image; overlay behavior is validated locally via
+      # is a Mac-local concern — it wraps the published base image with the
+      # host user's UID/GID for bind-mount permission parity on macOS. CI has
+      # no meaningful "host user" to match, no mount sources, and no overlay
+      # to rebuild; the Pull / Smoke / Dive steps above fully validate the
+      # published base image. Overlay behavior is validated locally via
       # `mise run up` on the Mac.
-
-      - name: Upload build metrics artifact
-        # `if: always()` so artifacts upload even when Dive fails the
-        # threshold gate or Trivy bails on a malformed SARIF — the
-        # artifact is the diagnostic surface most needed exactly when
-        # the build regressed. Bundles the mise log so diagnose sequence
-        # is one-stop in the artifact tab.
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: devcontainer-metrics
-          path: |
-            artifacts/build/devcontainer-metrics.json
-            /tmp/devcontainer-metrics.stdout.json
-            trivy.sarif
-            /tmp/mise.log
-          if-no-files-found: ignore
 
   # ============================================================
   # Promote: tag-only retag of the PR-built image as :dev / :latest.

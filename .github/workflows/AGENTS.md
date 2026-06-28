@@ -14,21 +14,19 @@ post-failure reporting.
 |------|---------|
 | `ci.yml` | Main pipeline: lint → contract-preflight → p2996-prep → build → smoke-test (PR/schedule) OR lint → promote (push to main) |
 | `ci-failure-report.yml` | Post-failure diagnostics / issue filing |
+| `image-analysis.yml` | Async (`workflow_run` on CI success): benchmark metrics + Trivy CVE scan, off the PR critical path |
 
 ## Pipeline stages
 
 PR / schedule / workflow_dispatch path:
 
 1. **lint** — mise install, hk pre-commit, agnix agent-doc validation
-   (`agnix .`; the target + severity come from `.agnix.toml`, which sets
-   `tools = ["claude-code"]` and `severity = "Warning"` — warnings do NOT
-   fail the build, so `agnix .` exits 0 even with warnings present),
-   `mise doctor --json` health check, `mise.lock` artifact upload, mise
-   data cache keyed on `mise.lock`. agnix is installed via the
-   `github:agent-sh/agnix` backend (NOT `npm:agnix`): the npm package only
-   ships a launcher that downloads its native binary in a `postinstall`
-   script, which mise's bun-based npm backend skips, leaving the binary
-   missing (`agnix binary not found`). See the `mise.toml` comment.
+   (`agnix .`; target + severity come from `.agnix.toml`:
+   `severity = "Warning"` so warnings don't fail), `mise doctor --json`,
+   `mise.lock` artifact upload, mise cache keyed on `mise.lock`. agnix uses
+   the `github:agent-sh/agnix` backend (NOT `npm:agnix`, whose postinstall
+   binary-download is skipped by mise's bun npm backend → `agnix binary not
+   found`); see the `mise.toml` comment.
 2. **contract-preflight** — Python 3.14 + uv; runs `dotfiles-setup
    verify run` over `python/verification/suites.toml`.
 3. **base-prep** — computes content-hash of base inputs via
@@ -51,10 +49,12 @@ PR / schedule / workflow_dispatch path:
    `.devcontainer/P2996-CACHE.md` for the current baseline).
    Always pushes (`:pr-NNN` or `:sha-<sha>` for PRs; `:dev`/`:latest`
    for schedule and `force_dev_tag=true` workflow_dispatch).
-6. **smoke-test** — pulls `:sha-<github.sha>` (the freshly-built
-   image) and runs the same checks against PR images that previously
-   only ran on main builds. The image smoked on the PR is the exact
-   image that gets retagged as `:dev`/`:latest` on merge.
+6. **smoke-test** — pulls `:sha-<github.sha>` and runs the PR-blocking
+   image gates only: `image smoke` (functional) + Dive (`.dive-ci` layer
+   thresholds). The non-gating benchmark metrics + Trivy CVE scan moved to
+   the async `image-analysis.yml` (on CI success) to keep them off the PR
+   critical path. The smoked image is the one retagged `:dev`/`:latest` on
+   merge.
 
 Push-to-main path (after a PR merge):
 

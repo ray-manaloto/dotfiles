@@ -198,6 +198,65 @@ def _gzip_size_for_image(image_ref: str) -> int:
     return compressed_size
 
 
+def _repo_without_tag(image_ref: str) -> str:
+    """Strip a ``:tag`` suffix, preserving a registry ``:port`` and ``@digest``."""
+    if "@" in image_ref:
+        return image_ref.split("@", 1)[0]
+    last_slash = image_ref.rfind("/")
+    last_colon = image_ref.rfind(":")
+    if last_colon > last_slash:
+        return image_ref[:last_colon]
+    return image_ref
+
+
+def _sum_manifest_layer_sizes(raw: str, image_ref: str) -> int:
+    """Sum compressed layer sizes from an OCI/Docker manifest JSON.
+
+    Registry manifests record each layer's *compressed* (download) size, so
+    summing them yields the compressed image size without a ``docker save``.
+    Handles a single-platform manifest (``layers``) directly and a manifest
+    list / OCI index (``manifests``) by recursing into the linux/amd64 entry.
+    """
+    doc = json.loads(raw)
+    layers = doc.get("layers")
+    if layers is not None:
+        return sum(int(layer.get("size", 0)) for layer in layers)
+    for entry in doc.get("manifests", []):
+        platform = entry.get("platform", {})
+        if platform.get("os") == "linux" and platform.get("architecture") == "amd64":
+            digest = entry.get("digest")
+            sub = _run(
+                [
+                    "docker",
+                    "buildx",
+                    "imagetools",
+                    "inspect",
+                    f"{_repo_without_tag(image_ref)}@{digest}",
+                    "--raw",
+                ],
+            ).stdout
+            return _sum_manifest_layer_sizes(sub, image_ref)
+    # Not a recognized manifest shape — fall back to the local gzip measure.
+    return _gzip_size_for_image(image_ref)
+
+
+def _compressed_size_for_image(image_ref: str) -> int:
+    """Compressed (download) size of an image.
+
+    Prefers the registry manifest (``docker buildx imagetools inspect --raw``),
+    whose layer sizes are already gzip-compressed — instant and exact for a
+    pushed image. Falls back to streaming ``docker image save`` through gzip
+    when the ref is not resolvable in a registry (e.g. a local-only image).
+    """
+    try:
+        raw = _run(
+            ["docker", "buildx", "imagetools", "inspect", image_ref, "--raw"],
+        ).stdout
+    except subprocess.CalledProcessError, FileNotFoundError:
+        return _gzip_size_for_image(image_ref)
+    return _sum_manifest_layer_sizes(raw, image_ref)
+
+
 def _parse_human_size(size: str) -> int:
     cleaned = size.strip()
     match = re.fullmatch(r"(?i)\s*([0-9]+(?:\.[0-9]+)?)\s*([kmgt]?b)\s*", cleaned)
@@ -229,7 +288,7 @@ def size_report(
             ["docker", "image", "inspect", "--format", "{{.Size}}", image_ref],
         ).stdout.strip()
     )
-    compressed_size_bytes = _gzip_size_for_image(image_ref)
+    compressed_size_bytes = _compressed_size_for_image(image_ref)
 
     history_lines = _run(
         ["docker", "history", "--no-trunc", "--format", "{{json .}}", image_ref],
