@@ -178,6 +178,69 @@ jobs:
             --json
 
   # ============================================================
+  # Change detection: gate the Docker build chain (base-prep →
+  # p2996-prep → build → smoke-test) AND `promote` on whether the
+  # change actually touches image- or test-relevant paths. Skips the
+  # whole chain for PRs/merges that only touch docs, root mise.toml/
+  # mise.lock (host-only — the image uses .devcontainer/mise-system.toml),
+  # hk.pkl, home/**, .claude/**, etc.
+  #
+  # Build-relevant paths = the image's actual inputs:
+  #   - .devcontainer/** (Dockerfile, mise-system.toml, resolved snapshot,
+  #     devcontainer.json), docker-bake.hcl, hk-common.pkl, hk-image.pkl
+  #     (all COPYd into the image or feed the bake/base/p2996 hashes)
+  #   - python/** + .dive-ci (drive base-hash/p2996-hash, contract-preflight
+  #     verify, and smoke-test) and ci.yml itself (build behaviour).
+  #
+  # schedule + workflow_dispatch always build (nightly full rebuild is
+  # intentional; do NOT gate it). The build jobs keep their existing
+  # push-to-main exemption; `promote` additionally skips when the merge
+  # changed no build paths (the image is unchanged, so :dev/:latest is
+  # already current and needs no retag/rebuild).
+  # ============================================================
+  changes:
+    needs: lint
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.decide.outputs.build }}
+    steps:
+      - name: Checkout code
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Filter build-relevant paths
+        id: filter
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        with:
+          filters: |
+            build:
+              - '.devcontainer/**'
+              - 'docker-bake.hcl'
+              - 'hk-common.pkl'
+              - 'hk-image.pkl'
+              - 'install.sh'
+              - 'python/**'
+              - '.dive-ci'
+              - '.github/workflows/ci.yml'
+
+      - name: Decide whether the build chain runs
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          FILTER_BUILD: ${{ steps.filter.outputs.build }}
+        run: |
+          # Non-PR/non-push events (schedule, workflow_dispatch) always
+          # build; PRs and main pushes build only when a build-relevant
+          # path changed.
+          case "$EVENT" in
+            pull_request|push) echo "build=${FILTER_BUILD}" >> "$GITHUB_OUTPUT" ;;
+            *) echo "build=true" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+  # ============================================================
   # Base cache prep: compute content-hash of devcontainer-base inputs
   # (apt + mise install + cargo crates layer) and ensure
   # ghcr.io/<owner>/<repo>:base-<hash16> exists. On hit, exits in <30s.
@@ -186,8 +249,8 @@ jobs:
   # base layer.
   # ============================================================
   base-prep:
-    needs: contract-preflight
-    if: github.event_name != 'push' || github.ref != 'refs/heads/main'
+    needs: [contract-preflight, changes]
+    if: (github.event_name != 'push' || github.ref != 'refs/heads/main') && needs.changes.outputs.build == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -290,8 +353,8 @@ jobs:
   # See .devcontainer/P2996-CACHE.md for the cache mechanism.
   # ============================================================
   p2996-prep:
-    needs: [contract-preflight, base-prep]
-    if: github.event_name != 'push' || github.ref != 'refs/heads/main'
+    needs: [contract-preflight, base-prep, changes]
+    if: (github.event_name != 'push' || github.ref != 'refs/heads/main') && needs.changes.outputs.build == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -393,8 +456,8 @@ jobs:
   # Build Type 2: Dotfiles environment image (Docker → ghcr.io)
   # ============================================================
   build:
-    needs: [contract-preflight, base-prep, p2996-prep]
-    if: github.event_name != 'push' || github.ref != 'refs/heads/main'
+    needs: [contract-preflight, base-prep, p2996-prep, changes]
+    if: (github.event_name != 'push' || github.ref != 'refs/heads/main') && needs.changes.outputs.build == 'true'
     runs-on: ubuntu-latest
     outputs:
       image-tag: ${{ steps.meta.outputs.tags }}
@@ -484,8 +547,8 @@ jobs:
   # and main publication.
   # ============================================================
   smoke-test:
-    needs: build
-    if: github.event_name != 'push' || github.ref != 'refs/heads/main'
+    needs: [build, changes]
+    if: (github.event_name != 'push' || github.ref != 'refs/heads/main') && needs.changes.outputs.build == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -624,8 +687,12 @@ jobs:
   # push), fall back to a workflow_dispatch with force_dev_tag=true.
   # ============================================================
   promote:
-    needs: lint
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [lint, changes]
+    # Only promote when the merge changed build-relevant paths. A docs-only
+    # merge skipped the PR build (no :pr-NNN image) and left the image
+    # unchanged, so :dev/:latest is already current — promoting would
+    # needlessly trigger the fallback rebuild.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.build == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Find source PR for this commit

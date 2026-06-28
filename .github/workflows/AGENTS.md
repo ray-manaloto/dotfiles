@@ -69,6 +69,12 @@ Push-to-main path (after a PR merge):
 
 - **All actions SHA-pinned** via pinact. Run `mise run pin-actions`
   locally to verify before committing workflow changes.
+- **Build chain is path-gated.** A `changes` job (dorny/paths-filter)
+  sets `build` true only when image/test inputs change (`.devcontainer/**`,
+  `docker-bake.hcl`, `hk-common.pkl`, `hk-image.pkl`, `python/**`,
+  `.dive-ci`, `install.sh`, `ci.yml`); base-prep→smoke-test AND `promote`
+  gate on it. Docs/root-mise/hk.pkl/home PRs run lint+contract-preflight
+  only; schedule + workflow_dispatch always build.
 - **Concurrency cancels superseded runs per branch.** `ci.yml` and
   `autofix.yml` group by
   `${{ github.workflow }}-${{ github.head_ref || github.ref }}` so all

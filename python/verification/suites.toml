@@ -440,12 +440,12 @@ tokens = ["packages: write"]
 
 [[suite]]
 name = "ci.push-to-main-skips-build"
-description = "Push-to-main must skip the heavy rebuild path. The build job (and p2996-prep, smoke-test which depend on it) must be gated 'if: github.event_name != \"push\" || github.ref != \"refs/heads/main\"'. Promote job retags the PR's image instead."
+description = "Push-to-main must skip the heavy rebuild path. The build job (and p2996-prep, smoke-test which depend on it) must carry the push-to-main skip clause '(github.event_name != \"push\" || github.ref != \"refs/heads/main\")'. Promote job retags the PR's image instead. The clause is now parenthesized because the build jobs additionally gate on the path-filter (&& needs.changes.outputs.build == 'true'), so this checks for the clause as a sub-expression rather than a bare 'if:'."
 category = "ci"
 check_type = "static"
 handler = "require_tokens"
 paths = [".github/workflows/ci.yml"]
-tokens = ["if: github.event_name != 'push' || github.ref != 'refs/heads/main'"]
+tokens = ["(github.event_name != 'push' || github.ref != 'refs/heads/main')"]
 
 [[suite]]
 name = "ci.promote-job-exists"
