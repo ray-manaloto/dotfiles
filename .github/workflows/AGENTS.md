@@ -20,9 +20,15 @@ post-failure reporting.
 PR / schedule / workflow_dispatch path:
 
 1. **lint** — mise install, hk pre-commit, agnix agent-doc validation
-   (`agnix --target claude-code --strict .`), `mise doctor --json`
-   health check, `mise.lock` artifact upload, mise data cache keyed on
-   `mise.lock`.
+   (`agnix .`; the target + severity come from `.agnix.toml`, which sets
+   `tools = ["claude-code"]` and `severity = "Warning"` — warnings do NOT
+   fail the build, so `agnix .` exits 0 even with warnings present),
+   `mise doctor --json` health check, `mise.lock` artifact upload, mise
+   data cache keyed on `mise.lock`. agnix is installed via the
+   `github:agent-sh/agnix` backend (NOT `npm:agnix`): the npm package only
+   ships a launcher that downloads its native binary in a `postinstall`
+   script, which mise's bun-based npm backend skips, leaving the binary
+   missing (`agnix binary not found`). See the `mise.toml` comment.
 2. **contract-preflight** — Python 3.14 + uv; runs `dotfiles-setup
    verify run` over `python/verification/suites.toml`.
 3. **base-prep** — computes content-hash of base inputs via
@@ -63,6 +69,14 @@ Push-to-main path (after a PR merge):
 
 - **All actions SHA-pinned** via pinact. Run `mise run pin-actions`
   locally to verify before committing workflow changes.
+- **Concurrency cancels superseded runs per branch.** `ci.yml` and
+  `autofix.yml` group by
+  `${{ github.workflow }}-${{ github.head_ref || github.ref }}` so all
+  events for one source branch share a group; pushing a new commit
+  cancels the older in-flight run. `head_ref` is the PR source branch;
+  `ref` covers push/schedule/dispatch. **main is exempt**
+  (`cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}`) so its
+  push-path `promote` manifest-retag is never interrupted mid-flight.
 - **Python 3.14** for contract-preflight and smoke-test jobs
   (`actions/setup-python@v6`, `astral-sh/setup-uv@v8`).
 - **lint job** caches mise data directory keyed on `mise.lock`.
