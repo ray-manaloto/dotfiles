@@ -35,20 +35,37 @@ The final `devcontainer` stage's `COPY --from=clang-builder
 
 ## Hash inputs
 
-The hash is sha256 (truncated to 16 hex chars) over a canonical
-concatenation of:
+There are two content-hashes (each sha256 truncated to 16 hex chars),
+and the p2996 hash folds in the base hash so changes cascade.
 
-- `CLANG_P2996_REF` value (parsed from `docker-bake.hcl`)
-- `BASE_IMAGE` value (parsed from `docker-bake.hcl`)
-- `PLATFORM` value (parsed from `docker-bake.hcl`)
-- sha256 of `.devcontainer/Dockerfile` content
-- sha256 of `docker-bake.hcl` content
-- sha256 of `.devcontainer/mise-system-resolved.json` content
+The **base** hash (`dotfiles-setup base-hash`) covers:
+
+- `BASE_IMAGE` and `PLATFORM` values (parsed from `docker-bake.hcl`)
+- sha256 of the `Dockerfile` section between the `BASE_HASH_BEGIN` /
+  `BASE_HASH_END` sentinels (NOT the whole file)
+- sha256 of `.devcontainer/mise-system-resolved.json`
+
+The **p2996** hash (`dotfiles-setup p2996-hash`) covers:
+
+- `CLANG_P2996_REF` and `PLATFORM` values (parsed from `docker-bake.hcl`)
+- the base hash above
+- sha256 of the `Dockerfile` section between the `P2996_HASH_BEGIN` /
+  `P2996_HASH_END` sentinels
+
+Only the *sentinel-delimited* Dockerfile sections feed the hashes —
+editing unrelated parts of the `Dockerfile` or `docker-bake.hcl` does NOT
+bust either cache. Implementation: `python/src/dotfiles_setup/p2996_hash.py`.
 
 The resolved-snapshot file pins the conda-forge resolutions of `cmake`,
 `ninja`, `clang`, `lld`, etc. — `mise-system.toml` declares them as
 `"latest"`, so without the snapshot the hash would not change on
 upstream conda-forge drift.
+
+> **Planned (issue #100):** `CLANG_P2996_REF` will be auto-bumped by a
+> scheduled workflow tracking the `bloomberg/clang-p2996` `p2996` branch
+> HEAD (opening a PR when it changes). The pin stays in `docker-bake.hcl`
+> so the hash above keeps caching correctly — an unchanged SHA hits the
+> cache, a changed SHA triggers exactly one rebuild.
 
 ## Operator workflow
 

@@ -9,7 +9,9 @@ containers on macOS ARM hosts. Two build types:
 2. **Docker env image** (CI/CD → ghcr.io): published from `main` via GHA
 
 Registry: `ghcr.io/ray-manaloto/dotfiles-devcontainer`. CI pipeline:
-lint → contract-preflight → build → smoke-test.
+lint → contract-preflight → `changes` path-gate → base-prep → p2996-prep →
+build → smoke-test (smoke + Dive); `promote` retags on main; benchmark +
+Trivy run async in `image-analysis.yml`.
 
 ## Quick Start
 
