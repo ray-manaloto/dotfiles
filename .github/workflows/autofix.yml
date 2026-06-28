@@ -25,8 +25,9 @@ env:
   MISE_LOG_FILE: /tmp/mise.log
   MISE_LOG_FILE_LEVEL: debug
 
+# Match ci.yml: group per source branch and cancel superseded autofix runs.
 concurrency:
-  group: autofix-${{ github.ref }}
+  group: autofix-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
 jobs:

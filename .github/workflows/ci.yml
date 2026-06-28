@@ -32,8 +32,14 @@ on:
         default: false
         type: boolean
 
+# Serialize runs per branch and cancel superseded ones — only the latest
+# commit's run survives; in-flight runs for older commits on the same branch
+# are cancelled. `head_ref` groups by source branch for pull_request events;
+# `ref` covers push / schedule / workflow_dispatch. main is exempt from
+# cancellation: its push-path runs `promote` (a manifest-retag of
+# :dev/:latest) which must not be interrupted mid-flight.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
