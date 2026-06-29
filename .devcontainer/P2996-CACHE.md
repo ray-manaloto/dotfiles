@@ -62,13 +62,14 @@ The resolved-snapshot file pins the conda-forge resolutions of `cmake`,
 upstream conda-forge drift.
 
 > **Auto-bump (issue #100):** `CLANG_P2996_REF` is auto-bumped by the
-> scheduled `.github/workflows/p2996-refresh.yml` workflow, which tracks
-> the `bloomberg/clang-p2996` `p2996` branch HEAD (no releases/tags exist)
-> and opens a PR when it advances. The pin stays in `docker-bake.hcl` so
-> the hash above keeps caching correctly — an unchanged SHA hits the
-> cache, a changed SHA triggers exactly one rebuild. Run it on demand with
-> `mise run p2996-refresh` (writes only on change) or `gh workflow run
-> p2996-refresh.yml`. Logic: `python/src/dotfiles_setup/p2996_refresh.py`.
+> scheduled `.github/workflows/refresh.yml` workflow (`p2996-refresh`
+> job), which tracks the `bloomberg/clang-p2996` `p2996` branch HEAD (no
+> releases/tags exist) and opens a PR when it advances. The pin stays in
+> `docker-bake.hcl` so the hash above keeps caching correctly — an
+> unchanged SHA hits the cache, a changed SHA triggers exactly one
+> rebuild. Run it on demand with `mise run p2996-refresh` (writes only on
+> change) or `gh workflow run refresh.yml`. Logic:
+> `python/src/dotfiles_setup/p2996_refresh.py`.
 
 ## Operator workflow
 
@@ -81,8 +82,8 @@ upstream conda-forge drift.
 - **Bump to latest p2996 HEAD**: `mise run p2996-refresh` — rewrites
   `CLANG_P2996_REF` in `docker-bake.hcl` to the latest
   `bloomberg/clang-p2996` `p2996`-branch HEAD (no-op write when already
-  current). The scheduled `p2996-refresh.yml` workflow does this daily
-  and opens a PR on change.
+  current). The scheduled `refresh.yml` workflow's `p2996-refresh` job
+  does this daily and opens a PR on change.
 - **Manual cache bust**: bump `CLANG_P2996_REF` in `docker-bake.hcl`,
   OR refresh the snapshot, OR edit any of the hash-input files. The
   next CI run detects a cache miss and rebuilds + pushes a new
@@ -104,4 +105,5 @@ shell branching.
 - `python/src/dotfiles_setup/mise_snapshot.py` — snapshot capture source.
 - `docker-bake.hcl` — the `dev` and `p2996-cache` targets.
 - `.github/workflows/ci.yml` — `p2996-prep` and `build` jobs.
-- `.github/workflows/p2996-refresh.yml` — scheduled CLANG_P2996_REF bump.
+- `.github/workflows/refresh.yml` — scheduled CLANG_P2996_REF bump
+  (`p2996-refresh` job) + mise-system snapshot refresh.

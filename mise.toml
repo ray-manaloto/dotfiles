@@ -579,7 +579,7 @@ description = "Print the content-hash of P2996 cache inputs (matches the CI :p29
 run = "uv run --project python dotfiles-setup p2996-hash"
 
 [tasks.p2996-refresh]
-description = "Bump CLANG_P2996_REF in docker-bake.hcl to the latest bloomberg/clang-p2996 p2996-branch HEAD (writes only on change; the scheduled p2996-refresh.yml workflow does this in CI)"
+description = "Bump CLANG_P2996_REF in docker-bake.hcl to the latest bloomberg/clang-p2996 p2996-branch HEAD (writes only on change; the scheduled refresh.yml workflow's p2996-refresh job does this in CI)"
 run = "uv run --project python dotfiles-setup p2996-refresh"
 
 [tasks.capture-mise-system-resolved]

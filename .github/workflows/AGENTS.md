@@ -15,8 +15,16 @@ post-failure reporting.
 | `ci.yml` | Main pipeline: lint → contract-preflight → `changes` (path-gate) → base-prep → p2996-prep → build → smoke-test (smoke+Dive), build chain gated on `changes.build`; OR lint → promote (push to main) |
 | `ci-failure-report.yml` | Post-failure diagnostics / issue filing |
 | `image-analysis.yml` | Async (`workflow_run` on CI success): benchmark metrics + Trivy CVE scan, off the PR critical path |
-| `snapshot-refresh.yml` | Daily cron: refresh `mise-system-resolved.json` (conda-forge drift), open PR on change |
-| `p2996-refresh.yml` | Daily cron: bump `CLANG_P2996_REF` to latest `bloomberg/clang-p2996` `p2996`-branch HEAD, open PR on change (issue #100) |
+| `refresh.yml` | Daily cron (00:00): two independent jobs — `snapshot-refresh` (refresh `mise-system-resolved.json` on conda-forge drift) and `p2996-refresh` (bump `CLANG_P2996_REF` to latest `bloomberg/clang-p2996` `p2996`-branch HEAD, issue #100). Both open a PR on change via the shared `open-refresh-pr` composite. |
+
+## Composite actions (`.github/actions/`)
+
+Self-documented in each `action.yml`: `setup-mise` (wraps `jdx/mise-action`
++ `install_args`, all 8 mise jobs) and `open-refresh-pr` (create-PR +
+ci.yml dispatch tail, both `refresh.yml` jobs). **Local-composite checkout
+gotcha:** a `./.github/actions/*` action resolves from `$GITHUB_WORKSPACE`
+(empty until checkout), so jobs run `actions/checkout` FIRST, then the
+composite — neither wraps checkout.
 
 ## Pipeline stages
 
@@ -92,55 +100,47 @@ Push-to-main path (after a PR merge):
   (`uid=1000` for vscode user) — never via `ARG` or env.
 - **`CONTAINER_REGISTRY`** env var, not `REGISTRY` (avoids HCL
   collision with the `REGISTRY` target in `docker-bake.hcl`).
-- **PR builds push** — every PR build pushes `:pr-NNN` and
-  `:sha-<github.sha>` to GHCR so smoke-test can validate the exact
-  image that promote will retag on merge. There is no
-  `cacheonly` mode anymore. (Earlier sessions referenced
-  `feedback_docker_ci_workarounds` for the previous `cacheonly`
-  conditional — that posture was deliberately removed in the cache+
-  promote rework.)
+- **PR builds push** `:pr-NNN` + `:sha-<github.sha>` to GHCR so smoke-test
+  validates the exact image promote retags on merge. No `cacheonly` mode
+  (removed in the cache+promote rework).
 - **Push-to-main does NOT rebuild.** `build`, `p2996-prep`, and
   `smoke-test` are all gated `if: github.event_name != 'push' ||
   github.ref != 'refs/heads/main'`. The merge commit is published
   via `promote`'s manifest-retag of the PR's `:pr-NNN`.
-- **P2996 cache invalidation.** The cache key is computed from
-  `CLANG_P2996_REF`, `BASE_IMAGE`, `PLATFORM`, the Dockerfile, the
-  bake file, and `.devcontainer/mise-system-resolved.json`. Refresh
-  the resolved-snapshot via `mise run capture-mise-system-resolved`
-  inside the devcontainer when conda-forge drift on `"latest"` should
-  bust the cache.
+- **P2996 cache invalidation.** Key = `CLANG_P2996_REF`, `BASE_IMAGE`,
+  `PLATFORM`, Dockerfile, bake file, `mise-system-resolved.json`. Bust via
+  `mise run capture-mise-system-resolved` in the devcontainer on conda-forge
+  drift. Details: `.devcontainer/P2996-CACHE.md`.
 - **`uv run --project python`**, not `--directory` — `--directory`
   changes cwd and breaks relative test paths.
-- **Use `--watch` flags for waiting**, never hand-roll poll loops.
-  Canonical: `gh pr checks <n> --watch [--fail-fast] [--interval 30]`.
-  See `.claude/rules/gh-cli-watch.md` and the
-  `feedback_gh_cli_watch_flag` auto-memory.
-- **`gh run watch --exit-status` is unreliable** — verify workflow
-  completion with `gh pr checks <n> --json` or
-  `gh run view <id> --json conclusion`.
-- **No `type=gha` cache on `base` / `p2996-cache` bake targets.**
-  Registry tag + `Probe cache` (`docker manifest inspect`) IS the
-  durable cache. `mode=max` gha export of these heavy layers exceeds
-  the 1-hour Azure SAS token TTL on cold runs and fails with
-  `403 AuthenticationFailed` after wasting ~1h of the runner. Documented
-  in `docker-bake.hcl`. The `dev` target keeps gha cache (small overlay,
-  no probe gate, well under 1-hour SAS limit).
+- **Use `--watch`, never sleep-poll** (`gh pr checks <n> --watch`); the
+  `gh run watch --exit-status` exit code is unreliable, cross-verify with
+  `--json conclusion`. Authority: `.claude/rules/gh-cli-watch.md`.
+- **No `type=gha` cache on `base`/`p2996-cache` targets** — registry tag +
+  `Probe cache` (`docker manifest inspect`) IS the durable cache;
+  `mode=max` gha export exceeds the 1h Azure SAS TTL → `403` on cold runs.
+  Documented in `docker-bake.hcl`. `dev` target keeps gha cache (small).
 - **Trivy lives in `image-analysis.yml` (async), not ci.yml smoke-test.**
   `scanners: vuln` + `timeout: 15m`, warn-only: default scanners timeout
   at 5min exporting the multi-GB image; scope is CVE-only (issue #92).
-- **`wagoodman/dive` action is broken upstream.** v0.13.1's
-  auto-built Dockerfile has `ARG DOCKER_CLI_VERSION=${DOCKER_CLI_VERSION}`
-  with no default, fetches `docker-.tgz` and 404s. Use the binary
-  release tarball directly in a `run:` step; do NOT switch back to
+- **`wagoodman/dive` action is broken upstream** (v0.13.1 `ARG
+  DOCKER_CLI_VERSION` has no default → fetches `docker-.tgz`, 404s). Use
+  the binary release tarball in a `run:` step; do NOT use
   `uses: wagoodman/dive@<sha>`.
 
 ## Cron schedules (`schedule:`)
 
-- **GHA `schedule.cron` supports a sibling `timezone:` field.** Use
-  `cron: "0 0 * * *"` + `timezone: "America/Chicago"` for IANA-zoned
-  schedules. Verified against the GHA workflow-syntax docs 2026-04-27.
-  Older AI-summarized claims of "GHA cron is UTC-only" are stale —
-  the field is supported.
+GHA `schedule.cron` honors a sibling `timezone:` field (IANA zone), e.g.
+`timezone: "America/Chicago"` — NOT UTC-only (a stale claim). Two staggered
+daily crons, **distinct, complementary** roles:
+
+| Time | Workflow | Role |
+|------|----------|------|
+| 00:00 | `refresh.yml` | **Changes the pins.** `snapshot-refresh` + `p2996-refresh` jobs detect upstream drift (conda-forge snapshot / `clang-p2996` HEAD) and open PRs — no build. |
+| 02:00 | `ci.yml` nightly | **Publishes on the pinned ref.** Rebuilds `:dev`/`:latest` on the *current* pins (catches base-image CVEs / floating-tool drift the pins don't move). |
+
+The 2h gap lets a 00:00 refresh PR, merged before 02:00, be what the
+nightly publishes. Do NOT collapse onto one cron (issue #116).
 
 ## Dependabot (`.github/dependabot.yml`)
 

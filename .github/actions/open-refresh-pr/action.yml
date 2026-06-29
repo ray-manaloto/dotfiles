@@ -1,0 +1,76 @@
+name: "Open refresh PR"
+description: >-
+  Shared create-PR tail for the refresh jobs. Opens (or updates) a PR via
+  peter-evans/create-pull-request, then dispatches ci.yml on its branch.
+  The dispatch is required because PRs created with secrets.GITHUB_TOKEN do
+  NOT fire `pull_request` workflows, so without it the auto-PR would sit
+  with no CI. Skipped when no file changed (no PR created). This composite
+  is local, so the calling job must run actions/checkout first.
+
+inputs:
+  token:
+    description: >-
+      Token used both for create-pull-request and the ci.yml dispatch
+      (typically secrets.GITHUB_TOKEN).
+    required: true
+  commit-message:
+    description: "Commit message for the refresh PR."
+    required: true
+  title:
+    description: "Title of the refresh PR."
+    required: true
+  body:
+    description: "Body of the refresh PR (markdown, may be multiline)."
+    required: true
+  branch:
+    description: "Head branch for the PR; also the ref ci.yml is dispatched on."
+    required: true
+  paths:
+    description: "add-paths value — only these paths are staged into the PR."
+    required: true
+  labels:
+    description: "Newline- or comma-separated labels for the PR."
+    required: true
+  summary-heading:
+    description: "Heading for the GITHUB_STEP_SUMMARY block written after dispatch."
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Open PR if the tracked files changed
+      id: cpr
+      uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+      with:
+        token: ${{ inputs.token }}
+        commit-message: ${{ inputs.commit-message }}
+        title: ${{ inputs.title }}
+        body: ${{ inputs.body }}
+        branch: ${{ inputs.branch }}
+        base: main
+        add-paths: ${{ inputs.paths }}
+        delete-branch: true
+        labels: ${{ inputs.labels }}
+
+    - name: Re-trigger CI on the auto-PR
+      # GH limitation: PRs created via secrets.GITHUB_TOKEN do NOT trigger
+      # `pull_request` workflows. Dispatch ci.yml on the auto-PR branch so
+      # the full pipeline (incl. a P2996 cache probe against the new hash)
+      # validates the change. Skipped when no PR was created (no drift).
+      if: steps.cpr.outputs.pull-request-number != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        PR_BRANCH: ${{ inputs.branch }}
+        PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
+        PR_URL: ${{ steps.cpr.outputs.pull-request-url }}
+        SUMMARY_HEADING: ${{ inputs.summary-heading }}
+      run: |
+        set -euo pipefail
+        gh workflow run ci.yml --ref "$PR_BRANCH"
+        {
+          echo "## ${SUMMARY_HEADING}"
+          echo ""
+          echo "- PR: #${PR_NUMBER} (${PR_URL})"
+          echo "- Dispatched ci.yml on \`${PR_BRANCH}\` to validate the change."
+        } >> "$GITHUB_STEP_SUMMARY"
