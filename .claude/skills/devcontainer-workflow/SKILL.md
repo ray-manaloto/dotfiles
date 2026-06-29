@@ -73,14 +73,17 @@ Tier 4 (CLion remote toolchain) is manual.
 
 ## Telemetry
 
-The CI smoke-test job emits `artifacts/build/devcontainer-metrics.json`
-with the existing benchmark fields plus `startup_seconds` (wall-clock for
-`devcontainer up`).
+The async `image-analysis.yml` workflow (triggered on CI success via
+`workflow_run`) emits `artifacts/build/devcontainer-metrics.json` (benchmark
+fields; compressed size now read from the registry manifest, not
+`docker save | gzip`). The PR-blocking `smoke-test` job runs only smoke +
+Dive and no longer emits metrics.
 
 ## References
 
 - `mise.toml` — `[tasks.up]`, `[tasks.stop]`, `[tasks.build]`, alias `down`
 - `hk.pkl` — `dockerfile_host_user_thin_overlay` step
-- `.github/workflows/ci.yml` — hard-gate assertion (lint job) + tier 1-3 smoke (smoke-test job)
+- `.github/workflows/ci.yml` — hard-gate assertion (lint job) + tier 1-3 smoke + Dive (smoke-test job)
+- `.github/workflows/image-analysis.yml` — async benchmark + Trivy (on CI success)
 - `home/.chezmoiignore` — the gate itself
 - `scripts/devcontainer-smoke.sh` — shared tier runner

@@ -12,7 +12,7 @@ post-failure reporting.
 
 | File | Purpose |
 |------|---------|
-| `ci.yml` | Main pipeline: lint → contract-preflight → p2996-prep → build → smoke-test (PR/schedule) OR lint → promote (push to main) |
+| `ci.yml` | Main pipeline: lint → contract-preflight → `changes` (path-gate) → base-prep → p2996-prep → build → smoke-test (smoke+Dive), build chain gated on `changes.build`; OR lint → promote (push to main) |
 | `ci-failure-report.yml` | Post-failure diagnostics / issue filing |
 | `image-analysis.yml` | Async (`workflow_run` on CI success): benchmark metrics + Trivy CVE scan, off the PR critical path |
 
@@ -123,11 +123,9 @@ Push-to-main path (after a PR merge):
   `403 AuthenticationFailed` after wasting ~1h of the runner. Documented
   in `docker-bake.hcl`. The `dev` target keeps gha cache (small overlay,
   no probe gate, well under 1-hour SAS limit).
-- **Trivy is `scanners: vuln` + `timeout: 15m`.** Default scanners
-  (`vuln,secret,misconfig`) timeout at 5min exporting our multi-GB
-  image through the Docker socket. Scope is intentionally CVE-only
-  (warn-only mode, see issue #92); secret + misconfig are out of
-  scope here.
+- **Trivy lives in `image-analysis.yml` (async), not ci.yml smoke-test.**
+  `scanners: vuln` + `timeout: 15m`, warn-only: default scanners timeout
+  at 5min exporting the multi-GB image; scope is CVE-only (issue #92).
 - **`wagoodman/dive` action is broken upstream.** v0.13.1's
   auto-built Dockerfile has `ARG DOCKER_CLI_VERSION=${DOCKER_CLI_VERSION}`
   with no default, fetches `docker-.tgz` and 404s. Use the binary
