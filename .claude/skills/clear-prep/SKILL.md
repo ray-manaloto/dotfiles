@@ -83,11 +83,13 @@ file rather than duplicating; delete memories proven wrong.
 ### b. Local handoff (survives `/clear`; gitignored, this-clone-only)
 
 Write `.omc/plans/session-<YYYY-MM-DD>[-letter].md`
-(`.claude/rules/omc-directory-conventions.md` — handoffs are plans). Include:
+(`.claude/rules/omc-directory-conventions.md` — handoffs are plans). The
+handoff must be **self-sufficient** — the resume prompt (step 5) only points
+here, so *everything the next session needs lives in this file*. Include:
 **State at handoff** (branch/PR/merge state, gate results), **what shipped**,
-**immediate next step**, **next task + preload pointers** (epic/issue/spec
-links), and **gotchas**. If a prior handoff exists for today, append a
-letter suffix rather than overwriting.
+**next task + preload pointers** (epic/issue/spec links), and **gotchas**. If
+a prior handoff exists for today, append a letter suffix rather than
+overwriting.
 
 ## 4. Validate, then commit doc changes
 
@@ -106,26 +108,28 @@ The handoff (`.omc/plans/`) is gitignored and memory lives outside the repo —
 neither is committed. If on `main`, branch first; open a PR only if the user
 asks.
 
-## 5. Emit the resume prompt
+## 5. Emit the resume prompt — keep it MINIMAL
 
-Print a fenced block the user pastes verbatim after `/clear`. Memory
-auto-loads, so the prompt only needs to name the task and point at the
-handoff + the specific issues/PRs/docs to read. Template:
+All context lives in memory (auto-loaded) + the handoff (step 3b). The resume
+prompt is therefore a **one-line pointer**, nothing more. Do NOT inline the
+task plan, issue summaries, gotchas, preload lists, or gate commands — those
+are all in the handoff; duplicating them in the prompt is the failure mode
+this skill exists to prevent.
+
+Print exactly this (single line, no extra sections):
 
 ```text
-Resume: <next task — $ARGUMENTS, or your inferred guess if it was empty>.
-
-Context recovery (memory auto-loads; read these to rehydrate):
-- Handoff: .omc/plans/session-<date>.md
-- Issues/PRs: #<epic>, #<phase/task>  (and the spec doc <path> if any)
-
-Read the handoff + linked issues first, confirm the repo state
-(git status, gh pr checks), then begin the task. Validate locally
-(mise run lint, pytest, dotfiles-setup verify run) before committing.
+Read and follow .omc/plans/session-<date>.md
 ```
 
-Then end with a one-line reminder: *"Run `/clear`, paste the block above,
-and the next session resumes immediately."*
+At most, echo the task for the human's benefit on the same line:
+
+```text
+Resume <task>: read and follow .omc/plans/session-<date>.md
+```
+
+Then a one-line reminder: *"Run `/clear`, paste that line, and the session
+resumes from the handoff."*
 
 ## Checklist (all true before you're done)
 
