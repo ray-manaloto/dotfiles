@@ -66,10 +66,15 @@ jobs:
         # App-token PR push fires `pull_request` CI on its own (unlike
         # secrets.GITHUB_TOKEN). Token is scoped to this repo via the App
         # installation; permissions = the App's grant (contents + PRs write).
+        # REFRESH_APP_ID must be the NUMERIC App ID — `app-id` signs the JWT
+        # `iss`, which GitHub requires be an integer. The Client ID (`Iv…`)
+        # fails with "'Issuer' claim must be an Integer" even via the
+        # newer `client-id` input (verified live, #119). The app-id
+        # deprecation warning is benign — client-id is not a usable path here.
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
-          client-id: ${{ secrets.REFRESH_APP_ID }}
+          app-id: ${{ secrets.REFRESH_APP_ID }}
           private-key: ${{ secrets.REFRESH_APP_PRIVATE_KEY }}
 
       - name: Checkout code
@@ -139,7 +144,7 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
-          client-id: ${{ secrets.REFRESH_APP_ID }}
+          app-id: ${{ secrets.REFRESH_APP_ID }}
           private-key: ${{ secrets.REFRESH_APP_PRIVATE_KEY }}
 
       - name: Checkout code
