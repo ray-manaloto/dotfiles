@@ -149,13 +149,13 @@ nightly publishes. Do NOT collapse onto one cron (issue #116).
 `refresh.yml` mints an App token (`actions/create-github-app-token`) so its
 PR fires `pull_request` CI on its own — GITHUB_TOKEN PRs don't. **One-time
 repo-admin setup:** (1) create a GitHub App with **contents: write +
-pull-requests: write**, install it here, add secrets `REFRESH_APP_ID` +
-`REFRESH_APP_PRIVATE_KEY`; (2) enable **Allow auto-merge**; (3) branch
-protection on `main` requiring
-**`build-publish / smoke-test`** — CRITICAL, else `--auto` lands before
-smoke runs. Policy: snapshot auto-merges (squash) once smoke passes; p2996
-is review-required. Caveat: docs-only PRs skip smoke (reported "skipped" =
-neutral for required checks) — verify after enabling protection.
+pull-requests: write**, install it here, add secrets `REFRESH_APP_ID` (the
+App's **Client ID** `Iv…`, not the App ID) + `REFRESH_APP_PRIVATE_KEY`;
+(2) enable **Allow auto-merge**; (3) branch protection on `main` requiring
+**`build-publish / smoke-test`** — else `--auto` lands before smoke. Policy:
+snapshot auto-merges (squash) once smoke passes; p2996 is review-required.
+Caveat: docs-only PRs skip smoke (skipped = neutral) — verify after
+enabling protection.
 
 ## Dependabot (`.github/dependabot.yml`)
 
