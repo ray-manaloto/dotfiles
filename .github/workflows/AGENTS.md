@@ -15,18 +15,18 @@ post-failure reporting.
 | `ci.yml` | Main pipeline: lint → contract-preflight → `changes` (path-gate) → base-prep → p2996-prep → build → smoke-test (smoke+Dive), build chain gated on `changes.build`; OR lint → promote (push to main) |
 | `ci-failure-report.yml` | Post-failure diagnostics / issue filing |
 | `image-analysis.yml` | Async (`workflow_run` on CI success): benchmark metrics + Trivy CVE scan, off the PR critical path |
+| `snapshot-refresh.yml` | Weekly cron: refresh `mise-system-resolved.json` (conda-forge drift), open PR on change |
+| `p2996-refresh.yml` | Weekly cron: bump `CLANG_P2996_REF` to latest `bloomberg/clang-p2996` `p2996`-branch HEAD, open PR on change (issue #100) |
 
 ## Pipeline stages
 
 PR / schedule / workflow_dispatch path:
 
 1. **lint** — mise install, hk pre-commit, agnix agent-doc validation
-   (`agnix .`; target + severity come from `.agnix.toml`:
-   `severity = "Warning"` so warnings don't fail), `mise doctor --json`,
-   `mise.lock` artifact upload, mise cache keyed on `mise.lock`. agnix uses
-   the `github:agent-sh/agnix` backend (NOT `npm:agnix`, whose postinstall
-   binary-download is skipped by mise's bun npm backend → `agnix binary not
-   found`); see the `mise.toml` comment.
+   (`agnix .`; `.agnix.toml` sets `severity = "Warning"` so warnings
+   don't fail), `mise doctor --json`, `mise.lock` artifact upload, mise
+   cache keyed on `mise.lock`. agnix uses the `github:agent-sh/agnix`
+   backend (NOT `npm:agnix`; bun skips its postinstall — see `mise.toml`).
 2. **contract-preflight** — Python 3.14 + uv; runs `dotfiles-setup
    verify run` over `python/verification/suites.toml`.
 3. **base-prep** — computes content-hash of base inputs via
