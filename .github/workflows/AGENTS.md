@@ -1,5 +1,5 @@
 <!-- Parent: ../../AGENTS.md -->
-<!-- Generated: 2026-04-07 | Updated: 2026-06-28 -->
+<!-- Generated: 2026-04-07 | Updated: 2026-06-29 -->
 
 # .github/workflows/ — CI Pipeline
 
@@ -12,7 +12,8 @@ post-failure reporting.
 
 | File | Purpose |
 |------|---------|
-| `ci.yml` | Main pipeline: lint → contract-preflight → `changes` (path-gate) → base-prep → p2996-prep → build → smoke-test (smoke+Dive), build chain gated on `changes.build`; OR lint → promote (push to main) |
+| `ci.yml` | Thin caller (Phase B, #118): lint → contract-preflight → `changes` (path-gate) → `build-publish` (the reusable build chain, gated on `changes.build` + push-to-main exemption); OR lint → promote (push to main) |
+| `build-publish.yml` | Reusable (`on: workflow_call`) build chain: base-prep → p2996-prep → build → smoke-test (smoke+Dive), lifted verbatim from ci.yml. Inputs `{tag_strategy, publish, target, ref, p2996_ref*, platform*}` (*reserved, Phase D); outputs `{image_ref, digest}`. `github` context = caller's event, so sha/pr tags resolve identically |
 | `ci-failure-report.yml` | Post-failure diagnostics / issue filing |
 | `image-analysis.yml` | Async (`workflow_run` on CI success): benchmark metrics + Trivy CVE scan, off the PR critical path |
 | `refresh.yml` | Daily cron (00:00): two independent jobs — `snapshot-refresh` (refresh `mise-system-resolved.json` on conda-forge drift) and `p2996-refresh` (bump `CLANG_P2996_REF` to latest `bloomberg/clang-p2996` `p2996`-branch HEAD, issue #100). Both open a PR on change via the shared `open-refresh-pr` composite. |
@@ -28,13 +29,15 @@ composite — neither wraps checkout.
 
 ## Pipeline stages
 
-PR / schedule / workflow_dispatch path:
+PR / schedule / workflow_dispatch path (stages 3–6 run inside the reusable
+`build-publish.yml`, invoked by ci.yml's `build-publish` caller — names and
+behavior unchanged):
 
 1. **lint** — mise install, hk pre-commit, agnix agent-doc validation
    (`agnix .`; `.agnix.toml` sets `severity = "Warning"` so warnings
    don't fail), `mise doctor --json`, `mise.lock` artifact upload, mise
    cache keyed on `mise.lock`. agnix uses the `github:agent-sh/agnix`
-   backend (NOT `npm:agnix`; bun skips its postinstall — see `mise.toml`).
+   backend (not `npm:agnix` — see `mise.toml`).
 2. **contract-preflight** — Python 3.14 + uv; runs `dotfiles-setup
    verify run` over `python/verification/suites.toml`.
 3. **base-prep** — computes content-hash of base inputs via
@@ -93,19 +96,17 @@ Push-to-main path (after a PR merge):
   `ref` covers push/schedule/dispatch. **main is exempt**
   (`cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}`) so its
   push-path `promote` manifest-retag is never interrupted mid-flight.
-- **Python 3.14** for contract-preflight and smoke-test jobs
-  (`actions/setup-python@v6`, `astral-sh/setup-uv@v8`).
-- **lint job** caches mise data directory keyed on `mise.lock`.
+- **Python 3.14 + uv via the `setup-mise` composite** for contract-preflight
+  and smoke-test (`install_args: python uv`). lint caches mise data on `mise.lock`.
 - **build job** passes GitHub token via BuildKit **secret mount**
-  (`uid=1000` for vscode user) — never via `ARG` or env.
+  (`uid=1000`) — never via `ARG` or env.
 - **`CONTAINER_REGISTRY`** env var, not `REGISTRY` (avoids HCL
   collision with the `REGISTRY` target in `docker-bake.hcl`).
 - **PR builds push** `:pr-NNN` + `:sha-<github.sha>` to GHCR so smoke-test
-  validates the exact image promote retags on merge. No `cacheonly` mode
-  (removed in the cache+promote rework).
-- **Push-to-main does NOT rebuild.** `build`, `p2996-prep`, and
-  `smoke-test` are all gated `if: github.event_name != 'push' ||
-  github.ref != 'refs/heads/main'`. The merge commit is published
+  validates the exact image promote retags on merge. No `cacheonly` mode.
+- **Push-to-main does NOT rebuild.** The `build-publish` caller in ci.yml is
+  gated `if: (github.event_name != 'push' || github.ref != 'refs/heads/main')`,
+  so the whole reusable chain is skipped on main; the merge commit is published
   via `promote`'s manifest-retag of the PR's `:pr-NNN`.
 - **P2996 cache invalidation.** Key = `CLANG_P2996_REF`, `BASE_IMAGE`,
   `PLATFORM`, Dockerfile, bake file, `mise-system-resolved.json`. Bust via
@@ -192,9 +193,7 @@ nightly publishes. Do NOT collapse onto one cron (issue #116).
 - **Re-run a failed job to verify a fix** — `gh run rerun RUN_ID --failed`
   refires only the failed jobs against the same commit. Useful for
   verifying that a config change (e.g. installing a GitHub app)
-  actually fixes the failure mode without forcing a fresh push. Used
-  to verify the autofix.ci app install in session 2026-05-01 (run
-  `25201532504` failed on first run, succeeded on rerun against the
-  same commit `ee079c5`).
+  actually fixes the failure mode without forcing a fresh push (validated
+  on the autofix.ci app install, session 2026-05-01, commit `ee079c5`).
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->
