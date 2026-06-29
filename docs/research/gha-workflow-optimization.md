@@ -212,10 +212,146 @@ Net: same number of workflows (each has a distinct job), but the
 duplicated plumbing lives in two composite actions, the publish path is
 unattended, and the cron roles are documented and staggered.
 
+---
+
+# v2 — Reusable-workflow target architecture (deeper rethink)
+
+The v1 recommendations above are incremental (composite actions + auto-merge
+on the existing shape). This section answers the follow-up: *is there a
+fundamentally more input-driven, event-driven design?* Yes — extract the
+build/publish pipeline into one **reusable workflow (`workflow_call`)** that
+every trigger calls with inputs. Researched against GitHub's current docs
+and six real-world repos (see sources at end).
+
+## What this repo already does well
+
+The real-world survey shows this repo has already adopted the strongest
+patterns; the redesign should preserve them, not replace them:
+
+- **Content-hash as the cache tag** (`:base-<hash>`, `:p2996-<hash>`) — same
+  idea as `5monkeys/docker-image-context-hash-action`, but ours is finer
+  (sentinel-delimited Dockerfile sections, two tiers).
+- **Registry as the idempotency oracle** (`docker manifest inspect` →
+  skip) — identical to the `cocallaw` and trivy patterns.
+- **Pinned upstream version committed to the repo** (`CLANG_P2996_REF` in
+  `docker-bake.hcl`) — the audit-trail/reproducibility pattern from
+  `aquasecurity/trivy-action`'s bump workflow.
+
+The gap is purely **structural**: that build logic is inlined in `ci.yml`
+and cannot be invoked by anything other than `ci.yml`'s own triggers, so the
+refresh workflows reach it only indirectly (open a PR, then
+`gh workflow run ci.yml --ref <branch>`).
+
+## The core constraint that shapes everything
+
+`GITHUB_TOKEN`-created PRs/commits **do not trigger downstream `pull_request`/
+`push` workflows** (GitHub's recursion guard). That single fact explains the
+current `gh workflow run ci.yml --ref <branch>` hack in both refresh
+workflows — it's a manual re-trigger because the auto-opened PR's CI won't
+fire on its own. Two clean ways out:
+
+1. **GitHub App token** (`actions/create-github-app-token`) for the refresh
+   PR's push → normal `pull_request` CI fires → `gh pr merge --auto` lands
+   it. Removes the dispatch hack *and* the "Allow Actions to create PRs"
+   setting dependency.
+2. **`repository_dispatch`/`workflow_call`** directly into the build (skip the
+   PR) — faster, but loses the in-repo pin unless paired with a commit-back.
+
+## Target shape
+
+```mermaid
+flowchart TD
+  subgraph callers [thin per-trigger callers]
+    A["ci.yml — pull_request / push:main"]
+    B["nightly.yml — schedule (staggered)"]
+    C["refresh.yml — schedule: detect p2996 + snapshot drift"]
+  end
+  RW["build-publish.yml (on: workflow_call)
+  inputs: ref, p2996_ref, tag_strategy, publish, platform
+  jobs: base-prep -> p2996-prep -> build -> smoke-test
+  outputs: image_ref, digest"]
+  SM["composite: setup-mise (checkout + jdx/mise-action)"]
+  A -->|"with: tag=pr/sha, publish=false"| RW
+  B -->|"with: tag=dev/latest, publish=true"| RW
+  C -->|"App-token PR + auto-merge -> push:main"| A
+  RW -. uses .-> SM
+```
+
+- **`build-publish.yml`** (`on: workflow_call`) holds the `base-prep →
+  p2996-prep → build → smoke-test` chain exactly as today, parameterized by
+  `inputs: { ref, p2996_ref, tag_strategy (string: pr|sha|dev|nightly),
+  publish (bool), platform }` and emitting `outputs: { image_ref, digest }`.
+  A `uses:` job can carry `needs`/`if`/`permissions`/`concurrency` but no
+  steps — which fits, because each tier is already its own job.
+- **`ci.yml`** shrinks to a caller: PR → `tag=pr, publish=false`; push:main
+  keeps `promote` (manifest retag) as-is.
+- **`refresh.yml`** merges the two near-identical refresh workflows into one
+  file with two independent detector jobs (p2996 via `git ls-remote`,
+  snapshot via in-container `mise-snapshot`), each using the shared
+  `open-refresh-pr` composite with an **App token** so CI fires + auto-merge.
+- **`setup-mise`** composite removes the checkout+mise block from all 8 jobs
+  (composite actions keep per-args caching and let each job add its own
+  steps — the right tool here, vs a reusable workflow).
+
+## Mapping current → reusable inputs
+
+| Current (ci.yml) | Becomes |
+|---|---|
+| `base-prep` job (base-hash probe/build) | `build-publish.yml` job 1 (unchanged) |
+| `p2996-prep` job (p2996-hash probe/build) | job 2; `p2996_ref` overridable via input for "build this exact upstream SHA" |
+| `build` job (`bake dev`, tag via metadata-action) | job 3; `tag_strategy`/`publish` inputs drive `metadata-action` + `push` |
+| `smoke-test` job | job 4 (unchanged; still the required gate) |
+| `promote` job | stays in `ci.yml` (push:main only) |
+| `changes` path-gate | stays in `ci.yml`; callers pass `publish`/skip decisions |
+
+## Recommended target (balances ambition vs the repo's invariants)
+
+- **Keep** the two-tier content-hash cache, `promote` manifest-retag, and the
+  pin-in-`docker-bake.hcl` reproducibility anchor. Do **not** adopt
+  build-and-push-direct (Example C/E's unconditional or PR-less publish) — it
+  breaks the "what SHA is in `:dev`?" guarantee that this repo deliberately
+  maintains.
+- **Adopt** the BretFisher "one reusable build, thin callers" structure and a
+  GitHub App token so the upstream-detected bump flows
+  `detect → App-token PR → CI (real) → auto-merge → promote` with zero manual
+  steps, pin intact.
+- **Optional** `repository_dispatch` path only if you later want sub-daily
+  reaction to upstream without waiting on the cron.
+
+## Phased migration (each phase shippable + reversible)
+
+1. **Phase A (low risk, high clarity):** `setup-mise` composite + merge the
+   two refresh workflows into `refresh.yml` (two jobs, shared composite).
+   No behavior change. Document + stagger crons (v1 R4).
+2. **Phase B (the unlock):** extract `build-publish.yml` (`workflow_call`);
+   `ci.yml` becomes a caller. Behavior-preserving — same jobs, same gates.
+3. **Phase C (automation):** App token for refresh PRs + `gh pr merge --auto`
+   (policy: auto-merge snapshot; choose auto vs review for the p2996 compiler
+   bump). Drops the `gh workflow run` dispatch hack and the create-PR setting.
+4. **Phase D (optional):** `p2996_ref` input + a `repository_dispatch` caller
+   for on-demand "build exactly this upstream SHA" without a cron wait.
+
+## Decision points for sign-off
+
+- **App token vs keep the dispatch hack?** App token is cleaner and the
+  research-recommended path; it needs a one-time GitHub App install (org
+  setting). If you'd rather not, we keep `gh workflow run` + enable the
+  create-PR setting (v1 R1).
+- **p2996 auto-merge or review?** Snapshot refresh → auto-merge is safe;
+  the compiler bump is higher-risk — recommend human review there unless you
+  want fully hands-off (smoke-test is the safety net either way).
+- **Scope now:** Phase A+B are pure refactors (safe to do anytime); C is the
+  behavior change that delivers "new commit → published image, unattended."
+
 ## GitHub repos touched
 
 - [bloomberg/clang-p2996](https://github.com/bloomberg/clang-p2996) — the tracked upstream whose `p2996` HEAD drives the refresh.
 - [peter-evans/create-pull-request](https://github.com/peter-evans/create-pull-request) — PR-creation action in both refresh workflows.
+- [peter-evans/repository-dispatch](https://github.com/peter-evans/repository-dispatch) — reference for the optional `repository_dispatch` detect→build path.
 - [jdx/mise-action](https://github.com/jdx/mise-action) — the repeated setup step analyzed for the `setup-mise` composite.
-- [aquasecurity/trivy-action](https://github.com/aquasecurity/trivy-action) — image-analysis CVE scan (pin fixed in #112).
+- [aquasecurity/trivy-action](https://github.com/aquasecurity/trivy-action) — image-analysis CVE scan (pin fixed in #112); also the bump-PR upstream-pin reference pattern.
+- [aquasecurity/trivy-db](https://github.com/aquasecurity/trivy-db) — scheduled-rebuild reference (the unconditional-rebuild anti-pattern).
 - [github/codeql-action](https://github.com/github/codeql-action) — SARIF upload in image-analysis (pin fixed in #112).
+- [BretFisher/docker-build-workflow](https://github.com/BretFisher/docker-build-workflow) — canonical "one reusable build, thin multi-trigger callers" reference.
+- [hassio-addons/workflows](https://github.com/hassio-addons/workflows) — two-layer reusable-workflow org pattern.
+- [5monkeys/docker-image-context-hash-action](https://github.com/5monkeys/docker-image-context-hash-action) — content-hash-as-tag reference (this repo's two-tier hash is a finer version).
