@@ -17,7 +17,7 @@ Trivy run async in `image-analysis.yml`.
 
 ```bash
 mise install                                 # Install all tools
-hk run pre-commit --all --stash none         # Run lint checks
+mise run lint                                # Run lint checks (hk under a hard timeout)
 mise run up                                  # Bring up devcontainer (see .devcontainer/AGENTS.md)
 mise run down                                # Tear down devcontainer
 uv run --project python pytest tests/ -x -q  # Run tests (see python/AGENTS.md)
@@ -111,26 +111,26 @@ locally before pushing Dockerfile changes.
   `.claude/rules/zero-skip-policy.md`.
 - **Zero inline suppressions**: The `no_lint_skip` hk step rejects
   `noqa`/`type: ignore`/`pylint: disable`/`nosec` in Python source.
-- **No MCP registration**: Never `claude mcp add`. The `no_mcp_registration`
-  hk step enforces this. Use `mcp2cli` (process-spawn, no schema injection),
-  `llms.txt`, or per-page `.md` fetches instead. See
-  `.claude/rules/research-doc-sources.md`.
-- **CI-local parity**: Every CI lint step has a local hk equivalent. Every
-  hk tool is in `mise.toml`. Verify parity before committing. See
-  `.claude/rules/ci-local-parity.md`.
-- **Research before fixing**: Check docs, changelogs, and issue trackers
-  before attempting fixes. Don't guess at CI failures.
-- **Local validation first**: Run `hk run pre-commit --all --stash none`
-  AND `dotfiles-setup verify run` locally before pushing.
-- **Use tool built-ins**: Before inventing custom detection logic / data
-  variables / env-var parsing, check the tool's official docs for a
-  built-in fact (e.g., `chezmoi.os` discriminates Mac host vs devcontainer).
-  See `.claude/rules/use-tool-builtins.md`.
-- **Chezmoi is devcontainer-only on this Mac (for now)**: `chezmoi apply`
-  and `chezmoi update` are blocked on the host by `.claude/settings.json`.
-  Read-only chezmoi commands remain allowed. See `home/AGENTS.md`.
-- **Notepad enforcement**: Agents write findings to notepad during work,
-  not at session end. See `.claude/rules/notepad-enforcement.md`.
+- **No MCP registration**: Never `claude mcp add` (enforced by the
+  `no_mcp_registration` hk step). Use `mcp2cli`/`llms.txt`/`.md` instead.
+  See `.claude/rules/research-doc-sources.md`.
+- **CI-local parity**: Every CI lint step has a local hk equivalent; every
+  hk tool is in `mise.toml`. See `.claude/rules/ci-local-parity.md`.
+- **Research before fixing**: Check docs/changelogs/issues before fixing — don't guess at CI failures.
+- **Bound long-running commands**: Run the lint gate via `mise run lint`
+  (hk under a hard timeout; hk has none) — never wait blind or capture via
+  `| tail` (masks exit codes). See `.claude/rules/long-running-command-hangs.md`.
+- **Clarify before acting**: On ambiguous, multi-path, or irreversible
+  work, ask (with a recommended option) until sure; proceed directly on
+  clear low-risk tasks. See `.claude/rules/clarify-before-acting.md`.
+- **Local validation first**: Run `mise run lint`, `pytest`, AND
+  `dotfiles-setup verify run` locally before pushing.
+- **Use tool built-ins**: Prefer documented built-in facts (e.g.
+  `chezmoi.os`) over homegrown detection logic. See
+  `.claude/rules/use-tool-builtins.md`.
+- **Chezmoi is devcontainer-only on this Mac**: `chezmoi apply`/`update`
+  blocked on host by `.claude/settings.json`; read-only ok. See `home/AGENTS.md`.
+- **Notepad enforcement**: Agents write findings to notepad during work, not at session end. See `.claude/rules/notepad-enforcement.md`.
 - **OMC directory conventions**: Use standard `.omc/` paths, no ad-hoc
   directories. See `.claude/rules/omc-directory-conventions.md`.
 - **Zero-bash logic**: Non-trivial logic (env detection, tool config,
@@ -140,7 +140,7 @@ locally before pushing Dockerfile changes.
 ### Validate before committing
 
 ```bash
-hk run pre-commit --all --stash none          # All lint checks pass — then proceed
+mise run lint                                 # Lint gate (hk under a hard timeout) — then proceed
 uv run --project python pytest tests/ -x -q   # All tests pass — then proceed
 dotfiles-setup verify run                     # Verification contracts pass — then proceed
 ```

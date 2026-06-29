@@ -17,6 +17,12 @@ from dotfiles_setup.docker import DevContainerManager
 from dotfiles_setup.ghcr import validate_ghcr_prereqs
 from dotfiles_setup.image import ImageCommand
 from dotfiles_setup.image import main as image_main
+from dotfiles_setup.lint import (
+    DEFAULT_TIMEOUT_SECONDS,
+    TIMEOUT_ENV_VAR,
+    resolve_timeout,
+    run_guarded,
+)
 from dotfiles_setup.mise_snapshot import capture, write_snapshot
 from dotfiles_setup.p2996_hash import (
     compute_repo_base_hash,
@@ -179,6 +185,20 @@ def setup_parser() -> argparse.ArgumentParser:
 
     # install command
     subparsers.add_parser("install", help="Execute toolchain installation")
+
+    # lint command — hk pre-commit under a hard timeout so hangs self-abort
+    lint_parser = subparsers.add_parser(
+        "lint",
+        help="Run hk pre-commit under a hard timeout (default 600s) so a "
+        "hung lint self-aborts instead of wedging",
+    )
+    lint_parser.add_argument(
+        "--timeout",
+        type=int,
+        default=None,
+        help=f"Timeout in seconds; overrides ${TIMEOUT_ENV_VAR} "
+        f"(default {DEFAULT_TIMEOUT_SECONDS})",
+    )
 
     _add_docker_subcommands(subparsers)
     _add_verify_subcommands(subparsers)
@@ -391,6 +411,9 @@ def _build_command_handlers(
             resolved,
         )
 
+    def _lint() -> None:
+        sys.exit(run_guarded(resolve_timeout(getattr(args, "timeout", None))))
+
     return {
         "validate": _validate,
         "audit": lambda: handle_audit(config=config),
@@ -407,6 +430,7 @@ def _build_command_handlers(
         "base-hash": _base_hash,
         "p2996-refresh": _p2996_refresh,
         "mise-snapshot": _mise_snapshot,
+        "lint": _lint,
     }
 
 
