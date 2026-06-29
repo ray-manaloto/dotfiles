@@ -215,6 +215,11 @@ jobs:
         if: github.event_name == 'pull_request' || github.event_name == 'push'
         uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         with:
+          # Emit the matched-file list so `decide` can drop markdown-only
+          # matches (a pattern-level `!**/*.md` can't: dorny's default `some`
+          # quantifier OR-matches the negation, and `**/*.md` skips dot-dirs
+          # like .devcontainer/).
+          list-files: json
           filters: |
             build:
               - '.devcontainer/**'
@@ -225,24 +230,25 @@ jobs:
               - 'python/**'
               - '.dive-ci'
               - '.github/workflows/ci.yml'
-              # Markdown never affects the image or build/verify logic, so a
-              # docs-only change under a build-relevant dir (e.g.
-              # .devcontainer/P2996-CACHE.md, python/AGENTS.md) does not need a
-              # build. The trailing negation excludes all .md (dorny/paths-filter
-              # honors `!`; a non-.md change in the same PR still triggers build).
-              - '!**/*.md'
 
       - name: Decide whether the build chain runs
         id: decide
         env:
           EVENT: ${{ github.event_name }}
-          FILTER_BUILD: ${{ steps.filter.outputs.build }}
+          BUILD_FILES: ${{ steps.filter.outputs.build_files }}
         run: |
-          # Non-PR/non-push events (schedule, workflow_dispatch) always
-          # build; PRs and main pushes build only when a build-relevant
-          # path changed.
+          # schedule / workflow_dispatch always build. For PR/push, build only
+          # when a changed build-relevant file is NOT markdown — docs (incl.
+          # docs under .devcontainer/** or python/**) never affect the image or
+          # build/verify logic. `jq` is preinstalled on the runner.
           case "$EVENT" in
-            pull_request|push) echo "build=${FILTER_BUILD}" >> "$GITHUB_OUTPUT" ;;
+            pull_request|push)
+              if printf '%s' "${BUILD_FILES:-[]}" \
+                | jq -e 'map(select(endswith(".md") | not)) | length > 0' >/dev/null; then
+                echo "build=true" >> "$GITHUB_OUTPUT"
+              else
+                echo "build=false" >> "$GITHUB_OUTPUT"
+              fi ;;
             *) echo "build=true" >> "$GITHUB_OUTPUT" ;;
           esac
 
