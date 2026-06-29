@@ -31,7 +31,7 @@ variable "DEVCONTAINER_USERNAME" {
 # Pinned commit SHA for Bloomberg's clang-p2996 fork (C++ P2996 reflection).
 # Changing this value invalidates the BuildKit cache for the clang-builder stage.
 variable "CLANG_P2996_REF" {
-  default = "9ffb96e3ce362289008e14ad2a79a249f58aa90a"
+  default = "a56e7036fc1dcc8d4325f79230809b6ee678e5f2"
 }
 
 // Default tags for local builds; overridden by docker/metadata-action
