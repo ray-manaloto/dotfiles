@@ -47,7 +47,7 @@ jobs:
         # ruff/yamlfmt/etc. via mise shims) and `uv` (for any python
         # ruff-fix steps). Avoid pulling the full toolchain to keep the
         # workflow under the 10-minute timeout.
-        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        uses: ./.github/actions/setup-mise
         with:
           install_args: "hk uv"
 

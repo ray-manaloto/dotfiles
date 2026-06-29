@@ -1,0 +1,27 @@
+name: "Set up mise"
+description: >-
+  Install mise-managed tools via jdx/mise-action. Wraps only the mise
+  step (not actions/checkout): a *local* composite action is resolved from
+  $GITHUB_WORKSPACE, which is empty until checkout runs, so the bootstrap
+  checkout must stay in the calling job. Callers therefore run
+  `actions/checkout` first, then `uses: ./.github/actions/setup-mise`.
+
+inputs:
+  install_args:
+    description: >-
+      Space-separated tool list passed to `mise install` (empty = install
+      every tool in mise.toml). mise-action's default `cache: true` keys on
+      {platform}-{install_args_hash}-{file_hash}, so each job's subset
+      ("python uv", "hk uv", or all) caches independently — passing this
+      through preserves the per-args cache isolation the duplicated blocks
+      had before extraction.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Install mise
+      uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+      with:
+        install_args: ${{ inputs.install_args }}

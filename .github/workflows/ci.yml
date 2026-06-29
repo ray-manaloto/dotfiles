@@ -2,7 +2,13 @@ name: CI
 
 on:
   schedule:
-    - cron: "0 0 * * *" # Daily midnight America/Chicago
+    # Staggered 2h after refresh.yml's 00:00 refresh so a same-day pin bump
+    # (snapshot / CLANG_P2996_REF), once merged, is what this nightly
+    # rebuild+publish picks up. This job rebuilds+publishes on the *pinned*
+    # ref (catches base-image CVEs / floating-tool drift); refresh.yml
+    # *changes* the pins. Distinct, complementary roles — see
+    # `.github/workflows/AGENTS.md` § Cron schedules.
+    - cron: "0 2 * * *" # Daily 02:00 America/Chicago
       timezone: "America/Chicago"
   push:
     branches: [main]
@@ -72,11 +78,11 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Install mise
-        # mise-action's default `cache: true` keys on
-        # {platform}-{install_args_hash}-{file_hash} which subsumes the
-        # earlier hand-rolled actions/cache block (keyed only on mise.lock).
-        # Granular per-platform AND per-install-args cache hygiene.
-        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        # No install_args → installs every tool in mise.toml. The composite
+        # forwards to jdx/mise-action, whose default `cache: true` keys on
+        # {platform}-{install_args_hash}-{file_hash} — granular per-platform
+        # AND per-install-args cache hygiene, preserved across all jobs.
+        uses: ./.github/actions/setup-mise
 
       - name: Configure git identity for hk
         run: |
@@ -167,7 +173,7 @@ jobs:
       - name: Install mise (python + uv)
         # Subset install: only python + uv, both pinned in mise.toml.
         # Replaces the prior actions/setup-python + astral-sh/setup-uv pair.
-        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        uses: ./.github/actions/setup-mise
         with:
           install_args: "python uv"
 
@@ -275,7 +281,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Install mise (python + uv)
-        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        uses: ./.github/actions/setup-mise
         with:
           install_args: "python uv"
 
@@ -379,7 +385,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Install mise (python + uv)
-        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        uses: ./.github/actions/setup-mise
         with:
           install_args: "python uv"
 
@@ -570,7 +576,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Install mise (python + uv)
-        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        uses: ./.github/actions/setup-mise
         with:
           install_args: "python uv"
 

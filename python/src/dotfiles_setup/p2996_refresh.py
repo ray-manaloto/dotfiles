@@ -12,8 +12,9 @@ content-addressed cache key in `p2996_hash.py`, so:
 - SHA unchanged -> same hash -> `:p2996-<hash>` cache **hit** -> no rebuild.
 - SHA changed   -> new hash  -> cache **miss** -> exactly one rebuild.
 
-The scheduled `.github/workflows/p2996-refresh.yml` runs this, then opens
-a PR via `peter-evans/create-pull-request` when the file actually changed.
+The scheduled `.github/workflows/refresh.yml` (`p2996-refresh` job) runs
+this, then opens a PR via `peter-evans/create-pull-request` when the file
+actually changed.
 
 See `.devcontainer/P2996-CACHE.md` and issue #100 for the full design.
 """
