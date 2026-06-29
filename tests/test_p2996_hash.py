@@ -17,14 +17,19 @@ from dotfiles_setup.p2996_hash import (
     P2996_SECTION_BEGIN,
     P2996_SECTION_END,
     BaseHashInputs,
+    DevHashInputs,
     P2996HashInputs,
+    _extract_bake_target_block,
     _extract_bake_variable,
     _extract_dockerfile_section,
     compute_base_hash,
+    compute_dev_hash,
     compute_p2996_hash,
     compute_repo_base_hash,
+    compute_repo_dev_hash,
     compute_repo_p2996_hash,
     gather_base_inputs,
+    gather_dev_inputs,
     gather_p2996_inputs,
 )
 
@@ -56,12 +61,35 @@ def _stub_p2996_inputs(**overrides: str) -> P2996HashInputs:
     return P2996HashInputs(**base)
 
 
+def _stub_dev_inputs(**overrides: str) -> DevHashInputs:
+    base = {
+        "base_hash": "0123456789abcdef",
+        "p2996_hash": "fedcba9876543210",
+        "platform": "linux/amd64/v2",
+        "dockerfile_digest": "d" * 64,
+        "dev_target_digest": "e" * 64,
+    }
+    base.update(overrides)
+    return DevHashInputs(**base)
+
+
 def _seed_repo(tmp_path: Path) -> Path:
-    """Write a minimal repo tree with valid Dockerfile section markers."""
+    """Write a minimal repo tree with valid Dockerfile section markers.
+
+    Includes a `dev` bake target (with nested `args` braces) and a
+    final-stage Dockerfile line OUTSIDE the sentinels so the dev-hash
+    tests can exercise whole-Dockerfile + dev-target hashing.
+    """
     (tmp_path / "docker-bake.hcl").write_text(
         'variable "BASE_IMAGE" { default = "ubuntu:26.04" }\n'
         'variable "PLATFORM" { default = "linux/amd64/v2" }\n'
-        'variable "CLANG_P2996_REF" { default = "abc123" }\n',
+        'variable "CLANG_P2996_REF" { default = "abc123" }\n'
+        'target "dev" {\n'
+        '  target = "devcontainer"\n'
+        "  args = {\n"
+        '    DEVCONTAINER_USERNAME = "devcontainer"\n'
+        "  }\n"
+        "}\n",
     )
     devcontainer = tmp_path / ".devcontainer"
     devcontainer.mkdir()
@@ -75,6 +103,9 @@ def _seed_repo(tmp_path: Path) -> Path:
         {P2996_SECTION_BEGIN}
         RUN cmake --build .
         {P2996_SECTION_END}
+
+        FROM devcontainer-base AS devcontainer
+        RUN echo final-stage
         """)
     )
     (devcontainer / "mise-system-resolved.json").write_text(
@@ -373,6 +404,183 @@ def test_cli_base_hash_returns_16_char_hex() -> None:
     output = _run_dotfiles_setup("base-hash")
     assert len(output) == HASH_LENGTH
     assert re.fullmatch(r"[0-9a-f]+", output)
+
+
+def test_cli_dev_hash_returns_16_char_hex() -> None:
+    output = _run_dotfiles_setup("dev-hash")
+    assert len(output) == HASH_LENGTH
+    assert re.fullmatch(r"[0-9a-f]+", output)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# DevHashInputs validation
+# ──────────────────────────────────────────────────────────────────────
+
+
+def test_dev_hash_is_stable_for_fixed_inputs() -> None:
+    inputs = _stub_dev_inputs()
+    assert compute_dev_hash(inputs) == compute_dev_hash(inputs)
+    assert len(compute_dev_hash(inputs)) == HASH_LENGTH
+
+
+def test_dev_hash_is_lowercase_hex() -> None:
+    assert re.fullmatch(r"[0-9a-f]+", compute_dev_hash(_stub_dev_inputs()))
+
+
+def test_dev_hash_changes_when_base_hash_changes() -> None:
+    base = _stub_dev_inputs()
+    bumped = _stub_dev_inputs(base_hash="ffffffffffffffff")
+    assert compute_dev_hash(base) != compute_dev_hash(bumped)
+
+
+def test_dev_hash_changes_when_p2996_hash_changes() -> None:
+    base = _stub_dev_inputs()
+    bumped = _stub_dev_inputs(p2996_hash="ffffffffffffffff")
+    assert compute_dev_hash(base) != compute_dev_hash(bumped)
+
+
+def test_dev_hash_changes_when_dockerfile_digest_changes() -> None:
+    base = _stub_dev_inputs()
+    bumped = _stub_dev_inputs(dockerfile_digest="f" * 64)
+    assert compute_dev_hash(base) != compute_dev_hash(bumped)
+
+
+def test_dev_hash_changes_when_dev_target_digest_changes() -> None:
+    base = _stub_dev_inputs()
+    bumped = _stub_dev_inputs(dev_target_digest="f" * 64)
+    assert compute_dev_hash(base) != compute_dev_hash(bumped)
+
+
+def test_dev_hash_changes_when_platform_changes() -> None:
+    base = _stub_dev_inputs()
+    bumped = _stub_dev_inputs(platform="linux/arm64")
+    assert compute_dev_hash(base) != compute_dev_hash(bumped)
+
+
+def test_dev_inputs_reject_short_base_hash() -> None:
+    with pytest.raises(ValueError, match="base_hash"):
+        _stub_dev_inputs(base_hash="abc")
+
+
+def test_dev_inputs_reject_uppercase_p2996_hash() -> None:
+    with pytest.raises(ValueError, match="p2996_hash"):
+        _stub_dev_inputs(p2996_hash="ABCDEF0123456789")
+
+
+def test_dev_inputs_reject_short_dockerfile_digest() -> None:
+    with pytest.raises(ValueError, match="dockerfile_digest"):
+        _stub_dev_inputs(dockerfile_digest="abc")
+
+
+def test_dev_inputs_reject_empty_platform() -> None:
+    with pytest.raises(ValueError, match="platform"):
+        _stub_dev_inputs(platform="")
+
+
+def test_dev_hash_kind_namespacing_differs_from_base_and_p2996() -> None:
+    # Even with colliding digest material, the kind= prefix keeps the
+    # three tiers in separate namespaces so a value can't be reused.
+    shared = "a" * 16
+    base = compute_base_hash(
+        BaseHashInputs(
+            base_image="x",
+            platform="x",
+            base_section_digest="a" * 64,
+            snapshot_digest="a" * 64,
+        )
+    )
+    dev = compute_dev_hash(_stub_dev_inputs())
+    assert base != dev
+    assert shared != dev
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Bake target extraction
+# ──────────────────────────────────────────────────────────────────────
+
+
+def test_extract_bake_target_block_handles_nested_braces() -> None:
+    bake = (
+        'target "dev" {\n'
+        "  args = {\n"
+        '    USER = "x"\n'
+        "  }\n"
+        "}\n"
+        'target "other" { target = "x" }\n'
+    )
+    block = _extract_bake_target_block(bake, "dev")
+    assert block.startswith('target "dev"')
+    assert block.endswith("}")
+    assert "USER" in block
+    # Must NOT bleed into the sibling target.
+    assert "other" not in block
+
+
+def test_extract_bake_target_block_missing_raises() -> None:
+    with pytest.raises(ValueError, match="not found"):
+        _extract_bake_target_block('target "dev" { }', "missing")
+
+
+def test_extract_bake_target_block_unbalanced_raises() -> None:
+    with pytest.raises(ValueError, match="unbalanced"):
+        _extract_bake_target_block('target "dev" {\n  args = {\n', "dev")
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Repo-level dev hash (gather + compute roundtrips)
+# ──────────────────────────────────────────────────────────────────────
+
+
+def test_gather_and_compute_repo_dev_hash_roundtrip(tmp_path: Path) -> None:
+    _seed_repo(tmp_path)
+    inputs = gather_dev_inputs(tmp_path, base_hash="0" * 16, p2996_hash="1" * 16)
+    assert inputs.platform == "linux/amd64/v2"
+    digest_a = compute_repo_dev_hash(tmp_path)
+    digest_b = compute_repo_dev_hash(tmp_path)
+    assert digest_a == digest_b
+    assert len(digest_a) == HASH_LENGTH
+
+
+def test_repo_dev_hash_changes_when_final_stage_modified(tmp_path: Path) -> None:
+    # A final-stage edit (OUTSIDE the base/p2996 sentinels) leaves base
+    # and p2996 hashes untouched but MUST bust dev-hash — this is the
+    # whole-Dockerfile coverage that prevents skipping smoke on a
+    # changed image.
+    _seed_repo(tmp_path)
+    base_before = compute_repo_base_hash(tmp_path)
+    p2996_before = compute_repo_p2996_hash(tmp_path)
+    dev_before = compute_repo_dev_hash(tmp_path)
+    dockerfile = tmp_path / ".devcontainer" / "Dockerfile"
+    dockerfile.write_text(
+        dockerfile.read_text().replace("RUN echo final-stage", "RUN echo changed")
+    )
+    assert compute_repo_base_hash(tmp_path) == base_before
+    assert compute_repo_p2996_hash(tmp_path) == p2996_before
+    assert compute_repo_dev_hash(tmp_path) != dev_before
+
+
+def test_repo_dev_hash_changes_when_dev_target_modified(tmp_path: Path) -> None:
+    _seed_repo(tmp_path)
+    before = compute_repo_dev_hash(tmp_path)
+    bake = tmp_path / "docker-bake.hcl"
+    bake.write_text(
+        bake.read_text().replace(
+            'DEVCONTAINER_USERNAME = "devcontainer"',
+            'DEVCONTAINER_USERNAME = "ray"',
+        )
+    )
+    assert compute_repo_dev_hash(tmp_path) != before
+
+
+def test_repo_dev_hash_changes_when_base_section_modified(tmp_path: Path) -> None:
+    # Base-section edit bumps base-hash → p2996-hash → dev-hash (chain).
+    _seed_repo(tmp_path)
+    before = compute_repo_dev_hash(tmp_path)
+    dockerfile = tmp_path / ".devcontainer" / "Dockerfile"
+    dockerfile.write_text(
+        dockerfile.read_text().replace("RUN apt-get update", "RUN apt-get install foo")
+    )
+    assert compute_repo_dev_hash(tmp_path) != before
 
 
 def test_cli_base_and_p2996_hashes_are_distinct() -> None:

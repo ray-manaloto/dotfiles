@@ -8,7 +8,7 @@ import logging
 import platform
 import sys
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from dotfiles_setup.ai import AIOrchestrator
 from dotfiles_setup.audit import DevEnvironmentAuditor, ToolManager
@@ -26,10 +26,14 @@ from dotfiles_setup.lint import (
 from dotfiles_setup.mise_snapshot import capture, write_snapshot
 from dotfiles_setup.p2996_hash import (
     compute_repo_base_hash,
+    compute_repo_dev_hash,
     compute_repo_p2996_hash,
 )
 from dotfiles_setup.p2996_refresh import refresh as refresh_p2996_ref
 from dotfiles_setup.verify import main as verify_main
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -213,6 +217,11 @@ def setup_parser() -> argparse.ArgumentParser:
         help="Print the content-addressed hash of devcontainer-base inputs",
     )
     subparsers.add_parser(
+        "dev-hash",
+        help="Print the content-addressed hash of the final dev-image inputs "
+        "(base + p2996 hashes + whole Dockerfile + dev bake target)",
+    )
+    subparsers.add_parser(
         "p2996-refresh",
         help="Bump CLANG_P2996_REF in docker-bake.hcl to the latest "
         "bloomberg/clang-p2996 p2996-branch HEAD (writes only on change)",
@@ -364,6 +373,24 @@ def handle_ghcr_check(args: argparse.Namespace, project_root: Path) -> None:
     sys.stdout.write(json.dumps(result, indent=2) + "\n")
 
 
+def _hash_command_handlers(project_root: Path) -> dict[str, Any]:
+    """Dispatch entries for the three content-hash CLI commands.
+
+    Extracted from `_build_command_handlers` so the three near-identical
+    stdout-emitting handlers don't push that function over the McCabe
+    complexity cap as tiers are added (base → p2996 → dev).
+    """
+
+    def _emit(compute: Callable[[Path], str]) -> None:
+        sys.stdout.write(compute(project_root) + "\n")
+
+    return {
+        "base-hash": lambda: _emit(compute_repo_base_hash),
+        "p2996-hash": lambda: _emit(compute_repo_p2996_hash),
+        "dev-hash": lambda: _emit(compute_repo_dev_hash),
+    }
+
+
 def _build_command_handlers(
     args: argparse.Namespace,
     project_root: Path,
@@ -395,12 +422,6 @@ def _build_command_handlers(
     def _version() -> None:
         sys.stdout.write("0.1.0\n")
 
-    def _p2996_hash() -> None:
-        sys.stdout.write(compute_repo_p2996_hash(project_root) + "\n")
-
-    def _base_hash() -> None:
-        sys.stdout.write(compute_repo_base_hash(project_root) + "\n")
-
     def _p2996_refresh() -> None:
         sys.stdout.write(refresh_p2996_ref(project_root).as_json() + "\n")
 
@@ -426,11 +447,10 @@ def _build_command_handlers(
         "image": lambda: handle_image(args),
         "ghcr-check": lambda: handle_ghcr_check(args, project_root),
         "sync-versions": lambda: handle_sync_versions(project_root),
-        "p2996-hash": _p2996_hash,
-        "base-hash": _base_hash,
         "p2996-refresh": _p2996_refresh,
         "mise-snapshot": _mise_snapshot,
         "lint": _lint,
+        **_hash_command_handlers(project_root),
     }
 
 

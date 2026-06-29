@@ -13,7 +13,7 @@ post-failure reporting.
 | File | Purpose |
 |------|---------|
 | `ci.yml` | Thin caller (Phase B, #118): lint → contract-preflight → `changes` (path-gate) → `build-publish` (the reusable build chain, gated on `changes.build` + push-to-main exemption); OR lint → promote (push to main) |
-| `build-publish.yml` | Reusable (`on: workflow_call`) build chain: base-prep → p2996-prep → build → smoke-test (smoke+Dive), lifted verbatim from ci.yml. Inputs `{tag_strategy, publish, target, ref, p2996_ref*, platform*}` (*reserved, Phase D); outputs `{image_ref, digest}`. `github` context = caller's event, so sha/pr tags resolve identically |
+| `build-publish.yml` | Reusable (`on: workflow_call`) build chain: base-prep → p2996-prep → dev-prep → build → smoke-test (smoke+Dive) → dev-tag. dev-prep/dev-tag are the third content-hash tier (#122). Inputs `{tag_strategy, publish, target, ref, p2996_ref*, platform*}` (*reserved, Phase D); outputs `{image_ref, digest}`. `github` context = caller's event, so sha/pr tags resolve identically |
 | `ci-failure-report.yml` | Post-failure diagnostics / issue filing |
 | `image-analysis.yml` | Async (`workflow_run` on CI success): benchmark metrics + Trivy CVE scan, off the PR critical path |
 | `refresh.yml` | Daily cron (00:00): two independent jobs — `snapshot-refresh` (refresh `mise-system-resolved.json` on conda-forge drift) and `p2996-refresh` (bump `CLANG_P2996_REF` to latest `bloomberg/clang-p2996` `p2996`-branch HEAD, issue #100). Both open a PR on change via the shared `open-refresh-pr` composite. |
@@ -40,31 +40,24 @@ behavior unchanged):
    backend (not `npm:agnix` — see `mise.toml`).
 2. **contract-preflight** — Python 3.14 + uv; runs `dotfiles-setup
    verify run` over `python/verification/suites.toml`.
-3. **base-prep** — computes content-hash of base inputs via
-   `dotfiles-setup base-hash`. Probes
-   `ghcr.io/<owner>/<repo>:base-<hash16>` with `docker manifest
-   inspect`. On hit, exits in <30s. On miss, builds the `base` bake
-   target (devcontainer-base stage = apt + mise install + cargo) and
-   pushes it. p2996-prep and build both pull this image so neither
-   rebuilds the heavy mise install when only p2996 inputs change.
-4. **p2996-prep** — computes content-hash of P2996 inputs via
-   `dotfiles-setup p2996-hash`. Probes
-   `ghcr.io/<owner>/<repo>:p2996-<hash16>` with `docker manifest
-   inspect`. On hit, exits in <30s. On miss, builds the `p2996-cache`
-   bake target (the scratch-based `p2996-export` stage holding just
-   `/opt/clang-p2996`, ~500 MB) and pushes it to GHCR.
-5. **build** — `docker buildx bake dev` with
-   `dev.args.P2996_SOURCE=<cache_ref>` from p2996-prep. On cache hit
-   the Dockerfile's `clang-builder` stage is `FROM <cache_ref>` instead
-   of `FROM p2996-export`, skipping the multi-hour clang compile (see
-   `.devcontainer/P2996-CACHE.md` for the current baseline).
-   Always pushes (`:pr-NNN` or `:sha-<sha>` for PRs; `:dev`/`:latest`
-   for schedule and `force_dev_tag=true` workflow_dispatch).
-6. **smoke-test** — pulls `:sha-<github.sha>` and runs the PR-blocking
-   image gates only: `image smoke` (functional) + Dive (`.dive-ci` layer
-   thresholds). The non-gating benchmark metrics + Trivy CVE scan moved to
-   the async `image-analysis.yml` (on CI success) to keep them off the PR
-   critical path. The smoked image is the one retagged `:dev`/`:latest` on
+3. **base-prep** — `dotfiles-setup base-hash` → probe `:base-<hash16>`
+   (`docker manifest inspect`). Hit: <30s. Miss: build the `base` bake
+   target (devcontainer-base = apt + mise install + cargo), push it.
+   p2996-prep + build pull it instead of rebuilding the mise layer.
+4. **p2996-prep** — `dotfiles-setup p2996-hash` → probe `:p2996-<hash16>`.
+   Hit: <30s. Miss: build the `p2996-cache` bake target (scratch
+   `p2996-export` with just `/opt/clang-p2996`, ~500 MB), push to GHCR.
+5. **dev-prep** (#122, PR builds only) — `dotfiles-setup dev-hash` → probe
+   `:dev-<hash16>`. Hit: retag the validated image to `:sha`/`:pr-NNN`,
+   skip build+smoke. Miss: fall through. Nightly skips this (always builds).
+6. **build** — `docker buildx bake dev` with
+   `dev.args.P2996_SOURCE=<cache_ref>`. On p2996 hit the `clang-builder`
+   stage is `FROM <cache_ref>`, skipping the multi-hour clang compile.
+   Pushes `:pr-NNN`/`:sha-<sha>` (PR) or `:dev`/`:latest` (nightly).
+7. **smoke-test** — pulls `:sha-<github.sha>`, runs the PR-blocking image
+   gates: `image smoke` + Dive (`.dive-ci`). Benchmark + Trivy moved to
+   async `image-analysis.yml`. On success **dev-tag** stamps `:dev-<hash>`
+   (the validated marker). The smoked image is the one retagged `:dev`/`:latest` on
    merge.
 
 Push-to-main path (after a PR merge):
@@ -108,10 +101,17 @@ Push-to-main path (after a PR merge):
   gated `if: (github.event_name != 'push' || github.ref != 'refs/heads/main')`,
   so the whole reusable chain is skipped on main; the merge commit is published
   via `promote`'s manifest-retag of the PR's `:pr-NNN`.
+- **Three-tier content-hash probe cache** (#122): `:base-<hash>`,
+  `:p2996-<hash>`, `:dev-<hash>` — each `docker manifest inspect`-probed
+  (`dotfiles-setup {base,p2996,dev}-hash`) before its build. `:dev-<hash>`
+  (dev-prep/dev-tag jobs) is the top tier = base+p2996 hashes + whole
+  Dockerfile + dev bake target; tagged only AFTER smoke passes (validated
+  marker), so a PR hit skips build+smoke (retag to `:sha`/`:pr-NNN`).
+  Nightly skips the dev probe and always rebuilds (catches rolling-tool
+  drift the hash can't see, e.g. the gcc-latest .deb URL).
 - **P2996 cache invalidation.** Key = `CLANG_P2996_REF`, `BASE_IMAGE`,
   `PLATFORM`, Dockerfile, bake file, `mise-system-resolved.json`. Bust via
-  `mise run capture-mise-system-resolved` in the devcontainer on conda-forge
-  drift. Details: `.devcontainer/P2996-CACHE.md`.
+  `mise run capture-mise-system-resolved`. Details: `.devcontainer/P2996-CACHE.md`.
 - **`uv run --project python`**, not `--directory` — `--directory`
   changes cwd and breaks relative test paths.
 - **Use `--watch`, never sleep-poll** (`gh pr checks <n> --watch`); the

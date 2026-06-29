@@ -43,6 +43,9 @@ BASE_SECTION_END = "# ──── BASE_HASH_END ────"
 P2996_SECTION_BEGIN = "# ──── P2996_HASH_BEGIN ────"
 P2996_SECTION_END = "# ──── P2996_HASH_END ────"
 
+# Bake target whose definition feeds the top-tier `:dev-<hash>` cache.
+DEV_BAKE_TARGET = "dev"
+
 
 @dataclass(frozen=True)
 class BaseHashInputs:
@@ -94,6 +97,50 @@ class P2996HashInputs:
         )
 
 
+@dataclass(frozen=True)
+class DevHashInputs:
+    """Inputs feeding the top-tier `:dev-<hash>` validated-image cache.
+
+    The final `devcontainer` Dockerfile stage COPYs nothing from the
+    repo build context — only `/opt/clang-p2996` from the (already
+    hashed) p2996 cache and a rolling `gcc-latest.deb` URL. So, given
+    fixed `base_hash` + `p2996_hash`, the dev image content is a pure
+    function of the Dockerfile instructions and the `dev` bake target.
+
+    `dockerfile_digest` covers the WHOLE Dockerfile (not a sentinel
+    slice): under-hashing here is the cardinal sin — a probe hit skips
+    smoke-test, so two different image contents must never collide to
+    one dev hash. Hashing the whole file is a safe superset (base/p2996
+    edits already bust their own tiers, which feed this hash too).
+    """
+
+    base_hash: str
+    p2996_hash: str
+    platform: str
+    dockerfile_digest: str
+    dev_target_digest: str
+
+    def __post_init__(self) -> None:
+        """Reject empty literals + ill-shaped hashes."""
+        if not self.platform:
+            msg = "DevHashInputs.platform must be non-empty"
+            raise ValueError(msg)
+        for field_name in ("base_hash", "p2996_hash"):
+            value = getattr(self, field_name)
+            if len(value) != HASH_LENGTH or not all(
+                c in "0123456789abcdef" for c in value
+            ):
+                msg = (
+                    f"DevHashInputs.{field_name} must be {HASH_LENGTH}-char "
+                    f"lowercase hex; got {value!r}"
+                )
+                raise ValueError(msg)
+        for field_name in ("dockerfile_digest", "dev_target_digest"):
+            _validate_hex_digest(
+                getattr(self, field_name), f"DevHashInputs.{field_name}"
+            )
+
+
 def _validate_hex_digest(value: str, field: str) -> None:
     if len(value) != SHA256_HEX_LEN or not all(c in "0123456789abcdef" for c in value):
         msg = (
@@ -118,6 +165,36 @@ def _extract_bake_variable(bake_text: str, name: str) -> str:
         msg = f"variable {name!r} not found with string default in docker-bake.hcl"
         raise ValueError(msg)
     return match.group(1)
+
+
+def _extract_bake_target_block(bake_text: str, name: str) -> str:
+    """Return the full `target "<name>" { ... }` block from bake HCL.
+
+    Brace-matched (not regex `[^}]*`) because bake targets nest blocks
+    (`args = { ... }`). The returned text spans the `target` keyword
+    through its closing brace, so any edit to the target's args, cache
+    config, or attestations changes the digest.
+
+    Raises:
+        ValueError: when the target is missing or its braces are
+            unbalanced (truncated file).
+    """
+    header = re.search(r'target\s+"' + re.escape(name) + r'"\s*\{', bake_text)
+    if header is None:
+        msg = f"target {name!r} not found in docker-bake.hcl"
+        raise ValueError(msg)
+    start = header.start()
+    depth = 0
+    for idx in range(header.end() - 1, len(bake_text)):
+        char = bake_text[idx]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return bake_text[start : idx + 1]
+    msg = f"target {name!r} has unbalanced braces in docker-bake.hcl"
+    raise ValueError(msg)
 
 
 def _extract_dockerfile_section(
@@ -234,6 +311,52 @@ def compute_repo_p2996_hash(repo_root: Path) -> str:
     """Top-level helper: compute base hash, then p2996 hash on top."""
     base_hash = compute_repo_base_hash(repo_root)
     return compute_p2996_hash(gather_p2996_inputs(repo_root, base_hash=base_hash))
+
+
+def gather_dev_inputs(
+    repo_root: Path, *, base_hash: str, p2996_hash: str
+) -> DevHashInputs:
+    """Read every input that contributes to the `:dev-<hash>` cache.
+
+    `base_hash` / `p2996_hash` are passed in (rather than recomputed) so
+    a caller can capture the whole chain from a single repo read.
+    """
+    bake_text = (repo_root / "docker-bake.hcl").read_text()
+    dockerfile_text = (repo_root / ".devcontainer" / "Dockerfile").read_text()
+    return DevHashInputs(
+        base_hash=base_hash,
+        p2996_hash=p2996_hash,
+        platform=_extract_bake_variable(bake_text, "PLATFORM"),
+        dockerfile_digest=_sha256_hex(dockerfile_text),
+        dev_target_digest=_sha256_hex(
+            _extract_bake_target_block(bake_text, DEV_BAKE_TARGET)
+        ),
+    )
+
+
+def compute_dev_hash(inputs: DevHashInputs) -> str:
+    """Reduce the dev inputs to a 16-char content hash."""
+    canonical = RECORD_SEPARATOR.join(
+        [
+            f"schema={SCHEMA_VERSION}",
+            "kind=dev",
+            f"base_hash={inputs.base_hash}",
+            f"p2996_hash={inputs.p2996_hash}",
+            f"platform={inputs.platform}",
+            f"dockerfile={inputs.dockerfile_digest}",
+            f"dev_target={inputs.dev_target_digest}",
+        ],
+    )
+    return _sha256_hex(canonical)[:HASH_LENGTH]
+
+
+def compute_repo_dev_hash(repo_root: Path) -> str:
+    """Top-level helper: compute base + p2996 hashes, then the dev hash."""
+    base_hash = compute_repo_base_hash(repo_root)
+    p2996_hash = compute_p2996_hash(gather_p2996_inputs(repo_root, base_hash=base_hash))
+    return compute_dev_hash(
+        gather_dev_inputs(repo_root, base_hash=base_hash, p2996_hash=p2996_hash)
+    )
 
 
 # Back-compat shim: existing callers used `compute_repo_hash` for the

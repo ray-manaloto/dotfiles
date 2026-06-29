@@ -290,10 +290,145 @@ jobs:
             *.secrets=id=github_token,src=/tmp/github_token
 
   # ============================================================
+  # Dev cache prep (#122): the THIRD content-hash tier. Computes
+  # `dotfiles-setup dev-hash` (= base-hash + p2996-hash + whole
+  # Dockerfile + dev bake target) and probes ghcr.io for
+  # `:dev-<hash16>`. That tag is a "built AND smoke-validated" marker —
+  # it is pushed by `dev-tag` ONLY after smoke-test passes — so a probe
+  # HIT means the identical image already exists and was validated:
+  #   HIT  → retag it to :sha-<sha> / :pr-NNN (so promote works on
+  #          merge) and skip build + smoke-test entirely (~12m → ~2m).
+  #   MISS → build + smoke-test as normal, then dev-tag pushes the marker.
+  # Runs for PR builds only (tag_strategy == 'pr'); schedule/dispatch
+  # (tag_strategy == 'nightly') is SKIPPED so the nightly always rebuilds
+  # — it exists to catch rolling-tool drift (gcc-latest .deb) that the
+  # content hash cannot see. See .devcontainer/P2996-CACHE.md +
+  # .github/workflows/AGENTS.md § three-tier probe cache.
+  # ============================================================
+  dev-prep:
+    needs: [base-prep, p2996-prep]
+    if: inputs.tag_strategy == 'pr'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      hash: ${{ steps.hash.outputs.hash }}
+      cache_ref: ${{ steps.hash.outputs.cache_ref }}
+      hit: ${{ steps.probe.outputs.hit }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Install mise (python + uv)
+        uses: ./.github/actions/setup-mise
+        with:
+          install_args: "python uv"
+
+      - name: Compute dev cache hash
+        id: hash
+        run: |
+          set -euo pipefail
+          hash=$(uv run --project python dotfiles-setup dev-hash)
+          cache_ref="${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:dev-${hash}"
+          {
+            echo "hash=${hash}"
+            echo "cache_ref=${cache_ref}"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "## Dev cache lookup"
+            echo ""
+            echo "- Hash: \`${hash}\`"
+            echo "- Cache ref: \`${cache_ref}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ${{ env.CONTAINER_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Probe dev cache
+        id: probe
+        # Same miss/non-miss discrimination as base-prep / p2996-prep:
+        # a "manifest not found" is a legitimate MISS; anything else
+        # (auth/network/registry) fails loud rather than silently
+        # forcing a rebuild. Captures stderr (no `2>/dev/null`) to honor
+        # build.no-stderr-suppression.
+        run: |
+          set -euo pipefail
+          if out=$(docker manifest inspect "${{ steps.hash.outputs.cache_ref }}" 2>&1); then
+            echo "hit=true" >> "$GITHUB_OUTPUT"
+            echo "Dev cache HIT — image already built AND smoke-validated; skipping build + smoke-test" >> "$GITHUB_STEP_SUMMARY"
+          else
+            rc=$?
+            if printf '%s\n' "$out" | grep -qiE 'manifest unknown|not found|no such manifest'; then
+              echo "hit=false" >> "$GITHUB_OUTPUT"
+              echo "Dev cache MISS — building + smoke-testing, then tagging the validated marker" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "FAIL: docker manifest inspect failed with non-miss error (rc=$rc):" >&2
+              printf '%s\n' "$out" >&2
+              exit "$rc"
+            fi
+          fi
+
+      - name: Set up Docker Buildx
+        if: steps.probe.outputs.hit == 'true'
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Retag validated image to :sha / :pr (cache hit)
+        if: steps.probe.outputs.hit == 'true'
+        # On a hit, build + smoke-test are skipped, so the tags they
+        # would have pushed (:sha-<sha>, :pr-NNN) must be created here
+        # from the already-validated :dev-<hash> image. `promote` then
+        # finds :pr-NNN on merge exactly as it would after a real build.
+        env:
+          IMAGE: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}
+          SOURCE_REF: ${{ steps.hash.outputs.cache_ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          short_sha=$(printf '%s' "${{ github.sha }}" | head -c 7)
+          tags=(--tag "${IMAGE}:${short_sha}")
+          if [ -n "${PR_NUMBER}" ]; then
+            tags+=(--tag "${IMAGE}:pr-${PR_NUMBER}")
+          fi
+          docker buildx imagetools create "${tags[@]}" "${SOURCE_REF}"
+          source_digest=$(docker buildx imagetools inspect "${SOURCE_REF}" --format '{{.Manifest.Digest}}')
+          sha_digest=$(docker buildx imagetools inspect "${IMAGE}:${short_sha}" --format '{{.Manifest.Digest}}')
+          [ -n "${sha_digest}" ] || { echo "FAIL: empty digest after retag" >&2; exit 1; }
+          if [ "${sha_digest}" != "${source_digest}" ]; then
+            echo "FAIL: retag did not propagate the validated digest" >&2
+            echo "  source : ${source_digest}" >&2
+            echo "  :sha   : ${sha_digest}" >&2
+            exit 1
+          fi
+          {
+            echo "## Dev cache retag (validated image reused)"
+            echo ""
+            echo "- Source: \`${SOURCE_REF}\` (digest \`${source_digest}\`)"
+            echo "- New tags: \`:${short_sha}\`${PR_NUMBER:+, \`:pr-${PR_NUMBER}\`}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ============================================================
   # Build Type 2: Dotfiles environment image (Docker → ghcr.io)
   # ============================================================
   build:
-    needs: [base-prep, p2996-prep]
+    needs: [base-prep, p2996-prep, dev-prep]
+    # Run when the dev cache MISSED (PR, image changed) OR when dev-prep
+    # was SKIPPED (nightly/dispatch always rebuilds). Skip only on a hit,
+    # where dev-prep already retagged the validated image. `always()` is
+    # required so a skipped dev-prep doesn't cascade-skip this job; the
+    # explicit upstream success checks restore the failure gating.
+    if: |
+      always()
+      && needs.base-prep.result == 'success'
+      && needs.p2996-prep.result == 'success'
+      && (needs.dev-prep.result == 'skipped'
+          || (needs.dev-prep.result == 'success' && needs.dev-prep.outputs.hit != 'true'))
     runs-on: ubuntu-latest
     outputs:
       image_ref: ${{ steps.out.outputs.image_ref }}
@@ -474,3 +609,68 @@ jobs:
       # to rebuild; the Pull / Smoke / Dive steps above fully validate the
       # published base image. Overlay behavior is validated locally via
       # `mise run up` on the Mac.
+
+  # ============================================================
+  # Dev cache tag (#122): push `:dev-<hash>` as the "built AND
+  # smoke-validated" marker — ONLY after smoke-test passes. This is what
+  # makes the dev-prep probe-skip safe: the tag can only ever point at an
+  # image that cleared smoke + Dive, so a future probe HIT reuses a
+  # validated image, never an untested one. Runs whenever build+smoke ran
+  # and passed (PR cache-miss AND nightly), so the marker stays fresh.
+  # Recomputes dev-hash independently (deterministic) since dev-prep is
+  # skipped on the nightly path.
+  # ============================================================
+  dev-tag:
+    needs: [build, smoke-test]
+    if: needs.smoke-test.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Install mise (python + uv)
+        uses: ./.github/actions/setup-mise
+        with:
+          install_args: "python uv"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ${{ env.CONTAINER_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag validated image as :dev-<hash>
+        env:
+          IMAGE: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}
+        run: |
+          set -euo pipefail
+          hash=$(uv run --project python dotfiles-setup dev-hash)
+          short_sha=$(printf '%s' "${{ github.sha }}" | head -c 7)
+          source_ref="${IMAGE}:${short_sha}"
+          marker_ref="${IMAGE}:dev-${hash}"
+          # The just-built + smoked image is published at :sha-<sha>;
+          # stamp the content-hash marker onto that exact digest.
+          docker buildx imagetools create --tag "${marker_ref}" "${source_ref}"
+          source_digest=$(docker buildx imagetools inspect "${source_ref}" --format '{{.Manifest.Digest}}')
+          marker_digest=$(docker buildx imagetools inspect "${marker_ref}" --format '{{.Manifest.Digest}}')
+          [ -n "${marker_digest}" ] || { echo "FAIL: empty digest after marker tag" >&2; exit 1; }
+          if [ "${marker_digest}" != "${source_digest}" ]; then
+            echo "FAIL: marker tag did not propagate the validated digest" >&2
+            echo "  source : ${source_digest}" >&2
+            echo "  marker : ${marker_digest}" >&2
+            exit 1
+          fi
+          {
+            echo "## Dev cache marker tagged"
+            echo ""
+            echo "- \`${marker_ref}\` → digest \`${source_digest}\` (smoke-validated)"
+          } >> "$GITHUB_STEP_SUMMARY"

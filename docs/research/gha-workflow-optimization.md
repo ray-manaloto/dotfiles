@@ -15,7 +15,13 @@ breaking the repo's reproducibility invariants.
 >   `snapshot-refresh.yml`+`p2996-refresh.yml` merged into `refresh.yml`
 >   (two jobs, shared `open-refresh-pr` composite), crons staggered
 >   (refresh 00:00, ci.yml nightly 02:00).
-> - ⬜ Phases B, C, D — not started.
+> - ✅ **Phase B** done — split into two stacked PRs (2026-06-29):
+>   **B1 (#125)** extracted the build chain into the reusable
+>   `build-publish.yml` (`workflow_call`); `ci.yml` is now a thin caller.
+>   **B2 (#126)** folded in #122 — the third `:dev-<hash>` content-hash
+>   tier (`dotfiles-setup dev-hash` + `dev-prep` probe + tag-after-smoke
+>   `dev-tag` marker) skips build+smoke on unchanged-image PRs.
+> - ⬜ Phases C, D — not started.
 
 ## Inventory
 
@@ -333,8 +339,13 @@ flowchart TD
    merged into `refresh.yml` (two jobs, shared `open-refresh-pr` composite);
    crons staggered (refresh 00:00, ci.yml nightly 00:00→02:00). No behavior
    change. v1 R4 satisfied.
-2. **Phase B (the unlock):** extract `build-publish.yml` (`workflow_call`);
-   `ci.yml` becomes a caller. Behavior-preserving — same jobs, same gates.
+2. **Phase B (the unlock):** ✅ **done, PRs #125 + #126 (2026-06-29).**
+   B1 (#125) extracted `build-publish.yml` (`workflow_call`); `ci.yml`
+   is a thin caller — behavior-preserving (same jobs, same gates, same
+   two-tier cache, `promote` retag). B2 (#126) folded in #122: the third
+   `:dev-<hash>` content-hash tier (`dev-prep` probe + `dev-tag`
+   tag-after-smoke validated marker) skips build+smoke on PRs that don't
+   change the image bytes (~12min → ~2min); nightly always rebuilds.
 3. **Phase C (automation):** App token for refresh PRs + `gh pr merge --auto`
    (policy: auto-merge snapshot; choose auto vs review for the p2996 compiler
    bump). Drops the `gh workflow run` dispatch hack and the create-PR setting.
