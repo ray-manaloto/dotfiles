@@ -150,7 +150,7 @@ nightly publishes. Do NOT collapse onto one cron (issue #116).
 PR fires `pull_request` CI on its own — GITHUB_TOKEN PRs don't. **One-time
 repo-admin setup:** (1) create a GitHub App with **contents: write +
 pull-requests: write**, install it here, add secrets `REFRESH_APP_ID` (the
-App's **Client ID** `Iv…`, not the App ID) + `REFRESH_APP_PRIVATE_KEY`;
+**numeric App ID**, NOT the Client ID `Iv…`) + `REFRESH_APP_PRIVATE_KEY`;
 (2) enable **Allow auto-merge**; (3) branch protection on `main` requiring
 **`build-publish / smoke-test`** — else `--auto` lands before smoke. Policy:
 snapshot auto-merges (squash) once smoke passes; p2996 is review-required.
