@@ -225,6 +225,12 @@ jobs:
               - 'python/**'
               - '.dive-ci'
               - '.github/workflows/ci.yml'
+              # Markdown never affects the image or build/verify logic, so a
+              # docs-only change under a build-relevant dir (e.g.
+              # .devcontainer/P2996-CACHE.md, python/AGENTS.md) does not need a
+              # build. The trailing negation excludes all .md (dorny/paths-filter
+              # honors `!`; a non-.md change in the same PR still triggers build).
+              - '!**/*.md'
 
       - name: Decide whether the build chain runs
         id: decide
