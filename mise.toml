@@ -569,6 +569,10 @@ run = "mise lock"
 description = "Print the content-hash of P2996 cache inputs (matches the CI :p2996-<hash> tag)"
 run = "uv run --project python dotfiles-setup p2996-hash"
 
+[tasks.p2996-refresh]
+description = "Bump CLANG_P2996_REF in docker-bake.hcl to the latest bloomberg/clang-p2996 p2996-branch HEAD (writes only on change; the scheduled p2996-refresh.yml workflow does this in CI)"
+run = "uv run --project python dotfiles-setup p2996-refresh"
+
 [tasks.capture-mise-system-resolved]
 description = "Refresh .devcontainer/mise-system-resolved.json — run inside the devcontainer when conda-forge tool drift should bust the P2996 cache"
 run = "uv run --project python dotfiles-setup mise-snapshot"

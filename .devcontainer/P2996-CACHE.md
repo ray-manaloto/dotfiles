@@ -61,11 +61,14 @@ The resolved-snapshot file pins the conda-forge resolutions of `cmake`,
 `"latest"`, so without the snapshot the hash would not change on
 upstream conda-forge drift.
 
-> **Planned (issue #100):** `CLANG_P2996_REF` will be auto-bumped by a
-> scheduled workflow tracking the `bloomberg/clang-p2996` `p2996` branch
-> HEAD (opening a PR when it changes). The pin stays in `docker-bake.hcl`
-> so the hash above keeps caching correctly — an unchanged SHA hits the
-> cache, a changed SHA triggers exactly one rebuild.
+> **Auto-bump (issue #100):** `CLANG_P2996_REF` is auto-bumped by the
+> scheduled `.github/workflows/p2996-refresh.yml` workflow, which tracks
+> the `bloomberg/clang-p2996` `p2996` branch HEAD (no releases/tags exist)
+> and opens a PR when it advances. The pin stays in `docker-bake.hcl` so
+> the hash above keeps caching correctly — an unchanged SHA hits the
+> cache, a changed SHA triggers exactly one rebuild. Run it on demand with
+> `mise run p2996-refresh` (writes only on change) or `gh workflow run
+> p2996-refresh.yml`. Logic: `python/src/dotfiles_setup/p2996_refresh.py`.
 
 ## Operator workflow
 
@@ -75,6 +78,11 @@ upstream conda-forge drift.
   bust the cache): `mise run capture-mise-system-resolved` inside the
   devcontainer, then commit the updated
   `.devcontainer/mise-system-resolved.json`.
+- **Bump to latest p2996 HEAD**: `mise run p2996-refresh` — rewrites
+  `CLANG_P2996_REF` in `docker-bake.hcl` to the latest
+  `bloomberg/clang-p2996` `p2996`-branch HEAD (no-op write when already
+  current). The scheduled `p2996-refresh.yml` workflow does this weekly
+  and opens a PR on change.
 - **Manual cache bust**: bump `CLANG_P2996_REF` in `docker-bake.hcl`,
   OR refresh the snapshot, OR edit any of the hash-input files. The
   next CI run detects a cache miss and rebuilds + pushes a new
@@ -92,6 +100,8 @@ shell branching.
 ## See also
 
 - `python/src/dotfiles_setup/p2996_hash.py` — hash computation source.
+- `python/src/dotfiles_setup/p2996_refresh.py` — auto-bump source.
 - `python/src/dotfiles_setup/mise_snapshot.py` — snapshot capture source.
 - `docker-bake.hcl` — the `dev` and `p2996-cache` targets.
 - `.github/workflows/ci.yml` — `p2996-prep` and `build` jobs.
+- `.github/workflows/p2996-refresh.yml` — scheduled CLANG_P2996_REF bump.

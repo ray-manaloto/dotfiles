@@ -22,6 +22,7 @@ from dotfiles_setup.p2996_hash import (
     compute_repo_base_hash,
     compute_repo_p2996_hash,
 )
+from dotfiles_setup.p2996_refresh import refresh as refresh_p2996_ref
 from dotfiles_setup.verify import main as verify_main
 
 logger = logging.getLogger(__name__)
@@ -190,6 +191,11 @@ def setup_parser() -> argparse.ArgumentParser:
     subparsers.add_parser(
         "base-hash",
         help="Print the content-addressed hash of devcontainer-base inputs",
+    )
+    subparsers.add_parser(
+        "p2996-refresh",
+        help="Bump CLANG_P2996_REF in docker-bake.hcl to the latest "
+        "bloomberg/clang-p2996 p2996-branch HEAD (writes only on change)",
     )
     subparsers.add_parser(
         "mise-snapshot",
@@ -375,6 +381,9 @@ def _build_command_handlers(
     def _base_hash() -> None:
         sys.stdout.write(compute_repo_base_hash(project_root) + "\n")
 
+    def _p2996_refresh() -> None:
+        sys.stdout.write(refresh_p2996_ref(project_root).as_json() + "\n")
+
     def _mise_snapshot() -> None:
         resolved = capture()
         write_snapshot(
@@ -396,6 +405,7 @@ def _build_command_handlers(
         "sync-versions": lambda: handle_sync_versions(project_root),
         "p2996-hash": _p2996_hash,
         "base-hash": _base_hash,
+        "p2996-refresh": _p2996_refresh,
         "mise-snapshot": _mise_snapshot,
     }
 
