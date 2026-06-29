@@ -1,17 +1,19 @@
 name: "Open refresh PR"
 description: >-
   Shared create-PR tail for the refresh jobs. Opens (or updates) a PR via
-  peter-evans/create-pull-request, then dispatches ci.yml on its branch.
-  The dispatch is required because PRs created with secrets.GITHUB_TOKEN do
-  NOT fire `pull_request` workflows, so without it the auto-PR would sit
-  with no CI. Skipped when no file changed (no PR created). This composite
-  is local, so the calling job must run actions/checkout first.
+  peter-evans/create-pull-request using a GitHub App token (passed in by the
+  caller — composites can't read `secrets`), so the PR's normal
+  `pull_request` CI fires automatically: NO ci.yml dispatch hack needed.
+  Optionally enables squash auto-merge. No-op when no tracked file changed.
+  This composite is local, so the calling job must run actions/checkout first.
 
 inputs:
   token:
     description: >-
-      Token used both for create-pull-request and the ci.yml dispatch
-      (typically secrets.GITHUB_TOKEN).
+      GitHub App installation token (from actions/create-github-app-token).
+      An App token — NOT secrets.GITHUB_TOKEN — is required: GITHUB_TOKEN-
+      created PRs do NOT trigger downstream `pull_request` workflows (GitHub's
+      recursion guard), which is the whole reason this phase exists.
     required: true
   commit-message:
     description: "Commit message for the refresh PR."
@@ -23,7 +25,7 @@ inputs:
     description: "Body of the refresh PR (markdown, may be multiline)."
     required: true
   branch:
-    description: "Head branch for the PR; also the ref ci.yml is dispatched on."
+    description: "Head branch for the PR."
     required: true
   paths:
     description: "add-paths value — only these paths are staged into the PR."
@@ -32,8 +34,29 @@ inputs:
     description: "Newline- or comma-separated labels for the PR."
     required: true
   summary-heading:
-    description: "Heading for the GITHUB_STEP_SUMMARY block written after dispatch."
+    description: "Heading for the GITHUB_STEP_SUMMARY block."
     required: true
+  auto-merge:
+    description: >-
+      When 'true', enable squash auto-merge on the opened PR — it lands
+      unattended once the branch-protection-required checks
+      (build-publish / smoke-test) pass. When 'false' (default), the PR is
+      left open for human review. Auto-merge requires the repo "Allow
+      auto-merge" setting AND a required smoke-test check on main, else the
+      PR could merge before smoke runs — see .github/workflows/AGENTS.md.
+    required: false
+    default: "false"
+
+outputs:
+  pull-request-number:
+    description: "Number of the opened/updated PR (empty when no change)."
+    value: ${{ steps.cpr.outputs.pull-request-number }}
+  pull-request-url:
+    description: "URL of the opened/updated PR (empty when no change)."
+    value: ${{ steps.cpr.outputs.pull-request-url }}
+  pull-request-operation:
+    description: "create | update | close | '' (none)."
+    value: ${{ steps.cpr.outputs.pull-request-operation }}
 
 runs:
   using: composite
@@ -52,25 +75,29 @@ runs:
         delete-branch: true
         labels: ${{ inputs.labels }}
 
-    - name: Re-trigger CI on the auto-PR
-      # GH limitation: PRs created via secrets.GITHUB_TOKEN do NOT trigger
-      # `pull_request` workflows. Dispatch ci.yml on the auto-PR branch so
-      # the full pipeline (incl. a P2996 cache probe against the new hash)
-      # validates the change. Skipped when no PR was created (no drift).
+    - name: Enable auto-merge or note review-required
+      # The App-token PR already fires `pull_request` CI on its own, so all
+      # that remains is the merge policy. Skipped when no PR was created
+      # (no drift). `--auto` waits for the required smoke-test check; without
+      # branch protection requiring it, the PR could merge before smoke runs.
       if: steps.cpr.outputs.pull-request-number != ''
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.token }}
-        PR_BRANCH: ${{ inputs.branch }}
         PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
         PR_URL: ${{ steps.cpr.outputs.pull-request-url }}
+        AUTO_MERGE: ${{ inputs.auto-merge }}
         SUMMARY_HEADING: ${{ inputs.summary-heading }}
       run: |
         set -euo pipefail
-        gh workflow run ci.yml --ref "$PR_BRANCH"
         {
           echo "## ${SUMMARY_HEADING}"
           echo ""
           echo "- PR: #${PR_NUMBER} (${PR_URL})"
-          echo "- Dispatched ci.yml on \`${PR_BRANCH}\` to validate the change."
         } >> "$GITHUB_STEP_SUMMARY"
+        if [ "${AUTO_MERGE}" = "true" ]; then
+          gh pr merge "${PR_NUMBER}" --auto --squash
+          echo "- Auto-merge enabled — lands when the required \`build-publish / smoke-test\` check passes." >> "$GITHUB_STEP_SUMMARY"
+        else
+          echo "- Review-required — left open for human merge (smoke-test is the safety net)." >> "$GITHUB_STEP_SUMMARY"
+        fi

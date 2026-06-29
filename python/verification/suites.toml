@@ -491,6 +491,29 @@ tokens = [
 ]
 
 [[suite]]
+name = "ci.refresh-uses-app-token"
+description = "Phase C (#119): refresh.yml must mint a GitHub App token (actions/create-github-app-token) for the PR push so downstream pull_request CI fires on its own (GITHUB_TOKEN-created PRs don't), and the snapshot job must enable auto-merge. App ID/private-key come from REFRESH_APP_ID / REFRESH_APP_PRIVATE_KEY secrets."
+category = "ci"
+check_type = "static"
+handler = "require_tokens"
+paths = [".github/workflows/refresh.yml"]
+tokens = [
+  "actions/create-github-app-token",
+  "REFRESH_APP_ID",
+  "REFRESH_APP_PRIVATE_KEY",
+  "auto-merge:",
+]
+
+[[suite]]
+name = "ci.refresh-no-dispatch-hack"
+description = "Phase C (#119): the open-refresh-pr composite must NOT re-trigger CI via 'gh workflow run ci.yml' — the App token makes the PR fire pull_request CI on its own, so the dispatch hack is removed. (The unrelated promote-fallback dispatch in ci.yml is a different path and is allowed.)"
+category = "ci"
+check_type = "static"
+handler = "forbid_tokens"
+paths = [".github/actions/open-refresh-pr/action.yml"]
+tokens = ["gh workflow run ci.yml"]
+
+[[suite]]
 name = "ci.regex-managers-enabled"
 description = "Renovate's customManagers must be enabled via 'custom.regex' in enabledManagers — without it, every regex manager block is silently inactive (the existing CLANG_P2996_REF tracker hit this in 2026-04)"
 category = "ci"

@@ -2,10 +2,22 @@ name: Refresh upstream pins
 
 # Two independent daily-refresh jobs merged into one workflow. Each detects
 # a different upstream drift and opens a PR via the shared
-# `./.github/actions/open-refresh-pr` composite (create-PR + ci.yml
-# dispatch). The jobs share nothing but that tail — distinct detection,
-# distinct concurrency groups, distinct cache needs — so they run fully in
-# parallel and one failing never blocks the other.
+# `./.github/actions/open-refresh-pr` composite. Each job mints a GitHub
+# App token (actions/create-github-app-token) for the PR push so the PR's
+# normal `pull_request` CI fires on its own — no `gh workflow run ci.yml`
+# dispatch hack, and no dependency on the "Allow Actions to create PRs"
+# repo setting (Phase C, #119). The jobs share nothing but that tail —
+# distinct detection, concurrency groups, and cache needs — so they run
+# fully in parallel and one failing never blocks the other.
+#
+# Merge policy: snapshot-refresh AUTO-MERGES (squash) once smoke-test
+# passes — fully unattended; p2996-refresh is REVIEW-REQUIRED (the clang
+# compiler bump gets human eyes; smoke-test is the safety net either way).
+#
+# One-time setup (repo admin) — see .github/workflows/AGENTS.md § GitHub
+# App: install an App with contents:write + pull-requests:write, add
+# `REFRESH_APP_ID` + `REFRESH_APP_PRIVATE_KEY` secrets, enable "Allow
+# auto-merge", and require the `build-publish / smoke-test` check on main.
 #
 #   - snapshot-refresh: refreshes `.devcontainer/mise-system-resolved.json`
 #     so the P2996 cache hash picks up conda-forge drift on `"latest"`-pinned
@@ -50,6 +62,16 @@ jobs:
       MISE_LOG_FILE: /tmp/mise.log
       MISE_LOG_FILE_LEVEL: debug
     steps:
+      - name: Mint GitHub App token
+        # App-token PR push fires `pull_request` CI on its own (unlike
+        # secrets.GITHUB_TOKEN). Token is scoped to this repo via the App
+        # installation; permissions = the App's grant (contents + PRs write).
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.REFRESH_APP_ID }}
+          private-key: ${{ secrets.REFRESH_APP_PRIVATE_KEY }}
+
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -85,22 +107,24 @@ jobs:
       - name: Open PR if snapshot drifted
         uses: ./.github/actions/open-refresh-pr
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
           commit-message: "chore: refresh mise-system-resolved snapshot"
           title: "chore: refresh mise-system-resolved snapshot"
           body: |
             Automated daily refresh of `.devcontainer/mise-system-resolved.json`.
 
             Captures conda-forge resolutions of system-mise tools whose
-            `mise-system.toml` versions are pinned to `"latest"`. Diff
-            below shows the upstream version drift since the last refresh
-            — review before merging to ensure no major-version surprises.
+            `mise-system.toml` versions are pinned to `"latest"`. This PR
+            auto-merges (squash) once `build-publish / smoke-test` passes —
+            the smoke test validates the rebuilt image, so the snapshot
+            drift lands unattended.
 
             Trigger: ${{ github.event_name }}.
           branch: chore/snapshot-refresh
           paths: .devcontainer/mise-system-resolved.json
           labels: mise-snapshot
           summary-heading: Snapshot refresh
+          auto-merge: "true"
 
   p2996-refresh:
     runs-on: ubuntu-latest
@@ -108,6 +132,16 @@ jobs:
       group: p2996-refresh
       cancel-in-progress: false
     steps:
+      - name: Mint GitHub App token
+        # App-token PR push fires `pull_request` CI on its own (unlike
+        # secrets.GITHUB_TOKEN). This job does NOT auto-merge — the clang
+        # compiler bump is review-required.
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.REFRESH_APP_ID }}
+          private-key: ${{ secrets.REFRESH_APP_PRIVATE_KEY }}
+
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -137,7 +171,7 @@ jobs:
       - name: Open PR if the pinned ref advanced
         uses: ./.github/actions/open-refresh-pr
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
           commit-message: "chore: bump CLANG_P2996_REF to latest p2996 HEAD"
           title: "chore: bump CLANG_P2996_REF to latest p2996 HEAD"
           body: |
@@ -148,10 +182,12 @@ jobs:
             on the `p2996` branch HEAD is tracked as "latest". The pinned
             SHA feeds the content-addressed P2996 cache key, so this PR will
             trigger exactly one clang rebuild (ccache gives ~80% object
-            reuse). Review the upstream commit range before merging.
+            reuse). **Review-required** — the compiler bump gets human eyes;
+            review the upstream commit range before merging.
 
             Trigger: ${{ github.event_name }}.
           branch: chore/p2996-refresh
           paths: docker-bake.hcl
           labels: enhancement
           summary-heading: CLANG_P2996_REF refresh validation
+          auto-merge: "false"
