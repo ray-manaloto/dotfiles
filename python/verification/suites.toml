@@ -440,7 +440,7 @@ tokens = ["packages: write"]
 
 [[suite]]
 name = "ci.push-to-main-skips-build"
-description = "Push-to-main must skip the heavy rebuild path. The build job (and p2996-prep, smoke-test which depend on it) must carry the push-to-main skip clause '(github.event_name != \"push\" || github.ref != \"refs/heads/main\")'. Promote job retags the PR's image instead. The clause is now parenthesized because the build jobs additionally gate on the path-filter (&& needs.changes.outputs.build == 'true'), so this checks for the clause as a sub-expression rather than a bare 'if:'."
+description = "Push-to-main must skip the heavy rebuild path. Since Phase B (#118) the build chain (base-prep → p2996-prep → build → smoke-test) lives in the reusable build-publish.yml and is invoked by a single 'build-publish' caller job in ci.yml; that caller carries the push-to-main skip clause '(github.event_name != \"push\" || github.ref != \"refs/heads/main\")' (parenthesized because it also gates on the path-filter && needs.changes.outputs.build == 'true'). Promote job retags the PR's image instead. This checks for the clause as a sub-expression rather than a bare 'if:'."
 category = "ci"
 check_type = "static"
 handler = "require_tokens"
@@ -463,11 +463,11 @@ tokens = [
 
 [[suite]]
 name = "ci.p2996-prep-job-exists"
-description = "p2996-prep job must compute the content-hash via dotfiles-setup p2996-hash and probe ghcr.io for ':p2996-<hash>' before triggering the build. Cache hit short-circuits the ~80–120 min clang compile."
+description = "p2996-prep job must compute the content-hash via dotfiles-setup p2996-hash and probe ghcr.io for ':p2996-<hash>' before triggering the build. Cache hit short-circuits the ~80–120 min clang compile. Lives in the reusable build-publish.yml since Phase B (#118) — ci.yml calls it via workflow_call."
 category = "ci"
 check_type = "static"
 handler = "require_tokens"
-paths = [".github/workflows/ci.yml"]
+paths = [".github/workflows/build-publish.yml"]
 tokens = [
   "p2996-prep:",
   "dotfiles-setup p2996-hash",
