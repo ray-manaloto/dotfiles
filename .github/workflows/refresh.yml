@@ -47,6 +47,10 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  packages: read  # snapshot-refresh pulls the private :dev image to capture
+                  # the mise snapshot; an explicit permissions block defaults
+                  # all unlisted scopes to `none`, so this must be declared
+                  # or `docker pull :dev` fails with "denied".
 
 jobs:
   snapshot-refresh:
