@@ -90,9 +90,9 @@ natively. The fix is at the tmux layer, not the terminal.
   because they set `TERM=xterm-256color` or similar. If your terminal
   uses a non-xterm `TERM` (rare — e.g., `screen-256color` if you set
   it manually), adjust the glob.
-- **Chezmoi-managed configs**: if your `~/.tmux.conf` is copied from
-  another repo (e.g., `macos-development-environment/home/dot_tmux.conf`),
-  edit the source file, not the target — otherwise the next chezmoi
+- **Chezmoi-managed configs**: if your `~/.tmux.conf` is chezmoi-managed
+  (e.g., a `dot_tmux.conf` source in your dotfiles repo), edit the source
+  file, not the target — otherwise the next chezmoi
   apply wipes the change. Then `cp` or `chezmoi apply` to sync, then
   `tmux source-file` to reload.
 - **`/terminal-setup` is a red herring inside tmux.** Don't exit tmux

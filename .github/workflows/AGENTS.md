@@ -1,5 +1,5 @@
 <!-- Parent: ../../AGENTS.md -->
-<!-- Generated: 2026-04-07 | Updated: 2026-04-07 -->
+<!-- Generated: 2026-04-07 | Updated: 2026-06-28 -->
 
 # .github/workflows/ — CI Pipeline
 
@@ -155,7 +155,7 @@ Push-to-main path (after a PR merge):
 ## Debugging CI failures
 
 - Check the build job diagnostics step first (`docker buildx bake
-  --print`) — it often shows known warnings without needing the full
+  --print`) — it surfaces known warnings without needing the full
   build log.
 - `mise doctor --json` output in the lint job shows tool resolution
   issues.

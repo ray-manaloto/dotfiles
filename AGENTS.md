@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-07 | Updated: 2026-04-07 -->
+<!-- Generated: 2026-04-07 | Updated: 2026-06-28 -->
 
 # Dotfiles — macOS Developer Environment
 
@@ -55,7 +55,7 @@ the official `@devcontainers/cli` (pinned in `mise.toml`).
 | `.claude/` | Claude-specific agents, skills, rules. Has its own `CLAUDE.md` with OMC orchestration |
 | `home/` | Chezmoi-managed dotfiles — see `home/AGENTS.md` |
 | `python/` | Python package `dotfiles_setup` — see `python/AGENTS.md` |
-| `tests/` | Pytest + Bats test suite (65 pytest tests) — see `tests/AGENTS.md` |
+| `tests/` | Pytest + Bats test suite (101 pytest tests) — see `tests/AGENTS.md` |
 | `scripts/` | Utility scripts (`benchmark-docker.sh`, `devcontainer-smoke.sh`) |
 | `docs/` | Documentation, research findings, design specs |
 
@@ -85,7 +85,7 @@ changes don't take effect.
 ## Testing
 
 ```bash
-uv run --project python pytest tests/ -x -q               # All 65 tests
+uv run --project python pytest tests/ -x -q               # All 101 tests
 uv run --project python pytest tests/test_audit.py -x -q  # Single file
 hk run pre-commit --all --stash none                      # Lint checks only
 dotfiles-setup verify run                                 # Verification contracts (suites.toml)
