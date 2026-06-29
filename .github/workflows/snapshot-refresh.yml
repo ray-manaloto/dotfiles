@@ -6,17 +6,17 @@ name: Refresh mise-system snapshot
 # cached image are last-snapshot, not latest).
 #
 # Triggers:
-#   - Weekly cron, Mondays at 00:00 in maintainer-local timezone so the
-#     auto-PR lands at the start of the work week and bounds drift to
-#     roughly one week. The `timezone:` field is honored by GitHub
-#     Actions cron natively.
+#   - Daily cron at 00:00 maintainer-local so a build with the latest
+#     conda-forge snapshots is always available; drift is bounded to ~one
+#     day. No-op on days with no drift. The `timezone:` field is honored
+#     by GitHub Actions cron natively.
 #   - workflow_dispatch — manual trigger via `gh workflow run` or web UI.
 #
 # Outcome: opens a PR if the snapshot file changed; no-op if not.
 
 on:
   schedule:
-    - cron: "0 0 * * MON"
+    - cron: "0 0 * * *"
       timezone: "America/Chicago"
   workflow_dispatch:
 
@@ -78,7 +78,7 @@ jobs:
           commit-message: "chore: refresh mise-system-resolved snapshot"
           title: "chore: refresh mise-system-resolved snapshot"
           body: |
-            Automated weekly refresh of `.devcontainer/mise-system-resolved.json`.
+            Automated daily refresh of `.devcontainer/mise-system-resolved.json`.
 
             Captures conda-forge resolutions of system-mise tools whose
             `mise-system.toml` versions are pinned to `"latest"`. Diff

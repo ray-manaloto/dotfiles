@@ -15,8 +15,8 @@ post-failure reporting.
 | `ci.yml` | Main pipeline: lint → contract-preflight → `changes` (path-gate) → base-prep → p2996-prep → build → smoke-test (smoke+Dive), build chain gated on `changes.build`; OR lint → promote (push to main) |
 | `ci-failure-report.yml` | Post-failure diagnostics / issue filing |
 | `image-analysis.yml` | Async (`workflow_run` on CI success): benchmark metrics + Trivy CVE scan, off the PR critical path |
-| `snapshot-refresh.yml` | Weekly cron: refresh `mise-system-resolved.json` (conda-forge drift), open PR on change |
-| `p2996-refresh.yml` | Weekly cron: bump `CLANG_P2996_REF` to latest `bloomberg/clang-p2996` `p2996`-branch HEAD, open PR on change (issue #100) |
+| `snapshot-refresh.yml` | Daily cron: refresh `mise-system-resolved.json` (conda-forge drift), open PR on change |
+| `p2996-refresh.yml` | Daily cron: bump `CLANG_P2996_REF` to latest `bloomberg/clang-p2996` `p2996`-branch HEAD, open PR on change (issue #100) |
 
 ## Pipeline stages
 
