@@ -477,6 +477,20 @@ tokens = [
 ]
 
 [[suite]]
+name = "ci.dev-prep-gate-exists"
+description = "The third-tier dev-image content-hash gate (#122) must exist: a dev-prep job probes ':dev-<hash>' (via dotfiles-setup dev-hash) to skip build+smoke on an unchanged image, and a dev-tag job pushes the ':dev-<hash>' marker ONLY after smoke-test passes (validated-marker invariant — what makes the probe-skip safe). Lives in the reusable build-publish.yml (Phase B / #118)."
+category = "ci"
+check_type = "static"
+handler = "require_tokens"
+paths = [".github/workflows/build-publish.yml"]
+tokens = [
+  "dev-prep:",
+  "dotfiles-setup dev-hash",
+  "dev-tag:",
+  "needs.smoke-test.result == 'success'",
+]
+
+[[suite]]
 name = "ci.regex-managers-enabled"
 description = "Renovate's customManagers must be enabled via 'custom.regex' in enabledManagers — without it, every regex manager block is silently inactive (the existing CLANG_P2996_REF tracker hit this in 2026-04)"
 category = "ci"
