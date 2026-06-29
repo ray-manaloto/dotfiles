@@ -158,8 +158,8 @@ Current assertions:
 - `mise ls --installed | wc -l > 0` after `mise install`
 - Non-empty shims dir after `mise reshim -f`
 
-Do NOT add `2>/dev/null` to any of these — the `build.no-stderr-suppression`
-contract rejects stderr suppression. Let errors be loud.
+Always let these checks fail loudly — the `build.no-stderr-suppression`
+contract rejects stderr suppression, so do not add `2>/dev/null`.
 
 ## Mise installer & system-config gotchas
 

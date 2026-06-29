@@ -16,6 +16,23 @@ exclude = [
 tools = ["claude-code"]
 max_files_to_validate = 10000
 
+# Per-file rule suppressions for by-design patterns in this repo's reference
+# docs. Scoped by path so a stray hard-coded path or bad pattern in NEW code
+# still flags. Rule IDs verified via `agnix --verbose .`.
+[[overrides]]
+# AGENTS.md / CLAUDE.md are hierarchical reference docs for a Claude Code repo:
+#  - XP-003: intentional `.claude/` path references (and container `~/` paths in
+#    .devcontainer/AGENTS.md, which are correct inside the container).
+#  - AGM-006: the deliberate nested-AGENTS.md hierarchy (enforced by the
+#    claude_agents_md_pairs hk step).
+#  - AGM-004: these files carry project context without a literal
+#    "## Project Context" header, and are at the 200-line claude_md_size_limit.
+#  - PE-001: "critical keyword in the 40-60% lost-in-middle zone" is a prompt
+#    heuristic that misfires on reference docs.
+paths = ["**/AGENTS.md", "**/CLAUDE.md", "AGENTS.md", "CLAUDE.md"]
+disabled_rules = ["XP-003", "AGM-004", "AGM-006", "PE-001"]
+
+[[overrides]]
 [rules]
 skills = true
 hooks = true
@@ -30,7 +47,11 @@ prompt_engineering = true
 frontmatter_validation = true
 xml_balance = true
 import_references = true
-disabled_rules = []
+# CC-SK-017: skills in this repo carry local metadata frontmatter fields
+# (type, extracted-from, applicability, triggers, source, status, inspired-by,
+# id, quality) that are not in agnix's canonical SKILL.md schema. They are an
+# intentional convention, so disable the unknown-frontmatter-field check.
+disabled_rules = ["CC-SK-017"]
 disabled_validators = []
 
 [files]

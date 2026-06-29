@@ -9,7 +9,7 @@ A highly resilient, declarative dotfiles setup using **Chezmoi**, **Mise**, and 
 ```bash
 mise install                                       # Install all tools
 hk run pre-commit --all                            # Run lint checks (requires HK_PKL_BACKEND=pkl)
-uv run --project python pytest tests/ -x -q      # Run all 65 tests
+uv run --project python pytest tests/ -x -q      # Run all 101 tests
 ```
 
 ### Docker Build
@@ -38,7 +38,7 @@ curl -fsSL https://raw.githubusercontent.com/sortakool/dotfiles/main/install.sh 
 -   **Zero-Bash**: Logic is encapsulated in a typed, linted Python library (`dotfiles_setup`).
 -   **Zero Lint Suppressions**: No `noqa`, `type: ignore`, or `pylint: disable` — enforced by `no_lint_skip` hk step.
 -   **Environment Auditor**: Built-in health checks for identity, toolchains, and SSH connectivity.
--   **CI/CD**: Lint, contract-preflight, build, and smoke-test on GitHub Actions.
+-   **CI/CD**: GitHub Actions — lint → contract-preflight → a `changes` path-gate → base-prep → p2996-prep → build → smoke-test (smoke + Dive); `promote` retags on main; benchmark + Trivy run async in `image-analysis.yml`. Docs-only changes skip the build chain.
 
 ## Tool Management
 
