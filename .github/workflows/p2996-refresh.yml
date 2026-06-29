@@ -11,16 +11,17 @@ name: Refresh CLANG_P2996_REF
 # `.devcontainer/P2996-CACHE.md`.
 #
 # Triggers:
-#   - Weekly cron, Mondays at 00:00 maintainer-local — mirrors
-#     snapshot-refresh.yml so both auto-PRs land at the start of the work
-#     week and drift is bounded to ~one week. GHA honors `timezone:`.
+#   - Daily cron at 00:00 maintainer-local — mirrors snapshot-refresh.yml
+#     so a build on the latest p2996 HEAD is always available; drift is
+#     bounded to ~one day. No-op on days with no new HEAD. GHA honors
+#     `timezone:`.
 #   - workflow_dispatch — manual trigger via `gh workflow run` or web UI.
 #
 # Outcome: opens a PR if the pinned SHA advanced; no-op if not.
 
 on:
   schedule:
-    - cron: "0 0 * * MON"
+    - cron: "0 0 * * *"
       timezone: "America/Chicago"
   workflow_dispatch:
 
@@ -71,7 +72,7 @@ jobs:
           commit-message: "chore: bump CLANG_P2996_REF to latest p2996 HEAD"
           title: "chore: bump CLANG_P2996_REF to latest p2996 HEAD"
           body: |
-            Automated weekly bump of `CLANG_P2996_REF` in `docker-bake.hcl`
+            Automated daily bump of `CLANG_P2996_REF` in `docker-bake.hcl`
             to the latest `bloomberg/clang-p2996` `p2996`-branch HEAD.
 
             clang-p2996 ships no releases or tags, so the active P2996 work

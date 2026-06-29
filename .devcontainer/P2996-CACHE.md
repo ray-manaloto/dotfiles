@@ -81,7 +81,7 @@ upstream conda-forge drift.
 - **Bump to latest p2996 HEAD**: `mise run p2996-refresh` — rewrites
   `CLANG_P2996_REF` in `docker-bake.hcl` to the latest
   `bloomberg/clang-p2996` `p2996`-branch HEAD (no-op write when already
-  current). The scheduled `p2996-refresh.yml` workflow does this weekly
+  current). The scheduled `p2996-refresh.yml` workflow does this daily
   and opens a PR on change.
 - **Manual cache bust**: bump `CLANG_P2996_REF` in `docker-bake.hcl`,
   OR refresh the snapshot, OR edit any of the hash-input files. The
