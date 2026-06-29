@@ -6,8 +6,16 @@ evaluate two specific ideas — (1) a reusable "latest p2996" action, and
 (2) auto-build-and-publish when a new p2996 commit appears — without
 breaking the repo's reproducibility invariants.
 
-> Status: **analysis + recommendations**. Nothing here is implemented yet;
-> it exists so we can agree a target architecture before changing CI.
+> Status: **in implementation** (tracked by epic #116). The Inventory and
+> diagrams below are the *pre-Phase-A baseline* the analysis was written
+> against — kept as-is so the reasoning stays legible. See **Phased
+> migration** at the bottom for live progress.
+>
+> - ✅ **Phase A** done — PR #121 (2026-06-29): `setup-mise` composite,
+>   `snapshot-refresh.yml`+`p2996-refresh.yml` merged into `refresh.yml`
+>   (two jobs, shared `open-refresh-pr` composite), crons staggered
+>   (refresh 00:00, ci.yml nightly 02:00).
+> - ⬜ Phases B, C, D — not started.
 
 ## Inventory
 
@@ -320,9 +328,11 @@ flowchart TD
 
 ## Phased migration (each phase shippable + reversible)
 
-1. **Phase A (low risk, high clarity):** `setup-mise` composite + merge the
-   two refresh workflows into `refresh.yml` (two jobs, shared composite).
-   No behavior change. Document + stagger crons (v1 R4).
+1. **Phase A (low risk, high clarity)** — ✅ **done, PR #121 (2026-06-29).**
+   `setup-mise` composite (8 jobs); `snapshot-refresh.yml`+`p2996-refresh.yml`
+   merged into `refresh.yml` (two jobs, shared `open-refresh-pr` composite);
+   crons staggered (refresh 00:00, ci.yml nightly 00:00→02:00). No behavior
+   change. v1 R4 satisfied.
 2. **Phase B (the unlock):** extract `build-publish.yml` (`workflow_call`);
    `ci.yml` becomes a caller. Behavior-preserving — same jobs, same gates.
 3. **Phase C (automation):** App token for refresh PRs + `gh pr merge --auto`
@@ -349,6 +359,7 @@ flowchart TD
 - [peter-evans/create-pull-request](https://github.com/peter-evans/create-pull-request) — PR-creation action in both refresh workflows.
 - [peter-evans/repository-dispatch](https://github.com/peter-evans/repository-dispatch) — reference for the optional `repository_dispatch` detect→build path.
 - [jdx/mise-action](https://github.com/jdx/mise-action) — the repeated setup step analyzed for the `setup-mise` composite.
+- [actions/runner](https://github.com/actions/runner) — issue #1300 / #1348: a *local* composite action is resolved from `$GITHUB_WORKSPACE`, so it cannot bundle the bootstrap `actions/checkout` (Phase A: `setup-mise` wraps mise only).
 - [aquasecurity/trivy-action](https://github.com/aquasecurity/trivy-action) — image-analysis CVE scan (pin fixed in #112); also the bump-PR upstream-pin reference pattern.
 - [aquasecurity/trivy-db](https://github.com/aquasecurity/trivy-db) — scheduled-rebuild reference (the unconditional-rebuild anti-pattern).
 - [github/codeql-action](https://github.com/github/codeql-action) — SARIF upload in image-analysis (pin fixed in #112).
