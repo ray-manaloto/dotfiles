@@ -16,16 +16,17 @@ post-failure reporting.
 | `build-publish.yml` | Reusable (`on: workflow_call`) build chain: base-prep → p2996-prep → dev-prep → build → smoke-test (smoke+Dive) → dev-tag. dev-prep/dev-tag are the third content-hash tier (#122). Inputs `{tag_strategy, publish, target, ref, p2996_ref*, platform*}` (*reserved, Phase D); outputs `{image_ref, digest}`. `github` context = caller's event, so sha/pr tags resolve identically |
 | `ci-failure-report.yml` | Post-failure diagnostics / issue filing |
 | `image-analysis.yml` | Async (`workflow_run` on CI success): benchmark metrics + Trivy CVE scan, off the PR critical path |
-| `refresh.yml` | Daily cron (00:00): two independent jobs — `snapshot-refresh` (refresh `mise-system-resolved.json` on conda-forge drift) and `p2996-refresh` (bump `CLANG_P2996_REF` to latest `bloomberg/clang-p2996` `p2996`-branch HEAD, issue #100). Both open a PR on change via the shared `open-refresh-pr` composite. |
+| `refresh.yml` | Daily cron (00:00): two independent jobs — `snapshot-refresh` (refresh `mise-system-resolved.json` on conda-forge drift, **auto-merges**) and `p2996-refresh` (bump `CLANG_P2996_REF` to latest `bloomberg/clang-p2996` HEAD, **review-required**, #100). Each mints a GitHub App token (Phase C, #119) so its PR fires CI on its own; both open a PR via `open-refresh-pr`. See **GitHub App** below. |
 
 ## Composite actions (`.github/actions/`)
 
 Self-documented in each `action.yml`: `setup-mise` (wraps `jdx/mise-action`
-+ `install_args`, all 8 mise jobs) and `open-refresh-pr` (create-PR +
-ci.yml dispatch tail, both `refresh.yml` jobs). **Local-composite checkout
-gotcha:** a `./.github/actions/*` action resolves from `$GITHUB_WORKSPACE`
-(empty until checkout), so jobs run `actions/checkout` FIRST, then the
-composite — neither wraps checkout.
++ `install_args`, all 8 mise jobs) and `open-refresh-pr` (App-token create-PR
++ optional squash auto-merge, both `refresh.yml` jobs). **Local-composite
+checkout gotcha:** a `./.github/actions/*` action resolves from
+`$GITHUB_WORKSPACE` (empty until checkout), so jobs run `actions/checkout`
+FIRST, then the composite — neither wraps checkout. **Composites can't read
+`secrets`** — the App token is minted in `refresh.yml`, passed in.
 
 ## Pipeline stages
 
@@ -34,10 +35,10 @@ PR / schedule / workflow_dispatch path (stages 3–6 run inside the reusable
 behavior unchanged):
 
 1. **lint** — mise install, hk pre-commit, agnix agent-doc validation
-   (`agnix .`; `.agnix.toml` sets `severity = "Warning"` so warnings
-   don't fail), `mise doctor --json`, `mise.lock` artifact upload, mise
-   cache keyed on `mise.lock`. agnix uses the `github:agent-sh/agnix`
-   backend (not `npm:agnix` — see `mise.toml`).
+   (`agnix .`; `.agnix.toml` `severity = "Warning"` keeps warnings
+   non-blocking), `mise doctor --json`, `mise.lock` upload, mise cache
+   keyed on `mise.lock`. agnix uses the `github:agent-sh/agnix` backend
+   (not `npm:agnix` — see `mise.toml`).
 2. **contract-preflight** — Python 3.14 + uv; runs `dotfiles-setup
    verify run` over `python/verification/suites.toml`.
 3. **base-prep** — `dotfiles-setup base-hash` → probe `:base-<hash16>`
@@ -143,6 +144,19 @@ daily crons, **distinct, complementary** roles:
 The 2h gap lets a 00:00 refresh PR, merged before 02:00, be what the
 nightly publishes. Do NOT collapse onto one cron (issue #116).
 
+## GitHub App — refresh auto-merge (Phase C, #119)
+
+`refresh.yml` mints an App token (`actions/create-github-app-token`) so its
+PR fires `pull_request` CI on its own — GITHUB_TOKEN PRs don't. **One-time
+repo-admin setup:** (1) create a GitHub App with **contents: write +
+pull-requests: write**, install it here, add secrets `REFRESH_APP_ID` +
+`REFRESH_APP_PRIVATE_KEY`; (2) enable **Allow auto-merge**; (3) branch
+protection on `main` requiring
+**`build-publish / smoke-test`** — CRITICAL, else `--auto` lands before
+smoke runs. Policy: snapshot auto-merges (squash) once smoke passes; p2996
+is review-required. Caveat: docs-only PRs skip smoke (reported "skipped" =
+neutral for required checks) — verify after enabling protection.
+
 ## Dependabot (`.github/dependabot.yml`)
 
 - **`interval: "cron"` enforces a 24h minimum.** The schema accepts
@@ -152,7 +166,7 @@ nightly publishes. Do NOT collapse onto one cron (issue #116).
   than the minimum allowed interval of 24 hours."* Use `0 0 * * *`
   (daily at midnight) or longer; do NOT try `0 * * * *` (hourly). The
   validation runs as a check named `.github/dependabot.yml` on every
-  PR that touches the file. (PR #86 commit `b5022c0`.)
+  PR that touches the file. (PR #86.)
 
 ## Debugging CI failures
 
@@ -162,38 +176,21 @@ nightly publishes. Do NOT collapse onto one cron (issue #116).
 - `mise doctor --json` output in the lint job shows tool resolution
   issues.
 - **App-installed check error detail** (dependabot, CodeRabbit, etc.)
-  lives in the check-runs API, not in `gh pr checks` output. Use:
-  `gh api 'repos/OWNER/REPO/commits/BRANCH/check-runs' --jq
-  '.check_runs[] | select(.name | contains("NAME")) |
-  .output.summary'` (substitute uppercase placeholders) to surface the
-  actual rejection message.
-- For Docker warning triage, see the `ci-warning-investigator` skill
-  under `.claude/skills/`.
-- Use `gh run watch <id> --exit-status` (or `gh pr checks <n> --watch`)
-  to monitor workflows — **never sleep-poll**. See
-  `feedback_gh_run_watch`. But always cross-verify with
-  `gh pr checks <n> --json` because `--exit-status` has reported exit 0
-  before runs were actually complete.
-- **`gh run list` returns multiple workflows.** A branch with both
-  `ci.yml` and `autofix.yml` has a `CI` run AND an `autofix.ci` run
-  per push; `gh run list --limit 1` may surface the wrong one. Filter
-  with `--workflow CI` (or `--workflow autofix.ci`) to disambiguate.
-- **Manual autofix-fix recipe** — if `autofix-ci/action` can't push
-  back (e.g. app uninstalled, `500 autofix.ci app is not installed`),
-  the diff is in the run's `autofix.ci.zip` artifact (substitute
-  uppercase RUN_ID and FILE placeholders):
-  ```bash
-  gh run download RUN_ID -D /tmp/autofix
-  jq -r '.changes.additions[] | select(.path=="FILE") | .contents' \
-    /tmp/autofix/autofix.ci/autofix.json | base64 -d > /tmp/FILE
-  cp /tmp/FILE FILE
-  ```
-  Apply locally, commit, push. Validated on PR #94 commit `cb186ac`
-  (mise.lock linux-x64 blake3 checksum drift).
-- **Re-run a failed job to verify a fix** — `gh run rerun RUN_ID --failed`
-  refires only the failed jobs against the same commit. Useful for
-  verifying that a config change (e.g. installing a GitHub app)
-  actually fixes the failure mode without forcing a fresh push (validated
-  on the autofix.ci app install, session 2026-05-01, commit `ee079c5`).
+  lives in the check-runs API: `gh api
+  'repos/OWNER/REPO/commits/BRANCH/check-runs' --jq '.check_runs[] |
+  select(.name|contains("NAME")) | .output.summary'`.
+- For Docker warning triage, see the `ci-warning-investigator` skill.
+- Use `gh run watch <id> --exit-status` / `gh pr checks <n> --watch` —
+  **never sleep-poll** (`feedback_gh_run_watch`). Cross-verify with
+  `--json conclusion`; `--exit-status` has reported exit 0 prematurely.
+- **`gh run list` returns multiple workflows.** A branch has both a `CI`
+  and an `autofix.ci` run per push; filter `--workflow CI` to disambiguate.
+- **Manual autofix-fix recipe** (when `autofix-ci/action` can't push back,
+  `500 ... not installed`): the diff is in the run's `autofix.ci.zip`
+  artifact — `gh run download RUN_ID`, base64-decode the `additions[].contents`
+  from `autofix.json`, apply, commit, push (PR #94 `cb186ac`).
+- **Re-run a failed job** — `gh run rerun RUN_ID --failed` refires only the
+  failed jobs against the same commit (verify a config fix without a fresh
+  push; validated on the autofix.ci app install, `ee079c5`).
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->
