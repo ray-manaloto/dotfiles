@@ -25,7 +25,7 @@ on:
   workflow_call:
     inputs:
       tag_strategy:
-        description: "Tag set to emit: 'pr' (=> :pr-NNN + :sha) or 'nightly' (=> :dev + :latest + :sha)"
+        description: "Tag set to emit: 'pr' (=> :pr-NNN + :sha), 'nightly' (=> :dev + :latest + :sha), or 'dispatch' (=> :sha only; on-demand p2996 build, Phase D #120 — never moves :dev/:latest)"
         required: true
         type: string
       publish:
@@ -44,7 +44,7 @@ on:
         default: ""
         type: string
       p2996_ref:
-        description: "Reserved (Phase D, #120): override CLANG_P2996_REF to build an exact upstream SHA. Unused when empty; the docker-bake.hcl pin is authoritative today."
+        description: "Phase D (#120): override CLANG_P2996_REF to build an exact upstream clang-p2996 SHA on demand. Exported as CLANG_P2996_REF so BOTH the content hash (p2996/dev) AND docker bake's variable override resolve the same ref. Empty => the docker-bake.hcl pin is authoritative (byte-identical canonical build)."
         required: false
         default: ""
         type: string
@@ -208,6 +208,20 @@ jobs:
         with:
           install_args: "python uv"
 
+      - name: Resolve p2996 ref override
+        # Phase D (#120): when a caller passes p2996_ref, export it as
+        # CLANG_P2996_REF so BOTH `dotfiles-setup p2996-hash` AND docker
+        # bake's native variable override resolve the SAME upstream SHA —
+        # the cache tag tracks the overridden ref, never poisoning the
+        # canonical pinned-ref cache. Empty input exports nothing, so the
+        # docker-bake.hcl pin stays authoritative (byte-identical to the
+        # canonical build). Value passed via env (not inline ${{ }}) to
+        # keep an untrusted client_payload out of the shell.
+        if: inputs.p2996_ref != ''
+        env:
+          P2996_REF: ${{ inputs.p2996_ref }}
+        run: echo "CLANG_P2996_REF=${P2996_REF}" >> "$GITHUB_ENV"
+
       - name: Compute P2996 cache hash
         id: hash
         run: |
@@ -326,6 +340,15 @@ jobs:
         uses: ./.github/actions/setup-mise
         with:
           install_args: "python uv"
+
+      - name: Resolve p2996 ref override
+        # Phase D (#120): keep `dotfiles-setup dev-hash` in lockstep with
+        # the p2996 override so the probed :dev-<hash> matches the image
+        # the dispatch path actually builds. See p2996-prep for rationale.
+        if: inputs.p2996_ref != ''
+        env:
+          P2996_REF: ${{ inputs.p2996_ref }}
+        run: echo "CLANG_P2996_REF=${P2996_REF}" >> "$GITHUB_ENV"
 
       - name: Compute dev cache hash
         id: hash
@@ -647,6 +670,17 @@ jobs:
           registry: ${{ env.CONTAINER_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve p2996 ref override
+        # Phase D (#120): the validated marker is content-addressed by
+        # dev-hash, which folds in CLANG_P2996_REF. dev-tag MUST honor the
+        # same override the p2996 cache built with — otherwise it would
+        # stamp a pinned-ref hash onto overridden-ref content, poisoning a
+        # later canonical build's probe. See p2996-prep for rationale.
+        if: inputs.p2996_ref != ''
+        env:
+          P2996_REF: ${{ inputs.p2996_ref }}
+        run: echo "CLANG_P2996_REF=${P2996_REF}" >> "$GITHUB_ENV"
 
       - name: Tag validated image as :dev-<hash>
         env:
