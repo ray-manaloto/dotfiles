@@ -8,10 +8,10 @@ containers on macOS ARM hosts. Two build types:
 1. **Local linting** (hk + mise): `mise install && hk run pre-commit --all --stash none`
 2. **Docker env image** (CI/CD → ghcr.io): published from `main` via GHA
 
-Registry: `ghcr.io/ray-manaloto/dotfiles-devcontainer`. CI pipeline:
-lint → contract-preflight → `changes` path-gate → base-prep → p2996-prep →
-build → smoke-test (smoke + Dive); `promote` retags on main; benchmark +
-Trivy run async in `image-analysis.yml`.
+Registry: `ghcr.io/ray-manaloto/dotfiles-devcontainer`. CI: `ci.yml` (thin
+caller) → lint → contract-preflight → `changes` → reusable `build-publish.yml`
+(base-prep → p2996-prep → dev-prep → build → smoke-test → dev-tag) → `ci-gate`;
+`promote` retags on main; benchmark + Trivy async in `image-analysis.yml`.
 
 ## Quick Start
 
