@@ -448,6 +448,20 @@ paths = [".github/workflows/ci.yml"]
 tokens = ["(github.event_name != 'push' || github.ref != 'refs/heads/main')"]
 
 [[suite]]
+name = "ci.ci-gate-aggregator-exists"
+description = "Branch protection requires the always-run `ci-gate` aggregator (not the path-gated `build-publish / smoke-test`, which produces no check run on non-build PRs and would block them). ci-gate must `needs` the upstream jobs, run `if: always()`, and fail unless each result is success or skipped — preserving auto-merge safety while unblocking non-build PRs (#119)."
+category = "ci"
+check_type = "static"
+handler = "require_tokens"
+paths = [".github/workflows/ci.yml"]
+tokens = [
+  "ci-gate:",
+  "needs.build-publish.result",
+  "if: always()",
+  "success|skipped",
+]
+
+[[suite]]
 name = "ci.promote-job-exists"
 description = "Push-to-main must trigger the promote job (manifest-only retag of the PR image as :dev/:latest, no rebuild). Direct-push fallback dispatches workflow with force_dev_tag=true."
 category = "ci"
