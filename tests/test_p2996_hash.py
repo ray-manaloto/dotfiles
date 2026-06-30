@@ -46,6 +46,7 @@ def _stub_base_inputs(**overrides: str) -> BaseHashInputs:
         "platform": "linux/amd64/v2",
         "base_section_digest": "a" * 64,
         "snapshot_digest": "c" * 64,
+        "mise_system_config_digest": "f" * 64,
     }
     base.update(overrides)
     return BaseHashInputs(**base)
@@ -112,6 +113,9 @@ def _seed_repo(tmp_path: Path) -> Path:
     (devcontainer / "mise-system-resolved.json").write_text(
         '{"schema_version": 1, "tools": {"conda:cmake": "4.3.2"}}\n',
     )
+    (devcontainer / "mise-system.toml").write_text(
+        '[tools]\n"conda:cmake" = "latest"\n\n[settings]\nexperimental = true\n',
+    )
     return tmp_path
 
 
@@ -148,6 +152,27 @@ def test_base_hash_changes_when_snapshot_digest_changes() -> None:
     base = _stub_base_inputs()
     bumped = _stub_base_inputs(snapshot_digest="e" * 64)
     assert compute_base_hash(base) != compute_base_hash(bumped)
+
+
+def test_base_hash_changes_when_mise_system_config_digest_changes() -> None:
+    # PR #140: mise-system.toml is COPYed into the image, so [settings]/
+    # [env]/[tasks] edits that don't move the resolved snapshot must still
+    # bust the base hash and trigger a rebuild.
+    base = _stub_base_inputs()
+    bumped = _stub_base_inputs(mise_system_config_digest="e" * 64)
+    assert compute_base_hash(base) != compute_base_hash(bumped)
+
+
+def test_repo_base_hash_changes_when_mise_system_toml_edited(tmp_path: Path) -> None:
+    _seed_repo(tmp_path)
+    before = compute_repo_base_hash(tmp_path)
+    toml = tmp_path / ".devcontainer" / "mise-system.toml"
+    # A pure [settings] edit — does NOT touch mise-system-resolved.json.
+    toml.write_text(
+        toml.read_text().replace("experimental = true", "asdf_compat = true")
+    )
+    after = compute_repo_base_hash(tmp_path)
+    assert before != after
 
 
 def test_base_inputs_reject_empty_literal() -> None:
@@ -576,6 +601,7 @@ def test_dev_hash_kind_namespacing_differs_from_base_and_p2996() -> None:
             platform="x",
             base_section_digest="a" * 64,
             snapshot_digest="a" * 64,
+            mise_system_config_digest="a" * 64,
         )
     )
     dev = compute_dev_hash(_stub_dev_inputs())
