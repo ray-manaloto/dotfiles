@@ -285,6 +285,42 @@ jobs:
       target: ${{ github.event.inputs.target || 'dev' }}
 
   # ============================================================
+  # CI gate (#119/#129): a single ALWAYS-run aggregator that branch
+  # protection requires INSTEAD of the path-gated `build-publish /
+  # smoke-test`. A non-build PR (docs/hk/home/refresh) skips the
+  # `build-publish` caller, so `build-publish / smoke-test` produces NO
+  # check run — requiring it directly would block every such PR ("Expected
+  # — waiting"). ci-gate sidesteps that: it passes when every upstream job
+  # SUCCEEDED or was legitimately SKIPPED, and fails if any FAILED/
+  # cancelled. Auto-merge safety is preserved — a failed smoke-test fails
+  # `build-publish`, which fails ci-gate — while letting non-build PRs
+  # merge normally. See .github/workflows/AGENTS.md § GitHub App.
+  # ============================================================
+  ci-gate:
+    needs: [lint, contract-preflight, changes, build-publish]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all upstream jobs to succeed or skip
+        env:
+          RESULTS: >-
+            ${{ needs.lint.result }} ${{ needs.contract-preflight.result }}
+            ${{ needs.changes.result }} ${{ needs.build-publish.result }}
+        run: |
+          set -euo pipefail
+          rc=0
+          for r in $RESULTS; do
+            case "$r" in
+              success|skipped) ;;
+              *) echo "FAIL: an upstream job result is '$r'" >&2; rc=1 ;;
+            esac
+          done
+          if [ "$rc" -eq 0 ]; then
+            echo "ci-gate: all upstream jobs success or skipped — mergeable"
+          fi
+          exit "$rc"
+
+  # ============================================================
   # Promote: tag-only retag of the PR-built image as :dev / :latest.
   # No rebuild — the PR's :pr-<NNN> manifest digest is reused. If the
   # merge commit has no associated PR (e.g., direct push to main, force
