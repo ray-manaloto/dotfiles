@@ -5,7 +5,9 @@ from __future__ import annotations
 import dataclasses
 import json
 import logging
+import os
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -13,11 +15,30 @@ import zlib
 from typing import TYPE_CHECKING, Any
 
 from dotfiles_setup import _project_root
+from dotfiles_setup.p2996_hash import _extract_bake_variable
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+
+
+def resolve_expected_p2996_ref() -> str:
+    """Resolve the clang-p2996 ref the image is expected to be built from.
+
+    Mirrors the hash-command resolution (main.py ``_hash_command_handlers``):
+    a Phase D (#120) ``CLANG_P2996_REF`` env override wins; otherwise the
+    committed ``docker-bake.hcl`` pin is authoritative. Fails loud if neither
+    is available — a silently-skipped ref check would reintroduce exactly the
+    false-positive this guard exists to prevent.
+    """
+    override = os.environ.get("CLANG_P2996_REF")
+    if override:
+        return override
+    bake_path = _project_root() / "docker-bake.hcl"
+    return _extract_bake_variable(bake_path.read_text(), "CLANG_P2996_REF")
 
 
 def _run(
@@ -34,10 +55,26 @@ def _run(
     )
 
 
-def build_smoke_script() -> str:
-    """Build the inline smoke test script."""
-    return """\
-set -euo pipefail
+def build_smoke_script(expected_p2996_ref: str) -> str:
+    """Build the inline smoke test script.
+
+    ``expected_p2996_ref`` is injected so the script can assert the
+    clang-p2996 binary baked into the image was actually built from the
+    pinned ref (``resolve_expected_p2996_ref``) — closing the false-positive
+    where a stale/wrong-ref reflection compiler still compiles a reflection
+    program and the smoke passes green. Only a 40-hex SHA triggers the strict
+    equality check; a non-SHA dispatch override still gets the
+    "is-a-real-p2996-build" guard.
+    """
+    strict = "1" if _SHA_RE.match(expected_p2996_ref) else ""
+    header = (
+        "set -euo pipefail\n"
+        f"EXPECTED_P2996_REF={shlex.quote(expected_p2996_ref)}\n"
+        f"P2996_REF_STRICT={shlex.quote(strict)}\n"
+    )
+    return (
+        header
+        + """\
 MISE_CFG="${MISE_CONFIG_DIR:-/usr/local/share/mise}/config.toml"
 echo "=== hk validate ==="
 HK_FILE=/etc/hk/hk.pkl hk validate
@@ -104,6 +141,29 @@ test -x /opt/gcc-latest/bin/g++ \
   || { echo "FAIL: gcc-latest binary missing"; exit 1; }
 test -x /opt/clang-p2996/bin/clang++ \
   || { echo "FAIL: clang-p2996 missing"; exit 1; }
+echo "=== clang-p2996 ref pin check ==="
+# The clang-p2996 build embeds its bloomberg/clang-p2996 source commit in
+# `--version`. Assert (a) it really IS a p2996 build (not conda clang on
+# PATH) and (b) the embedded SHA matches the pinned CLANG_P2996_REF. Without
+# this, a stale/wrong-ref reflection compiler still passes the functional
+# compile below — a silent false positive.
+P2996_VERSION=$(/opt/clang-p2996/bin/clang --version)
+if ! echo "$P2996_VERSION" | grep -q 'bloomberg/clang-p2996'; then
+  echo "FAIL: /opt/clang-p2996 is not a bloomberg/clang-p2996 build"; exit 1
+fi
+ACTUAL_P2996_REF=$(echo "$P2996_VERSION" | grep -oiE '[0-9a-f]{40}' | head -1)
+if [ -z "$ACTUAL_P2996_REF" ]; then
+  echo "FAIL: could not parse clang-p2996 git ref from --version"; exit 1
+fi
+if [ -n "$P2996_REF_STRICT" ]; then
+  if [ "$ACTUAL_P2996_REF" != "$EXPECTED_P2996_REF" ]; then
+    echo "FAIL: clang-p2996 ref $ACTUAL_P2996_REF != pinned $EXPECTED_P2996_REF"
+    exit 1
+  fi
+  echo "OK: clang-p2996 ref $ACTUAL_P2996_REF matches pinned CLANG_P2996_REF"
+else
+  echo "OK: clang-p2996 real build @ $ACTUAL_P2996_REF (non-SHA override; skip)"
+fi
 cat >/tmp/refl-func.cpp <<'CPP'
 #include <meta>
 enum class Color { Red, Green, Blue };
@@ -113,6 +173,12 @@ consteval int count_enumerators() {
 static_assert(count_enumerators() == 3);
 int main() { return 0; }
 CPP
+# -fsyntax-only is intentional: the static_assert above forces the reflection
+# (enumerators_of(^^Color)) to be EVALUATED at compile time, so a broken
+# reflection front-end fails the compile. Full link+run is avoided because
+# clang-p2996's -stdlib=libc++ binary needs libc++.so.1 at runtime, which is
+# not on the default loader path (the Dockerfile build-time smoke is
+# -fsyntax-only for the same reason).
 /opt/gcc-latest/bin/g++ -std=c++26 -freflection /tmp/refl-func.cpp -fsyntax-only \
   || { echo "FAIL: gcc-latest reflection compile failed"; exit 1; }
 /opt/clang-p2996/bin/clang++ -std=c++2c -freflection -freflection-latest \
@@ -132,13 +198,19 @@ if [ "$warn_count" -gt 0 ]; then
 fi
 echo "=== All smoke checks passed ==="
 """
+    )
 
 
 def build_smoke_docker_cmd(
-    image_ref: str, *, platform: str = "linux/amd64/v2"
+    image_ref: str,
+    *,
+    platform: str = "linux/amd64/v2",
+    expected_p2996_ref: str | None = None,
 ) -> list[str]:
     """Build the docker command used for smoke validation."""
-    script = build_smoke_script()
+    if expected_p2996_ref is None:
+        expected_p2996_ref = resolve_expected_p2996_ref()
+    script = build_smoke_script(expected_p2996_ref)
     return [
         "docker",
         "run",

@@ -58,6 +58,42 @@ clang++ -fsanitize=address,undefined -O1 -g "$td/hello.cc" -o "$td/hello"
 "$td/hello"
 rm -rf "$td"
 
+echo "[tier3] reflection compilers — ref pin + functional"
+# The sanitizer block above uses the conda clang++ on PATH; it never touches
+# the P2996 reflection compiler. Assert the clang-p2996 build (a) is a real
+# bloomberg/clang-p2996 build and (b) its embedded source commit matches the
+# CLANG_P2996_REF pinned in docker-bake.hcl — without this a stale/wrong-ref
+# (or missing) reflection compiler is a silent false positive. Then compile a
+# std::meta program with both reflection compilers (-fsyntax-only; the
+# static_assert forces compile-time reflection evaluation, and clang-p2996's
+# -stdlib=libc++ binary can't be run — libc++.so.1 is off the loader path).
+test -x /opt/clang-p2996/bin/clang++ || { echo "  FAIL: /opt/clang-p2996/bin/clang++ missing" >&2; exit 1; }
+test -x /opt/gcc-latest/bin/g++ || { echo "  FAIL: /opt/gcc-latest/bin/g++ missing" >&2; exit 1; }
+expected_ref="$(grep -A2 'CLANG_P2996_REF' "${WORKSPACE_FOLDER}/docker-bake.hcl" | grep -oiE '[0-9a-f]{40}' | head -1)"
+[ -n "${expected_ref}" ] || { echo "  FAIL: could not parse CLANG_P2996_REF from docker-bake.hcl" >&2; exit 1; }
+p2996_version="$(/opt/clang-p2996/bin/clang --version)"
+echo "${p2996_version}" | grep -q 'bloomberg/clang-p2996' || { echo "  FAIL: /opt/clang-p2996 clang is not a bloomberg/clang-p2996 build" >&2; exit 1; }
+actual_ref="$(echo "${p2996_version}" | grep -oiE '[0-9a-f]{40}' | head -1)"
+if [ "${actual_ref}" != "${expected_ref}" ]; then
+	echo "  FAIL: clang-p2996 built from ${actual_ref} but docker-bake.hcl pins ${expected_ref}" >&2
+	exit 1
+fi
+echo "  OK: clang-p2996 ref ${actual_ref} matches docker-bake.hcl"
+rd="$(mktemp -d)"
+cat >"${rd}/refl.cpp" <<'CPP'
+#include <meta>
+enum class Color { Red, Green, Blue };
+consteval int count_enumerators() {
+  return static_cast<int>(enumerators_of(^^Color).size());
+}
+static_assert(count_enumerators() == 3);
+int main() { return 0; }
+CPP
+/opt/gcc-latest/bin/g++ -std=c++26 -freflection "${rd}/refl.cpp" -fsyntax-only || { echo "  FAIL: gcc-latest reflection compile failed" >&2; exit 1; }
+/opt/clang-p2996/bin/clang++ -std=c++2c -freflection -freflection-latest -fexpansion-statements -stdlib=libc++ "${rd}/refl.cpp" -fsyntax-only || { echo "  FAIL: clang-p2996 reflection compile failed" >&2; exit 1; }
+rm -rf "${rd}"
+echo "  OK: both reflection compilers compile a std::meta program"
+
 echo "[tier3] home volume ownership + seed survivors"
 # v6 single-home-volume contract: the whole /home/${USER} dir is a
 # persistent named volume. Assert (a) mise install dir is user-owned
