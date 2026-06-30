@@ -100,9 +100,10 @@ Push-to-main path (after a PR merge):
   target) is tagged only AFTER smoke passes (validated marker), so a PR hit
   skips build+smoke (retag to `:sha`/`:pr-NNN`). Nightly skips the dev probe
   and always rebuilds (catches rolling-tool drift the hash can't see).
-- **P2996 cache invalidation.** Key = `CLANG_P2996_REF`, `BASE_IMAGE`,
-  `PLATFORM`, Dockerfile, bake file, `mise-system-resolved.json`. Bust via
-  `mise run capture-mise-system-resolved`. Details: `.devcontainer/P2996-CACHE.md`.
+- **P2996 cache inputs.** Key = `CLANG_P2996_REF`, `BASE_IMAGE`,
+  `PLATFORM`, Dockerfile, bake, `mise-system-resolved.json`,
+  `mise-system.toml`. Bust: `mise run capture-mise-system-resolved`
+  (`.devcontainer/P2996-CACHE.md`).
 - **`uv run --project python`**, not `--directory` — `--directory`
   changes cwd and breaks relative test paths.
 - **Use `--watch`, never sleep-poll** (`gh pr checks <n> --watch`); the

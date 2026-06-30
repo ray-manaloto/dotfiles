@@ -44,6 +44,10 @@ The **base** hash (`dotfiles-setup base-hash`) covers:
 - sha256 of the `Dockerfile` section between the `BASE_HASH_BEGIN` /
   `BASE_HASH_END` sentinels (NOT the whole file)
 - sha256 of `.devcontainer/mise-system-resolved.json`
+- sha256 of `.devcontainer/mise-system.toml` (the base section `COPY`s it
+  verbatim to `/usr/local/share/mise/config.toml`, so its bytes are a build
+  input — `[settings]`/`[env]`/`[tasks]` edits that don't move the resolved
+  snapshot still bust the cache; added PR #140, `SCHEMA_VERSION = 3`)
 
 The **p2996** hash (`dotfiles-setup p2996-hash`) covers:
 
