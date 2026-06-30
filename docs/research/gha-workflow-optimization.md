@@ -21,7 +21,12 @@ breaking the repo's reproducibility invariants.
 >   **B2 (#126)** folded in #122 — the third `:dev-<hash>` content-hash
 >   tier (`dotfiles-setup dev-hash` + `dev-prep` probe + tag-after-smoke
 >   `dev-tag` marker) skips build+smoke on unchanged-image PRs.
-> - ⬜ Phases C, D — not started.
+> - ✅ **Phase C** done — PRs #127–#133 (2026-06-29): an org-owned GitHub App
+>   mints a token in `refresh.yml` so refresh PRs fire CI on their own (dispatch
+>   hack removed); snapshot auto-merges (squash), p2996 review-required.
+>   Validated live: snapshot drift → App-token PR #134 → CI fired → auto-merge
+>   enabled, gated on the new `ci-gate` aggregator.
+> - ⬜ Phase D — not started.
 
 ## Inventory
 
@@ -346,9 +351,17 @@ flowchart TD
    `:dev-<hash>` content-hash tier (`dev-prep` probe + `dev-tag`
    tag-after-smoke validated marker) skips build+smoke on PRs that don't
    change the image bytes (~12min → ~2min); nightly always rebuilds.
-3. **Phase C (automation):** App token for refresh PRs + `gh pr merge --auto`
-   (policy: auto-merge snapshot; choose auto vs review for the p2996 compiler
-   bump). Drops the `gh workflow run` dispatch hack and the create-PR setting.
+3. **Phase C (automation):** ✅ **done, PRs #127–#133 (2026-06-29).** An
+   org-owned GitHub App (`actions/create-github-app-token`, numeric App ID)
+   mints a token in `refresh.yml`, so refresh PRs fire `pull_request` CI on
+   their own — the `gh workflow run` dispatch hack and the create-PR setting
+   are gone. snapshot-refresh auto-merges (squash, gated on the new always-run
+   `ci-gate` check); p2996-refresh is review-required. Validated end-to-end:
+   snapshot drift → App-token PR #134 → CI fired → auto-merge enabled. Setup
+   gotchas (live-debugged): the JWT `iss` needs the numeric App ID (not the
+   Client ID `Iv…`); the App must be installed on the **org** (not a personal
+   account); `refresh.yml` needs `packages: read` to pull `:dev`; the snapshot
+   capture must run `mise ls --json` in-container as the default user (#131).
 4. **Phase D (optional):** `p2996_ref` input + a `repository_dispatch` caller
    for on-demand "build exactly this upstream SHA" without a cron wait.
 
