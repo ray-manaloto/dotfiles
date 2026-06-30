@@ -26,7 +26,11 @@ breaking the repo's reproducibility invariants.
 >   hack removed); snapshot auto-merges (squash), p2996 review-required.
 >   Validated live: snapshot drift → App-token PR #134 → CI fired → auto-merge
 >   enabled, gated on the new `ci-gate` aggregator.
-> - ⬜ Phase D — not started.
+> - ✅ **Phase D** done — PR #137 (2026-06-29): `p2996_ref` wired end-to-end
+>   (content hash + bake's native `CLANG_P2996_REF` override, both gated on a
+>   non-empty input so the canonical pinned build stays byte-identical) plus a
+>   `dispatch-build.yml` `repository_dispatch` caller (type `build-p2996`) for
+>   on-demand "build this exact upstream SHA". Epic #116 complete.
 
 ## Inventory
 
@@ -362,8 +366,14 @@ flowchart TD
    Client ID `Iv…`); the App must be installed on the **org** (not a personal
    account); `refresh.yml` needs `packages: read` to pull `:dev`; the snapshot
    capture must run `mise ls --json` in-container as the default user (#131).
-4. **Phase D (optional):** `p2996_ref` input + a `repository_dispatch` caller
-   for on-demand "build exactly this upstream SHA" without a cron wait.
+4. **Phase D (optional):** ✅ **done, PR #137 (2026-06-29).** `p2996_ref`
+   wired through build-publish.yml — a *Resolve p2996 ref override* step in
+   p2996-prep/dev-prep/dev-tag exports `CLANG_P2996_REF` only on a non-empty
+   input, so BOTH `dotfiles-setup {p2996,dev}-hash` AND docker bake's native
+   variable override resolve the same SHA (empty input = byte-identical
+   canonical build). A thin `dispatch-build.yml` (`repository_dispatch`, type
+   `build-p2996`) calls it with `tag_strategy=dispatch` (emits `:sha` only —
+   never moves `:dev`/`:latest`, so the committed pin stays authoritative).
 
 ## Decision points for sign-off
 
