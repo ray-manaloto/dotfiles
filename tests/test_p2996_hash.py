@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
@@ -349,6 +350,55 @@ def test_repo_p2996_hash_changes_when_base_section_modified(tmp_path: Path) -> N
 
 
 # ──────────────────────────────────────────────────────────────────────
+# Phase D (#120): clang_p2996_ref override
+# ──────────────────────────────────────────────────────────────────────
+
+
+def test_gather_p2996_inputs_override_replaces_bake_pin(tmp_path: Path) -> None:
+    _seed_repo(tmp_path)
+    pinned = gather_p2996_inputs(tmp_path, base_hash="0" * 16)
+    assert pinned.clang_p2996_ref == "abc123"  # the seeded bake default
+    overridden = gather_p2996_inputs(
+        tmp_path, base_hash="0" * 16, clang_p2996_ref="deadbeef"
+    )
+    assert overridden.clang_p2996_ref == "deadbeef"
+
+
+def test_gather_p2996_inputs_none_override_uses_pin(tmp_path: Path) -> None:
+    # Explicit None must be byte-identical to omitting the arg — the
+    # canonical-build invariant the empty dispatch input relies on.
+    _seed_repo(tmp_path)
+    assert gather_p2996_inputs(
+        tmp_path, base_hash="0" * 16, clang_p2996_ref=None
+    ) == gather_p2996_inputs(tmp_path, base_hash="0" * 16)
+
+
+def test_repo_p2996_hash_override_differs_from_pin(tmp_path: Path) -> None:
+    _seed_repo(tmp_path)
+    pinned = compute_repo_p2996_hash(tmp_path)
+    overridden = compute_repo_p2996_hash(tmp_path, clang_p2996_ref="deadbeef")
+    assert pinned != overridden
+
+
+def test_repo_p2996_hash_override_equal_to_pin_matches(tmp_path: Path) -> None:
+    # Overriding with the SAME value the bake file pins must reproduce the
+    # canonical hash exactly — proves the override channel is pure.
+    _seed_repo(tmp_path)
+    assert compute_repo_p2996_hash(
+        tmp_path, clang_p2996_ref="abc123"
+    ) == compute_repo_p2996_hash(tmp_path)
+
+
+def test_repo_dev_hash_override_differs_from_pin(tmp_path: Path) -> None:
+    # The override must propagate through the nested p2996 hash into the
+    # dev hash so the dev-tag validated marker tracks overridden content.
+    _seed_repo(tmp_path)
+    pinned = compute_repo_dev_hash(tmp_path)
+    overridden = compute_repo_dev_hash(tmp_path, clang_p2996_ref="deadbeef")
+    assert pinned != overridden
+
+
+# ──────────────────────────────────────────────────────────────────────
 # Failure modes
 # ──────────────────────────────────────────────────────────────────────
 
@@ -379,13 +429,20 @@ def test_gather_p2996_inputs_missing_marker_raises(tmp_path: Path) -> None:
 # ──────────────────────────────────────────────────────────────────────
 
 
-def _run_dotfiles_setup(subcommand: str) -> str:
+def _run_dotfiles_setup(subcommand: str, *, env_override: str | None = None) -> str:
+    env = dict(os.environ)
+    # Phase D (#120): the CLI reads CLANG_P2996_REF from the environment to
+    # override the committed pin. None leaves the ambient env untouched.
+    env.pop("CLANG_P2996_REF", None)
+    if env_override is not None:
+        env["CLANG_P2996_REF"] = env_override
     result = subprocess.run(
         [sys.executable, "-m", "dotfiles_setup.main", subcommand],
         capture_output=True,
         text=True,
         check=True,
         cwd=Path(__file__).resolve().parent.parent,
+        env=env,
     )
     return result.stdout.strip()
 
@@ -410,6 +467,38 @@ def test_cli_dev_hash_returns_16_char_hex() -> None:
     output = _run_dotfiles_setup("dev-hash")
     assert len(output) == HASH_LENGTH
     assert re.fullmatch(r"[0-9a-f]+", output)
+
+
+def test_cli_p2996_hash_honors_clang_ref_env_override() -> None:
+    # Phase D (#120): an exported CLANG_P2996_REF must change the emitted
+    # p2996 hash so the dispatch path's cache tag tracks the overridden SHA.
+    pinned = _run_dotfiles_setup("p2996-hash")
+    overridden = _run_dotfiles_setup("p2996-hash", env_override="0" * 40)
+    assert pinned != overridden
+    assert len(overridden) == HASH_LENGTH
+
+
+def test_cli_dev_hash_honors_clang_ref_env_override() -> None:
+    pinned = _run_dotfiles_setup("dev-hash")
+    overridden = _run_dotfiles_setup("dev-hash", env_override="0" * 40)
+    assert pinned != overridden
+
+
+def test_cli_empty_clang_ref_env_is_treated_as_unset() -> None:
+    # An empty string must mean "use the pin" — the workflow only exports
+    # CLANG_P2996_REF on a non-empty input, but defense-in-depth here keeps
+    # the canonical build byte-identical even if an empty value leaks in.
+    assert _run_dotfiles_setup("p2996-hash", env_override="") == _run_dotfiles_setup(
+        "p2996-hash"
+    )
+
+
+def test_cli_base_hash_ignores_clang_ref_env_override() -> None:
+    # The base hash predates the clang compile and must be invariant under
+    # a p2996 ref override (only p2996/dev tiers depend on it).
+    assert _run_dotfiles_setup("base-hash", env_override="0" * 40) == (
+        _run_dotfiles_setup("base-hash")
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────

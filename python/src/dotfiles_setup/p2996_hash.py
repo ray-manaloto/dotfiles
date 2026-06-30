@@ -272,12 +272,22 @@ def compute_repo_base_hash(repo_root: Path) -> str:
     return compute_base_hash(gather_base_inputs(repo_root))
 
 
-def gather_p2996_inputs(repo_root: Path, *, base_hash: str) -> P2996HashInputs:
+def gather_p2996_inputs(
+    repo_root: Path, *, base_hash: str, clang_p2996_ref: str | None = None
+) -> P2996HashInputs:
     """Read every input that contributes to the `:p2996-<hash>` cache.
 
     `base_hash` is passed in (rather than recomputed) so the caller
     controls when the base reference is captured — same value reused
     across multiple p2996 hash computations.
+
+    `clang_p2996_ref`, when given, overrides the `CLANG_P2996_REF`
+    default read from docker-bake.hcl — the Phase D (#120) "build this
+    exact upstream SHA" path. `None` (the default) reads the committed
+    pin, so the hash is byte-identical to the canonical build. The
+    override must mirror docker bake's own variable override so the
+    content-addressed cache tag tracks the overridden ref and never
+    poisons the canonical pinned-ref cache.
     """
     bake_text = (repo_root / "docker-bake.hcl").read_text()
     dockerfile_text = (repo_root / ".devcontainer" / "Dockerfile").read_text()
@@ -285,7 +295,11 @@ def gather_p2996_inputs(repo_root: Path, *, base_hash: str) -> P2996HashInputs:
         dockerfile_text, P2996_SECTION_BEGIN, P2996_SECTION_END
     )
     return P2996HashInputs(
-        clang_p2996_ref=_extract_bake_variable(bake_text, "CLANG_P2996_REF"),
+        clang_p2996_ref=(
+            clang_p2996_ref
+            if clang_p2996_ref is not None
+            else _extract_bake_variable(bake_text, "CLANG_P2996_REF")
+        ),
         base_hash=base_hash,
         platform=_extract_bake_variable(bake_text, "PLATFORM"),
         p2996_section_digest=_sha256_hex(p2996_section),
@@ -307,10 +321,20 @@ def compute_p2996_hash(inputs: P2996HashInputs) -> str:
     return _sha256_hex(canonical)[:HASH_LENGTH]
 
 
-def compute_repo_p2996_hash(repo_root: Path) -> str:
-    """Top-level helper: compute base hash, then p2996 hash on top."""
+def compute_repo_p2996_hash(
+    repo_root: Path, *, clang_p2996_ref: str | None = None
+) -> str:
+    """Top-level helper: compute base hash, then p2996 hash on top.
+
+    `clang_p2996_ref` overrides the committed `CLANG_P2996_REF` pin for
+    the Phase D (#120) on-demand build path; `None` uses the pin.
+    """
     base_hash = compute_repo_base_hash(repo_root)
-    return compute_p2996_hash(gather_p2996_inputs(repo_root, base_hash=base_hash))
+    return compute_p2996_hash(
+        gather_p2996_inputs(
+            repo_root, base_hash=base_hash, clang_p2996_ref=clang_p2996_ref
+        )
+    )
 
 
 def gather_dev_inputs(
@@ -350,10 +374,24 @@ def compute_dev_hash(inputs: DevHashInputs) -> str:
     return _sha256_hex(canonical)[:HASH_LENGTH]
 
 
-def compute_repo_dev_hash(repo_root: Path) -> str:
-    """Top-level helper: compute base + p2996 hashes, then the dev hash."""
+def compute_repo_dev_hash(
+    repo_root: Path, *, clang_p2996_ref: str | None = None
+) -> str:
+    """Top-level helper: compute base + p2996 hashes, then the dev hash.
+
+    `clang_p2996_ref` overrides the committed `CLANG_P2996_REF` pin (it
+    flows through the nested p2996 hash) for the Phase D (#120) on-demand
+    build path; `None` uses the pin. dev-tag stamps the `:dev-<hash>`
+    validated marker, so this MUST honor the same override the p2996
+    cache built with — else the marker would point a pinned-ref hash at
+    overridden-ref content.
+    """
     base_hash = compute_repo_base_hash(repo_root)
-    p2996_hash = compute_p2996_hash(gather_p2996_inputs(repo_root, base_hash=base_hash))
+    p2996_hash = compute_p2996_hash(
+        gather_p2996_inputs(
+            repo_root, base_hash=base_hash, clang_p2996_ref=clang_p2996_ref
+        )
+    )
     return compute_dev_hash(
         gather_dev_inputs(repo_root, base_hash=base_hash, p2996_hash=p2996_hash)
     )

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import platform
 import sys
 from pathlib import Path
@@ -397,10 +398,28 @@ def _hash_command_handlers(project_root: Path) -> dict[str, Any]:
     def _emit(compute: Callable[[Path], str]) -> None:
         sys.stdout.write(compute(project_root) + "\n")
 
+    # Phase D (#120): an on-demand "build this exact upstream SHA" run
+    # exports CLANG_P2996_REF (mirroring docker bake's own variable
+    # override). The p2996/dev hashes must reflect it so the
+    # content-addressed cache tags track the overridden ref and never
+    # poison the canonical pinned-ref cache. Empty/unset => the committed
+    # pin, byte-identical to the canonical build.
+    p2996_ref = os.environ.get("CLANG_P2996_REF") or None
+
+    def _emit_p2996() -> None:
+        sys.stdout.write(
+            compute_repo_p2996_hash(project_root, clang_p2996_ref=p2996_ref) + "\n"
+        )
+
+    def _emit_dev() -> None:
+        sys.stdout.write(
+            compute_repo_dev_hash(project_root, clang_p2996_ref=p2996_ref) + "\n"
+        )
+
     return {
         "base-hash": lambda: _emit(compute_repo_base_hash),
-        "p2996-hash": lambda: _emit(compute_repo_p2996_hash),
-        "dev-hash": lambda: _emit(compute_repo_dev_hash),
+        "p2996-hash": _emit_p2996,
+        "dev-hash": _emit_dev,
     }
 
 
