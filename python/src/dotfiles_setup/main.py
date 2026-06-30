@@ -23,7 +23,11 @@ from dotfiles_setup.lint import (
     resolve_timeout,
     run_guarded,
 )
-from dotfiles_setup.mise_snapshot import capture, write_snapshot
+from dotfiles_setup.mise_snapshot import (
+    capture,
+    filter_conda_resolved,
+    write_snapshot,
+)
 from dotfiles_setup.p2996_hash import (
     compute_repo_base_hash,
     compute_repo_dev_hash,
@@ -226,10 +230,19 @@ def setup_parser() -> argparse.ArgumentParser:
         help="Bump CLANG_P2996_REF in docker-bake.hcl to the latest "
         "bloomberg/clang-p2996 p2996-branch HEAD (writes only on change)",
     )
-    subparsers.add_parser(
+    mise_snapshot_parser = subparsers.add_parser(
         "mise-snapshot",
         help="Capture mise system resolved versions to "
         ".devcontainer/mise-system-resolved.json",
+    )
+    mise_snapshot_parser.add_argument(
+        "--from-json",
+        metavar="PATH",
+        default=None,
+        help="Read `mise ls --json` output from PATH instead of running mise. "
+        "CI captures the JSON inside the :dev container (as its default user, "
+        "no UID override) and formats it on the host runner, avoiding the "
+        "container permission + project-config-install issues (#131).",
     )
 
     ghcr_parser = subparsers.add_parser(
@@ -426,7 +439,12 @@ def _build_command_handlers(
         sys.stdout.write(refresh_p2996_ref(project_root).as_json() + "\n")
 
     def _mise_snapshot() -> None:
-        resolved = capture()
+        from_json = getattr(args, "from_json", None)
+        if from_json:
+            data = json.loads(Path(from_json).read_text())
+            resolved = filter_conda_resolved(data)
+        else:
+            resolved = capture()
         write_snapshot(
             project_root / ".devcontainer" / "mise-system-resolved.json",
             resolved,

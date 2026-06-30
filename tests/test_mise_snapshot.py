@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from dotfiles_setup.mise_snapshot import (
     SCHEMA_VERSION,
@@ -71,3 +72,24 @@ def test_parse_snapshot_rejects_invalid_tools_field() -> None:
         return
     msg = "expected TypeError for non-dict tools field"
     raise AssertionError(msg)
+
+
+def test_filter_from_captured_mise_ls_json_file(tmp_path: Path) -> None:
+    # Mirrors the #131 CI data flow: `mise ls --json` is captured to a file
+    # inside the :dev container, then filtered + formatted on the host via
+    # `dotfiles-setup mise-snapshot --from-json <file>`.
+    ls_file = tmp_path / "mise-ls.json"
+    ls_file.write_text(
+        json.dumps(
+            {
+                "conda:cmake": [{"version": "4.3.2"}],
+                "conda:ninja": [{"version": "1.13.0"}],
+                "core:node": [{"version": "22.0.0"}],
+            }
+        )
+    )
+    data = json.loads(ls_file.read_text())
+    assert filter_conda_resolved(data) == {
+        "conda:cmake": "4.3.2",
+        "conda:ninja": "1.13.0",
+    }
