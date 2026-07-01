@@ -18,6 +18,26 @@ echo "[devcontainer-smoke][start]"
 WORKSPACE_FOLDER="${WORKSPACE_FOLDER:-/workspaces/$(basename "$PWD")}"
 
 echo "::group::Tier 1 — tools + hk"
+echo "[tier1] image identity — mise-system config hash"
+# Gap A (image identity): the Dockerfile COPYs .devcontainer/mise-system.toml
+# verbatim to $MISE_CONFIG_DIR/config.toml. If the in-image hash differs from
+# the mounted repo file, this container is running a STALE/cached image (e.g.
+# devcontainer-cli reused a vsc-dotfiles-<hash> overlay) — rebuild before
+# trusting any downstream check. Fails loud rather than silently validating
+# old content.
+sys_cfg="${MISE_CONFIG_DIR:-/usr/local/share/mise}/config.toml"
+repo_cfg="${WORKSPACE_FOLDER}/.devcontainer/mise-system.toml"
+if [ -f "$repo_cfg" ]; then
+  expected_cfg_hash="$(sha256sum "$repo_cfg" | cut -d' ' -f1)"
+  actual_cfg_hash="$(sha256sum "$sys_cfg" | cut -d' ' -f1)"
+  if [ "$actual_cfg_hash" != "$expected_cfg_hash" ]; then
+    echo "  FAIL: in-image mise config ${actual_cfg_hash} != repo mise-system.toml ${expected_cfg_hash} (stale/cached image — rebuild)" >&2
+    exit 1
+  fi
+  echo "  OK: image built from current mise-system.toml (${actual_cfg_hash})"
+else
+  echo "  SKIP: repo mise-system.toml not found at ${repo_cfg}"
+fi
 mise ls
 which clang++ python uv hk
 # Use the image-only hk config (installed at /etc/hk/hk.pkl by Dockerfile).

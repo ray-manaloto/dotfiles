@@ -1,5 +1,6 @@
 """Tests for image smoke test script generation and size parsing."""
 
+import os
 import sys
 from pathlib import Path
 
@@ -10,11 +11,13 @@ import json
 import pytest
 
 from dotfiles_setup.image import (
+    _is_emulated,
     _parse_human_size,
     _repo_without_tag,
     _sum_manifest_layer_sizes,
     build_smoke_docker_cmd,
     build_smoke_script,
+    resolve_expected_config_sha256,
     resolve_expected_p2996_ref,
 )
 
@@ -25,6 +28,12 @@ _PLAIN_BYTES_VALUE = 512
 # clang-p2996 ref-pin check tests.
 _FAKE_P2996_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"
 _NON_SHA_REF = "p2996-branch"
+
+# A fake 64-hex SHA-256 for the image-identity (config-hash) tests.
+_FAKE_CONFIG_SHA256 = "0" * 64
+
+# Length of a hex-encoded SHA-256 digest.
+_SHA256_HEXLEN = 64
 
 # Layer sizes (compressed bytes) used by the manifest-sum tests.
 _LAYER_A_BYTES = 1000
@@ -156,6 +165,92 @@ def test_repo_without_tag_strips_digest() -> None:
     assert (
         _repo_without_tag("ghcr.io/owner/repo@sha256:deadbeef") == "ghcr.io/owner/repo"
     )
+
+
+def test_smoke_script_injects_config_identity_check() -> None:
+    """Gap A: an injected config hash activates the image-identity guard."""
+    script = build_smoke_script(
+        _FAKE_P2996_SHA, expected_config_sha256=_FAKE_CONFIG_SHA256
+    )
+
+    assert f"EXPECTED_CONFIG_SHA256={_FAKE_CONFIG_SHA256}\n" in script
+    # The guard compares the in-image config.toml hash against the repo's.
+    assert 'sha256sum "$MISE_CFG"' in script
+    assert '"$actual_config_sha256" != "$EXPECTED_CONFIG_SHA256"' in script
+
+
+def test_smoke_script_config_identity_dormant_without_hash() -> None:
+    """Without a hash the identity guard is present but dormant (empty var)."""
+    script = build_smoke_script(_FAKE_P2996_SHA)
+
+    # shlex.quote renders an empty string as ''.
+    assert "EXPECTED_CONFIG_SHA256=''\n" in script
+    assert 'if [ -n "$EXPECTED_CONFIG_SHA256" ]; then' in script
+
+
+def test_smoke_script_tsan_runs_when_native() -> None:
+    """Gap B: on a native host the TSan binary is both compiled and run."""
+    script = build_smoke_script(_FAKE_P2996_SHA, emulated=False)
+
+    assert "TSAN_RUN_SKIP=''\n" in script
+    assert "clang++ -fsanitize=thread /tmp/sanitizer.cpp -o /tmp/san-tsan" in script
+    assert "/tmp/san-tsan >/dev/null" in script
+
+
+def test_smoke_script_tsan_run_skipped_when_emulated() -> None:
+    """Gap B: under emulation TSan is still compiled but the RUN is guarded."""
+    script = build_smoke_script(_FAKE_P2996_SHA, emulated=True)
+
+    assert "TSAN_RUN_SKIP=1\n" in script
+    # The compile still happens (proves the toolchain)...
+    assert "clang++ -fsanitize=thread /tmp/sanitizer.cpp -o /tmp/san-tsan" in script
+    # ...but the RUN is gated behind the skip flag.
+    assert 'if [ -n "$TSAN_RUN_SKIP" ]; then' in script
+    assert "ThreadSanitizer RUN skipped under emulation" in script
+
+
+def test_is_emulated_arm_host_amd64_target() -> None:
+    """An arm64 host running an amd64 image is emulated."""
+    assert _is_emulated("linux/amd64/v2") is (os.uname().machine.lower() != "x86_64")
+
+
+def test_is_emulated_matching_arch_is_native(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A matching host/target arch is not emulated."""
+    fake_uname = os.uname_result(("Linux", "h", "r", "v", "x86_64"))
+    monkeypatch.setattr(os, "uname", lambda: fake_uname)
+
+    assert _is_emulated("linux/amd64/v2") is False
+
+
+def test_is_emulated_mismatched_arch_is_emulated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An arm64 host with an amd64 target is emulated."""
+    fake_uname = os.uname_result(("Linux", "h", "r", "v", "arm64"))
+    monkeypatch.setattr(os, "uname", lambda: fake_uname)
+
+    assert _is_emulated("linux/amd64/v2") is True
+
+
+def test_resolve_expected_config_sha256_is_hex_digest() -> None:
+    """The repo's mise-system.toml hashes to a 64-hex SHA-256 digest."""
+    digest = resolve_expected_config_sha256()
+
+    assert len(digest) == _SHA256_HEXLEN
+    assert all(c in "0123456789abcdef" for c in digest)
+
+
+def test_smoke_docker_cmd_injects_config_hash() -> None:
+    """build_smoke_docker_cmd resolves and injects the real config hash."""
+    cmd = build_smoke_docker_cmd(
+        "ghcr.io/ray-manaloto/dotfiles-devcontainer:test",
+        expected_p2996_ref=_FAKE_P2996_SHA,
+    )
+    script = cmd[-1]
+
+    assert f"EXPECTED_CONFIG_SHA256={resolve_expected_config_sha256()}\n" in script
 
 
 def test_sum_manifest_layer_sizes_single_manifest() -> None:

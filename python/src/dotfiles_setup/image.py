@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import json
 import logging
 import os
@@ -41,6 +42,45 @@ def resolve_expected_p2996_ref() -> str:
     return _extract_bake_variable(bake_path.read_text(), "CLANG_P2996_REF")
 
 
+def resolve_expected_config_sha256() -> str:
+    """SHA-256 of the repo's ``.devcontainer/mise-system.toml``.
+
+    The Dockerfile COPYs this file *verbatim* to
+    ``/usr/local/share/mise/config.toml`` (base stage, no transform), so its
+    hash is a cheap image-identity fingerprint. If the hash of the in-image
+    config differs, the smoked image was NOT built from the current
+    ``mise-system.toml`` — the classic stale-cached-overlay false positive
+    where ``devcontainer up`` reused a ``vsc-dotfiles-<hash>`` overlay and the
+    smoke reported green against old content. Fails loud if the source file is
+    missing rather than silently skipping the identity guard.
+    """
+    config_path = _project_root() / ".devcontainer" / "mise-system.toml"
+    return hashlib.sha256(config_path.read_bytes()).hexdigest()
+
+
+def _is_emulated(target_platform: str) -> bool:
+    """True when the host CPU cannot *natively* execute ``target_platform``.
+
+    ThreadSanitizer's shadow-memory layout requires a native x86_64 process;
+    under Rosetta/QEMU emulation (arm64 host running an amd64 image) the TSan
+    RUN aborts with an ASLR/"unexpected memory mapping" fatal. We detect the
+    host↔target arch mismatch in Python — which knows the host arch via
+    ``os.uname()`` — rather than probing ``binfmt_misc`` in-container, because
+    the emulator marker is not reliably visible inside the container.
+    """
+    host = os.uname().machine.lower()
+    host_amd64 = host in {"x86_64", "amd64"}
+    host_arm = host in {"arm64", "aarch64"}
+    platform_lc = target_platform.lower()
+    target_amd64 = "amd64" in platform_lc or "x86_64" in platform_lc
+    target_arm = "arm64" in platform_lc or "aarch64" in platform_lc
+    if target_amd64:
+        return not host_amd64
+    if target_arm:
+        return not host_arm
+    return False
+
+
 def _run(
     cmd: list[str],
     *,
@@ -55,7 +95,12 @@ def _run(
     )
 
 
-def build_smoke_script(expected_p2996_ref: str) -> str:
+def build_smoke_script(
+    expected_p2996_ref: str,
+    *,
+    expected_config_sha256: str | None = None,
+    emulated: bool = False,
+) -> str:
     """Build the inline smoke test script.
 
     ``expected_p2996_ref`` is injected so the script can assert the
@@ -65,17 +110,43 @@ def build_smoke_script(expected_p2996_ref: str) -> str:
     program and the smoke passes green. Only a 40-hex SHA triggers the strict
     equality check; a non-SHA dispatch override still gets the
     "is-a-real-p2996-build" guard.
+
+    ``expected_config_sha256`` (gap A — image identity) is the hash of the
+    repo's ``mise-system.toml``; when set, the script asserts the in-image
+    ``config.toml`` matches it, catching a stale/cached-overlay image that
+    would otherwise pass smoke against old content. An empty/unset value
+    leaves the guard dormant (unit-test friendly).
+
+    ``emulated`` (gap B — TSan under Rosetta) controls whether the
+    ThreadSanitizer binary is RUN after it is compiled. The compile always
+    runs (it proves the toolchain); the RUN is skipped under emulation, where
+    TSan's shadow-memory layout is incompatible with Rosetta/QEMU.
     """
     strict = "1" if _SHA_RE.match(expected_p2996_ref) else ""
+    tsan_run_skip = "1" if emulated else ""
     header = (
         "set -euo pipefail\n"
         f"EXPECTED_P2996_REF={shlex.quote(expected_p2996_ref)}\n"
         f"P2996_REF_STRICT={shlex.quote(strict)}\n"
+        f"EXPECTED_CONFIG_SHA256={shlex.quote(expected_config_sha256 or '')}\n"
+        f"TSAN_RUN_SKIP={shlex.quote(tsan_run_skip)}\n"
     )
     return (
         header
         + """\
 MISE_CFG="${MISE_CONFIG_DIR:-/usr/local/share/mise}/config.toml"
+echo "=== image identity (mise-system config hash) ==="
+if [ -n "$EXPECTED_CONFIG_SHA256" ]; then
+  actual_config_sha256=$(sha256sum "$MISE_CFG" | cut -d' ' -f1)
+  if [ "$actual_config_sha256" != "$EXPECTED_CONFIG_SHA256" ]; then
+    echo "FAIL: in-image mise config $actual_config_sha256 !=" \
+         "repo mise-system.toml $EXPECTED_CONFIG_SHA256 (stale image — rebuild)"
+    exit 1
+  fi
+  echo "OK: image built from current mise-system.toml ($actual_config_sha256)"
+else
+  echo "SKIP: no expected config hash injected (identity guard dormant)"
+fi
 echo "=== hk validate ==="
 HK_FILE=/etc/hk/hk.pkl hk validate
 echo "=== mise ls (check no missing — system config only) ==="
@@ -134,7 +205,12 @@ CPP
 clang++ -fsanitize=address,undefined /tmp/sanitizer.cpp -o /tmp/san-au
 /tmp/san-au >/dev/null
 clang++ -fsanitize=thread /tmp/sanitizer.cpp -o /tmp/san-tsan
-/tmp/san-tsan >/dev/null
+if [ -n "$TSAN_RUN_SKIP" ]; then
+  echo "SKIP: ThreadSanitizer RUN skipped under emulation (compiled OK;" \
+       "TSan shadow-memory ASLR layout is incompatible with Rosetta/QEMU)"
+else
+  /tmp/san-tsan >/dev/null
+fi
 clang++ -fsanitize=fuzzer-no-link -c /tmp/sanitizer.cpp -o /tmp/san-fuzz.o
 echo "=== reflection compiler checks ==="
 test -x /opt/gcc-latest/bin/g++ \
@@ -206,11 +282,21 @@ def build_smoke_docker_cmd(
     *,
     platform: str = "linux/amd64/v2",
     expected_p2996_ref: str | None = None,
+    expected_config_sha256: str | None = None,
+    emulated: bool | None = None,
 ) -> list[str]:
     """Build the docker command used for smoke validation."""
     if expected_p2996_ref is None:
         expected_p2996_ref = resolve_expected_p2996_ref()
-    script = build_smoke_script(expected_p2996_ref)
+    if expected_config_sha256 is None:
+        expected_config_sha256 = resolve_expected_config_sha256()
+    if emulated is None:
+        emulated = _is_emulated(platform)
+    script = build_smoke_script(
+        expected_p2996_ref,
+        expected_config_sha256=expected_config_sha256,
+        emulated=emulated,
+    )
     return [
         "docker",
         "run",
