@@ -1,5 +1,4 @@
 name: autofix.ci
-
 # Auto-fix-and-commit-back safety net for missed local validations.
 # Runs on PR (excluding bot authors), invokes `hk fix` to apply ruff /
 # yamlfmt / hclfmt / etc. auto-fixable rules, then commits any diff back
@@ -9,14 +8,11 @@ name: autofix.ci
 # still run `hk run pre-commit --all --stash none` locally before push.
 # It only catches the rare oversight (e.g., editor reformatted a file
 # without saving correctly).
-
 on:
   pull_request:
     branches: [main]
-
 permissions:
   contents: read
-
 env:
   # Disk-only debug-level logs so an autofix that misbehaves (e.g.,
   # `hk fix` produces unexpected changes) is diagnosable from the
@@ -24,12 +20,10 @@ env:
   HK_LOG_FILE_LEVEL: debug
   MISE_LOG_FILE: /tmp/mise.log
   MISE_LOG_FILE_LEVEL: debug
-
 # Match ci.yml: group per source branch and cancel superseded autofix runs.
 concurrency:
   group: autofix-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
-
 jobs:
   autofix:
     # Excludes our own commit-back author (autofix-ci has its own loop
@@ -40,8 +34,9 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
       - name: "Install mise (minimal: hk + uv only)"
         # Subset install — autofix only needs `hk` (which delegates to
         # ruff/yamlfmt/etc. via mise shims) and `uv` (for any python
@@ -50,12 +45,10 @@ jobs:
         uses: ./.github/actions/setup-mise
         with:
           install_args: "hk uv"
-
       - name: Configure git identity for hk
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
       - name: Run hk fix (auto-format, auto-fix lint)
         # `HK_FIX=1` flips hk run into fix-mode, where each step's
         # `fix` command runs instead of the `check` command. Note: the
@@ -65,21 +58,18 @@ jobs:
         env:
           HK_FIX: "1"
           HK_PKL_BACKEND: pkl
-
       - name: Verify hk pre-commit passes after fix
         # If the fix produced a tree that still fails lint, do NOT
         # commit — fail loud so the operator inspects the PR.
         run: hk run pre-commit --all --stash none
         env:
           HK_PKL_BACKEND: pkl
-
       - name: Commit fixes back to PR
         # `fail-fast: true` (default) so any error in the action surfaces
         # rather than silently producing partial autofix commits.
         uses: autofix-ci/action@c5b2d67aa2274e7b5a18224e8171550871fc7e4a # v1.3.4
         with:
           commit-message: "ci: apply hk fix auto-formatting"
-
       - name: Upload diagnostic logs (hk + mise)
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

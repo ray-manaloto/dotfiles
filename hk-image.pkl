@@ -10,6 +10,9 @@
 
 amends "package://github.com/jdx/hk/releases/download/v1.44.2/hk@1.44.2#/Config.pkl"
 
+// #154: builtins must be assigned from Builtins, not declared bare (see hk.pkl).
+import "package://github.com/jdx/hk/releases/download/v1.44.2/hk@1.44.2#/Builtins.pkl"
+
 import "hk-common.pkl" as common
 
 fail_fast = false
@@ -25,14 +28,10 @@ hooks {
       ...common.typos
 
       // --- Image-specific: shell scripts installed in the image ---
-      ["shellcheck"] {
+      // (#154 drops shfmt — lint-only via shellcheck; see hk.pkl rationale.)
+      ["shellcheck"] = (Builtins.shellcheck) {
         types = List("shell")
         batch = true
-      }
-      ["shfmt"] {
-        types = List("shell")
-        batch = true
-        check_first = true
       }
     }
   }

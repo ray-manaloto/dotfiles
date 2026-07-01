@@ -1,0 +1,27 @@
+# gitleaks config (#154). The hk `gitleaks` builtin runs `gitleaks dir`, which
+# scans the ENTIRE working tree — it ignores both the file list hk passes and
+# .gitignore — so it flags example secrets in third-party cached docs, generated
+# research artifacts, gitignored local tool caches, and illustrative token
+# examples in documentation. `gitleaks git` (tracked/committed content) reports
+# ZERO real secrets. This allowlist scopes the dir scan to first-party source.
+title = "dotfiles-devcontainer"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Non-source paths and documentation examples (no real secrets)."
+paths = [
+  '''docs/research/mintlify-cache/''',
+  '''docs/research/trail/findings/''',
+  '''\.codex/''',
+  '''\.omc/''',
+  '''\.omg/''',
+  '''\.omx/''',
+  '''\.idea/''',
+  '''\.logging/''',
+  '''\.mise/''',
+  '''__pycache__/''',
+  # Documentation with illustrative `token = "..."` examples, not real secrets.
+  '''\.github/workflows/AGENTS\.md''',
+]

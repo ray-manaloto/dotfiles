@@ -1,5 +1,4 @@
 name: dispatch-build
-
 # ============================================================
 # Phase D (#120): on-demand "build this exact upstream clang-p2996 SHA"
 # without waiting for the daily refresh cron. A repository_dispatch of
@@ -28,22 +27,18 @@ name: dispatch-build
 #     -f 'client_payload[ref]=<git-ref>'
 # Spec: docs/research/gha-workflow-optimization.md § "Phase D".
 # ============================================================
-
 on:
   repository_dispatch:
     types: [build-p2996]
-
 permissions:
   contents: read
   packages: write
-
 jobs:
   build-p2996:
     permissions:
       contents: read
       packages: write
     uses: ./.github/workflows/build-publish.yml
-    secrets: inherit
     with:
       # 'dispatch' emits :sha only (dev-prep is skipped → always builds;
       # metadata-action enables :dev/:latest only for 'nightly'), so an

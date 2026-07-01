@@ -1,5 +1,4 @@
 name: CI
-
 on:
   schedule:
     # Staggered 2h after refresh.yml's 00:00 refresh so a same-day pin bump
@@ -23,7 +22,6 @@ on:
       - "hk-image.pkl"
       - "hk-common.pkl"
       - "renovate.json"
-
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -37,7 +35,6 @@ on:
         required: false
         default: false
         type: boolean
-
 # Serialize runs per branch and cancel superseded ones — only the latest
 # commit's run survives; in-flight runs for older commits on the same branch
 # are cancelled. `head_ref` groups by source branch for pull_request events;
@@ -47,7 +44,6 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
-
 env:
   CONTAINER_REGISTRY: ghcr.io
   IMAGE_NAME: ray-manaloto/dotfiles-devcontainer
@@ -62,44 +58,42 @@ env:
   HK_LOG_FILE_LEVEL: debug
   MISE_LOG_FILE: /tmp/mise.log
   MISE_LOG_FILE_LEVEL: debug
-
 permissions:
   contents: read
   packages: write
-
 jobs:
   # ============================================================
   # Build Type 1: Project linting (hk + mise)
   # ============================================================
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
       - name: Install mise
         # No install_args → installs every tool in mise.toml. The composite
         # forwards to jdx/mise-action, whose default `cache: true` keys on
         # {platform}-{install_args_hash}-{file_hash} — granular per-platform
         # AND per-install-args cache hygiene, preserved across all jobs.
         uses: ./.github/actions/setup-mise
-
       - name: Configure git identity for hk
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
       - name: Validate hk config
         run: hk validate
         env:
           HK_PKL_BACKEND: pkl
           HK_LOG: debug
-
       - name: Run hk checks
         run: hk run pre-commit --all
         env:
           HK_PKL_BACKEND: pkl
-
       - name: Assert chezmoiignore mise overlay hard gate
         # Machine-checks the .chezmoiignore devcontainer-only gate. Uses the
         # canonical chezmoi.os pattern (linux = devcontainer, darwin = host).
@@ -120,10 +114,8 @@ jobs:
           fi
           rm -rf "$T"
           echo "OK: .chezmoiignore mise overlay renders on linux runner. Darwin path verified locally on Mac."
-
       - name: Check for outdated tools
         run: mise outdated || true
-
       - name: Reshim mise tools
         # Explicit reshim to handle the cache-restored-from-fallback case:
         # when mise.lock changes (e.g., a new tool like pipx:mcp2cli is added)
@@ -133,22 +125,18 @@ jobs:
         # shims. Running reshim explicitly here resynchronises the shim
         # index against the actual installs/ directory.
         run: mise reshim
-
       - name: Run mise doctor
         run: |
           mise doctor
           echo "## mise doctor" >> "$GITHUB_STEP_SUMMARY"
           mise doctor -J | jq '.' >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
-
       - name: Validate agent documentation
         run: agnix .
-
       - name: Upload mise lockfile
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: mise-lock
           path: mise.lock
-
       - name: Upload diagnostic logs (hk + mise)
         # Always upload so failed/hung runs are diagnosable from the
         # artifact tab without re-running with --verbose. Aligns with
@@ -162,27 +150,28 @@ jobs:
             /tmp/mise.log
             ~/.local/state/hk/hk.log
           if-no-files-found: ignore
-
   contract-preflight:
     needs: lint
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
       - name: Install mise (python + uv)
         # Subset install: only python + uv, both pinned in mise.toml.
         # Replaces the prior actions/setup-python + astral-sh/setup-uv pair.
         uses: ./.github/actions/setup-mise
         with:
           install_args: "python uv"
-
       - name: Validate Dockerfile contracts
         run: |
           uv run --project python dotfiles-setup verify run \
             --category build --category ci --category identity --category architecture \
             --json
-
   # ============================================================
   # Change detection: gate the Docker build chain (base-prep →
   # p2996-prep → build → smoke-test) AND `promote` on whether the
@@ -207,15 +196,18 @@ jobs:
   changes:
     needs: lint
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
     outputs:
       build: ${{ steps.decide.outputs.build }}
     steps:
       - name: Checkout code
         if: github.event_name == 'pull_request' || github.event_name == 'push'
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
-
+          persist-credentials: false
       - name: Filter build-relevant paths
         id: filter
         if: github.event_name == 'pull_request' || github.event_name == 'push'
@@ -236,7 +228,6 @@ jobs:
               - 'python/**'
               - '.dive-ci'
               - '.github/workflows/ci.yml'
-
       - name: Decide whether the build chain runs
         id: decide
         env:
@@ -257,7 +248,6 @@ jobs:
               fi ;;
             *) echo "build=true" >> "$GITHUB_OUTPUT" ;;
           esac
-
   # ============================================================
   # Docker build chain — extracted to the reusable build-publish.yml
   # (Phase B, #118). This caller carries the `changes` path-gate and the
@@ -278,12 +268,10 @@ jobs:
       contents: read
       packages: write
     uses: ./.github/workflows/build-publish.yml
-    secrets: inherit
     with:
       tag_strategy: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.force_dev_tag)) && 'nightly' || 'pr' }}
       publish: true
       target: ${{ github.event.inputs.target || 'dev' }}
-
   # ============================================================
   # CI gate (#119/#129): a single ALWAYS-run aggregator that branch
   # protection requires INSTEAD of the path-gated `build-publish /
@@ -300,12 +288,14 @@ jobs:
     needs: [lint, contract-preflight, changes, build-publish]
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
     steps:
       - name: Require all upstream jobs to succeed or skip
         env:
           RESULTS: >-
-            ${{ needs.lint.result }} ${{ needs.contract-preflight.result }}
-            ${{ needs.changes.result }} ${{ needs.build-publish.result }}
+            ${{ needs.lint.result }} ${{ needs.contract-preflight.result }} ${{ needs.changes.result }} ${{ needs.build-publish.result }}
         run: |
           set -euo pipefail
           rc=0
@@ -319,7 +309,6 @@ jobs:
             echo "ci-gate: all upstream jobs success or skipped — mergeable"
           fi
           exit "$rc"
-
   # ============================================================
   # Promote: tag-only retag of the PR-built image as :dev / :latest.
   # No rebuild — the PR's :pr-<NNN> manifest digest is reused. If the
@@ -334,6 +323,10 @@ jobs:
     # needlessly trigger the fallback rebuild.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.build == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Find source PR for this commit
         id: pr
@@ -379,19 +372,16 @@ jobs:
             echo "fallback=false" >> "$GITHUB_OUTPUT"
             echo "pr_number=${pr_number}" >> "$GITHUB_OUTPUT"
           fi
-
       - name: Set up Docker Buildx
         if: steps.pr.outputs.fallback != 'true'
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
-
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
       - name: Log in to Container Registry
         if: steps.pr.outputs.fallback != 'true'
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
         with:
           registry: ${{ env.CONTAINER_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Probe source PR image exists (else fall through to rebuild)
         if: steps.pr.outputs.fallback != 'true'
         id: source_probe
@@ -427,7 +417,6 @@ jobs:
             cat "${err_log}" >&2
             exit 1
           fi
-
       - name: Retag PR image as :dev and :latest
         if: steps.pr.outputs.fallback != 'true' && steps.source_probe.outputs.source_present == 'true'
         env:
@@ -462,7 +451,6 @@ jobs:
             echo "- Source: \`${SOURCE_REF}\`"
             echo "- New tags: \`:dev\`, \`:latest\` (digest \`${SOURCE_DIGEST}\`)"
           } >> "$GITHUB_STEP_SUMMARY"
-
       - name: Trigger fallback rebuild
         if: steps.pr.outputs.fallback == 'true' || steps.source_probe.outputs.source_present == 'false'
         env:

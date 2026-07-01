@@ -1,9 +1,35 @@
 amends "package://github.com/jdx/hk/releases/download/v1.44.2/hk@1.44.2#/Config.pkl"
 
+// #154: builtin linters MUST be assigned from Builtins (`= Builtins.name`), not
+// declared as a bare `["name"] {}` block — a bare block is a fresh empty Step
+// (check=null) that hk silently skips (never ran locally or in CI). Extend a
+// builtin with overrides via `["name"] = (Builtins.name) { glob = ... }`.
+// See feedback_hk_builtins_need_assignment.
+import "package://github.com/jdx/hk/releases/download/v1.44.2/hk@1.44.2#/Builtins.pkl"
+
 import "hk-common.pkl" as common
 
 // Zero-skip policy: fail_fast=false to report ALL issues, not just the first
 fail_fast = false
+
+// #154: exclude from ALL builtin linters/formatters (a) third-party cached docs
+// and generated research artifacts (not first-party source), and (b) gitignored
+// local-only tool caches. The latter don't exist in CI, but `gitleaks dir` does
+// NOT honor .gitignore (unlike `walk_ignore`), so it would flag example secrets
+// in local plugin caches (e.g. .codex/.tmp/**) — exclude them explicitly.
+exclude =
+  List(
+    "docs/research/mintlify-cache/**",
+    "docs/research/trail/findings/**",
+    ".codex/**",
+    ".omc/**",
+    ".omg/**",
+    ".omx/**",
+    ".logging/**",
+    ".idea/**",
+    ".mise/**",
+    "**/__pycache__/**",
+  )
 
 hooks {
   // ==========================================================================
@@ -20,10 +46,10 @@ hooks {
       ...common.typos
 
       // --- Style & Consistency ---
-      ["editorconfig-checker"] {}
-      ["prettier"] {
-        batch = true
-      }
+      ["editorconfig-checker"] = Builtins.editorconfig_checker
+      // #154: no prettier step — prettier and yamlfmt both format YAML and would
+      // fight over the same files (perpetual reformat). JSON is covered by jq,
+      // TOML by taplo. Re-add scoped to non-YAML if prettier coverage is wanted.
 
       // --- Python: ruff + ty invoked directly via uv so hk uses
       //     python/pyproject.toml config verbatim. Replaces the hk builtin
@@ -42,11 +68,11 @@ hooks {
         fix = "uv run --project python ruff format python/src tests"
         depends = List("py_ruff")
       }
-      ["python_check_ast"] {
+      ["python_check_ast"] = (Builtins.python_check_ast) {
         glob = List("python/src/**/*.py", "tests/**/*.py")
         batch = true
       }
-      ["python_debug_statements"] {
+      ["python_debug_statements"] = (Builtins.python_debug_statements) {
         glob = List("python/src/**/*.py", "tests/**/*.py")
         batch = true
       }
@@ -68,16 +94,18 @@ hooks {
         // `# noqa: S310` was discovered in a plugin script that had
         // silently escaped enforcement. See feedback memory
         // `feedback_no_inline_lint_suppressions_ever.md`.
-        check = "! grep -rn --include='*.py' 'noqa\\|type: ignore\\|ty: ignore\\|pylint: disable\\|nosec' python/src/ tests/ plugins/"
+        check =
+          "! grep -rn --include='*.py' 'noqa\\|type: ignore\\|ty: ignore\\|pylint: disable\\|nosec' python/src/ tests/ plugins/"
       }
 
       // --- Dockerfile & Bake ---
-      ["hadolint"] {
+      ["hadolint"] = (Builtins.hadolint) {
         glob = List(".devcontainer/Dockerfile")
       }
       ["docker_bake_check"] {
         glob = List("docker-bake.hcl", ".devcontainer/Dockerfile")
-        check = "scripts/ensure-docker-up.sh && devcontainer read-configuration --workspace-folder ."
+        check =
+          "scripts/ensure-docker-up.sh && devcontainer read-configuration --workspace-folder ."
       }
 
       // --- devcontainer.json 3-layer schema validation ---
@@ -100,54 +128,40 @@ hooks {
       //     mounts, NOT new RUN steps in the overlay.
       ["dockerfile_host_user_thin_overlay"] {
         glob = List(".devcontainer/Dockerfile.host-user")
-        check = "lines=$(wc -l < .devcontainer/Dockerfile.host-user); [ \"$lines\" -le 89 ] || { echo \"Dockerfile.host-user is $lines lines, cap is 89 (baseline 79 + 10). Add capabilities via Features or devcontainer.json mounts, not RUN steps.\"; exit 1; }"
+        check =
+          "lines=$(wc -l < .devcontainer/Dockerfile.host-user); [ \"$lines\" -le 89 ] || { echo \"Dockerfile.host-user is $lines lines, cap is 89 (baseline 79 + 10). Add capabilities via Features or devcontainer.json mounts, not RUN steps.\"; exit 1; }"
       }
 
-      // --- TOML ---
-      ["taplo_format"] {
+      // --- TOML (lint only; #154 drops the opinionated taplo_format formatter
+      //     — it collapses hand-formatted arrays. `mise` fmt-checks mise.toml.) ---
+      ["taplo"] = (Builtins.taplo) {
         types = List("toml")
         batch = true
       }
-      ["taplo"] {
-        types = List("toml")
-        batch = true
-        depends = List("taplo_format")
-      }
 
-      // --- YAML ---
-      ["yamlfmt"] {
+      // --- YAML (lint only; #154 drops yamlfmt — it restyles hand-formatted
+      //     YAML). yamllint --strict still enforces correctness. ---
+      ["yamllint"] = (Builtins.yamllint) {
         types = List("yaml")
         batch = true
       }
-      ["yamllint"] {
-        types = List("yaml")
-        batch = true
-        depends = List("yamlfmt")
-      }
 
-      // --- JSON ---
-      ["jq"] {
-        types = List("json")
-        batch = true
-      }
+      // --- JSON: #154 no jq step — the jq builtin reorders JSON keys
+      //     (alphabetizes) and reflows, destroying intentional ordering in
+      //     renovate.json / .mcp.json. JSONC (devcontainer.json) is validated
+      //     by devcontainer_json_validate. ---
 
-      // --- Pkl ---
-      ["pkl"] {
-        types = List("pkl")
-      }
-      ["pkl_format"] {
+      // --- Pkl (eval-check only; #154 drops pkl_format — it reflows the
+      //     hand-formatted hk pkl files) ---
+      ["pkl"] = (Builtins.pkl) {
         types = List("pkl")
       }
 
-      // --- Shell ---
-      ["shellcheck"] {
+      // --- Shell (lint only; #154 drops shfmt — it restyles hand-formatted
+      //     scripts). shellcheck still enforces correctness. ---
+      ["shellcheck"] = (Builtins.shellcheck) {
         types = List("shell")
         batch = true
-      }
-      ["shfmt"] {
-        types = List("shell")
-        batch = true
-        check_first = true
       }
 
       // --- Exit-code-masking guard (#142): every shell script with a
@@ -161,38 +175,40 @@ hooks {
       //     (evidence discipline) and feedback_pipe_kills_exit_code.
       ["require_pipefail"] {
         glob = List("**/*.sh")
-        check = "rc=0; for f in $(git ls-files '*.sh'); do first=$(head -n1 \"$f\"); case \"$first\" in \"#!\"*) ;; *) continue ;; esac; grep -qE 'set -[a-z]*o pipefail' \"$f\" || { echo \"$f: shell script with shebang lacks 'set -o pipefail' (exit-code masking guard, #142)\" >&2; rc=1; }; done; exit $rc"
+        check =
+          "rc=0; for f in $(git ls-files '*.sh'); do first=$(head -n1 \"$f\"); case \"$first\" in \"#!\"*) ;; *) continue ;; esac; grep -qE 'set -[a-z]*o pipefail' \"$f\" || { echo \"$f: shell script with shebang lacks 'set -o pipefail' (exit-code masking guard, #142)\" >&2; rc=1; }; done; exit $rc"
       }
 
       // --- Markdown ---
-      ["markdown_lint"] {
-        types = List("markdown")
-      }
+      // #154: no markdown_lint step — its builtin runs `markdownlint` (cli v1),
+      // but the repo standardizes on `markdownlint-cli2` (+ rumdl, mdschema);
+      // adding a redundant v1 binary just to satisfy the builtin isn't worth it.
 
       // --- GitHub Actions ---
-      ["actionlint"] {
+      ["actionlint"] = (Builtins.actionlint) {
         glob = List(".github/workflows/*.yml")
       }
-      ["ghalint_workflow"] {
+      ["ghalint_workflow"] = (Builtins.ghalint_workflow) {
         glob = List(".github/workflows/*.yml")
       }
-      ["zizmor"] {
+      // #154: no zizmor step — the zizmor builtin in hk@1.44.2 resolves to
+      // check=null (a no-op that always "passes"); it never actually scans.
+      // Re-add when the builtin ships a real command (or wire zizmor manually).
+      ["pinact"] = (Builtins.pinact) {
         glob = List(".github/workflows/*.yml")
       }
-      ["pinact"] {
-        glob = List(".github/workflows/*.yml")
-      }
-      ["pinact_update"] {
+      ["pinact_update"] = (Builtins.pinact_update) {
         glob = List(".github/workflows/*.yml")
       }
 
       // --- HCL ---
-      ["hclfmt"] {
-        glob = List("**/*.hcl")
-      }
+      // #154: no hclfmt step — `hclfmt` is not in the mise registry (only
+      // hcl2json/hcloud), so it can't satisfy ci-local-parity. The sole .hcl
+      // file (docker-bake.hcl) is already validated by `docker_bake_check`
+      // (devcontainer read-configuration) and `mise run` bake validate.
 
       // --- mise config validation ---
-      ["mise"] {
+      ["mise"] = (Builtins.mise) {
         glob = List("**/mise.toml")
       }
 
@@ -219,7 +235,8 @@ hooks {
       //     remain banned. Tracked in feedback_no_mcp_registration.md;
       //     planned migration: convert to mcp2cli wrappers later.
       ["no_mcp_registration"] {
-        check = "! git grep -nE 'claude[[:space:]]+mcp[[:space:]]+add' -- ':!.claude/skills/mcp2cli/SKILL.md' ':!.claude/skills/mintlify/SKILL.md' ':!.claude/rules/research-doc-sources.md' ':!.claude/rules/research-repo-enumeration.md' ':!.claude/CLAUDE.md' ':!AGENTS.md' ':!mise.toml' ':!docs/research/mintlify-catalog.md' ':!hk.pkl' && ! git ls-files '**/.mcp.json' | grep -q ."
+        check =
+          "! git grep -nE 'claude[[:space:]]+mcp[[:space:]]+add' -- ':!.claude/skills/mcp2cli/SKILL.md' ':!.claude/skills/mintlify/SKILL.md' ':!.claude/rules/research-doc-sources.md' ':!.claude/rules/research-repo-enumeration.md' ':!.claude/CLAUDE.md' ':!AGENTS.md' ':!mise.toml' ':!docs/research/mintlify-catalog.md' ':!hk.pkl' && ! git ls-files '**/.mcp.json' | grep -q ."
       }
 
       // --- Claude Code memory docs size limit ---
@@ -236,7 +253,8 @@ hooks {
       //     scheduled for post-devcontainer-work review. This awk step
       //     ships immediate enforcement in the meantime.
       ["claude_md_size_limit"] {
-        check = "rc=0; for f in $(git ls-files | grep -E '(^|/)(CLAUDE|AGENTS)\\.md$'); do lines=$(wc -l < \"$f\"); if [ \"$lines\" -gt 200 ]; then echo \"$f: $lines lines (max 200 per Claude Code memory docs)\" >&2; rc=1; fi; done; exit $rc"
+        check =
+          "rc=0; for f in $(git ls-files | grep -E '(^|/)(CLAUDE|AGENTS)\\.md$'); do lines=$(wc -l < \"$f\"); if [ \"$lines\" -gt 200 ]; then echo \"$f: $lines lines (max 200 per Claude Code memory docs)\" >&2; rc=1; fi; done; exit $rc"
       }
 
       // --- No global skill leakage (presence assertion for project-scoped
@@ -246,7 +264,8 @@ hooks {
       //     replaces a CI parity check that would have been irrelevant on
       //     ephemeral runners. ---
       ["no_global_skill_leakage"] {
-        check = "test -f .claude/skills/mcp2cli/SKILL.md && test -f .claude/skills/mintlify/SKILL.md"
+        check =
+          "test -f .claude/skills/mcp2cli/SKILL.md && test -f .claude/skills/mintlify/SKILL.md"
       }
 
       // --- CLAUDE.md must be a thin `@AGENTS.md` import stub.
@@ -271,7 +290,6 @@ hooks {
       ["claude_agents_md_pairs"] {
         check = "scripts/check-claude-agents-md-pairs.sh"
       }
-
     }
   }
 
@@ -280,7 +298,7 @@ hooks {
   // ==========================================================================
   ["commit-msg"] {
     steps {
-      ["check_conventional_commit"] {}
+      ["check_conventional_commit"] = Builtins.check_conventional_commit
     }
   }
 
