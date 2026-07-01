@@ -18,6 +18,26 @@ echo "[devcontainer-smoke][start]"
 WORKSPACE_FOLDER="${WORKSPACE_FOLDER:-/workspaces/$(basename "$PWD")}"
 
 echo "::group::Tier 1 — tools + hk"
+echo "[tier1] image identity — mise-system config hash"
+# Gap A (image identity): the Dockerfile COPYs .devcontainer/mise-system.toml
+# verbatim to $MISE_CONFIG_DIR/config.toml. If the in-image hash differs from
+# the mounted repo file, this container is running a STALE/cached image (e.g.
+# devcontainer-cli reused a vsc-dotfiles-<hash> overlay) — rebuild before
+# trusting any downstream check. Fails loud rather than silently validating
+# old content.
+sys_cfg="${MISE_CONFIG_DIR:-/usr/local/share/mise}/config.toml"
+repo_cfg="${WORKSPACE_FOLDER}/.devcontainer/mise-system.toml"
+if [ -f "$repo_cfg" ]; then
+  expected_cfg_hash="$(sha256sum "$repo_cfg" | cut -d' ' -f1)"
+  actual_cfg_hash="$(sha256sum "$sys_cfg" | cut -d' ' -f1)"
+  if [ "$actual_cfg_hash" != "$expected_cfg_hash" ]; then
+    echo "  FAIL: in-image mise config ${actual_cfg_hash} != repo mise-system.toml ${expected_cfg_hash} (stale/cached image — rebuild)" >&2
+    exit 1
+  fi
+  echo "  OK: image built from current mise-system.toml (${actual_cfg_hash})"
+else
+  echo "  SKIP: repo mise-system.toml not found at ${repo_cfg}"
+fi
 mise ls
 which clang++ python uv hk
 # Use the image-only hk config (installed at /etc/hk/hk.pkl by Dockerfile).
@@ -57,6 +77,42 @@ CC
 clang++ -fsanitize=address,undefined -O1 -g "$td/hello.cc" -o "$td/hello"
 "$td/hello"
 rm -rf "$td"
+
+echo "[tier3] reflection compilers — ref pin + functional"
+# The sanitizer block above uses the conda clang++ on PATH; it never touches
+# the P2996 reflection compiler. Assert the clang-p2996 build (a) is a real
+# bloomberg/clang-p2996 build and (b) its embedded source commit matches the
+# CLANG_P2996_REF pinned in docker-bake.hcl — without this a stale/wrong-ref
+# (or missing) reflection compiler is a silent false positive. Then compile a
+# std::meta program with both reflection compilers (-fsyntax-only; the
+# static_assert forces compile-time reflection evaluation, and clang-p2996's
+# -stdlib=libc++ binary can't be run — libc++.so.1 is off the loader path).
+test -x /opt/clang-p2996/bin/clang++ || { echo "  FAIL: /opt/clang-p2996/bin/clang++ missing" >&2; exit 1; }
+test -x /opt/gcc-latest/bin/g++ || { echo "  FAIL: /opt/gcc-latest/bin/g++ missing" >&2; exit 1; }
+expected_ref="$(grep -A2 'CLANG_P2996_REF' "${WORKSPACE_FOLDER}/docker-bake.hcl" | grep -oiE '[0-9a-f]{40}' | head -1)"
+[ -n "${expected_ref}" ] || { echo "  FAIL: could not parse CLANG_P2996_REF from docker-bake.hcl" >&2; exit 1; }
+p2996_version="$(/opt/clang-p2996/bin/clang --version)"
+echo "${p2996_version}" | grep -q 'bloomberg/clang-p2996' || { echo "  FAIL: /opt/clang-p2996 clang is not a bloomberg/clang-p2996 build" >&2; exit 1; }
+actual_ref="$(echo "${p2996_version}" | grep -oiE '[0-9a-f]{40}' | head -1)"
+if [ "${actual_ref}" != "${expected_ref}" ]; then
+	echo "  FAIL: clang-p2996 built from ${actual_ref} but docker-bake.hcl pins ${expected_ref}" >&2
+	exit 1
+fi
+echo "  OK: clang-p2996 ref ${actual_ref} matches docker-bake.hcl"
+rd="$(mktemp -d)"
+cat >"${rd}/refl.cpp" <<'CPP'
+#include <meta>
+enum class Color { Red, Green, Blue };
+consteval int count_enumerators() {
+  return static_cast<int>(enumerators_of(^^Color).size());
+}
+static_assert(count_enumerators() == 3);
+int main() { return 0; }
+CPP
+/opt/gcc-latest/bin/g++ -std=c++26 -freflection "${rd}/refl.cpp" -fsyntax-only || { echo "  FAIL: gcc-latest reflection compile failed" >&2; exit 1; }
+/opt/clang-p2996/bin/clang++ -std=c++2c -freflection -freflection-latest -fexpansion-statements -stdlib=libc++ "${rd}/refl.cpp" -fsyntax-only || { echo "  FAIL: clang-p2996 reflection compile failed" >&2; exit 1; }
+rm -rf "${rd}"
+echo "  OK: both reflection compilers compile a std::meta program"
 
 echo "[tier3] home volume ownership + seed survivors"
 # v6 single-home-volume contract: the whole /home/${USER} dir is a

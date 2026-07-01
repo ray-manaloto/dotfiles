@@ -33,11 +33,11 @@ spec), not a bootstrap shell wrapper:
 - `onCreateCommand` (in container, once): `chezmoi init --apply`
   against `/workspaces/${localWorkspaceFolderBasename}`, chowns
   named-volume mountpoints to `${USER}:${USER}`.
-- `postCreateCommand` (in container, once): chowns the magic SSH socket
-  `/run/host-services/ssh-auth.sock` to the container user (root:root
-  0660 by default), installs `authorized_keys` from
-  `/tmp/dotfiles-host-state/` for R1, seeds `~/.ssh/known_hosts`, runs
-  `scripts/devcontainer-smoke.sh` tier 1/2/3. Exit 0 required.
+- `postCreateCommand` (once): chowns the magic SSH socket, installs
+  `authorized_keys` from `/tmp/dotfiles-host-state/` for R1, seeds
+  `~/.ssh/known_hosts`, runs `scripts/devcontainer-smoke.sh` tier 1/2/3
+  (exit 0 required). `postStartCommand` re-chowns the socket on EVERY
+  start (it reverts to root:root on DD restart) — R2's durable fix.
 
 ## Secrets Injection (Doppler)
 

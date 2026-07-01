@@ -34,7 +34,8 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 HASH_LENGTH = 16
-SCHEMA_VERSION = 2  # bumped when split from single-hash to base+p2996
+# v2: split single-hash into base+p2996. v3: base-hash covers mise-system.toml.
+SCHEMA_VERSION = 3
 RECORD_SEPARATOR = "\x1f"  # ASCII unit separator — never appears in inputs
 SHA256_HEX_LEN = 64
 
@@ -55,6 +56,7 @@ class BaseHashInputs:
     platform: str
     base_section_digest: str
     snapshot_digest: str
+    mise_system_config_digest: str
 
     def __post_init__(self) -> None:
         """Reject empty literals + non-64-hex digests."""
@@ -63,7 +65,11 @@ class BaseHashInputs:
             if not value:
                 msg = f"BaseHashInputs.{field_name} must be non-empty"
                 raise ValueError(msg)
-        for field_name in ("base_section_digest", "snapshot_digest"):
+        for field_name in (
+            "base_section_digest",
+            "snapshot_digest",
+            "mise_system_config_digest",
+        ):
             value = getattr(self, field_name)
             _validate_hex_digest(value, f"BaseHashInputs.{field_name}")
 
@@ -244,11 +250,19 @@ def gather_base_inputs(repo_root: Path) -> BaseHashInputs:
         dockerfile_text, BASE_SECTION_BEGIN, BASE_SECTION_END
     )
     snapshot_path = repo_root / ".devcontainer" / "mise-system-resolved.json"
+    # The Dockerfile base section COPYs mise-system.toml verbatim into the
+    # image (/usr/local/share/mise/config.toml), so its BYTES are a build
+    # input. The base_section_digest only captures the COPY *instruction*,
+    # not the file content — hashing the file closes that gap so [settings]/
+    # [env]/[tasks] edits (which don't move the resolved snapshot) still bust
+    # the cache and trigger a rebuild. See PR #140.
+    mise_system_config_path = repo_root / ".devcontainer" / "mise-system.toml"
     return BaseHashInputs(
         base_image=_extract_bake_variable(bake_text, "BASE_IMAGE"),
         platform=_extract_bake_variable(bake_text, "PLATFORM"),
         base_section_digest=_sha256_hex(base_section),
         snapshot_digest=_file_digest(snapshot_path),
+        mise_system_config_digest=_file_digest(mise_system_config_path),
     )
 
 
@@ -262,6 +276,7 @@ def compute_base_hash(inputs: BaseHashInputs) -> str:
             f"platform={inputs.platform}",
             f"base_section={inputs.base_section_digest}",
             f"snapshot={inputs.snapshot_digest}",
+            f"mise_system_config={inputs.mise_system_config_digest}",
         ],
     )
     return _sha256_hex(canonical)[:HASH_LENGTH]

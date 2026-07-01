@@ -39,8 +39,17 @@
 //      native `/run/host-services/ssh-auth.sock` magic socket,
 //      bind-mounted into the container and pointed at by
 //      `containerEnv.SSH_AUTH_SOCK`. The socket arrives as
-//      root:root 0660; `postCreateCommand` chowns it to the container
-//      user. No host-side or container-side proxy required.
+//      root:root 0660 and must be chowned to the container user.
+//      This chown runs in BOTH `postCreateCommand` (so first-create
+//      smoke, which runs inside postCreate, sees an accessible socket)
+//      AND `postStartCommand` (so the chown is re-established on EVERY
+//      container start). The latter is load-bearing: Docker Desktop
+//      recreates the host-services socket as root:root on reboot / DD
+//      restart / update, and `mise run up` reuses an existing container
+//      WITHOUT re-running postCreateCommand — so a create-only chown is
+//      silently lost across restarts and R2 breaks. postStartCommand
+//      runs on every `devcontainer up` (per devcontainers/cli docs),
+//      closing that gap. No host-side or container-side proxy required.
 //      Runtime pin: Docker Desktop only — Colima has no equivalent
 //      (`abiosoft/colima#1330`, `#942`); deferred follow-up #78.
 //
@@ -172,6 +181,13 @@
   "initializeCommand": "mkdir -p ~/.local/state/dotfiles && doppler secrets download --format docker --no-file --project \"${DOPPLER_PROJECT:-dotfiles}\" --config \"${DOPPLER_CONFIG:-dev}\" > ~/.local/state/dotfiles/doppler.env && [ -s ~/.local/state/dotfiles/doppler.env ] && uv run --project python dotfiles-setup docker initialize-host",
   "onCreateCommand": "bash /workspaces/${localWorkspaceFolderBasename}/.devcontainer/scripts/on-create.sh /workspaces/${localWorkspaceFolderBasename}",
   "postCreateCommand": "sudo chown ${localEnv:USER}:${localEnv:USER} /run/host-services/ssh-auth.sock && install -d -m 700 ~/.ssh && install -m 600 /tmp/dotfiles-host-state/authorized_keys ~/.ssh/authorized_keys && ssh-keyscan -t rsa,ecdsa,ed25519 github.com >> ~/.ssh/known_hosts && [ -s ~/.ssh/known_hosts ] && chmod 600 ~/.ssh/known_hosts && scripts/devcontainer-smoke.sh",
+  // Re-chown the Docker Desktop magic SSH socket on EVERY container
+  // start (R2 outbound). postCreateCommand runs once on create; the
+  // socket reverts to root:root whenever DD recreates host-services
+  // (reboot / DD restart) and `mise run up` reuses the container without
+  // re-running postCreate. postStartCommand fires on every `up`, so this
+  // is the durable fix for R2 surviving restarts.
+  "postStartCommand": "sudo chown ${localEnv:USER}:${localEnv:USER} /run/host-services/ssh-auth.sock",
   "customizations": {
     "vscode": {
       "extensions": [
