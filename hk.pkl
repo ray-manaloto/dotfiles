@@ -150,6 +150,20 @@ hooks {
         check_first = true
       }
 
+      // --- Exit-code-masking guard (#142): every shell script with a
+      //     shebang MUST declare `set -o pipefail` so a failing stage in
+      //     a `cmd | filter` pipeline surfaces instead of being masked by
+      //     the last stage's exit 0. Iterates all tracked `*.sh` (not just
+      //     the staged glob match) so a script anywhere in the tree cannot
+      //     regress — same whole-tree idiom as `claude_md_size_limit`.
+      //     Matches all short-flag forms (`set -o`, `set -euo`, ...) via
+      //     `set -[a-z]*o pipefail`. See .claude/rules/verify-before-advancing.md
+      //     (evidence discipline) and feedback_pipe_kills_exit_code.
+      ["require_pipefail"] {
+        glob = List("**/*.sh")
+        check = "rc=0; for f in $(git ls-files '*.sh'); do first=$(head -n1 \"$f\"); case \"$first\" in \"#!\"*) ;; *) continue ;; esac; grep -qE 'set -[a-z]*o pipefail' \"$f\" || { echo \"$f: shell script with shebang lacks 'set -o pipefail' (exit-code masking guard, #142)\" >&2; rc=1; }; done; exit $rc"
+      }
+
       // --- Markdown ---
       ["markdown_lint"] {
         types = List("markdown")
