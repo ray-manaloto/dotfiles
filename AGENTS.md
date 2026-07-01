@@ -18,8 +18,8 @@ caller) → lint → contract-preflight → `changes` → reusable `build-publis
 ```bash
 mise install                                 # Install all tools
 mise run lint                                # Run lint checks (hk under a hard timeout)
-mise run up                                  # Bring up devcontainer (see .devcontainer/AGENTS.md)
-mise run down                                # Tear down devcontainer
+mise run up / down                           # Bring up / tear down devcontainer (.devcontainer/AGENTS.md)
+mise run verify-container-latest             # Gate: container on latest branch code + base (hard)
 uv run --project python pytest tests/ -x -q  # Run tests (see python/AGENTS.md)
 dotfiles-setup verify run                    # Run structured verification contracts
 mise run pin-actions                         # Verify GHA actions are SHA-pinned
