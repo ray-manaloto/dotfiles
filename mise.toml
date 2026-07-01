@@ -359,6 +359,16 @@ echo 'OK: home-volume seed survivors + canary present'
 echo "OK: $PRE_COUNT tools persisted identically across stop/up (mise-system.toml baseline: $EXPECTED_MIN)"
 '''
 
+[tasks.verify-container-latest]
+description = "Gate: running devcontainer is on the latest branch code + current base + smoke"
+# Enforces verify-before-advancing's devcontainer row: the running container
+# must bind-mount THIS workspace (source = latest branch code, live) and pass
+# scripts/devcontainer-smoke.sh, whose tier-1 image-identity check hard-fails a
+# stale base (predating the current mise-system.toml). Logic is in
+# python/src/dotfiles_setup/container.py (zero-bash-logic policy); this task is
+# a thin caller. Use `--no-smoke` for a fast container/bind-mount pre-check.
+run = 'uv run --project python dotfiles-setup docker verify-latest'
+
 [tasks.verify-arch]
 description = "R3: container runs as linux/amd64 x86_64 (not ARM passthrough)"
 # Proves Requirement 3: the container is AMD64 regardless of host arch.

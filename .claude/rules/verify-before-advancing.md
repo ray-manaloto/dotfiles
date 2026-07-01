@@ -35,11 +35,47 @@ first".
 | `.github/**` (workflows/actions) | `mise run pin-actions` |
 | `AGENTS.md` / `CLAUDE.md` / `.claude/**/*.md` | `mise run lint-docs` (agnix) **and** the ≤200-line / ≤12000-char limit holds (`claude_md_size_limit`) |
 | `.devcontainer/**`, `mise-system.toml`, image/Dockerfile | `mise run verify-local` (R1/R2/R3 + persistence) or a direct `docker run <img> …` check; the in-image smoke can't fully run on this arm64 Mac (Rosetta) |
+| Validating **through the devcontainer** (any change you test in-container) | `mise run verify-container-latest` — the running container must bind-mount THIS workspace (source = latest branch code) and pass smoke; **base-currency is a hard gate** (smoke tier-1 identity fails a base predating the current `mise-system.toml`). See "Validate against the latest branch code" below. |
 | Opened a PR | `gh pr checks <n> --watch` until terminal — every check `pass` or `skipping`, **0 fail** |
 | Merged to `main` | Await the main `ci.yml` run and confirm `conclusion == success` (incl. `promote` retagging `:dev`) |
 
 Scale the matrix to the blast radius — a one-line doc typo needs the docs
 row, not `verify-local`; a Dockerfile change needs the image row.
+
+## Validate against the latest branch code (in a current container)
+
+When you validate *through the devcontainer*, that container must be
+running the **latest code of the working branch** — the PR branch during
+a PR, `main` on main — on a **current base image**. A container that
+mounts a stale tree, or was built on a base that predates the current
+`.devcontainer/mise-system.toml`, is not a valid validation environment,
+and a green result against it is a false positive.
+
+`mise run verify-container-latest` enforces this (hard):
+
+- **source is live** — the container bind-mounts THIS workspace, so the
+  files it runs are the host working tree at branch HEAD (not a snapshot);
+- **base is current** — `scripts/devcontainer-smoke.sh` tier-1 image
+  identity (PR #140 "Gap A") compares the in-image `config.toml` hash to
+  the repo `mise-system.toml` and **hard-fails a stale base**. Refresh with
+  `mise run dev-rebuild` (pulls the registry `:dev`; on a slow link this is
+  a long buildkit pull — never classic `docker pull`, which wedges on the
+  ~38GB image, see `feedback_mise_local_toml_replaces_task`);
+- **it runs** — smoke tiers 1-3 pass in the container.
+
+Base-currency is a hard block by design: do not advance validating against
+a base that predates the branch's `mise-system.toml`.
+
+**A slow base pull is acceptable — wait for it; never fall back to a stale
+base to save time.** The registry `:dev` is the base built from the
+current `mise-system.toml`, so refreshing to it is the *only* way to test
+the latest code — there is no valid local shortcut. On a slow link the
+~38GB buildkit pull can take hours; that is expected and fine. Background
+it (`mise run dev-rebuild`, or a `docker buildx build --pull --output
+type=docker` of `:dev` — buildkit, never classic `docker pull` which
+wedges on the large blob) and **wait for it to finish**, then rebuild the
+overlay and re-run the gate. Correctness (testing the latest code) beats
+speed: a green result on a stale base is worse than a slow-but-honest one.
 
 ## Evidence discipline (trust the artifact, not the notification)
 

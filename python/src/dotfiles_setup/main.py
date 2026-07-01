@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from dotfiles_setup.ai import AIOrchestrator
 from dotfiles_setup.audit import DevEnvironmentAuditor, ToolManager
 from dotfiles_setup.config import DotfilesConfig
+from dotfiles_setup.container import verify_latest_main
 from dotfiles_setup.docker import DevContainerManager
 from dotfiles_setup.ghcr import validate_ghcr_prereqs
 from dotfiles_setup.image import ImageCommand
@@ -78,6 +79,16 @@ def _add_docker_subcommands(
     docker_subparsers.add_parser(
         "initialize-host",
         help="Stage host-side authorized_keys for the container's R1 sshd login",
+    )
+    verify_latest_parser = docker_subparsers.add_parser(
+        "verify-latest",
+        help="Gate: running devcontainer is on the latest branch code + "
+        "current base (smoke identity) + smoke green",
+    )
+    verify_latest_parser.add_argument(
+        "--no-smoke",
+        action="store_true",
+        help="Skip the in-container smoke run (fast container/bind-mount check only)",
     )
 
 
@@ -291,6 +302,8 @@ def handle_docker(
         docker_manager.down()
     elif args.docker_command == "initialize-host":
         docker_manager.initialize_host()
+    elif args.docker_command == "verify-latest":
+        sys.exit(verify_latest_main(project_root, run_smoke=not args.no_smoke))
 
 
 def handle_audit(config: DotfilesConfig | None = None) -> None:
