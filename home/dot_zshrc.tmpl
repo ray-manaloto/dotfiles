@@ -13,9 +13,9 @@ export LANG="en_US.UTF-8"
 # add user local completion folder to fpath
 fpath+=(~/.zsh/completion)
 
-if [[ -d $HOME/.local/bin ]] ; then 
+if [[ -d $HOME/.local/bin ]] ; then
   export PATH=$HOME/.local/bin:$PATH
-fi 
+fi
 
 if [[ -d $HOME/.krew ]] ; then
   export PATH=$HOME/.krew/bin:$PATH
@@ -100,7 +100,7 @@ fi
 
 # some nice functions and aliases
 
-## use bat instead of cat 
+## use bat instead of cat
 if command -v bat > /dev/null ; then
   alias cat="bat"
 fi
@@ -110,7 +110,7 @@ if command -v batcat > /dev/null ; then
   alias cat="batcat"
 fi
 
-if command -v dagger > /dev/null ; then 
+if command -v dagger > /dev/null ; then
   export DAGGER_NO_NAG=1
 fi
 

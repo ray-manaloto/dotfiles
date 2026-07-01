@@ -15,6 +15,8 @@ yamlfmt = "0.21.0"
 yq = "4.53.2"
 ghalint = "1.5.6"
 jq = "1.8.1"
+editorconfig-checker = "3.8.0" # provides `ec` — used by hk editorconfig_checker builtin (#154)
+gitleaks = "8.30.1"            # secret scanner — used by hk-common security gitleaks builtin (#154)
 # Python toolchain for the mde-py package in python/
 python = "3.14.5"
 uv = "0.11.17"
@@ -22,7 +24,7 @@ pixi = "0.70.0"
 pinact = "4.0.0"
 chezmoi = "2.70.4"
 "npm:@devcontainers/cli" = "0.87.0"
-colima = "0.10.1"  # Alternate Docker runtime (VZ + Rosetta); Docker Desktop is the CURRENT supported runtime — see AGENTS.md Docker Runtimes + .omc/research/research-20260409c-dockerdesktop-ssh/
+colima = "0.10.1"                   # Alternate Docker runtime (VZ + Rosetta); Docker Desktop is the CURRENT supported runtime — see AGENTS.md Docker Runtimes + .omc/research/research-20260409c-dockerdesktop-ssh/
 lima = "2.1.2"
 "github:agent-sh/agnix" = "0.36.2"  # prebuilt release binary; npm: backend needs a postinstall download that bun skips (binary-not-found). Release tag is v0.36.2.
 "npm:agents-lint" = "0.5.0"
@@ -35,14 +37,14 @@ biome = "2.4.16"
 # immediate 200-line enforcement per Claude Code memory docs.
 "npm:claude-code-lint" = "0.5.0"
 "npm:@contextlint/cli" = "1.1.1"
-"npm:markdownlint-cli2" = "0.22.1"      # https://github.com/DavidAnson/markdownlint — general markdown quality (MD013 line-length, etc.)
+"npm:markdownlint-cli2" = "0.22.1"                                  # https://github.com/DavidAnson/markdownlint — general markdown quality (MD013 line-length, etc.)
 "aqua:jackchuka/mdschema" = "0.13.1"
 rumdl = "0.2.4"
 "npm:oh-my-claude-sisyphus" = "4.14.4"
 "github:ast-grep/ast-grep" = "0.43.0"
 lefthook = "2.1.9"
 "npm:ctx7" = "0.4.4"
-rtk = "0.37.2"  # held at 0.37.2: github backend for rtk@0.42.0 fails to populate url_api in mise.lock → CI install errors "relative URL without a base". Revisit bump separately.
+rtk = "0.37.2"                                                      # held at 0.37.2: github backend for rtk@0.42.0 fails to populate url_api in mise.lock → CI install errors "relative URL without a base". Revisit bump separately.
 "npm:skills" = "1.5.9"
 "npm:agent-browser" = "0.27.0"
 "npm:portless" = "0.13.1"
@@ -71,8 +73,14 @@ show_env = true
 postinstall = "mise reshim && hk install --mise"
 
 [env]
-HK_PKL_BACKEND = "pkl"  # "pkl" (not pklr) required for import/spread in hk-common.pkl
+HK_PKL_BACKEND = "pkl" # "pkl" (not pklr) required for import/spread in hk-common.pkl
 HK_MISE = "1"
+
+# #154: the hk `gitleaks` builtin runs `gitleaks dir` (whole-tree scan, no
+# --config flag), so point gitleaks at the repo allowlist config via env — it
+# scopes the scan to first-party source (see .gitleaks.toml). config_root
+# resolves to the repo root both locally and in CI.
+GITLEAKS_CONFIG = "{{config_root}}/.gitleaks.toml"
 
 # Console stays at the default (warn) — interactive use isn't spammed —
 # but the on-disk log captures debug-level detail so a stuck/slow run
@@ -94,12 +102,12 @@ MISE_LOG_FILE_LEVEL = "debug"
 # task `run` blocks per mise docs). Kept short for inner-loop muscle
 # memory; the canonical UX is still `mise run <task>`.
 [shell_alias]
-dcu     = "mise run up"
-dcd     = "mise run down"
-dcdev   = "mise run dev"
-dcrb    = "mise run dev-rebuild"
-dcsh    = "mise run sh"
-dcps    = "mise run ps"
+dcu = "mise run up"
+dcd = "mise run down"
+dcdev = "mise run dev"
+dcrb = "mise run dev-rebuild"
+dcsh = "mise run sh"
+dcps = "mise run ps"
 dcsmoke = "mise run smoke"
 dcverify = "mise run verify-image"
 

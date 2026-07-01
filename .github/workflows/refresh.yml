@@ -1,5 +1,4 @@
 name: Refresh upstream pins
-
 # Two independent daily-refresh jobs merged into one workflow. Each detects
 # a different upstream drift and opens a PR via the shared
 # `./.github/actions/open-refresh-pr` composite. Each job mints a GitHub
@@ -37,24 +36,24 @@ name: Refresh upstream pins
 #     or the web UI (fires both jobs).
 #
 # Outcome per job: opens a PR if its tracked file changed; no-op if not.
-
 on:
   schedule:
     - cron: "0 0 * * *"
       timezone: "America/Chicago"
   workflow_dispatch:
-
 permissions:
   contents: write
   pull-requests: write
-  packages: read  # snapshot-refresh pulls the private :dev image to capture
-                  # the mise snapshot; an explicit permissions block defaults
-                  # all unlisted scopes to `none`, so this must be declared
-                  # or `docker pull :dev` fails with "denied".
-
+  packages: read # snapshot-refresh pulls the private :dev image to capture
+  # the mise snapshot; an explicit permissions block defaults
+  # all unlisted scopes to `none`, so this must be declared
+  # or `docker pull :dev` fails with "denied".
 jobs:
   snapshot-refresh:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
     # Job-level concurrency keeps this independent of p2996-refresh — a
     # superseding snapshot run cancels only its own group.
     concurrency:
@@ -80,10 +79,12 @@ jobs:
         with:
           app-id: ${{ secrets.REFRESH_APP_ID }}
           private-key: ${{ secrets.REFRESH_APP_PRIVATE_KEY }}
-
+          permission-contents: write
+          permission-pull-requests: write
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
       - name: Install mise (python + uv)
         # Host-side python + uv: the snapshot JSON is captured in the
         # container, but formatted + written to the repo on the HOST so
@@ -92,20 +93,16 @@ jobs:
         uses: ./.github/actions/setup-mise
         with:
           install_args: "python uv"
-
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
-
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
       - name: Log in to Container Registry
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Pull latest devcontainer image
         run: docker pull ghcr.io/ray-manaloto/dotfiles-devcontainer:dev
-
       - name: Capture mise-system resolved snapshot from container
         # Two-step capture (#131): run `mise ls --json` inside the :dev
         # container AS ITS DEFAULT USER (no `--user` UID override, no repo
@@ -122,7 +119,6 @@ jobs:
             mise ls --json > /tmp/mise-ls.json
           uv run --project python dotfiles-setup mise-snapshot \
             --from-json /tmp/mise-ls.json
-
       - name: Open PR if snapshot drifted
         uses: ./.github/actions/open-refresh-pr
         with:
@@ -144,9 +140,11 @@ jobs:
           labels: mise-snapshot
           summary-heading: Snapshot refresh
           auto-merge: "true"
-
   p2996-refresh:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
     concurrency:
       group: p2996-refresh
       cancel-in-progress: false
@@ -160,16 +158,17 @@ jobs:
         with:
           app-id: ${{ secrets.REFRESH_APP_ID }}
           private-key: ${{ secrets.REFRESH_APP_PRIVATE_KEY }}
-
+          permission-contents: write
+          permission-pull-requests: write
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
       - name: Install mise (python + uv)
         # Subset install: only python + uv, both pinned in mise.toml.
         uses: ./.github/actions/setup-mise
         with:
           install_args: "python uv"
-
       - name: Bump CLANG_P2996_REF to latest p2996 HEAD
         # `git ls-remote` the p2996 branch, compare to the pinned SHA, and
         # rewrite docker-bake.hcl only when it advanced. Emits a one-line
@@ -186,7 +185,6 @@ jobs:
             echo "$result"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-
       - name: Open PR if the pinned ref advanced
         uses: ./.github/actions/open-refresh-pr
         with:

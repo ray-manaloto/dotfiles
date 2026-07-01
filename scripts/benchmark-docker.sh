@@ -28,7 +28,9 @@ echo ""
 time_cmd() {
     local start end
     start=$(date +%s.%N 2>/dev/null || python3 -c 'import time; print(f"{time.time():.3f}")')
-    eval "$@" >/dev/null 2>&1
+    # Callers pass a single shell-command string (pipes/quotes/&&), so eval a
+    # single arg — `eval "$1"` avoids SC2294 (which targets `eval "$@"`).
+    eval "$1" >/dev/null 2>&1
     end=$(date +%s.%N 2>/dev/null || python3 -c 'import time; print(f"{time.time():.3f}")')
     python3 -c "print(f'{float(\"$end\") - float(\"$start\"):.2f}')"
 }

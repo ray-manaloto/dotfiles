@@ -7,39 +7,48 @@
 //   import "package://github.com/jdx/hk/releases/download/v1.40.0/hk@1.40.0#/Config.pkl"
 //   import "hk-common.pkl" as common
 //   hooks { ["pre-commit"] { steps { ...common.hygiene ...common.safety } } }
+//
+// #154: builtin linters MUST be assigned from Builtins (`= Builtins.name`), not
+// declared as a bare `["name"] {}` block. A bare block constructs a fresh empty
+// Step (check=null) that hk silently skips — these steps NEVER ran, locally or
+// in CI. See feedback_hk_builtins_need_assignment.
 
+import "package://github.com/jdx/hk/releases/download/v1.44.2/hk@1.44.2#/Builtins.pkl"
 import "package://github.com/jdx/hk/releases/download/v1.44.2/hk@1.44.2#/Config.pkl"
 
 // File hygiene builtins — whitespace, line endings, encoding fixes.
 hygiene: Mapping<String, Config.Step> = new {
-  ["trailing_whitespace"] {}
-  ["newlines"] {}
-  ["mixed_line_ending"] {}
-  ["fix_smart_quotes"] {}
+  ["trailing_whitespace"] = Builtins.trailing_whitespace
+  ["newlines"] = Builtins.newlines
+  ["mixed_line_ending"] = Builtins.mixed_line_ending
+  ["fix_smart_quotes"] = Builtins.fix_smart_quotes
 }
 
 // Safety builtins — catch accidental secrets, conflicts, large files.
 safety: Mapping<String, Config.Step> = new {
-  ["detect_private_key"] {}
-  ["check_added_large_files"] {}
-  ["check_merge_conflict"] {}
-  ["check_case_conflict"] {}
-  ["check_symlinks"] {}
-  ["check_executables_have_shebangs"] {}
-  ["check_byte_order_marker"] {}
-  ["no_commit_to_branch"] {}
+  ["detect_private_key"] = Builtins.detect_private_key
+  ["check_added_large_files"] = Builtins.check_added_large_files
+  ["check_merge_conflict"] = Builtins.check_merge_conflict
+  ["check_case_conflict"] = Builtins.check_case_conflict
+  ["check_symlinks"] = Builtins.check_symlinks
+  ["check_executables_have_shebangs"] = Builtins.check_executables_have_shebangs
+  ["check_byte_order_marker"] = Builtins.check_byte_order_marker
+  // #154: no `no_commit_to_branch` — it errors in CI ("Failed to get current
+  // git branch") because GitHub Actions checks out a detached HEAD. It's a
+  // local-only guard against committing to main, already enforced by branch
+  // protection + .claude/rules/do-not.md, so drop it rather than special-case CI.
 }
 
 // Security scanning — secret detection via gitleaks.
 security: Mapping<String, Config.Step> = new {
-  ["gitleaks"] {
+  ["gitleaks"] = (Builtins.gitleaks) {
     batch = true
   }
 }
 
 // Typo detection across all file types.
 typos: Mapping<String, Config.Step> = new {
-  ["typos"] {
+  ["typos"] = (Builtins.typos) {
     batch = true
   }
 }

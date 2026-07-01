@@ -1,5 +1,4 @@
 name: build-publish
-
 # ============================================================
 # Reusable build/publish pipeline (Phase B, issue #118).
 #
@@ -20,7 +19,6 @@ name: build-publish
 # `:<short-sha>` smoke tag resolve identically to the inline version.
 # Spec: docs/research/gha-workflow-optimization.md § "v2 architecture".
 # ============================================================
-
 on:
   workflow_call:
     inputs:
@@ -60,7 +58,6 @@ on:
       digest:
         description: "containerimage.digest of the built dev image (best-effort, from bake metadata)"
         value: ${{ jobs.build.outputs.digest }}
-
 env:
   CONTAINER_REGISTRY: ghcr.io
   IMAGE_NAME: ray-manaloto/dotfiles-devcontainer
@@ -70,11 +67,9 @@ env:
   HK_LOG_FILE_LEVEL: debug
   MISE_LOG_FILE: /tmp/mise.log
   MISE_LOG_FILE_LEVEL: debug
-
 permissions:
   contents: read
   packages: write
-
 jobs:
   # ============================================================
   # Base cache prep: compute content-hash of devcontainer-base inputs
@@ -86,6 +81,7 @@ jobs:
   # ============================================================
   base-prep:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
@@ -94,15 +90,14 @@ jobs:
       cache_ref: ${{ steps.hash.outputs.cache_ref }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ inputs.ref }}
-
+          persist-credentials: false
       - name: Install mise (python + uv)
         uses: ./.github/actions/setup-mise
         with:
           install_args: "python uv"
-
       - name: Compute base cache hash
         id: hash
         run: |
@@ -119,14 +114,12 @@ jobs:
             echo "- Hash: \`${hash}\`"
             echo "- Cache ref: \`${cache_ref}\`"
           } >> "$GITHUB_STEP_SUMMARY"
-
       - name: Log in to Container Registry
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
         with:
           registry: ${{ env.CONTAINER_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Probe cache
         id: probe
         run: |
@@ -145,7 +138,6 @@ jobs:
               exit "$rc"
             fi
           fi
-
       - name: Free runner disk space
         if: steps.probe.outputs.hit != 'true'
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
@@ -157,18 +149,15 @@ jobs:
           large-packages: true
           docker-images: false
           swap-storage: true
-
       - name: Set up Docker Buildx
         if: steps.probe.outputs.hit != 'true'
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
-
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
       - name: Write GitHub token for build secret
         if: steps.probe.outputs.hit != 'true'
         run: echo "${{ secrets.GITHUB_TOKEN }}" > /tmp/github_token
-
       - name: Build and push base image
         if: steps.probe.outputs.hit != 'true'
-        uses: docker/bake-action@a66e1c87e2eca0503c343edf1d208c716d54b8a8 # v7.1.0
+        uses: docker/bake-action@d3418bd7d0e9324001bca92fa8ba175ea7e6dc9b # v7.3.0
         with:
           source: .
           targets: base
@@ -178,7 +167,6 @@ jobs:
           set: |
             base.tags=${{ steps.hash.outputs.cache_ref }}
             *.secrets=id=github_token,src=/tmp/github_token
-
   # ============================================================
   # P2996 cache prep: compute content-hash of clang-builder inputs and
   # ensure ghcr.io/<owner>/<repo>:p2996-<hash16> exists. On hash hit
@@ -191,23 +179,23 @@ jobs:
   p2996-prep:
     needs: [base-prep]
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     permissions:
       contents: read
-      packages: write  # explicit; do not rely on workflow-level inheritance
+      packages: write # explicit; do not rely on workflow-level inheritance
     outputs:
       hash: ${{ steps.hash.outputs.hash }}
       cache_ref: ${{ steps.hash.outputs.cache_ref }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ inputs.ref }}
-
+          persist-credentials: false
       - name: Install mise (python + uv)
         uses: ./.github/actions/setup-mise
         with:
           install_args: "python uv"
-
       - name: Resolve p2996 ref override
         # Phase D (#120): when a caller passes p2996_ref, export it as
         # CLANG_P2996_REF so BOTH `dotfiles-setup p2996-hash` AND docker
@@ -221,7 +209,6 @@ jobs:
         env:
           P2996_REF: ${{ inputs.p2996_ref }}
         run: echo "CLANG_P2996_REF=${P2996_REF}" >> "$GITHUB_ENV"
-
       - name: Compute P2996 cache hash
         id: hash
         run: |
@@ -239,14 +226,12 @@ jobs:
             echo "- Cache ref: \`${cache_ref}\`"
             echo "- Base ref: \`${{ needs.base-prep.outputs.cache_ref }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
-
       - name: Log in to Container Registry
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
         with:
           registry: ${{ env.CONTAINER_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Probe cache
         id: probe
         # Discriminate "manifest not found" (legitimate cache miss) from
@@ -268,7 +253,6 @@ jobs:
               exit "$rc"
             fi
           fi
-
       - name: Free runner disk space
         if: steps.probe.outputs.hit != 'true'
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
@@ -280,18 +264,15 @@ jobs:
           large-packages: true
           docker-images: false
           swap-storage: true
-
       - name: Set up Docker Buildx
         if: steps.probe.outputs.hit != 'true'
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
-
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
       - name: Write GitHub token for build secret
         if: steps.probe.outputs.hit != 'true'
         run: echo "${{ secrets.GITHUB_TOKEN }}" > /tmp/github_token
-
       - name: Build and push p2996-cache image
         if: steps.probe.outputs.hit != 'true'
-        uses: docker/bake-action@a66e1c87e2eca0503c343edf1d208c716d54b8a8 # v7.1.0
+        uses: docker/bake-action@d3418bd7d0e9324001bca92fa8ba175ea7e6dc9b # v7.3.0
         with:
           source: .
           targets: p2996-cache
@@ -302,7 +283,6 @@ jobs:
             p2996-cache.tags=${{ steps.hash.outputs.cache_ref }}
             p2996-cache.args.DEVCONTAINER_BASE_REF=${{ needs.base-prep.outputs.cache_ref }}
             *.secrets=id=github_token,src=/tmp/github_token
-
   # ============================================================
   # Dev cache prep (#122): the THIRD content-hash tier. Computes
   # `dotfiles-setup dev-hash` (= base-hash + p2996-hash + whole
@@ -323,6 +303,7 @@ jobs:
     needs: [base-prep, p2996-prep]
     if: inputs.tag_strategy == 'pr'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
@@ -332,15 +313,14 @@ jobs:
       hit: ${{ steps.probe.outputs.hit }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ inputs.ref }}
-
+          persist-credentials: false
       - name: Install mise (python + uv)
         uses: ./.github/actions/setup-mise
         with:
           install_args: "python uv"
-
       - name: Resolve p2996 ref override
         # Phase D (#120): keep `dotfiles-setup dev-hash` in lockstep with
         # the p2996 override so the probed :dev-<hash> matches the image
@@ -349,7 +329,6 @@ jobs:
         env:
           P2996_REF: ${{ inputs.p2996_ref }}
         run: echo "CLANG_P2996_REF=${P2996_REF}" >> "$GITHUB_ENV"
-
       - name: Compute dev cache hash
         id: hash
         run: |
@@ -366,14 +345,12 @@ jobs:
             echo "- Hash: \`${hash}\`"
             echo "- Cache ref: \`${cache_ref}\`"
           } >> "$GITHUB_STEP_SUMMARY"
-
       - name: Log in to Container Registry
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
         with:
           registry: ${{ env.CONTAINER_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Probe dev cache
         id: probe
         # Same miss/non-miss discrimination as base-prep / p2996-prep:
@@ -397,11 +374,9 @@ jobs:
               exit "$rc"
             fi
           fi
-
       - name: Set up Docker Buildx
         if: steps.probe.outputs.hit == 'true'
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
-
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
       - name: Retag validated image to :sha / :pr (cache hit)
         if: steps.probe.outputs.hit == 'true'
         # On a hit, build + smoke-test are skipped, so the tags they
@@ -435,7 +410,6 @@ jobs:
             echo "- Source: \`${SOURCE_REF}\` (digest \`${source_digest}\`)"
             echo "- New tags: \`:${short_sha}\`${PR_NUMBER:+, \`:pr-${PR_NUMBER}\`}"
           } >> "$GITHUB_STEP_SUMMARY"
-
   # ============================================================
   # Build Type 2: Dotfiles environment image (Docker → ghcr.io)
   # ============================================================
@@ -453,6 +427,10 @@ jobs:
       && (needs.dev-prep.result == 'skipped'
           || (needs.dev-prep.result == 'success' && needs.dev-prep.outputs.hit != 'true'))
     runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
     outputs:
       image_ref: ${{ steps.out.outputs.image_ref }}
       digest: ${{ steps.out.outputs.digest }}
@@ -486,25 +464,22 @@ jobs:
           # which need MORE disk, not less).
           docker-images: false
           swap-storage: true
-
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ inputs.ref }}
-
+          persist-credentials: false
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
-
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
       - name: Log in to Container Registry
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
         with:
           registry: ${{ env.CONTAINER_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
         with:
           images: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
@@ -512,13 +487,11 @@ jobs:
             type=raw,value=latest,enable=${{ inputs.tag_strategy == 'nightly' }}
             type=sha,prefix=
             type=ref,event=pr
-
       - name: Write GitHub token for build secret
         run: echo "${{ secrets.GITHUB_TOKEN }}" > /tmp/github_token
-
       - name: Build and push
         id: bake
-        uses: docker/bake-action@a66e1c87e2eca0503c343edf1d208c716d54b8a8 # v7.1.0
+        uses: docker/bake-action@d3418bd7d0e9324001bca92fa8ba175ea7e6dc9b # v7.3.0
         with:
           source: .
           targets: ${{ inputs.target }}
@@ -531,12 +504,10 @@ jobs:
             *.secrets=id=github_token,src=/tmp/github_token
             dev.args.DEVCONTAINER_BASE_REF=${{ needs.base-prep.outputs.cache_ref }}
             dev.args.P2996_SOURCE=${{ needs.p2996-prep.outputs.cache_ref }}
-
       # docker/bake-action v6.8.0+ emits a per-job build summary with inputs,
       # errors, and a downloadable .dockerbuild record by default. The prior
       # hand-rolled "Build performance summary" + "Build diagnostics" steps
       # duplicated this and have been removed.
-
       - name: Export build outputs
         id: out
         # Surface the canonical :<short-sha> ref (the one smoke validates and
@@ -553,7 +524,6 @@ jobs:
             echo "image_ref=${image_ref}"
             echo "digest=${digest}"
           } >> "$GITHUB_OUTPUT"
-
   # ============================================================
   # Smoke test: validate the freshly-pushed image (PR or main).
   # PRs validate the exact :sha-<sha> that promote will retag as
@@ -563,39 +533,35 @@ jobs:
   smoke-test:
     needs: [build]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ inputs.ref }}
-
+          persist-credentials: false
       - name: Install mise (python + uv)
         uses: ./.github/actions/setup-mise
         with:
           install_args: "python uv"
-
       - name: Log in to Container Registry
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
         with:
           registry: ${{ env.CONTAINER_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Derive image tag
         id: smoke-tag
         run: echo "tag=$(echo '${{ github.sha }}' | head -c 7)" >> "$GITHUB_OUTPUT"
-
       - name: Pull published image
         run: docker pull ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.smoke-tag.outputs.tag }}
-
       - name: Smoke published image
         run: |
           uv run --project python dotfiles-setup image smoke \
             --image-ref ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.smoke-tag.outputs.tag }}
-
       - name: Analyze image layer efficiency (Dive)
         # Dive --ci enforces .dive-ci thresholds (lowestEfficiency,
         # highestWastedBytes). Pass/fail gate; replaces the dead-letter
@@ -619,20 +585,18 @@ jobs:
           tar -xzf /tmp/dive.tar.gz -C /tmp dive
           sudo install -m 0755 /tmp/dive /usr/local/bin/dive
           dive --ci --ci-config .dive-ci "${IMAGE_REF}"
-
-      # smoke + Dive are the PR-blocking image gates. The benchmark metrics
-      # and the Trivy CVE scan run asynchronously in `image-analysis.yml`
-      # (triggered on CI success) so their minutes are off the PR critical
-      # path — see .github/workflows/AGENTS.md.
-      #
-      # Note: the host-user overlay (Dockerfile.host-user + `devcontainer up`)
-      # is a Mac-local concern — it wraps the published base image with the
-      # host user's UID/GID for bind-mount permission parity on macOS. CI has
-      # no meaningful "host user" to match, no mount sources, and no overlay
-      # to rebuild; the Pull / Smoke / Dive steps above fully validate the
-      # published base image. Overlay behavior is validated locally via
-      # `mise run up` on the Mac.
-
+        # smoke + Dive are the PR-blocking image gates. The benchmark metrics
+        # and the Trivy CVE scan run asynchronously in `image-analysis.yml`
+        # (triggered on CI success) so their minutes are off the PR critical
+        # path — see .github/workflows/AGENTS.md.
+        #
+        # Note: the host-user overlay (Dockerfile.host-user + `devcontainer up`)
+        # is a Mac-local concern — it wraps the published base image with the
+        # host user's UID/GID for bind-mount permission parity on macOS. CI has
+        # no meaningful "host user" to match, no mount sources, and no overlay
+        # to rebuild; the Pull / Smoke / Dive steps above fully validate the
+        # published base image. Overlay behavior is validated locally via
+        # `mise run up` on the Mac.
   # ============================================================
   # Dev cache tag (#122): push `:dev-<hash>` as the "built AND
   # smoke-validated" marker — ONLY after smoke-test passes. This is what
@@ -647,30 +611,28 @@ jobs:
     needs: [build, smoke-test]
     if: needs.smoke-test.result == 'success'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       packages: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ inputs.ref }}
-
+          persist-credentials: false
       - name: Install mise (python + uv)
         uses: ./.github/actions/setup-mise
         with:
           install_args: "python uv"
-
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
-
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
       - name: Log in to Container Registry
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
         with:
           registry: ${{ env.CONTAINER_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Resolve p2996 ref override
         # Phase D (#120): the validated marker is content-addressed by
         # dev-hash, which folds in CLANG_P2996_REF. dev-tag MUST honor the
@@ -681,7 +643,6 @@ jobs:
         env:
           P2996_REF: ${{ inputs.p2996_ref }}
         run: echo "CLANG_P2996_REF=${P2996_REF}" >> "$GITHUB_ENV"
-
       - name: Tag validated image as :dev-<hash>
         env:
           IMAGE: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}

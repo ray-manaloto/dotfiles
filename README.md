@@ -53,4 +53,3 @@ uv run --project python dotfiles-setup verify run # Contract verification
 mise run pin-actions                                # Verify GHA SHA-pinning
 mise run lint-docs                                  # Validate agent documentation
 ```
-

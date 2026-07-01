@@ -1,0 +1,20 @@
+---
+# yamllint config (#154). yamllint's `default` ruleset is famously too strict
+# for real-world GitHub Actions YAML; we keep the value-catching rules and relax
+# the purely-stylistic ones that fight normal workflow authoring.
+extends: default
+
+rules:
+  # Workflow run: bodies, long URLs, and pinned-SHA `uses:` lines routinely
+  # exceed any sane column limit — enforcing one just mangles readability.
+  line-length: disable
+  # GitHub Actions workflows do not use a `---` document start marker.
+  document-start: disable
+  # The GitHub `on:` key is parsed as the boolean `True` by YAML; that is
+  # correct and unavoidable, so don't flag workflow keys as "truthy".
+  truthy:
+    check-keys: false
+  # Allow a single space before inline comments (default demands two).
+  comments:
+    min-spaces-from-content: 1
+  comments-indentation: disable

@@ -1,5 +1,4 @@
 name: image-analysis
-
 # Async image analysis: benchmark metrics + Trivy CVE scan, decoupled from the
 # PR critical path. Runs after a successful CI run that actually built an image
 # (pull_request / schedule / workflow_dispatch — NOT push-to-main, which skips
@@ -13,56 +12,49 @@ name: image-analysis
 #
 # GOTCHA: `workflow_run` always uses this file as it exists on the default
 # branch, so edits here only take effect once merged to main.
-
 on:
   workflow_run:
     workflows: ["CI"]
     types: [completed]
-
 permissions:
   contents: read
   packages: read
   security-events: write # Trivy SARIF → GitHub code scanning
-
 concurrency:
   group: image-analysis-${{ github.event.workflow_run.head_sha }}
   cancel-in-progress: true
-
 env:
   CONTAINER_REGISTRY: ghcr.io
   IMAGE_NAME: ray-manaloto/dotfiles-devcontainer
-
 jobs:
   analyze:
     # Only for successful CI runs whose event built a fresh image. push-to-main
     # skips the build (promote retags), so there is no new :sha image to scan.
     if: >-
-      github.event.workflow_run.conclusion == 'success'
-      && github.event.workflow_run.event != 'push'
+      github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event != 'push'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout trusted code (default branch)
         # No `ref:` — checks out the default branch (main), NOT the PR head.
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
       - name: Install mise (python + uv)
         uses: ./.github/actions/setup-mise
         with:
           install_args: "python uv"
-
       - name: Log in to Container Registry
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
         with:
           registry: ${{ env.CONTAINER_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Derive image tag from analyzed commit
         id: tag
         env:
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: echo "tag=$(printf '%s' "$HEAD_SHA" | head -c 7)" >> "$GITHUB_OUTPUT"
-
       - name: Resolve image ref (skip when no image was built)
         id: image
         env:
@@ -78,13 +70,11 @@ jobs:
             echo "No image at $REF (build skipped for this run); nothing to analyze."
             echo "present=false" >> "$GITHUB_OUTPUT"
           fi
-
       - name: Pull image
         if: steps.image.outputs.present == 'true'
         env:
           REF: ${{ steps.image.outputs.ref }}
         run: docker pull "$REF"
-
       - name: Benchmark image (size + smoke metrics)
         # Compressed-size now comes from the registry manifest (instant), not
         # `docker save | gzip`. See python/src/dotfiles_setup/image.py.
@@ -96,7 +86,6 @@ jobs:
             --image-ref "$REF" \
             --output-path artifacts/build/devcontainer-metrics.json \
             > /tmp/devcontainer-metrics.stdout.json
-
       - name: Scan image for CVEs (Trivy, warn-only)
         # warn-only (exit-code 0): SARIF surfaces in the Security tab; does not
         # gate. `scanners: vuln` + `timeout: 15m` per the heavy-image notes that
@@ -111,18 +100,16 @@ jobs:
           exit-code: "0"
           scanners: vuln
           timeout: 15m
-
       - name: Upload Trivy SARIF to code scanning
         # Associate the result with the analyzed commit/branch (workflow_run
         # context defaults to the default branch otherwise).
         if: steps.image.outputs.present == 'true' && hashFiles('trivy.sarif') != ''
-        uses: github/codeql-action/upload-sarif@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3.36.2
+        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
         with:
           sarif_file: trivy.sarif
           category: trivy-image
           ref: refs/heads/${{ github.event.workflow_run.head_branch }}
           sha: ${{ github.event.workflow_run.head_sha }}
-
       - name: Upload metrics artifact
         if: always() && steps.image.outputs.present == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

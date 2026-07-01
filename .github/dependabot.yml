@@ -36,4 +36,4 @@ updates:
       - "python"
 
     commit-message:
-      prefix: "ci" 
+      prefix: "ci"
