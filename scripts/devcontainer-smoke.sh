@@ -7,7 +7,7 @@
 #
 # Tiers (per ralplan-consensus-devcontainer-build-mise-chezmoi-resync §5):
 #   Tier 1 — Tools+hk:      mise ls; which clang++ python uv hk; hk run pre-commit --all
-#   Tier 2 — Python+mounts: uv pytest 179/179; stat ~/.ssh ~/.claude /workspaces/${ws}
+#   Tier 2 — Python+mounts: uv pytest 187/187; stat ~/.ssh ~/.claude /workspaces/${ws}
 #   Tier 3 — Sanitizers+lifecycle: clang++ asan+ubsan; mise-user volume owner; github ssh
 #
 # Tier 4 (CLion remote toolchain) is manual and out of scope here.
@@ -44,6 +44,12 @@ else
   echo "  SKIP: repo mise-system.toml not found at ${repo_cfg}"
 fi
 mise ls
+# #143: assert the EXACT declared (tool, backend, version) set is installed, not
+# just that mise reports zero (missing). Parse + compare logic lives in python
+# (dotfiles_setup.image.verify_tools_main — zero-bash-logic), sharing the same
+# core as build_smoke_script's injected assertion so the two smoke paths can't
+# diverge (the #148/#150 lockstep lesson).
+uv run --project python dotfiles-setup image verify-tools
 which clang++ python uv hk
 # Use the image-only hk config (installed at /etc/hk/hk.pkl by Dockerfile).
 # The project's ./hk.pkl includes host-only steps (docker_bake_check ->

@@ -17,6 +17,10 @@ from dotfiles_setup.image import (
     _sum_manifest_layer_sizes,
     build_smoke_docker_cmd,
     build_smoke_script,
+    diff_tool_sets,
+    installed_tools_from_mise_ls,
+    parse_declared_tools,
+    resolve_declared_tools,
     resolve_expected_config_sha256,
     resolve_expected_p2996_ref,
 )
@@ -296,6 +300,136 @@ def test_smoke_docker_cmd_injects_config_hash() -> None:
     script = cmd[-1]
 
     assert f"EXPECTED_CONFIG_SHA256={resolve_expected_config_sha256()}\n" in script
+
+
+# --- #143: exact tool-set assertion ---
+
+# The in-image system mise config path (mise ls --json source.path).
+_SYS_CFG = "/usr/local/share/mise/config.toml"
+
+# Missing + extra + version-drift = three distinct diff-line classes.
+_EXPECTED_DIFF_CLASSES = 3
+
+# A minimal mise-system.toml covering both [tools] value forms.
+_SAMPLE_MISE_TOML = """\
+[tools]
+python = "latest"
+"conda:llvm" = "latest"
+"npm:@google/gemini-cli" = { version = "latest", depends = ["node"] }
+pinned = "1.2.3"
+
+[settings]
+experimental = true
+"""
+
+
+def _mise_ls_json(entries: dict[str, dict[str, object]]) -> str:
+    """Build a mise ls --json payload from {key: {version,requested,source,installed}}."""
+    doc = {
+        key: [
+            {
+                "version": e.get("version", "9.9.9"),
+                "requested_version": e.get("requested", "latest"),
+                "source": {"type": "mise.toml", "path": e.get("source", _SYS_CFG)},
+                "installed": e.get("installed", True),
+            }
+        ]
+        for key, e in entries.items()
+    }
+    return json.dumps(doc)
+
+
+def test_parse_declared_tools_handles_both_value_forms() -> None:
+    """Bare string and table ({version,...}) [tools] entries both parse."""
+    declared = parse_declared_tools(_SAMPLE_MISE_TOML)
+
+    assert declared == {
+        "python": "latest",
+        "conda:llvm": "latest",
+        "npm:@google/gemini-cli": "latest",
+        "pinned": "1.2.3",
+    }
+
+
+def test_installed_tools_filters_by_source_and_installed() -> None:
+    """Only tools sourced from the system config AND installed are returned."""
+    payload = _mise_ls_json(
+        {
+            "python": {"requested": "latest"},
+            "user-tool": {"source": "/home/x/.config/mise/config.toml"},
+            "half-installed": {"installed": False},
+        }
+    )
+
+    installed = installed_tools_from_mise_ls(payload, _SYS_CFG)
+
+    assert installed == {"python": "latest"}
+
+
+def test_diff_tool_sets_exact_match_is_empty() -> None:
+    """Identical declared/installed maps produce no diff lines."""
+    both = {"python": "latest", "conda:llvm": "latest"}
+
+    assert diff_tool_sets(both, dict(both)) == []
+
+
+def test_diff_tool_sets_reports_missing_extra_and_drift() -> None:
+    """Missing, extra, and version-drift each surface a distinct diff line."""
+    declared = {"python": "latest", "dropped": "latest", "pinned": "1.2.3"}
+    installed = {"python": "latest", "added": "latest", "pinned": "9.9.9"}
+
+    diffs = diff_tool_sets(declared, installed)
+
+    assert any(line.startswith("+ added:") for line in diffs)
+    assert any(line.startswith("- dropped:") for line in diffs)
+    assert any(line.startswith("~ pinned:") for line in diffs)
+    assert len(diffs) == _EXPECTED_DIFF_CLASSES
+
+
+def test_smoke_script_injects_tool_set_assertion() -> None:
+    """#143: declared tools are injected and the jq/diff assertion block present."""
+    script = build_smoke_script(
+        _FAKE_P2996_SHA,
+        expected_tools={"python": "latest", "conda:llvm": "latest"},
+    )
+
+    # Sorted key<TAB>version blob injected as data...
+    assert "EXPECTED_TOOL_REQUESTS=" in script
+    assert "conda:llvm\tlatest" in script
+    assert "python\tlatest" in script
+    # ...and the mechanical set-diff (no logic in bash).
+    assert 'if [ -n "$EXPECTED_TOOL_REQUESTS" ]; then' in script
+    assert "mise ls --json | jq -r" in script
+    assert "select(.source.path == $cfg and .installed == true)" in script
+
+
+def test_smoke_script_tool_set_guard_dormant_without_tools() -> None:
+    """Without an expected set the guard is present but dormant (empty var)."""
+    script = build_smoke_script(_FAKE_P2996_SHA)
+
+    assert "EXPECTED_TOOL_REQUESTS=''\n" in script
+    assert "tool-set guard dormant" in script
+
+
+def test_smoke_docker_cmd_injects_real_declared_tools() -> None:
+    """build_smoke_docker_cmd resolves and injects the repo's real [tools]."""
+    cmd = build_smoke_docker_cmd(
+        "ghcr.io/ray-manaloto/dotfiles-devcontainer:test",
+        expected_p2996_ref=_FAKE_P2996_SHA,
+    )
+    script = cmd[-1]
+
+    # A representative real tool from .devcontainer/mise-system.toml.
+    assert "python\tlatest" in script
+
+
+def test_resolve_declared_tools_reads_repo_config() -> None:
+    """The repo's mise-system.toml parses to a non-empty backend-prefixed set."""
+    declared = resolve_declared_tools()
+
+    assert declared["python"] == "latest"
+    assert "conda:llvm" in declared
+    assert all(isinstance(v, str) for v in declared.values())
 
 
 def test_sum_manifest_layer_sizes_single_manifest() -> None:
