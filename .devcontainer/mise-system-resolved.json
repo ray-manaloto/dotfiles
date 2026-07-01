@@ -12,7 +12,7 @@
     "conda:cmake": "4.3.4",
     "conda:cppcheck": "2.21.0",
     "conda:curl": "8.21.0",
-    "conda:doxygen": "1.13.2",
+    "conda:doxygen": "1.17.0",
     "conda:gdb": "17.2",
     "conda:git": "2.54.0",
     "conda:htop": "3.5.1",
