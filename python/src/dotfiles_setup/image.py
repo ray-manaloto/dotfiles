@@ -12,6 +12,7 @@ import shlex
 import subprocess
 import sys
 import time
+import tomllib
 import zlib
 from typing import TYPE_CHECKING, Any
 
@@ -19,6 +20,7 @@ from dotfiles_setup import _project_root
 from dotfiles_setup.p2996_hash import _extract_bake_variable
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -56,6 +58,100 @@ def resolve_expected_config_sha256() -> str:
     """
     config_path = _project_root() / ".devcontainer" / "mise-system.toml"
     return hashlib.sha256(config_path.read_bytes()).hexdigest()
+
+
+# System mise config inside the image — the Dockerfile COPY target and the
+# ``source.path`` that ``mise ls --json`` attributes system tools to.
+SYSTEM_CONFIG_FILE = "/usr/local/share/mise/config.toml"
+
+
+def _tool_requested_version(spec: str | dict[str, Any]) -> str:
+    """Requested version string from a mise ``[tools]`` entry value.
+
+    Handles both the bare form (``tool = "latest"``) and the table form
+    (``tool = { version = "latest", depends = [...] }``).
+    """
+    if isinstance(spec, str):
+        return spec
+    version = spec.get("version")
+    if not isinstance(version, str):
+        msg = f"mise [tools] entry lacks a string 'version': {spec!r}"
+        raise TypeError(msg)
+    return version
+
+
+def parse_declared_tools(config_text: str) -> dict[str, str]:
+    """Parse ``[tools]`` from a mise-system.toml document.
+
+    Returns ``{tool_key: requested_version}``. Keys preserve the backend prefix
+    verbatim (``conda:llvm``, ``npm:renovate``, bare ``python``) so they line up
+    1:1 with ``mise ls --json`` keys — that is what makes the (tool, backend,
+    version) comparison exact rather than name-only.
+    """
+    data = tomllib.loads(config_text)
+    tools = data.get("tools", {})
+    return {key: _tool_requested_version(spec) for key, spec in tools.items()}
+
+
+def resolve_declared_tools() -> dict[str, str]:
+    """Declared tool set from the repo's ``.devcontainer/mise-system.toml``."""
+    config_path = _project_root() / ".devcontainer" / "mise-system.toml"
+    return parse_declared_tools(config_path.read_text())
+
+
+def installed_tools_from_mise_ls(
+    mise_ls_json: str,
+    config_path: str = SYSTEM_CONFIG_FILE,
+) -> dict[str, str]:
+    """Extract ``{tool_key: requested_version}`` from ``mise ls --json`` output.
+
+    Filters to entries that are (a) sourced from ``config_path`` (the system
+    config, so a user/global overlay's tools don't pollute the comparison) and
+    (b) actually ``installed`` — a declared-but-failed install therefore shows
+    up as a *missing* tool in the diff instead of silently passing.
+    """
+    doc = json.loads(mise_ls_json)
+    result: dict[str, str] = {}
+    for key, entries in doc.items():
+        for entry in entries:
+            source = entry.get("source") or {}
+            if source.get("path") == config_path and entry.get("installed"):
+                result[key] = entry.get("requested_version", "")
+    return result
+
+
+def diff_tool_sets(
+    declared: Mapping[str, str],
+    installed: Mapping[str, str],
+) -> list[str]:
+    """Human-readable diff lines; empty ⇔ exact (tool, backend, version) match.
+
+    Compares against the *requested* version (deterministic, equal to the
+    declared string) rather than the resolved version, because ``latest`` tools
+    drift by design — asserting the resolved version would false-fail on every
+    upstream release.
+    """
+    lines: list[str] = []
+    for key in sorted(set(declared) | set(installed)):
+        want = declared.get(key)
+        have = installed.get(key)
+        if want is None:
+            lines.append(f"+ {key}: installed ({have!r}) but NOT declared")
+        elif have is None:
+            lines.append(f"- {key}: declared ({want!r}) but NOT installed")
+        elif want != have:
+            lines.append(f"~ {key}: declared {want!r} but installed {have!r}")
+    return lines
+
+
+def _format_expected_tool_lines(declared: Mapping[str, str]) -> str:
+    """Tab-separated ``key``/``version`` lines for the injected smoke assertion.
+
+    One line per tool, tab-joined, sorted with Python's default (code-point)
+    order so it matches an in-script ``LC_ALL=C sort`` byte comparison — all
+    tool keys are ASCII.
+    """
+    return "\n".join(sorted(f"{key}\t{ver}" for key, ver in declared.items()))
 
 
 def _is_emulated(target_platform: str) -> bool:
@@ -99,6 +195,7 @@ def build_smoke_script(
     expected_p2996_ref: str,
     *,
     expected_config_sha256: str | None = None,
+    expected_tools: Mapping[str, str] | None = None,
     emulated: bool = False,
 ) -> str:
     """Build the inline smoke test script.
@@ -117,6 +214,13 @@ def build_smoke_script(
     would otherwise pass smoke against old content. An empty/unset value
     leaves the guard dormant (unit-test friendly).
 
+    ``expected_tools`` (#143 — exact tool-set assertion) maps declared tool keys
+    to requested versions (``resolve_declared_tools``). When set, the script
+    asserts the installed set sourced from the system config matches it exactly
+    — catching a tool silently dropped/added or a requested-version drift that
+    the ``(missing)``-count check alone passes green. An empty/unset value
+    leaves the guard dormant (unit-test friendly).
+
     ``emulated`` (gap B — TSan under Rosetta) controls whether the
     ThreadSanitizer binary is RUN after it is compiled. The compile always
     runs (it proves the toolchain); the RUN is skipped under emulation, where
@@ -124,11 +228,15 @@ def build_smoke_script(
     """
     strict = "1" if _SHA_RE.match(expected_p2996_ref) else ""
     tsan_run_skip = "1" if emulated else ""
+    expected_tool_lines = (
+        _format_expected_tool_lines(expected_tools) if expected_tools else ""
+    )
     header = (
         "set -euo pipefail\n"
         f"EXPECTED_P2996_REF={shlex.quote(expected_p2996_ref)}\n"
         f"P2996_REF_STRICT={shlex.quote(strict)}\n"
         f"EXPECTED_CONFIG_SHA256={shlex.quote(expected_config_sha256 or '')}\n"
+        f"EXPECTED_TOOL_REQUESTS={shlex.quote(expected_tool_lines)}\n"
         f"TSAN_RUN_SKIP={shlex.quote(tsan_run_skip)}\n"
     )
     return (
@@ -160,6 +268,29 @@ echo "Missing tools: $missing"
 if [ "$missing" -gt 0 ]; then
   echo "$mise_output" | grep "(missing)"
   exit 1
+fi
+echo "=== exact tool-set assertion (declared vs installed, system config) ==="
+# #143: assert the EXACT (tool, backend, requested-version) set declared in
+# mise-system.toml is what's installed from the system config — not merely that
+# mise reports zero (missing). The declared set is injected as data
+# ($EXPECTED_TOOL_REQUESTS, computed in python: parse_declared_tools); this
+# block only does a mechanical set diff (zero-bash-logic). Comparison is on the
+# requested version (deterministic == declared) not the resolved version, which
+# drifts for `latest` by design. LC_ALL=C sort => byte order matching python's.
+if [ -n "$EXPECTED_TOOL_REQUESTS" ]; then
+  installed_tool_requests=$(mise ls --json | jq -r --arg cfg "$MISE_CFG" '
+    to_entries[] | .key as $k | .value[]
+    | select(.source.path == $cfg and .installed == true)
+    | "\\($k)\\t\\(.requested_version)"' | LC_ALL=C sort -u)
+  if ! diff <(printf '%s\n' "$EXPECTED_TOOL_REQUESTS") \
+            <(printf '%s\n' "$installed_tool_requests"); then
+    echo "FAIL: installed tool set differs from mise-system.toml [tools]" \
+         "('<' declared-not-installed; '>' installed-not-declared/version-drift)"
+    exit 1
+  fi
+  echo "OK: installed tool set matches mise-system.toml [tools]"
+else
+  echo "SKIP: no expected tool set injected (tool-set guard dormant)"
 fi
 echo "=== shell integration ==="
 command -v zsh || { echo "FAIL: zsh not found"; exit 1; }
@@ -307,7 +438,13 @@ def build_smoke_docker_cmd(
     expected_config_sha256: str | None = None,
     emulated: bool | None = None,
 ) -> list[str]:
-    """Build the docker command used for smoke validation."""
+    """Build the docker command used for smoke validation.
+
+    The declared tool set (#143) is always resolved from the repo's
+    ``mise-system.toml`` here — it has no injectable override because, unlike the
+    p2996-ref / config-hash, nothing needs to smoke against a *synthetic* tool
+    set; ``build_smoke_script`` remains the injection seam for unit tests.
+    """
     if expected_p2996_ref is None:
         expected_p2996_ref = resolve_expected_p2996_ref()
     if expected_config_sha256 is None:
@@ -317,6 +454,7 @@ def build_smoke_docker_cmd(
     script = build_smoke_script(
         expected_p2996_ref,
         expected_config_sha256=expected_config_sha256,
+        expected_tools=resolve_declared_tools(),
         emulated=emulated,
     )
     return [
@@ -567,8 +705,43 @@ class ImageCommand:
     candidate_path: Path | None = None
 
 
+def verify_tools_main() -> int:
+    """Assert the installed tool set matches ``.devcontainer/mise-system.toml``.
+
+    Runs ``mise ls --json`` against the ambient mise (inside the devcontainer)
+    and compares to the repo's declared ``[tools]`` — the in-container sibling of
+    the ``build_smoke_script`` assertion (#143), sharing the same parse/compare
+    core so the two smoke paths cannot diverge. Called by
+    ``scripts/devcontainer-smoke.sh`` (keeps the diff logic in python, not bash).
+    """
+    declared = resolve_declared_tools()
+    config_file = os.environ.get("MISE_SYSTEM_CONFIG_FILE", SYSTEM_CONFIG_FILE)
+    result = subprocess.run(
+        ["mise", "ls", "--json"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    installed = installed_tools_from_mise_ls(result.stdout, config_file)
+    diffs = diff_tool_sets(declared, installed)
+    if diffs:
+        sys.stderr.write(
+            "FAIL: installed tool set differs from mise-system.toml [tools]:\n"
+        )
+        for line in diffs:
+            sys.stderr.write(f"  {line}\n")
+        return 1
+    sys.stdout.write(
+        f"OK: installed tool set matches mise-system.toml [tools] "
+        f"({len(declared)} tools)\n"
+    )
+    return 0
+
+
 def main(cmd: ImageCommand) -> int:
     """CLI entry point for image operations."""
+    if cmd.command == "verify-tools":
+        return verify_tools_main()
     if cmd.command == "smoke":
         result = smoke(cmd.image_ref, platform=cmd.platform)
         if result["result"] == "FAIL":

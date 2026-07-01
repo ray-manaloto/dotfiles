@@ -158,6 +158,10 @@ def _add_image_subcommands(
         "--output-path",
         help="Optional JSON output path for benchmark metrics",
     )
+    image_sub.add_parser(
+        "verify-tools",
+        help="Assert installed tool set matches mise-system.toml [tools] (#143)",
+    )
     compare_parser = image_sub.add_parser(
         "metrics-compare",
         help="Compare two benchmark JSON files",
@@ -360,6 +364,9 @@ def handle_image(args: argparse.Namespace) -> None:
     Args:
         args: The parsed arguments.
     """
+    if args.image_command == "verify-tools":
+        cmd = ImageCommand("", command="verify-tools")
+        sys.exit(image_main(cmd))
     if args.image_command == "smoke":
         cmd = ImageCommand(args.image_ref, platform=args.platform)
         sys.exit(image_main(cmd))
