@@ -242,25 +242,43 @@ else
 fi
 cat >/tmp/refl-func.cpp <<'CPP'
 #include <meta>
+#include <iostream>
 enum class Color { Red, Green, Blue };
 consteval int count_enumerators() {
   return static_cast<int>(enumerators_of(^^Color).size());
 }
 static_assert(count_enumerators() == 3);
-int main() { return 0; }
+int main() {
+  int n = count_enumerators();
+  std::cout << "reflection enumerators=" << n << std::endl;
+  return n == 3 ? 0 : 1;
+}
 CPP
-# -fsyntax-only is intentional: the static_assert above forces the reflection
-# (enumerators_of(^^Color)) to be EVALUATED at compile time, so a broken
-# reflection front-end fails the compile. Full link+run is avoided because
-# clang-p2996's -stdlib=libc++ binary needs libc++.so.1 at runtime, which is
-# not on the default loader path (the Dockerfile build-time smoke is
-# -fsyntax-only for the same reason).
-/opt/gcc-latest/bin/g++ -std=c++26 -freflection /tmp/refl-func.cpp -fsyntax-only \
-  || { echo "FAIL: gcc-latest reflection compile failed"; exit 1; }
+# Gap C (#141): link + RUN, not merely a syntax check. The static_assert
+# still forces enumerators_of(^^Color) evaluation at COMPILE time (a broken
+# reflection front-end fails the build); the RUN then materializes that
+# consteval result into a runtime value and asserts on it via the exit code,
+# proving the emitted binary actually executes. clang-p2996's -stdlib=libc++
+# binary needs libc++.so.1 at runtime, which is off the default loader path,
+# so we bake an rpath pointing at the in-image libc++ dir — discovered, not
+# hard-coded, so a triple change can't silently break it. Link-flag-only fix:
+# no Dockerfile change, hence no cold base rebuild. A p2996 libc++ binary runs
+# under Rosetta/QEMU (verified #141), so unlike TSan the RUN needs no
+# emulation gate.
+P2996_LIBCXX_SO=$(find /opt/clang-p2996/lib -name 'libc++.so.1' 2>/dev/null | head -n1)
+if [ -z "$P2996_LIBCXX_SO" ]; then
+  echo "FAIL: clang-p2996 libc++.so.1 not found in image"; exit 1
+fi
+P2996_LIBCXX_DIR=$(dirname "$P2996_LIBCXX_SO")
+/opt/gcc-latest/bin/g++ -std=c++26 -freflection /tmp/refl-func.cpp -o /tmp/refl-gcc \
+  || { echo "FAIL: gcc-latest reflection link failed"; exit 1; }
+/tmp/refl-gcc || { echo "FAIL: gcc-latest reflection binary did not run"; exit 1; }
 /opt/clang-p2996/bin/clang++ -std=c++2c -freflection -freflection-latest \
-  -fexpansion-statements -stdlib=libc++ /tmp/refl-func.cpp -fsyntax-only \
-  || { echo "FAIL: clang-p2996 reflection compile failed"; exit 1; }
-rm -f /tmp/refl-func.cpp
+  -fexpansion-statements -stdlib=libc++ -Wl,-rpath,"$P2996_LIBCXX_DIR" \
+  /tmp/refl-func.cpp -o /tmp/refl-clang \
+  || { echo "FAIL: clang-p2996 reflection link failed"; exit 1; }
+/tmp/refl-clang || { echo "FAIL: clang-p2996 reflection binary did not run"; exit 1; }
+rm -f /tmp/refl-func.cpp /tmp/refl-gcc /tmp/refl-clang
 echo "=== AI CLI checks ==="
 for tool in claude codex gemini; do
   command -v "$tool" >/dev/null 2>&1 || { echo "FAIL: missing $tool"; exit 1; }
