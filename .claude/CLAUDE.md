@@ -41,7 +41,7 @@ If verification fails, keep iterating.
 Broad requests: explore first, then plan. 2+ independent tasks in parallel. `run_in_background` for builds/tests.
 Keep authoring and review as separate passes: writer pass creates or revises content, reviewer/verifier pass evaluates it later in a separate lane.
 Never self-approve in the same active context — instead, route the approval pass to `code-reviewer` or `verifier`.
-Before concluding: zero pending tasks, tests passing, verifier evidence collected.
+Before concluding OR advancing to the next task: zero pending tasks and EVERY applicable check green with evidence — local gates (lint, pytest, verify) plus PR checks and post-merge `main` CI where relevant. Verify from the real artifact (file `rc` / API `conclusion`), never a piped tail or a notification's exit code. See `.claude/rules/verify-before-advancing.md`.
 </execution_protocols>
 
 <hooks_and_context>

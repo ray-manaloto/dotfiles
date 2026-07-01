@@ -43,6 +43,7 @@ self-contained block). Each item's context is preserved verbatim.
 ## See also
 
 - `zero-skip-policy.md` — no warning/error shall be dismissed
+- `verify-before-advancing.md` — every applicable check green before the next task
 - `ci-local-parity.md` — keep local checks in sync with CI
 - `clean-git-state.md` — stage all changes before validation
 - `use-tool-builtins.md` — prefer tool builtins over homegrown logic
