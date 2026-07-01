@@ -134,7 +134,11 @@ def build_smoke_script(
     return (
         header
         + """\
-MISE_CFG="${MISE_CONFIG_DIR:-/usr/local/share/mise}/config.toml"
+# #148: the base SYSTEM config ($MISE_SYSTEM_CONFIG_FILE = the Dockerfile COPY
+# target /usr/local/share/mise/config.toml), NOT ${MISE_CONFIG_DIR}/config.toml
+# — MISE_CONFIG_DIR is overridden at runtime to the user config dir, a
+# different (chezmoi-rendered) file that false-fails identity on a current base.
+MISE_CFG="${MISE_SYSTEM_CONFIG_FILE:-/usr/local/share/mise/config.toml}"
 echo "=== image identity (mise-system config hash) ==="
 if [ -n "$EXPECTED_CONFIG_SHA256" ]; then
   actual_config_sha256=$(sha256sum "$MISE_CFG" | cut -d' ' -f1)
