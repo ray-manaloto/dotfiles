@@ -35,7 +35,10 @@ if TYPE_CHECKING:
 
 HASH_LENGTH = 16
 # v2: split single-hash into base+p2996. v3: base-hash covers mise-system.toml.
-SCHEMA_VERSION = 3
+# v4: base-hash covers hk-common.pkl + hk-image.pkl (Dockerfile base-section
+# COPY inputs — their bytes were unhashed, so #154's /etc/hk config change did
+# not bust the cache and CI skipped the rebuild).
+SCHEMA_VERSION = 4
 RECORD_SEPARATOR = "\x1f"  # ASCII unit separator — never appears in inputs
 SHA256_HEX_LEN = 64
 
@@ -57,6 +60,7 @@ class BaseHashInputs:
     base_section_digest: str
     snapshot_digest: str
     mise_system_config_digest: str
+    hk_config_digest: str
 
     def __post_init__(self) -> None:
         """Reject empty literals + non-64-hex digests."""
@@ -69,6 +73,7 @@ class BaseHashInputs:
             "base_section_digest",
             "snapshot_digest",
             "mise_system_config_digest",
+            "hk_config_digest",
         ):
             value = getattr(self, field_name)
             _validate_hex_digest(value, f"BaseHashInputs.{field_name}")
@@ -107,11 +112,13 @@ class P2996HashInputs:
 class DevHashInputs:
     """Inputs feeding the top-tier `:dev-<hash>` validated-image cache.
 
-    The final `devcontainer` Dockerfile stage COPYs nothing from the
-    repo build context — only `/opt/clang-p2996` from the (already
-    hashed) p2996 cache and a rolling `gcc-latest.deb` URL. So, given
-    fixed `base_hash` + `p2996_hash`, the dev image content is a pure
-    function of the Dockerfile instructions and the `dev` bake target.
+    The final `devcontainer` Dockerfile stage COPYs only `/opt/clang-p2996`
+    from the (already hashed) p2996 cache and a rolling `gcc-latest.deb`
+    URL — the repo-context COPYs (mise-system.toml, hk-common.pkl,
+    hk-image.pkl) all live in the base section and are hashed into
+    `base_hash`. So, given fixed `base_hash` + `p2996_hash`, the dev image
+    content is a pure function of the Dockerfile instructions and the
+    `dev` bake target.
 
     `dockerfile_digest` covers the WHOLE Dockerfile (not a sentinel
     slice): under-hashing here is the cardinal sin — a probe hit skips
@@ -257,12 +264,23 @@ def gather_base_inputs(repo_root: Path) -> BaseHashInputs:
     # [env]/[tasks] edits (which don't move the resolved snapshot) still bust
     # the cache and trigger a rebuild. See PR #140.
     mise_system_config_path = repo_root / ".devcontainer" / "mise-system.toml"
+    # The base section also COPYs hk-common.pkl + hk-image.pkl verbatim to
+    # /etc/hk/ (the in-image hk config the devcontainer smoke uses). Same gap as
+    # mise-system.toml: base_section_digest captures the COPY *instruction*, not
+    # the file bytes, so an edit to either pkl (e.g. #154's builtin wiring) did
+    # not bust the cache and CI skipped the rebuild. Hash both files' bytes.
+    hk_common_path = repo_root / "hk-common.pkl"
+    hk_image_path = repo_root / "hk-image.pkl"
+    hk_config_digest = _sha256_hex(
+        _file_digest(hk_common_path) + _file_digest(hk_image_path)
+    )
     return BaseHashInputs(
         base_image=_extract_bake_variable(bake_text, "BASE_IMAGE"),
         platform=_extract_bake_variable(bake_text, "PLATFORM"),
         base_section_digest=_sha256_hex(base_section),
         snapshot_digest=_file_digest(snapshot_path),
         mise_system_config_digest=_file_digest(mise_system_config_path),
+        hk_config_digest=hk_config_digest,
     )
 
 
@@ -277,6 +295,7 @@ def compute_base_hash(inputs: BaseHashInputs) -> str:
             f"base_section={inputs.base_section_digest}",
             f"snapshot={inputs.snapshot_digest}",
             f"mise_system_config={inputs.mise_system_config_digest}",
+            f"hk_config={inputs.hk_config_digest}",
         ],
     )
     return _sha256_hex(canonical)[:HASH_LENGTH]

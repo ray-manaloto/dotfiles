@@ -47,6 +47,7 @@ def _stub_base_inputs(**overrides: str) -> BaseHashInputs:
         "base_section_digest": "a" * 64,
         "snapshot_digest": "c" * 64,
         "mise_system_config_digest": "f" * 64,
+        "hk_config_digest": "b" * 64,
     }
     base.update(overrides)
     return BaseHashInputs(**base)
@@ -116,6 +117,10 @@ def _seed_repo(tmp_path: Path) -> Path:
     (devcontainer / "mise-system.toml").write_text(
         '[tools]\n"conda:cmake" = "latest"\n\n[settings]\nexperimental = true\n',
     )
+    # hk-common.pkl + hk-image.pkl are base-section COPY inputs hashed into the
+    # base hash (they land at /etc/hk/ in the image).
+    (tmp_path / "hk-common.pkl").write_text("hygiene = new {}\n")
+    (tmp_path / "hk-image.pkl").write_text('amends "Config.pkl"\n')
     return tmp_path
 
 
@@ -171,6 +176,33 @@ def test_repo_base_hash_changes_when_mise_system_toml_edited(tmp_path: Path) -> 
     toml.write_text(
         toml.read_text().replace("experimental = true", "asdf_compat = true")
     )
+    after = compute_repo_base_hash(tmp_path)
+    assert before != after
+
+
+def test_base_hash_changes_when_hk_config_digest_changes() -> None:
+    # The base section COPYs hk-common.pkl + hk-image.pkl to /etc/hk/; their
+    # bytes must bust the base hash (previously unhashed — #154's builtin wiring
+    # edit did not trigger a rebuild, leaving a stale in-image hk config).
+    base = _stub_base_inputs()
+    bumped = _stub_base_inputs(hk_config_digest="d" * 64)
+    assert compute_base_hash(base) != compute_base_hash(bumped)
+
+
+def test_repo_base_hash_changes_when_hk_image_pkl_edited(tmp_path: Path) -> None:
+    _seed_repo(tmp_path)
+    before = compute_repo_base_hash(tmp_path)
+    hk_image = tmp_path / "hk-image.pkl"
+    hk_image.write_text(hk_image.read_text() + '\nimport "Builtins.pkl"\n')
+    after = compute_repo_base_hash(tmp_path)
+    assert before != after
+
+
+def test_repo_base_hash_changes_when_hk_common_pkl_edited(tmp_path: Path) -> None:
+    _seed_repo(tmp_path)
+    before = compute_repo_base_hash(tmp_path)
+    hk_common = tmp_path / "hk-common.pkl"
+    hk_common.write_text(hk_common.read_text() + "\nsafety = new {}\n")
     after = compute_repo_base_hash(tmp_path)
     assert before != after
 
@@ -602,6 +634,7 @@ def test_dev_hash_kind_namespacing_differs_from_base_and_p2996() -> None:
             base_section_digest="a" * 64,
             snapshot_digest="a" * 64,
             mise_system_config_digest="a" * 64,
+            hk_config_digest="a" * 64,
         )
     )
     dev = compute_dev_hash(_stub_dev_inputs())
