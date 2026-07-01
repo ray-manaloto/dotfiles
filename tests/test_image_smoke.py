@@ -207,6 +207,23 @@ def test_smoke_script_injects_config_identity_check() -> None:
     assert '"$actual_config_sha256" != "$EXPECTED_CONFIG_SHA256"' in script
 
 
+def test_smoke_script_identity_reads_system_config_not_config_dir() -> None:
+    """#148: identity/policy checks hash the base SYSTEM config, not MISE_CONFIG_DIR.
+
+    MISE_CONFIG_DIR is overridden at runtime (Dockerfile.host-user +
+    devcontainer.json) to the user config dir, a chezmoi-rendered file that
+    would false-fail identity on a current base. The check must read
+    $MISE_SYSTEM_CONFIG_FILE (the Dockerfile COPY target).
+    """
+    script = build_smoke_script(_FAKE_P2996_SHA)
+
+    assert (
+        'MISE_CFG="${MISE_SYSTEM_CONFIG_FILE:-/usr/local/share/mise/config.toml}"'
+        in script
+    )
+    assert "MISE_CONFIG_DIR:-/usr/local/share/mise}/config.toml" not in script
+
+
 def test_smoke_script_config_identity_dormant_without_hash() -> None:
     """Without a hash the identity guard is present but dormant (empty var)."""
     script = build_smoke_script(_FAKE_P2996_SHA)
