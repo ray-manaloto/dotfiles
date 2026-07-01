@@ -145,8 +145,8 @@ uv run --project python pytest tests/ -x -q   # All tests pass — then proceed
 dotfiles-setup verify run                     # Verification contracts pass — then proceed
 ```
 
-Commit only after all three exit 0. Run local validation instead of
-pushing to test in CI.
+Commit only after all three exit 0 — validate locally, don't push to test in CI.
+Before advancing to the next task or claiming done, EVERY applicable check must be green with evidence: `.claude/rules/verify-before-advancing.md`.
 
 ### Tool management
 

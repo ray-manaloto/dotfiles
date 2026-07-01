@@ -59,3 +59,9 @@ Before ANY git commit, you MUST run local validation:
 
 All tools in the project: ruff, ty, pytest, hadolint, hk, docker build,
 GitHub Actions, actionlint, pinact, agnix, and any future additions.
+
+## See also
+
+- `verify-before-advancing.md` — the sibling gate: every applicable check
+  must be green *with evidence* before advancing to the next task,
+  committing, opening/merging a PR, or claiming done.
