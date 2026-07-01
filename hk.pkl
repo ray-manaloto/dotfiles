@@ -194,12 +194,12 @@ hooks {
       // #154: no zizmor step — the zizmor builtin in hk@1.44.2 resolves to
       // check=null (a no-op that always "passes"); it never actually scans.
       // Re-add when the builtin ships a real command (or wire zizmor manually).
-      ["pinact"] = (Builtins.pinact) {
-        glob = List(".github/workflows/*.yml")
-      }
-      ["pinact_update"] = (Builtins.pinact_update) {
-        glob = List(".github/workflows/*.yml")
-      }
+      //
+      // #154: no pinact / pinact_update steps — they call the GitHub API to
+      // resolve SHAs and hit the unauthenticated 60/hr rate limit in CI (the
+      // lint job has no GITHUB_TOKEN in env), and pinact_update is a fix-op, not
+      // a check. SHA-pin verification is the canonical `mise run pin-actions`
+      // task (AGENTS.md), which CI runs with an authenticated token.
 
       // --- HCL ---
       // #154: no hclfmt step — `hclfmt` is not in the mise registry (only
