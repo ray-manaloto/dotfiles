@@ -85,17 +85,45 @@ def test_smoke_script_injects_p2996_ref_and_strict_match() -> None:
     assert "bloomberg/clang-p2996" in script
 
 
-def test_smoke_script_p2996_reflection_is_evaluated_at_compile_time() -> None:
-    """The reflection check forces compile-time evaluation via static_assert."""
+def test_smoke_script_p2996_reflection_links_and_runs() -> None:
+    """Gap C (#141): reflection is compiled AND the emitted binary is run."""
     script = build_smoke_script(_FAKE_P2996_SHA)
 
-    # static_assert forces enumerators_of(^^Color) to be evaluated, so a
-    # broken reflection front-end fails the -fsyntax-only compile.
+    # static_assert still forces enumerators_of(^^Color) to be evaluated at
+    # compile time, so a broken reflection front-end fails the build...
     assert "static_assert(count_enumerators() == 3);" in script
     assert "enumerators_of(^^Color)" in script
-    # Both reflection compilers are exercised.
+    # ...and both reflection compilers now link (-o) + RUN their binary,
+    # replacing the old -fsyntax-only-only smoke entirely.
+    assert "-fsyntax-only" not in script
     assert "/opt/gcc-latest/bin/g++" in script
+    assert "-o /tmp/refl-gcc" in script
+    assert "/tmp/refl-gcc ||" in script
     assert "/opt/clang-p2996/bin/clang++" in script
+    assert "-o /tmp/refl-clang" in script
+    assert "/tmp/refl-clang ||" in script
+
+
+def test_smoke_script_p2996_reflection_rpath_discovers_libcxx() -> None:
+    """Gap C (#141): clang-p2996 links with an rpath at the discovered libc++."""
+    script = build_smoke_script(_FAKE_P2996_SHA)
+
+    # The libc++ dir is discovered at runtime (not hard-coded) so a triple
+    # rename can't silently break the rpath, then baked into the binary.
+    assert "find /opt/clang-p2996/lib -name 'libc++.so.1'" in script
+    assert '-Wl,-rpath,"$P2996_LIBCXX_DIR"' in script
+
+
+def test_smoke_script_p2996_reflection_runs_even_under_emulation() -> None:
+    """Gap C (#141): the reflection RUN is not emulation-gated.
+
+    Unlike TSan (gap B), a clang-p2996 -stdlib=libc++ binary runs fine under
+    Rosetta/QEMU, so the RUN must fire even when ``emulated=True``.
+    """
+    script = build_smoke_script(_FAKE_P2996_SHA, emulated=True)
+
+    assert "/tmp/refl-clang ||" in script
+    assert "/tmp/refl-gcc ||" in script
 
 
 def test_smoke_script_non_sha_ref_skips_strict_match() -> None:

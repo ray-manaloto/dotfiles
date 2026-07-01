@@ -38,7 +38,7 @@ scripts/devcontainer-smoke.sh --include-up   # also runs `devcontainer up` first
 Tiers:
 
 - **Tier 1** — `mise ls`, `which clang++ python uv hk`, `hk run pre-commit --all`
-- **Tier 2** — `pytest 65/65`, `stat ~/.ssh ~/.claude /workspaces/dotfiles`
+- **Tier 2** — `pytest 171/171`, `stat ~/.ssh ~/.claude /workspaces/dotfiles`
 - **Tier 3** — `clang++ -fsanitize=address,undefined hello.cc && ./hello`
 
 Tier 4 (CLion remote toolchain) is manual.

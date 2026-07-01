@@ -7,7 +7,7 @@
 #
 # Tiers (per ralplan-consensus-devcontainer-build-mise-chezmoi-resync §5):
 #   Tier 1 — Tools+hk:      mise ls; which clang++ python uv hk; hk run pre-commit --all
-#   Tier 2 — Python+mounts: uv pytest 65/65; stat ~/.ssh ~/.claude /workspaces/${ws}
+#   Tier 2 — Python+mounts: uv pytest 171/171; stat ~/.ssh ~/.claude /workspaces/${ws}
 #   Tier 3 — Sanitizers+lifecycle: clang++ asan+ubsan; mise-user volume owner; github ssh
 #
 # Tier 4 (CLion remote toolchain) is manual and out of scope here.
@@ -99,20 +99,36 @@ if [ "${actual_ref}" != "${expected_ref}" ]; then
 	exit 1
 fi
 echo "  OK: clang-p2996 ref ${actual_ref} matches docker-bake.hcl"
+# Gap C (#141): link + RUN, not just -fsyntax-only. The static_assert forces
+# compile-time reflection evaluation; the RUN proves the emitted binary
+# executes. clang-p2996's -stdlib=libc++ binary needs libc++.so.1, which is off
+# the default loader path, so bake an rpath at the discovered in-image libc++
+# dir (link-flag-only — no Dockerfile change, no cold rebuild). A p2996 libc++
+# binary runs under Rosetta/QEMU (verified #141), so no emulation gate needed.
+p2996_libcxx_so="$(find /opt/clang-p2996/lib -name 'libc++.so.1' 2>/dev/null | head -n1)"
+[ -n "${p2996_libcxx_so}" ] || { echo "  FAIL: clang-p2996 libc++.so.1 not found in image" >&2; exit 1; }
+p2996_libcxx_dir="$(dirname "${p2996_libcxx_so}")"
 rd="$(mktemp -d)"
 cat >"${rd}/refl.cpp" <<'CPP'
 #include <meta>
+#include <iostream>
 enum class Color { Red, Green, Blue };
 consteval int count_enumerators() {
   return static_cast<int>(enumerators_of(^^Color).size());
 }
 static_assert(count_enumerators() == 3);
-int main() { return 0; }
+int main() {
+  int n = count_enumerators();
+  std::cout << "reflection enumerators=" << n << std::endl;
+  return n == 3 ? 0 : 1;
+}
 CPP
-/opt/gcc-latest/bin/g++ -std=c++26 -freflection "${rd}/refl.cpp" -fsyntax-only || { echo "  FAIL: gcc-latest reflection compile failed" >&2; exit 1; }
-/opt/clang-p2996/bin/clang++ -std=c++2c -freflection -freflection-latest -fexpansion-statements -stdlib=libc++ "${rd}/refl.cpp" -fsyntax-only || { echo "  FAIL: clang-p2996 reflection compile failed" >&2; exit 1; }
+/opt/gcc-latest/bin/g++ -std=c++26 -freflection "${rd}/refl.cpp" -o "${rd}/refl-gcc" || { echo "  FAIL: gcc-latest reflection link failed" >&2; exit 1; }
+"${rd}/refl-gcc" || { echo "  FAIL: gcc-latest reflection binary did not run to return 0" >&2; exit 1; }
+/opt/clang-p2996/bin/clang++ -std=c++2c -freflection -freflection-latest -fexpansion-statements -stdlib=libc++ -Wl,-rpath,"${p2996_libcxx_dir}" "${rd}/refl.cpp" -o "${rd}/refl-clang" || { echo "  FAIL: clang-p2996 reflection link failed" >&2; exit 1; }
+"${rd}/refl-clang" || { echo "  FAIL: clang-p2996 reflection binary did not run to return 0" >&2; exit 1; }
 rm -rf "${rd}"
-echo "  OK: both reflection compilers compile a std::meta program"
+echo "  OK: both reflection compilers link + run a std::meta program"
 
 echo "[tier3] home volume ownership + seed survivors"
 # v6 single-home-volume contract: the whole /home/${USER} dir is a
