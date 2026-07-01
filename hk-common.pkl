@@ -33,7 +33,10 @@ safety: Mapping<String, Config.Step> = new {
   ["check_symlinks"] = Builtins.check_symlinks
   ["check_executables_have_shebangs"] = Builtins.check_executables_have_shebangs
   ["check_byte_order_marker"] = Builtins.check_byte_order_marker
-  ["no_commit_to_branch"] = Builtins.no_commit_to_branch
+  // #154: no `no_commit_to_branch` — it errors in CI ("Failed to get current
+  // git branch") because GitHub Actions checks out a detached HEAD. It's a
+  // local-only guard against committing to main, already enforced by branch
+  // protection + .claude/rules/do-not.md, so drop it rather than special-case CI.
 }
 
 // Security scanning — secret detection via gitleaks.
