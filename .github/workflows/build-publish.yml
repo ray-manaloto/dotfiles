@@ -81,7 +81,9 @@ jobs:
   # ============================================================
   base-prep:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Cold base rebuild (apt + mise install + cargo crates + conda solve) runs
+    # ~20-30 min; conda solve time varies, so keep generous headroom.
+    timeout-minutes: 60
     permissions:
       contents: read
       packages: write
@@ -179,7 +181,12 @@ jobs:
   p2996-prep:
     needs: [base-prep]
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # Cold clang-p2996 build is a multi-hour from-source compile (~2h+). The
+    # earlier 60 was far too low and CANCELLED cold rebuilds (regression from
+    # #154's timeout-minutes addition; only warm cache-hits — seconds — masked
+    # it). Cache HITS still finish in seconds; this ceiling only bounds a cold
+    # build. See docs/research/.../P2996-CACHE.md + feedback_ci_build_duration.
+    timeout-minutes: 240
     permissions:
       contents: read
       packages: write # explicit; do not rely on workflow-level inheritance
@@ -303,7 +310,7 @@ jobs:
     needs: [base-prep, p2996-prep]
     if: inputs.tag_strategy == 'pr'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       contents: read
       packages: write
@@ -427,7 +434,9 @@ jobs:
       && (needs.dev-prep.result == 'skipped'
           || (needs.dev-prep.result == 'success' && needs.dev-prep.outputs.hit != 'true'))
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # Cold dev assembly (pull p2996 cache + final COPY/overlay + bake) can run
+    # longer than a warm build; keep headroom for a cold path.
+    timeout-minutes: 120
     permissions:
       contents: read
       packages: write
@@ -533,7 +542,7 @@ jobs:
   smoke-test:
     needs: [build]
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       contents: read
       packages: read

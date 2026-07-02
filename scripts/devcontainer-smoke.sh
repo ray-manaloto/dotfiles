@@ -7,7 +7,7 @@
 #
 # Tiers (per ralplan-consensus-devcontainer-build-mise-chezmoi-resync §5):
 #   Tier 1 — Tools+hk:      mise ls; which clang++ python uv hk; hk run pre-commit --all
-#   Tier 2 — Python+mounts: uv pytest 187/187; stat ~/.ssh ~/.claude /workspaces/${ws}
+#   Tier 2 — Python+mounts: uv pytest 190/190; stat ~/.ssh ~/.claude /workspaces/${ws}
 #   Tier 3 — Sanitizers+lifecycle: clang++ asan+ubsan; mise-user volume owner; github ssh
 #
 # Tier 4 (CLion remote toolchain) is manual and out of scope here.
