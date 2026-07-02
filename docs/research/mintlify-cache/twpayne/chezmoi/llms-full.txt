@@ -2273,7 +2273,7 @@ cat ~/.local/share/chezmoi/private_dot_ssh/encrypted_private_id_rsa.age
 # See what will be written
 chezmoi cat ~/.bashrc
 
-# Compare with current file  
+# Compare with current file
 diff <(chezmoi cat ~/.bashrc) ~/.bashrc
 
 # Apply if satisfied
@@ -2325,7 +2325,7 @@ error: .config: not a file, script, or symlink
 If a template has errors:
 
 ```bash theme={null}
-$ chezmoi cat ~/.bashrc  
+$ chezmoi cat ~/.bashrc
 error: .bashrc: template: dot_bashrc.tmpl:5: undefined variable "editr"
 ```
 
@@ -2733,7 +2733,7 @@ chezmoi <Tab>
 ### Flag completion
 
 ```bash theme={null}
-chezmoi apply --<Tab>  
+chezmoi apply --<Tab>
 # Shows: --dry-run, --exclude, --include, --recursive, --verbose, ...
 ```
 
@@ -2827,7 +2827,7 @@ After upgrading chezmoi, regenerate completions:
 # Bash
 chezmoi completion bash > ~/.local/share/bash-completion/completions/chezmoi
 
-# Zsh  
+# Zsh
 chezmoi completion zsh > ~/.zsh/completion/_chezmoi
 
 # Fish
@@ -3303,7 +3303,7 @@ chezmoi doctor
 # 3. Verify fixes
 chezmoi doctor
 
-# 4. Test chezmoi functionality  
+# 4. Test chezmoi functionality
 chezmoi apply --dry-run --verbose
 ```
 
@@ -3761,7 +3761,7 @@ chezmoi execute-template '{{ .nonexistent }}'
 # Test onepassword
 chezmoi execute-template '{{ (onepassword "item") | toPrettyJson }}'
 
-# Test bitwarden  
+# Test bitwarden
 chezmoi execute-template '{{ (bitwarden "item") | toPrettyJson }}'
 ```
 
@@ -4137,7 +4137,7 @@ $ chezmoi managed --tree
 ├── .config
 │   └── nvim
 │       └── init.vim
-├── .gitconfig  
+├── .gitconfig
 ├── .ssh
 │   └── config
 └── .vimrc
@@ -4198,7 +4198,7 @@ chezmoi managed --path-style=absolute | xargs stat -c '%n %a'
 
 ```bash theme={null}
 chezmoi managed --include=files | \
-  xargs -I {} grep -l "pattern" ~/{}  
+  xargs -I {} grep -l "pattern" ~/{}
 ```
 
 ## Common Use Cases
@@ -4344,7 +4344,7 @@ MM .bashrc
 # See what changed
 $ chezmoi diff ~/.bashrc
 
-# Merge to resolve conflicts  
+# Merge to resolve conflicts
 $ chezmoi merge ~/.bashrc
 # (merge tool opens, resolve conflicts, save and exit)
 
@@ -4611,7 +4611,7 @@ A script will be executed by `chezmoi apply`.
 
 ```bash theme={null}
 chezmoi status    # See what will change
-chezmoi diff      # See detailed differences  
+chezmoi diff      # See detailed differences
 chezmoi apply     # Apply the changes
 ```
 
@@ -4839,7 +4839,7 @@ $ chezmoi unmanaged
 .bash_history
 .cache
 .lesshst
-.viminfo  
+.viminfo
 Downloads
 ```
 
@@ -4863,7 +4863,7 @@ $ chezmoi unmanaged --tree
 ```bash theme={null}
 $ chezmoi unmanaged ~/.config
 .config/Slack
-.config/discord  
+.config/discord
 .config/spotify
 ```
 
@@ -5177,7 +5177,7 @@ chezmoi version v2.47.0, commit abc1234def5678, built at 2024-01-20T10:30:00Z
 ### Already on latest version
 
 ```bash theme={null}
-$ chezmoi upgrade  
+$ chezmoi upgrade
 chezmoi: already at the latest version (v2.47.0)
 ```
 
@@ -5239,7 +5239,7 @@ ExecStart=/usr/local/bin/chezmoi upgrade
 ```
 
 ```ini theme={null}
-# /etc/systemd/system/chezmoi-upgrade.timer  
+# /etc/systemd/system/chezmoi-upgrade.timer
 [Unit]
 Description=Weekly chezmoi upgrade
 
@@ -5522,16 +5522,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Install chezmoi
         run: |
           sh -c "$(curl -fsLS get.chezmoi.io)" -- -b ~/.local/bin
-          
+
       - name: Initialize chezmoi
         run: |
           chezmoi init --source=$GITHUB_WORKSPACE
           chezmoi apply
-          
+
       - name: Verify configuration
         run: chezmoi verify
 ```
@@ -5558,7 +5558,7 @@ stage('Verify Dotfiles') {
         sh '''
             curl -sfL https://git.io/chezmoi | sh
             ./bin/chezmoi init --source=.
-            ./bin/chezmoi apply  
+            ./bin/chezmoi apply
             ./bin/chezmoi verify
         '''
     }
@@ -5587,7 +5587,7 @@ fi
 Description=Verify dotfiles with chezmoi
 
 [Service]
-Type=oneshot  
+Type=oneshot
 User=username
 ExecStart=/usr/bin/chezmoi verify
 ```
@@ -5637,7 +5637,7 @@ $ echo $?
 $ chezmoi verify --verbose
 .bashrc: verifying
 .gitconfig: verifying
-.vimrc: verifying  
+.vimrc: verifying
 error: .bashrc: contents differ
 $ echo $?
 1
@@ -6573,7 +6573,7 @@ graph LR
     F --> E
     E --> G[Apply Changes]
     G --> H[Updated Home Directory]
-    
+
     style A fill:#e1f5ff
     style C fill:#e1f5ff
     style D fill:#fff4e6
@@ -6892,21 +6892,21 @@ sequenceDiagram
     participant Source as Source State
     participant Target as Target State
     participant Dest as Destination Dir
-    
+
     User->>CLI: chezmoi add ~/.bashrc
     CLI->>Dest: Read ~/.bashrc
     CLI->>Source: Write dot_bashrc
-    
+
     User->>CLI: chezmoi edit ~/.bashrc
     CLI->>Source: Open dot_bashrc in $EDITOR
     User->>Source: Make changes
-    
+
     User->>CLI: chezmoi diff
     CLI->>Source: Read source state
     CLI->>Target: Compute target state
     CLI->>Dest: Read actual state
     CLI->>User: Show differences
-    
+
     User->>CLI: chezmoi apply
     CLI->>Source: Read source state
     CLI->>Target: Compute target state
@@ -7968,9 +7968,9 @@ class Chezmoi < Formula
   desc "Manage your dotfiles across multiple machines"
   homepage "https://chezmoi.io/"
   url "https://github.com/twpayne/chezmoi/archive/v2.0.0.tar.gz"
-  
+
   depends_on "go" => :build
-  
+
   def install
     system "make",
            "VERSION=v#{version}",
@@ -7988,7 +7988,7 @@ end
 ```bash theme={null}
 build() {
   cd "$srcdir/chezmoi-$pkgver"
-  
+
   make VERSION="v$pkgver" \
        COMMIT="$(cat COMMIT)" \
        DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
@@ -7998,9 +7998,9 @@ build() {
 
 package() {
   cd "$srcdir/chezmoi-$pkgver"
-  
+
   install -Dm755 chezmoi "$pkgdir/usr/bin/chezmoi"
-  
+
   # Shell completions
   install -Dm644 completions/chezmoi-completion.bash \
     "$pkgdir/usr/share/bash-completion/completions/chezmoi"
@@ -12079,12 +12079,12 @@ services:
     port: {{ (awsSecretsManager "database").port }}
     username: {{ (awsSecretsManager "database").username }}
     password: {{ (awsSecretsManager "database").password }}
-  
+
   redis:
     host: {{ (awsSecretsManager "redis").host }}
     port: {{ (awsSecretsManager "redis").port }}
     password: {{ awsSecretsManagerRaw "redis-password" }}
-  
+
   api:
     github: {{ awsSecretsManagerRaw "github-token" }}
     gitlab: {{ awsSecretsManagerRaw "gitlab-token" }}
@@ -12567,15 +12567,15 @@ services:
     host: {{ azureKeyVault "db-host" }}
     username: {{ azureKeyVault "db-username" }}
     password: {{ azureKeyVault "db-password" }}
-  
+
   redis:
     host: {{ azureKeyVault "redis-host" }}
     password: {{ azureKeyVault "redis-password" }}
-  
+
   storage:
     account_name: {{ azureKeyVault "storage-account" }}
     account_key: {{ azureKeyVault "storage-key" }}
-  
+
   api:
     github: {{ azureKeyVault "github-token" }}
     openai: {{ azureKeyVault "openai-key" }}
@@ -13680,7 +13680,7 @@ doppler configure set config dev
 doppler secrets set API_KEY=dev_key_here
 doppler secrets set DB_PASSWORD=dev_password
 
-# Staging  
+# Staging
 doppler configure set config stg
 doppler secrets set API_KEY=staging_key_here
 doppler secrets set DB_PASSWORD=staging_password
@@ -16840,7 +16840,7 @@ STRIPE_SECRET_KEY={{ (vault "secret/data/api-keys").data.data.stripe }}
 
 ```bash theme={null}
 vault kv put secret/ssh/github user=git
-vault kv put secret/ssh/gitlab user=git  
+vault kv put secret/ssh/gitlab user=git
 vault kv put secret/ssh/work-server user=john.doe host=server.company.com
 ```
 
@@ -17474,7 +17474,7 @@ Target names are considered **after all attributes are stripped**.
 ```bash theme={null}
 # Source state files:
 create_dot_zshrc          # Target: .zshrc
-modify_dot_bashrc         # Target: .bashrc  
+modify_dot_bashrc         # Target: .bashrc
 executable_dot_bin_script # Target: .bin/script
 run_after_update.sh       # Runs after all updates
 run_before_backup.sh      # Runs before all updates
@@ -17581,7 +17581,7 @@ chezmoi assumes that the source or destination states are **not modified** while
 echo "new content" > "$CHEZMOI_SOURCE_DIR/dot_newfile"
 
 # BAD: Modifying destination state during before script
-# run_before_modify_dest.sh  
+# run_before_modify_dest.sh
 echo "content" > ~/.important_file
 ```
 
@@ -17594,7 +17594,7 @@ echo "content" > ~/.important_file
 mysqldump mydb > /tmp/backup.sql
 
 # dot_config_myapp_schema.sql (applied during update phase)
-# run_after_01_migrate_db.sh  
+# run_after_01_migrate_db.sh
 mysql mydb < ~/.config/myapp/schema.sql
 ```
 
@@ -18494,7 +18494,7 @@ cp -r ~/.config ~/.config.backup
 ```
 
 ```bash title="run_after_update-completion.sh" theme={null}
-#!/bin/bash  
+#!/bin/bash
 # Runs after all changes are applied
 source ~/.bashrc
 ```
@@ -18887,7 +18887,7 @@ Write-Host "Welcome, <% .chezmoi.username %>!"
 ```json title="dot_config_app_settings.json.tmpl" theme={null}
 {{/* chezmoi:template:format-indent="\t" */}}
 {{
-	dict 
+	dict
 		"theme" .theme
 		"fontSize" .font_size
 		"plugins" .plugins
@@ -19680,7 +19680,7 @@ alias ls="ls --color=auto"
 theme = "dark"
 font_size = 14
 {{ else }}
-theme = "light" 
+theme = "light"
 font_size = 12
 {{ end }}
 ```
@@ -22326,5 +22326,3 @@ chezmoi tracks script execution in persistent state.
   {{ end -}}
   ```
 </CodeGroup>
-
-

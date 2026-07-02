@@ -12,24 +12,9 @@ import "hk-common.pkl" as common
 // Zero-skip policy: fail_fast=false to report ALL issues, not just the first
 fail_fast = false
 
-// #154: exclude from ALL builtin linters/formatters (a) third-party cached docs
-// and generated research artifacts (not first-party source), and (b) gitignored
-// local-only tool caches. The latter don't exist in CI, but `gitleaks dir` does
-// NOT honor .gitignore (unlike `walk_ignore`), so it would flag example secrets
-// in local plugin caches (e.g. .codex/.tmp/**) — exclude them explicitly.
-exclude =
-  List(
-    "docs/research/mintlify-cache/**",
-    "docs/research/trail/findings/**",
-    ".codex/**",
-    ".omc/**",
-    ".omg/**",
-    ".omx/**",
-    ".logging/**",
-    ".idea/**",
-    ".mise/**",
-    "**/__pycache__/**",
-  )
+// #154: exclude non-source paths from ALL builtins — shared with hk-image.pkl
+// via common.excludePaths so the host and in-image configs can't drift.
+exclude = common.excludePaths
 
 hooks {
   // ==========================================================================

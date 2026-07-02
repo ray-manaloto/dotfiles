@@ -4998,5 +4998,3 @@ devcontainer templates generate-docs \
 <Tip>
   Run `generate-docs` as part of your CI pipeline before publishing so that each template always has up-to-date documentation committed alongside the source.
 </Tip>
-
-

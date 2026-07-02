@@ -5855,5 +5855,3 @@ node scripts/openclaw-gateway-demo.mjs
 <Tip>
   Set `OMC_OPENCLAW_DEBUG=1` while testing to log every outbound request and response in the terminal, which makes it easier to verify your gateway is receiving events correctly.
 </Tip>
-
-

@@ -17,6 +17,11 @@ import "hk-common.pkl" as common
 
 fail_fast = false
 
+// #154: same non-source exclude as hk.pkl (shared via common.excludePaths).
+// Without this the in-container devcontainer smoke's `hk run pre-commit --all`
+// lints third-party cached docs under the mounted workspace and fails.
+exclude = common.excludePaths
+
 hooks {
   ["pre-commit"] {
     fix = true

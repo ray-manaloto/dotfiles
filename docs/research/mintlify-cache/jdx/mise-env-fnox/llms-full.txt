@@ -346,5 +346,3 @@ Before installing the plugin, you need:
     Customize the fnox binary path, profile, and tool resolution.
   </Card>
 </CardGroup>
-
-

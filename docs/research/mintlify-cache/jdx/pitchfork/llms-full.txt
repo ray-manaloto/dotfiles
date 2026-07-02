@@ -4985,5 +4985,3 @@ Internal settings for the pitchfork supervisor daemon.
 
   With the default `general.interval` of `10s`, a threshold of `3` means a daemon must exceed its `cpu_limit` for approximately 30 seconds before being killed.
 </ParamField>
-
-
