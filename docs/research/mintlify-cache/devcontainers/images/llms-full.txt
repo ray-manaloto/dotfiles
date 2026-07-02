@@ -4677,5 +4677,3 @@ This is simpler and produces smaller layers than running `apk update` and then `
 | `rm -rf /var/lib/apt/lists/*`   | Removes downloaded package index files                   |
 | `--no-install-recommends`       | Skips unnecessary packages pulled in by default          |
 | `apk --no-cache`                | Prevents Alpine package index from being written to disk |
-
-

@@ -3971,5 +3971,3 @@ repos:
 See [Benchmarks](/benchmarks) for reproducible performance numbers — hk, lefthook, pre-commit, and prek running 10 linters on a synthetic 6,000-file project.
 
 Ready to try it? [Get started](/quickstart).
-
-

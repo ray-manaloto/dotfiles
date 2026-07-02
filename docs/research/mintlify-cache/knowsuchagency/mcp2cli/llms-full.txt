@@ -2649,5 +2649,3 @@ Sessions let you keep a persistent MCP server process alive between calls, avoid
   # → mcp2cli 2.7.0
   ```
 </ParamField>
-
-

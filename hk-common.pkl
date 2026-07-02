@@ -16,6 +16,26 @@
 import "package://github.com/jdx/hk/releases/download/v1.44.2/hk@1.44.2#/Builtins.pkl"
 import "package://github.com/jdx/hk/releases/download/v1.44.2/hk@1.44.2#/Config.pkl"
 
+// #154: shared `exclude` list for ALL builtin linters — third-party cached
+// docs, generated research artifacts, and gitignored local tool caches (not
+// first-party source). Defined once here and referenced by BOTH hk.pkl (host)
+// and hk-image.pkl (in-image, used by the devcontainer smoke) so they can't
+// drift — a drift is exactly what broke the in-container smoke when hk.pkl had
+// the exclude but hk-image.pkl did not. `gitleaks dir` ignores .gitignore, so
+// the gitignored caches must be listed explicitly.
+excludePaths: List<String> = List(
+  "docs/research/mintlify-cache/**",
+  "docs/research/trail/findings/**",
+  ".codex/**",
+  ".omc/**",
+  ".omg/**",
+  ".omx/**",
+  ".logging/**",
+  ".idea/**",
+  ".mise/**",
+  "**/__pycache__/**",
+)
+
 // File hygiene builtins — whitespace, line endings, encoding fixes.
 hygiene: Mapping<String, Config.Step> = new {
   ["trailing_whitespace"] = Builtins.trailing_whitespace

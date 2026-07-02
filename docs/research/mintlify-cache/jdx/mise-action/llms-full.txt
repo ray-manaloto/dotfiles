@@ -1062,5 +1062,3 @@ The most frequently used inputs are shown below. For the complete list, see [All
     Avoid installation failures caused by unauthenticated GitHub API requests.
   </Card>
 </CardGroup>
-
-

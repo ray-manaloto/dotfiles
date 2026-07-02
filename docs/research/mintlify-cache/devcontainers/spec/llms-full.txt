@@ -4987,5 +4987,3 @@ Variables are substituted when the value is applied, not when the `devcontainer.
 * Path variables — resolved at container creation time from the active workspace
 
 When using [image metadata](/spec/image-metadata), variables stored in image labels are also substituted at container creation time, not at image build time.
-
-

@@ -922,7 +922,7 @@ The following characters have special meaning in Starship format strings and mus
 Example:
 
 ```toml theme={null}
-format = '\[\$\] '    # renders: [$] 
+format = '\[\$\] '    # renders: [$]
 ```
 
 ## TOML string types
@@ -1807,7 +1807,7 @@ Answers to common questions about Starship configuration, debugging, and compati
 
     ```bash theme={null}
     echo -e "\xf0\x9f\x90\x8d"   # Should display a snake emoji 🐍
-    echo -e "\xee\x82\xa0"        # Should display a Powerline branch symbol 
+    echo -e "\xee\x82\xa0"        # Should display a Powerline branch symbol
     ```
 
     If either fails to display, your system font configuration needs adjustment. If both display correctly but you still don't see the symbols in Starship, file a bug report.
@@ -3844,5 +3844,3 @@ cat ~/.cache/starship/session_${STARSHIP_SESSION_KEY}.log
 ```
 
 Starship automatically removes old session log files on startup to keep the cache directory tidy.
-
-

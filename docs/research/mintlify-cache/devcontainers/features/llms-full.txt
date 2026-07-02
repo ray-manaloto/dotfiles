@@ -3252,5 +3252,3 @@ Get up and running with Dev Container Features in minutes
     Pin to major, minor, or patch versions
   </Card>
 </CardGroup>
-
-

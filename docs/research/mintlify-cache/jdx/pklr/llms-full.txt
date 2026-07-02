@@ -3131,5 +3131,3 @@ async fn main() -> pklr::Result<()> {
     Work with pklr's error types and diagnostics.
   </Card>
 </CardGroup>
-
-
