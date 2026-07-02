@@ -552,6 +552,21 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
           persist-credentials: false
+      - name: Free disk space
+        # smoke-test `docker pull`s the full ~38 GB dev image; the stock
+        # ubuntu-latest runner (~14 GB free) runs out of space extracting it
+        # ("no space left on device"). Sibling build jobs already free disk;
+        # smoke-test was the one that didn't (it passed before only on roomier
+        # runners). No BuildKit cache to preserve here — this job only pulls.
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: false
+          swap-storage: true
       - name: Install mise (python + uv)
         uses: ./.github/actions/setup-mise
         with:
