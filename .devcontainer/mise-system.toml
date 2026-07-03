@@ -36,6 +36,11 @@ yamlfmt = "latest"
 yq = "latest"
 ghalint = "latest"
 jq = "latest"
+# #154: the in-image hk config (hk-image.pkl) runs the gitleaks + editorconfig
+# builtins, so the image needs these tools (root mise.toml is host-only — it has
+# ZERO effect on the image; tools inside the container come from THIS file).
+gitleaks = "latest"
+editorconfig-checker = "latest"
 "npm:ajv-cli" = "latest"
 "pipx:check-jsonschema" = "latest"
 # CLI utilities
