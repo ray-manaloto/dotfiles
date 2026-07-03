@@ -45,6 +45,10 @@ behavior unchanged):
    (`docker manifest inspect`). Hit: <30s. Miss: build the `base` bake
    target (devcontainer-base = apt + mise install + cargo), push it.
    p2996-prep + build pull it instead of rebuilding the mise layer.
+   base-hash covers the bytes of every base-section COPY input —
+   `mise-system.toml` (#140) + `hk-common.pkl`/`hk-image.pkl` (#156). Since
+   p2996-hash includes base-hash, ANY edit to those busts BOTH tiers → a cold
+   ~2h rebuild (batch in-image config changes).
 4. **p2996-prep** — `dotfiles-setup p2996-hash` → probe `:p2996-<hash16>`.
    Hit: <30s. Miss: build the `p2996-cache` bake target (scratch
    `p2996-export` with just `/opt/clang-p2996`, ~500 MB), push to GHCR.

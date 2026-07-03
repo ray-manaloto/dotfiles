@@ -1,5 +1,17 @@
 # hk Builtins Audit
 
+> **STATUS (2026-07-02): superseded as an "active steps" reference by #154–#158.**
+> This is a point-in-time 2026-04-05 audit. At the time, hk builtins were
+> declared as bare `["name"] {}` blocks that hk **silently no-op'd** — so the
+> table below reflects *intended* steps, not steps that actually ran. #154
+> (PR #155) rewired them via `= Builtins.name` so they run for real, and
+> curated the set: **dropped** `jq`, `taplo_format`, `yamlfmt`, `pkl_format`,
+> `shfmt` (opinionated formatters), `hclfmt` (not in mise registry), `zizmor`
+> (`check=null` no-op), `markdown_lint`/`rumdl` (redundant), `no_commit_to_branch`
+> (fails CI detached-HEAD), `pinact`/`pinact_update` (GitHub API rate-limit).
+> The current authoritative set is `hk.pkl` + `hk-common.pkl` + `hk-image.pkl`.
+> See memory `feedback_hk_builtins_need_assignment`.
+
 - **Last checked:** 2026-04-05
 - **hk version:** v1.40.0
 - **Project:** dotfiles (ray-manaloto/dotfiles)
