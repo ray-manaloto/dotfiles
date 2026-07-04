@@ -3,17 +3,15 @@
   "extends": [
     "github>jdx/renovate-config"
   ],
-  "mise": {
-    "enabled": true
-  },
   "packageRules": [
     {
       "matchPackageNames": ["bats-core"],
       "groupName": "bats-core"
     },
     {
+      "description": "Digest-pin the devcontainer base image + features (the jdx preset extends docker:pinDigests; this re-enables it for the devcontainer manager).",
       "matchManagers": ["devcontainer"],
-      "pinDigests": false
+      "pinDigests": true
     },
     {
       "matchUpdateTypes": ["minor", "patch", "digest"],
@@ -26,72 +24,8 @@
   "customManagers": [
     {
       "customType": "regex",
-      "fileMatch": ["(^|/)mise\\.toml$"],
-      "matchStrings": [
-        "(?<packageName>[\\w-]+)\\s*=\\s*\"(?<currentValue>[^\"]+)\""
-      ],
-      "datasourceTemplate": "asdf-registry"
-    },
-    {
-      "customType": "regex",
-      "fileMatch": ["(^|/)config\\.toml\\.tmpl$"],
-      "matchStrings": [
-        "\"npm:(?<depName>[^\"]+)\"\\s*=\\s*\"(?<currentValue>[^\"]+)\""
-      ],
-      "datasourceTemplate": "npm"
-    },
-    {
-      "customType": "regex",
-      "fileMatch": ["(^|/)config\\.toml\\.tmpl$"],
-      "matchStrings": [
-        "\"pipx:(?<depName>[^\"]+)\"\\s*=\\s*\"(?<currentValue>[^\"]+)\""
-      ],
-      "datasourceTemplate": "pypi"
-    },
-    {
-      "customType": "regex",
-      "fileMatch": ["(^|/)config\\.toml\\.tmpl$"],
-      "matchStrings": [
-        "\"pipx:(?<depName>[^\"]+)\"\\s*=\\s*\\{[^}]*version\\s*=\\s*\"(?<currentValue>[^\"]+)\""
-      ],
-      "datasourceTemplate": "pypi"
-    },
-    {
-      "customType": "regex",
-      "fileMatch": ["(^|/)config\\.toml\\.tmpl$"],
-      "matchStrings": [
-        "\"github:(?<depName>[^\"]+)\"\\s*=\\s*\"(?<currentValue>[^\"]+)\""
-      ],
-      "datasourceTemplate": "github-releases"
-    },
-    {
-      "customType": "regex",
-      "fileMatch": ["(^|/)config\\.toml\\.tmpl$"],
-      "matchStrings": [
-        "\"conda:(?<depName>[^\"]+)\"\\s*=\\s*\"(?<currentValue>[^\"]+)\""
-      ],
-      "datasourceTemplate": "conda"
-    },
-    {
-      "customType": "regex",
-      "fileMatch": ["docker-bake\\.hcl$", "\\.devcontainer/devcontainer\\.json$"],
-      "matchStrings": [
-        "\"(?<depName>[\\w.-]+/[\\w.-]+):(?<currentValue>[\\w.-]+)\""
-      ],
-      "datasourceTemplate": "docker"
-    },
-    {
-      "customType": "regex",
-      "fileMatch": ["\\.devcontainer/Dockerfile$", "docker-bake\\.hcl$", "\\.devcontainer/devcontainer\\.json$"],
-      "matchStrings": [
-        "MISE_VERSION[\"=: ]+v?(?<currentValue>[\\d.]+)"
-      ],
-      "depNameTemplate": "jdx/mise",
-      "datasourceTemplate": "github-releases"
-    },
-    {
-      "customType": "regex",
-      "fileMatch": ["hk\\.pkl$"],
+      "description": "hk pkl schema pin (amends + import package:// URLs) — kept in lockstep with hk releases across hk.pkl, hk-common.pkl, hk-image.pkl. No native/preset manager covers a pkl amends URL.",
+      "managerFilePatterns": ["/(^|/)hk(-common|-image)?\\.pkl$/"],
       "matchStrings": [
         "download/v(?<currentValue>[\\d.]+)/hk@"
       ],
@@ -100,7 +34,8 @@
     },
     {
       "customType": "regex",
-      "fileMatch": ["(^|/)\\.chezmoiversion$"],
+      "description": "chezmoi minimum-version file. No native/preset manager covers .chezmoiversion.",
+      "managerFilePatterns": ["/(^|/)\\.chezmoiversion$/"],
       "matchStrings": [
         "v?(?<currentValue>[\\d.]+)"
       ],
@@ -109,7 +44,8 @@
     },
     {
       "customType": "regex",
-      "fileMatch": ["docker-bake\\.hcl$", "\\.devcontainer/Dockerfile$"],
+      "description": "clang-p2996 pinned git SHA (tagless p2996 branch HEAD). git-refs datasource; no preset handles a git digest.",
+      "managerFilePatterns": ["/docker-bake\\.hcl$/", "/\\.devcontainer/Dockerfile$/"],
       "matchStrings": [
         "CLANG_P2996_REF[\"= ]+(?<currentDigest>[a-f0-9]{40})"
       ],
@@ -119,7 +55,7 @@
       "datasourceTemplate": "git-refs"
     }
   ],
-  "enabledManagers": ["npm", "cargo", "go", "pipx", "mise", "dockerfile", "docker-compose", "devcontainer", "github-actions", "custom.regex"],
+  "enabledManagers": ["npm", "cargo", "mise", "dockerfile", "docker-compose", "devcontainer", "github-actions", "custom.regex"],
   "vulnerabilityAlerts": {
     "enabled": true
   }
