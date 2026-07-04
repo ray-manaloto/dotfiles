@@ -18,7 +18,7 @@ This project uses a multi-stage Dockerfile with BuildKit features:
 ## docker-bake.hcl Patterns
 
 - **Variable naming**: HCL variables can be overridden by same-named environment variables. Never use generic names like `REGISTRY` that CI workflows might set. Current convention: `DEFAULT_REGISTRY`, `IMAGE_REF`.
-- **Tag separation**: Push-safe targets (`dev`, `cpp`) have only registry-prefixed tags. Local-load targets (`dev-load`, `cpp-load`) add short local tags for convenience.
+- **Tag separation**: The registry target (`dev`) pushes with CI-managed tags (SHA/latest/PR, from `docker-metadata-action`). The local-load variant (`dev-load`) inherits `dev` but outputs `type=docker` to load the image locally.
 - **Cache refs**: Must use `${IMAGE_REF}:buildcache` pattern, matching the push destination org.
 - **Attestations**: All targets must include `type=provenance,mode=min` and `type=sbom`.
 

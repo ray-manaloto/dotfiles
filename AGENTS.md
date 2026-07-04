@@ -41,7 +41,7 @@ the official `@devcontainers/cli` (pinned in `mise.toml`).
 | `hk.pkl` | Project git hook config; imports `hk-common.pkl`; enforces `no_lint_skip`, `no_mcp_registration`, `require_pipefail`, `claude_md_import_stub`, `claude_agents_md_pairs` |
 | `hk-common.pkl` | Shared step definitions (hygiene, safety, security, typos) reused by `hk.pkl` and `hk-image.pkl` |
 | `hk-image.pkl` | Image-only hook config for devcontainer validation |
-| `docker-bake.hcl` | BuildKit bake config (`dev`, `cpp`, `dev-load`, `cpp-load` targets); `IMAGE_REF` consolidates registry+image |
+| `docker-bake.hcl` | BuildKit bake config (`dev`, `dev-load` build targets + `base`/`p2996-cache` CI stages); `IMAGE_REF` consolidates registry+image |
 | `renovate.json` | Renovate dependency update config |
 | `AGENTS.md` | Agent-agnostic project instructions (this file) |
 | `CLAUDE.md` | Thin `@AGENTS.md` import stub for Claude Code |

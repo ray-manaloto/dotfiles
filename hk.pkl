@@ -197,6 +197,28 @@ hooks {
         glob = List("**/mise.toml")
       }
 
+      // --- Renovate config validation ---
+      //     `renovate-config-validator` (from npm:renovate in mise.toml) is the
+      //     official schema + migration validator. `--strict` fails on any
+      //     warning/error OR a needed config migration (e.g. a deprecated
+      //     `regex` manager name that must become `custom.regex`). `--no-global`
+      //     validates renovate.json AS A REPO CONFIG — without it the validator
+      //     treats a named file as GLOBAL self-hosted config and applies the
+      //     wrong schema. Network-safe: the validator does NOT fetch remote
+      //     `extends` presets (verified: a nonexistent preset still passes, run
+      //     is ~0.25s), so unlike pinact there's no GitHub rate-limit risk.
+      //
+      //     NOTE: this is COMPLEMENTARY to — not a replacement for — the
+      //     `ci.regex-managers-enabled` and `ci.renovate-extends-jdx-preset`
+      //     contracts in suites.toml. Empirically the validator passes when
+      //     `custom.regex` is dropped from enabledManagers (the 3 customManagers
+      //     silently go dead) AND when the jdx preset is removed; those two
+      //     repo-specific semantics are guarded only by the suites.toml tokens.
+      ["renovate_config_validate"] {
+        glob = List("renovate.json")
+        check = "renovate-config-validator --strict --no-global renovate.json"
+      }
+
       // --- Agent documentation ---
       ["agnix"] {
         check = "agnix ."
