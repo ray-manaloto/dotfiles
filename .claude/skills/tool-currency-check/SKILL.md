@@ -70,7 +70,7 @@ out-of-date pins AND custom code a tool now does natively, in one pass.
 
 5. **Emit a retire/bump report.** One table:
 
-   ```
+   ```text
    | tool/code | pinned | latest | native-now? | action        |
    |-----------|--------|--------|-------------|---------------|
    | hk        | 1.44.2 | 1.49.0 | n/a         | bump (3 pkl + mise + lock) |
