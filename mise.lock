@@ -721,6 +721,10 @@ backend = "npm:oh-my-claude-sisyphus"
 version = "0.13.1"
 backend = "npm:portless"
 
+[[tools."npm:renovate"]]
+version = "43.251.3"
+backend = "npm:renovate"
+
 [[tools."npm:skills"]]
 version = "1.5.9"
 backend = "npm:skills"
