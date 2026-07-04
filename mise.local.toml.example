@@ -1,18 +1,28 @@
 # mise.local.toml.example — per-clone override surface for the devcontainer tasks.
 #
-# Copy to mise.local.toml (gitignored) and edit. mise merges *.local.toml
-# on top of mise.toml, so any key here shadows the matching key in mise.toml.
+# Copy to mise.local.toml (gitignored) and edit. Override via a top-level
+# `[env]` block: mise MERGES `[env]` across configs (more-specific wins), and
+# the devcontainer tasks read these vars as templated defaults
+# (`{{ env.VAR | default(value='...') }}`), so a value set here overrides the
+# task default WITHOUT touching the task body.
 #
-# Primary overrides:
+# WARNING: do NOT override by redefining a task (`[tasks.up]`,
+# `[tasks.dev-rebuild]`, …). A `[tasks.<name>]` block in mise.local.toml
+# REPLACES the whole task — it strips the task's `run` body, so `mise run up`
+# silently becomes a no-op. mise task tables do NOT deep-merge (verified on
+# mise 2026.7.0). Use `[env]` only. See feedback_mise_local_toml_replaces_task.
+#
+# Overridable vars (consumed by the up / dev-rebuild / verify-* tasks):
 #
 #   - DEVCONTAINER_SSH_PORT — host-side port for the inbound ssh shell
-#     (Requirement R1). Default 4444. Bump on port collision; volume
-#     names do NOT include the port (C10/C11/C12) so you won't lose
-#     mise-user/cargo-user/rustup-user installs when recovering.
-#   - BASE_IMAGE — pin to a specific SHA tag for reproducible rebuilds.
+#     (Requirement R1). Default 4444. Bump on port collision; volume names do
+#     NOT include the port (C10/C11/C12), so you keep your home volume when
+#     recovering.
+#   - BASE_IMAGE — pin to a specific tag/SHA for reproducible rebuilds.
+#     Default ghcr.io/ray-manaloto/dotfiles-devcontainer:dev.
 #
 # DO NOT check in mise.local.toml; it is gitignored by design.
 
-[tasks.up]
-env = { DEVCONTAINER_SSH_PORT = "4444" }
-# env = { DEVCONTAINER_SSH_PORT = "4444", BASE_IMAGE = "ghcr.io/ray-manaloto/dotfiles-devcontainer:<sha>" }
+[env]
+DEVCONTAINER_SSH_PORT = "4444"
+# BASE_IMAGE = "ghcr.io/ray-manaloto/dotfiles-devcontainer:<sha>"

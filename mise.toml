@@ -169,7 +169,20 @@ description = "Bring the devcontainer up via the official @devcontainers/cli (Ma
 # pull` here — it bypasses the devcontainer-cli lifecycle (no
 # initializeCommand etc.) and recreates the silent-failure surface
 # from PR #86. To force-refresh, use `mise run dev-rebuild`.
-env = { BASE_IMAGE = "ghcr.io/ray-manaloto/dotfiles-devcontainer:dev", DOCKER_DEFAULT_PLATFORM = "linux/amd64/v2", DEVCONTAINER_SSH_PORT = "4444", DOPPLER_PROJECT = "dotfiles", DOPPLER_CONFIG = "dev" }
+#
+# BASE_IMAGE + DEVCONTAINER_SSH_PORT are templated `{{ env.VAR |
+# default(value='...') }}` so a per-clone gitignored mise.local.toml
+# `[env]` (or a shell env var) overrides them WITHOUT redefining the
+# task. A bare `[tasks.up]` in mise.local.toml REPLACES the whole task and
+# strips this `run` body (see mise.local.toml.example and
+# feedback_mise_local_toml_replaces_task) — templating is how the
+# documented override actually works. The Tera `env.VAR` variable (NOT the
+# documented `get_env()` function) is required: `get_env()` reads only the
+# ambient process env and is blind to mise's own merged `[env]` layer, so
+# it would silently ignore a mise.local.toml `[env]` override. The default
+# keeps these TASK-scoped (no global leak of BASE_IMAGE / the amd64
+# platform into unrelated subprocesses) unless the user opts in.
+env = { BASE_IMAGE = "{{ env.BASE_IMAGE | default(value='ghcr.io/ray-manaloto/dotfiles-devcontainer:dev') }}", DOCKER_DEFAULT_PLATFORM = "linux/amd64/v2", DEVCONTAINER_SSH_PORT = "{{ env.DEVCONTAINER_SSH_PORT | default(value='4444') }}", DOPPLER_PROJECT = "dotfiles", DOPPLER_CONFIG = "dev" }
 run = '''
 set -euo pipefail
 # v6 collision guard: compute an 8-char hash of $PWD so sibling clones
@@ -194,7 +207,8 @@ description = "Force a full rebuild + re-pull of :dev (lifecycle hooks fire)"
 # layer if the registry has a new digest), and `--build-no-cache` rebuilds
 # the host-user overlay without cached layers. Lifecycle hooks
 # (initializeCommand → onCreateCommand → postCreateCommand) all fire.
-env = { BASE_IMAGE = "ghcr.io/ray-manaloto/dotfiles-devcontainer:dev", DOCKER_DEFAULT_PLATFORM = "linux/amd64/v2", DEVCONTAINER_SSH_PORT = "4444", DOPPLER_PROJECT = "dotfiles", DOPPLER_CONFIG = "dev" }
+# BASE_IMAGE + DEVCONTAINER_SSH_PORT templated for per-clone override — see the up task.
+env = { BASE_IMAGE = "{{ env.BASE_IMAGE | default(value='ghcr.io/ray-manaloto/dotfiles-devcontainer:dev') }}", DOCKER_DEFAULT_PLATFORM = "linux/amd64/v2", DEVCONTAINER_SSH_PORT = "{{ env.DEVCONTAINER_SSH_PORT | default(value='4444') }}", DOPPLER_PROJECT = "dotfiles", DOPPLER_CONFIG = "dev" }
 run = '''
 set -euo pipefail
 DEVCONTAINER_WORKSPACE_HASH="$(scripts/workspace-hash.sh)"
@@ -209,7 +223,7 @@ description = "Spot-check cookbook paths in :dev (cargo/rustup cookbook layout +
 # NOT root mise.toml. Root mise.toml tools (hk, pkl, the 5 markdown
 # linters, etc.) live on the HOST, not in the image. Keep assertions here
 # scoped to what mise-system.toml actually provides.
-env = { BASE_IMAGE = "ghcr.io/ray-manaloto/dotfiles-devcontainer:dev", DOCKER_DEFAULT_PLATFORM = "linux/amd64/v2" }
+env = { BASE_IMAGE = "{{ env.BASE_IMAGE | default(value='ghcr.io/ray-manaloto/dotfiles-devcontainer:dev') }}", DOCKER_DEFAULT_PLATFORM = "linux/amd64/v2" }
 run = '''
 docker run --rm "$BASE_IMAGE" bash -lc '
   set -euo pipefail
@@ -421,7 +435,7 @@ description = "R1: ssh ${USER}@localhost -p ${DEVCONTAINER_SSH_PORT} succeeds fr
 # container. StrictHostKeyChecking=accept-new + UserKnownHostsFile=/dev/
 # null so we don't pollute the host's known_hosts with the container's
 # ephemeral host keys.
-env = { DEVCONTAINER_SSH_PORT = "4444" }
+env = { DEVCONTAINER_SSH_PORT = "{{ env.DEVCONTAINER_SSH_PORT | default(value='4444') }}" }
 run = '''
 set -euo pipefail
 port="${DEVCONTAINER_SSH_PORT}"
