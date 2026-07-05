@@ -20,7 +20,7 @@ This project uses a multi-stage Dockerfile with BuildKit features:
 - **Variable naming**: HCL variables can be overridden by same-named environment variables. Never use generic names like `REGISTRY` that CI workflows might set. Current convention: `DEFAULT_REGISTRY`, `IMAGE_REF`.
 - **Tag separation**: The registry target (`dev`) pushes with CI-managed tags (SHA/latest/PR, from `docker-metadata-action`). The local-load variant (`dev-load`) inherits `dev` but outputs `type=docker` to load the image locally.
 - **Cache refs**: `base`/`p2996-cache` use registry-tag probing (`:base-<hash16>`/`:p2996-<hash16>`) as the durable cache — no `:buildcache` refs and no gha cache on those targets; only `dev` keeps gha cache.
-- **Attestations**: All targets must include `type=provenance,mode=min` and `type=sbom`.
+- **Attestations**: All targets must include `type=provenance,mode=max` and `type=sbom` (epic #160 T7: dev bumps min→max; base/p2996-cache gain attest blocks in the same PR).
 
 ## CI Integration (bake-action v7)
 
