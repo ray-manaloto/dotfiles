@@ -82,7 +82,7 @@ speed: a green result on a stale base is worse than a slow-but-honest one.
 - Read a **file-based `rc`** or the **API `conclusion` field**, never a
   piped `… | tail` (bash returns tail's exit 0, masking upstream
   failure) and never a background-task "completed" notification's exit
-  code. See `pipe-kills-exit-code.md`, and issue #142.
+  code. See memory `feedback_pipe_kills_exit_code`, and issue #142.
 - `gh run watch --exit-status` has reported 0 prematurely — cross-verify
   with `gh run view <id> --json conclusion --jq .conclusion`. See
   `gh-cli-watch.md` and `feedback_gh_run_watch`.
@@ -107,7 +107,7 @@ confirming the delegate's checks actually passed).
 
 - `zero-skip-policy.md` — no red check is ever dismissed.
 - `long-running-command-hangs.md` — bound `mise run lint`; never wait blind.
-- `pipe-kills-exit-code.md` context in `feedback_pipe_kills_exit_code` — read the rc, not a piped tail.
+- Memory `feedback_pipe_kills_exit_code` — read the rc, not a piped tail.
 - `gh-cli-watch.md` — use `--watch`; cross-verify `gh run watch`.
 - `do-not.md` — project invariants that never bend regardless of green checks.
 - CLAUDE.md → `AGENTS.md` "Validate before committing".

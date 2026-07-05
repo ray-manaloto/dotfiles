@@ -134,8 +134,8 @@ locally before pushing Dockerfile changes.
 - **OMC directory conventions**: Use standard `.omc/` paths, no ad-hoc
   directories. See `.claude/rules/omc-directory-conventions.md`.
 - **Zero-bash logic**: Non-trivial logic (env detection, tool config,
-  validation) lives in `python/`. Bash is restricted to Stage 0
-  bootstrap (`install.sh`).
+  validation) lives in `python/`. Bash is restricted to thin check/smoke
+  wrappers in `scripts/` (the old `install.sh` bootstrap was retired).
 
 ### Validate before committing
 

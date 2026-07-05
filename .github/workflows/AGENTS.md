@@ -78,7 +78,7 @@ Push-to-main path (after a PR merge):
 - **Build chain is path-gated.** A `changes` job (dorny/paths-filter,
   `list-files: json`) matches image/test inputs (`.devcontainer/**`,
   `docker-bake.hcl`, `hk-common.pkl`, `hk-image.pkl`, `python/**`,
-  `.dive-ci`, `install.sh`, `ci.yml`); `decide` drops markdown-only matches
+  `.dive-ci`, `ci.yml`); `decide` drops markdown-only matches
   via `jq` (`!**/*.md` can't — `**/*.md` skips dot-dirs). So docs, root-mise,
   hk.pkl, home PRs run lint+contract-preflight only; schedule +
   workflow_dispatch always build.
