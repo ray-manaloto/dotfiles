@@ -281,15 +281,20 @@ FROM ${P2996_SOURCE} AS clang-builder
 # is built as a thin pull + COPY, not a rebuild from scratch.
 FROM ${DEVCONTAINER_BASE_REF} AS devcontainer
 
-# GCC-16 with P2996 reflection (precompiled .deb from jwakely trunk snapshot,
-# post-reflection-merge commit 4b0e94b 2026-01-15).
-# Installs to /opt/gcc-latest/bin. Rolling latest — no pinned hash.
-# kayari.org ships a single rolling .deb tracking Ubuntu trunk; compatibility
-# with the current base image is empirical. If `dpkg -i` fails, build from
-# source (see cpp-playground Dockerfile gcc stage for the pattern).
-RUN curl -fLOSs https://kayari.org/gcc-latest/gcc-latest.deb && \
-    dpkg -i gcc-latest.deb && \
-    rm -f gcc-latest.deb && \
+# GCC-17 with P2996 reflection (precompiled .deb from jwakely trunk snapshot).
+# Installs to /opt/gcc-latest/bin. kayari.org ships a rolling .deb tracking
+# Ubuntu trunk; the rolling `gcc-latest.deb` 302-redirects to a dated,
+# immutable filename (`gcc-latest_<ver>-<date>git<sha>.deb`). We pin that
+# dated URL as the reproducibility handle — upstream publishes NO checksum or
+# signature file (all 404), so the immutable dated filename IS the pin.
+# Renovate bumps it via the `custom.gcc-latest` HTML datasource on the
+# jwakely.github.io index (see renovate.json). Compatibility with the current
+# base image is empirical; if `dpkg -i` fails, build from source.
+# renovate: datasource=custom.gcc-latest depName=gcc-latest versioning=loose
+ARG GCC_LATEST_DEB=gcc-latest_17.0.0-20260621git4073a7927b16.deb
+RUN curl -fLOSs "https://kayari.org/gcc-latest/${GCC_LATEST_DEB}" && \
+    dpkg -i "${GCC_LATEST_DEB}" && \
+    rm -f "${GCC_LATEST_DEB}" && \
     test -x /opt/gcc-latest/bin/g++ || { echo "ERROR: gcc-latest binary missing after dpkg install"; exit 1; }
 
 # clang-p2996 (Bloomberg fork, built from source in clang-builder stage)
