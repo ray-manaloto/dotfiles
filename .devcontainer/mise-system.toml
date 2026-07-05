@@ -22,10 +22,10 @@ cargo-binstall = "latest"
 # pixi, pinact, and the linters) come from .config/mise/conf.d/shared.toml,
 # COPYd to /usr/local/share/mise/conf.d/ and merged into this system config —
 # exact-pinned so host and image never drift. See epic #160 T5.
-# #154: hk-image.pkl runs the gitleaks + editorconfig-checker builtins; gitleaks
-# is now provided by the shared fragment, editorconfig-checker stays here as an
-# image-only tool (removed in T6 — host has its own copy in root mise.toml).
-editorconfig-checker = "latest"
+# #154: hk-image.pkl's security group runs gitleaks (now provided by the shared
+# fragment). It has NO editorconfig step — the editorconfig_checker builtin is
+# wired only in the HOST hk.pkl — so editorconfig-checker was dead weight in the
+# image and is removed here (#160 T6). Nothing else in the image invokes `ec`.
 "npm:ajv-cli" = "latest"
 # CLI utilities
 fzf = "latest"
