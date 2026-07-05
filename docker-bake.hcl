@@ -79,8 +79,12 @@ target "dev" {
   cache-to = [
     "type=gha,scope=dotfiles-dev,mode=max",
   ]
+  # mode=max records the full build graph (materials, args, steps) so the
+  # published provenance can answer "what exactly went into this image"
+  # (#160 T7). All three published targets attest identically — see base /
+  # p2996-cache below.
   attest = [
-    "type=provenance,mode=min",
+    "type=provenance,mode=max",
     "type=sbom",
   ]
 }
@@ -107,6 +111,12 @@ target "base" {
   args = {
     BASE_IMAGE = BASE_IMAGE
   }
+  # Attestations on ALL published targets (#160 T7): the base cache image
+  # gets the same provenance/SBOM guarantees as the dev image it feeds.
+  attest = [
+    "type=provenance,mode=max",
+    "type=sbom",
+  ]
 }
 
 # Content-addressed cache for the clang-p2996 build artifact.
@@ -127,6 +137,13 @@ target "p2996-cache" {
     CLANG_P2996_REF       = CLANG_P2996_REF
     DEVCONTAINER_BASE_REF = "devcontainer-base"
   }
+  # Attestations on ALL published targets (#160 T7). Provenance on the
+  # p2996 artifact directly supports T11's "provenance materials contain
+  # the p2996 digest" check.
+  attest = [
+    "type=provenance,mode=max",
+    "type=sbom",
+  ]
 }
 
 # Local-load variant (outputs to docker instead of registry)

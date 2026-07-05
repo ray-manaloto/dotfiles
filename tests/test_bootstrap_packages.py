@@ -9,10 +9,42 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from dotfiles_setup.bootstrap_packages import apt_packages_from_bootstrap
+import json
+
+from dotfiles_setup.bootstrap_packages import (
+    apt_packages_from_bootstrap,
+    gap_report_failures,
+)
 
 _REPO_ROOT = Path(__file__).parent.parent
 _MISE_SYSTEM_TOML = _REPO_ROOT / ".devcontainer" / "mise-system.toml"
+
+
+def _toml_declaring(tmp_path: Path, *names: str) -> Path:
+    toml = tmp_path / "mise-system.toml"
+    lines = [f'"apt:{name}" = "latest"' for name in names]
+    toml.write_text("[bootstrap.packages]\n" + "\n".join(lines) + "\n")
+    return toml
+
+
+def _status_json(*entries: tuple[str, str]) -> str:
+    return json.dumps(
+        {
+            "apt": {
+                "available": True,
+                "packages": [
+                    {
+                        "package": name,
+                        "requested_version": "latest",
+                        "state": state,
+                        "installed_version": "1.0",
+                    }
+                    for name, state in entries
+                ],
+            }
+        }
+    )
+
 
 # Packages whose absence breaks the build or a documented invariant:
 # curl/ca-certificates must stay declared even though the Dockerfile seed
@@ -34,6 +66,45 @@ def test_apt_packages_from_bootstrap_strips_prefix(tmp_path: Path) -> None:
         '"brew:jq" = "latest"\n'
     )
     assert apt_packages_from_bootstrap(toml) == ["curl", "zsh"]
+
+
+def test_gap_report_clean(tmp_path: Path) -> None:
+    toml = _toml_declaring(tmp_path, "curl", "zsh")
+    report = _status_json(("curl", "installed"), ("zsh", "installed"))
+    assert gap_report_failures(report, toml) == []
+
+
+def test_gap_report_flags_missing_and_mismatch(tmp_path: Path) -> None:
+    toml = _toml_declaring(tmp_path, "curl", "zsh")
+    report = _status_json(("curl", "missing"), ("zsh", "version_mismatch"))
+    failures = gap_report_failures(report, toml)
+    assert any("curl: missing" in failure for failure in failures)
+    assert any("zsh: version_mismatch" in failure for failure in failures)
+
+
+def test_gap_report_flags_unavailable_manager(tmp_path: Path) -> None:
+    """`status --missing` does NOT exit 1 on an unavailable manager (it emits
+    state "skipped") — the gap report must catch it instead."""
+    toml = _toml_declaring(tmp_path, "curl")
+    report = json.dumps({"apt": {"available": False, "reason": "apt-get not found"}})
+    failures = gap_report_failures(report, toml)
+    assert any("unexpectedly unavailable" in failure for failure in failures)
+
+
+def test_gap_report_flags_set_drift_both_directions(tmp_path: Path) -> None:
+    """An empty/partial report (e.g. config discovery failed in the image)
+    must fail loudly, as must undeclared extras."""
+    toml = _toml_declaring(tmp_path, "curl", "zsh")
+    report = _status_json(("curl", "installed"), ("jq", "installed"))
+    failures = gap_report_failures(report, toml)
+    assert any("zsh: declared" in failure for failure in failures)
+    assert any("jq: reported" in failure for failure in failures)
+
+
+def test_gap_report_flags_absent_apt_manager(tmp_path: Path) -> None:
+    toml = _toml_declaring(tmp_path, "curl")
+    failures = gap_report_failures(json.dumps({"brew": {"available": True}}), toml)
+    assert failures == ["no 'apt' manager in status report (managers: ['brew'])"]
 
 
 def test_bootstrap_packages_declares_load_bearing_set() -> None:

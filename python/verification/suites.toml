@@ -390,12 +390,25 @@ tokens = ["type=sbom"]
 
 [[suite]]
 name = "ci.provenance-attestation"
-description = "Provenance attestation required in bake config"
+description = "Provenance attestation at mode=max required in bake config (#160 T7 — all published targets attest; mode=min drops the materials/steps detail T11's checks rely on)"
 category = "ci"
 check_type = "static"
 handler = "require_tokens"
 paths = ["docker-bake.hcl"]
-tokens = ["type=provenance"]
+tokens = ["type=provenance,mode=max"]
+
+[[suite]]
+name = "ci.bootstrap-gap-report-wired"
+description = "smoke-test must capture `mise bootstrap packages status --json` from the published image, assert it via dotfiles-setup bootstrap-gap-report, and upload the raw JSON as an artifact (#160 T7). This is the CI half of the T4 apt switch: the build-time status gate catches missing packages; this catches unavailable-manager and set-drift conditions the exit code cannot see."
+category = "ci"
+check_type = "static"
+handler = "require_tokens"
+paths = [".github/workflows/build-publish.yml"]
+tokens = [
+  "mise bootstrap packages status --json",
+  "dotfiles-setup bootstrap-gap-report",
+  "bootstrap-gap-report.json",
+]
 
 [[suite]]
 name = "ci.no-mise-data-in-cache-map"

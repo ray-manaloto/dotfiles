@@ -59,9 +59,9 @@ behavior unchanged):
    on a p2996 hit `clang-builder` is `FROM <cache_ref>`, skipping the
    multi-hour compile. Pushes `:pr-NNN`/`:sha` (PR) or `:dev`/`:latest` (nightly).
 7. **smoke-test** — pulls `:sha-<github.sha>`, runs the PR-blocking gates
-   `image smoke` + Dive (`.dive-ci`); benchmark + Trivy are async in
-   `image-analysis.yml`. On success **dev-tag** stamps the `:dev-<hash>`
-   validated marker — the smoked image is retagged `:dev`/`:latest`.
+   `image smoke` + Dive + the T7 bootstrap gap report; benchmark + Trivy
+   are async in `image-analysis.yml`. On success **dev-tag** stamps the
+   `:dev-<hash>` marker — the smoked image is retagged `:dev`/`:latest`.
 
 Push-to-main path (after a PR merge):
 

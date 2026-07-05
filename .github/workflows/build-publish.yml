@@ -533,6 +533,28 @@ jobs:
             echo "image_ref=${image_ref}"
             echo "digest=${digest}"
           } >> "$GITHUB_OUTPUT"
+      - name: Write hash report (#160 T7)
+        # The content-addressed lineage of this build as a downloadable
+        # artifact: which :base-/:p2996- cache refs fed the dev image and
+        # what digest came out. Complements the per-job step summaries.
+        env:
+          BASE_REF: ${{ needs.base-prep.outputs.cache_ref }}
+          P2996_REF: ${{ needs.p2996-prep.outputs.cache_ref }}
+          IMAGE_REF: ${{ steps.out.outputs.image_ref }}
+          DIGEST: ${{ steps.out.outputs.digest }}
+        run: |
+          set -euo pipefail
+          {
+            echo "base_cache_ref=${BASE_REF}"
+            echo "p2996_cache_ref=${P2996_REF}"
+            echo "image_ref=${IMAGE_REF}"
+            echo "digest=${DIGEST}"
+          } > /tmp/build-hash-report.txt
+      - name: Upload hash report artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: build-hash-report
+          path: /tmp/build-hash-report.txt
   # ============================================================
   # Smoke test: validate the freshly-pushed image (PR or main).
   # PRs validate the exact :sha-<sha> that promote will retag as
@@ -586,6 +608,29 @@ jobs:
         run: |
           uv run --project python dotfiles-setup image smoke \
             --image-ref ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.smoke-tag.outputs.tag }}
+      - name: Bootstrap packages gap report (#160 T7)
+        # Capture `status --json` from the published image and assert the
+        # declared [bootstrap.packages] set is fully installed. The Python
+        # check fails on `missing`/`version_mismatch` AND on an unexpectedly
+        # unavailable apt manager or set drift — conditions the build-time
+        # `status --missing` exit code cannot see (unavailable managers emit
+        # state "skipped"). Plain `status --json` exits 0 even with gaps, so
+        # the JSON is always captured for the artifact; the assert gates.
+        env:
+          IMAGE_REF: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.smoke-tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          docker run --rm "${IMAGE_REF}" \
+            mise bootstrap packages status --json > /tmp/bootstrap-gap-report.json
+          uv run --project python dotfiles-setup bootstrap-gap-report \
+            --status-json /tmp/bootstrap-gap-report.json
+      - name: Upload bootstrap gap report artifact
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bootstrap-gap-report
+          path: /tmp/bootstrap-gap-report.json
+          if-no-files-found: ignore
       - name: Analyze image layer efficiency (Dive)
         # Dive --ci enforces .dive-ci thresholds (lowestEfficiency,
         # highestWastedBytes). Pass/fail gate; replaces the dead-letter

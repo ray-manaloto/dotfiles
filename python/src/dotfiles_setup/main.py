@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from dotfiles_setup.ai import AIOrchestrator
 from dotfiles_setup.audit import DevEnvironmentAuditor, ToolManager
+from dotfiles_setup.bootstrap_packages import gap_report_failures
 from dotfiles_setup.config import DotfilesConfig
 from dotfiles_setup.container import verify_latest_main
 from dotfiles_setup.docker import DevContainerManager
@@ -236,6 +237,16 @@ def setup_parser() -> argparse.ArgumentParser:
         help="Print the content-addressed hash of the final dev-image inputs "
         "(base + p2996 hashes + whole Dockerfile + dev bake target)",
     )
+    gap_parser = subparsers.add_parser(
+        "bootstrap-gap-report",
+        help="Assert a `mise bootstrap packages status --json` report shows "
+        "the declared [bootstrap.packages] set fully installed (#160 T7)",
+    )
+    gap_parser.add_argument(
+        "--status-json",
+        required=True,
+        help="Path to the captured status --json output",
+    )
     subparsers.add_parser(
         "p2996-refresh",
         help="Bump CLANG_P2996_REF in docker-bake.hcl to the latest "
@@ -376,6 +387,24 @@ def handle_image(args: argparse.Namespace) -> None:
         sys.exit(image_main(cmd))
 
 
+def handle_bootstrap_gap_report(args: argparse.Namespace, project_root: Path) -> None:
+    """Handle the bootstrap-gap-report command (#160 T7).
+
+    Args:
+        args: The parsed arguments (carries --status-json).
+        project_root: The project root path.
+    """
+    failures = gap_report_failures(
+        Path(args.status_json).read_text(),
+        project_root / ".devcontainer" / "mise-system.toml",
+    )
+    if failures:
+        for failure in failures:
+            logger.error("gap-report FAIL: %s", failure)
+        sys.exit(1)
+    logger.info("gap-report OK: declared [bootstrap.packages] set fully installed")
+
+
 def handle_ghcr_check(args: argparse.Namespace, project_root: Path) -> None:
     """Handle GHCR prerequisite validation."""
     result = validate_ghcr_prereqs(
@@ -471,6 +500,7 @@ def _build_command_handlers(
         "verify": lambda: handle_verify(args),
         "image": lambda: handle_image(args),
         "ghcr-check": lambda: handle_ghcr_check(args, project_root),
+        "bootstrap-gap-report": lambda: handle_bootstrap_gap_report(args, project_root),
         "sync-versions": lambda: handle_sync_versions(project_root),
         "p2996-refresh": _p2996_refresh,
         "lint": _lint,
