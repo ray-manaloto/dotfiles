@@ -13,10 +13,11 @@ post-failure reporting.
 | File | Purpose |
 |------|---------|
 | `ci.yml` | Thin caller (Phase B, #118): lint → contract-preflight → `changes` (path-gate) → `build-publish` (the reusable build chain, gated on `changes.build` + push-to-main exemption); OR lint → promote (push to main) |
-| `build-publish.yml` | Reusable (`on: workflow_call`) build chain: base-prep → p2996-prep → dev-prep → build → smoke-test → dev-tag (dev-prep/dev-tag = 3rd content-hash tier, #122). Inputs `{tag_strategy, publish, target, ref, p2996_ref, platform*}` (`p2996_ref` #120; `*` reserved); outputs `{image_ref, digest}`. Caller's `github` context → sha/pr tags resolve identically |
-| `ci-failure-report.yml` | Post-failure diagnostics / issue filing |
+| `build-publish.yml` | Reusable (`on: workflow_call`) build chain: base-prep → p2996-prep → dev-prep → build → smoke-test → dev-tag (dev-prep/dev-tag = 3rd content-hash tier, #122). Inputs `{tag_strategy, publish, target, ref, p2996_ref, platform*}` (#120; `*` reserved); outputs `{image_ref, digest}`. Caller's `github` context → sha/pr tags resolve identically |
+| `ci-failure-report.yml` | Post-failure diagnostics |
 | `image-analysis.yml` | Async (`workflow_run` on CI success): benchmark metrics + Trivy CVE scan, off the PR critical path |
-| `refresh.yml` | Daily cron (00:00), one `lock-refresh` job (#160 T8): regenerates `mise.lock` + `.devcontainer/mise-system.lock` (pinned image mise, linux-x64) + `devcontainer-lock.json` via the `lock-refresh` composite, PRs via `open-refresh-pr` (App token #119), **auto-merges**. `CLANG_P2996_REF` bumps moved to Renovate's git-refs manager. |
+| `refresh.yml` | Daily cron (00:00), one `lock-refresh` job (#160 T8): regenerates all four lockfiles via the `lock-refresh` composite (pinned image mise, linux-x64), PRs via `open-refresh-pr` (App token #119), **auto-merges**. `CLANG_P2996_REF` bumps: Renovate git-refs. |
+| `ghcr-cleanup.yml` | Weekly hash-family retention plan (#160 T12.5); dry-run ALWAYS — delete only via dispatch `delete=true` after plan review. Planner: `dotfiles_setup.ghcr_cleanup` |
 | `dispatch-build.yml` | Thin `repository_dispatch` caller (Phase D, #120, type `build-p2996`): calls `build-publish.yml` with `client_payload.{p2996_ref,ref?}` + `tag_strategy: dispatch` for on-demand exact-upstream-SHA builds. Never moves `:dev`/`:latest`; warms `:p2996-<hash>`/`:dev-<hash>`. See **Phase D** below. |
 
 ## Composite actions (`.github/actions/`)

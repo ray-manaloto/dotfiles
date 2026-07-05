@@ -22,7 +22,10 @@ if [[ -d $HOME/.krew ]] ; then
 fi
 
 # edit PATH
-{{ if eq .chezmoi.osRelease.id "bazzite" -}}
+{{/* osRelease only exists on Linux — guard the lookup so the template
+     renders on darwin too (render gate, #160 T12.5); previously this was
+     an unguarded access that failed any darwin-side render. */ -}}
+{{ if and (eq .chezmoi.os "linux") (eq (.chezmoi.osRelease.id | default "") "bazzite") -}}
 export PATH=$HOME/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:$PATH
 {{- end}}
 

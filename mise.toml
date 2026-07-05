@@ -13,7 +13,7 @@ lima = "2.1.2"
 "github:agent-sh/agnix" = "0.36.2"  # prebuilt release binary; npm: backend needs a postinstall download that bun skips (binary-not-found). Release tag is v0.36.2.
 "npm:agents-lint" = "0.5.0"
 "pipx:mcp2cli" = "3.2.0"
-"npm:renovate" = "43.251.3"         # provides `renovate-config-validator` for the hk `renovate_config_validate` step (CI-local parity). The validator bin ships ONLY inside the full renovate package (~354M); no validator-only package exists. Host-only (not in image).
+"npm:renovate" = "43.252.1"         # provides `renovate-config-validator` for the hk `renovate_config_validate` step (CI-local parity). The validator bin ships ONLY inside the full renovate package (~354M); no validator-only package exists. Host-only (not in image).
 biome = "2.4.16"
 # Markdown + Claude-docs linters. Installed now; hk.pkl integration is
 # scheduled for post-devcontainer-work review (see GH issue tracking
@@ -31,7 +31,7 @@ zizmor = "1.26.1"
 "github:ast-grep/ast-grep" = "0.43.0"
 lefthook = "2.1.9"
 "npm:ctx7" = "0.4.4"
-rtk = "0.37.2"                                                      # held at 0.37.2: github backend for rtk@0.42.0 fails to populate url_api in mise.lock → CI install errors "relative URL without a base". Revisit bump separately.
+rtk = "0.43.0"                                                      # re-probed at #160 T12.5: mise #10703 (2026.7.0) fixed the github-backend url_api lock hold that pinned this at 0.37.2
 "npm:skills" = "1.5.9"
 "npm:agent-browser" = "0.27.0"
 "npm:portless" = "0.13.1"
@@ -47,6 +47,12 @@ opencode = "1.15.13"
 experimental = true
 auto_install = true
 lockfile = true
+# #160 T12.5 (decision 15): new tool requests get exact-pinned versions on
+# `mise use` instead of fuzzy ranges — pins are the repo's whole versioning
+# model. (task.timings from the decision does not exist as a setting in mise
+# 2026.7.0 — verified via `mise settings ls --all`; env_cache is already the
+# default true, so neither is set here.)
+pin = true
 
 [settings.status]
 show_tools = true
@@ -113,6 +119,12 @@ description = "Run all hk pre-commit checks (≡ `hk run pre-commit --all`)"
 run = "hk run pre-commit --all"
 
 [tasks.lint]
+# #160 T12.5: native outer backstop ABOVE the wrapper's 600s — probe showed
+# mise's task timeout kills the child and fails loud, but it lacks lint.py's
+# hk-log-tail diagnostics, so the wrapper STAYS (decision 15's retire
+# condition was full equivalence; it is not equivalent). This bound only
+# fires if the Python wrapper itself wedges.
+timeout = "700s"
 # Preferred manual/agent entrypoint for the lint gate. Wraps hk in a hard
 # timeout (hk has none of its own) so a hung step self-aborts with the
 # tail of the debug log instead of wedging for hours (see the 7h hang in

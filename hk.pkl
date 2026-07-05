@@ -90,8 +90,12 @@ local allSteps = new Mapping<String, Config.Step> {
     // `# noqa: S310` was discovered in a plugin script that had
     // silently escaped enforcement. See feedback memory
     // `feedback_no_inline_lint_suppressions_ever.md`.
+    // #160 T12.5 (decision 17, BEFORE the ruff/ty bumps): newer
+    // suppression syntaxes added — `ruff:ignore`/`ruff:file-ignore`/
+    // `ruff:disable` and the space-less `ty:ignore` — the old grep only
+    // caught `ty: ignore` with a space.
     check =
-      "! grep -rn --include='*.py' 'noqa\\|type: ignore\\|ty: ignore\\|pylint: disable\\|nosec' python/src/ tests/ plugins/"
+      "! grep -rn --include='*.py' 'noqa\\|type: ignore\\|ty: ignore\\|ty:ignore\\|ruff:ignore\\|ruff:file-ignore\\|ruff:disable\\|pylint: disable\\|nosec' python/src/ tests/ plugins/"
   }
 
   // --- Dockerfile & Bake ---
@@ -210,6 +214,23 @@ local allSteps = new Mapping<String, Config.Step> {
   // --- mise config validation ---
   ["mise"] = (Builtins.mise) {
     glob = List("**/mise.toml")
+  }
+
+  // --- uv lockfile currency (#160 T12.5, decision 19): a pyproject edit
+  //     without `uv lock` leaves uv.lock stale — resolved silently at the
+  //     next `uv run`, which then diverges from what CI installed. ---
+  ["uv_lock_check"] {
+    glob = List("python/pyproject.toml", "python/uv.lock")
+    check = "uv lock --check --project python"
+  }
+
+  // --- chezmoi template render gate (#160 T12.5, decision 19): every
+  //     tracked home/**/*.tmpl must render with the source data — catches
+  //     bad template syntax / undefined data at commit time instead of at
+  //     `chezmoi init --apply` inside the container. ---
+  ["chezmoi_template_render"] {
+    glob = List("home/**/*.tmpl", "home/.chezmoi.toml.tmpl")
+    check = "scripts/check-chezmoi-templates.sh"
   }
 
   // --- Renovate config validation ---

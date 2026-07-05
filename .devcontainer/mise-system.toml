@@ -147,9 +147,16 @@ conda.channel = "conda-forge"
 # all backends (aqua, github, python, core/ruby). Per-backend settings don't
 # cover core backends like ruby. GITHUB_TOKEN not reliably available in
 # buildkit secret mounts; CI passes token but local builds hit rate limits.
+# REVISITED #160 T12.5 (decision 16): per-tool disable now exists upstream
+# and a token-free attestation proxy is proposed (jdx/mise#10127) — flip to
+# per-tool opt-out once the proxy ships; until then the blanket-off stands
+# for the token-availability reason above.
 github_attestations = false
 slsa = false
 python.uv_venv_auto = "source"
+# #160 T12.5 (decision 15): the http timeout moved from the MISE_HTTP_TIMEOUT
+# env var to its native setting.
+http_timeout = "120s"
 
 [settings.status]
 show_tools = true
@@ -169,8 +176,8 @@ LC_ALL = "C.UTF-8"
 MISE_ARCH = "x86_64"
 MISE_OS = "linux"
 CONDA_SUBDIR = "linux-64"
-# Network / install behavior
-MISE_HTTP_TIMEOUT = "120"
+# Network / install behavior (MISE_HTTP_TIMEOUT moved to [settings]
+# http_timeout, #160 T12.5)
 npm_config_update_notifier = "false"
 # Rust: skip PATH check during non-interactive installs
 RUSTUP_INIT_SKIP_PATH_CHECK = "yes"

@@ -18,6 +18,7 @@ from dotfiles_setup.config import DotfilesConfig
 from dotfiles_setup.container import verify_latest_main
 from dotfiles_setup.docker import DevContainerManager
 from dotfiles_setup.ghcr import validate_ghcr_prereqs
+from dotfiles_setup.ghcr_cleanup import plan_cleanup
 from dotfiles_setup.image import ImageCommand
 from dotfiles_setup.image import main as image_main
 from dotfiles_setup.lint import (
@@ -270,6 +271,29 @@ def setup_parser() -> argparse.ArgumentParser:
         help="Bump CLANG_P2996_REF in docker-bake.hcl to the latest "
         "bloomberg/clang-p2996 p2996-branch HEAD (writes only on change)",
     )
+    ghcr_cleanup_parser = subparsers.add_parser(
+        "ghcr-cleanup",
+        help="Plan (default) or execute GHCR retention cleanup for the "
+        "hash-family cache tags (#160 T12.5); reads `gh api` package-"
+        "versions JSON from --versions-json",
+    )
+    ghcr_cleanup_parser.add_argument(
+        "--versions-json",
+        required=True,
+        help="Path to the `gh api --paginate` package versions JSON array",
+    )
+    ghcr_cleanup_parser.add_argument(
+        "--keep-per-family",
+        type=int,
+        default=3,
+        help="Newest-N window kept per hash-tag family (default 3)",
+    )
+    ghcr_cleanup_parser.add_argument(
+        "--emit-delete-ids",
+        action="store_true",
+        help="Print only the deletable version ids (one per line) for the "
+        "workflow's delete loop; default prints the human plan",
+    )
     ghcr_parser = subparsers.add_parser(
         "ghcr-check",
         help="Validate local GHCR publish prerequisites exposed via GitHub CLI",
@@ -437,6 +461,32 @@ def handle_bootstrap_gap_report(args: argparse.Namespace, project_root: Path) ->
     logger.info("gap-report OK: declared [bootstrap.packages] set fully installed")
 
 
+def handle_ghcr_cleanup(args: argparse.Namespace) -> None:
+    """Handle ghcr-cleanup: print the retention plan (never deletes itself).
+
+    Deletion stays in the workflow as an explicit, separately-gated loop
+    over --emit-delete-ids output — this command is read-only by design.
+    """
+    versions = json.loads(Path(args.versions_json).read_text())
+    plan = plan_cleanup(versions, keep_per_family=args.keep_per_family)
+    if args.emit_delete_ids:
+        for version in plan.delete:
+            sys.stdout.write(f"{version['id']}\n")
+        return
+    logger.info(
+        "GHCR cleanup plan: %d deletable, %d kept",
+        len(plan.delete),
+        len(plan.keep_reasons),
+    )
+    for version in plan.delete:
+        tags = version.get("metadata", {}).get("container", {}).get("tags", [])
+        logger.info(
+            "DELETE %s %s %s", version.get("id"), version.get("created_at"), tags
+        )
+    for version_id, reason in plan.keep_reasons.items():
+        logger.info("KEEP   %s — %s", version_id, reason)
+
+
 def handle_ghcr_check(args: argparse.Namespace, project_root: Path) -> None:
     """Handle GHCR prerequisite validation."""
     result = validate_ghcr_prereqs(
@@ -532,6 +582,7 @@ def _build_command_handlers(
         "verify": lambda: handle_verify(args),
         "image": lambda: handle_image(args),
         "ghcr-check": lambda: handle_ghcr_check(args, project_root),
+        "ghcr-cleanup": lambda: handle_ghcr_cleanup(args),
         "bootstrap-gap-report": lambda: handle_bootstrap_gap_report(args, project_root),
         "lock-stage": lambda: handle_lock_stage(args, project_root),
         "lock-collect": lambda: handle_lock_collect(args, project_root),

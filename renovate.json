@@ -1,8 +1,10 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "github>jdx/renovate-config"
+    "github>jdx/renovate-config",
+    "schedule:daily"
   ],
+  "minimumReleaseAge": null,
   "packageRules": [
     {
       "matchPackageNames": ["bats-core"],
@@ -20,9 +22,10 @@
       "platformAutomerge": true
     },
     {
-      "description": "Parse the gcc-latest version out of the jwakely index hrefs (the html datasource yields full URLs as version candidates; the rolling gcc-latest.deb link has no version and is filtered out).",
+      "description": "Parse the gcc-latest version out of the jwakely index hrefs (the html datasource yields full URLs as version candidates; the rolling gcc-latest.deb link has no version and is filtered out). timestamp-optional fixes a real bug (#160 T12.5): the html datasource emits NO releaseTimestamp, and the default minimumReleaseAge behavior holds timestamp-less updates FOREVER.",
       "matchDatasources": ["custom.gcc-latest"],
-      "extractVersion": "gcc-latest_(?<version>[0-9.]+-\\d+git[0-9a-f]+)\\.deb$"
+      "extractVersion": "gcc-latest_(?<version>[0-9.]+-\\d+git[0-9a-f]+)\\.deb$",
+      "minimumReleaseAgeBehaviour": "timestamp-optional"
     }
   ],
   "ignoreDeps": ["CC", "CXX"],

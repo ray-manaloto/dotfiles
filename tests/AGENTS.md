@@ -24,7 +24,7 @@ Docker image smoke outputs.
 | `infra/foundation.bats` | Bats | Bash-level foundation checks (shell script integration) |
 | `infra/runtimes.bats` | Bats | Runtime installation checks (bash) |
 
-Total: **210 pytest tests** (pytest runs all `test_*.py` files) plus Bats
+Total: **218 pytest tests** (pytest runs all `test_*.py` files) plus Bats
 scenarios under `infra/`.
 
 ## Running tests
