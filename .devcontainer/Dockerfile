@@ -74,27 +74,26 @@ ENV MISE_DATA_DIR=/usr/local/share/mise \
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
+# Seed layer: ONLY the minimal apt set the mise installer itself needs
+# (curl + ca-certificates). The full apt package set is declared in
+# mise-system.toml [bootstrap.packages] and installed by
+# `mise bootstrap packages apply` after the config COPY below (#160 T4,
+# wagov-dtt/devcontainer-base pattern — the shadow-verify split is retired).
+# The apt.conf.d drop-in disables Recommends/Suggests for EVERY apt
+# invocation in this image, including the mise-driven apply (mise has no
+# apt-args setting; native apt config replaces the per-command flag).
+# Lists/cache live in BuildKit cache mounts, never in a layer, so no
+# rm -rf cleanup is needed — and the preserved lists let the apply step
+# reuse them across builds.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     export DEBIAN_FRONTEND=noninteractive && \
+    printf 'APT::Install-Recommends "false";\nAPT::Install-Suggests "false";\n' \
+      > /etc/apt/apt.conf.d/99no-install-recommends && \
     sed -i '/^path-exclude=\/usr\/share\/man\/\*$/d' /etc/dpkg/dpkg.cfg.d/excludes && \
     apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
     ca-certificates \
-    curl \
-    gnupg \
-    graphviz \
-    pkg-config \
-    sudo \
-    unzip \
-    zsh \
-    libatomic1 \
-    libbz2-dev \
-    libreadline-dev \
-    libsqlite3-dev \
-    libssl-dev \
-    zlib1g-dev \
-    && rm -rf /var/lib/apt/lists/* /tmp/*
+    curl
 
 # Install mise via the official installer, pinned via MISE_VERSION (mise.run
 # honors it). The pin MUST be a version that reads the committed
@@ -130,6 +129,22 @@ COPY .devcontainer/mise-system.lock /usr/local/share/mise/mise.lock
 # Their versions are captured in mise-system.lock above and installed via
 # `mise install --system --locked`.
 COPY .config/mise/conf.d/shared.toml /usr/local/share/mise/conf.d/shared.toml
+
+# Install the full apt set declared in mise-system.toml [bootstrap.packages]
+# (#160 T4). Runs as root so mise elevates nothing (no sudo in argv); mise
+# sets DEBIAN_FRONTEND=noninteractive itself; --update forces apt-get update
+# against the cache-mounted lists; the experimental gate is satisfied by
+# `experimental = true` in the config COPYd above (trusted via
+# MISE_TRUSTED_CONFIG_PATHS). The `status --json --missing` post-condition
+# is the anti-drift gate: it exits 1 if any declared package is missing or
+# version-mismatched, so a silent apply no-op fails the build loudly
+# (build-time self-check rule). Accepted trade-off: the config COPY above
+# busts this layer on any mise-system.toml edit — mitigated by the cache
+# mounts keeping .deb downloads and lists warm.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    mise bootstrap packages apply --manager apt --yes --update && \
+    mise bootstrap packages status --json --missing
 
 # Pre-install tools globally via mise
 # Known cosmetic warnings during install:

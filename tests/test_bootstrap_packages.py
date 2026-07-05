@@ -1,22 +1,28 @@
-"""Tests for `dotfiles_setup.bootstrap_packages` — the anti-drift guard that
-keeps `[bootstrap.packages]` in sync with the Dockerfile's real apt-get list.
+"""Tests for `dotfiles_setup.bootstrap_packages` — parsing the declarative
+`[bootstrap.packages]` apt set that `mise bootstrap packages apply` installs
+in the image (#160 T4). Build-time drift is caught in the Dockerfile itself
+(`mise bootstrap packages status --json --missing` exits 1); these tests
+guard the parser and the declared set's load-bearing entries.
 """
 
 from __future__ import annotations
 
-import textwrap
 from pathlib import Path
 
-import pytest
-
-from dotfiles_setup.bootstrap_packages import (
-    apt_packages_from_bootstrap,
-    apt_packages_from_dockerfile,
-)
+from dotfiles_setup.bootstrap_packages import apt_packages_from_bootstrap
 
 _REPO_ROOT = Path(__file__).parent.parent
 _MISE_SYSTEM_TOML = _REPO_ROOT / ".devcontainer" / "mise-system.toml"
-_DOCKERFILE = _REPO_ROOT / ".devcontainer" / "Dockerfile"
+
+# Packages whose absence breaks the build or a documented invariant:
+# curl/ca-certificates must stay declared even though the Dockerfile seed
+# layer installs them (the status gate reports the full declarative set);
+# build-essential backs rust/cargo/conda toolchain installs; gnupg backs
+# mise signature verification (build.gnupg-installed contract); sudo/zsh
+# back the devcontainer user experience.
+_LOAD_BEARING_PACKAGES = frozenset(
+    {"build-essential", "ca-certificates", "curl", "gnupg", "sudo", "zsh"}
+)
 
 
 def test_apt_packages_from_bootstrap_strips_prefix(tmp_path: Path) -> None:
@@ -30,38 +36,12 @@ def test_apt_packages_from_bootstrap_strips_prefix(tmp_path: Path) -> None:
     assert apt_packages_from_bootstrap(toml) == ["curl", "zsh"]
 
 
-def test_apt_packages_from_dockerfile_extracts_block(tmp_path: Path) -> None:
-    dockerfile = tmp_path / "Dockerfile"
-    dockerfile.write_text(
-        textwrap.dedent("""\
-        RUN apt-get update && apt-get install -y --no-install-recommends \\
-            build-essential \\
-            curl \\
-            zsh \\
-            && rm -rf /var/lib/apt/lists/*
-        """)
-    )
-    assert apt_packages_from_dockerfile(dockerfile) == [
-        "build-essential",
-        "curl",
-        "zsh",
-    ]
-
-
-def test_apt_packages_from_dockerfile_missing_marker_raises(tmp_path: Path) -> None:
-    dockerfile = tmp_path / "Dockerfile"
-    dockerfile.write_text("FROM ubuntu:26.04\nRUN echo hi\n")
-    with pytest.raises(ValueError, match="apt-get install marker not found"):
-        apt_packages_from_dockerfile(dockerfile)
-
-
-def test_bootstrap_packages_match_dockerfile_apt_list() -> None:
-    """The declarative [bootstrap.packages] apt set MUST equal the Dockerfile's
-    real apt-get install list — neither may drift (#160 T4)."""
-    declared = apt_packages_from_bootstrap(_MISE_SYSTEM_TOML)
-    installed = apt_packages_from_dockerfile(_DOCKERFILE)
-    assert declared == installed, (
-        "drift between [bootstrap.packages] and the Dockerfile apt-get list:\n"
-        f"  only in [bootstrap.packages]: {sorted(set(declared) - set(installed))}\n"
-        f"  only in Dockerfile apt-get:   {sorted(set(installed) - set(declared))}"
+def test_bootstrap_packages_declares_load_bearing_set() -> None:
+    """`[bootstrap.packages]` is the image's ONLY apt package source (#160 T4)
+    — the load-bearing entries must never be silently dropped."""
+    declared = set(apt_packages_from_bootstrap(_MISE_SYSTEM_TOML))
+    missing = _LOAD_BEARING_PACKAGES - declared
+    assert not missing, (
+        f"load-bearing apt packages missing from [bootstrap.packages]: "
+        f"{sorted(missing)}"
     )

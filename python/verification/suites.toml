@@ -167,12 +167,25 @@ tokens = ["ARG BASE_IMAGE"]
 
 [[suite]]
 name = "build.gnupg-installed"
-description = "gnupg must be in apt-get install for mise signature verification"
+description = "gnupg must be in the declarative [bootstrap.packages] apt set (the image's only apt source since #160 T4) for mise signature verification"
+category = "build"
+check_type = "static"
+handler = "require_tokens"
+paths = [".devcontainer/mise-system.toml"]
+tokens = ["\"apt:gnupg\""]
+
+[[suite]]
+name = "build.apt-via-mise-bootstrap"
+description = "The full apt set installs via mise bootstrap packages apply from [bootstrap.packages] (#160 T4, wagov-dtt pattern); the Dockerfile seed layer carries only curl + ca-certificates for the mise installer. Required: the apply invocation, the status --missing anti-drift gate (exits 1 on missing/version-mismatch in the same RUN), and the apt.conf.d drop-in that disables Recommends/Suggests for mise-driven installs (mise has no apt-args flag)."
 category = "build"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/Dockerfile"]
-tokens = ["gnupg"]
+tokens = [
+  "mise bootstrap packages apply --manager apt --yes --update",
+  "mise bootstrap packages status --json --missing",
+  "/etc/apt/apt.conf.d/99no-install-recommends",
+]
 
 [[suite]]
 name = "build.npm-no-update-notifier"

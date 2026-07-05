@@ -19,7 +19,7 @@ Defines the devcontainer image and runtime lifecycle. Two layers:
 | `Dockerfile` | Multi-stage base image (mise bootstrap, cargo/rustup cookbook paths, build-time self-checks); known cosmetic warnings documented in comment block |
 | `Dockerfile.host-user` | Thin overlay that adds the host UID/GID (low-priority Phase 2 work) |
 | `devcontainer.json` | Devcontainer spec (containers.dev) — lifecycle hooks, features, volumes, dynamic naming |
-| `mise-system.toml` | Dedicated Docker system-wide mise config → `/usr/local/share/mise/config.toml`. `[bootstrap.packages]` declares the apt set (shadow verify, #160 T4); the 20 host↔image shared tools come from the repo `.config/mise/conf.d/shared.toml` COPYd to `conf.d/` and merged (#160 T5) |
+| `mise-system.toml` | Dedicated Docker system-wide mise config → `/usr/local/share/mise/config.toml`. `[bootstrap.packages]` declares the apt set installed by `mise bootstrap packages apply` (#160 T4); the 20 host↔image shared tools come from the repo `.config/mise/conf.d/shared.toml` COPYd to `conf.d/` and merged (#160 T5) |
 | `mise-system.lock` + `P2996-CACHE.md` | Native mise lockfile (rattler conda sha256 + version pins, linux-x64) covering the merged config; COPYd to `/usr/local/share/mise/mise.lock`, consumed by `mise install --system --locked`; its digest feeds the base content-hash. Regenerate via the CI `lock-refresh` job (epic #160) |
 
 ## Devcontainer Lifecycle
@@ -142,19 +142,19 @@ preserves all state. New in v6: `~/.cache/uv`, `~/.local/tmp` (TMPDIR,
 | cargo crates | `/usr/local/share/cargo/{bin,registry}` | `~/.cargo/{bin,registry}` | base image PR; runtime `cargo install` |
 | rust toolchains | `/usr/local/share/rustup/toolchains/` | `~/.rustup/toolchains/` | `mise-system.toml` `rust = "..."`; runtime `rustup install` |
 | pipx tools | `/usr/local/share/mise/installs/pipx-*` | shadowed by mise overlay | `"pipx:<name>"` in `mise-system.toml` |
-| apt packages | `/usr/{bin,lib,share}/...` | **none — not persistable** | `Dockerfile` apt list + base image PR |
+| apt packages | `/usr/{bin,lib,share}/...` | **none — not persistable** | `mise-system.toml [bootstrap.packages]` + base image PR |
 
 **Apt packages have no runtime persistence.** Add system packages to
-the base `Dockerfile` apt list and ship via a base-image PR. `sudo apt
-install` at runtime works but is lost on container recreate.
+`mise-system.toml [bootstrap.packages]` and ship via a base-image PR.
+`sudo apt install` at runtime works but is lost on container recreate.
 
 ## Build-time self-checks
 
 Tools that exit 0 on no-op (mise install, apt, pip) need post-condition
 `test` assertions in the same `RUN` block. Learned via 3 hotfix cycles
-(PRs #59/#60/#61), validated empirically by PR-2 commit F and issue #63.
-Current assertions:
+(PRs #59/#60/#61; PR-2 commit F, issue #63). Current assertions:
 
+- `mise bootstrap packages status --json --missing` after `apply` (#160 T4)
 - `mise ls --installed | wc -l > 0` after `mise install`
 - Non-empty shims dir after `mise reshim -f`
 
