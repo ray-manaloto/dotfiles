@@ -125,9 +125,11 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Probe cache
         id: probe
+        env:
+          CACHE_REF: ${{ steps.hash.outputs.cache_ref }}
         run: |
           set -euo pipefail
-          if out=$(docker manifest inspect "${{ steps.hash.outputs.cache_ref }}" 2>&1); then
+          if out=$(docker manifest inspect "${CACHE_REF}" 2>&1); then
             echo "hit=true" >> "$GITHUB_OUTPUT"
             echo "Cache HIT — skipping base build" >> "$GITHUB_STEP_SUMMARY"
           else
@@ -176,10 +178,12 @@ jobs:
         # hit and miss-after-push paths) and fail loud if empty, since an
         # unpinned context would silently accept a repushed tag.
         id: digest
+        env:
+          CACHE_REF: ${{ steps.hash.outputs.cache_ref }}
         run: |
           set -euo pipefail
-          digest=$(docker buildx imagetools inspect "${{ steps.hash.outputs.cache_ref }}" --format '{{.Manifest.Digest}}')
-          [ -n "$digest" ] || { echo "FAIL: empty digest for ${{ steps.hash.outputs.cache_ref }}" >&2; exit 1; }
+          digest=$(docker buildx imagetools inspect "${CACHE_REF}" --format '{{.Manifest.Digest}}')
+          [ -n "$digest" ] || { echo "FAIL: empty digest for ${CACHE_REF}" >&2; exit 1; }
           echo "digest=${digest}" >> "$GITHUB_OUTPUT"
   # ============================================================
   # P2996 cache prep: compute content-hash of clang-builder inputs and
@@ -256,9 +260,11 @@ jobs:
         # Discriminate "manifest not found" (legitimate cache miss) from
         # auth/network/registry failures. Capturing stderr instead of
         # `2>/dev/null` honors `build.no-stderr-suppression`.
+        env:
+          CACHE_REF: ${{ steps.hash.outputs.cache_ref }}
         run: |
           set -euo pipefail
-          if out=$(docker manifest inspect "${{ steps.hash.outputs.cache_ref }}" 2>&1); then
+          if out=$(docker manifest inspect "${CACHE_REF}" 2>&1); then
             echo "hit=true" >> "$GITHUB_OUTPUT"
             echo "Cache HIT — skipping clang-p2996 compile" >> "$GITHUB_STEP_SUMMARY"
           else
@@ -305,10 +311,12 @@ jobs:
         # #160 T11: same digest-pin capture as base-prep — the build job
         # injects this as the p2996-export named context.
         id: digest
+        env:
+          CACHE_REF: ${{ steps.hash.outputs.cache_ref }}
         run: |
           set -euo pipefail
-          digest=$(docker buildx imagetools inspect "${{ steps.hash.outputs.cache_ref }}" --format '{{.Manifest.Digest}}')
-          [ -n "$digest" ] || { echo "FAIL: empty digest for ${{ steps.hash.outputs.cache_ref }}" >&2; exit 1; }
+          digest=$(docker buildx imagetools inspect "${CACHE_REF}" --format '{{.Manifest.Digest}}')
+          [ -n "$digest" ] || { echo "FAIL: empty digest for ${CACHE_REF}" >&2; exit 1; }
           echo "digest=${digest}" >> "$GITHUB_OUTPUT"
   # ============================================================
   # Dev cache prep (#122): the THIRD content-hash tier. Computes
@@ -385,9 +393,11 @@ jobs:
         # (auth/network/registry) fails loud rather than silently
         # forcing a rebuild. Captures stderr (no `2>/dev/null`) to honor
         # build.no-stderr-suppression.
+        env:
+          CACHE_REF: ${{ steps.hash.outputs.cache_ref }}
         run: |
           set -euo pipefail
-          if out=$(docker manifest inspect "${{ steps.hash.outputs.cache_ref }}" 2>&1); then
+          if out=$(docker manifest inspect "${CACHE_REF}" 2>&1); then
             echo "hit=true" >> "$GITHUB_OUTPUT"
             echo "Dev cache HIT — image already built AND smoke-validated; skipping build + smoke-test" >> "$GITHUB_STEP_SUMMARY"
           else
@@ -414,9 +424,10 @@ jobs:
           IMAGE: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}
           SOURCE_REF: ${{ steps.hash.outputs.cache_ref }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          short_sha=$(printf '%s' "${{ github.sha }}" | head -c 7)
+          short_sha=$(printf '%s' "${COMMIT_SHA}" | head -c 7)
           tags=(--tag "${IMAGE}:${short_sha}")
           if [ -n "${PR_NUMBER}" ]; then
             tags+=(--tag "${IMAGE}:pr-${PR_NUMBER}")
@@ -548,9 +559,10 @@ jobs:
         # C. Digest is best-effort from bake metadata — never fails the build.
         env:
           METADATA: ${{ steps.bake.outputs.metadata }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          short_sha=$(printf '%s' "${{ github.sha }}" | head -c 7)
+          short_sha=$(printf '%s' "${COMMIT_SHA}" | head -c 7)
           image_ref="${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${short_sha}"
           digest=$(printf '%s' "${METADATA:-}" | jq -r '.dev["containerimage.digest"] // empty' 2>/dev/null || true)
           {
@@ -642,13 +654,19 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Derive image tag
         id: smoke-tag
-        run: echo "tag=$(echo '${{ github.sha }}' | head -c 7)" >> "$GITHUB_OUTPUT"
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+        run: echo "tag=$(printf '%s' "${COMMIT_SHA}" | head -c 7)" >> "$GITHUB_OUTPUT"
       - name: Pull published image
-        run: docker pull ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.smoke-tag.outputs.tag }}
+        env:
+          IMAGE_REF: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.smoke-tag.outputs.tag }}
+        run: docker pull "${IMAGE_REF}"
       - name: Smoke published image
+        env:
+          IMAGE_REF: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.smoke-tag.outputs.tag }}
         run: |
           uv run --project python dotfiles-setup image smoke \
-            --image-ref ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.smoke-tag.outputs.tag }}
+            --image-ref "${IMAGE_REF}"
       - name: Bootstrap packages gap report (#160 T7)
         # Capture `status --json` from the published image and assert the
         # declared [bootstrap.packages] set is fully installed. The Python
@@ -756,10 +774,11 @@ jobs:
       - name: Tag validated image as :dev-<hash>
         env:
           IMAGE: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           hash=$(uv run --project python dotfiles-setup dev-hash)
-          short_sha=$(printf '%s' "${{ github.sha }}" | head -c 7)
+          short_sha=$(printf '%s' "${COMMIT_SHA}" | head -c 7)
           source_ref="${IMAGE}:${short_sha}"
           marker_ref="${IMAGE}:dev-${hash}"
           # The just-built + smoked image is published at :sha-<sha>;

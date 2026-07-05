@@ -10,7 +10,6 @@ import textwrap
 from pathlib import Path
 
 import pytest
-
 from dotfiles_setup.p2996_hash import (
     BASE_SECTION_BEGIN,
     BASE_SECTION_END,
@@ -33,7 +32,6 @@ from dotfiles_setup.p2996_hash import (
     gather_dev_inputs,
     gather_p2996_inputs,
 )
-
 
 # ──────────────────────────────────────────────────────────────────────
 # Stub helpers

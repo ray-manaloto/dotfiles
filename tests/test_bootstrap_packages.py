@@ -1,15 +1,15 @@
-"""Tests for `dotfiles_setup.bootstrap_packages` — parsing the declarative
-`[bootstrap.packages]` apt set that `mise bootstrap packages apply` installs
-in the image (#160 T4). Build-time drift is caught in the Dockerfile itself
-(`mise bootstrap packages status --json --missing` exits 1); these tests
-guard the parser and the declared set's load-bearing entries.
+"""Tests for `dotfiles_setup.bootstrap_packages`.
+
+Parses the declarative `[bootstrap.packages]` apt set that `mise bootstrap
+packages apply` installs in the image (#160 T4). Build-time drift is caught in
+the Dockerfile itself (`mise bootstrap packages status --json --missing` exits
+1); these tests guard the parser and the declared set's load-bearing entries.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import json
+from pathlib import Path
 
 from dotfiles_setup.bootstrap_packages import (
     apt_packages_from_bootstrap,
@@ -83,8 +83,10 @@ def test_gap_report_flags_missing_and_mismatch(tmp_path: Path) -> None:
 
 
 def test_gap_report_flags_unavailable_manager(tmp_path: Path) -> None:
-    """`status --missing` does NOT exit 1 on an unavailable manager (it emits
-    state "skipped") — the gap report must catch it instead."""
+    """`status --missing` does NOT exit 1 on an unavailable manager.
+
+    It emits state "skipped", so the gap report must catch it instead.
+    """
     toml = _toml_declaring(tmp_path, "curl")
     report = json.dumps({"apt": {"available": False, "reason": "apt-get not found"}})
     failures = gap_report_failures(report, toml)
@@ -92,8 +94,10 @@ def test_gap_report_flags_unavailable_manager(tmp_path: Path) -> None:
 
 
 def test_gap_report_flags_set_drift_both_directions(tmp_path: Path) -> None:
-    """An empty/partial report (e.g. config discovery failed in the image)
-    must fail loudly, as must undeclared extras."""
+    """An empty/partial report must fail loudly, as must undeclared extras.
+
+    An empty/partial report can mean config discovery failed in the image.
+    """
     toml = _toml_declaring(tmp_path, "curl", "zsh")
     report = _status_json(("curl", "installed"), ("jq", "installed"))
     failures = gap_report_failures(report, toml)
@@ -108,8 +112,10 @@ def test_gap_report_flags_absent_apt_manager(tmp_path: Path) -> None:
 
 
 def test_bootstrap_packages_declares_load_bearing_set() -> None:
-    """`[bootstrap.packages]` is the image's ONLY apt package source (#160 T4)
-    — the load-bearing entries must never be silently dropped."""
+    """`[bootstrap.packages]` is the image's ONLY apt package source (#160 T4).
+
+    The load-bearing entries must never be silently dropped.
+    """
     declared = set(apt_packages_from_bootstrap(_MISE_SYSTEM_TOML))
     missing = _LOAD_BEARING_PACKAGES - declared
     assert not missing, (

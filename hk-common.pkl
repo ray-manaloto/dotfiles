@@ -3,8 +3,9 @@
 // Exports Mapping<String, Config.Step> values that can be spread into a
 // Config.pkl `steps {}` block via the `...` operator.
 //
-// Usage in an hk.pkl that amends Config.pkl:
-//   import "package://github.com/jdx/hk/releases/download/v1.40.0/hk@1.40.0#/Config.pkl"
+// Usage in an hk.pkl that amends Config.pkl (keep the version in lockstep
+// with the amends/import URLs — the hk_version_parity step enforces it):
+//   import "package://github.com/jdx/hk/releases/download/v1.49.0/hk@1.49.0#/Config.pkl"
 //   import "hk-common.pkl" as common
 //   hooks { ["pre-commit"] { steps { ...common.hygiene ...common.safety } } }
 //
@@ -13,8 +14,8 @@
 // Step (check=null) that hk silently skips — these steps NEVER ran, locally or
 // in CI. See feedback_hk_builtins_need_assignment.
 
-import "package://github.com/jdx/hk/releases/download/v1.44.2/hk@1.44.2#/Builtins.pkl"
-import "package://github.com/jdx/hk/releases/download/v1.44.2/hk@1.44.2#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v1.49.0/hk@1.49.0#/Builtins.pkl"
+import "package://github.com/jdx/hk/releases/download/v1.49.0/hk@1.49.0#/Config.pkl"
 
 // #154: shared `exclude` list for ALL builtin linters — third-party cached
 // docs, generated research artifacts, and gitignored local tool caches (not
@@ -52,7 +53,9 @@ safety: Mapping<String, Config.Step> = new {
   ["check_case_conflict"] = Builtins.check_case_conflict
   ["check_symlinks"] = Builtins.check_symlinks
   ["check_executables_have_shebangs"] = Builtins.check_executables_have_shebangs
-  ["check_byte_order_marker"] = Builtins.check_byte_order_marker
+  // #160 T12: renamed from the deprecated check_byte_order_marker alias
+  // (consolidated upstream in hk 1.30.0; pklr surfaces the deprecation).
+  ["byte_order_marker"] = Builtins.byte_order_marker
   // #154: no `no_commit_to_branch` — it errors in CI ("Failed to get current
   // git branch") because GitHub Actions checks out a detached HEAD. It's a
   // local-only guard against committing to main, already enforced by branch

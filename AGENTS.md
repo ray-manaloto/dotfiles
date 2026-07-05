@@ -55,7 +55,7 @@ the official `@devcontainers/cli` (pinned in `mise.toml`).
 | `.claude/` | Claude-specific agents, skills, rules. Has its own `CLAUDE.md` with OMC orchestration |
 | `home/` | Chezmoi-managed dotfile templates (its AGENTS.md was removed in #80) |
 | `python/` | Python package `dotfiles_setup` — see `python/AGENTS.md` |
-| `tests/` | Pytest + Bats test suite (209 pytest tests) — see `tests/AGENTS.md` |
+| `tests/` | Pytest + Bats test suite (210 pytest tests) — see `tests/AGENTS.md` |
 | `scripts/` | Utility scripts (`benchmark-docker.sh`, `devcontainer-smoke.sh`) |
 | `docs/` | Documentation, research findings, design specs |
 
@@ -77,15 +77,15 @@ Three pkl files with a shared-import pattern:
 - `hk.pkl` — project pre-commit config; imports and spreads `hk-common.pkl` groups
 - `hk-image.pkl` — Docker image checks; imports and spreads `hk-common.pkl` groups
 
-The pkl backend is required: `HK_PKL_BACKEND=pkl` (set in `mise.toml [env]`).
-The pklr backend lacks import/spread support. Note: hk caches pkl-evaluated
-configs at `~/Library/Caches/hk/configs/` — clear after editing `hk.pkl` if
-changes don't take effect.
+hk 1.49's default pklr backend evaluates the import/spread config
+identically to the pkl CLI (parity probe-verified #160 T12; the
+`HK_PKL_BACKEND=pkl` override is retired). The pkl-eval cache is
+content-hashed since hk 1.47 — no manual cache clearing after edits.
 
 ## Testing
 
 ```bash
-uv run --project python pytest tests/ -x -q               # All 209 tests
+uv run --project python pytest tests/ -x -q               # All 210 tests
 uv run --project python pytest tests/test_audit.py -x -q  # Single file
 hk run pre-commit --all --stash none                      # Lint checks only
 dotfiles-setup verify run                                 # Verification contracts (suites.toml)
@@ -173,7 +173,6 @@ Gated by `mise run verify-local`. Sessions touching `.devcontainer/` or `mise.to
 
 | Variable | Value | Purpose |
 |----------|-------|---------|
-| `HK_PKL_BACKEND` | `pkl` | Required pkl backend for hk (use pkl, not pklr) |
 | `HK_MISE` | `1` | Enable mise integration for hk |
 | `CONTAINER_REGISTRY` | `ghcr.io` | Docker registry (use `CONTAINER_REGISTRY`, not `REGISTRY` — avoids HCL collision) |
 | `DEVCONTAINER_USERNAME` | `${localEnv:USER}` (fallback: `devcontainer`) | Container user (UID 1000); passed through from host `USER` via `devcontainer.json`. Host-user migration is the current state — the legacy `vscode` value has been replaced. |

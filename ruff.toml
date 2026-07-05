@@ -1,0 +1,20 @@
+# Repo-root ruff config (#160 T12): extends the Python package's config so
+# tests/ and plugins/ — which live OUTSIDE python/'s directory tree — resolve
+# the same rules. Probe-verified: ruff resolves its config per-file by walking
+# up from each file; before this file existed, tests/ and plugins/ silently
+# got ruff DEFAULTS (select=ALL never applied there, and the
+# "../tests/*.py" per-file-ignore in python/pyproject.toml was dead config).
+extend = "python/pyproject.toml"
+
+[lint.per-file-ignores]
+# pytest convention: test functions self-describe via their names (D103),
+# magic values in assertions are idiomatic (PLR2004), and `assert` IS the test
+# mechanism (S101). S101 must be listed here (not left to python/pyproject.toml's
+# "../tests/*.py" entry): once this root config declares its own
+# per-file-ignores table, ruff re-anchors the extended pyproject glob to the
+# repo root, so "../tests/*.py" points outside the tree and silently stops
+# matching — the exact "dead config" fragility this file's header warns about.
+"tests/**/*.py" = ["D103", "PLR2004", "S101"]
+# The plugins are standalone CLI helper scripts where print IS the user
+# interface, so T201 (print) is expected rather than a defect.
+"plugins/**/*.py" = ["T201"]

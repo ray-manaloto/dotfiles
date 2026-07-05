@@ -1,13 +1,14 @@
-"""Tests for `dotfiles_setup.lock_refresh` — the stage/collect helpers behind
-the CI lock-refresh job (#160 T8).
+"""Tests for `dotfiles_setup.lock_refresh`.
+
+The stage/collect helpers behind the CI lock-refresh job (#160 T8).
 """
 
 from __future__ import annotations
 
-from pathlib import Path
+import tomllib
+from typing import TYPE_CHECKING
 
 import pytest
-
 from dotfiles_setup.lock_refresh import (
     _merge_shared_tools,
     collect_system_lock,
@@ -15,6 +16,9 @@ from dotfiles_setup.lock_refresh import (
     pinned_mise_version,
     stage_system_lock_dir,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 _SYSTEM_TOML = '[tools]\n"conda:git" = "latest"\n\n[settings]\nexperimental = true\n'
 _SHARED_TOML = '[tools]\nhk = "1.46.0"\n'
@@ -52,8 +56,6 @@ def test_pinned_mise_version_missing_raises(tmp_path: Path) -> None:
 
 
 def test_stage_merges_configs_and_returns_version(tmp_path: Path) -> None:
-    import tomllib
-
     repo = _mini_repo(tmp_path)
     stage = tmp_path / "stage"
     stage.mkdir()
@@ -69,11 +71,9 @@ def test_stage_merges_configs_and_returns_version(tmp_path: Path) -> None:
 
 
 def test_merge_shared_tools_requires_splice_points() -> None:
-    import pytest as _pytest
-
-    with _pytest.raises(ValueError, match="shared.toml"):
+    with pytest.raises(ValueError, match=r"shared\.toml"):
         _merge_shared_tools(_SYSTEM_TOML, "[settings]\nx = 1\n")
-    with _pytest.raises(ValueError, match="mise-system.toml"):
+    with pytest.raises(ValueError, match=r"mise-system\.toml"):
         _merge_shared_tools("[settings]\nx = 1\n", _SHARED_TOML)
 
 
@@ -89,8 +89,10 @@ def test_collect_copies_valid_lock_back(tmp_path: Path) -> None:
 
 
 def test_collect_refuses_partial_lock(tmp_path: Path) -> None:
-    """A truncated regen (rate limit, interrupt) must never overwrite the
-    committed lock."""
+    """A truncated regen must never overwrite the committed lock.
+
+    Rate-limit or interrupt truncation is the failure this guards against.
+    """
     repo = _mini_repo(tmp_path)
     stage = tmp_path / "stage"
     stage.mkdir()

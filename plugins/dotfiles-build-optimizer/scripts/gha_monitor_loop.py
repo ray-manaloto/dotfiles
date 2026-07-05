@@ -10,11 +10,13 @@ from pathlib import Path
 
 
 def run(cmd: list[str]) -> str:
+    """Run *cmd* and return its stdout as text."""
     result = subprocess.run(cmd, check=True, capture_output=True, text=True)
     return result.stdout
 
 
 def latest_failed_run() -> str:
+    """Return the id of the most recent failed workflow run."""
     runs = json.loads(
         run(
             [
@@ -31,10 +33,12 @@ def latest_failed_run() -> str:
     for item in runs:
         if item.get("conclusion") == "failure":
             return str(item["databaseId"])
-    raise RuntimeError("No failed run found")
+    msg = "No failed run found"
+    raise RuntimeError(msg)
 
 
 def main() -> int:
+    """Parse CLI arguments and drive the failure-report monitor loop."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--run-id")
     parser.add_argument("--latest-failed", action="store_true")
@@ -45,9 +49,12 @@ def main() -> int:
     parser.add_argument("--watch", action="store_true")
     args = parser.parse_args()
 
-    run_id = args.run_id or (latest_failed_run() if args.latest_failed or not args.run_id else None)
+    run_id = args.run_id or (
+        latest_failed_run() if args.latest_failed or not args.run_id else None
+    )
     if not run_id:
-        raise SystemExit("Provide --run-id or use --latest-failed")
+        msg = "Provide --run-id or use --latest-failed"
+        raise SystemExit(msg)
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -84,7 +91,10 @@ def main() -> int:
     print("- $local-preflight")
 
     if args.watch:
-        subprocess.run(["gh", "run", "watch", run_id, "--interval", "10", "--exit-status"], check=False)
+        subprocess.run(
+            ["gh", "run", "watch", run_id, "--interval", "10", "--exit-status"],
+            check=False,
+        )
 
     return 0
 

@@ -51,11 +51,11 @@ deps without changing cwd. This applies to hk.pkl steps and mise tasks.
 
 ## Rule 5: Clear hk cache after editing hk.pkl
 
-hk caches pkl-evaluated configs at `~/Library/Caches/hk/configs/`.
-After editing `hk.pkl`, clear the cache: `rm -rf ~/Library/Caches/hk/configs/`
-Otherwise hk may serve stale config silently. After clearing, ensure
-`HK_PKL_BACKEND=pkl` is set (mise provides this) — without it, hk
-falls back to pklr which cannot handle import/spread syntax.
+RETIRED (#160 T12, hk 1.49): the pkl-eval cache is content-hashed since
+hk 1.47 (stale-serve impossible) and the default pklr backend evaluates
+import/spread identically to the pkl CLI (parity probe-verified), so the
+`HK_PKL_BACKEND=pkl` override was dropped. Kept as a numbered rule so
+references to "rule 5" stay valid.
 
 ## Rule 6: Test new hk steps locally before committing
 

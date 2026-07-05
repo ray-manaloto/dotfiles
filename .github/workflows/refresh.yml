@@ -106,6 +106,7 @@ jobs:
           branch: chore/lock-refresh
           paths: |
             mise.lock
+            .config/mise/mise.lock
             .devcontainer/mise-system.lock
             .devcontainer/devcontainer-lock.json
           labels: lockfile

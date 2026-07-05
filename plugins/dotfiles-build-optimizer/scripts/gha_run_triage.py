@@ -11,22 +11,26 @@ from pathlib import Path
 from typing import Any
 
 
-def run_json(cmd: list[str]) -> Any:
+def run_json(cmd: list[str]) -> list[dict[str, Any]] | dict[str, Any]:
+    """Run *cmd* and return its stdout parsed as JSON."""
     result = subprocess.run(cmd, check=True, capture_output=True, text=True)
     return json.loads(result.stdout)
 
 
 def run_text(cmd: list[str]) -> str:
+    """Run *cmd* and return its stdout as text."""
     result = subprocess.run(cmd, check=True, capture_output=True, text=True)
     return result.stdout
 
 
 def parse_run_id(value: str) -> str:
+    """Extract the numeric run id from a run URL, or return *value* unchanged."""
     match = re.search(r"/actions/runs/(\d+)", value)
     return match.group(1) if match else value
 
 
 def latest_failed_run() -> str:
+    """Return the id of the most recent failed workflow run."""
     runs = run_json(
         [
             "gh",
@@ -41,10 +45,12 @@ def latest_failed_run() -> str:
     for run in runs:
         if run.get("conclusion") == "failure":
             return str(run["databaseId"])
-    raise RuntimeError("No failed run found")
+    msg = "No failed run found"
+    raise RuntimeError(msg)
 
 
 def extract_signatures(log_text: str) -> tuple[list[str], list[str]]:
+    """Split log text into deduplicated error and warning signature lines."""
     error_lines: list[str] = []
     warning_lines: list[str] = []
     for raw in log_text.splitlines():
@@ -58,6 +64,7 @@ def extract_signatures(log_text: str) -> tuple[list[str], list[str]]:
 
 
 def likely_owners(error_signatures: list[str]) -> list[str]:
+    """Infer likely owning subsystems from the error signatures."""
     owners: set[str] = set()
     combined = "\n".join(error_signatures).lower()
     if "docker" in combined or "buildx" in combined or "bake" in combined:
@@ -76,6 +83,7 @@ def likely_owners(error_signatures: list[str]) -> list[str]:
 
 
 def build_report(run_id: str) -> dict[str, Any]:
+    """Build a triage report dict for the given run id."""
     run = run_json(
         [
             "gh",
@@ -86,12 +94,16 @@ def build_report(run_id: str) -> dict[str, Any]:
             "displayTitle,headBranch,headSha,url,workflowName,status,conclusion,jobs",
         ]
     )
-    failed_jobs = [job for job in run.get("jobs", []) if job.get("conclusion") == "failure"]
+    failed_jobs = [
+        job for job in run.get("jobs", []) if job.get("conclusion") == "failure"
+    ]
     job_reports = []
     all_errors: list[str] = []
     all_warnings: list[str] = []
     for job in failed_jobs:
-        log_text = run_text(["gh", "run", "view", run_id, "--job", str(job["databaseId"]), "--log"])
+        log_text = run_text(
+            ["gh", "run", "view", run_id, "--job", str(job["databaseId"]), "--log"]
+        )
         errors, warnings = extract_signatures(log_text)
         all_errors.extend(errors)
         all_warnings.extend(warnings)
@@ -121,6 +133,7 @@ def build_report(run_id: str) -> dict[str, Any]:
 
 
 def main() -> int:
+    """Parse CLI arguments and print a triage report as JSON."""
     parser = argparse.ArgumentParser()
     parser.add_argument("run", nargs="?", help="Run id or run URL")
     parser.add_argument("--latest-failed", action="store_true")
@@ -129,7 +142,8 @@ def main() -> int:
 
     run_id = latest_failed_run() if args.latest_failed else parse_run_id(args.run or "")
     if not run_id:
-        raise SystemExit("Provide a run id, run URL, or --latest-failed")
+        msg = "Provide a run id, run URL, or --latest-failed"
+        raise SystemExit(msg)
 
     report = build_report(run_id)
     output = json.dumps(report, indent=2, sort_keys=True)

@@ -10,6 +10,7 @@ from pathlib import Path
 
 
 def main() -> int:
+    """Append the input JSON report as a timestamped failure-memory entry."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", required=True, help="Path to a JSON report")
     parser.add_argument(

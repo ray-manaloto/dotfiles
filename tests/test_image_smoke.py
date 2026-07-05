@@ -1,14 +1,15 @@
 """Tests for image smoke test script generation and size parsing."""
 
+from __future__ import annotations
+
 import os
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 import json
-
-import pytest
 
 from dotfiles_setup.image import (
     _is_emulated,
@@ -24,6 +25,9 @@ from dotfiles_setup.image import (
     resolve_expected_config_sha256,
     resolve_expected_p2996_ref,
 )
+
+if TYPE_CHECKING:
+    import pytest
 
 # Named constant for plain byte values in size parsing tests.
 _PLAIN_BYTES_VALUE = 512
@@ -102,10 +106,10 @@ def test_smoke_script_p2996_reflection_links_and_runs() -> None:
     assert "-fsyntax-only" not in script
     assert "/opt/gcc-latest/bin/g++" in script
     assert "-o /tmp/refl-gcc" in script
-    assert "/tmp/refl-gcc ||" in script
+    assert "\n/tmp/refl-gcc ||" in script
     assert "/opt/clang-p2996/bin/clang++" in script
     assert "-o /tmp/refl-clang" in script
-    assert "/tmp/refl-clang ||" in script
+    assert "\n/tmp/refl-clang ||" in script
 
 
 def test_smoke_script_p2996_reflection_rpath_discovers_libcxx() -> None:
@@ -126,8 +130,8 @@ def test_smoke_script_p2996_reflection_runs_even_under_emulation() -> None:
     """
     script = build_smoke_script(_FAKE_P2996_SHA, emulated=True)
 
-    assert "/tmp/refl-clang ||" in script
-    assert "/tmp/refl-gcc ||" in script
+    assert "\n/tmp/refl-clang ||" in script
+    assert "\n/tmp/refl-gcc ||" in script
 
 
 def test_smoke_script_non_sha_ref_skips_strict_match() -> None:
@@ -212,8 +216,11 @@ def test_smoke_script_injects_config_identity_check() -> None:
 
 
 def test_smoke_script_injects_runtime_identity_check() -> None:
-    """#160 T10: an injected runtime hash activates the runtime-tier half of
-    the image-identity guard (stale runtime stage on a current base)."""
+    """#160 T10: an injected runtime hash activates the runtime-tier guard.
+
+    Covers the runtime-tier half of the image-identity guard (a stale runtime
+    stage on a current base).
+    """
     script = build_smoke_script(
         _FAKE_P2996_SHA, expected_runtime_sha256=_FAKE_CONFIG_SHA256
     )
@@ -255,7 +262,7 @@ def test_smoke_script_tsan_runs_when_native() -> None:
 
     assert "TSAN_RUN_SKIP=''\n" in script
     assert "clang++ -fsanitize=thread /tmp/sanitizer.cpp -o /tmp/san-tsan" in script
-    assert "/tmp/san-tsan >/dev/null" in script
+    assert "  /tmp/san-tsan >/dev/null" in script
 
 
 def test_smoke_script_tsan_run_skipped_when_emulated() -> None:
@@ -336,7 +343,10 @@ experimental = true
 
 
 def _mise_ls_json(entries: dict[str, dict[str, object]]) -> str:
-    """Build a mise ls --json payload from {key: {version,requested,source,installed}}."""
+    """Build a mise ls --json payload from the given entries.
+
+    Each entry maps key -> {version, requested, source, installed}.
+    """
     doc = {
         key: [
             {
@@ -442,13 +452,15 @@ def test_smoke_docker_cmd_injects_real_declared_tools() -> None:
 
 
 def test_resolve_declared_tools_merges_system_and_shared() -> None:
-    """The image's declared set is mise-system.toml [tools] MERGED with the
-    shared conf.d fragment (#160 T5)."""
+    """The image's declared set merges mise-system.toml with the shared fragment.
+
+    mise-system.toml [tools] MERGED with the shared conf.d fragment (#160 T5).
+    """
     declared = resolve_declared_tools()
 
     # From the shared fragment, exact-pinned.
     assert declared["python"] == "3.14.5"
-    assert declared["hk"] == "1.46.0"
+    assert declared["hk"] == "1.49.0"
     # From mise-system.toml [tools].
     assert declared["node"] == "latest"
     assert "conda:llvm" in declared

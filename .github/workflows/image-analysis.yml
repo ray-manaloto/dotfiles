@@ -12,7 +12,11 @@ name: image-analysis
 #
 # GOTCHA: `workflow_run` always uses this file as it exists on the default
 # branch, so edits here only take effect once merged to main.
-on:
+# zizmor: ignore[dangerous-triggers] — workflow_run is the DELIBERATE design
+# here: this workflow runs off the PR critical path, triggered by CI
+# completion, and never checks out or executes PR-authored code with its
+# token (single-maintainer repo, no fork PRs). See workflows/AGENTS.md.
+on: # zizmor: ignore[dangerous-triggers] — deliberate: see comment above
   workflow_run:
     workflows: ["CI"]
     types: [completed]

@@ -1240,13 +1240,13 @@ url = "https://github.com/hadolint/hadolint/releases/download/v2.14.0/hadolint-l
 url_api = "https://api.github.com/repos/hadolint/hadolint/releases/assets/295944080"
 
 [[tools.hk]]
-version = "1.46.0"
+version = "1.49.0"
 backend = "aqua:jdx/hk"
 
 [tools.hk."platforms.linux-x64"]
-checksum = "sha256:85b2cc167443cd27b49e323ef9b9d1a946d4bc18196eccb66112842d30fb90cb"
-url = "https://github.com/jdx/hk/releases/download/v1.46.0/hk-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/jdx/hk/releases/assets/431420608"
+checksum = "sha256:409c24b22c7f0c2f32be9330defbef54adf71aa53ec13853e20ac0ea952061d6"
+url = "https://github.com/jdx/hk/releases/download/v1.49.0/hk-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/jdx/hk/releases/assets/463689407"
 
 [[tools.java]]
 version = "26.0.1"

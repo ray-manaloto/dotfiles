@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+import json
+from typing import TYPE_CHECKING
 
 import pytest
-
 from dotfiles_setup.p2996_refresh import (
     GIT_SHA1_LEN,
     RefreshResult,
@@ -14,6 +14,9 @@ from dotfiles_setup.p2996_refresh import (
     refresh,
     replace_pinned_ref,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 OLD_SHA = "9ffb96e3ce362289008e14ad2a79a249f58aa90a"
 NEW_SHA = "a56e7036fc1dcc8d4325f79230809b6ee678e5f2"
@@ -111,8 +114,6 @@ def test_refresh_is_noop_when_already_latest(tmp_path: Path) -> None:
 
 
 def test_refresh_result_as_json_roundtrips() -> None:
-    import json
-
     result = RefreshResult(changed=True, old_ref=OLD_SHA, new_ref=NEW_SHA)
     parsed = json.loads(result.as_json())
     assert parsed == {"changed": True, "old_ref": OLD_SHA, "new_ref": NEW_SHA}

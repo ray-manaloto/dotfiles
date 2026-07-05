@@ -46,8 +46,9 @@ unbounded wait + pipe-masked exit code.
 
 5. **hk specifics.** hk parallelises via per-file read/write locks
    *within* a run; a crashed/killed run can leave stale state under
-   `~/.local/state/hk/`. After editing `hk.pkl`, clear the pkl config
-   cache (`rm -rf ~/Library/Caches/hk/configs/`) — see `ci-local-parity.md`.
+   `~/.local/state/hk/`. (The old "clear ~/Library/Caches/hk/configs/
+   after editing hk.pkl" guidance is retired — the cache is
+   content-hashed since hk 1.47; see `ci-local-parity.md` rule 5.)
 
 ## Applies to
 
