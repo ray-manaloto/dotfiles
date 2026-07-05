@@ -26,6 +26,7 @@ from dotfiles_setup.lint import (
     resolve_timeout,
     run_guarded,
 )
+from dotfiles_setup.lock_refresh import collect_system_lock, stage_system_lock_dir
 from dotfiles_setup.p2996_hash import (
     compute_repo_base_hash,
     compute_repo_dev_hash,
@@ -237,6 +238,23 @@ def setup_parser() -> argparse.ArgumentParser:
         help="Print the content-addressed hash of the final dev-image inputs "
         "(base + p2996 hashes + whole Dockerfile + dev bake target)",
     )
+    lock_stage_parser = subparsers.add_parser(
+        "lock-stage",
+        help="Stage the image's merged mise config into a throwaway project "
+        "dir for pinned-mise `mise lock` (#160 T8); prints the pinned "
+        "MISE_VERSION to run it with",
+    )
+    lock_stage_parser.add_argument(
+        "--dir", required=True, help="Staging directory (created if needed)"
+    )
+    lock_collect_parser = subparsers.add_parser(
+        "lock-collect",
+        help="Validate + copy the regenerated stage mise.lock back to "
+        ".devcontainer/mise-system.lock (#160 T8)",
+    )
+    lock_collect_parser.add_argument(
+        "--dir", required=True, help="Staging directory used by lock-stage"
+    )
     gap_parser = subparsers.add_parser(
         "bootstrap-gap-report",
         help="Assert a `mise bootstrap packages status --json` report shows "
@@ -387,6 +405,20 @@ def handle_image(args: argparse.Namespace) -> None:
         sys.exit(image_main(cmd))
 
 
+def handle_lock_stage(args: argparse.Namespace, project_root: Path) -> None:
+    """Handle lock-stage: prepare the staging dir, print the pinned version."""
+    stage_dir = Path(args.dir)
+    stage_dir.mkdir(parents=True, exist_ok=True)
+    version = stage_system_lock_dir(project_root, stage_dir)
+    sys.stdout.write(version + "\n")
+
+
+def handle_lock_collect(args: argparse.Namespace, project_root: Path) -> None:
+    """Handle lock-collect: validate + copy the stage lock back."""
+    collect_system_lock(project_root, Path(args.dir))
+    logger.info("mise-system.lock collected from stage")
+
+
 def handle_bootstrap_gap_report(args: argparse.Namespace, project_root: Path) -> None:
     """Handle the bootstrap-gap-report command (#160 T7).
 
@@ -501,6 +533,8 @@ def _build_command_handlers(
         "image": lambda: handle_image(args),
         "ghcr-check": lambda: handle_ghcr_check(args, project_root),
         "bootstrap-gap-report": lambda: handle_bootstrap_gap_report(args, project_root),
+        "lock-stage": lambda: handle_lock_stage(args, project_root),
+        "lock-collect": lambda: handle_lock_collect(args, project_root),
         "sync-versions": lambda: handle_sync_versions(project_root),
         "p2996-refresh": _p2996_refresh,
         "lint": _lint,

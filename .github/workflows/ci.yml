@@ -69,6 +69,12 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+    env:
+      # #160 T8: fail-fast deterministic installs — lint runs on the exact
+      # versions recorded in mise.lock, the same lock the Mac host consumes
+      # (macOS local == CI/CD parity principle). Lock↔config coverage is
+      # gated by tests/test_lock_coverage.py in contract-preflight.
+      MISE_LOCKED: "1"
     steps:
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0

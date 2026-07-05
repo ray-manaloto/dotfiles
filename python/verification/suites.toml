@@ -551,7 +551,7 @@ tokens = [
 
 [[suite]]
 name = "ci.refresh-uses-app-token"
-description = "Phase C (#119): refresh.yml must mint a GitHub App token (actions/create-github-app-token) for the PR push so downstream pull_request CI fires on its own (GITHUB_TOKEN-created PRs don't), and the snapshot job must enable auto-merge. App ID/private-key come from REFRESH_APP_ID / REFRESH_APP_PRIVATE_KEY secrets."
+description = "Phase C (#119): refresh.yml must mint a GitHub App token (actions/create-github-app-token) for the PR push so downstream pull_request CI fires on its own (GITHUB_TOKEN-created PRs don't), and the lock-refresh job must enable auto-merge. App ID/private-key come from REFRESH_APP_ID / REFRESH_APP_PRIVATE_KEY secrets."
 category = "ci"
 check_type = "static"
 handler = "require_tokens"
@@ -562,6 +562,29 @@ tokens = [
   "REFRESH_APP_PRIVATE_KEY",
   "auto-merge:",
 ]
+
+[[suite]]
+name = "ci.lock-refresh-wired"
+description = "The daily lock-refresh (#160 T8) must regenerate all three committed lockfiles via the lock-refresh composite and PR them: mise.lock, .devcontainer/mise-system.lock (pinned image MISE_VERSION on linux-x64 — the reason this runs in CI at all), and devcontainer-lock.json. Renovate can never do this (mise lock is admin-allowlisted; mise-system.lock unknown to it)."
+category = "ci"
+check_type = "static"
+handler = "require_tokens"
+paths = [".github/workflows/refresh.yml"]
+tokens = [
+  "lock-refresh:",
+  "uses: ./.github/actions/lock-refresh",
+  ".devcontainer/mise-system.lock",
+  ".devcontainer/devcontainer-lock.json",
+]
+
+[[suite]]
+name = "ci.lint-locked-installs"
+description = "CI lint must install with MISE_LOCKED=1 so it runs the exact versions recorded in mise.lock — the same lock the Mac host consumes (#160 T8 parity principle)"
+category = "ci"
+check_type = "static"
+handler = "require_tokens"
+paths = [".github/workflows/ci.yml"]
+tokens = ["MISE_LOCKED: \"1\""]
 
 [[suite]]
 name = "ci.refresh-no-dispatch-hack"

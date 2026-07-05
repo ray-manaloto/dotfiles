@@ -1,41 +1,39 @@
-name: Refresh upstream pins
-# Two independent daily-refresh jobs merged into one workflow. Each detects
-# a different upstream drift and opens a PR via the shared
-# `./.github/actions/open-refresh-pr` composite. Each job mints a GitHub
-# App token (actions/create-github-app-token) for the PR push so the PR's
-# normal `pull_request` CI fires on its own — no `gh workflow run ci.yml`
-# dispatch hack, and no dependency on the "Allow Actions to create PRs"
-# repo setting (Phase C, #119). The jobs share nothing but that tail —
-# distinct detection, concurrency groups, and cache needs — so they run
-# fully in parallel and one failing never blocks the other.
+name: Refresh lockfiles
+# Daily lock-refresh (#160 T8). Regenerates the three committed lockfiles
+# via the ./.github/actions/lock-refresh composite and opens an
+# auto-merging PR when anything drifted:
 #
-# Merge policy: snapshot-refresh AUTO-MERGES (squash) once smoke-test
-# passes — fully unattended; p2996-refresh is REVIEW-REQUIRED (the clang
-# compiler bump gets human eyes; smoke-test is the safety net either way).
+#   - mise.lock (repo root)                  — host/CI tools
+#   - .devcontainer/mise-system.lock         — image tools (pinned image
+#     MISE_VERSION, linux-x64 — the runner IS linux-x64, which is why this
+#     job exists: macOS mise cannot write the conda checksums)
+#   - .devcontainer/devcontainer-lock.json   — devcontainer features
 #
-# One-time setup (repo admin) — see .github/workflows/AGENTS.md § GitHub
-# App: install an App with contents:write + pull-requests:write, add
-# `REFRESH_APP_ID` + `REFRESH_APP_PRIVATE_KEY` secrets, enable "Allow
-# auto-merge", and require the `build-publish / smoke-test` check on main.
+# Why not Renovate: the hosted app can never run `mise lock` (the command
+# is admin-allowlisted) and does not know mise-system.lock by name; its
+# native `mise` manager only rewrites version STRINGS in config files.
+# This job owns re-RESOLUTION of `"latest"` pins; per-PR lock↔config
+# coverage is gated deterministically by tests/test_lock_coverage.py in
+# contract-preflight (a per-PR regen would false-fail on any upstream
+# release since the last refresh).
 #
-#   - snapshot-refresh: refreshes `.devcontainer/mise-system-resolved.json`
-#     so the P2996 cache hash picks up conda-forge drift on `"latest"`-pinned
-#     tools. Without it the snapshot can stale-hit the cache (binaries inside
-#     the cached image are last-snapshot, not latest).
-#   - p2996-refresh: bumps the pinned `CLANG_P2996_REF` in `docker-bake.hcl`
-#     to the latest `bloomberg/clang-p2996` `p2996`-branch HEAD. clang-p2996
-#     ships no releases/tags, so that branch HEAD is "latest stable". The SHA
-#     stays pinned (reproducible) and feeds the content-addressed cache key
-#     in `dotfiles_setup.p2996_hash` (issue #100).
+# The predecessor snapshot-refresh job (mise-system-resolved.json) was
+# retired with the snapshot itself (#160 T1); p2996-refresh was retired
+# in favor of the Renovate git-refs manager, which bumps CLANG_P2996_REF
+# in docker-bake.hcl + Dockerfile in lockstep.
+#
+# The job mints a GitHub App token (actions/create-github-app-token) for
+# the PR push so the PR's normal `pull_request` CI fires on its own
+# (GITHUB_TOKEN-created PRs don't — GitHub's recursion guard). Merge
+# policy: AUTO-MERGE (squash) once ci-gate passes — a lock bump is
+# validated by the full build + smoke chain like any other PR. One-time
+# App setup: .github/workflows/AGENTS.md § GitHub App.
 #
 # Triggers:
-#   - Daily cron at 00:00 America/Chicago. ci.yml's nightly publish runs at
-#     02:00 (staggered) so a same-day refresh PR — once merged — is what the
-#     nightly rebuild publishes. GHA honors the sibling `timezone:` field.
-#   - workflow_dispatch — manual trigger via `gh workflow run refresh.yml`
-#     or the web UI (fires both jobs).
-#
-# Outcome per job: opens a PR if its tracked file changed; no-op if not.
+#   - Daily cron at 00:00 America/Chicago; ci.yml's nightly publish runs
+#     at 02:00 (staggered) so a same-day lock PR — once merged — is what
+#     the nightly rebuild publishes. GHA honors the sibling `timezone:`.
+#   - workflow_dispatch — manual trigger via `gh workflow run refresh.yml`.
 on:
   schedule:
     - cron: "0 0 * * *"
@@ -44,36 +42,26 @@ on:
 permissions:
   contents: write
   pull-requests: write
-  packages: read # snapshot-refresh pulls the private :dev image to capture
-  # the mise snapshot; an explicit permissions block defaults
-  # all unlisted scopes to `none`, so this must be declared
-  # or `docker pull :dev` fails with "denied".
 jobs:
-  snapshot-refresh:
+  lock-refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       contents: read
-    # Job-level concurrency keeps this independent of p2996-refresh — a
-    # superseding snapshot run cancels only its own group.
     concurrency:
-      group: snapshot-refresh
+      group: lock-refresh
       cancel-in-progress: false
     env:
-      # Disk-only debug-level logs for diagnosing snapshot-capture failures.
-      HK_LOG_FILE_LEVEL: debug
+      # Disk-only debug-level logs for diagnosing lock-regen failures.
       MISE_LOG_FILE: /tmp/mise.log
       MISE_LOG_FILE_LEVEL: debug
     steps:
       - name: Mint GitHub App token
         # App-token PR push fires `pull_request` CI on its own (unlike
-        # secrets.GITHUB_TOKEN). Token is scoped to this repo via the App
-        # installation; permissions = the App's grant (contents + PRs write).
-        # REFRESH_APP_ID must be the NUMERIC App ID — `app-id` signs the JWT
-        # `iss`, which GitHub requires be an integer. The Client ID (`Iv…`)
-        # fails with "'Issuer' claim must be an Integer" even via the
-        # newer `client-id` input (verified live, #119). The app-id
-        # deprecation warning is benign — client-id is not a usable path here.
+        # secrets.GITHUB_TOKEN). REFRESH_APP_ID must be the NUMERIC App ID
+        # — `app-id` signs the JWT `iss`, which GitHub requires be an
+        # integer; the Client ID (`Iv…`) fails even via `client-id`
+        # (verified live, #119).
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
@@ -85,126 +73,48 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - name: Install mise (python + uv)
-        # Host-side python + uv: the snapshot JSON is captured in the
-        # container, but formatted + written to the repo on the HOST so
-        # the file is runner-owned (peter-evans/create-pull-request needs
-        # that). See the Capture step (#131).
+      - name: Install mise (all tools)
+        # Full install: the composite needs mise itself (root lock), uv +
+        # python (lock-stage/lock-collect), and @devcontainers/cli
+        # (devcontainer upgrade) — all pinned in mise.toml/shared.toml.
         uses: ./.github/actions/setup-mise
+      - name: Regenerate lockfiles
+        uses: ./.github/actions/lock-refresh
         with:
-          install_args: "python uv"
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
-      - name: Log in to Container Registry
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Pull latest devcontainer image
-        run: docker pull ghcr.io/ray-manaloto/dotfiles-devcontainer:dev
-      - name: Capture mise-system resolved snapshot from container
-        # Two-step capture (#131): run `mise ls --json` inside the :dev
-        # container AS ITS DEFAULT USER (no `--user` UID override, no repo
-        # mount, no `uv run`) so mise reads the system config and writes
-        # nothing — this avoids the prior "Permission denied" on the
-        # container's UID-1000 mise cache/state dirs AND the project
-        # mise.toml triggering a tool install. Then format + write the
-        # snapshot on the HOST runner, so the file is runner-owned for
-        # create-pull-request to stage.
-        run: |
-          set -euo pipefail
-          docker run --rm \
-            ghcr.io/ray-manaloto/dotfiles-devcontainer:dev \
-            mise ls --json > /tmp/mise-ls.json
-          uv run --project python dotfiles-setup mise-snapshot \
-            --from-json /tmp/mise-ls.json
-      - name: Open PR if snapshot drifted
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Open PR if any lock drifted
         uses: ./.github/actions/open-refresh-pr
         with:
           token: ${{ steps.app-token.outputs.token }}
-          commit-message: "chore: refresh mise-system-resolved snapshot"
-          title: "chore: refresh mise-system-resolved snapshot"
+          commit-message: "chore: refresh lockfiles (mise.lock, mise-system.lock, devcontainer-lock.json)"
+          title: "chore: refresh lockfiles"
           body: |
-            Automated daily refresh of `.devcontainer/mise-system-resolved.json`.
+            Automated daily regeneration of the three committed lockfiles
+            (#160 T8):
 
-            Captures conda-forge resolutions of system-mise tools whose
-            `mise-system.toml` versions are pinned to `"latest"`. This PR
-            auto-merges (squash) once `build-publish / smoke-test` passes —
-            the smoke test validates the rebuilt image, so the snapshot
-            drift lands unattended.
+            - `mise.lock` — host/CI tool resolutions
+            - `.devcontainer/mise-system.lock` — image tool resolutions
+              (pinned image MISE_VERSION, linux-x64)
+            - `.devcontainer/devcontainer-lock.json` — devcontainer features
+
+            Re-resolves `"latest"` pins that the hosted Renovate app cannot
+            (it may not run `mise lock`). This PR auto-merges (squash) once
+            ci-gate passes — an image-input lock change runs the full
+            build + smoke chain first.
 
             Trigger: ${{ github.event_name }}.
-          branch: chore/snapshot-refresh
-          paths: .devcontainer/mise-system-resolved.json
-          labels: mise-snapshot
-          summary-heading: Snapshot refresh
+          branch: chore/lock-refresh
+          paths: |
+            mise.lock
+            .devcontainer/mise-system.lock
+            .devcontainer/devcontainer-lock.json
+          labels: lockfile
+          summary-heading: Lock refresh
           auto-merge: "true"
-  p2996-refresh:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    concurrency:
-      group: p2996-refresh
-      cancel-in-progress: false
-    steps:
-      - name: Mint GitHub App token
-        # App-token PR push fires `pull_request` CI on its own (unlike
-        # secrets.GITHUB_TOKEN). This job does NOT auto-merge — the clang
-        # compiler bump is review-required.
-        id: app-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+      - name: Upload diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          app-id: ${{ secrets.REFRESH_APP_ID }}
-          private-key: ${{ secrets.REFRESH_APP_PRIVATE_KEY }}
-          permission-contents: write
-          permission-pull-requests: write
-      - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-      - name: Install mise (python + uv)
-        # Subset install: only python + uv, both pinned in mise.toml.
-        uses: ./.github/actions/setup-mise
-        with:
-          install_args: "python uv"
-      - name: Bump CLANG_P2996_REF to latest p2996 HEAD
-        # `git ls-remote` the p2996 branch, compare to the pinned SHA, and
-        # rewrite docker-bake.hcl only when it advanced. Emits a one-line
-        # JSON result (changed/old_ref/new_ref) to the step summary.
-        id: bump
-        run: |
-          set -euo pipefail
-          result=$(uv run --project python dotfiles-setup p2996-refresh)
-          echo "$result"
-          {
-            echo "## CLANG_P2996_REF refresh"
-            echo ""
-            echo '```json'
-            echo "$result"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-      - name: Open PR if the pinned ref advanced
-        uses: ./.github/actions/open-refresh-pr
-        with:
-          token: ${{ steps.app-token.outputs.token }}
-          commit-message: "chore: bump CLANG_P2996_REF to latest p2996 HEAD"
-          title: "chore: bump CLANG_P2996_REF to latest p2996 HEAD"
-          body: |
-            Automated daily bump of `CLANG_P2996_REF` in `docker-bake.hcl`
-            to the latest `bloomberg/clang-p2996` `p2996`-branch HEAD.
-
-            clang-p2996 ships no releases or tags, so the active P2996 work
-            on the `p2996` branch HEAD is tracked as "latest". The pinned
-            SHA feeds the content-addressed P2996 cache key, so this PR will
-            trigger exactly one clang rebuild (ccache gives ~80% object
-            reuse). **Review-required** — the compiler bump gets human eyes;
-            review the upstream commit range before merging.
-
-            Trigger: ${{ github.event_name }}.
-          branch: chore/p2996-refresh
-          paths: docker-bake.hcl
-          labels: enhancement
-          summary-heading: CLANG_P2996_REF refresh validation
-          auto-merge: "false"
+          name: lock-refresh-logs
+          path: /tmp/mise.log
+          if-no-files-found: ignore

@@ -16,18 +16,18 @@ post-failure reporting.
 | `build-publish.yml` | Reusable (`on: workflow_call`) build chain: base-prep → p2996-prep → dev-prep → build → smoke-test → dev-tag (dev-prep/dev-tag = 3rd content-hash tier, #122). Inputs `{tag_strategy, publish, target, ref, p2996_ref, platform*}` (`p2996_ref` #120; `*` reserved); outputs `{image_ref, digest}`. Caller's `github` context → sha/pr tags resolve identically |
 | `ci-failure-report.yml` | Post-failure diagnostics / issue filing |
 | `image-analysis.yml` | Async (`workflow_run` on CI success): benchmark metrics + Trivy CVE scan, off the PR critical path |
-| `refresh.yml` | Daily cron (00:00), two independent jobs: `snapshot-refresh` (refresh `mise-system-resolved.json` on conda-forge drift, **auto-merges**) and `p2996-refresh` (bump `CLANG_P2996_REF` to `bloomberg/clang-p2996` HEAD, **review-required**, #100). Each mints an App token (#119) so its PR fires CI on its own; both PR via `open-refresh-pr`. See **GitHub App** below. |
+| `refresh.yml` | Daily cron (00:00), one `lock-refresh` job (#160 T8): regenerates `mise.lock` + `.devcontainer/mise-system.lock` (pinned image mise, linux-x64) + `devcontainer-lock.json` via the `lock-refresh` composite, PRs via `open-refresh-pr` (App token #119), **auto-merges**. `CLANG_P2996_REF` bumps moved to Renovate's git-refs manager. |
 | `dispatch-build.yml` | Thin `repository_dispatch` caller (Phase D, #120, type `build-p2996`): calls `build-publish.yml` with `client_payload.{p2996_ref,ref?}` + `tag_strategy: dispatch` for on-demand exact-upstream-SHA builds. Never moves `:dev`/`:latest`; warms `:p2996-<hash>`/`:dev-<hash>`. See **Phase D** below. |
 
 ## Composite actions (`.github/actions/`)
 
 Self-documented in each `action.yml`: `setup-mise` (wraps `jdx/mise-action`
-+ `install_args`, all 8 mise jobs) and `open-refresh-pr` (App-token create-PR
-+ optional squash auto-merge, both `refresh.yml` jobs). **Local-composite
-checkout gotcha:** `./.github/actions/*` resolves from `$GITHUB_WORKSPACE`
-(empty until checkout), so jobs `actions/checkout` FIRST, then the composite.
-**Composites can't read `secrets`** — the App token is minted in
-`refresh.yml`, passed in.
++ `install_args`), `lock-refresh` (regenerates the three lockfiles, #160
+T8), and `open-refresh-pr` (App-token create-PR + optional squash
+auto-merge). **Local-composite checkout gotcha:** `./.github/actions/*`
+resolves from `$GITHUB_WORKSPACE` (empty until checkout), so jobs
+`actions/checkout` FIRST, then the composite. **Composites can't read
+`secrets`** — the App token is minted in `refresh.yml`, passed in.
 
 ## Pipeline stages
 
@@ -105,8 +105,8 @@ Push-to-main path (after a PR merge):
   (retag to `:sha`/`:pr-NNN`). Nightly skips the dev probe and always rebuilds
   (catches rolling-tool drift the hash can't see).
 - **P2996 cache inputs.** Key = `CLANG_P2996_REF`, `BASE_IMAGE`, `PLATFORM`,
-  Dockerfile, bake, `mise-system-resolved.json`, `mise-system.toml`. Bust:
-  `mise run capture-mise-system-resolved` (`.devcontainer/P2996-CACHE.md`).
+  Dockerfile p2996 section, bake, + the folded base-hash (mise-system.toml/
+  .lock, shared.toml, hk pkls). See `.devcontainer/P2996-CACHE.md`.
 - **`uv run --project python`**, not `--directory` — `--directory`
   changes cwd and breaks relative test paths.
 - **Use `--watch`, never sleep-poll** (`gh pr checks <n> --watch`); the
@@ -130,7 +130,7 @@ GHA `schedule.cron` honors a sibling `timezone:` field (IANA zone), e.g.
 
 | Time | Workflow | Role |
 |------|----------|------|
-| 00:00 | `refresh.yml` | **Changes the pins.** `snapshot-refresh` + `p2996-refresh` jobs detect upstream drift (conda-forge snapshot / `clang-p2996` HEAD) and open PRs — no build. |
+| 00:00 | `refresh.yml` | **Changes the pins.** `lock-refresh` re-resolves the three lockfiles and opens an auto-merging PR on drift — no build. |
 | 02:00 | `ci.yml` nightly | **Publishes on the pinned ref.** Rebuilds `:dev`/`:latest` on the *current* pins (catches base-image CVEs / floating-tool drift the pins don't move). |
 
 The 2h gap lets a 00:00 refresh PR, merged before 02:00, be what the
@@ -144,9 +144,9 @@ repo-admin setup:** (1) create a GitHub App with **contents: write +
 pull-requests: write**, install it, add secrets `REFRESH_APP_ID` (**numeric
 App ID**, not Client ID `Iv…`) + `REFRESH_APP_PRIVATE_KEY`; (2) enable
 **Allow auto-merge**; (3) branch protection on `main` requiring **`ci-gate`**
-— else `--auto` lands before smoke. Policy: snapshot auto-merges (squash)
-once smoke passes; p2996 is review-required. `ci-gate` (always-run: passes
-when upstream succeed/skip) lets non-build PRs merge without admin.
+— else `--auto` lands before smoke. Policy: lock-refresh auto-merges
+(squash) once ci-gate passes. `ci-gate` (always-run: passes when upstream
+succeed/skip) lets non-build PRs merge without admin.
 
 ## Phase D — on-demand p2996 build (#120)
 
