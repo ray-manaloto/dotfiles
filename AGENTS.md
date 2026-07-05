@@ -35,7 +35,7 @@ the official `@devcontainers/cli` (pinned in `mise.toml`).
 
 | File | Purpose |
 |------|---------|
-| `mise.toml` | Tool versions and tasks (hk, pkl, hadolint, shellcheck, actionlint, pinact, python 3.14, uv, agnix) |
+| `mise.toml` + `.config/mise/conf.d/shared.toml` | Host tool versions + tasks; the 20 tools shared with the image (hk, pkl, linters, python, uv, chezmoi) live in the exact-pinned shared fragment both host and image merge (#160 T5) |
 | `mise.lock` | Locked tool versions for reproducible installs |
 | `mise.local.toml` | Gitignored per-clone overrides (e.g., `BASE_IMAGE`). See `mise.local.toml.example` |
 | `hk.pkl` | Project git hook config; imports `hk-common.pkl`; enforces `no_lint_skip`, `no_mcp_registration`, `require_pipefail`, `claude_md_import_stub`, `claude_agents_md_pairs` |
@@ -150,8 +150,8 @@ Before advancing to the next task or claiming done, EVERY applicable check must 
 
 ### Tool management
 
-- **mise-first**: All tools declared in `mise.toml`; use mise binaries
-  directly, not npx.
+- **mise-first**: All tools declared in `mise.toml` (or the merged
+  `.config/mise/conf.d/shared.toml`); use mise binaries directly, not npx.
 - **uv for Python**: `uv run --project python` for all Python commands.
   **Never `uv run --directory python`** — the latter changes cwd and
   breaks relative test paths.

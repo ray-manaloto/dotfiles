@@ -19,8 +19,8 @@ Defines the devcontainer image and runtime lifecycle. Two layers:
 | `Dockerfile` | Multi-stage base image (mise bootstrap, cargo/rustup cookbook paths, build-time self-checks); known cosmetic warnings documented in comment block |
 | `Dockerfile.host-user` | Thin overlay that adds the host UID/GID (low-priority Phase 2 work) |
 | `devcontainer.json` | Devcontainer spec (containers.dev) — lifecycle hooks, features, volumes, dynamic naming |
-| `mise-system.toml` | Dedicated Docker system-wide mise config; installed to `/usr/local/share/mise/config.toml`; includes postinstall hook for Claude Code CLI |
-| `mise-system.lock` + `P2996-CACHE.md` | Native mise lockfile (rattler conda sha256 + version pins, linux-x64); COPYd to `/usr/local/share/mise/mise.lock` and consumed by `mise install --system --locked`; its digest feeds the base content-hash. Regenerate via the CI `lock-refresh` job (epic #160) |
+| `mise-system.toml` | Dedicated Docker system-wide mise config → `/usr/local/share/mise/config.toml`. `[bootstrap.packages]` declares the apt set (shadow verify, #160 T4); the 20 host↔image shared tools come from the repo `.config/mise/conf.d/shared.toml` COPYd to `conf.d/` and merged (#160 T5) |
+| `mise-system.lock` + `P2996-CACHE.md` | Native mise lockfile (rattler conda sha256 + version pins, linux-x64) covering the merged config; COPYd to `/usr/local/share/mise/mise.lock`, consumed by `mise install --system --locked`; its digest feeds the base content-hash. Regenerate via the CI `lock-refresh` job (epic #160) |
 
 ## Devcontainer Lifecycle
 
