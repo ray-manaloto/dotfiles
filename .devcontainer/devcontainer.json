@@ -131,7 +131,12 @@
     // anywhere in the container). Verified jdx/mise@v2026.4.28 against
     // upstream HEAD: src/env.rs MISE_IGNORED_CONFIG_PATHS definition,
     // settings.toml [ignored_config_paths] section, src/config/mod.rs.
-    "MISE_IGNORED_CONFIG_PATHS": "/workspaces/${localWorkspaceFolderBasename}/mise.toml",
+    // The second path ignores the workspace copy of the shared conf.d fragment
+    // (#160 T5): the container gets those 20 tools from the COPYd system copy at
+    // /usr/local/share/mise/conf.d/shared.toml, so the bind-mounted workspace
+    // copy must NOT also load (preserves the "container reads the baked config,
+    // never the host repo" isolation). Colon-separated, PATH-style.
+    "MISE_IGNORED_CONFIG_PATHS": "/workspaces/${localWorkspaceFolderBasename}/mise.toml:/workspaces/${localWorkspaceFolderBasename}/.config/mise/conf.d/shared.toml",
 
     // Explicit system-config location. Per src/config/mod.rs
     // `system_config_files()`, MISE_SYSTEM_CONFIG_FILE short-circuits

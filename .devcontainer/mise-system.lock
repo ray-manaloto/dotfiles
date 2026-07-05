@@ -613,13 +613,13 @@ url = "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.20.1/ca
 url_api = "https://api.github.com/repos/cargo-bins/cargo-binstall/releases/assets/453434840"
 
 [[tools.chezmoi]]
-version = "2.70.5"
+version = "2.70.4"
 backend = "aqua:twpayne/chezmoi"
 
 [tools.chezmoi."platforms.linux-x64"]
-checksum = "sha256:6a76a0ac3718f0d45b34b4b57067f9556f8f6042e3da710a3c496838362aca14"
-url = "https://github.com/twpayne/chezmoi/releases/download/v2.70.5/chezmoi_2.70.5_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/twpayne/chezmoi/releases/assets/437663993"
+checksum = "sha256:7382f585d35647ebb492bd6345466e7f35564068b78285bb029cb2f35056ecf4"
+url = "https://github.com/twpayne/chezmoi/releases/download/v2.70.4/chezmoi_2.70.4_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/twpayne/chezmoi/releases/assets/424586806"
 
 [[tools.claude-code]]
 version = "2.1.195"
@@ -1665,13 +1665,13 @@ url = "https://github.com/bootandy/dust/releases/download/v1.2.4/dust-v1.2.4-x86
 url_api = "https://api.github.com/repos/bootandy/dust/releases/assets/338099991"
 
 [[tools.editorconfig-checker]]
-version = "3.7.0"
+version = "3.8.0"
 backend = "aqua:editorconfig-checker/editorconfig-checker"
 
 [tools.editorconfig-checker."platforms.linux-x64"]
-checksum = "sha256:9a0c3a5170bffa24f9e5f0def53d285777b6c5284a95367f40d399d0b76af552"
-url = "https://github.com/editorconfig-checker/editorconfig-checker/releases/download/v3.7.0/ec-linux-amd64.tar.gz"
-url_api = "https://api.github.com/repos/editorconfig-checker/editorconfig-checker/releases/assets/429522924"
+checksum = "sha256:613bd88f34165a334adcb6b7e92a123c9de0eada65846d31af63613b779ff3be"
+url = "https://github.com/editorconfig-checker/editorconfig-checker/releases/download/v3.8.0/ec-linux-amd64.tar.gz"
+url_api = "https://api.github.com/repos/editorconfig-checker/editorconfig-checker/releases/assets/460248510"
 
 [[tools.eza]]
 version = "0.23.4"
@@ -1816,13 +1816,13 @@ url = "https://github.com/sharkdp/hexyl/releases/download/v0.17.0/hexyl-v0.17.0-
 url_api = "https://api.github.com/repos/sharkdp/hexyl/releases/assets/355844488"
 
 [[tools.hk]]
-version = "1.48.0"
+version = "1.46.0"
 backend = "aqua:jdx/hk"
 
 [tools.hk."platforms.linux-x64"]
-checksum = "sha256:6b7f9a28391a8b13b88208d723cbde7b945d095cbb03455c7dd5f8df551ed380"
-url = "https://github.com/jdx/hk/releases/download/v1.48.0/hk-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/jdx/hk/releases/assets/445033857"
+checksum = "sha256:85b2cc167443cd27b49e323ef9b9d1a946d4bc18196eccb66112842d30fb90cb"
+url = "https://github.com/jdx/hk/releases/download/v1.46.0/hk-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/jdx/hk/releases/assets/431420608"
 
 [[tools.java]]
 version = "26.0.1"
@@ -1836,13 +1836,13 @@ checksum = "sha256:2f2802d57b5fc414f1ddf6648ba12cc9a6454cf67b32ac95407c018f2e6ab
 url = "https://download.java.net/java/GA/jdk26.0.1/458fda22e4c54d5ba572ab8d2b22eb83/8/GPL/openjdk-26.0.1_linux-x64_bin.tar.gz"
 
 [[tools.jq]]
-version = "1.8.2"
+version = "1.8.1"
 backend = "aqua:jqlang/jq"
 
 [tools.jq."platforms.linux-x64"]
-checksum = "sha256:b1c22172dd303f3be49e935aa56aa48a8b7a46e0bc838b4997d3bb451495870f"
-url = "https://github.com/jqlang/jq/releases/download/jq-1.8.2/jq-linux-amd64"
-url_api = "https://api.github.com/repos/jqlang/jq/releases/assets/453012752"
+checksum = "sha256:020468de7539ce70ef1bceaf7cde2e8c4f2ca6c3afb84642aabc5c97d9fc2a0d"
+url = "https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-linux-amd64"
+url_api = "https://api.github.com/repos/jqlang/jq/releases/assets/268981484"
 
 [[tools.lazygit]]
 version = "0.62.2"
@@ -1903,21 +1903,17 @@ backend = "npm:@openai/codex"
 version = "5.0.0"
 backend = "npm:ajv-cli"
 
-[[tools."npm:renovate"]]
-version = "43.245.0"
-backend = "npm:renovate"
-
 [[tools.pinact]]
-version = "4.1.0"
+version = "4.0.0"
 backend = "aqua:suzuki-shunsuke/pinact"
 
 [tools.pinact."platforms.linux-x64"]
-checksum = "sha256:8fcbf1b3e95551c82fd995535e3c1defa70e23299ce36eb3afd6c98778de6ca0"
-url = "https://github.com/suzuki-shunsuke/pinact/releases/download/v4.1.0/pinact_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/suzuki-shunsuke/pinact/releases/assets/442249966"
+checksum = "sha256:cc220902615325b10bd3bc52ed3de27488f79adaec52adcd12bd2194c2d2c592"
+url = "https://github.com/suzuki-shunsuke/pinact/releases/download/v4.0.0/pinact_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/suzuki-shunsuke/pinact/releases/assets/429386962"
 
 [[tools."pipx:check-jsonschema"]]
-version = "0.37.3"
+version = "0.37.2"
 backend = "pipx:check-jsonschema"
 
 [[tools."pipx:cmakelang"]]
@@ -1953,13 +1949,13 @@ version = "1.11.1"
 backend = "pipx:meson"
 
 [[tools.pixi]]
-version = "0.71.1"
+version = "0.70.0"
 backend = "github:prefix-dev/pixi"
 
 [tools.pixi."platforms.linux-x64"]
-checksum = "sha256:3415495a9b15d3525c5f575f672830349ddbf23ef3275c4488c71bc66ae470cc"
-url = "https://github.com/prefix-dev/pixi/releases/download/v0.71.1/pixi-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/prefix-dev/pixi/releases/assets/457802347"
+checksum = "sha256:23cb0b727b187a7c57aafe9456a76272bdbff30372be6e6f72187df948ad89df"
+url = "https://github.com/prefix-dev/pixi/releases/download/v0.70.0/pixi-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/prefix-dev/pixi/releases/assets/435151922"
 
 [[tools.pkl]]
 version = "0.31.1"
@@ -1971,12 +1967,12 @@ url = "https://github.com/apple/pkl/releases/download/0.31.1/pkl-linux-amd64"
 url_api = "https://api.github.com/repos/apple/pkl/releases/assets/382243718"
 
 [[tools.python]]
-version = "3.14.6"
+version = "3.14.5"
 backend = "core:python"
 
 [tools.python."platforms.linux-x64"]
-checksum = "sha256:c172314f4a8ec137a8f605289010c3d19c8b56867d968f0095074cc68efa1d29"
-url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260623/cpython-3.14.6+20260623-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
+checksum = "sha256:982a60fc7f11bbe405ab54afcd4eb145f1134797bbbffac9f5c49df4ec98b13e"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260602/cpython-3.14.5+20260602-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
 
 [[tools.ripgrep]]
 version = "15.1.0"
@@ -2065,13 +2061,13 @@ version = "14.0.0"
 backend = "cargo:tokei"
 
 [[tools.typos]]
-version = "1.47.2"
+version = "1.47.0"
 backend = "aqua:crate-ci/typos"
 
 [tools.typos."platforms.linux-x64"]
-checksum = "sha256:7aef58932fc123b4cf4b40d86468e89a3297d80169051d7cfd13a235e05fc426"
-url = "https://github.com/crate-ci/typos/releases/download/v1.47.2/typos-v1.47.2-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/crate-ci/typos/releases/assets/437792357"
+checksum = "sha256:6f8a935cea6c60b060082b862a7e777bfd92d939a4fd4194d8085b086dfe24e4"
+url = "https://github.com/crate-ci/typos/releases/download/v1.47.0/typos-v1.47.0-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/crate-ci/typos/releases/assets/432596994"
 
 [[tools.usage]]
 version = "3.5.3"
@@ -2083,13 +2079,13 @@ url = "https://github.com/jdx/usage/releases/download/v3.5.3/usage-x86_64-unknow
 url_api = "https://api.github.com/repos/jdx/usage/releases/assets/455875471"
 
 [[tools.uv]]
-version = "0.11.25"
+version = "0.11.17"
 backend = "aqua:astral-sh/uv"
 
 [tools.uv."platforms.linux-x64"]
-checksum = "sha256:7195cfcc1785d0c559d4682ad9109f26664b8db4d828d42d66078ef454061891"
-url = "https://github.com/astral-sh/uv/releases/download/0.11.25/uv-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/459122571"
+checksum = "sha256:4231a429d4e0f7c1937d8916658c08a7706cd7872afebeb87203a18c2e0dc28e"
+url = "https://github.com/astral-sh/uv/releases/download/0.11.17/uv-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/432412774"
 
 [[tools.vivid]]
 version = "0.11.1"
@@ -2132,13 +2128,13 @@ url = "https://github.com/sxyazi/yazi/releases/download/v26.5.6/yazi-x86_64-unkn
 url_api = "https://api.github.com/repos/sxyazi/yazi/releases/assets/412871954"
 
 [[tools.yq]]
-version = "4.53.3"
+version = "4.53.2"
 backend = "aqua:mikefarah/yq"
 
 [tools.yq."platforms.linux-x64"]
-checksum = "sha256:fa52a4e758c63d38299163fbdd1edfb4c4963247918bf9c1c5d31d84789eded4"
-url = "https://github.com/mikefarah/yq/releases/download/v4.53.3/yq_linux_amd64"
-url_api = "https://api.github.com/repos/mikefarah/yq/releases/assets/440146735"
+checksum = "sha256:d56bf5c6819e8e696340c312bd70f849dc1678a7cda9c2ad63eebd906371d56b"
+url = "https://github.com/mikefarah/yq/releases/download/v4.53.2/yq_linux_amd64"
+url_api = "https://api.github.com/repos/mikefarah/yq/releases/assets/398368450"
 provenance = "cosign"
 
 [[tools.zellij]]

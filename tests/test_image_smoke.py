@@ -361,7 +361,7 @@ def test_installed_tools_filters_by_source_and_installed() -> None:
         }
     )
 
-    installed = installed_tools_from_mise_ls(payload, _SYS_CFG)
+    installed = installed_tools_from_mise_ls(payload, (_SYS_CFG,))
 
     assert installed == {"python": "latest"}
 
@@ -399,8 +399,12 @@ def test_smoke_script_injects_tool_set_assertion() -> None:
     assert "python\tlatest" in script
     # ...and the mechanical set-diff (no logic in bash).
     assert 'if [ -n "$EXPECTED_TOOL_REQUESTS" ]; then' in script
-    assert "mise ls --json | jq -r" in script
-    assert "select(.source.path == $cfg and .installed == true)" in script
+    assert "mise ls --json" in script
+    assert "jq -r --arg cfg" in script
+    assert (
+        "select((.source.path == $cfg or .source.path == $shared) "
+        "and .installed == true)" in script
+    )
 
 
 def test_smoke_script_tool_set_guard_dormant_without_tools() -> None:
@@ -419,15 +423,22 @@ def test_smoke_docker_cmd_injects_real_declared_tools() -> None:
     )
     script = cmd[-1]
 
-    # A representative real tool from .devcontainer/mise-system.toml.
-    assert "python\tlatest" in script
+    # A representative real tool from .devcontainer/mise-system.toml [tools]...
+    assert "node\tlatest" in script
+    # ...and from the merged shared conf.d fragment (#160 T5), exact-pinned.
+    assert "python\t3.14.5" in script
 
 
-def test_resolve_declared_tools_reads_repo_config() -> None:
-    """The repo's mise-system.toml parses to a non-empty backend-prefixed set."""
+def test_resolve_declared_tools_merges_system_and_shared() -> None:
+    """The image's declared set is mise-system.toml [tools] MERGED with the
+    shared conf.d fragment (#160 T5)."""
     declared = resolve_declared_tools()
 
-    assert declared["python"] == "latest"
+    # From the shared fragment, exact-pinned.
+    assert declared["python"] == "3.14.5"
+    assert declared["hk"] == "1.46.0"
+    # From mise-system.toml [tools].
+    assert declared["node"] == "latest"
     assert "conda:llvm" in declared
     assert all(isinstance(v, str) for v in declared.values())
 

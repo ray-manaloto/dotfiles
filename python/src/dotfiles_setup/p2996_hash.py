@@ -64,6 +64,7 @@ class BaseHashInputs:
     base_section_digest: str
     mise_lock_digest: str
     mise_system_config_digest: str
+    shared_config_digest: str
     hk_config_digest: str
 
     def __post_init__(self) -> None:
@@ -77,6 +78,7 @@ class BaseHashInputs:
             "base_section_digest",
             "mise_lock_digest",
             "mise_system_config_digest",
+            "shared_config_digest",
             "hk_config_digest",
         ):
             value = getattr(self, field_name)
@@ -275,6 +277,12 @@ def gather_base_inputs(repo_root: Path) -> BaseHashInputs:
     # edits (which don't move the lock) still bust the cache and trigger a
     # rebuild. See PR #140.
     mise_system_config_path = repo_root / ".devcontainer" / "mise-system.toml"
+    # The base section also COPYs the shared conf.d fragment to
+    # /usr/local/share/mise/conf.d/shared.toml — it supplies the 20 exact-pinned
+    # host↔image tools that mise merges into the system config, so its bytes are
+    # a build input too (a version bump there changes what gets installed). See
+    # epic #160 T5.
+    shared_config_path = repo_root / ".config" / "mise" / "conf.d" / "shared.toml"
     # The base section also COPYs hk-common.pkl + hk-image.pkl verbatim to
     # /etc/hk/ (the in-image hk config the devcontainer smoke uses). Same gap as
     # mise-system.toml: base_section_digest captures the COPY *instruction*, not
@@ -291,6 +299,7 @@ def gather_base_inputs(repo_root: Path) -> BaseHashInputs:
         base_section_digest=_sha256_hex(base_section),
         mise_lock_digest=_file_digest(lock_path),
         mise_system_config_digest=_file_digest(mise_system_config_path),
+        shared_config_digest=_file_digest(shared_config_path),
         hk_config_digest=hk_config_digest,
     )
 
@@ -306,6 +315,7 @@ def compute_base_hash(inputs: BaseHashInputs) -> str:
             f"base_section={inputs.base_section_digest}",
             f"mise_lock={inputs.mise_lock_digest}",
             f"mise_system_config={inputs.mise_system_config_digest}",
+            f"shared_config={inputs.shared_config_digest}",
             f"hk_config={inputs.hk_config_digest}",
         ],
     )

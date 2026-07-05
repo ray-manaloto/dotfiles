@@ -55,6 +55,10 @@ The **base** hash (`dotfiles-setup base-hash`) covers:
   still bust the cache; added PR #140)
 - sha256 of `hk-common.pkl` + `hk-image.pkl` (base section `COPY`s them to
   `/etc/hk/`; added PR #156)
+- sha256 of `.config/mise/conf.d/shared.toml` (base section `COPY`s it to
+  `/usr/local/share/mise/conf.d/`; the 20 exact-pinned host↔image tools it
+  supplies are a build input — a version bump there changes what installs;
+  epic #160 T5)
 
 The **p2996** hash (`dotfiles-setup p2996-hash`) covers:
 

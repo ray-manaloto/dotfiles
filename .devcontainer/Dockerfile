@@ -124,6 +124,12 @@ COPY .devcontainer/mise-system.toml /usr/local/share/mise/config.toml
 # `mise install --system --locked` below consumes it. Replaces the retired
 # version-only mise-system-resolved.json snapshot. See epic #160.
 COPY .devcontainer/mise-system.lock /usr/local/share/mise/mise.lock
+# Shared host↔image tool versions (#160 T5). mise merges $MISE_CONFIG_DIR/conf.d/
+# *.toml into the system config, so these 20 exact-pinned tools are resolved the
+# same on the host (which loads the repo copy at .config/mise/conf.d/) and here.
+# Their versions are captured in mise-system.lock above and installed via
+# `mise install --system --locked`.
+COPY .config/mise/conf.d/shared.toml /usr/local/share/mise/conf.d/shared.toml
 
 # Pre-install tools globally via mise
 # Known cosmetic warnings during install:

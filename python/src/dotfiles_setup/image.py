@@ -14,6 +14,7 @@ import sys
 import time
 import tomllib
 import zlib
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from dotfiles_setup import _project_root
@@ -21,7 +22,6 @@ from dotfiles_setup.p2996_hash import _extract_bake_variable
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
-    from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +63,10 @@ def resolve_expected_config_sha256() -> str:
 # System mise config inside the image — the Dockerfile COPY target and the
 # ``source.path`` that ``mise ls --json`` attributes system tools to.
 SYSTEM_CONFIG_FILE = "/usr/local/share/mise/config.toml"
+# The shared conf.d fragment (#160 T5) is COPYd alongside and merged into the
+# system config; mise attributes its 20 tools to THIS source path, so the
+# declared/installed comparison must count both files.
+SHARED_CONFIG_FILE = "/usr/local/share/mise/conf.d/shared.toml"
 
 
 def _tool_requested_version(spec: str | dict[str, Any]) -> str:
@@ -94,28 +98,42 @@ def parse_declared_tools(config_text: str) -> dict[str, str]:
 
 
 def resolve_declared_tools() -> dict[str, str]:
-    """Declared tool set from the repo's ``.devcontainer/mise-system.toml``."""
-    config_path = _project_root() / ".devcontainer" / "mise-system.toml"
-    return parse_declared_tools(config_path.read_text())
+    """Declared image tool set (mise-system.toml [tools] + shared fragment).
+
+    Both files are COPYd into the image and merged by mise (#160 T5), so the
+    declared set is their union. The shared fragment supplies the 20 exact-
+    pinned host↔image tools; the system config supplies the rest.
+    """
+    root = _project_root()
+    declared = parse_declared_tools(
+        (root / ".devcontainer" / "mise-system.toml").read_text()
+    )
+    declared.update(
+        parse_declared_tools(
+            (root / ".config" / "mise" / "conf.d" / "shared.toml").read_text()
+        )
+    )
+    return declared
 
 
 def installed_tools_from_mise_ls(
     mise_ls_json: str,
-    config_path: str = SYSTEM_CONFIG_FILE,
+    config_paths: tuple[str, ...] = (SYSTEM_CONFIG_FILE, SHARED_CONFIG_FILE),
 ) -> dict[str, str]:
     """Extract ``{tool_key: requested_version}`` from ``mise ls --json`` output.
 
-    Filters to entries that are (a) sourced from ``config_path`` (the system
-    config, so a user/global overlay's tools don't pollute the comparison) and
-    (b) actually ``installed`` — a declared-but-failed install therefore shows
-    up as a *missing* tool in the diff instead of silently passing.
+    Filters to entries that are (a) sourced from one of ``config_paths`` (the
+    system config + the shared conf.d fragment, so a user/global overlay's tools
+    don't pollute the comparison) and (b) actually ``installed`` — a declared-
+    but-failed install therefore shows up as a *missing* tool in the diff
+    instead of silently passing.
     """
     doc = json.loads(mise_ls_json)
     result: dict[str, str] = {}
     for key, entries in doc.items():
         for entry in entries:
             source = entry.get("source") or {}
-            if source.get("path") == config_path and entry.get("installed"):
+            if source.get("path") in config_paths and entry.get("installed"):
                 result[key] = entry.get("requested_version", "")
     return result
 
@@ -247,6 +265,10 @@ def build_smoke_script(
 # — MISE_CONFIG_DIR is overridden at runtime to the user config dir, a
 # different (chezmoi-rendered) file that false-fails identity on a current base.
 MISE_CFG="${MISE_SYSTEM_CONFIG_FILE:-/usr/local/share/mise/config.toml}"
+# #160 T5: the shared conf.d fragment is merged into the system config; its
+# tools are attributed to this path by `mise ls --json`, so the tool-set diff
+# must count both sources.
+MISE_SHARED_CFG="$(dirname "$MISE_CFG")/conf.d/shared.toml"
 echo "=== image identity (mise-system config hash) ==="
 if [ -n "$EXPECTED_CONFIG_SHA256" ]; then
   actual_config_sha256=$(sha256sum "$MISE_CFG" | cut -d' ' -f1)
@@ -278,9 +300,10 @@ echo "=== exact tool-set assertion (declared vs installed, system config) ==="
 # requested version (deterministic == declared) not the resolved version, which
 # drifts for `latest` by design. LC_ALL=C sort => byte order matching python's.
 if [ -n "$EXPECTED_TOOL_REQUESTS" ]; then
-  installed_tool_requests=$(mise ls --json | jq -r --arg cfg "$MISE_CFG" '
+  installed_tool_requests=$(mise ls --json \
+    | jq -r --arg cfg "$MISE_CFG" --arg shared "$MISE_SHARED_CFG" '
     to_entries[] | .key as $k | .value[]
-    | select(.source.path == $cfg and .installed == true)
+    | select((.source.path == $cfg or .source.path == $shared) and .installed == true)
     | "\\($k)\\t\\(.requested_version)"' | LC_ALL=C sort -u)
   if ! diff <(printf '%s\n' "$EXPECTED_TOOL_REQUESTS") \
             <(printf '%s\n' "$installed_tool_requests"); then
@@ -722,7 +745,8 @@ def verify_tools_main() -> int:
         text=True,
         check=True,
     )
-    installed = installed_tools_from_mise_ls(result.stdout, config_file)
+    shared_file = str(Path(config_file).parent / "conf.d" / "shared.toml")
+    installed = installed_tools_from_mise_ls(result.stdout, (config_file, shared_file))
     diffs = diff_tool_sets(declared, installed)
     if diffs:
         sys.stderr.write(

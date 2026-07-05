@@ -9,40 +9,24 @@
 
 [tools]
 # Core runtimes
-python = "latest"
-uv = "latest"
 node = "latest"
 bun = "latest"
 go = "latest"
 rust = "latest"
 zig = "latest"
-pixi = "latest"
 java = "latest"
 deno = "latest"
 ruby = "latest"
 cargo-binstall = "latest"
-# Dotfiles management
-chezmoi = "latest"
-# Git hooks & linting
-hk = "latest"
-hadolint = "latest"
-shellcheck = "latest"
-shfmt = "latest"
-taplo = "latest"
-actionlint = "latest"
-typos = "latest"
-yamllint = "latest"
-yamlfmt = "latest"
-yq = "latest"
-ghalint = "latest"
-jq = "latest"
-# #154: the in-image hk config (hk-image.pkl) runs the gitleaks + editorconfig
-# builtins, so the image needs these tools (root mise.toml is host-only — it has
-# ZERO effect on the image; tools inside the container come from THIS file).
-gitleaks = "latest"
+# The 20 tools shared with the host (hk, pkl, gitleaks, chezmoi, python, uv,
+# pixi, pinact, and the linters) come from .config/mise/conf.d/shared.toml,
+# COPYd to /usr/local/share/mise/conf.d/ and merged into this system config —
+# exact-pinned so host and image never drift. See epic #160 T5.
+# #154: hk-image.pkl runs the gitleaks + editorconfig-checker builtins; gitleaks
+# is now provided by the shared fragment, editorconfig-checker stays here as an
+# image-only tool (removed in T6 — host has its own copy in root mise.toml).
 editorconfig-checker = "latest"
 "npm:ajv-cli" = "latest"
-"pipx:check-jsonschema" = "latest"
 # CLI utilities
 fzf = "latest"
 ripgrep = "latest"
@@ -62,7 +46,6 @@ vivid = "latest"
 "npm:@openai/codex" = { version = "latest", depends = ["node"] }
 # Build systems & C++ tooling
 bats = "latest"
-pkl = "latest"
 "github:go-task/task" = "latest"
 "github:mozilla/sccache" = "latest"
 # pipx tools (C++ ecosystem)
@@ -74,8 +57,7 @@ pkl = "latest"
 "pipx:cmakelang" = "latest"
 "pipx:codechecker" = "latest"
 "pipx:gcovr" = "latest"
-# Security scanners
-pinact = "latest"
+# Security scanners: pinact is shared (see .config/mise/conf.d/shared.toml).
 # betterleaks: not in mise tool registry for linux-x64 (tracked in docs/hk-builtins-audit.md)
 # Claude Code CLI — uses http:claude backend (native binary, no npm)
 claude-code = "latest"
@@ -122,7 +104,6 @@ claude-code = "latest"
 # (heavy GUI dep chain conflict). If imagemagick is needed, install via
 # apt in the Dockerfile (`imagemagick` is a standard Ubuntu package).
 "conda:vim" = "latest"
-"npm:renovate" = "latest"
 "sqlite" = "latest"
 "github:tursodatabase/turso" = "latest"
 "libsql-server" = "latest"

@@ -47,6 +47,7 @@ def _stub_base_inputs(**overrides: str) -> BaseHashInputs:
         "base_section_digest": "a" * 64,
         "mise_lock_digest": "c" * 64,
         "mise_system_config_digest": "f" * 64,
+        "shared_config_digest": "9" * 64,
         "hk_config_digest": "b" * 64,
     }
     base.update(overrides)
@@ -122,6 +123,10 @@ def _seed_repo(tmp_path: Path) -> Path:
     # base hash (they land at /etc/hk/ in the image).
     (tmp_path / "hk-common.pkl").write_text("hygiene = new {}\n")
     (tmp_path / "hk-image.pkl").write_text('amends "Config.pkl"\n')
+    # The shared conf.d fragment is a base-section COPY input too (#160 T5).
+    shared_dir = tmp_path / ".config" / "mise" / "conf.d"
+    shared_dir.mkdir(parents=True)
+    (shared_dir / "shared.toml").write_text('[tools]\nhk = "1.46.0"\n')
     return tmp_path
 
 
@@ -160,6 +165,15 @@ def test_base_hash_changes_when_mise_lock_digest_changes() -> None:
     # version-only snapshot — conda-forge drift moves the lock's checksums.
     base = _stub_base_inputs()
     bumped = _stub_base_inputs(mise_lock_digest="e" * 64)
+    assert compute_base_hash(base) != compute_base_hash(bumped)
+
+
+def test_base_hash_changes_when_shared_config_digest_changes() -> None:
+    # Epic #160 T5: the shared conf.d fragment is COPYd into the image and
+    # supplies 20 exact-pinned tools, so a version bump there must bust the
+    # base hash and trigger a rebuild.
+    base = _stub_base_inputs()
+    bumped = _stub_base_inputs(shared_config_digest="7" * 64)
     assert compute_base_hash(base) != compute_base_hash(bumped)
 
 
@@ -638,6 +652,7 @@ def test_dev_hash_kind_namespacing_differs_from_base_and_p2996() -> None:
             base_section_digest="a" * 64,
             mise_lock_digest="a" * 64,
             mise_system_config_digest="a" * 64,
+            shared_config_digest="a" * 64,
             hk_config_digest="a" * 64,
         )
     )
