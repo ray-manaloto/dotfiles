@@ -72,6 +72,8 @@ def _stub_dev_inputs(**overrides: str) -> DevHashInputs:
         "platform": "linux/amd64/v2",
         "dockerfile_digest": "d" * 64,
         "dev_target_digest": "e" * 64,
+        "runtime_config_digest": "a" * 64,
+        "runtime_lock_digest": "b" * 64,
     }
     base.update(overrides)
     return DevHashInputs(**base)
@@ -123,6 +125,12 @@ def _seed_repo(tmp_path: Path) -> Path:
     # base hash (they land at /etc/hk/ in the image).
     (tmp_path / "hk-common.pkl").write_text("hygiene = new {}\n")
     (tmp_path / "hk-image.pkl").write_text('amends "Config.pkl"\n')
+    # The runtime tier files are devcontainer-runtime COPY inputs hashed
+    # into dev-hash (#160 T9/T10).
+    (devcontainer / "mise-runtime.toml").write_text('[tools]\nbats = "latest"\n')
+    (devcontainer / "mise-runtime.lock").write_text(
+        '[[tools.bats]]\nversion = "1.12.0"\n'
+    )
     # The shared conf.d fragment is a base-section COPY input too (#160 T5).
     shared_dir = tmp_path / ".config" / "mise" / "conf.d"
     shared_dir.mkdir(parents=True)
@@ -612,6 +620,18 @@ def test_dev_hash_changes_when_dockerfile_digest_changes() -> None:
 def test_dev_hash_changes_when_dev_target_digest_changes() -> None:
     base = _stub_dev_inputs()
     bumped = _stub_dev_inputs(dev_target_digest="f" * 64)
+    assert compute_dev_hash(base) != compute_dev_hash(bumped)
+
+
+def test_dev_hash_changes_when_runtime_config_digest_changes() -> None:
+    base = _stub_dev_inputs()
+    bumped = _stub_dev_inputs(runtime_config_digest="f" * 64)
+    assert compute_dev_hash(base) != compute_dev_hash(bumped)
+
+
+def test_dev_hash_changes_when_runtime_lock_digest_changes() -> None:
+    base = _stub_dev_inputs()
+    bumped = _stub_dev_inputs(runtime_lock_digest="f" * 64)
     assert compute_dev_hash(base) != compute_dev_hash(bumped)
 
 

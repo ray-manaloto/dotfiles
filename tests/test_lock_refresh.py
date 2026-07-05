@@ -9,15 +9,18 @@ from pathlib import Path
 import pytest
 
 from dotfiles_setup.lock_refresh import (
+    _merge_shared_tools,
     collect_system_lock,
     merged_system_config_tools,
     pinned_mise_version,
     stage_system_lock_dir,
 )
 
-_SYSTEM_TOML = '[tools]\n"conda:git" = "latest"\n'
+_SYSTEM_TOML = '[tools]\n"conda:git" = "latest"\n\n[settings]\nexperimental = true\n'
 _SHARED_TOML = '[tools]\nhk = "1.46.0"\n'
+_RUNTIME_TOML = '[tools]\nbats = "latest"\n'
 _LOCK = '[[tools."conda:git"]]\nversion = "2.0"\n\n[[tools.hk]]\nversion = "1.46.0"\n'
+_RUNTIME_LOCK = '[[tools.bats]]\nversion = "1.12.0"\n'
 
 
 def _mini_repo(tmp_path: Path) -> Path:
@@ -30,6 +33,8 @@ def _mini_repo(tmp_path: Path) -> Path:
     (repo / ".devcontainer" / "mise-system.toml").write_text(_SYSTEM_TOML)
     (repo / ".config" / "mise" / "conf.d" / "shared.toml").write_text(_SHARED_TOML)
     (repo / ".devcontainer" / "mise-system.lock").write_text(_LOCK)
+    (repo / ".devcontainer" / "mise-runtime.toml").write_text(_RUNTIME_TOML)
+    (repo / ".devcontainer" / "mise-runtime.lock").write_text(_RUNTIME_LOCK)
     return repo
 
 
@@ -46,16 +51,30 @@ def test_pinned_mise_version_missing_raises(tmp_path: Path) -> None:
         pinned_mise_version(dockerfile)
 
 
-def test_stage_copies_project_layout_and_returns_version(tmp_path: Path) -> None:
+def test_stage_merges_configs_and_returns_version(tmp_path: Path) -> None:
+    import tomllib
+
     repo = _mini_repo(tmp_path)
     stage = tmp_path / "stage"
     stage.mkdir()
     assert stage_system_lock_dir(repo, stage) == "2026.7.0"
-    assert (stage / "mise.toml").read_text() == _SYSTEM_TOML
-    assert (
-        stage / ".config" / "mise" / "conf.d" / "shared.toml"
-    ).read_text() == _SHARED_TOML
+    # The staged project config is ONE merged file: a conf.d copy would put
+    # the shared tools in a different config dir and mise would lock them
+    # into a separate lockfile (empirically verified — see module docstring).
+    merged = tomllib.loads((stage / "mise.toml").read_text())
+    assert set(merged["tools"]) == {"conda:git", "hk"}
+    assert (stage / "mise.runtime.toml").read_text() == _RUNTIME_TOML
+    assert (stage / "mise.runtime.lock").read_text() == _RUNTIME_LOCK
     assert (stage / "mise.lock").read_text() == _LOCK
+
+
+def test_merge_shared_tools_requires_splice_points() -> None:
+    import pytest as _pytest
+
+    with _pytest.raises(ValueError, match="shared.toml"):
+        _merge_shared_tools(_SYSTEM_TOML, "[settings]\nx = 1\n")
+    with _pytest.raises(ValueError, match="mise-system.toml"):
+        _merge_shared_tools("[settings]\nx = 1\n", _SHARED_TOML)
 
 
 def test_collect_copies_valid_lock_back(tmp_path: Path) -> None:

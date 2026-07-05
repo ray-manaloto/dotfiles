@@ -131,6 +131,11 @@ class DevHashInputs:
     smoke-test, so two different image contents must never collide to
     one dev hash. Hashing the whole file is a safe superset (base/p2996
     edits already bust their own tiers, which feed this hash too).
+
+    The devcontainer-runtime stage (#160 T9/T10) COPYs two repo files
+    OUTSIDE the base sentinels — mise-runtime.toml and mise-runtime.lock —
+    so their BYTES are dev-hash inputs here (the COPY-input rule that
+    #140/#156 established for the base tier).
     """
 
     base_hash: str
@@ -138,6 +143,8 @@ class DevHashInputs:
     platform: str
     dockerfile_digest: str
     dev_target_digest: str
+    runtime_config_digest: str
+    runtime_lock_digest: str
 
     def __post_init__(self) -> None:
         """Reject empty literals + ill-shaped hashes."""
@@ -154,7 +161,12 @@ class DevHashInputs:
                     f"lowercase hex; got {value!r}"
                 )
                 raise ValueError(msg)
-        for field_name in ("dockerfile_digest", "dev_target_digest"):
+        for field_name in (
+            "dockerfile_digest",
+            "dev_target_digest",
+            "runtime_config_digest",
+            "runtime_lock_digest",
+        ):
             _validate_hex_digest(
                 getattr(self, field_name), f"DevHashInputs.{field_name}"
             )
@@ -410,6 +422,12 @@ def gather_dev_inputs(
         dev_target_digest=_sha256_hex(
             _extract_bake_target_block(bake_text, DEV_BAKE_TARGET)
         ),
+        runtime_config_digest=_sha256_hex(
+            (repo_root / ".devcontainer" / "mise-runtime.toml").read_text()
+        ),
+        runtime_lock_digest=_sha256_hex(
+            (repo_root / ".devcontainer" / "mise-runtime.lock").read_text()
+        ),
     )
 
 
@@ -424,6 +442,8 @@ def compute_dev_hash(inputs: DevHashInputs) -> str:
             f"platform={inputs.platform}",
             f"dockerfile={inputs.dockerfile_digest}",
             f"dev_target={inputs.dev_target_digest}",
+            f"runtime_config={inputs.runtime_config_digest}",
+            f"runtime_lock={inputs.runtime_lock_digest}",
         ],
     )
     return _sha256_hex(canonical)[:HASH_LENGTH]

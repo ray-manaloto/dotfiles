@@ -42,13 +42,20 @@ runs:
         # cross-version compatible, so the lock must be written by the
         # exact mise version the image consumes it with.
         curl https://mise.run | MISE_VERSION="v${version}" MISE_INSTALL_PATH="$stage/mise-pinned" sh
+        # mise's npm backend EXECS node/npm during `npm:` version
+        # resolution (ENOENT-fails without them — T9 regen probe; bun on
+        # PATH does NOT satisfy it despite npm.package_manager=bun).
+        # ubuntu-latest runners preinstall node+npm, so no install here.
+        command -v npm >/dev/null || { echo "FAIL: npm missing — npm: tool resolution would ENOENT" >&2; exit 1; }
         export MISE_TRUSTED_CONFIG_PATHS="$stage"
         # Iterate for GitHub-rate-limit convergence (proven in-container
         # recipe, session 2026-07-05): each pass fills what the previous
         # could not resolve; `mise lock` hard-errors on unresolvable
         # tools since 2026.6.13, so a broken tool fails loud here.
+        # MISE_ENV=runtime covers BOTH tiers in one pass — mise writes
+        # mise.lock (base) + mise.runtime.lock (runtime tier, #160 T9).
         for _ in 1 2 3 4 5; do
-          "$stage/mise-pinned" lock --platform linux-x64 -C "$stage"
+          MISE_ENV=runtime "$stage/mise-pinned" lock --platform linux-x64 -C "$stage"
         done
         # lock-collect validates coverage before overwriting the
         # committed lock — a truncated regen never lands.

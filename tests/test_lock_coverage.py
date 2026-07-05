@@ -15,7 +15,10 @@ import re
 import tomllib
 from pathlib import Path
 
-from dotfiles_setup.lock_refresh import merged_system_config_tools
+from dotfiles_setup.lock_refresh import (
+    merged_system_config_tools,
+    runtime_config_tools,
+)
 
 _REPO_ROOT = Path(__file__).parent.parent
 _FEATURE_KEY_RE = re.compile(r'"(ghcr\.io/[^"]+/features/[^"]+)"\s*:')
@@ -38,6 +41,21 @@ def test_system_lock_covers_merged_config() -> None:
     )
     assert locked - config == set(), (
         f"stale mise-system.lock entries for removed tools: {sorted(locked - config)}"
+    )
+
+
+def test_runtime_lock_covers_runtime_config() -> None:
+    """mise-runtime.lock must lock exactly the runtime tier's tools (#160
+    T9) — the devcontainer-runtime stage installs them with
+    `mise install --system --locked` under MISE_ENV=runtime."""
+    config = runtime_config_tools(_REPO_ROOT)
+    locked = _lock_tools(_REPO_ROOT / ".devcontainer" / "mise-runtime.lock")
+    assert config - locked == set(), (
+        f"tools missing from mise-runtime.lock (regenerate via lock-refresh): "
+        f"{sorted(config - locked)}"
+    )
+    assert locked - config == set(), (
+        f"stale mise-runtime.lock entries for removed tools: {sorted(locked - config)}"
     )
 
 

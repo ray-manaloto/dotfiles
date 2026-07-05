@@ -15,15 +15,23 @@ does not know `mise-system.lock` by name):
 - ``.devcontainer/devcontainer-lock.json`` — devcontainer features;
   regenerated via `devcontainer upgrade`.
 
-The staging layout mirrors how the repo root already merges its own config
-(project ``mise.toml`` + ``.config/mise/conf.d/*.toml`` share ONE
-``mise.lock``), so no TOML rewriting is needed — byte copies only:
+The staging is a single merged project config:
 
-    <stage>/mise.toml                        <- .devcontainer/mise-system.toml
-    <stage>/.config/mise/conf.d/shared.toml  <- .config/mise/conf.d/shared.toml
-    <stage>/mise.lock                        <- .devcontainer/mise-system.lock
+    <stage>/mise.toml          <- mise-system.toml with shared.toml's [tools]
+                                  spliced into its [tools] table
+    <stage>/mise.runtime.toml  <- mise-runtime.toml (runtime tier, #160 T9)
+    <stage>/mise.lock          <- .devcontainer/mise-system.lock (seed)
+    <stage>/mise.runtime.lock  <- .devcontainer/mise-runtime.lock (seed)
 
-Seeding the committed lock lets repeated `mise lock` runs converge under
+The splice (not a conf.d copy) is load-bearing: in a PROJECT layout the
+conf.d fragment would live in a different config dir
+(.config/mise/conf.d/) and mise writes one lock PER CONFIG DIR — the
+shared tools would land in a separate .config/mise/mise.lock (empirically
+verified, T9 regen). The IMAGE merges conf.d inside $MISE_CONFIG_DIR and
+reads a single mise.lock covering both, so the staged lock must cover the
+union — which the single merged file produces.
+
+Seeding the committed locks lets repeated `mise lock` runs converge under
 GitHub rate limits instead of starting cold each time.
 """
 
@@ -40,7 +48,13 @@ if TYPE_CHECKING:
 _MISE_VERSION_RE = re.compile(r"^ARG MISE_VERSION=(\S+)$", re.MULTILINE)
 _SYSTEM_TOML = ".devcontainer/mise-system.toml"
 _SYSTEM_LOCK = ".devcontainer/mise-system.lock"
+_RUNTIME_TOML = ".devcontainer/mise-runtime.toml"
+_RUNTIME_LOCK = ".devcontainer/mise-runtime.lock"
 _SHARED_TOML = ".config/mise/conf.d/shared.toml"
+# The MISE_ENV under which the runtime tier's config/lock resolve (#160 T9):
+# staged as mise.runtime.toml, locked to mise.runtime.lock. `mise lock` must
+# run with MISE_ENV=runtime to cover both tiers in one pass.
+RUNTIME_ENV = "runtime"
 
 
 def pinned_mise_version(dockerfile: Path) -> str:
@@ -64,20 +78,66 @@ def pinned_mise_version(dockerfile: Path) -> str:
 def stage_system_lock_dir(repo_root: Path, stage_dir: Path) -> str:
     """Stage the image's merged mise config as a throwaway project dir.
 
-    Byte-copies the system config, the shared conf.d fragment, and the
-    committed lock (as the convergence seed) into ``stage_dir`` using the
-    project-layout paths mise merges natively.
+    Writes a single merged ``mise.toml`` (system config with the shared
+    fragment's ``[tools]`` spliced in — see module docstring for why a
+    conf.d copy does NOT work), the runtime tier config, and the committed
+    locks as convergence seeds.
 
     Returns:
         The pinned MISE_VERSION the caller must run `mise lock` with.
     """
     version = pinned_mise_version(repo_root / ".devcontainer" / "Dockerfile")
-    conf_d = stage_dir / ".config" / "mise" / "conf.d"
-    conf_d.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(repo_root / _SYSTEM_TOML, stage_dir / "mise.toml")
-    shutil.copyfile(repo_root / _SHARED_TOML, conf_d / "shared.toml")
+    stage_dir.mkdir(parents=True, exist_ok=True)
+    (stage_dir / "mise.toml").write_text(
+        _merge_shared_tools(
+            (repo_root / _SYSTEM_TOML).read_text(),
+            (repo_root / _SHARED_TOML).read_text(),
+        )
+    )
     shutil.copyfile(repo_root / _SYSTEM_LOCK, stage_dir / "mise.lock")
+    # Runtime tier (#160 T9): staged under the project-layout env name so
+    # `MISE_ENV=runtime mise lock` writes mise.runtime.lock beside mise.lock
+    # (probe-verified per-env lock behavior). Seed the committed lock when
+    # present (first regen after the tier split starts cold).
+    shutil.copyfile(repo_root / _RUNTIME_TOML, stage_dir / f"mise.{RUNTIME_ENV}.toml")
+    runtime_lock = repo_root / _RUNTIME_LOCK
+    if runtime_lock.exists():
+        shutil.copyfile(runtime_lock, stage_dir / f"mise.{RUNTIME_ENV}.lock")
     return version
+
+
+def _merge_shared_tools(system_text: str, shared_text: str) -> str:
+    """Splice the shared fragment's ``[tools]`` body into the system config.
+
+    Text-level (no TOML serialization): the shared body — everything after
+    its ``[tools]`` header — is inserted at the end of the system config's
+    ``[tools]`` table, i.e. just before the next ``[`` section header.
+
+    Raises:
+        ValueError: when either file's structure defeats the splice points
+            (fail loud rather than staging a lock input missing 20 tools).
+    """
+    shared_header = re.search(r"^\[tools\]\s*$", shared_text, re.MULTILINE)
+    if shared_header is None:
+        msg = "shared.toml has no [tools] table — splice point missing"
+        raise ValueError(msg)
+    shared_body = shared_text[shared_header.end() :].strip("\n")
+    system_header = re.search(r"^\[tools\]\s*$", system_text, re.MULTILINE)
+    if system_header is None:
+        msg = "mise-system.toml has no [tools] table — splice point missing"
+        raise ValueError(msg)
+    next_section = re.search(r"^\[", system_text[system_header.end() :], re.MULTILINE)
+    if next_section is None:
+        msg = "mise-system.toml has no section after [tools] — splice point missing"
+        raise ValueError(msg)
+    insert_at = system_header.end() + next_section.start()
+    return (
+        system_text[:insert_at]
+        + "# --- spliced from .config/mise/conf.d/shared.toml (lock staging) ---\n"
+        + shared_body
+        + "\n\n"
+        + system_text[insert_at:]
+    )
 
 
 def collect_system_lock(repo_root: Path, stage_dir: Path) -> None:
@@ -90,18 +150,38 @@ def collect_system_lock(repo_root: Path, stage_dir: Path) -> None:
     Raises:
         ValueError: when the stage lock is missing tools from the config.
     """
-    stage_lock = stage_dir / "mise.lock"
+    _collect_one(
+        stage_dir / "mise.lock",
+        repo_root / _SYSTEM_LOCK,
+        merged_system_config_tools(repo_root),
+    )
+    _collect_one(
+        stage_dir / f"mise.{RUNTIME_ENV}.lock",
+        repo_root / _RUNTIME_LOCK,
+        runtime_config_tools(repo_root),
+    )
+
+
+def _collect_one(stage_lock: Path, dest: Path, config_tools: set[str]) -> None:
     locked_tools = set(tomllib.loads(stage_lock.read_text()).get("tools", {}))
-    config_tools = merged_system_config_tools(repo_root)
     missing = config_tools - locked_tools
     if missing:
-        msg = f"stage lock is missing tools (refusing to collect): {sorted(missing)}"
+        msg = (
+            f"stage lock {stage_lock.name} is missing tools "
+            f"(refusing to collect): {sorted(missing)}"
+        )
         raise ValueError(msg)
-    shutil.copyfile(stage_lock, repo_root / _SYSTEM_LOCK)
+    shutil.copyfile(stage_lock, dest)
 
 
 def merged_system_config_tools(repo_root: Path) -> set[str]:
-    """Return the tool keys of the image's merged config (system + shared)."""
+    """Return the tool keys of the image's merged BASE config (system + shared)."""
     system = tomllib.loads((repo_root / _SYSTEM_TOML).read_text())
     shared = tomllib.loads((repo_root / _SHARED_TOML).read_text())
     return set(system.get("tools", {})) | set(shared.get("tools", {}))
+
+
+def runtime_config_tools(repo_root: Path) -> set[str]:
+    """Return the tool keys of the runtime tier config (#160 T9)."""
+    runtime = tomllib.loads((repo_root / _RUNTIME_TOML).read_text())
+    return set(runtime.get("tools", {}))

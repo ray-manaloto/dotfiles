@@ -1,9 +1,48 @@
 #:schema https://mise.jdx.dev/schema/mise.json
 
 # Devcontainer-only mise overlay (gated by .chezmoiignore on chezmoi.os == "linux").
-# Tool installs live in .devcontainer/mise-system.toml at image-build time.
-# This user-level overlay is an intentional placeholder for future per-user
-# extensions (env vars, task shims) that should NOT bake into the image.
+# OVERLAY TIER (#160 T9): interactive session tools installed PER-USER onto
+# the home volume (~/.local/share/mise), eager-installed by onCreateCommand
+# (on-create.sh) so they are present on first shell. Free on "latest" by
+# design — no lockfile; they are session conveniences, not build inputs, and
+# keeping them out of the image keeps the base/runtime content-hashes stable.
+# Locked build/dev tools live in .devcontainer/mise-system.toml (base tier)
+# and .devcontainer/mise-runtime.toml (runtime tier).
+
+[tools]
+# File/search/navigation
+fzf = "latest"
+ripgrep = "latest"
+fd = "latest"
+bat = "latest"
+vivid = "latest"
+eza = "latest"
+lsd = "latest"
+zoxide = "latest"
+yazi = "latest"
+"conda:tree" = "latest"
+"conda:broot" = "latest"
+# Monitors & inspectors
+"conda:htop" = "latest"
+btop = "latest"
+"conda:procs" = "latest"
+"conda:ncdu" = "latest"
+dust = "latest"
+tokei = "latest"
+hexyl = "latest"
+"conda:hyperfine" = "latest"
+# Terminal & shell UX
+starship = "latest"
+zellij = "latest"
+"conda:tealdeer" = "latest"
+glow = "latest"
+"conda:vim" = "latest"
+# Git UIs
+gitui = "latest"
+lazygit = "latest"
+# HTTP clients
+"conda:HTTPie" = "latest"
+xh = "latest"
 
 [settings]
 activate_aggressive = true

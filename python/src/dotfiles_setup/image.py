@@ -60,6 +60,18 @@ def resolve_expected_config_sha256() -> str:
     return hashlib.sha256(config_path.read_bytes()).hexdigest()
 
 
+def resolve_expected_runtime_sha256() -> str:
+    """SHA-256 of the repo's ``.devcontainer/mise-runtime.toml`` (#160 T10).
+
+    The devcontainer-runtime stage COPYs this file verbatim to
+    ``/usr/local/share/mise/config.runtime.toml`` — the second half of the
+    two-tier image identity: a stale runtime stage on a current base must
+    fail identity just like a stale base would.
+    """
+    config_path = _project_root() / ".devcontainer" / "mise-runtime.toml"
+    return hashlib.sha256(config_path.read_bytes()).hexdigest()
+
+
 # System mise config inside the image — the Dockerfile COPY target and the
 # ``source.path`` that ``mise ls --json`` attributes system tools to.
 SYSTEM_CONFIG_FILE = "/usr/local/share/mise/config.toml"
@@ -67,6 +79,10 @@ SYSTEM_CONFIG_FILE = "/usr/local/share/mise/config.toml"
 # system config; mise attributes its 20 tools to THIS source path, so the
 # declared/installed comparison must count both files.
 SHARED_CONFIG_FILE = "/usr/local/share/mise/conf.d/shared.toml"
+# The runtime tier config (#160 T9/T10) — discovered beside config.toml when
+# MISE_ENV=runtime (baked as ENV in the final image); its tools are attributed
+# to this source path.
+RUNTIME_CONFIG_FILE = "/usr/local/share/mise/config.runtime.toml"
 
 
 def _tool_requested_version(spec: str | dict[str, Any]) -> str:
@@ -98,11 +114,12 @@ def parse_declared_tools(config_text: str) -> dict[str, str]:
 
 
 def resolve_declared_tools() -> dict[str, str]:
-    """Declared image tool set (mise-system.toml [tools] + shared fragment).
+    """Declared image tool set (base + shared fragment + runtime tier).
 
-    Both files are COPYd into the image and merged by mise (#160 T5), so the
-    declared set is their union. The shared fragment supplies the 20 exact-
-    pinned host↔image tools; the system config supplies the rest.
+    All three files are COPYd into the image and merged by mise (#160
+    T5/T9): the shared fragment supplies the 20 exact-pinned host↔image
+    tools, mise-system.toml the base tier, mise-runtime.toml the runtime
+    tier (loaded via MISE_ENV=runtime). The declared set is their union.
     """
     root = _project_root()
     declared = parse_declared_tools(
@@ -113,12 +130,19 @@ def resolve_declared_tools() -> dict[str, str]:
             (root / ".config" / "mise" / "conf.d" / "shared.toml").read_text()
         )
     )
+    declared.update(
+        parse_declared_tools((root / ".devcontainer" / "mise-runtime.toml").read_text())
+    )
     return declared
 
 
 def installed_tools_from_mise_ls(
     mise_ls_json: str,
-    config_paths: tuple[str, ...] = (SYSTEM_CONFIG_FILE, SHARED_CONFIG_FILE),
+    config_paths: tuple[str, ...] = (
+        SYSTEM_CONFIG_FILE,
+        SHARED_CONFIG_FILE,
+        RUNTIME_CONFIG_FILE,
+    ),
 ) -> dict[str, str]:
     """Extract ``{tool_key: requested_version}`` from ``mise ls --json`` output.
 
@@ -213,6 +237,7 @@ def build_smoke_script(
     expected_p2996_ref: str,
     *,
     expected_config_sha256: str | None = None,
+    expected_runtime_sha256: str | None = None,
     expected_tools: Mapping[str, str] | None = None,
     emulated: bool = False,
 ) -> str:
@@ -231,6 +256,9 @@ def build_smoke_script(
     ``config.toml`` matches it, catching a stale/cached-overlay image that
     would otherwise pass smoke against old content. An empty/unset value
     leaves the guard dormant (unit-test friendly).
+    ``expected_runtime_sha256`` is the runtime-tier half of the same guard
+    (#160 T10): the hash of ``mise-runtime.toml``, asserted against the
+    in-image ``config.runtime.toml``.
 
     ``expected_tools`` (#143 — exact tool-set assertion) maps declared tool keys
     to requested versions (``resolve_declared_tools``). When set, the script
@@ -254,6 +282,7 @@ def build_smoke_script(
         f"EXPECTED_P2996_REF={shlex.quote(expected_p2996_ref)}\n"
         f"P2996_REF_STRICT={shlex.quote(strict)}\n"
         f"EXPECTED_CONFIG_SHA256={shlex.quote(expected_config_sha256 or '')}\n"
+        f"EXPECTED_RUNTIME_SHA256={shlex.quote(expected_runtime_sha256 or '')}\n"
         f"EXPECTED_TOOL_REQUESTS={shlex.quote(expected_tool_lines)}\n"
         f"TSAN_RUN_SKIP={shlex.quote(tsan_run_skip)}\n"
     )
@@ -269,6 +298,9 @@ MISE_CFG="${MISE_SYSTEM_CONFIG_FILE:-/usr/local/share/mise/config.toml}"
 # tools are attributed to this path by `mise ls --json`, so the tool-set diff
 # must count both sources.
 MISE_SHARED_CFG="$(dirname "$MISE_CFG")/conf.d/shared.toml"
+# #160 T9/T10: the runtime tier config, discovered via MISE_ENV=runtime
+# (baked as image ENV); its tools attribute to this source path.
+MISE_RUNTIME_CFG="$(dirname "$MISE_CFG")/config.runtime.toml"
 echo "=== image identity (mise-system config hash) ==="
 if [ -n "$EXPECTED_CONFIG_SHA256" ]; then
   actual_config_sha256=$(sha256sum "$MISE_CFG" | cut -d' ' -f1)
@@ -280,6 +312,18 @@ if [ -n "$EXPECTED_CONFIG_SHA256" ]; then
   echo "OK: image built from current mise-system.toml ($actual_config_sha256)"
 else
   echo "SKIP: no expected config hash injected (identity guard dormant)"
+fi
+echo "=== image identity (runtime tier config hash, #160 T10) ==="
+if [ -n "$EXPECTED_RUNTIME_SHA256" ]; then
+  actual_runtime_sha256=$(sha256sum "$MISE_RUNTIME_CFG" | cut -d' ' -f1)
+  if [ "$actual_runtime_sha256" != "$EXPECTED_RUNTIME_SHA256" ]; then
+    echo "FAIL: in-image runtime config $actual_runtime_sha256 !=" \
+         "repo mise-runtime.toml $EXPECTED_RUNTIME_SHA256 (stale — rebuild)"
+    exit 1
+  fi
+  echo "OK: image built from current mise-runtime.toml ($actual_runtime_sha256)"
+else
+  echo "SKIP: no expected runtime hash injected (identity guard dormant)"
 fi
 echo "=== hk validate ==="
 HK_FILE=/etc/hk/hk.pkl hk validate
@@ -301,9 +345,11 @@ echo "=== exact tool-set assertion (declared vs installed, system config) ==="
 # drifts for `latest` by design. LC_ALL=C sort => byte order matching python's.
 if [ -n "$EXPECTED_TOOL_REQUESTS" ]; then
   installed_tool_requests=$(mise ls --json \
-    | jq -r --arg cfg "$MISE_CFG" --arg shared "$MISE_SHARED_CFG" '
+    | jq -r --arg cfg "$MISE_CFG" --arg shared "$MISE_SHARED_CFG" \
+         --arg runtime "$MISE_RUNTIME_CFG" '
     to_entries[] | .key as $k | .value[]
-    | select((.source.path == $cfg or .source.path == $shared) and .installed == true)
+    | select((.source.path == $cfg or .source.path == $shared
+              or .source.path == $runtime) and .installed == true)
     | "\\($k)\\t\\(.requested_version)"' | LC_ALL=C sort -u)
   if ! diff <(printf '%s\n' "$EXPECTED_TOOL_REQUESTS") \
             <(printf '%s\n' "$installed_tool_requests"); then
@@ -477,6 +523,7 @@ def build_smoke_docker_cmd(
     script = build_smoke_script(
         expected_p2996_ref,
         expected_config_sha256=expected_config_sha256,
+        expected_runtime_sha256=resolve_expected_runtime_sha256(),
         expected_tools=resolve_declared_tools(),
         emulated=emulated,
     )

@@ -19,9 +19,13 @@
 #      user. Uses `find -not -user` + `chown -h` so symlinks are NOT
 #      dereferenced (safety against root-owned symlinks pointing at
 #      system files like /etc/shadow).
-#   3. Sweep TMPDIR files older than 30 days (atime-based) to bound
+#   3. Eager-install the OVERLAY tool tier (#160 T9): the chezmoi-rendered
+#      ~/.config/mise/config.toml declares the interactive session tools;
+#      installing here puts them on the home volume (~/.local/share/mise)
+#      so they persist across stop/up and never bake into the image.
+#   4. Sweep TMPDIR files older than 30 days (atime-based) to bound
 #      persistent-volume growth.
-#   4. Prune empty directories left behind by the file sweep.
+#   5. Prune empty directories left behind by the file sweep.
 #
 # Repo rule: this script MUST NOT use `2>/dev/null` or `|| true` for
 # error suppression. See .claude/rules/do-not.md item #4
@@ -45,6 +49,16 @@ if [ "${mismatched_count}" -gt 0 ]; then
 else
 	echo "[on-create] Ownership already correct"
 fi
+
+echo "[on-create] Overlay tool tier eager install (user-level, home volume)"
+mise install -y
+mise reshim
+overlay_count="$(mise ls --installed --json | jq 'length')"
+if [ "${overlay_count}" -eq 0 ]; then
+	echo "[on-create] FAIL: zero tools resolved after overlay install — ~/.config/mise/config.toml missing or empty (chezmoi render failed?)" >&2
+	exit 1
+fi
+echo "[on-create] Overlay install complete (${overlay_count} tools resolved)"
 
 echo "[on-create] TMPDIR file sweep (30-day atime)"
 if [ -d "${HOME}/.local/tmp" ]; then

@@ -211,6 +211,18 @@ def test_smoke_script_injects_config_identity_check() -> None:
     assert '"$actual_config_sha256" != "$EXPECTED_CONFIG_SHA256"' in script
 
 
+def test_smoke_script_injects_runtime_identity_check() -> None:
+    """#160 T10: an injected runtime hash activates the runtime-tier half of
+    the image-identity guard (stale runtime stage on a current base)."""
+    script = build_smoke_script(
+        _FAKE_P2996_SHA, expected_runtime_sha256=_FAKE_CONFIG_SHA256
+    )
+
+    assert f"EXPECTED_RUNTIME_SHA256={_FAKE_CONFIG_SHA256}\n" in script
+    assert 'sha256sum "$MISE_RUNTIME_CFG"' in script
+    assert '"$actual_runtime_sha256" != "$EXPECTED_RUNTIME_SHA256"' in script
+
+
 def test_smoke_script_identity_reads_system_config_not_config_dir() -> None:
     """#148: identity/policy checks hash the base SYSTEM config, not MISE_CONFIG_DIR.
 
@@ -402,8 +414,8 @@ def test_smoke_script_injects_tool_set_assertion() -> None:
     assert "mise ls --json" in script
     assert "jq -r --arg cfg" in script
     assert (
-        "select((.source.path == $cfg or .source.path == $shared) "
-        "and .installed == true)" in script
+        "select((.source.path == $cfg or .source.path == $shared\n"
+        "              or .source.path == $runtime) and .installed == true)" in script
     )
 
 

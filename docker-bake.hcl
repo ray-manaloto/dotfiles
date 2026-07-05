@@ -64,7 +64,10 @@ target "_common" {
 # pull + thin layer instead of rebuilding base + clang from scratch.
 target "dev" {
   inherits = ["_common", "docker-metadata-action"]
-  target   = "devcontainer"
+  # devcontainer-runtime = final stage + the runtime tool tier (#160 T10);
+  # the published :dev image ships base + runtime tiers, the overlay tier
+  # installs per-user at container create.
+  target   = "devcontainer-runtime"
   args = {
     BASE_IMAGE      = BASE_IMAGE
     CLANG_P2996_REF = CLANG_P2996_REF

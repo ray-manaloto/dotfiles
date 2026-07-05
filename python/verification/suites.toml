@@ -363,6 +363,29 @@ tokens = [
 ]
 
 [[suite]]
+name = "build.runtime-tier-stage"
+description = "The devcontainer-runtime stage (#160 T9/T10) must exist and install the runtime tool tier: FROM devcontainer, COPY mise-runtime.toml to config.runtime.toml + its per-env lock, ENV MISE_ENV=runtime persisted so runtime containers keep loading the tier, and a locked install. The dev bake target must publish THIS stage."
+category = "build"
+check_type = "static"
+handler = "require_tokens"
+paths = [".devcontainer/Dockerfile"]
+tokens = [
+  "FROM devcontainer AS devcontainer-runtime",
+  "ENV MISE_ENV=runtime",
+  "/usr/local/share/mise/config.runtime.toml",
+  "/usr/local/share/mise/mise.runtime.lock",
+]
+
+[[suite]]
+name = "build.dev-target-publishes-runtime-stage"
+description = "docker-bake.hcl dev target must build the devcontainer-runtime stage (#160 T10) — publishing plain devcontainer would silently drop the runtime tool tier from :dev"
+category = "build"
+check_type = "static"
+handler = "require_tokens"
+paths = ["docker-bake.hcl"]
+tokens = ["target   = \"devcontainer-runtime\""]
+
+[[suite]]
 name = "build.doppler-secrets-wired"
 description = "S1 SECRETS: Doppler secrets injected via --env-file in runArgs. initializeCommand downloads secrets to staging area; runArgs passes the env file to docker run. DO NOT DROP — see AGENTS.md Secrets Injection section."
 category = "build"

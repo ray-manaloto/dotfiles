@@ -7,6 +7,15 @@
 # Changes here must be validated via CI (never `docker buildx bake dev-load`
 # locally — see feedback_base_image_ci_only.md).
 
+# BASE TIER (#160 T9): the 36 tools the image needs to BUILD ITSELF and the
+# core C++ toolchain — runtimes (rust STAYS base: cargo/rustup self-checks),
+# the conda toolchain (the p2996 stage runs cmake/ninja from these shims),
+# bazel, micromamba, sqlite. Everything else moved out: the locked dev tools
+# live in mise-runtime.toml (installed in the devcontainer-runtime stage
+# under MISE_ENV=runtime), the interactive tools live in the chezmoi user
+# overlay (home/dot_config/mise/config.toml.tmpl, eager-installed by
+# onCreateCommand). Probe-verified: config.<env>.toml is discovered beside
+# this file in $MISE_CONFIG_DIR and merged additively.
 [tools]
 # Core runtimes
 node = "latest"
@@ -26,41 +35,6 @@ cargo-binstall = "latest"
 # fragment). It has NO editorconfig step — the editorconfig_checker builtin is
 # wired only in the HOST hk.pkl — so editorconfig-checker was dead weight in the
 # image and is removed here (#160 T6). Nothing else in the image invokes `ec`.
-"npm:ajv-cli" = "latest"
-# CLI utilities
-fzf = "latest"
-ripgrep = "latest"
-fd = "latest"
-bat = "latest"
-vivid = "latest"
-"github:cli/cli" = "latest"
-"conda:rsync" = "latest"
-"conda:curl" = "latest"
-"fnox" = "latest"
-"usage" = "latest"
-"conda:hyperfine" = "latest"
-"gitlab:graphviz/graphviz" = "latest"
-"conda:tree" = "latest"
-# AI CLIs (depends=node ensures npm is available for version resolution)
-"npm:@google/gemini-cli" = { version = "latest", depends = ["node"] }
-"npm:@openai/codex" = { version = "latest", depends = ["node"] }
-# Build systems & C++ tooling
-bats = "latest"
-"github:go-task/task" = "latest"
-"github:mozilla/sccache" = "latest"
-# pipx tools (C++ ecosystem)
-"pipx:meson" = "latest"
-"pipx:conan" = "latest"
-"pipx:cpplint" = "latest"
-"pipx:flawfinder" = "latest"
-"pipx:lizard" = "latest"
-"pipx:cmakelang" = "latest"
-"pipx:codechecker" = "latest"
-"pipx:gcovr" = "latest"
-# Security scanners: pinact is shared (see .config/mise/conf.d/shared.toml).
-# betterleaks: not in mise tool registry for linux-x64 (tracked in docs/hk-builtins-audit.md)
-# Claude Code CLI — uses http:claude backend (native binary, no npm)
-claude-code = "latest"
 # Conda packages (C++ toolchain for devcontainer)
 "conda:llvm" = "latest"
 "conda:llvm-tools" = "latest"
@@ -98,38 +72,17 @@ claude-code = "latest"
 "conda:p7zip" = "latest"
 "conda:valgrind" = "latest"
 "bazel" = "latest"
+"sqlite" = "latest"
+"micromamba" = "latest"
 
 # conda:imagemagick removed 2026-04-28 — conda-forge solve fails with
 # "duplicate records for adwaita-icon-theme-40.1.1-ha770c72_1.tar.bz2"
 # (heavy GUI dep chain conflict). If imagemagick is needed, install via
 # apt in the Dockerfile (`imagemagick` is a standard Ubuntu package).
-"conda:vim" = "latest"
-"sqlite" = "latest"
-"github:tursodatabase/turso" = "latest"
-"libsql-server" = "latest"
-"micromamba" = "latest"
-# Interactive shell tools (moved from home/dot_config/mise/config.toml.tmpl
-# 2026-04-27 — these belong in the system image, not a per-user overlay).
-"conda:HTTPie" = "latest"
-"conda:ncdu" = "latest"
-"conda:htop" = "latest"
-"conda:broot" = "latest"
-"conda:procs" = "latest"
-"conda:tealdeer" = "latest"
-btop = "latest"
-eza = "latest"
-glow = "latest"
-starship = "latest"
-dust = "latest"
-tokei = "latest"
-xh = "latest"
-hexyl = "latest"
-yazi = "latest"
-zellij = "latest"
-zoxide = "latest"
-gitui = "latest"
-lazygit = "latest"
-lsd = "latest"
+# Interactive shell tools (fzf, starship, zellij, htop, …) moved BACK to the
+# per-user chezmoi overlay in #160 T9 — they are session conveniences, not
+# image build inputs; the overlay eager-installs them at container create
+# onto the home volume, so image cache stability no longer depends on them.
 
 # Declarative apt packages — the REAL installer source (#160 T4, wagov-dtt
 # pattern). The Dockerfile base stage seeds only curl + ca-certificates (for
