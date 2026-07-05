@@ -1,6 +1,6 @@
 # P2996 Content-Addressed Cache
 
-The `clang-builder` Dockerfile stage compiles Bloomberg's clang-p2996
+The `clang-builder-cold` Dockerfile stage compiles Bloomberg's clang-p2996
 fork from source — ~80-120 min cold, ~15-30 min warm ccache. To
 eliminate this cost on cache-hit runs, the stage is split into three
 parts and the install prefix is published as a separately-cached GHCR
@@ -115,14 +115,14 @@ the Dockerfile pins — cross-version lock formats are not interchangeable
   next CI run detects a cache miss and rebuilds + pushes a new
   `:p2996-<hash16>`.
 
-## Why scratch + indirection
+## Why scratch + named contexts
 
-The cache image is `FROM scratch` (instead of inheriting from
-`devcontainer-base`) to keep it small — 500 MB vs ~5-10 GB if it
-included the full base. The `clang-builder` indirection layer accepts
-either stage name or full image ref via the same build arg, so the
-same Dockerfile serves both cold-build and cache-hit paths without
-shell branching.
+The cache image is `FROM scratch` (instead of inheriting from the
+builder) to keep it small — 500 MB vs multi-GB with the toolchain.
+Since #160 T11 there is NO indirection stage: on warm paths CI injects
+the cache image as a digest-pinned `p2996-export` named build context
+that overrides the local stage of the same name; cold paths just build
+the local stages. Same Dockerfile, zero ARG plumbing.
 
 ## See also
 

@@ -282,6 +282,18 @@ paths = [".devcontainer/mise-system.toml"]
 tokens = ['RUSTUP_INIT_SKIP_PATH_CHECK = "yes"']
 
 [[suite]]
+name = "build.gcc-latest-deb-checksum"
+description = "Validation D (#160 T13): the gcc-latest .deb must be sha256-verified in the same RUN that downloads it — kayari publishes no checksum/signature, so the committed GCC_LATEST_DEB_SHA256 ARG is the only integrity handle for those bytes"
+category = "build"
+check_type = "static"
+handler = "require_tokens"
+paths = [".devcontainer/Dockerfile"]
+tokens = [
+  "ARG GCC_LATEST_DEB_SHA256=",
+  "sha256sum -c -",
+]
+
+[[suite]]
 name = "build.gcc-latest-reflection"
 description = "GCC-16 with P2996 reflection must be installed via precompiled .deb"
 category = "build"
@@ -368,6 +380,27 @@ tokens = [
   "AS p2996-export",
   "COPY --from=p2996-export /opt/clang-p2996",
 ]
+
+[[suite]]
+name = "build.locked-install-with-conda-sha"
+description = "Validation A (#160 T13): the base install must be `mise install --system --locked` and the committed mise-system.lock must carry rattler conda sha256 material (the [conda-packages] table) — an unlocked install or a checksum-less lock silently degrades reproducibility"
+category = "build"
+check_type = "static"
+handler = "require_tokens"
+paths = [".devcontainer/Dockerfile", ".devcontainer/mise-system.lock"]
+tokens = [
+  "mise install --system --locked",
+  "[conda-packages.linux-x64",
+]
+
+[[suite]]
+name = "build.base-image-digest-pinned"
+description = "Validation C (#160 T13): BASE_IMAGE must be digest-pinned (ubuntu:<ver>@sha256:) in both docker-bake.hcl and the Dockerfile ARG — a bare tag would let the base drift under the content-hash"
+category = "build"
+check_type = "static"
+handler = "regex_match"
+paths = ["docker-bake.hcl", ".devcontainer/Dockerfile"]
+pattern = 'ubuntu:[0-9.]+@sha256:[a-f0-9]{64}'
 
 [[suite]]
 name = "build.runtime-tier-stage"

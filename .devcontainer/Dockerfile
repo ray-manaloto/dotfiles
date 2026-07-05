@@ -312,6 +312,11 @@ COPY --from=clang-builder-cold /opt/clang-p2996 /opt/clang-p2996
 # same-named local stages — no ARG indirection, no rebuild.
 FROM devcontainer-base AS devcontainer
 
+# Re-declared per stage: hadolint analyzes stages independently (DL4006 on
+# the sha256sum pipe below), and the explicit SHELL also holds when CI
+# substitutes the devcontainer-base named context.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 # GCC-17 with P2996 reflection (precompiled .deb from jwakely trunk snapshot).
 # Installs to /opt/gcc-latest/bin. kayari.org ships a rolling .deb tracking
 # Ubuntu trunk; the rolling `gcc-latest.deb` 302-redirects to a dated,
@@ -323,7 +328,14 @@ FROM devcontainer-base AS devcontainer
 # base image is empirical; if `dpkg -i` fails, build from source.
 # renovate: datasource=custom.gcc-latest depName=gcc-latest versioning=loose
 ARG GCC_LATEST_DEB=gcc-latest_17.0.0-20260621git4073a7927b16.deb
+# Validation D (#160 T13): kayari publishes NO checksum or signature (all
+# 404), so this locally-computed pin is the .deb's only integrity handle.
+# Deliberately NOT Renovate-managed: a GCC_LATEST_DEB bump fails this check
+# until a human recomputes the hash (`curl -fLO <url> && sha256sum <deb>`)
+# — supply-chain friction by design, the one place custom shell is justified.
+ARG GCC_LATEST_DEB_SHA256=ea3c6aa8bb6ffd4af458171f812ee95404e2a668d5779c69b5705082d47d41ce
 RUN curl -fLOSs "https://kayari.org/gcc-latest/${GCC_LATEST_DEB}" && \
+    echo "${GCC_LATEST_DEB_SHA256}  ${GCC_LATEST_DEB}" | sha256sum -c - && \
     dpkg -i "${GCC_LATEST_DEB}" && \
     rm -f "${GCC_LATEST_DEB}" && \
     test -x /opt/gcc-latest/bin/g++ || { echo "ERROR: gcc-latest binary missing after dpkg install"; exit 1; }

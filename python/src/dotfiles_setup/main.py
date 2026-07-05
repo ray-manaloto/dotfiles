@@ -16,6 +16,7 @@ from dotfiles_setup.audit import DevEnvironmentAuditor, ToolManager
 from dotfiles_setup.bootstrap_packages import gap_report_failures
 from dotfiles_setup.config import DotfilesConfig
 from dotfiles_setup.container import verify_latest_main
+from dotfiles_setup.doc_refs import find_unresolved_refs
 from dotfiles_setup.docker import DevContainerManager
 from dotfiles_setup.ghcr import validate_ghcr_prereqs
 from dotfiles_setup.ghcr_cleanup import plan_cleanup
@@ -271,6 +272,11 @@ def setup_parser() -> argparse.ArgumentParser:
         help="Bump CLANG_P2996_REF in docker-bake.hcl to the latest "
         "bloomberg/clang-p2996 p2996-branch HEAD (writes only on change)",
     )
+    subparsers.add_parser(
+        "check-doc-refs",
+        help="Verify every backtick path reference in the agent docs "
+        "resolves to a real file (#160 T13 validation J)",
+    )
     ghcr_cleanup_parser = subparsers.add_parser(
         "ghcr-cleanup",
         help="Plan (default) or execute GHCR retention cleanup for the "
@@ -461,6 +467,16 @@ def handle_bootstrap_gap_report(args: argparse.Namespace, project_root: Path) ->
     logger.info("gap-report OK: declared [bootstrap.packages] set fully installed")
 
 
+def handle_check_doc_refs(project_root: Path) -> None:
+    """Handle check-doc-refs: fail loud on unresolved doc path refs."""
+    unresolved = find_unresolved_refs(project_root)
+    if unresolved:
+        for ref in unresolved:
+            logger.error("%s:%d: unresolved doc ref `%s`", ref.doc, ref.line, ref.ref)
+        sys.exit(1)
+    logger.info("check-doc-refs OK: all doc path references resolve")
+
+
 def handle_ghcr_cleanup(args: argparse.Namespace) -> None:
     """Handle ghcr-cleanup: print the retention plan (never deletes itself).
 
@@ -583,6 +599,7 @@ def _build_command_handlers(
         "image": lambda: handle_image(args),
         "ghcr-check": lambda: handle_ghcr_check(args, project_root),
         "ghcr-cleanup": lambda: handle_ghcr_cleanup(args),
+        "check-doc-refs": lambda: handle_check_doc_refs(project_root),
         "bootstrap-gap-report": lambda: handle_bootstrap_gap_report(args, project_root),
         "lock-stage": lambda: handle_lock_stage(args, project_root),
         "lock-collect": lambda: handle_lock_collect(args, project_root),

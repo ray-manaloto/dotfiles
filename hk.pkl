@@ -261,6 +261,17 @@ local allSteps = new Mapping<String, Config.Step> {
     glob = List("CLAUDE.md", "AGENTS.md", ".claude/**/*.md", ".agnix.toml")
   }
 
+  // --- Doc path-reference existence (#160 T13, validation J): every
+  //     backtick span in AGENTS.md/rules/skills that looks like a file
+  //     path must resolve (exact, basename, or suffix match) or be
+  //     allowlisted with a reason. agnix validates only @import stubs and
+  //     rumdl MD057 only real links — backtick citations were parsed by
+  //     NOTHING (dogfooding this check found + fixed a stale ref). ---
+  ["doc_refs"] {
+    glob = List("AGENTS.md", "**/AGENTS.md", ".claude/rules/*.md", ".claude/skills/**/*.md")
+    check = "uv run --project python dotfiles-setup check-doc-refs"
+  }
+
   // --- hk pin parity (check-H, #160 T12): the hk version must be identical
   //     across the 3 pkl package URLs AND equal the shared.toml binary pin.
   //     min_hk_version above guards binary-too-old; this guards pin drift
@@ -305,9 +316,12 @@ local allSteps = new Mapping<String, Config.Step> {
   //     diagnostics; full integration is tracked in a GH issue
   //     scheduled for post-devcontainer-work review. This awk step
   //     ships immediate enforcement in the meantime.
+  //     #160 T13 (validation K): the ≤12,000-char half is now enforced
+  //     too — it was cited by verify-before-advancing.md but nothing
+  //     machine-checked it (workflows/AGENTS.md ran it to 11,986).
   ["claude_md_size_limit"] {
     check =
-      "rc=0; for f in $(git ls-files | grep -E '(^|/)(CLAUDE|AGENTS)\\.md$'); do lines=$(wc -l < \"$f\"); if [ \"$lines\" -gt 200 ]; then echo \"$f: $lines lines (max 200 per Claude Code memory docs)\" >&2; rc=1; fi; done; exit $rc"
+      "rc=0; for f in $(git ls-files | grep -E '(^|/)(CLAUDE|AGENTS)\\.md$'); do lines=$(wc -l < \"$f\"); chars=$(wc -c < \"$f\"); if [ \"$lines\" -gt 200 ]; then echo \"$f: $lines lines (max 200 per Claude Code memory docs)\" >&2; rc=1; fi; if [ \"$chars\" -gt 12000 ]; then echo \"$f: $chars chars (max 12000 per Claude Code memory docs)\" >&2; rc=1; fi; done; exit $rc"
   }
 
   // --- No global skill leakage (presence assertion for project-scoped
