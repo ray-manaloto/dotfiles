@@ -7,8 +7,11 @@
 # stage-local).
 # ────────────────────────────────────────────────────────────────────
 
-# Base ubuntu image for the `devcontainer-base` stage.
-ARG BASE_IMAGE=ubuntu:26.04
+# Base ubuntu image for the `devcontainer-base` stage. Digest-pinned to the
+# 26.04 manifest-list (multi-arch resolution preserved); Renovate bumps the
+# digest via the custom `ubuntu` manager (docker datasource). Keep in lockstep
+# with docker-bake.hcl's BASE_IMAGE default (the p2996/base hash reads bake).
+ARG BASE_IMAGE=ubuntu:26.04@sha256:b7f48194d4d8b763a478a621cdc81c27be222ba2206ca3ca6bc42b49685f3d9e
 
 # Indirection point for the cold-built clang-p2996 install prefix.
 # Default `p2996-export` builds locally; CI passes a published
@@ -93,11 +96,17 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     zlib1g-dev \
     && rm -rf /var/lib/apt/lists/* /tmp/*
 
-# Install latest mise via the official installer. Image is rebuilt on
-# every `main` push, so CDN drift is acceptable here. The mise.run
-# installer already chmods the binary; the explicit chmod is a belt-
-# and-braces guard against permission drift on the cache mount.
-RUN curl https://mise.run | sh && \
+# Install mise via the official installer, pinned via MISE_VERSION (mise.run
+# honors it). The pin MUST be a version that reads the committed
+# mise-system.lock format — lock formats are NOT cross-version compatible
+# (`mise install --locked` rejects a lock written by a different mise), and
+# the lock was generated with 2026.7.0 (epic #160 T1). Renovate bumps this via
+# the custom `jdx/mise` manager, which regenerates the lock in lockstep. The
+# mise.run installer already chmods the binary; the explicit chmod is a
+# belt-and-braces guard against permission drift on the cache mount.
+# renovate: datasource=github-releases depName=jdx/mise
+ARG MISE_VERSION=2026.7.0
+RUN curl https://mise.run | MISE_VERSION="v${MISE_VERSION}" sh && \
     chmod +x ${MISE_INSTALL_PATH} && \
     mise --version
 
@@ -198,7 +207,12 @@ FROM ${DEVCONTAINER_BASE_REF} AS clang-builder-cold
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG CLANG_P2996_REPO=https://github.com/bloomberg/clang-p2996.git
-ARG CLANG_P2996_REF=9ffb96e3ce362289008e14ad2a79a249f58aa90a
+# Reconciled to match docker-bake.hcl's CLANG_P2996_REF default (#160 T3) —
+# CI's bake passes that value as a build arg (overriding this default), and
+# p2996_hash.py reads it from bake, so this default was stale drift. The
+# git-refs Renovate manager rewrites BOTH files in lockstep now that they
+# hold the same SHA.
+ARG CLANG_P2996_REF=a56e7036fc1dcc8d4325f79230809b6ee678e5f2
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \

@@ -20,8 +20,12 @@ variable "PLATFORM" {
   default = "linux/amd64/v2"
 }
 
+# Digest-pinned to the ubuntu:26.04 manifest-list (multi-arch resolution
+# preserved). This value feeds the base content-hash (p2996_hash.py reads it),
+# so a digest bump busts the base cache. Renovate bumps it via the custom
+# `ubuntu` manager; keep in lockstep with the Dockerfile BASE_IMAGE ARG.
 variable "BASE_IMAGE" {
-  default = "ubuntu:26.04"
+  default = "ubuntu:26.04@sha256:b7f48194d4d8b763a478a621cdc81c27be222ba2206ca3ca6bc42b49685f3d9e"
 }
 
 variable "DEVCONTAINER_USERNAME" {

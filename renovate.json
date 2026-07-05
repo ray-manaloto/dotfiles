@@ -69,6 +69,26 @@
       "depNameTemplate": "gcc-latest",
       "datasourceTemplate": "custom.gcc-latest",
       "versioningTemplate": "loose"
+    },
+    {
+      "customType": "regex",
+      "description": "ubuntu base image digest pin in docker-bake.hcl + Dockerfile ARG. The native docker/dockerfile managers do not parse bake HCL, and the digest feeds the base content-hash, so keep both files in lockstep here.",
+      "managerFilePatterns": ["/docker-bake\\.hcl$/", "/\\.devcontainer/Dockerfile$/"],
+      "matchStrings": [
+        "ubuntu:(?<currentValue>[0-9.]+)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "depNameTemplate": "ubuntu",
+      "datasourceTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "mise installer version pin (curl https://mise.run honors MISE_VERSION). The pin must track a mise version that reads the committed mise-system.lock format — Renovate bumps it, and the CI lock-refresh job regenerates the lock in lockstep.",
+      "managerFilePatterns": ["/\\.devcontainer/Dockerfile$/"],
+      "matchStrings": [
+        "ARG MISE_VERSION=(?<currentValue>[0-9.]+)"
+      ],
+      "depNameTemplate": "jdx/mise",
+      "datasourceTemplate": "github-releases"
     }
   ],
   "customDatasources": {
