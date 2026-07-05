@@ -66,10 +66,11 @@ Tier 4 (CLion remote toolchain) is manual.
    chezmoi scripts must never install tools. See memory
    `feedback_chezmoi_scripts_no_tool_install.md`.
 
-4. **`install.sh` stays at `postCreateCommand`.** It uses `script_dir`
-   resolved from its own location and depends on the workspace bind-mount,
-   which only exists after `onCreateCommand`. Moving it earlier breaks the
-   chezmoi bootstrap.
+4. **Chezmoi bootstrap lives at `onCreateCommand`.**
+   `.devcontainer/scripts/on-create.sh` runs `chezmoi init --apply` from the
+   workspace bind-mount (it replaced the old `install.sh` postCreate
+   bootstrap). `postCreateCommand` handles the SSH agent-socket chown +
+   authorized keys + smoke — keep the chezmoi step at onCreate.
 
 ## Telemetry
 

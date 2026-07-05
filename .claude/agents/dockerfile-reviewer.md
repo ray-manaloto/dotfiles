@@ -9,17 +9,17 @@ You are a Docker and BuildKit specialist reviewing devcontainer builds for this 
 
 This project uses a multi-stage Dockerfile with BuildKit features:
 
-- **APT packages**: Uses plain `apt-get` (no snapshot pinning — removed due to snapshot.ubuntu.com unreliability on 26.04).
-- **Non-root user**: The Dockerfile switches to `USER vscode` (uid=1000) before the final RUN. All `--mount` options after this point must specify `uid=1000,gid=1000`.
-- **Secret mounts**: `--mount=type=secret,id=github_token,uid=1000,gid=1000` — the uid/gid is required because BuildKit secrets default to root-owned mode 0400, unreadable by non-root users.
-- **Cache mounts**: Used for mise, uv, chezmoi, and pkl caches. Must use consistent target paths and uid=1000,gid=1000.
-- **Single entry point**: `install.sh` is the bootstrap script. The Dockerfile copies the repo and runs `bash install.sh --local`.
+- **APT packages**: Uses plain `apt-get` (no snapshot pinning — removed due to snapshot.ubuntu.com unreliability on 26.04); the package list is declared in `mise-system.toml` `[bootstrap.packages]`.
+- **Root build**: The base image builds entirely as root — no `USER` directive. The thin `Dockerfile.host-user` overlay creates `${DEVCONTAINER_USERNAME}` (uid 1000) at devcontainer-up time; do not expect `uid=1000` mount options in the base Dockerfile.
+- **Secret mounts**: `--mount=type=secret,id=github_token` with no uid/gid override — the root build reads the default root-owned 0400 secret directly.
+- **Cache mounts**: apt lists/cache, mise, and uv caches with `sharing=locked`; root-owned in the base build.
+- **Tool install**: `mise install --system --locked` from `mise-system.toml` + the COPYd `conf.d/shared.toml` fragment; the chezmoi bootstrap runs at `onCreateCommand` (`on-create.sh`) — the old `install.sh` entry point was retired.
 
 ## docker-bake.hcl Patterns
 
 - **Variable naming**: HCL variables can be overridden by same-named environment variables. Never use generic names like `REGISTRY` that CI workflows might set. Current convention: `DEFAULT_REGISTRY`, `IMAGE_REF`.
 - **Tag separation**: The registry target (`dev`) pushes with CI-managed tags (SHA/latest/PR, from `docker-metadata-action`). The local-load variant (`dev-load`) inherits `dev` but outputs `type=docker` to load the image locally.
-- **Cache refs**: Must use `${IMAGE_REF}:buildcache` pattern, matching the push destination org.
+- **Cache refs**: `base`/`p2996-cache` use registry-tag probing (`:base-<hash16>`/`:p2996-<hash16>`) as the durable cache — no `:buildcache` refs and no gha cache on those targets; only `dev` keeps gha cache.
 - **Attestations**: All targets must include `type=provenance,mode=min` and `type=sbom`.
 
 ## CI Integration (bake-action v7)
@@ -33,7 +33,7 @@ This project uses a multi-stage Dockerfile with BuildKit features:
 
 When reviewing Docker-related changes, check:
 
-1. Secret and cache mounts have `uid=1000,gid=1000` after `USER` directive
+1. Mounts match the root-build model (no stray `uid=1000` options in the base Dockerfile; user creation lives only in `Dockerfile.host-user`)
 2. HCL variable names won't collide with CI environment variables
 3. Cache-from/cache-to refs are consistent with push tags
 4. SBOM and provenance attestations are present on all targets
