@@ -90,6 +90,7 @@ jobs:
     outputs:
       hash: ${{ steps.hash.outputs.hash }}
       cache_ref: ${{ steps.hash.outputs.cache_ref }}
+      digest: ${{ steps.digest.outputs.digest }}
     steps:
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -169,17 +170,28 @@ jobs:
           set: |
             base.tags=${{ steps.hash.outputs.cache_ref }}
             *.secrets=id=github_token,src=/tmp/github_token
+      - name: Resolve cache image digest
+        # #160 T11: the build job consumes this image as a DIGEST-pinned
+        # named build context — capture the digest here (works on both the
+        # hit and miss-after-push paths) and fail loud if empty, since an
+        # unpinned context would silently accept a repushed tag.
+        id: digest
+        run: |
+          set -euo pipefail
+          digest=$(docker buildx imagetools inspect "${{ steps.hash.outputs.cache_ref }}" --format '{{.Manifest.Digest}}')
+          [ -n "$digest" ] || { echo "FAIL: empty digest for ${{ steps.hash.outputs.cache_ref }}" >&2; exit 1; }
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
   # ============================================================
   # P2996 cache prep: compute content-hash of clang-builder inputs and
   # ensure ghcr.io/<owner>/<repo>:p2996-<hash16> exists. On hash hit
   # (the typical case), this job exits in <30s with cache_ref set; the
   # build job then skips the multi-hour clang compile entirely. On
-  # miss, this job builds the p2996-cache target on top of the
-  # base-prep image (so mise install layer is pulled, not rebuilt).
+  # miss, this job builds the p2996-cache target FROM the parameterized
+  # BUILDER_IMAGE — fully decoupled from base-prep since #160 T11, so
+  # the two prep jobs run in PARALLEL.
   # See .devcontainer/P2996-CACHE.md for the cache mechanism.
   # ============================================================
   p2996-prep:
-    needs: [base-prep]
     runs-on: ubuntu-latest
     # Cold clang-p2996 build is a multi-hour from-source compile (~2h+). The
     # earlier 60 was far too low and CANCELLED cold rebuilds (regression from
@@ -193,6 +205,7 @@ jobs:
     outputs:
       hash: ${{ steps.hash.outputs.hash }}
       cache_ref: ${{ steps.hash.outputs.cache_ref }}
+      digest: ${{ steps.digest.outputs.digest }}
     steps:
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -231,7 +244,6 @@ jobs:
             echo ""
             echo "- Hash: \`${hash}\`"
             echo "- Cache ref: \`${cache_ref}\`"
-            echo "- Base ref: \`${{ needs.base-prep.outputs.cache_ref }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Log in to Container Registry
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
@@ -288,8 +300,16 @@ jobs:
             docker-bake.hcl
           set: |
             p2996-cache.tags=${{ steps.hash.outputs.cache_ref }}
-            p2996-cache.args.DEVCONTAINER_BASE_REF=${{ needs.base-prep.outputs.cache_ref }}
             *.secrets=id=github_token,src=/tmp/github_token
+      - name: Resolve cache image digest
+        # #160 T11: same digest-pin capture as base-prep — the build job
+        # injects this as the p2996-export named context.
+        id: digest
+        run: |
+          set -euo pipefail
+          digest=$(docker buildx imagetools inspect "${{ steps.hash.outputs.cache_ref }}" --format '{{.Manifest.Digest}}')
+          [ -n "$digest" ] || { echo "FAIL: empty digest for ${{ steps.hash.outputs.cache_ref }}" >&2; exit 1; }
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
   # ============================================================
   # Dev cache prep (#122): the THIRD content-hash tier. Computes
   # `dotfiles-setup dev-hash` (= base-hash + p2996-hash + whole
@@ -509,10 +529,14 @@ jobs:
             docker-bake.hcl
             ${{ steps.meta.outputs.bake-file-tags }}
             ${{ steps.meta.outputs.bake-file-labels }}
+          # #160 T11: the prebuilt tiers arrive as DIGEST-pinned named build
+          # contexts — each overrides the same-named local stage, so the
+          # heavy stages are never built here (native warm path); BuildKit
+          # fails the solve on any digest mismatch (exact-bytes guarantee).
           set: |
             *.secrets=id=github_token,src=/tmp/github_token
-            dev.args.DEVCONTAINER_BASE_REF=${{ needs.base-prep.outputs.cache_ref }}
-            dev.args.P2996_SOURCE=${{ needs.p2996-prep.outputs.cache_ref }}
+            dev.contexts.devcontainer-base=docker-image://${{ needs.base-prep.outputs.cache_ref }}@${{ needs.base-prep.outputs.digest }}
+            dev.contexts.p2996-export=docker-image://${{ needs.p2996-prep.outputs.cache_ref }}@${{ needs.p2996-prep.outputs.digest }}
       # docker/bake-action v6.8.0+ emits a per-job build summary with inputs,
       # errors, and a downloadable .dockerbuild record by default. The prior
       # hand-rolled "Build performance summary" + "Build diagnostics" steps
@@ -533,6 +557,23 @@ jobs:
             echo "image_ref=${image_ref}"
             echo "digest=${digest}"
           } >> "$GITHUB_OUTPUT"
+      - name: Assert provenance materials contain the p2996 digest (#160 T11)
+        # The pushed image's SLSA provenance (attest mode=max, T7) must
+        # record the exact p2996 artifact digest among its materials —
+        # closing the loop from "we injected a digest-pinned context" to
+        # "the published attestation proves those bytes went in".
+        if: inputs.publish
+        env:
+          IMAGE_REF: ${{ steps.out.outputs.image_ref }}
+          P2996_DIGEST: ${{ needs.p2996-prep.outputs.digest }}
+        run: |
+          set -euo pipefail
+          provenance=$(docker buildx imagetools inspect "${IMAGE_REF}" --format '{{json .Provenance}}')
+          if ! printf '%s' "$provenance" | jq -e --arg d "${P2996_DIGEST}" 'tostring | contains($d)' >/dev/null; then
+            echo "FAIL: provenance of ${IMAGE_REF} does not reference p2996 digest ${P2996_DIGEST}" >&2
+            exit 1
+          fi
+          echo "OK: provenance materials include p2996 digest ${P2996_DIGEST}"
       - name: Write hash report (#160 T7)
         # The content-addressed lineage of this build as a downloadable
         # artifact: which :base-/:p2996- cache refs fed the dev image and

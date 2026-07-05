@@ -44,20 +44,20 @@ behavior unchanged):
 3. **base-prep** — `dotfiles-setup base-hash` → probe `:base-<hash16>`
    (`docker manifest inspect`). Hit: <30s. Miss: build the `base` bake
    target (devcontainer-base = apt + mise install + cargo), push it;
-   p2996-prep + build pull it instead of rebuilding the mise layer.
+   build consumes it as a digest-pinned named context (not a rebuild).
    base-hash covers the BYTES of every base-section COPY input —
-   `mise-system.toml` (#140), `hk-common.pkl`/`hk-image.pkl` (#156). Since
-   p2996-hash folds base-hash, ANY edit busts BOTH tiers → a cold ~2h
-   rebuild (batch in-image config edits).
+   `mise-system.toml` (#140), `hk-common.pkl`/`hk-image.pkl` (#156).
+   Independent of p2996-hash since #160 T11: base edits rebuild ONLY the
+   base tier; the compiler cache stays warm.
 4. **p2996-prep** — `dotfiles-setup p2996-hash` → probe `:p2996-<hash16>`.
    Hit: <30s. Miss: build the `p2996-cache` bake target (scratch
    `p2996-export` with just `/opt/clang-p2996`, ~500 MB), push to GHCR.
 5. **dev-prep** (#122, PR builds only) — `dotfiles-setup dev-hash` → probe
    `:dev-<hash16>`. Hit: retag the validated image to `:sha`/`:pr-NNN`,
    skip build+smoke. Miss: fall through. Nightly skips this (always builds).
-6. **build** — `docker buildx bake dev` with `dev.args.P2996_SOURCE=<cache_ref>`;
-   on a p2996 hit `clang-builder` is `FROM <cache_ref>`, skipping the
-   multi-hour compile. Pushes `:pr-NNN`/`:sha` (PR) or `:dev`/`:latest` (nightly).
+6. **build** — `docker buildx bake dev` with digest-pinned named contexts
+   (`dev.contexts.{devcontainer-base,p2996-export}=docker-image://…@sha256:…`,
+   #160 T11) overriding the local stages — no multi-hour compile. Pushes `:pr-NNN`/`:sha` (PR) or `:dev`/`:latest` (nightly).
 7. **smoke-test** — pulls `:sha-<github.sha>`, runs the PR-blocking gates
    `image smoke` + Dive + the T7 bootstrap gap report; benchmark + Trivy
    are async in `image-analysis.yml`. On success **dev-tag** stamps the
@@ -104,9 +104,9 @@ Push-to-main path (after a PR merge):
   target) is tagged only AFTER smoke passes, so a PR hit skips build+smoke
   (retag to `:sha`/`:pr-NNN`). Nightly skips the dev probe and always rebuilds
   (catches rolling-tool drift the hash can't see).
-- **P2996 cache inputs.** Key = `CLANG_P2996_REF`, `BASE_IMAGE`, `PLATFORM`,
-  Dockerfile p2996 section, bake, + the folded base-hash (mise-system.toml/
-  .lock, shared.toml, hk pkls). See `.devcontainer/P2996-CACHE.md`.
+- **P2996 cache inputs.** Key = `CLANG_P2996_REF`, `BUILDER_IMAGE`,
+  `PLATFORM`, Dockerfile p2996 section — decoupled from base-hash
+  (#160 T11). See `.devcontainer/P2996-CACHE.md`.
 - **`uv run --project python`**, not `--directory` — `--directory`
   changes cwd and breaks relative test paths.
 - **Use `--watch`, never sleep-poll** (`gh pr checks <n> --watch`); the

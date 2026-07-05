@@ -8,8 +8,10 @@ separately so each only invalidates when ITS inputs change:
   changes, mise-system.lock drift, BASE_IMAGE bump.
 - `:p2996-<p2996_hash>` — clang-builder-cold + p2996-export stages.
   ~80-120 min cold. Invalidates on CLANG_P2996_REF bump, p2996-section
-  Dockerfile changes, OR base-hash changes (since a base toolchain
-  shift could affect the compile).
+  Dockerfile changes, BUILDER_IMAGE digest bump, or PLATFORM change.
+  INDEPENDENT of base-hash since #160 T11 (the builder compiles FROM
+  the parameterized BUILDER_IMAGE with its own apt toolchain, so
+  mise/hk/base-config edits never rebuild the compiler).
 - `:dev` / `:sha-<sha>` — final image. Pure pull + COPY when both
   caches hit. ~5-10 min.
 
@@ -87,28 +89,28 @@ class BaseHashInputs:
 
 @dataclass(frozen=True)
 class P2996HashInputs:
-    """Inputs feeding the `:p2996-<hash>` cache image."""
+    """Inputs feeding the `:p2996-<hash>` cache image.
+
+    Decoupled from base-hash since #160 T11: the builder compiles FROM the
+    parameterized ``BUILDER_IMAGE`` with its own apt toolchain, so
+    mise/hk/base-config edits no longer move this hash (and no longer
+    trigger the ~2h compiler rebuild). ``builder_image`` (the digest-pinned
+    builder ref from bake) and ``platform`` are the first-class
+    replacements — either changing means different compiler inputs.
+    """
 
     clang_p2996_ref: str
-    base_hash: str
+    builder_image: str
     platform: str
     p2996_section_digest: str
 
     def __post_init__(self) -> None:
         """Reject empty literals + ill-shaped hashes."""
-        for field_name in ("clang_p2996_ref", "platform"):
+        for field_name in ("clang_p2996_ref", "builder_image", "platform"):
             value = getattr(self, field_name)
             if not value:
                 msg = f"P2996HashInputs.{field_name} must be non-empty"
                 raise ValueError(msg)
-        if len(self.base_hash) != HASH_LENGTH or not all(
-            c in "0123456789abcdef" for c in self.base_hash
-        ):
-            msg = (
-                f"P2996HashInputs.base_hash must be {HASH_LENGTH}-char "
-                f"lowercase hex; got {self.base_hash!r}"
-            )
-            raise ValueError(msg)
         _validate_hex_digest(
             self.p2996_section_digest, "P2996HashInputs.p2996_section_digest"
         )
@@ -340,13 +342,12 @@ def compute_repo_base_hash(repo_root: Path) -> str:
 
 
 def gather_p2996_inputs(
-    repo_root: Path, *, base_hash: str, clang_p2996_ref: str | None = None
+    repo_root: Path, *, clang_p2996_ref: str | None = None
 ) -> P2996HashInputs:
     """Read every input that contributes to the `:p2996-<hash>` cache.
 
-    `base_hash` is passed in (rather than recomputed) so the caller
-    controls when the base reference is captured — same value reused
-    across multiple p2996 hash computations.
+    Independent of base-hash since #160 T11 (the builder is decoupled);
+    the builder ref and platform come from docker-bake.hcl.
 
     `clang_p2996_ref`, when given, overrides the `CLANG_P2996_REF`
     default read from docker-bake.hcl — the Phase D (#120) "build this
@@ -367,7 +368,7 @@ def gather_p2996_inputs(
             if clang_p2996_ref is not None
             else _extract_bake_variable(bake_text, "CLANG_P2996_REF")
         ),
-        base_hash=base_hash,
+        builder_image=_extract_bake_variable(bake_text, "BUILDER_IMAGE"),
         platform=_extract_bake_variable(bake_text, "PLATFORM"),
         p2996_section_digest=_sha256_hex(p2996_section),
     )
@@ -380,7 +381,7 @@ def compute_p2996_hash(inputs: P2996HashInputs) -> str:
             f"schema={SCHEMA_VERSION}",
             "kind=p2996",
             f"clang_p2996_ref={inputs.clang_p2996_ref}",
-            f"base_hash={inputs.base_hash}",
+            f"builder_image={inputs.builder_image}",
             f"platform={inputs.platform}",
             f"p2996_section={inputs.p2996_section_digest}",
         ],
@@ -391,16 +392,13 @@ def compute_p2996_hash(inputs: P2996HashInputs) -> str:
 def compute_repo_p2996_hash(
     repo_root: Path, *, clang_p2996_ref: str | None = None
 ) -> str:
-    """Top-level helper: compute base hash, then p2996 hash on top.
+    """Top-level helper: compute the p2996 hash (no base dependency, T11).
 
     `clang_p2996_ref` overrides the committed `CLANG_P2996_REF` pin for
     the Phase D (#120) on-demand build path; `None` uses the pin.
     """
-    base_hash = compute_repo_base_hash(repo_root)
     return compute_p2996_hash(
-        gather_p2996_inputs(
-            repo_root, base_hash=base_hash, clang_p2996_ref=clang_p2996_ref
-        )
+        gather_p2996_inputs(repo_root, clang_p2996_ref=clang_p2996_ref)
     )
 
 
@@ -463,9 +461,7 @@ def compute_repo_dev_hash(
     """
     base_hash = compute_repo_base_hash(repo_root)
     p2996_hash = compute_p2996_hash(
-        gather_p2996_inputs(
-            repo_root, base_hash=base_hash, clang_p2996_ref=clang_p2996_ref
-        )
+        gather_p2996_inputs(repo_root, clang_p2996_ref=clang_p2996_ref)
     )
     return compute_dev_hash(
         gather_dev_inputs(repo_root, base_hash=base_hash, p2996_hash=p2996_hash)

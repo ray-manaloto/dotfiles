@@ -57,7 +57,7 @@ def _stub_base_inputs(**overrides: str) -> BaseHashInputs:
 def _stub_p2996_inputs(**overrides: str) -> P2996HashInputs:
     base = {
         "clang_p2996_ref": "9ffb96e3ce362289008e14ad2a79a249f58aa90a",
-        "base_hash": "0123456789abcdef",
+        "builder_image": "ubuntu:26.04@sha256:feedfacefeedface",
         "platform": "linux/amd64/v2",
         "p2996_section_digest": "b" * 64,
     }
@@ -89,6 +89,7 @@ def _seed_repo(tmp_path: Path) -> Path:
     (tmp_path / "docker-bake.hcl").write_text(
         'variable "BASE_IMAGE" { default = "ubuntu:26.04" }\n'
         'variable "PLATFORM" { default = "linux/amd64/v2" }\n'
+        'variable "BUILDER_IMAGE" { default = "ubuntu:26.04@sha256:feedface" }\n'
         'variable "CLANG_P2996_REF" { default = "abc123" }\n'
         'target "dev" {\n'
         '  target = "devcontainer"\n'
@@ -265,11 +266,17 @@ def test_p2996_hash_changes_when_clang_ref_changes() -> None:
     assert compute_p2996_hash(base) != compute_p2996_hash(bumped)
 
 
-def test_p2996_hash_changes_when_base_hash_changes() -> None:
-    # Critical: base-hash bumps must invalidate p2996 cache (toolchain
-    # shift could affect the compile output).
+def test_p2996_hash_changes_when_builder_image_changes() -> None:
+    # T11: a BUILDER_IMAGE digest bump means different compiler inputs and
+    # must move the hash (it replaced base_hash as the toolchain signal).
     base = _stub_p2996_inputs()
-    bumped = _stub_p2996_inputs(base_hash="fedcba9876543210")
+    bumped = _stub_p2996_inputs(builder_image="ubuntu:26.04@sha256:0badc0de")
+    assert compute_p2996_hash(base) != compute_p2996_hash(bumped)
+
+
+def test_p2996_hash_changes_when_platform_changes() -> None:
+    base = _stub_p2996_inputs()
+    bumped = _stub_p2996_inputs(platform="linux/arm64")
     assert compute_p2996_hash(base) != compute_p2996_hash(bumped)
 
 
@@ -284,14 +291,9 @@ def test_p2996_inputs_reject_empty_clang_ref() -> None:
         _stub_p2996_inputs(clang_p2996_ref="")
 
 
-def test_p2996_inputs_reject_short_base_hash() -> None:
-    with pytest.raises(ValueError, match="16-char"):
-        _stub_p2996_inputs(base_hash="abc")
-
-
-def test_p2996_inputs_reject_uppercase_base_hash() -> None:
-    with pytest.raises(ValueError, match="16-char"):
-        _stub_p2996_inputs(base_hash="ABCDEF0123456789")
+def test_p2996_inputs_reject_empty_builder_image() -> None:
+    with pytest.raises(ValueError, match="must be non-empty"):
+        _stub_p2996_inputs(builder_image="")
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -299,9 +301,9 @@ def test_p2996_inputs_reject_uppercase_base_hash() -> None:
 # ──────────────────────────────────────────────────────────────────────
 
 
-def test_p2996_hash_independent_of_base_section_when_base_hash_held() -> None:
-    # When base-hash is held constant (caller controls), the
-    # p2996-section input is the only thing that determines p2996-hash.
+def test_p2996_hash_moves_on_section_digest_alone() -> None:
+    # With builder/platform/ref held constant, the p2996-section input is
+    # the only thing that determines p2996-hash.
     a = _stub_p2996_inputs(p2996_section_digest="a" * 64)
     b = _stub_p2996_inputs(p2996_section_digest="b" * 64)
     assert compute_p2996_hash(a) != compute_p2996_hash(b)
@@ -315,9 +317,7 @@ def test_base_and_p2996_hashes_have_different_kind_namespacing() -> None:
     base = compute_base_hash(
         _stub_base_inputs(base_section_digest=same_digest, mise_lock_digest=same_digest)
     )
-    p2996 = compute_p2996_hash(
-        _stub_p2996_inputs(p2996_section_digest=same_digest, base_hash="0" * 16)
-    )
+    p2996 = compute_p2996_hash(_stub_p2996_inputs(p2996_section_digest=same_digest))
     assert base != p2996
 
 
@@ -419,17 +419,52 @@ def test_repo_p2996_hash_changes_when_p2996_section_modified(tmp_path: Path) -> 
     assert before != after
 
 
-def test_repo_p2996_hash_changes_when_base_section_modified(tmp_path: Path) -> None:
-    # Inverse of the previous: editing the base section bumps both
-    # base-hash AND p2996-hash (because p2996 inherits base-hash).
+def test_repo_p2996_hash_unchanged_when_base_section_modified(tmp_path: Path) -> None:
+    # T11 PROOF TEST (inverted from the pre-decouple coupling assertion):
+    # base-section edits move base-hash but must leave p2996-hash ALONE —
+    # the builder no longer descends from devcontainer-base, so mise/hk/
+    # base edits never trigger the ~2h compiler rebuild.
     _seed_repo(tmp_path)
-    before = compute_repo_p2996_hash(tmp_path)
+    base_before = compute_repo_base_hash(tmp_path)
+    p2996_before = compute_repo_p2996_hash(tmp_path)
     dockerfile = tmp_path / ".devcontainer" / "Dockerfile"
     dockerfile.write_text(
         dockerfile.read_text().replace("RUN apt-get update", "RUN apt-get install foo")
     )
-    after = compute_repo_p2996_hash(tmp_path)
-    assert before != after
+    assert compute_repo_base_hash(tmp_path) != base_before
+    assert compute_repo_p2996_hash(tmp_path) == p2996_before
+
+
+def test_repo_p2996_hash_unchanged_when_mise_system_toml_edited(tmp_path: Path) -> None:
+    _seed_repo(tmp_path)
+    before = compute_repo_p2996_hash(tmp_path)
+    path = tmp_path / ".devcontainer" / "mise-system.toml"
+    path.write_text(path.read_text() + '"conda:extra" = "latest"\n')
+    assert compute_repo_p2996_hash(tmp_path) == before
+
+
+def test_repo_p2996_hash_unchanged_when_shared_toml_edited(tmp_path: Path) -> None:
+    _seed_repo(tmp_path)
+    before = compute_repo_p2996_hash(tmp_path)
+    path = tmp_path / ".config" / "mise" / "conf.d" / "shared.toml"
+    path.write_text(path.read_text() + 'jq = "1.8.1"\n')
+    assert compute_repo_p2996_hash(tmp_path) == before
+
+
+def test_repo_p2996_hash_unchanged_when_hk_common_pkl_edited(tmp_path: Path) -> None:
+    _seed_repo(tmp_path)
+    before = compute_repo_p2996_hash(tmp_path)
+    path = tmp_path / "hk-common.pkl"
+    path.write_text(path.read_text() + "extra = new {}\n")
+    assert compute_repo_p2996_hash(tmp_path) == before
+
+
+def test_repo_p2996_hash_unchanged_when_mise_lock_edited(tmp_path: Path) -> None:
+    _seed_repo(tmp_path)
+    before = compute_repo_p2996_hash(tmp_path)
+    path = tmp_path / ".devcontainer" / "mise-system.lock"
+    path.write_text(path.read_text() + "# drift\n")
+    assert compute_repo_p2996_hash(tmp_path) == before
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -439,11 +474,9 @@ def test_repo_p2996_hash_changes_when_base_section_modified(tmp_path: Path) -> N
 
 def test_gather_p2996_inputs_override_replaces_bake_pin(tmp_path: Path) -> None:
     _seed_repo(tmp_path)
-    pinned = gather_p2996_inputs(tmp_path, base_hash="0" * 16)
+    pinned = gather_p2996_inputs(tmp_path)
     assert pinned.clang_p2996_ref == "abc123"  # the seeded bake default
-    overridden = gather_p2996_inputs(
-        tmp_path, base_hash="0" * 16, clang_p2996_ref="deadbeef"
-    )
+    overridden = gather_p2996_inputs(tmp_path, clang_p2996_ref="deadbeef")
     assert overridden.clang_p2996_ref == "deadbeef"
 
 
@@ -451,9 +484,9 @@ def test_gather_p2996_inputs_none_override_uses_pin(tmp_path: Path) -> None:
     # Explicit None must be byte-identical to omitting the arg — the
     # canonical-build invariant the empty dispatch input relies on.
     _seed_repo(tmp_path)
-    assert gather_p2996_inputs(
-        tmp_path, base_hash="0" * 16, clang_p2996_ref=None
-    ) == gather_p2996_inputs(tmp_path, base_hash="0" * 16)
+    assert gather_p2996_inputs(tmp_path, clang_p2996_ref=None) == gather_p2996_inputs(
+        tmp_path
+    )
 
 
 def test_repo_p2996_hash_override_differs_from_pin(tmp_path: Path) -> None:
@@ -490,6 +523,7 @@ def test_gather_base_inputs_missing_dockerfile_raises(tmp_path: Path) -> None:
     (tmp_path / "docker-bake.hcl").write_text(
         'variable "BASE_IMAGE" { default = "ubuntu:26.04" }\n'
         'variable "PLATFORM" { default = "linux/amd64/v2" }\n'
+        'variable "BUILDER_IMAGE" { default = "ubuntu:26.04@sha256:feedface" }\n'
         'variable "CLANG_P2996_REF" { default = "abc" }\n',
     )
     (tmp_path / ".devcontainer").mkdir()
@@ -504,7 +538,7 @@ def test_gather_p2996_inputs_missing_marker_raises(tmp_path: Path) -> None:
     # Strip the p2996 begin marker.
     dockerfile.write_text(dockerfile.read_text().replace(P2996_SECTION_BEGIN, ""))
     with pytest.raises(ValueError, match="not found"):
-        gather_p2996_inputs(tmp_path, base_hash="0" * 16)
+        gather_p2996_inputs(tmp_path)
 
 
 # ──────────────────────────────────────────────────────────────────────

@@ -310,7 +310,7 @@ tokens = ["CLANG_P2996_REF"]
 
 [[suite]]
 name = "build.p2996-cache-target"
-description = "docker-bake.hcl must define p2996-cache target backed by p2996-export stage; dev target must accept P2996_SOURCE arg for cache short-circuit"
+description = "docker-bake.hcl must define the p2996-cache target backed by the p2996-export stage, parameterized by BUILDER_IMAGE (#160 T11 — the builder is decoupled from devcontainer-base; warm paths consume the artifact as a digest-pinned named context)"
 category = "build"
 check_type = "static"
 handler = "require_tokens"
@@ -318,12 +318,12 @@ paths = ["docker-bake.hcl"]
 tokens = [
   "target \"p2996-cache\"",
   "p2996-export",
-  "P2996_SOURCE",
+  "BUILDER_IMAGE",
 ]
 
 [[suite]]
 name = "build.base-cache-target"
-description = "docker-bake.hcl must define base target backed by devcontainer-base stage; both dev and p2996-cache targets must accept DEVCONTAINER_BASE_REF arg so they pull the cached base instead of rebuilding the heavy mise install layer"
+description = "docker-bake.hcl must define the base target backed by the devcontainer-base stage; the dev build consumes it as the digest-pinned devcontainer-base named context on warm CI paths (#160 T11)"
 category = "build"
 check_type = "static"
 handler = "require_tokens"
@@ -331,8 +331,16 @@ paths = ["docker-bake.hcl"]
 tokens = [
   "target \"base\"",
   "devcontainer-base",
-  "DEVCONTAINER_BASE_REF",
 ]
+
+[[suite]]
+name = "build.no-retired-indirection-args"
+description = "The ARG P2996_SOURCE / ARG DEVCONTAINER_BASE_REF FROM-indirection is retired (#160 T11) — digest-pinned named build contexts replaced it; reintroducing either ARG resurrects tag-pinned (repush-vulnerable) plumbing"
+category = "build"
+check_type = "static"
+handler = "forbid_tokens"
+paths = [".devcontainer/Dockerfile", "docker-bake.hcl"]
+tokens = ["P2996_SOURCE", "DEVCONTAINER_BASE_REF"]
 
 [[suite]]
 name = "build.dockerfile-section-markers"
@@ -350,16 +358,15 @@ tokens = [
 
 [[suite]]
 name = "build.p2996-cache-dockerfile-stages"
-description = "Dockerfile must split clang-builder into clang-builder-cold (cold compile) + p2996-export (scratch export) + clang-builder (FROM ${P2996_SOURCE} indirection) so the same Dockerfile serves both cold and cache-hit paths"
+description = "Dockerfile must keep the decoupled p2996 pipeline (#160 T11): clang-builder-cold compiles FROM the parameterized ${BUILDER_IMAGE}; p2996-export is the scratch artifact stage the final COPY consumes (locally on cold paths, as a digest-pinned named context on warm paths)"
 category = "build"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/Dockerfile"]
 tokens = [
-  "AS clang-builder-cold",
+  "FROM ${BUILDER_IMAGE} AS clang-builder-cold",
   "AS p2996-export",
-  "ARG P2996_SOURCE",
-  "FROM ${P2996_SOURCE}",
+  "COPY --from=p2996-export /opt/clang-p2996",
 ]
 
 [[suite]]
@@ -526,7 +533,7 @@ tokens = [
 
 [[suite]]
 name = "ci.p2996-prep-job-exists"
-description = "p2996-prep job must compute the content-hash via dotfiles-setup p2996-hash and probe ghcr.io for ':p2996-<hash>' before triggering the build. Cache hit short-circuits the ~80–120 min clang compile. Lives in the reusable build-publish.yml since Phase B (#118) — ci.yml calls it via workflow_call."
+description = "p2996-prep job must compute the content-hash via dotfiles-setup p2996-hash and probe ghcr.io for ':p2996-<hash>' before triggering the build; the build job consumes the artifact as a digest-pinned p2996-export named context (#160 T11). Cache hit short-circuits the ~80–120 min clang compile. Lives in the reusable build-publish.yml since Phase B (#118)."
 category = "ci"
 check_type = "static"
 handler = "require_tokens"
@@ -536,7 +543,8 @@ tokens = [
   "dotfiles-setup p2996-hash",
   "docker manifest inspect",
   "p2996-cache",
-  "P2996_SOURCE",
+  "dev.contexts.p2996-export=docker-image://",
+  "dev.contexts.devcontainer-base=docker-image://",
 ]
 
 [[suite]]

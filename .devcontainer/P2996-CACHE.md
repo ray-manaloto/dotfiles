@@ -8,27 +8,31 @@ image keyed on a content-hash of the build inputs.
 
 ## Stages
 
-1. **`clang-builder-cold`** — `FROM devcontainer-base`. Performs the
-   actual `git clone` + `cmake` + `ninja install` to
-   `/opt/clang-p2996`. Runs the cold-path reflection smoke test.
+1. **`clang-builder-cold`** — `FROM ${BUILDER_IMAGE}` (#160 T11): a
+   parameterized, rarely-bumped ubuntu digest with its OWN apt compile
+   toolchain — fully decoupled from `devcontainer-base`, so mise/hk/base
+   edits never rebuild the compiler. Performs the `git fetch` + `cmake`
+   + `ninja install` to `/opt/clang-p2996` + the reflection smoke test.
 2. **`p2996-export`** — `FROM scratch` + `COPY --from=clang-builder-cold
    /opt/clang-p2996 /opt/clang-p2996`. ~500 MB image holding just the
    install prefix; small enough to push/pull as a cache image.
-3. **`clang-builder`** — thin indirection: `ARG P2996_SOURCE=p2996-export`
-   + `FROM ${P2996_SOURCE}`. The build arg switches between the local
-   `p2996-export` stage (cold path, default) and a pre-built
-   `ghcr.io/<owner>/<repo>:p2996-<hash16>` cache image.
 
-The final `devcontainer` stage's `COPY --from=clang-builder
-/opt/clang-p2996 /opt/clang-p2996` is unchanged — works either way.
+The final `devcontainer` stage does `COPY --from=p2996-export`: on the
+cold path that builds the local stages; on warm CI paths bake-action
+injects `dev.contexts.p2996-export=docker-image://…:p2996-<hash16>@sha256:…`
+— a DIGEST-pinned named build context that overrides the same-named local
+stage (the former `ARG P2996_SOURCE` indirection stage is retired).
 
 ## CI flow
 
 1. `p2996-prep` job runs `dotfiles-setup p2996-hash` to compute the
    16-char content-hash, then `docker manifest inspect` against
    `ghcr.io/<owner>/<repo>:p2996-<hash16>`.
-2. On HIT (typical case): exits in <30 s. The downstream `build` job
-   receives `P2996_SOURCE=<cache_ref>` and skips the cold compile.
+2. On HIT (typical case): exits in <30 s. The job resolves the manifest
+   digest; the downstream `build` job injects
+   `dev.contexts.p2996-export=docker-image://<cache_ref>@<digest>` and
+   skips the cold compile. `p2996-prep` runs in PARALLEL with
+   `base-prep` (no dependency since the T11 decouple).
 3. On MISS: the job does the full P2996 build via the `p2996-cache`
    bake target and pushes the resulting `:p2996-<hash16>` image to
    GHCR. Subsequent runs hit the new cache.
@@ -36,7 +40,8 @@ The final `devcontainer` stage's `COPY --from=clang-builder
 ## Hash inputs
 
 There are two content-hashes (each sha256 truncated to 16 hex chars),
-and the p2996 hash folds in the base hash so changes cascade.
+fully INDEPENDENT of each other since #160 T11 — base edits move only
+the base hash; compiler-input edits move only the p2996 hash.
 
 The **base** hash (`dotfiles-setup base-hash`) covers:
 
@@ -62,8 +67,8 @@ The **base** hash (`dotfiles-setup base-hash`) covers:
 
 The **p2996** hash (`dotfiles-setup p2996-hash`) covers:
 
-- `CLANG_P2996_REF` and `PLATFORM` values (parsed from `docker-bake.hcl`)
-- the base hash above
+- `CLANG_P2996_REF`, `BUILDER_IMAGE`, and `PLATFORM` values (parsed from
+  `docker-bake.hcl`) — NOT the base hash (decoupled, #160 T11)
 - sha256 of the `Dockerfile` section between the `P2996_HASH_BEGIN` /
   `P2996_HASH_END` sentinels
 
