@@ -84,7 +84,8 @@ target "dev" {
 # Content-addressed cache for the devcontainer-base stage (apt + mise
 # install + cargo crates — the heavy ~30 min layer). CI tags it
 # ghcr.io/<owner>/<repo>:base-<hash16> where the hash captures
-# BASE_IMAGE + Dockerfile base-section + mise-system-resolved.json.
+# BASE_IMAGE + Dockerfile base-section + mise-system.toml + mise-system.lock
+# + hk-common.pkl/hk-image.pkl.
 # Both p2996-cache and dev pull this image so neither rebuilds the
 # mise install when only p2996 inputs change.
 #

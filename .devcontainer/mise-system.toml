@@ -155,6 +155,12 @@ arch = "x86_64"
 experimental = true
 auto_install = true
 lockfile = true
+# Scope `mise.lock` to the image target so `mise lock` doesn't fan out to all
+# 7 platforms (native since mise v2026.4.9 — requires the pinned MISE_VERSION in
+# the Dockerfile to honor it; older mise treats it as an unknown field). The
+# committed .devcontainer/mise-system.lock is generated for linux-x64 and
+# consumed by `mise install --system --locked`. See epic #160.
+lockfile_platforms = ["linux-x64"]
 jobs = 1
 # Supply-chain hardening: ignore tool versions younger than 7 days when
 # resolving `latest`/fuzzy requests (forwards the cutoff to npm:/pipx:

@@ -20,7 +20,7 @@ Defines the devcontainer image and runtime lifecycle. Two layers:
 | `Dockerfile.host-user` | Thin overlay that adds the host UID/GID (low-priority Phase 2 work) |
 | `devcontainer.json` | Devcontainer spec (containers.dev) — lifecycle hooks, features, volumes, dynamic naming |
 | `mise-system.toml` | Dedicated Docker system-wide mise config; installed to `/usr/local/share/mise/config.toml`; includes postinstall hook for Claude Code CLI |
-| `mise-system-resolved.json` + `P2996-CACHE.md` | P2996 content-addressed cache for clang-builder (multi-hour compile skipped on hash hit); refresh snapshot via `mise run capture-mise-system-resolved` |
+| `mise-system.lock` + `P2996-CACHE.md` | Native mise lockfile (rattler conda sha256 + version pins, linux-x64); COPYd to `/usr/local/share/mise/mise.lock` and consumed by `mise install --system --locked`; its digest feeds the base content-hash. Regenerate via the CI `lock-refresh` job (epic #160) |
 
 ## Devcontainer Lifecycle
 

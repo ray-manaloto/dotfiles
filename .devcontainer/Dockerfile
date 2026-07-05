@@ -109,6 +109,12 @@ RUN groupadd --gid 2000 mise && \
 
 # Copy dedicated system config — no chezmoi dependency, no sed stripping
 COPY .devcontainer/mise-system.toml /usr/local/share/mise/config.toml
+# The native mise lockfile (rattler conda sha256 + version pins for all 109
+# tools, generated for linux-x64). mise reads the lock as `mise.lock` beside
+# the data dir — NOT `config.lock` (verified: config.lock is silently ignored);
+# `mise install --system --locked` below consumes it. Replaces the retired
+# version-only mise-system-resolved.json snapshot. See epic #160.
+COPY .devcontainer/mise-system.lock /usr/local/share/mise/mise.lock
 
 # Pre-install tools globally via mise
 # Known cosmetic warnings during install:
@@ -137,7 +143,7 @@ RUN --mount=type=cache,id=mise-cache,target=/usr/local/share/mise/cache,sharing=
       export GITHUB_TOKEN && \
       export MISE_GITHUB_TOKEN="$GITHUB_TOKEN"; \
     fi && \
-    mise install --system -y && \
+    mise install --system --locked -y && \
     test "$(mise ls --installed | wc -l)" -gt 0 || { echo "ERROR: mise installed zero tools — system config not discovered (check MISE_CONFIG_DIR points at /usr/local/share/mise containing config.toml)"; exit 1; } && \
     test -d /usr/local/share/cargo/bin || { echo "ERROR: MISE_CARGO_HOME not honored — /usr/local/share/cargo/bin missing after mise install (rust cookbook regression)"; exit 1; } && \
     test -d /usr/local/share/rustup/toolchains || { echo "ERROR: MISE_RUSTUP_HOME not honored — /usr/local/share/rustup/toolchains missing after mise install (rust cookbook regression)"; exit 1; } && \

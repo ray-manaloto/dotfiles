@@ -5,7 +5,7 @@ separately so each only invalidates when ITS inputs change:
 
 - `:base-<base_hash>` — devcontainer-base stage (apt + mise install +
   cargo crates). ~30 min cold. Invalidates on Dockerfile base-section
-  changes, mise-system-resolved.json drift, BASE_IMAGE bump.
+  changes, mise-system.lock drift, BASE_IMAGE bump.
 - `:p2996-<p2996_hash>` — clang-builder-cold + p2996-export stages.
   ~80-120 min cold. Invalidates on CLANG_P2996_REF bump, p2996-section
   Dockerfile changes, OR base-hash changes (since a base toolchain
@@ -38,7 +38,11 @@ HASH_LENGTH = 16
 # v4: base-hash covers hk-common.pkl + hk-image.pkl (Dockerfile base-section
 # COPY inputs — their bytes were unhashed, so #154's /etc/hk config change did
 # not bust the cache and CI skipped the rebuild).
-SCHEMA_VERSION = 4
+# v5 (epic #160 mega cold PR): base-hash reads the native `mise-system.lock`
+# digest instead of the retired `mise-system-resolved.json` snapshot (rattler
+# conda sha256 supersedes the version-only snapshot); the same bump also covers
+# the p2996 base-hash decouple in this PR — one coherent schema epoch.
+SCHEMA_VERSION = 5
 RECORD_SEPARATOR = "\x1f"  # ASCII unit separator — never appears in inputs
 SHA256_HEX_LEN = 64
 
@@ -58,7 +62,7 @@ class BaseHashInputs:
     base_image: str
     platform: str
     base_section_digest: str
-    snapshot_digest: str
+    mise_lock_digest: str
     mise_system_config_digest: str
     hk_config_digest: str
 
@@ -71,7 +75,7 @@ class BaseHashInputs:
                 raise ValueError(msg)
         for field_name in (
             "base_section_digest",
-            "snapshot_digest",
+            "mise_lock_digest",
             "mise_system_config_digest",
             "hk_config_digest",
         ):
@@ -256,13 +260,20 @@ def gather_base_inputs(repo_root: Path) -> BaseHashInputs:
     base_section = _extract_dockerfile_section(
         dockerfile_text, BASE_SECTION_BEGIN, BASE_SECTION_END
     )
-    snapshot_path = repo_root / ".devcontainer" / "mise-system-resolved.json"
-    # The Dockerfile base section COPYs mise-system.toml verbatim into the
-    # image (/usr/local/share/mise/config.toml), so its BYTES are a build
-    # input. The base_section_digest only captures the COPY *instruction*,
-    # not the file content — hashing the file closes that gap so [settings]/
-    # [env]/[tasks] edits (which don't move the resolved snapshot) still bust
-    # the cache and trigger a rebuild. See PR #140.
+    # The Dockerfile base section COPYs mise-system.lock verbatim into the
+    # image (/usr/local/share/mise/mise.lock) and `mise install --system
+    # --locked` consumes it, so its BYTES are a build input. The lock (rattler
+    # conda sha256 + version pins for all backends) replaces the retired
+    # version-only mise-system-resolved.json snapshot: conda-forge drift now
+    # moves the lock's checksums, busting the cache deterministically. See
+    # epic #160.
+    lock_path = repo_root / ".devcontainer" / "mise-system.lock"
+    # The base section also COPYs mise-system.toml verbatim into the image
+    # (/usr/local/share/mise/config.toml), so its BYTES are a build input. The
+    # base_section_digest only captures the COPY *instruction*, not the file
+    # content — hashing the file closes that gap so [settings]/[env]/[tasks]
+    # edits (which don't move the lock) still bust the cache and trigger a
+    # rebuild. See PR #140.
     mise_system_config_path = repo_root / ".devcontainer" / "mise-system.toml"
     # The base section also COPYs hk-common.pkl + hk-image.pkl verbatim to
     # /etc/hk/ (the in-image hk config the devcontainer smoke uses). Same gap as
@@ -278,7 +289,7 @@ def gather_base_inputs(repo_root: Path) -> BaseHashInputs:
         base_image=_extract_bake_variable(bake_text, "BASE_IMAGE"),
         platform=_extract_bake_variable(bake_text, "PLATFORM"),
         base_section_digest=_sha256_hex(base_section),
-        snapshot_digest=_file_digest(snapshot_path),
+        mise_lock_digest=_file_digest(lock_path),
         mise_system_config_digest=_file_digest(mise_system_config_path),
         hk_config_digest=hk_config_digest,
     )
@@ -293,7 +304,7 @@ def compute_base_hash(inputs: BaseHashInputs) -> str:
             f"base_image={inputs.base_image}",
             f"platform={inputs.platform}",
             f"base_section={inputs.base_section_digest}",
-            f"snapshot={inputs.snapshot_digest}",
+            f"mise_lock={inputs.mise_lock_digest}",
             f"mise_system_config={inputs.mise_system_config_digest}",
             f"hk_config={inputs.hk_config_digest}",
         ],
