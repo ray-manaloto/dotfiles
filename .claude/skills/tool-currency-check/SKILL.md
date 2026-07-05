@@ -51,7 +51,7 @@ out-of-date pins AND custom code a tool now does natively, in one pass.
    | Custom code | Tool feature to re-check |
    |---|---|
    | `python/.../p2996_hash.py` content-hash | mise SBOM / `mise bom` / any toolchain-fingerprint (none as of 2026-07) |
-   | `mise-system-resolved.json` + `mise_snapshot.py` | `mise lock` conda `sha256` (rattler — NOW native, retire the snapshot) |
+   | `mise-system-resolved.json` + `mise_snapshot.py` | `mise lock` conda `sha256` (rattler — native; RETIRED in #160 T1) |
    | `refresh.yml` `p2996-refresh` | Renovate `git-refs` datasource |
    | `renovate.json` customManagers | native mise/dockerfile/devcontainer managers + jdx preset |
 
@@ -81,6 +81,12 @@ out-of-date pins AND custom code a tool now does natively, in one pass.
    (custom still justified — record why per rule 6).
 
 ## Guardrails
+
+- **Never introduce a `ubi:` pin.** The ubi backend is deprecated (warns since mise
+  2026.4.0, REMOVED in 2027.1.0); its niche (prebuilt GitHub-release binary) is the
+  `github:` backend — vfox is the *plugin-system* recommendation, not a ubi
+  replacement. Verify any backend's live docs page
+  (`mise.jdx.dev/dev-tools/backends/<name>.html`) before proposing a pin.
 
 - **In-image config edits cascade.** Bumping a pin in `mise-system.toml` /
   `hk-image.pkl` / `hk-common.pkl` busts the base content-hash → cold rebuild.

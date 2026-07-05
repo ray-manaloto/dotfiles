@@ -53,7 +53,7 @@ the official `@devcontainers/cli` (pinned in `mise.toml`).
 | `.devcontainer/` | Devcontainer spec, Dockerfile, mise-system.toml — see `.devcontainer/AGENTS.md` |
 | `.github/workflows/` | CI pipeline — see `.github/workflows/AGENTS.md` |
 | `.claude/` | Claude-specific agents, skills, rules. Has its own `CLAUDE.md` with OMC orchestration |
-| `home/` | Chezmoi-managed dotfiles — see `home/AGENTS.md` |
+| `home/` | Chezmoi-managed dotfile templates (its AGENTS.md was removed in #80) |
 | `python/` | Python package `dotfiles_setup` — see `python/AGENTS.md` |
 | `tests/` | Pytest + Bats test suite (190 pytest tests) — see `tests/AGENTS.md` |
 | `scripts/` | Utility scripts (`benchmark-docker.sh`, `devcontainer-smoke.sh`) |
@@ -129,7 +129,7 @@ locally before pushing Dockerfile changes.
   `chezmoi.os`) over homegrown detection logic. See
   `.claude/rules/use-tool-builtins.md`.
 - **Chezmoi is devcontainer-only on this Mac**: `chezmoi apply`/`update`
-  blocked on host by `.claude/settings.json`; read-only ok. See `home/AGENTS.md`.
+  blocked on host (enforced by `.claude/settings.json` deny rules); read-only ok.
 - **Notepad enforcement**: Agents write findings to notepad during work, not at session end. See `.claude/rules/notepad-enforcement.md`.
 - **OMC directory conventions**: Use standard `.omc/` paths, no ad-hoc
   directories. See `.claude/rules/omc-directory-conventions.md`.
