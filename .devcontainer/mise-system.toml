@@ -150,9 +150,38 @@ gitui = "latest"
 lazygit = "latest"
 lsd = "latest"
 
+# Declarative apt packages (single source of truth). apt-get in the Dockerfile
+# stays the REAL base installer (stable, no experimental risk on the ~30-min
+# layer); this section drives a SHADOW verify (`mise bootstrap packages status
+# --json`) whose gap report is emitted as a build artifact, so over time we can
+# answer "is mise's native package management mature enough to replace apt-get?"
+# Keys are `manager:package`; the value is the requested version. Keep in sync
+# with the Dockerfile apt-get list — enforced by tests/test_bootstrap_packages.py.
+# NOTE: mise renamed this from `[system.packages]`/`mise system` (2026.6.4) to
+# `[bootstrap.packages]`/`mise bootstrap packages` by 2026.7.0 (epic #160 T4).
+[bootstrap.packages]
+"apt:build-essential" = "latest"
+"apt:ca-certificates" = "latest"
+"apt:curl" = "latest"
+"apt:gnupg" = "latest"
+"apt:graphviz" = "latest"
+"apt:pkg-config" = "latest"
+"apt:sudo" = "latest"
+"apt:unzip" = "latest"
+"apt:zsh" = "latest"
+"apt:libatomic1" = "latest"
+"apt:libbz2-dev" = "latest"
+"apt:libreadline-dev" = "latest"
+"apt:libsqlite3-dev" = "latest"
+"apt:libssl-dev" = "latest"
+"apt:zlib1g-dev" = "latest"
+
 [settings]
 arch = "x86_64"
 experimental = true
+# Scope mise's declarative package management to apt (the only manager present
+# in the linux-x64 image) so the shadow verify never touches dnf/pacman/brew.
+system_packages.managers = ["apt"]
 auto_install = true
 lockfile = true
 # Scope `mise.lock` to the image target so `mise lock` doesn't fan out to all
