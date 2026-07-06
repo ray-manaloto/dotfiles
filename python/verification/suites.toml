@@ -360,7 +360,11 @@ description = "MISE_SYSTEM_CONFIG_FILE must not be set in the image ENV or devco
 category = "build"
 check_type = "static"
 handler = "forbid_tokens"
-paths = [".devcontainer/Dockerfile", ".devcontainer/devcontainer.json"]
+paths = [
+  ".devcontainer/Dockerfile",
+  ".devcontainer/Dockerfile.host-user",
+  ".devcontainer/devcontainer.json",
+]
 tokens = ["MISE_SYSTEM_CONFIG_FILE"]
 allowlist = ["^\\s*//"]
 
