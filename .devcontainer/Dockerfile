@@ -64,11 +64,17 @@ ARG DEBIAN_FRONTEND=noninteractive
 #     runtime users fall back to ~/.cargo / ~/.rustup defaults; PR-2
 #     mounts named volumes there for per-clone persistence and
 #     cookbook shadow-priority semantics.
+# MISE_SYSTEM_CONFIG_FILE is intentionally NOT set: it short-circuits
+# mise's system_config_files() to that ONE file, hiding conf.d/shared.toml
+# and config.runtime.toml from the system axis. The devcontainer runtime
+# re-points MISE_CONFIG_DIR at the user dir (overlay tier), so system-axis
+# *directory discovery* via MISE_SYSTEM_CONFIG_DIR is the only thing
+# keeping the shared + runtime tiers resolvable there (probe-verified in
+# :pr-169; a baked FILE pin broke `chezmoi init` onCreate — PR #169).
 ENV MISE_DATA_DIR=/usr/local/share/mise \
     MISE_CONFIG_DIR=/usr/local/share/mise \
     MISE_INSTALL_PATH=/usr/local/bin/mise \
     MISE_SYSTEM_CONFIG_DIR=/usr/local/share/mise \
-    MISE_SYSTEM_CONFIG_FILE=/usr/local/share/mise/config.toml \
     MISE_TRUSTED_CONFIG_PATHS=/usr/local/share/mise:/workspaces/dotfiles \
     MISE_CARGO_HOME=/usr/local/share/cargo \
     MISE_RUSTUP_HOME=/usr/local/share/rustup \

@@ -134,9 +134,10 @@ jobs = 1
 # transitive deps too). Network-free, needs no GITHUB_TOKEN — complements
 # the intentional github_attestations=false / slsa=false below (disabled
 # because a token isn't reliably available in buildkit secret mounts).
-# Pinned-exact versions are unaffected. Format per mise settings schema
-# (default 24h; relative durations like 7d/90d/6mo). Exempt specific tools
-# via minimum_release_age_exclude_tools if a bleeding-edge pin is needed.
+# NOTE: `mise lock` resolves `latest` WITHOUT this cutoff while bun
+# enforces it at install, so a locked latest younger than 7d fail-closes
+# (PR #169). Exempt fast-releasing tools via minimum_release_age_excludes
+# (mise-runtime.toml [settings] does this for the AI CLIs).
 minimum_release_age = "7d"
 npm.package_manager = "bun"
 pipx.uvx = true

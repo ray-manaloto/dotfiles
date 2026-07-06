@@ -355,6 +355,16 @@ paths = [".devcontainer/Dockerfile", "docker-bake.hcl"]
 tokens = ["P2996_SOURCE", "DEVCONTAINER_BASE_REF"]
 
 [[suite]]
+name = "build.no-system-config-file-pin"
+description = "MISE_SYSTEM_CONFIG_FILE must not be set in the image ENV or devcontainer containerEnv: per mise system_config_files() it short-circuits the system axis to that ONE file, hiding conf.d/shared.toml (shared tier, #160 T5) and config.runtime.toml (runtime tier, T9/T10) at devcontainer runtime — broke `chezmoi init` onCreate in PR #169. System-axis DIRECTORY discovery via MISE_SYSTEM_CONFIG_DIR is the supported shape (probe-verified against :pr-169)"
+category = "build"
+check_type = "static"
+handler = "forbid_tokens"
+paths = [".devcontainer/Dockerfile", ".devcontainer/devcontainer.json"]
+tokens = ["MISE_SYSTEM_CONFIG_FILE"]
+allowlist = ["^\\s*//"]
+
+[[suite]]
 name = "build.dockerfile-section-markers"
 description = "Dockerfile must contain BASE_HASH_BEGIN/END and P2996_HASH_BEGIN/END sentinel comments delimiting which stages feed which content hash; without these the hash function falls back to whole-file hashing and editing any line invalidates everything"
 category = "build"
