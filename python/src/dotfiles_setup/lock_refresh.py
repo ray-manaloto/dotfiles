@@ -163,7 +163,8 @@ def collect_system_lock(repo_root: Path, stage_dir: Path) -> None:
 
 
 def _collect_one(stage_lock: Path, dest: Path, config_tools: set[str]) -> None:
-    locked_tools = set(tomllib.loads(stage_lock.read_text()).get("tools", {}))
+    stage_text = stage_lock.read_text()
+    locked_tools = set(tomllib.loads(stage_text).get("tools", {}))
     missing = config_tools - locked_tools
     if missing:
         msg = (
@@ -171,7 +172,53 @@ def _collect_one(stage_lock: Path, dest: Path, config_tools: set[str]) -> None:
             f"(refusing to collect): {sorted(missing)}"
         )
         raise ValueError(msg)
-    shutil.copyfile(stage_lock, dest)
+    dest.write_text(strip_provenance(stage_text))
+
+
+def strip_provenance(lock_text: str) -> str:
+    """Drop provenance entries so the lock matches the image's verification.
+
+    The image intentionally disables attestation verification
+    (`github_attestations = false` / `slsa = false` in mise-system.toml —
+    no reliable token in buildkit, #160 T7 decision 16), but `mise lock`
+    2026.7.0 records provenance regardless of those settings (empirically
+    verified: stripped entries are re-recorded on the next pass), and
+    `mise install --locked` fail-closes when the lock requires provenance
+    the settings won't verify (jdx/mise#10694 downgrade-attack guard).
+    Producer-side normalization keeps the committed image locks consistent
+    with the consumer's settings. Host locks (mise.lock,
+    .config/mise/mise.lock) keep their provenance — hosts verify.
+
+    Raises:
+        ValueError: when a provenance key survives the strip (format
+            drift in a future mise lock schema — fail loud, never land a
+            lock the image build would reject).
+    """
+    lines = lock_text.splitlines(keepends=True)
+    out: list[str] = []
+    in_provenance_table = False
+    for line in lines:
+        if line.startswith("["):
+            in_provenance_table = ".provenance" in line or '"provenance' in line
+        if in_provenance_table or line.startswith("provenance = "):
+            continue
+        out.append(line)
+    stripped = "".join(out)
+    if _has_provenance_key(tomllib.loads(stripped)):
+        msg = "provenance key survived strip — mise.lock schema drifted"
+        raise ValueError(msg)
+    return stripped
+
+
+def _has_provenance_key(node: object) -> bool:
+    if isinstance(node, dict):
+        return any(
+            key == "provenance" or _has_provenance_key(value)
+            for key, value in node.items()
+        )
+    if isinstance(node, list):
+        return any(_has_provenance_key(item) for item in node)
+    return False
 
 
 def merged_system_config_tools(repo_root: Path) -> set[str]:

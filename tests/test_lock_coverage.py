@@ -65,6 +65,26 @@ def test_runtime_lock_covers_runtime_config() -> None:
     )
 
 
+def test_image_locks_carry_no_provenance() -> None:
+    """The image locks must not require provenance the image won't verify.
+
+    mise-system.toml disables `github_attestations`/`slsa` (T7 decision
+    16), and `mise install --system --locked` fail-closes when a lock
+    entry requires provenance while verification is off (jdx/mise#10694
+    — broke PR #169's base build). `mise lock` records provenance
+    regardless of those settings, so lock-collect strips it
+    (`strip_provenance`); this gate catches a hand-regenerated lock that
+    bypassed collect. Host locks keep provenance — hosts verify.
+    """
+    for lock in ("mise-system.lock", "mise-runtime.lock"):
+        text = (_REPO_ROOT / ".devcontainer" / lock).read_text()
+        assert "provenance" not in text, (
+            f"{lock} requires provenance the image build cannot verify — "
+            f"collect via `dotfiles-setup lock-collect` (strips it), do not "
+            f"copy stage locks by hand"
+        )
+
+
 def test_root_lock_covers_host_config() -> None:
     """mise.lock must lock exactly the root mise.toml tools.
 

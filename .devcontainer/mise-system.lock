@@ -404,7 +404,6 @@ backend = "aqua:rhysd/actionlint"
 checksum = "sha256:8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
 url = "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz"
 url_api = "https://api.github.com/repos/rhysd/actionlint/releases/assets/384924896"
-provenance = "github-attestations"
 
 [[tools.bazel]]
 version = "9.1.1"
@@ -443,7 +442,6 @@ backend = "aqua:cargo-bins/cargo-binstall"
 checksum = "sha256:f12954bc382e1d0b2df3fbfb217a05d92c25570e4517841e0613499a24f4594e"
 url = "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.20.1/cargo-binstall-x86_64-unknown-linux-musl.tgz"
 url_api = "https://api.github.com/repos/cargo-bins/cargo-binstall/releases/assets/453434840"
-provenance = "github-attestations"
 
 [[tools.chezmoi]]
 version = "2.70.5"
@@ -1210,9 +1208,6 @@ checksum = "sha256:98ee0e3330de7286f470d1e89c03ff7ce70d7a5998ba0f15969c400447be5
 url = "https://github.com/suzuki-shunsuke/ghalint/releases/download/v1.5.6/ghalint_1.5.6_linux_amd64.tar.gz"
 url_api = "https://api.github.com/repos/suzuki-shunsuke/ghalint/releases/assets/409631220"
 
-[tools.ghalint."platforms.linux-x64".provenance.slsa]
-url = "https://github.com/suzuki-shunsuke/ghalint/releases/download/v1.5.6/multiple.intoto.jsonl"
-
 [[tools.gitleaks]]
 version = "8.30.1"
 backend = "aqua:gitleaks/gitleaks"
@@ -1267,7 +1262,6 @@ backend = "aqua:jqlang/jq"
 checksum = "sha256:020468de7539ce70ef1bceaf7cde2e8c4f2ca6c3afb84642aabc5c97d9fc2a0d"
 url = "https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-linux-amd64"
 url_api = "https://api.github.com/repos/jqlang/jq/releases/assets/268981484"
-provenance = "github-attestations"
 
 [[tools.micromamba]]
 version = "2.8.1-0"
@@ -1294,7 +1288,6 @@ backend = "aqua:suzuki-shunsuke/pinact"
 checksum = "sha256:8fcbf1b3e95551c82fd995535e3c1defa70e23299ce36eb3afd6c98778de6ca0"
 url = "https://github.com/suzuki-shunsuke/pinact/releases/download/v4.1.0/pinact_linux_amd64.tar.gz"
 url_api = "https://api.github.com/repos/suzuki-shunsuke/pinact/releases/assets/442249966"
-provenance = "github-attestations"
 
 [[tools."pipx:check-jsonschema"]]
 version = "0.37.2"
@@ -1308,7 +1301,6 @@ backend = "github:prefix-dev/pixi"
 checksum = "sha256:2c086608809f7bdd9918323cf6f6278bb43b025f4d957ddfd55295cf151c6f21"
 url = "https://github.com/prefix-dev/pixi/releases/download/v0.72.0/pixi-x86_64-unknown-linux-musl.tar.gz"
 url_api = "https://api.github.com/repos/prefix-dev/pixi/releases/assets/463197303"
-provenance = "github-attestations"
 
 [[tools.pkl]]
 version = "0.31.1"
@@ -1326,7 +1318,6 @@ backend = "core:python"
 [tools.python."platforms.linux-x64"]
 checksum = "sha256:c172314f4a8ec137a8f605289010c3d19c8b56867d968f0095074cc68efa1d29"
 url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260623/cpython-3.14.6+20260623-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
-provenance = "github-attestations"
 
 [[tools.ruby]]
 version = "4.0.5"
@@ -1422,7 +1413,6 @@ backend = "aqua:astral-sh/uv"
 checksum = "sha256:62bf1a53501adf4083224b69b33737450ac516935f5a5e483e9dfaf2665084de"
 url = "https://github.com/astral-sh/uv/releases/download/0.11.26/uv-x86_64-unknown-linux-musl.tar.gz"
 url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/462248297"
-provenance = "github-attestations"
 
 [[tools.yamlfmt]]
 version = "0.21.0"
@@ -1445,7 +1435,6 @@ backend = "aqua:mikefarah/yq"
 checksum = "sha256:d56bf5c6819e8e696340c312bd70f849dc1678a7cda9c2ad63eebd906371d56b"
 url = "https://github.com/mikefarah/yq/releases/download/v4.53.2/yq_linux_amd64"
 url_api = "https://api.github.com/repos/mikefarah/yq/releases/assets/398368450"
-provenance = "cosign"
 
 [[tools.zig]]
 version = "0.16.0"

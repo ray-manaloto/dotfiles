@@ -15,6 +15,7 @@ from dotfiles_setup.lock_refresh import (
     merged_system_config_tools,
     pinned_mise_version,
     stage_system_lock_dir,
+    strip_provenance,
 )
 
 if TYPE_CHECKING:
@@ -101,6 +102,47 @@ def test_collect_refuses_partial_lock(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="missing tools"):
         collect_system_lock(repo, stage)
     assert (repo / ".devcontainer" / "mise-system.lock").read_text() == _LOCK
+
+
+def test_strip_provenance_removes_keys_and_tables() -> None:
+    """Provenance keys AND provenance sub-tables must both be dropped.
+
+    The image disables attestation verification, and mise's locked
+    install fail-closes on a lock that requires it (jdx/mise#10694).
+    """
+    lock = (
+        '[[tools.python]]\nversion = "3.14.6"\n\n'
+        '[tools.python."platforms.linux-x64"]\n'
+        'checksum = "sha256:abc"\n'
+        'provenance = "github-attestations"\n\n'
+        '[[tools.cosign-tool]]\nversion = "1.0"\n\n'
+        '[tools.cosign-tool."platforms.linux-x64"]\n'
+        'provenance = "cosign"\n\n'
+        '[[tools.ghalint]]\nversion = "1.5.6"\n\n'
+        '[tools.ghalint."platforms.linux-x64".provenance.slsa]\n'
+        'source_uri = "github.com/x/y"\n\n'
+        '[[tools.hk]]\nversion = "1.49.0"\n'
+    )
+    stripped = strip_provenance(lock)
+    parsed = tomllib.loads(stripped)
+    assert set(parsed["tools"]) == {"python", "cosign-tool", "ghalint", "hk"}
+    assert "provenance" not in stripped
+    assert parsed["tools"]["python"][0]["platforms.linux-x64"] == {
+        "checksum": "sha256:abc"
+    }
+
+
+def test_collect_strips_provenance(tmp_path: Path) -> None:
+    repo = _mini_repo(tmp_path)
+    stage = tmp_path / "stage"
+    stage.mkdir()
+    stage_system_lock_dir(repo, stage)
+    regenerated = _LOCK + 'provenance = "github-attestations"\n'
+    (stage / "mise.lock").write_text(regenerated)
+    collect_system_lock(repo, stage)
+    committed = (repo / ".devcontainer" / "mise-system.lock").read_text()
+    assert "provenance" not in committed
+    assert tomllib.loads(committed)["tools"].keys() == {"conda:git", "hk"}
 
 
 def test_merged_system_config_tools_unions_both(tmp_path: Path) -> None:
