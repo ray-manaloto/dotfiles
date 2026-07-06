@@ -37,14 +37,15 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - name: "Install mise (minimal: hk + uv only)"
-        # Subset install — autofix only needs `hk` (which delegates to
-        # ruff/yamlfmt/etc. via mise shims) and `uv` (for any python
-        # ruff-fix steps). Avoid pulling the full toolchain to keep the
-        # workflow under the 10-minute timeout.
+      - name: Install mise (full toolchain)
+        # Full install, matching the lint job: the pre-commit hook runs
+        # every step (gitleaks, typos, shellcheck, …), so every hk tool
+        # must be present. The previous `install_args: "hk uv"` subset
+        # only worked because hk ≤1.46's HK_MISE=1 ran commands via
+        # `mise x --`, auto-installing missing tools at runtime; hk 1.49
+        # scopes HK_MISE to hook generation, so tools must be installed
+        # up front (#160 T12 follow-up, PR #169).
         uses: ./.github/actions/setup-mise
-        with:
-          install_args: "hk uv"
       - name: Configure git identity for hk
         run: |
           git config --global user.name "github-actions[bot]"
@@ -57,13 +58,10 @@ jobs:
         run: hk run pre-commit --all --stash none
         env:
           HK_FIX: "1"
-          HK_PKL_BACKEND: pkl
       - name: Verify hk pre-commit passes after fix
         # If the fix produced a tree that still fails lint, do NOT
         # commit — fail loud so the operator inspects the PR.
         run: hk run pre-commit --all --stash none
-        env:
-          HK_PKL_BACKEND: pkl
       - name: Commit fixes back to PR
         # `fail-fast: true` (default) so any error in the action surfaces
         # rather than silently producing partial autofix commits.
