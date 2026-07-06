@@ -14,7 +14,6 @@ import sys
 import time
 import tomllib
 import zlib
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from dotfiles_setup import _project_root
@@ -22,6 +21,7 @@ from dotfiles_setup.p2996_hash import _extract_bake_variable
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
+    from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -785,15 +785,17 @@ def verify_tools_main() -> int:
     ``scripts/devcontainer-smoke.sh`` (keeps the diff logic in python, not bash).
     """
     declared = resolve_declared_tools()
-    config_file = os.environ.get("MISE_SYSTEM_CONFIG_FILE", SYSTEM_CONFIG_FILE)
     result = subprocess.run(
         ["mise", "ls", "--json"],
         capture_output=True,
         text=True,
         check=True,
     )
-    shared_file = str(Path(config_file).parent / "conf.d" / "shared.toml")
-    installed = installed_tools_from_mise_ls(result.stdout, (config_file, shared_file))
+    # Default source tuple = system + shared + runtime configs. The runtime
+    # tier was missing here (a 2-tuple derived from MISE_SYSTEM_CONFIG_FILE,
+    # itself retired — build.no-system-config-file-pin), so all 23 runtime
+    # tools diffed as declared-but-not-installed in the devcontainer (PR #169).
+    installed = installed_tools_from_mise_ls(result.stdout)
     diffs = diff_tool_sets(declared, installed)
     if diffs:
         sys.stderr.write(

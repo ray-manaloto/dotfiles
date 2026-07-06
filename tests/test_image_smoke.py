@@ -388,6 +388,27 @@ def test_installed_tools_filters_by_source_and_installed() -> None:
     assert installed == {"python": "latest"}
 
 
+def test_installed_tools_default_sources_cover_all_three_tiers() -> None:
+    """The default source tuple must accept system, shared AND runtime configs.
+
+    verify_tools_main relies on the default; a 2-tuple override made all 23
+    runtime-tier tools diff as declared-but-not-installed in the devcontainer
+    (PR #169).
+    """
+    payload = _mise_ls_json(
+        {
+            "python": {"source": _SYS_CFG},
+            "hk": {"source": "/usr/local/share/mise/conf.d/shared.toml"},
+            "github:cli/cli": {"source": "/usr/local/share/mise/config.runtime.toml"},
+            "user-tool": {"source": "/home/x/.config/mise/config.toml"},
+        }
+    )
+
+    installed = installed_tools_from_mise_ls(payload)
+
+    assert set(installed) == {"python", "hk", "github:cli/cli"}
+
+
 def test_diff_tool_sets_exact_match_is_empty() -> None:
     """Identical declared/installed maps produce no diff lines."""
     both = {"python": "latest", "conda:llvm": "latest"}
