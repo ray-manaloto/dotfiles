@@ -9,6 +9,13 @@ applicability: any repo managing tools via mise + hk + Renovate
 
 # Skill: Tool Currency Check
 
+
+> Daily input signal: refresh.yml's `tool-currency` job upserts the
+> standing issue "Tool currency report (daily)" (rendered by
+> `mise run tool-currency`) whenever upstream moved — start the review
+> there instead of re-deriving the outdated set.
+
+
 Operationalizes `.claude/rules/tool-currency-and-native-first.md`: find
 out-of-date pins AND custom code a tool now does natively, in one pass.
 

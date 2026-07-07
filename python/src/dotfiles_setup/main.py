@@ -38,6 +38,7 @@ from dotfiles_setup.p2996_hash import (
 from dotfiles_setup.p2996_refresh import refresh as refresh_p2996_ref
 from dotfiles_setup.pr import land_main, ship_main
 from dotfiles_setup.sync import SyncOptions, sync_main
+from dotfiles_setup.tool_currency import tool_currency_main
 from dotfiles_setup.verify import main as verify_main
 
 if TYPE_CHECKING:
@@ -395,6 +396,12 @@ def setup_parser() -> argparse.ArgumentParser:
         "that have a canonical mise task (mise-tasks-only policy)",
     )
 
+    subparsers.add_parser(
+        "tool-currency",
+        help="Markdown report of tools with upstream movement + release-notes "
+        "links (daily refresh.yml signal; feeds the tool-currency-check skill)",
+    )
+
     # version command
     subparsers.add_parser("version", help="Show the version of the library")
 
@@ -699,6 +706,7 @@ def _build_command_handlers(
         "ai-setup": _ai_setup,
         "docker": lambda: handle_docker(args, project_root, config=config),
         "pr": lambda: handle_pr(args, project_root),
+        "tool-currency": lambda: sys.exit(tool_currency_main()),
         "hook": lambda: (
             sys.exit(pretooluse_main())
             if getattr(args, "hook_command", None) == "pretooluse"

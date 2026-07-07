@@ -119,3 +119,58 @@ jobs:
           name: lock-refresh-logs
           path: /tmp/mise.log
           if-no-files-found: ignore
+  # ============================================================
+  # Tool-currency signal (2026-07-07, Ray's self-learning ask): render
+  # `mise outdated --json` into a markdown report with per-tool
+  # release-notes links and upsert it into a standing issue. The
+  # AGENT-grade half (read the release notes, decide adopt/retire,
+  # research newer tools/techniques) happens locally via the
+  # tool-currency-check skill, with this issue as its daily input —
+  # a workflow can produce the signal, not the judgment.
+  # ============================================================
+  tool-currency:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Install mise (all tools)
+        uses: ./.github/actions/setup-mise
+      - name: Render tool-currency report
+        run: mise run tool-currency > /tmp/tool-currency.md
+      - name: Upsert the standing report issue
+        # Only when something moved upstream (the report has table rows).
+        # One standing issue, body replaced daily — history lives in the
+        # issue timeline, not in N stale issues.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if ! grep -q '^| `' /tmp/tool-currency.md; then
+            echo "All tools current — no issue update."
+            exit 0
+          fi
+          title="Tool currency report (daily)"
+          number=$(gh issue list --repo "$REPO" --state open \
+                     --search "in:title \"$title\"" \
+                     --json number --jq '.[0].number // empty')
+          if [ -n "$number" ]; then
+            gh issue edit "$number" --repo "$REPO" --body-file /tmp/tool-currency.md
+            echo "Updated issue #$number"
+          else
+            gh issue create --repo "$REPO" --title "$title" \
+              --body-file /tmp/tool-currency.md --label dependencies
+          fi
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tool-currency-report
+          path: /tmp/tool-currency.md
+          if-no-files-found: ignore
