@@ -15,6 +15,22 @@ from dotfiles_setup import sync
 from dotfiles_setup.container import Check
 
 _WORKSPACE = Path("/workspaces-host/dotfiles")
+
+
+@pytest.fixture(autouse=True)
+def _isolated_sync_state(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """No test may touch the REAL sync state (defense-in-depth).
+
+    Probe-observed 2026-07-07: before the write_sync_record isolation fix,
+    a host pytest run wrote a FIXTURE digest into the user's real
+    ~/.local/state/dotfiles record. Redirecting _state_file makes that
+    class of pollution impossible for every current and future test here.
+    """
+    monkeypatch.setattr(
+        sync, "_state_file", lambda ref: tmp_path / f"sync-{hash(ref)}.json"
+    )
+
+
 _REPO = "ghcr.io/ray-manaloto/dotfiles-devcontainer"
 _REF = f"{_REPO}:dev"
 _DIGEST_NEW = "sha256:" + "ce" * 32
