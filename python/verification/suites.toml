@@ -610,21 +610,16 @@ tokens = [
 
 [[suite]]
 name = "ci.p2996-ref-dispatch-wired"
-description = "Phase D (#120): the p2996_ref override must be wired end-to-end. build-publish.yml resolves inputs.p2996_ref into CLANG_P2996_REF (a 'Resolve p2996 ref override' step) so BOTH the content hash AND docker bake's variable override track the same upstream SHA — never poisoning the canonical pinned-ref cache. A repository_dispatch caller (dispatch-build.yml, type build-p2996) threads client_payload.p2996_ref through. Empty override => the committed docker-bake.hcl pin is authoritative (byte-identical canonical build)."
+description = "Phase D (#120): the p2996_ref override must stay wired in build-publish.yml — inputs.p2996_ref resolves into CLANG_P2996_REF (a 'Resolve p2996 ref override' step) so BOTH the content hash AND docker bake's variable override track the same upstream SHA — never poisoning the canonical pinned-ref cache. Empty override => the committed docker-bake.hcl pin is authoritative. The dispatch-build.yml repository_dispatch caller was RETIRED 2026-07-07 (zero lifetime runs; resurrect from git history) — this contract now guards only the reusable-workflow side that makes resurrection possible."
 category = "ci"
 check_type = "static"
 handler = "require_tokens"
 paths = [
   ".github/workflows/build-publish.yml",
-  ".github/workflows/dispatch-build.yml",
 ]
 tokens = [
   "inputs.p2996_ref != ''",
   "CLANG_P2996_REF=${P2996_REF}",
-  "repository_dispatch",
-  "build-p2996",
-  "client_payload.p2996_ref",
-  "tag_strategy: dispatch",
 ]
 
 [[suite]]
