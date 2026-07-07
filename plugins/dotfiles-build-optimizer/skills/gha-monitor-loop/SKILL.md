@@ -22,7 +22,7 @@ Run the full loop for this repo:
 - latest failed run
 - run id
 - run URL
-- failure artifact from `.github/workflows/ci-failure-report.yml`
+- failure artifact from ci.yml's `failure-report` job (`failure-report-<run_id>`; the standalone ci-failure-report.yml follower was folded into ci.yml 2026-07-07)
 
 ## Tool Split
 

@@ -23,7 +23,7 @@ on:
   workflow_call:
     inputs:
       tag_strategy:
-        description: "Tag set to emit: 'pr' (=> :pr-NNN + :sha), 'nightly' (=> :dev + :latest + :sha), or 'dispatch' (=> :sha only; on-demand p2996 build, Phase D #120 — never moves :dev/:latest)"
+        description: "Tag set to emit: 'pr' (=> :pr-NNN + :sha) or 'nightly' (=> :dev + :latest + :sha). Any other value emits :sha only (the retired Phase D dispatch caller used this; resurrect from git history if needed)"
         required: true
         type: string
       publish:
@@ -690,33 +690,12 @@ jobs:
           name: bootstrap-gap-report
           path: /tmp/bootstrap-gap-report.json
           if-no-files-found: ignore
-      - name: Analyze image layer efficiency (Dive)
-        # Dive --ci enforces .dive-ci thresholds (lowestEfficiency,
-        # highestWastedBytes). Pass/fail gate; replaces the dead-letter
-        # top_layers JSON dump in `dotfiles-setup image benchmark`.
-        #
-        # Direct binary install (NOT `uses: wagoodman/dive@<sha>`):
-        # the upstream "action" is a bare Dockerfile (no action.yml)
-        # auto-detected by GHA. That Dockerfile has the bug
-        #   ARG DOCKER_CLI_VERSION=${DOCKER_CLI_VERSION}
-        # which under BuildKit resolves to empty (no env-var inheritance
-        # for ARG defaults), so the action build fetches docker-.tgz
-        # and fails with 404 before our scan ever runs. The release
-        # tarball has no such bug — invoke the binary directly.
-        env:
-          DIVE_VERSION: 0.13.1
-          IMAGE_REF: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.smoke-tag.outputs.tag }}
-        run: |
-          set -euo pipefail
-          curl -fsSLo /tmp/dive.tar.gz \
-            "https://github.com/wagoodman/dive/releases/download/v${DIVE_VERSION}/dive_${DIVE_VERSION}_linux_amd64.tar.gz"
-          tar -xzf /tmp/dive.tar.gz -C /tmp dive
-          sudo install -m 0755 /tmp/dive /usr/local/bin/dive
-          dive --ci --ci-config .dive-ci "${IMAGE_REF}"
-        # smoke + Dive are the PR-blocking image gates. The benchmark metrics
-        # and the Trivy CVE scan run asynchronously in `image-analysis.yml`
-        # (triggered on CI success) so their minutes are off the PR critical
-        # path — see .github/workflows/AGENTS.md.
+        # smoke (+ the bootstrap gap report above) is the PR-blocking image
+        # gate. Dive layer-efficiency analysis, benchmark metrics, and the
+        # Trivy CVE scan all run asynchronously in `image-analysis.yml`
+        # (triggered on CI success) so their minutes never extend the
+        # merge-to-main → image-pullable-on-the-Mac critical path — see
+        # .github/workflows/AGENTS.md (GHA restructure, 2026-07-07).
         #
         # Note: the host-user overlay (Dockerfile.host-user + `devcontainer up`)
         # is a Mac-local concern — it wraps the published base image with the
@@ -729,7 +708,7 @@ jobs:
   # Dev cache tag (#122): push `:dev-<hash>` as the "built AND
   # smoke-validated" marker — ONLY after smoke-test passes. This is what
   # makes the dev-prep probe-skip safe: the tag can only ever point at an
-  # image that cleared smoke + Dive, so a future probe HIT reuses a
+  # image that cleared smoke, so a future probe HIT reuses a
   # validated image, never an untested one. Runs whenever build+smoke ran
   # and passed (PR cache-miss AND nightly), so the marker stays fresh.
   # Recomputes dev-hash independently (deterministic) since dev-prep is

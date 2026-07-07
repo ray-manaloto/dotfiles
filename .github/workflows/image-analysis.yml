@@ -1,9 +1,13 @@
 name: image-analysis
-# Async image analysis: benchmark metrics + Trivy CVE scan, decoupled from the
-# PR critical path. Runs after a successful CI run that actually built an image
-# (pull_request / schedule / workflow_dispatch — NOT push-to-main, which skips
-# the build and lets `promote` retag instead). smoke + Dive remain the blocking
-# image gates in ci.yml; this workflow only carries the slow, non-gating checks.
+# Async image analysis: Dive layer efficiency + benchmark metrics + Trivy CVE
+# scan, decoupled from the PR critical path. Runs after a successful CI run
+# that actually built an image (pull_request / schedule / workflow_dispatch —
+# NOT push-to-main, which skips the build and lets `promote` retag instead).
+# smoke remains the only blocking image gate in ci.yml; this workflow carries
+# every non-gating analysis so nothing here can extend the merge-to-main →
+# image-pullable-on-the-Mac critical path (GHA restructure, 2026-07-07).
+# A Dive threshold breach fails THIS run (visible, zero-skip: investigate it)
+# without blocking the already-smoked image.
 #
 # SECURITY: this is a privileged `workflow_run` context. It checks out the
 # DEFAULT branch's trusted code (no `ref:` → main), never the PR head, and runs
@@ -79,6 +83,31 @@ jobs:
         env:
           REF: ${{ steps.image.outputs.ref }}
         run: docker pull "$REF"
+      - name: Analyze image layer efficiency (Dive)
+        # Dive --ci enforces .dive-ci thresholds (lowestEfficiency,
+        # highestWastedBytes). Moved out of the PR-blocking smoke-test job
+        # (2026-07-07): layer efficiency does not affect whether the image
+        # works, so it runs async here.
+        #
+        # Direct binary install (NOT `uses: wagoodman/dive@<sha>`):
+        # the upstream "action" is a bare Dockerfile (no action.yml)
+        # auto-detected by GHA. That Dockerfile has the bug
+        #   ARG DOCKER_CLI_VERSION=${DOCKER_CLI_VERSION}
+        # which under BuildKit resolves to empty (no env-var inheritance
+        # for ARG defaults), so the action build fetches docker-.tgz
+        # and fails with 404 before our scan ever runs. The release
+        # tarball has no such bug — invoke the binary directly.
+        if: steps.image.outputs.present == 'true'
+        env:
+          DIVE_VERSION: 0.13.1
+          REF: ${{ steps.image.outputs.ref }}
+        run: |
+          set -euo pipefail
+          curl -fsSLo /tmp/dive.tar.gz \
+            "https://github.com/wagoodman/dive/releases/download/v${DIVE_VERSION}/dive_${DIVE_VERSION}_linux_amd64.tar.gz"
+          tar -xzf /tmp/dive.tar.gz -C /tmp dive
+          sudo install -m 0755 /tmp/dive /usr/local/bin/dive
+          dive --ci --ci-config .dive-ci "$REF"
       - name: Benchmark image (size + smoke metrics)
         # Compressed-size now comes from the registry manifest (instant), not
         # `docker save | gzip`. See python/src/dotfiles_setup/image.py.

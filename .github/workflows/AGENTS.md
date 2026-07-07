@@ -14,11 +14,9 @@ post-failure reporting.
 |------|---------|
 | `ci.yml` | Thin caller (Phase B, #118): lint → contract-preflight → `changes` (path-gate) → `build-publish` (the reusable build chain, gated on `changes.build` + push-to-main exemption); OR lint → promote (push to main) |
 | `build-publish.yml` | Reusable (`on: workflow_call`) build chain: base-prep → p2996-prep → dev-prep → build → smoke-test → dev-tag (dev-prep/dev-tag = 3rd content-hash tier, #122). Inputs `{tag_strategy, publish, target, ref, p2996_ref, platform*}` (#120; `*` reserved); outputs `{image_ref, digest}`. Caller's `github` context → sha/pr tags resolve identically |
-| `ci-failure-report.yml` | Post-failure diagnostics |
 | `image-analysis.yml` | Async (`workflow_run` on CI success): benchmark metrics + Trivy CVE scan, off the PR critical path |
 | `refresh.yml` | Daily cron (00:00), one `lock-refresh` job (#160 T8): regenerates all four lockfiles via the `lock-refresh` composite (pinned image mise, linux-x64), PRs via `open-refresh-pr` (App token #119), **auto-merges**. `CLANG_P2996_REF` bumps: Renovate git-refs. |
 | `ghcr-cleanup.yml` | Weekly hash-family retention plan (#160 T12.5); dry-run ALWAYS — delete only via dispatch `delete=true` after plan review. Planner: `dotfiles_setup.ghcr_cleanup` |
-| `dispatch-build.yml` | Thin `repository_dispatch` caller (Phase D, #120, type `build-p2996`): calls `build-publish.yml` with `client_payload.{p2996_ref,ref?}` + `tag_strategy: dispatch` for on-demand exact-upstream-SHA builds. Never moves `:dev`/`:latest`; warms `:p2996-<hash>`/`:dev-<hash>`. See **Phase D** below. |
 
 ## Composite actions (`.github/actions/`)
 
@@ -60,7 +58,7 @@ behavior unchanged):
    (`dev.contexts.{devcontainer-base,p2996-export}=docker-image://…@sha256:…`,
    #160 T11) overriding the local stages — no multi-hour compile. Pushes `:pr-NNN`/`:sha` (PR) or `:dev`/`:latest` (nightly).
 7. **smoke-test** — pulls `:sha-<github.sha>`, runs the PR-blocking gates
-   `image smoke` + Dive + the T7 bootstrap gap report; benchmark + Trivy
+   `image smoke` + the T7 bootstrap gap report; Dive + benchmark + Trivy
    are async in `image-analysis.yml`. On success **dev-tag** stamps the
    `:dev-<hash>` marker — the smoked image is retagged `:dev`/`:latest`.
 
@@ -116,9 +114,13 @@ Push-to-main path (after a PR merge):
 - **No `type=gha` cache on `base`/`p2996-cache` targets** — registry tag +
   `Probe cache` IS the durable cache; `mode=max` gha export exceeds the 1h
   Azure SAS TTL → `403` on cold runs. `dev` keeps gha cache.
-- **Trivy lives in `image-analysis.yml` (async), not smoke-test.**
-  `scanners: vuln` + `timeout: 15m`, warn-only (defaults timeout at 5min on
-  the multi-GB image); CVE-only (#92).
+- **Dive + Trivy live in `image-analysis.yml` (async), not smoke-test**
+  (restructure 2026-07-07): layer efficiency + CVE scanning never extend
+  the merge→pullable critical path. Trivy: `scanners: vuln` + `timeout:
+  15m`, warn-only; CVE-only (#92). A failed CI run gets a normalized
+  triage artifact from ci.yml's `failure-report` job (`if: failure()`,
+  replaced the ci-failure-report.yml follower whose history was 93%
+  skipped entries).
 - **`wagoodman/dive` action is broken upstream** (v0.13.1 `ARG
   DOCKER_CLI_VERSION` empty → 404s on `docker-.tgz`). Install the release
   tarball in a `run:` step; never `uses: wagoodman/dive@<sha>`.
@@ -149,23 +151,13 @@ App ID**, not Client ID `Iv…`) + `REFRESH_APP_PRIVATE_KEY`; (2) enable
 (squash) once ci-gate passes. `ci-gate` (always-run: passes when upstream
 succeed/skip) lets non-build PRs merge without admin.
 
-## Phase D — on-demand p2996 build (#120)
+## Phase D — on-demand p2996 build (RETIRED 2026-07-07)
 
-`dispatch-build.yml` builds an exact upstream clang-p2996 SHA on demand
-(no cron wait). Dispatch (needs a `contents: write` token):
-
-```sh
-gh api repos/ray-manaloto/dotfiles/dispatches -f event_type=build-p2996 \
-  -f 'client_payload[p2996_ref]=<upstream-sha-or-ref>'
-```
-
-`p2996_ref` flows into build-publish.yml's **Resolve p2996 ref override**
-steps (p2996-prep, dev-prep, dev-tag): they export `CLANG_P2996_REF` so BOTH
-`dotfiles-setup {p2996,dev}-hash` AND docker bake's native variable resolve
-the same SHA — the cache tag tracks the override, never poisoning the pinned
-cache. Empty input exports nothing → the `docker-bake.hcl` pin wins
-(byte-identical). `tag_strategy: dispatch` emits `:sha` only; merge the
-`p2996-refresh` PR to make a bump permanent.
+The dispatch-build workflow (repository_dispatch `build-p2996` caller,
+#120) was retired with zero lifetime runs. build-publish.yml still resolves
+`inputs.p2996_ref` end-to-end (any non-pr/nightly `tag_strategy` emits
+`:sha` only), so the capability is resurrectable from git history
+(pre-2026-07-07) without redesign.
 
 ## Dependabot (`.github/dependabot.yml`)
 
