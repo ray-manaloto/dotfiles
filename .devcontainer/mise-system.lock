@@ -1255,13 +1255,13 @@ checksum = "sha256:2f2802d57b5fc414f1ddf6648ba12cc9a6454cf67b32ac95407c018f2e6ab
 url = "https://download.java.net/java/GA/jdk26.0.1/458fda22e4c54d5ba572ab8d2b22eb83/8/GPL/openjdk-26.0.1_linux-x64_bin.tar.gz"
 
 [[tools.jq]]
-version = "1.8.1"
+version = "1.8.2"
 backend = "aqua:jqlang/jq"
 
 [tools.jq."platforms.linux-x64"]
-checksum = "sha256:020468de7539ce70ef1bceaf7cde2e8c4f2ca6c3afb84642aabc5c97d9fc2a0d"
-url = "https://github.com/jqlang/jq/releases/download/jq-1.8.1/jq-linux-amd64"
-url_api = "https://api.github.com/repos/jqlang/jq/releases/assets/268981484"
+checksum = "sha256:b1c22172dd303f3be49e935aa56aa48a8b7a46e0bc838b4997d3bb451495870f"
+url = "https://github.com/jqlang/jq/releases/download/jq-1.8.2/jq-linux-amd64"
+url_api = "https://api.github.com/repos/jqlang/jq/releases/assets/453012752"
 
 [[tools.micromamba]]
 version = "2.8.1-0"
@@ -1290,7 +1290,7 @@ url = "https://github.com/suzuki-shunsuke/pinact/releases/download/v4.1.0/pinact
 url_api = "https://api.github.com/repos/suzuki-shunsuke/pinact/releases/assets/442249966"
 
 [[tools."pipx:check-jsonschema"]]
-version = "0.37.2"
+version = "0.37.4"
 backend = "pipx:check-jsonschema"
 
 [[tools.pixi]]
@@ -1347,7 +1347,7 @@ checksum = "sha256:7d6149079a63f8ae1d326c9fa65c6019ba2dc3155eae7b39159817911c889
 url = "https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.5.tar.gz"
 
 [[tools.rust]]
-version = "1.96.0"
+version = "1.96.1"
 backend = "core:rust"
 
 [[tools.shellcheck]]
@@ -1428,13 +1428,13 @@ version = "1.38.0"
 backend = "pipx:yamllint"
 
 [[tools.yq]]
-version = "4.53.2"
+version = "4.53.3"
 backend = "aqua:mikefarah/yq"
 
 [tools.yq."platforms.linux-x64"]
-checksum = "sha256:d56bf5c6819e8e696340c312bd70f849dc1678a7cda9c2ad63eebd906371d56b"
-url = "https://github.com/mikefarah/yq/releases/download/v4.53.2/yq_linux_amd64"
-url_api = "https://api.github.com/repos/mikefarah/yq/releases/assets/398368450"
+checksum = "sha256:fa52a4e758c63d38299163fbdd1edfb4c4963247918bf9c1c5d31d84789eded4"
+url = "https://github.com/mikefarah/yq/releases/download/v4.53.3/yq_linux_amd64"
+url_api = "https://api.github.com/repos/mikefarah/yq/releases/assets/440146735"
 
 [[tools.zig]]
 version = "0.16.0"
