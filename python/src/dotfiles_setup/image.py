@@ -776,15 +776,16 @@ class ImageCommand:
     identity_path: str | None = None
 
 
-def identity_expected_hash(repo_root: Path, rel_path: str) -> str:
-    """Expected sha256 for the in-image copy of an image build input.
+def base_currency_blob(repo_root: Path, rel_path: str) -> bytes:
+    """Bytes of an image build input as the CURRENT local base was built from it.
 
     A branch that CHANGES an image build input can never have a local base
     built from it — the new base is built by that branch's own PR CI — so
-    smoke tier-1 identity validates base currency against the MERGE-BASE
-    blob ("is the base current w.r.t. what is already integrated on main")
-    and defers branch-config identity to the PR CI build+smoke. On main,
-    merge-base == HEAD, so this is byte-identical to the committed file.
+    the local smoke tier-1 base-currency checks compare against the
+    MERGE-BASE blob ("is the base current w.r.t. what is already integrated
+    on main") and defer branch-config validation to the PR CI build+smoke.
+    On main, merge-base == HEAD, so this is byte-identical to the committed
+    file.
 
     Falls back to the worktree bytes when the merge-base or blob cannot be
     resolved (checkout without origin/main, path not yet tracked).
@@ -808,8 +809,17 @@ def identity_expected_hash(repo_root: Path, rel_path: str) -> str:
             check=False,
         )
         if blob.returncode == 0:
-            return hashlib.sha256(blob.stdout).hexdigest()
-    return hashlib.sha256((repo_root / rel_path).read_bytes()).hexdigest()
+            return blob.stdout
+    return (repo_root / rel_path).read_bytes()
+
+
+def identity_expected_hash(repo_root: Path, rel_path: str) -> str:
+    """Expected sha256 for the in-image copy of an image build input.
+
+    Base-currency hash: the merge-base blob for a branch-modified input,
+    the committed file otherwise (see :func:`base_currency_blob`).
+    """
+    return hashlib.sha256(base_currency_blob(repo_root, rel_path)).hexdigest()
 
 
 def identity_expected_main(rel_path: str) -> int:
@@ -822,16 +832,44 @@ def identity_expected_main(rel_path: str) -> int:
     return 0
 
 
+def resolve_declared_tools_at_base(repo_root: Path) -> dict[str, str]:
+    """Declared image tools as the CURRENT local base was built from them.
+
+    Merge-base-aware sibling of :func:`resolve_declared_tools` (which reads
+    HEAD and feeds ``build_smoke_script`` — CI builds the image FROM the
+    branch config, so it must compare against HEAD). The local
+    devcontainer's base predates a branch's image-input bump, so
+    ``verify_tools_main`` compares installed tools against the merge-base
+    declaration; branch tool bumps are validated by the PR CI build+smoke.
+    """
+    declared: dict[str, str] = {}
+    for rel_path in (
+        ".devcontainer/mise-system.toml",
+        ".config/mise/conf.d/shared.toml",
+        ".devcontainer/mise-runtime.toml",
+    ):
+        declared.update(
+            parse_declared_tools(base_currency_blob(repo_root, rel_path).decode())
+        )
+    return declared
+
+
 def verify_tools_main() -> int:
-    """Assert the installed tool set matches ``.devcontainer/mise-system.toml``.
+    """Assert the installed tool set matches the base-declared ``[tools]``.
 
     Runs ``mise ls --json`` against the ambient mise (inside the devcontainer)
-    and compares to the repo's declared ``[tools]`` — the in-container sibling of
-    the ``build_smoke_script`` assertion (#143), sharing the same parse/compare
-    core so the two smoke paths cannot diverge. Called by
+    and compares to the MERGE-BASE declared ``[tools]`` — the in-container
+    sibling of the ``build_smoke_script`` assertion (#143), sharing the same
+    parse/compare core so the two smoke paths cannot diverge. Called by
     ``scripts/devcontainer-smoke.sh`` (keeps the diff logic in python, not bash).
+
+    Uses :func:`resolve_declared_tools_at_base`, not
+    :func:`resolve_declared_tools`: the local base predates a branch's
+    image-input bump, so a HEAD comparison would false-fail on the bumped
+    tools (#178 follow-up). Branch tool bumps are validated by the PR CI
+    build+smoke, which builds the image from HEAD.
     """
-    declared = resolve_declared_tools()
+    declared = resolve_declared_tools_at_base(_project_root())
     result = subprocess.run(
         ["mise", "ls", "--json"],
         capture_output=True,
@@ -846,13 +884,14 @@ def verify_tools_main() -> int:
     diffs = diff_tool_sets(declared, installed)
     if diffs:
         sys.stderr.write(
-            "FAIL: installed tool set differs from mise-system.toml [tools]:\n"
+            "FAIL: installed tool set differs from base-declared [tools] "
+            "(merge-base):\n"
         )
         for line in diffs:
             sys.stderr.write(f"  {line}\n")
         return 1
     sys.stdout.write(
-        f"OK: installed tool set matches mise-system.toml [tools] "
+        f"OK: installed tool set matches base-declared [tools] "
         f"({len(declared)} tools)\n"
     )
     return 0

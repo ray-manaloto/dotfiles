@@ -18,6 +18,7 @@ from dotfiles_setup.image import (
     _parse_human_size,
     _repo_without_tag,
     _sum_manifest_layer_sizes,
+    base_currency_blob,
     build_smoke_docker_cmd,
     build_smoke_script,
     diff_tool_sets,
@@ -25,6 +26,7 @@ from dotfiles_setup.image import (
     installed_tools_from_mise_ls,
     parse_declared_tools,
     resolve_declared_tools,
+    resolve_declared_tools_at_base,
     resolve_expected_config_sha256,
     resolve_expected_p2996_ref,
 )
@@ -581,3 +583,56 @@ def test_identity_expected_falls_back_without_origin_main(tmp_path: Path) -> Non
     _git(repo, "commit", "-m", "no origin")
     expected = hashlib.sha256(b"only-local\n").hexdigest()
     assert identity_expected_hash(repo, "config.toml") == expected
+
+
+# --------------------------- tool-set base-currency (merge-base declared)
+
+
+def _tool_config_fixture_repo(tmp_path: Path) -> Path:
+    """A repo whose origin/main pins the three image tool-config tiers."""
+    repo = tmp_path / "toolrepo"
+    (repo / ".devcontainer").mkdir(parents=True)
+    (repo / ".config" / "mise" / "conf.d").mkdir(parents=True)
+    (repo / ".devcontainer" / "mise-system.toml").write_text(
+        '[tools]\npython = "3.14.6"\n'
+    )
+    (repo / ".config" / "mise" / "conf.d" / "shared.toml").write_text(
+        '[tools]\njq = "1.8.1"\n'
+    )
+    (repo / ".devcontainer" / "mise-runtime.toml").write_text(
+        '[tools]\nfd = "10.4.2"\n'
+    )
+    _git(repo, "init", "-b", "main")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-m", "base tool configs")
+    _git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+    return repo
+
+
+def test_resolve_declared_tools_at_base_uses_merge_base(tmp_path: Path) -> None:
+    """A branch bump reports the MERGE-BASE version, not the branch HEAD.
+
+    The exact deadlock this closes: the local base predates the bump, so a
+    HEAD comparison false-fails verify-tools on the bumped tool (#178).
+    """
+    repo = _tool_config_fixture_repo(tmp_path)
+    _git(repo, "checkout", "-b", "bump")
+    (repo / ".config" / "mise" / "conf.d" / "shared.toml").write_text(
+        '[tools]\njq = "1.8.2"\n'
+    )
+    _git(repo, "commit", "-am", "bump jq")
+    declared = resolve_declared_tools_at_base(repo)
+    assert declared["jq"] == "1.8.1"  # merge-base, not the branch's 1.8.2
+    assert declared["python"] == "3.14.6"
+    assert declared["fd"] == "10.4.2"
+
+
+def test_resolve_declared_tools_at_base_on_main_is_worktree(tmp_path: Path) -> None:
+    repo = _tool_config_fixture_repo(tmp_path)
+    declared = resolve_declared_tools_at_base(repo)
+    assert declared["jq"] == "1.8.1"
+
+
+def test_base_currency_blob_returns_bytes(tmp_path: Path) -> None:
+    repo = _identity_fixture_repo(tmp_path)
+    assert base_currency_blob(repo, "config.toml") == b"original\n"
