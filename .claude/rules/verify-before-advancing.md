@@ -57,7 +57,11 @@ and a green result against it is a false positive.
   files it runs are the host working tree at branch HEAD (not a snapshot);
 - **base is current** — `scripts/devcontainer-smoke.sh` tier-1 image
   identity (PR #140 "Gap A") compares the in-image `config.toml` hash to
-  the repo `mise-system.toml` and **hard-fails a stale base**. Refresh with
+  the expected build input and **hard-fails a stale base**. On a branch
+  that CHANGES an image build input, "expected" is the merge-base blob
+  (`dotfiles-setup image identity-expected`) — the new base is built by
+  that PR's own CI, so branch-config identity is validated there, not
+  locally. Refresh with
   `mise run dev-rebuild` (pulls the registry `:dev`; on a slow link this is
   a long buildkit pull — never classic `docker pull`, which wedges on the
   ~38GB image, see `feedback_mise_local_toml_replaces_task`);

@@ -199,6 +199,16 @@ def _add_image_subcommands(
         "verify-tools",
         help="Assert installed tool set matches mise-system.toml [tools] (#143)",
     )
+    identity_parser = image_sub.add_parser(
+        "identity-expected",
+        help="Print the smoke tier-1 expected sha256 for an image build input "
+        "(merge-base blob when the branch changed it; worktree otherwise)",
+    )
+    identity_parser.add_argument(
+        "path",
+        help="Repo-relative path of the image build input (e.g. "
+        ".devcontainer/mise-system.toml)",
+    )
     compare_parser = image_sub.add_parser(
         "metrics-compare",
         help="Compare two benchmark JSON files",
@@ -531,6 +541,9 @@ def handle_image(args: argparse.Namespace) -> None:
     """
     if args.image_command == "verify-tools":
         cmd = ImageCommand("", command="verify-tools")
+        sys.exit(image_main(cmd))
+    if args.image_command == "identity-expected":
+        cmd = ImageCommand("", command="identity-expected", identity_path=args.path)
         sys.exit(image_main(cmd))
     if args.image_command == "smoke":
         cmd = ImageCommand(args.image_ref, platform=args.platform)

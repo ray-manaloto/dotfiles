@@ -21,6 +21,10 @@ on:
       - "hk-image.pkl"
       - "hk-common.pkl"
       - "renovate.json"
+      # Image build input: COPYd to /usr/local/share/mise/conf.d/ by the
+      # Dockerfile and covered by the base content-hash — a merge touching
+      # only this file must still run promote (gap found landing #178).
+      - ".config/mise/conf.d/shared.toml"
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -231,6 +235,7 @@ jobs:
               - 'python/**'
               - '.dive-ci'
               - '.github/workflows/ci.yml'
+              - '.config/mise/conf.d/shared.toml'
       - name: Decide whether the build chain runs
         id: decide
         env:

@@ -183,7 +183,7 @@ def test_land_merge_pins_verified_head(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(pr, "pr_checks_green", lambda _n: (True, "ok"))
     monkeypatch.setattr(pr, "_stream", lambda cmd, **_k: streamed.append(cmd) or 0)
     monkeypatch.setattr(pr, "_merge_commit_oid", lambda _n: "c" * 40)
-    monkeypatch.setattr(pr, "_main_run_conclusion", lambda _o: True)
+    monkeypatch.setattr(pr, "_main_run_conclusion", lambda _o, **_k: True)
     monkeypatch.setattr(pr, "sync_main", lambda *_a, **_k: 0)
     assert pr.land_main(_WORKSPACE, 7) == 0
     merge_cmd = next(c for c in streamed if c[:3] == ["gh", "pr", "merge"])
@@ -203,7 +203,7 @@ def test_land_surface_pr_validates_full_tier(
     monkeypatch.setattr(pr, "pr_checks_green", lambda _n: (True, "ok"))
     monkeypatch.setattr(pr, "_stream", lambda *_a, **_k: 0)
     monkeypatch.setattr(pr, "_merge_commit_oid", lambda _n: "e" * 40)
-    monkeypatch.setattr(pr, "_main_run_conclusion", lambda _o: True)
+    monkeypatch.setattr(pr, "_main_run_conclusion", lambda _o, **_k: True)
 
     def fake_sync(_w: Path, options: SyncOptions) -> int:
         seen["full"] = options.full
@@ -267,7 +267,7 @@ def test_land_resume_replays_post_merge(monkeypatch: pytest.MonkeyPatch) -> None
     )
     monkeypatch.setattr(pr, "_pr_changed_paths", lambda _n: ["a.py"])
     monkeypatch.setattr(pr, "_merge_commit_oid", lambda _n: "c" * 40)
-    monkeypatch.setattr(pr, "_main_run_conclusion", lambda _o: True)
+    monkeypatch.setattr(pr, "_main_run_conclusion", lambda _o, **_k: True)
     monkeypatch.setattr(pr, "_stream", lambda *_a, **_k: 0)
     monkeypatch.setattr(pr, "sync_main", lambda *_a, **_k: 0)
     assert pr.land_main(_WORKSPACE, 7, resume=True) == 0
@@ -280,3 +280,121 @@ def test_land_resume_replays_post_merge(monkeypatch: pytest.MonkeyPatch) -> None
 def test_surface_covers_image_copy_inputs(path: str) -> None:
     """Review finding [5]: image COPY inputs + task definitions are surface."""
     assert pr.touches_surface([path])
+
+
+# ------------------------------------------- main-CI expectation (post #178)
+
+
+def _ci_yml_push_paths() -> list[str]:
+    """The on.push.paths entries as written in ci.yml (comments skipped)."""
+    text = (
+        Path(__file__).parent.parent / ".github" / "workflows" / "ci.yml"
+    ).read_text()
+    block = text.split("push:", 1)[1].split("paths:", 1)[1]
+    entries: list[str] = []
+    for line in block.splitlines()[1:]:
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
+        if not stripped.startswith("- "):
+            break
+        entries.append(stripped[2:].strip('"'))
+    return entries
+
+
+def _fnmatch_patterns_for(yaml_path: str) -> tuple[str, ...]:
+    """The fnmatch mirror of one ci.yml glob (``x/**`` needs two patterns)."""
+    if yaml_path.endswith("/**"):
+        base = yaml_path.removesuffix("/**")
+        return (f"{base}/*", f"{base}/**/*")
+    return (yaml_path,)
+
+
+def test_ci_push_paths_mirror_ci_yml() -> None:
+    """CI_PUSH_PATHS must stay in lockstep with ci.yml on.push.paths.
+
+    Land's "no main run expected" outcome (#178) is only correct while the
+    mirrored constant matches the workflow — this test fails on drift in
+    either direction.
+    """
+    entries = _ci_yml_push_paths()
+    assert entries, "failed to parse ci.yml on.push.paths"
+    expected: set[str] = set()
+    for entry in entries:
+        expected.update(_fnmatch_patterns_for(entry))
+    assert set(pr.CI_PUSH_PATHS) == expected
+
+
+@pytest.mark.parametrize(
+    ("paths", "expected"),
+    [
+        (["mise.toml", "mise.lock", ".agnix.toml"], False),  # the #178 shape
+        ([".config/mise/conf.d/shared.toml"], True),
+        (["python/src/dotfiles_setup/pr.py"], True),
+        (["home/dot_zshrc"], True),
+        ([".devcontainer/mise-system.lock"], True),
+        ([".claude/rules/do-not.md", "AGENTS.md"], False),
+    ],
+)
+def test_expects_main_run(paths: list[str], *, expected: bool) -> None:
+    assert pr.expects_main_run(paths) is expected
+
+
+def _land_run_dispatch(view: dict[str, str], *, run_id: str = "") -> object:
+    """Fake ``pr._run`` dispatching by gh subcommand for land_main flows."""
+
+    def fake(cmd: list[str], **_k: object) -> subprocess.CompletedProcess[str]:
+        if "run" in cmd and "list" in cmd:
+            return _cp(f"{run_id}\n" if run_id else "")
+        if "conclusion" in cmd:
+            return _cp("success\n")
+        if "mergeCommit" in cmd:
+            return _cp(json.dumps({"mergeCommit": {"oid": "c" * 40}}))
+        if "checks" in cmd:
+            return _cp(json.dumps([{"name": "lint", "bucket": "pass"}]))
+        return _cp(json.dumps(view))
+
+    return fake
+
+
+def test_land_passes_when_no_main_run_expected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#178: a merge whose paths match no ci.yml push path needs no run."""
+    view = {"state": "OPEN", "headRefOid": "b" * 40, "baseRefName": "main"}
+    monkeypatch.setattr(pr, "_run", _land_run_dispatch(view))
+    monkeypatch.setattr(
+        pr, "_pr_changed_paths", lambda _n: ["mise.toml", ".agnix.toml"]
+    )
+    monkeypatch.setattr(pr, "_stream", lambda *_a, **_k: 0)
+    monkeypatch.setattr(pr, "sync_main", lambda *_a, **_k: 0)
+    monkeypatch.setattr(pr.time, "sleep", lambda _s: None)
+    assert pr.land_main(_WORKSPACE, 7) == 0
+
+
+def test_land_fails_when_expected_main_run_absent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A ci.yml-push-path merge with no main run is a real failure."""
+    view = {"state": "OPEN", "headRefOid": "b" * 40, "baseRefName": "main"}
+    monkeypatch.setattr(pr, "_run", _land_run_dispatch(view))
+    monkeypatch.setattr(
+        pr, "_pr_changed_paths", lambda _n: [".config/mise/conf.d/shared.toml"]
+    )
+    monkeypatch.setattr(pr, "_stream", lambda *_a, **_k: 0)
+    monkeypatch.setattr(pr, "sync_main", lambda *_a, **_k: 0)
+    monkeypatch.setattr(pr.time, "sleep", lambda _s: None)
+    assert pr.land_main(_WORKSPACE, 7) == 1
+
+
+def test_land_watches_main_run_when_one_unexpectedly_appears(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Grace poll: a run appearing despite no expectation is still verified."""
+    view = {"state": "OPEN", "headRefOid": "b" * 40, "baseRefName": "main"}
+    monkeypatch.setattr(pr, "_run", _land_run_dispatch(view, run_id="999"))
+    monkeypatch.setattr(pr, "_pr_changed_paths", lambda _n: ["docs/x.md"])
+    monkeypatch.setattr(pr, "_stream", lambda *_a, **_k: 0)
+    monkeypatch.setattr(pr, "sync_main", lambda *_a, **_k: 0)
+    monkeypatch.setattr(pr.time, "sleep", lambda _s: None)
+    assert pr.land_main(_WORKSPACE, 7) == 0

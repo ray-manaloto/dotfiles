@@ -20,7 +20,7 @@ from dotfiles_setup import _project_root
 from dotfiles_setup.p2996_hash import _extract_bake_variable
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Callable, Mapping
     from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -773,6 +773,53 @@ class ImageCommand:
     output_path: Path | None = None
     baseline_path: Path | None = None
     candidate_path: Path | None = None
+    identity_path: str | None = None
+
+
+def identity_expected_hash(repo_root: Path, rel_path: str) -> str:
+    """Expected sha256 for the in-image copy of an image build input.
+
+    A branch that CHANGES an image build input can never have a local base
+    built from it — the new base is built by that branch's own PR CI — so
+    smoke tier-1 identity validates base currency against the MERGE-BASE
+    blob ("is the base current w.r.t. what is already integrated on main")
+    and defers branch-config identity to the PR CI build+smoke. On main,
+    merge-base == HEAD, so this is byte-identical to the committed file.
+
+    Falls back to the worktree bytes when the merge-base or blob cannot be
+    resolved (checkout without origin/main, path not yet tracked).
+    """
+    merge_base = subprocess.run(
+        ["git", "-C", str(repo_root), "merge-base", "HEAD", "origin/main"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if merge_base.returncode == 0:
+        blob = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo_root),
+                "show",
+                f"{merge_base.stdout.strip()}:{rel_path}",
+            ],
+            capture_output=True,
+            check=False,
+        )
+        if blob.returncode == 0:
+            return hashlib.sha256(blob.stdout).hexdigest()
+    return hashlib.sha256((repo_root / rel_path).read_bytes()).hexdigest()
+
+
+def identity_expected_main(rel_path: str) -> int:
+    """CLI: print the tier-1 expected hash for ``rel_path`` (see above).
+
+    Called by ``scripts/devcontainer-smoke.sh`` so the merge-base decision
+    lives in python, not bash (zero-bash-logic).
+    """
+    sys.stdout.write(identity_expected_hash(_project_root(), rel_path) + "\n")
+    return 0
 
 
 def verify_tools_main() -> int:
@@ -811,42 +858,62 @@ def verify_tools_main() -> int:
     return 0
 
 
+def _handle_verify_tools(_cmd: ImageCommand) -> int:
+    return verify_tools_main()
+
+
+def _handle_identity_expected(cmd: ImageCommand) -> int:
+    if cmd.identity_path is None:
+        sys.stderr.write("identity-expected requires a path\n")
+        return 2
+    return identity_expected_main(cmd.identity_path)
+
+
+def _handle_smoke(cmd: ImageCommand) -> int:
+    result = smoke(cmd.image_ref, platform=cmd.platform)
+    if result["result"] == "FAIL":
+        sys.stderr.write(f"FAIL: {cmd.image_ref}\n")
+        sys.stderr.write(result.get("stderr", ""))
+        return 1
+    sys.stderr.write(f"PASS: {cmd.image_ref}\n")
+    return 0
+
+
+def _handle_size_report(cmd: ImageCommand) -> int:
+    payload = size_report(cmd.image_ref, platform=cmd.platform)
+    sys.stdout.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    return 0
+
+
+def _handle_benchmark(cmd: ImageCommand) -> int:
+    payload = benchmark(
+        cmd.image_ref, platform=cmd.platform, output_path=cmd.output_path
+    )
+    sys.stdout.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    return 0
+
+
+def _handle_metrics_compare(cmd: ImageCommand) -> int:
+    if cmd.baseline_path is None or cmd.candidate_path is None:
+        msg = "baseline_path and candidate_path are required"
+        raise ValueError(msg)
+    payload = metrics_compare(cmd.baseline_path, cmd.candidate_path)
+    sys.stdout.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    return 0
+
+
 def main(cmd: ImageCommand) -> int:
-    """CLI entry point for image operations."""
-    if cmd.command == "verify-tools":
-        return verify_tools_main()
-    if cmd.command == "smoke":
-        result = smoke(cmd.image_ref, platform=cmd.platform)
-        if result["result"] == "FAIL":
-            sys.stderr.write(f"FAIL: {cmd.image_ref}\n")
-            sys.stderr.write(result.get("stderr", ""))
-            return 1
-        sys.stderr.write(f"PASS: {cmd.image_ref}\n")
-        return 0
-    if cmd.command == "size-report":
-        payload = size_report(cmd.image_ref, platform=cmd.platform)
-        sys.stdout.write(
-            json.dumps(payload, indent=2, sort_keys=True) + "\n",
-        )
-        return 0
-    if cmd.command == "benchmark":
-        payload = benchmark(
-            cmd.image_ref,
-            platform=cmd.platform,
-            output_path=cmd.output_path,
-        )
-        sys.stdout.write(
-            json.dumps(payload, indent=2, sort_keys=True) + "\n",
-        )
-        return 0
-    if cmd.command == "metrics-compare":
-        if cmd.baseline_path is None or cmd.candidate_path is None:
-            msg = "baseline_path and candidate_path are required"
-            raise ValueError(msg)
-        payload = metrics_compare(cmd.baseline_path, cmd.candidate_path)
-        sys.stdout.write(
-            json.dumps(payload, indent=2, sort_keys=True) + "\n",
-        )
-        return 0
-    msg = f"Unsupported command: {cmd.command}"
-    raise ValueError(msg)
+    """CLI entry point for image operations (command → handler dispatch)."""
+    handlers: dict[str, Callable[[ImageCommand], int]] = {
+        "verify-tools": _handle_verify_tools,
+        "identity-expected": _handle_identity_expected,
+        "smoke": _handle_smoke,
+        "size-report": _handle_size_report,
+        "benchmark": _handle_benchmark,
+        "metrics-compare": _handle_metrics_compare,
+    }
+    handler = handlers.get(cmd.command)
+    if handler is None:
+        msg = f"Unsupported command: {cmd.command}"
+        raise ValueError(msg)
+    return handler(cmd)

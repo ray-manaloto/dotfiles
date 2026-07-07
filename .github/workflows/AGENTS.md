@@ -77,10 +77,13 @@ Push-to-main path (after a PR merge):
 - **Build chain is path-gated.** A `changes` job (dorny/paths-filter,
   `list-files: json`) matches image/test inputs (`.devcontainer/**`,
   `docker-bake.hcl`, `hk-common.pkl`, `hk-image.pkl`, `python/**`,
-  `.dive-ci`, `ci.yml`); `decide` drops markdown-only matches
+  `.dive-ci`, `ci.yml`, `.config/mise/conf.d/shared.toml`); `decide`
+  drops markdown-only matches
   via `jq` (`!**/*.md` can't — `**/*.md` skips dot-dirs). So docs, root-mise,
   hk.pkl, home PRs run lint+contract-preflight only; schedule +
-  workflow_dispatch always build.
+  workflow_dispatch always build. `shared.toml` is on both the push-paths
+  and this build filter — it is a Dockerfile COPY input (gap found
+  landing #178).
 - **Concurrency cancels superseded runs per branch.** `ci.yml`/`autofix.yml`
   group by `${{ github.workflow }}-${{ github.head_ref || github.ref }}`; a
   new commit cancels the older in-flight run. **main is exempt**
