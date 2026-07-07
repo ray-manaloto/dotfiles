@@ -107,6 +107,7 @@ def forbid_tokens(
     *,
     description: str = "",
     allowlist: list[str] | None = None,
+    strip_comments: bool = True,
 ) -> dict[str, Any]:
     """Check that none of the given tokens appear in the given files.
 
@@ -115,6 +116,8 @@ def forbid_tokens(
         tokens: Strings that must not appear.
         description: Optional description for error messages.
         allowlist: Regex patterns; lines matching any are skipped.
+        strip_comments: Strip text after '#' before matching (default
+            True; set False for JSON/YAML-string content — finding [23]).
 
     Returns:
         Result dictionary with status key.
@@ -129,7 +132,10 @@ def forbid_tokens(
             continue
         lines = path.read_text().splitlines()
         for line in lines:
-            content = line.split("#", 1)[0]
+            # Review finding [23]: '#' starts a comment in TOML/shell but
+            # NOT in JSON/YAML-strings — stripping there creates false
+            # negatives. strip_comments=False disables it per-contract.
+            content = line.split("#", 1)[0] if strip_comments else line
             if any(p.search(line) for p in allowlist_patterns):
                 continue
             violations.extend(
@@ -183,6 +189,7 @@ def regex_match(
     pattern: str,
     *,
     description: str = "",
+    match_all_paths: bool = False,
 ) -> dict[str, Any]:
     """Check that a regex pattern matches in at least one of the given files.
 
@@ -190,6 +197,8 @@ def regex_match(
         paths: Files to scan.
         pattern: Regex pattern that must match.
         description: Optional description for error messages.
+        match_all_paths: Require the pattern in EVERY listed path
+            (finding [22]); default False = any one path.
 
     Returns:
         Result dictionary with status key.
@@ -205,6 +214,19 @@ def regex_match(
         )
 
     compiled = re.compile(pattern, re.MULTILINE)
+    if match_all_paths:
+        # Review finding [22]: 'in both files' contracts need every path
+        # to match, not any one of them.
+        misses = [
+            str(path)
+            for path in paths
+            if not (path.exists() and compiled.search(path.read_text()))
+        ]
+        if misses:
+            fail(
+                f"{description}: pattern '{pattern}' not found in: " + ", ".join(misses)
+            )
+        return {"status": "passed"}
     for path in paths:
         if path.exists() and compiled.search(path.read_text()):
             return {"status": "passed"}
@@ -329,15 +351,40 @@ def _handle_forbid_tokens(entry: dict[str, Any]) -> dict[str, Any]:
         entry.get("tokens", []),
         description=entry.get("description", ""),
         allowlist=entry.get("allowlist"),
+        strip_comments=entry.get("strip_comments", True),
     )
 
 
 def _handle_require_tokens(entry: dict[str, Any]) -> dict[str, Any]:
+    description = entry.get("description", "")
+    # Review finding [21]: a listed path that no longer exists must FAIL,
+    # not silently shrink the combined text — otherwise deleting a wired
+    # test file (or the module itself) passes every "must exist" contract.
+    if entry.get("paths_required", False):
+        root = _project_root()
+        missing = [raw for raw in entry.get("paths", []) if not (root / raw).exists()]
+        if missing:
+            fail(f"{description}: required path(s) missing: {', '.join(missing)}")
+    # Review findings [19]/[22]: per-path token requirements — combined-text
+    # semantics let a token in ANY listed file satisfy the contract, so
+    # "wired in settings.json" could be satisfied by the rule doc alone.
+    per_path = entry.get("per_path_tokens", {})
+    if per_path:
+        root = _project_root()
+        problems: list[str] = []
+        for raw, tokens in per_path.items():
+            target = root / raw
+            text = target.read_text() if target.exists() else ""
+            problems.extend(
+                f"{raw}: missing '{tok}'" for tok in tokens if tok not in text
+            )
+        if problems:
+            fail(f"{description}: " + "; ".join(problems))
     paths = _resolve_paths(entry)
     return require_tokens(
         paths,
         entry.get("tokens", []),
-        description=entry.get("description", ""),
+        description=description,
     )
 
 
@@ -347,6 +394,7 @@ def _handle_regex_match(entry: dict[str, Any]) -> dict[str, Any]:
         paths,
         entry.get("pattern", ""),
         description=entry.get("description", ""),
+        match_all_paths=entry.get("match_all_paths", False),
     )
 
 
@@ -361,7 +409,9 @@ def _handle_regex_forbid(entry: dict[str, Any]) -> dict[str, Any]:
 
 
 def _handle_dockerfile_structure(entry: dict[str, Any]) -> dict[str, Any]:
-    root = Path.cwd()
+    # Review finding [26]: resolve against the project root (like every
+    # other handler), not the invoker's cwd.
+    root = _project_root()
     paths = entry.get("paths", [])
     path = root / paths[0] if paths else root / ".devcontainer" / "Dockerfile"
     return dockerfile_structure(

@@ -153,13 +153,28 @@ jobs:
         run: |
           set -euo pipefail
           if ! grep -q '^| `' /tmp/tool-currency.md; then
+            # Review finding [32]: when everything is current, CLOSE the
+            # standing issue (if open) so it cannot go silently stale —
+            # 'no rows' and 'job broken' must not look identical.
+            title="Tool currency report (daily)"
+            number=$(gh issue list --repo "$REPO" --state open \
+                       --search "in:title \"$title\"" \
+                       --json number,title \
+                       --jq ".[] | select(.title == \"$title\") | .number" | head -1)
+            if [ -n "$number" ]; then
+              gh issue close "$number" --repo "$REPO" \
+                --comment "All pinned tools are current — closing until upstream moves again."
+            fi
             echo "All tools current — no issue update."
             exit 0
           fi
           title="Tool currency report (daily)"
+          # Review finding [30]: --search word-matches; filter to the
+          # EXACT title so an unrelated issue can never be clobbered.
           number=$(gh issue list --repo "$REPO" --state open \
                      --search "in:title \"$title\"" \
-                     --json number --jq '.[0].number // empty')
+                     --json number,title \
+                     --jq ".[] | select(.title == \"$title\") | .number" | head -1)
           if [ -n "$number" ]; then
             gh issue edit "$number" --repo "$REPO" --body-file /tmp/tool-currency.md
             echo "Updated issue #$number"

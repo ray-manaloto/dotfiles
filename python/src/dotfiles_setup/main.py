@@ -239,6 +239,12 @@ def _add_pr_subcommands(
         "the devcontainer surface changed)",
     )
     land_parser.add_argument("number", type=int, help="PR number to land")
+    land_parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Replay the post-merge steps (main-CI watch, local validation) "
+        "for an already-MERGED PR that failed after its merge",
+    )
 
 
 def setup_parser() -> argparse.ArgumentParser:
@@ -458,7 +464,7 @@ def handle_pr(args: argparse.Namespace, project_root: Path) -> None:
     if args.pr_command == "ship":
         sys.exit(ship_main(project_root, title=args.title))
     elif args.pr_command == "land":
-        sys.exit(land_main(project_root, args.number))
+        sys.exit(land_main(project_root, args.number, resume=args.resume))
 
 
 def handle_audit(config: DotfilesConfig | None = None) -> None:

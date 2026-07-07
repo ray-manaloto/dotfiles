@@ -61,5 +61,5 @@ references to "rule 5" stay valid.
 
 When adding a new step to hk.pkl:
 1. `hk validate` — verify config syntax
-2. `hk run pre-commit --all --stash none` — verify the step passes
+2. `mise run lint` — verify the step passes (wraps hk with a timeout)
 3. Only then commit and push

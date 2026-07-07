@@ -40,6 +40,24 @@ if [ -f "$repo_cfg" ]; then
     exit 1
   fi
   echo "  OK: image built from current mise-system.toml (${actual_cfg_hash})"
+  # Review finding [24] 2026-07-07: mise-system.toml alone under-covers the
+  # base-currency claim — the shared tier + runtime tier are COPY inputs
+  # too, and a base stale w.r.t. either passed this gate. Compare all
+  # in-image config tiers that have a repo-side source of truth.
+  for pair in \
+    "/usr/local/share/mise/conf.d/shared.toml:${WORKSPACE_FOLDER}/.config/mise/conf.d/shared.toml" \
+    "/usr/local/share/mise/config.runtime.toml:${WORKSPACE_FOLDER}/.devcontainer/mise-runtime.toml"; do
+    img_file="${pair%%:*}"; src_file="${pair##*:}"
+    if [ -f "$src_file" ] && [ -f "$img_file" ]; then
+      want="$(sha256sum "$src_file" | cut -d' ' -f1)"
+      got="$(sha256sum "$img_file" | cut -d' ' -f1)"
+      if [ "$got" != "$want" ]; then
+        echo "  FAIL: in-image $(basename "$img_file") ${got} != repo $(basename "$src_file") ${want} (stale/cached image — rebuild)" >&2
+        exit 1
+      fi
+      echo "  OK: image built from current $(basename "$src_file") (${got})"
+    fi
+  done
 else
   echo "  SKIP: repo mise-system.toml not found at ${repo_cfg}"
 fi

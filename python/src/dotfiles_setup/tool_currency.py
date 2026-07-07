@@ -78,8 +78,11 @@ def tool_currency_main() -> int:
     issue-upsert on report content, not exit code, so a busy upstream day
     never turns the cron red.
     """
+    # Review finding [27]: with exact pins (the repo's whole versioning
+    # model), plain `mise outdated` reports NOTHING — --bump compares the
+    # pinned version against latest, which is the signal we want.
     res = subprocess.run(
-        ["mise", "outdated", "--json"],
+        ["mise", "outdated", "--bump", "--json"],
         capture_output=True,
         text=True,
         check=False,

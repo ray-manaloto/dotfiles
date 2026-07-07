@@ -40,7 +40,18 @@ import sys
 # ban — never false-positive. Probe-observed 2026-07-07: the unanchored
 # chezmoi rule denied a commit whose message documented it. Anchoring
 # still catches every real invocation (they sit at command position).
-_CMD = r"(?:^|[;&|(]\s*)"
+# Findings [13][14][15]: newline is a separator; common wrappers
+# (env/VAR=x/exec/nohup/time/timeout N/xargs, possibly stacked) must not
+# hide the real command; and the open-paren was removed from the class —
+# it false-positived on quoted prose (probe-observed live: the guard
+# denied a review agent quoting the merge rule). Deliberately fail-open
+# beyond this (sh -c, base64, aliases): this is a redirect guard, not a
+# sandbox — hard bans live in settings.json permissions deny.
+_WRAPPER = (
+    r"(?:(?:env\s+)?(?:\w+=\S*\s+)*"
+    r"(?:exec\s+|nohup\s+|time\s+|timeout\s+\S+\s+|xargs\s+)?)*"
+)
+_CMD = r"(?:^|[;&|\n]\s*)" + _WRAPPER
 _RULES: tuple[tuple[re.Pattern[str], str], ...] = (
     (
         re.compile(_CMD + r"npx\s"),
@@ -73,7 +84,9 @@ _RULES: tuple[tuple[re.Pattern[str], str], ...] = (
         "env (BASE_IMAGE, DOCKER_DEFAULT_PLATFORM) to be reproducible.",
     ),
     (
-        re.compile(_CMD + r"docker\s+pull\b.*dotfiles-devcontainer"),
+        re.compile(
+            _CMD + r"docker\s+(?:image\s+)?pull\b[^;&|\n]*dotfiles-devcontainer"
+        ),
         "Never classic-pull the devcontainer image (it wedges on the ~38GB "
         "blob). Use `mise run sync` — buildkit-based, digest-aware, and it "
         "verifies the result.",

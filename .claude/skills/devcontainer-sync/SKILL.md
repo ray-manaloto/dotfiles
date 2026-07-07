@@ -57,6 +57,7 @@ currency + smoke tiers 1-3, incl. tier-1 image-identity base-currency);
 | `FAIL smoke-tiers-1-3 … stale base?` | Tier-1 image identity: in-image config hash ≠ repo `mise-system.toml` | The registry image predates your branch's `mise-system.toml` — wait for CI to publish, then rerun sync |
 | `WARN rebuilding: in-container sessions will be killed` | Expected on stale+running | Workspace bind-mount and home volume persist; running shells die by design |
 | rc 1 from `--check` | Stale — a real sync would rebuild | Run `mise run sync` when ready for the rebuild |
+| rc 2 from `--check` | UNKNOWN — registry unreachable, currency could not be verified | Fix ghcr auth/DNS; never treat as current |
 
 Evidence discipline: trust the printed `PASS`/`FAIL` lines and the task's
 exit code read from a file/API — never a piped tail

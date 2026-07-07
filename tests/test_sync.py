@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import subprocess
 import sys
@@ -31,12 +32,15 @@ def _status(
     registry: str | None = _DIGEST_NEW,
     local: str | None = _DIGEST_NEW,
     state: sync.ContainerState = "running",
+    record: sync.SyncRecord | None = None,
 ) -> sync.SyncStatus:
     return sync.SyncStatus(
         image_ref=_REF,
         registry_digest=registry,
-        local_digest=local,
+        local_digests=(local,) if local else (),
+        local_image_id="img-1",
         container_state=state,
+        synced_state=record,
     )
 
 
@@ -60,6 +64,50 @@ def test_absent_local_tag_is_stale() -> None:
 def test_unreachable_registry_is_not_stale() -> None:
     # A network blip must never tear down a working container.
     assert not _status(registry=None, local=_DIGEST_OLD).stale
+
+
+# Review finding [0]: buildkit refresh mints a new local manifest digest,
+# so convergence is witnessed by the sync record, not RepoDigests.
+def test_sync_record_witnesses_refresh_convergence() -> None:
+    record = sync.SyncRecord(registry_digest=_DIGEST_NEW, local_image_id="img-1")
+    assert not _status(local=_DIGEST_OLD, record=record).stale
+
+
+def test_sync_record_stale_when_registry_moved_again() -> None:
+    record = sync.SyncRecord(registry_digest=_DIGEST_OLD, local_image_id="img-1")
+    assert _status(local=_DIGEST_OLD, record=record).stale
+
+
+def test_sync_record_stale_when_local_image_replaced() -> None:
+    record = sync.SyncRecord(registry_digest=_DIGEST_NEW, local_image_id="img-0")
+    assert _status(local=_DIGEST_OLD, record=record).stale  # img-1 != img-0
+
+
+def test_multi_digest_local_tag_matches_any() -> None:
+    status = sync.SyncStatus(
+        image_ref=_REF,
+        registry_digest=_DIGEST_NEW,
+        local_digests=(_DIGEST_OLD, _DIGEST_NEW),
+        local_image_id="img-1",
+        container_state="running",
+    )
+    assert not status.stale
+
+
+# Review finding [1]: a running container from an older converge triggers
+# rebuild; unknown ids stay non-destructive.
+def test_outdated_container_triggers_rebuild() -> None:
+    record = sync.SyncRecord(
+        registry_digest=_DIGEST_NEW, local_image_id="img-1", container_image_id="c-old"
+    )
+    status = dataclasses.replace(_status(record=record), container_image_id="c-new")
+    assert not status.container_current
+    assert sync.decide_action(status, force=False) == "rebuild"
+
+
+def test_unknown_container_id_is_non_destructive() -> None:
+    record = sync.SyncRecord(registry_digest=_DIGEST_NEW, local_image_id="img-1")
+    assert _status(record=record).container_current
 
 
 # ------------------------------------------------------------ action matrix
@@ -87,22 +135,23 @@ def test_current_but_not_running_brings_up() -> None:
 # ------------------------------------------------------------- observation
 
 
-def test_local_digest_matches_repo_not_stage_alias(
+def test_local_digests_matches_repo_not_stage_alias(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # RepoDigests can carry bake-stage aliases (dotfiles-devcontainer-base@…);
-    # only the entry whose repo matches the ref counts.
+    # only entries whose repo matches the ref count — ALL of them ([0] sub-point).
     payload = [
         f"dotfiles-devcontainer-base@{_DIGEST_OLD}",
         f"{_REPO}@{_DIGEST_NEW}",
+        f"{_REPO}@{_DIGEST_OLD}",
     ]
     monkeypatch.setattr(sync, "_run", lambda *_a, **_k: _cp(json.dumps(payload) + "\n"))
-    assert sync.local_digest(_REF) == _DIGEST_NEW
+    assert sync.local_digests(_REF) == (_DIGEST_NEW, _DIGEST_OLD)
 
 
-def test_local_digest_absent_tag(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_local_digests_absent_tag(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sync, "_run", lambda *_a, **_k: _cp("", returncode=1))
-    assert sync.local_digest(_REF) is None
+    assert sync.local_digests(_REF) == ()
 
 
 def test_registry_digest_parses_json_string(

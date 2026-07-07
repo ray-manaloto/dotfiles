@@ -40,11 +40,11 @@ linting, CI/CD, and code review.
 
 Before ANY git commit, you MUST run local validation:
 
-1. Run `hk run pre-commit --all --stash none` and verify exit 0
+1. Run `mise run lint` and verify exit 0
 2. If any check fails: research root cause, attempt fix, re-run
 3. Only escalate to user via AskUserQuestion after 2 failed fix attempts
 4. Do NOT commit until all hk checks pass
-5. Do NOT push until `hk run pre-commit --all --stash none` passes
+5. Do NOT push until `mise run lint` passes
 
 ## Examples of Violations
 
@@ -52,7 +52,7 @@ Before ANY git commit, you MUST run local validation:
 - Skipping `hk check` because the tool isn't installed instead of installing it
 - Suppressing a ruff error with `# noqa` instead of fixing the code
 - Adding `continue-on-error: true` to a CI step to mask failures
-- Committing without running `hk run pre-commit --all --stash none`
+- Committing without running `mise run lint`
 - Pushing to trigger CI to "see if it passes" instead of validating locally
 
 ## Applies To

@@ -61,6 +61,7 @@ import os
 import re
 import subprocess
 import sys
+from pathlib import Path as PathLib
 from typing import TYPE_CHECKING, Literal
 
 from dotfiles_setup.container import verify_latest
@@ -107,29 +108,122 @@ class SyncStatus:
 
     image_ref: str
     registry_digest: str | None
-    local_digest: str | None
+    local_digests: tuple[str, ...]
+    local_image_id: str | None
     container_state: ContainerState
+    container_image_id: str | None = None
+    synced_state: SyncRecord | None = None
 
     @property
     def stale(self) -> bool:
-        """True when the local tag does not point at the registry manifest.
+        """True when the local tag is not known to carry the registry bytes.
 
-        A missing local tag (never pulled) counts as stale — converging
-        requires a pull either way. An unreachable registry (``None``)
-        does NOT count as stale: sync must not tear down a working
-        container on a network blip.
+        Converged means EITHER the registry manifest digest appears in the
+        local tag's RepoDigests (the plain-pull path) OR the sync state
+        record says this exact registry digest was refreshed onto this
+        exact local image id (the buildkit-refresh path — review finding
+        [0]: a buildkit ``--output type=docker`` re-export mints a NEW
+        local manifest digest, so RepoDigests can never converge after a
+        refresh; the state record is the durable convergence witness).
+
+        A missing local tag counts as stale. An unreachable registry
+        (``None``) does NOT: sync must not tear down a working container
+        on a network blip.
         """
         if self.registry_digest is None:
             return False
-        return self.local_digest != self.registry_digest
+        if self.registry_digest in self.local_digests:
+            return False
+        return not (
+            self.synced_state is not None
+            and self.synced_state.registry_digest == self.registry_digest
+            and self.synced_state.local_image_id == self.local_image_id
+            and self.local_image_id is not None
+        )
+
+    @property
+    def container_current(self) -> bool:
+        """The running container matches the last converge's record.
+
+        Review finding [1]: verify-only must not bless a container left
+        over from an older converge. The container runs the OVERLAY image
+        (vsc-…), never the base tag itself, so the comparison is against
+        the overlay id captured in the sync record at converge time —
+        self-consistent on both sides. No record / unknown ids count as
+        current (non-destructive default; smoke tier-1 identity still
+        guards config-level staleness in the verify step).
+        """
+        if self.container_state != "running":
+            return True
+        record = self.synced_state
+        if (
+            record is None
+            or record.container_image_id is None
+            or self.container_image_id is None
+        ):
+            return True
+        return self.container_image_id == record.container_image_id
+
+
+@dataclasses.dataclass(frozen=True)
+class SyncRecord:
+    """Durable witness of the last successful converge for an image ref."""
+
+    registry_digest: str
+    local_image_id: str
+    container_image_id: str | None = None
+
+
+def _state_file(image_ref: str) -> Path:
+    safe = re.sub(r"[^A-Za-z0-9._-]", "_", image_ref)
+    return PathLib.home() / ".local" / "state" / "dotfiles" / f"sync-{safe}.json"
+
+
+def read_sync_record(image_ref: str) -> SyncRecord | None:
+    """The last recorded converge for ``image_ref`` (or None)."""
+    try:
+        data = json.loads(_state_file(image_ref).read_text())
+        return SyncRecord(
+            registry_digest=data["registry_digest"],
+            local_image_id=data["local_image_id"],
+            container_image_id=data.get("container_image_id"),
+        )
+    except OSError, json.JSONDecodeError, KeyError:
+        return None
+
+
+def write_sync_record(workspace: Path, image_ref: str, registry: str) -> None:
+    """Record that ``registry`` digest now backs ``image_ref`` locally."""
+    image_id = local_image_id(image_ref)
+    if image_id is None:
+        return
+    path = _state_file(image_ref)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "registry_digest": registry,
+                "local_image_id": image_id,
+                "container_image_id": container_image_id(workspace),
+            }
+        )
+        + "\n"
+    )
 
 
 def _run(
     cmd: list[str], *, timeout: float | None = None
 ) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        cmd, capture_output=True, text=True, check=False, timeout=timeout
-    )
+    # Review finding [3]: a hung probe must degrade to a failed probe,
+    # never crash sync with an uncaught TimeoutExpired.
+    try:
+        return subprocess.run(
+            cmd, capture_output=True, text=True, check=False, timeout=timeout
+        )
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(
+            args=cmd, returncode=124, stdout="", stderr="probe timed out"
+        )
 
 
 def _stream(
@@ -164,19 +258,41 @@ def registry_digest(image_ref: str) -> str | None:
     return json.loads(res.stdout.strip())
 
 
-def local_digest(image_ref: str) -> str | None:
-    """Digest the LOCAL tag ``image_ref`` points at, or None if absent."""
+def local_digests(image_ref: str) -> tuple[str, ...]:
+    """ALL digests the LOCAL tag carries for its repo (empty if absent).
+
+    All, not first: under the containerd store one image can carry
+    multiple digests for the same repo (review finding [0] sub-point).
+    """
     res = _run(
         ["docker", "image", "inspect", image_ref, "--format", "{{json .RepoDigests}}"]
     )
     if res.returncode != 0:
-        return None
+        return ()
     repo = image_ref.rsplit(":", 1)[0]
+    out = []
     for entry in json.loads(res.stdout.strip()):
         entry_repo, _, digest = entry.partition("@")
         if entry_repo == repo:
-            return digest
-    return None
+            out.append(digest)
+    return tuple(out)
+
+
+def local_image_id(image_ref: str) -> str | None:
+    """The local image id the tag points at (None if absent)."""
+    res = _run(["docker", "image", "inspect", image_ref, "--format", "{{.Id}}"])
+    return res.stdout.strip() or None if res.returncode == 0 else None
+
+
+def container_image_id(workspace: Path) -> str | None:
+    """Image id of the RUNNING devcontainer for this workspace (or None)."""
+    cid = _run(
+        ["docker", "ps", "-q", "--filter", f"label={_LOCAL_FOLDER_LABEL}={workspace}"]
+    ).stdout.strip()
+    if not cid:
+        return None
+    res = _run(["docker", "inspect", cid.splitlines()[0], "--format", "{{.Image}}"])
+    return res.stdout.strip() or None if res.returncode == 0 else None
 
 
 def container_state(workspace: Path) -> ContainerState:
@@ -298,6 +414,8 @@ def decide_action(status: SyncStatus, *, force: bool) -> Action:
         return "rebuild"
     if status.container_state != "running":
         return "up"
+    if not status.container_current:
+        return "rebuild"
     return "verify-only"
 
 
@@ -306,8 +424,11 @@ def observe(workspace: Path, image_ref: str) -> SyncStatus:
     return SyncStatus(
         image_ref=image_ref,
         registry_digest=registry_digest(image_ref),
-        local_digest=local_digest(image_ref),
+        local_digests=local_digests(image_ref),
+        local_image_id=local_image_id(image_ref),
         container_state=container_state(workspace),
+        container_image_id=container_image_id(workspace),
+        synced_state=read_sync_record(image_ref),
     )
 
 
@@ -322,6 +443,15 @@ def _report_inflight(tag: str, *, wait: bool) -> None:
     """Report (or await) unfinished ci.yml runs that may supersede ``tag``."""
     branch = tag_branch(tag)
     if branch is None:
+        if wait:
+            # Review finding [4]: --wait must fail loud when the CI probe
+            # itself failed — 'await CI then sync' silently degrading to
+            # 'sync now' breaks the caller's ordering assumption.
+            sys.stdout.write(
+                "FAIL  --wait requested but the CI branch for this tag could "
+                "not be resolved (gh error or untracked tag) — aborting\n"
+            )
+            raise SystemExit(1)
         return
     runs = inflight_ci_runs(branch)
     if not runs:
@@ -360,15 +490,26 @@ def _converge(workspace: Path, status: SyncStatus, action: Action) -> tuple[bool
             env=_mise_env(status.image_ref),
             cwd=workspace,
         )
+        if rc == 0 and status.registry_digest:
+            write_sync_record(workspace, status.image_ref, status.registry_digest)
         return rc == 0, f"dev-rebuild rc={rc}"
     rc = _stream(["mise", "run", "up"], env=_mise_env(status.image_ref), cwd=workspace)
+    if rc == 0 and status.registry_digest:
+        write_sync_record(workspace, status.image_ref, status.registry_digest)
     return rc == 0, f"up rc={rc}"
 
 
-def _verify(workspace: Path, *, full: bool) -> bool:
+def _verify(workspace: Path, *, full: bool, image_ref: str) -> bool:
     """Run the post-converge gate: smoke by default, verify-local on --full."""
     if full:
-        rc = _stream(["mise", "run", "verify-local"], cwd=workspace)
+        # Review finding [28]: verify-local must validate the SAME image
+        # this sync targets — without the env override, a `--tag pr-NNN`
+        # sync would verify (and its up/persistence steps rebuild) :dev.
+        rc = _stream(
+            ["mise", "run", "verify-local"],
+            env=_mise_env(image_ref),
+            cwd=workspace,
+        )
         sys.stdout.write(f"{'PASS' if rc == 0 else 'FAIL'}  verify-local rc={rc}\n")
         return rc == 0
     checks = verify_latest(workspace, run_smoke=True)
@@ -388,9 +529,10 @@ def sync_main(workspace: Path, options: SyncOptions | None = None) -> int:
     sys.stdout.write(
         f"==> {image_ref}\n"
         f"    registry: {status.registry_digest or 'UNREACHABLE'}\n"
-        f"    local:    {status.local_digest or 'ABSENT'}\n"
+        f"    local:    {', '.join(status.local_digests) or 'ABSENT'}\n"
         f"    container: {status.container_state}"
-        f"{'  [STALE]' if status.stale else ''}\n"
+        f"{'  [STALE]' if status.stale else ''}"
+        f"{'  [CONTAINER OUTDATED]' if not status.container_current else ''}\n"
     )
     if status.registry_digest is None:
         sys.stdout.write(
@@ -399,6 +541,12 @@ def sync_main(workspace: Path, options: SyncOptions | None = None) -> int:
         )
 
     if opts.check_only:
+        # Review finding [2]: an unreachable registry is UNKNOWN, not
+        # 'current' — scripts gating on --check must be able to tell
+        # 'verified current' (0) from 'could not verify' (2).
+        if status.registry_digest is None:
+            sys.stdout.write("check: UNKNOWN — registry unreachable\n")
+            return 2
         sys.stdout.write(
             f"check: {'STALE — sync would rebuild' if status.stale else 'current'}\n"
         )
@@ -411,7 +559,7 @@ def sync_main(workspace: Path, options: SyncOptions | None = None) -> int:
     if not ok:
         return 1
 
-    if not _verify(workspace, full=opts.full):
+    if not _verify(workspace, full=opts.full, image_ref=image_ref):
         sys.stdout.write(
             "\nsync: verification failed — the container is NOT a valid "
             "environment (see .claude/rules/verify-before-advancing.md)\n"

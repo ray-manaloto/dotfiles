@@ -108,6 +108,17 @@
     "MISE_OS": "linux",
     "CONDA_SUBDIR": "linux-64",
 
+    // ─ Container-private python venv (review finding [33], 2026-07-07) ─
+    // The workspace bind mount would otherwise share python/.venv between
+    // the macOS host and this linux container: the interpreters are
+    // incompatible (each side "repairs" the venv, clobbering the other)
+    // and CONCURRENT host+container uv runs race on the same directory —
+    // probe-observed: an in-container `uv sync` failed with a dist-info
+    // rename ENOENT while host uv ran in parallel, killing the
+    // persistence gate. uv's documented env var points the project venv
+    // at the persistent home volume instead — no bind-mount sharing.
+    "UV_PROJECT_ENVIRONMENT": "/home/${localEnv:USER:devcontainer}/.venvs/dotfiles-python",
+
     // ─ Config trust + discovery ──────────────────────────────────────
     // Trust ALL paths without prompting ("/" matches everything).
     // Required for non-interactive mise activation in user shells,

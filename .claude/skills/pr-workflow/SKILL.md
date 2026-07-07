@@ -61,6 +61,7 @@ Invoking `land` IS the merge approval — nothing auto-merges without it.
 | `FAIL gate <name>` | A local gate failed | That failure IS the task (zero-skip); fix, rerun ship |
 | `pr-checks: <name>=fail` | CI check failed after watch | Triage the run; autofix "✅ Autofix task started" failures mean the bot pushed a fix commit — re-watch |
 | `land: merge refused` | Head moved since verification / protection unmet | Re-run land (it re-verifies) |
+| land failed AFTER the merge (CI watch / sync) | Merged-but-unvalidated PR | `mise run land -- <PR#> --resume` replays the idempotent post-merge steps |
 | `land: no main ci.yml run appeared` | Merge-commit run never registered (~10 min) | Check Actions; run land's remaining steps manually via `mise run sync` after main is green |
 
 ## Wiring audit (meta-validation)

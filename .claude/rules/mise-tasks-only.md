@@ -41,6 +41,16 @@ The hook fails OPEN on its own errors (a crashed guard must not brick
 every Bash call); hard one-off bans that must never fail open belong in
 settings.json permission deny rules, not the hook.
 
+## Known limitation: prose content in compound commands
+
+The guard matches the raw Bash string, so heredoc/quoted CONTENT that
+embeds a denied command shape (e.g. a doc edit containing
+`&& hk run pre-commit`) can be denied — and a deny cancels the ENTIRE
+compound command, silently skipping its other parts (observed twice,
+2026-07-07). Workaround: write scripts via the Write tool and run
+`python3 <file>`; after ANY deny, re-check that the command's intended
+side effects actually happened.
+
 ## Extending
 
 New redirect = new `_RULES` entry in `hook_guard.py` + a test + a row in
