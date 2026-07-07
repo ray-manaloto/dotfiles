@@ -111,6 +111,10 @@ def _run(
         return subprocess.CompletedProcess(
             args=cmd, returncode=124, stdout="", stderr="probe timed out"
         )
+    except OSError as exc:
+        return subprocess.CompletedProcess(
+            args=cmd, returncode=127, stdout="", stderr=str(exc)
+        )
 
 
 def _stream(cmd: list[str], *, cwd: Path | None = None) -> int:

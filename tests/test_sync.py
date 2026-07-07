@@ -235,12 +235,17 @@ def test_sync_stale_refreshes_tag_then_rebuilds(
     monkeypatch.setattr(
         sync, "refresh_local_tag", lambda _ref: events.append("refresh") or True
     )
+    # write_sync_record must never touch real docker in a unit test
+    # (probe-observed: in-container pytest has no docker CLI).
+    monkeypatch.setattr(
+        sync, "write_sync_record", lambda *_a, **_k: events.append("record")
+    )
     monkeypatch.setattr(
         sync, "_stream", lambda cmd, **_k: events.append(" ".join(cmd[:3])) or 0
     )
     monkeypatch.setattr(sync, "verify_latest", lambda *_a, **_k: [])
     assert sync.sync_main(_WORKSPACE) == 0
-    assert events == ["refresh", "mise run dev-rebuild"]
+    assert events == ["refresh", "mise run dev-rebuild", "record"]
 
 
 def test_sync_check_mode_reports_without_converging(

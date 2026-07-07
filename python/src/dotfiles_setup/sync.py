@@ -215,7 +215,8 @@ def _run(
     cmd: list[str], *, timeout: float | None = None
 ) -> subprocess.CompletedProcess[str]:
     # Review finding [3]: a hung probe must degrade to a failed probe,
-    # never crash sync with an uncaught TimeoutExpired.
+    # never crash sync with an uncaught TimeoutExpired. Same for a missing
+    # binary (probe-observed: in-container pytest has no docker CLI).
     try:
         return subprocess.run(
             cmd, capture_output=True, text=True, check=False, timeout=timeout
@@ -223,6 +224,10 @@ def _run(
     except subprocess.TimeoutExpired:
         return subprocess.CompletedProcess(
             args=cmd, returncode=124, stdout="", stderr="probe timed out"
+        )
+    except OSError as exc:
+        return subprocess.CompletedProcess(
+            args=cmd, returncode=127, stdout="", stderr=str(exc)
         )
 
 
