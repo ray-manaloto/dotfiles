@@ -73,8 +73,8 @@ local allSteps = new Mapping<String, Config.Step> {
   // attaches python/pyproject.toml's [tool.ty] config (probe-verified:
   // without it, cwd=repo-root discovery found NO ty config at all).
   ["py_ty"] {
-    glob = List("python/src/**/*.py", "tests/**/*.py")
-    check = "uv run --project python ty check --project python python/src tests"
+    glob = List("python/src/**/*.py", "tests/**/*.py", "plugins/**/*.py")
+    check = "uv run --project python ty check --project python python/src tests plugins"
   }
 
   // --- Zero inline lint suppressions (enforces zero-skip policy) ---

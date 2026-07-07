@@ -11,10 +11,24 @@ from pathlib import Path
 from typing import Any
 
 
-def run_json(cmd: list[str]) -> list[dict[str, Any]] | dict[str, Any]:
-    """Run *cmd* and return its stdout parsed as JSON."""
+def run_json_list(cmd: list[str]) -> list[dict[str, Any]]:
+    """Run *cmd* and return its stdout parsed as a JSON array of objects."""
     result = subprocess.run(cmd, check=True, capture_output=True, text=True)
-    return json.loads(result.stdout)
+    data = json.loads(result.stdout)
+    if not isinstance(data, list):
+        msg = f"expected a JSON array from {cmd[0]}, got {type(data).__name__}"
+        raise TypeError(msg)
+    return data
+
+
+def run_json_dict(cmd: list[str]) -> dict[str, Any]:
+    """Run *cmd* and return its stdout parsed as a JSON object."""
+    result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+    data = json.loads(result.stdout)
+    if not isinstance(data, dict):
+        msg = f"expected a JSON object from {cmd[0]}, got {type(data).__name__}"
+        raise TypeError(msg)
+    return data
 
 
 def run_text(cmd: list[str]) -> str:
@@ -31,7 +45,7 @@ def parse_run_id(value: str) -> str:
 
 def latest_failed_run() -> str:
     """Return the id of the most recent failed workflow run."""
-    runs = run_json(
+    runs = run_json_list(
         [
             "gh",
             "run",
@@ -84,7 +98,7 @@ def likely_owners(error_signatures: list[str]) -> list[str]:
 
 def build_report(run_id: str) -> dict[str, Any]:
     """Build a triage report dict for the given run id."""
-    run = run_json(
+    run = run_json_dict(
         [
             "gh",
             "run",
