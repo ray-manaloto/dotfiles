@@ -50,6 +50,7 @@ url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.35.17.zip"
 url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.35.17.zip"
 
 [tools.aws-cli."platforms.linux-x64"]
+checksum = "blake3:da78f2807abb956c7cd5b8aed293de15f59a2dfa69f036b60699bd1dab260ed8"
 url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.35.17.zip"
 
 [tools.aws-cli."platforms.linux-x64-musl"]
@@ -159,6 +160,7 @@ url = "https://download.docker.com/linux/static/stable/aarch64/docker-29.6.1.tgz
 url = "https://download.docker.com/linux/static/stable/aarch64/docker-29.6.1.tgz"
 
 [tools.docker-cli."platforms.linux-x64"]
+checksum = "blake3:6ca3ed01c76636a0db271e1a32f12aa0534514a05baf12c387ac9a08de4edfa8"
 url = "https://download.docker.com/linux/static/stable/x86_64/docker-29.6.1.tgz"
 
 [tools.docker-cli."platforms.linux-x64-musl"]
