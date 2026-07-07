@@ -178,8 +178,32 @@ def pr_checks_green(pr_number: int) -> tuple[bool, str]:
     return True, f"{len(checks)} checks pass/skipping"
 
 
+def _await_checks_registered(pr_number: int, *, attempts: int = 40) -> bool:
+    """Poll until GitHub reports at least one check for the PR.
+
+    Checks register asynchronously after push/PR-create; ``gh pr checks``
+    exits nonzero with "no checks reported" in that window (probe-observed
+    on PR #173's first ship). That state is *pending*, not failure.
+    """
+    for _ in range(attempts):
+        res = _run(
+            ["gh", "pr", "checks", str(pr_number), "--json", "name,bucket"],
+            timeout=_PROBE_TIMEOUT_S,
+        )
+        if res.returncode == 0 and json.loads(res.stdout or "[]"):
+            return True
+        time.sleep(15)
+    sys.stdout.write(
+        f"FAIL  pr-checks: no checks registered on PR #{pr_number} within "
+        f"{attempts * 15}s\n"
+    )
+    return False
+
+
 def watch_pr_checks(pr_number: int) -> bool:
-    """Watch to terminal state, then verify via the JSON buckets."""
+    """Await registration, watch to terminal state, verify via JSON buckets."""
+    if not _await_checks_registered(pr_number):
+        return False
     _stream(["gh", "pr", "checks", str(pr_number), "--watch", "--fail-fast"])
     ok, detail = pr_checks_green(pr_number)
     sys.stdout.write(f"{'PASS' if ok else 'FAIL'}  pr-checks: {detail}\n")

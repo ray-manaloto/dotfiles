@@ -212,3 +212,35 @@ def test_land_surface_pr_validates_full_tier(
     monkeypatch.setattr(pr, "sync_main", fake_sync)
     assert pr.land_main(_WORKSPACE, 7) == 0
     assert seen["full"] is True
+
+
+def test_watch_awaits_check_registration(monkeypatch: pytest.MonkeyPatch) -> None:
+    """'no checks reported' right after PR-create is pending, not failure."""
+    calls: list[str] = []
+    responses = iter(
+        [
+            _cp("", returncode=1),  # registration window: gh errors
+            _cp("[]"),  # registered but empty list — still pending
+            _cp(json.dumps([{"name": "lint", "bucket": "pending"}])),  # registered
+            _cp(json.dumps([{"name": "lint", "bucket": "pass"}])),  # final verify
+        ]
+    )
+    monkeypatch.setattr(pr, "_run", lambda *_a, **_k: next(responses))
+    monkeypatch.setattr(pr, "_stream", lambda cmd, **_k: calls.append(cmd[0]) or 0)
+    monkeypatch.setattr(pr.time, "sleep", lambda _s: None)
+    assert pr.watch_pr_checks(9) is True
+    assert calls == ["gh"]  # the --watch ran exactly once, after registration
+
+
+def test_watch_fails_when_checks_never_register(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(pr, "_run", lambda *_a, **_k: _cp("", returncode=1))
+    monkeypatch.setattr(pr.time, "sleep", lambda _s: None)
+
+    def _boom(*_a: object, **_k: object) -> int:
+        msg = "must not watch before checks register"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(pr, "_stream", _boom)
+    assert pr.watch_pr_checks(9) is False
