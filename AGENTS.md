@@ -19,6 +19,7 @@ caller) → lint → contract-preflight → `changes` → reusable `build-publis
 mise install                                 # Install all tools
 mise run lint                                # Run lint checks (hk under a hard timeout)
 mise run up / down                           # Bring up / tear down devcontainer (.devcontainer/AGENTS.md)
+mise run sync                                # Converge devcontainer onto latest CI image + verify (-- --check/--full)
 mise run verify-container-latest             # Gate: container on latest branch code + base (hard)
 uv run --project python pytest tests/ -x -q  # Run tests (see python/AGENTS.md)
 dotfiles-setup verify run                    # Run structured verification contracts
@@ -55,7 +56,7 @@ the official `@devcontainers/cli` (pinned in `mise.toml`).
 | `.claude/` | Claude-specific agents, skills, rules. Has its own `CLAUDE.md` with OMC orchestration |
 | `home/` | Chezmoi-managed dotfile templates (its AGENTS.md was removed in #80) |
 | `python/` | Python package `dotfiles_setup` — see `python/AGENTS.md` |
-| `tests/` | Pytest + Bats test suite (224 pytest tests) — see `tests/AGENTS.md` |
+| `tests/` | Pytest + Bats test suite (251 pytest tests) — see `tests/AGENTS.md` |
 | `scripts/` | Utility scripts (`benchmark-docker.sh`, `devcontainer-smoke.sh`) |
 | `docs/` | Documentation, research findings, design specs |
 
@@ -85,7 +86,7 @@ content-hashed since hk 1.47 — no manual cache clearing after edits.
 ## Testing
 
 ```bash
-uv run --project python pytest tests/ -x -q               # All 224 tests
+uv run --project python pytest tests/ -x -q               # All 251 tests
 uv run --project python pytest tests/test_audit.py -x -q  # Single file
 hk run pre-commit --all --stash none                      # Lint checks only
 dotfiles-setup verify run                                 # Verification contracts (suites.toml)

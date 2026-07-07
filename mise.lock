@@ -482,6 +482,11 @@ checksum = "sha256:5519f7ca12e5c143a609f0d28a0a77b97413a8dce31c2681f1a41c24519a8
 url = "https://github.com/rtk-ai/rtk/releases/download/v0.43.0/rtk-aarch64-unknown-linux-gnu.tar.gz"
 url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/460115891"
 
+[tools.rtk."platforms.linux-arm64-musl"]
+checksum = "sha256:5519f7ca12e5c143a609f0d28a0a77b97413a8dce31c2681f1a41c24519a8731"
+url = "https://github.com/rtk-ai/rtk/releases/download/v0.43.0/rtk-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/460115891"
+
 [tools.rtk."platforms.linux-x64"]
 checksum = "sha256:ff8a1e7766496e175291a85aeca1dc97c9ff6df33e51e5893d1fbc78fea2a609"
 url = "https://github.com/rtk-ai/rtk/releases/download/v0.43.0/rtk-x86_64-unknown-linux-musl.tar.gz"

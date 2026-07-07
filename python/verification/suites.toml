@@ -908,3 +908,23 @@ category = "policy"
 check_type = "policy"
 handler = "policy_doc"
 reference = "CLAUDE.md"
+
+[[suite]]
+name = "workflow.sync-wiring"
+description = "Devcontainer sync workflow wiring: `mise run sync` must stay a thin caller of the python library CLI (`dotfiles-setup docker sync`, zero-bash-logic), the sync module + its tests must exist, and the devcontainer-sync skill must document the entrypoint. Catches drift where the task body grows logic or the skill/CLI/task triple falls out of sync."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths = [
+    "mise.toml",
+    "python/src/dotfiles_setup/sync.py",
+    "tests/test_sync.py",
+    ".claude/skills/devcontainer-sync/SKILL.md",
+]
+tokens = [
+    "[tasks.sync]",
+    "dotfiles-setup docker sync",
+    "def sync_main",
+    "def decide_action",
+    "mise run sync",
+]

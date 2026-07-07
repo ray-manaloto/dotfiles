@@ -35,6 +35,7 @@ from dotfiles_setup.p2996_hash import (
     compute_repo_p2996_hash,
 )
 from dotfiles_setup.p2996_refresh import refresh as refresh_p2996_ref
+from dotfiles_setup.sync import SyncOptions, sync_main
 from dotfiles_setup.verify import main as verify_main
 
 if TYPE_CHECKING:
@@ -88,6 +89,39 @@ def _add_docker_subcommands(
         "--no-smoke",
         action="store_true",
         help="Skip the in-container smoke run (fast container/bind-mount check only)",
+    )
+    sync_parser = docker_subparsers.add_parser(
+        "sync",
+        help="Converge the devcontainer onto the latest CI-built image "
+        "(digest fast-path, handles up/stopped/absent) and verify",
+    )
+    sync_parser.add_argument(
+        "--tag",
+        default="dev",
+        help="Registry tag to sync to (default: dev; e.g. pr-169 for "
+        "pre-merge validation)",
+    )
+    sync_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Rebuild even when the local tag matches the registry digest",
+    )
+    sync_parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Dry-run: report staleness only (rc 1 if stale), change nothing",
+    )
+    sync_parser.add_argument(
+        "--full",
+        action="store_true",
+        help="Verify with the whole verify-local chain (R1/R2/R3 + "
+        "persistence + secrets) instead of the default smoke gate",
+    )
+    sync_parser.add_argument(
+        "--wait",
+        action="store_true",
+        help="If a ci.yml run is in flight on the target branch, watch it "
+        "to completion before syncing",
     )
 
 
@@ -347,6 +381,19 @@ def handle_docker(
         docker_manager.initialize_host()
     elif args.docker_command == "verify-latest":
         sys.exit(verify_latest_main(project_root, run_smoke=not args.no_smoke))
+    elif args.docker_command == "sync":
+        sys.exit(
+            sync_main(
+                project_root,
+                SyncOptions(
+                    tag=args.tag,
+                    force=args.force,
+                    check_only=args.check,
+                    full=args.full,
+                    wait=args.wait,
+                ),
+            )
+        )
 
 
 def handle_audit(config: DotfilesConfig | None = None) -> None:

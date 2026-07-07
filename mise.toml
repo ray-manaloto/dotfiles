@@ -383,6 +383,19 @@ echo 'OK: home-volume seed survivors + canary present'
 echo "OK: $PRE_COUNT tools persisted identically across stop/up (mise-system.toml baseline: $EXPECTED_MIN)"
 '''
 
+[tasks.sync]
+description = "Converge the devcontainer onto the latest CI image + verify (digest fast-path)"
+# Thin caller per zero-bash-logic; the orchestration (registry-vs-local-tag
+# digest compare, container state matrix, in-flight ci.yml awareness,
+# buildkit tag refresh, tiered verification) lives in
+# python/src/dotfiles_setup/sync.py. Extra flags pass through:
+#   mise run sync -- --check          # dry-run staleness report (rc 1 if stale)
+#   mise run sync -- --full           # verify-local chain instead of smoke gate
+#   mise run sync -- --tag pr-169     # pre-merge validation against a PR image
+#   mise run sync -- --force          # rebuild even when current
+#   mise run sync -- --wait           # await an in-flight ci.yml run first
+run = 'uv run --project python dotfiles-setup docker sync'
+
 [tasks.verify-container-latest]
 description = "Gate: running devcontainer is on the latest branch code + current base + smoke"
 # Enforces verify-before-advancing's devcontainer row: the running container
