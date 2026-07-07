@@ -15,6 +15,8 @@ task (wrapping the python library, zero-bash-logic) in the same change.
 | `docker pull …dotfiles-devcontainer…` | `mise run sync` (buildkit, digest-aware, verifying; classic pull wedges on ~38GB) |
 | `gh pr create` (+ push + gates by hand) | `mise run ship` |
 | `gh pr merge` (+ watch + validate by hand) | `mise run land -- <PR#>` |
+| autofix artifact recovery by hand | `mise run autofix-apply -- <run-id>` |
+| `gh workflow run` / `gh run rerun` | `mise run gha-dispatch -- <wf>` / `mise run gha-rerun -- <id>` |
 | `npx <tool>` | the mise-pinned binary directly |
 | `chezmoi apply/update` on the Mac host | nothing — devcontainer-only |
 
