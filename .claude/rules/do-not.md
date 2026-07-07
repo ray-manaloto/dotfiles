@@ -42,6 +42,7 @@ self-contained block). Each item's context is preserved verbatim.
 
 ## See also
 
+- `mise-tasks-only.md` — canonical mise tasks over one-off commands (hook-enforced)
 - `zero-skip-policy.md` — no warning/error shall be dismissed
 - `verify-before-advancing.md` — every applicable check green before the next task
 - `ci-local-parity.md` — keep local checks in sync with CI

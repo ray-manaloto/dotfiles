@@ -967,3 +967,23 @@ tokens = [
     "mise run land",
     "mise run ship",
 ]
+
+[[suite]]
+name = "workflow.tool-currency-wiring"
+description = "Daily tool-currency signal wiring: refresh.yml's tool-currency job must render the report via `mise run tool-currency` (thin caller of the python library) and upsert the standing issue; module + tests must exist. The signal feeds the tool-currency-check skill's release-note review (self-learning loop, 2026-07-07)."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths = [
+    "mise.toml",
+    "python/src/dotfiles_setup/tool_currency.py",
+    "tests/test_tool_currency.py",
+    ".github/workflows/refresh.yml",
+]
+tokens = [
+    "[tasks.tool-currency]",
+    "dotfiles-setup tool-currency",
+    "def tool_currency_main",
+    "mise run tool-currency",
+    "Tool currency report (daily)",
+]

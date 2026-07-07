@@ -383,6 +383,14 @@ echo 'OK: home-volume seed survivors + canary present'
 echo "OK: $PRE_COUNT tools persisted identically across stop/up (mise-system.toml baseline: $EXPECTED_MIN)"
 '''
 
+[tasks.tool-currency]
+description = "Markdown report of tools with upstream movement + release-notes links"
+# Thin caller (zero-bash-logic); logic in
+# python/src/dotfiles_setup/tool_currency.py. Run daily by refresh.yml's
+# tool-currency job (upserts the standing issue); locally it feeds the
+# tool-currency-check skill's release-note review.
+run = 'uv run --project python dotfiles-setup tool-currency'
+
 [tasks.ship]
 description = "Gate matrix → push → open/update PR → watch checks to verified green"
 # Thin caller per zero-bash-logic; orchestration in
