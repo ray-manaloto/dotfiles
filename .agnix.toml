@@ -32,7 +32,6 @@ max_files_to_validate = 10000
 paths = ["**/AGENTS.md", "**/CLAUDE.md", "AGENTS.md", "CLAUDE.md"]
 disabled_rules = ["XP-003", "AGM-004", "AGM-006", "PE-001"]
 
-[[overrides]]
 [rules]
 skills = true
 hooks = true
