@@ -20,6 +20,7 @@ from dotfiles_setup.doc_refs import find_unresolved_refs
 from dotfiles_setup.docker import DevContainerManager
 from dotfiles_setup.ghcr import validate_ghcr_prereqs
 from dotfiles_setup.ghcr_cleanup import plan_cleanup
+from dotfiles_setup.hook_guard import pretooluse_main
 from dotfiles_setup.image import ImageCommand
 from dotfiles_setup.image import main as image_main
 from dotfiles_setup.lint import (
@@ -383,6 +384,17 @@ def setup_parser() -> argparse.ArgumentParser:
         help="GHCR container package name",
     )
 
+    hook_parser = subparsers.add_parser(
+        "hook",
+        help="Claude Code hook entrypoints (wired in .claude/settings.json)",
+    )
+    hook_sub = hook_parser.add_subparsers(dest="hook_command", help="Hook events")
+    hook_sub.add_parser(
+        "pretooluse",
+        help="PreToolUse Bash guard: deny-with-redirect for one-off commands "
+        "that have a canonical mise task (mise-tasks-only policy)",
+    )
+
     # version command
     subparsers.add_parser("version", help="Show the version of the library")
 
@@ -687,6 +699,11 @@ def _build_command_handlers(
         "ai-setup": _ai_setup,
         "docker": lambda: handle_docker(args, project_root, config=config),
         "pr": lambda: handle_pr(args, project_root),
+        "hook": lambda: (
+            sys.exit(pretooluse_main())
+            if getattr(args, "hook_command", None) == "pretooluse"
+            else None
+        ),
         "version": _version,
         "install": lambda: handle_install(project_root),
         "verify": lambda: handle_verify(args),

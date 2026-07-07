@@ -947,3 +947,23 @@ tokens = [
     "mise run ship",
     "mise run land",
 ]
+
+[[suite]]
+name = "workflow.mise-tasks-enforcement"
+description = "mise-tasks-only policy wiring: the PreToolUse Bash guard must stay wired end-to-end — .claude/settings.json invokes `dotfiles-setup hook pretooluse`, the guard module + its tests exist, and the rule doc names the canonical task map. Prevents the guard silently drifting out of the hook chain."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths = [
+    ".claude/settings.json",
+    "python/src/dotfiles_setup/hook_guard.py",
+    "tests/test_hook_guard.py",
+    ".claude/rules/mise-tasks-only.md",
+]
+tokens = [
+    "dotfiles-setup hook pretooluse",
+    "def pretooluse_main",
+    "permissionDecision",
+    "mise run land",
+    "mise run ship",
+]
