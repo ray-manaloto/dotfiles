@@ -23,7 +23,14 @@ Design notes (deep-research verified, 2026-07-07 —
   (:data:`SURFACE_PATTERNS`), ship requires a full local
   ``mise run sync -- --full`` (verify-local chain) BEFORE the PR opens,
   and land re-runs it after the merge. Zero-skip: there is no flag to
-  bypass this.
+  bypass this. For branches that CHANGE an image build input, smoke
+  tier-1 identity validates against the merge-base blob (the local base
+  can never be built from the branch's config — that base is built by
+  the branch's own PR CI); see ``image.identity_expected_hash``.
+- **Main-CI expectation is path-aware** (:data:`CI_PUSH_PATHS`): ci.yml's
+  push trigger is path-filtered, so a merge whose diff matches no push
+  path legitimately produces NO main run — land passes that outcome
+  instead of false-failing (#178).
 - Gate order is cheap-first: lint → pytest → verify → conditional
   (pin-actions / lint-docs) → full sync last.
 
@@ -71,6 +78,26 @@ SURFACE_PATTERNS: tuple[str, ...] = (
     "hk-image.pkl",
     ".config/mise/conf.d/*",
     "mise.toml",
+)
+
+# ci.yml's on.push.paths, mirrored: a merge to main whose diff matches NONE
+# of these produces NO main ci.yml run — that is the expected outcome, not a
+# failure (found landing #178: a mise.toml-only merge false-failed land).
+# tests/test_pr.py asserts this constant stays in lockstep with ci.yml.
+CI_PUSH_PATHS: tuple[str, ...] = (
+    ".devcontainer/*",
+    ".devcontainer/**/*",
+    "docker-bake.hcl",
+    "home/*",
+    "home/**/*",
+    "python/*",
+    "python/**/*",
+    ".github/workflows/ci.yml",
+    "hk.pkl",
+    "hk-image.pkl",
+    "hk-common.pkl",
+    "renovate.json",
+    ".config/mise/conf.d/shared.toml",
 )
 
 # Conditional gates from verify-before-advancing's check matrix.
@@ -129,6 +156,16 @@ def _matches_any(path: str, patterns: tuple[str, ...]) -> bool:
 def touches_surface(paths: list[str]) -> bool:
     """True when the diff touches the devcontainer/image/validation surface."""
     return any(_matches_any(p, SURFACE_PATTERNS) for p in paths)
+
+
+def expects_main_run(paths: list[str]) -> bool:
+    """True when merging these paths triggers a main ci.yml run.
+
+    Mirrors ci.yml's ``on.push.paths`` (:data:`CI_PUSH_PATHS`). A merge
+    matching none produces no main run, so land treats that absence as
+    success rather than a false failure (#178).
+    """
+    return any(_matches_any(p, CI_PUSH_PATHS) for p in paths)
 
 
 def changed_paths_vs_main(workspace: Path) -> list[str]:
@@ -333,8 +370,14 @@ def _merge_commit_oid(pr_number: int) -> str | None:
     return commit.get("oid")
 
 
-def _main_run_conclusion(merge_oid: str) -> bool:
-    """Watch the main ci.yml run for the merge commit; verify via the API."""
+def _main_run_conclusion(merge_oid: str, *, expect_run: bool = True) -> bool:
+    """Watch the main ci.yml run for the merge commit; verify via the API.
+
+    ``expect_run=False`` (merge diff matches no ci.yml push path): a short
+    grace poll still runs — if a run DOES appear (constant drifted vs
+    ci.yml) it is watched normally — but no run within the grace window is
+    the expected outcome and passes.
+    """
     run_id = ""
     sys.stdout.write("==> waiting for main ci.yml run on the merge commit\n")
     find = [
@@ -354,12 +397,21 @@ def _main_run_conclusion(merge_oid: str) -> bool:
         "--jq",
         ".[0].databaseId // empty",
     ]
-    for _ in range(40):  # ~10 min at 15s; the run registers within seconds
+    # ~10 min at 15s when a run is expected (it registers within seconds);
+    # a short grace poll otherwise, in case CI_PUSH_PATHS drifted vs ci.yml.
+    attempts = 40 if expect_run else 4
+    for _ in range(attempts):
         run_id = _run(find, timeout=_PROBE_TIMEOUT_S).stdout.strip()
         if run_id:
             break
         time.sleep(15)
     if not run_id:
+        if not expect_run:
+            sys.stdout.write(
+                "PASS  main run: none expected — the merge diff matches no "
+                "ci.yml push path (PR-level CI validated the merge)\n"
+            )
+            return True
         sys.stdout.write("FAIL  land: no main ci.yml run appeared for the merge\n")
         return False
     _stream(["gh", "run", "watch", run_id, "--exit-status"])
@@ -460,7 +512,8 @@ def _merge_and_watch_main(workspace: Path, pr_number: int, head: str) -> bool:
     if not merge_oid:
         sys.stdout.write("FAIL  land: could not resolve the merge commit oid\n")
         return False
-    return _main_run_conclusion(merge_oid)
+    expect_run = expects_main_run(_pr_changed_paths(pr_number))
+    return _main_run_conclusion(merge_oid, expect_run=expect_run)
 
 
 def _land_merge_phase(workspace: Path, pr_number: int, *, resume: bool) -> bool | None:
@@ -477,9 +530,12 @@ def _land_merge_phase(workspace: Path, pr_number: int, *, resume: bool) -> bool 
             )
             return None
         merge_oid = _merge_commit_oid(pr_number)
-        if not merge_oid or not _main_run_conclusion(merge_oid):
+        pr_paths = _pr_changed_paths(pr_number)
+        if not merge_oid or not _main_run_conclusion(
+            merge_oid, expect_run=expects_main_run(pr_paths)
+        ):
             return None
-        return touches_surface(_pr_changed_paths(pr_number))
+        return touches_surface(pr_paths)
     preflight = _land_preflight(pr_number)
     if preflight is None:
         return None

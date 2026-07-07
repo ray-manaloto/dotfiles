@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
+import subprocess
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -19,6 +21,7 @@ from dotfiles_setup.image import (
     build_smoke_docker_cmd,
     build_smoke_script,
     diff_tool_sets,
+    identity_expected_hash,
     installed_tools_from_mise_ls,
     parse_declared_tools,
     resolve_declared_tools,
@@ -507,3 +510,74 @@ def test_sum_manifest_layer_sizes_single_manifest() -> None:
     assert (
         _sum_manifest_layer_sizes(raw, "ghcr.io/owner/repo:tag") == _LAYERS_TOTAL_BYTES
     )
+
+
+# --------------------------------------- tier-1 identity (merge-base aware)
+
+
+def _git(repo: Path, *args: str) -> None:
+    subprocess.run(
+        ["git", "-C", str(repo), *args],
+        check=True,
+        capture_output=True,
+        env={
+            **os.environ,
+            "GIT_AUTHOR_NAME": "t",
+            "GIT_AUTHOR_EMAIL": "t@t",
+            "GIT_COMMITTER_NAME": "t",
+            "GIT_COMMITTER_EMAIL": "t@t",
+        },
+    )
+
+
+def _identity_fixture_repo(tmp_path: Path) -> Path:
+    """A repo where origin/main pins config.toml at its ORIGINAL content."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-b", "main")
+    (repo / "config.toml").write_text("original\n")
+    (repo / "other.toml").write_text("untouched\n")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-m", "base")
+    _git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+    return repo
+
+
+def test_identity_expected_unchanged_file_uses_worktree(tmp_path: Path) -> None:
+    repo = _identity_fixture_repo(tmp_path)
+    expected = hashlib.sha256(b"untouched\n").hexdigest()
+    assert identity_expected_hash(repo, "other.toml") == expected
+
+
+def test_identity_expected_branch_change_uses_merge_base(tmp_path: Path) -> None:
+    """A branch that changes an image input expects the MERGE-BASE blob.
+
+    The local base can never be built from the branch's config (that base
+    is built by the branch's own PR CI), so tier-1 identity must expect
+    the integrated content — the exact ship-gate deadlock of the #178
+    follow-up (jq CVE bump PR).
+    """
+    repo = _identity_fixture_repo(tmp_path)
+    _git(repo, "checkout", "-b", "bump")
+    (repo / "config.toml").write_text("bumped\n")
+    _git(repo, "commit", "-am", "bump config")
+    expected = hashlib.sha256(b"original\n").hexdigest()
+    assert identity_expected_hash(repo, "config.toml") == expected
+
+
+def test_identity_expected_on_main_equals_worktree(tmp_path: Path) -> None:
+    """On main (merge-base == HEAD) the expectation is the committed file."""
+    repo = _identity_fixture_repo(tmp_path)
+    expected = hashlib.sha256(b"original\n").hexdigest()
+    assert identity_expected_hash(repo, "config.toml") == expected
+
+
+def test_identity_expected_falls_back_without_origin_main(tmp_path: Path) -> None:
+    repo = tmp_path / "bare-checkout"
+    repo.mkdir()
+    _git(repo, "init", "-b", "main")
+    (repo / "config.toml").write_text("only-local\n")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-m", "no origin")
+    expected = hashlib.sha256(b"only-local\n").hexdigest()
+    assert identity_expected_hash(repo, "config.toml") == expected

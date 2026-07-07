@@ -30,13 +30,19 @@ echo "[tier1] image identity — mise-system config hash"
 # runtime (Dockerfile.host-user + devcontainer.json) to the USER config dir
 # /home/<user>/.config/mise, a chezmoi-rendered file in the persistent home
 # volume — a different file that false-fails this check on a current base.
+# Expected hashes come from `dotfiles-setup image identity-expected` (not a
+# raw sha256sum of the worktree file): a branch that CHANGES an image build
+# input can never have a local base built from it — the new base is built by
+# that PR's own CI — so the expected hash is the MERGE-BASE blob for
+# branch-modified inputs and the worktree file otherwise (identical on main).
+# Branch-config identity is validated by the PR CI build+smoke instead.
 sys_cfg="${MISE_SYSTEM_CONFIG_FILE:-/usr/local/share/mise/config.toml}"
 repo_cfg="${WORKSPACE_FOLDER}/.devcontainer/mise-system.toml"
 if [ -f "$repo_cfg" ]; then
-  expected_cfg_hash="$(sha256sum "$repo_cfg" | cut -d' ' -f1)"
+  expected_cfg_hash="$(cd "${WORKSPACE_FOLDER}" && uv run --project python dotfiles-setup image identity-expected .devcontainer/mise-system.toml)"
   actual_cfg_hash="$(sha256sum "$sys_cfg" | cut -d' ' -f1)"
   if [ "$actual_cfg_hash" != "$expected_cfg_hash" ]; then
-    echo "  FAIL: in-image mise config ${actual_cfg_hash} != repo mise-system.toml ${expected_cfg_hash} (stale/cached image — rebuild)" >&2
+    echo "  FAIL: in-image mise config ${actual_cfg_hash} != expected mise-system.toml ${expected_cfg_hash} (stale/cached image — rebuild)" >&2
     exit 1
   fi
   echo "  OK: image built from current mise-system.toml (${actual_cfg_hash})"
@@ -45,17 +51,18 @@ if [ -f "$repo_cfg" ]; then
   # too, and a base stale w.r.t. either passed this gate. Compare all
   # in-image config tiers that have a repo-side source of truth.
   for pair in \
-    "/usr/local/share/mise/conf.d/shared.toml:${WORKSPACE_FOLDER}/.config/mise/conf.d/shared.toml" \
-    "/usr/local/share/mise/config.runtime.toml:${WORKSPACE_FOLDER}/.devcontainer/mise-runtime.toml"; do
-    img_file="${pair%%:*}"; src_file="${pair##*:}"
+    "/usr/local/share/mise/conf.d/shared.toml:.config/mise/conf.d/shared.toml" \
+    "/usr/local/share/mise/config.runtime.toml:.devcontainer/mise-runtime.toml"; do
+    img_file="${pair%%:*}"; src_rel="${pair##*:}"
+    src_file="${WORKSPACE_FOLDER}/${src_rel}"
     if [ -f "$src_file" ] && [ -f "$img_file" ]; then
-      want="$(sha256sum "$src_file" | cut -d' ' -f1)"
+      want="$(cd "${WORKSPACE_FOLDER}" && uv run --project python dotfiles-setup image identity-expected "$src_rel")"
       got="$(sha256sum "$img_file" | cut -d' ' -f1)"
       if [ "$got" != "$want" ]; then
-        echo "  FAIL: in-image $(basename "$img_file") ${got} != repo $(basename "$src_file") ${want} (stale/cached image — rebuild)" >&2
+        echo "  FAIL: in-image $(basename "$img_file") ${got} != expected $(basename "$src_rel") ${want} (stale/cached image — rebuild)" >&2
         exit 1
       fi
-      echo "  OK: image built from current $(basename "$src_file") (${got})"
+      echo "  OK: image built from current $(basename "$src_rel") (${got})"
     fi
   done
 else
