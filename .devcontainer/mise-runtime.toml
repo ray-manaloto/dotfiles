@@ -1,0 +1,64 @@
+# :schema https://mise.jdx.dev/schema/mise.json
+#
+# RUNTIME TIER (#160 T9): the locked dev tools shipped in the image but NOT
+# needed to build it. COPYd to /usr/local/share/mise/config.runtime.toml by
+# the devcontainer-runtime stage (#160 T10) and installed there with
+# MISE_ENV=runtime — mise discovers config.<env>.toml beside config.toml in
+# $MISE_CONFIG_DIR and merges it additively (probe-verified, T9). The final
+# image sets ENV MISE_ENV=runtime so runtime containers keep loading it.
+#
+# Splitting these out of mise-system.toml keeps the heavy base stage's
+# content-hash stable when a dev tool changes: editing THIS file rebuilds
+# only the thin runtime stage, not the ~30-min base (nor p2996).
+#
+# Locked by .devcontainer/mise-runtime.lock (mise writes per-env
+# mise.<env>.lock files natively; regenerated together with the other locks
+# by the daily lock-refresh job / the T8 staging recipe under
+# MISE_ENV=runtime).
+#
+# Tier criteria: needed at dev time, versioned deliberately (locked), no
+# image-build role. Interactive session tools (fzf, starship, htop, …)
+# are NOT here — they live in the per-user chezmoi overlay
+# (home/dot_config/mise/config.toml.tmpl), free on "latest".
+
+[settings]
+# The AI CLIs below release faster than weekly, so the 7d
+# minimum_release_age gate (mise-system.toml [settings]) makes their locked
+# "latest" uninstallable almost always: `mise lock` resolves latest WITHOUT
+# the age cutoff, then forwards the gate to bun at install time, which
+# blocks the exact locked pin (PR #169 cold build: codex 0.142.5 at 5.7d).
+# Native escape hatch, scoped to this tier so mise-system.toml (a base-hash
+# input) stays byte-identical. [settings] in an env config merges under
+# MISE_ENV=runtime (probe-verified 2026-07-06).
+minimum_release_age_excludes = ["npm:@openai/codex", "npm:@google/gemini-cli"]
+
+[tools]
+# Dev CLIs
+"npm:ajv-cli" = "latest"
+"github:cli/cli" = "latest"
+"conda:rsync" = "latest"
+"conda:curl" = "latest"
+"fnox" = "latest"
+"usage" = "latest"
+"gitlab:graphviz/graphviz" = "latest"
+# Build systems & C++ tooling
+bats = "latest"
+"github:go-task/task" = "latest"
+"github:mozilla/sccache" = "latest"
+# pipx tools (C++ ecosystem)
+"pipx:meson" = "latest"
+"pipx:conan" = "latest"
+"pipx:cpplint" = "latest"
+"pipx:flawfinder" = "latest"
+"pipx:lizard" = "latest"
+"pipx:cmakelang" = "latest"
+"pipx:codechecker" = "latest"
+"pipx:gcovr" = "latest"
+# AI CLIs (depends=node: npm resolution needs node, provided by the base tier)
+# claude-code uses the http:claude backend (native binary, no npm)
+claude-code = "latest"
+"npm:@google/gemini-cli" = { version = "latest", depends = ["node"] }
+"npm:@openai/codex" = { version = "latest", depends = ["node"] }
+# Databases
+"github:tursodatabase/turso" = "latest"
+"libsql-server" = "latest"

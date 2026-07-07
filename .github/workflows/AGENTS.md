@@ -13,21 +13,22 @@ post-failure reporting.
 | File | Purpose |
 |------|---------|
 | `ci.yml` | Thin caller (Phase B, #118): lint → contract-preflight → `changes` (path-gate) → `build-publish` (the reusable build chain, gated on `changes.build` + push-to-main exemption); OR lint → promote (push to main) |
-| `build-publish.yml` | Reusable (`on: workflow_call`) build chain: base-prep → p2996-prep → dev-prep → build → smoke-test → dev-tag (dev-prep/dev-tag = 3rd content-hash tier, #122). Inputs `{tag_strategy, publish, target, ref, p2996_ref, platform*}` (`p2996_ref` #120; `*` reserved); outputs `{image_ref, digest}`. Caller's `github` context → sha/pr tags resolve identically |
-| `ci-failure-report.yml` | Post-failure diagnostics / issue filing |
+| `build-publish.yml` | Reusable (`on: workflow_call`) build chain: base-prep → p2996-prep → dev-prep → build → smoke-test → dev-tag (dev-prep/dev-tag = 3rd content-hash tier, #122). Inputs `{tag_strategy, publish, target, ref, p2996_ref, platform*}` (#120; `*` reserved); outputs `{image_ref, digest}`. Caller's `github` context → sha/pr tags resolve identically |
+| `ci-failure-report.yml` | Post-failure diagnostics |
 | `image-analysis.yml` | Async (`workflow_run` on CI success): benchmark metrics + Trivy CVE scan, off the PR critical path |
-| `refresh.yml` | Daily cron (00:00), two independent jobs: `snapshot-refresh` (refresh `mise-system-resolved.json` on conda-forge drift, **auto-merges**) and `p2996-refresh` (bump `CLANG_P2996_REF` to `bloomberg/clang-p2996` HEAD, **review-required**, #100). Each mints an App token (#119) so its PR fires CI on its own; both PR via `open-refresh-pr`. See **GitHub App** below. |
+| `refresh.yml` | Daily cron (00:00), one `lock-refresh` job (#160 T8): regenerates all four lockfiles via the `lock-refresh` composite (pinned image mise, linux-x64), PRs via `open-refresh-pr` (App token #119), **auto-merges**. `CLANG_P2996_REF` bumps: Renovate git-refs. |
+| `ghcr-cleanup.yml` | Weekly hash-family retention plan (#160 T12.5); dry-run ALWAYS — delete only via dispatch `delete=true` after plan review. Planner: `dotfiles_setup.ghcr_cleanup` |
 | `dispatch-build.yml` | Thin `repository_dispatch` caller (Phase D, #120, type `build-p2996`): calls `build-publish.yml` with `client_payload.{p2996_ref,ref?}` + `tag_strategy: dispatch` for on-demand exact-upstream-SHA builds. Never moves `:dev`/`:latest`; warms `:p2996-<hash>`/`:dev-<hash>`. See **Phase D** below. |
 
 ## Composite actions (`.github/actions/`)
 
 Self-documented in each `action.yml`: `setup-mise` (wraps `jdx/mise-action`
-+ `install_args`, all 8 mise jobs) and `open-refresh-pr` (App-token create-PR
-+ optional squash auto-merge, both `refresh.yml` jobs). **Local-composite
-checkout gotcha:** `./.github/actions/*` resolves from `$GITHUB_WORKSPACE`
-(empty until checkout), so jobs `actions/checkout` FIRST, then the composite.
-**Composites can't read `secrets`** — the App token is minted in
-`refresh.yml`, passed in.
++ `install_args`), `lock-refresh` (regenerates the three lockfiles, #160
+T8), and `open-refresh-pr` (App-token create-PR + optional squash
+auto-merge). **Local-composite checkout gotcha:** `./.github/actions/*`
+resolves from `$GITHUB_WORKSPACE` (empty until checkout), so jobs
+`actions/checkout` FIRST, then the composite. **Composites can't read
+`secrets`** — the App token is minted in `refresh.yml`, passed in.
 
 ## Pipeline stages
 
@@ -44,24 +45,24 @@ behavior unchanged):
 3. **base-prep** — `dotfiles-setup base-hash` → probe `:base-<hash16>`
    (`docker manifest inspect`). Hit: <30s. Miss: build the `base` bake
    target (devcontainer-base = apt + mise install + cargo), push it;
-   p2996-prep + build pull it instead of rebuilding the mise layer.
+   build consumes it as a digest-pinned named context (not a rebuild).
    base-hash covers the BYTES of every base-section COPY input —
-   `mise-system.toml` (#140), `hk-common.pkl`/`hk-image.pkl` (#156). Since
-   p2996-hash folds base-hash, ANY edit busts BOTH tiers → a cold ~2h
-   rebuild (batch in-image config edits).
+   `mise-system.toml` (#140), `hk-common.pkl`/`hk-image.pkl` (#156).
+   Independent of p2996-hash since #160 T11: base edits rebuild ONLY the
+   base tier; the compiler cache stays warm.
 4. **p2996-prep** — `dotfiles-setup p2996-hash` → probe `:p2996-<hash16>`.
    Hit: <30s. Miss: build the `p2996-cache` bake target (scratch
    `p2996-export` with just `/opt/clang-p2996`, ~500 MB), push to GHCR.
 5. **dev-prep** (#122, PR builds only) — `dotfiles-setup dev-hash` → probe
    `:dev-<hash16>`. Hit: retag the validated image to `:sha`/`:pr-NNN`,
    skip build+smoke. Miss: fall through. Nightly skips this (always builds).
-6. **build** — `docker buildx bake dev` with `dev.args.P2996_SOURCE=<cache_ref>`;
-   on a p2996 hit `clang-builder` is `FROM <cache_ref>`, skipping the
-   multi-hour compile. Pushes `:pr-NNN`/`:sha` (PR) or `:dev`/`:latest` (nightly).
+6. **build** — `docker buildx bake dev` with digest-pinned named contexts
+   (`dev.contexts.{devcontainer-base,p2996-export}=docker-image://…@sha256:…`,
+   #160 T11) overriding the local stages — no multi-hour compile. Pushes `:pr-NNN`/`:sha` (PR) or `:dev`/`:latest` (nightly).
 7. **smoke-test** — pulls `:sha-<github.sha>`, runs the PR-blocking gates
-   `image smoke` + Dive (`.dive-ci`); benchmark + Trivy are async in
-   `image-analysis.yml`. On success **dev-tag** stamps the `:dev-<hash>`
-   validated marker — the smoked image is retagged `:dev`/`:latest`.
+   `image smoke` + Dive + the T7 bootstrap gap report; benchmark + Trivy
+   are async in `image-analysis.yml`. On success **dev-tag** stamps the
+   `:dev-<hash>` marker — the smoked image is retagged `:dev`/`:latest`.
 
 Push-to-main path (after a PR merge):
 
@@ -78,7 +79,7 @@ Push-to-main path (after a PR merge):
 - **Build chain is path-gated.** A `changes` job (dorny/paths-filter,
   `list-files: json`) matches image/test inputs (`.devcontainer/**`,
   `docker-bake.hcl`, `hk-common.pkl`, `hk-image.pkl`, `python/**`,
-  `.dive-ci`, `install.sh`, `ci.yml`); `decide` drops markdown-only matches
+  `.dive-ci`, `ci.yml`); `decide` drops markdown-only matches
   via `jq` (`!**/*.md` can't — `**/*.md` skips dot-dirs). So docs, root-mise,
   hk.pkl, home PRs run lint+contract-preflight only; schedule +
   workflow_dispatch always build.
@@ -104,9 +105,9 @@ Push-to-main path (after a PR merge):
   target) is tagged only AFTER smoke passes, so a PR hit skips build+smoke
   (retag to `:sha`/`:pr-NNN`). Nightly skips the dev probe and always rebuilds
   (catches rolling-tool drift the hash can't see).
-- **P2996 cache inputs.** Key = `CLANG_P2996_REF`, `BASE_IMAGE`, `PLATFORM`,
-  Dockerfile, bake, `mise-system-resolved.json`, `mise-system.toml`. Bust:
-  `mise run capture-mise-system-resolved` (`.devcontainer/P2996-CACHE.md`).
+- **P2996 cache inputs.** Key = `CLANG_P2996_REF`, `BUILDER_IMAGE`,
+  `PLATFORM`, Dockerfile p2996 section — decoupled from base-hash
+  (#160 T11). See `.devcontainer/P2996-CACHE.md`.
 - **`uv run --project python`**, not `--directory` — `--directory`
   changes cwd and breaks relative test paths.
 - **Use `--watch`, never sleep-poll** (`gh pr checks <n> --watch`); the
@@ -130,7 +131,7 @@ GHA `schedule.cron` honors a sibling `timezone:` field (IANA zone), e.g.
 
 | Time | Workflow | Role |
 |------|----------|------|
-| 00:00 | `refresh.yml` | **Changes the pins.** `snapshot-refresh` + `p2996-refresh` jobs detect upstream drift (conda-forge snapshot / `clang-p2996` HEAD) and open PRs — no build. |
+| 00:00 | `refresh.yml` | **Changes the pins.** `lock-refresh` re-resolves the three lockfiles and opens an auto-merging PR on drift — no build. |
 | 02:00 | `ci.yml` nightly | **Publishes on the pinned ref.** Rebuilds `:dev`/`:latest` on the *current* pins (catches base-image CVEs / floating-tool drift the pins don't move). |
 
 The 2h gap lets a 00:00 refresh PR, merged before 02:00, be what the
@@ -144,9 +145,9 @@ repo-admin setup:** (1) create a GitHub App with **contents: write +
 pull-requests: write**, install it, add secrets `REFRESH_APP_ID` (**numeric
 App ID**, not Client ID `Iv…`) + `REFRESH_APP_PRIVATE_KEY`; (2) enable
 **Allow auto-merge**; (3) branch protection on `main` requiring **`ci-gate`**
-— else `--auto` lands before smoke. Policy: snapshot auto-merges (squash)
-once smoke passes; p2996 is review-required. `ci-gate` (always-run: passes
-when upstream succeed/skip) lets non-build PRs merge without admin.
+— else `--auto` lands before smoke. Policy: lock-refresh auto-merges
+(squash) once ci-gate passes. `ci-gate` (always-run: passes when upstream
+succeed/skip) lets non-build PRs merge without admin.
 
 ## Phase D — on-demand p2996 build (#120)
 

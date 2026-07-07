@@ -1,8 +1,10 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "github>jdx/renovate-config"
+    "github>jdx/renovate-config",
+    "schedule:daily"
   ],
+  "minimumReleaseAge": null,
   "packageRules": [
     {
       "matchPackageNames": ["bats-core"],
@@ -18,6 +20,12 @@
       "automerge": true,
       "automergeType": "pr",
       "platformAutomerge": true
+    },
+    {
+      "description": "Parse the gcc-latest version out of the jwakely index hrefs (the html datasource yields full URLs as version candidates; the rolling gcc-latest.deb link has no version and is filtered out). timestamp-optional fixes a real bug (#160 T12.5): the html datasource emits NO releaseTimestamp, and the default minimumReleaseAge behavior holds timestamp-less updates FOREVER.",
+      "matchDatasources": ["custom.gcc-latest"],
+      "extractVersion": "gcc-latest_(?<version>[0-9.]+-\\d+git[0-9a-f]+)\\.deb$",
+      "minimumReleaseAgeBehaviour": "timestamp-optional"
     }
   ],
   "ignoreDeps": ["CC", "CXX"],
@@ -53,8 +61,45 @@
       "packageNameTemplate": "https://github.com/bloomberg/clang-p2996",
       "currentValueTemplate": "p2996",
       "datasourceTemplate": "git-refs"
+    },
+    {
+      "customType": "regex",
+      "description": "gcc-latest.deb dated URL pin. Upstream (kayari) publishes NO checksum/signature — the immutable dated filename is the reproducibility handle. Bumped via the custom.gcc-latest HTML datasource on the jwakely index; no native/preset manager covers a rolling .deb URL.",
+      "managerFilePatterns": ["/\\.devcontainer/Dockerfile$/"],
+      "matchStrings": [
+        "ARG GCC_LATEST_DEB=gcc-latest_(?<currentValue>[0-9.]+-\\d+git[0-9a-f]+)\\.deb"
+      ],
+      "depNameTemplate": "gcc-latest",
+      "datasourceTemplate": "custom.gcc-latest",
+      "versioningTemplate": "loose"
+    },
+    {
+      "customType": "regex",
+      "description": "ubuntu base image digest pin in docker-bake.hcl + Dockerfile ARG. The native docker/dockerfile managers do not parse bake HCL, and the digest feeds the base content-hash, so keep both files in lockstep here.",
+      "managerFilePatterns": ["/docker-bake\\.hcl$/", "/\\.devcontainer/Dockerfile$/"],
+      "matchStrings": [
+        "ubuntu:(?<currentValue>[0-9.]+)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "depNameTemplate": "ubuntu",
+      "datasourceTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "mise installer version pin (curl https://mise.run honors MISE_VERSION). The pin must track a mise version that reads the committed mise-system.lock format — Renovate bumps it, and the CI lock-refresh job regenerates the lock in lockstep.",
+      "managerFilePatterns": ["/\\.devcontainer/Dockerfile$/"],
+      "matchStrings": [
+        "ARG MISE_VERSION=(?<currentValue>[0-9.]+)"
+      ],
+      "depNameTemplate": "jdx/mise",
+      "datasourceTemplate": "github-releases"
     }
   ],
+  "customDatasources": {
+    "gcc-latest": {
+      "defaultRegistryUrlTemplate": "https://jwakely.github.io/pkg-gcc-latest/",
+      "format": "html"
+    }
+  },
   "enabledManagers": ["npm", "cargo", "mise", "dockerfile", "docker-compose", "devcontainer", "github-actions", "custom.regex"],
   "vulnerabilityAlerts": {
     "enabled": true

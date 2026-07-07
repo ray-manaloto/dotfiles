@@ -5,11 +5,13 @@ separately so each only invalidates when ITS inputs change:
 
 - `:base-<base_hash>` — devcontainer-base stage (apt + mise install +
   cargo crates). ~30 min cold. Invalidates on Dockerfile base-section
-  changes, mise-system-resolved.json drift, BASE_IMAGE bump.
+  changes, mise-system.lock drift, BASE_IMAGE bump.
 - `:p2996-<p2996_hash>` — clang-builder-cold + p2996-export stages.
   ~80-120 min cold. Invalidates on CLANG_P2996_REF bump, p2996-section
-  Dockerfile changes, OR base-hash changes (since a base toolchain
-  shift could affect the compile).
+  Dockerfile changes, BUILDER_IMAGE digest bump, or PLATFORM change.
+  INDEPENDENT of base-hash since #160 T11 (the builder compiles FROM
+  the parameterized BUILDER_IMAGE with its own apt toolchain, so
+  mise/hk/base-config edits never rebuild the compiler).
 - `:dev` / `:sha-<sha>` — final image. Pure pull + COPY when both
   caches hit. ~5-10 min.
 
@@ -38,7 +40,11 @@ HASH_LENGTH = 16
 # v4: base-hash covers hk-common.pkl + hk-image.pkl (Dockerfile base-section
 # COPY inputs — their bytes were unhashed, so #154's /etc/hk config change did
 # not bust the cache and CI skipped the rebuild).
-SCHEMA_VERSION = 4
+# v5 (epic #160 mega cold PR): base-hash reads the native `mise-system.lock`
+# digest instead of the retired `mise-system-resolved.json` snapshot (rattler
+# conda sha256 supersedes the version-only snapshot); the same bump also covers
+# the p2996 base-hash decouple in this PR — one coherent schema epoch.
+SCHEMA_VERSION = 5
 RECORD_SEPARATOR = "\x1f"  # ASCII unit separator — never appears in inputs
 SHA256_HEX_LEN = 64
 
@@ -58,8 +64,9 @@ class BaseHashInputs:
     base_image: str
     platform: str
     base_section_digest: str
-    snapshot_digest: str
+    mise_lock_digest: str
     mise_system_config_digest: str
+    shared_config_digest: str
     hk_config_digest: str
 
     def __post_init__(self) -> None:
@@ -71,8 +78,9 @@ class BaseHashInputs:
                 raise ValueError(msg)
         for field_name in (
             "base_section_digest",
-            "snapshot_digest",
+            "mise_lock_digest",
             "mise_system_config_digest",
+            "shared_config_digest",
             "hk_config_digest",
         ):
             value = getattr(self, field_name)
@@ -81,28 +89,28 @@ class BaseHashInputs:
 
 @dataclass(frozen=True)
 class P2996HashInputs:
-    """Inputs feeding the `:p2996-<hash>` cache image."""
+    """Inputs feeding the `:p2996-<hash>` cache image.
+
+    Decoupled from base-hash since #160 T11: the builder compiles FROM the
+    parameterized ``BUILDER_IMAGE`` with its own apt toolchain, so
+    mise/hk/base-config edits no longer move this hash (and no longer
+    trigger the ~2h compiler rebuild). ``builder_image`` (the digest-pinned
+    builder ref from bake) and ``platform`` are the first-class
+    replacements — either changing means different compiler inputs.
+    """
 
     clang_p2996_ref: str
-    base_hash: str
+    builder_image: str
     platform: str
     p2996_section_digest: str
 
     def __post_init__(self) -> None:
         """Reject empty literals + ill-shaped hashes."""
-        for field_name in ("clang_p2996_ref", "platform"):
+        for field_name in ("clang_p2996_ref", "builder_image", "platform"):
             value = getattr(self, field_name)
             if not value:
                 msg = f"P2996HashInputs.{field_name} must be non-empty"
                 raise ValueError(msg)
-        if len(self.base_hash) != HASH_LENGTH or not all(
-            c in "0123456789abcdef" for c in self.base_hash
-        ):
-            msg = (
-                f"P2996HashInputs.base_hash must be {HASH_LENGTH}-char "
-                f"lowercase hex; got {self.base_hash!r}"
-            )
-            raise ValueError(msg)
         _validate_hex_digest(
             self.p2996_section_digest, "P2996HashInputs.p2996_section_digest"
         )
@@ -125,6 +133,11 @@ class DevHashInputs:
     smoke-test, so two different image contents must never collide to
     one dev hash. Hashing the whole file is a safe superset (base/p2996
     edits already bust their own tiers, which feed this hash too).
+
+    The devcontainer-runtime stage (#160 T9/T10) COPYs two repo files
+    OUTSIDE the base sentinels — mise-runtime.toml and mise-runtime.lock —
+    so their BYTES are dev-hash inputs here (the COPY-input rule that
+    #140/#156 established for the base tier).
     """
 
     base_hash: str
@@ -132,6 +145,8 @@ class DevHashInputs:
     platform: str
     dockerfile_digest: str
     dev_target_digest: str
+    runtime_config_digest: str
+    runtime_lock_digest: str
 
     def __post_init__(self) -> None:
         """Reject empty literals + ill-shaped hashes."""
@@ -148,7 +163,12 @@ class DevHashInputs:
                     f"lowercase hex; got {value!r}"
                 )
                 raise ValueError(msg)
-        for field_name in ("dockerfile_digest", "dev_target_digest"):
+        for field_name in (
+            "dockerfile_digest",
+            "dev_target_digest",
+            "runtime_config_digest",
+            "runtime_lock_digest",
+        ):
             _validate_hex_digest(
                 getattr(self, field_name), f"DevHashInputs.{field_name}"
             )
@@ -256,14 +276,27 @@ def gather_base_inputs(repo_root: Path) -> BaseHashInputs:
     base_section = _extract_dockerfile_section(
         dockerfile_text, BASE_SECTION_BEGIN, BASE_SECTION_END
     )
-    snapshot_path = repo_root / ".devcontainer" / "mise-system-resolved.json"
-    # The Dockerfile base section COPYs mise-system.toml verbatim into the
-    # image (/usr/local/share/mise/config.toml), so its BYTES are a build
-    # input. The base_section_digest only captures the COPY *instruction*,
-    # not the file content — hashing the file closes that gap so [settings]/
-    # [env]/[tasks] edits (which don't move the resolved snapshot) still bust
-    # the cache and trigger a rebuild. See PR #140.
+    # The Dockerfile base section COPYs mise-system.lock verbatim into the
+    # image (/usr/local/share/mise/mise.lock) and `mise install --system
+    # --locked` consumes it, so its BYTES are a build input. The lock (rattler
+    # conda sha256 + version pins for all backends) replaces the retired
+    # version-only mise-system-resolved.json snapshot: conda-forge drift now
+    # moves the lock's checksums, busting the cache deterministically. See
+    # epic #160.
+    lock_path = repo_root / ".devcontainer" / "mise-system.lock"
+    # The base section also COPYs mise-system.toml verbatim into the image
+    # (/usr/local/share/mise/config.toml), so its BYTES are a build input. The
+    # base_section_digest only captures the COPY *instruction*, not the file
+    # content — hashing the file closes that gap so [settings]/[env]/[tasks]
+    # edits (which don't move the lock) still bust the cache and trigger a
+    # rebuild. See PR #140.
     mise_system_config_path = repo_root / ".devcontainer" / "mise-system.toml"
+    # The base section also COPYs the shared conf.d fragment to
+    # /usr/local/share/mise/conf.d/shared.toml — it supplies the 20 exact-pinned
+    # host↔image tools that mise merges into the system config, so its bytes are
+    # a build input too (a version bump there changes what gets installed). See
+    # epic #160 T5.
+    shared_config_path = repo_root / ".config" / "mise" / "conf.d" / "shared.toml"
     # The base section also COPYs hk-common.pkl + hk-image.pkl verbatim to
     # /etc/hk/ (the in-image hk config the devcontainer smoke uses). Same gap as
     # mise-system.toml: base_section_digest captures the COPY *instruction*, not
@@ -278,8 +311,9 @@ def gather_base_inputs(repo_root: Path) -> BaseHashInputs:
         base_image=_extract_bake_variable(bake_text, "BASE_IMAGE"),
         platform=_extract_bake_variable(bake_text, "PLATFORM"),
         base_section_digest=_sha256_hex(base_section),
-        snapshot_digest=_file_digest(snapshot_path),
+        mise_lock_digest=_file_digest(lock_path),
         mise_system_config_digest=_file_digest(mise_system_config_path),
+        shared_config_digest=_file_digest(shared_config_path),
         hk_config_digest=hk_config_digest,
     )
 
@@ -293,8 +327,9 @@ def compute_base_hash(inputs: BaseHashInputs) -> str:
             f"base_image={inputs.base_image}",
             f"platform={inputs.platform}",
             f"base_section={inputs.base_section_digest}",
-            f"snapshot={inputs.snapshot_digest}",
+            f"mise_lock={inputs.mise_lock_digest}",
             f"mise_system_config={inputs.mise_system_config_digest}",
+            f"shared_config={inputs.shared_config_digest}",
             f"hk_config={inputs.hk_config_digest}",
         ],
     )
@@ -307,13 +342,12 @@ def compute_repo_base_hash(repo_root: Path) -> str:
 
 
 def gather_p2996_inputs(
-    repo_root: Path, *, base_hash: str, clang_p2996_ref: str | None = None
+    repo_root: Path, *, clang_p2996_ref: str | None = None
 ) -> P2996HashInputs:
     """Read every input that contributes to the `:p2996-<hash>` cache.
 
-    `base_hash` is passed in (rather than recomputed) so the caller
-    controls when the base reference is captured — same value reused
-    across multiple p2996 hash computations.
+    Independent of base-hash since #160 T11 (the builder is decoupled);
+    the builder ref and platform come from docker-bake.hcl.
 
     `clang_p2996_ref`, when given, overrides the `CLANG_P2996_REF`
     default read from docker-bake.hcl — the Phase D (#120) "build this
@@ -334,7 +368,7 @@ def gather_p2996_inputs(
             if clang_p2996_ref is not None
             else _extract_bake_variable(bake_text, "CLANG_P2996_REF")
         ),
-        base_hash=base_hash,
+        builder_image=_extract_bake_variable(bake_text, "BUILDER_IMAGE"),
         platform=_extract_bake_variable(bake_text, "PLATFORM"),
         p2996_section_digest=_sha256_hex(p2996_section),
     )
@@ -347,7 +381,7 @@ def compute_p2996_hash(inputs: P2996HashInputs) -> str:
             f"schema={SCHEMA_VERSION}",
             "kind=p2996",
             f"clang_p2996_ref={inputs.clang_p2996_ref}",
-            f"base_hash={inputs.base_hash}",
+            f"builder_image={inputs.builder_image}",
             f"platform={inputs.platform}",
             f"p2996_section={inputs.p2996_section_digest}",
         ],
@@ -358,16 +392,13 @@ def compute_p2996_hash(inputs: P2996HashInputs) -> str:
 def compute_repo_p2996_hash(
     repo_root: Path, *, clang_p2996_ref: str | None = None
 ) -> str:
-    """Top-level helper: compute base hash, then p2996 hash on top.
+    """Top-level helper: compute the p2996 hash (no base dependency, T11).
 
     `clang_p2996_ref` overrides the committed `CLANG_P2996_REF` pin for
     the Phase D (#120) on-demand build path; `None` uses the pin.
     """
-    base_hash = compute_repo_base_hash(repo_root)
     return compute_p2996_hash(
-        gather_p2996_inputs(
-            repo_root, base_hash=base_hash, clang_p2996_ref=clang_p2996_ref
-        )
+        gather_p2996_inputs(repo_root, clang_p2996_ref=clang_p2996_ref)
     )
 
 
@@ -389,6 +420,12 @@ def gather_dev_inputs(
         dev_target_digest=_sha256_hex(
             _extract_bake_target_block(bake_text, DEV_BAKE_TARGET)
         ),
+        runtime_config_digest=_sha256_hex(
+            (repo_root / ".devcontainer" / "mise-runtime.toml").read_text()
+        ),
+        runtime_lock_digest=_sha256_hex(
+            (repo_root / ".devcontainer" / "mise-runtime.lock").read_text()
+        ),
     )
 
 
@@ -403,6 +440,8 @@ def compute_dev_hash(inputs: DevHashInputs) -> str:
             f"platform={inputs.platform}",
             f"dockerfile={inputs.dockerfile_digest}",
             f"dev_target={inputs.dev_target_digest}",
+            f"runtime_config={inputs.runtime_config_digest}",
+            f"runtime_lock={inputs.runtime_lock_digest}",
         ],
     )
     return _sha256_hex(canonical)[:HASH_LENGTH]
@@ -422,9 +461,7 @@ def compute_repo_dev_hash(
     """
     base_hash = compute_repo_base_hash(repo_root)
     p2996_hash = compute_p2996_hash(
-        gather_p2996_inputs(
-            repo_root, base_hash=base_hash, clang_p2996_ref=clang_p2996_ref
-        )
+        gather_p2996_inputs(repo_root, clang_p2996_ref=clang_p2996_ref)
     )
     return compute_dev_hash(
         gather_dev_inputs(repo_root, base_hash=base_hash, p2996_hash=p2996_hash)

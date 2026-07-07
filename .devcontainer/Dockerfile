@@ -7,22 +7,27 @@
 # stage-local).
 # ────────────────────────────────────────────────────────────────────
 
-# Base ubuntu image for the `devcontainer-base` stage.
-ARG BASE_IMAGE=ubuntu:26.04
+# Base ubuntu image for the `devcontainer-base` stage. Digest-pinned to the
+# 26.04 manifest-list (multi-arch resolution preserved); Renovate bumps the
+# digest via the custom `ubuntu` manager (docker datasource). Keep in lockstep
+# with docker-bake.hcl's BASE_IMAGE default (the base hash reads bake).
+ARG BASE_IMAGE=ubuntu:26.04@sha256:b7f48194d4d8b763a478a621cdc81c27be222ba2206ca3ca6bc42b49685f3d9e
 
-# Indirection point for the cold-built clang-p2996 install prefix.
-# Default `p2996-export` builds locally; CI passes a published
-# `ghcr.io/<owner>/<repo>:p2996-<hash16>` ref to skip the compile.
-ARG P2996_SOURCE=p2996-export
+# Builder image for the clang-p2996 compile (#160 T11). DELIBERATELY a
+# separate, rarely-bumped variable (NOT Renovate-tracked): its digest is a
+# first-class p2996-hash input, so a bump forces the ~2h compiler rebuild —
+# decoupled from routine BASE_IMAGE bumps. The builder never ships bytes
+# into the final image (only /opt/clang-p2996 is exported), so pinning it
+# older than BASE_IMAGE is ABI-safe while both are the same ubuntu series.
+# Keep in lockstep with docker-bake.hcl's BUILDER_IMAGE default.
+ARG BUILDER_IMAGE=ubuntu:26.04@sha256:b7f48194d4d8b763a478a621cdc81c27be222ba2206ca3ca6bc42b49685f3d9e
 
-# Indirection point for the (heavy, ~30 min) devcontainer-base stage.
-# Default `devcontainer-base` builds the stage in-tree; CI passes a
-# published `ghcr.io/<owner>/<repo>:base-<hash16>` ref so the
-# p2996-cache and dev targets pull a pre-built base instead of
-# rebuilding the apt + mise install + cargo crates layers from scratch.
-# This is the main lever that lets `mise install --system` cost get
-# amortized across PRs — change p2996 inputs, the base hash stays put.
-ARG DEVCONTAINER_BASE_REF=devcontainer-base
+# NOTE (#160 T11): the former ARG P2996_SOURCE / ARG DEVCONTAINER_BASE_REF
+# FROM-indirection is retired. CI now injects prebuilt tiers as
+# digest-pinned NAMED BUILD CONTEXTS that override the same-named local
+# stages (bake `dev.contexts.devcontainer-base=docker-image://…@sha256:…`,
+# `dev.contexts.p2996-export=…`); absent contexts, the local stages build
+# — the native cold/warm switch with zero Dockerfile plumbing.
 
 # ──── BASE_HASH_BEGIN ──── (sentinel for python/.../p2996_hash.py)
 FROM ${BASE_IMAGE} AS devcontainer-base
@@ -59,11 +64,17 @@ ARG DEBIAN_FRONTEND=noninteractive
 #     runtime users fall back to ~/.cargo / ~/.rustup defaults; PR-2
 #     mounts named volumes there for per-clone persistence and
 #     cookbook shadow-priority semantics.
+# MISE_SYSTEM_CONFIG_FILE is intentionally NOT set: it short-circuits
+# mise's system_config_files() to that ONE file, hiding conf.d/shared.toml
+# and config.runtime.toml from the system axis. The devcontainer runtime
+# re-points MISE_CONFIG_DIR at the user dir (overlay tier), so system-axis
+# *directory discovery* via MISE_SYSTEM_CONFIG_DIR is the only thing
+# keeping the shared + runtime tiers resolvable there (probe-verified in
+# :pr-169; a baked FILE pin broke `chezmoi init` onCreate — PR #169).
 ENV MISE_DATA_DIR=/usr/local/share/mise \
     MISE_CONFIG_DIR=/usr/local/share/mise \
     MISE_INSTALL_PATH=/usr/local/bin/mise \
     MISE_SYSTEM_CONFIG_DIR=/usr/local/share/mise \
-    MISE_SYSTEM_CONFIG_FILE=/usr/local/share/mise/config.toml \
     MISE_TRUSTED_CONFIG_PATHS=/usr/local/share/mise:/workspaces/dotfiles \
     MISE_CARGO_HOME=/usr/local/share/cargo \
     MISE_RUSTUP_HOME=/usr/local/share/rustup \
@@ -71,33 +82,38 @@ ENV MISE_DATA_DIR=/usr/local/share/mise \
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
+# Seed layer: ONLY the minimal apt set the mise installer itself needs
+# (curl + ca-certificates). The full apt package set is declared in
+# mise-system.toml [bootstrap.packages] and installed by
+# `mise bootstrap packages apply` after the config COPY below (#160 T4,
+# wagov-dtt/devcontainer-base pattern — the shadow-verify split is retired).
+# The apt.conf.d drop-in disables Recommends/Suggests for EVERY apt
+# invocation in this image, including the mise-driven apply (mise has no
+# apt-args setting; native apt config replaces the per-command flag).
+# Lists/cache live in BuildKit cache mounts, never in a layer, so no
+# rm -rf cleanup is needed — and the preserved lists let the apply step
+# reuse them across builds.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     export DEBIAN_FRONTEND=noninteractive && \
+    printf 'APT::Install-Recommends "false";\nAPT::Install-Suggests "false";\n' \
+      > /etc/apt/apt.conf.d/99no-install-recommends && \
     sed -i '/^path-exclude=\/usr\/share\/man\/\*$/d' /etc/dpkg/dpkg.cfg.d/excludes && \
     apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
     ca-certificates \
-    curl \
-    gnupg \
-    graphviz \
-    pkg-config \
-    sudo \
-    unzip \
-    zsh \
-    libatomic1 \
-    libbz2-dev \
-    libreadline-dev \
-    libsqlite3-dev \
-    libssl-dev \
-    zlib1g-dev \
-    && rm -rf /var/lib/apt/lists/* /tmp/*
+    curl
 
-# Install latest mise via the official installer. Image is rebuilt on
-# every `main` push, so CDN drift is acceptable here. The mise.run
-# installer already chmods the binary; the explicit chmod is a belt-
-# and-braces guard against permission drift on the cache mount.
-RUN curl https://mise.run | sh && \
+# Install mise via the official installer, pinned via MISE_VERSION (mise.run
+# honors it). The pin MUST be a version that reads the committed
+# mise-system.lock format — lock formats are NOT cross-version compatible
+# (`mise install --locked` rejects a lock written by a different mise), and
+# the lock was generated with 2026.7.0 (epic #160 T1). Renovate bumps this via
+# the custom `jdx/mise` manager, which regenerates the lock in lockstep. The
+# mise.run installer already chmods the binary; the explicit chmod is a
+# belt-and-braces guard against permission drift on the cache mount.
+# renovate: datasource=github-releases depName=jdx/mise
+ARG MISE_VERSION=2026.7.0
+RUN curl https://mise.run | MISE_VERSION="v${MISE_VERSION}" sh && \
     chmod +x ${MISE_INSTALL_PATH} && \
     mise --version
 
@@ -109,6 +125,34 @@ RUN groupadd --gid 2000 mise && \
 
 # Copy dedicated system config — no chezmoi dependency, no sed stripping
 COPY .devcontainer/mise-system.toml /usr/local/share/mise/config.toml
+# The native mise lockfile (rattler conda sha256 + version pins for all 109
+# tools, generated for linux-x64). mise reads the lock as `mise.lock` beside
+# the data dir — NOT `config.lock` (verified: config.lock is silently ignored);
+# `mise install --system --locked` below consumes it. Replaces the retired
+# version-only mise-system-resolved.json snapshot. See epic #160.
+COPY .devcontainer/mise-system.lock /usr/local/share/mise/mise.lock
+# Shared host↔image tool versions (#160 T5). mise merges $MISE_CONFIG_DIR/conf.d/
+# *.toml into the system config, so these 20 exact-pinned tools are resolved the
+# same on the host (which loads the repo copy at .config/mise/conf.d/) and here.
+# Their versions are captured in mise-system.lock above and installed via
+# `mise install --system --locked`.
+COPY .config/mise/conf.d/shared.toml /usr/local/share/mise/conf.d/shared.toml
+
+# Install the full apt set declared in mise-system.toml [bootstrap.packages]
+# (#160 T4). Runs as root so mise elevates nothing (no sudo in argv); mise
+# sets DEBIAN_FRONTEND=noninteractive itself; --update forces apt-get update
+# against the cache-mounted lists; the experimental gate is satisfied by
+# `experimental = true` in the config COPYd above (trusted via
+# MISE_TRUSTED_CONFIG_PATHS). The `status --json --missing` post-condition
+# is the anti-drift gate: it exits 1 if any declared package is missing or
+# version-mismatched, so a silent apply no-op fails the build loudly
+# (build-time self-check rule). Accepted trade-off: the config COPY above
+# busts this layer on any mise-system.toml edit — mitigated by the cache
+# mounts keeping .deb downloads and lists warm.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    mise bootstrap packages apply --manager apt --yes --update && \
+    mise bootstrap packages status --json --missing
 
 # Pre-install tools globally via mise
 # Known cosmetic warnings during install:
@@ -137,7 +181,7 @@ RUN --mount=type=cache,id=mise-cache,target=/usr/local/share/mise/cache,sharing=
       export GITHUB_TOKEN && \
       export MISE_GITHUB_TOKEN="$GITHUB_TOKEN"; \
     fi && \
-    mise install --system -y && \
+    mise install --system --locked -y && \
     test "$(mise ls --installed | wc -l)" -gt 0 || { echo "ERROR: mise installed zero tools — system config not discovered (check MISE_CONFIG_DIR points at /usr/local/share/mise containing config.toml)"; exit 1; } && \
     test -d /usr/local/share/cargo/bin || { echo "ERROR: MISE_CARGO_HOME not honored — /usr/local/share/cargo/bin missing after mise install (rust cookbook regression)"; exit 1; } && \
     test -d /usr/local/share/rustup/toolchains || { echo "ERROR: MISE_RUSTUP_HOME not honored — /usr/local/share/rustup/toolchains missing after mise install (rust cookbook regression)"; exit 1; } && \
@@ -169,35 +213,41 @@ WORKDIR /workspaces
 # ──── P2996_HASH_BEGIN ──── (sentinel for python/.../p2996_hash.py)
 
 # ── clang-p2996 builder (Bloomberg fork, built from source) ──────────
-# Runs in parallel with devcontainer-base via BuildKit DAG.
-# Only the install prefix (/opt/clang-p2996) is COPY'd into the final
-# stage — the ~20GB build tree is discarded.
-#
-# Three-stage pattern:
-#   1. clang-builder-cold: heavy compile from source (multi-hour cold;
-#      see .devcontainer/P2996-CACHE.md for the current baseline).
-#      Inherits FROM ${DEVCONTAINER_BASE_REF}: defaults to local stage
-#      `devcontainer-base` (rebuilt in-tree); CI's base-prep job
-#      overrides with `ghcr.io/<owner>/<repo>:base-<hash16>` so the
-#      mise install layer is pulled, not rebuilt.
-#   2. p2996-export: scratch-based export of just /opt/clang-p2996
-#      (~500 MB — small enough for cheap GHCR push/pull as cache image)
-#   3. clang-builder: indirection layer; FROM ${P2996_SOURCE} resolves
-#      to either the local p2996-export (cold path) or to a pre-built
-#      cache image like ghcr.io/<owner>/<repo>:p2996-<hash16>.
-#
-# The dev target passes P2996_SOURCE=p2996-export by default; CI's
-# p2996-prep job overrides it with the cache image ref on hash hit.
-FROM ${DEVCONTAINER_BASE_REF} AS clang-builder-cold
+# Runs in parallel with devcontainer-base via BuildKit DAG — since #160
+# T11 the builder is fully DECOUPLED from devcontainer-base: it starts
+# from the parameterized ${BUILDER_IMAGE} and installs its own compile
+# toolchain via apt, so mise/hk/base-config edits never invalidate the
+# ~2h compiler build (p2996-hash no longer folds base-hash). Only the
+# install prefix (/opt/clang-p2996) ships — via the scratch
+# p2996-export stage (~500 MB), pushed to GHCR as :p2996-<hash16> and
+# re-consumed as a digest-pinned named build context on warm paths.
+FROM ${BUILDER_IMAGE} AS clang-builder-cold
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG CLANG_P2996_REPO=https://github.com/bloomberg/clang-p2996.git
-ARG CLANG_P2996_REF=9ffb96e3ce362289008e14ad2a79a249f58aa90a
+# Reconciled to match docker-bake.hcl's CLANG_P2996_REF default (#160 T3) —
+# CI's bake passes that value as a build arg (overriding this default), and
+# p2996_hash.py reads it from bake, so this default was stale drift. The
+# git-refs Renovate manager rewrites BOTH files in lockstep now that they
+# hold the same SHA.
+ARG CLANG_P2996_REF=a56e7036fc1dcc8d4325f79230809b6ee678e5f2
 
+# Self-contained compile toolchain (#160 T11): gcc/g++ via build-essential,
+# cmake + ninja from apt (26.04 ships cmake ≥3.28, well past LLVM's 3.20
+# floor), python3 (LLVM build requirement), ccache, git, and the LLVM
+# optional-dep dev headers the previous base-tier build had.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     export DEBIAN_FRONTEND=noninteractive && \
     apt-get update && apt-get install -y --no-install-recommends \
+      build-essential \
+      ca-certificates \
+      ccache \
+      cmake \
+      git \
+      ninja-build \
+      python3 \
+      zlib1g-dev \
       libedit-dev \
       libffi-dev \
       libncurses5-dev \
@@ -214,7 +264,7 @@ RUN git init . && \
 
 WORKDIR /opt/clang-p2996/build
 
-# cmake and ninja are available via mise shims from devcontainer-base.
+# cmake and ninja come from the builder's own apt toolchain (#160 T11).
 # Build only X86 target to minimize compile time and binary size.
 # ccache mount persists across builds — on SHA change, ~80% of objects
 # are reusable, cutting rebuild time significantly vs cold cache.
@@ -259,35 +309,46 @@ COPY --from=clang-builder-cold /opt/clang-p2996 /opt/clang-p2996
 
 # ──── P2996_HASH_END ──── (sentinel for python/.../p2996_hash.py)
 
-# ── clang-builder: thin indirection that switches between cold-build
-# (FROM p2996-export, which transitively builds clang-builder-cold)
-# and cache-pull (FROM ghcr.io/.../:p2996-<hash16>). Whichever the bake
-# arg P2996_SOURCE resolves to, the resulting stage exposes
-# /opt/clang-p2996 for the final COPY below. P2996_SOURCE is declared
-# at file scope (top of Dockerfile) so it can interpolate here.
-FROM ${P2996_SOURCE} AS clang-builder
-
 # ── final: combine base + reflection compilers ───────────────────────
-# Stage name "devcontainer" preserves docker-bake.hcl target and
-# Dockerfile.host-user BASE_IMAGE compatibility — no downstream changes.
-# DEVCONTAINER_BASE_REF defaults to the local `devcontainer-base` stage
-# but CI overrides it with `ghcr.io/.../:base-<hash16>` so the dev image
-# is built as a thin pull + COPY, not a rebuild from scratch.
-FROM ${DEVCONTAINER_BASE_REF} AS devcontainer
+# The published image is the devcontainer-runtime stage below (#160 T10);
+# this stage stays the compiler-assembly layer it always was.
+# Plain local stage names since #160 T11: on warm CI paths, bake-action
+# injects `dev.contexts.devcontainer-base` / `dev.contexts.p2996-export`
+# as digest-pinned docker-image:// contexts, which OVERRIDE these
+# same-named local stages — no ARG indirection, no rebuild.
+FROM devcontainer-base AS devcontainer
 
-# GCC-16 with P2996 reflection (precompiled .deb from jwakely trunk snapshot,
-# post-reflection-merge commit 4b0e94b 2026-01-15).
-# Installs to /opt/gcc-latest/bin. Rolling latest — no pinned hash.
-# kayari.org ships a single rolling .deb tracking Ubuntu trunk; compatibility
-# with the current base image is empirical. If `dpkg -i` fails, build from
-# source (see cpp-playground Dockerfile gcc stage for the pattern).
-RUN curl -fLOSs https://kayari.org/gcc-latest/gcc-latest.deb && \
-    dpkg -i gcc-latest.deb && \
-    rm -f gcc-latest.deb && \
+# Re-declared per stage: hadolint analyzes stages independently (DL4006 on
+# the sha256sum pipe below), and the explicit SHELL also holds when CI
+# substitutes the devcontainer-base named context.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+# GCC-17 with P2996 reflection (precompiled .deb from jwakely trunk snapshot).
+# Installs to /opt/gcc-latest/bin. kayari.org ships a rolling .deb tracking
+# Ubuntu trunk; the rolling `gcc-latest.deb` 302-redirects to a dated,
+# immutable filename (`gcc-latest_<ver>-<date>git<sha>.deb`). We pin that
+# dated URL as the reproducibility handle — upstream publishes NO checksum or
+# signature file (all 404), so the immutable dated filename IS the pin.
+# Renovate bumps it via the `custom.gcc-latest` HTML datasource on the
+# jwakely.github.io index (see renovate.json). Compatibility with the current
+# base image is empirical; if `dpkg -i` fails, build from source.
+# renovate: datasource=custom.gcc-latest depName=gcc-latest versioning=loose
+ARG GCC_LATEST_DEB=gcc-latest_17.0.0-20260621git4073a7927b16.deb
+# Validation D (#160 T13): kayari publishes NO checksum or signature (all
+# 404), so this locally-computed pin is the .deb's only integrity handle.
+# Deliberately NOT Renovate-managed: a GCC_LATEST_DEB bump fails this check
+# until a human recomputes the hash (`curl -fLO <url> && sha256sum <deb>`)
+# — supply-chain friction by design, the one place custom shell is justified.
+ARG GCC_LATEST_DEB_SHA256=ea3c6aa8bb6ffd4af458171f812ee95404e2a668d5779c69b5705082d47d41ce
+RUN curl -fLOSs "https://kayari.org/gcc-latest/${GCC_LATEST_DEB}" && \
+    echo "${GCC_LATEST_DEB_SHA256}  ${GCC_LATEST_DEB}" | sha256sum -c - && \
+    dpkg -i "${GCC_LATEST_DEB}" && \
+    rm -f "${GCC_LATEST_DEB}" && \
     test -x /opt/gcc-latest/bin/g++ || { echo "ERROR: gcc-latest binary missing after dpkg install"; exit 1; }
 
-# clang-p2996 (Bloomberg fork, built from source in clang-builder stage)
-COPY --from=clang-builder /opt/clang-p2996 /opt/clang-p2996
+# clang-p2996 (Bloomberg fork; local p2996-export stage on the cold path,
+# digest-pinned :p2996-<hash16> registry context on the warm path)
+COPY --from=p2996-export /opt/clang-p2996 /opt/clang-p2996
 
 # Add reflection compilers to PATH; LD_RUN_PATH for gcc-latest runtime libs
 ENV PATH="/opt/gcc-latest/bin:/opt/clang-p2996/bin:${PATH}" \
@@ -313,3 +374,36 @@ RUN printf '#include <meta>\nint main(){return 0;}\n' >/tmp/refl-clang.cpp && \
       /tmp/refl-clang.cpp \
       -fsyntax-only && \
     rm -f /tmp/refl-clang.cpp
+
+# ── devcontainer-runtime: the RUNTIME tool tier (#160 T9/T10) ─────────
+# Locked dev tools shipped in the image but NOT needed to build it.
+# MISE_ENV=runtime makes mise merge config.runtime.toml beside the base
+# config.toml in $MISE_CONFIG_DIR (probe-verified additive discovery);
+# the ENV persists into the final image so runtime containers keep
+# loading the runtime tier. Editing mise-runtime.toml/.lock rebuilds
+# only THIS thin stage — the base and p2996 caches stay warm. Both
+# COPY inputs are hashed by bytes into dev-hash (COPY-input rule).
+FROM devcontainer AS devcontainer-runtime
+
+ENV MISE_ENV=runtime
+COPY .devcontainer/mise-runtime.toml /usr/local/share/mise/config.runtime.toml
+# Per-env lockfile (mise natively writes mise.<env>.lock beside mise.lock;
+# regenerated by the lock-refresh staging under MISE_ENV=runtime).
+COPY .devcontainer/mise-runtime.lock /usr/local/share/mise/mise.runtime.lock
+
+RUN --mount=type=cache,id=mise-cache,target=/usr/local/share/mise/cache,sharing=locked \
+    --mount=type=cache,id=uv-cache,target=/root/.cache/uv,sharing=locked \
+    --mount=type=secret,id=github_token \
+    export MISE_INSTALL_MODE=system && \
+    export UV_LINK_MODE=copy && \
+    export LANG=C.UTF-8 && \
+    export LC_ALL=C.UTF-8 && \
+    if [ -f /run/secrets/github_token ]; then \
+      GITHUB_TOKEN="$(cat /run/secrets/github_token)" && \
+      export GITHUB_TOKEN && \
+      export MISE_GITHUB_TOKEN="$GITHUB_TOKEN"; \
+    fi && \
+    mise install --system --locked -y && \
+    mise reshim -f && \
+    test -x "$(mise which gh)" || { echo "ERROR: runtime tier not installed — gh unresolvable, so config.runtime.toml was not discovered under MISE_ENV=runtime (check MISE_CONFIG_DIR layout + mise.runtime.lock)"; exit 1; } && \
+    chmod -R 777 /usr/local/share/mise /usr/local/share/cargo /usr/local/share/rustup

@@ -72,7 +72,11 @@ warn_unused_ignores = true
 warn_no_return = true
 warn_unreachable = true
 
-[tool.ty]
+# ty reads this ONLY when invoked with --project python (#160 T12 probe:
+# with cwd at the repo root and no root pyproject, ty previously discovered
+# NO config at all — this section was silently dead, and its python-version
+# key sat at the wrong level; the schema wants it under [tool.ty.environment]).
+[tool.ty.environment]
 python-version = "3.14"
 
 [tool.pylint.MASTER]

@@ -131,17 +131,23 @@
     // anywhere in the container). Verified jdx/mise@v2026.4.28 against
     // upstream HEAD: src/env.rs MISE_IGNORED_CONFIG_PATHS definition,
     // settings.toml [ignored_config_paths] section, src/config/mod.rs.
-    "MISE_IGNORED_CONFIG_PATHS": "/workspaces/${localWorkspaceFolderBasename}/mise.toml",
+    // The second path ignores the workspace copy of the shared conf.d fragment
+    // (#160 T5): the container gets those 20 tools from the COPYd system copy at
+    // /usr/local/share/mise/conf.d/shared.toml, so the bind-mounted workspace
+    // copy must NOT also load (preserves the "container reads the baked config,
+    // never the host repo" isolation). Colon-separated, PATH-style.
+    "MISE_IGNORED_CONFIG_PATHS": "/workspaces/${localWorkspaceFolderBasename}/mise.toml:/workspaces/${localWorkspaceFolderBasename}/.config/mise/conf.d/shared.toml",
 
-    // Explicit system-config location. Per src/config/mod.rs
-    // `system_config_files()`, MISE_SYSTEM_CONFIG_FILE short-circuits
-    // all other system-config discovery, so this is the single source
-    // of truth for "which file is the system config." Re-set here
-    // alongside Dockerfile ENV so user-mise at runtime sees it
-    // explicitly (defense-in-depth: even if Docker ENV inheritance
-    // were skipped, containerEnv covers it).
+    // System-config DIRECTORY discovery — deliberately no
+    // MISE_SYSTEM_CONFIG_FILE. Per src/config/mod.rs
+    // `system_config_files()`, setting the FILE short-circuits system
+    // discovery to that ONE file, which hid conf.d/shared.toml (the 20
+    // shared-tier tools, #160 T5) and config.runtime.toml (the runtime
+    // tier, T9/T10) at runtime — `chezmoi init` onCreate failed with
+    // "No version is set for shim: chezmoi" (PR #169). With only the
+    // DIR set, mise discovers config.toml + config.runtime.toml +
+    // conf.d/*.toml on the system axis (probe-verified in :pr-169).
     "MISE_SYSTEM_CONFIG_DIR": "/usr/local/share/mise",
-    "MISE_SYSTEM_CONFIG_FILE": "/usr/local/share/mise/config.toml",
 
     // Per-user mise config — path templated to host user's home. This
     // OVERRIDES the build-time MISE_CONFIG_DIR=/usr/local/share/mise

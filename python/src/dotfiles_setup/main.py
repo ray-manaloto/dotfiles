@@ -13,10 +13,13 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from dotfiles_setup.ai import AIOrchestrator
 from dotfiles_setup.audit import DevEnvironmentAuditor, ToolManager
+from dotfiles_setup.bootstrap_packages import gap_report_failures
 from dotfiles_setup.config import DotfilesConfig
 from dotfiles_setup.container import verify_latest_main
+from dotfiles_setup.doc_refs import find_unresolved_refs
 from dotfiles_setup.docker import DevContainerManager
 from dotfiles_setup.ghcr import validate_ghcr_prereqs
+from dotfiles_setup.ghcr_cleanup import plan_cleanup
 from dotfiles_setup.image import ImageCommand
 from dotfiles_setup.image import main as image_main
 from dotfiles_setup.lint import (
@@ -25,11 +28,7 @@ from dotfiles_setup.lint import (
     resolve_timeout,
     run_guarded,
 )
-from dotfiles_setup.mise_snapshot import (
-    capture,
-    filter_conda_resolved,
-    write_snapshot,
-)
+from dotfiles_setup.lock_refresh import collect_system_lock, stage_system_lock_dir
 from dotfiles_setup.p2996_hash import (
     compute_repo_base_hash,
     compute_repo_dev_hash,
@@ -241,26 +240,66 @@ def setup_parser() -> argparse.ArgumentParser:
         help="Print the content-addressed hash of the final dev-image inputs "
         "(base + p2996 hashes + whole Dockerfile + dev bake target)",
     )
+    lock_stage_parser = subparsers.add_parser(
+        "lock-stage",
+        help="Stage the image's merged mise config into a throwaway project "
+        "dir for pinned-mise `mise lock` (#160 T8); prints the pinned "
+        "MISE_VERSION to run it with",
+    )
+    lock_stage_parser.add_argument(
+        "--dir", required=True, help="Staging directory (created if needed)"
+    )
+    lock_collect_parser = subparsers.add_parser(
+        "lock-collect",
+        help="Validate + copy the regenerated stage mise.lock back to "
+        ".devcontainer/mise-system.lock (#160 T8)",
+    )
+    lock_collect_parser.add_argument(
+        "--dir", required=True, help="Staging directory used by lock-stage"
+    )
+    gap_parser = subparsers.add_parser(
+        "bootstrap-gap-report",
+        help="Assert a `mise bootstrap packages status --json` report shows "
+        "the declared [bootstrap.packages] set fully installed (#160 T7)",
+    )
+    gap_parser.add_argument(
+        "--status-json",
+        required=True,
+        help="Path to the captured status --json output",
+    )
     subparsers.add_parser(
         "p2996-refresh",
         help="Bump CLANG_P2996_REF in docker-bake.hcl to the latest "
         "bloomberg/clang-p2996 p2996-branch HEAD (writes only on change)",
     )
-    mise_snapshot_parser = subparsers.add_parser(
-        "mise-snapshot",
-        help="Capture mise system resolved versions to "
-        ".devcontainer/mise-system-resolved.json",
+    subparsers.add_parser(
+        "check-doc-refs",
+        help="Verify every backtick path reference in the agent docs "
+        "resolves to a real file (#160 T13 validation J)",
     )
-    mise_snapshot_parser.add_argument(
-        "--from-json",
-        metavar="PATH",
-        default=None,
-        help="Read `mise ls --json` output from PATH instead of running mise. "
-        "CI captures the JSON inside the :dev container (as its default user, "
-        "no UID override) and formats it on the host runner, avoiding the "
-        "container permission + project-config-install issues (#131).",
+    ghcr_cleanup_parser = subparsers.add_parser(
+        "ghcr-cleanup",
+        help="Plan (default) or execute GHCR retention cleanup for the "
+        "hash-family cache tags (#160 T12.5); reads `gh api` package-"
+        "versions JSON from --versions-json",
     )
-
+    ghcr_cleanup_parser.add_argument(
+        "--versions-json",
+        required=True,
+        help="Path to the `gh api --paginate` package versions JSON array",
+    )
+    ghcr_cleanup_parser.add_argument(
+        "--keep-per-family",
+        type=int,
+        default=3,
+        help="Newest-N window kept per hash-tag family (default 3)",
+    )
+    ghcr_cleanup_parser.add_argument(
+        "--emit-delete-ids",
+        action="store_true",
+        help="Print only the deletable version ids (one per line) for the "
+        "workflow's delete loop; default prints the human plan",
+    )
     ghcr_parser = subparsers.add_parser(
         "ghcr-check",
         help="Validate local GHCR publish prerequisites exposed via GitHub CLI",
@@ -396,6 +435,74 @@ def handle_image(args: argparse.Namespace) -> None:
         sys.exit(image_main(cmd))
 
 
+def handle_lock_stage(args: argparse.Namespace, project_root: Path) -> None:
+    """Handle lock-stage: prepare the staging dir, print the pinned version."""
+    stage_dir = Path(args.dir)
+    stage_dir.mkdir(parents=True, exist_ok=True)
+    version = stage_system_lock_dir(project_root, stage_dir)
+    sys.stdout.write(version + "\n")
+
+
+def handle_lock_collect(args: argparse.Namespace, project_root: Path) -> None:
+    """Handle lock-collect: validate + copy the stage lock back."""
+    collect_system_lock(project_root, Path(args.dir))
+    logger.info("mise-system.lock collected from stage")
+
+
+def handle_bootstrap_gap_report(args: argparse.Namespace, project_root: Path) -> None:
+    """Handle the bootstrap-gap-report command (#160 T7).
+
+    Args:
+        args: The parsed arguments (carries --status-json).
+        project_root: The project root path.
+    """
+    failures = gap_report_failures(
+        Path(args.status_json).read_text(),
+        project_root / ".devcontainer" / "mise-system.toml",
+    )
+    if failures:
+        for failure in failures:
+            logger.error("gap-report FAIL: %s", failure)
+        sys.exit(1)
+    logger.info("gap-report OK: declared [bootstrap.packages] set fully installed")
+
+
+def handle_check_doc_refs(project_root: Path) -> None:
+    """Handle check-doc-refs: fail loud on unresolved doc path refs."""
+    unresolved = find_unresolved_refs(project_root)
+    if unresolved:
+        for ref in unresolved:
+            logger.error("%s:%d: unresolved doc ref `%s`", ref.doc, ref.line, ref.ref)
+        sys.exit(1)
+    logger.info("check-doc-refs OK: all doc path references resolve")
+
+
+def handle_ghcr_cleanup(args: argparse.Namespace) -> None:
+    """Handle ghcr-cleanup: print the retention plan (never deletes itself).
+
+    Deletion stays in the workflow as an explicit, separately-gated loop
+    over --emit-delete-ids output — this command is read-only by design.
+    """
+    versions = json.loads(Path(args.versions_json).read_text())
+    plan = plan_cleanup(versions, keep_per_family=args.keep_per_family)
+    if args.emit_delete_ids:
+        for version in plan.delete:
+            sys.stdout.write(f"{version['id']}\n")
+        return
+    logger.info(
+        "GHCR cleanup plan: %d deletable, %d kept",
+        len(plan.delete),
+        len(plan.keep_reasons),
+    )
+    for version in plan.delete:
+        tags = version.get("metadata", {}).get("container", {}).get("tags", [])
+        logger.info(
+            "DELETE %s %s %s", version.get("id"), version.get("created_at"), tags
+        )
+    for version_id, reason in plan.keep_reasons.items():
+        logger.info("KEEP   %s — %s", version_id, reason)
+
+
 def handle_ghcr_check(args: argparse.Namespace, project_root: Path) -> None:
     """Handle GHCR prerequisite validation."""
     result = validate_ghcr_prereqs(
@@ -477,18 +584,6 @@ def _build_command_handlers(
     def _p2996_refresh() -> None:
         sys.stdout.write(refresh_p2996_ref(project_root).as_json() + "\n")
 
-    def _mise_snapshot() -> None:
-        from_json = getattr(args, "from_json", None)
-        if from_json:
-            data = json.loads(Path(from_json).read_text())
-            resolved = filter_conda_resolved(data)
-        else:
-            resolved = capture()
-        write_snapshot(
-            project_root / ".devcontainer" / "mise-system-resolved.json",
-            resolved,
-        )
-
     def _lint() -> None:
         sys.exit(run_guarded(resolve_timeout(getattr(args, "timeout", None))))
 
@@ -503,9 +598,13 @@ def _build_command_handlers(
         "verify": lambda: handle_verify(args),
         "image": lambda: handle_image(args),
         "ghcr-check": lambda: handle_ghcr_check(args, project_root),
+        "ghcr-cleanup": lambda: handle_ghcr_cleanup(args),
+        "check-doc-refs": lambda: handle_check_doc_refs(project_root),
+        "bootstrap-gap-report": lambda: handle_bootstrap_gap_report(args, project_root),
+        "lock-stage": lambda: handle_lock_stage(args, project_root),
+        "lock-collect": lambda: handle_lock_collect(args, project_root),
         "sync-versions": lambda: handle_sync_versions(project_root),
         "p2996-refresh": _p2996_refresh,
-        "mise-snapshot": _mise_snapshot,
         "lint": _lint,
         **_hash_command_handlers(project_root),
     }

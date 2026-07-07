@@ -2,35 +2,18 @@
 # These are Build Type 1 tools: run locally before commits
 
 [tools]
-hk = "1.46.0"
-pkl = "0.31.1"
-hadolint = "2.14.0"
-shellcheck = "0.11.0"
-shfmt = "3.13.1"
-taplo = "0.10.0"
-actionlint = "1.7.12"
-typos = "1.47.0"
-yamllint = "1.38.0"
-yamlfmt = "0.21.0"
-yq = "4.53.2"
-ghalint = "1.5.6"
-jq = "1.8.1"
-editorconfig-checker = "3.8.0" # provides `ec` — used by hk editorconfig_checker builtin (#154)
-gitleaks = "8.30.1"            # secret scanner — used by hk-common security gitleaks builtin (#154)
-# Python toolchain for the mde-py package in python/
-python = "3.14.5"
-uv = "0.11.17"
-pixi = "0.70.0"
-pinact = "4.0.0"
-chezmoi = "2.70.4"
+# The 20 tools shared with the devcontainer image live in
+# .config/mise/conf.d/shared.toml — the single exact-pinned source both this
+# host config and .devcontainer/mise-system.toml merge, so they never drift
+# (Renovate bumps that one file). See epic #160 T5. Below: host-ONLY tools.
+editorconfig-checker = "3.8.0"      # provides `ec` — hk editorconfig_checker builtin (#154); host-only (image drops it in T6)
 "npm:@devcontainers/cli" = "0.87.0"
 colima = "0.10.1"                   # Alternate Docker runtime (VZ + Rosetta); Docker Desktop is the CURRENT supported runtime — see AGENTS.md Docker Runtimes + .omc/research/research-20260409c-dockerdesktop-ssh/
 lima = "2.1.2"
 "github:agent-sh/agnix" = "0.36.2"  # prebuilt release binary; npm: backend needs a postinstall download that bun skips (binary-not-found). Release tag is v0.36.2.
 "npm:agents-lint" = "0.5.0"
 "pipx:mcp2cli" = "3.2.0"
-"pipx:check-jsonschema" = "0.37.2"
-"npm:renovate" = "43.251.3"         # provides `renovate-config-validator` for the hk `renovate_config_validate` step (CI-local parity). The validator bin ships ONLY inside the full renovate package (~354M); no validator-only package exists. Pin == latest.
+"npm:renovate" = "43.252.1"         # provides `renovate-config-validator` for the hk `renovate_config_validate` step (CI-local parity). The validator bin ships ONLY inside the full renovate package (~354M); no validator-only package exists. Host-only (not in image).
 biome = "2.4.16"
 # Markdown + Claude-docs linters. Installed now; hk.pkl integration is
 # scheduled for post-devcontainer-work review (see GH issue tracking
@@ -38,14 +21,17 @@ biome = "2.4.16"
 # immediate 200-line enforcement per Claude Code memory docs.
 "npm:claude-code-lint" = "0.5.0"
 "npm:@contextlint/cli" = "1.1.1"
-"npm:markdownlint-cli2" = "0.22.1"                                  # https://github.com/DavidAnson/markdownlint — general markdown quality (MD013 line-length, etc.)
+"npm:markdownlint-cli2" = "0.22.1"   # https://github.com/DavidAnson/markdownlint — general markdown quality (MD013 line-length, etc.)
 "aqua:jackchuka/mdschema" = "0.13.1"
 rumdl = "0.2.4"
+# zizmor: GHA security scanner — backs the hk zizmor builtin (#160 T12);
+# host-only lint tool, so it lives here (not shared.toml).
+zizmor = "1.26.1"
 "npm:oh-my-claude-sisyphus" = "4.14.4"
 "github:ast-grep/ast-grep" = "0.43.0"
 lefthook = "2.1.9"
 "npm:ctx7" = "0.4.4"
-rtk = "0.37.2"                                                      # held at 0.37.2: github backend for rtk@0.42.0 fails to populate url_api in mise.lock → CI install errors "relative URL without a base". Revisit bump separately.
+rtk = "0.43.0"                                                      # re-probed at #160 T12.5: mise #10703 (2026.7.0) fixed the github-backend url_api lock hold that pinned this at 0.37.2
 "npm:skills" = "1.5.9"
 "npm:agent-browser" = "0.27.0"
 "npm:portless" = "0.13.1"
@@ -61,6 +47,12 @@ opencode = "1.15.13"
 experimental = true
 auto_install = true
 lockfile = true
+# #160 T12.5 (decision 15): new tool requests get exact-pinned versions on
+# `mise use` instead of fuzzy ranges — pins are the repo's whole versioning
+# model. (task.timings from the decision does not exist as a setting in mise
+# 2026.7.0 — verified via `mise settings ls --all`; env_cache is already the
+# default true, so neither is set here.)
+pin = true
 
 [settings.status]
 show_tools = true
@@ -74,7 +66,10 @@ show_env = true
 postinstall = "mise reshim && hk install --mise"
 
 [env]
-HK_PKL_BACKEND = "pkl" # "pkl" (not pklr) required for import/spread in hk-common.pkl
+# HK_PKL_BACKEND dropped (#160 T12): hk 1.49's default pklr backend evaluates
+# the import/spread config identically to the pkl CLI (probe: --plan -J output
+# byte-identical minus timestamp). The pkl binary stays pinned in shared.toml
+# for the hk `pkl` builtin step (evals *.pkl files), not for hk itself.
 HK_MISE = "1"
 
 # #154: the hk `gitleaks` builtin runs `gitleaks dir` (whole-tree scan, no
@@ -124,6 +119,12 @@ description = "Run all hk pre-commit checks (≡ `hk run pre-commit --all`)"
 run = "hk run pre-commit --all"
 
 [tasks.lint]
+# #160 T12.5: native outer backstop ABOVE the wrapper's 600s — probe showed
+# mise's task timeout kills the child and fails loud, but it lacks lint.py's
+# hk-log-tail diagnostics, so the wrapper STAYS (decision 15's retire
+# condition was full equivalence; it is not equivalent). This bound only
+# fires if the Python wrapper itself wedges.
+timeout = "700s"
 # Preferred manual/agent entrypoint for the lint gate. Wraps hk in a hard
 # timeout (hk has none of its own) so a hung step self-aborts with the
 # tail of the debug log instead of wedging for hours (see the 7h hang in
@@ -614,7 +615,3 @@ run = "uv run --project python dotfiles-setup p2996-hash"
 [tasks.p2996-refresh]
 description = "Bump CLANG_P2996_REF in docker-bake.hcl to the latest bloomberg/clang-p2996 p2996-branch HEAD (writes only on change; the scheduled refresh.yml workflow's p2996-refresh job does this in CI)"
 run = "uv run --project python dotfiles-setup p2996-refresh"
-
-[tasks.capture-mise-system-resolved]
-description = "Refresh .devcontainer/mise-system-resolved.json — run inside the devcontainer when conda-forge tool drift should bust the P2996 cache"
-run = "uv run --project python dotfiles-setup mise-snapshot"

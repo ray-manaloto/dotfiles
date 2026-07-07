@@ -1,0 +1,65 @@
+name: "Refresh lockfiles"
+description: >-
+  Regenerate the three committed lockfiles in place (#160 T8): root
+  mise.lock (runner mise), .devcontainer/mise-system.lock (pinned image
+  MISE_VERSION on linux-x64 against a staged copy of the image's merged
+  config), and .devcontainer/devcontainer-lock.json (devcontainer
+  upgrade). The caller stages/commits the diff (refresh.yml PRs it via
+  open-refresh-pr). Hosted Renovate cannot do this: it may not run
+  `mise lock` (admin-allowlisted command) and does not know
+  mise-system.lock by name. Requires actions/checkout + setup-mise
+  (full install: mise tools incl. uv/python + @devcontainers/cli) to
+  have run first. Linux-x64 runner REQUIRED — macOS mise silently omits
+  linux-x64 conda checksums (session-2026-07-05 empirical correction).
+
+inputs:
+  github-token:
+    description: >-
+      Token exported as GITHUB_TOKEN/MISE_GITHUB_TOKEN so `mise lock`'s
+      GitHub-backed resolutions are not rate-limited (the convergence
+      loop exists because anonymous quota exhausts mid-run).
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Regenerate root mise.lock
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        MISE_GITHUB_TOKEN: ${{ inputs.github-token }}
+      run: mise lock
+    - name: Regenerate mise-system.lock (pinned mise, linux-x64)
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        MISE_GITHUB_TOKEN: ${{ inputs.github-token }}
+      run: |
+        set -euo pipefail
+        stage=$(mktemp -d)
+        version=$(uv run --project python dotfiles-setup lock-stage --dir "$stage")
+        # Same installer + pin as the Dockerfile: lock formats are NOT
+        # cross-version compatible, so the lock must be written by the
+        # exact mise version the image consumes it with.
+        curl https://mise.run | MISE_VERSION="v${version}" MISE_INSTALL_PATH="$stage/mise-pinned" sh
+        # mise's npm backend EXECS node/npm during `npm:` version
+        # resolution (ENOENT-fails without them — T9 regen probe; bun on
+        # PATH does NOT satisfy it despite npm.package_manager=bun).
+        # ubuntu-latest runners preinstall node+npm, so no install here.
+        command -v npm >/dev/null || { echo "FAIL: npm missing — npm: tool resolution would ENOENT" >&2; exit 1; }
+        export MISE_TRUSTED_CONFIG_PATHS="$stage"
+        # Iterate for GitHub-rate-limit convergence (proven in-container
+        # recipe, session 2026-07-05): each pass fills what the previous
+        # could not resolve; `mise lock` hard-errors on unresolvable
+        # tools since 2026.6.13, so a broken tool fails loud here.
+        # MISE_ENV=runtime covers BOTH tiers in one pass — mise writes
+        # mise.lock (base) + mise.runtime.lock (runtime tier, #160 T9).
+        for _ in 1 2 3 4 5; do
+          MISE_ENV=runtime "$stage/mise-pinned" lock --platform linux-x64 -C "$stage"
+        done
+        # lock-collect validates coverage before overwriting the
+        # committed lock — a truncated regen never lands.
+        uv run --project python dotfiles-setup lock-collect --dir "$stage"
+    - name: Regenerate devcontainer-lock.json
+      shell: bash
+      run: devcontainer upgrade --workspace-folder .

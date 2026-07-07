@@ -7,78 +7,34 @@
 # Changes here must be validated via CI (never `docker buildx bake dev-load`
 # locally — see feedback_base_image_ci_only.md).
 
+# BASE TIER (#160 T9): the 36 tools the image needs to BUILD ITSELF and the
+# core C++ toolchain — runtimes (rust STAYS base: cargo/rustup self-checks),
+# the conda toolchain (the p2996 stage runs cmake/ninja from these shims),
+# bazel, micromamba, sqlite. Everything else moved out: the locked dev tools
+# live in mise-runtime.toml (installed in the devcontainer-runtime stage
+# under MISE_ENV=runtime), the interactive tools live in the chezmoi user
+# overlay (home/dot_config/mise/config.toml.tmpl, eager-installed by
+# onCreateCommand). Probe-verified: config.<env>.toml is discovered beside
+# this file in $MISE_CONFIG_DIR and merged additively.
 [tools]
 # Core runtimes
-python = "latest"
-uv = "latest"
 node = "latest"
 bun = "latest"
 go = "latest"
 rust = "latest"
 zig = "latest"
-pixi = "latest"
 java = "latest"
 deno = "latest"
 ruby = "latest"
 cargo-binstall = "latest"
-# Dotfiles management
-chezmoi = "latest"
-# Git hooks & linting
-hk = "latest"
-hadolint = "latest"
-shellcheck = "latest"
-shfmt = "latest"
-taplo = "latest"
-actionlint = "latest"
-typos = "latest"
-yamllint = "latest"
-yamlfmt = "latest"
-yq = "latest"
-ghalint = "latest"
-jq = "latest"
-# #154: the in-image hk config (hk-image.pkl) runs the gitleaks + editorconfig
-# builtins, so the image needs these tools (root mise.toml is host-only — it has
-# ZERO effect on the image; tools inside the container come from THIS file).
-gitleaks = "latest"
-editorconfig-checker = "latest"
-"npm:ajv-cli" = "latest"
-"pipx:check-jsonschema" = "latest"
-# CLI utilities
-fzf = "latest"
-ripgrep = "latest"
-fd = "latest"
-bat = "latest"
-vivid = "latest"
-"github:cli/cli" = "latest"
-"conda:rsync" = "latest"
-"conda:curl" = "latest"
-"fnox" = "latest"
-"usage" = "latest"
-"conda:hyperfine" = "latest"
-"gitlab:graphviz/graphviz" = "latest"
-"conda:tree" = "latest"
-# AI CLIs (depends=node ensures npm is available for version resolution)
-"npm:@google/gemini-cli" = { version = "latest", depends = ["node"] }
-"npm:@openai/codex" = { version = "latest", depends = ["node"] }
-# Build systems & C++ tooling
-bats = "latest"
-pkl = "latest"
-"github:go-task/task" = "latest"
-"github:mozilla/sccache" = "latest"
-# pipx tools (C++ ecosystem)
-"pipx:meson" = "latest"
-"pipx:conan" = "latest"
-"pipx:cpplint" = "latest"
-"pipx:flawfinder" = "latest"
-"pipx:lizard" = "latest"
-"pipx:cmakelang" = "latest"
-"pipx:codechecker" = "latest"
-"pipx:gcovr" = "latest"
-# Security scanners
-pinact = "latest"
-# betterleaks: not in mise tool registry for linux-x64 (tracked in docs/hk-builtins-audit.md)
-# Claude Code CLI — uses http:claude backend (native binary, no npm)
-claude-code = "latest"
+# The 20 tools shared with the host (hk, pkl, gitleaks, chezmoi, python, uv,
+# pixi, pinact, and the linters) come from .config/mise/conf.d/shared.toml,
+# COPYd to /usr/local/share/mise/conf.d/ and merged into this system config —
+# exact-pinned so host and image never drift. See epic #160 T5.
+# #154: hk-image.pkl's security group runs gitleaks (now provided by the shared
+# fragment). It has NO editorconfig step — the editorconfig_checker builtin is
+# wired only in the HOST hk.pkl — so editorconfig-checker was dead weight in the
+# image and is removed here (#160 T6). Nothing else in the image invokes `ec`.
 # Conda packages (C++ toolchain for devcontainer)
 "conda:llvm" = "latest"
 "conda:llvm-tools" = "latest"
@@ -116,54 +72,72 @@ claude-code = "latest"
 "conda:p7zip" = "latest"
 "conda:valgrind" = "latest"
 "bazel" = "latest"
+"sqlite" = "latest"
+"micromamba" = "latest"
 
 # conda:imagemagick removed 2026-04-28 — conda-forge solve fails with
 # "duplicate records for adwaita-icon-theme-40.1.1-ha770c72_1.tar.bz2"
 # (heavy GUI dep chain conflict). If imagemagick is needed, install via
 # apt in the Dockerfile (`imagemagick` is a standard Ubuntu package).
-"conda:vim" = "latest"
-"npm:renovate" = "latest"
-"sqlite" = "latest"
-"github:tursodatabase/turso" = "latest"
-"libsql-server" = "latest"
-"micromamba" = "latest"
-# Interactive shell tools (moved from home/dot_config/mise/config.toml.tmpl
-# 2026-04-27 — these belong in the system image, not a per-user overlay).
-"conda:HTTPie" = "latest"
-"conda:ncdu" = "latest"
-"conda:htop" = "latest"
-"conda:broot" = "latest"
-"conda:procs" = "latest"
-"conda:tealdeer" = "latest"
-btop = "latest"
-eza = "latest"
-glow = "latest"
-starship = "latest"
-dust = "latest"
-tokei = "latest"
-xh = "latest"
-hexyl = "latest"
-yazi = "latest"
-zellij = "latest"
-zoxide = "latest"
-gitui = "latest"
-lazygit = "latest"
-lsd = "latest"
+# Interactive shell tools (fzf, starship, zellij, htop, …) moved BACK to the
+# per-user chezmoi overlay in #160 T9 — they are session conveniences, not
+# image build inputs; the overlay eager-installs them at container create
+# onto the home volume, so image cache stability no longer depends on them.
+
+# Declarative apt packages — the REAL installer source (#160 T4, wagov-dtt
+# pattern). The Dockerfile base stage seeds only curl + ca-certificates (for
+# the mise installer), then runs `mise bootstrap packages apply --manager apt
+# --yes --update` against this section. Recommends/Suggests are disabled
+# image-wide via /etc/apt/apt.conf.d/99no-install-recommends (mise has no
+# apt-args flag). The build fails loudly if anything is missing afterwards:
+# `mise bootstrap packages status --json --missing` exits 1 (anti-drift gate);
+# CI's T7 gap report additionally asserts the status JSON. Keys are
+# `manager:package`; values stay "latest" — satisfied by any installed
+# version (apply never upgrades), and mise.lock does NOT cover bootstrap
+# packages, so pins would add no reproducibility.
+# NOTE: mise renamed this from `[system.packages]`/`mise system` (2026.6.4) to
+# `[bootstrap.packages]`/`mise bootstrap packages` by 2026.7.0.
+[bootstrap.packages]
+"apt:build-essential" = "latest"
+"apt:ca-certificates" = "latest"
+"apt:curl" = "latest"
+"apt:gnupg" = "latest"
+"apt:graphviz" = "latest"
+"apt:pkg-config" = "latest"
+"apt:sudo" = "latest"
+"apt:unzip" = "latest"
+"apt:zsh" = "latest"
+"apt:libatomic1" = "latest"
+"apt:libbz2-dev" = "latest"
+"apt:libreadline-dev" = "latest"
+"apt:libsqlite3-dev" = "latest"
+"apt:libssl-dev" = "latest"
+"apt:zlib1g-dev" = "latest"
 
 [settings]
 arch = "x86_64"
 experimental = true
+# Scope mise's declarative package management to apt (the only manager present
+# in the linux-x64 image) so apply/status never touch dnf/pacman/brew.
+system_packages.managers = ["apt"]
 auto_install = true
 lockfile = true
+# Scope `mise.lock` to the image target so `mise lock` doesn't fan out to all
+# 7 platforms (native since mise v2026.4.9 — requires the pinned MISE_VERSION in
+# the Dockerfile to honor it; older mise treats it as an unknown field). The
+# committed .devcontainer/mise-system.lock is generated for linux-x64 and
+# consumed by `mise install --system --locked`. See epic #160.
+lockfile_platforms = ["linux-x64"]
 jobs = 1
 # Supply-chain hardening: ignore tool versions younger than 7 days when
 # resolving `latest`/fuzzy requests (forwards the cutoff to npm:/pipx:
 # transitive deps too). Network-free, needs no GITHUB_TOKEN — complements
 # the intentional github_attestations=false / slsa=false below (disabled
 # because a token isn't reliably available in buildkit secret mounts).
-# Pinned-exact versions are unaffected. Format per mise settings schema
-# (default 24h; relative durations like 7d/90d/6mo). Exempt specific tools
-# via minimum_release_age_exclude_tools if a bleeding-edge pin is needed.
+# NOTE: `mise lock` resolves `latest` WITHOUT this cutoff while bun
+# enforces it at install, so a locked latest younger than 7d fail-closes
+# (PR #169). Exempt fast-releasing tools via minimum_release_age_excludes
+# (mise-runtime.toml [settings] does this for the AI CLIs).
 minimum_release_age = "7d"
 npm.package_manager = "bun"
 pipx.uvx = true
@@ -174,9 +148,16 @@ conda.channel = "conda-forge"
 # all backends (aqua, github, python, core/ruby). Per-backend settings don't
 # cover core backends like ruby. GITHUB_TOKEN not reliably available in
 # buildkit secret mounts; CI passes token but local builds hit rate limits.
+# REVISITED #160 T12.5 (decision 16): per-tool disable now exists upstream
+# and a token-free attestation proxy is proposed (jdx/mise#10127) — flip to
+# per-tool opt-out once the proxy ships; until then the blanket-off stands
+# for the token-availability reason above.
 github_attestations = false
 slsa = false
 python.uv_venv_auto = "source"
+# #160 T12.5 (decision 15): the http timeout moved from the MISE_HTTP_TIMEOUT
+# env var to its native setting.
+http_timeout = "120s"
 
 [settings.status]
 show_tools = true
@@ -187,8 +168,7 @@ show_env = true
 # Build toolchain
 CC = "gcc"
 CXX = "g++"
-# Hook runner
-HK_PKL_BACKEND = "pkl"  # "pkl" (not pklr) required for import/spread in hk-common.pkl
+# Hook runner (HK_PKL_BACKEND dropped #160 T12 — pklr parity verified)
 HK_MISE = "1"
 # Locale (set here so all mise-activated shells inherit)
 LANG = "C.UTF-8"
@@ -197,8 +177,8 @@ LC_ALL = "C.UTF-8"
 MISE_ARCH = "x86_64"
 MISE_OS = "linux"
 CONDA_SUBDIR = "linux-64"
-# Network / install behavior
-MISE_HTTP_TIMEOUT = "120"
+# Network / install behavior (MISE_HTTP_TIMEOUT moved to [settings]
+# http_timeout, #160 T12.5)
 npm_config_update_notifier = "false"
 # Rust: skip PATH check during non-interactive installs
 RUSTUP_INIT_SKIP_PATH_CHECK = "yes"

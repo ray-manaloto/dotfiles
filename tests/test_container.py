@@ -1,14 +1,20 @@
 """Tests for the devcontainer freshness gate (dotfiles_setup.container)."""
 
+from __future__ import annotations
+
+import dataclasses
+import json
 import subprocess
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
-import pytest
-
 from dotfiles_setup import container
+
+if TYPE_CHECKING:
+    import pytest
 
 _WORKSPACE = Path("/workspaces-host/dotfiles")
 
@@ -19,27 +25,20 @@ def _cp(stdout: str = "", returncode: int = 0) -> subprocess.CompletedProcess[st
     )
 
 
+@dataclasses.dataclass(kw_only=True)
 class _FakeDocker:
     """Routes container._run calls to canned outputs keyed by the command shape."""
 
-    def __init__(
-        self,
-        *,
-        container_id: str | None = "cafef00dbeef",
-        bind_source: str | None = str(_WORKSPACE),
-        smoke_rc: int = 0,
-        smoke_out: str = "=== All smoke checks passed ===\n",
-        head: str = "e61b3ea0",
-        branch: str = "main",
-    ) -> None:
-        self.container_id = container_id
-        self.bind_source = bind_source
-        self.smoke_rc = smoke_rc
-        self.smoke_out = smoke_out
-        self.head = head
-        self.branch = branch
+    container_id: str | None = "cafef00dbeef"
+    bind_source: str | None = str(_WORKSPACE)
+    smoke_rc: int = 0
+    smoke_out: str = "=== All smoke checks passed ===\n"
+    head: str = "e61b3ea0"
+    branch: str = "main"
 
-    def __call__(self, cmd: list[str], **_kwargs: object):
+    def __call__(
+        self, cmd: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
         if cmd[:2] == ["git", "-C"]:
             return _cp((self.head if cmd[-1] == "HEAD" else self.branch) + "\n")
         if cmd[:3] == ["docker", "ps", "-q"]:
@@ -47,16 +46,21 @@ class _FakeDocker:
         if cmd[:2] == ["docker", "inspect"]:
             if self.bind_source is None:
                 return _cp("[]")
-            return _cp(
-                '[{"Type":"bind","Source":"%s","Destination":"/workspaces/dotfiles"}]'
-                % self.bind_source
-            )
+            payload = [
+                {
+                    "Type": "bind",
+                    "Source": self.bind_source,
+                    "Destination": "/workspaces/dotfiles",
+                }
+            ]
+            return _cp(json.dumps(payload))
         if cmd[:2] == ["devcontainer", "exec"]:
             return _cp(self.smoke_out, returncode=self.smoke_rc)
-        raise AssertionError(f"unexpected command: {cmd}")
+        msg = f"unexpected command: {cmd}"
+        raise AssertionError(msg)
 
 
-def _names(checks):
+def _names(checks: list[container.Check]) -> dict[str, container.Check]:
     return {c.name: c for c in checks}
 
 
@@ -97,7 +101,9 @@ def test_stale_base_fails_via_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
         "_run",
         _FakeDocker(
             smoke_rc=1,
-            smoke_out="[tier1] image identity\n  FAIL: in-image mise config X != repo Y\n",
+            smoke_out=(
+                "[tier1] image identity\n  FAIL: in-image mise config X != repo Y\n"
+            ),
         ),
     )
     smoke = _names(container.verify_latest(_WORKSPACE))["smoke-tiers-1-3"]

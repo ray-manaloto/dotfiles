@@ -90,6 +90,7 @@ jobs:
     outputs:
       hash: ${{ steps.hash.outputs.hash }}
       cache_ref: ${{ steps.hash.outputs.cache_ref }}
+      digest: ${{ steps.digest.outputs.digest }}
     steps:
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -124,9 +125,11 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Probe cache
         id: probe
+        env:
+          CACHE_REF: ${{ steps.hash.outputs.cache_ref }}
         run: |
           set -euo pipefail
-          if out=$(docker manifest inspect "${{ steps.hash.outputs.cache_ref }}" 2>&1); then
+          if out=$(docker manifest inspect "${CACHE_REF}" 2>&1); then
             echo "hit=true" >> "$GITHUB_OUTPUT"
             echo "Cache HIT — skipping base build" >> "$GITHUB_STEP_SUMMARY"
           else
@@ -169,17 +172,30 @@ jobs:
           set: |
             base.tags=${{ steps.hash.outputs.cache_ref }}
             *.secrets=id=github_token,src=/tmp/github_token
+      - name: Resolve cache image digest
+        # #160 T11: the build job consumes this image as a DIGEST-pinned
+        # named build context — capture the digest here (works on both the
+        # hit and miss-after-push paths) and fail loud if empty, since an
+        # unpinned context would silently accept a repushed tag.
+        id: digest
+        env:
+          CACHE_REF: ${{ steps.hash.outputs.cache_ref }}
+        run: |
+          set -euo pipefail
+          digest=$(docker buildx imagetools inspect "${CACHE_REF}" --format '{{.Manifest.Digest}}')
+          [ -n "$digest" ] || { echo "FAIL: empty digest for ${CACHE_REF}" >&2; exit 1; }
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
   # ============================================================
   # P2996 cache prep: compute content-hash of clang-builder inputs and
   # ensure ghcr.io/<owner>/<repo>:p2996-<hash16> exists. On hash hit
   # (the typical case), this job exits in <30s with cache_ref set; the
   # build job then skips the multi-hour clang compile entirely. On
-  # miss, this job builds the p2996-cache target on top of the
-  # base-prep image (so mise install layer is pulled, not rebuilt).
+  # miss, this job builds the p2996-cache target FROM the parameterized
+  # BUILDER_IMAGE — fully decoupled from base-prep since #160 T11, so
+  # the two prep jobs run in PARALLEL.
   # See .devcontainer/P2996-CACHE.md for the cache mechanism.
   # ============================================================
   p2996-prep:
-    needs: [base-prep]
     runs-on: ubuntu-latest
     # Cold clang-p2996 build is a multi-hour from-source compile (~2h+). The
     # earlier 60 was far too low and CANCELLED cold rebuilds (regression from
@@ -193,6 +209,7 @@ jobs:
     outputs:
       hash: ${{ steps.hash.outputs.hash }}
       cache_ref: ${{ steps.hash.outputs.cache_ref }}
+      digest: ${{ steps.digest.outputs.digest }}
     steps:
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -231,7 +248,6 @@ jobs:
             echo ""
             echo "- Hash: \`${hash}\`"
             echo "- Cache ref: \`${cache_ref}\`"
-            echo "- Base ref: \`${{ needs.base-prep.outputs.cache_ref }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Log in to Container Registry
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
@@ -244,9 +260,11 @@ jobs:
         # Discriminate "manifest not found" (legitimate cache miss) from
         # auth/network/registry failures. Capturing stderr instead of
         # `2>/dev/null` honors `build.no-stderr-suppression`.
+        env:
+          CACHE_REF: ${{ steps.hash.outputs.cache_ref }}
         run: |
           set -euo pipefail
-          if out=$(docker manifest inspect "${{ steps.hash.outputs.cache_ref }}" 2>&1); then
+          if out=$(docker manifest inspect "${CACHE_REF}" 2>&1); then
             echo "hit=true" >> "$GITHUB_OUTPUT"
             echo "Cache HIT — skipping clang-p2996 compile" >> "$GITHUB_STEP_SUMMARY"
           else
@@ -288,8 +306,18 @@ jobs:
             docker-bake.hcl
           set: |
             p2996-cache.tags=${{ steps.hash.outputs.cache_ref }}
-            p2996-cache.args.DEVCONTAINER_BASE_REF=${{ needs.base-prep.outputs.cache_ref }}
             *.secrets=id=github_token,src=/tmp/github_token
+      - name: Resolve cache image digest
+        # #160 T11: same digest-pin capture as base-prep — the build job
+        # injects this as the p2996-export named context.
+        id: digest
+        env:
+          CACHE_REF: ${{ steps.hash.outputs.cache_ref }}
+        run: |
+          set -euo pipefail
+          digest=$(docker buildx imagetools inspect "${CACHE_REF}" --format '{{.Manifest.Digest}}')
+          [ -n "$digest" ] || { echo "FAIL: empty digest for ${CACHE_REF}" >&2; exit 1; }
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
   # ============================================================
   # Dev cache prep (#122): the THIRD content-hash tier. Computes
   # `dotfiles-setup dev-hash` (= base-hash + p2996-hash + whole
@@ -365,9 +393,11 @@ jobs:
         # (auth/network/registry) fails loud rather than silently
         # forcing a rebuild. Captures stderr (no `2>/dev/null`) to honor
         # build.no-stderr-suppression.
+        env:
+          CACHE_REF: ${{ steps.hash.outputs.cache_ref }}
         run: |
           set -euo pipefail
-          if out=$(docker manifest inspect "${{ steps.hash.outputs.cache_ref }}" 2>&1); then
+          if out=$(docker manifest inspect "${CACHE_REF}" 2>&1); then
             echo "hit=true" >> "$GITHUB_OUTPUT"
             echo "Dev cache HIT — image already built AND smoke-validated; skipping build + smoke-test" >> "$GITHUB_STEP_SUMMARY"
           else
@@ -394,9 +424,10 @@ jobs:
           IMAGE: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}
           SOURCE_REF: ${{ steps.hash.outputs.cache_ref }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          short_sha=$(printf '%s' "${{ github.sha }}" | head -c 7)
+          short_sha=$(printf '%s' "${COMMIT_SHA}" | head -c 7)
           tags=(--tag "${IMAGE}:${short_sha}")
           if [ -n "${PR_NUMBER}" ]; then
             tags+=(--tag "${IMAGE}:pr-${PR_NUMBER}")
@@ -509,10 +540,14 @@ jobs:
             docker-bake.hcl
             ${{ steps.meta.outputs.bake-file-tags }}
             ${{ steps.meta.outputs.bake-file-labels }}
+          # #160 T11: the prebuilt tiers arrive as DIGEST-pinned named build
+          # contexts — each overrides the same-named local stage, so the
+          # heavy stages are never built here (native warm path); BuildKit
+          # fails the solve on any digest mismatch (exact-bytes guarantee).
           set: |
             *.secrets=id=github_token,src=/tmp/github_token
-            dev.args.DEVCONTAINER_BASE_REF=${{ needs.base-prep.outputs.cache_ref }}
-            dev.args.P2996_SOURCE=${{ needs.p2996-prep.outputs.cache_ref }}
+            dev.contexts.devcontainer-base=docker-image://${{ needs.base-prep.outputs.cache_ref }}@${{ needs.base-prep.outputs.digest }}
+            dev.contexts.p2996-export=docker-image://${{ needs.p2996-prep.outputs.cache_ref }}@${{ needs.p2996-prep.outputs.digest }}
       # docker/bake-action v6.8.0+ emits a per-job build summary with inputs,
       # errors, and a downloadable .dockerbuild record by default. The prior
       # hand-rolled "Build performance summary" + "Build diagnostics" steps
@@ -524,15 +559,55 @@ jobs:
         # C. Digest is best-effort from bake metadata — never fails the build.
         env:
           METADATA: ${{ steps.bake.outputs.metadata }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          short_sha=$(printf '%s' "${{ github.sha }}" | head -c 7)
+          short_sha=$(printf '%s' "${COMMIT_SHA}" | head -c 7)
           image_ref="${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${short_sha}"
           digest=$(printf '%s' "${METADATA:-}" | jq -r '.dev["containerimage.digest"] // empty' 2>/dev/null || true)
           {
             echo "image_ref=${image_ref}"
             echo "digest=${digest}"
           } >> "$GITHUB_OUTPUT"
+      - name: Assert provenance materials contain the p2996 digest (#160 T11)
+        # The pushed image's SLSA provenance (attest mode=max, T7) must
+        # record the exact p2996 artifact digest among its materials —
+        # closing the loop from "we injected a digest-pinned context" to
+        # "the published attestation proves those bytes went in".
+        if: inputs.publish
+        env:
+          IMAGE_REF: ${{ steps.out.outputs.image_ref }}
+          P2996_DIGEST: ${{ needs.p2996-prep.outputs.digest }}
+        run: |
+          set -euo pipefail
+          provenance=$(docker buildx imagetools inspect "${IMAGE_REF}" --format '{{json .Provenance}}')
+          if ! printf '%s' "$provenance" | jq -e --arg d "${P2996_DIGEST}" 'tostring | contains($d)' >/dev/null; then
+            echo "FAIL: provenance of ${IMAGE_REF} does not reference p2996 digest ${P2996_DIGEST}" >&2
+            exit 1
+          fi
+          echo "OK: provenance materials include p2996 digest ${P2996_DIGEST}"
+      - name: Write hash report (#160 T7)
+        # The content-addressed lineage of this build as a downloadable
+        # artifact: which :base-/:p2996- cache refs fed the dev image and
+        # what digest came out. Complements the per-job step summaries.
+        env:
+          BASE_REF: ${{ needs.base-prep.outputs.cache_ref }}
+          P2996_REF: ${{ needs.p2996-prep.outputs.cache_ref }}
+          IMAGE_REF: ${{ steps.out.outputs.image_ref }}
+          DIGEST: ${{ steps.out.outputs.digest }}
+        run: |
+          set -euo pipefail
+          {
+            echo "base_cache_ref=${BASE_REF}"
+            echo "p2996_cache_ref=${P2996_REF}"
+            echo "image_ref=${IMAGE_REF}"
+            echo "digest=${DIGEST}"
+          } > /tmp/build-hash-report.txt
+      - name: Upload hash report artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: build-hash-report
+          path: /tmp/build-hash-report.txt
   # ============================================================
   # Smoke test: validate the freshly-pushed image (PR or main).
   # PRs validate the exact :sha-<sha> that promote will retag as
@@ -579,13 +654,42 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Derive image tag
         id: smoke-tag
-        run: echo "tag=$(echo '${{ github.sha }}' | head -c 7)" >> "$GITHUB_OUTPUT"
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+        run: echo "tag=$(printf '%s' "${COMMIT_SHA}" | head -c 7)" >> "$GITHUB_OUTPUT"
       - name: Pull published image
-        run: docker pull ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.smoke-tag.outputs.tag }}
+        env:
+          IMAGE_REF: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.smoke-tag.outputs.tag }}
+        run: docker pull "${IMAGE_REF}"
       - name: Smoke published image
+        env:
+          IMAGE_REF: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.smoke-tag.outputs.tag }}
         run: |
           uv run --project python dotfiles-setup image smoke \
-            --image-ref ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.smoke-tag.outputs.tag }}
+            --image-ref "${IMAGE_REF}"
+      - name: Bootstrap packages gap report (#160 T7)
+        # Capture `status --json` from the published image and assert the
+        # declared [bootstrap.packages] set is fully installed. The Python
+        # check fails on `missing`/`version_mismatch` AND on an unexpectedly
+        # unavailable apt manager or set drift — conditions the build-time
+        # `status --missing` exit code cannot see (unavailable managers emit
+        # state "skipped"). Plain `status --json` exits 0 even with gaps, so
+        # the JSON is always captured for the artifact; the assert gates.
+        env:
+          IMAGE_REF: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.smoke-tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          docker run --rm "${IMAGE_REF}" \
+            mise bootstrap packages status --json > /tmp/bootstrap-gap-report.json
+          uv run --project python dotfiles-setup bootstrap-gap-report \
+            --status-json /tmp/bootstrap-gap-report.json
+      - name: Upload bootstrap gap report artifact
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bootstrap-gap-report
+          path: /tmp/bootstrap-gap-report.json
+          if-no-files-found: ignore
       - name: Analyze image layer efficiency (Dive)
         # Dive --ci enforces .dive-ci thresholds (lowestEfficiency,
         # highestWastedBytes). Pass/fail gate; replaces the dead-letter
@@ -670,10 +774,11 @@ jobs:
       - name: Tag validated image as :dev-<hash>
         env:
           IMAGE: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           hash=$(uv run --project python dotfiles-setup dev-hash)
-          short_sha=$(printf '%s' "${{ github.sha }}" | head -c 7)
+          short_sha=$(printf '%s' "${COMMIT_SHA}" | head -c 7)
           source_ref="${IMAGE}:${short_sha}"
           marker_ref="${IMAGE}:dev-${hash}"
           # The just-built + smoked image is published at :sha-<sha>;

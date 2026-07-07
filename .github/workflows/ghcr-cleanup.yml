@@ -1,0 +1,101 @@
+name: GHCR cleanup
+# Weekly retention pass over the dotfiles-devcontainer package (#160 T12.5,
+# decision 13). The three-tier probe cache accretes one :base-/:p2996-/
+# :dev-<hash16> tag per content-hash epoch forever; this prunes each family
+# to its newest-N while ALWAYS keeping :dev/:latest, any non-hash-family
+# tag (:sha, :pr-NNN), and every untagged version (attestation/child
+# manifests of kept indexes — deleting those corrupts kept images).
+#
+# SAFETY MODEL: dry-run by default, everywhere. The scheduled run only ever
+# PRINTS the plan. Deletion requires a manual workflow_dispatch with
+# delete=true — validate a dry-run's plan first (decision 13: "dry-run
+# validated before any delete"). The planner itself is pure Python
+# (dotfiles_setup.ghcr_cleanup, unit-tested); this workflow only feeds it
+# `gh api` JSON and executes the separately-gated delete loop.
+on:
+  schedule:
+    - cron: "0 3 * * 0" # weekly, Sunday 03:00 (after Saturday's quiet day)
+      timezone: "America/Chicago"
+  workflow_dispatch:
+    inputs:
+      delete:
+        description: "Execute the deletions (default: plan only). Run a dry-run first and review its plan."
+        required: false
+        default: false
+        type: boolean
+      keep_per_family:
+        description: "Newest-N window kept per hash-tag family"
+        required: false
+        default: "3"
+        type: string
+permissions:
+  contents: read
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write # needed only by the gated delete loop; plan is read-only
+    env:
+      PACKAGE: dotfiles-devcontainer
+      OWNER: ray-manaloto
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Install mise (python + uv)
+        uses: ./.github/actions/setup-mise
+        with:
+          install_args: "python uv"
+      - name: Fetch package versions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh api --paginate \
+            "/users/${OWNER}/packages/container/${PACKAGE}/versions?per_page=100" \
+            --jq '.' | jq -s 'add' > /tmp/versions.json
+          jq 'length' /tmp/versions.json
+      - name: Print retention plan
+        env:
+          KEEP: ${{ inputs.keep_per_family || '3' }}
+        run: |
+          set -euo pipefail
+          uv run --project python dotfiles-setup ghcr-cleanup \
+            --versions-json /tmp/versions.json --keep-per-family "${KEEP}" \
+            2>&1 | tee /tmp/plan.txt
+          {
+            echo "## GHCR cleanup plan (keep-per-family=${KEEP})"
+            echo '```'
+            cat /tmp/plan.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Delete pruned versions (explicitly gated)
+        if: inputs.delete == true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KEEP: ${{ inputs.keep_per_family || '3' }}
+        run: |
+          set -euo pipefail
+          uv run --project python dotfiles-setup ghcr-cleanup \
+            --versions-json /tmp/versions.json --keep-per-family "${KEEP}" \
+            --emit-delete-ids > /tmp/delete-ids.txt
+          count=$(wc -l < /tmp/delete-ids.txt | tr -d ' ')
+          echo "Deleting ${count} version(s)"
+          while IFS= read -r version_id; do
+            gh api --method DELETE \
+              "/users/${OWNER}/packages/container/${PACKAGE}/versions/${version_id}"
+            echo "deleted ${version_id}"
+          done < /tmp/delete-ids.txt
+          echo "GHCR cleanup: deleted ${count} version(s)" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload plan artifact
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ghcr-cleanup-plan
+          path: |
+            /tmp/versions.json
+            /tmp/plan.txt
+          if-no-files-found: ignore

@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import time
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
-
 from dotfiles_setup.lint import (
     DEFAULT_TIMEOUT_SECONDS,
     TIMEOUT_ENV_VAR,
@@ -14,6 +13,9 @@ from dotfiles_setup.lint import (
     resolve_timeout,
     run_guarded,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # A short timeout the kill-path tests can trip quickly without flaking.
 _SHORT_TIMEOUT = 1

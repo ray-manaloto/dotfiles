@@ -48,7 +48,7 @@ natively. The fix is at the tmux layer, not the terminal.
 ## The Approach
 
 1. **Edit tmux config** (`~/.tmux.conf` or `~/.config/tmux/tmux.conf`,
-   or the chezmoi source `home/dot_tmux.conf`). Add near the top with
+   or the chezmoi source `home/dot_tmux.conf.tmpl`). Add near the top with
    other `terminal-*` settings:
 
    ```tmux

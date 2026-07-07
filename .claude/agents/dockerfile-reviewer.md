@@ -9,18 +9,18 @@ You are a Docker and BuildKit specialist reviewing devcontainer builds for this 
 
 This project uses a multi-stage Dockerfile with BuildKit features:
 
-- **APT packages**: Uses plain `apt-get` (no snapshot pinning — removed due to snapshot.ubuntu.com unreliability on 26.04).
-- **Non-root user**: The Dockerfile switches to `USER vscode` (uid=1000) before the final RUN. All `--mount` options after this point must specify `uid=1000,gid=1000`.
-- **Secret mounts**: `--mount=type=secret,id=github_token,uid=1000,gid=1000` — the uid/gid is required because BuildKit secrets default to root-owned mode 0400, unreadable by non-root users.
-- **Cache mounts**: Used for mise, uv, chezmoi, and pkl caches. Must use consistent target paths and uid=1000,gid=1000.
-- **Single entry point**: `install.sh` is the bootstrap script. The Dockerfile copies the repo and runs `bash install.sh --local`.
+- **APT packages**: Uses plain `apt-get` (no snapshot pinning — removed due to snapshot.ubuntu.com unreliability on 26.04); the package list is declared in `mise-system.toml` `[bootstrap.packages]`.
+- **Root build**: The base image builds entirely as root — no `USER` directive. The thin `Dockerfile.host-user` overlay creates `${DEVCONTAINER_USERNAME}` (uid 1000) at devcontainer-up time; do not expect `uid=1000` mount options in the base Dockerfile.
+- **Secret mounts**: `--mount=type=secret,id=github_token` with no uid/gid override — the root build reads the default root-owned 0400 secret directly.
+- **Cache mounts**: apt lists/cache, mise, and uv caches with `sharing=locked`; root-owned in the base build.
+- **Tool install**: `mise install --system --locked` from `mise-system.toml` + the COPYd `conf.d/shared.toml` fragment; the chezmoi bootstrap runs at `onCreateCommand` (`on-create.sh`) — the old `install.sh` entry point was retired.
 
 ## docker-bake.hcl Patterns
 
 - **Variable naming**: HCL variables can be overridden by same-named environment variables. Never use generic names like `REGISTRY` that CI workflows might set. Current convention: `DEFAULT_REGISTRY`, `IMAGE_REF`.
 - **Tag separation**: The registry target (`dev`) pushes with CI-managed tags (SHA/latest/PR, from `docker-metadata-action`). The local-load variant (`dev-load`) inherits `dev` but outputs `type=docker` to load the image locally.
-- **Cache refs**: Must use `${IMAGE_REF}:buildcache` pattern, matching the push destination org.
-- **Attestations**: All targets must include `type=provenance,mode=min` and `type=sbom`.
+- **Cache refs**: `base`/`p2996-cache` use registry-tag probing (`:base-<hash16>`/`:p2996-<hash16>`) as the durable cache — no `:buildcache` refs and no gha cache on those targets; only `dev` keeps gha cache.
+- **Attestations**: All targets must include `type=provenance,mode=max` and `type=sbom` (epic #160 T7: dev bumps min→max; base/p2996-cache gain attest blocks in the same PR).
 
 ## CI Integration (bake-action v7)
 
@@ -33,7 +33,7 @@ This project uses a multi-stage Dockerfile with BuildKit features:
 
 When reviewing Docker-related changes, check:
 
-1. Secret and cache mounts have `uid=1000,gid=1000` after `USER` directive
+1. Mounts match the root-build model (no stray `uid=1000` options in the base Dockerfile; user creation lives only in `Dockerfile.host-user`)
 2. HCL variable names won't collide with CI environment variables
 3. Cache-from/cache-to refs are consistent with push tags
 4. SBOM and provenance attestations are present on all targets
@@ -42,6 +42,6 @@ When reviewing Docker-related changes, check:
 7. `RUSTUP_INIT_SKIP_EXISTENCE_CHECKS=yes` is set in mise env when rust is in mise tools (suppresses false "existing settings file" warning)
 8. `*.output=type=cacheonly` is CONDITIONAL in bake-action `set:` — only for non-push builds. `set:` overrides `push:` (higher precedence), so unconditional cacheonly silently prevents image push on main.
 9. Docker build comment block documents all known cosmetic warnings with root cause and fix status
-10. `HK_PKL_BACKEND=pkl` is set (not `pklr`) — required for pkl `import`/spread syntax used by hk-common.pkl
+10. hk config evaluates under the default pklr backend (the `HK_PKL_BACKEND=pkl` override was retired at hk 1.49, #160 T12 — pklr import/spread parity is probe-verified)
 11. Smoke test validates only baked-in image content — no host `--volume` mounts (avoids mise reading host config)
 12. `hk-common.pkl` and `hk-image.pkl` are COPYed into the image at `/etc/hk/` for image-side hook validation

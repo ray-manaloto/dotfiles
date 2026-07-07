@@ -20,12 +20,26 @@ variable "PLATFORM" {
   default = "linux/amd64/v2"
 }
 
+# Digest-pinned to the ubuntu:26.04 manifest-list (multi-arch resolution
+# preserved). This value feeds the base content-hash (p2996_hash.py reads it),
+# so a digest bump busts the base cache. Renovate bumps it via the custom
+# `ubuntu` manager; keep in lockstep with the Dockerfile BASE_IMAGE ARG.
 variable "BASE_IMAGE" {
-  default = "ubuntu:26.04"
+  default = "ubuntu:26.04@sha256:b7f48194d4d8b763a478a621cdc81c27be222ba2206ca3ca6bc42b49685f3d9e"
 }
 
 variable "DEVCONTAINER_USERNAME" {
   default = "devcontainer"
+}
+
+# Builder image for the clang-p2996 compile (#160 T11). A first-class
+# p2996-hash input (with PLATFORM): bumping it forces the ~2h compiler
+# rebuild, so it is DELIBERATELY separate from BASE_IMAGE and NOT
+# Renovate-tracked — bump manually and rarely. The builder never ships
+# bytes into the final image. Keep in lockstep with the Dockerfile
+# BUILDER_IMAGE ARG default.
+variable "BUILDER_IMAGE" {
+  default = "ubuntu:26.04@sha256:b7f48194d4d8b763a478a621cdc81c27be222ba2206ca3ca6bc42b49685f3d9e"
 }
 
 # Pinned commit SHA for Bloomberg's clang-p2996 fork (C++ P2996 reflection).
@@ -55,18 +69,21 @@ target "_common" {
 }
 
 # Default dev environment on ubuntu base.
-# CI's base-prep + p2996-prep jobs override DEVCONTAINER_BASE_REF and
-# P2996_SOURCE with published cache image refs so the dev build is a
-# pull + thin layer instead of rebuilding base + clang from scratch.
+# Warm CI paths inject `dev.contexts.devcontainer-base` and
+# `dev.contexts.p2996-export` as digest-pinned docker-image:// refs via
+# bake-action `set:` (#160 T11) — the contexts override the same-named
+# local stages so the dev build is a pull + thin layer. No contexts
+# here: the committed default is the cold path (local stages build).
 target "dev" {
   inherits = ["_common", "docker-metadata-action"]
-  target   = "devcontainer"
+  # devcontainer-runtime = final stage + the runtime tool tier (#160 T10);
+  # the published :dev image ships base + runtime tiers, the overlay tier
+  # installs per-user at container create.
+  target   = "devcontainer-runtime"
   args = {
     BASE_IMAGE      = BASE_IMAGE
+    BUILDER_IMAGE   = BUILDER_IMAGE
     CLANG_P2996_REF = CLANG_P2996_REF
-    # Defaults are local stage names — cold path. CI overrides these.
-    DEVCONTAINER_BASE_REF = "devcontainer-base"
-    P2996_SOURCE          = "p2996-export"
   }
   # Tags inherited from docker-metadata-action (CI overrides with SHA/latest/PR tags)
   cache-from = [
@@ -75,8 +92,12 @@ target "dev" {
   cache-to = [
     "type=gha,scope=dotfiles-dev,mode=max",
   ]
+  # mode=max records the full build graph (materials, args, steps) so the
+  # published provenance can answer "what exactly went into this image"
+  # (#160 T7). All three published targets attest identically — see base /
+  # p2996-cache below.
   attest = [
-    "type=provenance,mode=min",
+    "type=provenance,mode=max",
     "type=sbom",
   ]
 }
@@ -84,9 +105,11 @@ target "dev" {
 # Content-addressed cache for the devcontainer-base stage (apt + mise
 # install + cargo crates — the heavy ~30 min layer). CI tags it
 # ghcr.io/<owner>/<repo>:base-<hash16> where the hash captures
-# BASE_IMAGE + Dockerfile base-section + mise-system-resolved.json.
-# Both p2996-cache and dev pull this image so neither rebuilds the
-# mise install when only p2996 inputs change.
+# BASE_IMAGE + Dockerfile base-section + mise-system.toml + mise-system.lock
+# + hk-common.pkl/hk-image.pkl.
+# The dev build consumes it as the digest-pinned `devcontainer-base`
+# named context on warm paths (#160 T11); p2996-cache no longer touches
+# it at all (builder decoupled).
 #
 # NOTE: deliberately NO `type=gha` cache-from/cache-to. The registry
 # tag IS the durable cache: CI's `Probe cache` step short-circuits
@@ -102,14 +125,20 @@ target "base" {
   args = {
     BASE_IMAGE = BASE_IMAGE
   }
+  # Attestations on ALL published targets (#160 T7): the base cache image
+  # gets the same provenance/SBOM guarantees as the dev image it feeds.
+  attest = [
+    "type=provenance,mode=max",
+    "type=sbom",
+  ]
 }
 
 # Content-addressed cache for the clang-p2996 build artifact.
 # Builds only the scratch-based p2996-export stage (~500 MB, just
-# /opt/clang-p2996/). CI passes DEVCONTAINER_BASE_REF=
-# ghcr.io/.../:base-<base-hash16> so the mise install layer is pulled
-# (not rebuilt) before the clang compile starts. Tag pattern:
-# ghcr.io/<owner>/<repo>:p2996-<p2996-hash16>.
+# /opt/clang-p2996/). Since #160 T11 the builder is fully decoupled
+# from devcontainer-base (FROM ${BUILDER_IMAGE} + own apt toolchain),
+# so this target needs NO base ref and p2996-prep runs in PARALLEL
+# with base-prep. Tag pattern: ghcr.io/<owner>/<repo>:p2996-<hash16>.
 #
 # Same reasoning as `base` for omitting `type=gha` cache: registry
 # tag + Probe cache covers the inter-job path; gha cache export only
@@ -118,10 +147,16 @@ target "p2996-cache" {
   inherits = ["_common"]
   target   = "p2996-export"
   args = {
-    BASE_IMAGE            = BASE_IMAGE
-    CLANG_P2996_REF       = CLANG_P2996_REF
-    DEVCONTAINER_BASE_REF = "devcontainer-base"
+    BUILDER_IMAGE   = BUILDER_IMAGE
+    CLANG_P2996_REF = CLANG_P2996_REF
   }
+  # Attestations on ALL published targets (#160 T7). Provenance on the
+  # p2996 artifact directly supports T11's "provenance materials contain
+  # the p2996 digest" check.
+  attest = [
+    "type=provenance,mode=max",
+    "type=sbom",
+  ]
 }
 
 # Local-load variant (outputs to docker instead of registry)

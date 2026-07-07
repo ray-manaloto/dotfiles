@@ -35,7 +35,7 @@ the official `@devcontainers/cli` (pinned in `mise.toml`).
 
 | File | Purpose |
 |------|---------|
-| `mise.toml` | Tool versions and tasks (hk, pkl, hadolint, shellcheck, actionlint, pinact, python 3.14, uv, agnix) |
+| `mise.toml` + `.config/mise/conf.d/shared.toml` | Host tool versions + tasks; the 20 tools shared with the image (hk, pkl, linters, python, uv, chezmoi) live in the exact-pinned shared fragment both host and image merge (#160 T5) |
 | `mise.lock` | Locked tool versions for reproducible installs |
 | `mise.local.toml` | Gitignored per-clone overrides (e.g., `BASE_IMAGE`). See `mise.local.toml.example` |
 | `hk.pkl` | Project git hook config; imports `hk-common.pkl`; enforces `no_lint_skip`, `no_mcp_registration`, `require_pipefail`, `claude_md_import_stub`, `claude_agents_md_pairs` |
@@ -53,9 +53,9 @@ the official `@devcontainers/cli` (pinned in `mise.toml`).
 | `.devcontainer/` | Devcontainer spec, Dockerfile, mise-system.toml — see `.devcontainer/AGENTS.md` |
 | `.github/workflows/` | CI pipeline — see `.github/workflows/AGENTS.md` |
 | `.claude/` | Claude-specific agents, skills, rules. Has its own `CLAUDE.md` with OMC orchestration |
-| `home/` | Chezmoi-managed dotfiles — see `home/AGENTS.md` |
+| `home/` | Chezmoi-managed dotfile templates (its AGENTS.md was removed in #80) |
 | `python/` | Python package `dotfiles_setup` — see `python/AGENTS.md` |
-| `tests/` | Pytest + Bats test suite (190 pytest tests) — see `tests/AGENTS.md` |
+| `tests/` | Pytest + Bats test suite (224 pytest tests) — see `tests/AGENTS.md` |
 | `scripts/` | Utility scripts (`benchmark-docker.sh`, `devcontainer-smoke.sh`) |
 | `docs/` | Documentation, research findings, design specs |
 
@@ -77,15 +77,15 @@ Three pkl files with a shared-import pattern:
 - `hk.pkl` — project pre-commit config; imports and spreads `hk-common.pkl` groups
 - `hk-image.pkl` — Docker image checks; imports and spreads `hk-common.pkl` groups
 
-The pkl backend is required: `HK_PKL_BACKEND=pkl` (set in `mise.toml [env]`).
-The pklr backend lacks import/spread support. Note: hk caches pkl-evaluated
-configs at `~/Library/Caches/hk/configs/` — clear after editing `hk.pkl` if
-changes don't take effect.
+hk 1.49's default pklr backend evaluates the import/spread config
+identically to the pkl CLI (parity probe-verified #160 T12; the
+`HK_PKL_BACKEND=pkl` override is retired). The pkl-eval cache is
+content-hashed since hk 1.47 — no manual cache clearing after edits.
 
 ## Testing
 
 ```bash
-uv run --project python pytest tests/ -x -q               # All 190 tests
+uv run --project python pytest tests/ -x -q               # All 224 tests
 uv run --project python pytest tests/test_audit.py -x -q  # Single file
 hk run pre-commit --all --stash none                      # Lint checks only
 dotfiles-setup verify run                                 # Verification contracts (suites.toml)
@@ -129,13 +129,13 @@ locally before pushing Dockerfile changes.
   `chezmoi.os`) over homegrown detection logic. See
   `.claude/rules/use-tool-builtins.md`.
 - **Chezmoi is devcontainer-only on this Mac**: `chezmoi apply`/`update`
-  blocked on host by `.claude/settings.json`; read-only ok. See `home/AGENTS.md`.
+  blocked on host (enforced by `.claude/settings.json` deny rules); read-only ok.
 - **Notepad enforcement**: Agents write findings to notepad during work, not at session end. See `.claude/rules/notepad-enforcement.md`.
 - **OMC directory conventions**: Use standard `.omc/` paths, no ad-hoc
   directories. See `.claude/rules/omc-directory-conventions.md`.
 - **Zero-bash logic**: Non-trivial logic (env detection, tool config,
-  validation) lives in `python/`. Bash is restricted to Stage 0
-  bootstrap (`install.sh`).
+  validation) lives in `python/`. Bash is restricted to thin check/smoke
+  wrappers in `scripts/` (the old `install.sh` bootstrap was retired).
 
 ### Validate before committing
 
@@ -150,8 +150,8 @@ Before advancing to the next task or claiming done, EVERY applicable check must 
 
 ### Tool management
 
-- **mise-first**: All tools declared in `mise.toml`; use mise binaries
-  directly, not npx.
+- **mise-first**: All tools declared in `mise.toml` (or the merged
+  `.config/mise/conf.d/shared.toml`); use mise binaries directly, not npx.
 - **uv for Python**: `uv run --project python` for all Python commands.
   **Never `uv run --directory python`** — the latter changes cwd and
   breaks relative test paths.
@@ -173,7 +173,6 @@ Gated by `mise run verify-local`. Sessions touching `.devcontainer/` or `mise.to
 
 | Variable | Value | Purpose |
 |----------|-------|---------|
-| `HK_PKL_BACKEND` | `pkl` | Required pkl backend for hk (use pkl, not pklr) |
 | `HK_MISE` | `1` | Enable mise integration for hk |
 | `CONTAINER_REGISTRY` | `ghcr.io` | Docker registry (use `CONTAINER_REGISTRY`, not `REGISTRY` — avoids HCL collision) |
 | `DEVCONTAINER_USERNAME` | `${localEnv:USER}` (fallback: `devcontainer`) | Container user (UID 1000); passed through from host `USER` via `devcontainer.json`. Host-user migration is the current state — the legacy `vscode` value has been replaced. |

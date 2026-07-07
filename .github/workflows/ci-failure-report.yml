@@ -1,5 +1,9 @@
 name: ci-failure-report
-on:
+# zizmor: ignore[dangerous-triggers] — workflow_run is the DELIBERATE design
+# here: this workflow runs off the PR critical path, triggered by CI
+# completion, and never checks out or executes PR-authored code with its
+# token (single-maintainer repo, no fork PRs). See workflows/AGENTS.md.
+on: # zizmor: ignore[dangerous-triggers] — deliberate: see comment above
   workflow_run:
     workflows: ["CI"]
     types: [completed]

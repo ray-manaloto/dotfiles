@@ -1,14 +1,15 @@
 """Tests for image smoke test script generation and size parsing."""
 
+from __future__ import annotations
+
 import os
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 import json
-
-import pytest
 
 from dotfiles_setup.image import (
     _is_emulated,
@@ -24,6 +25,9 @@ from dotfiles_setup.image import (
     resolve_expected_config_sha256,
     resolve_expected_p2996_ref,
 )
+
+if TYPE_CHECKING:
+    import pytest
 
 # Named constant for plain byte values in size parsing tests.
 _PLAIN_BYTES_VALUE = 512
@@ -102,10 +106,10 @@ def test_smoke_script_p2996_reflection_links_and_runs() -> None:
     assert "-fsyntax-only" not in script
     assert "/opt/gcc-latest/bin/g++" in script
     assert "-o /tmp/refl-gcc" in script
-    assert "/tmp/refl-gcc ||" in script
+    assert "\n/tmp/refl-gcc ||" in script
     assert "/opt/clang-p2996/bin/clang++" in script
     assert "-o /tmp/refl-clang" in script
-    assert "/tmp/refl-clang ||" in script
+    assert "\n/tmp/refl-clang ||" in script
 
 
 def test_smoke_script_p2996_reflection_rpath_discovers_libcxx() -> None:
@@ -126,8 +130,8 @@ def test_smoke_script_p2996_reflection_runs_even_under_emulation() -> None:
     """
     script = build_smoke_script(_FAKE_P2996_SHA, emulated=True)
 
-    assert "/tmp/refl-clang ||" in script
-    assert "/tmp/refl-gcc ||" in script
+    assert "\n/tmp/refl-clang ||" in script
+    assert "\n/tmp/refl-gcc ||" in script
 
 
 def test_smoke_script_non_sha_ref_skips_strict_match() -> None:
@@ -211,6 +215,21 @@ def test_smoke_script_injects_config_identity_check() -> None:
     assert '"$actual_config_sha256" != "$EXPECTED_CONFIG_SHA256"' in script
 
 
+def test_smoke_script_injects_runtime_identity_check() -> None:
+    """#160 T10: an injected runtime hash activates the runtime-tier guard.
+
+    Covers the runtime-tier half of the image-identity guard (a stale runtime
+    stage on a current base).
+    """
+    script = build_smoke_script(
+        _FAKE_P2996_SHA, expected_runtime_sha256=_FAKE_CONFIG_SHA256
+    )
+
+    assert f"EXPECTED_RUNTIME_SHA256={_FAKE_CONFIG_SHA256}\n" in script
+    assert 'sha256sum "$MISE_RUNTIME_CFG"' in script
+    assert '"$actual_runtime_sha256" != "$EXPECTED_RUNTIME_SHA256"' in script
+
+
 def test_smoke_script_identity_reads_system_config_not_config_dir() -> None:
     """#148: identity/policy checks hash the base SYSTEM config, not MISE_CONFIG_DIR.
 
@@ -243,7 +262,7 @@ def test_smoke_script_tsan_runs_when_native() -> None:
 
     assert "TSAN_RUN_SKIP=''\n" in script
     assert "clang++ -fsanitize=thread /tmp/sanitizer.cpp -o /tmp/san-tsan" in script
-    assert "/tmp/san-tsan >/dev/null" in script
+    assert "  /tmp/san-tsan >/dev/null" in script
 
 
 def test_smoke_script_tsan_run_skipped_when_emulated() -> None:
@@ -324,7 +343,10 @@ experimental = true
 
 
 def _mise_ls_json(entries: dict[str, dict[str, object]]) -> str:
-    """Build a mise ls --json payload from {key: {version,requested,source,installed}}."""
+    """Build a mise ls --json payload from the given entries.
+
+    Each entry maps key -> {version, requested, source, installed}.
+    """
     doc = {
         key: [
             {
@@ -361,9 +383,30 @@ def test_installed_tools_filters_by_source_and_installed() -> None:
         }
     )
 
-    installed = installed_tools_from_mise_ls(payload, _SYS_CFG)
+    installed = installed_tools_from_mise_ls(payload, (_SYS_CFG,))
 
     assert installed == {"python": "latest"}
+
+
+def test_installed_tools_default_sources_cover_all_three_tiers() -> None:
+    """The default source tuple must accept system, shared AND runtime configs.
+
+    verify_tools_main relies on the default; a 2-tuple override made all 23
+    runtime-tier tools diff as declared-but-not-installed in the devcontainer
+    (PR #169).
+    """
+    payload = _mise_ls_json(
+        {
+            "python": {"source": _SYS_CFG},
+            "hk": {"source": "/usr/local/share/mise/conf.d/shared.toml"},
+            "github:cli/cli": {"source": "/usr/local/share/mise/config.runtime.toml"},
+            "user-tool": {"source": "/home/x/.config/mise/config.toml"},
+        }
+    )
+
+    installed = installed_tools_from_mise_ls(payload)
+
+    assert set(installed) == {"python", "hk", "github:cli/cli"}
 
 
 def test_diff_tool_sets_exact_match_is_empty() -> None:
@@ -399,8 +442,12 @@ def test_smoke_script_injects_tool_set_assertion() -> None:
     assert "python\tlatest" in script
     # ...and the mechanical set-diff (no logic in bash).
     assert 'if [ -n "$EXPECTED_TOOL_REQUESTS" ]; then' in script
-    assert "mise ls --json | jq -r" in script
-    assert "select(.source.path == $cfg and .installed == true)" in script
+    assert "mise ls --json" in script
+    assert "jq -r --arg cfg" in script
+    assert (
+        "select((.source.path == $cfg or .source.path == $shared\n"
+        "              or .source.path == $runtime) and .installed == true)" in script
+    )
 
 
 def test_smoke_script_tool_set_guard_dormant_without_tools() -> None:
@@ -419,15 +466,24 @@ def test_smoke_docker_cmd_injects_real_declared_tools() -> None:
     )
     script = cmd[-1]
 
-    # A representative real tool from .devcontainer/mise-system.toml.
-    assert "python\tlatest" in script
+    # A representative real tool from .devcontainer/mise-system.toml [tools]...
+    assert "node\tlatest" in script
+    # ...and from the merged shared conf.d fragment (#160 T5), exact-pinned.
+    assert "python\t3.14.6" in script
 
 
-def test_resolve_declared_tools_reads_repo_config() -> None:
-    """The repo's mise-system.toml parses to a non-empty backend-prefixed set."""
+def test_resolve_declared_tools_merges_system_and_shared() -> None:
+    """The image's declared set merges mise-system.toml with the shared fragment.
+
+    mise-system.toml [tools] MERGED with the shared conf.d fragment (#160 T5).
+    """
     declared = resolve_declared_tools()
 
-    assert declared["python"] == "latest"
+    # From the shared fragment, exact-pinned.
+    assert declared["python"] == "3.14.6"
+    assert declared["hk"] == "1.49.0"
+    # From mise-system.toml [tools].
+    assert declared["node"] == "latest"
     assert "conda:llvm" in declared
     assert all(isinstance(v, str) for v in declared.values())
 

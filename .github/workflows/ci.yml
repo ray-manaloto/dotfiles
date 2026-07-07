@@ -16,7 +16,6 @@ on:
       - "docker-bake.hcl"
       - "home/**"
       - "python/**"
-      - "install.sh"
       - ".github/workflows/ci.yml"
       - "hk.pkl"
       - "hk-image.pkl"
@@ -70,6 +69,12 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+    env:
+      # #160 T8: fail-fast deterministic installs — lint runs on the exact
+      # versions recorded in mise.lock, the same lock the Mac host consumes
+      # (macOS local == CI/CD parity principle). Lock↔config coverage is
+      # gated by tests/test_lock_coverage.py in contract-preflight.
+      MISE_LOCKED: "1"
     steps:
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -88,12 +93,11 @@ jobs:
       - name: Validate hk config
         run: hk validate
         env:
-          HK_PKL_BACKEND: pkl
           HK_LOG: debug
       - name: Run hk checks
-        run: hk run pre-commit --all
-        env:
-          HK_PKL_BACKEND: pkl
+        # #160 T12: the canonical read-only `check` hook (same steps as
+        # pre-commit, no fix/stash) — CI never wants write-backs.
+        run: hk run check --all
       - name: Assert chezmoiignore mise overlay hard gate
         # Machine-checks the .chezmoiignore devcontainer-only gate. Uses the
         # canonical chezmoi.os pattern (linux = devcontainer, darwin = host).
@@ -224,7 +228,6 @@ jobs:
               - 'docker-bake.hcl'
               - 'hk-common.pkl'
               - 'hk-image.pkl'
-              - 'install.sh'
               - 'python/**'
               - '.dive-ci'
               - '.github/workflows/ci.yml'
@@ -332,6 +335,11 @@ jobs:
         id: pr
         env:
           GH_TOKEN: ${{ github.token }}
+          # Values passed via env (not inline ${{ }}) so template expansion
+          # never lands inside the shell — zizmor template-injection (#160 T12).
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           # Look up the PR(s) associated with this commit. Works uniformly
@@ -353,9 +361,9 @@ jobs:
           # (would silently trigger a multi-hour rebuild today).
           resp=$(gh api graphql \
             -F query=@/tmp/associated_pr.gql \
-            -F owner="${{ github.repository_owner }}" \
-            -F repo="${{ github.event.repository.name }}" \
-            -F sha="${{ github.sha }}")
+            -F owner="${REPO_OWNER}" \
+            -F repo="${REPO_NAME}" \
+            -F sha="${COMMIT_SHA}")
           if jq -e '.errors' <<<"$resp" >/dev/null 2>&1; then
             echo "FAIL: graphql returned errors:" >&2
             jq '.errors' <<<"$resp" >&2
@@ -365,7 +373,7 @@ jobs:
             '.data.repository.object.associatedPullRequests.nodes[0].number // empty' \
             <<<"$resp")
           if [ -z "$pr_number" ]; then
-            echo "No associated PR for ${{ github.sha }} — will fall back to rebuild" >&2
+            echo "No associated PR for ${COMMIT_SHA} — will fall back to rebuild" >&2
             echo "fallback=true" >> "$GITHUB_OUTPUT"
           else
             echo "Found associated PR #${pr_number}" >&2

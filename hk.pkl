@@ -1,13 +1,22 @@
-amends "package://github.com/jdx/hk/releases/download/v1.44.2/hk@1.44.2#/Config.pkl"
+amends "package://github.com/jdx/hk/releases/download/v1.49.0/hk@1.49.0#/Config.pkl"
 
 // #154: builtin linters MUST be assigned from Builtins (`= Builtins.name`), not
 // declared as a bare `["name"] {}` block — a bare block is a fresh empty Step
 // (check=null) that hk silently skips (never ran locally or in CI). Extend a
 // builtin with overrides via `["name"] = (Builtins.name) { glob = ... }`.
 // See feedback_hk_builtins_need_assignment.
-import "package://github.com/jdx/hk/releases/download/v1.44.2/hk@1.44.2#/Builtins.pkl"
+import "package://github.com/jdx/hk/releases/download/v1.49.0/hk@1.49.0#/Builtins.pkl"
+// Named Config import for the Mapping<String, Config.Step> type annotation on
+// allSteps (the `amends` clause does not bind a module name).
+import "package://github.com/jdx/hk/releases/download/v1.49.0/hk@1.49.0#/Config.pkl"
 
 import "hk-common.pkl" as common
+
+// One-directional binary-vs-config drift guard (#160 T12): an older hk binary
+// refuses this config instead of silently misreading 1.49 features. The
+// cross-file pin parity (3 pkl URLs == shared.toml binary pin) is enforced by
+// the hk_version_parity step below (check-H).
+min_hk_version = "1.49.0"
 
 // Zero-skip policy: fail_fast=false to report ALL issues, not just the first
 fail_fast = false
@@ -15,6 +24,348 @@ fail_fast = false
 // #154: exclude non-source paths from ALL builtins — shared with hk-image.pkl
 // via common.excludePaths so the host and in-image configs can't drift.
 exclude = common.excludePaths
+
+// ============================================================================
+// All pre-commit steps, hoisted (#160 T12) so the canonical `check` / `fix`
+// hooks (jdx pattern — hk's own hk.pkl does exactly this) share one
+// definition with pre-commit. `hk fix` previously errored: hk has NO
+// fallback from an undefined `fix` hook to pre-commit.
+// ============================================================================
+local allSteps = new Mapping<String, Config.Step> {
+  // --- Shared checks (imported from hk-common.pkl) ---
+  ...common.hygiene
+  ...common.safety
+  ...common.security
+  ...common.typos
+
+  // --- Style & Consistency ---
+  ["editorconfig-checker"] = Builtins.editorconfig_checker
+  // #154: no prettier step — prettier and yamlfmt both format YAML and would
+  // fight over the same files (perpetual reformat). JSON is covered by jq,
+  // TOML by taplo. Re-add scoped to non-YAML if prettier coverage is wanted.
+
+  // --- Python: ruff builtins with a uv prefix (#160 T12) so hk uses the
+  //     repo config verbatim (root ruff.toml extends python/pyproject.toml —
+  //     tests/ and plugins/ finally resolve select=ALL; previously they got
+  //     ruff DEFAULTS because ruff resolves config per-file walking up).
+  //     The old custom whole-dir steps are retired: ruff lint is single-file
+  //     analysis, so the builtin's {{files}} scoping loses nothing, and the
+  //     builtin glob widens coverage to plugins/**. Order per Astral docs:
+  //     `ruff check --fix` BEFORE `ruff format`. ---
+  ["ruff"] = (Builtins.ruff) {
+    prefix = "uv run --project python"
+  }
+  ["ruff_format"] = (Builtins.ruff_format) {
+    prefix = "uv run --project python"
+    depends = List("ruff")
+  }
+  ["python_check_ast"] = (Builtins.python_check_ast) {
+    glob = List("python/src/**/*.py", "tests/**/*.py", "plugins/**/*.py")
+    batch = true
+  }
+  ["python_debug_statements"] = (Builtins.python_debug_statements) {
+    glob = List("python/src/**/*.py", "tests/**/*.py", "plugins/**/*.py")
+    batch = true
+  }
+  // py_ty STAYS custom whole-dir (#160 T12 probe): ty is a cross-module
+  // analyzer — `ty check pkg/a.py` passes on a broken call in pkg/b.py;
+  // file-scoped staged runs would miss cross-module breakage. --project
+  // attaches python/pyproject.toml's [tool.ty] config (probe-verified:
+  // without it, cwd=repo-root discovery found NO ty config at all).
+  ["py_ty"] {
+    glob = List("python/src/**/*.py", "tests/**/*.py")
+    check = "uv run --project python ty check --project python python/src tests"
+  }
+
+  // --- Zero inline lint suppressions (enforces zero-skip policy) ---
+  // Covers: ruff `noqa`, mypy `type: ignore`, ty `ty: ignore`, pylint, bandit `nosec`
+  ["no_lint_skip"] {
+    glob = List("python/src/**/*.py", "tests/**/*.py", "plugins/**/*.py")
+    // --include='*.py' aligns the check with the trigger glob.
+    // Without it, `grep -rn` matches markdown docs (e.g.,
+    // tests/AGENTS.md) that legitimately quote the suppression
+    // tokens while documenting the policy. The intent is to
+    // catch suppressions in Python source, not in prose.
+    // Scope expanded 2026-04-09 to include plugins/ after a
+    // `# noqa: S310` was discovered in a plugin script that had
+    // silently escaped enforcement. See feedback memory
+    // `feedback_no_inline_lint_suppressions_ever.md`.
+    // #160 T12.5 (decision 17, BEFORE the ruff/ty bumps): newer
+    // suppression syntaxes added — `ruff:ignore`/`ruff:file-ignore`/
+    // `ruff:disable` and the space-less `ty:ignore` — the old grep only
+    // caught `ty: ignore` with a space.
+    check =
+      "! grep -rn --include='*.py' 'noqa\\|type: ignore\\|ty: ignore\\|ty:ignore\\|ruff:ignore\\|ruff:file-ignore\\|ruff:disable\\|pylint: disable\\|nosec' python/src/ tests/ plugins/"
+  }
+
+  // --- Dockerfile & Bake ---
+  // #160 T12: glob includes Dockerfile.host-user — it was unlinted before.
+  ["hadolint"] = (Builtins.hadolint) {
+    glob = List(".devcontainer/Dockerfile", ".devcontainer/Dockerfile.host-user")
+  }
+  ["docker_bake_check"] {
+    glob = List("docker-bake.hcl", ".devcontainer/Dockerfile")
+    check =
+      "scripts/ensure-docker-up.sh && devcontainer read-configuration --workspace-folder ."
+  }
+
+  // --- devcontainer.json 3-layer schema validation ---
+  //     Layer 1: biome lint (JSONC parse, duplicate keys)
+  //     Layer 2: devcontainer read-configuration (official parser + substitution)
+  //     Layer 3: check-jsonschema vs official spec schema URL
+  //     Rationale: devcontainer.json is JSONC, so plain JSON tools
+  //     choke on trailing commas and comments. The 3-layer pipeline
+  //     catches parse errors, substitution failures, AND schema
+  //     drift (unknown fields, wrong types, missing required).
+  //     See scripts/validate-devcontainer-json.sh for details.
+  ["devcontainer_json_validate"] {
+    glob = List(".devcontainer/devcontainer.json")
+    check = "scripts/validate-devcontainer-json.sh"
+  }
+
+  // --- Thin host-user overlay invariant (Principle 1 of devcontainer-build refactor)
+  //     Dockerfile.host-user MUST stay <= baseline (79) + 10 = 89 lines.
+  //     New capabilities go into Devcontainer Features or devcontainer.json
+  //     mounts, NOT new RUN steps in the overlay.
+  ["dockerfile_host_user_thin_overlay"] {
+    glob = List(".devcontainer/Dockerfile.host-user")
+    check =
+      "lines=$(wc -l < .devcontainer/Dockerfile.host-user); [ \"$lines\" -le 89 ] || { echo \"Dockerfile.host-user is $lines lines, cap is 89 (baseline 79 + 10). Add capabilities via Features or devcontainer.json mounts, not RUN steps.\"; exit 1; }"
+  }
+
+  // --- TOML (lint only; #154 drops the opinionated taplo_format formatter
+  //     — it collapses hand-formatted arrays. #160 T12 drops the redundant
+  //     types override — the builtin already scopes to TOML.) ---
+  ["taplo"] = (Builtins.taplo) {
+    batch = true
+  }
+
+  // --- YAML (lint only; #154 drops yamlfmt — it restyles hand-formatted
+  //     YAML). yamllint --strict still enforces correctness. #160 T12 drops
+  //     the redundant types override (builtin default). ---
+  ["yamllint"] = (Builtins.yamllint) {
+    batch = true
+  }
+
+  // --- JSON: #154 no jq step — the jq builtin reorders JSON keys
+  //     (alphabetizes) and reflows, destroying intentional ordering in
+  //     renovate.json / .mcp.json. JSONC (devcontainer.json) is validated
+  //     by devcontainer_json_validate. ---
+
+  // --- Pkl (eval-check only; #154 drops pkl_format — it reflows the
+  //     hand-formatted hk pkl files; #160 T12 drops the redundant types
+  //     override) ---
+  ["pkl"] = Builtins.pkl
+
+  // --- Shell (lint only; #154 drops shfmt — it restyles hand-formatted
+  //     scripts). shellcheck still enforces correctness. #160 T12 drops the
+  //     redundant batch override. ---
+  ["shellcheck"] = (Builtins.shellcheck) {
+    types = List("shell")
+  }
+
+  // --- Exit-code-masking guard (#142): every shell script with a
+  //     shebang MUST declare `set -o pipefail` so a failing stage in
+  //     a `cmd | filter` pipeline surfaces instead of being masked by
+  //     the last stage's exit 0. Iterates all tracked `*.sh` (not just
+  //     the staged glob match) so a script anywhere in the tree cannot
+  //     regress — same whole-tree idiom as `claude_md_size_limit`.
+  //     Matches all short-flag forms (`set -o`, `set -euo`, ...) via
+  //     `set -[a-z]*o pipefail`. See .claude/rules/verify-before-advancing.md
+  //     (evidence discipline) and feedback_pipe_kills_exit_code.
+  ["require_pipefail"] {
+    glob = List("**/*.sh")
+    check =
+      "rc=0; for f in $(git ls-files '*.sh'); do first=$(head -n1 \"$f\"); case \"$first\" in \"#!\"*) ;; *) continue ;; esac; grep -qE 'set -[a-z]*o pipefail' \"$f\" || { echo \"$f: shell script with shebang lacks 'set -o pipefail' (exit-code masking guard, #142)\" >&2; rc=1; }; done; exit $rc"
+  }
+
+  // --- Markdown ---
+  // #154: no markdown_lint step — its builtin runs `markdownlint` (cli v1),
+  // but the repo standardizes on `markdownlint-cli2` (+ rumdl, mdschema).
+  // #160 T12: rumdl/mdschema builtin adoption DEFERRED with probe evidence —
+  // rumdl reports 591 findings across 56 files (a real burn-down project),
+  // and mdschema requires authoring a schema file that does not exist yet.
+  // Tracked as a follow-up issue (decision 20 files issues during the PR).
+
+  // --- GitHub Actions ---
+  // #160 T12: redundant yml-only glob overrides dropped (the builtins cover
+  // .yml and .yaml); ghalint_action added — the 2 local composite actions
+  // were previously unlinted; zizmor adopted (the 1.44.2-era "check=null
+  // no-op" carve-out was stale — the builtin is real; findings burned down
+  // to zero this commit, with the 2 intentional workflow_run triggers
+  // annotated inline).
+  ["actionlint"] = Builtins.actionlint
+  ["ghalint_workflow"] = Builtins.ghalint_workflow
+  ["ghalint_action"] = Builtins.ghalint_action
+  ["zizmor"] = Builtins.zizmor
+  //
+  // #154: no pinact / pinact_update steps — they call the GitHub API to
+  // resolve SHAs and hit the unauthenticated 60/hr rate limit in CI (the
+  // lint job has no GITHUB_TOKEN in env), and pinact_update is a fix-op, not
+  // a check. SHA-pin verification is the canonical `mise run pin-actions`
+  // task (AGENTS.md), which CI runs with an authenticated token.
+
+  // --- HCL ---
+  // #154: no hclfmt step — `hclfmt` is not in the mise registry (only
+  // hcl2json/hcloud), so it can't satisfy ci-local-parity. The sole .hcl
+  // file (docker-bake.hcl) is already validated by `docker_bake_check`
+  // (devcontainer read-configuration) and `mise run` bake validate.
+
+  // --- mise config validation ---
+  ["mise"] = (Builtins.mise) {
+    glob = List("**/mise.toml")
+  }
+
+  // --- uv lockfile currency (#160 T12.5, decision 19): a pyproject edit
+  //     without `uv lock` leaves uv.lock stale — resolved silently at the
+  //     next `uv run`, which then diverges from what CI installed. ---
+  ["uv_lock_check"] {
+    glob = List("python/pyproject.toml", "python/uv.lock")
+    check = "uv lock --check --project python"
+  }
+
+  // --- chezmoi template render gate (#160 T12.5, decision 19): every
+  //     tracked home/**/*.tmpl must render with the source data — catches
+  //     bad template syntax / undefined data at commit time instead of at
+  //     `chezmoi init --apply` inside the container. ---
+  ["chezmoi_template_render"] {
+    glob = List("home/**/*.tmpl", "home/.chezmoi.toml.tmpl")
+    check = "scripts/check-chezmoi-templates.sh"
+  }
+
+  // --- Renovate config validation ---
+  //     `renovate-config-validator` (from npm:renovate in mise.toml) is the
+  //     official schema + migration validator. `--strict` fails on any
+  //     warning/error OR a needed config migration (e.g. a deprecated
+  //     `regex` manager name that must become `custom.regex`). `--no-global`
+  //     validates renovate.json AS A REPO CONFIG — without it the validator
+  //     treats a named file as GLOBAL self-hosted config and applies the
+  //     wrong schema. Network-safe: the validator does NOT fetch remote
+  //     `extends` presets (verified: a nonexistent preset still passes, run
+  //     is ~0.25s), so unlike pinact there's no GitHub rate-limit risk.
+  //
+  //     NOTE: this is COMPLEMENTARY to — not a replacement for — the
+  //     `ci.regex-managers-enabled` and `ci.renovate-extends-jdx-preset`
+  //     contracts in suites.toml. Empirically the validator passes when
+  //     `custom.regex` is dropped from enabledManagers (the 3 customManagers
+  //     silently go dead) AND when the jdx preset is removed; those two
+  //     repo-specific semantics are guarded only by the suites.toml tokens.
+  ["renovate_config_validate"] {
+    glob = List("renovate.json")
+    check = "renovate-config-validator --strict --no-global renovate.json"
+  }
+
+  // --- Agent documentation ---
+  ["agnix"] {
+    check = "agnix ."
+    glob = List("CLAUDE.md", "AGENTS.md", ".claude/**/*.md", ".agnix.toml")
+  }
+
+  // --- Doc path-reference existence (#160 T13, validation J): every
+  //     backtick span in AGENTS.md/rules/skills that looks like a file
+  //     path must resolve (exact, basename, or suffix match) or be
+  //     allowlisted with a reason. agnix validates only @import stubs and
+  //     rumdl MD057 only real links — backtick citations were parsed by
+  //     NOTHING (dogfooding this check found + fixed a stale ref). ---
+  ["doc_refs"] {
+    glob = List("AGENTS.md", "**/AGENTS.md", ".claude/rules/*.md", ".claude/skills/**/*.md")
+    check = "uv run --project python dotfiles-setup check-doc-refs"
+  }
+
+  // --- hk pin parity (check-H, #160 T12): the hk version must be identical
+  //     across the 3 pkl package URLs AND equal the shared.toml binary pin.
+  //     min_hk_version above guards binary-too-old; this guards pin drift
+  //     (the exact 1.44.2-vs-1.46 split this task found). ---
+  ["hk_version_parity"] {
+    glob = List("hk.pkl", "hk-common.pkl", "hk-image.pkl", ".config/mise/conf.d/shared.toml")
+    check =
+      "set -- $(grep -ohE 'hk@[0-9]+\\.[0-9]+\\.[0-9]+' hk.pkl hk-common.pkl hk-image.pkl | sort -u); pin=$(grep -E '^hk = ' .config/mise/conf.d/shared.toml | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+'); [ $# -eq 1 ] && [ \"$1\" = \"hk@${pin}\" ] || { echo \"hk pin drift: pkl URLs [$*] vs shared.toml pin ${pin} — bump all four together\" >&2; exit 1; }"
+  }
+
+  // --- No MCP registration (enforces feedback_no_mcp_registration.md) ---
+  //     `claude mcp add` and tracked `.mcp.json` files inflate every
+  //     Claude conversation's system prompt with tool schemas. The
+  //     sanctioned alternatives are `mcp2cli` (process spawn) and
+  //     curl-based llms.txt/.md fetches. See
+  //     .claude/rules/research-doc-sources.md and
+  //     .claude/skills/mcp2cli/SKILL.md.
+  //
+  //     Whitelisted paths are the files that legitimately document
+  //     the ban (skills, rules, this hk step itself).
+  //
+  //     Approved exception (2026-04-07): root `.mcp.json` is allowed
+  //     to provision OMC default MCP servers (exa, context7, memory,
+  //     filesystem) at project scope. Nested `**/.mcp.json` files
+  //     remain banned. Tracked in feedback_no_mcp_registration.md;
+  //     planned migration: convert to mcp2cli wrappers later.
+  ["no_mcp_registration"] {
+    check =
+      "! git grep -nE 'claude[[:space:]]+mcp[[:space:]]+add' -- ':!.claude/skills/mcp2cli/SKILL.md' ':!.claude/skills/mintlify/SKILL.md' ':!.claude/rules/research-doc-sources.md' ':!.claude/rules/research-repo-enumeration.md' ':!.claude/CLAUDE.md' ':!AGENTS.md' ':!mise.toml' ':!docs/research/mintlify-catalog.md' ':!hk.pkl' && ! git ls-files '**/.mcp.json' | grep -q ."
+  }
+
+  // --- Claude Code memory docs size limit ---
+  //     The Claude Code memory docs (code.claude.com/docs/en/memory)
+  //     recommend each CLAUDE.md stay "under 200 lines". We enforce
+  //     the same limit on AGENTS.md because CLAUDE.md in this repo
+  //     is a thin `@AGENTS.md` import stub - the AGENTS.md holds
+  //     the content that CLAUDE.md delegates to, so the line budget
+  //     effectively lives in AGENTS.md.
+  //
+  //     Belt-and-suspenders check: claudelint (installed via
+  //     mise.toml) has a native size limit check with richer
+  //     diagnostics; full integration is tracked in a GH issue
+  //     scheduled for post-devcontainer-work review. This awk step
+  //     ships immediate enforcement in the meantime.
+  //     #160 T13 (validation K): the ≤12,000-char half is now enforced
+  //     too — it was cited by verify-before-advancing.md but nothing
+  //     machine-checked it (workflows/AGENTS.md ran it to 11,986).
+  ["claude_md_size_limit"] {
+    check =
+      "rc=0; for f in $(git ls-files | grep -E '(^|/)(CLAUDE|AGENTS)\\.md$'); do lines=$(wc -l < \"$f\"); chars=$(wc -c < \"$f\"); if [ \"$lines\" -gt 200 ]; then echo \"$f: $lines lines (max 200 per Claude Code memory docs)\" >&2; rc=1; fi; if [ \"$chars\" -gt 12000 ]; then echo \"$f: $chars chars (max 12000 per Claude Code memory docs)\" >&2; rc=1; fi; done; exit $rc"
+  }
+
+  // --- No global skill leakage (presence assertion for project-scoped
+  //     mcp2cli + mintlify reference skills). Asserts that the
+  //     project-local SKILL.md files exist; a commit that deletes them
+  //     must also remove this check. Per R3 Architect finding #2, this
+  //     replaces a CI parity check that would have been irrelevant on
+  //     ephemeral runners. ---
+  ["no_global_skill_leakage"] {
+    check =
+      "test -f .claude/skills/mcp2cli/SKILL.md && test -f .claude/skills/mintlify/SKILL.md"
+  }
+
+  // --- CLAUDE.md must be a thin `@AGENTS.md` import stub.
+  //     Every tracked CLAUDE.md (excluding `.claude/**`) consists
+  //     solely of: one `@AGENTS.md` import + optional blank lines +
+  //     optional HTML comments. Prevents drift between CLAUDE.md
+  //     (Claude Code) and AGENTS.md (Codex/Gemini) — the former
+  //     should always import the latter, never duplicate content.
+  //     `.claude/**` is exempt because that scope is Claude-specific
+  //     (e.g., `.claude/CLAUDE.md` holds OMC orchestration content
+  //     that other agents don't load). ---
+  ["claude_md_import_stub"] {
+    check = "scripts/check-claude-md-stub.sh"
+  }
+
+  // --- Every CLAUDE.md must have a sibling AGENTS.md, and vice
+  //     versa. A CLAUDE.md without a sibling AGENTS.md would import
+  //     a non-existent file; an AGENTS.md without a sibling
+  //     CLAUDE.md would mean Claude doesn't load that scope's
+  //     project instructions. `.claude/**` is exempt for the same
+  //     reason as `claude_md_import_stub` above. ---
+  ["claude_agents_md_pairs"] {
+    check = "scripts/check-claude-agents-md-pairs.sh"
+  }
+
+  // #160 T12: step `tests{}` + the hk_test builtin + `hk test` in CI are
+  // DEFERRED with probe evidence: `hk test` executes test cases IN THE REAL
+  // PROJECT DIRECTORY (no sandbox — the probe left written test files behind
+  // and tests observed each other's files), so a violation-case test for
+  // e.g. no_lint_skip would write an actual `noqa` file into python/src/
+  // and leave it there. Needs upstream sandboxing or a {{files}}-scoped
+  // step redesign first. Tracked as a follow-up issue.
+}
 
 hooks {
   // ==========================================================================
@@ -24,279 +375,25 @@ hooks {
     fix = true
     stash = "git"
     steps {
-      // --- Shared checks (imported from hk-common.pkl) ---
-      ...common.hygiene
-      ...common.safety
-      ...common.security
-      ...common.typos
+      ...allSteps
+    }
+  }
 
-      // --- Style & Consistency ---
-      ["editorconfig-checker"] = Builtins.editorconfig_checker
-      // #154: no prettier step — prettier and yamlfmt both format YAML and would
-      // fight over the same files (perpetual reformat). JSON is covered by jq,
-      // TOML by taplo. Re-add scoped to non-YAML if prettier coverage is wanted.
-
-      // --- Python: ruff + ty invoked directly via uv so hk uses
-      //     python/pyproject.toml config verbatim. Replaces the hk builtin
-      //     steps, which silently dropped rules (see Issue #45). ruff + ty
-      //     are pinned via python/uv.lock (dev dependency-group).
-      //     Order per Astral ruff docs: `ruff check --fix` BEFORE `ruff format`
-      //     (lint fixes reorder imports; format then cleans up). ---
-      ["py_ruff"] {
-        glob = List("python/src/**/*.py", "tests/**/*.py")
-        check = "uv run --project python ruff check python/src tests"
-        fix = "uv run --project python ruff check --fix python/src tests"
-      }
-      ["py_ruff_format"] {
-        glob = List("python/src/**/*.py", "tests/**/*.py")
-        check = "uv run --project python ruff format --check python/src tests"
-        fix = "uv run --project python ruff format python/src tests"
-        depends = List("py_ruff")
-      }
-      ["python_check_ast"] = (Builtins.python_check_ast) {
-        glob = List("python/src/**/*.py", "tests/**/*.py")
-        batch = true
-      }
-      ["python_debug_statements"] = (Builtins.python_debug_statements) {
-        glob = List("python/src/**/*.py", "tests/**/*.py")
-        batch = true
-      }
-      ["py_ty"] {
-        glob = List("python/src/**/*.py", "tests/**/*.py")
-        check = "uv run --project python ty check python/src tests"
-      }
-
-      // --- Zero inline lint suppressions (enforces zero-skip policy) ---
-      // Covers: ruff `noqa`, mypy `type: ignore`, ty `ty: ignore`, pylint, bandit `nosec`
-      ["no_lint_skip"] {
-        glob = List("python/src/**/*.py", "tests/**/*.py", "plugins/**/*.py")
-        // --include='*.py' aligns the check with the trigger glob.
-        // Without it, `grep -rn` matches markdown docs (e.g.,
-        // tests/AGENTS.md) that legitimately quote the suppression
-        // tokens while documenting the policy. The intent is to
-        // catch suppressions in Python source, not in prose.
-        // Scope expanded 2026-04-09 to include plugins/ after a
-        // `# noqa: S310` was discovered in a plugin script that had
-        // silently escaped enforcement. See feedback memory
-        // `feedback_no_inline_lint_suppressions_ever.md`.
-        check =
-          "! grep -rn --include='*.py' 'noqa\\|type: ignore\\|ty: ignore\\|pylint: disable\\|nosec' python/src/ tests/ plugins/"
-      }
-
-      // --- Dockerfile & Bake ---
-      ["hadolint"] = (Builtins.hadolint) {
-        glob = List(".devcontainer/Dockerfile")
-      }
-      ["docker_bake_check"] {
-        glob = List("docker-bake.hcl", ".devcontainer/Dockerfile")
-        check =
-          "scripts/ensure-docker-up.sh && devcontainer read-configuration --workspace-folder ."
-      }
-
-      // --- devcontainer.json 3-layer schema validation ---
-      //     Layer 1: biome lint (JSONC parse, duplicate keys)
-      //     Layer 2: devcontainer read-configuration (official parser + substitution)
-      //     Layer 3: check-jsonschema vs official spec schema URL
-      //     Rationale: devcontainer.json is JSONC, so plain JSON tools
-      //     choke on trailing commas and comments. The 3-layer pipeline
-      //     catches parse errors, substitution failures, AND schema
-      //     drift (unknown fields, wrong types, missing required).
-      //     See scripts/validate-devcontainer-json.sh for details.
-      ["devcontainer_json_validate"] {
-        glob = List(".devcontainer/devcontainer.json")
-        check = "scripts/validate-devcontainer-json.sh"
-      }
-
-      // --- Thin host-user overlay invariant (Principle 1 of devcontainer-build refactor)
-      //     Dockerfile.host-user MUST stay <= baseline (79) + 10 = 89 lines.
-      //     New capabilities go into Devcontainer Features or devcontainer.json
-      //     mounts, NOT new RUN steps in the overlay.
-      ["dockerfile_host_user_thin_overlay"] {
-        glob = List(".devcontainer/Dockerfile.host-user")
-        check =
-          "lines=$(wc -l < .devcontainer/Dockerfile.host-user); [ \"$lines\" -le 89 ] || { echo \"Dockerfile.host-user is $lines lines, cap is 89 (baseline 79 + 10). Add capabilities via Features or devcontainer.json mounts, not RUN steps.\"; exit 1; }"
-      }
-
-      // --- TOML (lint only; #154 drops the opinionated taplo_format formatter
-      //     — it collapses hand-formatted arrays. `mise` fmt-checks mise.toml.) ---
-      ["taplo"] = (Builtins.taplo) {
-        types = List("toml")
-        batch = true
-      }
-
-      // --- YAML (lint only; #154 drops yamlfmt — it restyles hand-formatted
-      //     YAML). yamllint --strict still enforces correctness. ---
-      ["yamllint"] = (Builtins.yamllint) {
-        types = List("yaml")
-        batch = true
-      }
-
-      // --- JSON: #154 no jq step — the jq builtin reorders JSON keys
-      //     (alphabetizes) and reflows, destroying intentional ordering in
-      //     renovate.json / .mcp.json. JSONC (devcontainer.json) is validated
-      //     by devcontainer_json_validate. ---
-
-      // --- Pkl (eval-check only; #154 drops pkl_format — it reflows the
-      //     hand-formatted hk pkl files) ---
-      ["pkl"] = (Builtins.pkl) {
-        types = List("pkl")
-      }
-
-      // --- Shell (lint only; #154 drops shfmt — it restyles hand-formatted
-      //     scripts). shellcheck still enforces correctness. ---
-      ["shellcheck"] = (Builtins.shellcheck) {
-        types = List("shell")
-        batch = true
-      }
-
-      // --- Exit-code-masking guard (#142): every shell script with a
-      //     shebang MUST declare `set -o pipefail` so a failing stage in
-      //     a `cmd | filter` pipeline surfaces instead of being masked by
-      //     the last stage's exit 0. Iterates all tracked `*.sh` (not just
-      //     the staged glob match) so a script anywhere in the tree cannot
-      //     regress — same whole-tree idiom as `claude_md_size_limit`.
-      //     Matches all short-flag forms (`set -o`, `set -euo`, ...) via
-      //     `set -[a-z]*o pipefail`. See .claude/rules/verify-before-advancing.md
-      //     (evidence discipline) and feedback_pipe_kills_exit_code.
-      ["require_pipefail"] {
-        glob = List("**/*.sh")
-        check =
-          "rc=0; for f in $(git ls-files '*.sh'); do first=$(head -n1 \"$f\"); case \"$first\" in \"#!\"*) ;; *) continue ;; esac; grep -qE 'set -[a-z]*o pipefail' \"$f\" || { echo \"$f: shell script with shebang lacks 'set -o pipefail' (exit-code masking guard, #142)\" >&2; rc=1; }; done; exit $rc"
-      }
-
-      // --- Markdown ---
-      // #154: no markdown_lint step — its builtin runs `markdownlint` (cli v1),
-      // but the repo standardizes on `markdownlint-cli2` (+ rumdl, mdschema);
-      // adding a redundant v1 binary just to satisfy the builtin isn't worth it.
-
-      // --- GitHub Actions ---
-      ["actionlint"] = (Builtins.actionlint) {
-        glob = List(".github/workflows/*.yml")
-      }
-      ["ghalint_workflow"] = (Builtins.ghalint_workflow) {
-        glob = List(".github/workflows/*.yml")
-      }
-      // #154: no zizmor step — the zizmor builtin in hk@1.44.2 resolves to
-      // check=null (a no-op that always "passes"); it never actually scans.
-      // Re-add when the builtin ships a real command (or wire zizmor manually).
-      //
-      // #154: no pinact / pinact_update steps — they call the GitHub API to
-      // resolve SHAs and hit the unauthenticated 60/hr rate limit in CI (the
-      // lint job has no GITHUB_TOKEN in env), and pinact_update is a fix-op, not
-      // a check. SHA-pin verification is the canonical `mise run pin-actions`
-      // task (AGENTS.md), which CI runs with an authenticated token.
-
-      // --- HCL ---
-      // #154: no hclfmt step — `hclfmt` is not in the mise registry (only
-      // hcl2json/hcloud), so it can't satisfy ci-local-parity. The sole .hcl
-      // file (docker-bake.hcl) is already validated by `docker_bake_check`
-      // (devcontainer read-configuration) and `mise run` bake validate.
-
-      // --- mise config validation ---
-      ["mise"] = (Builtins.mise) {
-        glob = List("**/mise.toml")
-      }
-
-      // --- Renovate config validation ---
-      //     `renovate-config-validator` (from npm:renovate in mise.toml) is the
-      //     official schema + migration validator. `--strict` fails on any
-      //     warning/error OR a needed config migration (e.g. a deprecated
-      //     `regex` manager name that must become `custom.regex`). `--no-global`
-      //     validates renovate.json AS A REPO CONFIG — without it the validator
-      //     treats a named file as GLOBAL self-hosted config and applies the
-      //     wrong schema. Network-safe: the validator does NOT fetch remote
-      //     `extends` presets (verified: a nonexistent preset still passes, run
-      //     is ~0.25s), so unlike pinact there's no GitHub rate-limit risk.
-      //
-      //     NOTE: this is COMPLEMENTARY to — not a replacement for — the
-      //     `ci.regex-managers-enabled` and `ci.renovate-extends-jdx-preset`
-      //     contracts in suites.toml. Empirically the validator passes when
-      //     `custom.regex` is dropped from enabledManagers (the 3 customManagers
-      //     silently go dead) AND when the jdx preset is removed; those two
-      //     repo-specific semantics are guarded only by the suites.toml tokens.
-      ["renovate_config_validate"] {
-        glob = List("renovate.json")
-        check = "renovate-config-validator --strict --no-global renovate.json"
-      }
-
-      // --- Agent documentation ---
-      ["agnix"] {
-        check = "agnix ."
-        glob = List("CLAUDE.md", "AGENTS.md", ".claude/**/*.md", ".agnix.toml")
-      }
-
-      // --- No MCP registration (enforces feedback_no_mcp_registration.md) ---
-      //     `claude mcp add` and tracked `.mcp.json` files inflate every
-      //     Claude conversation's system prompt with tool schemas. The
-      //     sanctioned alternatives are `mcp2cli` (process spawn) and
-      //     curl-based llms.txt/.md fetches. See
-      //     .claude/rules/research-doc-sources.md and
-      //     .claude/skills/mcp2cli/SKILL.md.
-      //
-      //     Whitelisted paths are the files that legitimately document
-      //     the ban (skills, rules, this hk step itself).
-      //
-      //     Approved exception (2026-04-07): root `.mcp.json` is allowed
-      //     to provision OMC default MCP servers (exa, context7, memory,
-      //     filesystem) at project scope. Nested `**/.mcp.json` files
-      //     remain banned. Tracked in feedback_no_mcp_registration.md;
-      //     planned migration: convert to mcp2cli wrappers later.
-      ["no_mcp_registration"] {
-        check =
-          "! git grep -nE 'claude[[:space:]]+mcp[[:space:]]+add' -- ':!.claude/skills/mcp2cli/SKILL.md' ':!.claude/skills/mintlify/SKILL.md' ':!.claude/rules/research-doc-sources.md' ':!.claude/rules/research-repo-enumeration.md' ':!.claude/CLAUDE.md' ':!AGENTS.md' ':!mise.toml' ':!docs/research/mintlify-catalog.md' ':!hk.pkl' && ! git ls-files '**/.mcp.json' | grep -q ."
-      }
-
-      // --- Claude Code memory docs size limit ---
-      //     The Claude Code memory docs (code.claude.com/docs/en/memory)
-      //     recommend each CLAUDE.md stay "under 200 lines". We enforce
-      //     the same limit on AGENTS.md because CLAUDE.md in this repo
-      //     is a thin `@AGENTS.md` import stub - the AGENTS.md holds
-      //     the content that CLAUDE.md delegates to, so the line budget
-      //     effectively lives in AGENTS.md.
-      //
-      //     Belt-and-suspenders check: claudelint (installed via
-      //     mise.toml) has a native size limit check with richer
-      //     diagnostics; full integration is tracked in a GH issue
-      //     scheduled for post-devcontainer-work review. This awk step
-      //     ships immediate enforcement in the meantime.
-      ["claude_md_size_limit"] {
-        check =
-          "rc=0; for f in $(git ls-files | grep -E '(^|/)(CLAUDE|AGENTS)\\.md$'); do lines=$(wc -l < \"$f\"); if [ \"$lines\" -gt 200 ]; then echo \"$f: $lines lines (max 200 per Claude Code memory docs)\" >&2; rc=1; fi; done; exit $rc"
-      }
-
-      // --- No global skill leakage (presence assertion for project-scoped
-      //     mcp2cli + mintlify reference skills). Asserts that the
-      //     project-local SKILL.md files exist; a commit that deletes them
-      //     must also remove this check. Per R3 Architect finding #2, this
-      //     replaces a CI parity check that would have been irrelevant on
-      //     ephemeral runners. ---
-      ["no_global_skill_leakage"] {
-        check =
-          "test -f .claude/skills/mcp2cli/SKILL.md && test -f .claude/skills/mintlify/SKILL.md"
-      }
-
-      // --- CLAUDE.md must be a thin `@AGENTS.md` import stub.
-      //     Every tracked CLAUDE.md (excluding `.claude/**`) consists
-      //     solely of: one `@AGENTS.md` import + optional blank lines +
-      //     optional HTML comments. Prevents drift between CLAUDE.md
-      //     (Claude Code) and AGENTS.md (Codex/Gemini) — the former
-      //     should always import the latter, never duplicate content.
-      //     `.claude/**` is exempt because that scope is Claude-specific
-      //     (e.g., `.claude/CLAUDE.md` holds OMC orchestration content
-      //     that other agents don't load). ---
-      ["claude_md_import_stub"] {
-        check = "scripts/check-claude-md-stub.sh"
-      }
-
-      // --- Every CLAUDE.md must have a sibling AGENTS.md, and vice
-      //     versa. A CLAUDE.md without a sibling AGENTS.md would import
-      //     a non-existent file; an AGENTS.md without a sibling
-      //     CLAUDE.md would mean Claude doesn't load that scope's
-      //     project instructions. `.claude/**` is exempt for the same
-      //     reason as `claude_md_import_stub` above. ---
-      ["claude_agents_md_pairs"] {
-        check = "scripts/check-claude-agents-md-pairs.sh"
-      }
+  // ==========================================================================
+  // CHECK / FIX: canonical jdx-pattern hooks (#160 T12) sharing the same
+  // step definitions — `hk check --all` is the read-only CI entry point;
+  // `hk fix` (previously a hard error: hk has no fallback from an undefined
+  // fix hook) applies fixes, which un-breaks `mise run fmt`.
+  // ==========================================================================
+  ["check"] {
+    steps {
+      ...allSteps
+    }
+  }
+  ["fix"] {
+    fix = true
+    steps {
+      ...allSteps
     }
   }
 

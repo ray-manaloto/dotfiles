@@ -167,12 +167,25 @@ tokens = ["ARG BASE_IMAGE"]
 
 [[suite]]
 name = "build.gnupg-installed"
-description = "gnupg must be in apt-get install for mise signature verification"
+description = "gnupg must be in the declarative [bootstrap.packages] apt set (the image's only apt source since #160 T4) for mise signature verification"
+category = "build"
+check_type = "static"
+handler = "require_tokens"
+paths = [".devcontainer/mise-system.toml"]
+tokens = ["\"apt:gnupg\""]
+
+[[suite]]
+name = "build.apt-via-mise-bootstrap"
+description = "The full apt set installs via mise bootstrap packages apply from [bootstrap.packages] (#160 T4, wagov-dtt pattern); the Dockerfile seed layer carries only curl + ca-certificates for the mise installer. Required: the apply invocation, the status --missing anti-drift gate (exits 1 on missing/version-mismatch in the same RUN), and the apt.conf.d drop-in that disables Recommends/Suggests for mise-driven installs (mise has no apt-args flag)."
 category = "build"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/Dockerfile"]
-tokens = ["gnupg"]
+tokens = [
+  "mise bootstrap packages apply --manager apt --yes --update",
+  "mise bootstrap packages status --json --missing",
+  "/etc/apt/apt.conf.d/99no-install-recommends",
+]
 
 [[suite]]
 name = "build.npm-no-update-notifier"
@@ -269,6 +282,18 @@ paths = [".devcontainer/mise-system.toml"]
 tokens = ['RUSTUP_INIT_SKIP_PATH_CHECK = "yes"']
 
 [[suite]]
+name = "build.gcc-latest-deb-checksum"
+description = "Validation D (#160 T13): the gcc-latest .deb must be sha256-verified in the same RUN that downloads it — kayari publishes no checksum/signature, so the committed GCC_LATEST_DEB_SHA256 ARG is the only integrity handle for those bytes"
+category = "build"
+check_type = "static"
+handler = "require_tokens"
+paths = [".devcontainer/Dockerfile"]
+tokens = [
+  "ARG GCC_LATEST_DEB_SHA256=",
+  "sha256sum -c -",
+]
+
+[[suite]]
 name = "build.gcc-latest-reflection"
 description = "GCC-16 with P2996 reflection must be installed via precompiled .deb"
 category = "build"
@@ -297,7 +322,7 @@ tokens = ["CLANG_P2996_REF"]
 
 [[suite]]
 name = "build.p2996-cache-target"
-description = "docker-bake.hcl must define p2996-cache target backed by p2996-export stage; dev target must accept P2996_SOURCE arg for cache short-circuit"
+description = "docker-bake.hcl must define the p2996-cache target backed by the p2996-export stage, parameterized by BUILDER_IMAGE (#160 T11 — the builder is decoupled from devcontainer-base; warm paths consume the artifact as a digest-pinned named context)"
 category = "build"
 check_type = "static"
 handler = "require_tokens"
@@ -305,12 +330,12 @@ paths = ["docker-bake.hcl"]
 tokens = [
   "target \"p2996-cache\"",
   "p2996-export",
-  "P2996_SOURCE",
+  "BUILDER_IMAGE",
 ]
 
 [[suite]]
 name = "build.base-cache-target"
-description = "docker-bake.hcl must define base target backed by devcontainer-base stage; both dev and p2996-cache targets must accept DEVCONTAINER_BASE_REF arg so they pull the cached base instead of rebuilding the heavy mise install layer"
+description = "docker-bake.hcl must define the base target backed by the devcontainer-base stage; the dev build consumes it as the digest-pinned devcontainer-base named context on warm CI paths (#160 T11)"
 category = "build"
 check_type = "static"
 handler = "require_tokens"
@@ -318,8 +343,30 @@ paths = ["docker-bake.hcl"]
 tokens = [
   "target \"base\"",
   "devcontainer-base",
-  "DEVCONTAINER_BASE_REF",
 ]
+
+[[suite]]
+name = "build.no-retired-indirection-args"
+description = "The ARG P2996_SOURCE / ARG DEVCONTAINER_BASE_REF FROM-indirection is retired (#160 T11) — digest-pinned named build contexts replaced it; reintroducing either ARG resurrects tag-pinned (repush-vulnerable) plumbing"
+category = "build"
+check_type = "static"
+handler = "forbid_tokens"
+paths = [".devcontainer/Dockerfile", "docker-bake.hcl"]
+tokens = ["P2996_SOURCE", "DEVCONTAINER_BASE_REF"]
+
+[[suite]]
+name = "build.no-system-config-file-pin"
+description = "MISE_SYSTEM_CONFIG_FILE must not be set in the image ENV or devcontainer containerEnv: per mise system_config_files() it short-circuits the system axis to that ONE file, hiding conf.d/shared.toml (shared tier, #160 T5) and config.runtime.toml (runtime tier, T9/T10) at devcontainer runtime — broke `chezmoi init` onCreate in PR #169. System-axis DIRECTORY discovery via MISE_SYSTEM_CONFIG_DIR is the supported shape (probe-verified against :pr-169)"
+category = "build"
+check_type = "static"
+handler = "forbid_tokens"
+paths = [
+  ".devcontainer/Dockerfile",
+  ".devcontainer/Dockerfile.host-user",
+  ".devcontainer/devcontainer.json",
+]
+tokens = ["MISE_SYSTEM_CONFIG_FILE"]
+allowlist = ["^\\s*//"]
 
 [[suite]]
 name = "build.dockerfile-section-markers"
@@ -337,17 +384,60 @@ tokens = [
 
 [[suite]]
 name = "build.p2996-cache-dockerfile-stages"
-description = "Dockerfile must split clang-builder into clang-builder-cold (cold compile) + p2996-export (scratch export) + clang-builder (FROM ${P2996_SOURCE} indirection) so the same Dockerfile serves both cold and cache-hit paths"
+description = "Dockerfile must keep the decoupled p2996 pipeline (#160 T11): clang-builder-cold compiles FROM the parameterized ${BUILDER_IMAGE}; p2996-export is the scratch artifact stage the final COPY consumes (locally on cold paths, as a digest-pinned named context on warm paths)"
 category = "build"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/Dockerfile"]
 tokens = [
-  "AS clang-builder-cold",
+  "FROM ${BUILDER_IMAGE} AS clang-builder-cold",
   "AS p2996-export",
-  "ARG P2996_SOURCE",
-  "FROM ${P2996_SOURCE}",
+  "COPY --from=p2996-export /opt/clang-p2996",
 ]
+
+[[suite]]
+name = "build.locked-install-with-conda-sha"
+description = "Validation A (#160 T13): the base install must be `mise install --system --locked` and the committed mise-system.lock must carry rattler conda sha256 material (the [conda-packages] table) — an unlocked install or a checksum-less lock silently degrades reproducibility"
+category = "build"
+check_type = "static"
+handler = "require_tokens"
+paths = [".devcontainer/Dockerfile", ".devcontainer/mise-system.lock"]
+tokens = [
+  "mise install --system --locked",
+  "[conda-packages.linux-x64",
+]
+
+[[suite]]
+name = "build.base-image-digest-pinned"
+description = "Validation C (#160 T13): BASE_IMAGE must be digest-pinned (ubuntu:<ver>@sha256:) in both docker-bake.hcl and the Dockerfile ARG — a bare tag would let the base drift under the content-hash"
+category = "build"
+check_type = "static"
+handler = "regex_match"
+paths = ["docker-bake.hcl", ".devcontainer/Dockerfile"]
+pattern = 'ubuntu:[0-9.]+@sha256:[a-f0-9]{64}'
+
+[[suite]]
+name = "build.runtime-tier-stage"
+description = "The devcontainer-runtime stage (#160 T9/T10) must exist and install the runtime tool tier: FROM devcontainer, COPY mise-runtime.toml to config.runtime.toml + its per-env lock, ENV MISE_ENV=runtime persisted so runtime containers keep loading the tier, and a locked install. The dev bake target must publish THIS stage."
+category = "build"
+check_type = "static"
+handler = "require_tokens"
+paths = [".devcontainer/Dockerfile"]
+tokens = [
+  "FROM devcontainer AS devcontainer-runtime",
+  "ENV MISE_ENV=runtime",
+  "/usr/local/share/mise/config.runtime.toml",
+  "/usr/local/share/mise/mise.runtime.lock",
+]
+
+[[suite]]
+name = "build.dev-target-publishes-runtime-stage"
+description = "docker-bake.hcl dev target must build the devcontainer-runtime stage (#160 T10) — publishing plain devcontainer would silently drop the runtime tool tier from :dev"
+category = "build"
+check_type = "static"
+handler = "require_tokens"
+paths = ["docker-bake.hcl"]
+tokens = ["target   = \"devcontainer-runtime\""]
 
 [[suite]]
 name = "build.doppler-secrets-wired"
@@ -377,12 +467,25 @@ tokens = ["type=sbom"]
 
 [[suite]]
 name = "ci.provenance-attestation"
-description = "Provenance attestation required in bake config"
+description = "Provenance attestation at mode=max required in bake config (#160 T7 — all published targets attest; mode=min drops the materials/steps detail T11's checks rely on)"
 category = "ci"
 check_type = "static"
 handler = "require_tokens"
 paths = ["docker-bake.hcl"]
-tokens = ["type=provenance"]
+tokens = ["type=provenance,mode=max"]
+
+[[suite]]
+name = "ci.bootstrap-gap-report-wired"
+description = "smoke-test must capture `mise bootstrap packages status --json` from the published image, assert it via dotfiles-setup bootstrap-gap-report, and upload the raw JSON as an artifact (#160 T7). This is the CI half of the T4 apt switch: the build-time status gate catches missing packages; this catches unavailable-manager and set-drift conditions the exit code cannot see."
+category = "ci"
+check_type = "static"
+handler = "require_tokens"
+paths = [".github/workflows/build-publish.yml"]
+tokens = [
+  "mise bootstrap packages status --json",
+  "dotfiles-setup bootstrap-gap-report",
+  "bootstrap-gap-report.json",
+]
 
 [[suite]]
 name = "ci.no-mise-data-in-cache-map"
@@ -477,7 +580,7 @@ tokens = [
 
 [[suite]]
 name = "ci.p2996-prep-job-exists"
-description = "p2996-prep job must compute the content-hash via dotfiles-setup p2996-hash and probe ghcr.io for ':p2996-<hash>' before triggering the build. Cache hit short-circuits the ~80–120 min clang compile. Lives in the reusable build-publish.yml since Phase B (#118) — ci.yml calls it via workflow_call."
+description = "p2996-prep job must compute the content-hash via dotfiles-setup p2996-hash and probe ghcr.io for ':p2996-<hash>' before triggering the build; the build job consumes the artifact as a digest-pinned p2996-export named context (#160 T11). Cache hit short-circuits the ~80–120 min clang compile. Lives in the reusable build-publish.yml since Phase B (#118)."
 category = "ci"
 check_type = "static"
 handler = "require_tokens"
@@ -487,7 +590,8 @@ tokens = [
   "dotfiles-setup p2996-hash",
   "docker manifest inspect",
   "p2996-cache",
-  "P2996_SOURCE",
+  "dev.contexts.p2996-export=docker-image://",
+  "dev.contexts.devcontainer-base=docker-image://",
 ]
 
 [[suite]]
@@ -525,7 +629,7 @@ tokens = [
 
 [[suite]]
 name = "ci.refresh-uses-app-token"
-description = "Phase C (#119): refresh.yml must mint a GitHub App token (actions/create-github-app-token) for the PR push so downstream pull_request CI fires on its own (GITHUB_TOKEN-created PRs don't), and the snapshot job must enable auto-merge. App ID/private-key come from REFRESH_APP_ID / REFRESH_APP_PRIVATE_KEY secrets."
+description = "Phase C (#119): refresh.yml must mint a GitHub App token (actions/create-github-app-token) for the PR push so downstream pull_request CI fires on its own (GITHUB_TOKEN-created PRs don't), and the lock-refresh job must enable auto-merge. App ID/private-key come from REFRESH_APP_ID / REFRESH_APP_PRIVATE_KEY secrets."
 category = "ci"
 check_type = "static"
 handler = "require_tokens"
@@ -536,6 +640,29 @@ tokens = [
   "REFRESH_APP_PRIVATE_KEY",
   "auto-merge:",
 ]
+
+[[suite]]
+name = "ci.lock-refresh-wired"
+description = "The daily lock-refresh (#160 T8) must regenerate all three committed lockfiles via the lock-refresh composite and PR them: mise.lock, .devcontainer/mise-system.lock (pinned image MISE_VERSION on linux-x64 — the reason this runs in CI at all), and devcontainer-lock.json. Renovate can never do this (mise lock is admin-allowlisted; mise-system.lock unknown to it)."
+category = "ci"
+check_type = "static"
+handler = "require_tokens"
+paths = [".github/workflows/refresh.yml"]
+tokens = [
+  "lock-refresh:",
+  "uses: ./.github/actions/lock-refresh",
+  ".devcontainer/mise-system.lock",
+  ".devcontainer/devcontainer-lock.json",
+]
+
+[[suite]]
+name = "ci.lint-locked-installs"
+description = "CI lint must install with MISE_LOCKED=1 so it runs the exact versions recorded in mise.lock — the same lock the Mac host consumes (#160 T8 parity principle)"
+category = "ci"
+check_type = "static"
+handler = "require_tokens"
+paths = [".github/workflows/ci.yml"]
+tokens = ["MISE_LOCKED: \"1\""]
 
 [[suite]]
 name = "ci.refresh-no-dispatch-hack"
