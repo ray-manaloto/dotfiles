@@ -923,3 +923,27 @@ tokens = [
     "def decide_action",
     "mise run sync",
 ]
+
+[[suite]]
+name = "workflow.ship-land-wiring"
+description = "PR ship/land workflow wiring: `mise run ship` / `mise run land` must stay thin callers of the python library (`dotfiles-setup pr ship|land`, zero-bash-logic), the pr module + tests must exist, and the pr-workflow skill must document the entrypoints. The land merge must stay pinned to the verified head SHA (--match-head-commit) so the verify-then-merge race stays closed."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths = [
+    "mise.toml",
+    "python/src/dotfiles_setup/pr.py",
+    "tests/test_pr.py",
+    ".claude/skills/pr-workflow/SKILL.md",
+]
+tokens = [
+    "[tasks.ship]",
+    "[tasks.land]",
+    "dotfiles-setup pr ship",
+    "dotfiles-setup pr land",
+    "def ship_main",
+    "def land_main",
+    "--match-head-commit",
+    "mise run ship",
+    "mise run land",
+]

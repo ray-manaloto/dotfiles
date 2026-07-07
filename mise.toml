@@ -383,6 +383,21 @@ echo 'OK: home-volume seed survivors + canary present'
 echo "OK: $PRE_COUNT tools persisted identically across stop/up (mise-system.toml baseline: $EXPECTED_MIN)"
 '''
 
+[tasks.ship]
+description = "Gate matrix → push → open/update PR → watch checks to verified green"
+# Thin caller per zero-bash-logic; orchestration in
+# python/src/dotfiles_setup/pr.py. Requires committed work on a feature
+# branch (refuses main / dirty tree). Devcontainer-surface diffs trigger
+# the hard `sync --full` gate — no override. Flags pass through:
+#   mise run ship -- --title "feat: ..."
+run = 'uv run --project python dotfiles-setup pr ship'
+
+[tasks.land]
+description = "Verify PR green → pinned squash-merge → watch main CI → local sync validation"
+# Thin caller; see pr.py. Invocation IS the merge approval:
+#   mise run land -- 172
+run = 'uv run --project python dotfiles-setup pr land'
+
 [tasks.sync]
 description = "Converge the devcontainer onto the latest CI image + verify (digest fast-path)"
 # Thin caller per zero-bash-logic; the orchestration (registry-vs-local-tag
