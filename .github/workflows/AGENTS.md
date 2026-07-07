@@ -188,9 +188,9 @@ cache. Empty input exports nothing → the `docker-bake.hcl` pin wins
 - For Docker warning triage, see the `ci-warning-investigator` skill.
 - **`gh run list` returns multiple workflows.** A branch has both a `CI`
   and an `autofix.ci` run per push; filter `--workflow CI` to disambiguate.
-- **Manual autofix recipe** (`autofix-ci/action` can't push back,
-  `500 ... not installed`): `gh run download RUN_ID`, base64-decode
-  `additions[].contents` from `autofix.json`, apply, commit, push (#94).
+- **autofix commit-back live** (app installed 2026-07-07, probe #171):
+  fix-computing runs FAIL BY DESIGN (`✅ Autofix task started.`); the app
+  pushes the fix commit → fresh runs. If uninstalled: #94 recipe.
 - **Re-run a failed job** — `gh run rerun RUN_ID --failed` refires only the
   failed jobs against the same commit (re-verify a fix without a fresh push;
   validated `ee079c5`).
