@@ -1,1 +1,1 @@
-Autofix app probe — throwaway file with trailing whitespace.   
+Autofix app probe — throwaway file with trailing whitespace.
