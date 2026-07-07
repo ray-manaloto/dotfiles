@@ -20,7 +20,7 @@ is clean before running validation or committing.
    - Deleted files not staged will still exist in CI's checkout
    - This caused the agnix/dockerfile-reviewer.md CI failure on 2026-04-05
 3. Stage ALL file modifications you intend to commit
-4. Then run `hk run pre-commit --all --stash none`
+4. Then run `mise run lint`
 
 ## Before Every Commit
 

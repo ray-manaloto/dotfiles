@@ -64,6 +64,13 @@ SURFACE_PATTERNS: tuple[str, ...] = (
     "python/src/dotfiles_setup/docker.py",
     "python/src/dotfiles_setup/pr.py",
     "python/verification/*",
+    # Review finding [5]: image COPY inputs + the task definitions the
+    # validation chain executes are surface too — changing them alters
+    # what gets built or how it gets verified.
+    "hk-common.pkl",
+    "hk-image.pkl",
+    ".config/mise/conf.d/*",
+    "mise.toml",
 )
 
 # Conditional gates from verify-before-advancing's check matrix.
@@ -90,11 +97,24 @@ class Gate:
 
 
 def _run(
-    cmd: list[str], *, timeout: float | None = None
+    cmd: list[str],
+    *,
+    timeout: float | None = None,
+    cwd: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        cmd, capture_output=True, text=True, check=False, timeout=timeout
-    )
+    # Degrade a hung probe to a failed probe (never an uncaught crash).
+    try:
+        return subprocess.run(
+            cmd, capture_output=True, text=True, check=False, timeout=timeout, cwd=cwd
+        )
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(
+            args=cmd, returncode=124, stdout="", stderr="probe timed out"
+        )
+    except OSError as exc:
+        return subprocess.CompletedProcess(
+            args=cmd, returncode=127, stdout="", stderr=str(exc)
+        )
 
 
 def _stream(cmd: list[str], *, cwd: Path | None = None) -> int:
@@ -243,8 +263,12 @@ def _ship_preflight(workspace: Path) -> tuple[str, list[str]] | None:
 
 def _open_or_update_pr(workspace: Path, title: str | None) -> int | None:
     """Open (or reuse) the branch PR; returns its number or None on failure."""
+    # Review finding [8]: branch-implicit gh calls must run in the
+    # workspace repo, not the caller's cwd.
     existing = _run(
-        ["gh", "pr", "view", "--json", "number,state"], timeout=_PROBE_TIMEOUT_S
+        ["gh", "pr", "view", "--json", "number,state"],
+        timeout=_PROBE_TIMEOUT_S,
+        cwd=workspace,
     )
     if existing.returncode == 0 and json.loads(existing.stdout).get("state") == "OPEN":
         number = int(json.loads(existing.stdout)["number"])
@@ -256,7 +280,15 @@ def _open_or_update_pr(workspace: Path, title: str | None) -> int | None:
     if _stream(create, cwd=workspace) != 0:
         sys.stdout.write("FAIL  ship: gh pr create failed\n")
         return None
-    view = _run(["gh", "pr", "view", "--json", "number"], timeout=_PROBE_TIMEOUT_S)
+    view = _run(
+        ["gh", "pr", "view", "--json", "number"],
+        timeout=_PROBE_TIMEOUT_S,
+        cwd=workspace,
+    )
+    if view.returncode != 0 or not view.stdout.strip():
+        # Review finding [10]: never JSON-parse an unchecked gh result.
+        sys.stdout.write("FAIL  ship: created PR but could not resolve its number\n")
+        return None
     return int(json.loads(view.stdout)["number"])
 
 
@@ -342,10 +374,37 @@ def _main_run_conclusion(merge_oid: str) -> bool:
     return conclusion == "success"
 
 
+def _pr_changed_paths(pr_number: int) -> list[str]:
+    """ALL changed paths of the PR, paginated.
+
+    Review finding [9]: ``gh pr view --json files`` caps at 100 entries,
+    which could silently drop the surface-triggering file on a large PR.
+    """
+    res = _run(
+        [
+            "gh",
+            "api",
+            f"repos/{{owner}}/{{repo}}/pulls/{pr_number}/files",
+            "--paginate",
+            "--jq",
+            ".[].filename",
+        ],
+        timeout=_PROBE_TIMEOUT_S,
+    )
+    return [line for line in res.stdout.splitlines() if line]
+
+
 def _land_preflight(pr_number: int) -> tuple[str, bool] | None:
-    """PR open + checks verified green; (head_oid, surface) or None on fail."""
+    """PR open + base main + checks verified green; None on fail."""
     view = _run(
-        ["gh", "pr", "view", str(pr_number), "--json", "state,headRefOid,files"],
+        [
+            "gh",
+            "pr",
+            "view",
+            str(pr_number),
+            "--json",
+            "state,headRefOid,baseRefName",
+        ],
         timeout=_PROBE_TIMEOUT_S,
     )
     if view.returncode != 0:
@@ -355,16 +414,32 @@ def _land_preflight(pr_number: int) -> tuple[str, bool] | None:
     if info["state"] != "OPEN":
         sys.stdout.write(f"FAIL  land: PR #{pr_number} is {info['state']}\n")
         return None
+    if info.get("baseRefName") != "main":
+        # Review finding [11]: land's post-merge main-CI watch and local
+        # main fast-forward only make sense for main-based PRs.
+        sys.stdout.write(
+            f"FAIL  land: PR #{pr_number} targets {info.get('baseRefName')!r}, "
+            "not main — land only lands main-based PRs\n"
+        )
+        return None
     ok, detail = pr_checks_green(pr_number)
     sys.stdout.write(f"{'PASS' if ok else 'FAIL'}  pr-checks: {detail}\n")
     if not ok:
         return None
-    surface = touches_surface([f["path"] for f in info.get("files", [])])
+    surface = touches_surface(_pr_changed_paths(pr_number))
     return info["headRefOid"], surface
 
 
 def _merge_and_watch_main(workspace: Path, pr_number: int, head: str) -> bool:
-    """Pinned squash-merge, then the main ci.yml run must conclude success."""
+    """Pinned squash-merge, then the main ci.yml run must conclude success.
+
+    Known-accepted race (review finding [7]): main can advance between
+    check-verification and this merge; --match-head-commit pins only the
+    PR head. Accepted because the post-merge main-CI watch below re-runs
+    the full gate chain on the ACTUAL merge commit and land fails loud if
+    it does not conclude success — the race window cannot produce a
+    silently-broken main.
+    """
     merge = [
         "gh",
         "pr",
@@ -388,14 +463,43 @@ def _merge_and_watch_main(workspace: Path, pr_number: int, head: str) -> bool:
     return _main_run_conclusion(merge_oid)
 
 
-def land_main(workspace: Path, pr_number: int) -> int:
-    """Verify green → pinned squash-merge → main-CI watch → local validation."""
+def _land_merge_phase(workspace: Path, pr_number: int, *, resume: bool) -> bool | None:
+    """Merge (or resume-verify) phase; returns surface flag or None on fail."""
+    if resume:
+        state = _run(
+            ["gh", "pr", "view", str(pr_number), "--json", "state"],
+            timeout=_PROBE_TIMEOUT_S,
+        )
+        if state.returncode != 0 or json.loads(state.stdout)["state"] != "MERGED":
+            sys.stdout.write(
+                f"FAIL  land --resume: PR #{pr_number} is not MERGED — use a "
+                "plain land\n"
+            )
+            return None
+        merge_oid = _merge_commit_oid(pr_number)
+        if not merge_oid or not _main_run_conclusion(merge_oid):
+            return None
+        return touches_surface(_pr_changed_paths(pr_number))
     preflight = _land_preflight(pr_number)
     if preflight is None:
-        return 1
+        return None
     head, surface = preflight
-
     if not _merge_and_watch_main(workspace, pr_number, head):
+        return None
+    return surface
+
+
+def land_main(workspace: Path, pr_number: int, *, resume: bool = False) -> int:
+    """Verify green → pinned squash-merge → main-CI watch → local validation.
+
+    ``resume=True`` (review finding [6]): re-enter after a failure that
+    happened AFTER the merge (main-CI watch, fast-forward, local
+    validation) — skips the merge for an already-MERGED PR and replays
+    the idempotent post-merge steps, so a merged-but-unvalidated PR never
+    strands.
+    """
+    surface = _land_merge_phase(workspace, pr_number, resume=resume)
+    if surface is None:
         return 1
 
     # Post-merge validation must run against main's code (the merged

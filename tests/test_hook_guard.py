@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -84,3 +86,46 @@ def test_pretooluse_silent_on_allowed(
     monkeypatch.setattr(hook_guard, "_read_command", lambda: "git status")
     assert hook_guard.pretooluse_main() == 0
     assert capsys.readouterr().out == ""
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        # Review findings [13][14]: newline separators + wrapper prefixes.
+        "echo hi\ngh pr merge 42 --squash",
+        "env GH_PAGER= gh pr create --fill",
+        "GH_TOKEN=x gh pr merge 42",
+        "exec gh pr create",
+        "timeout 30 devcontainer up --workspace-folder .",
+        "nohup npx cowsay hi",
+        # [16]: `docker image pull` variant.
+        "docker image pull ghcr.io/ray-manaloto/dotfiles-devcontainer:dev",
+    ],
+)
+def test_bypass_routes_denied(command: str) -> None:
+    assert hook_guard.decide(command) is not None
+
+
+def test_pull_rule_does_not_span_separators() -> None:
+    # [16]: an unrelated pull followed by a mention must not be denied.
+    cmd = "docker pull ubuntu:24.04 && echo dotfiles-devcontainer"
+    assert hook_guard.decide(cmd) is None
+
+
+def test_read_command_real_hook_payload() -> None:
+    """[17]: exercise the ACTUAL stdin contract through the CLI subprocess."""
+    payload = json.dumps(
+        {"tool_name": "Bash", "tool_input": {"command": "gh pr create --fill"}}
+    )
+    res = subprocess.run(
+        ["uv", "run", "--project", "python", "dotfiles-setup", "hook", "pretooluse"],
+        input=payload,
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=Path(__file__).parent.parent,
+        timeout=120,
+    )
+    assert res.returncode == 0
+    assert '"permissionDecision": "deny"' in res.stdout
+    assert "mise run ship" in res.stdout

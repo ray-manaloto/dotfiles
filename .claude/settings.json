@@ -1,4 +1,10 @@
 {
+  "permissions": {
+    "deny": [
+      "Bash(chezmoi apply:*)",
+      "Bash(chezmoi update:*)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {

@@ -156,7 +156,7 @@ def test_ship_gate_failure_stops_before_push(
 
 
 def test_land_aborts_on_non_green_checks(monkeypatch: pytest.MonkeyPatch) -> None:
-    view = {"state": "OPEN", "headRefOid": "a" * 40, "files": [{"path": "a.py"}]}
+    view = {"state": "OPEN", "headRefOid": "a" * 40, "baseRefName": "main"}
     monkeypatch.setattr(pr, "_run", lambda *_a, **_k: _cp(json.dumps(view)))
     monkeypatch.setattr(pr, "pr_checks_green", lambda _n: (False, "lint=fail"))
 
@@ -169,16 +169,17 @@ def test_land_aborts_on_non_green_checks(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_land_aborts_on_closed_pr(monkeypatch: pytest.MonkeyPatch) -> None:
-    view = {"state": "MERGED", "headRefOid": "a" * 40, "files": []}
+    view = {"state": "MERGED", "headRefOid": "a" * 40, "baseRefName": "main"}
     monkeypatch.setattr(pr, "_run", lambda *_a, **_k: _cp(json.dumps(view)))
     assert pr.land_main(_WORKSPACE, 7) == 1
 
 
 def test_land_merge_pins_verified_head(monkeypatch: pytest.MonkeyPatch) -> None:
     head = "b" * 40
-    view = {"state": "OPEN", "headRefOid": head, "files": [{"path": "a.py"}]}
+    view = {"state": "OPEN", "headRefOid": head, "baseRefName": "main"}
     streamed: list[list[str]] = []
     monkeypatch.setattr(pr, "_run", lambda *_a, **_k: _cp(json.dumps(view)))
+    monkeypatch.setattr(pr, "_pr_changed_paths", lambda _n: ["a.py"])
     monkeypatch.setattr(pr, "pr_checks_green", lambda _n: (True, "ok"))
     monkeypatch.setattr(pr, "_stream", lambda cmd, **_k: streamed.append(cmd) or 0)
     monkeypatch.setattr(pr, "_merge_commit_oid", lambda _n: "c" * 40)
@@ -193,13 +194,12 @@ def test_land_merge_pins_verified_head(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_land_surface_pr_validates_full_tier(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    view = {
-        "state": "OPEN",
-        "headRefOid": "d" * 40,
-        "files": [{"path": ".devcontainer/Dockerfile"}],
-    }
+    view = {"state": "OPEN", "headRefOid": "d" * 40, "baseRefName": "main"}
     seen: dict[str, bool] = {}
     monkeypatch.setattr(pr, "_run", lambda *_a, **_k: _cp(json.dumps(view)))
+    monkeypatch.setattr(
+        pr, "_pr_changed_paths", lambda _n: [".devcontainer/Dockerfile"]
+    )
     monkeypatch.setattr(pr, "pr_checks_green", lambda _n: (True, "ok"))
     monkeypatch.setattr(pr, "_stream", lambda *_a, **_k: 0)
     monkeypatch.setattr(pr, "_merge_commit_oid", lambda _n: "e" * 40)
@@ -244,3 +244,39 @@ def test_watch_fails_when_checks_never_register(
 
     monkeypatch.setattr(pr, "_stream", _boom)
     assert pr.watch_pr_checks(9) is False
+
+
+def test_land_refuses_non_main_base(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Review finding [11]: land only lands main-based PRs."""
+    view = {"state": "OPEN", "headRefOid": "a" * 40, "baseRefName": "develop"}
+    monkeypatch.setattr(pr, "_run", lambda *_a, **_k: _cp(json.dumps(view)))
+    assert pr.land_main(_WORKSPACE, 7) == 1
+
+
+def test_land_resume_requires_merged(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Review finding [6]: --resume only replays post-merge steps."""
+    monkeypatch.setattr(
+        pr, "_run", lambda *_a, **_k: _cp(json.dumps({"state": "OPEN"}))
+    )
+    assert pr.land_main(_WORKSPACE, 7, resume=True) == 1
+
+
+def test_land_resume_replays_post_merge(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        pr, "_run", lambda *_a, **_k: _cp(json.dumps({"state": "MERGED"}))
+    )
+    monkeypatch.setattr(pr, "_pr_changed_paths", lambda _n: ["a.py"])
+    monkeypatch.setattr(pr, "_merge_commit_oid", lambda _n: "c" * 40)
+    monkeypatch.setattr(pr, "_main_run_conclusion", lambda _o: True)
+    monkeypatch.setattr(pr, "_stream", lambda *_a, **_k: 0)
+    monkeypatch.setattr(pr, "sync_main", lambda *_a, **_k: 0)
+    assert pr.land_main(_WORKSPACE, 7, resume=True) == 0
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["hk-common.pkl", "hk-image.pkl", ".config/mise/conf.d/shared.toml", "mise.toml"],
+)
+def test_surface_covers_image_copy_inputs(path: str) -> None:
+    """Review finding [5]: image COPY inputs + task definitions are surface."""
+    assert pr.touches_surface([path])

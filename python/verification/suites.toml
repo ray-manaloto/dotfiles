@@ -7,13 +7,12 @@ version = "2"
 
 [[suite]]
 name = "build.no-custom-mise-data-dir"
-description = "Base image should rely on mise system/default data paths instead of custom MISE_DATA_DIR"
+description = "MISE_DATA_DIR must be the canonical cookbook system path (/usr/local/share/mise). Review finding [20] 2026-07-07: the old forbid+ENV-allowlist form was fully vacuous (ENV is exactly how the var is set); the image DOES set it deliberately (mise Docker cookbook), so the honest contract asserts the expected value instead."
 category = "build"
 check_type = "static"
-handler = "forbid_tokens"
+handler = "require_tokens"
 paths = [".devcontainer/Dockerfile"]
-tokens = ["MISE_DATA_DIR="]
-allowlist = ["^\\s*ENV\\s"]
+tokens = ["MISE_DATA_DIR=/usr/local/share/mise"]
 
 [[suite]]
 name = "build.mise-install-path-system"
@@ -48,7 +47,7 @@ description = "Never suppress mise warnings"
 category = "build"
 check_type = "static"
 handler = "forbid_tokens"
-paths = [".devcontainer/Dockerfile", "install.sh", ".github/workflows/ci.yml"]
+paths = [".devcontainer/Dockerfile", ".github/workflows/ci.yml"]
 tokens = ["MISE_QUIET", "MISE_LOG_LEVEL=warn", "MISE_LOG_LEVEL=error"]
 
 [[suite]]
@@ -57,7 +56,7 @@ description = "No blanket stderr suppression (2>/dev/null) except mise trust"
 category = "build"
 check_type = "static"
 handler = "forbid_tokens"
-paths = [".devcontainer/Dockerfile", "install.sh"]
+paths = [".devcontainer/Dockerfile"]
 tokens = ["2>/dev/null"]
 allowlist = ["mise trust", "\\$MISE trust"]
 
@@ -415,6 +414,7 @@ check_type = "static"
 handler = "regex_match"
 paths = ["docker-bake.hcl", ".devcontainer/Dockerfile"]
 pattern = 'ubuntu:[0-9.]+@sha256:[a-f0-9]{64}'
+match_all_paths = true
 
 [[suite]]
 name = "build.runtime-tier-stage"
@@ -732,7 +732,6 @@ paths = [
     ".devcontainer/Dockerfile.host-user",
     ".devcontainer/devcontainer.json",
     "docker-bake.hcl",
-    "install.sh",
     ".github/workflows/ci.yml",
 ]
 tokens = ["vscode"]
@@ -910,6 +909,7 @@ description = "Devcontainer sync workflow wiring: `mise run sync` must stay a th
 category = "workflow"
 check_type = "static"
 handler = "require_tokens"
+paths_required = true
 paths = [
     "mise.toml",
     "python/src/dotfiles_setup/sync.py",
@@ -930,6 +930,7 @@ description = "PR ship/land workflow wiring: `mise run ship` / `mise run land` m
 category = "workflow"
 check_type = "static"
 handler = "require_tokens"
+paths_required = true
 paths = [
     "mise.toml",
     "python/src/dotfiles_setup/pr.py",
@@ -954,12 +955,14 @@ description = "mise-tasks-only policy wiring: the PreToolUse Bash guard must sta
 category = "workflow"
 check_type = "static"
 handler = "require_tokens"
+paths_required = true
 paths = [
     ".claude/settings.json",
     "python/src/dotfiles_setup/hook_guard.py",
     "tests/test_hook_guard.py",
     ".claude/rules/mise-tasks-only.md",
 ]
+per_path_tokens = { ".claude/settings.json" = ["dotfiles-setup hook pretooluse"] }
 tokens = [
     "dotfiles-setup hook pretooluse",
     "def pretooluse_main",
@@ -974,6 +977,7 @@ description = "Daily tool-currency signal wiring: refresh.yml's tool-currency jo
 category = "workflow"
 check_type = "static"
 handler = "require_tokens"
+paths_required = true
 paths = [
     "mise.toml",
     "python/src/dotfiles_setup/tool_currency.py",

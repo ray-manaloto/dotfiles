@@ -226,7 +226,9 @@ description = "Spot-check cookbook paths in :dev (cargo/rustup cookbook layout +
 # scoped to what mise-system.toml actually provides.
 env = { BASE_IMAGE = "{{ env.BASE_IMAGE | default(value='ghcr.io/ray-manaloto/dotfiles-devcontainer:dev') }}", DOCKER_DEFAULT_PLATFORM = "linux/amd64/v2" }
 run = '''
-docker run --rm "$BASE_IMAGE" bash -lc '
+# Review finding [29]: --pull=never — an absent local tag must fail loud
+# (use `mise run sync` to fetch via buildkit), never classic-pull ~38GB.
+docker run --rm --pull=never "$BASE_IMAGE" bash -lc '
   set -euo pipefail
   # Cookbook cargo/rustup homes (PR-2 commit F)
   ls /usr/local/share/cargo/bin

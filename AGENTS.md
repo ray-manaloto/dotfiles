@@ -5,7 +5,7 @@
 Chezmoi-managed dotfiles with devcontainer support targeting AMD64 Linux
 containers on macOS ARM hosts. Two build types:
 
-1. **Local linting** (hk + mise): `mise install && hk run pre-commit --all --stash none`
+1. **Local linting** (hk + mise): `mise install && mise run lint`
 2. **Docker env image** (CI/CD → ghcr.io): published from `main` via GHA
 
 Registry: `ghcr.io/ray-manaloto/dotfiles-devcontainer`. CI: `ci.yml` (thin
@@ -63,7 +63,7 @@ the official `@devcontainers/cli` (pinned in `mise.toml`).
 ## Two Build Types
 
 - **Build Type 1 — Local Linting**: Tools managed by mise. Git hooks via hk.
-  Run `mise install` then `hk run pre-commit --all --stash none` before every commit.
+  Run `mise install` then `mise run lint` before every commit.
 - **Build Type 2 — Docker Image**: Multi-stage Dockerfile at `.devcontainer/Dockerfile`.
   BuildKit bake via `docker-bake.hcl`. **CI-only** — never `mise run build` or
   `docker buildx bake dev-load` locally; the base image is published to
@@ -88,7 +88,7 @@ content-hashed since hk 1.47 — no manual cache clearing after edits.
 ```bash
 uv run --project python pytest tests/ -x -q               # All 316 tests
 uv run --project python pytest tests/test_audit.py -x -q  # Single file
-hk run pre-commit --all --stash none                      # Lint checks only
+mise run lint                                             # Lint checks only (hk under a hard timeout)
 dotfiles-setup verify run                                 # Verification contracts (suites.toml)
 mise run pin-actions                                      # Verify GHA action pinning
 mise run lint-docs                                        # Validate agent documentation
@@ -156,8 +156,8 @@ Before advancing to the next task or claiming done, EVERY applicable check must 
 - **uv for Python**: `uv run --project python` for all Python commands.
   **Never `uv run --directory python`** — the latter changes cwd and
   breaks relative test paths.
-- **hk for hooks**: `hk run pre-commit --all --stash none` for lint,
-  `hk fix` for auto-formatting. Always `git add` BEFORE running hk —
+- **hk for hooks**: `mise run lint` for the lint gate (guard redirects
+  raw hk); `hk fix` for auto-formatting. Always `git add` BEFORE hk —
   `fix=true` + `--stash none` can strand unstaged edits when new files
   are present.
 
