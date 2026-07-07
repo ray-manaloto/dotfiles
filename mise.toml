@@ -385,6 +385,20 @@ echo 'OK: home-volume seed survivors + canary present'
 echo "OK: $PRE_COUNT tools persisted identically across stop/up (mise-system.toml baseline: $EXPECTED_MIN)"
 '''
 
+[tasks.autofix-apply]
+description = "Apply a run's autofix.ci artifact locally (App-down fallback): mise run autofix-apply -- <run-id>"
+run = 'uv run --project python dotfiles-setup autofix-apply'
+
+[tasks.gha-dispatch]
+description = "Dispatch a workflow: mise run gha-dispatch -- <workflow.yml> [gh args]"
+# Thin gh wrapper (allowed: no logic). Args append after --.
+run = 'gh workflow run'
+
+[tasks.gha-rerun]
+description = "Re-run a run's failed jobs: mise run gha-rerun -- <run-id>"
+# Cross-verify afterwards per gh-cli-watch.md (conclusion via gh run view).
+run = 'gh run rerun --failed'
+
 [tasks.tool-currency]
 description = "Markdown report of tools with upstream movement + release-notes links"
 # Thin caller (zero-bash-logic); logic in

@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from dotfiles_setup.ai import AIOrchestrator
 from dotfiles_setup.audit import DevEnvironmentAuditor, ToolManager
+from dotfiles_setup.autofix import autofix_apply_main
 from dotfiles_setup.bootstrap_packages import gap_report_failures
 from dotfiles_setup.config import DotfilesConfig
 from dotfiles_setup.container import verify_latest_main
@@ -402,6 +403,13 @@ def setup_parser() -> argparse.ArgumentParser:
         "that have a canonical mise task (mise-tasks-only policy)",
     )
 
+    autofix_parser = subparsers.add_parser(
+        "autofix-apply",
+        help="Apply a run's autofix.ci artifact to the working tree (the "
+        "manual fallback when the App cannot push back, #94)",
+    )
+    autofix_parser.add_argument("run_id", help="Workflow run id with the artifact")
+
     subparsers.add_parser(
         "tool-currency",
         help="Markdown report of tools with upstream movement + release-notes "
@@ -713,6 +721,9 @@ def _build_command_handlers(
         "docker": lambda: handle_docker(args, project_root, config=config),
         "pr": lambda: handle_pr(args, project_root),
         "tool-currency": lambda: sys.exit(tool_currency_main()),
+        "autofix-apply": lambda: sys.exit(
+            autofix_apply_main(args.run_id, project_root)
+        ),
         "hook": lambda: (
             sys.exit(pretooluse_main())
             if getattr(args, "hook_command", None) == "pretooluse"
