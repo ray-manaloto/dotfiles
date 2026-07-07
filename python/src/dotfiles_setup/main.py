@@ -35,6 +35,7 @@ from dotfiles_setup.p2996_hash import (
     compute_repo_p2996_hash,
 )
 from dotfiles_setup.p2996_refresh import refresh as refresh_p2996_ref
+from dotfiles_setup.pr import land_main, ship_main
 from dotfiles_setup.sync import SyncOptions, sync_main
 from dotfiles_setup.verify import main as verify_main
 
@@ -207,6 +208,37 @@ def _add_image_subcommands(
     )
 
 
+def _add_pr_subcommands(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    """Register pr subcommands (ship/land — the full PR loop).
+
+    Args:
+        subparsers: The parent subparsers action to attach pr commands to.
+    """
+    pr_parser = subparsers.add_parser(
+        "pr",
+        help="PR workflow: ship (gates → push → PR → watch) and land "
+        "(merge → main CI → local validation)",
+    )
+    pr_sub = pr_parser.add_subparsers(dest="pr_command", help="PR commands")
+    ship_parser = pr_sub.add_parser(
+        "ship",
+        help="Run the path-aware gate matrix, push, open/update the PR, "
+        "watch checks to a verified-green terminal state",
+    )
+    ship_parser.add_argument(
+        "--title", help="PR title (default: gh --fill from the commits)"
+    )
+    land_parser = pr_sub.add_parser(
+        "land",
+        help="Verify checks green, squash-merge pinned to the verified head "
+        "SHA, watch main CI, then validate locally (sync; full tier when "
+        "the devcontainer surface changed)",
+    )
+    land_parser.add_argument("number", type=int, help="PR number to land")
+
+
 def setup_parser() -> argparse.ArgumentParser:
     """Configure the argument parser."""
     parser = argparse.ArgumentParser(description="Reproducible Dotfiles Orchestrator")
@@ -260,6 +292,7 @@ def setup_parser() -> argparse.ArgumentParser:
     _add_docker_subcommands(subparsers)
     _add_verify_subcommands(subparsers)
     _add_image_subcommands(subparsers)
+    _add_pr_subcommands(subparsers)
 
     subparsers.add_parser(
         "p2996-hash",
@@ -394,6 +427,19 @@ def handle_docker(
                 ),
             )
         )
+
+
+def handle_pr(args: argparse.Namespace, project_root: Path) -> None:
+    """Handle pr subcommands.
+
+    Args:
+        args: The parsed arguments.
+        project_root: The project root path.
+    """
+    if args.pr_command == "ship":
+        sys.exit(ship_main(project_root, title=args.title))
+    elif args.pr_command == "land":
+        sys.exit(land_main(project_root, args.number))
 
 
 def handle_audit(config: DotfilesConfig | None = None) -> None:
@@ -640,6 +686,7 @@ def _build_command_handlers(
         "ensure-ssh": _ensure_ssh,
         "ai-setup": _ai_setup,
         "docker": lambda: handle_docker(args, project_root, config=config),
+        "pr": lambda: handle_pr(args, project_root),
         "version": _version,
         "install": lambda: handle_install(project_root),
         "verify": lambda: handle_verify(args),

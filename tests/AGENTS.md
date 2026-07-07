@@ -21,11 +21,12 @@ Docker image smoke outputs.
 | `test_image_smoke.py` | pytest | Smoke-test script generation, `_parse_human_size`, and the #143 exact tool-set assertion (parse/compare vs mise-system.toml) |
 | `test_container.py` | pytest | `verify-container-latest` gate (`dotfiles_setup.container`) — running/bind-mount/smoke freshness checks |
 | `test_sync.py` | pytest | `mise run sync` workflow (`dotfiles_setup.sync`) — staleness detection, action matrix, CI awareness, check/full/wait modes |
+| `test_pr.py` | pytest | `mise run ship`/`land` workflow (`dotfiles_setup.pr`) — surface detection, gate matrix, bucket verification, pinned merge |
 | `test_shell_integration.py` | pytest | Tool reachability in login shells (mise, chezmoi, uv, pixi, claude, gemini, codex) |
 | `infra/foundation.bats` | Bats | Bash-level foundation checks (shell script integration) |
 | `infra/runtimes.bats` | Bats | Runtime installation checks (bash) |
 
-Total: **251 pytest tests** (pytest runs all `test_*.py` files) plus Bats
+Total: **278 pytest tests** (pytest runs all `test_*.py` files) plus Bats
 scenarios under `infra/`.
 
 ## Running tests

@@ -1,0 +1,393 @@
+"""Ship/land: the full PR loop as library code (zero-bash-logic).
+
+``dotfiles-setup pr ship`` (wrapped by ``mise run ship``) takes the
+current feature branch from "work is committed/staged" to "PR open with
+checks watched"; ``dotfiles-setup pr land <n>`` (wrapped by
+``mise run land``) takes a green PR through squash-merge, main-CI watch,
+and post-merge LOCAL validation on this Mac. Together they encode the
+verify-before-advancing rule as code instead of discipline.
+
+Design notes (deep-research verified, 2026-07-07 —
+``.omc/research/research-20260707-gha-shipland-enforcement/report.md``):
+
+- **Check verification reads the ``--json`` buckets**, never a watch
+  command's exit code alone (``gh run watch --exit-status`` has reported
+  0 prematurely; see ``.claude/rules/gh-cli-watch.md``). A PR is green
+  iff every check bucket is ``pass`` or ``skipping``.
+- **The merge is delegated to GitHub's requirements engine** with the
+  head SHA pinned: ``gh pr merge --squash --match-head-commit <sha>``
+  returns 409 if the branch moved after we verified it — closing the
+  verify-then-merge race.
+- **Hard path-aware gate (no override by design)**: when the diff
+  touches the devcontainer/image/validation surface
+  (:data:`SURFACE_PATTERNS`), ship requires a full local
+  ``mise run sync -- --full`` (verify-local chain) BEFORE the PR opens,
+  and land re-runs it after the merge. Zero-skip: there is no flag to
+  bypass this.
+- Gate order is cheap-first: lint → pytest → verify → conditional
+  (pin-actions / lint-docs) → full sync last.
+
+Everything long-running streams to the terminal (never wait blind);
+quick probes are captured + timeout-bounded.
+"""
+
+from __future__ import annotations
+
+import dataclasses
+import fnmatch
+import json
+import subprocess
+import sys
+import time
+from typing import TYPE_CHECKING
+
+from dotfiles_setup.sync import SyncOptions, sync_main
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+_PROBE_TIMEOUT_S = 120.0
+
+# The devcontainer/image/validation surface: a diff touching any of these
+# makes full local verification (sync --full == verify-local chain)
+# mandatory in ship AND land. Glob-style, matched against repo-relative
+# paths with fnmatch.
+SURFACE_PATTERNS: tuple[str, ...] = (
+    ".devcontainer/*",
+    ".devcontainer/**/*",
+    "docker-bake.hcl",
+    "scripts/devcontainer-smoke.sh",
+    "scripts/workspace-hash.sh",
+    "python/src/dotfiles_setup/container.py",
+    "python/src/dotfiles_setup/sync.py",
+    "python/src/dotfiles_setup/image.py",
+    "python/src/dotfiles_setup/docker.py",
+    "python/src/dotfiles_setup/pr.py",
+    "python/verification/*",
+)
+
+# Conditional gates from verify-before-advancing's check matrix.
+_GHA_PATTERNS = (".github/*", ".github/**/*")
+_DOCS_PATTERNS = (
+    "AGENTS.md",
+    "*/AGENTS.md",
+    "**/AGENTS.md",
+    "CLAUDE.md",
+    "*/CLAUDE.md",
+    "**/CLAUDE.md",
+    ".claude/**/*.md",
+)
+
+_GREEN_BUCKETS = frozenset({"pass", "skipping"})
+
+
+@dataclasses.dataclass(frozen=True)
+class Gate:
+    """One named validation command in the ship gate matrix."""
+
+    name: str
+    cmd: tuple[str, ...]
+
+
+def _run(
+    cmd: list[str], *, timeout: float | None = None
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        cmd, capture_output=True, text=True, check=False, timeout=timeout
+    )
+
+
+def _stream(cmd: list[str], *, cwd: Path | None = None) -> int:
+    """Run a long operation streaming to the terminal (never wait blind)."""
+    return subprocess.run(cmd, check=False, cwd=cwd).returncode
+
+
+def _matches_any(path: str, patterns: tuple[str, ...]) -> bool:
+    return any(fnmatch.fnmatch(path, pat) for pat in patterns)
+
+
+def touches_surface(paths: list[str]) -> bool:
+    """True when the diff touches the devcontainer/image/validation surface."""
+    return any(_matches_any(p, SURFACE_PATTERNS) for p in paths)
+
+
+def changed_paths_vs_main(workspace: Path) -> list[str]:
+    """Repo-relative paths changed on this branch vs origin/main (incl. staged)."""
+    merged: set[str] = set()
+    for args in (
+        ["git", "-C", str(workspace), "diff", "--name-only", "origin/main...HEAD"],
+        ["git", "-C", str(workspace), "diff", "--name-only", "--cached"],
+    ):
+        merged.update(line for line in _run(args).stdout.splitlines() if line)
+    return sorted(merged)
+
+
+def gate_matrix(paths: list[str]) -> list[Gate]:
+    """The ordered, path-aware gate list for ship — cheap gates first.
+
+    Always: lint, pytest, verify contracts. Conditional per
+    verify-before-advancing: pin-actions on .github changes, lint-docs on
+    agent-doc changes. The full-sync hard gate runs LAST (most expensive)
+    when the devcontainer/image/validation surface changed — no override.
+    """
+    gates = [
+        Gate("lint", ("mise", "run", "lint")),
+        Gate(
+            "pytest",
+            ("uv", "run", "--project", "python", "pytest", "tests/", "-x", "-q"),
+        ),
+        Gate(
+            "verify-contracts",
+            ("uv", "run", "--project", "python", "dotfiles-setup", "verify", "run"),
+        ),
+    ]
+    if any(_matches_any(p, _GHA_PATTERNS) for p in paths):
+        gates.append(Gate("pin-actions", ("mise", "run", "pin-actions")))
+    if any(_matches_any(p, _DOCS_PATTERNS) for p in paths):
+        gates.append(Gate("lint-docs", ("mise", "run", "lint-docs")))
+    if touches_surface(paths):
+        gates.append(Gate("sync-full", ("mise", "run", "sync", "--", "--full")))
+    return gates
+
+
+def run_gates(workspace: Path, gates: list[Gate]) -> bool:
+    """Run each gate streamed; stop at the first failure (it IS the task)."""
+    for gate in gates:
+        sys.stdout.write(f"==> gate: {gate.name}\n")
+        rc = _stream(list(gate.cmd), cwd=workspace)
+        marker = "PASS" if rc == 0 else "FAIL"
+        sys.stdout.write(f"{marker}  gate {gate.name} rc={rc}\n")
+        if rc != 0:
+            return False
+    return True
+
+
+def pr_checks_green(pr_number: int) -> tuple[bool, str]:
+    """API-verified: every check bucket is pass/skipping (none fail/pending)."""
+    res = _run(
+        ["gh", "pr", "checks", str(pr_number), "--json", "name,bucket"],
+        timeout=_PROBE_TIMEOUT_S,
+    )
+    if res.returncode != 0:
+        return False, f"gh pr checks --json failed: {res.stderr.strip()}"
+    checks = json.loads(res.stdout)
+    bad = [c for c in checks if c["bucket"] not in _GREEN_BUCKETS]
+    if bad:
+        detail = ", ".join(f"{c['name']}={c['bucket']}" for c in bad)
+        return False, detail
+    return True, f"{len(checks)} checks pass/skipping"
+
+
+def watch_pr_checks(pr_number: int) -> bool:
+    """Watch to terminal state, then verify via the JSON buckets."""
+    _stream(["gh", "pr", "checks", str(pr_number), "--watch", "--fail-fast"])
+    ok, detail = pr_checks_green(pr_number)
+    sys.stdout.write(f"{'PASS' if ok else 'FAIL'}  pr-checks: {detail}\n")
+    return ok
+
+
+def _current_branch(workspace: Path) -> str:
+    return _run(
+        ["git", "-C", str(workspace), "rev-parse", "--abbrev-ref", "HEAD"]
+    ).stdout.strip()
+
+
+def _working_tree_clean(workspace: Path) -> bool:
+    return not _run(
+        ["git", "-C", str(workspace), "status", "--porcelain"]
+    ).stdout.strip()
+
+
+def _ship_preflight(workspace: Path) -> tuple[str, list[str]] | None:
+    """Branch/tree/diff preconditions for ship; None (after printing) on fail."""
+    branch = _current_branch(workspace)
+    if branch in ("main", "HEAD"):
+        sys.stdout.write("FAIL  ship: refusing to ship from main/detached HEAD\n")
+        return None
+    if not _working_tree_clean(workspace):
+        sys.stdout.write(
+            "FAIL  ship: working tree not clean — commit (or stash) first so "
+            "the gates validate exactly what ships\n"
+        )
+        return None
+    paths = changed_paths_vs_main(workspace)
+    if not paths:
+        sys.stdout.write("FAIL  ship: no changes vs origin/main\n")
+        return None
+    return branch, paths
+
+
+def _open_or_update_pr(workspace: Path, title: str | None) -> int | None:
+    """Open (or reuse) the branch PR; returns its number or None on failure."""
+    existing = _run(
+        ["gh", "pr", "view", "--json", "number,state"], timeout=_PROBE_TIMEOUT_S
+    )
+    if existing.returncode == 0 and json.loads(existing.stdout).get("state") == "OPEN":
+        number = int(json.loads(existing.stdout)["number"])
+        sys.stdout.write(f"==> PR #{number} already open — pushed update\n")
+        return number
+    create = ["gh", "pr", "create", "--fill"]
+    if title:
+        create += ["--title", title]
+    if _stream(create, cwd=workspace) != 0:
+        sys.stdout.write("FAIL  ship: gh pr create failed\n")
+        return None
+    view = _run(["gh", "pr", "view", "--json", "number"], timeout=_PROBE_TIMEOUT_S)
+    return int(json.loads(view.stdout)["number"])
+
+
+def ship_main(workspace: Path, *, title: str | None = None) -> int:
+    """Gates → push → PR → watched checks. Requires committed work on a branch.
+
+    Commit creation stays with the operator/agent (messages need human
+    judgment); ship refuses a dirty tree so nothing half-staged leaks
+    past the gates (`clean-git-state` rule).
+    """
+    preflight = _ship_preflight(workspace)
+    if preflight is None:
+        return 1
+    branch, paths = preflight
+    surface = touches_surface(paths)
+    sys.stdout.write(
+        f"==> ship {branch}: {len(paths)} changed paths"
+        f"{'  [devcontainer surface → full-sync gate]' if surface else ''}\n"
+    )
+    if not run_gates(workspace, gate_matrix(paths)):
+        return 1
+
+    if _stream(["git", "push", "-u", "origin", branch], cwd=workspace) != 0:
+        sys.stdout.write("FAIL  ship: git push failed\n")
+        return 1
+
+    number = _open_or_update_pr(workspace, title)
+    if number is None or not watch_pr_checks(number):
+        return 1
+    sys.stdout.write(f"\nship: OK — PR #{number} green and ready for land\n")
+    return 0
+
+
+def _merge_commit_oid(pr_number: int) -> str | None:
+    res = _run(
+        ["gh", "pr", "view", str(pr_number), "--json", "mergeCommit"],
+        timeout=_PROBE_TIMEOUT_S,
+    )
+    if res.returncode != 0:
+        return None
+    commit = json.loads(res.stdout).get("mergeCommit") or {}
+    return commit.get("oid")
+
+
+def _main_run_conclusion(merge_oid: str) -> bool:
+    """Watch the main ci.yml run for the merge commit; verify via the API."""
+    run_id = ""
+    sys.stdout.write("==> waiting for main ci.yml run on the merge commit\n")
+    find = [
+        "gh",
+        "run",
+        "list",
+        "--branch",
+        "main",
+        "--workflow",
+        "ci.yml",
+        "--commit",
+        merge_oid,
+        "--limit",
+        "1",
+        "--json",
+        "databaseId",
+        "--jq",
+        ".[0].databaseId // empty",
+    ]
+    for _ in range(40):  # ~10 min at 15s; the run registers within seconds
+        run_id = _run(find, timeout=_PROBE_TIMEOUT_S).stdout.strip()
+        if run_id:
+            break
+        time.sleep(15)
+    if not run_id:
+        sys.stdout.write("FAIL  land: no main ci.yml run appeared for the merge\n")
+        return False
+    _stream(["gh", "run", "watch", run_id, "--exit-status"])
+    conclusion = _run(
+        ["gh", "run", "view", run_id, "--json", "conclusion", "--jq", ".conclusion"],
+        timeout=_PROBE_TIMEOUT_S,
+    ).stdout.strip()
+    sys.stdout.write(
+        f"{'PASS' if conclusion == 'success' else 'FAIL'}  main run {run_id} "
+        f"conclusion={conclusion}\n"
+    )
+    return conclusion == "success"
+
+
+def _land_preflight(pr_number: int) -> tuple[str, bool] | None:
+    """PR open + checks verified green; (head_oid, surface) or None on fail."""
+    view = _run(
+        ["gh", "pr", "view", str(pr_number), "--json", "state,headRefOid,files"],
+        timeout=_PROBE_TIMEOUT_S,
+    )
+    if view.returncode != 0:
+        sys.stdout.write(f"FAIL  land: gh pr view failed: {view.stderr.strip()}\n")
+        return None
+    info = json.loads(view.stdout)
+    if info["state"] != "OPEN":
+        sys.stdout.write(f"FAIL  land: PR #{pr_number} is {info['state']}\n")
+        return None
+    ok, detail = pr_checks_green(pr_number)
+    sys.stdout.write(f"{'PASS' if ok else 'FAIL'}  pr-checks: {detail}\n")
+    if not ok:
+        return None
+    surface = touches_surface([f["path"] for f in info.get("files", [])])
+    return info["headRefOid"], surface
+
+
+def _merge_and_watch_main(workspace: Path, pr_number: int, head: str) -> bool:
+    """Pinned squash-merge, then the main ci.yml run must conclude success."""
+    merge = [
+        "gh",
+        "pr",
+        "merge",
+        str(pr_number),
+        "--squash",
+        "--delete-branch",
+        "--match-head-commit",
+        head,
+    ]
+    if _stream(merge, cwd=workspace) != 0:
+        sys.stdout.write(
+            "FAIL  land: merge refused (head moved since verification, or "
+            "branch protection unmet) — re-verify and rerun\n"
+        )
+        return False
+    merge_oid = _merge_commit_oid(pr_number)
+    if not merge_oid:
+        sys.stdout.write("FAIL  land: could not resolve the merge commit oid\n")
+        return False
+    return _main_run_conclusion(merge_oid)
+
+
+def land_main(workspace: Path, pr_number: int) -> int:
+    """Verify green → pinned squash-merge → main-CI watch → local validation."""
+    preflight = _land_preflight(pr_number)
+    if preflight is None:
+        return 1
+    head, surface = preflight
+
+    if not _merge_and_watch_main(workspace, pr_number, head):
+        return 1
+
+    # Post-merge validation must run against main's code (the merged
+    # state), not whatever branch the checkout happens to be on.
+    if (
+        _stream(["git", "-C", str(workspace), "checkout", "main"]) != 0
+        or _stream(["git", "-C", str(workspace), "pull", "--ff-only"]) != 0
+    ):
+        sys.stdout.write("FAIL  land: could not fast-forward local main\n")
+        return 1
+
+    sys.stdout.write(
+        f"==> post-merge local validation ({'full' if surface else 'smoke'} tier)\n"
+    )
+    rc = sync_main(workspace, SyncOptions(full=surface))
+    if rc != 0:
+        return rc
+    sys.stdout.write(f"\nland: OK — PR #{pr_number} merged, main green, Mac synced\n")
+    return 0
