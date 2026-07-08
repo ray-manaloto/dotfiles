@@ -20,10 +20,17 @@
        v6 refactor (plan home-volume-consolidation-draft.md):
        `is_ephemeral` removed. It conflated two concerns: "don't template
        tool-managed dirs" and "don't run chezmoi on the Mac host." Replaced
-       by `is_darwin` / `is_devcontainer` which name the host vs container
-       discriminator directly. Tool-managed dirs (.cargo, .rustup,
-       .config/gcloud) are now unconditionally skipped in .chezmoiignore
-       regardless of environment. */ -}}
+       by `is_darwin`, the host discriminator. Tool-managed dirs (.cargo,
+       .rustup, .config/gcloud) are now unconditionally skipped in
+       .chezmoiignore regardless of environment.
+
+       #88: the sibling `is_devcontainer` data var was removed here. It was
+       dead (no consumer) and misleadingly named — its predicate was just
+       `eq .chezmoi.os "linux"`, and the mise-overlay gate in .chezmoiignore
+       keys on the built-in `chezmoi.os` fact directly, so no linux-side
+       data var is needed. Keeping a misnamed "am I in a devcontainer" var
+       invited a future consumer to wire it up wrongly (a real /.dockerenv
+       probe would break the image build, where /.dockerenv is absent). */ -}}
 {{- $isDevComputer := false -}}
 {{- $isPersonal := false -}}
 
@@ -40,7 +47,6 @@
     is_dev_computer = {{ $isDevComputer }}
     is_personal = {{ $isPersonal }}
     is_darwin = {{ eq .chezmoi.os "darwin" }}
-    is_devcontainer = {{ eq .chezmoi.os "linux" }}
     is_ci = {{ $isCI }}
     remote = {{ $remote }}
 
