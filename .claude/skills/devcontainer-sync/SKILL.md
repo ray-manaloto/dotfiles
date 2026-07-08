@@ -54,7 +54,7 @@ currency + smoke tiers 1-3, incl. tier-1 image-identity base-currency);
 | `NOTE ci.yml run … in progress` | The target image may be superseded shortly | Fine to continue for a devloop; rerun sync (or use `--wait`) after the run completes |
 | `FAIL converge: buildkit tag refresh failed` | `docker buildx build --pull` could not fetch the manifest | Registry auth/manifest issue; never fall back to classic `docker pull` (wedges on the ~38GB image) |
 | `FAIL converge: dev-rebuild rc=…` | Lifecycle rebuild failed | Read the streamed devcontainer-cli output; `getaddrinfo ENOTFOUND ghcr.io` = transient DNS, retry once per `.claude/rules/persistence-gate-retry.md` |
-| `FAIL smoke-tiers-1-3 … stale base?` | Tier-1 image identity: in-image config hash ≠ repo `mise-system.toml` | The registry image predates your branch's `mise-system.toml` — wait for CI to publish, then rerun sync |
+| `FAIL smoke-tiers-1-3 … stale base?` | Tier-1 image identity: in-image config hash / tool-set ≠ the **merge-base** config (base-currency, not branch HEAD — `dotfiles-setup image identity-expected` / `resolve_declared_tools_at_base`) | The registry base predates what's integrated on `main` — wait for CI to publish `:dev`, then rerun sync. A branch's own image-input bump does NOT trip this (merge-base baseline); PR CI validates that image |
 | `WARN rebuilding: in-container sessions will be killed` | Expected on stale+running | Workspace bind-mount and home volume persist; running shells die by design |
 | rc 1 from `--check` | Stale — a real sync would rebuild | Run `mise run sync` when ready for the rebuild |
 | rc 2 from `--check` | UNKNOWN — registry unreachable, currency could not be verified | Fix ghcr auth/DNS; never treat as current |
