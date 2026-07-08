@@ -38,6 +38,7 @@ from dotfiles_setup.p2996_hash import (
 )
 from dotfiles_setup.p2996_refresh import refresh as refresh_p2996_ref
 from dotfiles_setup.pr import land_main, ship_main
+from dotfiles_setup.renovate import renovate_status_main
 from dotfiles_setup.sync import SyncOptions, sync_main
 from dotfiles_setup.tool_currency import tool_currency_main
 from dotfiles_setup.verify import main as verify_main
@@ -426,6 +427,16 @@ def setup_parser() -> argparse.ArgumentParser:
         "links (daily refresh.yml signal; feeds the tool-currency-check skill)",
     )
 
+    # renovate-status command
+    renovate_parser = subparsers.add_parser(
+        "renovate-status",
+        help="Report Mend-hosted Renovate app install + privileges + open "
+        "update PRs (read-only; replaces ad-hoc gh/git polling)",
+    )
+    renovate_parser.add_argument(
+        "--json", action="store_true", help="Emit the raw status as JSON"
+    )
+
     # version command
     subparsers.add_parser("version", help="Show the version of the library")
 
@@ -734,6 +745,9 @@ def _build_command_handlers(
         "docker": lambda: handle_docker(args, project_root, config=config),
         "pr": lambda: handle_pr(args, project_root),
         "tool-currency": lambda: sys.exit(tool_currency_main()),
+        "renovate-status": lambda: sys.exit(
+            renovate_status_main(json_output=args.json)
+        ),
         "autofix-apply": lambda: sys.exit(
             autofix_apply_main(args.run_id, project_root)
         ),
