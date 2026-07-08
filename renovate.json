@@ -12,9 +12,9 @@
       "groupName": "bats-core"
     },
     {
-      "description": "Digest-pin the devcontainer base image + features (the jdx preset extends docker:pinDigests; this re-enables it for the devcontainer manager).",
+      "description": "Do NOT digest-pin devcontainer features. Renovate's devcontainer manager + pinDigests appends a digest to the already-tagged feature ref, producing the INVALID combined form `ghcr.io/devcontainers/features/sshd:1@sha256:...` which @devcontainers/cli rejects (path-regex validation fails), breaking `devcontainer upgrade`/`up` and the lock-coverage test. Observed 2026-07-08 (PR #187 broke main; fixed here). Features stay tag-pinned; the base image digest is managed by the custom ubuntu manager below.",
       "matchManagers": ["devcontainer"],
-      "pinDigests": true
+      "pinDigests": false
     },
     {
       "matchUpdateTypes": ["minor", "patch", "digest"],

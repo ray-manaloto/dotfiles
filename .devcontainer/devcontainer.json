@@ -189,7 +189,7 @@
     "SSH_AUTH_SOCK": "/run/host-services/ssh-auth.sock",
   },
   "features": {
-    "ghcr.io/devcontainers/features/sshd:1@sha256:f5251b8e4325f68f7280973c6cd65daff414449c66f240621502d4e8e74eb7ee": {},
+    "ghcr.io/devcontainers/features/sshd:1": {},
   },
   "appPort": ["${localEnv:DEVCONTAINER_SSH_PORT}:2222"],
   "forwardPorts": [2222],
