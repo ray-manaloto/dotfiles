@@ -407,6 +407,14 @@ description = "Markdown report of tools with upstream movement + release-notes l
 # tool-currency-check skill's release-note review.
 run = 'uv run --project python dotfiles-setup tool-currency'
 
+[tasks.renovate-status]
+description = "Report Mend-hosted Renovate install + privileges + open update PRs"
+# Thin caller (zero-bash-logic); logic in
+# python/src/dotfiles_setup/renovate.py. Read-only — replaces ad-hoc
+# gh/git polling for Renovate status (skill -> mise task -> python).
+# Pass --json for machine-readable output.
+run = 'uv run --project python dotfiles-setup renovate-status'
+
 [tasks.ship]
 description = "Gate matrix → push → open/update PR → watch checks to verified green"
 # Thin caller per zero-bash-logic; orchestration in
