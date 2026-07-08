@@ -57,6 +57,23 @@ outlive the session; note anything intentionally left running in the handoff.
 A stale wakeup firing after handoff re-triggers work that is already done
 (observed 2026-07-05).
 
+**Distinguish session-LOCAL state from session-INDEPENDENT autonomous
+processes — do NOT block `/clear` on the latter (Ray, 2026-07-08).** GitHub-side
+processes — running GHA runs, and autonomous bots like **Renovate** that
+continuously open/merge PRs on their own schedule — execute on GitHub
+regardless of whether you `/clear`, start a new session, or none. They are NOT
+"background tasks of this session." Trying to wait for `main` to "settle"
+before `/clear` is futile when Renovate is active: merging one PR immediately
+triggers its promote run + the next queued PR (observed 2026-07-08 — #188
+merged → promote in-flight + #189 building + #192 failing, all at once).
+Correct handling: **INVENTORY** in-flight autonomous PRs / CI runs in the
+handoff (number, what each is, expected outcome, any that are legitimately
+failing and why), pin the handoff to the current HEAD, note that `main` is
+bot-advanced and the next session just `git pull`s the latest — then `/clear`.
+Do not idle waiting for a quiescent `main` that an active bot will never
+produce. (Only wait on a GHA run if YOU need its result to finish THIS
+session's task — e.g. a merge you must confirm landed.)
+
 ## 2. Documentation sync — make docs match reality
 
 For everything changed this session (uncommitted **and** recent commits not yet
@@ -204,7 +221,8 @@ resumes from the handoff."*
 - [ ] **Next-task ambiguity driven to zero via clarifying questions (step 0, mandatory); answers encoded in the handoff.**
 - [ ] **No-context-lost self-check passed: MEMORY.md + handoff + research artifacts alone reconstruct the full working context.**
 - [ ] Working state snapshotted; open PR/CI state known.
-- [ ] Background tasks/agents + scheduled wakeups inventoried; stale ones cancelled or noted.
+- [ ] Session-LOCAL background tasks/agents + scheduled wakeups inventoried; stale ones cancelled or noted.
+- [ ] Session-INDEPENDENT autonomous processes (running GHA runs, Renovate PRs) inventoried in the handoff — NOT waited/blocked on; `main` noted as bot-advanced.
 - [ ] Every doc affected by this session's changes updated; cross-refs grep-clean.
 - [ ] Repo-wide doc-ref sweep run (step 2.5); every MISSING hit fixed or justified in place.
 - [ ] `CLAUDE.md`/`AGENTS.md` files ≤ 200 lines AND ≤ 12,000 chars; at-limit files flagged in the handoff.
