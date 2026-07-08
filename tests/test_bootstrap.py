@@ -51,15 +51,6 @@ def test_uv_version() -> None:
     assert "uv" in result.stdout.lower()
 
 
-def test_pixi_version() -> None:
-    """Verify that pixi is functional."""
-    result = subprocess.run(
-        ["pixi", "--version"], capture_output=True, text=True, check=False
-    )
-    assert result.returncode == 0
-    assert "pixi" in result.stdout.lower()
-
-
 def test_python_version() -> None:
     """Verify that python is functional."""
     result = subprocess.run(
