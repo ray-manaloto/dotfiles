@@ -215,21 +215,30 @@ def test_land_surface_pr_validates_full_tier(
 
 
 def test_watch_awaits_check_registration(monkeypatch: pytest.MonkeyPatch) -> None:
-    """'no checks reported' right after PR-create is pending, not failure."""
+    """Registration + ci-gate waits both precede --watch; then buckets verify."""
     calls: list[str] = []
     responses = iter(
         [
             _cp("", returncode=1),  # registration window: gh errors
             _cp("[]"),  # registered but empty list — still pending
-            _cp(json.dumps([{"name": "lint", "bucket": "pending"}])),  # registered
-            _cp(json.dumps([{"name": "lint", "bucket": "pass"}])),  # final verify
+            _cp(json.dumps([{"name": "lint", "bucket": "pending"}])),  # >=1 check
+            _cp(json.dumps([{"name": "lint"}])),  # ci-gate not present yet
+            _cp(json.dumps([{"name": "lint"}, {"name": "ci-gate"}])),  # ci-gate here
+            _cp(  # final bucket verify
+                json.dumps(
+                    [
+                        {"name": "lint", "bucket": "pass"},
+                        {"name": "ci-gate", "bucket": "pass"},
+                    ]
+                )
+            ),
         ]
     )
     monkeypatch.setattr(pr, "_run", lambda *_a, **_k: next(responses))
     monkeypatch.setattr(pr, "_stream", lambda cmd, **_k: calls.append(cmd[0]) or 0)
     monkeypatch.setattr(pr.time, "sleep", lambda _s: None)
     assert pr.watch_pr_checks(9) is True
-    assert calls == ["gh"]  # the --watch ran exactly once, after registration
+    assert calls == ["gh"]  # --watch ran exactly once, after BOTH waits
 
 
 def test_watch_fails_when_checks_never_register(
@@ -240,6 +249,29 @@ def test_watch_fails_when_checks_never_register(
 
     def _boom(*_a: object, **_k: object) -> int:
         msg = "must not watch before checks register"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(pr, "_stream", _boom)
+    assert pr.watch_pr_checks(9) is False
+
+
+def test_watch_fails_when_aggregate_never_registers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#181: >=1 check exists but ci-gate never appears — not green, no watch.
+
+    The premature-green gap: without the ci-gate wait, --watch could exit on
+    an early all-green wave (here `lint`) before the build jobs registered.
+    """
+    monkeypatch.setattr(
+        pr,
+        "_run",
+        lambda *_a, **_k: _cp(json.dumps([{"name": "lint", "bucket": "pass"}])),
+    )
+    monkeypatch.setattr(pr.time, "sleep", lambda _s: None)
+
+    def _boom(*_a: object, **_k: object) -> int:
+        msg = "must not watch before ci-gate registers"
         raise AssertionError(msg)
 
     monkeypatch.setattr(pr, "_stream", _boom)
