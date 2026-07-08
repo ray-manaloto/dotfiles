@@ -486,7 +486,7 @@ def test_resolve_declared_tools_merges_system_and_shared() -> None:
 
     # From the shared fragment, exact-pinned.
     assert declared["python"] == "3.14.6"
-    assert declared["hk"] == "1.49.0"
+    assert declared["hk"] == "1.50.0"
     # From mise-system.toml [tools].
     assert declared["node"] == "latest"
     assert "conda:llvm" in declared

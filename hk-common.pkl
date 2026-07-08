@@ -5,7 +5,7 @@
 //
 // Usage in an hk.pkl that amends Config.pkl (keep the version in lockstep
 // with the amends/import URLs — the hk_version_parity step enforces it):
-//   import "package://github.com/jdx/hk/releases/download/v1.49.0/hk@1.49.0#/Config.pkl"
+//   import "package://github.com/jdx/hk/releases/download/v1.50.0/hk@1.50.0#/Config.pkl"
 //   import "hk-common.pkl" as common
 //   hooks { ["pre-commit"] { steps { ...common.hygiene ...common.safety } } }
 //
@@ -14,8 +14,8 @@
 // Step (check=null) that hk silently skips — these steps NEVER ran, locally or
 // in CI. See feedback_hk_builtins_need_assignment.
 
-import "package://github.com/jdx/hk/releases/download/v1.49.0/hk@1.49.0#/Builtins.pkl"
-import "package://github.com/jdx/hk/releases/download/v1.49.0/hk@1.49.0#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v1.50.0/hk@1.50.0#/Builtins.pkl"
+import "package://github.com/jdx/hk/releases/download/v1.50.0/hk@1.50.0#/Config.pkl"
 
 // #154: shared `exclude` list for ALL builtin linters — third-party cached
 // docs, generated research artifacts, and gitignored local tool caches (not
