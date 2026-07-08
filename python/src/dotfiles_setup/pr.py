@@ -13,7 +13,10 @@ Design notes (deep-research verified, 2026-07-07 —
 - **Check verification reads the ``--json`` buckets**, never a watch
   command's exit code alone (``gh run watch --exit-status`` has reported
   0 prematurely; see ``.claude/rules/gh-cli-watch.md``). A PR is green
-  iff every check bucket is ``pass`` or ``skipping``.
+  iff every check bucket is ``pass`` or ``skipping``. ship also waits for
+  the ``ci-gate`` aggregator (:data:`_AGGREGATE_CHECK`) to register before
+  ``--watch``, so a build PR is not declared green on an early check wave
+  before build-publish's matrix jobs register (#181).
 - **The merge is delegated to GitHub's requirements engine** with the
   head SHA pinned: ``gh pr merge --squash --match-head-commit <sha>``
   returns 409 if the branch moved after we verified it — closing the
@@ -113,6 +116,13 @@ _DOCS_PATTERNS = (
 )
 
 _GREEN_BUCKETS = frozenset({"pass", "skipping"})
+
+# The always-run aggregator job (ci.yml) that `needs` every other job and is
+# branch-protection-required on every PR. ship waits for THIS to register
+# before `gh pr checks --watch`, so --watch cannot exit on an early all-green
+# wave before the build-publish matrix jobs (base-prep/build/smoke-test)
+# register — the premature-green ship gap found landing #181.
+_AGGREGATE_CHECK = "ci-gate"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -257,9 +267,43 @@ def _await_checks_registered(pr_number: int, *, attempts: int = 40) -> bool:
     return False
 
 
+def _await_aggregate_registered(pr_number: int, *, attempts: int = 40) -> bool:
+    """Poll until the ``ci-gate`` aggregator check is registered.
+
+    build-publish's matrix jobs (base-prep/build/smoke-test) register in
+    WAVES after ``changes`` decides build=true, so waiting for *any* check
+    (``_await_checks_registered``) let ``gh pr checks --watch`` exit on an
+    early all-green wave before the build jobs appeared — ship declared #181
+    green prematurely. :data:`_AGGREGATE_CHECK` ``needs`` every job, so once
+    it is present the subsequent ``--watch`` cannot terminate until the whole
+    chain (including the late-registering build jobs) is terminal.
+    """
+    for _ in range(attempts):
+        res = _run(
+            ["gh", "pr", "checks", str(pr_number), "--json", "name"],
+            timeout=_PROBE_TIMEOUT_S,
+        )
+        if res.returncode == 0 and any(
+            c.get("name") == _AGGREGATE_CHECK for c in json.loads(res.stdout or "[]")
+        ):
+            return True
+        time.sleep(15)
+    sys.stdout.write(
+        f"FAIL  pr-checks: aggregator {_AGGREGATE_CHECK!r} never registered on "
+        f"PR #{pr_number} within {attempts * 15}s\n"
+    )
+    return False
+
+
 def watch_pr_checks(pr_number: int) -> bool:
-    """Await registration, watch to terminal state, verify via JSON buckets."""
+    """Await registration, watch to terminal state, verify via JSON buckets.
+
+    Waits for the ``ci-gate`` aggregator to register before ``--watch`` so a
+    build PR is not declared green on an early check wave (#181 gap).
+    """
     if not _await_checks_registered(pr_number):
+        return False
+    if not _await_aggregate_registered(pr_number):
         return False
     _stream(["gh", "pr", "checks", str(pr_number), "--watch", "--fail-fast"])
     ok, detail = pr_checks_green(pr_number)
