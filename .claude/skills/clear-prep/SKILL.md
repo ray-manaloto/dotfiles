@@ -16,6 +16,26 @@ your guess.
 Work top-to-bottom. Do not skip the validation gate. Keep the final resume
 prompt short — durable detail lives in memory + the handoff, not the prompt.
 
+## 0. Resolve next-task ambiguity FIRST — mandatory (Ray, 2026-07-08)
+
+**Before writing the handoff, drive the next-task scope to zero ambiguity by
+asking the user clarifying questions** (`AskUserQuestion`), and keep asking
+across rounds until nothing material is unresolved. The handoff's "Next task"
+section is only as good as this step — a vague next-task line makes the whole
+`/clear` lossy. This is a hard requirement, not a courtesy: if the next task
+admits multiple interpretations, scope forks, an undecided B-vs-C, or an
+unstated end-goal, you MUST surface each and get the user's answer, then encode
+the answers verbatim in the handoff. Skipping this because the task "seems
+clear" is the failure mode this step exists to prevent.
+
+**Then double-check nothing will be lost by `/clear`** (see step 3c + the
+final checklist): every findings-bearing agent/research report is on disk,
+every decision + open question is in the handoff, and the resume prompt +
+memory + handoff together reconstruct the full working context. Verify by
+asking: "if I `/clear` right now and only have MEMORY.md + the handoff + the
+research artifacts, can the next session continue with no gaps?" If the answer
+is no, fix it before emitting the resume prompt.
+
 ## 1. Snapshot the working state
 
 Gather, don't guess:
@@ -181,6 +201,8 @@ resumes from the handoff."*
 
 ## Checklist (all true before you're done)
 
+- [ ] **Next-task ambiguity driven to zero via clarifying questions (step 0, mandatory); answers encoded in the handoff.**
+- [ ] **No-context-lost self-check passed: MEMORY.md + handoff + research artifacts alone reconstruct the full working context.**
 - [ ] Working state snapshotted; open PR/CI state known.
 - [ ] Background tasks/agents + scheduled wakeups inventoried; stale ones cancelled or noted.
 - [ ] Every doc affected by this session's changes updated; cross-refs grep-clean.

@@ -24,12 +24,13 @@ Docker image smoke outputs.
 | `test_pr.py` | pytest | `mise run ship`/`land` workflow (`dotfiles_setup.pr`) — surface detection, gate matrix, bucket verification, pinned merge |
 | `test_hook_guard.py` | pytest | PreToolUse mise-tasks-only guard (`dotfiles_setup.hook_guard`) — deny/redirect rules, false-positive guards, JSON contract |
 | `test_tool_currency.py` | pytest | Daily tool-currency signal (`dotfiles_setup.tool_currency`) — release-link backends, report rendering |
+| `test_renovate.py` | pytest | Renovate status signal (`dotfiles_setup.renovate`) — app-id/privilege check, report rendering |
 | `test_autofix.py` | pytest | autofix.ci artifact applier (`dotfiles_setup.autofix`) — additions, traversal/shape/deletion refusal |
 | `test_shell_integration.py` | pytest | Tool reachability in login shells (mise, chezmoi, uv, pixi, claude, gemini, codex) |
 | `infra/foundation.bats` | Bats | Bash-level foundation checks (shell script integration) |
 | `infra/runtimes.bats` | Bats | Runtime installation checks (bash) |
 
-Total: **316 pytest tests** (pytest runs all `test_*.py` files) plus Bats
+Total: **373 pytest tests** (pytest runs all `test_*.py` files) plus Bats
 scenarios under `infra/`.
 
 ## Running tests
