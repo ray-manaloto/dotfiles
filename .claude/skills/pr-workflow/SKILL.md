@@ -33,9 +33,18 @@ mise run land -- <PR#>             # verify green → pinned squash-merge → ma
    `.devcontainer/**`, `docker-bake.hcl`, smoke/workspace scripts,
    `container.py`/`sync.py`/`image.py`/`docker.py`/`pr.py`,
    `python/verification/*`).
-3. Push, open (or reuse) the PR, `gh pr checks --watch --fail-fast`,
-   then **verify via `--json` buckets** — green means every check
-   `pass`/`skipping`; a watch exit code alone is never trusted.
+   The full-sync gate's smoke tier-1 base-currency (config-hash AND
+   tool-set) validates against the **merge-base** for a branch that
+   changed an image build input — the local base can't be built from the
+   branch (its base is built by that branch's own PR CI), so branch-config
+   validation defers to CI. Without this, an image-input bump deadlocks the
+   gate (#179/#180).
+3. Push, open (or reuse) the PR, wait for the **`ci-gate` aggregator to
+   register** (it `needs` every job), then `gh pr checks --watch
+   --fail-fast`, then **verify via `--json` buckets** — green means every
+   check `pass`/`skipping`. The ci-gate wait stops a build PR being called
+   green on an early check wave before build-publish's matrix jobs register
+   (#181); a watch exit code alone is never trusted.
 
 ## What land does
 
@@ -62,7 +71,7 @@ Invoking `land` IS the merge approval — nothing auto-merges without it.
 | `pr-checks: <name>=fail` | CI check failed after watch | Triage the run; autofix "✅ Autofix task started" failures mean the bot pushed a fix commit — re-watch |
 | `land: merge refused` | Head moved since verification / protection unmet | Re-run land (it re-verifies) |
 | land failed AFTER the merge (CI watch / sync) | Merged-but-unvalidated PR | `mise run land -- <PR#> --resume` replays the idempotent post-merge steps |
-| `land: no main ci.yml run appeared` | Merge-commit run never registered (~10 min) | Check Actions; run land's remaining steps manually via `mise run sync` after main is green |
+| `land: no main ci.yml run appeared` | A merge that SHOULD trigger a run didn't register (~10 min) | Check Actions; land only expects a run when the diff matches `CI_PUSH_PATHS` (ci.yml on.push.paths) — a merge matching none passes without one (#179) |
 
 ## Wiring audit (meta-validation)
 
