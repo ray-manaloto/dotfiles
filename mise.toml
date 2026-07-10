@@ -23,7 +23,7 @@ biome = "2.5.2"
 "npm:@contextlint/cli" = "1.1.1"
 "npm:markdownlint-cli2" = "0.23.0"   # https://github.com/DavidAnson/markdownlint — general markdown quality (MD013 line-length, etc.)
 "aqua:jackchuka/mdschema" = "0.13.2"
-rumdl = "0.2.28"
+rumdl = "v0.2.30"
 # zizmor: GHA security scanner — backs the hk zizmor builtin (#160 T12);
 # host-only lint tool, so it lives here (not shared.toml).
 zizmor = "1.26.1"
