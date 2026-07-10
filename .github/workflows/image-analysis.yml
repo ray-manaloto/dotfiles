@@ -137,7 +137,7 @@ jobs:
         # Associate the result with the analyzed commit/branch (workflow_run
         # context defaults to the default branch otherwise).
         if: steps.image.outputs.present == 'true' && hashFiles('trivy.sarif') != ''
-        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
         with:
           sarif_file: trivy.sarif
           category: trivy-image
