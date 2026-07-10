@@ -112,7 +112,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # mise.run installer already chmods the binary; the explicit chmod is a
 # belt-and-braces guard against permission drift on the cache mount.
 # renovate: datasource=github-releases depName=jdx/mise
-ARG MISE_VERSION=2026.7.2
+ARG MISE_VERSION=2026.7.5
 RUN curl https://mise.run | MISE_VERSION="v${MISE_VERSION}" sh && \
     chmod +x ${MISE_INSTALL_PATH} && \
     mise --version
