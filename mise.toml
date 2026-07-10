@@ -39,7 +39,7 @@ rtk = "0.43.0"                                                      # re-probed 
 aws-cli = { version = "2.35.20", symlink_bins = "true" }
 azure-cli = { version = "2.88.0", uvx_args = "--prerelease=allow" }
 docker-cli = "29.6.1"
-opencode = "1.17.15"
+opencode = "1.17.18"
 "npm:@claude-flow/cli" = "3.25.2"
 "npm:@ralph-orchestrator/ralph-cli" = "2.10.1"
 
