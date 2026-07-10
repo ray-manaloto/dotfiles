@@ -36,7 +36,7 @@ rtk = "0.43.0"                                                      # re-probed 
 "npm:agent-browser" = "0.31.1"
 "npm:portless" = "0.15.1"
 "pipx:deepagents-cli" = "0.2.2"
-aws-cli = { version = "2.35.20", symlink_bins = "true" }
+aws-cli = { version = "2.35.21", symlink_bins = "true" }
 azure-cli = { version = "2.88.0", uvx_args = "--prerelease=allow" }
 docker-cli = "29.6.1"
 opencode = "1.17.18"
