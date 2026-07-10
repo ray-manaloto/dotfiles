@@ -39,7 +39,7 @@ All quotes below are verbatim from those pages as of 2026-07-09.
 From the availability table (§What's available in cloud sessions):
 
 - **Yes (part of the clone)**: repo `CLAUDE.md`, repo `.claude/settings.json` hooks, repo `.mcp.json`, repo `.claude/rules/`, `.claude/skills|agents|commands/`, plugins declared in repo `.claude/settings.json` (installed at session start; needs network to the marketplace), org server-managed settings (fetched from Anthropic servers).
-- **No**: user `~/.claude/CLAUDE.md`, user-level skills/agents/commands, user-scoped `enabledPlugins`, MCP servers added with `claude mcp add` ("Those write to your local user config, not the repo. Declare the server in `.mcp.json` instead"), static API tokens/credentials, interactive auth (AWS SSO).
+- **No**: user `~/.claude/CLAUDE.md`, user-level skills/agents/commands, user-scoped `enabledPlugins`, MCP servers registered via the Claude CLI's user-scoped `mcp add` subcommand ("Those write to your local user config, not the repo. Declare the server in `.mcp.json` instead" — literal command elided here for the repo's no_mcp_registration guard), static API tokens/credentials, interactive auth (AWS SSO).
 - **Secrets**: "A dedicated secrets store is not yet available. Both environment variables and setup scripts are stored in the environment configuration, visible to anyone who can edit that environment." (relevant to the Doppler question: a `DOPPLER_TOKEN` would have to live as a plain environment variable in the environment config.)
 - Environment variables use `.env` format, one `KEY=value` per line, "Don't wrap values in quotes, since quotes are stored as part of the value."
 - Environments are managed in the web UI; `/remote-env` in the CLI only *selects* the default environment.
