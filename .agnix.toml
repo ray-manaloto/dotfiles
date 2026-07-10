@@ -9,6 +9,13 @@ exclude = [
     ".logging/**",
     "plugins/**",
     "missions/**",
+    # Deep-research artifacts: prose reports whose per-run `agents/` subdir
+    # name collides with agnix's agent-definition validation (it treats any
+    # **/agents/*.md as an agent file needing YAML frontmatter). These are
+    # research findings, not agent docs — same rationale as the .omc/** exclude
+    # above (r2 reports lived there; r3 moved to this tracked path for
+    # visibility on `git pull`).
+    "docs/research/runs/**",
     ".claude/skills.bak/**",
     # Third-party skill reference docs (upstream-controlled, hard-coded paths expected)
     ".claude/skills/context7-cli/references/**",
