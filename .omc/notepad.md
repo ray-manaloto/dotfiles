@@ -119,3 +119,24 @@
   resumeFromRunId wf_37f14652-0dc (research replays cached). A/B
   synthesizers didn't write report.md (B hit a session usage limit,
   resets 10:50pm UTC) — dedicated writer agents dispatched instead.
+
+## ROUND COMPLETE (2026-07-10)
+- All 7 domain reports (A-G) + inventory + unified synthesis + phased plan
+  written and pushed to `claude/refine-local-plan-7knttu`; PR #197 body
+  updated to describe the full round.
+- Synthesis: `.omc/research/research-20260709-r2-synthesis/report.md`
+  (through-line: formalize mise config as the ONE shared source of truth;
+  thin per-env consumers fan out; Mermaid pipeline diagram; P0/P1/P2 open
+  questions; 18-row refuted/corrected roll-up incl. 2 r1 overturns).
+- Plan: `.omc/plans/plan-20260710-r2-implementation.md` (supersedes
+  plan-20260709-unified-image.md) — Phase 0 quick wins → keystone core/cpp
+  split → 3 self-learning automation workflows → web lane + secrets → KB.
+- [ops CI] The recurring ci-gate "failure" during delivery was NOT real:
+  rapid successive pushes triggered GHA concurrency cancellation
+  (RESULTS: cancelled cancelled cancelled skipped). Zero guard-literal
+  violations remain (grep-clean). Resolves once pushes stop and one run
+  completes uninterrupted. LESSON: batch artifact pushes into few commits.
+- [ops] Courier reliability: haiku couriers reading 15-20 large files hit
+  context/output limits and summarize instead of pushing; the reliable
+  shape is per-domain (≤5 files) push_files calls, or main-loop push for
+  small/final files. Sonnet couriers more reliable than haiku for pushes.
