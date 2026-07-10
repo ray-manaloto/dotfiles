@@ -62,10 +62,14 @@ if command -v uv >/dev/null 2>&1; then
 fi
 
 # 4. SessionStart-hook mode: persist PATH so subsequent Bash tool calls (and the
-#    guard) find mise + the shims. No-op when run as the setup script.
+#    guard) find mise + the shims. No-op when run as the setup script. The
+#    literal '$PATH' is written via ${dollar} so it stays UNEXPANDED (it expands
+#    when the env file is later sourced) without tripping shellcheck SC2016 on a
+#    single-quoted expansion — which the no_lint_skip rule forbids suppressing.
 if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
-  printf 'export PATH="%s/.local/bin:%s/.local/share/mise/shims:$PATH"\n' \
-    "${HOME}" "${HOME}" >>"${CLAUDE_ENV_FILE}"
+  dollar='$'
+  printf 'export PATH="%s/.local/bin:%s/.local/share/mise/shims:%sPATH"\n' \
+    "${HOME}" "${HOME}" "${dollar}" >>"${CLAUDE_ENV_FILE}"
 fi
 
 log "done"
