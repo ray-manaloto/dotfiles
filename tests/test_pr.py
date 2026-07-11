@@ -214,55 +214,123 @@ def test_ship_gate_failure_stops_before_push(
 # ------------------------------------------------------------------- land
 
 
-def test_land_aborts_on_non_green_checks(monkeypatch: pytest.MonkeyPatch) -> None:
-    view = {"state": "OPEN", "headRefOid": "a" * 40, "baseRefName": "main"}
-    monkeypatch.setattr(pr, "_run", lambda *_a, **_k: _cp(json.dumps(view)))
-    monkeypatch.setattr(pr, "pr_checks_green", lambda _n: (False, "lint=fail"))
-
-    def _boom(*_a: object, **_k: object) -> int:
-        msg = "must not merge with non-green checks"
-        raise AssertionError(msg)
-
-    monkeypatch.setattr(pr, "_stream", _boom)
-    assert pr.land_main(_WORKSPACE, 7) == 1
-
-
-def test_land_aborts_on_closed_pr(monkeypatch: pytest.MonkeyPatch) -> None:
-    view = {"state": "MERGED", "headRefOid": "a" * 40, "baseRefName": "main"}
-    monkeypatch.setattr(pr, "_run", lambda *_a, **_k: _cp(json.dumps(view)))
-    assert pr.land_main(_WORKSPACE, 7) == 1
-
-
-def test_land_merge_pins_verified_head(monkeypatch: pytest.MonkeyPatch) -> None:
+def testenable_auto_merge_builds_pinned_squash_command(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     head = "b" * 40
-    view = {"state": "OPEN", "headRefOid": head, "baseRefName": "main"}
-    streamed: list[list[str]] = []
+    seen: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **_k: object) -> subprocess.CompletedProcess[str]:
+        seen.append(cmd)
+        return _cp()
+
+    monkeypatch.setattr(pr, "_run", fake_run)
+    assert pr.enable_auto_merge(_WORKSPACE, 7, head) is True
+    cmd = seen[-1]
+    assert cmd[:3] == ["gh", "pr", "merge"]
+    assert "--auto" in cmd
+    assert "--squash" in cmd
+    assert "--match-head-commit" in cmd
+    assert head in cmd
+
+
+def testenable_auto_merge_retries_transient_422(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    responses = iter([_cp("422 Failed enabling auto-merge", returncode=1), _cp()])
+    monkeypatch.setattr(pr, "_run", lambda *_a, **_k: next(responses))
+    monkeypatch.setattr(pr.time, "sleep", lambda _s: None)
+    assert pr.enable_auto_merge(_WORKSPACE, 7, "a" * 40) is True
+
+
+def testenable_auto_merge_fails_after_all_retries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(pr, "_run", lambda *_a, **_k: _cp("422", returncode=1))
+    monkeypatch.setattr(pr.time, "sleep", lambda _s: None)
+    assert pr.enable_auto_merge(_WORKSPACE, 7, "a" * 40) is False
+
+
+def test_ship_enables_auto_merge_and_returns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ship opens the PR, enables native auto-merge (pinned to HEAD), returns 0.
+
+    GitHub owns the wait — ship never watches the build.
+    """
+    enabled: dict[str, object] = {}
+    monkeypatch.setattr(pr, "_current_branch", lambda _w: "feat/x")
+    monkeypatch.setattr(pr, "_working_tree_clean", lambda _w: True)
+    monkeypatch.setattr(pr, "changed_paths_vs_main", lambda _w: ["README.md"])
+    monkeypatch.setattr(pr, "run_gates", lambda *_a: True)
+    monkeypatch.setattr(pr, "_stream", lambda *_a, **_k: 0)  # git push
+    monkeypatch.setattr(pr, "_open_or_update_pr", lambda *_a, **_k: 42)
+    monkeypatch.setattr(pr, "_await_checks_registered", lambda _n: True)
+    monkeypatch.setattr(pr, "_run", lambda *_a, **_k: _cp("abc123\n"))  # rev-parse
+
+    def fake_enable(_w: Path, n: int, head: str) -> bool:
+        enabled["pr"] = n
+        enabled["head"] = head
+        return True
+
+    monkeypatch.setattr(pr, "enable_auto_merge", fake_enable)
+    assert pr.ship_main(_WORKSPACE) == 0
+    assert enabled["pr"] == 42
+    assert enabled["head"] == "abc123"
+
+
+def test_ship_fails_if_auto_merge_enable_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(pr, "_current_branch", lambda _w: "feat/x")
+    monkeypatch.setattr(pr, "_working_tree_clean", lambda _w: True)
+    monkeypatch.setattr(pr, "changed_paths_vs_main", lambda _w: ["README.md"])
+    monkeypatch.setattr(pr, "run_gates", lambda *_a: True)
+    monkeypatch.setattr(pr, "_stream", lambda *_a, **_k: 0)
+    monkeypatch.setattr(pr, "_open_or_update_pr", lambda *_a, **_k: 42)
+    monkeypatch.setattr(pr, "_await_checks_registered", lambda _n: True)
+    monkeypatch.setattr(pr, "_run", lambda *_a, **_k: _cp("abc123\n"))
+    monkeypatch.setattr(pr, "enable_auto_merge", lambda *_a: False)
+    assert pr.ship_main(_WORKSPACE) == 1
+
+
+def test_land_requires_merged(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A still-OPEN PR means auto-merge is pending ci-gate — land exits 1."""
+    view = {"state": "OPEN", "baseRefName": "main"}
+    monkeypatch.setattr(pr, "_run", lambda *_a, **_k: _cp(json.dumps(view)))
+    assert pr.land_main(_WORKSPACE, 7) == 1
+
+
+def test_land_refuses_non_main_base(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Land only validates main-based PRs."""
+    view = {"state": "MERGED", "baseRefName": "develop"}
+    monkeypatch.setattr(pr, "_run", lambda *_a, **_k: _cp(json.dumps(view)))
+    assert pr.land_main(_WORKSPACE, 7) == 1
+
+
+def test_land_merged_validates_and_syncs(monkeypatch: pytest.MonkeyPatch) -> None:
+    view = {"state": "MERGED", "baseRefName": "main"}
     monkeypatch.setattr(pr, "_run", lambda *_a, **_k: _cp(json.dumps(view)))
     monkeypatch.setattr(pr, "_pr_changed_paths", lambda _n: ["a.py"])
-    monkeypatch.setattr(pr, "pr_checks_green", lambda _n: (True, "ok"))
-    monkeypatch.setattr(pr, "_stream", lambda cmd, **_k: streamed.append(cmd) or 0)
     monkeypatch.setattr(pr, "_merge_commit_oid", lambda _n: "c" * 40)
     monkeypatch.setattr(pr, "_main_run_conclusion", lambda _o, **_k: True)
+    monkeypatch.setattr(pr, "_stream", lambda *_a, **_k: 0)
     monkeypatch.setattr(pr, "sync_main", lambda *_a, **_k: 0)
     assert pr.land_main(_WORKSPACE, 7) == 0
-    merge_cmd = next(c for c in streamed if c[:3] == ["gh", "pr", "merge"])
-    assert "--match-head-commit" in merge_cmd
-    assert head in merge_cmd
 
 
 def test_land_surface_pr_validates_full_tier(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    view = {"state": "OPEN", "headRefOid": "d" * 40, "baseRefName": "main"}
+    view = {"state": "MERGED", "baseRefName": "main"}
     seen: dict[str, bool] = {}
     monkeypatch.setattr(pr, "_run", lambda *_a, **_k: _cp(json.dumps(view)))
     monkeypatch.setattr(
         pr, "_pr_changed_paths", lambda _n: [".devcontainer/Dockerfile"]
     )
-    monkeypatch.setattr(pr, "pr_checks_green", lambda _n: (True, "ok"))
-    monkeypatch.setattr(pr, "_stream", lambda *_a, **_k: 0)
     monkeypatch.setattr(pr, "_merge_commit_oid", lambda _n: "e" * 40)
     monkeypatch.setattr(pr, "_main_run_conclusion", lambda _o, **_k: True)
+    monkeypatch.setattr(pr, "_stream", lambda *_a, **_k: 0)
 
     def fake_sync(_w: Path, options: SyncOptions) -> int:
         seen["full"] = options.full
@@ -273,89 +341,10 @@ def test_land_surface_pr_validates_full_tier(
     assert seen["full"] is True
 
 
-def test_watch_awaits_check_registration(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Registration + ci-gate waits both precede --watch; then buckets verify."""
-    calls: list[str] = []
-    responses = iter(
-        [
-            _cp("", returncode=1),  # registration window: gh errors
-            _cp("[]"),  # registered but empty list — still pending
-            _cp(json.dumps([{"name": "lint", "bucket": "pending"}])),  # >=1 check
-            _cp(json.dumps([{"name": "lint"}])),  # ci-gate not present yet
-            _cp(json.dumps([{"name": "lint"}, {"name": "ci-gate"}])),  # ci-gate here
-            _cp(  # final bucket verify
-                json.dumps(
-                    [
-                        {"name": "lint", "bucket": "pass"},
-                        {"name": "ci-gate", "bucket": "pass"},
-                    ]
-                )
-            ),
-        ]
-    )
-    monkeypatch.setattr(pr, "_run", lambda *_a, **_k: next(responses))
-    monkeypatch.setattr(pr, "_stream", lambda cmd, **_k: calls.append(cmd[0]) or 0)
-    monkeypatch.setattr(pr.time, "sleep", lambda _s: None)
-    assert pr.watch_pr_checks(9) is True
-    assert calls == ["gh"]  # --watch ran exactly once, after BOTH waits
-
-
-def test_watch_fails_when_checks_never_register(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(pr, "_run", lambda *_a, **_k: _cp("", returncode=1))
-    monkeypatch.setattr(pr.time, "sleep", lambda _s: None)
-
-    def _boom(*_a: object, **_k: object) -> int:
-        msg = "must not watch before checks register"
-        raise AssertionError(msg)
-
-    monkeypatch.setattr(pr, "_stream", _boom)
-    assert pr.watch_pr_checks(9) is False
-
-
-def test_watch_fails_when_aggregate_never_registers(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """#181: >=1 check exists but ci-gate never appears — not green, no watch.
-
-    The premature-green gap: without the ci-gate wait, --watch could exit on
-    an early all-green wave (here `lint`) before the build jobs registered.
-    """
-    monkeypatch.setattr(
-        pr,
-        "_run",
-        lambda *_a, **_k: _cp(json.dumps([{"name": "lint", "bucket": "pass"}])),
-    )
-    monkeypatch.setattr(pr.time, "sleep", lambda _s: None)
-
-    def _boom(*_a: object, **_k: object) -> int:
-        msg = "must not watch before ci-gate registers"
-        raise AssertionError(msg)
-
-    monkeypatch.setattr(pr, "_stream", _boom)
-    assert pr.watch_pr_checks(9) is False
-
-
-def test_land_refuses_non_main_base(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Review finding [11]: land only lands main-based PRs."""
-    view = {"state": "OPEN", "headRefOid": "a" * 40, "baseRefName": "develop"}
+def test_land_resume_is_accepted_alias(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Resume is accepted for compat — land is always the post-merge replay."""
+    view = {"state": "MERGED", "baseRefName": "main"}
     monkeypatch.setattr(pr, "_run", lambda *_a, **_k: _cp(json.dumps(view)))
-    assert pr.land_main(_WORKSPACE, 7) == 1
-
-
-def test_land_resume_requires_merged(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Review finding [6]: --resume only replays post-merge steps."""
-    monkeypatch.setattr(
-        pr, "_run", lambda *_a, **_k: _cp(json.dumps({"state": "OPEN"}))
-    )
-    assert pr.land_main(_WORKSPACE, 7, resume=True) == 1
-
-
-def test_land_resume_replays_post_merge(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        pr, "_run", lambda *_a, **_k: _cp(json.dumps({"state": "MERGED"}))
-    )
     monkeypatch.setattr(pr, "_pr_changed_paths", lambda _n: ["a.py"])
     monkeypatch.setattr(pr, "_merge_commit_oid", lambda _n: "c" * 40)
     monkeypatch.setattr(pr, "_main_run_conclusion", lambda _o, **_k: True)
@@ -452,7 +441,7 @@ def test_land_passes_when_no_main_run_expected(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """#178: a merge whose paths match no ci.yml push path needs no run."""
-    view = {"state": "OPEN", "headRefOid": "b" * 40, "baseRefName": "main"}
+    view = {"state": "MERGED", "baseRefName": "main"}
     monkeypatch.setattr(pr, "_run", _land_run_dispatch(view))
     monkeypatch.setattr(
         pr, "_pr_changed_paths", lambda _n: ["mise.toml", ".agnix.toml"]
@@ -467,7 +456,7 @@ def test_land_fails_when_expected_main_run_absent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A ci.yml-push-path merge with no main run is a real failure."""
-    view = {"state": "OPEN", "headRefOid": "b" * 40, "baseRefName": "main"}
+    view = {"state": "MERGED", "baseRefName": "main"}
     monkeypatch.setattr(pr, "_run", _land_run_dispatch(view))
     monkeypatch.setattr(
         pr, "_pr_changed_paths", lambda _n: [".config/mise/conf.d/shared.toml"]
@@ -482,7 +471,7 @@ def test_land_watches_main_run_when_one_unexpectedly_appears(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Grace poll: a run appearing despite no expectation is still verified."""
-    view = {"state": "OPEN", "headRefOid": "b" * 40, "baseRefName": "main"}
+    view = {"state": "MERGED", "baseRefName": "main"}
     monkeypatch.setattr(pr, "_run", _land_run_dispatch(view, run_id="999"))
     monkeypatch.setattr(pr, "_pr_changed_paths", lambda _n: ["docs/x.md"])
     monkeypatch.setattr(pr, "_stream", lambda *_a, **_k: 0)
