@@ -86,7 +86,7 @@ jobs:
         uses: ./.github/actions/open-refresh-pr
         with:
           token: ${{ steps.app-token.outputs.token }}
-          commit-message: "chore: refresh lockfiles (mise.lock, mise-system.lock, devcontainer-lock.json)"
+          commit-message: "chore: refresh lockfiles (mise.lock, mise-system.lock, mise-runtime.lock, devcontainer-lock.json)"
           title: "chore: refresh lockfiles"
           body: |
             Automated daily regeneration of the three committed lockfiles
@@ -95,6 +95,9 @@ jobs:
             - `mise.lock` — host/CI tool resolutions
             - `.devcontainer/mise-system.lock` — image tool resolutions
               (pinned image MISE_VERSION, linux-x64)
+            - `.devcontainer/mise-runtime.lock` — runtime-tier image tool
+              resolutions (`MISE_ENV=runtime`, written beside mise-system.lock
+              in the same pinned-mise pass, #160 T9)
             - `.devcontainer/devcontainer-lock.json` — devcontainer features
 
             Re-resolves `"latest"` pins that the hosted Renovate app cannot
@@ -108,6 +111,7 @@ jobs:
             mise.lock
             .config/mise/mise.lock
             .devcontainer/mise-system.lock
+            .devcontainer/mise-runtime.lock
             .devcontainer/devcontainer-lock.json
           labels: lockfile
           summary-heading: Lock refresh

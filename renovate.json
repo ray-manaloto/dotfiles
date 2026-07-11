@@ -3,6 +3,7 @@
   "extends": [
     "github>jdx/renovate-config"
   ],
+  "schedule": ["at any time"],
   "minimumReleaseAge": null,
   "prConcurrentLimit": 20,
   "prHourlyLimit": 0,
@@ -92,6 +93,16 @@
         "ARG MISE_VERSION=(?<currentValue>[0-9.]+)"
       ],
       "depNameTemplate": "jdx/mise",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "dive layer-analysis version pin. The upstream action is broken (bare Dockerfile with an empty ARG DOCKER_CLI_VERSION → 404), so image-analysis.yml installs the release tarball directly and the version lives in a workflow env var no native manager parses. Same github-releases shape as the MISE_VERSION pin; the curl URL re-adds the v prefix.",
+      "managerFilePatterns": ["/\\.github/workflows/image-analysis\\.yml$/"],
+      "matchStrings": [
+        "DIVE_VERSION: (?<currentValue>[0-9.]+)"
+      ],
+      "depNameTemplate": "wagoodman/dive",
       "datasourceTemplate": "github-releases"
     }
   ],
