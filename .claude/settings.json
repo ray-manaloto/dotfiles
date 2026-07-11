@@ -12,8 +12,20 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --project python dotfiles-setup hook pretooluse",
+            "command": "bash scripts/pretooluse-guard.sh",
             "timeout": 20
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ \"${CLAUDE_CODE_REMOTE:-}\" = \"true\" ] && bash scripts/web-setup.sh || true",
+            "timeout": 600
           }
         ]
       }

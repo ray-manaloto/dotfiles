@@ -951,18 +951,19 @@ tokens = [
 
 [[suite]]
 name = "workflow.mise-tasks-enforcement"
-description = "mise-tasks-only policy wiring: the PreToolUse Bash guard must stay wired end-to-end — .claude/settings.json invokes `dotfiles-setup hook pretooluse`, the guard module + its tests exist, and the rule doc names the canonical task map. Prevents the guard silently drifting out of the hook chain."
+description = "mise-tasks-only policy wiring: the PreToolUse Bash guard must stay wired end-to-end — .claude/settings.json invokes `bash scripts/pretooluse-guard.sh`, that fail-open wrapper execs `dotfiles-setup hook pretooluse`, the guard module + its tests exist, and the rule doc names the canonical task map. The wrapper adds one hop of indirection (web-brick fix: fail open when the Python>=3.14 interpreter is absent) — this contract asserts BOTH hops so neither drifts out of the chain."
 category = "workflow"
 check_type = "static"
 handler = "require_tokens"
 paths_required = true
 paths = [
     ".claude/settings.json",
+    "scripts/pretooluse-guard.sh",
     "python/src/dotfiles_setup/hook_guard.py",
     "tests/test_hook_guard.py",
     ".claude/rules/mise-tasks-only.md",
 ]
-per_path_tokens = { ".claude/settings.json" = ["dotfiles-setup hook pretooluse"] }
+per_path_tokens = { ".claude/settings.json" = ["scripts/pretooluse-guard.sh"], "scripts/pretooluse-guard.sh" = ["dotfiles-setup hook pretooluse"] }
 tokens = [
     "dotfiles-setup hook pretooluse",
     "def pretooluse_main",

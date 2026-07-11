@@ -19,12 +19,18 @@ fast, and their **docs lag their code** — the merged CHANGELOG/PRs are often t
 only truthful source. Stated twice by Ray (2026-07-04), and verified repeatedly
 in the devcontainer build-input program:
 
-- **mise's rattler `conda:` backend** now writes per-platform `sha256` +
-  transitive deps to `mise.lock` (graduated v2026.5.0, confirmed on 2026.7.0).
-  This **retires** the custom `mise-system-resolved.json` snapshot +
-  `mise_snapshot.py` + the manual capture task — a hand-rolled workaround the
-  tool now does natively and more strongly. The docs "backend-support table"
-  still listed conda as unsupported; only the CHANGELOG told the truth.
+- **mise's rattler `conda:` backend does NOT yet lock (verified 0/3, r3
+  round, 2026-07-10).** An earlier revision of this rule claimed the backend
+  writes per-platform `sha256` + transitive deps to `mise.lock` as of v2026.5.0
+  and that this *retires* the custom `mise-system-resolved.json` snapshot +
+  `mise_snapshot.py`. That was wrong: v2026.5.0 only graduated the conda
+  backend's **experimental flag** — conda resolutions still land in **no
+  lockfile tier**, and native conda locking remains open upstream
+  (`jdx/mise#7700`). This is itself a case of "docs/assumption lag code": the
+  assumption that conda had reached lockfile parity did not survive probing.
+  **Do NOT retire `mise_snapshot.py` / the snapshot machinery on the conda-lock
+  basis** — until `#7700` closes and a probe confirms `sha256` in the lockfile,
+  the snapshot is the only sha-verified capture we have.
 - **`minimum_release_age` / `lockfile` / `lockfile_platforms`** are native — no
   custom cooldown or platform-scoping machinery needed.
 - **Renovate's native `mise` manager + the `github>jdx/renovate-config` preset**
