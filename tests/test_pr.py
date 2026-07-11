@@ -75,9 +75,68 @@ def test_gate_matrix_docs_adds_lint_docs() -> None:
     assert "lint-docs" in names
 
 
-def test_gate_matrix_surface_adds_full_sync_last() -> None:
-    names = [g.name for g in pr.gate_matrix([".devcontainer/Dockerfile"])]
+def test_gate_matrix_non_base_surface_adds_full_sync_last() -> None:
+    # A surface change that does NOT rebuild the base (validation tooling /
+    # overlay) still runs the local container gate last.
+    names = [g.name for g in pr.gate_matrix(["scripts/devcontainer-smoke.sh"])]
     assert names[-1] == "sync-full"
+    names = [g.name for g in pr.gate_matrix(["python/src/dotfiles_setup/sync.py"])]
+    assert names[-1] == "sync-full"
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ".devcontainer/Dockerfile",
+        ".devcontainer/mise-system.toml",
+        ".devcontainer/mise-system.lock",
+        ".devcontainer/mise-runtime.toml",
+        ".devcontainer/mise-runtime.lock",
+        ".config/mise/conf.d/shared.toml",
+        "hk-common.pkl",
+        "hk-image.pkl",
+        "docker-bake.hcl",
+    ],
+)
+def test_base_input_changes_detected(path: str) -> None:
+    assert pr.changes_base_image_inputs([path])
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "scripts/devcontainer-smoke.sh",
+        "python/src/dotfiles_setup/sync.py",
+        "python/src/dotfiles_setup/pr.py",
+        "mise.toml",
+        ".devcontainer/devcontainer.json",
+        "README.md",
+    ],
+)
+def test_non_base_paths_not_base_inputs(path: str) -> None:
+    assert not pr.changes_base_image_inputs([path])
+
+
+def test_gate_matrix_base_input_defers_full_sync() -> None:
+    # A base-image build input can only be validated by the PR's own CI
+    # (the local :dev base is built from the merge-base), so the local
+    # container gate is DEFERRED — not appended — for these changes.
+    for path in (".devcontainer/Dockerfile", ".config/mise/conf.d/shared.toml"):
+        names = [g.name for g in pr.gate_matrix([path])]
+        assert "sync-full" not in names
+        assert names[:3] == ["lint", "pytest", "verify-contracts"]
+
+
+def test_gate_matrix_base_input_wins_over_non_base_surface() -> None:
+    # When a diff touches BOTH a base input and a non-base surface path,
+    # the base-input deferral wins (the container still can't converge).
+    names = [
+        g.name
+        for g in pr.gate_matrix(
+            [".config/mise/conf.d/shared.toml", "python/src/dotfiles_setup/sync.py"]
+        )
+    ]
+    assert "sync-full" not in names
 
 
 def test_run_gates_stops_at_first_failure(monkeypatch: pytest.MonkeyPatch) -> None:
