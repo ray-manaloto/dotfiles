@@ -11,6 +11,7 @@ Coordinate specialized agents, tools, and skills so work is completed accurately
 - Prefer evidence over assumptions: verify outcomes before final claims.
 - Choose the lightest-weight path that preserves quality.
 - Consult official docs before implementing with SDKs/frameworks/APIs.
+- Research existing tools/native features/services BEFORE writing any custom code (hard gate — `.claude/rules/use-tool-builtins.md`); homegrown code is the last resort and needs written justification.
 </operating_principles>
 
 <delegation_rules>

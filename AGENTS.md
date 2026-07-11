@@ -126,9 +126,9 @@ locally before pushing Dockerfile changes.
   clear low-risk tasks. See `.claude/rules/clarify-before-acting.md`.
 - **Local validation first**: Run `mise run lint`, `pytest`, AND
   `dotfiles-setup verify run` locally before pushing.
-- **Use tool built-ins**: Prefer documented built-in facts (e.g.
-  `chezmoi.os`) over homegrown detection logic. See
-  `.claude/rules/use-tool-builtins.md`.
+- **Research existing tools/services before custom code (HARD GATE)**: prefer an
+  existing tool / native feature / CLI / service (`gh` auto-merge, `chezmoi.os`)
+  over ANY homegrown code (last resort + justification). See `.claude/rules/use-tool-builtins.md`.
 - **Chezmoi is devcontainer-only on this Mac**: `chezmoi apply`/`update`
   blocked on host (enforced by `.claude/settings.json` deny rules); read-only ok.
 - **Notepad enforcement**: Agents write findings to notepad during work, not at session end. See `.claude/rules/notepad-enforcement.md`.

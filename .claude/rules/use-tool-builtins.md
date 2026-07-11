@@ -1,4 +1,48 @@
-# Use Tool Built-ins Before Inventing
+# Research Existing Tools/Services Before Building Custom
+
+**Before writing ANY custom code, script, or config to accomplish a capability,
+you MUST first research whether an existing tool, service, native feature, or
+canonical pattern already provides it — and prefer that.** This covers tool
+built-in *facts* (below) AND, more broadly, any capability you are about to
+hand-roll: a CLI already ships the command (`gh`, `mise`, `docker`, `chezmoi`),
+a platform already has the feature (GitHub auto-merge / merge queue / webhooks /
+`workflow_run`), an established service or library already solves it, or the
+tool's docs show a canonical pattern. Homegrown code is the LAST resort, not the
+first reach.
+
+This is a **standing rule** — it is written here so it never needs to be
+repeated per-task. If you find yourself about to write a loop, a poller, a
+parser, a detector, or a wrapper, STOP and research first.
+
+## The hard gate (do this before writing custom code)
+
+1. **Name the capability** you need in one sentence ("wait for CI to finish then
+   merge", "detect the OS", "monitor a workflow run").
+2. **Research existing solutions FIRST** (walk `research-doc-sources.md`): the
+   relevant CLI's manual/`--help`, the platform's feature docs + changelog, CLI
+   extensions, established services, and libraries. Assume the native mechanism
+   exists until you've confirmed it doesn't.
+3. **Prefer the existing mechanism.** Custom code is justified ONLY when no
+   existing tool/service fits, AND you record *why* in the code comment or PR
+   body (which options you evaluated and why each was insufficient). Without
+   that written justification, the default answer is "delete the custom code,
+   use the existing tool."
+4. **A known-flaky native tool is not license to hand-roll a replacement** —
+   first check for a newer version, the documented robust usage, an extension,
+   or an adjacent native feature (e.g. auto-merge instead of watch-then-merge)
+   that sidesteps the flaw. Reinvention is the last resort even then.
+
+### Worked failure (2026-07-11)
+
+Asked to fix a ship/land CI-wait that used a fixed timeout, the agent hand-rolled
+a custom `await_pr_checks_terminal()` polling loop — WITHOUT first researching
+that GitHub offers **native auto-merge** (`gh pr merge --auto`), **merge queue**,
+`gh run watch`, `workflow_run` triggers, and webhooks, several of which eliminate
+the polling entirely. The maintainer had to send the agent back to research. This
+rule is strengthened so that never recurs: research existing tools/services
+first, every time, unprompted.
+
+## Tool built-in facts (the original case)
 
 Before designing custom detection logic, custom data variables, custom env-var
 parsing, or custom helper scripts to discriminate environments / machines /

@@ -10,17 +10,21 @@ verify-before-advancing rule as code instead of discipline.
 Design notes (deep-research verified, 2026-07-07 —
 ``.omc/research/research-20260707-gha-shipland-enforcement/report.md``):
 
-- **Check verification reads the ``--json`` buckets**, never a watch
-  command's exit code alone (``gh run watch --exit-status`` has reported
-  0 prematurely; see ``.claude/rules/gh-cli-watch.md``). A PR is green
-  iff every check bucket is ``pass`` or ``skipping``. ship also waits for
-  the ``ci-gate`` aggregator (:data:`_AGGREGATE_CHECK`) to register before
-  ``--watch``, so a build PR is not declared green on an early check wave
-  before build-publish's matrix jobs register (#181).
-- **The merge is delegated to GitHub's requirements engine** with the
-  head SHA pinned: ``gh pr merge --squash --match-head-commit <sha>``
-  returns 409 if the branch moved after we verified it — closing the
-  verify-then-merge race.
+- **The CI wait is GitHub's, not ours — native auto-merge, no polling.**
+  A base-image build can take hours, so a client-side watch (fixed timeout
+  OR hand-rolled poll) is the wrong shape. ship enables **GitHub-native
+  auto-merge** (``gh pr merge --auto --squash --match-head-commit <sha>``,
+  :func:`enable_auto_merge`) and returns; GitHub merges the PR server-side
+  the instant the branch-protection-required ``ci-gate`` check goes green.
+  No client process stays alive, no ``gh run watch``/``--watch`` (both have
+  exited/reported prematurely; see ``.claude/rules/gh-cli-watch.md``).
+  ``--match-head-commit`` scopes the enable to the gated SHA and GitHub
+  auto-disables auto-merge on new pushes, closing the verify-then-merge
+  race. **land** is the post-merge step (confirm merged → main-CI concluded
+  → ff main → local ``verify-local``), run after the PR has auto-merged.
+- **Green is read from the ``--json`` buckets**, never a watch exit code:
+  a PR/run is green iff every check bucket is ``pass``/``skipping`` and the
+  API ``conclusion`` is ``success``.
 - **Hard path-aware gate (no *operator* override)**: when the diff
   touches the devcontainer/image/validation surface
   (:data:`SURFACE_PATTERNS`) but NOT a base-image build input, ship
@@ -150,13 +154,6 @@ _DOCS_PATTERNS = (
 )
 
 _GREEN_BUCKETS = frozenset({"pass", "skipping"})
-
-# The always-run aggregator job (ci.yml) that `needs` every other job and is
-# branch-protection-required on every PR. ship waits for THIS to register
-# before `gh pr checks --watch`, so --watch cannot exit on an early all-green
-# wave before the build-publish matrix jobs (base-prep/build/smoke-test)
-# register — the premature-green ship gap found landing #181.
-_AGGREGATE_CHECK = "ci-gate"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -315,48 +312,57 @@ def _await_checks_registered(pr_number: int, *, attempts: int = 40) -> bool:
     return False
 
 
-def _await_aggregate_registered(pr_number: int, *, attempts: int = 40) -> bool:
-    """Poll until the ``ci-gate`` aggregator check is registered.
+# Absolute backstop for the terminal-state poll. A cold base+p2996 build is
+# ~2.5h (memory: feedback_ci_build_duration_baseline); 4h leaves margin. This
+# is a genuinely-stuck guard, NOT a "typical build takes this long" estimate —
+# the poll returns as soon as CI reaches terminal, however long that is.
+# GitHub's March-2026 auto-merge regression can 422 the *enable* call until
+# requirements are near-met (community #190610). A short bounded retry
+# (seconds-to-minutes, NOT an hours-long poll) rides it out; if GitHub only
+# accepts once ci-gate is green, auto-merge degrades to an immediate merge —
+# still correct, still poll-free. Verify on the first real auto-merge PR.
+_AUTOMERGE_ENABLE_ATTEMPTS = 5
+_AUTOMERGE_ENABLE_BACKOFF_S = 20
 
-    build-publish's matrix jobs (base-prep/build/smoke-test) register in
-    WAVES after ``changes`` decides build=true, so waiting for *any* check
-    (``_await_checks_registered``) let ``gh pr checks --watch`` exit on an
-    early all-green wave before the build jobs appeared — ship declared #181
-    green prematurely. :data:`_AGGREGATE_CHECK` ``needs`` every job, so once
-    it is present the subsequent ``--watch`` cannot terminate until the whole
-    chain (including the late-registering build jobs) is terminal.
+
+def enable_auto_merge(workspace: Path, pr_number: int, head: str) -> bool:
+    """Enable GitHub-native auto-merge (squash), pinned to the verified head.
+
+    GitHub then merges the PR server-side the instant the required ``ci-gate``
+    check goes green — no client poll, no timeout, tolerant of multi-hour base
+    builds. ``--match-head-commit`` scopes the enable to the SHA ship gated (and
+    GitHub auto-disables auto-merge if new commits are pushed), closing the
+    verify-then-merge race. Runs as a subprocess, so it is not a hand-rolled
+    watch — GitHub owns the wait.
     """
-    for _ in range(attempts):
-        res = _run(
-            ["gh", "pr", "checks", str(pr_number), "--json", "name"],
-            timeout=_PROBE_TIMEOUT_S,
-        )
-        if res.returncode == 0 and any(
-            c.get("name") == _AGGREGATE_CHECK for c in json.loads(res.stdout or "[]")
-        ):
+    cmd = [
+        "gh",
+        "pr",
+        "merge",
+        str(pr_number),
+        "--auto",
+        "--squash",
+        "--delete-branch",
+        "--match-head-commit",
+        head,
+    ]
+    res = _run(cmd, timeout=_PROBE_TIMEOUT_S, cwd=workspace)
+    for attempt in range(1, _AUTOMERGE_ENABLE_ATTEMPTS):
+        if res.returncode == 0:
             return True
-        time.sleep(15)
+        sys.stdout.write(
+            f"==> auto-merge enable attempt {attempt} failed "
+            f"({res.stderr.strip()[:80]}); retrying (transient 422)…\n"
+        )
+        time.sleep(_AUTOMERGE_ENABLE_BACKOFF_S)
+        res = _run(cmd, timeout=_PROBE_TIMEOUT_S, cwd=workspace)
+    if res.returncode == 0:
+        return True
     sys.stdout.write(
-        f"FAIL  pr-checks: aggregator {_AGGREGATE_CHECK!r} never registered on "
-        f"PR #{pr_number} within {attempts * 15}s\n"
+        f"FAIL  ship: could not enable auto-merge on PR #{pr_number}: "
+        f"{res.stderr.strip()}\n"
     )
     return False
-
-
-def watch_pr_checks(pr_number: int) -> bool:
-    """Await registration, watch to terminal state, verify via JSON buckets.
-
-    Waits for the ``ci-gate`` aggregator to register before ``--watch`` so a
-    build PR is not declared green on an early check wave (#181 gap).
-    """
-    if not _await_checks_registered(pr_number):
-        return False
-    if not _await_aggregate_registered(pr_number):
-        return False
-    _stream(["gh", "pr", "checks", str(pr_number), "--watch", "--fail-fast"])
-    ok, detail = pr_checks_green(pr_number)
-    sys.stdout.write(f"{'PASS' if ok else 'FAIL'}  pr-checks: {detail}\n")
-    return ok
 
 
 def _current_branch(workspace: Path) -> str:
@@ -422,11 +428,15 @@ def _open_or_update_pr(workspace: Path, title: str | None) -> int | None:
 
 
 def ship_main(workspace: Path, *, title: str | None = None) -> int:
-    """Gates → push → PR → watched checks. Requires committed work on a branch.
+    """Gates → push → open PR → enable native auto-merge → return.
 
-    Commit creation stays with the operator/agent (messages need human
-    judgment); ship refuses a dirty tree so nothing half-staged leaks
-    past the gates (`clean-git-state` rule).
+    Requires committed work on a branch. Commit creation stays with the
+    operator/agent (messages need human judgment); ship refuses a dirty tree
+    so nothing half-staged leaks past the gates (`clean-git-state` rule).
+    The CI wait is GitHub's, not ours: ship enables auto-merge and returns;
+    GitHub merges when the required ``ci-gate`` check goes green (no client
+    poll, no timeout — a base build can take hours). land is the post-merge
+    Mac-validation step. See :func:`enable_auto_merge`.
     """
     preflight = _ship_preflight(workspace)
     if preflight is None:
@@ -456,9 +466,30 @@ def ship_main(workspace: Path, *, title: str | None = None) -> int:
         return 1
 
     number = _open_or_update_pr(workspace, title)
-    if number is None or not watch_pr_checks(number):
+    if number is None:
         return 1
-    sys.stdout.write(f"\nship: OK — PR #{number} green and ready for land\n")
+    head = _run(
+        ["git", "-C", str(workspace), "rev-parse", "HEAD"], timeout=_PROBE_TIMEOUT_S
+    ).stdout.strip()
+    # Confirm CI kicked off (auto-merge waits for ci-gate regardless, but if CI
+    # never triggers the PR would never merge — surface that early).
+    if _await_checks_registered(number):
+        sys.stdout.write(f"==> CI started on PR #{number}\n")
+    else:
+        sys.stdout.write(
+            f"WARN  ship: no CI checks registered yet on PR #{number} — auto-merge "
+            "waits for ci-gate; if CI never triggers, the PR won't merge\n"
+        )
+    # Native auto-merge is the wait: GitHub merges when ci-gate is green. No
+    # client poll, no timeout — the wrong-shape fixed-timeout watch is gone.
+    if not enable_auto_merge(workspace, number, head):
+        return 1
+    sys.stdout.write(
+        f"\nship: OK — PR #{number} open, local gates green, AUTO-MERGE enabled.\n"
+        f"GitHub merges it the instant ci-gate goes green (no poll; a base build "
+        f"can take hours). After it merges, run `mise run land -- {number}` for "
+        "the post-merge Mac validation (or `mise run sync` on next bring-up).\n"
+    )
     return 0
 
 
@@ -549,115 +580,59 @@ def _pr_changed_paths(pr_number: int) -> list[str]:
     return [line for line in res.stdout.splitlines() if line]
 
 
-def _land_preflight(pr_number: int) -> tuple[str, bool] | None:
-    """PR open + base main + checks verified green; None on fail."""
+def _land_post_merge(pr_number: int) -> bool | None:
+    """Confirm the PR auto-merged + the main ci.yml run concluded; surface flag.
+
+    ship enables native auto-merge, so by the time land runs GitHub should have
+    already squash-merged the PR (when ci-gate went green). land does NOT merge
+    — it validates the merged result. Returns the surface flag (which local
+    validation tier to run), or None on fail. A still-OPEN PR means auto-merge
+    is pending ci-gate; land says so and exits (re-run once it has merged).
+    """
     view = _run(
-        [
-            "gh",
-            "pr",
-            "view",
-            str(pr_number),
-            "--json",
-            "state,headRefOid,baseRefName",
-        ],
+        ["gh", "pr", "view", str(pr_number), "--json", "state,baseRefName"],
         timeout=_PROBE_TIMEOUT_S,
     )
     if view.returncode != 0:
         sys.stdout.write(f"FAIL  land: gh pr view failed: {view.stderr.strip()}\n")
         return None
     info = json.loads(view.stdout)
-    if info["state"] != "OPEN":
-        sys.stdout.write(f"FAIL  land: PR #{pr_number} is {info['state']}\n")
-        return None
     if info.get("baseRefName") != "main":
-        # Review finding [11]: land's post-merge main-CI watch and local
-        # main fast-forward only make sense for main-based PRs.
+        # Post-merge main-CI watch + local main fast-forward assume a main PR.
         sys.stdout.write(
             f"FAIL  land: PR #{pr_number} targets {info.get('baseRefName')!r}, "
-            "not main — land only lands main-based PRs\n"
+            "not main — land only validates main-based PRs\n"
         )
         return None
-    ok, detail = pr_checks_green(pr_number)
-    sys.stdout.write(f"{'PASS' if ok else 'FAIL'}  pr-checks: {detail}\n")
-    if not ok:
-        return None
-    surface = touches_surface(_pr_changed_paths(pr_number))
-    return info["headRefOid"], surface
-
-
-def _merge_and_watch_main(workspace: Path, pr_number: int, head: str) -> bool:
-    """Pinned squash-merge, then the main ci.yml run must conclude success.
-
-    Known-accepted race (review finding [7]): main can advance between
-    check-verification and this merge; --match-head-commit pins only the
-    PR head. Accepted because the post-merge main-CI watch below re-runs
-    the full gate chain on the ACTUAL merge commit and land fails loud if
-    it does not conclude success — the race window cannot produce a
-    silently-broken main.
-    """
-    merge = [
-        "gh",
-        "pr",
-        "merge",
-        str(pr_number),
-        "--squash",
-        "--delete-branch",
-        "--match-head-commit",
-        head,
-    ]
-    if _stream(merge, cwd=workspace) != 0:
+    if info["state"] != "MERGED":
         sys.stdout.write(
-            "FAIL  land: merge refused (head moved since verification, or "
-            "branch protection unmet) — re-verify and rerun\n"
+            f"land: PR #{pr_number} is {info['state']}, not yet MERGED — ship "
+            "enabled auto-merge; GitHub merges when ci-gate is green. Re-run land "
+            "once it has merged (land is the post-merge Mac validation now).\n"
         )
-        return False
+        return None
     merge_oid = _merge_commit_oid(pr_number)
-    if not merge_oid:
-        sys.stdout.write("FAIL  land: could not resolve the merge commit oid\n")
-        return False
-    expect_run = expects_main_run(_pr_changed_paths(pr_number))
-    return _main_run_conclusion(merge_oid, expect_run=expect_run)
-
-
-def _land_merge_phase(workspace: Path, pr_number: int, *, resume: bool) -> bool | None:
-    """Merge (or resume-verify) phase; returns surface flag or None on fail."""
-    if resume:
-        state = _run(
-            ["gh", "pr", "view", str(pr_number), "--json", "state"],
-            timeout=_PROBE_TIMEOUT_S,
-        )
-        if state.returncode != 0 or json.loads(state.stdout)["state"] != "MERGED":
-            sys.stdout.write(
-                f"FAIL  land --resume: PR #{pr_number} is not MERGED — use a "
-                "plain land\n"
-            )
-            return None
-        merge_oid = _merge_commit_oid(pr_number)
-        pr_paths = _pr_changed_paths(pr_number)
-        if not merge_oid or not _main_run_conclusion(
-            merge_oid, expect_run=expects_main_run(pr_paths)
-        ):
-            return None
-        return touches_surface(pr_paths)
-    preflight = _land_preflight(pr_number)
-    if preflight is None:
+    pr_paths = _pr_changed_paths(pr_number)
+    if not merge_oid or not _main_run_conclusion(
+        merge_oid, expect_run=expects_main_run(pr_paths)
+    ):
         return None
-    head, surface = preflight
-    if not _merge_and_watch_main(workspace, pr_number, head):
-        return None
-    return surface
+    return touches_surface(pr_paths)
 
 
 def land_main(workspace: Path, pr_number: int, *, resume: bool = False) -> int:
-    """Verify green → pinned squash-merge → main-CI watch → local validation.
+    """Post-merge validation for an auto-merged PR.
 
-    ``resume=True`` (review finding [6]): re-enter after a failure that
-    happened AFTER the merge (main-CI watch, fast-forward, local
-    validation) — skips the merge for an already-MERGED PR and replays
-    the idempotent post-merge steps, so a merged-but-unvalidated PR never
-    strands.
+    ship enables native auto-merge, so GitHub merges the PR when ci-gate is
+    green. land is the post-merge step: confirm the PR MERGED, verify the main
+    ci.yml run concluded success, fast-forward local main, and run the
+    Mac-local ``verify-local`` (arm64 R1/R2/R3 + persistence) that can't run in
+    CI. Run it once the PR has merged; it is idempotent (safe to re-run). The
+    ``resume`` flag is accepted for compatibility — land is always the
+    idempotent post-merge replay now, so it has no separate effect.
     """
-    surface = _land_merge_phase(workspace, pr_number, resume=resume)
+    _ = resume  # land is always the idempotent post-merge replay now
+    surface = _land_post_merge(pr_number)
     if surface is None:
         return 1
 
