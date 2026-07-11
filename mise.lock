@@ -379,7 +379,7 @@ url_api = "https://api.github.com/repos/lima-vm/lima/releases/assets/464870648"
 provenance = "github-attestations"
 
 [[tools."npm:@claude-flow/cli"]]
-version = "3.25.2"
+version = "3.25.6"
 backend = "npm:@claude-flow/cli"
 
 [[tools."npm:@contextlint/cli"]]
@@ -415,7 +415,7 @@ version = "0.23.0"
 backend = "npm:markdownlint-cli2"
 
 [[tools."npm:oh-my-claude-sisyphus"]]
-version = "4.15.2"
+version = "4.15.3"
 backend = "npm:oh-my-claude-sisyphus"
 
 [[tools."npm:portless"]]
@@ -423,11 +423,11 @@ version = "0.15.1"
 backend = "npm:portless"
 
 [[tools."npm:renovate"]]
-version = "43.255.2"
+version = "43.257.8"
 backend = "npm:renovate"
 
 [[tools."npm:skills"]]
-version = "1.5.15"
+version = "1.5.16"
 backend = "npm:skills"
 
 [[tools.opencode]]

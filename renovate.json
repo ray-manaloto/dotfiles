@@ -1,7 +1,8 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "github>jdx/renovate-config"
+    "github>jdx/renovate-config",
+    "group:all"
   ],
   "schedule": ["at any time"],
   "minimumReleaseAge": null,

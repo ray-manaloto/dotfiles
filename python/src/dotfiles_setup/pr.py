@@ -21,15 +21,26 @@ Design notes (deep-research verified, 2026-07-07 —
   head SHA pinned: ``gh pr merge --squash --match-head-commit <sha>``
   returns 409 if the branch moved after we verified it — closing the
   verify-then-merge race.
-- **Hard path-aware gate (no override by design)**: when the diff
+- **Hard path-aware gate (no *operator* override)**: when the diff
   touches the devcontainer/image/validation surface
-  (:data:`SURFACE_PATTERNS`), ship requires a full local
-  ``mise run sync -- --full`` (verify-local chain) BEFORE the PR opens,
-  and land re-runs it after the merge. Zero-skip: there is no flag to
-  bypass this. For branches that CHANGE an image build input, smoke
-  tier-1 identity validates against the merge-base blob (the local base
-  can never be built from the branch's config — that base is built by
-  the branch's own PR CI); see ``image.identity_expected_hash``.
+  (:data:`SURFACE_PATTERNS`) but NOT a base-image build input, ship
+  requires a full local ``mise run sync -- --full`` (verify-local chain)
+  BEFORE the PR opens, and land re-runs it after the merge. Zero-skip:
+  there is no *flag* to bypass this.
+- **Base-image input changes DEFER container validation to CI** (not a
+  bypass — an automatic, principled deferral): when the diff changes a
+  base/p2996 build input (:data:`BASE_INPUT_PATTERNS` — mise-system/
+  runtime toml+lock, shared.toml, hk-common/image.pkl, Dockerfile,
+  docker-bake.hcl), the new base is built ONLY by the branch's own PR
+  CI. The local ``:dev`` base is built from the merge-base and cannot be
+  made current for the branch (base builds are CI-only; a chezmoi/tool
+  bump can even make the stale base's ``onCreate`` fail outright). Per
+  ``verify-before-advancing.md``, ship then runs lint/pytest/verify
+  locally, skips the impossible local container convergence, and still
+  gates on CI's base-build + smoke via the watched PR checks
+  (``watch_pr_checks``). CI is the validator — not a zero-skip
+  violation. This closes the ship deadlock for base-tool bumps (a
+  chezmoi/gcc/mise-system bump otherwise cannot open its own PR).
 - **Main-CI expectation is path-aware** (:data:`CI_PUSH_PATHS`): ci.yml's
   push trigger is path-filtered, so a merge whose diff matches no push
   path legitimately produces NO main run — land passes that outcome
@@ -81,6 +92,29 @@ SURFACE_PATTERNS: tuple[str, ...] = (
     "hk-image.pkl",
     ".config/mise/conf.d/*",
     "mise.toml",
+)
+
+# The subset of the surface that feeds the CI-built base/p2996 image — the
+# base-hash + p2996-hash inputs. A branch changing any of these needs a NEW
+# base image, built ONLY by that PR's own CI; the local ``:dev`` base is built
+# from the merge-base and cannot be made current for the branch (base builds
+# are CI-only — never local, per do-not.md). So the local container gate cannot
+# validate such a branch — worse, a base-tool bump (chezmoi/gcc) can make the
+# stale base's ``onCreate`` fail outright. For these, ship DEFERS container
+# validation to CI (see the module docstring): still runs lint/pytest/verify
+# locally, and still gates on CI's base-build + smoke via the watched PR checks.
+# Keep in lockstep with the base-hash/p2996-hash input set (main.py base-hash,
+# p2996_hash.py) — tests/test_pr.py pins the expected behavior.
+BASE_INPUT_PATTERNS: tuple[str, ...] = (
+    ".devcontainer/Dockerfile",
+    ".devcontainer/mise-system.toml",
+    ".devcontainer/mise-system.lock",
+    ".devcontainer/mise-runtime.toml",
+    ".devcontainer/mise-runtime.lock",
+    ".config/mise/conf.d/shared.toml",
+    "hk-common.pkl",
+    "hk-image.pkl",
+    "docker-bake.hcl",
 )
 
 # ci.yml's on.push.paths, mirrored: a merge to main whose diff matches NONE
@@ -168,6 +202,17 @@ def touches_surface(paths: list[str]) -> bool:
     return any(_matches_any(p, SURFACE_PATTERNS) for p in paths)
 
 
+def changes_base_image_inputs(paths: list[str]) -> bool:
+    """True when the diff changes a base/p2996 build input.
+
+    The new base image is built by the branch's own PR CI; the local ``:dev``
+    base is built from the merge-base and cannot be made current for the
+    branch, so ship defers local container validation to CI for these changes
+    (:data:`BASE_INPUT_PATTERNS`, module docstring, verify-before-advancing.md).
+    """
+    return any(_matches_any(p, BASE_INPUT_PATTERNS) for p in paths)
+
+
 def expects_main_run(paths: list[str]) -> bool:
     """True when merging these paths triggers a main ci.yml run.
 
@@ -195,7 +240,10 @@ def gate_matrix(paths: list[str]) -> list[Gate]:
     Always: lint, pytest, verify contracts. Conditional per
     verify-before-advancing: pin-actions on .github changes, lint-docs on
     agent-doc changes. The full-sync hard gate runs LAST (most expensive)
-    when the devcontainer/image/validation surface changed — no override.
+    when the devcontainer/image/validation surface changed — EXCEPT when a
+    base-image build input changed (:func:`changes_base_image_inputs`), for
+    which the local base cannot validate the branch and container validation
+    defers to CI (module docstring). No *operator* override either way.
     """
     gates = [
         Gate("lint", ("mise", "run", "lint")),
@@ -212,7 +260,7 @@ def gate_matrix(paths: list[str]) -> list[Gate]:
         gates.append(Gate("pin-actions", ("mise", "run", "pin-actions")))
     if any(_matches_any(p, _DOCS_PATTERNS) for p in paths):
         gates.append(Gate("lint-docs", ("mise", "run", "lint-docs")))
-    if touches_surface(paths):
+    if touches_surface(paths) and not changes_base_image_inputs(paths):
         gates.append(Gate("sync-full", ("mise", "run", "sync", "--", "--full")))
     return gates
 
@@ -384,11 +432,22 @@ def ship_main(workspace: Path, *, title: str | None = None) -> int:
     if preflight is None:
         return 1
     branch, paths = preflight
-    surface = touches_surface(paths)
-    sys.stdout.write(
-        f"==> ship {branch}: {len(paths)} changed paths"
-        f"{'  [devcontainer surface → full-sync gate]' if surface else ''}\n"
-    )
+    base_change = changes_base_image_inputs(paths)
+    if base_change:
+        tag = "  [base-image inputs changed → container validation DEFERRED to CI]"
+    elif touches_surface(paths):
+        tag = "  [devcontainer surface → full-sync gate]"
+    else:
+        tag = ""
+    sys.stdout.write(f"==> ship {branch}: {len(paths)} changed paths{tag}\n")
+    if base_change:
+        sys.stdout.write(
+            "==> NOTE: a base-image build input changed; the new base is built "
+            "by this PR's CI, so the local :dev base cannot validate it (base "
+            "builds are CI-only). Running lint/pytest/verify locally; CI's "
+            "base-build + smoke gate the PR (watched below). "
+            "See verify-before-advancing.md.\n"
+        )
     if not run_gates(workspace, gate_matrix(paths)):
         return 1
 
