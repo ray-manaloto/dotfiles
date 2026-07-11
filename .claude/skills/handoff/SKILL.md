@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: "Write a CROSS-SURFACE session handoff to a tracked path and push it, so a session on another surface (web <-> desktop <-> CLI) can continue with zero context loss. Use when ending a session whose work must be picked up on a DIFFERENT machine/surface. For same-machine /clear continuity use /clear-prep instead. Invoke as /handoff [next-task]."
+description: "Write a CROSS-SURFACE session handoff to a tracked path and push it, so a session on another surface (web, desktop, or CLI) can continue with zero context loss. Use when ending a session whose work must be picked up on a DIFFERENT machine/surface. For same-machine /clear continuity use /clear-prep instead. Invoke as /handoff [next-task]."
 disable-model-invocation: true
 argument-hint: "[one-line description of the next task, optional]"
 ---
@@ -27,7 +27,7 @@ pytest, `dotfiles-setup verify run` — all green). Do NOT duplicate that logic
 here; this skill only changes WHERE the handoff lives and that it is pushed.
 
 ### 2. Write the tracked handoff
-Write `docs/handoffs/session-<YYYY-MM-DD>[-letter].md` (append a letter if one
+Write `docs/handoffs/session-{YYYY-MM-DD}[-letter].md` (append a letter if one
 exists for today). It must be **self-sufficient** — the resume line only points
 here. Fill the template in `docs/handoffs/README.md`:
 - **State at handoff** — branch, PR #, HEAD sha, CI/gate results (real `rc` /
@@ -40,7 +40,7 @@ here. Fill the template in `docs/handoffs/README.md`:
   PRs, running GHA) that the next session should inventory not wait on.
 
 ### 3. Self-verify the handoff
-Every path it cites exists; every `file:line` is real; every `mise run <task>`
+Every path it cites exists; every `file:line` is real; every `mise run {task}`
 it names exists (`mise tasks ls`); gate results match the recorded `rc`. A
 wrong detail costs the next session more than a missing one.
 
@@ -48,7 +48,7 @@ wrong detail costs the next session more than a missing one.
 Stage the handoff and the doc updates from step 1 (specific paths — never
 `git add .`; `.claude/rules/do-not.md`). Commit + push per
 `.claude/skills/git-branch-commit-push-workflow/SKILL.md` (plain git,
-`git push -u origin <branch>`). Unlike `/clear-prep`, the handoff IS committed,
+`git push -u origin {branch}`). Unlike `/clear-prep`, the handoff IS committed,
 because a tracked-but-unpushed handoff still can't cross surfaces.
 
 > **Bricked web session caveat:** if Bash/git is blocked (the Claude-web
@@ -61,16 +61,16 @@ Print exactly (single line the user pastes on the receiving surface after
 `git pull`):
 
 ```text
-/resume docs/handoffs/session-<date>.md
+/resume docs/handoffs/session-{date}.md
 ```
 
-Then one line: *"On your other machine: `git fetch && git checkout <branch> &&
+Then one line: *"On your other machine: `git fetch && git checkout {branch} &&
 git pull`, open Claude Code in the repo, paste that."*
 
 ## Checklist
 
 - [ ] `/clear-prep` steps 1-4 done: docs synced, relevant gates green.
-- [ ] Handoff written to `docs/handoffs/session-<date>.md` (TRACKED), self-sufficient.
+- [ ] Handoff written to `docs/handoffs/session-{date}.md` (TRACKED), self-sufficient.
 - [ ] Handoff self-verified (paths, file:line, task names, gate rcs).
 - [ ] Handoff + doc updates committed AND pushed (or API-pushed if git is bricked).
 - [ ] Resume line printed for the receiving surface.

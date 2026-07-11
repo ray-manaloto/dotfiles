@@ -1,6 +1,6 @@
 ---
 name: resume
-description: "Resume work on a DIFFERENT surface (web <-> desktop <-> CLI) from a tracked cross-surface handoff written by /handoff. Pulls the branch, reads the latest docs/handoffs/session-*.md, restates the plan, and continues. Invoke as /resume [handoff-file]."
+description: "Resume work on a DIFFERENT surface (web, desktop, or CLI) from a tracked cross-surface handoff written by /handoff. Pulls the branch, reads the latest docs/handoffs/session-*.md, restates the plan, and continues. Invoke as /resume [handoff-file]."
 disable-model-invocation: true
 argument-hint: "[path to a specific handoff file, optional]"
 ---
@@ -20,7 +20,7 @@ present locally:
 
 ```bash
 git fetch origin
-git checkout <branch>          # the branch named in the handoff / PR
+git checkout {branch}          # the branch named in the handoff / PR
 git pull --ff-only
 ```
 
