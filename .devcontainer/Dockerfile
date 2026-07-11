@@ -333,13 +333,13 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # jwakely.github.io index (see renovate.json). Compatibility with the current
 # base image is empirical; if `dpkg -i` fails, build from source.
 # renovate: datasource=custom.gcc-latest depName=gcc-latest versioning=loose
-ARG GCC_LATEST_DEB=gcc-latest_17.0.0-20260621git4073a7927b16.deb
+ARG GCC_LATEST_DEB=gcc-latest_17.0.0-20260705git88752b86ff1a.deb
 # Validation D (#160 T13): kayari publishes NO checksum or signature (all
 # 404), so this locally-computed pin is the .deb's only integrity handle.
 # Deliberately NOT Renovate-managed: a GCC_LATEST_DEB bump fails this check
 # until a human recomputes the hash (`curl -fLO <url> && sha256sum <deb>`)
 # — supply-chain friction by design, the one place custom shell is justified.
-ARG GCC_LATEST_DEB_SHA256=ea3c6aa8bb6ffd4af458171f812ee95404e2a668d5779c69b5705082d47d41ce
+ARG GCC_LATEST_DEB_SHA256=2503ddace30a46c732b5a764f0d3a7cbae35666f4cc064d34485e0c10652f93a
 RUN curl -fLOSs "https://kayari.org/gcc-latest/${GCC_LATEST_DEB}" && \
     echo "${GCC_LATEST_DEB_SHA256}  ${GCC_LATEST_DEB}" | sha256sum -c - && \
     dpkg -i "${GCC_LATEST_DEB}" && \
