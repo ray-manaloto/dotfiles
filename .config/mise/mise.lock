@@ -354,49 +354,49 @@ version = "0.37.4"
 backend = "pipx:check-jsonschema"
 
 [[tools.pixi]]
-version = "0.72.0"
+version = "0.72.2"
 backend = "github:prefix-dev/pixi"
 
 [tools.pixi."platforms.linux-arm64"]
-checksum = "sha256:8b48fd8b315552ee48d340e89d654a177d1f001810ab741f51f7dcdd7e00e1c1"
-url = "https://github.com/prefix-dev/pixi/releases/download/v0.72.0/pixi-aarch64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/prefix-dev/pixi/releases/assets/463197243"
+checksum = "sha256:ecdc83450002025691f805e250bf2199e878e042ca5fc44cb11f119e48cc836e"
+url = "https://github.com/prefix-dev/pixi/releases/download/v0.72.2/pixi-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/prefix-dev/pixi/releases/assets/471390733"
 provenance = "github-attestations"
 
 [tools.pixi."platforms.linux-arm64-musl"]
-checksum = "sha256:8b48fd8b315552ee48d340e89d654a177d1f001810ab741f51f7dcdd7e00e1c1"
-url = "https://github.com/prefix-dev/pixi/releases/download/v0.72.0/pixi-aarch64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/prefix-dev/pixi/releases/assets/463197243"
+checksum = "sha256:ecdc83450002025691f805e250bf2199e878e042ca5fc44cb11f119e48cc836e"
+url = "https://github.com/prefix-dev/pixi/releases/download/v0.72.2/pixi-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/prefix-dev/pixi/releases/assets/471390733"
 provenance = "github-attestations"
 
 [tools.pixi."platforms.linux-x64"]
-checksum = "sha256:2c086608809f7bdd9918323cf6f6278bb43b025f4d957ddfd55295cf151c6f21"
-url = "https://github.com/prefix-dev/pixi/releases/download/v0.72.0/pixi-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/prefix-dev/pixi/releases/assets/463197303"
+checksum = "sha256:1411219982281ad6d224337c6a82acfe3548bc13d82e55903ff8c8c05b22a038"
+url = "https://github.com/prefix-dev/pixi/releases/download/v0.72.2/pixi-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/prefix-dev/pixi/releases/assets/471390823"
 provenance = "github-attestations"
 
 [tools.pixi."platforms.linux-x64-musl"]
-checksum = "sha256:2c086608809f7bdd9918323cf6f6278bb43b025f4d957ddfd55295cf151c6f21"
-url = "https://github.com/prefix-dev/pixi/releases/download/v0.72.0/pixi-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/prefix-dev/pixi/releases/assets/463197303"
+checksum = "sha256:1411219982281ad6d224337c6a82acfe3548bc13d82e55903ff8c8c05b22a038"
+url = "https://github.com/prefix-dev/pixi/releases/download/v0.72.2/pixi-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/prefix-dev/pixi/releases/assets/471390823"
 provenance = "github-attestations"
 
 [tools.pixi."platforms.macos-arm64"]
-checksum = "sha256:b1e924a8bac4baab799ce01669f8f2ee0989bf9dfd63c865032e9889308789bd"
-url = "https://github.com/prefix-dev/pixi/releases/download/v0.72.0/pixi-aarch64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/prefix-dev/pixi/releases/assets/463197217"
+checksum = "sha256:6e973893aa61368d83b1bccaeb04b6b5e231f3169110aa421605be8762409a0d"
+url = "https://github.com/prefix-dev/pixi/releases/download/v0.72.2/pixi-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/prefix-dev/pixi/releases/assets/471390678"
 provenance = "github-attestations"
 
 [tools.pixi."platforms.macos-x64"]
-checksum = "sha256:6c2d6f9faa43e44d7010aa6a9a06215138154d7b50e9c309885d8620af5de6c7"
-url = "https://github.com/prefix-dev/pixi/releases/download/v0.72.0/pixi-x86_64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/prefix-dev/pixi/releases/assets/463197266"
+checksum = "sha256:656d3acca3e3166d4ea487d404176c51c62219556fe858fba461ea32e6d21abb"
+url = "https://github.com/prefix-dev/pixi/releases/download/v0.72.2/pixi-x86_64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/prefix-dev/pixi/releases/assets/471390762"
 provenance = "github-attestations"
 
 [tools.pixi."platforms.windows-x64"]
-checksum = "sha256:dc3a55c204692ad38a52a8c745ff2a0d2e7a48fad2c0d2109f12a486cf8937c4"
-url = "https://github.com/prefix-dev/pixi/releases/download/v0.72.0/pixi-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/prefix-dev/pixi/releases/assets/463197296"
+checksum = "sha256:6c6c4b1e7e55ec590bd755ae720956b5549526442f0dcb8707941d3289e31477"
+url = "https://github.com/prefix-dev/pixi/releases/download/v0.72.2/pixi-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/prefix-dev/pixi/releases/assets/471390794"
 provenance = "github-attestations"
 
 [[tools.pkl]]
