@@ -333,7 +333,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # jwakely.github.io index (see renovate.json). Compatibility with the current
 # base image is empirical; if `dpkg -i` fails, build from source.
 # renovate: datasource=custom.gcc-latest depName=gcc-latest versioning=loose
-ARG GCC_LATEST_DEB=gcc-latest_17.0.0-20260621git4073a7927b16.deb
+ARG GCC_LATEST_DEB=gcc-latest_17.0.0-20260705git88752b86ff1a.deb
 # Validation D (#160 T13): kayari publishes NO checksum or signature (all
 # 404), so this locally-computed pin is the .deb's only integrity handle.
 # Deliberately NOT Renovate-managed: a GCC_LATEST_DEB bump fails this check
