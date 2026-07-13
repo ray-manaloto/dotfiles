@@ -163,10 +163,15 @@ jobs:
       - name: Build and push base image
         if: steps.probe.outputs.hit != 'true'
         uses: docker/bake-action@d3418bd7d0e9324001bca92fa8ba175ea7e6dc9b # v7.3.0
+        # PUSH=true (bake reads it into the `PUSH` variable) instead of the
+        # `push: true` shorthand: the shorthand injects `--set *.output=type=
+        # registry`, and a bake `--set` on output REPLACES the list, dropping
+        # the zstd/OCI compression flags on the target's `output` (#222).
+        env:
+          PUSH: "true"
         with:
           source: .
           targets: base
-          push: true
           files: |
             docker-bake.hcl
           set: |
@@ -298,10 +303,14 @@ jobs:
       - name: Build and push p2996-cache image
         if: steps.probe.outputs.hit != 'true'
         uses: docker/bake-action@d3418bd7d0e9324001bca92fa8ba175ea7e6dc9b # v7.3.0
+        # PUSH=true instead of `push: true` — see base-prep step for why (a
+        # `--set` output override from the push shorthand would drop the zstd
+        # compression flags, #222).
+        env:
+          PUSH: "true"
         with:
           source: .
           targets: p2996-cache
-          push: true
           files: |
             docker-bake.hcl
           set: |
@@ -532,10 +541,17 @@ jobs:
       - name: Build and push
         id: bake
         uses: docker/bake-action@d3418bd7d0e9324001bca92fa8ba175ea7e6dc9b # v7.3.0
+        # PUSH=<publish> feeds the bake `PUSH` variable (target output =
+        # type=image,push=${PUSH},...zstd...) instead of the `push:` shorthand,
+        # which would inject `--set *.output=type=registry` and REPLACE the
+        # target's compression output (#222). force-compression on the `dev`
+        # target recompresses the inherited gzip base/p2996 context layers
+        # (~82% of the pull) to zstd here — the actual pull-speed lever.
+        env:
+          PUSH: ${{ inputs.publish }}
         with:
           source: .
           targets: ${{ inputs.target }}
-          push: ${{ inputs.publish }}
           files: |
             docker-bake.hcl
             ${{ steps.meta.outputs.bake-file-tags }}

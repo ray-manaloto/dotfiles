@@ -20,6 +20,36 @@ variable "PLATFORM" {
   default = "linux/amd64/v2"
 }
 
+# Whether the published targets push to the registry. Defaults false so a
+# stray local `docker buildx bake dev/base/p2996-cache` builds without
+# pushing to GHCR (those targets are CI-only — see AGENTS.md "Do not").
+# CI flips it per job via a `PUSH` step env var (bake reads same-named env
+# vars into variables): base/p2996-prep set it "true"; the dev build sets it
+# to the reusable workflow's `publish` input. This lives in a variable — not
+# the bake-action `push:` shorthand — because `push: true` injects
+# `--set *.output=type=registry`, and a bake `--set` on `output` REPLACES the
+# whole list (docs.docker.com/build/bake/reference "overridden by last
+# occurrence"), which would silently drop the zstd/OCI compression flags below.
+variable "PUSH" {
+  default = "false"
+}
+
+# Layer compression for the published image (#222). zstd compresses better and
+# decompresses faster than gzip, and — unlike a lazy-pull snapshotter — shrinks
+# the bytes EVERY consumer transfers on a normal `docker pull` (the Mac's
+# `mise run sync` plus both CI pull jobs). `oci-mediatypes=true` is the
+# prerequisite media-type framing. `force-compression=true` is load-bearing on
+# the `dev` target: the two largest layers (~82% of the pull) arrive from the
+# gzip `devcontainer-base`/`p2996-export` named contexts, whose content-hash
+# tags are NOT busted by this attribute (base-hash/p2996-hash read file bytes,
+# not the bake output) — so they stay warm gzip cache-hits and force-compression
+# is what recompresses them to zstd in the final manifest, no cold rebuild.
+# compression-level is left at the buildkit zstd default for this first flip
+# (single-variable size measurement vs the 9.26 GB gzip baseline); tune later.
+variable "COMPRESSION_OUTPUT" {
+  default = "compression=zstd,oci-mediatypes=true,force-compression=true"
+}
+
 # Digest-pinned to the ubuntu:26.04 manifest-list (multi-arch resolution
 # preserved). This value feeds the base content-hash (p2996_hash.py reads it),
 # so a digest bump busts the base cache. Renovate bumps it via the custom
@@ -100,6 +130,14 @@ target "dev" {
     "type=provenance,mode=max",
     "type=sbom",
   ]
+  # zstd + OCI media types + force-compression (#222). Editing this block is
+  # deliberate: `dev_target_digest` (p2996_hash.py) hashes the whole `dev`
+  # target, so adding this output BUSTS dev-hash — the dev-prep probe MISSES
+  # and CI actually rebuilds, applying zstd. Without a block edit the existing
+  # gzip `:dev-<hash>` would be a cache-hit and the flip a silent no-op.
+  output = [
+    "type=image,push=${PUSH},${COMPRESSION_OUTPUT}",
+  ]
 }
 
 # Content-addressed cache for the devcontainer-base stage (apt + mise
@@ -131,6 +169,15 @@ target "base" {
     "type=provenance,mode=max",
     "type=sbom",
   ]
+  # zstd + OCI media types (#222). This block is NOT a base-hash input, so
+  # adding it does NOT bust `:base-<hash>` — the warm gzip base cache stays a
+  # hit (no ~30 min cold rebuild) and the `dev` target's force-compression
+  # recompresses its layers to zstd anyway. This output only takes effect on a
+  # genuine base rebuild (BASE_IMAGE/mise-system bump), keeping the internal
+  # cache image zstd for consistency.
+  output = [
+    "type=image,push=${PUSH},${COMPRESSION_OUTPUT}",
+  ]
 }
 
 # Content-addressed cache for the clang-p2996 build artifact.
@@ -156,6 +203,13 @@ target "p2996-cache" {
   attest = [
     "type=provenance,mode=max",
     "type=sbom",
+  ]
+  # zstd + OCI media types (#222). Like `base`, this block is NOT a p2996-hash
+  # input, so it does NOT bust `:p2996-<hash>` — the warm cache stays a hit (no
+  # ~2 h cold clang rebuild) and only takes effect on a genuine p2996 rebuild
+  # (CLANG_P2996_REF/BUILDER_IMAGE bump).
+  output = [
+    "type=image,push=${PUSH},${COMPRESSION_OUTPUT}",
   ]
 }
 
