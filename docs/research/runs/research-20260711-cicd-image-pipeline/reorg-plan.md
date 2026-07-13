@@ -1,8 +1,10 @@
 # Backlog Reorg Plan — Image CI/CD Optimization + Validation Automation + Matrix-Readiness
 
-**Date:** 2026-07-11 · Companion to `report.md`. **Status:** execution plan
-awaiting Ray's confirm on the runner reframe (Epic 2), then I create/relabel/close
-the GH issues.
+**Date:** 2026-07-11 (executed 2026-07-12) · Companion to `report.md`.
+**Status:** EXECUTED — epics created: #222 (Epic 1), #223 (Epic 2), #224 (Epic 3),
+#225 (Epic 4). Existing issues auto-cross-linked from epic bodies; #160/#116
+commented (reparent/close-recommend). Standalone child issues promoted from
+epic checkboxes as each task starts.
 
 ## Confirmed decisions (Ray, 2026-07-11)
 1. **Drop squash+dual-upload AND SOCI/eStargz.** Pivot to zstd-now +
@@ -28,7 +30,7 @@ content-hash scheme so arm64 is a config flip later — not a rewrite.
 
 ## New epic tree
 
-### EPIC 1 — Image pull-speed & size
+### EPIC 1 (#222) — Image pull-speed & size
 | Task | Origin | Priority | Notes |
 |---|---|---|---|
 | Build-metrics collection (image size / tool count / build time) | **#17** | **P0** | Gates the expensive levers; answers "is warm sync even slow". |
@@ -39,7 +41,7 @@ content-hash scheme so arm64 is a config flip later — not a rewrite.
 | Flip Trivy CVE scan to gate | **#92** | P3 | After baseline cleanup. |
 | ~~squash + dual-upload~~ / ~~SOCI POC~~ | report §Q2 | **CLOSE** | Record evidence, close the ideas. |
 
-### EPIC 2 — Validation automation on a Linux runner + smoke modularity  *(pending runner-reframe confirm)*
+### EPIC 2 (#223) — Validation automation on a Linux runner + smoke modularity
 | Task | Origin | Priority | Notes |
 |---|---|---|---|
 | Unify the two smoke code-paths (`devcontainer-smoke.sh` + `image.py build_smoke_script`) behind one shared impl + tier flag | NEW | P1 | The real "modular shared local↔CI, no duplication" win. |
@@ -47,7 +49,7 @@ content-hash scheme so arm64 is a config flip later — not a rewrite.
 | Keep R1/R2/persistence as the local `verify-local` gate; document why (DD magic socket, no runner can host it) | NEW | P2 | The irreducible local residual. |
 | Lint matrix `[ubuntu, macos]` | **#101** | P2 | The ONE legit macOS-runner use — catches host-specific *lint/tool* breakage (no Docker needed). |
 
-### EPIC 3 — Matrix (ubuntu × arch) + input-combination content-hashing  *(design now, build arm64 later)*
+### EPIC 3 (#224) — Matrix (ubuntu × arch) + input-combination content-hashing (design now, build arm64 later)
 | Task | Origin | Priority | Notes |
 |---|---|---|---|
 | **Design** the matrix axes + the per-combination content-hash scheme | NEW | **P1 (design)** | Core of decision #4. Today PLATFORM feeds all 3 hashes via a shape-coupled regex (`p2996_hash.py:192-200,328,385,440`) — the scheme must key hashes on (ubuntu×arch) combination without crashing the pipeline. |
@@ -56,7 +58,7 @@ content-hash scheme so arm64 is a config flip later — not a rewrite.
 | p2996 AArch64 target (real arm64) | **#166 #102 #5** | P3 (blocked) | `-DLLVM_TARGETS_TO_BUILD=X86` → add AArch64; ~2h/arch, depends on #82. |
 | Fold: build-input observability remainder | **#160** | — | Reparent remaining #160 scope here (hash/observability is this epic). |
 
-### EPIC 4 — Automation-library speedups  *(low priority)*
+### EPIC 4 (#225) — Automation-library speedups (low priority)
 | Task | Origin | Priority | Notes |
 |---|---|---|---|
 | Parallelize `run_gates` (pr.py) with fail-fast preserved | NEW | P3 | Only viable Q5 win; conditional on ship-path timing. |
