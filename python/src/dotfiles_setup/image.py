@@ -371,137 +371,20 @@ fi
 _TIER1_CORE_BODY = _TIER1_MISE_PATHS + _TIER1_IDENTITY_BLOCK + _TIER1_MISE_LS_TOOLSET
 
 
-def _tier1_var_lines(
-    expected_identity: Mapping[str, str] | None,
-    expected_tools: Mapping[str, str] | None,
-) -> str:
-    """Injected-data header lines the tier-1 core reads ($EXPECTED_*)."""
-    identity_blob = (
-        _format_identity_lines(expected_identity) if expected_identity else ""
-    )
-    tool_lines = _format_expected_tool_lines(expected_tools) if expected_tools else ""
-    return (
-        f"EXPECTED_IDENTITY={shlex.quote(identity_blob)}\n"
-        f"EXPECTED_TOOL_REQUESTS={shlex.quote(tool_lines)}\n"
-    )
-
-
-def build_tier1_script(
-    *,
-    expected_identity: Mapping[str, str] | None = None,
-    expected_tools: Mapping[str, str] | None = None,
-) -> str:
-    """Standalone tier-1 core smoke script: image identity + exact tool-set.
-
-    Emitted by ``image smoke-script --tier 1`` for ``scripts/devcontainer-smoke``
-    to run in-container, and reused VERBATIM (the same :data:`_TIER1_CORE_BODY`)
-    by :func:`build_smoke_script` for the CI no-mount smoke — the #223 single
-    source of truth for tier-1 logic. Both guards are dormant (empty injected
-    var) when their data is unset, so an unpopulated call is a no-op, never a
-    false green.
-    """
-    return (
-        "set -euo pipefail\n"
-        + _tier1_var_lines(expected_identity, expected_tools)
-        + _TIER1_CORE_BODY
-    )
-
-
-def build_smoke_script(
-    expected_p2996_ref: str,
-    *,
-    expected_identity: Mapping[str, str] | None = None,
-    expected_tools: Mapping[str, str] | None = None,
-    emulated: bool = False,
-) -> str:
-    """Build the inline CI (no-mount) smoke test script.
-
-    Composes the shared tier-1 core (:data:`_TIER1_CORE_BODY` — image identity
-    + exact tool-set, #223) with the CI-only tail (hk validate, sanitizers,
-    reflection compilers, AI CLIs, zero-warning). The devcontainer smoke runs
-    the SAME core via :func:`build_tier1_script`.
-
-    ``expected_p2996_ref`` is injected so the script can assert the clang-p2996
-    binary baked into the image was actually built from the pinned ref
-    (``resolve_expected_p2996_ref``) — closing the false-positive where a
-    stale/wrong-ref reflection compiler still compiles a reflection program and
-    the smoke passes green. Only a 40-hex SHA triggers the strict equality
-    check; a non-SHA dispatch override still gets the "is-a-real-p2996-build"
-    guard.
-
-    ``expected_identity`` (gap A — image identity) maps each verbatim-COPYd
-    build input (:data:`IDENTITY_IMAGE_PATHS`) to its expected in-image sha256;
-    the tier-1 core asserts each in-image copy matches, catching a stale/cached
-    overlay smoked against old content. An empty/unset map leaves the guard
-    dormant (unit-test friendly).
-
-    ``expected_tools`` (#143 — exact tool-set assertion) maps declared tool keys
-    to requested versions (``resolve_declared_tools``). When set, the script
-    asserts the installed set sourced from the system config matches it exactly
-    — catching a tool silently dropped/added or a requested-version drift that
-    the ``(missing)``-count check alone passes green. An empty/unset value
-    leaves the guard dormant (unit-test friendly).
-
-    ``emulated`` (gap B — TSan under Rosetta) controls whether the
-    ThreadSanitizer binary is RUN after it is compiled. The compile always
-    runs (it proves the toolchain); the RUN is skipped under emulation, where
-    TSan's shadow-memory layout is incompatible with Rosetta/QEMU.
-    """
-    strict = "1" if _SHA_RE.match(expected_p2996_ref) else ""
-    tsan_run_skip = "1" if emulated else ""
-    header = (
-        "set -euo pipefail\n"
-        + _tier1_var_lines(expected_identity, expected_tools)
-        + f"EXPECTED_P2996_REF={shlex.quote(expected_p2996_ref)}\n"
-        + f"P2996_REF_STRICT={shlex.quote(strict)}\n"
-        + f"TSAN_RUN_SKIP={shlex.quote(tsan_run_skip)}\n"
-    )
-    return (
-        header
-        + _TIER1_CORE_BODY
-        + """\
-echo "=== hk validate ==="
-HK_FILE=/etc/hk/hk.pkl hk validate
-echo "=== shell integration ==="
-command -v zsh || { echo "FAIL: zsh not found"; exit 1; }
-command -v git || { echo "FAIL: git not found"; exit 1; }
-echo "=== identity constraints ==="
-if getent passwd vscode >/dev/null 2>&1; then
-  echo "FAIL: vscode user exists in image"; exit 1
-fi
-if getent group vscode >/dev/null 2>&1; then
-  echo "FAIL: vscode group exists in image"; exit 1
-fi
-if [ -d /home/vscode ]; then
-  echo "FAIL: /home/vscode directory exists"; exit 1
-fi
-if env | grep -qi vscode; then
-  echo "FAIL: vscode found in environment variables"; exit 1
-fi
-echo "=== path constraints ==="
-if [ ! -x /usr/local/bin/mise ]; then
-  echo "FAIL: /usr/local/bin/mise missing"; exit 1
-fi
-if [ ! -d /usr/local/share/mise/installs ]; then
-  echo "FAIL: /usr/local/share/mise/installs missing"; exit 1
-fi
-echo "=== backend policy checks ==="
-grep -q 'npm.package_manager = "bun"' "$MISE_CFG" || {
-  echo "FAIL: bun package manager policy missing"; exit 1;
-}
-grep -q 'pipx.uvx = true' "$MISE_CFG" || {
-  echo "FAIL: uvx policy missing"; exit 1;
-}
-grep -q 'cargo.binstall = true' "$MISE_CFG" || {
-  echo "FAIL: cargo-binstall policy missing"; exit 1;
-}
-grep -q 'python.uv_venv_auto = "source"' "$MISE_CFG" || {
-  echo "FAIL: python uv venv policy missing"; exit 1;
-}
-echo "=== clang tooling checks ==="
-for tool in clang clang++ clangd clang-tidy clang-format lld lldb; do
-  command -v "$tool" >/dev/null 2>&1 || { echo "FAIL: missing $tool"; exit 1; }
-done
+# The tier-3 COMPILER substrate: sanitizer compile checks + reflection compiler
+# presence/ref-pin + reflection functional compile+run. This is mount-INDEPENDENT
+# (self-contained /tmp + /opt paths, no repo files), so it is shared VERBATIM by
+# the CI no-mount smoke (:func:`build_smoke_script`) and the devcontainer smoke's
+# tier 3 (:func:`build_tier3_script`, emitted by ``image smoke-script --tier 3``)
+# — closing the sanitizer/reflection duplication that previously drifted between
+# the two paths (#223). The genuinely mount/SSH-dependent tier-3 checks
+# (home-volume ownership + seed survivors, TMPDIR, R2 github SSH) can never run
+# in the CI no-mount smoke and stay bash-only in scripts/devcontainer-smoke.sh.
+# Reads injected data: $TSAN_RUN_SKIP (skip the emulation-incompatible TSan RUN),
+# $EXPECTED_P2996_REF / $P2996_REF_STRICT (the pinned clang-p2996 ref). Only the
+# injected DATA differs by caller (HEAD ref for CI; merge-base for the
+# devcontainer, whose local base was built from the merge-base pin).
+_TIER3_COMPILER_BODY = """\
 echo "=== sanitizer compile checks ==="
 cat >/tmp/sanitizer.cpp <<'CPP'
 #include <iostream>
@@ -584,6 +467,178 @@ P2996_LIBCXX_DIR=$(dirname "$P2996_LIBCXX_SO")
   || { echo "FAIL: clang-p2996 reflection link failed"; exit 1; }
 /tmp/refl-clang || { echo "FAIL: clang-p2996 reflection binary did not run"; exit 1; }
 rm -f /tmp/refl-func.cpp /tmp/refl-gcc /tmp/refl-clang
+"""
+
+
+def _tier1_var_lines(
+    expected_identity: Mapping[str, str] | None,
+    expected_tools: Mapping[str, str] | None,
+) -> str:
+    """Injected-data header lines the tier-1 core reads ($EXPECTED_*)."""
+    identity_blob = (
+        _format_identity_lines(expected_identity) if expected_identity else ""
+    )
+    tool_lines = _format_expected_tool_lines(expected_tools) if expected_tools else ""
+    return (
+        f"EXPECTED_IDENTITY={shlex.quote(identity_blob)}\n"
+        f"EXPECTED_TOOL_REQUESTS={shlex.quote(tool_lines)}\n"
+    )
+
+
+def _tier3_var_lines(expected_p2996_ref: str, *, emulated: bool) -> str:
+    """Injected-data header lines the tier-3 substrate reads.
+
+    ``P2996_REF_STRICT`` is set only for a 40-hex SHA (a non-SHA dispatch
+    override keeps the "is-a-real-p2996-build" guard but not strict equality).
+    ``TSAN_RUN_SKIP`` gates the ThreadSanitizer RUN — the compile always fires
+    (it proves the toolchain), but the RUN is skipped under emulation, where
+    TSan's shadow-memory ASLR layout is incompatible with Rosetta/QEMU.
+    """
+    strict = "1" if _SHA_RE.match(expected_p2996_ref) else ""
+    tsan_run_skip = "1" if emulated else ""
+    return (
+        f"EXPECTED_P2996_REF={shlex.quote(expected_p2996_ref)}\n"
+        f"P2996_REF_STRICT={shlex.quote(strict)}\n"
+        f"TSAN_RUN_SKIP={shlex.quote(tsan_run_skip)}\n"
+    )
+
+
+def build_tier3_script(
+    *,
+    expected_p2996_ref: str,
+    emulated: bool,
+) -> str:
+    """Standalone tier-3 compiler smoke script: sanitizers + reflection.
+
+    Emitted by ``image smoke-script --tier 3`` for ``scripts/devcontainer-smoke``
+    to run in-container, and reused VERBATIM (the same :data:`_TIER3_COMPILER_BODY`)
+    by :func:`build_smoke_script` for the CI no-mount smoke — the #223 single
+    source of truth for the tier-3 compiler substrate. The mount/SSH-dependent
+    tier-3 checks (home-volume, TMPDIR, R2 SSH) stay bash-only and are NOT part
+    of this substrate. ``emulated`` skips the TSan RUN (the compile still runs).
+    """
+    return (
+        "set -euo pipefail\n"
+        + _tier3_var_lines(expected_p2996_ref, emulated=emulated)
+        + _TIER3_COMPILER_BODY
+    )
+
+
+def build_tier1_script(
+    *,
+    expected_identity: Mapping[str, str] | None = None,
+    expected_tools: Mapping[str, str] | None = None,
+) -> str:
+    """Standalone tier-1 core smoke script: image identity + exact tool-set.
+
+    Emitted by ``image smoke-script --tier 1`` for ``scripts/devcontainer-smoke``
+    to run in-container, and reused VERBATIM (the same :data:`_TIER1_CORE_BODY`)
+    by :func:`build_smoke_script` for the CI no-mount smoke — the #223 single
+    source of truth for tier-1 logic. Both guards are dormant (empty injected
+    var) when their data is unset, so an unpopulated call is a no-op, never a
+    false green.
+    """
+    return (
+        "set -euo pipefail\n"
+        + _tier1_var_lines(expected_identity, expected_tools)
+        + _TIER1_CORE_BODY
+    )
+
+
+def build_smoke_script(
+    expected_p2996_ref: str,
+    *,
+    expected_identity: Mapping[str, str] | None = None,
+    expected_tools: Mapping[str, str] | None = None,
+    emulated: bool = False,
+) -> str:
+    """Build the inline CI (no-mount) smoke test script.
+
+    Composes the shared tier-1 core (:data:`_TIER1_CORE_BODY` — image identity
+    + exact tool-set, #223) with the CI-only tail (hk validate, sanitizers,
+    reflection compilers, AI CLIs, zero-warning). The devcontainer smoke runs
+    the SAME core via :func:`build_tier1_script`.
+
+    ``expected_p2996_ref`` is injected so the script can assert the clang-p2996
+    binary baked into the image was actually built from the pinned ref
+    (``resolve_expected_p2996_ref``) — closing the false-positive where a
+    stale/wrong-ref reflection compiler still compiles a reflection program and
+    the smoke passes green. Only a 40-hex SHA triggers the strict equality
+    check; a non-SHA dispatch override still gets the "is-a-real-p2996-build"
+    guard.
+
+    ``expected_identity`` (gap A — image identity) maps each verbatim-COPYd
+    build input (:data:`IDENTITY_IMAGE_PATHS`) to its expected in-image sha256;
+    the tier-1 core asserts each in-image copy matches, catching a stale/cached
+    overlay smoked against old content. An empty/unset map leaves the guard
+    dormant (unit-test friendly).
+
+    ``expected_tools`` (#143 — exact tool-set assertion) maps declared tool keys
+    to requested versions (``resolve_declared_tools``). When set, the script
+    asserts the installed set sourced from the system config matches it exactly
+    — catching a tool silently dropped/added or a requested-version drift that
+    the ``(missing)``-count check alone passes green. An empty/unset value
+    leaves the guard dormant (unit-test friendly).
+
+    ``emulated`` (gap B — TSan under Rosetta) controls whether the
+    ThreadSanitizer binary is RUN after it is compiled. The compile always
+    runs (it proves the toolchain); the RUN is skipped under emulation, where
+    TSan's shadow-memory layout is incompatible with Rosetta/QEMU.
+    """
+    header = (
+        "set -euo pipefail\n"
+        + _tier1_var_lines(expected_identity, expected_tools)
+        + _tier3_var_lines(expected_p2996_ref, emulated=emulated)
+    )
+    return (
+        header
+        + _TIER1_CORE_BODY
+        + """\
+echo "=== hk validate ==="
+HK_FILE=/etc/hk/hk.pkl hk validate
+echo "=== shell integration ==="
+command -v zsh || { echo "FAIL: zsh not found"; exit 1; }
+command -v git || { echo "FAIL: git not found"; exit 1; }
+echo "=== identity constraints ==="
+if getent passwd vscode >/dev/null 2>&1; then
+  echo "FAIL: vscode user exists in image"; exit 1
+fi
+if getent group vscode >/dev/null 2>&1; then
+  echo "FAIL: vscode group exists in image"; exit 1
+fi
+if [ -d /home/vscode ]; then
+  echo "FAIL: /home/vscode directory exists"; exit 1
+fi
+if env | grep -qi vscode; then
+  echo "FAIL: vscode found in environment variables"; exit 1
+fi
+echo "=== path constraints ==="
+if [ ! -x /usr/local/bin/mise ]; then
+  echo "FAIL: /usr/local/bin/mise missing"; exit 1
+fi
+if [ ! -d /usr/local/share/mise/installs ]; then
+  echo "FAIL: /usr/local/share/mise/installs missing"; exit 1
+fi
+echo "=== backend policy checks ==="
+grep -q 'npm.package_manager = "bun"' "$MISE_CFG" || {
+  echo "FAIL: bun package manager policy missing"; exit 1;
+}
+grep -q 'pipx.uvx = true' "$MISE_CFG" || {
+  echo "FAIL: uvx policy missing"; exit 1;
+}
+grep -q 'cargo.binstall = true' "$MISE_CFG" || {
+  echo "FAIL: cargo-binstall policy missing"; exit 1;
+}
+grep -q 'python.uv_venv_auto = "source"' "$MISE_CFG" || {
+  echo "FAIL: python uv venv policy missing"; exit 1;
+}
+echo "=== clang tooling checks ==="
+for tool in clang clang++ clangd clang-tidy clang-format lld lldb; do
+  command -v "$tool" >/dev/null 2>&1 || { echo "FAIL: missing $tool"; exit 1; }
+done
+"""
+        + _TIER3_COMPILER_BODY
+        + """\
 echo "=== AI CLI checks ==="
 for tool in claude codex gemini; do
   command -v "$tool" >/dev/null 2>&1 || { echo "FAIL: missing $tool"; exit 1; }
@@ -1156,6 +1211,27 @@ def resolve_declared_tools_at_base(repo_root: Path) -> dict[str, str]:
     return declared
 
 
+def resolve_expected_p2996_ref_at_base() -> str:
+    """The clang-p2996 ref the CURRENT local base was built from (merge-base).
+
+    Merge-base-aware sibling of :func:`resolve_expected_p2996_ref` (which reads
+    HEAD and feeds ``build_smoke_script`` — CI builds the image FROM the branch
+    ``docker-bake.hcl`` pin). The local devcontainer's base predates a branch's
+    ``CLANG_P2996_REF`` bump (the branch's base is built by its own PR CI, never
+    locally), so the devcontainer tier-3 ref-pin (injected by
+    :func:`build_tier3_script` / ``smoke-script --tier 3``) must expect the
+    MERGE-BASE pin — reading HEAD would false-FAIL on a branch that bumps the
+    ref. A Phase D ``CLANG_P2996_REF`` env override still wins (dispatch parity).
+    Fixes the latent HEAD-read the pre-#223 bash tier-3 had (it grepped the
+    mounted HEAD ``docker-bake.hcl``).
+    """
+    override = os.environ.get("CLANG_P2996_REF")
+    if override:
+        return override
+    blob = base_currency_blob(_project_root(), "docker-bake.hcl")
+    return _extract_bake_variable(blob.decode(), "CLANG_P2996_REF")
+
+
 def verify_tools_main() -> int:
     """Assert the installed tool set matches the base-declared ``[tools]``.
 
@@ -1203,27 +1279,51 @@ def verify_tools_main() -> int:
 
 
 _SMOKE_SCRIPT_TIER1 = 1
+_SMOKE_SCRIPT_TIER3 = 3
 
 
 def smoke_script_main(tier: int | None) -> int:
-    """CLI: print the shared tier-1 smoke core for the devcontainer smoke (#223).
+    """CLI: print a shared smoke core for the devcontainer smoke (#223).
 
-    ``scripts/devcontainer-smoke.sh`` evaluates this so its in-container tier-1
-    (image identity + exact tool-set) is byte-identical to the CI no-mount smoke
-    — the two paths run the SAME :data:`_TIER1_CORE_BODY`. The injected DATA is
-    merge-base aware (:func:`resolve_expected_identity_at_base` /
-    :func:`resolve_declared_tools_at_base`): the local base predates a branch's
-    image-input bump, which is validated by the branch's own PR CI build+smoke.
-    Only tier 1 is migrated to python; tiers 2/3 stay in bash for now.
+    ``scripts/devcontainer-smoke.sh`` evaluates this so its in-container checks
+    are byte-identical to the CI no-mount smoke — the two paths run the SAME
+    python-generated bodies (:data:`_TIER1_CORE_BODY` for tier 1,
+    :data:`_TIER3_COMPILER_BODY` for tier 3), so they cannot diverge. The
+    injected DATA is merge-base aware (the local base predates a branch's
+    image-input bump, which is validated by the branch's own PR CI build+smoke):
+
+    - **tier 1** — image identity + exact tool-set
+      (:func:`resolve_expected_identity_at_base` /
+      :func:`resolve_declared_tools_at_base`).
+    - **tier 3** — sanitizer + reflection compiler substrate
+      (:func:`resolve_expected_p2996_ref_at_base`). ``emulated=True`` is forced:
+      the amd64 container reports ``x86_64`` even under Rosetta on the arm64 Mac
+      dev host, so emulation is invisible from inside (``os.uname`` can't tell) —
+      and CI's native-runner smoke already exercises the TSan RUN, so the
+      devcontainer always skips it (the compile still runs, proving the
+      toolchain). asan/ubsan + reflection RUN fine under Rosetta and stay.
+
+    Tier 2 (pytest + mounts + doppler secrets) has NO python-generated core —
+    every tier-2 check is mount/env-dependent and has no CI no-mount counterpart,
+    so there is nothing to unify; it stays entirely bash. The mount/SSH-dependent
+    tier-3 checks (home-volume, TMPDIR, R2 SSH) likewise stay bash-only.
     """
-    if tier != _SMOKE_SCRIPT_TIER1:
-        sys.stderr.write(f"smoke-script: unsupported tier {tier!r} (only --tier 1)\n")
-        return 2
     root = _project_root()
-    script = build_tier1_script(
-        expected_identity=resolve_expected_identity_at_base(),
-        expected_tools=resolve_declared_tools_at_base(root),
-    )
+    if tier == _SMOKE_SCRIPT_TIER1:
+        script = build_tier1_script(
+            expected_identity=resolve_expected_identity_at_base(),
+            expected_tools=resolve_declared_tools_at_base(root),
+        )
+    elif tier == _SMOKE_SCRIPT_TIER3:
+        script = build_tier3_script(
+            expected_p2996_ref=resolve_expected_p2996_ref_at_base(),
+            emulated=True,
+        )
+    else:
+        sys.stderr.write(
+            f"smoke-script: unsupported tier {tier!r} (only --tier 1 or 3)\n"
+        )
+        return 2
     sys.stdout.write(script)
     return 0
 

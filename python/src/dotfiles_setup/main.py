@@ -202,16 +202,19 @@ def _add_image_subcommands(
     )
     smoke_script_parser = image_sub.add_parser(
         "smoke-script",
-        help="Print the shared tier-1 smoke core (image identity + exact "
-        "tool-set) for scripts/devcontainer-smoke.sh to eval — the same core "
-        "the CI no-mount smoke runs, so the two paths cannot diverge (#223)",
+        help="Print a shared smoke core (tier 1: image identity + exact "
+        "tool-set; tier 3: sanitizer + reflection compiler substrate) for "
+        "scripts/devcontainer-smoke.sh to eval — the same core the CI no-mount "
+        "smoke runs, so the two paths cannot diverge (#223)",
     )
     smoke_script_parser.add_argument(
         "--tier",
         type=int,
         required=True,
-        choices=[1],
-        help="Smoke tier to emit (only tier 1 is migrated to python; 2/3 stay in bash)",
+        choices=[1, 3],
+        help="Smoke tier core to emit (1 = identity + tool-set; 3 = sanitizer "
+        "+ reflection). Tier 2 stays fully bash — every tier-2 check is "
+        "mount/env-dependent with no CI no-mount counterpart to unify",
     )
     identity_parser = image_sub.add_parser(
         "identity-expected",
