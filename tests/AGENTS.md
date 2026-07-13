@@ -26,11 +26,12 @@ Docker image smoke outputs.
 | `test_tool_currency.py` | pytest | Daily tool-currency signal (`dotfiles_setup.tool_currency`) — release-link backends, report rendering |
 | `test_renovate.py` | pytest | Renovate status signal (`dotfiles_setup.renovate`) — app-id/privilege check, report rendering |
 | `test_autofix.py` | pytest | autofix.ci artifact applier (`dotfiles_setup.autofix`) — additions, traversal/shape/deletion refusal |
+| `test_bash_budget.py` | pytest | Zero-bash-logic enforcer (`dotfiles_setup.bash_budget`) — allowlist/growth/shrink/stale logic, real-repo `allowlist == tracked` pin, end-to-end CLI |
 | `test_shell_integration.py` | pytest | Tool reachability in login shells (mise, chezmoi, uv, pixi, claude, gemini, codex) |
 | `infra/foundation.bats` | Bats | Bash-level foundation checks (shell script integration) |
 | `infra/runtimes.bats` | Bats | Runtime installation checks (bash) |
 
-Total: **413 pytest tests** (pytest runs all `test_*.py` files) plus Bats
+Total: **421 pytest tests** (pytest runs all `test_*.py` files) plus Bats
 scenarios under `infra/`.
 
 ## Running tests
