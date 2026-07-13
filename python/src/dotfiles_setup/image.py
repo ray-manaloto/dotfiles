@@ -821,6 +821,41 @@ def _parse_human_size(size: str) -> int:
     return 0
 
 
+# Layer→source attribution (#231 scope-(b)(a)). A fat layer's `created_by` is
+# the raw Dockerfile command, which does not by itself say *which toolchain /
+# stage* produced it — the datum #222 needs to decide what to thin/drop. This
+# ordered keyword map coarsely classifies a layer command into a source bucket
+# so the two fat layers (the report measured 3.80 GB + 2.28 GB compressed =
+# 83.4% of the pull) map to a cause. Order matters: the most specific toolchain
+# markers (clang-p2996, gcc-latest) are checked before the generic ones (mise,
+# apt) so a `mise install` line that also mentions gcc is not misfiled.
+_LAYER_SOURCE_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("clang-p2996", ("clang-p2996", "/opt/clang-p2996", "p2996")),
+    ("gcc-latest", ("gcc-latest", "/opt/gcc-latest")),
+    ("cargo", ("cargo install", "cargo-binstall", "cargo_home", "cargo ")),
+    ("node/npm", ("npm install", "npm ci", "bun install", "bun add", "corepack")),
+    ("mise-tools", ("mise install", "mise use", "mise-system", "mise ")),
+    ("apt", ("apt-get", "apt install", "dpkg", "add-apt-repository")),
+)
+
+
+def classify_layer_source(created_by: str) -> str:
+    """Coarse source bucket for a layer's ``created_by`` Dockerfile command.
+
+    Pure keyword classifier (#231 scope-(b)(a)): maps a fat layer to the
+    toolchain/stage that produced it so #222 can group pull-cost by cause
+    instead of eyeballing verbose ``RUN`` strings. Returns ``"other"`` when no
+    marker matches — never guesses. The buckets are intentionally coarse; the
+    goal is "which of base-apt / mise / the 3 C++ toolchains", not per-package
+    accounting.
+    """
+    low = created_by.lower()
+    for label, needles in _LAYER_SOURCE_PATTERNS:
+        if any(needle in low for needle in needles):
+            return label
+    return "other"
+
+
 def size_report(
     image_ref: str,
     *,
@@ -844,9 +879,11 @@ def size_report(
             continue
         entry = json.loads(line)
         size_bytes = _parse_human_size(entry.get("Size", "0B"))
+        created_by = entry.get("CreatedBy", "")
         layers.append(
             {
-                "created_by": entry.get("CreatedBy", ""),
+                "created_by": created_by,
+                "source": classify_layer_source(created_by),
                 "size": entry.get("Size", "0B"),
                 "size_bytes": size_bytes,
             }
@@ -859,6 +896,49 @@ def size_report(
         "image_size_bytes": image_size_bytes,
         "compressed_size_bytes": compressed_size_bytes,
         "top_layers": layers[:top_layers],
+    }
+
+
+# Modeled pull-time defaults (#231 scope-(b)(c)). Compressed size drives the
+# network download; uncompressed size drives zstd decompression. Both are
+# already captured by the benchmark, so a modeled wall-time is the user-facing
+# metric the whole "measure before optimize" program is about. Defaults are
+# deliberately conservative round numbers (a mid-tier connection + zstd's
+# level-independent decompress throughput) and are overridable so a caller can
+# model a specific link. This is an ESTIMATE, labeled as such in the summary —
+# not a measured pull.
+_DEFAULT_BANDWIDTH_MBPS = 200.0
+_ZSTD_DECOMPRESS_MB_S = 500.0
+_MEGABIT_BYTES_PER_S = 125_000.0  # 1 Mbps = 1e6 bits/s = 125_000 bytes/s
+_MIB = 1024.0 * 1024.0
+
+
+def estimate_pull_time_s(
+    compressed_size_bytes: int,
+    uncompressed_size_bytes: int,
+    *,
+    bandwidth_mbps: float = _DEFAULT_BANDWIDTH_MBPS,
+    decompress_mb_s: float = _ZSTD_DECOMPRESS_MB_S,
+) -> dict[str, float]:
+    """Model image pull wall-time from compressed + uncompressed sizes.
+
+    Pure (#231 scope-(b)(c)): ``download_s`` = compressed bytes ÷ bandwidth,
+    ``decompress_s`` = uncompressed bytes ÷ zstd throughput, ``total_s`` their
+    sum. The two assumptions are echoed back in the payload so a reader knows
+    the model behind the number. Zero/negative bandwidth would divide by zero;
+    callers pass the positive defaults, and the guard keeps a hostile override
+    from raising inside the benchmark.
+    """
+    bandwidth = bandwidth_mbps if bandwidth_mbps > 0 else _DEFAULT_BANDWIDTH_MBPS
+    decompress = decompress_mb_s if decompress_mb_s > 0 else _ZSTD_DECOMPRESS_MB_S
+    download_s = compressed_size_bytes / (bandwidth * _MEGABIT_BYTES_PER_S)
+    decompress_s = uncompressed_size_bytes / (decompress * _MIB)
+    return {
+        "download_s": round(download_s, 2),
+        "decompress_s": round(decompress_s, 2),
+        "total_s": round(download_s + decompress_s, 2),
+        "bandwidth_mbps": bandwidth,
+        "decompress_mb_s": decompress,
     }
 
 
@@ -883,7 +963,8 @@ def benchmark(
     tool_count = count_installed_tools(image_ref, platform=platform)
 
     payload = {
-        "schema_version": 2,
+        # schema 3 (#231): per-layer `source` attribution + modeled pull-time.
+        "schema_version": 3,
         "image_ref": image_ref,
         "platform": platform,
         "smoke": smoke_result,
@@ -894,6 +975,9 @@ def benchmark(
         },
         "image_size_bytes": report["image_size_bytes"],
         "compressed_size_bytes": report["compressed_size_bytes"],
+        "pull_time_estimate": estimate_pull_time_s(
+            report["compressed_size_bytes"], report["image_size_bytes"]
+        ),
         "tool_count": tool_count,
         "top_layers": report["top_layers"],
         "result": smoke_result["result"].lower(),
@@ -904,6 +988,42 @@ def benchmark(
     return payload
 
 
+def _pull_time_total(payload: Mapping[str, Any]) -> float:
+    """Modeled total pull-time from a payload, tolerating pre-schema-3 JSON.
+
+    A baseline written before #231 has no ``pull_time_estimate`` key; treat its
+    modeled pull-time as 0 so a delta against it degrades gracefully rather than
+    KeyError-ing the whole summary.
+    """
+    estimate = payload.get("pull_time_estimate") or {}
+    return float(estimate.get("total_s", 0.0))
+
+
+def compare_payloads(
+    baseline: Mapping[str, Any], candidate: Mapping[str, Any]
+) -> dict[str, float]:
+    """Pure metric deltas (candidate - baseline) between two benchmark payloads.
+
+    Split out of :func:`metrics_compare` (which does the file IO) so the trend
+    section in the step summary (#231 scope-(b)(b)) can render a delta from
+    in-memory payloads without a second file read. Positive ⇒ candidate is
+    larger/slower (a regression for size/pull-time).
+    """
+    return {
+        "image_size_delta": candidate["image_size_bytes"]
+        - baseline["image_size_bytes"],
+        "compressed_size_delta": candidate["compressed_size_bytes"]
+        - baseline["compressed_size_bytes"],
+        "pull_time_total_delta": round(
+            _pull_time_total(candidate) - _pull_time_total(baseline), 2
+        ),
+        "smoke_wall_delta": candidate["timings_s"]["smoke_wall"]
+        - baseline["timings_s"]["smoke_wall"],
+        "total_wall_delta": candidate["timings_s"]["total_wall"]
+        - baseline["timings_s"]["total_wall"],
+    }
+
+
 def metrics_compare(baseline_path: Path, candidate_path: Path) -> dict[str, Any]:
     """Compare two benchmark payloads."""
     baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
@@ -911,14 +1031,7 @@ def metrics_compare(baseline_path: Path, candidate_path: Path) -> dict[str, Any]
     return {
         "baseline": str(baseline_path),
         "candidate": str(candidate_path),
-        "image_size_delta": candidate["image_size_bytes"]
-        - baseline["image_size_bytes"],
-        "compressed_size_delta": candidate["compressed_size_bytes"]
-        - baseline["compressed_size_bytes"],
-        "smoke_wall_delta": candidate["timings_s"]["smoke_wall"]
-        - baseline["timings_s"]["smoke_wall"],
-        "total_wall_delta": candidate["timings_s"]["total_wall"]
-        - baseline["timings_s"]["total_wall"],
+        **compare_payloads(baseline, candidate),
     }
 
 
@@ -1033,12 +1146,32 @@ def _format_duration(seconds: float) -> str:
     return f"{secs}s"
 
 
+def _format_signed_bytes(delta: int) -> str:
+    """Signed byte delta (``+1.20 GB`` / ``-512 MB`` / ``±0 B``) for the trend."""
+    if delta == 0:
+        return "±0 B"
+    return f"{'+' if delta > 0 else '-'}{_format_bytes(abs(delta))}"
+
+
+def _format_signed_seconds(delta: float) -> str:
+    """Signed second delta (``+3.20s`` / ``-1.10s`` / ``±0.00s``) for the trend."""
+    if delta == 0:
+        return "±0.00s"
+    return f"{'+' if delta > 0 else '-'}{abs(delta):.2f}s"
+
+
 def render_metrics_summary(
-    payload: Mapping[str, Any], timing: Mapping[str, Any] | None
+    payload: Mapping[str, Any],
+    timing: Mapping[str, Any] | None,
+    comparison: Mapping[str, Any] | None = None,
 ) -> str:
-    """Render benchmark ``payload`` (+ optional CI ``timing``) as markdown.
+    """Render benchmark ``payload`` (+ optional CI ``timing``/trend) as markdown.
 
     GitHub-flavored markdown for ``$GITHUB_STEP_SUMMARY``. Pure — no IO.
+    ``comparison`` (candidate - baseline deltas from :func:`compare_payloads`,
+    #231 scope-(b)(b)) renders a trend section when supplied; the durable
+    cross-run baseline store is a deferred follow-up, so the workflow leaves it
+    unset for now and the section stays dormant.
     """
     compressed = _format_bytes(payload.get("compressed_size_bytes", 0))
     uncompressed = _format_bytes(payload.get("image_size_bytes", 0))
@@ -1052,6 +1185,14 @@ def render_metrics_summary(
         f"| Compressed size | {compressed} |",
         f"| Uncompressed size | {uncompressed} |",
     ]
+    pull_estimate = payload.get("pull_time_estimate")
+    if pull_estimate:
+        bandwidth = pull_estimate.get("bandwidth_mbps", _DEFAULT_BANDWIDTH_MBPS)
+        pull_total = _format_duration(pull_estimate.get("total_s", 0))
+        lines.append(
+            f"| Modeled pull time | ~{pull_total} "
+            f"(down {bandwidth:g} Mbps + zstd decompress) |"
+        )
     if "tool_count" in payload:
         lines.append(f"| Installed tools | {payload['tool_count']} |")
     lines.append(f"| Smoke result | {payload.get('result', '?').upper()} |")
@@ -1061,12 +1202,33 @@ def render_metrics_summary(
         )
     lines.append("")
 
+    if comparison is not None:
+        compressed_delta = _format_signed_bytes(comparison["compressed_size_delta"])
+        uncompressed_delta = _format_signed_bytes(comparison["image_size_delta"])
+        pull_delta = _format_signed_seconds(comparison["pull_time_total_delta"])
+        lines += [
+            "### Trend vs baseline",
+            "",
+            "| Metric | Delta (candidate - baseline) |",
+            "| --- | --- |",
+            f"| Compressed size | {compressed_delta} |",
+            f"| Uncompressed size | {uncompressed_delta} |",
+            f"| Modeled pull time | {pull_delta} |",
+            "",
+        ]
+
     top_layers = payload.get("top_layers") or []
     if top_layers:
-        lines += ["### Largest layers", "", "| Size | Created by |", "| --- | --- |"]
+        lines += [
+            "### Largest layers",
+            "",
+            "| Size | Source | Created by |",
+            "| --- | --- | --- |",
+        ]
         lines.extend(
-            f"| {_format_bytes(layer.get('size_bytes', 0))} | "
-            f"`{layer.get('created_by', '').replace('|', '\\|')}` |"
+            f"| {_format_bytes(layer.get('size_bytes', 0))} "
+            f"| {layer.get('source', 'other')} "
+            f"| `{layer.get('created_by', '').replace('|', '\\|')}` |"
             for layer in top_layers[:5]
         )
         lines.append("")
@@ -1096,19 +1258,193 @@ def metrics_summary(
     run_id: str | None = None,
     repo: str | None = None,
     summary_path: Path | None = None,
+    baseline_path: Path | None = None,
 ) -> str:
     """Read a benchmark JSON, render a step summary, return the markdown.
 
-    Optionally fetches upstream CI timings (when ``run_id``/``repo`` given)
-    and appends the rendered markdown to ``summary_path``.
+    Optionally fetches upstream CI timings (when ``run_id``/``repo`` given) and
+    appends the rendered markdown to ``summary_path``. When ``baseline_path`` is
+    given and readable, renders a trend section (#231 scope-(b)(b)) with deltas
+    vs that baseline; a missing/unreadable baseline degrades to no trend section
+    rather than failing the summary (the durable baseline store is deferred).
     """
     payload = json.loads(metrics_path.read_text(encoding="utf-8"))
     timing = fetch_build_timing(run_id, repo) if run_id and repo else None
-    markdown = render_metrics_summary(payload, timing)
+    comparison: dict[str, float] | None = None
+    if baseline_path is not None and baseline_path.is_file():
+        baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+        comparison = compare_payloads(baseline, payload)
+    markdown = render_metrics_summary(payload, timing, comparison)
     if summary_path is not None:
         with summary_path.open("a", encoding="utf-8") as handle:
             handle.write(markdown)
     return markdown
+
+
+# --------------------------------------------------------------------------
+# image-analysis tag resolution (#231)
+#
+# ``image-analysis.yml`` runs via ``workflow_run`` and must find the image the
+# upstream CI run pushed. The pre-#231 code sought ``:<workflow_run.head_sha>``
+# = the PR HEAD commit, but ``build-publish`` tags the PR image ``:<github.sha>``
+# = the ephemeral ``refs/pull/N/merge`` commit (head ≠ merge for every PR), so
+# the lookup missed on every PR build → ``present=false`` → all analysis steps
+# skipped → job silently green. Fix (Option A): analyze ``:pr-NNN`` (which
+# ``build-publish`` reliably pushes via ``type=ref,event=pr``), resolving the PR
+# number from the head sha via ``commits/<sha>/pulls`` — NOT
+# ``workflow_run.pull_requests[]``, which is EMPTY on same-repo PR CI runs
+# (verified #231). schedule/dispatch runs keep the bare ``:<head_sha>`` tag,
+# which works there because ``github.sha == head_sha ==`` a real main tip.
+_PULL_REQUEST_EVENT = "pull_request"
+
+
+@dataclasses.dataclass(frozen=True)
+class AnalysisTarget:
+    """Outcome of resolving the analyzable image for an image-analysis run."""
+
+    ref: str | None
+    present: bool
+    fail: bool
+    reason: str
+
+
+def decide_analysis_target(
+    *,
+    event: str,
+    head_sha: str,
+    pr_number: int | None,
+    image_base: str,
+    tag_exists: Callable[[str], bool],
+) -> AnalysisTarget:
+    """Pure decision: which image ref (if any) an image-analysis run analyzes.
+
+    ``image_base`` is the untagged ``registry/name``; ``tag_exists`` probes a
+    full ref in the registry (injected so this is unit-testable without docker).
+
+    - **pull_request** with no ``pr_number`` → FAIL. A PR CI run whose head sha
+      resolves to no PR is the #231 silent-lookup signature (the empty
+      ``pull_requests[]`` trap); failing loud is the zero-skip guard Ray locked,
+      rather than silently skipping analysis again.
+    - **pull_request** with ``pr_number`` → analyze ``:pr-NNN`` when present;
+      when absent, the build was path-gated off (docs/root-mise PR) so there is
+      genuinely no image — a correct, quiet green skip.
+    - **schedule / workflow_dispatch** → the bare ``:<head_sha 7-char>`` tag,
+      which those triggers push (``github.sha == head_sha``); quiet-skip if
+      absent (no build for this run).
+    """
+    if event == _PULL_REQUEST_EVENT:
+        if pr_number is None:
+            return AnalysisTarget(
+                ref=None,
+                present=False,
+                fail=True,
+                reason=(
+                    "FAIL: pull_request CI run but commits/"
+                    f"{head_sha}/pulls resolved no PR number — the analyzable "
+                    ":pr-NNN tag cannot be derived (#231 silent-lookup "
+                    "regression); failing loud instead of skipping analysis."
+                ),
+            )
+        tag = f"pr-{pr_number}"
+        ref = f"{image_base}:{tag}"
+        if tag_exists(ref):
+            return AnalysisTarget(
+                ref=ref,
+                present=True,
+                fail=False,
+                reason=f"analyzing per-PR image {tag}",
+            )
+        return AnalysisTarget(
+            ref=None,
+            present=False,
+            fail=False,
+            reason=(
+                f"{tag} absent — no image built for this PR "
+                "(docs/path-gated build skipped); nothing to analyze."
+            ),
+        )
+    tag = head_sha[:7]
+    ref = f"{image_base}:{tag}"
+    if tag_exists(ref):
+        return AnalysisTarget(
+            ref=ref, present=True, fail=False, reason=f"analyzing {event} image {tag}"
+        )
+    return AnalysisTarget(
+        ref=None,
+        present=False,
+        fail=False,
+        reason=f"{tag} absent (no build for this {event} run); nothing to analyze.",
+    )
+
+
+def _lookup_pr_number(repo: str, head_sha: str) -> int | None:
+    """PR number associated with ``head_sha`` via ``gh api commits/<sha>/pulls``.
+
+    This is the resolution the #231 verifier proved works
+    (``commits/24a68c8/pulls → [{237}]``) where ``workflow_run.pull_requests[]``
+    was empty. Returns ``None`` when no PR is associated or the field is absent
+    — the caller turns that into the loud FAIL for a pull_request run.
+    """
+    result = _run(
+        ["gh", "api", f"repos/{repo}/commits/{head_sha}/pulls", "--jq", ".[0].number"],
+        check=False,
+    )
+    number = result.stdout.strip()
+    return int(number) if number.isdigit() else None
+
+
+def _image_tag_exists(ref: str) -> bool:
+    """True when ``ref`` resolves in the registry (``imagetools inspect``)."""
+    result = subprocess.run(
+        ["docker", "buildx", "imagetools", "inspect", ref],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def resolve_analysis_target(
+    *, event: str, head_sha: str, repo: str, image_base: str
+) -> AnalysisTarget:
+    """Resolve the analyzable image ref (IO wrapper over the pure decision).
+
+    Looks the PR number up only for a pull_request event (schedule/dispatch use
+    the head sha directly), then defers to :func:`decide_analysis_target` with
+    the real registry probe.
+    """
+    pr_number = (
+        _lookup_pr_number(repo, head_sha) if event == _PULL_REQUEST_EVENT else None
+    )
+    return decide_analysis_target(
+        event=event,
+        head_sha=head_sha,
+        pr_number=pr_number,
+        image_base=image_base,
+        tag_exists=_image_tag_exists,
+    )
+
+
+def resolve_analysis_ref_main(
+    *, event: str, head_sha: str, repo: str, image_base: str
+) -> int:
+    """CLI: emit ``present``/``ref`` GitHub outputs; exit 1 on the loud FAIL.
+
+    stdout carries ONLY ``key=value`` lines (the workflow redirects it to
+    ``$GITHUB_OUTPUT``); the human-readable reason goes to stderr (the run log).
+    A FAIL writes the reason to stderr and returns 1 so the step (``set -e``)
+    reddens the async, non-gating analyze job — visible, without blocking merge.
+    """
+    target = resolve_analysis_target(
+        event=event, head_sha=head_sha, repo=repo, image_base=image_base
+    )
+    sys.stderr.write(target.reason + "\n")
+    if target.fail:
+        return 1
+    sys.stdout.write(f"present={'true' if target.present else 'false'}\n")
+    if target.ref is not None:
+        sys.stdout.write(f"ref={target.ref}\n")
+    return 0
 
 
 @dataclasses.dataclass(frozen=True)
@@ -1127,6 +1463,9 @@ class ImageCommand:
     repo: str | None = None
     summary_path: Path | None = None
     tier: int | None = None
+    event: str | None = None
+    head_sha: str | None = None
+    image_base: str | None = None
 
 
 def base_currency_blob(repo_root: Path, rel_path: str) -> bytes:
@@ -1385,9 +1724,25 @@ def _handle_metrics_summary(cmd: ImageCommand) -> int:
         run_id=cmd.run_id,
         repo=cmd.repo,
         summary_path=cmd.summary_path,
+        baseline_path=cmd.baseline_path,
     )
     sys.stdout.write(markdown)
     return 0
+
+
+def _handle_resolve_analysis_ref(cmd: ImageCommand) -> int:
+    if cmd.event is None or cmd.head_sha is None or cmd.image_base is None:
+        sys.stderr.write("resolve-analysis-ref requires --event, --head-sha, --image\n")
+        return 2
+    if cmd.repo is None:
+        sys.stderr.write("resolve-analysis-ref requires --repo\n")
+        return 2
+    return resolve_analysis_ref_main(
+        event=cmd.event,
+        head_sha=cmd.head_sha,
+        repo=cmd.repo,
+        image_base=cmd.image_base,
+    )
 
 
 def main(cmd: ImageCommand) -> int:
@@ -1401,6 +1756,7 @@ def main(cmd: ImageCommand) -> int:
         "benchmark": _handle_benchmark,
         "metrics-compare": _handle_metrics_compare,
         "metrics-summary": _handle_metrics_summary,
+        "resolve-analysis-ref": _handle_resolve_analysis_ref,
     }
     handler = handlers.get(cmd.command)
     if handler is None:
