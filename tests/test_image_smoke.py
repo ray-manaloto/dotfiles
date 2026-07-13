@@ -4,19 +4,23 @@ from __future__ import annotations
 
 import hashlib
 import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 import json
 
+import pytest
 from dotfiles_setup.image import (
+    _TIER1_IDENTITY_BLOCK,
+    IDENTITY_IMAGE_PATHS,
     _count_tools_from_mise_ls,
     _format_bytes,
     _format_duration,
+    _format_identity_lines,
     _is_emulated,
     _parse_build_timing,
     _parse_human_size,
@@ -25,6 +29,7 @@ from dotfiles_setup.image import (
     base_currency_blob,
     build_smoke_docker_cmd,
     build_smoke_script,
+    build_tier1_script,
     diff_tool_sets,
     identity_expected_hash,
     installed_tools_from_mise_ls,
@@ -33,12 +38,11 @@ from dotfiles_setup.image import (
     render_metrics_summary,
     resolve_declared_tools,
     resolve_declared_tools_at_base,
-    resolve_expected_config_sha256,
+    resolve_expected_identity_at_base,
+    resolve_expected_identity_head,
     resolve_expected_p2996_ref,
+    smoke_script_main,
 )
-
-if TYPE_CHECKING:
-    import pytest
 
 # Named constant for plain byte values in size parsing tests.
 _PLAIN_BYTES_VALUE = 512
@@ -214,31 +218,42 @@ def test_repo_without_tag_strips_digest() -> None:
     )
 
 
-def test_smoke_script_injects_config_identity_check() -> None:
-    """Gap A: an injected config hash activates the image-identity guard."""
-    script = build_smoke_script(
-        _FAKE_P2996_SHA, expected_config_sha256=_FAKE_CONFIG_SHA256
-    )
+def test_smoke_script_injects_identity_lines() -> None:
+    """#223: injected identity lines (repo_rel<TAB>img_rel<TAB>hash) all appear.
 
-    assert f"EXPECTED_CONFIG_SHA256={_FAKE_CONFIG_SHA256}\n" in script
-    # The guard compares the in-image config.toml hash against the repo's.
-    assert 'sha256sum "$MISE_CFG"' in script
-    assert '"$actual_config_sha256" != "$EXPECTED_CONFIG_SHA256"' in script
-
-
-def test_smoke_script_injects_runtime_identity_check() -> None:
-    """#160 T10: an injected runtime hash activates the runtime-tier guard.
-
-    Covers the runtime-tier half of the image-identity guard (a stale runtime
-    stage on a current base).
+    The unified identity block replaces the two per-file scalar guards with one
+    loop over $EXPECTED_IDENTITY covering all three verbatim-COPYd build inputs.
     """
-    script = build_smoke_script(
-        _FAKE_P2996_SHA, expected_runtime_sha256=_FAKE_CONFIG_SHA256
-    )
+    ident = dict.fromkeys(IDENTITY_IMAGE_PATHS, _FAKE_CONFIG_SHA256)
+    script = build_smoke_script(_FAKE_P2996_SHA, expected_identity=ident)
 
-    assert f"EXPECTED_RUNTIME_SHA256={_FAKE_CONFIG_SHA256}\n" in script
-    assert 'sha256sum "$MISE_RUNTIME_CFG"' in script
-    assert '"$actual_runtime_sha256" != "$EXPECTED_RUNTIME_SHA256"' in script
+    assert "EXPECTED_IDENTITY=" in script
+    # Every build input's line is injected: repo_rel<TAB>img_rel<TAB>hash.
+    for repo_rel, img_rel in IDENTITY_IMAGE_PATHS.items():
+        assert f"{repo_rel}\t{img_rel}\t{_FAKE_CONFIG_SHA256}" in script
+    # The loop hashes the resolved in-image file and fails on mismatch.
+    assert 'sha256sum "$img_file"' in script
+    assert '"$actual_identity_sha256" != "$want"' in script
+
+
+def test_smoke_script_identity_sys_sentinel_reads_system_config() -> None:
+    """#223/#148: the @SYS@ sentinel resolves to $MISE_CFG (the COPY target)."""
+    ident = dict.fromkeys(IDENTITY_IMAGE_PATHS, _FAKE_CONFIG_SHA256)
+    script = build_smoke_script(_FAKE_P2996_SHA, expected_identity=ident)
+
+    assert ".devcontainer/mise-system.toml\t@SYS@\t" in script
+    assert 'if [ "$img_rel" = "@SYS@" ]; then' in script
+    assert 'img_file="$MISE_CFG"' in script
+
+
+def test_format_identity_lines_rejects_unknown_build_input() -> None:
+    """An unknown build-input key is a hard error, never a silent drop.
+
+    A dropped identity line would be an invisible false-green, so the formatter
+    refuses inputs outside IDENTITY_IMAGE_PATHS.
+    """
+    with pytest.raises(ValueError, match="unknown identity build-input"):
+        _format_identity_lines({"not/a/real/input.toml": _FAKE_CONFIG_SHA256})
 
 
 def test_smoke_script_identity_reads_system_config_not_config_dir() -> None:
@@ -259,12 +274,13 @@ def test_smoke_script_identity_reads_system_config_not_config_dir() -> None:
 
 
 def test_smoke_script_config_identity_dormant_without_hash() -> None:
-    """Without a hash the identity guard is present but dormant (empty var)."""
+    """Without identity data the guard is present but dormant (empty var)."""
     script = build_smoke_script(_FAKE_P2996_SHA)
 
     # shlex.quote renders an empty string as ''.
-    assert "EXPECTED_CONFIG_SHA256=''\n" in script
-    assert 'if [ -n "$EXPECTED_CONFIG_SHA256" ]; then' in script
+    assert "EXPECTED_IDENTITY=''\n" in script
+    assert 'if [ -n "$EXPECTED_IDENTITY" ]; then' in script
+    assert "SKIP: no expected identity injected" in script
 
 
 def test_smoke_script_tsan_runs_when_native() -> None:
@@ -313,23 +329,45 @@ def test_is_emulated_mismatched_arch_is_emulated(
     assert _is_emulated("linux/amd64/v2") is True
 
 
-def test_resolve_expected_config_sha256_is_hex_digest() -> None:
-    """The repo's mise-system.toml hashes to a 64-hex SHA-256 digest."""
-    digest = resolve_expected_config_sha256()
+def test_resolve_expected_identity_head_are_hex_digests() -> None:
+    """Each verbatim-COPYd build input hashes to a 64-hex SHA-256 (HEAD)."""
+    head = resolve_expected_identity_head()
 
-    assert len(digest) == _SHA256_HEXLEN
-    assert all(c in "0123456789abcdef" for c in digest)
+    assert set(head) == set(IDENTITY_IMAGE_PATHS)
+    for digest in head.values():
+        assert len(digest) == _SHA256_HEXLEN
+        assert all(c in "0123456789abcdef" for c in digest)
 
 
-def test_smoke_docker_cmd_injects_config_hash() -> None:
-    """build_smoke_docker_cmd resolves and injects the real config hash."""
+def test_resolve_expected_identity_at_base_covers_all_inputs() -> None:
+    """The merge-base resolver returns a hex digest per build input.
+
+    The HEAD-vs-merge-base branching itself is covered by the
+    identity_expected_hash tests; here we assert coverage + shape.
+    """
+    at_base = resolve_expected_identity_at_base()
+
+    assert set(at_base) == set(IDENTITY_IMAGE_PATHS)
+    for digest in at_base.values():
+        assert len(digest) == _SHA256_HEXLEN
+
+
+def test_smoke_docker_cmd_injects_real_identity() -> None:
+    """build_smoke_docker_cmd resolves and injects the real HEAD identity.
+
+    Guards against a no-op: the CI smoke's identity data must be ACTIVE (real
+    hashes present), not the dormant empty var.
+    """
     cmd = build_smoke_docker_cmd(
         "ghcr.io/ray-manaloto/dotfiles-devcontainer:test",
         expected_p2996_ref=_FAKE_P2996_SHA,
     )
     script = cmd[-1]
 
-    assert f"EXPECTED_CONFIG_SHA256={resolve_expected_config_sha256()}\n" in script
+    head = resolve_expected_identity_head()
+    assert "EXPECTED_IDENTITY=''" not in script
+    for repo_rel, digest in head.items():
+        assert f"{repo_rel}\t{IDENTITY_IMAGE_PATHS[repo_rel]}\t{digest}" in script
 
 
 # --- #143: exact tool-set assertion ---
@@ -497,6 +535,138 @@ def test_resolve_declared_tools_merges_system_and_shared() -> None:
     assert declared["node"] == "latest"
     assert "conda:llvm" in declared
     assert all(isinstance(v, str) for v in declared.values())
+
+
+# ------------------------------------------ #223: shared tier-1 core (identity)
+
+
+def test_build_tier1_script_is_core_without_ci_tail() -> None:
+    """The tier-1 script has the shared core but NOT the CI-only tail.
+
+    The devcontainer runs only tier-1 identity + tool-set via this script;
+    sanitizers/reflection/AI-CLI/zero-warning stay in the CI no-mount smoke and
+    (for the devcontainer) in tiers 2/3 of the bash script.
+    """
+    ident = dict.fromkeys(IDENTITY_IMAGE_PATHS, _FAKE_CONFIG_SHA256)
+    script = build_tier1_script(
+        expected_identity=ident, expected_tools={"python": "3.14.6"}
+    )
+
+    assert script.startswith("set -euo pipefail\n")
+    # Core present.
+    assert 'echo "=== image identity (build-input hashes) ==="' in script
+    assert 'echo "=== exact tool-set assertion' in script
+    # CI-only tail absent.
+    assert "reflection compiler checks" not in script
+    assert "sanitizer compile checks" not in script
+    assert "hk validate" not in script
+    assert "AI CLI checks" not in script
+
+
+def test_build_tier1_script_shares_core_with_smoke_script() -> None:
+    """#223: the CI smoke and the tier-1 script embed the SAME core verbatim.
+
+    Byte-for-byte reuse is what makes the two paths unable to diverge.
+    """
+    ident = dict.fromkeys(IDENTITY_IMAGE_PATHS, _FAKE_CONFIG_SHA256)
+    tools = {"python": "3.14.6", "node": "latest"}
+    tier1 = build_tier1_script(expected_identity=ident, expected_tools=tools)
+    smoke = build_smoke_script(
+        _FAKE_P2996_SHA, expected_identity=ident, expected_tools=tools
+    )
+
+    # The identity block + the tool-set block are identical substrings in both.
+    core_start = 'echo "=== image identity (build-input hashes) ==="'
+    core_end_marker = 'echo "=== hk validate ==="'
+    smoke_core = smoke[smoke.index(core_start) : smoke.index(core_end_marker)]
+    tier1_core = tier1[tier1.index(core_start) :]
+    assert smoke_core == tier1_core
+
+
+def _run_identity_block(
+    sysfile: Path, repo_rel: str, img_rel: str, want_hash: str
+) -> subprocess.CompletedProcess:
+    """Run just the tier-1 identity block against a real file via bash.
+
+    ``img_rel`` is ``@SYS@`` (system config → $MISE_CFG) or a path relative to
+    $MISE_DIR (shared/runtime tiers → the else branch).
+    """
+    blob = f"{repo_rel}\t{img_rel}\t{want_hash}"
+    harness = (
+        "set -euo pipefail\n"
+        f"MISE_CFG={shlex.quote(str(sysfile))}\n"
+        'MISE_DIR="$(dirname "$MISE_CFG")"\n'
+        f"EXPECTED_IDENTITY={shlex.quote(blob)}\n" + _TIER1_IDENTITY_BLOCK
+    )
+    return subprocess.run(
+        ["bash", "-c", harness], capture_output=True, text=True, check=False
+    )
+
+
+def test_tier1_identity_block_sys_branch_catches_mismatch(tmp_path: Path) -> None:
+    """#223 no-op guard (@SYS@ branch): PASSES a correct hash, FAILS a wrong one.
+
+    The asymmetric false-green risk is a check that silently stops running: this
+    proves the generated bash actually hashes the system config and gates on the
+    result, not that it merely contains the right substrings.
+    """
+    sysfile = tmp_path / "config.toml"
+    sysfile.write_text("hello mise-system\n")
+    good = hashlib.sha256(sysfile.read_bytes()).hexdigest()
+
+    ok = _run_identity_block(sysfile, ".devcontainer/mise-system.toml", "@SYS@", good)
+    bad = _run_identity_block(
+        sysfile, ".devcontainer/mise-system.toml", "@SYS@", "0" * _SHA256_HEXLEN
+    )
+
+    assert ok.returncode == 0, ok.stderr
+    assert "OK: image built from current" in ok.stdout
+    assert bad.returncode == 1
+    assert "stale image — rebuild" in bad.stdout
+
+
+def test_tier1_identity_block_mise_dir_branch_catches_mismatch(tmp_path: Path) -> None:
+    """#223 no-op guard (else branch): the $MISE_DIR/$img_rel resolution gates too.
+
+    This is the NEW shared/runtime tier coverage (#223 extended CI identity from
+    2 files to 3); the else branch resolves a non-@SYS@ img_rel relative to the
+    mise dir. Proves it hashes the resolved file and fails on a wrong hash.
+    """
+    sysfile = tmp_path / "config.toml"
+    sysfile.write_text("system\n")
+    shared = tmp_path / "conf.d" / "shared.toml"
+    shared.parent.mkdir()
+    shared.write_text("hello shared\n")
+    good = hashlib.sha256(shared.read_bytes()).hexdigest()
+    rel = ".config/mise/conf.d/shared.toml"
+
+    ok = _run_identity_block(sysfile, rel, "conf.d/shared.toml", good)
+    bad = _run_identity_block(sysfile, rel, "conf.d/shared.toml", "0" * _SHA256_HEXLEN)
+
+    assert ok.returncode == 0, ok.stderr
+    assert f"OK: image built from current {rel}" in ok.stdout
+    assert bad.returncode == 1
+    assert "stale image — rebuild" in bad.stdout
+
+
+def test_smoke_script_main_tier1_emits_identity_and_tools(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The CLI emits a runnable tier-1 script with ACTIVE identity + tool-set."""
+    rc = smoke_script_main(1)
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert out.startswith("set -euo pipefail\n")
+    assert "EXPECTED_IDENTITY=''" not in out  # active, not dormant
+    assert ".devcontainer/mise-system.toml\t@SYS@\t" in out
+    assert 'echo "=== exact tool-set assertion' in out
+
+
+def test_smoke_script_main_rejects_non_tier1() -> None:
+    """Only tier 1 is migrated to python; other tiers are refused."""
+    assert smoke_script_main(2) == 2
+    assert smoke_script_main(None) == 2
 
 
 def test_sum_manifest_layer_sizes_single_manifest() -> None:
