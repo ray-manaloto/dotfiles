@@ -30,14 +30,16 @@ Requires **Python 3.14**.
   as part of hk pre-commit.
 - **Zero inline suppressions:** `noqa`, `type: ignore`, `pylint: disable`,
   `nosec` are rejected by the `no_lint_skip` hk step.
-- **Python 2 comma-except trap:** `except A, B:` is valid Python 3 but
-  catches only `A` and rebinds `B` as the exception instance — always
-  use `except (A, B):`. See `feedback_python2_comma_except` memory.
+- **Comma-except (PEP 758, py3.14):** `except A, B:` (no `as`) catches
+  BOTH `A` and `B` — parens are optional style, and ruff actively strips
+  them to the no-paren form (verified: it does not rebind `B`, the old
+  Python-2 trap). Parens are still REQUIRED to bind multiple types:
+  `except (A, B) as e:`. See `feedback_python2_comma_except` memory.
 
 ## Testing
 
 ```bash
-uv run --project python pytest tests/ -x -q                # All 421 tests
+uv run --project python pytest tests/ -x -q                # All 445 tests
 uv run --project python pytest tests/test_audit.py -x -q   # Single file
 ```
 

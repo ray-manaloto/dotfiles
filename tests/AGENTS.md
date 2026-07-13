@@ -18,7 +18,8 @@ Docker image smoke outputs.
 | `test_bootstrap.py` | pytest | Bootstrap tool availability (`mise`, `chezmoi`, `uv`, `pixi`, python) |
 | `test_config.py` | pytest | Pydantic `DotfilesConfig` and container-path constants |
 | `test_ghcr.py` | pytest | GHCR prerequisite validation and token scope parsing |
-| `test_image_smoke.py` | pytest | Smoke-test script generation, `_parse_human_size`, the #143 exact tool-set assertion, and the #223 shared cores — tier-1 (`build_tier1_script`, HEAD-vs-merge-base identity resolvers, a real bash EXECUTION test that the identity loop gates on a wrong hash) and tier-3 (`build_tier3_script` sanitizer+reflection substrate, `resolve_expected_p2996_ref_at_base` merge-base ref-pin, TSan-skip/ref-strict injection, golden byte-parity with `build_smoke_script`) |
+| `test_image_smoke.py` | pytest | Smoke-test script generation, `_parse_human_size`, the #143 tool-set jq/diff block (host-bash), and the #223 shared cores — tier-1 (`build_tier1_script`, HEAD-vs-merge-base identity resolvers, a real bash EXECUTION test that the identity loop gates on a wrong hash) and tier-3 (`build_tier3_script` sanitizer+reflection substrate, `resolve_expected_p2996_ref_at_base` merge-base ref-pin, TSan-skip/ref-strict injection, golden byte-parity with `build_smoke_script`); plus the #231 image-analysis resolver (`decide_analysis_target` FAIL/quiet-skip, `_lookup_pr_number` empty-array trap, `resolve_analysis_ref_main`) and scope-(b) benchmark instrumentation (`classify_layer_source`, `estimate_pull_time_s`, `compare_payloads`, trend summary) |
+| `test_image_smoke_exec.py` | pytest (`image_exec`, gated) | Containerized real-toolchain EXEC tests (#231 backlog): run the generated tier-1/tier-3 smoke cores against the real local `:dev` image — tier-1 happy + tool-set jq/diff FAIL-on-tampered, tier-3 compiler substrate compiles + ref-pin FAIL-on-wrong-ref. Deselected by default (root `pytest.ini` `addopts = -m 'not image_exec'`); run only via `mise run smoke-exec` (needs Docker + `mise run sync`) |
 | `test_container.py` | pytest | `verify-container-latest` gate (`dotfiles_setup.container`) — running/bind-mount/smoke freshness checks |
 | `test_sync.py` | pytest | `mise run sync` workflow (`dotfiles_setup.sync`) — staleness detection, action matrix, CI awareness, check/full/wait modes |
 | `test_pr.py` | pytest | `mise run ship`/`land` workflow (`dotfiles_setup.pr`) — surface detection, gate matrix, bucket verification, pinned merge |
@@ -31,8 +32,9 @@ Docker image smoke outputs.
 | `infra/foundation.bats` | Bats | Bash-level foundation checks (shell script integration) |
 | `infra/runtimes.bats` | Bats | Runtime installation checks (bash) |
 
-Total: **421 pytest tests** (pytest runs all `test_*.py` files) plus Bats
-scenarios under `infra/`.
+Total: **445 pytest tests** run by default (`pytest tests/` collects all
+`test_*.py` files) plus **4 gated `image_exec`** exec tests (deselected by
+default; run via `mise run smoke-exec`) and Bats scenarios under `infra/`.
 
 ## Running tests
 

@@ -197,10 +197,6 @@ def _add_image_subcommands(
         "--output-path",
         help="Optional JSON output path for benchmark metrics",
     )
-    image_sub.add_parser(
-        "verify-tools",
-        help="Assert installed tool set matches mise-system.toml [tools] (#143)",
-    )
     smoke_script_parser = image_sub.add_parser(
         "smoke-script",
         help="Print a shared smoke core (tier 1: image identity + exact "
@@ -216,16 +212,6 @@ def _add_image_subcommands(
         help="Smoke tier core to emit (1 = identity + tool-set; 3 = sanitizer "
         "+ reflection). Tier 2 stays fully bash — every tier-2 check is "
         "mount/env-dependent with no CI no-mount counterpart to unify",
-    )
-    identity_parser = image_sub.add_parser(
-        "identity-expected",
-        help="Print the smoke tier-1 expected sha256 for an image build input "
-        "(merge-base blob when the branch changed it; worktree otherwise)",
-    )
-    identity_parser.add_argument(
-        "path",
-        help="Repo-relative path of the image build input (e.g. "
-        ".devcontainer/mise-system.toml)",
     )
     compare_parser = image_sub.add_parser(
         "metrics-compare",
@@ -629,12 +615,6 @@ def handle_image(args: argparse.Namespace) -> None:
     Args:
         args: The parsed arguments.
     """
-    if args.image_command == "verify-tools":
-        cmd = ImageCommand("", command="verify-tools")
-        sys.exit(image_main(cmd))
-    if args.image_command == "identity-expected":
-        cmd = ImageCommand("", command="identity-expected", identity_path=args.path)
-        sys.exit(image_main(cmd))
     if args.image_command == "smoke-script":
         cmd = ImageCommand("", command="smoke-script", tier=args.tier)
         sys.exit(image_main(cmd))
