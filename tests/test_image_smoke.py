@@ -16,6 +16,7 @@ import json
 import pytest
 from dotfiles_setup.image import (
     _TIER1_IDENTITY_BLOCK,
+    _TIER3_COMPILER_BODY,
     IDENTITY_IMAGE_PATHS,
     _count_tools_from_mise_ls,
     _format_bytes,
@@ -30,6 +31,7 @@ from dotfiles_setup.image import (
     build_smoke_docker_cmd,
     build_smoke_script,
     build_tier1_script,
+    build_tier3_script,
     diff_tool_sets,
     identity_expected_hash,
     installed_tools_from_mise_ls,
@@ -41,6 +43,7 @@ from dotfiles_setup.image import (
     resolve_expected_identity_at_base,
     resolve_expected_identity_head,
     resolve_expected_p2996_ref,
+    resolve_expected_p2996_ref_at_base,
     smoke_script_main,
 )
 
@@ -663,10 +666,118 @@ def test_smoke_script_main_tier1_emits_identity_and_tools(
     assert 'echo "=== exact tool-set assertion' in out
 
 
-def test_smoke_script_main_rejects_non_tier1() -> None:
-    """Only tier 1 is migrated to python; other tiers are refused."""
+def test_smoke_script_main_rejects_tier2_and_none() -> None:
+    """Tiers 1 and 3 are python-generated; tier 2 and an unset tier are refused."""
     assert smoke_script_main(2) == 2
     assert smoke_script_main(None) == 2
+
+
+# ------------------------------------------ #223: shared tier-3 compiler substrate
+
+
+def test_build_tier3_script_is_substrate_without_tier1_or_ci_tail() -> None:
+    """The tier-3 script has the shared compiler substrate but NOTHING else.
+
+    No tier-1 core (identity/tool-set), no CI-only tail (hk validate, AI CLI,
+    zero-warning), and none of the mount/SSH-dependent tier-3 checks (which stay
+    bash-only in scripts/devcontainer-smoke.sh).
+    """
+    script = build_tier3_script(expected_p2996_ref=_FAKE_P2996_SHA, emulated=True)
+
+    assert script.startswith("set -euo pipefail\n")
+    # Substrate present.
+    assert 'echo "=== sanitizer compile checks ==="' in script
+    assert 'echo "=== reflection compiler checks ==="' in script
+    assert "bloomberg/clang-p2996" in script
+    # Tier-1 core absent.
+    assert "image identity" not in script
+    assert "exact tool-set assertion" not in script
+    # CI-only tail absent.
+    assert "hk validate" not in script
+    assert "AI CLI checks" not in script
+    assert "zero-warning" not in script
+    # Mount/SSH-dependent tier-3 checks are NOT in the shared substrate.
+    assert "home volume" not in script
+    assert "ssh-add" not in script
+    assert "TMPDIR" not in script
+
+
+def test_build_tier3_script_shares_substrate_with_smoke_script() -> None:
+    """#223: the CI smoke and the tier-3 script embed the SAME substrate verbatim.
+
+    Byte-for-byte reuse (the same :data:`_TIER3_COMPILER_BODY` object) is what
+    makes the sanitizer/reflection logic unable to diverge between the paths.
+    """
+    smoke = build_smoke_script(_FAKE_P2996_SHA)
+    tier3 = build_tier3_script(expected_p2996_ref=_FAKE_P2996_SHA, emulated=False)
+
+    assert _TIER3_COMPILER_BODY in smoke
+    assert _TIER3_COMPILER_BODY in tier3
+
+
+def test_build_tier3_script_tsan_run_gated_by_emulation() -> None:
+    """The TSan RUN is skipped under emulation; the compile always fires."""
+    native = build_tier3_script(expected_p2996_ref=_FAKE_P2996_SHA, emulated=False)
+    emulated = build_tier3_script(expected_p2996_ref=_FAKE_P2996_SHA, emulated=True)
+
+    # Compile is unconditional in both (proves the toolchain).
+    for script in (native, emulated):
+        assert "clang++ -fsanitize=thread /tmp/sanitizer.cpp -o /tmp/san-tsan" in script
+    # RUN gate flips with emulation.
+    assert "TSAN_RUN_SKIP=''\n" in native
+    assert "TSAN_RUN_SKIP=1\n" in emulated
+
+
+def test_build_tier3_script_injects_ref_and_strict_flag() -> None:
+    """A 40-hex ref triggers strict equality; a non-SHA keeps the real-build guard."""
+    strict = build_tier3_script(expected_p2996_ref=_FAKE_P2996_SHA, emulated=True)
+    loose = build_tier3_script(expected_p2996_ref=_NON_SHA_REF, emulated=True)
+
+    assert f"EXPECTED_P2996_REF={_FAKE_P2996_SHA}\n" in strict
+    assert "P2996_REF_STRICT=1\n" in strict
+    assert f"EXPECTED_P2996_REF={_NON_SHA_REF}\n" in loose
+    assert "P2996_REF_STRICT=''\n" in loose
+
+
+def test_smoke_script_main_tier3_emits_substrate_and_skips_tsan(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The CLI emits a runnable tier-3 substrate with an ACTIVE ref, TSan skipped.
+
+    The devcontainer always forces the TSan RUN skip (the amd64 container reports
+    x86_64 under Rosetta so emulation is invisible from inside; CI's native
+    runner covers the RUN).
+    """
+    rc = smoke_script_main(3)
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert out.startswith("set -euo pipefail\n")
+    assert 'echo "=== sanitizer compile checks ==="' in out
+    # Ref is active (a real 40-hex pin from docker-bake.hcl), not empty.
+    assert "EXPECTED_P2996_REF=''" not in out
+    assert "TSAN_RUN_SKIP=1\n" in out
+
+
+def test_resolve_expected_p2996_ref_at_base_env_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A CLANG_P2996_REF env override wins over the merge-base docker-bake pin."""
+    monkeypatch.setenv("CLANG_P2996_REF", _FAKE_P2996_SHA)
+
+    assert resolve_expected_p2996_ref_at_base() == _FAKE_P2996_SHA
+
+
+def test_resolve_expected_p2996_ref_at_base_reads_merge_base_pin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With no override, the (merge-base) docker-bake.hcl pin is a 40-hex SHA."""
+    monkeypatch.delenv("CLANG_P2996_REF", raising=False)
+
+    ref = resolve_expected_p2996_ref_at_base()
+
+    assert len(ref) == 40
+    assert all(c in "0123456789abcdef" for c in ref)
 
 
 def test_sum_manifest_layer_sizes_single_manifest() -> None:
