@@ -45,33 +45,13 @@ def resolve_expected_p2996_ref() -> str:
     return _extract_bake_variable(bake_path.read_text(), "CLANG_P2996_REF")
 
 
-def resolve_expected_config_sha256() -> str:
-    """SHA-256 of the repo's ``.devcontainer/mise-system.toml``.
-
-    The Dockerfile COPYs this file *verbatim* to
-    ``/usr/local/share/mise/config.toml`` (base stage, no transform), so its
-    hash is a cheap image-identity fingerprint. If the hash of the in-image
-    config differs, the smoked image was NOT built from the current
-    ``mise-system.toml`` — the classic stale-cached-overlay false positive
-    where ``devcontainer up`` reused a ``vsc-dotfiles-<hash>`` overlay and the
-    smoke reported green against old content. Fails loud if the source file is
-    missing rather than silently skipping the identity guard.
-    """
-    config_path = _project_root() / ".devcontainer" / "mise-system.toml"
-    return hashlib.sha256(config_path.read_bytes()).hexdigest()
-
-
-def resolve_expected_runtime_sha256() -> str:
-    """SHA-256 of the repo's ``.devcontainer/mise-runtime.toml`` (#160 T10).
-
-    The devcontainer-runtime stage COPYs this file verbatim to
-    ``/usr/local/share/mise/config.runtime.toml`` — the second half of the
-    two-tier image identity: a stale runtime stage on a current base must
-    fail identity just like a stale base would.
-    """
-    config_path = _project_root() / ".devcontainer" / "mise-runtime.toml"
-    return hashlib.sha256(config_path.read_bytes()).hexdigest()
-
+# The per-file HEAD/merge-base identity resolvers now live with the tier-1
+# identity block (``resolve_expected_identity_head`` /
+# ``resolve_expected_identity_at_base``, below ``resolve_declared_tools``): the
+# Dockerfile COPYs each build input verbatim into the image, so its sha256 is a
+# cheap image-identity fingerprint that catches a stale/cached overlay smoked
+# against old content (#223 folded the config/runtime scalar resolvers into the
+# three-file map ``IDENTITY_IMAGE_PATHS``).
 
 # System mise config inside the image — the Dockerfile COPY target and the
 # ``source.path`` that ``mise ls --json`` attributes system tools to.
@@ -135,6 +115,69 @@ def resolve_declared_tools() -> dict[str, str]:
         parse_declared_tools((root / ".devcontainer" / "mise-runtime.toml").read_text())
     )
     return declared
+
+
+# Image build-input files whose in-image copy is byte-identical to the repo
+# file (verbatim Dockerfile COPY), keyed by repo-relative path -> the in-image
+# location expressed RELATIVE to the mise config dir. The system config uses the
+# ``@SYS@`` sentinel so the smoke reads ``$MISE_SYSTEM_CONFIG_FILE`` directly
+# (#148) rather than a reconstructed path. This map is the single source of
+# truth for the tier-1 identity block, shared by the CI no-mount smoke and the
+# devcontainer smoke (#223) so both assert the SAME three build inputs.
+IDENTITY_IMAGE_PATHS: dict[str, str] = {
+    ".devcontainer/mise-system.toml": "@SYS@",
+    ".config/mise/conf.d/shared.toml": "conf.d/shared.toml",
+    ".devcontainer/mise-runtime.toml": "config.runtime.toml",
+}
+
+
+def resolve_expected_identity_head() -> dict[str, str]:
+    """Expected in-image hashes for the CI smoke (image built from branch HEAD).
+
+    CI smokes the image it JUST built from the branch, so the in-image build
+    inputs are the branch-HEAD files — the expectation is a raw sha256 of the
+    worktree file (identical to origin/main on main). The devcontainer path
+    uses :func:`resolve_expected_identity_at_base` instead (merge-base aware),
+    because a local base predates a branch's image-input bump.
+    """
+    root = _project_root()
+    return {
+        rel: hashlib.sha256((root / rel).read_bytes()).hexdigest()
+        for rel in IDENTITY_IMAGE_PATHS
+    }
+
+
+def resolve_expected_identity_at_base() -> dict[str, str]:
+    """Expected in-image hashes for the devcontainer smoke (merge-base base).
+
+    The local base predates a branch's image-input bump (the branch's base is
+    built by its own PR CI, never locally), so tier-1 identity must expect the
+    MERGE-BASE blob for a branch-modified input and the committed file otherwise
+    — exactly :func:`identity_expected_hash`. Branch identity is validated by the
+    PR CI build+smoke, which builds from HEAD
+    (:func:`resolve_expected_identity_head`).
+    """
+    root = _project_root()
+    return {rel: identity_expected_hash(root, rel) for rel in IDENTITY_IMAGE_PATHS}
+
+
+def _format_identity_lines(expected_identity: Mapping[str, str]) -> str:
+    """Tab-separated ``repo_rel``/``img_rel``/``hash`` lines for the smoke block.
+
+    ``img_rel`` comes from :data:`IDENTITY_IMAGE_PATHS`; all three fields are
+    non-empty (the system file uses the ``@SYS@`` sentinel) so the in-script
+    ``IFS=<tab> read`` never collapses adjacent tabs. An unknown build-input key
+    is a hard error, never a silent drop — a dropped identity line would be an
+    invisible false-green.
+    """
+    unknown = set(expected_identity) - set(IDENTITY_IMAGE_PATHS)
+    if unknown:
+        msg = f"unknown identity build-input(s): {sorted(unknown)}"
+        raise ValueError(msg)
+    return "\n".join(
+        f"{rel}\t{IDENTITY_IMAGE_PATHS[rel]}\t{expected_identity[rel]}"
+        for rel in sorted(expected_identity)
+    )
 
 
 def installed_tools_from_mise_ls(
@@ -234,100 +277,55 @@ def _run(
     )
 
 
-def build_smoke_script(
-    expected_p2996_ref: str,
-    *,
-    expected_config_sha256: str | None = None,
-    expected_runtime_sha256: str | None = None,
-    expected_tools: Mapping[str, str] | None = None,
-    emulated: bool = False,
-) -> str:
-    """Build the inline smoke test script.
-
-    ``expected_p2996_ref`` is injected so the script can assert the
-    clang-p2996 binary baked into the image was actually built from the
-    pinned ref (``resolve_expected_p2996_ref``) — closing the false-positive
-    where a stale/wrong-ref reflection compiler still compiles a reflection
-    program and the smoke passes green. Only a 40-hex SHA triggers the strict
-    equality check; a non-SHA dispatch override still gets the
-    "is-a-real-p2996-build" guard.
-
-    ``expected_config_sha256`` (gap A — image identity) is the hash of the
-    repo's ``mise-system.toml``; when set, the script asserts the in-image
-    ``config.toml`` matches it, catching a stale/cached-overlay image that
-    would otherwise pass smoke against old content. An empty/unset value
-    leaves the guard dormant (unit-test friendly).
-    ``expected_runtime_sha256`` is the runtime-tier half of the same guard
-    (#160 T10): the hash of ``mise-runtime.toml``, asserted against the
-    in-image ``config.runtime.toml``.
-
-    ``expected_tools`` (#143 — exact tool-set assertion) maps declared tool keys
-    to requested versions (``resolve_declared_tools``). When set, the script
-    asserts the installed set sourced from the system config matches it exactly
-    — catching a tool silently dropped/added or a requested-version drift that
-    the ``(missing)``-count check alone passes green. An empty/unset value
-    leaves the guard dormant (unit-test friendly).
-
-    ``emulated`` (gap B — TSan under Rosetta) controls whether the
-    ThreadSanitizer binary is RUN after it is compiled. The compile always
-    runs (it proves the toolchain); the RUN is skipped under emulation, where
-    TSan's shadow-memory layout is incompatible with Rosetta/QEMU.
-    """
-    strict = "1" if _SHA_RE.match(expected_p2996_ref) else ""
-    tsan_run_skip = "1" if emulated else ""
-    expected_tool_lines = (
-        _format_expected_tool_lines(expected_tools) if expected_tools else ""
-    )
-    header = (
-        "set -euo pipefail\n"
-        f"EXPECTED_P2996_REF={shlex.quote(expected_p2996_ref)}\n"
-        f"P2996_REF_STRICT={shlex.quote(strict)}\n"
-        f"EXPECTED_CONFIG_SHA256={shlex.quote(expected_config_sha256 or '')}\n"
-        f"EXPECTED_RUNTIME_SHA256={shlex.quote(expected_runtime_sha256 or '')}\n"
-        f"EXPECTED_TOOL_REQUESTS={shlex.quote(expected_tool_lines)}\n"
-        f"TSAN_RUN_SKIP={shlex.quote(tsan_run_skip)}\n"
-    )
-    return (
-        header
-        + """\
+_TIER1_MISE_PATHS = """\
 # #148: the base SYSTEM config ($MISE_SYSTEM_CONFIG_FILE = the Dockerfile COPY
 # target /usr/local/share/mise/config.toml), NOT ${MISE_CONFIG_DIR}/config.toml
 # — MISE_CONFIG_DIR is overridden at runtime to the user config dir, a
 # different (chezmoi-rendered) file that false-fails identity on a current base.
 MISE_CFG="${MISE_SYSTEM_CONFIG_FILE:-/usr/local/share/mise/config.toml}"
+MISE_DIR="$(dirname "$MISE_CFG")"
 # #160 T5: the shared conf.d fragment is merged into the system config; its
 # tools are attributed to this path by `mise ls --json`, so the tool-set diff
 # must count both sources.
-MISE_SHARED_CFG="$(dirname "$MISE_CFG")/conf.d/shared.toml"
+MISE_SHARED_CFG="$MISE_DIR/conf.d/shared.toml"
 # #160 T9/T10: the runtime tier config, discovered via MISE_ENV=runtime
 # (baked as image ENV); its tools attribute to this source path.
-MISE_RUNTIME_CFG="$(dirname "$MISE_CFG")/config.runtime.toml"
-echo "=== image identity (mise-system config hash) ==="
-if [ -n "$EXPECTED_CONFIG_SHA256" ]; then
-  actual_config_sha256=$(sha256sum "$MISE_CFG" | cut -d' ' -f1)
-  if [ "$actual_config_sha256" != "$EXPECTED_CONFIG_SHA256" ]; then
-    echo "FAIL: in-image mise config $actual_config_sha256 !=" \
-         "repo mise-system.toml $EXPECTED_CONFIG_SHA256 (stale image — rebuild)"
-    exit 1
-  fi
-  echo "OK: image built from current mise-system.toml ($actual_config_sha256)"
+MISE_RUNTIME_CFG="$MISE_DIR/config.runtime.toml"
+"""
+
+# #223: ONE identity loop over every verbatim-COPYd build input (mise-system,
+# the shared conf.d fragment, mise-runtime), replacing the two per-file scalar
+# checks. Expected hashes are injected as data ($EXPECTED_IDENTITY:
+# repo_rel<TAB>img_rel<TAB>hash lines); the @SYS@ sentinel reads
+# $MISE_SYSTEM_CONFIG_FILE directly (#148). A stale/cached overlay smoked
+# against old content fails here. Raw string: `\\t`/backslashes stay literal.
+_TIER1_IDENTITY_BLOCK = r"""echo "=== image identity (build-input hashes) ==="
+if [ -n "$EXPECTED_IDENTITY" ]; then
+  while IFS="$(printf '\t')" read -r repo_rel img_rel want; do
+    [ -n "$repo_rel" ] || continue
+    if [ "$img_rel" = "@SYS@" ]; then
+      img_file="$MISE_CFG"
+    else
+      img_file="$MISE_DIR/$img_rel"
+    fi
+    if [ ! -f "$img_file" ]; then
+      echo "FAIL: in-image build input $img_file missing (from $repo_rel)"
+      exit 1
+    fi
+    actual_identity_sha256=$(sha256sum "$img_file" | cut -d' ' -f1)
+    if [ "$actual_identity_sha256" != "$want" ]; then
+      echo "FAIL: in-image $img_file $actual_identity_sha256 !=" \
+           "$repo_rel $want (stale image — rebuild)"
+      exit 1
+    fi
+    echo "OK: image built from current $repo_rel ($actual_identity_sha256)"
+  done <<< "$EXPECTED_IDENTITY"
 else
-  echo "SKIP: no expected config hash injected (identity guard dormant)"
+  echo "SKIP: no expected identity injected (identity guard dormant)"
 fi
-echo "=== image identity (runtime tier config hash, #160 T10) ==="
-if [ -n "$EXPECTED_RUNTIME_SHA256" ]; then
-  actual_runtime_sha256=$(sha256sum "$MISE_RUNTIME_CFG" | cut -d' ' -f1)
-  if [ "$actual_runtime_sha256" != "$EXPECTED_RUNTIME_SHA256" ]; then
-    echo "FAIL: in-image runtime config $actual_runtime_sha256 !=" \
-         "repo mise-runtime.toml $EXPECTED_RUNTIME_SHA256 (stale — rebuild)"
-    exit 1
-  fi
-  echo "OK: image built from current mise-runtime.toml ($actual_runtime_sha256)"
-else
-  echo "SKIP: no expected runtime hash injected (identity guard dormant)"
-fi
-echo "=== hk validate ==="
-HK_FILE=/etc/hk/hk.pkl hk validate
+"""
+
+_TIER1_MISE_LS_TOOLSET = """\
 echo "=== mise ls (check no missing — system config only) ==="
 mise_output=$(mise ls 2>&1)
 missing=$(echo "$mise_output" | grep -c "(missing)" || true)
@@ -362,6 +360,108 @@ if [ -n "$EXPECTED_TOOL_REQUESTS" ]; then
 else
   echo "SKIP: no expected tool set injected (tool-set guard dormant)"
 fi
+"""
+
+# The tier-1 CORE: image identity + no-missing + exact tool-set. This is the
+# single source of truth shared VERBATIM by the CI no-mount smoke
+# (:func:`build_smoke_script`) and the devcontainer smoke
+# (:func:`build_tier1_script`, emitted by ``image smoke-script --tier 1``) so
+# the two paths cannot diverge (#223). Only the injected DATA differs by caller
+# (HEAD hashes/tools for CI; merge-base for the devcontainer).
+_TIER1_CORE_BODY = _TIER1_MISE_PATHS + _TIER1_IDENTITY_BLOCK + _TIER1_MISE_LS_TOOLSET
+
+
+def _tier1_var_lines(
+    expected_identity: Mapping[str, str] | None,
+    expected_tools: Mapping[str, str] | None,
+) -> str:
+    """Injected-data header lines the tier-1 core reads ($EXPECTED_*)."""
+    identity_blob = (
+        _format_identity_lines(expected_identity) if expected_identity else ""
+    )
+    tool_lines = _format_expected_tool_lines(expected_tools) if expected_tools else ""
+    return (
+        f"EXPECTED_IDENTITY={shlex.quote(identity_blob)}\n"
+        f"EXPECTED_TOOL_REQUESTS={shlex.quote(tool_lines)}\n"
+    )
+
+
+def build_tier1_script(
+    *,
+    expected_identity: Mapping[str, str] | None = None,
+    expected_tools: Mapping[str, str] | None = None,
+) -> str:
+    """Standalone tier-1 core smoke script: image identity + exact tool-set.
+
+    Emitted by ``image smoke-script --tier 1`` for ``scripts/devcontainer-smoke``
+    to run in-container, and reused VERBATIM (the same :data:`_TIER1_CORE_BODY`)
+    by :func:`build_smoke_script` for the CI no-mount smoke — the #223 single
+    source of truth for tier-1 logic. Both guards are dormant (empty injected
+    var) when their data is unset, so an unpopulated call is a no-op, never a
+    false green.
+    """
+    return (
+        "set -euo pipefail\n"
+        + _tier1_var_lines(expected_identity, expected_tools)
+        + _TIER1_CORE_BODY
+    )
+
+
+def build_smoke_script(
+    expected_p2996_ref: str,
+    *,
+    expected_identity: Mapping[str, str] | None = None,
+    expected_tools: Mapping[str, str] | None = None,
+    emulated: bool = False,
+) -> str:
+    """Build the inline CI (no-mount) smoke test script.
+
+    Composes the shared tier-1 core (:data:`_TIER1_CORE_BODY` — image identity
+    + exact tool-set, #223) with the CI-only tail (hk validate, sanitizers,
+    reflection compilers, AI CLIs, zero-warning). The devcontainer smoke runs
+    the SAME core via :func:`build_tier1_script`.
+
+    ``expected_p2996_ref`` is injected so the script can assert the clang-p2996
+    binary baked into the image was actually built from the pinned ref
+    (``resolve_expected_p2996_ref``) — closing the false-positive where a
+    stale/wrong-ref reflection compiler still compiles a reflection program and
+    the smoke passes green. Only a 40-hex SHA triggers the strict equality
+    check; a non-SHA dispatch override still gets the "is-a-real-p2996-build"
+    guard.
+
+    ``expected_identity`` (gap A — image identity) maps each verbatim-COPYd
+    build input (:data:`IDENTITY_IMAGE_PATHS`) to its expected in-image sha256;
+    the tier-1 core asserts each in-image copy matches, catching a stale/cached
+    overlay smoked against old content. An empty/unset map leaves the guard
+    dormant (unit-test friendly).
+
+    ``expected_tools`` (#143 — exact tool-set assertion) maps declared tool keys
+    to requested versions (``resolve_declared_tools``). When set, the script
+    asserts the installed set sourced from the system config matches it exactly
+    — catching a tool silently dropped/added or a requested-version drift that
+    the ``(missing)``-count check alone passes green. An empty/unset value
+    leaves the guard dormant (unit-test friendly).
+
+    ``emulated`` (gap B — TSan under Rosetta) controls whether the
+    ThreadSanitizer binary is RUN after it is compiled. The compile always
+    runs (it proves the toolchain); the RUN is skipped under emulation, where
+    TSan's shadow-memory layout is incompatible with Rosetta/QEMU.
+    """
+    strict = "1" if _SHA_RE.match(expected_p2996_ref) else ""
+    tsan_run_skip = "1" if emulated else ""
+    header = (
+        "set -euo pipefail\n"
+        + _tier1_var_lines(expected_identity, expected_tools)
+        + f"EXPECTED_P2996_REF={shlex.quote(expected_p2996_ref)}\n"
+        + f"P2996_REF_STRICT={shlex.quote(strict)}\n"
+        + f"TSAN_RUN_SKIP={shlex.quote(tsan_run_skip)}\n"
+    )
+    return (
+        header
+        + _TIER1_CORE_BODY
+        + """\
+echo "=== hk validate ==="
+HK_FILE=/etc/hk/hk.pkl hk validate
 echo "=== shell integration ==="
 command -v zsh || { echo "FAIL: zsh not found"; exit 1; }
 command -v git || { echo "FAIL: git not found"; exit 1; }
@@ -505,26 +605,27 @@ def build_smoke_docker_cmd(
     *,
     platform: str = "linux/amd64/v2",
     expected_p2996_ref: str | None = None,
-    expected_config_sha256: str | None = None,
+    expected_identity: Mapping[str, str] | None = None,
     emulated: bool | None = None,
 ) -> list[str]:
     """Build the docker command used for smoke validation.
 
-    The declared tool set (#143) is always resolved from the repo's
-    ``mise-system.toml`` here — it has no injectable override because, unlike the
-    p2996-ref / config-hash, nothing needs to smoke against a *synthetic* tool
-    set; ``build_smoke_script`` remains the injection seam for unit tests.
+    CI smokes the image it just built from branch HEAD, so identity + tool-set
+    resolve to the HEAD content (:func:`resolve_expected_identity_head` /
+    :func:`resolve_declared_tools`) — the devcontainer path injects merge-base
+    data instead (:func:`build_tier1_script`). The declared tool set has no
+    injectable override (nothing smokes a *synthetic* set); ``build_smoke_script``
+    remains the injection seam for unit tests.
     """
     if expected_p2996_ref is None:
         expected_p2996_ref = resolve_expected_p2996_ref()
-    if expected_config_sha256 is None:
-        expected_config_sha256 = resolve_expected_config_sha256()
+    if expected_identity is None:
+        expected_identity = resolve_expected_identity_head()
     if emulated is None:
         emulated = _is_emulated(platform)
     script = build_smoke_script(
         expected_p2996_ref,
-        expected_config_sha256=expected_config_sha256,
-        expected_runtime_sha256=resolve_expected_runtime_sha256(),
+        expected_identity=expected_identity,
         expected_tools=resolve_declared_tools(),
         emulated=emulated,
     )
@@ -970,6 +1071,7 @@ class ImageCommand:
     run_id: str | None = None
     repo: str | None = None
     summary_path: Path | None = None
+    tier: int | None = None
 
 
 def base_currency_blob(repo_root: Path, rel_path: str) -> bytes:
@@ -1021,8 +1123,11 @@ def identity_expected_hash(repo_root: Path, rel_path: str) -> str:
 def identity_expected_main(rel_path: str) -> int:
     """CLI: print the tier-1 expected hash for ``rel_path`` (see above).
 
-    Called by ``scripts/devcontainer-smoke.sh`` so the merge-base decision
-    lives in python, not bash (zero-bash-logic).
+    Standalone debug/inspection command. As of #223 the devcontainer smoke no
+    longer calls this per-file — tier-1 identity is generated by
+    :func:`build_tier1_script` (``image smoke-script --tier 1``), which injects
+    :func:`resolve_expected_identity_at_base` in one shot. Retirement of this
+    thin wrapper is a #223 follow-up candidate.
     """
     sys.stdout.write(identity_expected_hash(_project_root(), rel_path) + "\n")
     return 0
@@ -1033,10 +1138,11 @@ def resolve_declared_tools_at_base(repo_root: Path) -> dict[str, str]:
 
     Merge-base-aware sibling of :func:`resolve_declared_tools` (which reads
     HEAD and feeds ``build_smoke_script`` — CI builds the image FROM the
-    branch config, so it must compare against HEAD). The local
-    devcontainer's base predates a branch's image-input bump, so
-    ``verify_tools_main`` compares installed tools against the merge-base
-    declaration; branch tool bumps are validated by the PR CI build+smoke.
+    branch config, so it must compare against HEAD). The local devcontainer's
+    base predates a branch's image-input bump, so the devcontainer smoke's
+    tier-1 tool-set (injected by :func:`build_tier1_script` / ``smoke-script
+    --tier 1``) compares installed tools against this merge-base declaration;
+    branch tool bumps are validated by the PR CI build+smoke.
     """
     declared: dict[str, str] = {}
     for rel_path in (
@@ -1054,10 +1160,13 @@ def verify_tools_main() -> int:
     """Assert the installed tool set matches the base-declared ``[tools]``.
 
     Runs ``mise ls --json`` against the ambient mise (inside the devcontainer)
-    and compares to the MERGE-BASE declared ``[tools]`` — the in-container
-    sibling of the ``build_smoke_script`` assertion (#143), sharing the same
-    parse/compare core so the two smoke paths cannot diverge. Called by
-    ``scripts/devcontainer-smoke.sh`` (keeps the diff logic in python, not bash).
+    and compares to the MERGE-BASE declared ``[tools]``. Standalone
+    debug/inspection command: as of #223 the devcontainer smoke asserts the
+    tool-set through the shared tier-1 core (:func:`build_tier1_script`, the
+    same bash jq/diff the CI no-mount smoke runs) rather than this python diff,
+    so the two smoke paths cannot diverge. Retirement of this now-off-path
+    wrapper (and its ``installed_tools_from_mise_ls`` / ``diff_tool_sets``
+    helpers) is a #223 follow-up candidate.
 
     Uses :func:`resolve_declared_tools_at_base`, not
     :func:`resolve_declared_tools`: the local base predates a branch's
@@ -1091,6 +1200,36 @@ def verify_tools_main() -> int:
         f"({len(declared)} tools)\n"
     )
     return 0
+
+
+_SMOKE_SCRIPT_TIER1 = 1
+
+
+def smoke_script_main(tier: int | None) -> int:
+    """CLI: print the shared tier-1 smoke core for the devcontainer smoke (#223).
+
+    ``scripts/devcontainer-smoke.sh`` evaluates this so its in-container tier-1
+    (image identity + exact tool-set) is byte-identical to the CI no-mount smoke
+    — the two paths run the SAME :data:`_TIER1_CORE_BODY`. The injected DATA is
+    merge-base aware (:func:`resolve_expected_identity_at_base` /
+    :func:`resolve_declared_tools_at_base`): the local base predates a branch's
+    image-input bump, which is validated by the branch's own PR CI build+smoke.
+    Only tier 1 is migrated to python; tiers 2/3 stay in bash for now.
+    """
+    if tier != _SMOKE_SCRIPT_TIER1:
+        sys.stderr.write(f"smoke-script: unsupported tier {tier!r} (only --tier 1)\n")
+        return 2
+    root = _project_root()
+    script = build_tier1_script(
+        expected_identity=resolve_expected_identity_at_base(),
+        expected_tools=resolve_declared_tools_at_base(root),
+    )
+    sys.stdout.write(script)
+    return 0
+
+
+def _handle_smoke_script(cmd: ImageCommand) -> int:
+    return smoke_script_main(cmd.tier)
 
 
 def _handle_verify_tools(_cmd: ImageCommand) -> int:
@@ -1156,6 +1295,7 @@ def main(cmd: ImageCommand) -> int:
     handlers: dict[str, Callable[[ImageCommand], int]] = {
         "verify-tools": _handle_verify_tools,
         "identity-expected": _handle_identity_expected,
+        "smoke-script": _handle_smoke_script,
         "smoke": _handle_smoke,
         "size-report": _handle_size_report,
         "benchmark": _handle_benchmark,

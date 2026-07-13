@@ -200,6 +200,19 @@ def _add_image_subcommands(
         "verify-tools",
         help="Assert installed tool set matches mise-system.toml [tools] (#143)",
     )
+    smoke_script_parser = image_sub.add_parser(
+        "smoke-script",
+        help="Print the shared tier-1 smoke core (image identity + exact "
+        "tool-set) for scripts/devcontainer-smoke.sh to eval — the same core "
+        "the CI no-mount smoke runs, so the two paths cannot diverge (#223)",
+    )
+    smoke_script_parser.add_argument(
+        "--tier",
+        type=int,
+        required=True,
+        choices=[1],
+        help="Smoke tier to emit (only tier 1 is migrated to python; 2/3 stay in bash)",
+    )
     identity_parser = image_sub.add_parser(
         "identity-expected",
         help="Print the smoke tier-1 expected sha256 for an image build input "
@@ -579,6 +592,9 @@ def handle_image(args: argparse.Namespace) -> None:
         sys.exit(image_main(cmd))
     if args.image_command == "identity-expected":
         cmd = ImageCommand("", command="identity-expected", identity_path=args.path)
+        sys.exit(image_main(cmd))
+    if args.image_command == "smoke-script":
+        cmd = ImageCommand("", command="smoke-script", tier=args.tier)
         sys.exit(image_main(cmd))
     if args.image_command == "smoke":
         cmd = ImageCommand(args.image_ref, platform=args.platform)
