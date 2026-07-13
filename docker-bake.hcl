@@ -44,8 +44,12 @@ variable "PUSH" {
 # tags are NOT busted by this attribute (base-hash/p2996-hash read file bytes,
 # not the bake output) — so they stay warm gzip cache-hits and force-compression
 # is what recompresses them to zstd in the final manifest, no cold rebuild.
-# compression-level is left at the buildkit zstd default for this first flip
-# (single-variable size measurement vs the 9.26 GB gzip baseline); tune later.
+# compression-level: this shared variable stays at the buildkit zstd default (~3).
+# It feeds the base/p2996 INTERNAL cache images, whose layers the `dev` target
+# recompresses via force-compression anyway — so a higher level here would only
+# add rebuild time on genuine base/p2996 rebuilds with no effect on the published
+# bytes. The published `dev` target pins compression-level=19 inline on its own
+# output (#222 fast-follow); see the `dev` block below.
 variable "COMPRESSION_OUTPUT" {
   default = "compression=zstd,oci-mediatypes=true,force-compression=true"
 }
@@ -130,13 +134,16 @@ target "dev" {
     "type=provenance,mode=max",
     "type=sbom",
   ]
-  # zstd + OCI media types + force-compression (#222). Editing this block is
-  # deliberate: `dev_target_digest` (p2996_hash.py) hashes the whole `dev`
-  # target, so adding this output BUSTS dev-hash — the dev-prep probe MISSES
-  # and CI actually rebuilds, applying zstd. Without a block edit the existing
-  # gzip `:dev-<hash>` would be a cache-hit and the flip a silent no-op.
+  # zstd + OCI media types + force-compression (#222) + compression-level=19
+  # (#222 fast-follow). Editing this block is deliberate: `dev_target_digest`
+  # (p2996_hash.py) hashes the whole `dev` target, so changing this output line
+  # BUSTS dev-hash — the dev-prep probe MISSES and CI actually rebuilds, applying
+  # the new level. Without a block edit the existing `:dev-<hash>` would be a
+  # cache-hit and the change a silent no-op. compression-level=19 is the max
+  # standard zstd level (buildkit default is ~3); force-compression recompresses
+  # even the warm base/p2996 named-context layers to level 19 in the final image.
   output = [
-    "type=image,push=${PUSH},${COMPRESSION_OUTPUT}",
+    "type=image,push=${PUSH},${COMPRESSION_OUTPUT},compression-level=19",
   ]
 }
 
