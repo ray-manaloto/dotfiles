@@ -43,6 +43,13 @@ Tiers:
 
 Tier 4 (CLion remote toolchain) is manual.
 
+`mise run smoke-exec` is a complementary **containerized real-toolchain
+exec gate** (`tests/test_image_smoke_exec.py`, marked `image_exec`): it runs
+the python-generated tier-1/tier-3 smoke cores against the local `:dev`
+image and asserts both the happy path and a tampered FAIL. It's deselected
+from the default `mise run test` (root `pytest.ini`) and needs Docker + a
+current `:dev` (`mise run sync`).
+
 ## Hard rules (DO NOT VIOLATE)
 
 1. **Never grow `Dockerfile.host-user` beyond 89 lines.** Add capabilities via
