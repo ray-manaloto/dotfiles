@@ -14,6 +14,7 @@ import sys
 import time
 import tomllib
 import zlib
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from dotfiles_setup import _project_root
@@ -723,9 +724,10 @@ def benchmark(
     smoke_finished = time.time()
     report = size_report(image_ref, platform=platform)
     finished = time.time()
+    tool_count = count_installed_tools(image_ref, platform=platform)
 
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "image_ref": image_ref,
         "platform": platform,
         "smoke": smoke_result,
@@ -736,6 +738,7 @@ def benchmark(
         },
         "image_size_bytes": report["image_size_bytes"],
         "compressed_size_bytes": report["compressed_size_bytes"],
+        "tool_count": tool_count,
         "top_layers": report["top_layers"],
         "result": smoke_result["result"].lower(),
     }
@@ -763,6 +766,195 @@ def metrics_compare(baseline_path: Path, candidate_path: Path) -> dict[str, Any]
     }
 
 
+def _count_tools_from_mise_ls(raw: str) -> int:
+    """Count installed tool entries from ``mise ls --json`` output.
+
+    ``mise ls --json`` maps each tool key to a list of its installed version
+    objects, so summing those list lengths counts every installed
+    (tool, version) entry — the JSON-robust equivalent of ``mise ls | wc -l``
+    (one line per tool-version) without depending on the plain-text columns.
+    """
+    data = json.loads(raw)
+    total = 0
+    for versions in data.values():
+        total += len(versions) if isinstance(versions, list) else 1
+    return total
+
+
+def count_installed_tools(image_ref: str, *, platform: str = "linux/amd64/v2") -> int:
+    """Installed tool count inside ``image_ref`` via ``mise ls --json``.
+
+    Runs mise in a login shell (``-lc``) so the image's mise activation and
+    PATH are in effect, mirroring :func:`build_smoke_docker_cmd`.
+    """
+    raw = _run(
+        [
+            "docker",
+            "run",
+            "--rm",
+            "--platform",
+            platform,
+            "--entrypoint",
+            "/bin/bash",
+            image_ref,
+            "-lc",
+            "mise ls --json",
+        ],
+    ).stdout
+    return _count_tools_from_mise_ls(raw)
+
+
+def _parse_build_timing(jobs_json: str) -> dict[str, Any]:
+    """Reduce a ``/actions/runs/<id>/jobs`` payload to timing metrics.
+
+    Jobs in the reusable build chain run partly in parallel, so the honest
+    "total build time" is wall-clock: the span from the earliest job start to
+    the latest job completion. Per-job durations are kept for a visibility
+    breakdown. Jobs still running (null ``completed_at``) are skipped — this
+    runs after CI has completed, so that is only a defensive guard.
+    """
+    doc = json.loads(jobs_json)
+    per_job: list[dict[str, Any]] = []
+    starts: list[datetime] = []
+    ends: list[datetime] = []
+    for job in doc.get("jobs", []):
+        started = job.get("started_at")
+        completed = job.get("completed_at")
+        if not started or not completed:
+            continue
+        start_dt = datetime.fromisoformat(started)
+        end_dt = datetime.fromisoformat(completed)
+        starts.append(start_dt)
+        ends.append(end_dt)
+        per_job.append(
+            {
+                "name": job.get("name", "?"),
+                "conclusion": job.get("conclusion"),
+                "duration_s": round((end_dt - start_dt).total_seconds(), 3),
+            }
+        )
+    total_wall_s = (
+        round((max(ends) - min(starts)).total_seconds(), 3) if starts else 0.0
+    )
+    return {"total_wall_s": total_wall_s, "jobs": per_job}
+
+
+def fetch_build_timing(run_id: str, repo: str) -> dict[str, Any]:
+    """Fetch upstream CI-run job timings via ``gh api`` (needs actions:read).
+
+    ``run_id`` is the source CI run exposed by the ``workflow_run`` trigger
+    (``github.event.workflow_run.id``); ``repo`` is ``owner/name``. Uses the
+    native jobs endpoint — no build-job instrumentation needed. No
+    ``--paginate``: the object-wrapped list endpoint would emit one JSON doc
+    per page (unparsable), and the build chain has far fewer than 100 jobs.
+    """
+    raw = _run(
+        ["gh", "api", f"repos/{repo}/actions/runs/{run_id}/jobs"],
+    ).stdout
+    return _parse_build_timing(raw)
+
+
+_BYTE_STEP = 1024.0
+
+
+def _format_bytes(num_bytes: int) -> str:
+    value = float(num_bytes)
+    for unit in ("B", "KB", "MB", "GB"):
+        if abs(value) < _BYTE_STEP:
+            return f"{int(value)} {unit}" if unit == "B" else f"{value:.2f} {unit}"
+        value /= _BYTE_STEP
+    return f"{value:.2f} TB"
+
+
+def _format_duration(seconds: float) -> str:
+    total = round(seconds)
+    minutes, secs = divmod(total, 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours:
+        return f"{hours}h {minutes}m {secs}s"
+    if minutes:
+        return f"{minutes}m {secs}s"
+    return f"{secs}s"
+
+
+def render_metrics_summary(
+    payload: Mapping[str, Any], timing: Mapping[str, Any] | None
+) -> str:
+    """Render benchmark ``payload`` (+ optional CI ``timing``) as markdown.
+
+    GitHub-flavored markdown for ``$GITHUB_STEP_SUMMARY``. Pure — no IO.
+    """
+    compressed = _format_bytes(payload.get("compressed_size_bytes", 0))
+    uncompressed = _format_bytes(payload.get("image_size_bytes", 0))
+    lines: list[str] = [
+        "## \U0001f433 Devcontainer image metrics",
+        "",
+        f"**Image:** `{payload.get('image_ref', '?')}`",
+        "",
+        "| Metric | Value |",
+        "| --- | --- |",
+        f"| Compressed size | {compressed} |",
+        f"| Uncompressed size | {uncompressed} |",
+    ]
+    if "tool_count" in payload:
+        lines.append(f"| Installed tools | {payload['tool_count']} |")
+    lines.append(f"| Smoke result | {payload.get('result', '?').upper()} |")
+    if timing is not None:
+        lines.append(
+            f"| CI build time (wall) | {_format_duration(timing['total_wall_s'])} |"
+        )
+    lines.append("")
+
+    top_layers = payload.get("top_layers") or []
+    if top_layers:
+        lines += ["### Largest layers", "", "| Size | Created by |", "| --- | --- |"]
+        lines.extend(
+            f"| {_format_bytes(layer.get('size_bytes', 0))} | "
+            f"`{layer.get('created_by', '').replace('|', '\\|')}` |"
+            for layer in top_layers[:5]
+        )
+        lines.append("")
+
+    jobs = (timing or {}).get("jobs") or []
+    if jobs:
+        lines += [
+            "### CI job timings",
+            "",
+            "| Job | Duration | Conclusion |",
+            "| --- | --- | --- |",
+        ]
+        lines.extend(
+            f"| {job.get('name', '?')} "
+            f"| {_format_duration(job.get('duration_s', 0))} "
+            f"| {job.get('conclusion') or '?'} |"
+            for job in jobs
+        )
+        lines.append("")
+
+    return "\n".join(lines) + "\n"
+
+
+def metrics_summary(
+    metrics_path: Path,
+    *,
+    run_id: str | None = None,
+    repo: str | None = None,
+    summary_path: Path | None = None,
+) -> str:
+    """Read a benchmark JSON, render a step summary, return the markdown.
+
+    Optionally fetches upstream CI timings (when ``run_id``/``repo`` given)
+    and appends the rendered markdown to ``summary_path``.
+    """
+    payload = json.loads(metrics_path.read_text(encoding="utf-8"))
+    timing = fetch_build_timing(run_id, repo) if run_id and repo else None
+    markdown = render_metrics_summary(payload, timing)
+    if summary_path is not None:
+        with summary_path.open("a", encoding="utf-8") as handle:
+            handle.write(markdown)
+    return markdown
+
+
 @dataclasses.dataclass(frozen=True)
 class ImageCommand:
     """Parsed image CLI command parameters."""
@@ -774,6 +966,10 @@ class ImageCommand:
     baseline_path: Path | None = None
     candidate_path: Path | None = None
     identity_path: str | None = None
+    metrics_path: Path | None = None
+    run_id: str | None = None
+    repo: str | None = None
+    summary_path: Path | None = None
 
 
 def base_currency_blob(repo_root: Path, rel_path: str) -> bytes:
@@ -941,6 +1137,20 @@ def _handle_metrics_compare(cmd: ImageCommand) -> int:
     return 0
 
 
+def _handle_metrics_summary(cmd: ImageCommand) -> int:
+    if cmd.metrics_path is None:
+        sys.stderr.write("metrics-summary requires --metrics-path\n")
+        return 2
+    markdown = metrics_summary(
+        cmd.metrics_path,
+        run_id=cmd.run_id,
+        repo=cmd.repo,
+        summary_path=cmd.summary_path,
+    )
+    sys.stdout.write(markdown)
+    return 0
+
+
 def main(cmd: ImageCommand) -> int:
     """CLI entry point for image operations (command → handler dispatch)."""
     handlers: dict[str, Callable[[ImageCommand], int]] = {
@@ -950,6 +1160,7 @@ def main(cmd: ImageCommand) -> int:
         "size-report": _handle_size_report,
         "benchmark": _handle_benchmark,
         "metrics-compare": _handle_metrics_compare,
+        "metrics-summary": _handle_metrics_summary,
     }
     handler = handlers.get(cmd.command)
     if handler is None:

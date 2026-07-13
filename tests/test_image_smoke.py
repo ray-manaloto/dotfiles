@@ -14,7 +14,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 import json
 
 from dotfiles_setup.image import (
+    _count_tools_from_mise_ls,
+    _format_bytes,
+    _format_duration,
     _is_emulated,
+    _parse_build_timing,
     _parse_human_size,
     _repo_without_tag,
     _sum_manifest_layer_sizes,
@@ -24,7 +28,9 @@ from dotfiles_setup.image import (
     diff_tool_sets,
     identity_expected_hash,
     installed_tools_from_mise_ls,
+    metrics_summary,
     parse_declared_tools,
+    render_metrics_summary,
     resolve_declared_tools,
     resolve_declared_tools_at_base,
     resolve_expected_config_sha256,
@@ -636,3 +642,138 @@ def test_resolve_declared_tools_at_base_on_main_is_worktree(tmp_path: Path) -> N
 def test_base_currency_blob_returns_bytes(tmp_path: Path) -> None:
     repo = _identity_fixture_repo(tmp_path)
     assert base_currency_blob(repo, "config.toml") == b"original\n"
+
+
+# --- #17 build-metrics: tool-count, build-time, step-summary ---------------
+
+# Expected tool-entry count for the mise-ls fixture below (jq: 1, python: 2).
+_EXPECTED_TOOL_ENTRIES = 3
+
+# Expected wall-clock seconds for the two-job jobs fixture (12:00:05 → 12:10:05).
+_EXPECTED_WALL_SECONDS = 600.0
+
+# One gibibyte, for the byte-format assertion.
+_ONE_GIB = 1024**3
+
+
+def test_count_tools_from_mise_ls_sums_version_entries() -> None:
+    raw = json.dumps(
+        {
+            "jq": [{"version": "1.8.1", "installed": True}],
+            "python": [
+                {"version": "3.14.0", "installed": True},
+                {"version": "3.13.0", "installed": True},
+            ],
+        }
+    )
+    assert _count_tools_from_mise_ls(raw) == _EXPECTED_TOOL_ENTRIES
+
+
+def test_parse_build_timing_computes_wall_clock_and_per_job() -> None:
+    jobs = json.dumps(
+        {
+            "jobs": [
+                {
+                    "name": "base-prep",
+                    "conclusion": "success",
+                    "started_at": "2026-07-13T12:00:05Z",
+                    "completed_at": "2026-07-13T12:00:25Z",
+                },
+                {
+                    "name": "build",
+                    "conclusion": "success",
+                    "started_at": "2026-07-13T12:00:30Z",
+                    "completed_at": "2026-07-13T12:10:05Z",
+                },
+                {
+                    "name": "still-running",
+                    "conclusion": None,
+                    "started_at": "2026-07-13T12:10:00Z",
+                    "completed_at": None,
+                },
+            ]
+        }
+    )
+    timing = _parse_build_timing(jobs)
+    # Wall clock spans earliest start (12:00:05) to latest completion (12:10:05).
+    assert timing["total_wall_s"] == _EXPECTED_WALL_SECONDS
+    # The still-running job (null completed_at) is skipped.
+    assert [job["name"] for job in timing["jobs"]] == ["base-prep", "build"]
+
+
+def test_parse_build_timing_empty_is_zero() -> None:
+    timing = _parse_build_timing(json.dumps({"jobs": []}))
+    assert timing["total_wall_s"] == 0.0
+    assert timing["jobs"] == []
+
+
+def test_format_bytes_scales_units() -> None:
+    assert _format_bytes(512) == "512 B"
+    assert _format_bytes(_ONE_GIB) == "1.00 GB"
+
+
+def test_format_duration_renders_hms() -> None:
+    assert _format_duration(45) == "45s"
+    assert _format_duration(605) == "10m 5s"
+    assert _format_duration(3661) == "1h 1m 1s"
+
+
+def test_render_metrics_summary_includes_all_sections() -> None:
+    payload = {
+        "image_ref": "ghcr.io/owner/repo:abc1234",
+        "compressed_size_bytes": _ONE_GIB,
+        "image_size_bytes": 2 * _ONE_GIB,
+        "tool_count": 107,
+        "result": "pass",
+        "top_layers": [{"created_by": "RUN mise install", "size_bytes": _ONE_GIB}],
+    }
+    timing = {
+        "total_wall_s": _EXPECTED_WALL_SECONDS,
+        "jobs": [{"name": "build", "conclusion": "success", "duration_s": 300.0}],
+    }
+    markdown = render_metrics_summary(payload, timing)
+    assert "Devcontainer image metrics" in markdown
+    assert "ghcr.io/owner/repo:abc1234" in markdown
+    assert "| Installed tools | 107 |" in markdown
+    assert "| Smoke result | PASS |" in markdown
+    assert "| CI build time (wall) | 10m 0s |" in markdown
+    assert "### Largest layers" in markdown
+    assert "### CI job timings" in markdown
+
+
+def test_render_metrics_summary_without_timing_omits_ci_sections() -> None:
+    payload = {
+        "image_ref": "ghcr.io/owner/repo:abc1234",
+        "compressed_size_bytes": _ONE_GIB,
+        "image_size_bytes": _ONE_GIB,
+        "result": "pass",
+        "top_layers": [],
+    }
+    markdown = render_metrics_summary(payload, None)
+    assert "CI build time" not in markdown
+    assert "### CI job timings" not in markdown
+
+
+def test_metrics_summary_appends_to_summary_path(tmp_path: Path) -> None:
+    metrics = tmp_path / "metrics.json"
+    metrics.write_text(
+        json.dumps(
+            {
+                "image_ref": "ghcr.io/owner/repo:abc1234",
+                "compressed_size_bytes": _ONE_GIB,
+                "image_size_bytes": _ONE_GIB,
+                "tool_count": 42,
+                "result": "pass",
+                "top_layers": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    summary = tmp_path / "summary.md"
+    summary.write_text("pre-existing\n", encoding="utf-8")
+    returned = metrics_summary(metrics, summary_path=summary)
+    written = summary.read_text(encoding="utf-8")
+    # Appends (does not truncate) and returns the same markdown it wrote.
+    assert written.startswith("pre-existing\n")
+    assert "| Installed tools | 42 |" in written
+    assert returned in written
