@@ -39,7 +39,7 @@ the official `@devcontainers/cli` (pinned in `mise.toml`).
 | `mise.toml` + `.config/mise/conf.d/shared.toml` | Host tool versions + tasks; the 20 tools shared with the image (hk, pkl, linters, python, uv, chezmoi) live in the exact-pinned shared fragment both host and image merge (#160 T5) |
 | `mise.lock` | Locked tool versions for reproducible installs |
 | `mise.local.toml` | Gitignored per-clone overrides (e.g., `BASE_IMAGE`). See `mise.local.toml.example` |
-| `hk.pkl` | Project git hook config; imports `hk-common.pkl`; enforces `no_lint_skip`, `no_mcp_registration`, `require_pipefail`, `claude_md_import_stub`, `claude_agents_md_pairs` |
+| `hk.pkl` | Project git hook config; imports `hk-common.pkl`; enforces `no_lint_skip`, `no_mcp_registration`, `require_pipefail`, `bash_logic_budget`, `claude_md_import_stub`, `claude_agents_md_pairs` |
 | `hk-common.pkl` | Shared step definitions (hygiene, safety, security, typos) reused by `hk.pkl` and `hk-image.pkl` |
 | `hk-image.pkl` | Image-only hook config for devcontainer validation |
 | `docker-bake.hcl` | BuildKit bake config (`dev`, `dev-load` build targets + `base`/`p2996-cache` CI stages); `IMAGE_REF` consolidates registry+image |
@@ -56,7 +56,7 @@ the official `@devcontainers/cli` (pinned in `mise.toml`).
 | `.claude/` | Claude-specific agents, skills, rules. Has its own `CLAUDE.md` with OMC orchestration |
 | `home/` | Chezmoi-managed dotfile templates (its AGENTS.md was removed in #80) |
 | `python/` | Python package `dotfiles_setup` — see `python/AGENTS.md` |
-| `tests/` | Pytest + Bats test suite (413 pytest tests) — see `tests/AGENTS.md` |
+| `tests/` | Pytest + Bats test suite (421 pytest tests) — see `tests/AGENTS.md` |
 | `scripts/` | Utility scripts (`benchmark-docker.sh`, `devcontainer-smoke.sh`) |
 | `docs/` | Documentation, research findings, design specs |
 
@@ -86,7 +86,7 @@ content-hashed since hk 1.47 — no manual cache clearing after edits.
 ## Testing
 
 ```bash
-uv run --project python pytest tests/ -x -q               # All 413 tests
+uv run --project python pytest tests/ -x -q               # All 421 tests
 uv run --project python pytest tests/test_audit.py -x -q  # Single file
 mise run lint                                             # Lint checks only (hk under a hard timeout)
 dotfiles-setup verify run                                 # Verification contracts (suites.toml)
