@@ -27,6 +27,7 @@ on: # zizmor: ignore[dangerous-triggers] — deliberate: see comment above
 permissions:
   contents: read
   packages: read
+  actions: read # read the upstream CI run's job timings (build-metrics, #17)
   security-events: write # Trivy SARIF → GitHub code scanning
 concurrency:
   group: image-analysis-${{ github.event.workflow_run.head_sha }}
@@ -119,6 +120,21 @@ jobs:
             --image-ref "$REF" \
             --output-path artifacts/build/devcontainer-metrics.json \
             > /tmp/devcontainer-metrics.stdout.json
+      - name: Render metrics step summary (#17)
+        # Renders size + installed-tool-count + smoke + upstream CI build-time
+        # to the run summary. Visibility-only — never gates. build-time comes
+        # from the source CI run's jobs API (workflow_run.id → actions:read).
+        if: steps.image.outputs.present == 'true'
+        env:
+          METRICS_RUN_ID: ${{ github.event.workflow_run.id }}
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          uv run --project python dotfiles-setup image metrics-summary \
+            --metrics-path artifacts/build/devcontainer-metrics.json \
+            --run-id "$METRICS_RUN_ID" \
+            --repo "$REPO" \
+            --summary-path "$GITHUB_STEP_SUMMARY"
       - name: Scan image for CVEs (Trivy, warn-only)
         # warn-only (exit-code 0): SARIF surfaces in the Security tab; does not
         # gate. `scanners: vuln` + `timeout: 15m` per the heavy-image notes that

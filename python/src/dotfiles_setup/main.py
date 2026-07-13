@@ -220,6 +220,30 @@ def _add_image_subcommands(
         required=True,
         help="Candidate JSON path",
     )
+    summary_parser = image_sub.add_parser(
+        "metrics-summary",
+        help="Render a benchmark JSON (+ optional CI run timings) as a "
+        "GitHub step-summary markdown report (#17)",
+    )
+    summary_parser.add_argument(
+        "--metrics-path",
+        required=True,
+        help="Benchmark JSON produced by `image benchmark`",
+    )
+    summary_parser.add_argument(
+        "--run-id",
+        help="Upstream CI run id (github.event.workflow_run.id) for build-time "
+        "metrics; omit to skip the CI-timing section",
+    )
+    summary_parser.add_argument(
+        "--repo",
+        help="owner/name for the gh jobs API (github.repository)",
+    )
+    summary_parser.add_argument(
+        "--summary-path",
+        help="File to append the rendered markdown to (e.g. $GITHUB_STEP_SUMMARY); "
+        "always also printed to stdout",
+    )
 
 
 def _add_pr_subcommands(
@@ -581,6 +605,16 @@ def handle_image(args: argparse.Namespace) -> None:
             command="metrics-compare",
             baseline_path=Path(args.baseline),
             candidate_path=Path(args.candidate),
+        )
+        sys.exit(image_main(cmd))
+    if args.image_command == "metrics-summary":
+        cmd = ImageCommand(
+            "",
+            command="metrics-summary",
+            metrics_path=Path(args.metrics_path),
+            run_id=args.run_id,
+            repo=args.repo,
+            summary_path=Path(args.summary_path) if args.summary_path else None,
         )
         sys.exit(image_main(cmd))
 
