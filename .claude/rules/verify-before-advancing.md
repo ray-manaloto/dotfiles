@@ -59,7 +59,8 @@ and a green result against it is a false positive.
   identity (PR #140 "Gap A") compares the in-image `config.toml` hash to
   the expected build input and **hard-fails a stale base**. On a branch
   that CHANGES an image build input, "expected" is the merge-base blob
-  (`dotfiles-setup image identity-expected`) — the new base is built by
+  (injected by `dotfiles-setup image smoke-script --tier 1` via
+  `resolve_expected_identity_at_base`) — the new base is built by
   that PR's own CI, so branch-config identity is validated there, not
   locally. Refresh with
   `mise run dev-rebuild` (pulls the registry `:dev`; on a slow link this is

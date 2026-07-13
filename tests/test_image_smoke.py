@@ -37,10 +37,8 @@ from dotfiles_setup.image import (
     classify_layer_source,
     compare_payloads,
     decide_analysis_target,
-    diff_tool_sets,
     estimate_pull_time_s,
     identity_expected_hash,
-    installed_tools_from_mise_ls,
     metrics_summary,
     parse_declared_tools,
     render_metrics_summary,
@@ -382,12 +380,6 @@ def test_smoke_docker_cmd_injects_real_identity() -> None:
 
 # --- #143: exact tool-set assertion ---
 
-# The in-image system mise config path (mise ls --json source.path).
-_SYS_CFG = "/usr/local/share/mise/config.toml"
-
-# Missing + extra + version-drift = three distinct diff-line classes.
-_EXPECTED_DIFF_CLASSES = 3
-
 # A minimal mise-system.toml covering both [tools] value forms.
 _SAMPLE_MISE_TOML = """\
 [tools]
@@ -401,25 +393,6 @@ experimental = true
 """
 
 
-def _mise_ls_json(entries: dict[str, dict[str, object]]) -> str:
-    """Build a mise ls --json payload from the given entries.
-
-    Each entry maps key -> {version, requested, source, installed}.
-    """
-    doc = {
-        key: [
-            {
-                "version": e.get("version", "9.9.9"),
-                "requested_version": e.get("requested", "latest"),
-                "source": {"type": "mise.toml", "path": e.get("source", _SYS_CFG)},
-                "installed": e.get("installed", True),
-            }
-        ]
-        for key, e in entries.items()
-    }
-    return json.dumps(doc)
-
-
 def test_parse_declared_tools_handles_both_value_forms() -> None:
     """Bare string and table ({version,...}) [tools] entries both parse."""
     declared = parse_declared_tools(_SAMPLE_MISE_TOML)
@@ -430,62 +403,6 @@ def test_parse_declared_tools_handles_both_value_forms() -> None:
         "npm:@google/gemini-cli": "latest",
         "pinned": "1.2.3",
     }
-
-
-def test_installed_tools_filters_by_source_and_installed() -> None:
-    """Only tools sourced from the system config AND installed are returned."""
-    payload = _mise_ls_json(
-        {
-            "python": {"requested": "latest"},
-            "user-tool": {"source": "/home/x/.config/mise/config.toml"},
-            "half-installed": {"installed": False},
-        }
-    )
-
-    installed = installed_tools_from_mise_ls(payload, (_SYS_CFG,))
-
-    assert installed == {"python": "latest"}
-
-
-def test_installed_tools_default_sources_cover_all_three_tiers() -> None:
-    """The default source tuple must accept system, shared AND runtime configs.
-
-    verify_tools_main relies on the default; a 2-tuple override made all 23
-    runtime-tier tools diff as declared-but-not-installed in the devcontainer
-    (PR #169).
-    """
-    payload = _mise_ls_json(
-        {
-            "python": {"source": _SYS_CFG},
-            "hk": {"source": "/usr/local/share/mise/conf.d/shared.toml"},
-            "github:cli/cli": {"source": "/usr/local/share/mise/config.runtime.toml"},
-            "user-tool": {"source": "/home/x/.config/mise/config.toml"},
-        }
-    )
-
-    installed = installed_tools_from_mise_ls(payload)
-
-    assert set(installed) == {"python", "hk", "github:cli/cli"}
-
-
-def test_diff_tool_sets_exact_match_is_empty() -> None:
-    """Identical declared/installed maps produce no diff lines."""
-    both = {"python": "latest", "conda:llvm": "latest"}
-
-    assert diff_tool_sets(both, dict(both)) == []
-
-
-def test_diff_tool_sets_reports_missing_extra_and_drift() -> None:
-    """Missing, extra, and version-drift each surface a distinct diff line."""
-    declared = {"python": "latest", "dropped": "latest", "pinned": "1.2.3"}
-    installed = {"python": "latest", "added": "latest", "pinned": "9.9.9"}
-
-    diffs = diff_tool_sets(declared, installed)
-
-    assert any(line.startswith("+ added:") for line in diffs)
-    assert any(line.startswith("- dropped:") for line in diffs)
-    assert any(line.startswith("~ pinned:") for line in diffs)
-    assert len(diffs) == _EXPECTED_DIFF_CLASSES
 
 
 def test_smoke_script_injects_tool_set_assertion() -> None:
@@ -907,7 +824,8 @@ def test_resolve_declared_tools_at_base_uses_merge_base(tmp_path: Path) -> None:
     """A branch bump reports the MERGE-BASE version, not the branch HEAD.
 
     The exact deadlock this closes: the local base predates the bump, so a
-    HEAD comparison false-fails verify-tools on the bumped tool (#178).
+    HEAD comparison would false-fail the tier-1 smoke tool-set assertion
+    (``smoke_script_main`` / ``build_tier1_script``) on the bumped tool (#178).
     """
     repo = _tool_config_fixture_repo(tmp_path)
     _git(repo, "checkout", "-b", "bump")

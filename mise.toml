@@ -141,6 +141,12 @@ depends = ["pre-commit", "test"]
 description = "Run Python test suite"
 run = "uv run --project python pytest tests/ -x -q"
 
+[tasks.smoke-exec]
+description = "Run the containerized real-toolchain exec tests against the local :dev image (needs Docker + `mise run sync`; tier-3 compiles under Rosetta — minutes)"
+# `-m image_exec` re-selects the tests the root pytest.ini deselects by default
+# (last -m wins), so these run ONLY here, never in `mise run test` / CI.
+run = "uv run --project python pytest -m image_exec tests/test_image_smoke_exec.py -v"
+
 [tasks.up]
 description = "Bring the devcontainer up via the official @devcontainers/cli (Mac-local)"
 # BASE_IMAGE default is task-scoped (not global [env]) so it does not leak
