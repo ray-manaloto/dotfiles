@@ -14,8 +14,11 @@ image keyed on a content-hash of the build inputs.
    edits never rebuild the compiler. Performs the `git fetch` + `cmake`
    + `ninja install` to `/opt/clang-p2996` + the reflection smoke test.
 2. **`p2996-export`** — `FROM scratch` + `COPY --from=clang-builder-cold
-   /opt/clang-p2996 /opt/clang-p2996`. ~500 MB image holding just the
-   install prefix; small enough to push/pull as a cache image.
+   /opt/clang-p2996 /opt/clang-p2996`. **~2.8 GB uncompressed / ~0.7 GB
+   compressed** — the install prefix only (bin + libTooling static libs +
+   headers). Since #222 PR-B the compiler is built out-of-tree under
+   `/build/clang-p2996`, so source + build/ + `.git` (~6 GB) are NOT in the
+   export (previously the whole ~8.5 GB tree shipped by mistake).
 
 The final `devcontainer` stage does `COPY --from=p2996-export`: on the
 cold path that builds the local stages; on warm CI paths bake-action
@@ -118,7 +121,9 @@ the Dockerfile pins — cross-version lock formats are not interchangeable
 ## Why scratch + named contexts
 
 The cache image is `FROM scratch` (instead of inheriting from the
-builder) to keep it small — 500 MB vs multi-GB with the toolchain.
+builder) to keep it small — ~2.8 GB (install prefix only, out-of-tree
+build since #222 PR-B) vs ~8.5 GB if source + build/ + `.git` were
+included, and far more if it inherited the builder's apt toolchain.
 Since #160 T11 there is NO indirection stage: on warm paths CI injects
 the cache image as a digest-pinned `p2996-export` named build context
 that overrides the local stage of the same name; cold paths just build

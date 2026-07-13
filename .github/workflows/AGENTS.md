@@ -50,7 +50,9 @@ behavior unchanged):
    base tier; the compiler cache stays warm.
 4. **p2996-prep** — `dotfiles-setup p2996-hash` → probe `:p2996-<hash16>`.
    Hit: <30s. Miss: build the `p2996-cache` bake target (scratch
-   `p2996-export` with just `/opt/clang-p2996`, ~500 MB), push to GHCR.
+   `p2996-export` with just `/opt/clang-p2996`, ~2.8 GB uncompressed /
+   ~0.7 GB compressed — install prefix only, out-of-tree since #222 PR-B),
+   push to GHCR.
 5. **dev-prep** (#122, PR builds only) — `dotfiles-setup dev-hash` → probe
    `:dev-<hash16>`. Hit: retag the validated image to `:sha`/`:pr-NNN`,
    skip build+smoke. Miss: fall through. Nightly skips this (always builds).

@@ -218,9 +218,12 @@ WORKDIR /workspaces
 # from the parameterized ${BUILDER_IMAGE} and installs its own compile
 # toolchain via apt, so mise/hk/base-config edits never invalidate the
 # ~2h compiler build (p2996-hash no longer folds base-hash). Only the
-# install prefix (/opt/clang-p2996) ships — via the scratch
-# p2996-export stage (~500 MB), pushed to GHCR as :p2996-<hash16> and
-# re-consumed as a digest-pinned named build context on warm paths.
+# install prefix (/opt/clang-p2996) ships — via the scratch p2996-export
+# stage (~2.8 GB uncompressed / ~0.7 GB compressed: bin + libTooling static
+# libs + headers), pushed to GHCR as :p2996-<hash16> and re-consumed as a
+# digest-pinned named build context on warm paths. The source checkout +
+# build tree stay under /build (builder-only), excluded from the export
+# since #222 PR-B.
 FROM ${BUILDER_IMAGE} AS clang-builder-cold
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -255,20 +258,32 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
       libzstd-dev \
       swig
 
-WORKDIR /opt/clang-p2996
+# Out-of-tree build (#222 PR-B): the source checkout (+ .git) and the CMake
+# build tree live under /build/clang-p2996 (builder-only, NEVER shipped);
+# ONLY the install prefix /opt/clang-p2996 is COPYd into p2996-export below.
+# Before this, `git init .` + build + install all happened IN /opt/clang-p2996,
+# so `COPY /opt/clang-p2996` grabbed the whole ~8.5 GB tree (source ~2.3 GB +
+# build/ ~3.4 GB + .git ~0.25 GB) instead of the ~2.8 GB install prefix — a
+# capability-preserving ~6 GB of pure packaging waste. The bloomberg/clang-p2996
+# commit is still embedded in `clang --version` at build time (.git is present
+# during the compile here, just excluded from the export), so the smoke ref-pin
+# check (image.py) is unaffected.
+WORKDIR /build/clang-p2996
 
 RUN git init . && \
     git remote add origin "${CLANG_P2996_REPO}" && \
     git fetch --depth 1 origin "${CLANG_P2996_REF}" && \
     git checkout FETCH_HEAD
 
-WORKDIR /opt/clang-p2996/build
+WORKDIR /build/clang-p2996/build
 
 # cmake and ninja come from the builder's own apt toolchain (#160 T11).
 # Build only X86 target to minimize compile time and binary size.
 # ccache mount persists across builds — on SHA change, ~80% of objects
 # are reusable, cutting rebuild time significantly vs cold cache.
 # See issue #82 for further caching optimization (sccache, separate scope).
+# `../llvm` resolves to /build/clang-p2996/llvm; install goes to the separate
+# prefix /opt/clang-p2996 (the only thing exported).
 RUN --mount=type=cache,target=/root/.cache/ccache,sharing=locked \
     cmake -G Ninja ../llvm \
       -DCMAKE_BUILD_TYPE=Release \
@@ -302,7 +317,9 @@ RUN printf '#include <meta>\nint main(){return 0;}\n' >/tmp/refl.cpp && \
       -fsyntax-only && \
     rm -f /tmp/refl.cpp
 
-# ── p2996-export: tiny scratch-based image holding just the install prefix.
+# ── p2996-export: scratch-based image holding ONLY the install prefix
+# (~2.8 GB uncompressed). The out-of-tree build above keeps source + build/ +
+# .git under /build, so this COPY genuinely grabs just the prefix (#222 PR-B).
 # This is what gets pushed to GHCR as :p2996-<hash16> for cross-build reuse.
 FROM scratch AS p2996-export
 COPY --from=clang-builder-cold /opt/clang-p2996 /opt/clang-p2996
