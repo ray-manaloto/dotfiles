@@ -973,6 +973,28 @@ tokens = [
 ]
 
 [[suite]]
+name = "workflow.bash-logic-enforcement"
+description = "Zero-bash-logic policy wiring: the `bash_logic_budget` hk step must stay wired to the python enforcer end-to-end — hk.pkl shells out to `dotfiles-setup bash-budget`, main.py registers the subcommand, the bash_budget module (allowlist + per-file growth budget) + its tests exist, and the rule doc records the policy. The check LOGIC lives in python so the enforcer does not itself violate the policy it enforces; this contract asserts the whole chain so it can't drift out."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    "hk.pkl",
+    "python/src/dotfiles_setup/main.py",
+    "python/src/dotfiles_setup/bash_budget.py",
+    "tests/test_bash_budget.py",
+    ".claude/rules/zero-bash-logic.md",
+]
+per_path_tokens = { "hk.pkl" = ["bash_logic_budget", "dotfiles-setup bash-budget"], "python/src/dotfiles_setup/main.py" = ["bash-budget"], "python/src/dotfiles_setup/bash_budget.py" = ["def find_violations", "def bash_budget_main"] }
+tokens = [
+    "dotfiles-setup bash-budget",
+    "def bash_budget_main",
+    "def find_violations",
+    "ALLOWLIST",
+]
+
+[[suite]]
 name = "workflow.tool-currency-wiring"
 description = "Daily tool-currency signal wiring: refresh.yml's tool-currency job must render the report via `mise run tool-currency` (thin caller of the python library) and upsert the standing issue; module + tests must exist. The signal feeds the tool-currency-check skill's release-note review (self-learning loop, 2026-07-07)."
 category = "workflow"
