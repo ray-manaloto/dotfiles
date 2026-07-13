@@ -27,24 +27,43 @@ carries a citation; every repo claim carries a `file:line`.
 
 ## Q1 — Automating the local macOS validation via GHA
 
-### Verified feasibility: hosted macOS runners CANNOT run Docker/DinD
+### Verified feasibility (primary-source deep-check, 2026-07-12)
 
-**CONFIRMED (high, vote 2-1 on cause / 3-0 on conclusion).** GitHub-hosted
-macOS runners cannot run Docker or docker-in-docker:
+Refined from the harness synthesis after Ray asked for the actual GitHub docs +
+runner-image README. Precise finding — **arch matters**:
 
-- Docker Desktop is not pre-installed — GitHub staff: *"using Docker on a
-  service requires an enterprise license and docker enterprise is not at all
-  supported on macOS"*
-  ([community #25777](https://github.com/orgs/community/discussions/25777)).
-- The documented colima workaround is fragile: runner-images
-  [#8104](https://github.com/actions/runner-images/issues/8104) records
-  `colima start` breaking with `failed to open the QMP socket … forcibly
-  killing QEMU`; on Apple-Silicon runners colima
-  [#970](https://github.com/abiosoft/colima/issues/970) fails
-  `HV_UNSUPPORTED` — **no nested virtualization** on M-series runner VMs.
+- **arm64 (Apple Silicon) hosted macOS runners — Docker cannot work.** GitHub
+  docs, *Limitations for arm64 macOS runners*: *"Nested-virtualization is not
+  supported due to the limitation of Apple's Virtualization Framework."* The
+  `macos-26-arm64` runner-image README ships **no** Docker/colima/lima/qemu/podman
+  (only Xcode + Android simulators). The `setup-docker-macos-action` README
+  confirms the consequence: *"arm64 processors (M-series)… are unsupported. These
+  processors do not support nested virtualization. This means Colima can't start
+  the VM to run Docker… The M1 processor there is no hope."*
+- **Intel (x86) hosted macOS runners — Docker CAN be installed.** `macos-15-intel`
+  and `macos-26-intel` are **not** deprecated (only `macos-14` is), and the action
+  supports `macos-15-intel`; on Intel, colima starts a Linux VM and `docker` works,
+  so it *could* pull the amd64 image.
 
-→ The Docker-dependent gates cannot move to *hosted* macOS runners. The only
-CI path for them is a **self-hosted macOS runner**.
+**But Intel-macOS is still the wrong tool** — it runs **colima, not Docker
+Desktop**, so it *still* cannot do R2 (`/run/host-services/ssh-auth.sock` is a
+Docker-Desktop-only socket; colima lacks it — issue #78); it costs ~10× a Linux
+runner, is slower/flakier, and a **Linux runner does the identical
+container-internal validation natively**. The only thing *any* macOS runner adds
+over Linux is testing macOS-*host*-specific behavior (host SSH-proxy spawn) —
+which doesn't need Docker, and Docker-Desktop R2 can only be faithfully tested on
+the actual Mac.
+
+→ **Decision (Ray, 2026-07-12): Linux runner.** Automate all container-internal
+validation on a cheap Linux runner; R1/R2/persistence stay a local gate. No macOS
+runner (hosted or self-hosted); Intel-macOS rejected on the cost/fidelity grounds
+above.
+
+Sources: [arm64 macOS limitations](https://docs.github.com/en/actions/reference/runners/github-hosted-runners#limitations-for-arm64-macos-runners),
+[macos-26-arm64 README](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-arm64-Readme.md),
+[setup-docker-macos-action](https://github.com/douglascamata/setup-docker-macos-action),
+[runner-images README](https://github.com/actions/runner-images/blob/main/README.md),
+community #25777, runner-images #8104, colima #970.
 
 ### The critical reframe: most of `verify-local` is ALREADY in CI
 
@@ -466,7 +485,8 @@ the plausibly-largest byte win, now called out explicitly in A3.
 ## GitHub repos touched
 
 - [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — the repo under study (files + issues).
-- [actions/runner-images](https://github.com/actions/runner-images) — #8104 colima/QMP breakage on hosted macOS runners.
+- [actions/runner-images](https://github.com/actions/runner-images) — #8104 colima/QMP breakage; macos-26-arm64 README (no Docker); README image/deprecation status.
+- [douglascamata/setup-docker-macos-action](https://github.com/douglascamata/setup-docker-macos-action) — arm64-unsupported (no nested virt); Intel-only Docker-on-macOS.
 - [abiosoft/colima](https://github.com/abiosoft/colima) — #970 HV_UNSUPPORTED (no nested virt on M-series runners); FAQ.
 - [containerd/stargz-snapshotter](https://github.com/containerd/stargz-snapshotter) — eStargz OCI/ghcr compatibility + lazy-pull mechanics.
 - [moby/buildkit](https://github.com/moby/buildkit) — v0.31.0 OCI-media-types default (zstd prerequisite); #6062 squash-not-implemented.
