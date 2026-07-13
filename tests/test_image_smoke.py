@@ -18,11 +18,13 @@ from dotfiles_setup.image import (
     _TIER1_IDENTITY_BLOCK,
     _TIER3_COMPILER_BODY,
     IDENTITY_IMAGE_PATHS,
+    AnalysisTarget,
     _count_tools_from_mise_ls,
     _format_bytes,
     _format_duration,
     _format_identity_lines,
     _is_emulated,
+    _lookup_pr_number,
     _parse_build_timing,
     _parse_human_size,
     _repo_without_tag,
@@ -32,12 +34,17 @@ from dotfiles_setup.image import (
     build_smoke_script,
     build_tier1_script,
     build_tier3_script,
+    classify_layer_source,
+    compare_payloads,
+    decide_analysis_target,
     diff_tool_sets,
+    estimate_pull_time_s,
     identity_expected_hash,
     installed_tools_from_mise_ls,
     metrics_summary,
     parse_declared_tools,
     render_metrics_summary,
+    resolve_analysis_ref_main,
     resolve_declared_tools,
     resolve_declared_tools_at_base,
     resolve_expected_identity_at_base,
@@ -1058,3 +1065,325 @@ def test_metrics_summary_appends_to_summary_path(tmp_path: Path) -> None:
     assert written.startswith("pre-existing\n")
     assert "| Installed tools | 42 |" in written
     assert returned in written
+
+
+# --------------------------------------- #231 scope-(b): layer attribution
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("created_by", "expected"),
+    [
+        ("RUN /opt/clang-p2996/bin/clang++ ...", "clang-p2996"),
+        ("RUN cmake --build p2996 ...", "clang-p2996"),
+        ("COPY /opt/gcc-latest /opt/gcc-latest", "gcc-latest"),
+        ("RUN cargo install --locked ripgrep", "cargo"),
+        ("RUN mise install", "mise-tools"),
+        ("RUN apt-get install -y build-essential", "apt"),
+        ("RUN npm install -g @anthropic-ai/claude-code", "node/npm"),
+        ("RUN echo hello > /etc/motd", "other"),
+        ("", "other"),
+    ],
+)
+def test_classify_layer_source_buckets(created_by: str, expected: str) -> None:
+    assert classify_layer_source(created_by) == expected
+
+
+def test_classify_layer_source_specific_before_generic() -> None:
+    """A clang-p2996 build step that also runs via mise files as clang-p2996."""
+    assert (
+        classify_layer_source("RUN mise exec -- build /opt/clang-p2996")
+        == "clang-p2996"
+    )
+
+
+# --------------------------------------- #231 scope-(b): modeled pull-time
+# ---------------------------------------------------------------------------
+
+# 25 MB at 200 Mbps (200*125_000 B/s) = 1.0s download; 500 MiB at 500 MiB/s
+# = 1.0s decompress — chosen so the model yields round numbers.
+_COMPRESSED_1S_BYTES = 25_000_000
+_UNCOMPRESSED_1S_BYTES = 500 * 1024 * 1024
+_EXPECTED_DOWNLOAD_S = 1.0
+_EXPECTED_TOTAL_PULL_S = 2.0
+
+
+def test_estimate_pull_time_splits_download_and_decompress() -> None:
+    estimate = estimate_pull_time_s(_COMPRESSED_1S_BYTES, _UNCOMPRESSED_1S_BYTES)
+    assert estimate["download_s"] == _EXPECTED_DOWNLOAD_S
+    assert estimate["decompress_s"] == _EXPECTED_DOWNLOAD_S
+    assert estimate["total_s"] == _EXPECTED_TOTAL_PULL_S
+    # The model assumptions are echoed back so the number is interpretable.
+    assert estimate["bandwidth_mbps"] > 0
+    assert estimate["decompress_mb_s"] > 0
+
+
+def test_estimate_pull_time_guards_against_zero_bandwidth() -> None:
+    """A hostile zero override falls back to the default, never divides by 0."""
+    estimate = estimate_pull_time_s(
+        _COMPRESSED_1S_BYTES, _UNCOMPRESSED_1S_BYTES, bandwidth_mbps=0
+    )
+    assert estimate["total_s"] > 0
+
+
+# --------------------------------------- #231 scope-(b): trend comparison
+# ---------------------------------------------------------------------------
+
+_BASE_GIB = 1024**3
+
+
+def _bench_payload(*, compressed: int, uncompressed: int, pull_total: float) -> dict:
+    return {
+        "image_size_bytes": uncompressed,
+        "compressed_size_bytes": compressed,
+        "pull_time_estimate": {"total_s": pull_total},
+        "timings_s": {"smoke_wall": 1.0, "total_wall": 2.0},
+    }
+
+
+def test_compare_payloads_reports_signed_deltas() -> None:
+    baseline = _bench_payload(
+        compressed=_BASE_GIB, uncompressed=_BASE_GIB, pull_total=10.0
+    )
+    candidate = _bench_payload(
+        compressed=_BASE_GIB - 100, uncompressed=_BASE_GIB, pull_total=8.5
+    )
+    deltas = compare_payloads(baseline, candidate)
+    assert deltas["compressed_size_delta"] == -100
+    assert deltas["pull_time_total_delta"] == -1.5
+
+
+def test_compare_payloads_tolerates_pre_schema3_baseline() -> None:
+    """A baseline written before #231 (no pull_time_estimate) is treated as 0."""
+    baseline = {
+        "image_size_bytes": _BASE_GIB,
+        "compressed_size_bytes": _BASE_GIB,
+        "timings_s": {"smoke_wall": 1.0, "total_wall": 2.0},
+    }
+    candidate = _bench_payload(
+        compressed=_BASE_GIB, uncompressed=_BASE_GIB, pull_total=5.0
+    )
+    deltas = compare_payloads(baseline, candidate)
+    assert deltas["pull_time_total_delta"] == 5.0
+
+
+def test_render_metrics_summary_shows_pull_time_and_source() -> None:
+    payload = {
+        "image_ref": "ghcr.io/owner/repo:pr-231",
+        "compressed_size_bytes": _ONE_GIB,
+        "image_size_bytes": 2 * _ONE_GIB,
+        "pull_time_estimate": {"total_s": 90.0, "bandwidth_mbps": 200.0},
+        "result": "pass",
+        "top_layers": [
+            {
+                "created_by": "RUN cargo install x",
+                "source": "cargo",
+                "size_bytes": _ONE_GIB,
+            }
+        ],
+    }
+    markdown = render_metrics_summary(payload, None)
+    assert "Modeled pull time" in markdown
+    assert "| Size | Source | Created by |" in markdown
+    assert "| cargo |" in markdown
+
+
+def test_render_metrics_summary_renders_trend_when_comparison_given() -> None:
+    payload = {
+        "image_ref": "ghcr.io/owner/repo:pr-231",
+        "compressed_size_bytes": _ONE_GIB,
+        "image_size_bytes": _ONE_GIB,
+        "result": "pass",
+        "top_layers": [],
+    }
+    comparison = {
+        "compressed_size_delta": -_ONE_GIB,
+        "image_size_delta": _ONE_GIB,
+        "pull_time_total_delta": -3.2,
+    }
+    markdown = render_metrics_summary(payload, None, comparison)
+    assert "### Trend vs baseline" in markdown
+    assert "-1.00 GB" in markdown
+    assert "+1.00 GB" in markdown
+    assert "-3.20s" in markdown
+
+
+def test_render_metrics_summary_omits_trend_without_comparison() -> None:
+    payload = {
+        "image_ref": "ghcr.io/owner/repo:pr-231",
+        "compressed_size_bytes": _ONE_GIB,
+        "image_size_bytes": _ONE_GIB,
+        "result": "pass",
+        "top_layers": [],
+    }
+    assert "### Trend vs baseline" not in render_metrics_summary(payload, None)
+
+
+def test_metrics_summary_renders_trend_against_baseline_file(tmp_path: Path) -> None:
+    baseline = tmp_path / "baseline.json"
+    baseline.write_text(
+        json.dumps(
+            _bench_payload(
+                compressed=2 * _ONE_GIB, uncompressed=2 * _ONE_GIB, pull_total=12.0
+            )
+        ),
+        encoding="utf-8",
+    )
+    metrics = tmp_path / "metrics.json"
+    payload = _bench_payload(compressed=_ONE_GIB, uncompressed=_ONE_GIB, pull_total=6.0)
+    payload["image_ref"] = "ghcr.io/owner/repo:pr-231"
+    payload["result"] = "pass"
+    payload["top_layers"] = []
+    metrics.write_text(json.dumps(payload), encoding="utf-8")
+    markdown = metrics_summary(metrics, baseline_path=baseline)
+    assert "### Trend vs baseline" in markdown
+    # candidate 6.0s - baseline 12.0s = -6.00s modeled pull-time.
+    assert "-6.00s" in markdown
+
+
+def test_metrics_summary_missing_baseline_omits_trend(tmp_path: Path) -> None:
+    metrics = tmp_path / "metrics.json"
+    payload = _bench_payload(compressed=_ONE_GIB, uncompressed=_ONE_GIB, pull_total=6.0)
+    payload["image_ref"] = "ghcr.io/owner/repo:pr-231"
+    payload["result"] = "pass"
+    payload["top_layers"] = []
+    metrics.write_text(json.dumps(payload), encoding="utf-8")
+    markdown = metrics_summary(metrics, baseline_path=tmp_path / "nope.json")
+    assert "### Trend vs baseline" not in markdown
+
+
+# --------------------------------------- #231 scope-(a): analysis-ref resolver
+# ---------------------------------------------------------------------------
+
+_IMAGE_BASE = "ghcr.io/ray-manaloto/dotfiles-devcontainer"
+_PR_HEAD_SHA = "24a68c8c901595858c78261ad547f724cdd0a8b3"
+_MAIN_SHA = "058f337abc0000000000000000000000000000ff"
+_PR_NUMBER = 237
+
+
+def test_decide_analysis_target_pr_present_analyzes_pr_tag() -> None:
+    target = decide_analysis_target(
+        event="pull_request",
+        head_sha=_PR_HEAD_SHA,
+        pr_number=_PR_NUMBER,
+        image_base=_IMAGE_BASE,
+        tag_exists=lambda ref: ref == f"{_IMAGE_BASE}:pr-{_PR_NUMBER}",
+    )
+    assert target.present is True
+    assert target.fail is False
+    assert target.ref == f"{_IMAGE_BASE}:pr-{_PR_NUMBER}"
+
+
+def test_decide_analysis_target_pr_absent_quiet_skips() -> None:
+    """PR resolved but :pr-NNN absent = docs/path-gated PR -> quiet green skip."""
+    target = decide_analysis_target(
+        event="pull_request",
+        head_sha=_PR_HEAD_SHA,
+        pr_number=238,
+        image_base=_IMAGE_BASE,
+        tag_exists=lambda _ref: False,
+    )
+    assert target.present is False
+    assert target.fail is False
+    assert target.ref is None
+
+
+def test_decide_analysis_target_pr_unresolved_fails_loud() -> None:
+    """The #231 signature: a pull_request run with no resolvable PR -> FAIL."""
+    target = decide_analysis_target(
+        event="pull_request",
+        head_sha=_PR_HEAD_SHA,
+        pr_number=None,
+        image_base=_IMAGE_BASE,
+        tag_exists=lambda _ref: False,
+    )
+    assert target.fail is True
+    assert target.present is False
+    assert target.ref is None
+
+
+def test_decide_analysis_target_schedule_uses_bare_sha() -> None:
+    target = decide_analysis_target(
+        event="schedule",
+        head_sha=_MAIN_SHA,
+        pr_number=None,
+        image_base=_IMAGE_BASE,
+        tag_exists=lambda ref: ref == f"{_IMAGE_BASE}:{_MAIN_SHA[:7]}",
+    )
+    assert target.present is True
+    assert target.fail is False
+    assert target.ref == f"{_IMAGE_BASE}:{_MAIN_SHA[:7]}"
+
+
+def test_decide_analysis_target_schedule_absent_quiet_skips() -> None:
+    target = decide_analysis_target(
+        event="workflow_dispatch",
+        head_sha=_MAIN_SHA,
+        pr_number=None,
+        image_base=_IMAGE_BASE,
+        tag_exists=lambda _ref: False,
+    )
+    assert target.present is False
+    assert target.fail is False
+
+
+def test_lookup_pr_number_parses_number(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "dotfiles_setup.image._run",
+        lambda *_a, **_k: subprocess.CompletedProcess([], 0, stdout="237\n", stderr=""),
+    )
+    assert _lookup_pr_number("owner/repo", _PR_HEAD_SHA) == _PR_NUMBER
+
+
+def test_lookup_pr_number_empty_is_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The empty pull_requests[] trap: jq on an empty array prints 'null'."""
+    monkeypatch.setattr(
+        "dotfiles_setup.image._run",
+        lambda *_a, **_k: subprocess.CompletedProcess(
+            [], 0, stdout="null\n", stderr=""
+        ),
+    )
+    assert _lookup_pr_number("owner/repo", _PR_HEAD_SHA) is None
+
+
+def test_resolve_analysis_ref_main_emits_outputs(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(
+        "dotfiles_setup.image.resolve_analysis_target",
+        lambda **_k: AnalysisTarget(
+            ref=f"{_IMAGE_BASE}:pr-237", present=True, fail=False, reason="ok"
+        ),
+    )
+    rc = resolve_analysis_ref_main(
+        event="pull_request",
+        head_sha=_PR_HEAD_SHA,
+        repo="owner/repo",
+        image_base=_IMAGE_BASE,
+    )
+    out = capsys.readouterr()
+    assert rc == 0
+    assert "present=true" in out.out
+    assert f"ref={_IMAGE_BASE}:pr-237" in out.out
+
+
+def test_resolve_analysis_ref_main_fail_exits_nonzero_no_stdout(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(
+        "dotfiles_setup.image.resolve_analysis_target",
+        lambda **_k: AnalysisTarget(
+            ref=None, present=False, fail=True, reason="FAIL: no PR"
+        ),
+    )
+    rc = resolve_analysis_ref_main(
+        event="pull_request",
+        head_sha=_PR_HEAD_SHA,
+        repo="owner/repo",
+        image_base=_IMAGE_BASE,
+    )
+    out = capsys.readouterr()
+    assert rc == 1
+    # No GITHUB_OUTPUT lines on failure (stdout is redirected to $GITHUB_OUTPUT).
+    assert out.out == ""
+    assert "FAIL" in out.err

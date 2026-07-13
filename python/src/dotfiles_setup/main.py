@@ -261,6 +261,38 @@ def _add_image_subcommands(
         help="File to append the rendered markdown to (e.g. $GITHUB_STEP_SUMMARY); "
         "always also printed to stdout",
     )
+    summary_parser.add_argument(
+        "--baseline-path",
+        help="Prior benchmark JSON to render a trend section against (#231); "
+        "a missing/unreadable path omits the trend rather than failing",
+    )
+    resolve_parser = image_sub.add_parser(
+        "resolve-analysis-ref",
+        help="Resolve the analyzable image ref for image-analysis.yml (#231): "
+        "prints present=/ref= GitHub outputs to stdout, exits 1 on the loud "
+        "FAIL (pull_request run whose PR number cannot be resolved)",
+    )
+    resolve_parser.add_argument(
+        "--event",
+        required=True,
+        help="Upstream CI event (github.event.workflow_run.event): "
+        "pull_request / schedule / workflow_dispatch",
+    )
+    resolve_parser.add_argument(
+        "--head-sha",
+        required=True,
+        help="Upstream CI head sha (github.event.workflow_run.head_sha)",
+    )
+    resolve_parser.add_argument(
+        "--repo",
+        required=True,
+        help="owner/name for the gh commits/<sha>/pulls lookup (github.repository)",
+    )
+    resolve_parser.add_argument(
+        "--image",
+        required=True,
+        help="Untagged registry/name image base (CONTAINER_REGISTRY/IMAGE_NAME)",
+    )
 
 
 def _add_pr_subcommands(
@@ -641,6 +673,17 @@ def handle_image(args: argparse.Namespace) -> None:
             run_id=args.run_id,
             repo=args.repo,
             summary_path=Path(args.summary_path) if args.summary_path else None,
+            baseline_path=Path(args.baseline_path) if args.baseline_path else None,
+        )
+        sys.exit(image_main(cmd))
+    if args.image_command == "resolve-analysis-ref":
+        cmd = ImageCommand(
+            "",
+            command="resolve-analysis-ref",
+            event=args.event,
+            head_sha=args.head_sha,
+            repo=args.repo,
+            image_base=args.image,
         )
         sys.exit(image_main(cmd))
 

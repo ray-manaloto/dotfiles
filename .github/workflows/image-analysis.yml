@@ -59,26 +59,32 @@ jobs:
           registry: ${{ env.CONTAINER_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Derive image tag from analyzed commit
-        id: tag
-        env:
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
-        run: echo "tag=$(printf '%s' "$HEAD_SHA" | head -c 7)" >> "$GITHUB_OUTPUT"
-      - name: Resolve image ref (skip when no image was built)
+      - name: Resolve analyzable image ref (#231)
         id: image
+        # #231: a PR build tags the image :<github.sha> = the ephemeral
+        # refs/pull/N/merge commit (head != merge), so the pre-#231 lookup by
+        # :<workflow_run.head_sha> (the PR HEAD) missed on every PR build and all
+        # analysis silently skipped. The resolver (python, unit-tested) analyzes
+        # :pr-NNN instead — resolved from the head sha via commits/<sha>/pulls,
+        # NOT workflow_run.pull_requests[] (empty on same-repo PR runs) — and
+        # FAILS LOUD (exit 1 -> red job) when a pull_request run resolves no PR
+        # number (the #231 silent-lookup signature). A resolved PR whose :pr-NNN
+        # is absent is a docs/path-gated PR (build correctly skipped) -> quiet
+        # green skip. This job is async/non-gating, so a red FAIL surfaces the
+        # regression without blocking merge. Emits present=/ref= to $GITHUB_OUTPUT.
         env:
-          REF: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
+          EVENT: ${{ github.event.workflow_run.event }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          REPO: ${{ github.repository }}
+          IMAGE_BASE: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          # A path-gated PR (docs / root-mise / etc.) skips the build, so the
-          # :sha image will not exist — analyze nothing rather than fail.
-          if docker buildx imagetools inspect "$REF" >/dev/null 2>&1; then
-            echo "ref=$REF" >> "$GITHUB_OUTPUT"
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "No image at $REF (build skipped for this run); nothing to analyze."
-            echo "present=false" >> "$GITHUB_OUTPUT"
-          fi
+          uv run --project python dotfiles-setup image resolve-analysis-ref \
+            --event "$EVENT" \
+            --head-sha "$HEAD_SHA" \
+            --repo "$REPO" \
+            --image "$IMAGE_BASE" >> "$GITHUB_OUTPUT"
       - name: Pull image
         if: steps.image.outputs.present == 'true'
         env:
