@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from dotfiles_setup.ai import AIOrchestrator
 from dotfiles_setup.audit import DevEnvironmentAuditor, ToolManager
 from dotfiles_setup.autofix import autofix_apply_main
+from dotfiles_setup.bash_budget import bash_budget_main
 from dotfiles_setup.bootstrap_packages import gap_report_failures
 from dotfiles_setup.config import DotfilesConfig
 from dotfiles_setup.container import verify_latest_main
@@ -403,6 +404,12 @@ def setup_parser() -> argparse.ArgumentParser:
         "check-doc-refs",
         help="Verify every backtick path reference in the agent docs "
         "resolves to a real file (#160 T13 validation J)",
+    )
+    subparsers.add_parser(
+        "bash-budget",
+        help="Enforce zero-bash-logic: every scripts/*.sh + "
+        ".devcontainer/scripts/*.sh must be allowlisted and within its "
+        "per-file line budget (new/grown scripts fail — move logic to python/)",
     )
     ghcr_cleanup_parser = subparsers.add_parser(
         "ghcr-cleanup",
@@ -816,6 +823,7 @@ def _build_command_handlers(
         "ghcr-check": lambda: handle_ghcr_check(args, project_root),
         "ghcr-cleanup": lambda: handle_ghcr_cleanup(args),
         "check-doc-refs": lambda: handle_check_doc_refs(project_root),
+        "bash-budget": lambda: sys.exit(bash_budget_main(project_root)),
         "bootstrap-gap-report": lambda: handle_bootstrap_gap_report(args, project_root),
         "lock-stage": lambda: handle_lock_stage(args, project_root),
         "lock-collect": lambda: handle_lock_collect(args, project_root),

@@ -179,6 +179,20 @@ local allSteps = new Mapping<String, Config.Step> {
       "rc=0; for f in $(git ls-files '*.sh'); do first=$(head -n1 \"$f\"); case \"$first\" in \"#!\"*) ;; *) continue ;; esac; grep -qE 'set -[a-z]*o pipefail' \"$f\" || { echo \"$f: shell script with shebang lacks 'set -o pipefail' (exit-code masking guard, #142)\" >&2; rc=1; }; done; exit $rc"
   }
 
+  // --- Zero-bash-logic enforcement: no NEW bash + no GROWTH of existing.
+  //     The policy (root AGENTS.md — "Non-trivial logic lives in python/;
+  //     bash restricted to thin check/smoke wrappers") was doc-only until
+  //     this step. An allowlist + per-file line budget gate scripts/*.sh and
+  //     .devcontainer/scripts/*.sh (11 files): a NEW .sh not on the allowlist
+  //     FAILS (move logic to python/, or add a justified entry); an existing
+  //     file GROWN past its baseline budget FAILS. The check LOGIC lives in
+  //     python (dotfiles_setup.bash_budget) — a big inline-bash grep here would
+  //     itself violate the policy it enforces. plugins/** is out of scope. ---
+  ["bash_logic_budget"] {
+    glob = List("scripts/*.sh", ".devcontainer/scripts/*.sh")
+    check = "uv run --project python dotfiles-setup bash-budget"
+  }
+
   // --- Markdown ---
   // #154: no markdown_lint step — its builtin runs `markdownlint` (cli v1),
   // but the repo standardizes on `markdownlint-cli2` (+ rumdl, mdschema).
