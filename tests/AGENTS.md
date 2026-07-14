@@ -28,11 +28,12 @@ Docker image smoke outputs.
 | `test_renovate.py` | pytest | Renovate status signal (`dotfiles_setup.renovate`) — app-id/privilege check, report rendering |
 | `test_autofix.py` | pytest | autofix.ci artifact applier (`dotfiles_setup.autofix`) — additions, traversal/shape/deletion refusal |
 | `test_bash_budget.py` | pytest | Zero-bash-logic enforcer (`dotfiles_setup.bash_budget`) — allowlist/growth/shrink/stale logic, real-repo `allowlist == tracked` pin, end-to-end CLI |
+| `test_gcc_sha.py` | pytest | gcc-latest sha auto-repair (`dotfiles_setup.gcc_sha`, #249) — pin parse/rewrite (strict subn), injected-fetcher sha compute, drift/no-drift repair, check-mode dry-run, CLI rc |
 | `test_shell_integration.py` | pytest | Tool reachability in login shells (mise, chezmoi, uv, pixi, claude, gemini, codex) |
 | `infra/foundation.bats` | Bats | Bash-level foundation checks (shell script integration) |
 | `infra/runtimes.bats` | Bats | Runtime installation checks (bash) |
 
-Total: **445 pytest tests** run by default (`pytest tests/` collects all
+Total: **466 pytest tests** run by default (`pytest tests/` collects all
 `test_*.py` files) plus **4 gated `image_exec`** exec tests (deselected by
 default; run via `mise run smoke-exec`) and Bats scenarios under `infra/`.
 
