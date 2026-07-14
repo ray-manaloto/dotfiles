@@ -45,8 +45,18 @@ single-test `pytest path::test` via uv) are NOT wrapped and stay direct.
 3. **This rule + skills** — `pr-workflow` and `devcontainer-sync` skills
    name the canonical tasks; markdown alone is "relying on the LLM", so
    it is never the only layer.
-4. **Contracts** — `workflow.mise-tasks-enforcement` (the deny guard) and
-   `workflow.hook-selfcheck-wiring` (the selfcheck gate) in suites.toml
+4. **Self-learning loop (`mise run command-audit`)** —
+   `python/src/dotfiles_setup/command_audit.py` scans this project's recent
+   Claude Code transcript JSONL (native capture — no logging hook) and flags
+   mutating one-off Bash commands the guard does NOT yet cover, so the layers
+   above get refined over time. It is the *inverse* of Claude Code's
+   `fewer-permission-prompts` skill (same transcript mine + command+subcommand
+   grouping, opposite verdict). Review the report, then add a `mise run` task
+   (+ a `hook_guard._RULES` redirect for a known-bad shape) for the top
+   culprits. Ongoing, not one-shot.
+5. **Contracts** — `workflow.mise-tasks-enforcement` (the deny guard),
+   `workflow.hook-selfcheck-wiring` (the selfcheck gate), and
+   `workflow.command-audit-wiring` (the self-learning loop) in suites.toml
    assert the whole chain exists (settings.json → wrapper → CLI → module →
    tests), so nothing silently drifts out.
 
@@ -62,9 +72,10 @@ belong in settings.json permission deny rules, not the hook.
 > and the LLM-behavior evidence ranks a hard gate (zero decay) far above
 > per-turn reminders (which decay, cost instruction budget, and sit in the
 > lowest-trust context tier). See
-> `.omc/research/research-20260714-hook-enforcement/report.md`. A separate
-> self-learning loop (telemetry review + a scanner that flags one-off-command
-> culprits to refine these layers) is the improvement path — not more hooks.
+> `.omc/research/research-20260714-hook-enforcement/report.md`. The improvement
+> path is the self-learning loop (`mise run command-audit`, layer 4 above) that
+> mines native transcripts for one-off-command culprits to refine these layers
+> — not more per-turn hooks.
 
 ## Known limitation: prose content in compound commands
 

@@ -1034,3 +1034,24 @@ tokens = [
     "mise run tool-currency",
     "Tool currency report (daily)",
 ]
+
+[[suite]]
+name = "workflow.command-audit-wiring"
+description = "Command-audit self-learning loop wiring: `mise run command-audit` must stay a thin caller of the python library (`dotfiles-setup command-audit`, zero-bash-logic), the command_audit module (transcript scan + classifier) + its tests must exist, and the rule doc must name the loop. The scanner is the inverse of fewer-permission-prompts — it flags one-off Bash commands the PreToolUse guard does not yet cover, so the enforcement layers can be refined over time. Asserts the chain so the loop can't silently drift out."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    "mise.toml",
+    "python/src/dotfiles_setup/command_audit.py",
+    "python/src/dotfiles_setup/main.py",
+    "tests/test_command_audit.py",
+    ".claude/rules/mise-tasks-only.md",
+]
+per_path_tokens = { "mise.toml" = ["[tasks.command-audit]", "dotfiles-setup command-audit"], "python/src/dotfiles_setup/command_audit.py" = ["def command_audit_main", "def classify", "def iter_bash_commands"], "python/src/dotfiles_setup/main.py" = ["command-audit"], ".claude/rules/mise-tasks-only.md" = ["mise run command-audit"] }
+tokens = [
+    "dotfiles-setup command-audit",
+    "def command_audit_main",
+    "def classify",
+]

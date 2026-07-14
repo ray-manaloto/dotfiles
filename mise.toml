@@ -413,6 +413,16 @@ description = "Markdown report of tools with upstream movement + release-notes l
 # tool-currency-check skill's release-note review.
 run = 'uv run --project python dotfiles-setup tool-currency'
 
+[tasks.command-audit]
+description = "Scan recent Claude Code transcripts for one-off Bash culprits to package as mise tasks"
+# Thin caller (zero-bash-logic); logic in
+# python/src/dotfiles_setup/command_audit.py. The self-learning half of the
+# mise-tasks-only loop: mines native transcript JSONL (no capture hook), flags
+# mutating hand-run commands the PreToolUse guard does not yet cover. Review
+# the report to refine rules/hooks/docs. Pass flags through: mise run
+# command-audit -- --limit 20
+run = 'uv run --project python dotfiles-setup command-audit'
+
 [tasks.renovate-status]
 description = "Report Mend-hosted Renovate install + privileges + open update PRs"
 # Thin caller (zero-bash-logic); logic in

@@ -16,6 +16,7 @@ from dotfiles_setup.audit import DevEnvironmentAuditor, ToolManager
 from dotfiles_setup.autofix import autofix_apply_main
 from dotfiles_setup.bash_budget import bash_budget_main
 from dotfiles_setup.bootstrap_packages import gap_report_failures
+from dotfiles_setup.command_audit import DEFAULT_SESSION_LIMIT, command_audit_main
 from dotfiles_setup.config import DotfilesConfig
 from dotfiles_setup.container import verify_latest_main
 from dotfiles_setup.doc_refs import find_unresolved_refs
@@ -522,6 +523,18 @@ def setup_parser() -> argparse.ArgumentParser:
         "links (daily refresh.yml signal; feeds the tool-currency-check skill)",
     )
 
+    command_audit_parser = subparsers.add_parser(
+        "command-audit",
+        help="Scan recent Claude Code transcripts for one-off Bash commands "
+        "that should be mise tasks (self-learning mise-tasks-only loop)",
+    )
+    command_audit_parser.add_argument(
+        "--limit",
+        type=int,
+        default=DEFAULT_SESSION_LIMIT,
+        help=f"Most-recent sessions to scan (default {DEFAULT_SESSION_LIMIT})",
+    )
+
     # renovate-status command
     renovate_parser = subparsers.add_parser(
         "renovate-status",
@@ -871,6 +884,9 @@ def _build_command_handlers(
         "docker": lambda: handle_docker(args, project_root, config=config),
         "pr": lambda: handle_pr(args, project_root),
         "tool-currency": lambda: sys.exit(tool_currency_main()),
+        "command-audit": lambda: sys.exit(
+            command_audit_main(project_root, limit=args.limit)
+        ),
         "renovate-status": lambda: sys.exit(
             renovate_status_main(json_output=args.json)
         ),
