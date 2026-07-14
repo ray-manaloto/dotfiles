@@ -20,6 +20,7 @@ from dotfiles_setup.config import DotfilesConfig
 from dotfiles_setup.container import verify_latest_main
 from dotfiles_setup.doc_refs import find_unresolved_refs
 from dotfiles_setup.docker import DevContainerManager
+from dotfiles_setup.gcc_sha import gcc_sha_main
 from dotfiles_setup.ghcr import validate_ghcr_prereqs
 from dotfiles_setup.ghcr_cleanup import plan_cleanup
 from dotfiles_setup.hook_guard import pretooluse_main
@@ -422,6 +423,18 @@ def setup_parser() -> argparse.ArgumentParser:
         "check-doc-refs",
         help="Verify every backtick path reference in the agent docs "
         "resolves to a real file (#160 T13 validation J)",
+    )
+    gcc_sha_parser = subparsers.add_parser(
+        "gcc-sha",
+        help="Recompute GCC_LATEST_DEB_SHA256 from the pinned gcc-latest "
+        ".deb and rewrite it on drift (kayari publishes no checksum; the "
+        "gcc-sha-repair workflow greens a Renovate gcc bump, #249)",
+    )
+    gcc_sha_parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Report drift without writing; exit 1 if the pinned sha is "
+        "stale (still downloads the .deb to compare)",
     )
     subparsers.add_parser(
         "bash-budget",
@@ -846,6 +859,7 @@ def _build_command_handlers(
         "ghcr-check": lambda: handle_ghcr_check(args, project_root),
         "ghcr-cleanup": lambda: handle_ghcr_cleanup(args),
         "check-doc-refs": lambda: handle_check_doc_refs(project_root),
+        "gcc-sha": lambda: sys.exit(gcc_sha_main(project_root, check=args.check)),
         "bash-budget": lambda: sys.exit(bash_budget_main(project_root)),
         "bootstrap-gap-report": lambda: handle_bootstrap_gap_report(args, project_root),
         "lock-stage": lambda: handle_lock_stage(args, project_root),

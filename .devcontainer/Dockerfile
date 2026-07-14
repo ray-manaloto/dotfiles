@@ -422,9 +422,11 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ARG GCC_LATEST_DEB=gcc-latest_17.0.0-20260705git88752b86ff1a.deb
 # Validation D (#160 T13): kayari publishes NO checksum or signature (all
 # 404), so this locally-computed pin is the .deb's only integrity handle.
-# Deliberately NOT Renovate-managed: a GCC_LATEST_DEB bump fails this check
-# until a human recomputes the hash (`curl -fLO <url> && sha256sum <deb>`)
-# — supply-chain friction by design, the one place custom shell is justified.
+# NOT Renovate-managed (Renovate can't compute a sha): a GCC_LATEST_DEB bump
+# leaves this stale, but the gcc-sha-repair workflow (#249) recomputes it from
+# the newly-pinned .deb and commits the fix to the Renovate branch — the pin
+# stays byte-exact without the old human-recompute friction. To repair by hand:
+# `uv run --project python dotfiles-setup gcc-sha` (or `--check` to dry-run).
 ARG GCC_LATEST_DEB_SHA256=2503ddace30a46c732b5a764f0d3a7cbae35666f4cc064d34485e0c10652f93a
 # #222 PR-A (dev-hash only): the kayari .deb ships UNSTRIPPED backend
 # executables — cc1plus 518M, cc1 480M, lto1 463M, lto-dump 463M each carry

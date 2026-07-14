@@ -271,8 +271,20 @@ local allSteps = new Mapping<String, Config.Step> {
 
   // --- Agent documentation ---
   ["agnix"] {
-    check = "agnix ."
-    glob = List("CLAUDE.md", "AGENTS.md", ".claude/**/*.md", ".agnix.toml")
+    // --strict: warnings-as-errors so agnix warnings surface + FAIL locally
+    // (agnix exits 0 on warnings-only, so they were invisible — #250). Parity
+    // with ci.yml + `mise run lint-docs`. Known false positives (CC-HK-025)
+    // are scoped out in .agnix.toml. settings.json is in the glob so a hook
+    // config change triggers agnix locally (it was .md-only, missing the file
+    // agnix actually flagged).
+    check = "agnix . --strict"
+    glob = List(
+      "CLAUDE.md",
+      "AGENTS.md",
+      ".claude/**/*.md",
+      ".claude/settings.json",
+      ".agnix.toml",
+    )
   }
 
   // --- Doc path-reference existence (#160 T13, validation J): every

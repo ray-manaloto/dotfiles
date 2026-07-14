@@ -12,11 +12,12 @@ post-failure reporting.
 
 | File | Purpose |
 |------|---------|
-| `ci.yml` | Thin caller (Phase B, #118): lint → contract-preflight → `changes` (path-gate) → `build-publish` (the reusable build chain, gated on `changes.build` + push-to-main exemption); OR lint → promote (push to main) |
-| `build-publish.yml` | Reusable (`on: workflow_call`) build chain: base-prep → p2996-prep → dev-prep → build → smoke-test → dev-tag (dev-prep/dev-tag = 3rd content-hash tier, #122). Inputs `{tag_strategy, publish, target, ref, p2996_ref, platform*}` (#120; `*` reserved); outputs `{image_ref, digest}`. Caller's `github` context → sha/pr tags resolve identically |
-| `image-analysis.yml` | Async (`workflow_run` on CI success): benchmark metrics + Trivy CVE scan, off the PR critical path. Analyzes `:pr-NNN` — resolved from the head sha via `commits/<sha>/pulls` (NOT `workflow_run.pull_requests[]`, empty), #231; a PR run with no resolvable PR **fails loud** (red, non-gating). Resolver: `image resolve-analysis-ref` |
-| `refresh.yml` | Daily cron (00:00), one `lock-refresh` job (#160 T8): regenerates all four lockfiles via the `lock-refresh` composite (pinned image mise, linux-x64), PRs via `open-refresh-pr` (App token #119), **auto-merges**. `CLANG_P2996_REF` bumps: Renovate git-refs. |
+| `ci.yml` | Thin caller (Phase B, #118): lint → contract-preflight → `changes` (path-gate) → `build-publish` (gated on `changes.build` + push-to-main exemption); OR lint → promote (push to main) |
+| `build-publish.yml` | Reusable (`on: workflow_call`) build chain: base-prep → p2996-prep → dev-prep → build → smoke-test → dev-tag (dev-prep/dev-tag = 3rd content-hash tier, #122). Inputs `{tag_strategy, publish, target, ref, p2996_ref, platform*}` (#120); outputs `{image_ref, digest}`. |
+| `image-analysis.yml` | Async (`workflow_run` on CI success): benchmark metrics + Trivy CVE scan, off the PR critical path. Analyzes `:pr-NNN` resolved from the head sha via `commits/<sha>/pulls` (#231); a PR run with no resolvable PR **fails loud** (non-gating). Resolver: `image resolve-analysis-ref` |
+| `refresh.yml` | Daily cron (00:00), `lock-refresh` job (#160 T8): regenerates all four lockfiles (pinned image mise, linux-x64), PRs via `open-refresh-pr` (App token #119), **auto-merges**. `CLANG_P2996_REF`: Renovate git-refs. |
 | `ghcr-cleanup.yml` | Weekly hash-family retention plan (#160 T12.5); dry-run ALWAYS — delete only via dispatch `delete=true` after plan review. Planner: `dotfiles_setup.ghcr_cleanup` |
+| `gcc-sha-repair.yml` | `push: renovate/**` + Dockerfile change → `dotfiles-setup gcc-sha` recomputes `GCC_LATEST_DEB_SHA256` (kayari has no checksum) + commits via App token → greens the gcc bump (#249). |
 
 ## Composite actions (`.github/actions/`)
 

@@ -43,6 +43,21 @@ max_files_to_validate = 10000
 paths = ["**/AGENTS.md", "**/CLAUDE.md", "AGENTS.md", "CLAUDE.md"]
 disabled_rules = ["XP-003", "AGM-004", "AGM-006", "PE-001"]
 
+[[overrides]]
+# CC-HK-025 is a VERIFIED upstream agnix bug (source-confirmed at 0.37.5, the
+# latest release; see .omc/research/research-20260714-agnix/report.md). It
+# tests the RAW matcher string (e.g. "startup|resume") against the SessionStart
+# enum {startup,resume,clear,compact} WITHOUT splitting on '|'/',' — but the
+# official Claude Code hooks docs (code.claude.com/docs/en/hooks) parse a
+# matcher containing only [A-Za-z0-9_ -,|] as a LIST of exact values split on
+# '|'/','. So our `startup|resume` correctly fires on both; agnix is wrong.
+# Version-pinning (VER-001) does NOT fix it (the enum is a compile-time const).
+# Scoped to settings.json so a genuinely-bad matcher elsewhere still flags.
+# Sibling precedent upstream fixed: agent-sh/agnix#1052 (CC-SK-008 whitespace
+# split). Remove this override once an equivalent CC-HK-025 fix ships upstream.
+paths = [".claude/settings.json", "**/settings.json"]
+disabled_rules = ["CC-HK-025"]
+
 [rules]
 skills = true
 hooks = true

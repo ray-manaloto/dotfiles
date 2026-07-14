@@ -668,7 +668,8 @@ run = "pinact run --verify"
 
 [tasks.lint-docs]
 description = "Validate agent documentation"
-run = "agnix ."
+# --strict: warnings-as-errors (#250) — parity with ci.yml + the hk agnix step.
+run = "agnix . --strict"
 
 [tasks.lock]
 description = "Regenerate mise.lock"

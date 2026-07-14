@@ -1,0 +1,75 @@
+name: gcc-sha repair
+# When Renovate bumps the dated GCC_LATEST_DEB filename in the Dockerfile, the
+# GCC_LATEST_DEB_SHA256 pin goes stale — kayari.org publishes no checksum, so
+# the sha is deliberately Renovate-unmanaged (Dockerfile ARG comment) and
+# `sha256sum -c` fails the image build "by design" until a human recomputes it
+# (#249). This job recomputes the sha from the newly-pinned .deb and commits it
+# back to the Renovate branch, so the bump goes green automatically.
+#
+# Push (not pull_request) trigger: this only acts on our OWN renovate/** branch
+# pushes — no PR-head checkout with a write token. It commits with a GitHub App
+# token (like refresh.yml) so the corrected commit RE-FIRES the PR's
+# `pull_request` CI (a secrets.GITHUB_TOKEN push does not — GitHub's recursion
+# guard). Idempotent + self-terminating: the App-token push re-fires THIS
+# workflow, which recomputes, finds the sha already correct, and pushes nothing.
+#
+# The download+hash+rewrite logic lives in `dotfiles-setup gcc-sha`
+# (python/src/dotfiles_setup/gcc_sha.py) per the zero-bash-logic rule; this
+# workflow is a thin trigger + commit seam.
+on:
+  push:
+    branches:
+      - "renovate/**"
+    paths:
+      - ".devcontainer/Dockerfile"
+permissions:
+  contents: read # the App token carries contents:write for the push
+concurrency:
+  group: gcc-sha-repair-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Mint GitHub App token
+        # App-token push fires the PR's `pull_request` CI on its own (unlike
+        # secrets.GITHUB_TOKEN). Reuses the refresh.yml App; REFRESH_APP_ID is
+        # the NUMERIC App ID (signs the JWT `iss`). See workflows/AGENTS.md.
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.REFRESH_APP_ID }}
+          private-key: ${{ secrets.REFRESH_APP_PRIVATE_KEY }}
+          permission-contents: write
+      - name: Checkout the pushed branch
+        # persist-credentials: false — the App token is used ONLY in the push
+        # step below (via a tokenized remote), never persisted to .git/config
+        # (zizmor artipacked). Default GITHUB_TOKEN suffices to check out.
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Install mise (python + uv)
+        uses: ./.github/actions/setup-mise
+        with:
+          install_args: "python uv"
+      - name: Recompute + repair gcc-latest sha
+        # Downloads the pinned .deb, recomputes sha256, rewrites the ARG only on
+        # drift (a 404 = the dated .deb aged out of kayari's rolling window,
+        # which fails loud here — the bump is invalid).
+        run: uv run --project python dotfiles-setup gcc-sha
+      - name: Commit + push if the sha drifted
+        env:
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- .devcontainer/Dockerfile; then
+            echo "gcc-latest sha already correct — nothing to repair."
+            exit 0
+          fi
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${APP_SLUG}[bot]@users.noreply.github.com"
+          git add .devcontainer/Dockerfile
+          git commit -m "chore(image): repair GCC_LATEST_DEB_SHA256 for bumped gcc-latest .deb (#249)"
+          git push "https://x-access-token:${APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:${GITHUB_REF_NAME}"

@@ -24,7 +24,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "[ \"${CLAUDE_CODE_REMOTE:-}\" = \"true\" ] && bash scripts/web-setup.sh || true",
+            "command": "if [ \"${CLAUDE_CODE_REMOTE:-}\" = \"true\" ]; then bash scripts/web-setup.sh; fi",
             "timeout": 600
           }
         ]
