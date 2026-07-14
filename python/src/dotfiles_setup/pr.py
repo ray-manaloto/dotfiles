@@ -234,7 +234,8 @@ def changed_paths_vs_main(workspace: Path) -> list[str]:
 def gate_matrix(paths: list[str]) -> list[Gate]:
     """The ordered, path-aware gate list for ship — cheap gates first.
 
-    Always: lint, pytest, verify contracts. Conditional per
+    Always: lint, pytest, verify contracts, hook-selfcheck (the wired
+    host-side hooks, end-to-end). Conditional per
     verify-before-advancing: pin-actions on .github changes, lint-docs on
     agent-doc changes. The full-sync hard gate runs LAST (most expensive)
     when the devcontainer/image/validation surface changed — EXCEPT when a
@@ -251,6 +252,14 @@ def gate_matrix(paths: list[str]) -> list[Gate]:
         Gate(
             "verify-contracts",
             ("uv", "run", "--project", "python", "dotfiles-setup", "verify", "run"),
+        ),
+        # Host-side hook validation: drives the WIRED PreToolUse guard + the
+        # advisory UserPromptSubmit/PostToolUse hooks end-to-end (settings.json
+        # wiring, the real wrappers, `bash -n`), so a hook regression is caught
+        # like any other gate. Always-run and cheap — see hook_selfcheck.py.
+        Gate(
+            "hook-selfcheck",
+            ("uv", "run", "--project", "python", "dotfiles-setup", "hook", "selfcheck"),
         ),
     ]
     if any(_matches_any(p, _GHA_PATTERNS) for p in paths):

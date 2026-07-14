@@ -28,23 +28,43 @@ single-test `pytest path::test` via uv) are NOT wrapped and stay direct.
 
 ## Enforcement layers (deep-research verified, 2026-07-07)
 
-1. **PreToolUse hook** — `.claude/settings.json` wires every Bash call
-   through `dotfiles-setup hook pretooluse`
+1. **PreToolUse hook (hard deny)** — `.claude/settings.json` wires every
+   Bash call through `dotfiles-setup hook pretooluse`
    (`python/src/dotfiles_setup/hook_guard.py`): a matched one-off command
    is DENIED with the redirect reason fed back (JSON
    `permissionDecision: "deny"`; deterministic, applies even in
    bypassPermissions mode). The rules are tested in
    `tests/test_hook_guard.py`.
-2. **This rule + skills** — `pr-workflow` and `devcontainer-sync` skills
+2. **ship/land `hook-selfcheck` gate** — `mise run ship` / `land` run
+   `dotfiles-setup hook selfcheck`
+   (`python/src/dotfiles_setup/hook_selfcheck.py`) as an always-run gate: it
+   drives the WIRED PreToolUse guard end-to-end (settings.json wiring +
+   `Bash` matcher, the real wrapper, `bash -n` on the scripts), so a hook
+   regression fails a PR like lint/pytest. Tested in
+   `tests/test_hook_selfcheck.py`.
+3. **This rule + skills** — `pr-workflow` and `devcontainer-sync` skills
    name the canonical tasks; markdown alone is "relying on the LLM", so
    it is never the only layer.
-3. **Contract** — `workflow.mise-tasks-enforcement` in suites.toml
-   asserts the hook wiring exists (settings.json → CLI → module → tests),
-   so the guard can't silently drift out.
+4. **Contracts** — `workflow.mise-tasks-enforcement` (the deny guard) and
+   `workflow.hook-selfcheck-wiring` (the selfcheck gate) in suites.toml
+   assert the whole chain exists (settings.json → wrapper → CLI → module →
+   tests), so nothing silently drifts out.
 
-The hook fails OPEN on its own errors (a crashed guard must not brick
-every Bash call); hard one-off bans that must never fail open belong in
-settings.json permission deny rules, not the hook.
+The hook fails OPEN on its own errors (a crashed guard must not brick every
+Bash call — the wrapper exits 0 when the Python>=3.14 interpreter is absent,
+e.g. a cold Claude-web session). Hard one-off bans that must never fail open
+belong in settings.json permission deny rules, not the hook.
+
+> **Enforcement design note (2026-07-14, research-backed):** we deliberately
+> do NOT re-inject a "use mise tasks" reminder every turn (UserPromptSubmit)
+> or nudge after every command (PostToolUse). Anthropic's guidance routes
+> static conventions to CLAUDE.md and enforcement to the PreToolUse hook,
+> and the LLM-behavior evidence ranks a hard gate (zero decay) far above
+> per-turn reminders (which decay, cost instruction budget, and sit in the
+> lowest-trust context tier). See
+> `.omc/research/research-20260714-hook-enforcement/report.md`. A separate
+> self-learning loop (telemetry review + a scanner that flags one-off-command
+> culprits to refine these layers) is the improvement path — not more hooks.
 
 ## Known limitation: prose content in compound commands
 
