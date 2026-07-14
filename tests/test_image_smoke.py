@@ -460,7 +460,10 @@ def test_resolve_declared_tools_merges_system_and_shared() -> None:
     assert declared["hk"] == "1.50.0"
     # From mise-system.toml [tools].
     assert declared["node"] == "latest"
-    assert "conda:llvm" in declared
+    # A representative conda build tool still declared via mise (#222 PR-C moved
+    # the LLVM-family conda tools — conda:llvm/clang/lld/lldb/... — to the apt
+    # LLVM-22 packages in [bootstrap.packages], so they are no longer mise tools).
+    assert "conda:cmake" in declared
     assert all(isinstance(v, str) for v in declared.values())
 
 
