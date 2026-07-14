@@ -58,6 +58,20 @@ disabled_rules = ["XP-003", "AGM-004", "AGM-006", "PE-001"]
 paths = [".claude/settings.json", "**/settings.json"]
 disabled_rules = ["CC-HK-025"]
 
+[[overrides]]
+# VER-001 ("No Tool/Spec Versions Pinned", Severity LOW / BEST_PRACTICE / info)
+# nudges us to pin `[tool_versions] claude_code = "<ver>"`. We deliberately do
+# NOT: Claude Code auto-updates and is not a mise/Renovate-managed dep here, so
+# any pinned value goes stale within days — after which agnix would validate our
+# config against a CC version we no longer run. Unpinned, agnix uses its
+# latest-known schema, which MATCHES us (we run latest CC), so the default is the
+# more accurate choice for a rolling CLI; pinning would be worse + endless manual
+# bumps. Info-level so it never fails (--strict escalates warnings, not info) —
+# disabled only to keep the agnix output clean. Decision record + revisit
+# conditions: https://github.com/ray-manaloto/dotfiles/issues/258
+paths = [".agnix.toml"]
+disabled_rules = ["VER-001"]
+
 [rules]
 skills = true
 hooks = true
