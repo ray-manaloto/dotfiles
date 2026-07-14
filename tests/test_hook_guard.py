@@ -29,6 +29,13 @@ from dotfiles_setup import hook_guard
         ),
         ("gh pr create --fill", "mise run ship"),
         ("gh pr merge 42 --squash", "mise run land"),
+        # Hand-rolled task detachment + CI-watch observation (workflow shapes
+        # that ship/land own) — the gaps a 2026-07-14 session fell through.
+        ("nohup mise run land -- 256 > /tmp/x 2>&1 &", "harness background"),
+        ("env FOO=1 nohup mise run verify-local &", "harness background"),
+        ("gh run watch 123 --exit-status", "gh run view"),
+        ("gh pr checks 172 --watch", "mise run ship"),
+        ("gh pr checks 172 --watch --interval 30", "mise run ship"),
     ],
 )
 def test_one_off_commands_denied_with_redirect(
@@ -45,7 +52,15 @@ def test_one_off_commands_denied_with_redirect(
         # Diagnostics and reads stay direct.
         "docker ps --filter label=x",
         "gh pr view 172 --json state",
-        "gh pr checks 172 --watch",
+        # One-shot CI reads stay allowed — only the --watch/run-watch forms
+        # (workflow observation ship/land own) are redirected.
+        "gh pr checks 172 --json state,bucket",
+        "gh run view 123 --json conclusion",
+        # The canonical land command itself — only hand-detaching it is denied.
+        "mise run land -- 256",
+        # Prose: `nohup mise run` inside a quoted string is not at command
+        # position, so the detachment rule must not fire.
+        "echo 'use nohup mise run for long tasks? no'",
         "chezmoi diff",
         "chezmoi execute-template < a.tmpl",
         "git status --porcelain",

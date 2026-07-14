@@ -15,6 +15,9 @@ task (wrapping the python library, zero-bash-logic) in the same change.
 | `docker pull …dotfiles-devcontainer…` | `mise run sync` (buildkit, digest-aware, verifying; classic pull wedges on ~38GB) |
 | `gh pr create` (+ push + gates by hand) | `mise run ship` |
 | `gh pr merge` (+ watch + validate by hand) | `mise run land -- <PR#>` |
+| `nohup … mise run <task>` (hand-detaching a task) | the harness background run — stays tracked, one clean completion (no orphaned process, no hand-rolled log monitor) |
+| `gh run watch <id>` (hand-rolled CI wait) | `mise run land -- <PR#>` (watches main CI via --json buckets); one-shot: `gh run view <id> --json conclusion` |
+| `gh pr checks … --watch` (hand-rolled CI wait) | `mise run ship`/`land` already watch; one-shot read: `gh pr checks <n> --json` |
 | autofix artifact recovery by hand | `mise run autofix-apply -- <run-id>` |
 | `gh workflow run` / `gh run rerun` | `mise run gha-dispatch -- <wf>` / `mise run gha-rerun -- <id>` |
 | `npx <tool>` | the mise-pinned binary directly |

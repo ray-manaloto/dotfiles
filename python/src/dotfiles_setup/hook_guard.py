@@ -104,6 +104,36 @@ _RULES: tuple[tuple[re.Pattern[str], str], ...] = (
         "merge to the verified head SHA, watches main CI, and validates "
         "locally. See .claude/skills/pr-workflow/SKILL.md.",
     ),
+    # `nohup`/manual detachment of a mise task orphans it from the harness
+    # (no completion notification, hand-rolled log-polling on top). _CMD's
+    # _WRAPPER treats `nohup` as transparent for OTHER rules, so `mise run`
+    # (otherwise canonical/allowed) slips through when detached — hence a
+    # dedicated rule that anchors `nohup` at command position and requires a
+    # `mise run` later in the same segment.
+    (
+        re.compile(
+            r"(?:^|[;&|\n]\s*)(?:env\s+)?(?:\w+=\S*\s+)*nohup\s+[^;&|\n]*"
+            r"mise\s+run\b"
+        ),
+        "Do not `nohup`/hand-detach a `mise run` task. Run it via the harness "
+        "background mechanism so it stays tracked and reports one clean "
+        "completion — no orphaned process, no hand-rolled log monitor. See "
+        ".claude/rules/mise-tasks-only.md.",
+    ),
+    (
+        re.compile(_CMD + r"gh\s+run\s+watch\b"),
+        "Do not hand-roll `gh run watch` (it reports prematurely — see "
+        ".claude/rules/gh-cli-watch.md). `mise run land -- <PR#>` already "
+        "watches main CI via --json buckets; for a one-shot check use "
+        "`gh run view <id> --json conclusion`.",
+    ),
+    (
+        re.compile(_CMD + r"gh\s+pr\s+checks\b[^;&|\n]*--watch\b"),
+        "Do not hand-roll `gh pr checks --watch` — `mise run ship` already "
+        "watches PR checks to bucket-verified green and `mise run land` "
+        "watches main CI. A one-shot `gh pr checks <n> --json` read is fine. "
+        "See .claude/rules/mise-tasks-only.md.",
+    ),
 )
 
 # NO pytest rule, deliberately (probe-observed 2026-07-07): Claude Code's
