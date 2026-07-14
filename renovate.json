@@ -35,10 +35,11 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "hk pkl schema pin (amends + import package:// URLs) — kept in lockstep with hk releases across hk.pkl, hk-common.pkl, hk-image.pkl. No native/preset manager covers a pkl amends URL.",
+      "description": "hk pkl schema pin (amends + import package:// URLs) — kept in lockstep with hk releases across hk.pkl, hk-common.pkl, hk-image.pkl. No native/preset manager covers a pkl amends URL. The version appears TWICE per URL (release tag `download/v<X>/` AND package `hk@<X>`); both matchStrings are required so a bump rewrites both — a single-occurrence match produces the 404 URL `v<new>/hk@<old>.zip` (fixed #248).",
       "managerFilePatterns": ["/(^|/)hk(-common|-image)?\\.pkl$/"],
       "matchStrings": [
-        "download/v(?<currentValue>[\\d.]+)/hk@"
+        "download/v(?<currentValue>[\\d.]+)/hk@",
+        "hk@(?<currentValue>[\\d.]+)"
       ],
       "depNameTemplate": "jdx/hk",
       "datasourceTemplate": "github-releases"
@@ -67,7 +68,7 @@
     },
     {
       "customType": "regex",
-      "description": "gcc-latest.deb dated URL pin. Upstream (kayari) publishes NO checksum/signature — the immutable dated filename is the reproducibility handle. Bumped via the custom.gcc-latest HTML datasource on the jwakely index; no native/preset manager covers a rolling .deb URL.",
+      "description": "gcc-latest.deb dated URL pin. Upstream (kayari) publishes NO checksum/signature — the immutable dated filename is the reproducibility handle. Bumped via the custom.gcc-latest HTML datasource on the jwakely index; no native/preset manager covers a rolling .deb URL. The companion GCC_LATEST_DEB_SHA256 is NOT managed here (Renovate can't hash an artifact); the gcc-sha-repair.yml workflow recomputes + commits it on this bump (#249).",
       "managerFilePatterns": ["/\\.devcontainer/Dockerfile$/"],
       "matchStrings": [
         "ARG GCC_LATEST_DEB=gcc-latest_(?<currentValue>[0-9.]+-\\d+git[0-9a-f]+)\\.deb"

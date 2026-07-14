@@ -139,7 +139,11 @@ jobs:
           echo "## mise doctor" >> "$GITHUB_STEP_SUMMARY"
           mise doctor -J | jq '.' >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
       - name: Validate agent documentation
-        run: agnix .
+        # --strict: warnings are errors (agnix exits 0 on warnings otherwise,
+        # so they were invisible — #250). Kept CI/local-parity with the hk
+        # `agnix` step and `mise run lint-docs`. Known false positives are
+        # scoped out in .agnix.toml, so a NEW warning fails loud here.
+        run: agnix . --strict
       - name: Upload mise lockfile
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
