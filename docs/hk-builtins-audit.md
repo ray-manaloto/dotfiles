@@ -87,7 +87,7 @@
 | pylint | Python | Superseded by ruff |
 | pyright | Python | Using ty instead |
 | bandit | Python | Superseded by ruff (S rules) |
-| clang-format (standalone) | C++ | Using conda:clang-format in devcontainer only |
+| clang-format (standalone) | C++ | Using apt clang-format-22 in devcontainer only (#222 PR-C; was conda:clang-format) |
 | cmake-format | C++ | Using pipx:cmakelang in devcontainer only |
 | eslint | JavaScript | No JS source in project |
 | biome | JavaScript | No JS source in project |

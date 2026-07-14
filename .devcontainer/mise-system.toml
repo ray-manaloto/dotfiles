@@ -7,10 +7,11 @@
 # Changes here must be validated via CI (never `docker buildx bake dev-load`
 # locally — see feedback_base_image_ci_only.md).
 
-# BASE TIER (#160 T9): the 36 tools the image needs to BUILD ITSELF and the
-# core C++ toolchain — runtimes (rust STAYS base: cargo/rustup self-checks),
-# the conda toolchain (the p2996 stage runs cmake/ninja from these shims),
-# bazel, micromamba, sqlite. Everything else moved out: the locked dev tools
+# BASE TIER (#160 T9): the tools the image needs to BUILD ITSELF and the core
+# C++ toolchain — runtimes (rust STAYS base: cargo/rustup self-checks), the conda
+# build tools (the p2996 stage runs cmake/ninja from these shims), bazel,
+# micromamba, sqlite. The LLVM-family compiler/linker/debugger toolchain lives in
+# apt (see [bootstrap.packages], #222 PR-C). Everything else moved out: the locked dev tools
 # live in mise-runtime.toml (installed in the devcontainer-runtime stage
 # under MISE_ENV=runtime), the interactive tools live in the chezmoi user
 # overlay (home/dot_config/mise/config.toml.tmpl, eager-installed by
@@ -36,15 +37,22 @@ cargo-binstall = "latest"
 # wired only in the HOST hk.pkl — so editorconfig-checker was dead weight in the
 # image and is removed here (#160 T6). Nothing else in the image invokes `ec`.
 # Conda packages (C++ toolchain for devcontainer)
-"conda:llvm" = "latest"
-"conda:llvm-tools" = "latest"
-"conda:clang" = "latest"
-"conda:clangxx" = "latest"
+# NOTE (#222 PR-C): the LLVM-family toolchain (llvm, llvm-tools, clang, clangxx,
+# clang-tools, clang-format, lld, lldb) was MOVED OUT of the conda backend to the
+# Ubuntu apt LLVM-22 packages declared in [bootstrap.packages] below. mise's conda
+# backend installs one isolated prefix PER tool (rattler per-tool extraction), so
+# each carried its OWN 186 MB libLLVM.so — 9 duplicate copies, ~6.9 GB. The apt
+# packages all depend on a single shared libLLVM-22 runtime (one 149 MB copy), so
+# the same LLVM 22.1.x toolchain costs ~0.68 GB — a ~6.2 GB reclaim, capability
+# preserved (clang/clang++/clangd/clang-tidy/clang-format/lld/lldb/llvm-* + the
+# asan/ubsan/tsan/fuzzer sanitizers via libclang-rt-22-dev). mise has no non-source
+# LLVM backend (conda dups; the asdf-llvm plugin builds from source ~2h), so apt is
+# the native "system tools" install. include-what-you-use STAYS conda (Ubuntu's apt
+# iwyu is built against clang-19 and drags libLLVM-19+21; conda keeps it on the
+# matching clang-22 in one isolated env). cppcheck STAYS conda (no libLLVM — it was
+# never part of the duplication). cmake/ninja STAY conda (the p2996 stage uses them).
 "conda:cmake" = "latest"
 "conda:ninja" = "latest"
-"conda:clang-tools" = "latest"
-"conda:clang-format" = "latest"
-"conda:lld" = "latest"
 "conda:mold" = "latest"
 "conda:bear" = "latest"
 "conda:ccache" = "latest"
@@ -62,7 +70,8 @@ cargo-binstall = "latest"
 # makes mise treat the file as a non-shimmable resource — no deletion of an
 # upstream-owned file. See `.claude/rules/persistence-gate-retry.md`.
 "conda:gdb" = { version = "latest", postinstall = "find \"$MISE_TOOL_INSTALL_PATH/bin\" -maxdepth 1 -name '.*' -type f -exec chmod -x {} +" }
-"conda:lldb" = "latest"
+# conda:lldb moved to apt lldb-22 (#222 PR-C) — see the LLVM note above. conda-forge
+# had no lldb-22 build (it pinned lldb to LLVM 21); apt ships lldb-22 matching clang-22.
 "conda:lcov" = "latest"
 "conda:doxygen" = "latest"
 "conda:git" = "latest"
@@ -115,6 +124,23 @@ cargo-binstall = "latest"
 "apt:libsqlite3-dev" = "latest"
 "apt:libssl-dev" = "latest"
 "apt:zlib1g-dev" = "latest"
+# LLVM-22 C++ toolchain (#222 PR-C) — Ubuntu 26.04's version-suffixed apt packages
+# all depend on ONE shared libLLVM-22 runtime, replacing the 8 conda LLVM tools that
+# each duplicated a 186 MB libLLVM.so (~6.9 GB → ~0.68 GB). Version is pinned by the
+# `-22` package name (no drift to 23; patch updates within 22 are fine). The
+# unversioned binaries (clang, clang++, clangd, clang-tidy, clang-format, lld,
+# ld.lld, lldb, llvm-*) live under /usr/lib/llvm-22/bin, added to PATH by the
+# base-stage RUN in the Dockerfile. libclang-rt-22-dev supplies the sanitizer
+# runtimes (asan/ubsan/tsan/fuzzer) the tier-3 smoke exercises via `clang++`.
+"apt:clang-22" = "latest"
+"apt:clang-tools-22" = "latest"
+"apt:clang-tidy-22" = "latest"
+"apt:clangd-22" = "latest"
+"apt:clang-format-22" = "latest"
+"apt:lld-22" = "latest"
+"apt:lldb-22" = "latest"
+"apt:llvm-22" = "latest"
+"apt:libclang-rt-22-dev" = "latest"
 
 [settings]
 arch = "x86_64"

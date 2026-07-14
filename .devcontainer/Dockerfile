@@ -198,6 +198,34 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     printf 'graph{a--b--c--a}' | neato -Tsvg -o /dev/null && \
     dot -V 2>&1 | grep -q 'version 15'
 
+# LLVM-22 C++ toolchain PATH + build-time smoke (#222 PR-C).
+# The apt llvm/clang/lld/lldb/clang-tools packages (declared in mise-system.toml
+# [bootstrap.packages], installed by `mise bootstrap packages apply` above) put
+# their UNVERSIONED binaries under /usr/lib/llvm-22/bin (clang, clang++, clangd,
+# clang-tidy, clang-format, lld, ld.lld, lldb, llvm-*) — /usr/bin holds only the
+# `-22`-suffixed names. A single /etc/profile.d entry prepends that dir so the
+# toolchain is on PATH under its plain names for every login/mise-activated shell,
+# exactly as the retired conda shims exposed it (smoke runs `bash -lc`). The
+# escaped \$PATH stays literal in the written file (not build-time expanded;
+# double-quoted so hadolint SC2016 doesn't misread it). The compile smoke is the
+# loud build-time self-check: it proves clang++ is really v22, that the
+# asan+ubsan sanitizer runtimes (libclang-rt-22-dev) link AND the binary runs, and
+# that clangd/clang-tidy/lld/lldb/llvm-config are present (capability parity with
+# the removed conda tools). TSan is not RUN here (build-as-root ASLR layout; the
+# tier-3 smoke covers it on real amd64).
+RUN printf "export PATH=\"/usr/lib/llvm-22/bin:\$PATH\"\n" > /etc/profile.d/llvm-toolchain.sh && \
+    /usr/lib/llvm-22/bin/clang++ --version | grep -q 'version 22' && \
+    printf '#include <cstdio>\nint main(){printf("ok\\n");return 0;}\n' > /tmp/llvmcheck.cpp && \
+    /usr/lib/llvm-22/bin/clang++ -fsanitize=address,undefined /tmp/llvmcheck.cpp -o /tmp/llvmcheck && \
+    /tmp/llvmcheck | grep -q '^ok$' && \
+    test -x /usr/lib/llvm-22/bin/clangd && \
+    test -x /usr/lib/llvm-22/bin/clang-tidy && \
+    test -x /usr/lib/llvm-22/bin/clang-format && \
+    test -x /usr/lib/llvm-22/bin/lld && \
+    test -x /usr/lib/llvm-22/bin/lldb && \
+    /usr/lib/llvm-22/bin/llvm-config --version | grep -q '^22' && \
+    rm -f /tmp/llvmcheck.cpp /tmp/llvmcheck
+
 # Pre-install tools globally via mise
 # Known cosmetic warnings during install:
 # - rustup "existing settings file": rustup-init creates settings.toml then
