@@ -213,14 +213,6 @@ checksum = "sha256:b574d448434d1e256ceacc000d1a94eaf6d0e858f503104be73711ffd727d
 url = "https://github.com/tursodatabase/turso/releases/download/v0.6.1/turso_cli-x86_64-unknown-linux-gnu.tar.xz"
 url_api = "https://api.github.com/repos/tursodatabase/turso/releases/assets/426952377"
 
-[[tools."gitlab:graphviz/graphviz"]]
-version = "15.1.0"
-backend = "gitlab:graphviz/graphviz"
-
-[tools."gitlab:graphviz/graphviz"."platforms.linux-x64"]
-url = "https://gitlab.com/api/v4/projects/4207231/packages/generic/graphviz-releases/15.1.0/fedora_43_graphviz-15.1.0-rpms.tar.xz"
-url_api = "https://gitlab.com/api/v4/projects/4207231/packages/generic/graphviz-releases/15.1.0/fedora_43_graphviz-15.1.0-rpms.tar.xz"
-
 [[tools.libsql-server]]
 version = "0.24.32"
 backend = "github:tursodatabase/libsql"

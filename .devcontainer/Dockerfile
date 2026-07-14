@@ -154,6 +154,50 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     mise bootstrap packages apply --manager apt --yes --update && \
     mise bootstrap packages status --json --missing
 
+# graphviz 15.1.0 — pinned GitLab Ubuntu .deb (#222 PR-A, folds #22).
+# WHY a manual .deb and not apt: Ubuntu 26.04 apt ships graphviz 14.1.2, and the
+# retired mise `gitlab:` backend only fetched Fedora RPMs (no usable `dot`).
+# Upstream's GitLab release publishes a native ubuntu_26.04 build, but both
+# flavors are kitchen-sink: the -cmake.deb declares ZERO deps (its plugins can't
+# load → `dot -c` registers nothing), and the split -debs pull 161 packages
+# (Qt5/ghostscript/GTK). So we take the dep-less cmake .deb and add ONLY the
+# libs we want — libgd3 (png/gif) + libgts (neato/fdp/circo/twopi layout); SVG,
+# dot, json come from the built-in `core` plugin needing nothing extra — then
+# PRUNE the exotic output plugins whose heavy deps we refuse and regenerate the
+# plugin registry with `dot -c`. Net ~+21 MB over apt 14.1.2 (the lean floor for
+# 15.1.0). Probe-verified formats: svg/svgz/png/json/dot/xdot.
+# Pin discipline (like GCC_LATEST_DEB): the filename encodes BOTH the base
+# Ubuntu release (ubuntu_26.04) and the version — bump the URL and sha256
+# together. Upstream ships no checksum for the ubuntu debs, so this
+# locally-computed sha256 is the .deb's only integrity handle.
+# renovate: datasource=gitlab-releases depName=graphviz/graphviz
+ARG GRAPHVIZ_VERSION=15.1.0
+ARG GRAPHVIZ_DEB=ubuntu_26.04_graphviz-15.1.0-cmake.deb
+ARG GRAPHVIZ_DEB_SHA256=f3294aeea3618044022874823344a1154ee7272857e82f248610fcaa7d2dc4c5
+# Pure && chain (any failing step aborts the build loudly); explicit /tmp paths
+# avoid a `cd` (hadolint DL3003). SVG/PNG/neato renders to /dev/null exercise the
+# core+gd plugins and dot+neato layout engines; the trailing grep asserts v15.
+# The cmake .deb declares NO deps, so we install every runtime lib explicitly:
+# libltdl7/libexpat1/zlib1g are the `dot` binary's own core deps (the minimal
+# devcontainer-base lacks libltdl7 once apt:graphviz is gone → dot would fail to
+# start); libgd3+libcairo2 back the gd plugin (png/gif); libgts backs the neato/
+# fdp/circo/twopi layout engines. Verified on a bare ubuntu:26.04 amd64 base.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    export DEBIAN_FRONTEND=noninteractive && \
+    curl -fLSs -o "/tmp/${GRAPHVIZ_DEB}" "https://gitlab.com/api/v4/projects/4207231/packages/generic/graphviz-releases/${GRAPHVIZ_VERSION}/${GRAPHVIZ_DEB}" && \
+    echo "${GRAPHVIZ_DEB_SHA256}  /tmp/${GRAPHVIZ_DEB}" | sha256sum -c - && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends "/tmp/${GRAPHVIZ_DEB}" libltdl7 libexpat1 zlib1g libgd3 libgts-0.7-5t64 libcairo2 && \
+    rm -f "/tmp/${GRAPHVIZ_DEB}" && \
+    rm -f /usr/lib/graphviz/libgvplugin_{ascii,devil,gdk,gs,kitty,lasi,pango,poppler,rsvg,vt,webp,xlib}.so.8 && \
+    rm -f /usr/lib/graphviz/config8 && \
+    dot -c && \
+    printf 'digraph{a->b->c;a->c}' | dot -Tsvg -o /dev/null && \
+    printf 'digraph{a->b}' | dot -Tpng -o /dev/null && \
+    printf 'graph{a--b--c--a}' | neato -Tsvg -o /dev/null && \
+    dot -V 2>&1 | grep -q 'version 15'
+
 # Pre-install tools globally via mise
 # Known cosmetic warnings during install:
 # - rustup "existing settings file": rustup-init creates settings.toml then
@@ -357,11 +401,23 @@ ARG GCC_LATEST_DEB=gcc-latest_17.0.0-20260705git88752b86ff1a.deb
 # until a human recomputes the hash (`curl -fLO <url> && sha256sum <deb>`)
 # — supply-chain friction by design, the one place custom shell is justified.
 ARG GCC_LATEST_DEB_SHA256=2503ddace30a46c732b5a764f0d3a7cbae35666f4cc064d34485e0c10652f93a
+# #222 PR-A (dev-hash only): the kayari .deb ships UNSTRIPPED backend
+# executables — cc1plus 518M, cc1 480M, lto1 463M, lto-dump 463M each carry
+# .debug_*+.symtab (probe-verified). `strip --strip-all` reclaims ~1.68 GB and
+# keeps .dynsym (ELF stays EXEC → GCC plugins / dynamic linking unaffected).
+# lib64 runtime libs are intentionally NOT stripped (keep-runtime-debug policy);
+# the small hardlinked drivers (gcc/g++/cpp) and gcov* are left as-is. Stripped
+# in the SAME RUN as dpkg -i, with a trivial compile (invokes the stripped
+# cc1plus) as the loud post-condition — the reflection smoke below is the
+# deeper functional gate.
 RUN curl -fLOSs "https://kayari.org/gcc-latest/${GCC_LATEST_DEB}" && \
     echo "${GCC_LATEST_DEB_SHA256}  ${GCC_LATEST_DEB}" | sha256sum -c - && \
     dpkg -i "${GCC_LATEST_DEB}" && \
     rm -f "${GCC_LATEST_DEB}" && \
-    test -x /opt/gcc-latest/bin/g++ || { echo "ERROR: gcc-latest binary missing after dpkg install"; exit 1; }
+    test -x /opt/gcc-latest/bin/g++ || { echo "ERROR: gcc-latest binary missing after dpkg install"; exit 1; } && \
+    find /opt/gcc-latest -type f \( -name cc1 -o -name cc1plus -o -name lto1 -o -name lto-dump \) -exec strip --strip-all {} + && \
+    printf 'int main(){}\n' | /opt/gcc-latest/bin/g++ -x c++ - -o /tmp/gcc-strip-check && \
+    rm -f /tmp/gcc-strip-check
 
 # clang-p2996 (Bloomberg fork; local p2996-export stage on the cold path,
 # digest-pinned :p2996-<hash16> registry context on the warm path)
