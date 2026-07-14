@@ -177,13 +177,18 @@ ARG GRAPHVIZ_DEB_SHA256=f3294aeea3618044022874823344a1154ee7272857e82f248610fcaa
 # Pure && chain (any failing step aborts the build loudly); explicit /tmp paths
 # avoid a `cd` (hadolint DL3003). SVG/PNG/neato renders to /dev/null exercise the
 # core+gd plugins and dot+neato layout engines; the trailing grep asserts v15.
+# The cmake .deb declares NO deps, so we install every runtime lib explicitly:
+# libltdl7/libexpat1/zlib1g are the `dot` binary's own core deps (the minimal
+# devcontainer-base lacks libltdl7 once apt:graphviz is gone → dot would fail to
+# start); libgd3+libcairo2 back the gd plugin (png/gif); libgts backs the neato/
+# fdp/circo/twopi layout engines. Verified on a bare ubuntu:26.04 amd64 base.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     export DEBIAN_FRONTEND=noninteractive && \
     curl -fLSs -o "/tmp/${GRAPHVIZ_DEB}" "https://gitlab.com/api/v4/projects/4207231/packages/generic/graphviz-releases/${GRAPHVIZ_VERSION}/${GRAPHVIZ_DEB}" && \
     echo "${GRAPHVIZ_DEB_SHA256}  /tmp/${GRAPHVIZ_DEB}" | sha256sum -c - && \
     apt-get update && \
-    apt-get install -y --no-install-recommends "/tmp/${GRAPHVIZ_DEB}" libgd3 libgts-0.7-5t64 && \
+    apt-get install -y --no-install-recommends "/tmp/${GRAPHVIZ_DEB}" libltdl7 libexpat1 zlib1g libgd3 libgts-0.7-5t64 libcairo2 && \
     rm -f "/tmp/${GRAPHVIZ_DEB}" && \
     rm -f /usr/lib/graphviz/libgvplugin_{ascii,devil,gdk,gs,kitty,lasi,pango,poppler,rsvg,vt,webp,xlib}.so.8 && \
     rm -f /usr/lib/graphviz/config8 && \
