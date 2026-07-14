@@ -193,6 +193,17 @@ missing_tools = "always"
 show_env = true
 
 [env]
+# Expose the apt LLVM-22 toolchain (#222 PR-C) on PATH via mise's native path
+# directive — NOT /etc/profile.d. mise manages PATH through activation (this is
+# how every base tool is exposed), and the chezmoi-rendered ~/.profile runs
+# `mise activate`, which resets PATH and would discard a profile.d addition. The
+# old conda clang++ survived only because it was a mise shim in a dir mise's PATH
+# includes; `_.path` restores that exact exposure for the apt binaries. mise puts
+# this FIRST in the activated PATH, so the unversioned clang/clang++/clangd/
+# clang-tidy/clang-format/lld/lldb/llvm-* win over /opt/clang-p2996 (the general
+# toolchain, matching the pre-#222 behavior). Covers login + non-login +
+# CI dev-image smoke (all mise-activated). See the base-stage smoke in the Dockerfile.
+_.path = ["/usr/lib/llvm-22/bin"]
 # Build toolchain
 CC = "gcc"
 CXX = "g++"
