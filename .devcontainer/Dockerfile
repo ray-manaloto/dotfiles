@@ -427,7 +427,7 @@ ARG GCC_LATEST_DEB=gcc-latest_17.0.0-20260712gitd556f558b9db.deb
 # the newly-pinned .deb and commits the fix to the Renovate branch — the pin
 # stays byte-exact without the old human-recompute friction. To repair by hand:
 # `uv run --project python dotfiles-setup gcc-sha` (or `--check` to dry-run).
-ARG GCC_LATEST_DEB_SHA256=2503ddace30a46c732b5a764f0d3a7cbae35666f4cc064d34485e0c10652f93a
+ARG GCC_LATEST_DEB_SHA256=bae6633904200665b8e48f7cee170dfb8ffec0db9dc0378f57d43edb3085dbc1
 # #222 PR-A (dev-hash only): the kayari .deb ships UNSTRIPPED backend
 # executables — cc1plus 518M, cc1 480M, lto1 463M, lto-dump 463M each carry
 # .debug_*+.symtab (probe-verified). `strip --strip-all` reclaims ~1.68 GB and
