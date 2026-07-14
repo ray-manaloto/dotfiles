@@ -24,6 +24,7 @@ Docker image smoke outputs.
 | `test_sync.py` | pytest | `mise run sync` workflow (`dotfiles_setup.sync`) — staleness detection, action matrix, CI awareness, check/full/wait modes |
 | `test_pr.py` | pytest | `mise run ship`/`land` workflow (`dotfiles_setup.pr`) — surface detection, gate matrix, bucket verification, pinned merge |
 | `test_hook_guard.py` | pytest | PreToolUse mise-tasks-only guard (`dotfiles_setup.hook_guard`) — deny/redirect rules, false-positive guards, JSON contract |
+| `test_hook_selfcheck.py` | pytest | Host-side hook self-check (`dotfiles_setup.hook_selfcheck`, the ship/land `hook-selfcheck` gate) — settings.json wiring + Bash-matcher assertions, and an end-to-end real-repo pass driving the wired PreToolUse guard |
 | `test_tool_currency.py` | pytest | Daily tool-currency signal (`dotfiles_setup.tool_currency`) — release-link backends, report rendering |
 | `test_renovate.py` | pytest | Renovate status signal (`dotfiles_setup.renovate`) — app-id/privilege check, report rendering |
 | `test_autofix.py` | pytest | autofix.ci artifact applier (`dotfiles_setup.autofix`) — additions, traversal/shape/deletion refusal |
@@ -33,7 +34,7 @@ Docker image smoke outputs.
 | `infra/foundation.bats` | Bats | Bash-level foundation checks (shell script integration) |
 | `infra/runtimes.bats` | Bats | Runtime installation checks (bash) |
 
-Total: **466 pytest tests** run by default (`pytest tests/` collects all
+Total: **475 pytest tests** run by default (`pytest tests/` collects all
 `test_*.py` files) plus **4 gated `image_exec`** exec tests (deselected by
 default; run via `mise run smoke-exec`) and Bats scenarios under `infra/`.
 

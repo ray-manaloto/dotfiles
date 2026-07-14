@@ -24,6 +24,7 @@ from dotfiles_setup.gcc_sha import gcc_sha_main
 from dotfiles_setup.ghcr import validate_ghcr_prereqs
 from dotfiles_setup.ghcr_cleanup import plan_cleanup
 from dotfiles_setup.hook_guard import pretooluse_main
+from dotfiles_setup.hook_selfcheck import hook_selfcheck_main
 from dotfiles_setup.image import ImageCommand
 from dotfiles_setup.image import main as image_main
 from dotfiles_setup.lint import (
@@ -319,6 +320,31 @@ def _add_pr_subcommands(
     )
 
 
+def _add_hook_subcommands(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    """Register the Claude Code hook entrypoints (wired in settings.json).
+
+    Args:
+        subparsers: The parent subparsers action to attach hook commands to.
+    """
+    hook_parser = subparsers.add_parser(
+        "hook",
+        help="Claude Code hook entrypoints (wired in .claude/settings.json)",
+    )
+    hook_sub = hook_parser.add_subparsers(dest="hook_command", help="Hook events")
+    hook_sub.add_parser(
+        "pretooluse",
+        help="PreToolUse Bash guard: deny-with-redirect for one-off commands "
+        "that have a canonical mise task (mise-tasks-only policy)",
+    )
+    hook_sub.add_parser(
+        "selfcheck",
+        help="Exercise the WIRED host-side hooks end-to-end (ship/land gate) — "
+        "settings.json wiring, the real wrappers, and `bash -n` on the scripts",
+    )
+
+
 def setup_parser() -> argparse.ArgumentParser:
     """Configure the argument parser."""
     parser = argparse.ArgumentParser(description="Reproducible Dotfiles Orchestrator")
@@ -481,16 +507,7 @@ def setup_parser() -> argparse.ArgumentParser:
         help="GHCR container package name",
     )
 
-    hook_parser = subparsers.add_parser(
-        "hook",
-        help="Claude Code hook entrypoints (wired in .claude/settings.json)",
-    )
-    hook_sub = hook_parser.add_subparsers(dest="hook_command", help="Hook events")
-    hook_sub.add_parser(
-        "pretooluse",
-        help="PreToolUse Bash guard: deny-with-redirect for one-off commands "
-        "that have a canonical mise task (mise-tasks-only policy)",
-    )
+    _add_hook_subcommands(subparsers)
 
     autofix_parser = subparsers.add_parser(
         "autofix-apply",
@@ -572,6 +589,19 @@ def handle_pr(args: argparse.Namespace, project_root: Path) -> None:
         sys.exit(ship_main(project_root, title=args.title))
     elif args.pr_command == "land":
         sys.exit(land_main(project_root, args.number, resume=args.resume))
+
+
+def handle_hook(args: argparse.Namespace, project_root: Path) -> None:
+    """Dispatch a Claude Code hook subcommand (wired in .claude/settings.json).
+
+    Each hook main returns a process exit code; ``selfcheck`` is the ship/land
+    gate. Unknown/absent subcommand is a no-op (never bricks a hook).
+    """
+    command = getattr(args, "hook_command", None)
+    if command == "pretooluse":
+        sys.exit(pretooluse_main())
+    elif command == "selfcheck":
+        sys.exit(hook_selfcheck_main(project_root))
 
 
 def handle_audit(config: DotfilesConfig | None = None) -> None:
@@ -847,11 +877,7 @@ def _build_command_handlers(
         "autofix-apply": lambda: sys.exit(
             autofix_apply_main(args.run_id, project_root)
         ),
-        "hook": lambda: (
-            sys.exit(pretooluse_main())
-            if getattr(args, "hook_command", None) == "pretooluse"
-            else None
-        ),
+        "hook": lambda: handle_hook(args, project_root),
         "version": _version,
         "install": lambda: handle_install(project_root),
         "verify": lambda: handle_verify(args),

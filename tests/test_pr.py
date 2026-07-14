@@ -58,9 +58,25 @@ def test_non_surface_paths_not_detected(path: str) -> None:
 
 def test_gate_matrix_always_has_core_gates() -> None:
     names = [g.name for g in pr.gate_matrix(["README.md"])]
-    assert names[:3] == ["lint", "pytest", "verify-contracts"]
+    assert names[:4] == ["lint", "pytest", "verify-contracts", "hook-selfcheck"]
     assert "sync-full" not in names
     assert "pin-actions" not in names
+
+
+def test_hook_selfcheck_is_an_unconditional_gate() -> None:
+    # The host-side hook validation runs on EVERY ship, like lint/pytest —
+    # a hook regression can arrive from any diff, not just a hook-file change.
+    for paths in (["README.md"], [".github/workflows/ci.yml"], ["python/x.py"]):
+        gate = next(g for g in pr.gate_matrix(paths) if g.name == "hook-selfcheck")
+        assert gate.cmd == (
+            "uv",
+            "run",
+            "--project",
+            "python",
+            "dotfiles-setup",
+            "hook",
+            "selfcheck",
+        )
 
 
 def test_gate_matrix_gha_adds_pin_actions() -> None:

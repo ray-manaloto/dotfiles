@@ -973,6 +973,26 @@ tokens = [
 ]
 
 [[suite]]
+name = "workflow.hook-selfcheck-wiring"
+description = "Host-side hook self-check gate wiring: ship/land must gate on `hook-selfcheck` (an always-run gate that drives the WIRED PreToolUse guard end-to-end — settings.json wiring + Bash matcher, the real wrapper, `bash -n`), the hook_selfcheck module + its tests must exist, and main.py must register the `selfcheck` subcommand. Asserts the chain so the gate that validates the enforcement guard can't itself silently drift out."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    "python/src/dotfiles_setup/hook_selfcheck.py",
+    "python/src/dotfiles_setup/main.py",
+    "python/src/dotfiles_setup/pr.py",
+    "tests/test_hook_selfcheck.py",
+    ".claude/rules/mise-tasks-only.md",
+]
+per_path_tokens = { "python/src/dotfiles_setup/hook_selfcheck.py" = ["def hook_selfcheck_main", "def check_settings_wiring", "def check_pretooluse_endtoend"], "python/src/dotfiles_setup/main.py" = ["selfcheck"], "python/src/dotfiles_setup/pr.py" = ["hook-selfcheck"] }
+tokens = [
+    "dotfiles-setup hook selfcheck",
+    "def hook_selfcheck_main",
+]
+
+[[suite]]
 name = "workflow.bash-logic-enforcement"
 description = "Zero-bash-logic policy wiring: the `bash_logic_budget` hk step must stay wired to the python enforcer end-to-end — hk.pkl shells out to `dotfiles-setup bash-budget`, main.py registers the subcommand, the bash_budget module (allowlist + per-file growth budget) + its tests exist, and the rule doc records the policy. The check LOGIC lives in python so the enforcer does not itself violate the policy it enforces; this contract asserts the whole chain so it can't drift out."
 category = "workflow"

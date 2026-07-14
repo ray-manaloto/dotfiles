@@ -26,7 +26,9 @@ mise run land -- <PR#>             # (after it auto-merges) confirm merged → m
    first — the gates must validate exactly what ships).
 2. **Path-aware gate matrix, cheap-first** (from
    `.claude/rules/verify-before-advancing.md`): `mise run lint` →
-   pytest → `dotfiles-setup verify run`; + `pin-actions` when `.github/**`
+   pytest → `dotfiles-setup verify run` → `hook-selfcheck` (always-run:
+   drives the wired host-side hooks end-to-end — see
+   `.claude/rules/mise-tasks-only.md`); + `pin-actions` when `.github/**`
    changed; + `lint-docs` when agent docs changed; + **`mise run sync --
    --full` (hard gate, no override)** when the diff touches the
    devcontainer/image/validation surface (`SURFACE_PATTERNS` in pr.py:
