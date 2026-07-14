@@ -102,7 +102,9 @@ cargo-binstall = "latest"
 "apt:ca-certificates" = "latest"
 "apt:curl" = "latest"
 "apt:gnupg" = "latest"
-"apt:graphviz" = "latest"
+# graphviz is installed separately below as a pinned GitLab .deb (15.1.0),
+# NOT via apt (Ubuntu ships 14.1.2). See the graphviz RUN in
+# .devcontainer/Dockerfile (#222 PR-A / folds #22).
 "apt:pkg-config" = "latest"
 "apt:sudo" = "latest"
 "apt:unzip" = "latest"

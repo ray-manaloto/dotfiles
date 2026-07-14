@@ -40,7 +40,10 @@ minimum_release_age_excludes = ["npm:@openai/codex", "npm:@google/gemini-cli"]
 "conda:curl" = "latest"
 "fnox" = "latest"
 "usage" = "latest"
-"gitlab:graphviz/graphviz" = "latest"
+# graphviz is NOT a mise tool: the gitlab backend only fetched Fedora RPMs
+# (no usable `dot`), so it was dead weight. graphviz 15.1.0 now ships from the
+# base image via the pinned GitLab Ubuntu .deb — see .devcontainer/Dockerfile
+# and P2996-CACHE.md (#222 PR-A / folds #22).
 # Build systems & C++ tooling
 bats = "latest"
 "github:go-task/task" = "latest"
