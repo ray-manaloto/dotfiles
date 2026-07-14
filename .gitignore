@@ -39,6 +39,10 @@ mise.*.local.toml
 # OMC/OMG/OMX plugin state
 .omg/
 .omc/state/
+# Transient working notepad — agents edit it mid-work, so tracking it dirtied
+# the tree and tripped `mise run ship`'s clean-tree gate (forcing stash dances).
+# Durable findings live in GH issues + `.omc/research/`, not here.
+.omc/notepad.md
 .omx/
 
 # Codex CLI temporary state
