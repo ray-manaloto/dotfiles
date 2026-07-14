@@ -40,26 +40,26 @@ url = "https://github.com/jackchuka/mdschema/releases/download/v0.13.2/mdschema_
 url_api = "https://api.github.com/repos/jackchuka/mdschema/releases/assets/449905058"
 
 [[tools.aws-cli]]
-version = "2.35.21"
+version = "2.35.23"
 backend = "aqua:aws/aws-cli"
 
 [tools.aws-cli."platforms.linux-arm64"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.35.21.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.35.23.zip"
 
 [tools.aws-cli."platforms.linux-arm64-musl"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.35.21.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.35.23.zip"
 
 [tools.aws-cli."platforms.linux-x64"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.35.21.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.35.23.zip"
 
 [tools.aws-cli."platforms.linux-x64-musl"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.35.21.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.35.23.zip"
 
 [tools.aws-cli."platforms.macos-arm64"]
-url = "https://awscli.amazonaws.com/AWSCLIV2-2.35.21.pkg"
+url = "https://awscli.amazonaws.com/AWSCLIV2-2.35.23.pkg"
 
 [tools.aws-cli."platforms.macos-x64"]
-url = "https://awscli.amazonaws.com/AWSCLIV2-2.35.21.pkg"
+url = "https://awscli.amazonaws.com/AWSCLIV2-2.35.23.pkg"
 
 [[tools.azure-cli]]
 version = "2.88.0"
@@ -379,7 +379,7 @@ url_api = "https://api.github.com/repos/lima-vm/lima/releases/assets/464870648"
 provenance = "github-attestations"
 
 [[tools."npm:@claude-flow/cli"]]
-version = "3.25.6"
+version = "3.30.2"
 backend = "npm:@claude-flow/cli"
 
 [[tools."npm:@contextlint/cli"]]
@@ -395,7 +395,7 @@ version = "2.10.1"
 backend = "npm:@ralph-orchestrator/ralph-cli"
 
 [[tools."npm:agent-browser"]]
-version = "0.31.1"
+version = "0.31.2"
 backend = "npm:agent-browser"
 
 [[tools."npm:agents-lint"]]
@@ -403,7 +403,7 @@ version = "0.5.0"
 backend = "npm:agents-lint"
 
 [[tools."npm:claude-code-lint"]]
-version = "0.5.0"
+version = "0.7.0"
 backend = "npm:claude-code-lint"
 
 [[tools."npm:ctx7"]]
@@ -419,55 +419,55 @@ version = "4.15.4"
 backend = "npm:oh-my-claude-sisyphus"
 
 [[tools."npm:portless"]]
-version = "0.15.1"
+version = "0.15.3"
 backend = "npm:portless"
 
 [[tools."npm:renovate"]]
-version = "43.260.2"
+version = "43.263.4"
 backend = "npm:renovate"
 
 [[tools."npm:skills"]]
-version = "1.5.16"
+version = "1.5.17"
 backend = "npm:skills"
 
 [[tools.opencode]]
-version = "1.17.18"
+version = "1.17.20"
 backend = "aqua:anomalyco/opencode"
 
 [tools.opencode."platforms.linux-arm64"]
-checksum = "sha256:db9b53eae485da969a0a855bca465f9901dd84676384f724f320e3ccc5a9b107"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.17.18/opencode-linux-arm64.tar.gz"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/471614402"
+checksum = "sha256:0a41572e83a896eb008683589dfe09e17b941d06122608510f3e5f16d86d9afc"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.17.20/opencode-linux-arm64.tar.gz"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/475880367"
 
 [tools.opencode."platforms.linux-arm64-musl"]
-checksum = "sha256:3ee4bc4a8b878f74f5ebdf21d984c9f7a3dd8d2b17e9d03e86689f078310668d"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.17.18/opencode-linux-arm64-musl.tar.gz"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/471614404"
+checksum = "sha256:cc24a56310d44a459c8a4a4d45d3bb1ea2920c65e3bde1e711a1a9f6497d8209"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.17.20/opencode-linux-arm64-musl.tar.gz"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/475880306"
 
 [tools.opencode."platforms.linux-x64"]
-checksum = "sha256:e149d32ee5667c0cd5fb84d0bf8393b312e93782eeb4d74d29bbb0392de7133c"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.17.18/opencode-linux-x64.tar.gz"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/471614339"
+checksum = "sha256:b7100c0ad0980fba25d595123b4219a6fdc1fbd456dcb64859236741e199c564"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.17.20/opencode-linux-x64.tar.gz"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/475880298"
 
 [tools.opencode."platforms.linux-x64-musl"]
-checksum = "sha256:97d07ee2ab3fcb0238fdf8ba17e11008fcd7bf606f01241df8d1ed8e75de15cb"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.17.18/opencode-linux-x64-musl.tar.gz"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/471614344"
+checksum = "sha256:0e897fac4e29175eae33ba2f8d65bd8ae7f67c1234ce2aeb01fbfd6ec8e4d213"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.17.20/opencode-linux-x64-musl.tar.gz"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/475880311"
 
 [tools.opencode."platforms.macos-arm64"]
-checksum = "sha256:24327f89c103526c0518fc9b797767f318ab85ef3cee8636e722d6138f33aa3d"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.17.18/opencode-darwin-arm64.zip"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/471614269"
+checksum = "sha256:dc42114bb7a312e0c61c71456fed00d1e6d8b7647d279233125090804dc0218b"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.17.20/opencode-darwin-arm64.zip"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/475880212"
 
 [tools.opencode."platforms.macos-x64"]
-checksum = "sha256:cebf209aad2c0bd998fbac3f8dd1b45eef35da1af18cd698e78b111b73c5fbb0"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.17.18/opencode-darwin-x64.zip"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/471614270"
+checksum = "sha256:ffd981d3c65a2787aa14f4d48317f1d44fc14f73907090fdb7bd55239fea11c2"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.17.20/opencode-darwin-x64.zip"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/475880216"
 
 [tools.opencode."platforms.windows-x64"]
-checksum = "sha256:7d489fd9b314e25bccf9c5dd2f17ef2774902c7b7db9aa34f46b0aab4715c70c"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.17.18/opencode-windows-x64.zip"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/471616422"
+checksum = "sha256:1d7438cf9b4c6b45fee325003b4452b06f4c14be29977ea81595a705165ec646"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.17.20/opencode-windows-x64.zip"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/475882301"
 
 [[tools."pipx:deepagents-cli"]]
 version = "0.2.2"
@@ -517,87 +517,87 @@ url = "https://github.com/rtk-ai/rtk/releases/download/v0.43.0/rtk-x86_64-pc-win
 url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/460115883"
 
 [[tools.rumdl]]
-version = "v0.2.31"
+version = "v0.2.34"
 backend = "aqua:rvben/rumdl"
 
 [tools.rumdl."platforms.linux-arm64"]
-checksum = "sha256:d5aa4ac3f94de9b6508021f70d78be592c6dc8b67ea499c6e203c1e3daf044b0"
-url = "https://github.com/rvben/rumdl/releases/download/v0.2.31/rumdl-v0.2.31-aarch64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/474381480"
+checksum = "sha256:6bef22314e9bdfcb217b92c88fcfe0e81f8be6b89802882650b3ddbc3fc8a400"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.34/rumdl-v0.2.34-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/477130703"
 provenance = "github-attestations"
 
 [tools.rumdl."platforms.linux-arm64-musl"]
-checksum = "sha256:d5aa4ac3f94de9b6508021f70d78be592c6dc8b67ea499c6e203c1e3daf044b0"
-url = "https://github.com/rvben/rumdl/releases/download/v0.2.31/rumdl-v0.2.31-aarch64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/474381480"
+checksum = "sha256:6bef22314e9bdfcb217b92c88fcfe0e81f8be6b89802882650b3ddbc3fc8a400"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.34/rumdl-v0.2.34-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/477130703"
 provenance = "github-attestations"
 
 [tools.rumdl."platforms.linux-x64"]
-checksum = "sha256:5550f7954457248c6e29715b69d4ec2e9394613de51f98b50fa81f197a29af92"
-url = "https://github.com/rvben/rumdl/releases/download/v0.2.31/rumdl-v0.2.31-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/474381477"
+checksum = "sha256:2d410128ecef7b6313137189066fd8340740d2e5e399af93beb6e7fbe310c943"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.34/rumdl-v0.2.34-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/477130708"
 provenance = "github-attestations"
 
 [tools.rumdl."platforms.linux-x64-musl"]
-checksum = "sha256:5550f7954457248c6e29715b69d4ec2e9394613de51f98b50fa81f197a29af92"
-url = "https://github.com/rvben/rumdl/releases/download/v0.2.31/rumdl-v0.2.31-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/474381477"
+checksum = "sha256:2d410128ecef7b6313137189066fd8340740d2e5e399af93beb6e7fbe310c943"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.34/rumdl-v0.2.34-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/477130708"
 provenance = "github-attestations"
 
 [tools.rumdl."platforms.macos-arm64"]
-checksum = "sha256:368a02639247be530043abc36c40310090c09ef69b32f5744f9a0d9cc2673be5"
-url = "https://github.com/rvben/rumdl/releases/download/v0.2.31/rumdl-v0.2.31-aarch64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/474381484"
+checksum = "sha256:140a81909f6b1e67b6da1152f3e64a8420f565bb1900fb27e7393e31a33b7425"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.34/rumdl-v0.2.34-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/477130699"
 provenance = "github-attestations"
 
 [tools.rumdl."platforms.macos-x64"]
-checksum = "sha256:bc8933e04b5c83b8b14c21793c7f7902bc8b1a841bb1f1964c5f177b3cf7d05f"
-url = "https://github.com/rvben/rumdl/releases/download/v0.2.31/rumdl-v0.2.31-x86_64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/474381479"
+checksum = "sha256:81054f9d0264e5e4bcc0ced0f295bb8278e8b9d617255018f2c917082dac0477"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.34/rumdl-v0.2.34-x86_64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/477130697"
 provenance = "github-attestations"
 
 [tools.rumdl."platforms.windows-x64"]
-checksum = "sha256:f8a4b2abf774301fd4ffd04f56e12fb0b2bf4357b28c63ec355405d57f0cfe88"
-url = "https://github.com/rvben/rumdl/releases/download/v0.2.31/rumdl-v0.2.31-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/474381488"
+checksum = "sha256:059a8bb568b605d8470f52fcba7c5dfefebbbe6deeb32e18fbab26db40f9bdf8"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.34/rumdl-v0.2.34-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/477130711"
 provenance = "github-attestations"
 
 [[tools.zizmor]]
-version = "1.26.1"
+version = "1.27.0"
 backend = "aqua:zizmorcore/zizmor"
 
 [tools.zizmor."platforms.linux-arm64"]
-checksum = "sha256:711f5af366b299128f9a04b1470e37d990b41fbd21f14a1a4148d25004a83762"
-url = "https://github.com/zizmorcore/zizmor/releases/download/v1.26.1/zizmor-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/453417983"
+checksum = "sha256:46fceee9a8262dca0e61f8463204e1f0f3a63bf6c20fa3ef9a5c1b3cff7b17b0"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.27.0/zizmor-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/476453094"
 provenance = "github-attestations"
 
 [tools.zizmor."platforms.linux-arm64-musl"]
 provenance = "github-attestations"
 
 [tools.zizmor."platforms.linux-x64"]
-checksum = "sha256:8556289a64e7aaf2400cd516f61a471aa91c5902cc56ad96a82fd12f90c2ef73"
-url = "https://github.com/zizmorcore/zizmor/releases/download/v1.26.1/zizmor-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/453417985"
+checksum = "sha256:277f2bd8fd37cf60c42ab7afca6faa884e65440fa31e02b44bdaae60f62a358f"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.27.0/zizmor-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/476453097"
 provenance = "github-attestations"
 
 [tools.zizmor."platforms.linux-x64-musl"]
 provenance = "github-attestations"
 
 [tools.zizmor."platforms.macos-arm64"]
-checksum = "sha256:68ab2b37836bbd44f6cfffcc102b9ffffbc20c5d67d84293dafb63bd2775a1da"
-url = "https://github.com/zizmorcore/zizmor/releases/download/v1.26.1/zizmor-aarch64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/453417984"
+checksum = "sha256:81336423d1b280c5dd0cdd8644a1e5f3238ab3ceb8d6e4334dfd05dab95a8a86"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.27.0/zizmor-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/476453095"
 provenance = "github-attestations"
 
 [tools.zizmor."platforms.macos-x64"]
-checksum = "sha256:2967414a561f8c1264121e8f723c3b5abcf3d1bf7ce5063114df99985dd75801"
-url = "https://github.com/zizmorcore/zizmor/releases/download/v1.26.1/zizmor-x86_64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/453417982"
+checksum = "sha256:51cd82d1f6914cbb7f4402dbdc19bd989a7599078e5ddeaf837d1ab901c97328"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.27.0/zizmor-x86_64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/476453098"
 provenance = "github-attestations"
 
 [tools.zizmor."platforms.windows-x64"]
-checksum = "sha256:c6cea156935e3b9d36faeca4fd8f622d23f7a7578da26adb34e6456abd9beb9a"
-url = "https://github.com/zizmorcore/zizmor/releases/download/v1.26.1/zizmor-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/453417981"
+checksum = "sha256:a8c5d02d638bacf9ae5779b08b0291455c67e7e835be56995f35483518dcd70a"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.27.0/zizmor-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/476453096"
 provenance = "github-attestations"

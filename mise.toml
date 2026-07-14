@@ -13,34 +13,34 @@ lima = "2.1.4"                      # 2.1.3 fixed CVE-2026-53657 (guest-agent so
 "github:agent-sh/agnix" = "0.37.5"  # prebuilt release binary; npm: backend needs a postinstall download that bun skips (binary-not-found). Release tag is v0.37.5.
 "npm:agents-lint" = "0.5.0"
 "pipx:mcp2cli" = "3.3.1"
-"npm:renovate" = "43.260.2"         # provides `renovate-config-validator` for the hk `renovate_config_validate` step (CI-local parity). The validator bin ships ONLY inside the full renovate package (~354M); no validator-only package exists. Host-only (not in image).
+"npm:renovate" = "43.263.4"         # provides `renovate-config-validator` for the hk `renovate_config_validate` step (CI-local parity). The validator bin ships ONLY inside the full renovate package (~354M); no validator-only package exists. Host-only (not in image).
 biome = "2.5.2"
 # Markdown + Claude-docs linters. Installed now; hk.pkl integration is
 # scheduled for post-devcontainer-work review (see GH issue tracking
 # follow-up). claude_md_size_limit (below in hk.pkl) provides the
 # immediate 200-line enforcement per Claude Code memory docs.
-"npm:claude-code-lint" = "0.5.0"
+"npm:claude-code-lint" = "0.7.0"
 "npm:@contextlint/cli" = "1.1.1"
 "npm:markdownlint-cli2" = "0.23.0"   # https://github.com/DavidAnson/markdownlint — general markdown quality (MD013 line-length, etc.)
 "aqua:jackchuka/mdschema" = "0.13.2"
-rumdl = "v0.2.31"
+rumdl = "v0.2.34"
 # zizmor: GHA security scanner — backs the hk zizmor builtin (#160 T12);
 # host-only lint tool, so it lives here (not shared.toml).
-zizmor = "1.26.1"
+zizmor = "1.27.0"
 "npm:oh-my-claude-sisyphus" = "4.15.4"
 "github:ast-grep/ast-grep" = "0.44.1"
 lefthook = "2.1.10"
 "npm:ctx7" = "0.5.4"
 rtk = "0.43.0"                                                      # re-probed at #160 T12.5: mise #10703 (2026.7.0) fixed the github-backend url_api lock hold that pinned this at 0.37.2
-"npm:skills" = "1.5.16"
-"npm:agent-browser" = "0.31.1"
-"npm:portless" = "0.15.1"
+"npm:skills" = "1.5.17"
+"npm:agent-browser" = "0.31.2"
+"npm:portless" = "0.15.3"
 "pipx:deepagents-cli" = "0.2.2"
-aws-cli = { version = "2.35.21", symlink_bins = "true" }
+aws-cli = { version = "2.35.23", symlink_bins = "true" }
 azure-cli = { version = "2.88.0", uvx_args = "--prerelease=allow" }
 docker-cli = "29.6.1"
-opencode = "1.17.18"
-"npm:@claude-flow/cli" = "3.25.6"
+opencode = "1.17.20"
+"npm:@claude-flow/cli" = "3.30.2"
 "npm:@ralph-orchestrator/ralph-cli" = "2.10.1"
 
 [settings]
