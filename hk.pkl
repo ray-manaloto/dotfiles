@@ -179,6 +179,32 @@ local allSteps = new Mapping<String, Config.Step> {
       "rc=0; for f in $(git ls-files '*.sh'); do first=$(head -n1 \"$f\"); case \"$first\" in \"#!\"*) ;; *) continue ;; esac; grep -qE 'set -[a-z]*o pipefail' \"$f\" || { echo \"$f: shell script with shebang lacks 'set -o pipefail' (exit-code masking guard, #142)\" >&2; rc=1; }; done; exit $rc"
   }
 
+  // --- `cmd | grep -q PAT` is UNSAFE under `set -o pipefail` (#289).
+  //     grep -q exits the instant it matches and closes the pipe; the
+  //     producer then takes SIGPIPE and exits 141; pipefail propagates 141
+  //     as the pipeline's status. So the check FAILS *BECAUSE THE MATCH
+  //     SUCCEEDED* — a false negative that looks like a real failure.
+  //     Measured 2026-07-15: this broke the #289 base build
+  //     (`apt-cache policy clang-22 | grep -q 'apt.llvm.org'` -> rc=141
+  //     with the string plainly present). It is a RACE, not a size limit:
+  //     4 sibling pipelines in the same Dockerfile passed only because
+  //     their producers exit before grep closes the pipe. Control-armed —
+  //     early match -> 141, pipefail off -> 0, match at end-of-stream -> 0.
+  //     FIX: `out="$(cmd)"; grep -q PAT <<<"$out"` — a here-string has no
+  //     producer process, so it cannot SIGPIPE (verified rc=0, and rc=1 on
+  //     a real absence). `grep -c ... >/dev/null` also works (never
+  //     early-exits). Scans the files that actually set pipefail: *.sh with
+  //     the `set -[a-z]*o pipefail` line, plus the Dockerfile whose
+  //     `SHELL [... "-o" "pipefail" ...]` applies it to every RUN.
+  //     `^[^#]*` keeps comments that merely NAME the pattern from tripping
+  //     it. Sibling of `require_pipefail`: that one demands pipefail, this
+  //     one stops pipefail from lying. ---
+  ["no_grep_q_under_pipefail"] {
+    glob = List("**/*.sh", ".devcontainer/Dockerfile")
+    check =
+      "rc=0; for f in .devcontainer/Dockerfile $(git ls-files '*.sh'); do test -f \"$f\" || continue; grep -qE 'set -[a-z]*o pipefail|SHELL \\[.*pipefail' \"$f\" || continue; if grep -nE '^[^#]*\\| *grep -q' \"$f\" >&2; then echo \"$f: 'cmd | grep -q' under pipefail returns 141 (SIGPIPE) WHEN THE MATCH SUCCEEDS — broke the #289 base build. Use: out=\\\"\\$(cmd)\\\"; grep -q PAT <<<\\\"\\$out\\\"\" >&2; rc=1; fi; done; exit $rc"
+  }
+
   // --- Zero-bash-logic enforcement: no NEW bash + no GROWTH of existing.
   //     The policy (root AGENTS.md — "Non-trivial logic lives in python/;
   //     bash restricted to thin check/smoke wrappers") was doc-only until

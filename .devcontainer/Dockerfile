@@ -149,6 +149,62 @@ COPY .config/mise/conf.d/shared.toml /usr/local/share/mise/conf.d/shared.toml
 # (build-time self-check rule). Accepted trade-off: the config COPY above
 # busts this layer on any mise-system.toml edit — mitigated by the cache
 # mounts keeping .deb downloads and lists warm.
+# apt.llvm.org — the LLVM 22 source (#251). Ubuntu resolute/universe froze at
+# 22.1.2; this suite carries 22.1.8. Despite the site self-describing as
+# "nightly", the NUMBERED suites build RELEASED TAGS: probed 2026-07-15,
+# `llvmorg-22.1.8` points at commit ca7933e47d3a and the pinned versions in
+# mise-system.toml embed exactly that commit. "Nightly" names the packaging
+# cadence, not the source tree.
+#
+# Only `-22` is enabled. The UNNUMBERED suite (`llvm-toolchain-<codename>`) is
+# LLVM 23 trunk and sorts HIGHER, so enabling it would silently win every
+# unversioned package; `-23` does not exist (404).
+#
+# MUST run BEFORE the bootstrap apply below — mise resolves `[bootstrap.packages]`
+# against the image's apt sources, so the repo has to exist first.
+# `[bootstrap.repos]` cannot do this: that is git repos, not apt sources.
+#
+# Key handling: `Signed-By` scopes the key to THIS repo only (the deprecated
+# `apt-key add` / `trusted.gpg.d` route trusts it for every source). The
+# fingerprint is asserted BEFORE the key is trusted — a build-time self-check
+# per .devcontainer/AGENTS.md, so a swapped key fails the build loudly instead
+# of silently installing signed-by-someone-else packages. gnupg is declared in
+# [bootstrap.packages] but installed by the apply BELOW, so it is pulled here.
+# The codename is read from /etc/os-release, never hardcoded, so a BASE_IMAGE
+# bump cannot silently point at the wrong dist.
+#
+# The candidate post-condition captures `apt-cache policy` into a VARIABLE and
+# matches with `case`, NOT `... | grep -q`. Under this image's
+# `SHELL [... "-o" "pipefail" ...]`, `grep -q` exits on first match and closes
+# the pipe, apt-cache takes SIGPIPE (141), and pipefail propagates 141 as the
+# pipeline's status — so the check FAILS *because* the match succeeded. That is
+# exactly how this build broke on its first CI run (#289); probed with control
+# arms: early match -> 141, pipefail off -> 0, match at end-of-stream -> 0.
+ARG LLVM_APT_SIGNING_FINGERPRINT=6084F3CF814B57C1CF12EFD515CF4D18AF4F7421
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    export DEBIAN_FRONTEND=noninteractive && \
+    apt-get update && apt-get install -y --no-install-recommends gnupg && \
+    install -d -m 0755 /etc/apt/keyrings && \
+    curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key \
+      -o /etc/apt/keyrings/apt-llvm-org.asc && \
+    actual_fingerprint="$(gpg --show-keys --with-colons --with-fingerprint \
+      /etc/apt/keyrings/apt-llvm-org.asc | awk -F: '/^fpr:/{print $10; exit}')" && \
+    if [ "$actual_fingerprint" != "$LLVM_APT_SIGNING_FINGERPRINT" ]; then \
+      echo "FAIL: apt.llvm.org key fingerprint $actual_fingerprint != pinned $LLVM_APT_SIGNING_FINGERPRINT" >&2; \
+      exit 1; \
+    fi && \
+    codename="$(. /etc/os-release && echo "$VERSION_CODENAME")" && \
+    printf 'Types: deb\nURIs: https://apt.llvm.org/%s/\nSuites: llvm-toolchain-%s-22\nComponents: main\nSigned-By: /etc/apt/keyrings/apt-llvm-org.asc\n' \
+      "$codename" "$codename" > /etc/apt/sources.list.d/apt-llvm-org.sources && \
+    apt-get update && \
+    clang_policy="$(apt-cache policy clang-22)" && \
+    case "$clang_policy" in \
+      *apt.llvm.org*) ;; \
+      *) echo "FAIL: apt.llvm.org is not a candidate source for clang-22" >&2; \
+         echo "$clang_policy" >&2; exit 1 ;; \
+    esac
+
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     mise bootstrap packages apply --manager apt --yes --update && \
@@ -196,7 +252,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     printf 'digraph{a->b->c;a->c}' | dot -Tsvg -o /dev/null && \
     printf 'digraph{a->b}' | dot -Tpng -o /dev/null && \
     printf 'graph{a--b--c--a}' | neato -Tsvg -o /dev/null && \
-    dot -V 2>&1 | grep -q 'version 15'
+    dot_version="$(dot -V 2>&1)" && \
+    grep -q 'version 15' <<<"$dot_version"
 
 # LLVM-22 C++ toolchain build-time smoke (#222 PR-C).
 # The apt llvm/clang/lld/lldb/clang-tools packages (declared in mise-system.toml
@@ -211,16 +268,19 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # link AND the binary runs, and that clangd/clang-tidy/lld/lldb/llvm-config are
 # present (capability parity with the removed conda tools). TSan is not RUN here
 # (build-as-root ASLR layout; the tier-3 smoke covers it on real amd64).
-RUN /usr/lib/llvm-22/bin/clang++ --version | grep -q 'version 22' && \
+RUN clangxx_version="$(/usr/lib/llvm-22/bin/clang++ --version)" && \
+    grep -q 'version 22' <<<"$clangxx_version" && \
     printf '#include <cstdio>\nint main(){printf("ok\\n");return 0;}\n' > /tmp/llvmcheck.cpp && \
     /usr/lib/llvm-22/bin/clang++ -fsanitize=address,undefined /tmp/llvmcheck.cpp -o /tmp/llvmcheck && \
-    /tmp/llvmcheck | grep -q '^ok$' && \
+    llvmcheck_out="$(/tmp/llvmcheck)" && \
+    [ "$llvmcheck_out" = "ok" ] && \
     test -x /usr/lib/llvm-22/bin/clangd && \
     test -x /usr/lib/llvm-22/bin/clang-tidy && \
     test -x /usr/lib/llvm-22/bin/clang-format && \
     test -x /usr/lib/llvm-22/bin/lld && \
     test -x /usr/lib/llvm-22/bin/lldb && \
-    /usr/lib/llvm-22/bin/llvm-config --version | grep -q '^22' && \
+    llvm_config_version="$(/usr/lib/llvm-22/bin/llvm-config --version)" && \
+    grep -q '^22' <<<"$llvm_config_version" && \
     rm -f /tmp/llvmcheck.cpp /tmp/llvmcheck
 
 # Pre-install tools globally via mise

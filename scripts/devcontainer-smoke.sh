@@ -137,13 +137,13 @@ if [ ! -S "${expected_sock}" ]; then
   echo "  FAIL: ${expected_sock} is not a socket (Docker Desktop magic mount missing — are you on Docker Desktop? 'docker context ls' should show desktop-linux *)" >&2
   exit 1
 fi
-if ! ssh-add -L 2>/dev/null | grep -q '^ssh-'; then
+if ! grep -q '^ssh-' <<<"$(ssh-add -L 2>/dev/null || true)"; then
   echo "  FAIL: ssh-add -L shows no identities (host ssh-agent empty? run 'ssh-add ~/.ssh/id_*' on the Mac)" >&2
   ssh-add -L 2>&1 | awk '{print "    " $0}' >&2 || true
   exit 1
 fi
 ssh_out=$(ssh -o BatchMode=yes -o ConnectTimeout=10 -T git@github.com 2>&1 || true)
-if echo "${ssh_out}" | grep -q "successfully authenticated"; then
+if grep -q "successfully authenticated" <<<"${ssh_out}"; then
   echo "  OK: github ssh full auth via /run/host-services/ssh-auth.sock"
 else
   echo "  FAIL: github ssh did not reach successful auth" >&2

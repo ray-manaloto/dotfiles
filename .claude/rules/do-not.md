@@ -45,6 +45,7 @@ self-contained block). Each item's context is preserved verbatim.
 - `mise-tasks-only.md` — canonical mise tasks over one-off commands (hook-enforced)
 - `zero-skip-policy.md` — no warning/error shall be dismissed
 - `verify-before-advancing.md` — every applicable check green before the next task
+- `probes-need-a-control-arm.md` — a check that can only pass is not a check
 - `ci-local-parity.md` — keep local checks in sync with CI
 - `clean-git-state.md` — stage all changes before validation
 - `use-tool-builtins.md` — prefer tool builtins over homegrown logic
