@@ -132,15 +132,123 @@ cargo-binstall = "latest"
 # ld.lld, lldb, llvm-*) live under /usr/lib/llvm-22/bin, added to PATH by the
 # base-stage RUN in the Dockerfile. libclang-rt-22-dev supplies the sanitizer
 # runtimes (asan/ubsan/tsan/fuzzer) the tier-3 smoke exercises via `clang++`.
-"apt:clang-22" = "latest"
-"apt:clang-tools-22" = "latest"
-"apt:clang-tidy-22" = "latest"
-"apt:clangd-22" = "latest"
-"apt:clang-format-22" = "latest"
-"apt:lld-22" = "latest"
-"apt:lldb-22" = "latest"
-"apt:llvm-22" = "latest"
-"apt:libclang-rt-22-dev" = "latest"
+#
+# The set below is the COMPLETE llvm-toolchain-22 suite and is DERIVED, not
+# hand-typed — every list written from memory has been wrong (#251 proposed
+# `apt:mlir-22`, which does not exist; OpenMP is `libomp-22-dev`, matching no
+# substring of "openmp"). Regenerate with:
+#
+#     mise run apt-repo -- --llvm-version 22 --toml
+#
+# (`--llvm-version` takes 21 | 22 | dev; dev is the UNNUMBERED apt.llvm.org
+# suite — `llvm-toolchain-resolute-23` is a 404.) The task reads the repo's
+# Packages index via python-debian; see python/src/dotfiles_setup/apt_repo.py.
+#
+# Deliberately NOT passing `--exclude-runtime`: that flag drops `Section: libs`
+# on the assumption they always arrive via Depends:. True for 9 of the 10 it
+# drops — and FALSE for libclc-22, which is the payload (124 OpenCL .bc libs)
+# and which nothing depends on, because libclc inverts the usual arrow
+# (`libclc-22` Depends: `libclc-22-dev`, not the reverse). A heuristic that
+# silently drops payload must not generate this file. Declaring a package that
+# would arrive via Depends: anyway is merely explicit — and it makes the
+# Dockerfile's `status --json --missing` gate actually verify it is present.
+#
+# Covers every component apt.llvm.org advertises: LLVM, Clang, compiler-rt,
+# polly, LLDB, LLD, libFuzzer, libc++, libc++abi, openmp, libclc, libunwind,
+# MLIR, BOLT, flang, libc (libllvmlibc-22-dev), wasm.
+#
+# python3-clang-22 — installed, and DELIBERATELY not on the default python
+# (Ray, 2026-07-15). It lands in /usr/lib/python3/dist-packages/, which only
+# /usr/bin/python3 sees; the default `python3` here is the mise shim. That is
+# the intended arrangement, not a defect:
+#
+#   * Debian's is the ONLY version-matched source. PyPI `clang` stops at
+#     21.1.7 and `libclang` at 18.1.1 — both mismatch our libclang 22.1.2, and
+#     cindex.py raises LibclangError when a binding's function is absent.
+#     `libclang` also bundles its own .so, duplicating a lib we ship (#222).
+#   * The module is pure-python ctypes (0 .so), so nothing is broken — it
+#     imports, creates an Index and parses real C under /usr/bin/python3.
+#     Reach it there; set LIBCLANG_LIBRARY_FILE=/usr/lib/llvm-22/lib/
+#     libclang-22.so.1 (cindex.py reads that env var natively).
+#
+# DO NOT "fix" this with PYTHONPATH=/usr/lib/python3/dist-packages. PYTHONPATH
+# lands at sys.path[1] while site-packages is [5], so dist-packages WINS:
+# probed 2026-07-15, a venv pinning pyyaml==6.0.2 silently got Debian's 6.0.3.
+# That trades every project's pinned deps for one import.
+#
+# These are Ubuntu 26.04 resolute/universe names at 22.1.2. apt.llvm.org
+# publishes the same names at a 22.1.8 daily snapshot (#251 open decision).
+"apt:bolt-22"                   = "latest"
+"apt:clang-22"                  = "latest"
+"apt:clang-format-22"           = "latest"
+"apt:clang-tidy-22"             = "latest"
+"apt:clang-tools-22"            = "latest"
+"apt:clangd-22"                 = "latest"
+"apt:flang-22"                  = "latest"
+"apt:libbolt-22-dev"            = "latest"
+"apt:libc++-22-dev"             = "latest"
+"apt:libc++-22-dev-wasm32"      = "latest"
+"apt:libc++1"                   = "latest"
+"apt:libc++abi-22-dev"          = "latest"
+"apt:libc++abi-22-dev-wasm32"   = "latest"
+"apt:libc++abi1"                = "latest"
+"apt:libclang-22-dev"           = "latest"
+"apt:libclang-common-22-dev"    = "latest"
+"apt:libclang-cpp22"            = "latest"
+"apt:libclang-cpp22-dev"        = "latest"
+"apt:libclang-rt-22-dev"        = "latest"
+"apt:libclang-rt-22-dev-wasm32" = "latest"
+"apt:libclang-rt-22-dev-wasm64" = "latest"
+"apt:libclang1-22"              = "latest"
+"apt:libclc-22"                 = "latest"
+"apt:libclc-22-dev"             = "latest"
+"apt:libflang-22-dev"           = "latest"
+"apt:libfuzzer-22-dev"          = "latest"
+"apt:liblld-22"                 = "latest"
+"apt:liblld-22-dev"             = "latest"
+"apt:liblldb-22"                = "latest"
+"apt:liblldb-22-dev"            = "latest"
+"apt:libllvm-22-ocaml-dev"      = "latest"
+"apt:libllvm22"                 = "latest"
+"apt:libllvmlibc-22-dev"        = "latest"
+"apt:libmlir-22"                = "latest"
+"apt:libmlir-22-dev"            = "latest"
+"apt:liboffload-22"             = "latest"
+"apt:liboffload-22-dev"         = "latest"
+"apt:libomp-22-dev"             = "latest"
+"apt:libomp5"                   = "latest"
+"apt:libpolly-22-dev"           = "latest"
+"apt:libunwind-22-dev"          = "latest"
+"apt:lld-22"                    = "latest"
+"apt:lldb-22"                   = "latest"
+"apt:llvm-22"                   = "latest"
+"apt:llvm-22-dev"               = "latest"
+"apt:llvm-22-linker-tools"      = "latest"
+"apt:llvm-22-runtime"           = "latest"
+"apt:llvm-22-tools"             = "latest"
+"apt:llvm-libunwind1"           = "latest"
+"apt:mlir-22-tools"             = "latest"
+"apt:python3-clang-22"          = "latest"
+"apt:python3-lldb-22"           = "latest"
+
+# NOT installed — listed so the set is visibly complete and a reader sees
+# these were considered and rejected, not missed.
+#
+# docs/examples: pure image weight; #222 just took :dev 25.8 GB -> 17.5 GB.
+# "apt:clang-22-doc"              = "latest"
+# "apt:clang-22-examples"         = "latest"
+# "apt:libomp-22-doc"             = "latest"
+# "apt:llvm-22-doc"               = "latest"
+# "apt:llvm-22-examples"          = "latest"
+#
+# libclang-rt-22-dev-win: UN-INSTALLABLE alongside libclang-rt-22-dev, which
+# supplies the asan/ubsan/tsan/fuzzer runtimes tier-3 smoke exercises. Both
+# ship /usr/lib/llvm-22/lib/clang/22/lib/windows/libclang_rt.builtins-aarch64.a
+# and Ubuntu declares no Conflicts/Replaces, so dpkg aborts the WHOLE apt
+# transaction — one bad package takes all 30 with it. Upstream packaging bug;
+# probed in-container 2026-07-15, fails identically when installed alone. We
+# do not target Windows, so this is no loss.
+# "apt:libclang-rt-22-dev-win"    = "latest"
 
 [settings]
 arch = "x86_64"
