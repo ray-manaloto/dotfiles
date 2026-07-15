@@ -1,9 +1,9 @@
-# Dependabot configuration file
-# Documentation: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+# Dependabot configuration — LIVE config for this repo (not a template).
+# Docs: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 #
-# DEMO FILE: Copy to .github/dependabot.yml in your target repository.
-# This file demonstrates real-world Dependabot configuration patterns
-# used in production environments.
+# Scope: Python deps in /python, and nothing else. This is the repo's ONLY
+# Python dependency updater — renovate.json's `enabledManagers` lists no
+# pip/pep621 manager, so removing this file silently stops Python bumps.
 
 version: 2
 
@@ -27,13 +27,15 @@ updates:
     open-pull-requests-limit: 5
 
     groups:
-      github-actions:
+      # Named for the ecosystem above, NOT github-actions — that name was residue
+      # from the github-actions ecosystem removed in #93 (1dd95a1), and it made a
+      # multi-dep Python bump arrive titled "bump the github-actions group …".
+      python-deps:
         patterns:
-          - "*"         # Group ALL Actions updates into a single PR
+          - "*"         # Group all /python updates into a single PR
 
     labels:
       - "dependencies"
-      - "python"
 
     commit-message:
       prefix: "ci"
