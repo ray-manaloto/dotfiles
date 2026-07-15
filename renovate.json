@@ -4,39 +4,56 @@
     "github>jdx/renovate-config",
     "group:all"
   ],
-  "schedule": ["at any time"],
+  "schedule": [
+    "at any time"
+  ],
   "minimumReleaseAge": null,
   "prConcurrentLimit": 20,
   "prHourlyLimit": 0,
   "packageRules": [
     {
-      "matchPackageNames": ["bats-core"],
+      "matchPackageNames": [
+        "bats-core"
+      ],
       "groupName": "bats-core"
     },
     {
       "description": "Do NOT digest-pin devcontainer features. Renovate's devcontainer manager + pinDigests appends a digest to the already-tagged feature ref, producing the INVALID combined form `ghcr.io/devcontainers/features/sshd:1@sha256:...` which @devcontainers/cli rejects (path-regex validation fails), breaking `devcontainer upgrade`/`up` and the lock-coverage test. Observed 2026-07-08 (PR #187 broke main; fixed here). Features stay tag-pinned; the base image digest is managed by the custom ubuntu manager below.",
-      "matchManagers": ["devcontainer"],
+      "matchManagers": [
+        "devcontainer"
+      ],
       "pinDigests": false
     },
     {
-      "matchUpdateTypes": ["minor", "patch", "digest"],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest"
+      ],
       "automerge": true,
       "automergeType": "pr",
       "platformAutomerge": true
     },
     {
       "description": "Parse the gcc-latest version out of the jwakely index hrefs (the html datasource yields full URLs as version candidates; the rolling gcc-latest.deb link has no version and is filtered out). timestamp-optional fixes a real bug (#160 T12.5): the html datasource emits NO releaseTimestamp, and the default minimumReleaseAge behavior holds timestamp-less updates FOREVER.",
-      "matchDatasources": ["custom.gcc-latest"],
+      "matchDatasources": [
+        "custom.gcc-latest"
+      ],
       "extractVersion": "gcc-latest_(?<version>[0-9.]+-\\d+git[0-9a-f]+)\\.deb$",
       "minimumReleaseAgeBehaviour": "timestamp-optional"
     }
   ],
-  "ignoreDeps": ["CC", "CXX"],
+  "ignoreDeps": [
+    "CC",
+    "CXX"
+  ],
   "customManagers": [
     {
       "customType": "regex",
       "description": "hk pkl schema pin (amends + import package:// URLs) — kept in lockstep with hk releases across hk.pkl, hk-common.pkl, hk-image.pkl. No native/preset manager covers a pkl amends URL. The version appears TWICE per URL (release tag `download/v<X>/` AND package `hk@<X>`); both matchStrings are required so a bump rewrites both — a single-occurrence match produces the 404 URL `v<new>/hk@<old>.zip` (fixed #248).",
-      "managerFilePatterns": ["/(^|/)hk(-common|-image)?\\.pkl$/"],
+      "managerFilePatterns": [
+        "/(^|/)hk(-common|-image)?\\.pkl$/"
+      ],
       "matchStrings": [
         "download/v(?<currentValue>[\\d.]+)/hk@",
         "hk@(?<currentValue>[\\d.]+)"
@@ -47,7 +64,9 @@
     {
       "customType": "regex",
       "description": "chezmoi minimum-version file. No native/preset manager covers .chezmoiversion.",
-      "managerFilePatterns": ["/(^|/)\\.chezmoiversion$/"],
+      "managerFilePatterns": [
+        "/(^|/)\\.chezmoiversion$/"
+      ],
       "matchStrings": [
         "v?(?<currentValue>[\\d.]+)"
       ],
@@ -57,7 +76,10 @@
     {
       "customType": "regex",
       "description": "clang-p2996 pinned git SHA (tagless p2996 branch HEAD). git-refs datasource; no preset handles a git digest.",
-      "managerFilePatterns": ["/docker-bake\\.hcl$/", "/\\.devcontainer/Dockerfile$/"],
+      "managerFilePatterns": [
+        "/docker-bake\\.hcl$/",
+        "/\\.devcontainer/Dockerfile$/"
+      ],
       "matchStrings": [
         "CLANG_P2996_REF[\"= ]+(?<currentDigest>[a-f0-9]{40})"
       ],
@@ -69,7 +91,9 @@
     {
       "customType": "regex",
       "description": "gcc-latest.deb dated URL pin. Upstream (kayari) publishes NO checksum/signature — the immutable dated filename is the reproducibility handle. Bumped via the custom.gcc-latest HTML datasource on the jwakely index; no native/preset manager covers a rolling .deb URL. The companion GCC_LATEST_DEB_SHA256 is NOT managed here (Renovate can't hash an artifact); the gcc-sha-repair.yml workflow recomputes + commits it on this bump (#249).",
-      "managerFilePatterns": ["/\\.devcontainer/Dockerfile$/"],
+      "managerFilePatterns": [
+        "/\\.devcontainer/Dockerfile$/"
+      ],
       "matchStrings": [
         "ARG GCC_LATEST_DEB=gcc-latest_(?<currentValue>[0-9.]+-\\d+git[0-9a-f]+)\\.deb"
       ],
@@ -80,7 +104,10 @@
     {
       "customType": "regex",
       "description": "ubuntu base image digest pin in docker-bake.hcl + Dockerfile ARG. The native docker/dockerfile managers do not parse bake HCL, and the digest feeds the base content-hash, so keep both files in lockstep here.",
-      "managerFilePatterns": ["/docker-bake\\.hcl$/", "/\\.devcontainer/Dockerfile$/"],
+      "managerFilePatterns": [
+        "/docker-bake\\.hcl$/",
+        "/\\.devcontainer/Dockerfile$/"
+      ],
       "matchStrings": [
         "ubuntu:(?<currentValue>[0-9.]+)@(?<currentDigest>sha256:[a-f0-9]{64})"
       ],
@@ -90,7 +117,9 @@
     {
       "customType": "regex",
       "description": "mise installer version pin (curl https://mise.run honors MISE_VERSION). The pin must track a mise version that reads the committed mise-system.lock format — Renovate bumps it, and the CI lock-refresh job regenerates the lock in lockstep.",
-      "managerFilePatterns": ["/\\.devcontainer/Dockerfile$/"],
+      "managerFilePatterns": [
+        "/\\.devcontainer/Dockerfile$/"
+      ],
       "matchStrings": [
         "ARG MISE_VERSION=(?<currentValue>[0-9.]+)"
       ],
@@ -100,12 +129,27 @@
     {
       "customType": "regex",
       "description": "dive layer-analysis version pin. The upstream action is broken (bare Dockerfile with an empty ARG DOCKER_CLI_VERSION → 404), so image-analysis.yml installs the release tarball directly and the version lives in a workflow env var no native manager parses. Same github-releases shape as the MISE_VERSION pin; the curl URL re-adds the v prefix.",
-      "managerFilePatterns": ["/\\.github/workflows/image-analysis\\.yml$/"],
+      "managerFilePatterns": [
+        "/\\.github/workflows/image-analysis\\.yml$/"
+      ],
       "matchStrings": [
         "DIVE_VERSION: (?<currentValue>[0-9.]+)"
       ],
       "depNameTemplate": "wagoodman/dive",
       "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "#251: LLVM apt packages in mise-system.toml [bootstrap.packages], pinned to apt.llvm.org's llvm-toolchain-<codename>-22 suite. Renovate's NATIVE mise manager cannot do this - its schema parses only `tools`/`tasks` and z.object silently strips [bootstrap.packages] - so this regex + the `deb` datasource is the only route. Proven end-to-end against this exact suite (2026-07-15): extract yields depName/currentValue/replaceString, lookup resolves against apt.llvm.org with no warnings. #236 does NOT apply: bootstrap packages are not in mise.lock and a regex manager has no lockfile to regenerate. Only `-22` lines match: the non-LLVM apt entries stay \"latest\" and the version regex (^1:) will not match them.",
+      "managerFilePatterns": [
+        "/^\\.devcontainer/mise-system\\.toml$/"
+      ],
+      "matchStrings": [
+        "\"apt:(?<depName>[a-z0-9.+-]+)\"\\s*=\\s*\"(?<currentValue>1:[^\"]+)\""
+      ],
+      "datasourceTemplate": "deb",
+      "versioningTemplate": "deb",
+      "registryUrlTemplate": "https://apt.llvm.org/resolute?suite=llvm-toolchain-resolute-22&components=main&binaryArch=amd64"
     }
   ],
   "customDatasources": {
@@ -114,7 +158,16 @@
       "format": "html"
     }
   },
-  "enabledManagers": ["npm", "cargo", "mise", "dockerfile", "docker-compose", "devcontainer", "github-actions", "custom.regex"],
+  "enabledManagers": [
+    "npm",
+    "cargo",
+    "mise",
+    "dockerfile",
+    "docker-compose",
+    "devcontainer",
+    "github-actions",
+    "custom.regex"
+  ],
   "vulnerabilityAlerts": {
     "enabled": true
   }

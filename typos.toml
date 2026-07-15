@@ -4,3 +4,12 @@
 # typos elsewhere are still caught.
 [default.extend-identifiers]
 ba41c3748e298012 = "ba41c3748e298012"
+
+# `fpr` is gpg's --with-colons RECORD TYPE for a fingerprint line, not a
+# misspelling of "for"/"far"/"fps" (#251). The Dockerfile's apt.llvm.org key
+# check parses that exact format:
+#   fpr:::::::::6084F3CF814B57C1CF12EFD515CF4D18AF4F7421:
+# Allowlist the identifier so genuine typos elsewhere are still caught. gpg's
+# format is not ours to rename, and weakening the check to dodge the word
+# (grepping for the hex anywhere in the output) would match a subkey too.
+fpr = "fpr"

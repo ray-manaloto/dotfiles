@@ -458,6 +458,26 @@ description = "Check MEMORY.md before trimming it: budget, dead links, and facts
 # Pass flags through: mise run memory-index -- --refs feedback_colima_recommendation
 run = 'uv run --project python dotfiles-setup memory-index'
 
+[tasks.renovate-dryrun]
+description = "Dry-run Renovate against this repo to see what it would change (no PRs)"
+# Thin caller. `--platform=local --dry-run=full` reads the working tree and
+# reports what Renovate WOULD do; it never writes or opens a PR.
+#
+# tools.node pins THIS TASK to node 24 (#251). Renovate 43.x declares
+# `engines.node ^24.11.0`; under our node 26 the binary exits rc=1 with
+# "Unsupported node environment detected" and extracts NOTHING — which reads
+# like "no deps found", not like an env error. `depends` cannot fix this (it is
+# install ORDER only); `tasks.*.tools` is mise's documented per-task version
+# override ("a tool with a different version... only used for that task").
+# Probed 2026-07-15: default task -> v26.5.0, tools.node="24" task -> v24.x.
+# Renovate's own mise manager reads `tasks.*.tools`, so this pin stays current.
+#
+# NOTE: a full run is slow when a `deb` datasource points at Ubuntu's archive
+# (it downloads the whole main,universe Packages index). apt.llvm.org's index
+# is ~13 KB and resolves fast.
+tools.node = "24"
+run = 'renovate --platform=local --dry-run=full'
+
 [tasks.renovate-status]
 description = "Report Mend-hosted Renovate install + privileges + open update PRs"
 # Thin caller (zero-bash-logic); logic in
