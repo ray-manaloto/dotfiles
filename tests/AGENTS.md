@@ -60,6 +60,41 @@ bats tests/infra/
 changes cwd and breaks `Path(__file__).parent.parent` resolution in the
 test fixtures.
 
+## What a good test is here
+
+Tests verify behavior through a **public interface** — an exported function,
+a CLI's rc and output, a generated script's real execution — never through
+implementation details. Code can change entirely; the test shouldn't. The tell
+for an implementation-coupled test is that it breaks under a refactor while
+behavior hasn't changed.
+
+Two anti-patterns have already cost this repo real bugs. Both are **silent
+false negatives**: they surface as a green suite, never as a failure, so only
+a deliberate probe finds them.
+
+- **Tautological** — the assertion recomputes the expected value the way the
+  code does, so it passes by construction and can never disagree with the
+  code. Expected values must come from an **independent source of truth**: a
+  known-good literal, a worked example, the real artifact. The four
+  `test_memory_index.py` bugs above are this shape.
+- **A probe with no control arm** — a check that can only pass is not a check.
+  Pin the FAIL direction next to the pass: tier-1 identity really fails on a
+  wrong hash, tier-3 on a wrong ref, and every `_inert_masked` case is paired
+  with a recall pin. A 2026-07-15 hook probe "passed" while its control proved
+  the hook had never fired at all.
+
+## Mocking
+
+Mock at **system boundaries only** — the network (GHCR, `gh`, release feeds),
+Docker, the clock, the filesystem where `tmp_path` won't do. Never mock our
+own modules, internal collaborators, or anything we control: that couples the
+test to structure and is exactly how the implementation-coupled tell appears.
+
+At a boundary, prefer **injecting** the dependency over constructing it inside
+the function. `gcc_sha`'s injected fetcher and `hook_guard`'s pure `decide()`
+are the pattern already in use here — the seam is a parameter, so the test
+substitutes a value and needs no patching at all.
+
 ## Working in this directory
 
 - **Imports from `python/src/`:** tests add
