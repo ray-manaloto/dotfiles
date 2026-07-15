@@ -473,3 +473,75 @@ def test_cli_accepts_the_session_end_output_flag() -> None:
     )
     assert res.returncode == 0
     assert "--output" in res.stdout
+
+
+class TestFalseSignals:
+    """#289: shapes whose ANSWER cannot be trusted.
+
+    Orthogonal to `classify` — a diagnostic command can still lie. Each shape
+    is pinned in BOTH directions per
+    `.claude/rules/probes-need-a-control-arm.md`: a detector that only ever
+    fires is as useless as one that never does.
+    """
+
+    def test_grep_q_under_pipefail_is_flagged(self) -> None:
+        """The shape that broke the #289 base build.
+
+        `apt-cache policy clang-22 | grep -q 'apt.llvm.org'` returned 141:
+        grep -q closed the pipe ON MATCH, apt-cache took SIGPIPE, pipefail
+        propagated it. The check failed BECAUSE it succeeded.
+        """
+        assert "grep_q_pipefail" in ca.false_signals(
+            "apt-cache policy clang-22 | grep -q 'apt.llvm.org'"
+        )
+
+    def test_the_grep_q_fix_is_not_flagged(self) -> None:
+        """CONTROL: the prescribed fix must not trip the detector.
+
+        A detector that flags its own remedy trains the reader to ignore it.
+        """
+        assert ca.false_signals('out="$(cmd)"; grep -q PAT <<<"$out"') == []
+
+    def test_pipe_then_read_rc_is_flagged(self) -> None:
+        """`cmd | head; echo rc=$?` reads head's rc, not cmd's."""
+        assert "pipe_then_rc" in ca.false_signals('typos f | head -3; echo "rc=$?"')
+
+    def test_rc_without_a_pipe_is_not_flagged(self) -> None:
+        """CONTROL: reading $? is correct when no pipe can steal it."""
+        assert ca.false_signals('typos f > /tmp/o 2>&1; echo "rc=$?"') == []
+
+    def test_depth_bounded_find_is_flagged(self) -> None:
+        """The probe that called `grill-with-docs` absent; it sat at depth 7."""
+        assert "bounded_find" in ca.false_signals(
+            "find ~/.claude/plugins -iname '*grill*' -maxdepth 4"
+        )
+
+    def test_unbounded_and_deep_find_are_not_flagged(self) -> None:
+        """CONTROL: only a SHALLOW bound turns 'unreachable' into 'absent'."""
+        assert ca.false_signals("find . -name '*.py'") == []
+        assert ca.false_signals("find . -name '*.py' -maxdepth 8") == []
+
+    def test_nested_quoting_via_docker_exec_is_flagged(self) -> None:
+        """25x in one session; mangled an openmp probe into a false FAIL."""
+        assert "nested_quote_exec" in ca.false_signals(
+            'docker exec "$C" bash -lc "echo hi"'
+        )
+
+    def test_docker_cp_script_form_is_not_flagged(self) -> None:
+        """CONTROL: the prescribed fix (write a file, cp it, run it) is clean."""
+        assert ca.false_signals("docker exec $C bash /tmp/probe.sh") == []
+
+    def test_every_shape_has_advice(self) -> None:
+        """A finding without a remedy is noise; each shape must explain itself."""
+        for shape in (
+            "pipe_then_rc",
+            "grep_q_pipefail",
+            "bounded_find",
+            "nested_quote_exec",
+        ):
+            assert len(ca.false_signal_advice(shape)) > 20
+
+    def test_clean_commands_yield_nothing(self) -> None:
+        """CONTROL: ordinary work must not be flagged at all."""
+        for cmd in ("git status --short", "mise run lint", "ls -la"):
+            assert ca.false_signals(cmd) == []

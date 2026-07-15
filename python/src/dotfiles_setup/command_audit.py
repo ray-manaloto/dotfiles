@@ -380,6 +380,61 @@ def is_diagnostic(command: str) -> bool:
     return sub in reads
 
 
+# --- False-signal shapes (#289) -------------------------------------------
+#
+# ORTHOGONAL to the classify() classes above: a command can be `diagnostic`
+# AND still carry a shape whose ANSWER CANNOT BE TRUSTED. These are not
+# "should be a mise task" findings — they are "this probe lied to you".
+#
+# Measured over one session's 429 Bash calls (2026-07-15): 25x nested-quoting,
+# 13x depth-limited find, 10x grep -q under pipefail, 2x pipe-then-read-rc.
+# All four are the SAME root: the signal read is not the signal meant.
+# Documented in .claude/rules/probes-need-a-control-arm.md; the grep -q case
+# is machine-gated for tracked files by hk.pkl's `no_grep_q_under_pipefail`,
+# but ad-hoc Bash reaches no gate — which is why it is surfaced here.
+_FALSE_SIGNAL_SHAPES: tuple[tuple[str, str, str], ...] = (
+    (
+        "pipe_then_rc",
+        r"\|\s*(?:head|tail|wc|grep|sed|awk)\b[^\n]*\n?\s*(?:echo\s+)?[\"']?\s*rc=\$\?",
+        "reads $? after a pipe — that is the LAST stage's rc, not the command's",
+    ),
+    (
+        "grep_q_pipefail",
+        r"\|\s*grep\s+-q\b",
+        "cmd | grep -q returns 141 under pipefail WHEN THE MATCH SUCCEEDS "
+        '(SIGPIPE); use: out="$(cmd)"; grep -q PAT <<<"$out"',
+    ),
+    (
+        "bounded_find",
+        r"\bfind\b[^\n|]*-maxdepth\s+[1-5]\b",
+        "a depth-bounded find turns 'unreachable' into 'absent' — it found "
+        "nothing because it could not look, not because nothing is there",
+    ),
+    (
+        "nested_quote_exec",
+        r"docker\s+exec[^\n]*\bbash\s+-lc\s+[\"']",
+        "nested quoting through `docker exec bash -lc` mangles the payload; "
+        "write the script to a file and `docker cp` it instead",
+    ),
+)
+
+
+def false_signals(command: str) -> list[str]:
+    """Shape names whose RESULT this command cannot be trusted to report.
+
+    Orthogonal to :func:`classify` — a command may be diagnostic, mise-backed
+    or a one-off and still lie about what it found.
+    """
+    return [
+        name for name, pattern, _ in _FALSE_SIGNAL_SHAPES if re.search(pattern, command)
+    ]
+
+
+def false_signal_advice(name: str) -> str:
+    """The one-line reason a shape's answer is untrustworthy."""
+    return next(a for n, _, a in _FALSE_SIGNAL_SHAPES if n == name)
+
+
 def classify(bc: BashCommand) -> str:
     """The class of one command: see the module docstring (first match wins).
 
@@ -430,6 +485,9 @@ class AuditResult:
     one_off_groups: list[tuple[str, int, str]]
     sessions: int
     total: int
+    #: shape name -> (count, one example). Orthogonal to `counts` — a command
+    #: can be counted in a class above AND appear here.
+    false_signal_groups: dict[str, tuple[int, str]]
 
 
 # Grouped classes, and how each one names a group. Guard denials group by the
@@ -446,6 +504,8 @@ def audit(commands: Iterable[BashCommand], *, sessions: int) -> AuditResult:
     group_counts: dict[str, Counter[str]] = {k: Counter() for k in _GROUPED}
     examples: dict[str, dict[str, str]] = {k: {} for k in _GROUPED}
     total = 0
+    fs_counts: Counter[str] = Counter()
+    fs_examples: dict[str, str] = {}
     for bc in commands:
         total += 1
         kind = classify(bc)
@@ -454,6 +514,9 @@ def audit(commands: Iterable[BashCommand], *, sessions: int) -> AuditResult:
             key = _group_name(bc, kind)
             group_counts[kind][key] += 1
             examples[kind].setdefault(key, bc.command)
+        for shape in false_signals(bc.command):
+            fs_counts[shape] += 1
+            fs_examples.setdefault(shape, bc.command)
 
     def ranked(kind: str) -> list[tuple[str, int, str]]:
         return [
@@ -467,6 +530,9 @@ def audit(commands: Iterable[BashCommand], *, sessions: int) -> AuditResult:
         one_off_groups=ranked("one_off"),
         sessions=sessions,
         total=total,
+        false_signal_groups={
+            s: (n, fs_examples[s]) for s, n in fs_counts.most_common()
+        },
     )
 
 
@@ -545,7 +611,24 @@ def render_report(result: AuditResult) -> str:
         "known bad shape, add a `hook_guard._RULES` redirect — with a `since` "
         "date, or its first scan reports as history. See "
         ".claude/rules/mise-tasks-only.md.",
+        "",
+        "## False signals",
+        "",
+        "Commands whose ANSWER cannot be trusted — orthogonal to the classes "
+        "above (a diagnostic can still lie). These are not 'wrap it in a task' "
+        "findings; they are 'this probe told you something false'. See "
+        "`.claude/rules/probes-need-a-control-arm.md`.",
+        "",
     ]
+    if result.false_signal_groups:
+        for shape, (n, example) in result.false_signal_groups.items():
+            lines += [
+                f"- **{shape}** — {n}x. {false_signal_advice(shape)}",
+                f"  - e.g. `{_truncate(example, 96)}`",
+            ]
+        lines += [""]
+    else:
+        lines += ["_None._", ""]
     return "\n".join(lines) + "\n"
 
 
