@@ -33,7 +33,7 @@ first".
 | Changed | Also required |
 |---|---|
 | `.github/**` (workflows/actions) | `mise run pin-actions` |
-| `AGENTS.md` / `CLAUDE.md` / `.claude/**/*.md` | `mise run lint-docs` (agnix) **and** the ≤200-line / ≤12000-char limit holds (`claude_md_size_limit`) |
+| `AGENTS.md` / `CLAUDE.md` / `.claude/**/*.md` | `mise run lint-docs` (agnix) **and** the per-load-class budget holds (`md_size_budget`; see [[md-size-budgets]]) |
 | `.devcontainer/**`, `mise-system.toml`, image/Dockerfile | `mise run verify-local` (R1/R2/R3 + persistence) or a direct `docker run <img> …` check; the in-image smoke can't fully run on this arm64 Mac (Rosetta) |
 | Validating **through the devcontainer** (any change you test in-container) | `mise run verify-container-latest` — the running container must bind-mount THIS workspace (source = latest branch code) and pass smoke; **base-currency is a hard gate** (smoke tier-1 identity fails a base predating the current `mise-system.toml`). See "Validate against the latest branch code" below. |
 | Opened a PR | `gh pr checks <n> --watch` until terminal — every check `pass` or `skipping`, **0 fail** |
@@ -108,8 +108,20 @@ Every task in this repo — local edits, PRs, merges, multi-step work, and
 agent-delegated work (the delegating context is responsible for
 confirming the delegate's checks actually passed).
 
+> **This file is where the ≤12000-char misattribution was born (2026-07-15
+> archaeology).** The row above once asserted a "≤200-line / ≤12000-char limit"
+> for a gate that enforced **only** lines. The number is REAL — it is
+> **Windsurf's** AGENTS.md limit (agnix AGM-003) — but it arrived here without
+> its source, was later machine-enforced to match this prose, and was captioned
+> "per Claude Code memory docs", which never stated it. **A true fact that
+> travels without its source becomes indistinguishable from an invented one**,
+> and gets applied to files its real owner never governed. Cite a figure only
+> where you can name the vendor; when code and a doc disagree, re-read the
+> source before making either match the other. See [[md-size-budgets]].
+
 ## See also
 
+- `md-size-budgets.md` — the per-load-class budgets that replaced the fiction.
 - `zero-skip-policy.md` — no red check is ever dismissed.
 - `long-running-command-hangs.md` — bound `mise run lint`; never wait blind.
 - Memory `feedback_pipe_kills_exit_code` — read the rc, not a piped tail.

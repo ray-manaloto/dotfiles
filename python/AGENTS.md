@@ -39,7 +39,7 @@ Requires **Python 3.14**.
 ## Testing
 
 ```bash
-uv run --project python pytest tests/ -x -q                # All 654 tests
+uv run --project python pytest tests/ -x -q                # All 697 tests
 uv run --project python pytest tests/test_audit.py -x -q   # Single file
 ```
 
