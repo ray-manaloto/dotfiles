@@ -16,6 +16,7 @@ import json
 import pytest
 from dotfiles_setup.image import (
     _TIER1_IDENTITY_BLOCK,
+    _TIER1_PYTHON_DEFAULT,
     _TIER3_COMPILER_BODY,
     IDENTITY_IMAGE_PATHS,
     AnalysisTarget,
@@ -1308,3 +1309,81 @@ def test_resolve_analysis_ref_main_fail_exits_nonzero_no_stdout(
     # No GITHUB_OUTPUT lines on failure (stdout is redirected to $GITHUB_OUTPUT).
     assert out.out == ""
     assert "FAIL" in out.err
+
+
+def _run_python_block(
+    mise_dir: Path, py_exe: str, py_ver: str, want_ver: str
+) -> subprocess.CompletedProcess:
+    """Run just the tier-1 python block against a fake `python3` via bash.
+
+    A stub `python3` on PATH reports `py_exe`/`py_ver`, so the block's two
+    assertions (resolution under $MISE_DIR/installs/python, exact version) can
+    be driven in both directions without a real interpreter.
+    """
+    bin_dir = mise_dir / "stub-bin"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    stub = bin_dir / "python3"
+    stub.write_text(
+        "#!/usr/bin/env bash\n"
+        f'case "$*" in *sys.executable*) echo {shlex.quote(py_exe)} ;; '
+        f"*python_version*) echo {shlex.quote(py_ver)} ;; esac\n"
+    )
+    stub.chmod(0o755)
+    harness = (
+        "set -euo pipefail\n"
+        f"MISE_DIR={shlex.quote(str(mise_dir))}\n"
+        f"PATH={shlex.quote(str(bin_dir))}:$PATH\n"
+        f"EXPECTED_PYTHON_VERSION={shlex.quote(want_ver)}\n" + _TIER1_PYTHON_DEFAULT
+    )
+    return subprocess.run(
+        ["bash", "-c", harness], capture_output=True, text=True, check=False
+    )
+
+
+def test_tier1_python_block_passes_for_mise_python(tmp_path: Path) -> None:
+    """The happy path: python3 under mise's installs at the declared version."""
+    exe = f"{tmp_path}/installs/python/3.14.6/bin/python3"
+    r = _run_python_block(tmp_path, exe, "3.14.6", "3.14.6")
+    assert r.returncode == 0, r.stderr
+    assert "OK: default python3 is mise's 3.14.6" in r.stdout
+
+
+def test_tier1_python_block_fails_on_distro_python(tmp_path: Path) -> None:
+    """FAIL arm: the distro python taking the PATH is caught.
+
+    This is the regression the block exists for — the image ships Ubuntu's
+    /usr/bin/python3 as a hard Depends: of clang-format-22/lldb-22, so a shim
+    or PATH break silently hands `python3` to a DIFFERENT interpreter. Without
+    this arm the block would be a probe that can only pass.
+    """
+    r = _run_python_block(tmp_path, "/usr/bin/python3", "3.14.4", "3.14.6")
+    assert r.returncode == 1
+    assert "not a mise install" in r.stdout
+
+
+def test_tier1_python_block_fails_on_version_drift(tmp_path: Path) -> None:
+    """FAIL arm: right location, wrong version — the pin is enforced too."""
+    exe = f"{tmp_path}/installs/python/3.14.4/bin/python3"
+    r = _run_python_block(tmp_path, exe, "3.14.4", "3.14.6")
+    assert r.returncode == 1
+    assert "declared 3.14.6" in r.stdout
+
+
+def test_tier1_python_block_dormant_when_unset(tmp_path: Path) -> None:
+    """An unpopulated call is a no-op SKIP, never a false green."""
+    r = _run_python_block(tmp_path, "/usr/bin/python3", "3.14.4", "")
+    assert r.returncode == 0
+    assert "SKIP" in r.stdout
+
+
+def test_build_tier1_script_injects_python_version() -> None:
+    """`build_tier1_script` threads the declared version into the script."""
+    s = build_tier1_script(expected_python="3.14.6")
+    assert "EXPECTED_PYTHON_VERSION=3.14.6" in s
+    assert "not a mise install under" in s
+
+
+def test_build_tier1_script_python_guard_dormant_without_data() -> None:
+    """No python version => the guard is emitted but inert."""
+    s = build_tier1_script()
+    assert "EXPECTED_PYTHON_VERSION=''" in s
