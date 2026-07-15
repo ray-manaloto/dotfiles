@@ -1,11 +1,4 @@
----
-paths:
-  - ".devcontainer/**"
-  - "docker-bake.hcl"
-  - ".claude/**"
-  - ".agnix.toml"
-  - ".pinact.yaml"
----
+<!-- UNSCOPED ON PURPOSE: behaviour-triggered; see "Why eager" below. -->
 
 # Clean Git State Before Validation
 
@@ -38,3 +31,10 @@ Verify what hk checked locally matches what CI will see:
 | File modified, not staged | Old content in CI | `git add <file>` or stash |
 | Global mise tool installed | Tool missing in CI | Add to mise.toml |
 | npx resolves cached package | npx re-downloads in CI | Use mise binary name |
+
+## Why this rule is eager (never `paths:`-scoped)
+
+Same class as [[zero-skip-policy]]: it fires when validation is about to run,
+not when a given file is read, so no glob predicts it. It was scoped to
+`.devcontainer/**`/`.claude/**` until 2026-07-15, which meant validating after
+a python-only edit never loaded it. See `.claude/rules/md-size-budgets.md`.

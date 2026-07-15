@@ -1,0 +1,408 @@
+r"""Markdown instruction-file size budgets, BY LOAD CLASS.
+
+``dotfiles-setup md-budget`` (the ``md_size_budget`` hk step) replaces the old
+``claude_md_size_limit`` one-liner, which enforced a uniform 200-line/12000-byte
+cap on every ``CLAUDE.md``/``AGENTS.md``. That gate had three defects, each
+established against primary sources in
+``.omc/research/research-20260715-md-size-limits/report.md``:
+
+1. **The 12000-byte half was MISATTRIBUTED, not invented.** The figure is real
+   — it is **Windsurf's**, not Anthropic's. Windsurf's own docs
+   (<https://docs.windsurf.com/windsurf/cascade/memories>) state its Rules
+   engine is "Limited to 12,000 characters per file", and that ``AGENTS.md`` is
+   "processed by the same Rules engine". agnix enforces it as **AGM-003**
+   (Category: agents-md, Tool: windsurf, Source type: vendor_docs). It appears
+   nowhere in ANTHROPIC's docs — control-armed over the full corpus
+   (``code.claude.com/docs/llms-full.txt``, 5,930,782 B, 2026-07-15):
+   ``\b12,?000\b`` -> **0 hits**, vs 5 for MEMORY.md's cap and 12 for
+   ``"200 lines"``. So captioning it "per Claude Code memory docs" was wrong
+   about the SOURCE, not about the number. A CAUTIONARY NOTE ON THAT PROBE: it
+   was bounded to Anthropic's corpus and answered truthfully within it; reading
+   it as "undocumented anywhere" is the bound-dropping error
+   ``probes-need-a-control-arm.md`` warns about, and it was made here before
+   agnix failed and surfaced Windsurf.
+2. **It was class-blind.** It spent its whole budget on LAZY files while 68,773
+   bytes of EAGER ``.claude/rules/*.md`` (5.9x the root AGENTS.md) went
+   ungoverned — anti-correlated with the context cost it existed to control.
+3. **It counted disk bytes.** HTML comments are stripped before injection, so
+   the root CLAUDE.md's 324 disk bytes are 10 bytes of context. Counting them
+   measures what Claude never sees.
+
+The one documented figure for author-written instruction files is:
+
+    "Size: target under 200 lines per CLAUDE.md file. Longer files consume more
+    context and reduce adherence."
+    -- https://code.claude.com/docs/en/memory (Write effective instructions)
+
+It is a SOFT guideline about a gradient, not a truncation point. The same page
+states plainly: "CLAUDE.md files are loaded in full regardless of length,
+though shorter files produce better adherence." Nothing here truncates.
+
+Budgets differ BY LOAD CLASS because that is the docs' own cost model — a
+limit's justification is *when* the bytes are spent:
+
+- **eager**  root ``CLAUDE.md`` + its ``@import`` closure, and unscoped
+  ``.claude/rules/*`` ("loaded at launch with the same priority as
+  .claude/CLAUDE.md") -> the documented 200.
+- **lazy**   nested ``CLAUDE.md``/``AGENTS.md`` ("included when Claude reads
+  files in those subdirectories", and NOT re-injected after /compact) -> 400.
+- **cond**   ``paths:``-scoped rules ("only load into context when Claude works
+  with matching files") -> 400.
+- **skill**  ``SKILL.md`` ("Keep under 500 lines"; loads on invocation only) ->
+  500, plus the description cap below.
+
+``SKILL_DESCRIPTION_MAX`` is the ONE hard-truncating limit this repo can
+actually violate, and it fails silently: an over-long description is cut, so the
+keywords Claude matches on vanish and the skill simply stops being discovered.
+
+The byte ceilings are SELF-IMPOSED anti-gaming backstops (a line cap alone
+admits 200 x 400-char lines), sized so they never bind before the documented
+line limit does. They are OURS. Do not re-attribute them upstream — that
+mistake is what this module exists to undo.
+"""
+
+from __future__ import annotations
+
+import re
+import subprocess
+import sys
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+# --- Budgets -----------------------------------------------------------------
+
+# The one documented figure ("target under 200 lines per CLAUDE.md file").
+DOCUMENTED_LINE_TARGET = 200
+
+# Relaxed ceiling for classes whose bytes are NOT spent at launch (lazy/cond).
+# Self-imposed: no Anthropic figure governs these classes at all.
+DEFERRED_LINE_LIMIT = 400
+
+# "Keep under 500 lines" — https://code.claude.com/docs/en/skills
+SKILL_LINE_LIMIT = 500
+
+# HARD TRUNCATION. Raised 250 -> 1536 across v2.1.86..v2.1.105. An over-long
+# description is silently cut, taking the matching keywords with it.
+SKILL_DESCRIPTION_MAX = 1536
+
+# Self-imposed byte backstops (~200 x 120 chars), NOT Anthropic figures.
+EAGER_BYTE_BACKSTOP = 24_000
+DEFERRED_BYTE_BACKSTOP = 32_000
+
+# Vendored / third-party; not ours to budget (same carve-out as bash_budget).
+_EXCLUDED_PREFIXES = ("plugins/",)
+
+# Docs: "maximum depth of four hops".
+_MAX_IMPORT_DEPTH = 4
+
+# Only CLAUDE.md is an ENTRY POINT: "Claude Code reads CLAUDE.md, not
+# AGENTS.md. If your repository already uses AGENTS.md ... create a CLAUDE.md
+# that imports it." So an AGENTS.md reaches context ONLY through its stub's
+# @import, and is budgeted as a member of that closure — never standalone.
+# Budgeting it twice would both double-count the eager total and blame the
+# wrong file. (`claude_agents_md_pairs` separately guarantees the stub exists,
+# which is what makes this safe: no AGENTS.md is orphaned and unbudgeted.)
+_ENTRY_RE = re.compile(r"(^|/)CLAUDE\.md$")
+_RULE_RE = re.compile(r"^\.claude/rules/.*\.md$")
+_SKILL_RE = re.compile(r"^\.claude/skills/.*/SKILL\.md$")
+
+# An @import directive. Import parsing "skips Markdown code spans and fenced
+# code blocks", so a backticked `@README` is a literal mention, not an import —
+# hence the lookbehind, which also rejects an email's local part (`a@b.com`).
+# The target may be a BARE filename (`@AGENTS.md` — this repo's own root stub),
+# so it must not require a `/`. Prose false positives are harmless: a target
+# that does not resolve to a real file contributes nothing.
+_IMPORT_RE = re.compile(r"(?<![`\w])@([A-Za-z0-9_./~-][^\s`]*)")
+
+
+@dataclass
+class Budget:
+    """The ceiling for one load class."""
+
+    max_lines: int
+    max_bytes: int
+    why: str
+
+
+BUDGETS: dict[str, Budget] = {
+    "eager_root": Budget(
+        DOCUMENTED_LINE_TARGET,
+        EAGER_BYTE_BACKSTOP,
+        "loaded in full at launch, every session — the documented 200-line target",
+    ),
+    "rule_unscoped": Budget(
+        DOCUMENTED_LINE_TARGET,
+        EAGER_BYTE_BACKSTOP,
+        "unscoped rule: loads at launch at the same priority as .claude/CLAUDE.md",
+    ),
+    "nested": Budget(
+        DEFERRED_LINE_LIMIT,
+        DEFERRED_BYTE_BACKSTOP,
+        "lazy: loaded only when Claude reads files in that directory",
+    ),
+    "rule_scoped": Budget(
+        DEFERRED_LINE_LIMIT,
+        DEFERRED_BYTE_BACKSTOP,
+        "paths:-scoped rule: loads only when Claude works with matching files",
+    ),
+    "skill": Budget(
+        SKILL_LINE_LIMIT,
+        DEFERRED_BYTE_BACKSTOP,
+        "loads only on invocation/relevance — documented 500-line guideline",
+    ),
+}
+
+# The classes whose bytes are spent at launch, every session.
+EAGER_CLASSES = frozenset({"eager_root", "rule_unscoped"})
+
+
+@dataclass
+class Violation:
+    """One budget breach."""
+
+    path: str
+    message: str
+
+
+@dataclass
+class Report:
+    """The outcome of one budget sweep."""
+
+    violations: list[Violation] = field(default_factory=list)
+    eager_bytes: int = 0
+    counted: int = 0
+
+
+# --- Measurement -------------------------------------------------------------
+
+
+def injected_text(raw: str, *, strip_comments: bool = True) -> str:
+    """Strip what Claude never sees.
+
+    "Block-level HTML comments (``<!-- maintainer notes -->``) **in CLAUDE.md
+    files** are stripped before the content is injected into Claude's context.
+    Use them to leave notes for human maintainers without spending context
+    tokens on them." -- https://code.claude.com/docs/en/memory
+
+    Counting them for CLAUDE.md would tax the exact practice the docs endorse
+    as free: our root CLAUDE.md is 324 disk bytes and 10 bytes of context.
+
+    NOTE the scope of that sentence — it says "in CLAUDE.md files". Whether the
+    same stripping applies to ``.claude/rules/*.md`` or ``SKILL.md`` is NOT
+    documented, so callers for those classes pass ``strip_comments=False`` and
+    pay full price. Assuming the discount where it is unproven would make the
+    gate UNDER-count the eagerly-loaded class — the failure direction that
+    matters. Being slightly strict there is the safe error.
+    """
+    return re.sub(r"<!--.*?-->", "", raw, flags=re.DOTALL) if strip_comments else raw
+
+
+def measure(raw: str, *, strip_comments: bool = True) -> tuple[int, int]:
+    """Return (lines, bytes) of the content that actually reaches context."""
+    text = injected_text(raw, strip_comments=strip_comments).strip()
+    if not text:
+        return 0, 0
+    return len(text.split("\n")), len(text.encode())
+
+
+def has_paths_frontmatter(raw: str) -> bool:
+    """True when the file opens with YAML frontmatter carrying a paths: key.
+
+    Only real frontmatter counts — the document must OPEN with ``---``. A prose
+    mention of "paths:" further down is not scoping, and treating it as such
+    would silently hand a rule the relaxed budget it has not earned.
+    """
+    m = re.match(r"^---\n(.*?)\n---(\n|$)", raw, re.DOTALL)
+    return bool(m) and re.search(r"^paths:", m.group(1), re.MULTILINE) is not None
+
+
+def skill_description(raw: str) -> str:
+    """Extract a SKILL.md frontmatter description, or "" when absent."""
+    m = re.match(r"^---\n(.*?)\n---(\n|$)", raw, re.DOTALL)
+    if not m:
+        return ""
+    d = re.search(
+        r"^description:\s*(.*?)(?=\n[A-Za-z_-]+:|\Z)",
+        m.group(1),
+        re.DOTALL | re.MULTILINE,
+    )
+    return d.group(1).strip() if d else ""
+
+
+# --- Classification ----------------------------------------------------------
+
+
+def classify(path: str) -> str | None:
+    """Map a tracked path to its load class, or None when unbudgeted."""
+    if path.startswith(_EXCLUDED_PREFIXES):
+        return None
+    if _SKILL_RE.match(path):
+        return "skill"
+    if _RULE_RE.match(path):
+        return "rule_unscoped"  # refined by frontmatter at read time
+    if not _ENTRY_RE.search(path):
+        return None
+    # The root CLAUDE.md and .claude/CLAUDE.md are "loaded in full at launch";
+    # every other directory's stub is lazy ("included when Claude reads files
+    # in those subdirectories").
+    if "/" not in path or path.startswith(".claude/"):
+        return "eager_root"
+    return "nested"
+
+
+def resolve_imports(entry: Path, root: Path, depth: int = 0) -> list[Path]:
+    """Return the transitive @import closure of ``entry``, including itself.
+
+    Imports "are expanded and loaded into context at launch alongside the
+    CLAUDE.md that references them", so the closure — not the file — is the
+    unit that costs context. Budgeting per file would let any file evade its
+    ceiling by splitting, which the docs explicitly call a non-reduction.
+    """
+    if depth > _MAX_IMPORT_DEPTH or not entry.is_file():
+        return []
+    out = [entry]
+    raw = injected_text(entry.read_text(errors="replace"))
+    # Fenced blocks are skipped by the real import parser; mirror that.
+    raw = re.sub(r"```.*?```", "", raw, flags=re.DOTALL)
+    for m in _IMPORT_RE.finditer(raw):
+        target = m.group(1)
+        if target.startswith("~"):
+            continue  # a home-dir import is not this repo's to budget
+        nxt = (entry.parent / target).resolve()
+        try:
+            nxt.relative_to(root)
+        except ValueError:
+            continue  # outside the repo
+        if nxt not in out:
+            out.extend(p for p in resolve_imports(nxt, root, depth + 1) if p not in out)
+    return out
+
+
+def closure_size(entry: Path, root: Path) -> tuple[int, int, list[Path]]:
+    """Measure the (lines, bytes) of an entry's whole import closure.
+
+    An import directive is REPLACED by the imported content, so the directive's
+    own line must not be counted — otherwise the root closure (CLAUDE.md's one
+    `@AGENTS.md` line + AGENTS.md's 200) reads as 201 and a file sitting
+    legitimately at the documented limit fails for a reason unrelated to size.
+    """
+    files = resolve_imports(entry, root)
+    lines = bytes_ = 0
+    for f in files:
+        raw = f.read_text(errors="replace")
+        text = injected_text(raw)
+        fenced = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
+        directives = len(_IMPORT_RE.findall(fenced))
+        line_n, byte_n = measure(raw)
+        lines += max(0, line_n - directives)
+        bytes_ += byte_n
+    return lines, bytes_, files
+
+
+# --- The sweep ---------------------------------------------------------------
+
+
+def tracked_files(root: Path) -> list[str]:
+    """Every git-tracked path, for classification."""
+    out = subprocess.run(
+        ["git", "-C", str(root), "ls-files"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return [f for f in out.stdout.split("\n") if f]
+
+
+def _resolve_class(rel: str, raw: str) -> str | None:
+    """Classify ``rel``, refining a rule by its frontmatter."""
+    cls = classify(rel)
+    if cls == "rule_unscoped" and has_paths_frontmatter(raw):
+        return "rule_scoped"
+    return cls
+
+
+def _description_violation(rel: str, raw: str) -> Violation | None:
+    """Catch the one HARD truncation: an over-long SKILL.md description."""
+    desc = skill_description(raw)
+    if len(desc) <= SKILL_DESCRIPTION_MAX:
+        return None
+    return Violation(
+        rel,
+        f"description is {len(desc)} chars (HARD cap {SKILL_DESCRIPTION_MAX}) "
+        f"— the tail is TRUNCATED SILENTLY, taking the keywords Claude matches "
+        f"on with it, so the skill stops being discovered",
+    )
+
+
+def _size_of(cls: str, path: Path, raw: str, root: Path) -> tuple[int, int, str]:
+    """Return (lines, bytes, unit) for one file, by class."""
+    if cls in ("eager_root", "nested"):
+        lines, bytes_, files = closure_size(path, root)
+        # Name the closure, not just the stub: a 1-line CLAUDE.md that imports
+        # a 12KB AGENTS.md must not report "CLAUDE.md is too big".
+        members = ", ".join(f.relative_to(root).as_posix() for f in files if f != path)
+        return lines, bytes_, (f"closure incl. {members}" if members else "file")
+    # Comment-stripping is documented for CLAUDE.md only; rules and skills pay
+    # full price until proven otherwise (see injected_text).
+    lines, bytes_ = measure(raw, strip_comments=False)
+    return lines, bytes_, "file"
+
+
+def check(root: Path) -> Report:
+    """Budget every tracked instruction file by its load class."""
+    report = Report()
+
+    for rel in tracked_files(root):
+        path = root / rel
+        if classify(rel) is None or not path.is_file():
+            continue
+        raw = path.read_text(errors="replace")
+        cls = _resolve_class(rel, raw)
+        if cls is None:
+            continue
+
+        if cls == "skill" and (v := _description_violation(rel, raw)):
+            report.violations.append(v)
+
+        budget = BUDGETS[cls]
+        lines, bytes_, unit = _size_of(cls, path, raw, root)
+
+        report.counted += 1
+        if cls in EAGER_CLASSES:
+            report.eager_bytes += bytes_
+
+        if lines > budget.max_lines:
+            report.violations.append(
+                Violation(
+                    rel,
+                    f"{lines} lines ({unit}) > {budget.max_lines} for class "
+                    f"'{cls}' — {budget.why}",
+                )
+            )
+        if bytes_ > budget.max_bytes:
+            report.violations.append(
+                Violation(
+                    rel,
+                    f"{bytes_} bytes ({unit}) > {budget.max_bytes} for class "
+                    f"'{cls}' — self-imposed backstop, not an Anthropic figure",
+                )
+            )
+    return report
+
+
+def md_budget_main(root: Path) -> int:
+    """Entry point for ``dotfiles-setup md-budget``."""
+    report = check(root)
+    for v in report.violations:
+        sys.stderr.write(f"{v.path}: {v.message}\n")
+    # The number that actually matters, surfaced every run: bytes paid at
+    # launch in EVERY session, regardless of what the task touches.
+    sys.stdout.write(
+        f"md-budget: {report.counted} instruction files checked; "
+        f"eager context ~{report.eager_bytes} bytes "
+        f"(~{report.eager_bytes // 4} tokens) every session\n"
+    )
+    return 1 if report.violations else 0

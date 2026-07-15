@@ -6,38 +6,23 @@
 ## Purpose
 
 Repo-root-level test suite. Tests live here (not under `python/tests/`)
-because they exercise the repo as a whole — Python package behavior,
-bootstrap tool availability, shell integration, GHCR prerequisites, and
-Docker image smoke outputs.
+because they exercise the repo as a whole, not just the python package.
 
 ## Key Files
 
-| File | Framework | Purpose |
-|------|-----------|---------|
-| `test_audit.py` | pytest | `dotfiles-setup audit` command output structure and exit codes |
-| `test_bootstrap.py` | pytest | Bootstrap tool availability (`mise`, `chezmoi`, `uv`, `pixi`, python) |
-| `test_config.py` | pytest | Pydantic `DotfilesConfig` and container-path constants |
-| `test_ghcr.py` | pytest | GHCR prerequisite validation and token scope parsing |
-| `test_image_smoke.py` | pytest | Smoke-test script generation, `_parse_human_size`, the #143 tool-set jq/diff block (host-bash), and the #223 shared cores — tier-1 (`build_tier1_script`, HEAD-vs-merge-base identity resolvers, a real bash EXECUTION test that the identity loop gates on a wrong hash) and tier-3 (`build_tier3_script` sanitizer+reflection substrate, `resolve_expected_p2996_ref_at_base` merge-base ref-pin, TSan-skip/ref-strict injection, golden byte-parity with `build_smoke_script`); plus the #231 image-analysis resolver (`decide_analysis_target` FAIL/quiet-skip, `_lookup_pr_number` empty-array trap, `resolve_analysis_ref_main`) and scope-(b) benchmark instrumentation (`classify_layer_source`, `estimate_pull_time_s`, `compare_payloads`, trend summary) |
-| `test_image_smoke_exec.py` | pytest (`image_exec`, gated) | Containerized real-toolchain EXEC tests (#231 backlog): run the generated tier-1/tier-3 smoke cores against the real local `:dev` image — tier-1 happy + tool-set jq/diff FAIL-on-tampered, tier-3 compiler substrate compiles + ref-pin FAIL-on-wrong-ref. Deselected by default (root `pytest.ini` `addopts = -m 'not image_exec'`); run only via `mise run smoke-exec` (needs Docker + `mise run sync`) |
-| `test_container.py` | pytest | `verify-container-latest` gate (`dotfiles_setup.container`) — running/bind-mount/smoke freshness checks |
-| `test_sync.py` | pytest | `mise run sync` workflow (`dotfiles_setup.sync`) — staleness detection, action matrix, CI awareness, check/full/wait modes |
-| `test_pr.py` | pytest | `mise run ship`/`land` workflow (`dotfiles_setup.pr`) — surface detection, gate matrix, bucket verification, pinned merge |
-| `test_hook_guard.py` | pytest | PreToolUse mise-tasks-only guard (`dotfiles_setup.hook_guard`) — deny/redirect rules, false-positive guards, JSON contract, `match()` rule lookup, per-rule `since`/`name` integrity (a rule with a malformed `since` silently classifies every match as history and darkens the audit's bypass alarm), the cd-prefixed compound denials (pinned: they pass with NO cd-unwrap in `decide()`, since `_CMD` re-anchors on the `&&`/`;`/newline every prefix ends in — probe 2026-07-14 refuting the predicted "chained-command evasion"), and the #265 inert-span masking (`_inert_masked`): the 2 real transcript false positives verbatim, every separator quoted, heredoc bodies (`<<EOF`/`<<'EOF'`/`<<-EOF`) — each paired against a recall pin, since the fix trades recall for precision and must not overshoot. The `npx` denial is pinned SEPARATELY as a true positive (its `||` is outside quotes): the audit reports "3 denials" as one number, so a fix driving `blocked` to 0 would look like success while destroying the guard's only correct denial — the bar is 3 → 1 |
-| `test_hook_selfcheck.py` | pytest | Host-side hook self-check (`dotfiles_setup.hook_selfcheck`, the ship/land `hook-selfcheck` gate) — settings.json wiring + Bash-matcher assertions incl. the SessionEnd command-audit hook, and an end-to-end real-repo pass driving the wired PreToolUse guard |
-| `test_command_audit.py` | pytest | Command-audit transcript scanner (`dotfiles_setup.command_audit`, the self-learning mise-tasks loop) — env-aware transcript discovery, defensive JSONL parse, attempt→result pairing (a denied Bash call is recorded exactly like an executed one; only the `stdout`-bearing `toolUseResult` separates them), the bypass/blocked/pre_rule/mise/diagnostic/one_off classifier (cd-prefix unwrap; era×outcome split — probe 2026-07-14: of 155 rule-matching commands, 147 were pre-rule, 3 denials, **0** bypasses), denials grouped by rule identity not command head, report rendering, and the `--output` path the SessionEnd hook uses (repo-anchored resolve, no-clobber on a transcript miss, real-CLI flag pin) Plus the #289 FALSE-SIGNAL axis — shapes whose ANSWER cannot be trusted, orthogonal to `classify` (a diagnostic can still lie): grep-q-under-pipefail (141 on MATCH via SIGPIPE — broke the #289 base build), pipe-then-rc, depth-bounded find, docker-exec nested quoting. Pinned BOTH ways per `probes-need-a-control-arm.md`, incl. that the FIX doesn't trip its own detector |
-| `test_memory_index.py` | pytest | Memory-index curation checker (`dotfiles_setup.memory_index`) — env-aware memory-dir discovery (sibling of the transcripts, so the shared path encoding is pinned), index parse, distinctive-fact extraction across title AND hook, and per-kind normalized matching (`25.8GB` vs `25.8 GB` is ONE fact — the prototype's over-report and the reason a checker gets ignored). Pins the index_only-vs-elsewhere split (only a fact recorded nowhere else fails), that `audit_index` drops MEMORY.md itself (the index holds every entry ⇒ including it returns a silent all-pass), that orphans/`--refs` never fail the rc, that an unreadable entry fails rather than being skipped in silence, and the first live finding verbatim: a hook claiming CI green at `3adff36` against a topic file saying `c2cecd7` — index-only but STALE, which is why the report describes instead of prescribing "migrate". The rest pin bugs an adversarial review probe-verified pre-merge, each a silent false negative: `load_cutoff_line` enforcing the BYTE cap (the only one reachable at ~149 B/line — the first draft checked lines alone and printed OVER while exiting 0); `_SHA` needing an `a-f` letter (a digit-only test read `research-20260714-*` slugs and run ids as shas, then prefix-matched them "present"); `_elsewhere` refusing to downgrade a size (17.5GB of image vs of free disk share a number, not a fact); and `inbound_refs` matching a bare stem (brackets-or-`.md` missed 4 live citations and told the reader a cited memory had none) |
-| `test_apt_repo.py` | pytest | apt repository enumerator (`dotfiles_setup.apt_repo`, #251) — suite naming incl. the trap that development is the UNNUMBERED suite (`-23` is a 404), deb822 parse via python-debian, injected-fetcher seam (no network), `Section: libs` filter, and the `"latest"`/`--pin` TOML render. Pins the OpenMP naming trap: `libomp-22-dev` matches no substring of "openmp", so a list written from memory is wrong |
-| `test_tool_currency.py` | pytest | Daily tool-currency signal (`dotfiles_setup.tool_currency`) — release-link backends, report rendering |
-| `test_renovate.py` | pytest | Renovate status signal (`dotfiles_setup.renovate`) — app-id/privilege check, report rendering |
-| `test_autofix.py` | pytest | autofix.ci artifact applier (`dotfiles_setup.autofix`) — additions, traversal/shape/deletion refusal |
-| `test_bash_budget.py` | pytest | Zero-bash-logic enforcer (`dotfiles_setup.bash_budget`) — allowlist/growth/shrink/stale logic, real-repo `allowlist == tracked` pin, end-to-end CLI |
-| `test_gcc_sha.py` | pytest | gcc-latest sha auto-repair (`dotfiles_setup.gcc_sha`, #249) — pin parse/rewrite (strict subn), injected-fetcher sha compute, drift/no-drift repair, check-mode dry-run, CLI rc |
-| `test_shell_integration.py` | pytest | Tool reachability in login shells (mise, chezmoi, uv, pixi, claude, gemini, codex) |
-| `infra/foundation.bats` | Bats | Bash-level foundation checks (shell script integration) |
-| `infra/runtimes.bats` | Bats | Runtime installation checks (bash) |
+The per-file index lives in `tests/TEST-INDEX.md` — read it when you need to
+know what a given test file covers, or before adding one.
 
-Total: **654 pytest tests** run by default (`pytest tests/` collects all
+It is split out because agnix **AGM-003** caps an `AGENTS.md` at 12,000 chars
+for **Windsurf** compatibility (real and vendor-documented:
+<https://docs.windsurf.com/windsurf/cascade/memories> — "Limited to 12,000
+characters per file"; `AGENTS.md` is "processed by the same Rules engine").
+It is referenced, NOT `@import`ed: agnix rejects `@import` in an `AGENTS.md`
+(Claude-only syntax in an agent-agnostic file) and `claude_md_import_stub`
+requires every non-`.claude/` `CLAUDE.md` be solely `@AGENTS.md`. So the index
+is on-demand reference — which is what it should be anyway.
+
+Total: **697 pytest tests** run by default (`pytest tests/` collects all
 `test_*.py` files) plus **4 gated `image_exec`** exec tests (deselected by
 default; run via `mise run smoke-exec`) and Bats scenarios under `infra/`.
 

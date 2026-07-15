@@ -36,6 +36,7 @@ from dotfiles_setup.lint import (
     run_guarded,
 )
 from dotfiles_setup.lock_refresh import collect_system_lock, stage_system_lock_dir
+from dotfiles_setup.md_budget import md_budget_main
 from dotfiles_setup.memory_index import memory_index_main
 from dotfiles_setup.p2996_hash import (
     compute_repo_base_hash,
@@ -45,6 +46,7 @@ from dotfiles_setup.p2996_hash import (
 from dotfiles_setup.p2996_refresh import refresh as refresh_p2996_ref
 from dotfiles_setup.pr import land_main, ship_main
 from dotfiles_setup.renovate import renovate_status_main
+from dotfiles_setup.renovate_dryrun import renovate_dryrun_main
 from dotfiles_setup.sync import SyncOptions, sync_main
 from dotfiles_setup.tool_currency import tool_currency_main
 from dotfiles_setup.verify import main as verify_main
@@ -465,6 +467,26 @@ def _add_report_parsers(subparsers: _SubParsers) -> None:
     )
     renovate_parser.add_argument(
         "--json", action="store_true", help="Emit the raw status as JSON"
+    )
+
+    subparsers.add_parser(
+        "md-budget",
+        help="Budget instruction-markdown by LOAD CLASS (eager/lazy/scoped/"
+        "skill) + the SKILL.md description hard cap",
+    )
+
+    dryrun_parser = subparsers.add_parser(
+        "renovate-dryrun",
+        help="Run Renovate locally and report the updates it would raise "
+        "(read-only; opens no PRs)",
+    )
+    dryrun_parser.add_argument(
+        "--json", action="store_true", help="Emit the raw dry-run result as JSON"
+    )
+    dryrun_parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Exit 1 when any update is pending (gate mode, per sync --check)",
     )
 
 
@@ -1014,6 +1036,10 @@ def _build_command_handlers(
         "renovate-status": lambda: sys.exit(
             renovate_status_main(json_output=args.json)
         ),
+        "renovate-dryrun": lambda: sys.exit(
+            renovate_dryrun_main(json_output=args.json, check=args.check)
+        ),
+        "md-budget": lambda: sys.exit(md_budget_main(project_root)),
         "autofix-apply": lambda: sys.exit(
             autofix_apply_main(args.run_id, project_root)
         ),

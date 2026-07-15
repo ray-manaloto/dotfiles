@@ -459,21 +459,21 @@ description = "Check MEMORY.md before trimming it: budget, dead links, and facts
 run = 'uv run --project python dotfiles-setup memory-index'
 
 [tasks.renovate-dryrun]
-description = "Dry-run Renovate to see what it would change (no PRs) — BLOCKED, see #290"
-# Thin caller. `--platform=local --dry-run=full` reads the working tree and
-# reports what Renovate WOULD do; it never writes or opens a PR.
+description = "Report the updates Renovate would raise, from this working tree (no PRs)"
+# Thin caller per zero-bash-logic; the renovate invocation, its three
+# non-obvious env requirements, and the native-report parsing live in
+# python/src/dotfiles_setup/renovate_dryrun.py — which documents each with the
+# probe that established it. Read-only: opens no PR, writes no branch.
+#   mise run renovate-dryrun            # report; always rc=0
+#   mise run renovate-dryrun -- --check # rc=1 if any update is pending
+#   mise run renovate-dryrun -- --json  # machine-readable
 #
-# !! CURRENTLY BLOCKED — #290. Against THIS repo it exits rc=1 with
-# `Cannot sync git when platform=local` (dying in renovate's cloneSubmodules)
-# and extracts 0 deps. NOT the node pin: the pinned run gets 0
-# "Unsupported node environment" hits vs 2 in an unpinned control, and renovate
-# starts and initialises the repo before dying. NOT --dry-run=full either
-# (--dry-run=extract fails identically). NOT submodules (no .gitmodules). The
-# same config + the same real mise-system.toml in a scratch `git init` dir
-# extracts 58 deps and resolves them cleanly — so it is platform=local meeting
-# this working tree's remote/branch state. The task and its pin are kept
-# because both are correct and are what #290 needs to land against; the pin was
-# never the blocker.
+# #290 (FIXED): the failure was never the node pin and never submodules — the
+# `github>jdx/renovate-config` preset we extend sets `cloneSubmodules: true`,
+# which makes initRepo reach syncGit(), which throws outright under
+# platform=local. The module forces it off via RENOVATE_FORCE (the only config
+# layer applied AFTER repo config, so env/CLI both lose to the preset), leaving
+# renovate.json byte-identical to what hosted Renovate reads.
 #
 # tools.node pins THIS TASK to node 24 (#251). Renovate 43.x declares
 # `engines.node ^24.11.0`; under our node 26 the binary exits rc=1 with
@@ -484,11 +484,11 @@ description = "Dry-run Renovate to see what it would change (no PRs) — BLOCKED
 # Probed 2026-07-15: default task -> v26.5.0, tools.node="24" task -> v24.x.
 # Renovate's own mise manager reads `tasks.*.tools`, so this pin stays current.
 #
-# NOTE: a full run is slow when a `deb` datasource points at Ubuntu's archive
-# (it downloads the whole main,universe Packages index). apt.llvm.org's index
-# is ~13 KB and resolves fast.
+# NOTE: a lookup is slow when a `deb` datasource points at Ubuntu's archive (it
+# downloads the whole main,universe Packages index). apt.llvm.org's index is
+# ~13 KB and resolves fast; a full pass over this repo takes ~80s.
 tools.node = "24"
-run = 'renovate --platform=local --dry-run=full'
+run = 'uv run --project python dotfiles-setup renovate-dryrun'
 
 [tasks.renovate-status]
 description = "Report Mend-hosted Renovate install + privileges + open update PRs"

@@ -355,25 +355,49 @@ local allSteps = new Mapping<String, Config.Step> {
       "! git grep -nE 'claude[[:space:]]+mcp[[:space:]]+add' -- ':!.claude/skills/mcp2cli/SKILL.md' ':!.claude/skills/mintlify/SKILL.md' ':!.claude/rules/research-doc-sources.md' ':!.claude/rules/research-repo-enumeration.md' ':!.claude/CLAUDE.md' ':!AGENTS.md' ':!mise.toml' ':!docs/research/mintlify-catalog.md' ':!hk.pkl' && ! git ls-files '**/.mcp.json' | grep -q ."
   }
 
-  // --- Claude Code memory docs size limit ---
-  //     The Claude Code memory docs (code.claude.com/docs/en/memory)
-  //     recommend each CLAUDE.md stay "under 200 lines". We enforce
-  //     the same limit on AGENTS.md because CLAUDE.md in this repo
-  //     is a thin `@AGENTS.md` import stub - the AGENTS.md holds
-  //     the content that CLAUDE.md delegates to, so the line budget
-  //     effectively lives in AGENTS.md.
+  // --- Instruction-markdown size budgets, BY LOAD CLASS ---
+  //     Replaces `claude_md_size_limit`, which applied ONE uniform
+  //     200-line/12000-byte cap to every CLAUDE.md/AGENTS.md.
   //
-  //     Belt-and-suspenders check: claudelint (installed via
-  //     mise.toml) has a native size limit check with richer
-  //     diagnostics; full integration is tracked in a GH issue
-  //     scheduled for post-devcontainer-work review. This awk step
-  //     ships immediate enforcement in the meantime.
-  //     #160 T13 (validation K): the ≤12,000-char half is now enforced
-  //     too — it was cited by verify-before-advancing.md but nothing
-  //     machine-checked it (workflows/AGENTS.md ran it to 11,986).
-  ["claude_md_size_limit"] {
-    check =
-      "rc=0; for f in $(git ls-files | grep -E '(^|/)(CLAUDE|AGENTS)\\.md$'); do lines=$(wc -l < \"$f\"); chars=$(wc -c < \"$f\"); if [ \"$lines\" -gt 200 ]; then echo \"$f: $lines lines (max 200 per Claude Code memory docs)\" >&2; rc=1; fi; if [ \"$chars\" -gt 12000 ]; then echo \"$f: $chars chars (max 12000 per Claude Code memory docs)\" >&2; rc=1; fi; done; exit $rc"
+  //     Anthropic documents exactly ONE figure for author-written
+  //     instruction files: "Size: target under 200 lines per CLAUDE.md
+  //     file" (code.claude.com/docs/en/memory § Write effective
+  //     instructions). It is a SOFT guideline about a gradient, NOT a
+  //     truncation point — the same page states "CLAUDE.md files are
+  //     loaded in full regardless of length".
+  //
+  //     The old ≤12,000-char half was MISATTRIBUTED, not invented. That
+  //     figure is real but it is WINDSURF's, not Anthropic's: Windsurf's
+  //     Rules engine is "Limited to 12,000 characters per file" and reads
+  //     AGENTS.md through it (docs.windsurf.com/windsurf/cascade/memories).
+  //     `mise run lint-docs` already enforces it as agnix AGM-003
+  //     (agents-md / tool: windsurf / vendor_docs) — so AGENTS.md files
+  //     are capped THERE, by the vendor that actually imposes it, and this
+  //     step does not duplicate it. In Anthropic's corpus the figure has 0
+  //     hits (control-armed; 5 for MEMORY.md's cap, 12 for "200 lines"),
+  //     so the old caption "per Claude Code memory docs" named the wrong
+  //     vendor. The 200-line/25KB HARD truncation applies to auto-memory
+  //     MEMORY.md ONLY — a file this repo does not commit.
+  //
+  //     Budgets differ by LOAD CLASS because that is the docs' own cost
+  //     model — what matters is WHEN the bytes are spent:
+  //       eager (root CLAUDE.md + @import closure; unscoped rules, at
+  //         "the same priority as .claude/CLAUDE.md")      → 200 lines
+  //       lazy  (nested CLAUDE.md: "included when Claude reads files in
+  //         those subdirectories", not re-injected on /compact) → 400
+  //       cond  (paths:-scoped rules: load "only when Claude works with
+  //         matching files")                                → 400
+  //       skill (SKILL.md: "Keep under 500 lines")          → 500, plus
+  //         description ≤ 1536 chars — a REAL hard truncation that
+  //         silently strips the keywords Claude matches on.
+  //     The byte ceilings are SELF-IMPOSED anti-gaming backstops, sized
+  //     never to bind before the documented line limit. Do not
+  //     re-attribute them upstream — that error is what this replaces.
+  //
+  //     Logic lives in python (zero-bash-logic); this is a thin seam.
+  //     Research: .omc/research/research-20260715-md-size-limits/report.md
+  ["md_size_budget"] {
+    check = "uv run --project python dotfiles-setup md-budget"
   }
 
   // --- No global skill leakage (presence assertion for project-scoped
