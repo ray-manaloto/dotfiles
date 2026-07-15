@@ -45,14 +45,14 @@
   "enabledPlugins": {
     "ultrapowers@ultrapowers": false,
     "ultrapowers-dev@ultrapowers": false,
-    "code-review@claude-plugins-official": true,
-    "code-simplifier@claude-plugins-official": true,
-    "feature-dev@claude-plugins-official": true,
+    "code-review@claude-plugins-official": false,
+    "code-simplifier@claude-plugins-official": false,
+    "feature-dev@claude-plugins-official": false,
     "typescript-lsp@claude-plugins-official": false,
-    "claude-md-management@claude-plugins-official": true,
+    "claude-md-management@claude-plugins-official": false,
     "commit-commands@claude-plugins-official": true,
-    "skill-creator@claude-plugins-official": true,
-    "claude-code-setup@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": false,
+    "claude-code-setup@claude-plugins-official": false,
     "pyright-lsp@claude-plugins-official": false,
     "pyright@claude-code-lsps": false,
     "explanatory-output-style@claude-plugins-official": true,
@@ -78,8 +78,9 @@
     "guide@claude-code-guide": false,
     "codex@openai-codex": false,
     "astral@astral-sh": true,
-    "cli-anything@cli-anything": true,
-    "mattpocock-skills@mattpocock": true
+    "cli-anything@cli-anything": false,
+    "mattpocock-skills@mattpocock": true,
+    "ty@claude-code-lsps": false
   },
   "prefersReducedMotion": true
 }

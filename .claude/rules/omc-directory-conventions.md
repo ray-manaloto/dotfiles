@@ -25,8 +25,10 @@ skills from `.claude/skills/<name>/SKILL.md`. See rule 5 below.
 2. **Session handoffs go in plans/**: A handoff is a "what to do next" document — that's a plan.
    Name convention: `session-{date}.md` or `session-{date}-{letter}.md`.
 
-3. **Agent findings go in notepad**: Not in memory, not in standalone files. Use the notepad
-   MCP tools (`notepad_write_working`, `notepad_write_priority`).
+3. **Agent findings go in notepad**: Not in memory, not in standalone files. Append to
+   `.omc/notepad.md` with Write/Edit — the OMC notepad MCP tools this once named ship with
+   the disabled `oh-my-claudecode` plugin and are absent from every session. See
+   `.claude/rules/notepad-enforcement.md`.
 
 4. **Specs from deep-dive/interview go in specs/**: Not in plans, not in research.
 

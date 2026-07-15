@@ -3,11 +3,24 @@
 All agents performing research, debugging, or multi-step analysis MUST write
 findings to the notepad immediately — not at session end.
 
+## The notepad is a file, not a tool
+
+The notepad is **`.omc/notepad.md`** (gitignored). Write to it with the ordinary
+Write/Edit tools, appending as you go.
+
+Until 2026-07-15 this rule named
+`mcp__plugin_oh-my-claudecode_t__notepad_write_working` / `..._write_priority`.
+Those tools ship with the `oh-my-claudecode` plugin, which is **disabled** — so
+they are absent from every session, and a `/doctor` scan measured **zero
+invocations across 941 transcripts**. The rule was unfollowable as written; the
+notepad file itself stayed current because sessions wrote it by hand. Naming the
+real mechanism is the fix. If OMC is ever re-enabled, its notepad tools write
+this same file — the rule does not change.
+
 ## Rules
 
-1. **Write findings as you go**: After each significant discovery, write to
-   notepad via `mcp__plugin_oh-my-claudecode_t__notepad_write_working` or
-   `mcp__plugin_oh-my-claudecode_t__notepad_write_priority` for critical items.
+1. **Write findings as you go**: After each significant discovery, append it to
+   `.omc/notepad.md`. Mark critical items so they survive a skim.
 
 2. **What to record**: Root causes found, design decisions made, dead ends
    explored, verification results, and any context the next agent will need.
@@ -16,9 +29,8 @@ findings to the notepad immediately — not at session end.
    them all at session end. Each finding should be persisted within the same
    step it was discovered.
 
-4. **Research agents especially**: Agents running `/deepinit`, `/ai-slop-cleaner`,
-   `/self-improve`, or any multi-file analysis MUST write intermediate findings
-   to notepad before proceeding to the next file or step.
+4. **Research agents especially**: Any multi-file analysis or research sweep
+   MUST write intermediate findings before proceeding to the next file or step.
 
 ## Why
 
@@ -28,5 +40,11 @@ findings had to be re-derived. This policy prevents that waste.
 
 ## Verification
 
-After an agent completes work, check notepad for findings. If the notepad is
+After an agent completes work, check `.omc/notepad.md` for findings. If it is
 empty or stale relative to the work performed, the agent did not comply.
+
+## See also
+
+- `.claude/rules/agent-report-persistence.md` — the full-fidelity layer; this
+  rule covers the running condensed findings.
+- `.claude/rules/omc-directory-conventions.md` — where each artifact type lives.
