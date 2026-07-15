@@ -254,6 +254,30 @@ def test_real_npx_denial_was_a_true_positive() -> None:
     assert "mise-installed binary" in reason
 
 
+def test_masking_trades_the_incidental_eval_catch() -> None:
+    """The `eval`/`sh -c` class loses an ACCIDENTAL catch. Deliberate, measured.
+
+    Before #265, `eval "echo x; gh pr create"` was denied — not because the
+    guard understood `eval`, but because the quoted `;` anchored `_CMD`. Masking
+    removes that, and the third assertion is why it costs nothing real: the bare
+    `eval "gh pr create"` was ALREADY allowed, so the class was never covered —
+    only its separator-bearing variant was, which no one could have relied on.
+
+    The module has always declared `sh -c`/`eval`/`$(…)`/base64 fail-open (a
+    redirect guard, not a sandbox), evasion has measured 0 across the guard's
+    lifetime while false positives were 2 of its 3 denials, and the direction
+    set for this fix was precision over recall. So this is the trade working as
+    intended — pinned here so it stays a decision. If these are ever re-denied,
+    it should be because someone chose to guard `eval` properly, not by
+    accident.
+    """
+    assert hook_guard.decide('eval "echo x; gh pr create"') is None
+    assert hook_guard.decide('bash -c "cd /x && gh pr merge 42"') is None
+    # Never covered even BEFORE the fix — the proof the catch above was
+    # incidental rather than a capability this change gave up.
+    assert hook_guard.decide('eval "gh pr create"') is None
+
+
 @pytest.mark.parametrize(
     ("command", "redirect_hint"),
     [

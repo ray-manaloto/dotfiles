@@ -255,9 +255,17 @@ _RULES: tuple[Rule, ...] = (
 # the canonical alternation idiom (Friedl's "unrolling the loop"), not a novel
 # parser.
 #
-# This is a redirect guard, not a sandbox: `$(…)` substitution, `sh -c`, and
-# base64 stay fail-open exactly as before — unchanged by this fix, not newly
-# opened by it.
+# This is a redirect guard, not a sandbox: `$(…)` substitution, `sh -c`/`eval`,
+# base64 and aliases are fail-open BY DESIGN. Masking narrows that class
+# slightly and DELIBERATELY (measured against the pre-fix guard, not assumed):
+# `eval "echo x; gh pr create"` was denied before, because the quoted `;`
+# anchored `_CMD`, and is allowed now. That catch was an ACCIDENT, not a
+# capability — `eval "gh pr create"` was always allowed, so the class was never
+# actually covered; only its separator-bearing variant was, which is not a
+# property anyone could have relied on. Losing it is the trade this fix exists
+# to make: evasion has measured 0 for the guard's lifetime while false
+# positives were 2 of its 3 denials. Pinned by
+# tests/test_hook_guard.py::test_masking_trades_the_incidental_eval_catch.
 
 # Exactly `_CMD`'s separator class: neutering these and nothing else is what
 # makes the rules quoting-aware without touching a rule.
