@@ -81,7 +81,7 @@ scopes it to the SHA the local gates validated.
 | `ship: working tree not clean` | Uncommitted changes | Commit (or stash) so gates validate the shipped tree |
 | `FAIL gate <name>` | A local gate failed | That failure IS the task (zero-skip); fix, rerun ship |
 | `ship: could not enable auto-merge` | The 422 regression outlasted the bounded retry, or "Allow auto-merge"/`ci-gate` isn't configured | Check the repo's auto-merge setting + branch protection; re-run `ship` (it reuses the PR) |
-| `land: PR #N is OPEN, not yet MERGED` | Auto-merge is still pending `ci-gate` (CI running) | Wait for GitHub to merge it, then re-run `land` for the post-merge Mac validation |
+| `land: PR #N is OPEN, not yet MERGED` | Auto-merge is still pending `ci-gate` (CI running). **Expected right after ship — not a failure**, though `land` does exit non-zero | Wait for the merge, then re-run `land` for the post-merge Mac validation. `land` has no `--wait` and `gh pr checks --watch` is guard-denied, so poll the blessed one-shot read, keeping the turn engaged: `until [ "$(gh pr view <N> --json state --jq .state)" = MERGED ]; do sleep 60; done` |
 | CI check failed (PR never auto-merges) | A required check went red, so auto-merge never fires | Triage the run; autofix "✅ Autofix task started" means the bot pushed a fix → new checks run → auto-merges when green |
 | land failed AFTER the merge (CI watch / sync) | Merged-but-unvalidated PR | `mise run land -- <PR#> --resume` replays the idempotent post-merge steps |
 | `land: no main ci.yml run appeared` | A merge that SHOULD trigger a run didn't register (~10 min) | Check Actions; land only expects a run when the diff matches `CI_PUSH_PATHS` (ci.yml on.push.paths) — a merge matching none passes without one (#179) |

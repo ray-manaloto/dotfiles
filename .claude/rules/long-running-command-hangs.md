@@ -27,8 +27,12 @@ unbounded wait + pipe-masked exit code.
 
 2. **For any command expected to exceed ~30s, never wait blind.** Either
    bound it with a timeout, or run it in the background and monitor its
-   debug log: hk → `~/.local/state/hk/hk.log` (or the per-run
-   `HK_LOG_FILE` that `mise run lint` sets), mise →
+   debug log. For a `mise run lint` run the log is
+   **`~/.local/state/dotfiles/hk-lint.log`** — the per-run `HK_LOG_FILE`
+   the wrapper sets (`lint.py` `DEFAULT_LOG_FILE`). Read THAT one:
+   `~/.local/state/hk/hk.log` is a *different* file written by other hk
+   entrypoints (e.g. the pre-push hook) and is typically stale, which
+   makes a live hang look idle (misread 2026-07-14). mise →
    `~/.local/state/mise/mise.log` (`MISE_LOG_FILE`, debug level set in
    `mise.toml [env]`). Use a count-diff monitor loop, not a fixed sleep.
 
@@ -49,6 +53,22 @@ unbounded wait + pipe-masked exit code.
    `~/.local/state/hk/`. (The old "clear ~/Library/Caches/hk/configs/
    after editing hk.pkl" guidance is retired — the cache is
    content-hashed since hk 1.47; see `ci-local-parity.md` rule 5.)
+
+6. **A hanging lint is usually YOUR ruff error, not flaky tooling
+   (issue #268).** A real ruff violation does not fail the gate — it
+   **wedges hk for the full 600s**, and the error is never printed.
+   The `ruff` step has `fix=true`, so a failed check phase makes hk
+   seek a WRITE lock to run the fix (`failed to get write locks …
+   src/file_rw_locks.rs:85:30`) while `ruff_format` sits at `waiting
+   for ruff`. Proven causal 2026-07-14: same tree with 3 ruff errors →
+   wedged at 39/47 steps, 0% CPU, no children; ruff clean → `rc=0`, 47
+   steps. **So: when lint hangs, run `uv run --project python ruff
+   check` DIRECTLY first** — it prints in seconds what hk hides for ten
+   minutes. Fix, then re-run `mise run lint`.
+
+7. **Find the wedged step by name.** Grep the lint output for a
+   `❯ <step>` with no matching `✔ <step>` — that names it directly,
+   without reading the whole debug log.
 
 ## Applies to
 
