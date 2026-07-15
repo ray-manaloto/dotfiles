@@ -54,6 +54,9 @@ def _full_settings() -> dict:
                     "bash scripts/web-setup.sh; fi",
                 )
             ],
+            "SessionEnd": [
+                _hook(None, "mise run command-audit -- --output .omc/command-audit.md")
+            ],
         }
     }
 
@@ -83,6 +86,22 @@ def test_wrong_command_fails(tmp_path: Path) -> None:
     settings["hooks"]["SessionStart"] = [_hook("startup|resume", "bash other.sh")]
     failures = _wiring(tmp_path, settings)
     assert any("SessionStart" in f for f in failures)
+
+
+def test_missing_session_end_fails(tmp_path: Path) -> None:
+    """The recurring command-audit loop must stay wired (SessionEnd hook)."""
+    settings = _full_settings()
+    del settings["hooks"]["SessionEnd"]
+    failures = _wiring(tmp_path, settings)
+    assert any("SessionEnd" in f for f in failures)
+
+
+def test_session_end_without_output_path_fails(tmp_path: Path) -> None:
+    """A SessionEnd that drops `--output` would print to a debug log, not the report."""
+    settings = _full_settings()
+    settings["hooks"]["SessionEnd"] = [_hook(None, "mise run command-audit")]
+    failures = _wiring(tmp_path, settings)
+    assert any("SessionEnd" in f and "command-audit.md" in f for f in failures)
 
 
 def test_unreadable_settings_fails(tmp_path: Path) -> None:

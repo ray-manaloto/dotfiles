@@ -121,6 +121,36 @@ def test_bypass_routes_denied(command: str) -> None:
     assert hook_guard.decide(command) is not None
 
 
+@pytest.mark.parametrize(
+    ("command", "redirect_hint"),
+    [
+        ("cd /x && gh pr create --fill", "mise run ship"),
+        ("cd /x && gh pr merge 42 --squash", "mise run land"),
+        # No space around the separator, and `;`/newline variants.
+        ("cd /x&&gh pr create --fill", "mise run ship"),
+        ("cd /x ; gh pr merge 42 --squash", "mise run land"),
+        ("cd /x\ngh run watch 123 --exit-status", "gh run view"),
+        # Stacked prefixes, a `~` path, a subshell, and an interposed command.
+        ("cd /a && cd /b && hk run pre-commit --all", "mise run lint"),
+        ("cd ~/dev && devcontainer up --workspace-folder .", "mise run up"),
+        ("(cd /x && gh pr create --fill)", "mise run ship"),
+        ("cd /x && echo starting && gh pr create --fill", "mise run ship"),
+    ],
+)
+def test_cd_prefixed_one_offs_denied(command: str, redirect_hint: str) -> None:
+    """A leading `cd <path> &&` must never hide the operative command.
+
+    These pass WITHOUT a cd-unwrap in `decide()` (probe 2026-07-14, refuting
+    the research report's predicted "chained-command evasion"): the `cd` prefix
+    always ends in a separator `_CMD` re-anchors on. Pinned so a future
+    narrowing of `_CMD`'s separator class fails here instead of silently
+    opening the bypass. See the "NO `cd`-prefix unwrap" note in hook_guard.py.
+    """
+    reason = hook_guard.decide(command)
+    assert reason is not None
+    assert redirect_hint in reason
+
+
 def test_pull_rule_does_not_span_separators() -> None:
     # [16]: an unrelated pull followed by a mention must not be denied.
     cmd = "docker pull ubuntu:24.04 && echo dotfiles-devcontainer"

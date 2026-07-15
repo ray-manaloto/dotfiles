@@ -143,6 +143,18 @@ _RULES: tuple[tuple[re.Pattern[str], str], ...] = (
 # meant to redirect. A rule here would deny the documented command.
 # Bare-pytest guidance stays doc-level (python/AGENTS.md, mise-tasks-only).
 
+# NO `cd`-prefix unwrap, deliberately (probe-observed 2026-07-14): the
+# "chained-command evasion" the enforcement research predicted for
+# `cd /x && gh pr create` does not exist here. Every `cd` prefix ends in
+# `&&`/`;`/newline BY CONSTRUCTION, `_CMD`'s `[;&|\n]` class re-anchors on
+# that separator, and `re.search` retries at every offset — so the rule
+# already matches the operative command. Mirroring `command_audit._operative`
+# into `decide()` would be dead code: that module needs the unwrap because it
+# reads token[0] after `.split()` (a genuinely positional read); a regex
+# search is not positional. tests/test_hook_guard.py pins the cd-prefixed
+# denials so a future narrowing of `_CMD` fails loudly rather than silently
+# opening the bypass.
+
 
 def decide(command: str) -> str | None:
     """Redirect reason when ``command`` should be denied, else None."""

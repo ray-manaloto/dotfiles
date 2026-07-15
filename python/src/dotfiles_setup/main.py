@@ -534,6 +534,14 @@ def setup_parser() -> argparse.ArgumentParser:
         default=DEFAULT_SESSION_LIMIT,
         help=f"Most-recent sessions to scan (default {DEFAULT_SESSION_LIMIT})",
     )
+    command_audit_parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Write the report here instead of stdout (relative paths resolve "
+        "against the repo root). Used by the SessionEnd hook to refresh "
+        ".omc/command-audit.md once per session",
+    )
 
     # renovate-status command
     renovate_parser = subparsers.add_parser(
@@ -885,7 +893,7 @@ def _build_command_handlers(
         "pr": lambda: handle_pr(args, project_root),
         "tool-currency": lambda: sys.exit(tool_currency_main()),
         "command-audit": lambda: sys.exit(
-            command_audit_main(project_root, limit=args.limit)
+            command_audit_main(project_root, limit=args.limit, output=args.output)
         ),
         "renovate-status": lambda: sys.exit(
             renovate_status_main(json_output=args.json)

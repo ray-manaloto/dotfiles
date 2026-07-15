@@ -29,6 +29,17 @@
           }
         ]
       }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "mise run command-audit -- --output .omc/command-audit.md",
+            "timeout": 120
+          }
+        ]
+      }
     ]
   },
   "enabledPlugins": {
