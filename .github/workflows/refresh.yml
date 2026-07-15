@@ -192,8 +192,11 @@ jobs:
             gh issue edit "$number" --repo "$REPO" --body-file /tmp/tool-currency.md
             echo "Updated issue #$number"
           else
+            # needs-triage puts bot-filed issues into the /triage flow rather than
+            # leaving them unlabelled (docs/triage-labels.md). Safe to add: this
+            # issue is deduped by EXACT TITLE above, never by label.
             gh issue create --repo "$REPO" --title "$title" \
-              --body-file /tmp/tool-currency.md --label dependencies
+              --body-file /tmp/tool-currency.md --label dependencies,needs-triage
           fi
       - name: Upload report artifact
         if: always()
