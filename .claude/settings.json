@@ -56,7 +56,7 @@
     "pyright-lsp@claude-plugins-official": false,
     "pyright@claude-code-lsps": false,
     "explanatory-output-style@claude-plugins-official": true,
-    "plugin-dev@claude-plugins-official": false,
+    "plugin-dev@claude-plugins-official": true,
     "hookify@claude-plugins-official": true,
     "learning-output-style@claude-plugins-official": true,
     "gopls-lsp@claude-plugins-official": false,
@@ -78,7 +78,8 @@
     "guide@claude-code-guide": false,
     "codex@openai-codex": false,
     "astral@astral-sh": true,
-    "cli-anything@cli-anything": true
+    "cli-anything@cli-anything": true,
+    "mattpocock-skills@mattpocock": true
   },
   "prefersReducedMotion": true
 }

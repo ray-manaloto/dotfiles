@@ -31,6 +31,14 @@ jobs:
   repair:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      # This job commits (below), and `mise install` fires mise.toml's postinstall
+      # (`hk install --mise`) which wires .git/hooks/pre-commit on the runner —
+      # hk would then run every step, incl. ones needing `gh auth` / `claude` on
+      # PATH. Latent today only because `install_args: "python uv"` omits hk, so
+      # the postinstall fails (warn-only) and the hook is never written; widening
+      # install_args would arm it. Same fix as refresh.yml, which this bit for real.
+      HK_SKIP_HOOKS: pre-commit
     steps:
       - name: Mint GitHub App token
         # App-token push fires the PR's `pull_request` CI on its own (unlike
