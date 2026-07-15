@@ -53,7 +53,7 @@ the official `@devcontainers/cli` (pinned in `mise.toml`).
 |-----------|---------|
 | `.devcontainer/` | Devcontainer spec, Dockerfile, mise-system.toml — see `.devcontainer/AGENTS.md` |
 | `.github/workflows/` | CI pipeline — see `.github/workflows/AGENTS.md` |
-| `.claude/` | Claude-specific agents, skills, rules. Has its own `CLAUDE.md` with OMC orchestration |
+| `.claude/` | Claude-specific agents, skills, rules. Has its own `CLAUDE.md` (exempt from the stub check) |
 | `home/` | Chezmoi-managed dotfile templates (its AGENTS.md was removed in #80) |
 | `python/` | Python package `dotfiles_setup` — see `python/AGENTS.md` |
 | `tests/` | Pytest + Bats test suite (618 pytest tests) — see `tests/AGENTS.md` |

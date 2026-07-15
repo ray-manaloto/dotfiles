@@ -368,7 +368,7 @@ local allSteps = new Mapping<String, Config.Step> {
   //     (Claude Code) and AGENTS.md (Codex/Gemini) — the former
   //     should always import the latter, never duplicate content.
   //     `.claude/**` is exempt because that scope is Claude-specific
-  //     (e.g., `.claude/CLAUDE.md` holds OMC orchestration content
+  //     (e.g., `.claude/CLAUDE.md` holds the mattpocock-skills config
   //     that other agents don't load). ---
   ["claude_md_import_stub"] {
     check = "scripts/check-claude-md-stub.sh"
