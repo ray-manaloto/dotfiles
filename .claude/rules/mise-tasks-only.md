@@ -127,11 +127,18 @@ command). Rule patterns are untouched, so recall is preserved by
 construction. Measured: the `blocked` bucket went **3 → 1**, keeping the
 one denial that was always correct.
 
-Still fail-open BY DESIGN (unchanged — this is a redirect guard, not a
-sandbox): `$(…)` substitution, `sh -c`, base64, aliases. If a deny ever
-does look wrong, the workaround remains: write the script with the Write
-tool and run `python3 <file>` — and after ANY deny, re-check that the
-command's intended side effects actually happened.
+Still fail-open BY DESIGN (this is a redirect guard, not a sandbox):
+`$(…)` substitution, `sh -c`/`eval`, base64, aliases. Masking narrows
+that class slightly and on purpose — `eval "echo x; gh pr create"` was
+denied before (the quoted `;` anchored `_CMD`) and is allowed now. That
+was an accident, not coverage: bare `eval "gh pr create"` was always
+allowed, so the class was never guarded, only its separator-bearing
+variant. Giving that up IS the precision-over-recall trade, with evasion
+measured at 0.
+
+If a deny ever does look wrong, the workaround remains: write the script
+with the Write tool and run `python3 <file>` — and after ANY deny,
+re-check that the command's intended side effects actually happened.
 
 **Evasion was never the defect — false positives were** (issue #265, now
 closed). The audit's `blocked` bucket measured it: 2 of the 3 denials ever

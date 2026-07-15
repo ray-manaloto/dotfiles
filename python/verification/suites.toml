@@ -963,7 +963,7 @@ paths = [
     "tests/test_hook_guard.py",
     ".claude/rules/mise-tasks-only.md",
 ]
-per_path_tokens = { ".claude/settings.json" = ["scripts/pretooluse-guard.sh"], "scripts/pretooluse-guard.sh" = ["dotfiles-setup hook pretooluse"], "python/src/dotfiles_setup/hook_guard.py" = ["def _inert_masked", "_inert_masked(command)"], "tests/test_hook_guard.py" = ["def test_separators_inside_inert_spans_do_not_anchor", "def test_real_npx_denial_was_a_true_positive", "def test_inert_span_redaction_never_costs_a_true_positive"] }
+per_path_tokens = { ".claude/settings.json" = ["scripts/pretooluse-guard.sh"], "scripts/pretooluse-guard.sh" = ["dotfiles-setup hook pretooluse"], "python/src/dotfiles_setup/hook_guard.py" = ["def _inert_masked", "_inert_masked(command)"], "tests/test_hook_guard.py" = ["def test_separators_inside_inert_spans_do_not_anchor", "def test_real_npx_denial_was_a_true_positive", "def test_inert_span_redaction_never_costs_a_true_positive", "def test_masking_trades_the_incidental_eval_catch"] }
 tokens = [
     "dotfiles-setup hook pretooluse",
     "def pretooluse_main",

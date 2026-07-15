@@ -35,7 +35,7 @@ Docker image smoke outputs.
 | `infra/foundation.bats` | Bats | Bash-level foundation checks (shell script integration) |
 | `infra/runtimes.bats` | Bats | Runtime installation checks (bash) |
 
-Total: **561 pytest tests** run by default (`pytest tests/` collects all
+Total: **562 pytest tests** run by default (`pytest tests/` collects all
 `test_*.py` files) plus **4 gated `image_exec`** exec tests (deselected by
 default; run via `mise run smoke-exec`) and Bats scenarios under `infra/`.
 
