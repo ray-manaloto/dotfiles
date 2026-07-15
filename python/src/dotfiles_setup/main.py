@@ -35,6 +35,7 @@ from dotfiles_setup.lint import (
     run_guarded,
 )
 from dotfiles_setup.lock_refresh import collect_system_lock, stage_system_lock_dir
+from dotfiles_setup.memory_index import memory_index_main
 from dotfiles_setup.p2996_hash import (
     compute_repo_base_hash,
     compute_repo_dev_hash,
@@ -48,7 +49,14 @@ from dotfiles_setup.tool_currency import tool_currency_main
 from dotfiles_setup.verify import main as verify_main
 
 if TYPE_CHECKING:
+    from argparse import _SubParsersAction
     from collections.abc import Callable
+
+    # argparse exposes no public type for what add_subparsers() returns, so a
+    # helper that registers subcommands has to name the private one. Aliased
+    # here, under TYPE_CHECKING, to keep that single unavoidable reference in
+    # one place instead of in every helper signature.
+    type _SubParsers = _SubParsersAction[argparse.ArgumentParser]
 
 logger = logging.getLogger(__name__)
 
@@ -346,6 +354,71 @@ def _add_hook_subcommands(
     )
 
 
+def _add_report_parsers(subparsers: _SubParsers) -> None:
+    """Register the read-only scan-and-report commands.
+
+    Extracted from :func:`setup_parser` to keep it under ruff's statement cap —
+    these four share a shape (scan something, render markdown, change nothing),
+    so they group cleanly rather than being split at an arbitrary line.
+    """
+    subparsers.add_parser(
+        "tool-currency",
+        help="Markdown report of tools with upstream movement + release-notes "
+        "links (daily refresh.yml signal; feeds the tool-currency-check skill)",
+    )
+
+    command_audit_parser = subparsers.add_parser(
+        "command-audit",
+        help="Scan recent Claude Code transcripts for one-off Bash commands "
+        "that should be mise tasks (self-learning mise-tasks-only loop)",
+    )
+    command_audit_parser.add_argument(
+        "--limit",
+        type=int,
+        default=DEFAULT_SESSION_LIMIT,
+        help=f"Most-recent sessions to scan (default {DEFAULT_SESSION_LIMIT})",
+    )
+    command_audit_parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Write the report here instead of stdout (relative paths resolve "
+        "against the repo root). Used by the SessionEnd hook to refresh "
+        ".omc/command-audit.md once per session",
+    )
+
+    memory_index_parser = subparsers.add_parser(
+        "memory-index",
+        help="Check the auto-memory index (MEMORY.md) before trimming it: "
+        "load-budget, dead links, and facts that live ONLY in an index hook "
+        "and would be silently destroyed by shortening it",
+    )
+    memory_index_parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Write the report here instead of stdout (relative paths resolve "
+        "against the repo root)",
+    )
+    memory_index_parser.add_argument(
+        "--refs",
+        metavar="NAME",
+        default=None,
+        help="Instead of auditing, list the memories citing NAME (with or "
+        "without .md) — run this before DELETING a memory, so a citation "
+        "cannot rot unnoticed",
+    )
+
+    renovate_parser = subparsers.add_parser(
+        "renovate-status",
+        help="Report Mend-hosted Renovate app install + privileges + open "
+        "update PRs (read-only; replaces ad-hoc gh/git polling)",
+    )
+    renovate_parser.add_argument(
+        "--json", action="store_true", help="Emit the raw status as JSON"
+    )
+
+
 def setup_parser() -> argparse.ArgumentParser:
     """Configure the argument parser."""
     parser = argparse.ArgumentParser(description="Reproducible Dotfiles Orchestrator")
@@ -517,41 +590,7 @@ def setup_parser() -> argparse.ArgumentParser:
     )
     autofix_parser.add_argument("run_id", help="Workflow run id with the artifact")
 
-    subparsers.add_parser(
-        "tool-currency",
-        help="Markdown report of tools with upstream movement + release-notes "
-        "links (daily refresh.yml signal; feeds the tool-currency-check skill)",
-    )
-
-    command_audit_parser = subparsers.add_parser(
-        "command-audit",
-        help="Scan recent Claude Code transcripts for one-off Bash commands "
-        "that should be mise tasks (self-learning mise-tasks-only loop)",
-    )
-    command_audit_parser.add_argument(
-        "--limit",
-        type=int,
-        default=DEFAULT_SESSION_LIMIT,
-        help=f"Most-recent sessions to scan (default {DEFAULT_SESSION_LIMIT})",
-    )
-    command_audit_parser.add_argument(
-        "--output",
-        type=Path,
-        default=None,
-        help="Write the report here instead of stdout (relative paths resolve "
-        "against the repo root). Used by the SessionEnd hook to refresh "
-        ".omc/command-audit.md once per session",
-    )
-
-    # renovate-status command
-    renovate_parser = subparsers.add_parser(
-        "renovate-status",
-        help="Report Mend-hosted Renovate app install + privileges + open "
-        "update PRs (read-only; replaces ad-hoc gh/git polling)",
-    )
-    renovate_parser.add_argument(
-        "--json", action="store_true", help="Emit the raw status as JSON"
-    )
+    _add_report_parsers(subparsers)
 
     # version command
     subparsers.add_parser("version", help="Show the version of the library")
@@ -894,6 +933,9 @@ def _build_command_handlers(
         "tool-currency": lambda: sys.exit(tool_currency_main()),
         "command-audit": lambda: sys.exit(
             command_audit_main(project_root, limit=args.limit, output=args.output)
+        ),
+        "memory-index": lambda: sys.exit(
+            memory_index_main(project_root, output=args.output, refs=args.refs)
         ),
         "renovate-status": lambda: sys.exit(
             renovate_status_main(json_output=args.json)

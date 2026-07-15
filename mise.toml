@@ -425,6 +425,17 @@ description = "Scan recent Claude Code transcripts for one-off Bash culprits to 
 # (`-- --output .omc/command-audit.md`) — run it by hand for an ad-hoc report.
 run = 'uv run --project python dotfiles-setup command-audit'
 
+[tasks.memory-index]
+description = "Check MEMORY.md before trimming it: budget, dead links, and facts a trim would silently destroy"
+# Thin caller (zero-bash-logic); logic in
+# python/src/dotfiles_setup/memory_index.py. The auto-memory index only loads
+# to 200 lines / 25KB, so it must stay short — but shortening a hook silently
+# destroys any fact that lives only in that hook (measured: 4 such facts on
+# 2026-07-14). Run this BEFORE trimming; `-- --refs <name>` before deleting a
+# memory. On-demand by design — no hook wires it yet (see the skill).
+# Pass flags through: mise run memory-index -- --refs feedback_colima_recommendation
+run = 'uv run --project python dotfiles-setup memory-index'
+
 [tasks.renovate-status]
 description = "Report Mend-hosted Renovate install + privileges + open update PRs"
 # Thin caller (zero-bash-logic); logic in
