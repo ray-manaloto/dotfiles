@@ -1,7 +1,9 @@
 """Tests for the command-audit transcript scanner (dotfiles_setup.command_audit).
 
 Covers transcript discovery (env-aware, never hardcoded), defensive JSONL
-parsing, the one-off/denied/mise/diagnostic classifier (incl. cd-prefix
+parsing, attempt-to-result pairing (a denied Bash call is recorded exactly like
+an executed one — only the result tells them apart), the
+bypass/blocked/pre_rule/mise/diagnostic/one_off classifier (incl. cd-prefix
 compound unwrapping), grouping, report rendering, and the ``--output`` path the
 SessionEnd hook uses to refresh the report once per session.
 """
@@ -58,16 +60,47 @@ def test_project_transcripts_limit_and_recency(tmp_path: Path) -> None:
 # ------------------------------------------------------------ defensive parsing
 
 
-def _assistant_bash(cmd: str) -> str:
+# Any date strictly after every rule's `since`, so seeded commands land in the
+# live-rule era (the pre_rule cutoff is exercised separately, by classify).
+_LIVE_TS = "2026-07-20T00:00:00Z"
+
+
+def _assistant_bash(cmd: str, uid: str = "tu1", ts: str = _LIVE_TS) -> str:
     return json.dumps(
         {
             "type": "assistant",
             "sessionId": "sess1",
-            "timestamp": "2026-07-14T00:00:00Z",
+            "timestamp": ts,
             "message": {
                 "content": [
-                    {"type": "tool_use", "name": "Bash", "input": {"command": cmd}}
+                    {
+                        "type": "tool_use",
+                        "id": uid,
+                        "name": "Bash",
+                        "input": {"command": cmd},
+                    }
                 ]
+            },
+        }
+    )
+
+
+def _result(uid: str, *, executed: bool) -> str:
+    """A tool_result line: dict-with-stdout when it ran, bare str when refused.
+
+    Mirrors the real shapes probed 2026-07-14 — a refused call carries the
+    guard's reason as a plain string, an executed one a stdout-bearing dict.
+    """
+    return json.dumps(
+        {
+            "type": "user",
+            "toolUseResult": (
+                {"stdout": "out", "stderr": "", "interrupted": False}
+                if executed
+                else "Error: Use `mise run ship` — …"
+            ),
+            "message": {
+                "content": [{"type": "tool_result", "tool_use_id": uid}],
             },
         }
     )
@@ -116,10 +149,41 @@ def test_iter_bash_commands_extracts_and_skips_defensively(tmp_path: Path) -> No
     cmds = list(ca.iter_bash_commands([f]))
     assert [c.command for c in cmds] == ["ls -la"]
     assert cmds[0].session == "sess1"
+    # No tool_result for it: unproven execution never counts as executed.
+    assert cmds[0].executed is False
 
 
 def test_iter_bash_commands_unreadable_file_skipped(tmp_path: Path) -> None:
     assert list(ca.iter_bash_commands([tmp_path / "does-not-exist.jsonl"])) == []
+
+
+def test_iter_bash_commands_pairs_results_to_attempts(tmp_path: Path) -> None:
+    """The transcript records a denied attempt exactly like an executed one.
+
+    Only the paired tool_result separates them, so this pairing is the whole
+    basis for telling a guard bypass from the guard working.
+    """
+    f = tmp_path / "t.jsonl"
+    f.write_text(
+        "\n".join(
+            [
+                _assistant_bash("ls -la", uid="a"),
+                _assistant_bash("gh pr create --fill", uid="b"),
+                _assistant_bash("git status", uid="c"),
+                # Results arrive on LATER lines, and out of order — the pairing
+                # is by id, never by position.
+                _result("b", executed=False),  # guard refused it
+                _result("a", executed=True),
+                # (no result for "c" — still in flight)
+            ]
+        )
+    )
+    got = {c.command: c.executed for c in ca.iter_bash_commands([f])}
+    assert got == {
+        "ls -la": True,
+        "gh pr create --fill": False,
+        "git status": False,
+    }
 
 
 # ------------------------------------------------------------- classification
@@ -170,13 +234,55 @@ def test_not_diagnostic_mutations(command: str) -> None:
     assert not ca.is_diagnostic(command)
 
 
+def _bc(command: str, *, ts: str = _LIVE_TS, executed: bool = True) -> ca.BashCommand:
+    return ca.BashCommand(command, session="s", timestamp=ts, executed=executed)
+
+
 def test_classify_precedence() -> None:
-    # denied (guard rule) wins even inside a cd compound
-    assert ca.classify("cd /repo && gh pr create --fill") == "denied"
-    assert ca.classify("mise run lint") == "mise"
-    assert ca.classify("git status") == "diagnostic"
-    assert ca.classify("git commit -m x") == "one_off"
-    assert ca.classify("docker run --rm ubuntu bash -c 'x'") == "one_off"
+    # A guard rule wins even inside a cd compound.
+    assert ca.classify(_bc("cd /repo && gh pr create --fill")) == "bypass"
+    assert ca.classify(_bc("mise run lint")) == "mise"
+    assert ca.classify(_bc("git status")) == "diagnostic"
+    assert ca.classify(_bc("git commit -m x")) == "one_off"
+    assert ca.classify(_bc("docker run --rm ubuntu bash -c 'x'")) == "one_off"
+
+
+@pytest.mark.parametrize(
+    ("ts", "executed", "expected"),
+    [
+        # Live rule (gh pr create landed 2026-07-07) + it really ran = evasion.
+        ("2026-07-08T00:00:00Z", True, "bypass"),
+        # Live rule but refused: the guard working, not a bypass.
+        ("2026-07-08T00:00:00Z", False, "blocked"),
+        # Before the rule existed — history, whether or not it ran.
+        ("2026-07-01T00:00:00Z", True, "pre_rule"),
+        ("2026-07-01T00:00:00Z", False, "pre_rule"),
+        # The rule's own landing day counts as pre-rule: it may have merged
+        # later that day, and a false alarm costs more than a missed one.
+        ("2026-07-07T23:59:59Z", True, "pre_rule"),
+        # No timestamp ⇒ no evidence ⇒ no alarm.
+        ("", True, "pre_rule"),
+    ],
+)
+def test_classify_rule_match_splits_by_era_and_outcome(
+    ts: str, expected: str, *, executed: bool
+) -> None:
+    """A bare "matched a rule" verdict was 98% noise; these two axes fix it.
+
+    Measured 2026-07-14 over 3,615 real commands: 155 matched a rule — 147
+    predated it, 3 were denials, 0 were bypasses.
+    """
+    assert ca.classify(_bc("gh pr create --fill", ts=ts, executed=executed)) == expected
+
+
+def test_classify_uses_the_matched_rules_own_since_date() -> None:
+    """Rules landed on different dates, so the cutoff must be per-rule.
+
+    `gh run watch` landed 2026-07-14, a week after `gh pr create` — on
+    2026-07-10 the first is still history while the second is already live.
+    """
+    assert ca.classify(_bc("gh run watch 1", ts="2026-07-10T00:00:00Z")) == "pre_rule"
+    assert ca.classify(_bc("gh pr create", ts="2026-07-10T00:00:00Z")) == "bypass"
 
 
 def test_group_key_uses_operative_head_sub() -> None:
@@ -191,7 +297,7 @@ def test_group_key_uses_operative_head_sub() -> None:
 
 
 def _cmds(*commands: str) -> list[ca.BashCommand]:
-    return [ca.BashCommand(c, session="s", timestamp="t") for c in commands]
+    return [_bc(c) for c in commands]
 
 
 def test_audit_counts_and_ranks() -> None:
@@ -202,7 +308,7 @@ def test_audit_counts_and_ranks() -> None:
             "docker run --rm x",  # one_off
             "ls",  # diagnostic
             "mise run lint",  # mise
-            "gh pr create",  # denied
+            "gh pr create",  # bypass (live rule + executed)
         ),
         sessions=2,
     )
@@ -211,10 +317,30 @@ def test_audit_counts_and_ranks() -> None:
     assert result.counts["one_off"] == 3
     assert result.counts["diagnostic"] == 1
     assert result.counts["mise"] == 1
-    assert result.counts["denied"] == 1
+    assert result.counts["bypass"] == 1
     # "git commit" is the top one-off group with count 2
     assert result.one_off_groups[0][0] == "git commit"
     assert result.one_off_groups[0][1] == 2
+
+
+def test_audit_groups_denials_by_rule_not_command_shape() -> None:
+    """Denials group by the rule that fired — a false positive's head is junk.
+
+    Both commands here are the real prose false positive (probed 2026-07-14):
+    the `|` sitting INSIDE the quoted regex, right before the literal, reads as
+    a shell separator to the guard, so `devcontainer up` matches at "command
+    position". Their command HEAD is `echo`/`ps`, naming nothing; the rule
+    identity is the thing to audit.
+    """
+    result = ca.audit(
+        [
+            _bc('echo hi | grep -E "mise run|devcontainer up"', executed=False),
+            _bc('ps aux | grep -E "land|devcontainer up|cli"', executed=False),
+        ],
+        sessions=1,
+    )
+    assert result.counts["blocked"] == 2
+    assert [(k, n) for k, n, _ex in result.blocked_groups] == [("devcontainer up", 2)]
 
 
 def test_render_report_has_sections_and_counts() -> None:
@@ -222,9 +348,17 @@ def test_render_report_has_sections_and_counts() -> None:
     report = ca.render_report(result)
     assert "# Command audit" in report
     assert "One-off culprits" in report
-    assert "Denied-but-ran" in report
+    assert "Bypasses (ran despite a live guard rule)" in report
     assert "`git commit`" in report
     assert "mise-tasks-only.md" in report
+
+
+def test_render_report_no_bypasses_says_so() -> None:
+    """Zero bypasses is the expected steady state — report it, don't omit it."""
+    report = ca.render_report(ca.audit(_cmds("ls", "git commit -m x"), sessions=1))
+    assert "_None — nothing has evaded the guard since its rule landed._" in report
+    # A clean run must not imply the guard was never exercised.
+    assert "Guard denials" not in report
 
 
 def test_render_report_no_one_offs() -> None:

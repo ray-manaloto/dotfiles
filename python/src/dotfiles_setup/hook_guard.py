@@ -29,10 +29,43 @@ import json
 import os
 import re
 import sys
+from dataclasses import dataclass
 
-# (pattern, reason). First match wins. Patterns run against the whole
-# Bash command string; they are deliberately narrow — a redirect that
-# misfires on legitimate diagnostics erodes trust in the guard.
+
+@dataclass(frozen=True)
+class Rule:
+    """One deny rule: what it matches, why, and when it started denying.
+
+    ``since`` is the ISO date (UTC) the rule LANDED ON MAIN — the date from
+    which a matching command that actually RAN is a genuine bypass. It exists
+    for :mod:`dotfiles_setup.command_audit`, which scans transcripts reaching
+    back long before the guard did: with no per-rule cutoff, every historical
+    ``gh pr create`` (2026-07-01, when no guard existed) reads as an evasion.
+    Measured 2026-07-14: 147 of 155 rule-matching commands predated their rule
+    — a 95% false-alarm rate that buries any real signal.
+
+    Set ``since`` when a rule is ADDED and never touch it again: it dates the
+    RULE, not the wording. Rewording a reason must not reset the cutoff, or
+    real bypasses go dark. (Deriving these from ``git log -S`` was rejected:
+    non-deterministic, slow, needs git at scan time, and a reword would reset
+    the date — the very failure this field is pinned against. A test asserts
+    every rule carries a valid one.)
+
+    ``name`` is a short shape label. The audit report groups guard denials by
+    rule identity, because grouping them by command head is meaningless — a
+    prose false-positive like ``ps aux | grep -iE "…|devcontainer up|…"``
+    groups under ``echo``, naming nothing.
+    """
+
+    name: str
+    pattern: re.Pattern[str]
+    reason: str
+    since: str
+
+
+# First match wins. Patterns run against the whole Bash command string;
+# they are deliberately narrow — a redirect that misfires on legitimate
+# diagnostics erodes trust in the guard.
 #
 # _CMD anchors every rule to command position (start of string or right
 # after a shell separator) so quoted/prose mentions — `echo 'gh pr
@@ -47,62 +80,91 @@ import sys
 # denied a review agent quoting the merge rule). Deliberately fail-open
 # beyond this (sh -c, base64, aliases): this is a redirect guard, not a
 # sandbox — hard bans live in settings.json permissions deny.
+#
+# Anchoring does NOT make the guard quoting-aware, and that gap is the only
+# defect the audit has ever measured (#265): the separator class cannot see
+# that a `|` INSIDE a quoted string is not a shell separator, so
+# `grep -iE "…|devcontainer up|…"` denies. 2 of the 3 denials this guard has
+# ever issued were this shape; 0 commands have ever evaded it. Any narrowing
+# here should trade recall for precision — never the reverse.
 _WRAPPER = (
     r"(?:(?:env\s+)?(?:\w+=\S*\s+)*"
     r"(?:exec\s+|nohup\s+|time\s+|timeout\s+\S+\s+|xargs\s+)?)*"
 )
 _CMD = r"(?:^|[;&|\n]\s*)" + _WRAPPER
-_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
-    (
+# The eight original rules landed together in #174 (90d699e, 2026-07-07);
+# #176 re-anchored them the same day, so the cutoff is unchanged.
+_V1 = "2026-07-07"
+# The three workflow-observation rules landed in #260 (7eae108, 2026-07-14).
+_V2 = "2026-07-14"
+
+_RULES: tuple[Rule, ...] = (
+    Rule(
+        "npx",
         re.compile(_CMD + r"npx\s"),
         "Do not use npx. Use the mise-installed binary directly (e.g. "
         "`agnix`, not `npx agnix`) — all tools are pinned in mise.toml. "
         "See .claude/rules/ci-local-parity.md.",
+        _V1,
     ),
-    (
+    Rule(
+        "chezmoi apply/update",
         re.compile(_CMD + r"chezmoi\s+(apply|update)\b"),
         "chezmoi apply/update is blocked on the Mac host — it may only run "
         "inside the devcontainer (chezmoi.os == 'linux' renders the "
         "container-only overlay). Read-only chezmoi commands are fine. See "
         ".claude/rules/use-tool-builtins.md.",
+        _V1,
     ),
-    (
+    Rule(
+        "hk run pre-commit",
         re.compile(_CMD + r"hk\s+run\s+pre-commit\b"),
         "Use `mise run lint` — it wraps hk in a hard timeout (hk has none) "
         "with log-tail diagnostics. See "
         ".claude/rules/long-running-command-hangs.md.",
+        _V1,
     ),
-    (
+    Rule(
+        "devcontainer up",
         re.compile(_CMD + r"devcontainer\s+up\b"),
         "Use `mise run up` (or `mise run dev-rebuild` to force-refresh) — "
         "the task carries BASE_IMAGE/platform/ssh-port env and the "
         "workspace-hash collision guard a raw `devcontainer up` misses.",
+        _V1,
     ),
-    (
+    Rule(
+        "devcontainer build",
         re.compile(_CMD + r"devcontainer\s+build\b"),
         "Use `mise run dev-rebuild` — the overlay build needs the task's "
         "env (BASE_IMAGE, DOCKER_DEFAULT_PLATFORM) to be reproducible.",
+        _V1,
     ),
-    (
+    Rule(
+        "docker pull (devcontainer image)",
         re.compile(
             _CMD + r"docker\s+(?:image\s+)?pull\b[^;&|\n]*dotfiles-devcontainer"
         ),
         "Never classic-pull the devcontainer image (it wedges on the ~38GB "
         "blob). Use `mise run sync` — buildkit-based, digest-aware, and it "
         "verifies the result.",
+        _V1,
     ),
-    (
+    Rule(
+        "gh pr create",
         re.compile(_CMD + r"gh\s+pr\s+create\b"),
         "Use `mise run ship` — it runs the path-aware gate matrix (incl. "
         "the hard full-sync gate on devcontainer-surface diffs) before the "
         "PR opens, then watches checks to bucket-verified green. See "
         ".claude/skills/pr-workflow/SKILL.md.",
+        _V1,
     ),
-    (
+    Rule(
+        "gh pr merge",
         re.compile(_CMD + r"gh\s+pr\s+merge\b"),
         "Use `mise run land -- <PR#>` — it verifies check buckets, pins the "
         "merge to the verified head SHA, watches main CI, and validates "
         "locally. See .claude/skills/pr-workflow/SKILL.md.",
+        _V1,
     ),
     # `nohup`/manual detachment of a mise task orphans it from the harness
     # (no completion notification, hand-rolled log-polling on top). _CMD's
@@ -110,7 +172,8 @@ _RULES: tuple[tuple[re.Pattern[str], str], ...] = (
     # (otherwise canonical/allowed) slips through when detached — hence a
     # dedicated rule that anchors `nohup` at command position and requires a
     # `mise run` later in the same segment.
-    (
+    Rule(
+        "nohup mise run",
         re.compile(
             r"(?:^|[;&|\n]\s*)(?:env\s+)?(?:\w+=\S*\s+)*nohup\s+[^;&|\n]*"
             r"mise\s+run\b"
@@ -119,20 +182,25 @@ _RULES: tuple[tuple[re.Pattern[str], str], ...] = (
         "background mechanism so it stays tracked and reports one clean "
         "completion — no orphaned process, no hand-rolled log monitor. See "
         ".claude/rules/mise-tasks-only.md.",
+        _V2,
     ),
-    (
+    Rule(
+        "gh run watch",
         re.compile(_CMD + r"gh\s+run\s+watch\b"),
         "Do not hand-roll `gh run watch` (it reports prematurely — see "
         ".claude/rules/gh-cli-watch.md). `mise run land -- <PR#>` already "
         "watches main CI via --json buckets; for a one-shot check use "
         "`gh run view <id> --json conclusion`.",
+        _V2,
     ),
-    (
+    Rule(
+        "gh pr checks --watch",
         re.compile(_CMD + r"gh\s+pr\s+checks\b[^;&|\n]*--watch\b"),
         "Do not hand-roll `gh pr checks --watch` — `mise run ship` already "
         "watches PR checks to bucket-verified green and `mise run land` "
         "watches main CI. A one-shot `gh pr checks <n> --json` read is fine. "
         "See .claude/rules/mise-tasks-only.md.",
+        _V2,
     ),
 )
 
@@ -156,12 +224,34 @@ _RULES: tuple[tuple[re.Pattern[str], str], ...] = (
 # opening the bypass.
 
 
+def rules() -> tuple[Rule, ...]:
+    """Every deny rule, in match order — the guard's introspection surface.
+
+    The rule table is a contract, not an implementation detail: `since` and
+    `name` are read outside this module (the audit dates bypasses by the first
+    and groups denials by the second), and the invariants that keep those
+    honest — every rule dated, every name unique — are asserted against this.
+    """
+    return _RULES
+
+
+def match(command: str) -> Rule | None:
+    """The first :class:`Rule` matching ``command``, else None.
+
+    Split out of :func:`decide` for :mod:`dotfiles_setup.command_audit`, which
+    needs the matched rule's ``since`` date (and ``name``) — not just its
+    reason — to tell a genuine bypass from pre-rule history.
+    """
+    for rule in _RULES:
+        if rule.pattern.search(command):
+            return rule
+    return None
+
+
 def decide(command: str) -> str | None:
     """Redirect reason when ``command`` should be denied, else None."""
-    for pattern, reason in _RULES:
-        if pattern.search(command):
-            return reason
-    return None
+    rule = match(command)
+    return rule.reason if rule is not None else None
 
 
 def _read_command() -> str:
