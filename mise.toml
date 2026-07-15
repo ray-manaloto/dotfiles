@@ -459,9 +459,21 @@ description = "Check MEMORY.md before trimming it: budget, dead links, and facts
 run = 'uv run --project python dotfiles-setup memory-index'
 
 [tasks.renovate-dryrun]
-description = "Dry-run Renovate against this repo to see what it would change (no PRs)"
+description = "Dry-run Renovate to see what it would change (no PRs) — BLOCKED, see #290"
 # Thin caller. `--platform=local --dry-run=full` reads the working tree and
 # reports what Renovate WOULD do; it never writes or opens a PR.
+#
+# !! CURRENTLY BLOCKED — #290. Against THIS repo it exits rc=1 with
+# `Cannot sync git when platform=local` (dying in renovate's cloneSubmodules)
+# and extracts 0 deps. NOT the node pin: the pinned run gets 0
+# "Unsupported node environment" hits vs 2 in an unpinned control, and renovate
+# starts and initialises the repo before dying. NOT --dry-run=full either
+# (--dry-run=extract fails identically). NOT submodules (no .gitmodules). The
+# same config + the same real mise-system.toml in a scratch `git init` dir
+# extracts 58 deps and resolves them cleanly — so it is platform=local meeting
+# this working tree's remote/branch state. The task and its pin are kept
+# because both are correct and are what #290 needs to land against; the pin was
+# never the blocker.
 #
 # tools.node pins THIS TASK to node 24 (#251). Renovate 43.x declares
 # `engines.node ^24.11.0`; under our node 26 the binary exits rc=1 with
