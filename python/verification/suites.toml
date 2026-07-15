@@ -1036,6 +1036,27 @@ tokens = [
 ]
 
 [[suite]]
+name = "workflow.memory-index-wiring"
+description = "Memory-index curation wiring: `mise run memory-index` must stay a thin caller of the python library (`dotfiles-setup memory-index`, zero-bash-logic), the memory_index module + its tests must exist, and the skill must carry the operating procedure. Why it exists: MEMORY.md auto-loads only to 200 lines / 25KB, so it must stay short — but shortening an index entry SILENTLY DESTROYS any fact that lives only in that entry. Measured 2026-07-14, not theorized: a routine trim of 4 bloated lines would have destroyed 4 facts (#244, #186, #194, 8010c61) that no topic file recorded, and the checker's first live run found a 5th (a hook claiming CI green at 3adff36 against a topic file saying c2cecd7 — a later commit). Hence the order the skill encodes and this contract pins: verify -> migrate/correct -> THEN shorten. Pins the design choices that make the report worth reading, each one a bug an adversarial review probe-verified before it shipped: load_cutoff_line enforces BOTH caps (the first draft checked only LINE_BUDGET, on the twice-asserted belief that lines bind first — at ~149 bytes/line the 25KB cap lands near line 168 and the line cap is UNREACHABLE, so the only axis that could fire was the unenforced one, and the report printed OVER in its own table while exiting 0); audit_index drops MEMORY.md itself (the index holds every entry, so including it resolves every fact as 'recorded somewhere' and returns a silent all-pass — the one failure a loss-checker cannot have); fact_present matches per-kind rather than by raw string (the prototype cried `25.8GB` missing against a file writing `25.8 GB`, and a checker that cries wolf gets ignored); _SHA demands a digit AND an a-f letter (a digit-only test read the repo's own research-YYYYMMDD-* slugs and GHA run ids as commit shas); _elsewhere never downgrades a size (17.5GB of image and 17.5GB of free disk share a number, not a fact, so the coincidence would pass a genuinely index-only measurement); and inbound_refs matches a bare stem (requiring brackets or .md missed 4 real citations in the live dir and told the reader a cited memory had none — the false reassurance that precedes a delete). On-demand by design: no hook wires it (Ray, 2026-07-14 — revisit once the numbers show how they move), so unlike command-audit there is deliberately no settings.json entry to assert."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    "mise.toml",
+    "python/src/dotfiles_setup/memory_index.py",
+    "python/src/dotfiles_setup/main.py",
+    "tests/test_memory_index.py",
+    ".claude/skills/memory-index-curation/SKILL.md",
+]
+per_path_tokens = { "mise.toml" = ["[tasks.memory-index]", "dotfiles-setup memory-index"], "python/src/dotfiles_setup/memory_index.py" = ["def memory_index_main", "def audit_index", "def distinctive_facts", "def fact_present", "def inbound_refs", "def load_cutoff_line", "LINE_BUDGET", "BYTE_BUDGET"], "python/src/dotfiles_setup/main.py" = ["memory-index", "--refs"], "tests/test_memory_index.py" = ["def test_the_index_does_not_satisfy_its_own_facts", "def test_size_matches_across_a_space_the_prototype_reported_as_missing", "def test_fact_only_in_the_hook_is_index_only_and_fails_the_check", "def test_an_entry_past_the_byte_cutoff_fails_even_when_under_200_lines", "def test_distinctive_facts_ignores_plain_numbers_that_are_all_hex_digits", "def test_a_matching_size_in_an_unrelated_memory_is_not_the_same_fact", "def test_a_fact_in_the_title_is_checked_not_just_the_hook", "def test_inbound_refs_finds_every_citation_form_the_memories_use"], ".claude/skills/memory-index-curation/SKILL.md" = ["mise run memory-index", "--refs", "THEN shorten"] }
+tokens = [
+    "dotfiles-setup memory-index",
+    "def memory_index_main",
+    "def audit_index",
+]
+
+[[suite]]
 name = "workflow.command-audit-wiring"
 description = "Command-audit self-learning loop wiring: `mise run command-audit` must stay a thin caller of the python library (`dotfiles-setup command-audit`, zero-bash-logic), the command_audit module (transcript scan + classifier) + its tests must exist, and the rule doc must name the loop. The scanner is the inverse of fewer-permission-prompts — it flags one-off Bash commands the PreToolUse guard does not yet cover, so the enforcement layers can be refined over time. The loop is RECURRING: a SessionEnd hook in .claude/settings.json refreshes .omc/command-audit.md via --output once per session (SessionEnd fires once per session and cannot block — unlike Stop, which fires per-turn and can block), hook_selfcheck asserts that wiring, and .gitignore keeps the report local. Also pins the two axes that make the alarm mean anything (measured 2026-07-14: of 155 rule-matching commands, 147 predated their rule, 3 were denials, 0 were bypasses): every hook_guard Rule carries a `since` landing date (without it classify() reads every match as history and the bypass alarm goes dark), and _executed_ids pairs each attempt to its result (a transcript records a denied Bash call identically to an executed one, so denial and evasion are indistinguishable without it). Asserts the chain so the loop can't silently drift out."
 category = "workflow"
