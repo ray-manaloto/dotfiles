@@ -43,6 +43,11 @@ mise.*.local.toml
 # the tree and tripped `mise run ship`'s clean-tree gate (forcing stash dances).
 # Durable findings live in GH issues + `.omc/research/`, not here.
 .omc/notepad.md
+# Regenerated every session by the SessionEnd command-audit hook (settings.json)
+# and derived from LOCAL ~/.claude transcripts, so it is per-clone by nature —
+# same clean-tree rationale as the notepad above. `.omc/*` is only excluded via
+# this clone's .git/info/exclude, which a fresh clone does not get.
+.omc/command-audit.md
 .omx/
 
 # Codex CLI temporary state

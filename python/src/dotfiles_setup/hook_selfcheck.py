@@ -6,8 +6,9 @@ never drives the actual path the harness uses: ``.claude/settings.json`` ->
 hook pretooluse``. This module closes that gap. It:
 
 - asserts ``.claude/settings.json`` wires the project hooks
-  (:data:`_SETTINGS_WIRING`): the PreToolUse deny guard (scoped to ``Bash``) and
-  the SessionStart web-setup bootstrap;
+  (:data:`_SETTINGS_WIRING`): the PreToolUse deny guard (scoped to ``Bash``),
+  the SessionStart web-setup bootstrap, and the SessionEnd command-audit
+  refresh;
 - drives the REAL PreToolUse wrapper end-to-end — a denied command must DENY,
   an allowed one must stay silent;
 - ``bash -n`` syntax-checks the wired hook scripts (a parse error in
@@ -53,9 +54,17 @@ _HOOK_SCRIPTS = (_PRETOOLUSE_WRAPPER, _WEB_SETUP)
 # wired command(s), required matcher or None). Keeps the project hooks from
 # silently drifting out of .claude/settings.json (the wiring the end-to-end
 # check then exercises). PreToolUse must stay scoped to Bash.
+#
+# SessionEnd runs the command-audit refine loop once per session (the recurring
+# half of mise-tasks-only enforcement). A matcher would SCOPE it to particular
+# end reasons (clear/logout/resume/...) — it must fire on all of them, hence
+# None. Deliberately NOT a `Stop` hook: Stop fires every turn and can block,
+# which would put a transcript scan on the per-turn path.
+_SESSION_END_REPORT = ".omc/command-audit.md"
 _SETTINGS_WIRING: tuple[tuple[str, tuple[str, ...], str | None], ...] = (
     ("PreToolUse", (_PRETOOLUSE_WRAPPER,), "Bash"),
     ("SessionStart", (_WEB_SETUP, "CLAUDE_CODE_REMOTE"), None),
+    ("SessionEnd", ("mise run command-audit", _SESSION_END_REPORT), None),
 )
 
 

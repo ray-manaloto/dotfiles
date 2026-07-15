@@ -23,9 +23,9 @@ Docker image smoke outputs.
 | `test_container.py` | pytest | `verify-container-latest` gate (`dotfiles_setup.container`) — running/bind-mount/smoke freshness checks |
 | `test_sync.py` | pytest | `mise run sync` workflow (`dotfiles_setup.sync`) — staleness detection, action matrix, CI awareness, check/full/wait modes |
 | `test_pr.py` | pytest | `mise run ship`/`land` workflow (`dotfiles_setup.pr`) — surface detection, gate matrix, bucket verification, pinned merge |
-| `test_hook_guard.py` | pytest | PreToolUse mise-tasks-only guard (`dotfiles_setup.hook_guard`) — deny/redirect rules, false-positive guards, JSON contract |
-| `test_hook_selfcheck.py` | pytest | Host-side hook self-check (`dotfiles_setup.hook_selfcheck`, the ship/land `hook-selfcheck` gate) — settings.json wiring + Bash-matcher assertions, and an end-to-end real-repo pass driving the wired PreToolUse guard |
-| `test_command_audit.py` | pytest | Command-audit transcript scanner (`dotfiles_setup.command_audit`, the self-learning mise-tasks loop) — env-aware transcript discovery, defensive JSONL parse, one-off/denied/mise/diagnostic classifier (cd-prefix unwrap), grouping, report rendering |
+| `test_hook_guard.py` | pytest | PreToolUse mise-tasks-only guard (`dotfiles_setup.hook_guard`) — deny/redirect rules, false-positive guards, JSON contract, and the cd-prefixed compound denials (pinned: they pass with NO cd-unwrap in `decide()`, since `_CMD` re-anchors on the `&&`/`;`/newline every prefix ends in — probe 2026-07-14 refuting the predicted "chained-command evasion") |
+| `test_hook_selfcheck.py` | pytest | Host-side hook self-check (`dotfiles_setup.hook_selfcheck`, the ship/land `hook-selfcheck` gate) — settings.json wiring + Bash-matcher assertions incl. the SessionEnd command-audit hook, and an end-to-end real-repo pass driving the wired PreToolUse guard |
+| `test_command_audit.py` | pytest | Command-audit transcript scanner (`dotfiles_setup.command_audit`, the self-learning mise-tasks loop) — env-aware transcript discovery, defensive JSONL parse, one-off/denied/mise/diagnostic classifier (cd-prefix unwrap), grouping, report rendering, and the `--output` path the SessionEnd hook uses (repo-anchored resolve, no-clobber on a transcript miss, real-CLI flag pin) |
 | `test_tool_currency.py` | pytest | Daily tool-currency signal (`dotfiles_setup.tool_currency`) — release-link backends, report rendering |
 | `test_renovate.py` | pytest | Renovate status signal (`dotfiles_setup.renovate`) — app-id/privilege check, report rendering |
 | `test_autofix.py` | pytest | autofix.ci artifact applier (`dotfiles_setup.autofix`) — additions, traversal/shape/deletion refusal |
@@ -35,7 +35,7 @@ Docker image smoke outputs.
 | `infra/foundation.bats` | Bats | Bash-level foundation checks (shell script integration) |
 | `infra/runtimes.bats` | Bats | Runtime installation checks (bash) |
 
-Total: **505 pytest tests** run by default (`pytest tests/` collects all
+Total: **522 pytest tests** run by default (`pytest tests/` collects all
 `test_*.py` files) plus **4 gated `image_exec`** exec tests (deselected by
 default; run via `mise run smoke-exec`) and Bats scenarios under `infra/`.
 

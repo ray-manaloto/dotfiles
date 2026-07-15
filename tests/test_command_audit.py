@@ -2,13 +2,15 @@
 
 Covers transcript discovery (env-aware, never hardcoded), defensive JSONL
 parsing, the one-off/denied/mise/diagnostic classifier (incl. cd-prefix
-compound unwrapping), grouping, and report rendering.
+compound unwrapping), grouping, report rendering, and the ``--output`` path the
+SessionEnd hook uses to refresh the report once per session.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -229,3 +231,98 @@ def test_render_report_no_one_offs() -> None:
     result = ca.audit(_cmds("ls", "git status"), sessions=1)
     report = ca.render_report(result)
     assert "_None — no un-wrapped one-off commands found._" in report
+
+
+# ------------------------------------------- --output (the SessionEnd hook path)
+
+
+def _seed_transcript(tmp_path: Path, project: Path, *commands: str) -> Path:
+    """A CLAUDE_CONFIG_DIR holding one transcript for ``project``."""
+    cfg = tmp_path / "cfg"
+    proj = cfg / "projects" / ca.encode_cwd(project)
+    proj.mkdir(parents=True)
+    (proj / "s.jsonl").write_text("\n".join(_assistant_bash(c) for c in commands))
+    return cfg
+
+
+def test_write_report_resolves_relative_to_project_root(tmp_path: Path) -> None:
+    """Relative output is repo-anchored (the hook must not depend on cwd)."""
+    dest = ca.write_report("body", tmp_path, Path(".omc/command-audit.md"))
+    assert dest == tmp_path / ".omc" / "command-audit.md"
+    assert dest.read_text() == "body"  # parent created on demand
+
+
+def test_write_report_honors_absolute_path(tmp_path: Path) -> None:
+    target = tmp_path / "out" / "r.md"
+    assert ca.write_report("body", tmp_path / "unused", target) == target
+    assert target.read_text() == "body"
+
+
+def test_main_output_writes_file_instead_of_stdout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    project = tmp_path / "repo"
+    project.mkdir()
+    monkeypatch.setenv(
+        "CLAUDE_CONFIG_DIR",
+        str(_seed_transcript(tmp_path, project, "git commit -m x", "ls")),
+    )
+    assert ca.command_audit_main(project, output=Path(".omc/command-audit.md")) == 0
+    report = (project / ".omc" / "command-audit.md").read_text()
+    assert "# Command audit" in report
+    assert "`git commit`" in report
+    out = capsys.readouterr().out
+    assert "wrote" in out
+    assert "# Command audit" not in out  # the body went to the file, not stdout
+
+
+def test_main_without_output_prints_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    project = tmp_path / "repo"
+    project.mkdir()
+    monkeypatch.setenv(
+        "CLAUDE_CONFIG_DIR", str(_seed_transcript(tmp_path, project, "git commit -m x"))
+    )
+    assert ca.command_audit_main(project) == 0
+    assert "# Command audit" in capsys.readouterr().out
+
+
+def test_main_no_transcripts_leaves_existing_report_intact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A miss must not clobber a good report with an empty/notice file."""
+    project = tmp_path / "repo"
+    (project / ".omc").mkdir(parents=True)
+    stale = project / ".omc" / "command-audit.md"
+    stale.write_text("previous report")
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "empty"))
+    assert ca.command_audit_main(project, output=Path(".omc/command-audit.md")) == 0
+    assert stale.read_text() == "previous report"
+    assert "no transcripts" in capsys.readouterr().out
+
+
+def test_cli_accepts_the_session_end_output_flag() -> None:
+    """The flag the SessionEnd hook passes must exist on the REAL CLI.
+
+    The wiring check asserts settings.json names `--output`; this asserts
+    argparse actually accepts it, so the hook cannot fail only at runtime.
+    """
+    res = subprocess.run(
+        [
+            "uv",
+            "run",
+            "--project",
+            "python",
+            "dotfiles-setup",
+            "command-audit",
+            "--help",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=Path(__file__).parent.parent,
+        timeout=120,
+    )
+    assert res.returncode == 0
+    assert "--output" in res.stdout

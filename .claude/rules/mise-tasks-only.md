@@ -53,7 +53,15 @@ single-test `pytest path::test` via uv) are NOT wrapped and stay direct.
    `fewer-permission-prompts` skill (same transcript mine + command+subcommand
    grouping, opposite verdict). Review the report, then add a `mise run` task
    (+ a `hook_guard._RULES` redirect for a known-bad shape) for the top
-   culprits. Ongoing, not one-shot.
+   culprits. Ongoing, not one-shot — a **`SessionEnd` hook** in
+   `.claude/settings.json` runs it once per session (`-- --output
+   .omc/command-audit.md`), so the report is always waiting rather than
+   remember-to-run. `SessionEnd` and not `Stop`: it fires once per session at
+   termination and *cannot block*, while `Stop` fires every turn and can block
+   (exit 2 continues the turn) — a transcript scan belongs on neither the
+   per-turn path nor a blocking one. It is also **local-only by nature** (it
+   reads `~/.claude` transcripts), so it is a hook and never a GHA job — a CI
+   runner has no transcripts. The report stays out of git via `.gitignore`.
 5. **Contracts** — `workflow.mise-tasks-enforcement` (the deny guard),
    `workflow.hook-selfcheck-wiring` (the selfcheck gate), and
    `workflow.command-audit-wiring` (the self-learning loop) in suites.toml

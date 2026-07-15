@@ -30,6 +30,15 @@ Classification (first match wins):
 
 ``dotfiles-setup command-audit`` (→ ``mise run command-audit``) renders a
 frequency-ranked markdown report grouped by command+subcommand.
+
+The loop is RECURRING, not remember-to-run: a ``SessionEnd`` hook in
+``.claude/settings.json`` refreshes ``.omc/command-audit.md`` via ``--output``
+once per session. SessionEnd (not ``Stop``) is the right event — it fires once
+per session at termination and *cannot block*, whereas ``Stop`` fires every
+turn and can block (exit 2 continues the conversation), which would put a
+transcript scan on the per-turn path and risk a stop-loop. The scan is local by
+nature (it reads ``~/.claude`` transcripts), so this is a local hook and never
+a CI job — a GHA runner has no transcripts to read.
 """
 
 from __future__ import annotations
@@ -406,10 +415,34 @@ def render_report(result: AuditResult) -> str:
     return "\n".join(lines) + "\n"
 
 
+def write_report(text: str, project_root: Path, output: Path) -> Path:
+    """Write ``text`` to ``output`` (relative paths resolve against the repo).
+
+    Python owns the path resolution + parent creation so the SessionEnd hook
+    stays a pure invocation with no shell redirect (zero-bash-logic), and so
+    the destination does not depend on the hook's cwd.
+    """
+    dest = output if output.is_absolute() else project_root / output
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(text)
+    return dest
+
+
 def command_audit_main(
-    project_root: Path, *, limit: int = DEFAULT_SESSION_LIMIT
+    project_root: Path,
+    *,
+    limit: int = DEFAULT_SESSION_LIMIT,
+    output: Path | None = None,
 ) -> int:
-    """Scan this project's recent transcripts; print the markdown report."""
+    """Scan this project's recent transcripts; report to stdout or ``output``.
+
+    ``--output`` is what the SessionEnd hook (``.claude/settings.json``) uses to
+    refresh ``.omc/command-audit.md`` once per session, making the refine loop
+    recurring instead of remember-to-run. The no-transcripts branch deliberately
+    leaves any existing report untouched rather than clobbering it with a
+    notice — and it cannot fire from the hook anyway, since a SessionEnd
+    implies this project has a transcript.
+    """
     base = transcripts_base()
     transcripts = project_transcripts(base, project_root, limit=limit)
     if not transcripts:
@@ -419,5 +452,14 @@ def command_audit_main(
         )
         return 0
     result = audit(iter_bash_commands(transcripts), sessions=len(transcripts))
-    sys.stdout.write(render_report(result))
+    text = render_report(result)
+    if output is None:
+        sys.stdout.write(text)
+        return 0
+    dest = write_report(text, project_root, output)
+    sys.stdout.write(
+        f"command-audit: wrote {dest} "
+        f"({result.counts.get('one_off', 0)} one-off, "
+        f"{result.counts.get('denied', 0)} denied-but-ran)\n"
+    )
     return 0

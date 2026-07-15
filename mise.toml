@@ -421,6 +421,8 @@ description = "Scan recent Claude Code transcripts for one-off Bash culprits to 
 # mutating hand-run commands the PreToolUse guard does not yet cover. Review
 # the report to refine rules/hooks/docs. Pass flags through: mise run
 # command-audit -- --limit 20
+# Also run automatically by the SessionEnd hook in .claude/settings.json
+# (`-- --output .omc/command-audit.md`) — run it by hand for an ad-hoc report.
 run = 'uv run --project python dotfiles-setup command-audit'
 
 [tasks.renovate-status]
