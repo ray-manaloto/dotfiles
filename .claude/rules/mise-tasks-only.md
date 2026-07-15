@@ -53,7 +53,9 @@ single-test `pytest path::test` via uv) are NOT wrapped and stay direct.
    `fewer-permission-prompts` skill (same transcript mine + command+subcommand
    grouping, opposite verdict). Review the report, then add a `mise run` task
    (+ a `hook_guard._RULES` redirect for a known-bad shape) for the top
-   culprits. Ongoing, not one-shot — a **`SessionEnd` hook** in
+   culprits. A rule-matching command is only an alarm (`bypass`) when it ran
+   AFTER its rule's `since` date AND actually executed — see "Reading the
+   report" below. Ongoing, not one-shot — a **`SessionEnd` hook** in
    `.claude/settings.json` runs it once per session (`-- --output
    .omc/command-audit.md`), so the report is always waiting rather than
    remember-to-run. `SessionEnd` and not `Stop`: it fires once per session at
@@ -85,6 +87,27 @@ belong in settings.json permission deny rules, not the hook.
 > mines native transcripts for one-off-command culprits to refine these layers
 > — not more per-turn hooks.
 
+## Reading the command-audit report
+
+Only **`bypass`** is an alarm: a command that matched a rule ALREADY LIVE
+(`timestamp > rule.since`) and that really executed. The other rule-matching
+classes are not:
+
+- **`blocked`** — the guard denied it; it never ran. The guard working. Audit
+  these for FALSE POSITIVES (see the known limitation below), not for evasion.
+- **`pre_rule`** — it predates the rule that matches it. History.
+- **`one_off`** — the refine-loop candidates, but known-noisy (#266): its top
+  shapes are currently sanctioned work (plain git, ad-hoc scripts, the
+  prescribed wait-loops). Read it with that discount until #266 lands.
+
+Both distinctions are load-bearing, because a bare "matched a rule" verdict is
+almost pure noise. Measured over 3,615 real commands (2026-07-14): **155**
+matched a rule — **147** predated it, **3** were denials, and **0** were
+bypasses. Nothing has ever evaded the guard. The transcript is what forces the
+second axis: it records the Bash `tool_use` block whether or not the command
+ran (a PreToolUse deny lands *after* the model emits it), so a denial and a
+bypass are byte-identical until you pair the attempt to its result.
+
 ## Known limitation: prose content in compound commands
 
 The guard matches the raw Bash string, so heredoc/quoted CONTENT that
@@ -95,11 +118,20 @@ compound command, silently skipping its other parts (observed twice,
 `python3 <file>`; after ANY deny, re-check that the command's intended
 side effects actually happened.
 
+**This — not evasion — is the guard's live defect** (issue #265). The audit's
+`blocked` bucket measures it: 2 of the 3 denials ever recorded were false
+positives, both from a `|` INSIDE a quoted regex (`grep -iE
+"…|devcontainer up|…"`) reading as a shell separator.
+
 ## Extending
 
 New redirect = new `_RULES` entry in `hook_guard.py` + a test + a row in
-the table above, same change. Keep patterns narrow: a redirect that
-misfires on legitimate diagnostics erodes trust in the guard.
+the table above, same change. Give it a `since` date (the day it lands on
+main) — the audit needs it to tell a real bypass from pre-rule history, and a
+rule missing one classifies every match as history forever, darkening the
+alarm. `since` dates the RULE, not its wording: never bump it on a reword.
+Keep patterns narrow: a redirect that misfires on legitimate diagnostics
+erodes trust in the guard.
 
 ## See also
 

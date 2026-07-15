@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -155,6 +157,37 @@ def test_pull_rule_does_not_span_separators() -> None:
     # [16]: an unrelated pull followed by a mention must not be denied.
     cmd = "docker pull ubuntu:24.04 && echo dotfiles-devcontainer"
     assert hook_guard.decide(cmd) is None
+
+
+@pytest.mark.parametrize("rule", hook_guard.rules(), ids=lambda r: r.name)
+def test_every_rule_carries_a_usable_since_date(rule: hook_guard.Rule) -> None:
+    """A rule with no (or a malformed) `since` reports as history forever.
+
+    `command_audit.classify` compares an ISO timestamp prefix against this
+    field, so a wrong shape doesn't crash — it silently classifies every
+    match as `pre_rule` and the bypass alarm goes dark. Pinned here so a rule
+    added without a date fails loudly at authoring time instead.
+    """
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", rule.since), rule.since
+    # A real date, not just the right shape (e.g. not 2026-13-45).
+    landed = dt.date.fromisoformat(rule.since)
+    assert landed >= dt.date(2026, 7, 7), "no rule predates the guard itself"
+    assert landed <= dt.datetime.now(dt.UTC).date(), "since must not be a future date"
+
+
+def test_rule_names_are_unique_and_nonempty() -> None:
+    """Denials group by rule name in the audit report — collisions merge rows."""
+    names = [r.name for r in hook_guard.rules()]
+    assert all(names)
+    assert len(set(names)) == len(names)
+
+
+def test_match_returns_the_rule_behind_the_reason() -> None:
+    rule = hook_guard.match("gh pr create --fill")
+    assert rule is not None
+    assert rule.name == "gh pr create"
+    assert rule.reason == hook_guard.decide("gh pr create --fill")
+    assert hook_guard.match("git status") is None
 
 
 def test_read_command_real_hook_payload() -> None:

@@ -12,15 +12,30 @@ Capture is 100% native — no logging hook, no OTel collector. Every Bash call i
 already recorded verbatim in the session transcript JSONL
 (``$CLAUDE_CONFIG_DIR/projects/<encoded-cwd>/<session>.jsonl``, default
 ``~/.claude``): an ``type:"assistant"`` line whose ``message.content`` holds a
-``{type:"tool_use", name:"Bash", input:{command:"…"}}`` block. That schema is
+``{type:"tool_use", name:"Bash", input:{command:"…"}}`` block, answered by a
+later ``type:"user"`` line carrying the matching ``tool_result``. That schema is
 community-reverse-engineered, not an officially versioned contract, so every
 field access here is defensive (a malformed line is skipped, never fatal).
 
-Classification (first match wins):
+A transcript records ATTEMPTS, not executions: the ``tool_use`` block is
+written whether or not the command ran, because a PreToolUse deny lands *after*
+the model emits it. So an attempt is paired to its result (see
+:func:`_executed_ids`) to tell "the guard blocked this" from "this evaded the
+guard" — two outcomes that are otherwise byte-identical in the transcript.
 
-- ``denied`` — :func:`hook_guard.decide` returns a reason. A KNOWN one-off that
-  still ran ⇒ the guard was bypassed or the command predates the rule. Highest
-  signal.
+Classification (first match wins). The three rule-matching classes exist
+because a bare "matched a deny rule" verdict is almost pure noise — measured
+over 3,615 real calls on 2026-07-14: 155 matched a rule, 147 predated it, 3 were
+denials, and **0** were bypasses:
+
+- ``bypass`` — matched a rule that ALREADY EXISTED (``timestamp > rule.since``)
+  *and* actually executed. A real evasion. The only alarm worth raising.
+- ``blocked`` — matched a live rule and did NOT run: the guard working. Audit
+  these for FALSE POSITIVES — the guard is quoting-blind, so a denied literal
+  inside a quoted string (``grep -iE "…|devcontainer up|…"``) is denied, which
+  cancels the whole compound command. That, not evasion, is the live defect.
+- ``pre_rule`` — matched a rule that post-dates it: history from before the
+  guard existed. No action; NOT a one-off (it has a mise task today).
 - ``mise`` — already goes through a mise task / the ``dotfiles_setup`` CLI /
   canonical pytest. Good; no action.
 - ``diagnostic`` — a read-only/allowlisted shape (ls, cat, git status, docker
@@ -176,11 +191,18 @@ _GH_READ_MARKERS = re.compile(r"\b(view|checks|list|status|--json)\b")
 
 @dataclass(frozen=True)
 class BashCommand:
-    """One Bash invocation recovered from a transcript."""
+    """One Bash invocation recovered from a transcript.
+
+    ``executed`` says the command really RAN, as opposed to being refused by
+    the permission layer before execution. It has no default on purpose: the
+    field decides whether a rule-matching command reads as a guard bypass or as
+    the guard working, so every construction site must state it outright.
+    """
 
     command: str
     session: str
     timestamp: str
+    executed: bool
 
 
 def transcripts_base(
@@ -209,8 +231,8 @@ def project_transcripts(base: Path, cwd: Path, *, limit: int) -> list[Path]:
     return files[:limit]
 
 
-def _bash_blocks(content: object) -> Iterator[str]:
-    """Yield Bash ``input.command`` strings from an assistant line's content."""
+def _bash_blocks(content: object) -> Iterator[tuple[str, str]]:
+    """Yield ``(tool_use_id, command)`` for Bash calls in one line's content."""
     if not isinstance(content, list):
         return
     for block in content:
@@ -221,31 +243,90 @@ def _bash_blocks(content: object) -> Iterator[str]:
             if isinstance(command, dict):
                 cmd = command.get("command")
                 if isinstance(cmd, str) and cmd.strip():
-                    yield cmd
+                    yield str(block.get("id", "")), cmd
+
+
+def _json_lines(path: Path) -> list[dict[str, object]]:
+    """Every well-formed JSON object line in ``path`` (bad lines skipped)."""
+    try:
+        raw = path.read_text(errors="replace")
+    except OSError:
+        return []
+    objs: list[dict[str, object]] = []
+    for line in raw.splitlines():
+        if not line.strip():
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(obj, dict):
+            objs.append(obj)
+    return objs
+
+
+def _content_blocks(obj: dict[str, object]) -> object:
+    """The ``message.content`` of a transcript line, if it has one."""
+    message = obj.get("message")
+    return message.get("content") if isinstance(message, dict) else None
+
+
+def _executed_ids(objs: Iterable[dict[str, object]]) -> set[str]:
+    """The ``tool_use`` ids whose result proves the command actually ran.
+
+    A Bash result line carries ``toolUseResult``: a **dict** with a ``stdout``
+    key when the command executed, or a bare **str** (``"Error: <reason>"``)
+    when the permission layer refused it first. Probed against 3,618 real
+    results (2026-07-14): ``stdout`` is present in every executed variant —
+    plain, ``backgroundTaskId``, ``gitOperation``, ``persistedOutputPath``,
+    ``returnCodeInterpretation`` — and the 80 refusals are the only non-dicts,
+    so the dict-with-stdout test is a structural signal, not a string match on
+    the reason. Each line holds exactly one ``tool_result`` block (6,822/6,822
+    probed), so the line-level ``toolUseResult`` maps to it unambiguously.
+
+    An id absent from the returned set is treated as NOT executed — a result
+    can be missing for the final in-flight call of a session. That direction is
+    deliberate: proof-of-execution is required to cry bypass, so an unknown
+    outcome stays quiet rather than inventing an alarm.
+    """
+    ids: set[str] = set()
+    for obj in objs:
+        result = obj.get("toolUseResult")
+        if not (isinstance(result, dict) and "stdout" in result):
+            continue
+        content = _content_blocks(obj)
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "tool_result":
+                uid = block.get("tool_use_id")
+                if isinstance(uid, str):
+                    ids.add(uid)
+    return ids
 
 
 def iter_bash_commands(paths: Iterable[Path]) -> Iterator[BashCommand]:
-    """Every Bash command across the transcripts, parsed defensively."""
+    """Every Bash command across the transcripts, parsed defensively.
+
+    Two passes per file: results can only be paired to attempts once the whole
+    file is read (the ``tool_result`` always lands on a later line than its
+    ``tool_use``). The file is read into memory either way.
+    """
     for path in paths:
-        try:
-            lines = path.read_text(errors="replace").splitlines()
-        except OSError:
-            continue
-        for line in lines:
-            if not line.strip():
+        objs = _json_lines(path)
+        executed = _executed_ids(objs)
+        for obj in objs:
+            if obj.get("type") != "assistant":
                 continue
-            try:
-                obj = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if not isinstance(obj, dict) or obj.get("type") != "assistant":
-                continue
-            message = obj.get("message")
-            content = message.get("content") if isinstance(message, dict) else None
             session = str(obj.get("sessionId", ""))
             timestamp = str(obj.get("timestamp", ""))
-            for cmd in _bash_blocks(content):
-                yield BashCommand(cmd, session=session, timestamp=timestamp)
+            for uid, cmd in _bash_blocks(_content_blocks(obj)):
+                yield BashCommand(
+                    cmd,
+                    session=session,
+                    timestamp=timestamp,
+                    executed=uid in executed,
+                )
 
 
 # A leading `cd <path> &&|;|newline` prefix hides the operative command from
@@ -295,13 +376,27 @@ def is_diagnostic(command: str) -> bool:
     return sub in reads
 
 
-def classify(command: str) -> str:
-    """One of ``denied`` / ``mise`` / ``diagnostic`` / ``one_off`` (first match)."""
-    if hook_guard.decide(command) is not None:
-        return "denied"
-    if is_mise_backed(command):
+def classify(bc: BashCommand) -> str:
+    """The class of one command: see the module docstring (first match wins).
+
+    A command matching a rule that post-dates it is ``pre_rule`` and stops
+    there — it is NOT a one-off, because it has a canonical mise task today;
+    telling the reader to "package it as a mise task" would be wrong.
+
+    The cutoff compares dates, and a command from the rule's own landing DAY
+    counts as pre-rule: the rule may have merged later that day, and a false
+    bypass alarm costs more than a missed same-day one. Every later day is
+    exact. An empty/short timestamp likewise reads as pre-rule — no alarm
+    without evidence.
+    """
+    rule = hook_guard.match(bc.command)
+    if rule is not None:
+        if bc.timestamp[:10] <= rule.since:
+            return "pre_rule"
+        return "bypass" if bc.executed else "blocked"
+    if is_mise_backed(bc.command):
         return "mise"
-    if is_diagnostic(command):
+    if is_diagnostic(bc.command):
         return "diagnostic"
     return "one_off"
 
@@ -312,29 +407,46 @@ def group_key(command: str) -> str:
     return f"{head} {sub}".strip() if head else "(empty)"
 
 
+def _group_name(bc: BashCommand, kind: str) -> str:
+    """The group a command reports under: rule name for denials, else shape."""
+    if kind == "blocked":
+        rule = hook_guard.match(bc.command)
+        if rule is not None:
+            return rule.name
+    return group_key(bc.command)
+
+
 @dataclass(frozen=True)
 class AuditResult:
     """The classified + grouped outcome of a scan."""
 
     counts: dict[str, int]
-    denied_groups: list[tuple[str, int, str]]
+    bypass_groups: list[tuple[str, int, str]]
+    blocked_groups: list[tuple[str, int, str]]
     one_off_groups: list[tuple[str, int, str]]
     sessions: int
     total: int
 
 
+# Grouped classes, and how each one names a group. Guard denials group by the
+# RULE that fired, not by command shape: a false-positive denial's head names
+# nothing useful (`ps aux | grep -iE "…|devcontainer up|…"` heads as `echo`),
+# whereas the rule identity is exactly what the reader must audit.
+_GROUPED = ("bypass", "blocked", "one_off")
+
+
 def audit(commands: Iterable[BashCommand], *, sessions: int) -> AuditResult:
     """Classify + frequency-rank the commands into an :class:`AuditResult`."""
     counts: Counter[str] = Counter()
-    group_counts: dict[str, Counter[str]] = {"denied": Counter(), "one_off": Counter()}
-    examples: dict[str, dict[str, str]] = {"denied": {}, "one_off": {}}
+    group_counts: dict[str, Counter[str]] = {k: Counter() for k in _GROUPED}
+    examples: dict[str, dict[str, str]] = {k: {} for k in _GROUPED}
     total = 0
     for bc in commands:
         total += 1
-        kind = classify(bc.command)
+        kind = classify(bc)
         counts[kind] += 1
         if kind in group_counts:
-            key = group_key(bc.command)
+            key = _group_name(bc, kind)
             group_counts[kind][key] += 1
             examples[kind].setdefault(key, bc.command)
 
@@ -345,7 +457,8 @@ def audit(commands: Iterable[BashCommand], *, sessions: int) -> AuditResult:
 
     return AuditResult(
         counts=dict(counts),
-        denied_groups=ranked("denied"),
+        bypass_groups=ranked("bypass"),
+        blocked_groups=ranked("blocked"),
         one_off_groups=ranked("one_off"),
         sessions=sessions,
         total=total,
@@ -357,13 +470,19 @@ def _truncate(text: str, width: int = 80) -> str:
     return text if len(text) <= width else text[: width - 1] + "…"
 
 
+def _table(groups: list[tuple[str, int, str]], label: str) -> list[str]:
+    """A ranked ``count | <label> | example`` markdown table."""
+    return [
+        f"| count | {label} | example |",
+        "|---:|---|---|",
+        *(f"| {n} | `{key}` | `{_truncate(ex)}` |" for key, n, ex in groups),
+        "",
+    ]
+
+
 def render_report(result: AuditResult) -> str:
     """A frequency-ranked markdown report for human review of the refine loop."""
     c = result.counts
-    n_one_off = c.get("one_off", 0)
-    n_denied = c.get("denied", 0)
-    n_mise = c.get("mise", 0)
-    n_diag = c.get("diagnostic", 0)
     lines = [
         "# Command audit — one-off Bash culprits",
         "",
@@ -372,44 +491,52 @@ def render_report(result: AuditResult) -> str:
         "",
         "| class | count | meaning |",
         "|---|---:|---|",
-        f"| one_off | {n_one_off} | mutating hand-run — package as a mise task |",
-        f"| denied | {n_denied} | already-denied shape that ran (bypass / pre-rule) |",
-        f"| mise | {n_mise} | already via a mise task / dotfiles_setup CLI |",
-        f"| diagnostic | {n_diag} | read-only, legitimately direct |",
+        f"| bypass | {c.get('bypass', 0)} | ran DESPITE a live guard rule — "
+        "a real evasion, investigate |",
+        f"| blocked | {c.get('blocked', 0)} | guard denied it (working) — "
+        "audit for false positives |",
+        f"| pre_rule | {c.get('pre_rule', 0)} | matched a rule that post-dates "
+        "it — history, no action |",
+        f"| one_off | {c.get('one_off', 0)} | mutating hand-run — package as a "
+        "mise task |",
+        f"| mise | {c.get('mise', 0)} | already via a mise task / dotfiles_setup CLI |",
+        f"| diagnostic | {c.get('diagnostic', 0)} | read-only, legitimately direct |",
+        "",
+        "## 🚨 Bypasses (ran despite a live guard rule)",
         "",
     ]
-    if result.denied_groups:
+    if result.bypass_groups:
+        lines += _table(result.bypass_groups, "shape")
+    else:
         lines += [
-            "## ⚠️ Denied-but-ran (investigate — guard bypass or pre-rule history)",
+            "_None — nothing has evaded the guard since its rule landed._",
             "",
-            "| count | shape | example |",
-            "|---:|---|---|",
-            *(
-                f"| {n} | `{key}` | `{_truncate(ex)}` |"
-                for key, n, ex in result.denied_groups
-            ),
+        ]
+    if result.blocked_groups:
+        lines += [
+            "## Guard denials (the guard working — audit for false positives)",
             "",
+            "A denial is only correct if the command really was the shape the "
+            "rule names. The guard is quoting-blind: a denied literal inside a "
+            'quoted string (`grep -iE "…|devcontainer up|…"`) is denied too, '
+            "and that cancels the WHOLE compound command. Grouped by the rule "
+            "that fired.",
+            "",
+            *_table(result.blocked_groups, "rule"),
         ]
     lines += [
         "## One-off culprits (candidates for a mise task + python function)",
         "",
     ]
     if result.one_off_groups:
-        lines += [
-            "| count | shape | example |",
-            "|---:|---|---|",
-            *(
-                f"| {n} | `{key}` | `{_truncate(ex)}` |"
-                for key, n, ex in result.one_off_groups
-            ),
-        ]
+        lines += _table(result.one_off_groups, "shape")
     else:
-        lines.append("_None — no un-wrapped one-off commands found._")
+        lines += ["_None — no un-wrapped one-off commands found._", ""]
     lines += [
-        "",
         "Refine loop: for a high-frequency one-off shape, add a `mise run <task>` "
         "wrapping a `dotfiles_setup` function (zero-bash-logic), and if it's a "
-        "known bad shape, add a `hook_guard._RULES` redirect. See "
+        "known bad shape, add a `hook_guard._RULES` redirect — with a `since` "
+        "date, or its first scan reports as history. See "
         ".claude/rules/mise-tasks-only.md.",
     ]
     return "\n".join(lines) + "\n"
@@ -460,6 +587,7 @@ def command_audit_main(
     sys.stdout.write(
         f"command-audit: wrote {dest} "
         f"({result.counts.get('one_off', 0)} one-off, "
-        f"{result.counts.get('denied', 0)} denied-but-ran)\n"
+        f"{result.counts.get('bypass', 0)} bypass, "
+        f"{result.counts.get('blocked', 0)} guard-denied)\n"
     )
     return 0
