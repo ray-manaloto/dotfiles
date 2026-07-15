@@ -56,7 +56,7 @@
     "pyright-lsp@claude-plugins-official": false,
     "pyright@claude-code-lsps": false,
     "explanatory-output-style@claude-plugins-official": true,
-    "plugin-dev@claude-plugins-official": true,
+    "plugin-dev@claude-plugins-official": false,
     "hookify@claude-plugins-official": true,
     "learning-output-style@claude-plugins-official": true,
     "gopls-lsp@claude-plugins-official": false,

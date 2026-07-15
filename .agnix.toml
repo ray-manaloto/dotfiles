@@ -40,7 +40,13 @@ max_files_to_validate = 10000
 #    "## Project Context" header, and are at the 200-line claude_md_size_limit.
 #  - PE-001: "critical keyword in the 40-60% lost-in-middle zone" is a prompt
 #    heuristic that misfires on reference docs.
-paths = ["**/AGENTS.md", "**/CLAUDE.md", "AGENTS.md", "CLAUDE.md"]
+# CONTEXT.md joins them (2026-07-15): it is the domain glossary the mattpocock
+# engineering skills read, and the same XP-003 rationale applies verbatim — its
+# `.claude/rules/*.md` references are the POINT (that is where this repo's ADRs
+# live; see docs/adr/README.md). Rewording them to satisfy a portability check
+# would delete the fact the section exists to state. Scoped to the exact filename
+# so a stray hard-coded path in new code still flags.
+paths = ["**/AGENTS.md", "**/CLAUDE.md", "AGENTS.md", "CLAUDE.md", "CONTEXT.md"]
 disabled_rules = ["XP-003", "AGM-004", "AGM-006", "PE-001"]
 
 [[overrides]]
