@@ -6,6 +6,14 @@ requires-python = ">=3.14"
 dependencies = [
     "pydantic>=2.12.5",
     "pydantic-settings>=2.14.2",
+    # deb822 control-file parser, maintained by Debian's own
+    # pkg-python-debian-maint (salsa.debian.org/python-debian-team). Ubuntu
+    # ships the same code as `python3-debian`. Used by `apt_repo` to read an
+    # apt repository's Packages index without configuring the repo first and
+    # without libapt (`use_apt_pkg=False`), so enumeration works before we
+    # decide to adopt a source. Hand-rolling deb822 was rejected per
+    # .claude/rules/use-tool-builtins.md.
+    "python-debian>=1.1.1",
 ]
 
 [project.scripts]

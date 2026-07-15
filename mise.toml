@@ -413,6 +413,28 @@ description = "Markdown report of tools with upstream movement + release-notes l
 # tool-currency-check skill's release-note review.
 run = 'uv run --project python dotfiles-setup tool-currency'
 
+[tasks.apt-repo]
+description = "List the packages an apt repository publishes (defaults to apt.llvm.org)"
+# Thin caller (zero-bash-logic); logic in
+# python/src/dotfiles_setup/apt_repo.py. Reads the repo's Packages index
+# directly via python-debian, so it needs neither the repo configured in
+# sources.list nor libapt -- enumeration works BEFORE deciding to adopt a
+# source, which is what #251 asks for. mise itself cannot do this
+# (`mise bootstrap packages` has no search; `import`/dpkg-query only ever see
+# INSTALLED packages), and apt-cache would require adding the repo first.
+#
+#   mise run apt-repo                                  # llvm 22 (qualification)
+#   mise run apt-repo -- --llvm-version 21             # stable
+#   mise run apt-repo -- --llvm-version dev            # development (clang 23)
+#   mise run apt-repo -- --llvm-version dev --toml --exclude-runtime
+#   mise run apt-repo -- --repo <url> --suite <suite>  # any apt repo
+#
+# --llvm-version takes a VERSION, not a channel label: apt.llvm.org's
+# stable/qualification/development roles shift every release cycle
+# (2026-07-15: 21/22/23), so a label pinned today silently becomes a
+# different major later.
+run = 'uv run --project python dotfiles-setup apt-repo'
+
 [tasks.command-audit]
 description = "Scan recent Claude Code transcripts for one-off Bash culprits to package as mise tasks"
 # Thin caller (zero-bash-logic); logic in
