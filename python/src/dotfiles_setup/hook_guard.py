@@ -52,9 +52,9 @@ class Rule:
     every rule carries a valid one.)
 
     ``name`` is a short shape label. The audit report groups guard denials by
-    rule identity, because grouping them by command head is meaningless — a
-    prose false-positive like ``ps aux | grep -iE "…|devcontainer up|…"``
-    groups under ``echo``, naming nothing.
+    rule identity, because grouping them by command head is meaningless — the
+    guard's one real denial reaches ``npx`` through a ``||`` fallback after a
+    ``cd``+``echo`` preamble, so it groups under ``echo``, naming nothing.
     """
 
     name: str
@@ -81,12 +81,14 @@ class Rule:
 # beyond this (sh -c, base64, aliases): this is a redirect guard, not a
 # sandbox — hard bans live in settings.json permissions deny.
 #
-# Anchoring does NOT make the guard quoting-aware, and that gap is the only
-# defect the audit has ever measured (#265): the separator class cannot see
+# Anchoring alone did NOT make the guard quoting-aware, and that gap was the
+# only defect the audit ever measured (#265): the separator class could not see
 # that a `|` INSIDE a quoted string is not a shell separator, so
-# `grep -iE "…|devcontainer up|…"` denies. 2 of the 3 denials this guard has
-# ever issued were this shape; 0 commands have ever evaded it. Any narrowing
-# here should trade recall for precision — never the reverse.
+# `grep -iE "…|devcontainer up|…"` denied. 2 of the 3 denials this guard had
+# ever issued were that shape; 0 commands have ever evaded it. `_inert_masked`
+# below closes it by neutering separators that are DATA before these rules run;
+# the rules themselves are unchanged. Any further narrowing here should keep
+# trading recall for precision — never the reverse.
 _WRAPPER = (
     r"(?:(?:env\s+)?(?:\w+=\S*\s+)*"
     r"(?:exec\s+|nohup\s+|time\s+|timeout\s+\S+\s+|xargs\s+)?)*"
@@ -224,6 +226,124 @@ _RULES: tuple[Rule, ...] = (
 # opening the bypass.
 
 
+# --- #265: a separator inside an inert span is not a separator --------------
+#
+# `_CMD` anchors on `[;&|\n]`. Bash only treats those characters as syntax when
+# they are UNQUOTED, so the rules were denying literals sitting at a "command
+# position" that did not exist. Rather than teach 11 rule patterns about
+# quoting, the command is normalized ONCE here: every separator that is data
+# gets neutered, and the rules run against the result unchanged.
+#
+# Existing tools were researched first and none fits (the hard gate in
+# .claude/rules/use-tool-builtins.md; full report + probe evidence in
+# .omc/research/research-20260714-guard-quoting/agents/native-options.md):
+#   - `shlex(punctuation_chars=True)` — its `whitespace` includes `\n`, so a
+#     newline is never an operator token: a heredoc body and two real
+#     newline-separated commands tokenize IDENTICALLY. Cannot fix one without
+#     losing the other.
+#   - `bashlex` — GPLv3, unmaintained since 2024, and raises ParsingError on
+#     `<<'EOF'` (upstream #97/#99) — precisely the shape that must be fixed.
+#   - `tree-sitter-bash` — correct (a real `heredoc_body` node) but costs two
+#     deps and ~20-40ms of import on EVERY Bash call. Kept as the documented
+#     upgrade path if richer shell constructs ever matter.
+#   - Claude Code natively — the PreToolUse payload carries only the raw
+#     string, its own matcher is not callable from Python, and native
+#     permission `deny` rules carry no custom-reason field, so they cannot
+#     deliver a redirect message. The hook stays.
+# So the residue is hand-written, per rule 3 of use-tool-builtins.md: only
+# heredoc-boundary detection has no stdlib model. The quote-span scan itself is
+# the canonical alternation idiom (Friedl's "unrolling the loop"), not a novel
+# parser.
+#
+# This is a redirect guard, not a sandbox: `$(…)` substitution, `sh -c`, and
+# base64 stay fail-open exactly as before — unchanged by this fix, not newly
+# opened by it.
+
+# Exactly `_CMD`'s separator class: neutering these and nothing else is what
+# makes the rules quoting-aware without touching a rule.
+_SEPARATORS = ";&|\n"
+
+# NUL is the filler because it is the one byte that CANNOT occur in a real Bash
+# command (execve arguments are NUL-terminated), so input can never forge it,
+# and it is neither `\w` nor `\s` — it cannot be absorbed by `_WRAPPER` or any
+# rule token. Substitution is length-preserving so every other offset, and thus
+# every rule's view of the surrounding text, is untouched.
+_FILLER = "\x00"
+_SEPARATOR_TABLE = str.maketrans(_SEPARATORS, _FILLER * len(_SEPARATORS))
+
+# A heredoc body is stdin DATA that can never be a command. Matches `<<EOF`,
+# `<<'EOF'` and `<<-EOF` (which strips leading TABS from the body *and* the
+# delimiter line — and `_CMD`'s own `\s*` eats that tab, so indenting never
+# spared it). `<<<` here-strings are not matched: a `\w` delimiter cannot start
+# with `<`, and their content is quoted anyway.
+_HEREDOC = re.compile(
+    r"""
+    <<-?[ \t]*(?P<q>['"]?)(?P<delim>[A-Za-z_]\w*)(?P=q)  # the redirect operator
+    [^\n]*\n                                             # rest of that line
+    (?P<inert>(?:[^\n]*\n)*?[ \t]*(?P=delim)[ \t]*)      # body + delimiter line
+    (?=\n|\Z)                                            # delimiter line ends here
+    """,
+    re.VERBOSE,
+)
+
+# Quoted spans, scanned left-to-right and non-overlapping so alternating quotes
+# resolve correctly. The leading `\\.` consumes an escaped character — critical,
+# because it stops a `\'`/`\"` from opening a phantom span. Single quotes take
+# no escapes (bash semantics), and the double-quoted body is the unrolled-loop
+# form whose two alternatives are disjoint, so it cannot backtrack pathologically.
+_QUOTED_SPAN = re.compile(
+    r"""
+      \\.
+    | '[^']*'
+    | "(?:\\.|[^"\\])*"
+    """,
+    re.VERBOSE | re.DOTALL,
+)
+
+
+def _blank_heredoc(match: re.Match[str]) -> str:
+    """Redact a heredoc body + its delimiter line, keeping the redirect line."""
+    whole = match.group(0)
+    inert = match.group("inert")
+    return whole[: len(whole) - len(inert)] + _FILLER * len(inert)
+
+
+def _blank_quoted(match: re.Match[str]) -> str:
+    """Neuter the separators inside one quoted span, keeping its content."""
+    span = match.group(0)
+    if span[0] not in "\"'":
+        return span  # an escaped character, consumed so it cannot open a span
+    return span.translate(_SEPARATOR_TABLE)
+
+
+def _inert_masked(command: str) -> str:
+    """``command`` with every separator that is DATA, not syntax, neutered.
+
+    Heredocs are redacted BEFORE quotes, and are redacted *whole* rather than
+    separator-only. Both details are load-bearing. A body is stdin data, so
+    nothing in it is ever rule-relevant — and blanking it removes any apostrophe
+    it contains (``don't``) that would otherwise open a span in the quote pass
+    below and run on to a later real quote, neutering the real separators in
+    between and silently costing recall.
+
+    Quoted spans get the opposite, conservative treatment: only their separators
+    are neutered, because their CONTENT is still rule-relevant — the
+    ``docker pull "…dotfiles-devcontainer:dev"`` denial depends on the rule
+    reading a literal inside the quotes.
+
+    Deliberately NOT wrapped in try/except: every operation here is total (slice,
+    ``len``, ``translate`` over a regex match), so there is no exception to
+    catch, and the realistic failure mode — a *wrong* mask — is one no handler
+    would see. Fail-open lives where it actually works: a crash exits non-zero,
+    which PreToolUse treats as non-blocking, and scripts/pretooluse-guard.sh
+    covers a missing interpreter.
+
+    An unterminated quote closes no span, so nothing is redacted and the real
+    separators still anchor — a malformed command cannot launder itself.
+    """
+    return _QUOTED_SPAN.sub(_blank_quoted, _HEREDOC.sub(_blank_heredoc, command))
+
+
 def rules() -> tuple[Rule, ...]:
     """Every deny rule, in match order — the guard's introspection surface.
 
@@ -238,12 +358,21 @@ def rules() -> tuple[Rule, ...]:
 def match(command: str) -> Rule | None:
     """The first :class:`Rule` matching ``command``, else None.
 
+    Rules run against :func:`_inert_masked`, never the raw string, so a
+    separator that is quoted or inside a heredoc body cannot fake a command
+    position (#265). Masking here — the one chokepoint :func:`decide` and
+    :mod:`dotfiles_setup.command_audit` both go through — is what lets the audit
+    MEASURE the fix: the same call that denies a command is the one that
+    classifies it, so the report's `blocked` bucket moves without any change
+    there.
+
     Split out of :func:`decide` for :mod:`dotfiles_setup.command_audit`, which
     needs the matched rule's ``since`` date (and ``name``) — not just its
     reason — to tell a genuine bypass from pre-rule history.
     """
+    target = _inert_masked(command)
     for rule in _RULES:
-        if rule.pattern.search(command):
+        if rule.pattern.search(target):
             return rule
     return None
 

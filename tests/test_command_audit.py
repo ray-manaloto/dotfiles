@@ -324,23 +324,36 @@ def test_audit_counts_and_ranks() -> None:
 
 
 def test_audit_groups_denials_by_rule_not_command_shape() -> None:
-    """Denials group by the rule that fired — a false positive's head is junk.
+    """Denials group by the rule that fired — the command's own head is junk.
 
-    Both commands here are the real prose false positive (probed 2026-07-14):
-    the `|` sitting INSIDE the quoted regex, right before the literal, reads as
-    a shell separator to the guard, so `devcontainer up` matches at "command
-    position". Their command HEAD is `echo`/`ps`, naming nothing; the rule
-    identity is the thing to audit.
+    Both commands here are the shape of the guard's one real denial (recovered
+    verbatim 2026-07-14): a `cd` + `echo` preamble, then the operative `npx`
+    reached through a genuine `||` fallback. Their head is `echo`, which names
+    nothing a reader could act on; the rule identity is the thing to audit.
+
+    The earlier fixture here used the quoted-regex FALSE positive
+    (`grep -E "…|devcontainer up|…"`). #265 fixed that shape, so it is no longer
+    denied and can no longer reach this path — the grouping rule it was written
+    to prove still holds, and now rests on a denial that is actually correct.
     """
+    preamble = "cd /repo\necho '===== validator ====='\n"
     result = ca.audit(
         [
-            _bc('echo hi | grep -E "mise run|devcontainer up"', executed=False),
-            _bc('ps aux | grep -E "land|devcontainer up|cli"', executed=False),
+            _bc(
+                preamble + "mise exec -- rcv --strict || npx --yes rcv --strict",
+                executed=False,
+            ),
+            _bc(
+                preamble + "mise exec -- rcv | tail -20 || npx --yes rcv",
+                executed=False,
+            ),
         ],
         sessions=1,
     )
     assert result.counts["blocked"] == 2
-    assert [(k, n) for k, n, _ex in result.blocked_groups] == [("devcontainer up", 2)]
+    assert [(k, n) for k, n, _ex in result.blocked_groups] == [("npx", 2)]
+    # The point of the rule-name grouping: the head names nothing useful.
+    assert ca.group_key(preamble + "mise exec -- rcv || npx --yes rcv") == "echo '====="
 
 
 def test_render_report_has_sections_and_counts() -> None:

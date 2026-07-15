@@ -159,6 +159,131 @@ def test_pull_rule_does_not_span_separators() -> None:
     assert hook_guard.decide(cmd) is None
 
 
+# --- #265: a separator inside an INERT span is not a separator --------------
+#
+# The two shapes below are the guard's ONLY measured false positives, recovered
+# verbatim from the transcripts (2026-07-13/14) rather than from the audit's
+# grouped table — the group row names the rule that fired, not the command.
+# Both are read-only diagnostics denied because a `|` inside a quoted regex
+# re-anchored `_CMD`. A deny cancels the WHOLE compound command, so these did
+# not merely warn: they silently skipped the rest of the pipeline.
+_REAL_FALSE_POSITIVES = [
+    pytest.param(
+        'ps aux | grep -iE "mise run land|dotfiles-setup pr land|devcontainer'
+        ' up|[d]evcontainers/cli" | grep -v grep | head',
+        id="real-ps-grep-quoted-regex",
+    ),
+    pytest.param(
+        'pgrep -fl "mise run land|dotfiles-setup pr|devcontainer up|verify-local'
+        '|verify-ssh" | grep -vi "helper" | head',
+        id="real-pgrep-quoted-regex",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        *_REAL_FALSE_POSITIVES,
+        # Single quotes are inert too, and bash gives them no escape semantics.
+        pytest.param(
+            "rg 'x|gh pr create' docs/",
+            id="single-quoted-pipe",
+        ),
+        # Every separator in the class, not just `|`.
+        pytest.param('echo "a;gh pr create"', id="quoted-semicolon"),
+        pytest.param('echo "a&&gh pr merge 42"', id="quoted-andand"),
+        # A newline inside a quoted span: the shape of a commit message whose
+        # body documents the ban on its own line.
+        pytest.param(
+            "git commit -m 'docs: enforcement\n\nhk run pre-commit --all is banned'",
+            id="quoted-newline-commit-body",
+        ),
+        # A heredoc body is inert text, never commands — the same defect, the
+        # other half of the rule doc's "heredoc/quoted CONTENT". Measured live
+        # 2026-07-14: appending a note that QUOTED the npx finding was denied.
+        pytest.param(
+            "cat >> notes.md <<'EOF'\nfallback: || npx --yes foo\nEOF",
+            id="heredoc-quoted-delimiter",
+        ),
+        # The literal must sit at LINE START inside the body: that is the shape
+        # the newline separator anchors on, and therefore the only one that is
+        # red before the fix. (`<<EOF\nrun: gh pr create` passes even unfixed —
+        # `_CMD` needs the separator immediately before the literal, so the
+        # `run: ` prefix already spared it. A fixture like that asserts nothing.)
+        pytest.param(
+            "cat > x.md <<EOF\ngh pr create --fill\nEOF",
+            id="heredoc-bare-delimiter",
+        ),
+        # `<<-` strips leading TABS from the body and the delimiter line — and
+        # `_CMD`'s `\\s*` eats that tab, so indenting does not spare it either.
+        pytest.param(
+            "cat <<-EOF\n\tdevcontainer up --workspace-folder .\n\tEOF",
+            id="heredoc-dash-tab-indented",
+        ),
+    ],
+)
+def test_separators_inside_inert_spans_do_not_anchor(command: str) -> None:
+    r"""A `|`/`;`/`&&`/newline inside quotes or a heredoc is DATA, not syntax.
+
+    `_CMD` anchors on `[;&|\n]`, which made the guard quoting-blind (#265): a
+    denied literal after such a character was treated as being at command
+    position when no command position existed. Evasion has been measured at 0
+    for the guard's whole lifetime while 2 of its 3 denials were this shape, so
+    the trade runs one way only — recall for precision, never the reverse.
+    """
+    assert hook_guard.decide(command) is None
+
+
+def test_real_npx_denial_was_a_true_positive() -> None:
+    """The third measured denial is CORRECT and must survive the #265 fix.
+
+    Recovered verbatim (2026-07-14T19:24:48Z). Unlike its two siblings, the
+    `||` here sits OUTSIDE any quote: `npx` really is at command position, a
+    fallback invocation after the mise-pinned binary. Pinned separately because
+    the audit's grouped table reports "3 denials" as one number — a fix that
+    drove the `blocked` bucket to 0 would have looked like a total success while
+    silently destroying the guard's only correct denial. The bar is 3 -> 1.
+    """
+    cmd = (
+        "mise exec -- renovate-config-validator --strict 2>&1 | tail -20 "
+        "|| npx --yes renovate-config-validator --strict 2>&1 | tail -20"
+    )
+    reason = hook_guard.decide(cmd)
+    assert reason is not None
+    assert "mise-installed binary" in reason
+
+
+@pytest.mark.parametrize(
+    ("command", "redirect_hint"),
+    [
+        # A real invocation is never INSIDE a span, so redaction cannot hide it:
+        # a quoted ARGUMENT to a denied command keeps the command exposed.
+        ("gh pr create --title 'fix: a|b'", "mise run ship"),
+        ('gh pr merge 42 --subject "a;b"', "mise run land"),
+        # The pull rule matches a literal that may legitimately be quoted — the
+        # span's CONTENT must stay readable, so only its separators are neutered.
+        (
+            'docker pull "ghcr.io/ray-manaloto/dotfiles-devcontainer:dev"',
+            "mise run sync",
+        ),
+        # A real separator BEFORE a quoted span still anchors what follows it.
+        ('echo "a|b" && gh pr create --fill', "mise run ship"),
+        ('echo "a|b" ; devcontainer up --workspace-folder .', "mise run up"),
+        # An unterminated quote is not a licence to smuggle: no span is closed,
+        # so nothing is redacted and the real separator still anchors.
+        ('echo "oops && gh pr create --fill', "mise run ship"),
+    ],
+)
+def test_inert_span_redaction_never_costs_a_true_positive(
+    command: str, redirect_hint: str
+) -> None:
+    """Quoting an ARGUMENT must not launder the command that owns it."""
+    reason = hook_guard.decide(command)
+    assert reason is not None
+    assert redirect_hint in reason
+
+
 @pytest.mark.parametrize("rule", hook_guard.rules(), ids=lambda r: r.name)
 def test_every_rule_carries_a_usable_since_date(rule: hook_guard.Rule) -> None:
     """A rule with no (or a malformed) `since` reports as history forever.

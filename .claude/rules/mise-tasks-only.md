@@ -94,7 +94,8 @@ Only **`bypass`** is an alarm: a command that matched a rule ALREADY LIVE
 classes are not:
 
 - **`blocked`** — the guard denied it; it never ran. The guard working. Audit
-  these for FALSE POSITIVES (see the known limitation below), not for evasion.
+  these for FALSE POSITIVES (see #265 below), not for evasion — that is the
+  direction every measured defect has come from.
 - **`pre_rule`** — it predates the rule that matches it. History.
 - **`one_off`** — the refine-loop candidates, but known-noisy (#266): its top
   shapes are currently sanctioned work (plain git, ad-hoc scripts, the
@@ -108,20 +109,40 @@ second axis: it records the Bash `tool_use` block whether or not the command
 ran (a PreToolUse deny lands *after* the model emits it), so a denial and a
 bypass are byte-identical until you pair the attempt to its result.
 
-## Known limitation: prose content in compound commands
+## Fixed: prose content in compound commands (#265)
 
-The guard matches the raw Bash string, so heredoc/quoted CONTENT that
-embeds a denied command shape (e.g. a doc edit containing
-`&& hk run pre-commit`) can be denied — and a deny cancels the ENTIRE
-compound command, silently skipping its other parts (observed twice,
-2026-07-07). Workaround: write scripts via the Write tool and run
-`python3 <file>`; after ANY deny, re-check that the command's intended
-side effects actually happened.
+The guard used to match the RAW Bash string, so a separator inside
+quoted/heredoc CONTENT read as a shell separator and the denied literal
+after it looked like it sat at a command position. `grep -iE
+"…|devcontainer up|…"` was denied — and a deny cancels the ENTIRE
+compound command, silently skipping its other parts, so the cost was a
+command that looked like it ran.
 
-**This — not evasion — is the guard's live defect** (issue #265). The audit's
-`blocked` bucket measures it: 2 of the 3 denials ever recorded were false
-positives, both from a `|` INSIDE a quoted regex (`grep -iE
-"…|devcontainer up|…"`) reading as a shell separator.
+**Fixed 2026-07-14** by `hook_guard._inert_masked`: before the rules run,
+separators (`;&|` + newline) that are DATA get neutered — inside quoted
+spans (content preserved, only separators blanked, since a rule may need
+to read a quoted argument) and inside heredoc bodies (`<<EOF`, `<<'EOF'`,
+`<<-EOF` — redacted whole, since a body is stdin data and can never be a
+command). Rule patterns are untouched, so recall is preserved by
+construction. Measured: the `blocked` bucket went **3 → 1**, keeping the
+one denial that was always correct.
+
+Still fail-open BY DESIGN (unchanged — this is a redirect guard, not a
+sandbox): `$(…)` substitution, `sh -c`, base64, aliases. If a deny ever
+does look wrong, the workaround remains: write the script with the Write
+tool and run `python3 <file>` — and after ANY deny, re-check that the
+command's intended side effects actually happened.
+
+**Evasion was never the defect — false positives were** (issue #265, now
+closed). The audit's `blocked` bucket measured it: 2 of the 3 denials ever
+recorded were false positives, both from a `|` INSIDE a quoted regex (`grep -iE
+"…|devcontainer up|…"`) reading as a shell separator. The surviving denial —
+an `npx` reached through a real `||` fallback — was correct all along, which is
+why the fix targets 3 → 1 and not 3 → 0.
+
+Twice now a predicted risk has been refuted by probing and the real one turned
+out to be its mirror image (#264's cd-prefix "evasion"; #265's quoting). When
+this guard next looks wrong, measure before believing the prediction.
 
 ## Extending
 
@@ -132,6 +153,12 @@ rule missing one classifies every match as history forever, darkening the
 alarm. `since` dates the RULE, not its wording: never bump it on a reword.
 Keep patterns narrow: a redirect that misfires on legitimate diagnostics
 erodes trust in the guard.
+
+Rules match the command AFTER `hook_guard._inert_masked` has neutered every
+separator that is data, so write the pattern against real shell syntax and let
+masking handle quoting — do NOT add quote-awareness to a rule. Test a new rule
+against a quoted mention of itself (`echo "…|<your literal>"`) as well as the
+real invocation; the first must pass, the second must deny.
 
 ## See also
 

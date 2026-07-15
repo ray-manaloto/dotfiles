@@ -31,9 +31,13 @@ denials, and **0** were bypasses:
 - ``bypass`` — matched a rule that ALREADY EXISTED (``timestamp > rule.since``)
   *and* actually executed. A real evasion. The only alarm worth raising.
 - ``blocked`` — matched a live rule and did NOT run: the guard working. Audit
-  these for FALSE POSITIVES — the guard is quoting-blind, so a denied literal
-  inside a quoted string (``grep -iE "…|devcontainer up|…"``) is denied, which
-  cancels the whole compound command. That, not evasion, is the live defect.
+  these for FALSE POSITIVES; a denial cancels the WHOLE compound command, so a
+  wrong one is not just noise. This bucket is what MEASURED #265 and then what
+  proved it fixed: 2 of the guard's 3 denials were quoted-regex false positives
+  (``grep -iE "…|devcontainer up|…"``), and after
+  :func:`dotfiles_setup.hook_guard._inert_masked` landed the bucket fell to the
+  1 denial that was always correct. It stays the place to look — no measurement,
+  no next defect.
 - ``pre_rule`` — matched a rule that post-dates it: history from before the
   guard existed. No action; NOT a one-off (it has a mise task today).
 - ``mise`` — already goes through a mise task / the ``dotfiles_setup`` CLI /
@@ -429,9 +433,10 @@ class AuditResult:
 
 
 # Grouped classes, and how each one names a group. Guard denials group by the
-# RULE that fired, not by command shape: a false-positive denial's head names
-# nothing useful (`ps aux | grep -iE "…|devcontainer up|…"` heads as `echo`),
-# whereas the rule identity is exactly what the reader must audit.
+# RULE that fired, not by command shape: a denial's head names nothing useful —
+# the guard's one real denial is a `cd`+`echo` preamble whose operative `npx`
+# sits behind a `||`, so it heads as `echo` — whereas the rule identity is
+# exactly what the reader must audit.
 _GROUPED = ("bypass", "blocked", "one_off")
 
 
@@ -517,10 +522,12 @@ def render_report(result: AuditResult) -> str:
             "## Guard denials (the guard working — audit for false positives)",
             "",
             "A denial is only correct if the command really was the shape the "
-            "rule names. The guard is quoting-blind: a denied literal inside a "
-            'quoted string (`grep -iE "…|devcontainer up|…"`) is denied too, '
-            "and that cancels the WHOLE compound command. Grouped by the rule "
-            "that fired.",
+            "rule names — a deny cancels the WHOLE compound command, so a wrong "
+            "one silently skips the rest. Separators inside quotes and heredoc "
+            "bodies no longer count as command positions (#265), which is what "
+            "emptied this bucket of its false positives; anything left should "
+            "be a real invocation. Grouped by the rule that fired, because a "
+            "denial's own head names nothing useful.",
             "",
             *_table(result.blocked_groups, "rule"),
         ]
