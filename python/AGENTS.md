@@ -39,7 +39,7 @@ Requires **Python 3.14**.
 ## Testing
 
 ```bash
-uv run --project python pytest tests/ -x -q                # All 618 tests
+uv run --project python pytest tests/ -x -q                # All 638 tests
 uv run --project python pytest tests/test_audit.py -x -q   # Single file
 ```
 
@@ -62,7 +62,8 @@ or `regex_forbid` handlers. See `feedback_forbid_tokens_substring_fragile`.
 
 ## Dependencies
 
-Key packages: `pydantic` (config), `pytest` (testing). Full lockfile at
-`uv.lock`.
+Key packages: `pydantic` (config), `python-debian` (deb822 parsing for
+`apt_repo`; Ubuntu ships the same code as `python3-debian`), `pytest`
+(testing). Full lockfile at `uv.lock`.
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

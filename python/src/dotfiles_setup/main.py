@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from dotfiles_setup.ai import AIOrchestrator
+from dotfiles_setup.apt_repo import LLVM_DEV, RepoQuery, apt_repo_main
 from dotfiles_setup.audit import DevEnvironmentAuditor, ToolManager
 from dotfiles_setup.autofix import autofix_apply_main
 from dotfiles_setup.bash_budget import bash_budget_main
@@ -73,6 +74,54 @@ class EnvironmentValidator:
         if current_os not in cls.SUPPORTED_PLATFORMS:
             msg = f"Platform {current_os} is not supported"
             raise RuntimeError(msg)
+
+
+def _add_apt_repo_subcommand(subparsers: _SubParsers) -> None:
+    """Register the apt-repo subcommand.
+
+    Args:
+        subparsers: The parent subparsers action to attach apt-repo to.
+    """
+    apt_repo_parser = subparsers.add_parser(
+        "apt-repo",
+        help="List the packages an apt repository publishes (reads the "
+        "Packages index directly, so it needs neither the repo configured "
+        "nor libapt). Defaults to apt.llvm.org for #251.",
+    )
+    apt_repo_parser.add_argument(
+        "--llvm-version",
+        default="22",
+        help="apt.llvm.org major to enumerate, or 'dev' for the unnumbered "
+        "development/trunk suite (2026-07-15: 21 stable, 22 qualification, "
+        "dev == 23). Takes a version, not a channel label -- the labels "
+        "shift every release cycle. (default: %(default)s)",
+    )
+    apt_repo_parser.add_argument(
+        "--dist", default="resolute", help="Ubuntu codename (default: %(default)s)"
+    )
+    apt_repo_parser.add_argument(
+        "--arch", default="amd64", help="Binary architecture (default: %(default)s)"
+    )
+    apt_repo_parser.add_argument(
+        "--repo", help="Override the repository base URL (any apt repo, not just LLVM)"
+    )
+    apt_repo_parser.add_argument("--suite", help="Override the suite (implies --repo)")
+    apt_repo_parser.add_argument(
+        "--toml",
+        action="store_true",
+        help="Emit [bootstrap.packages] lines ready for mise-system.toml",
+    )
+    apt_repo_parser.add_argument(
+        "--pin",
+        action="store_true",
+        help='With --toml, emit exact versions instead of "latest" (note: '
+        "apt.llvm.org rotates its single build daily, so a pin goes stale)",
+    )
+    apt_repo_parser.add_argument(
+        "--exclude-runtime",
+        action="store_true",
+        help="Drop Section: libs packages (they arrive via Depends:)",
+    )
 
 
 def _add_docker_subcommands(
@@ -536,6 +585,7 @@ def setup_parser() -> argparse.ArgumentParser:
         help="Report drift without writing; exit 1 if the pinned sha is "
         "stale (still downloads the .deb to compare)",
     )
+    _add_apt_repo_subcommand(subparsers)
     subparsers.add_parser(
         "bash-budget",
         help="Enforce zero-bash-logic: every scripts/*.sh + "
@@ -803,6 +853,30 @@ def handle_bootstrap_gap_report(args: argparse.Namespace, project_root: Path) ->
     logger.info("gap-report OK: declared [bootstrap.packages] set fully installed")
 
 
+def handle_apt_repo(args: argparse.Namespace) -> int:
+    """Handle apt-repo: list what an apt repository publishes.
+
+    `--repo`/`--suite` address any apt repo; without them the query is built
+    for apt.llvm.org from `--llvm-version` (#251).
+    """
+    if args.repo or args.suite:
+        if not (args.repo and args.suite):
+            logger.error("--repo and --suite must be given together")
+            return 2
+        query = RepoQuery(repo=args.repo, suite=args.suite, arch=args.arch)
+    else:
+        version: int | str = (
+            LLVM_DEV if args.llvm_version == LLVM_DEV else int(args.llvm_version)
+        )
+        query = RepoQuery.for_llvm(version, dist=args.dist, arch=args.arch)
+    return apt_repo_main(
+        query,
+        toml=args.toml,
+        pin=args.pin,
+        exclude_runtime=args.exclude_runtime,
+    )
+
+
 def handle_check_doc_refs(project_root: Path) -> None:
     """Handle check-doc-refs: fail loud on unresolved doc path refs."""
     unresolved = find_unresolved_refs(project_root)
@@ -952,6 +1026,7 @@ def _build_command_handlers(
         "ghcr-cleanup": lambda: handle_ghcr_cleanup(args),
         "check-doc-refs": lambda: handle_check_doc_refs(project_root),
         "gcc-sha": lambda: sys.exit(gcc_sha_main(project_root, check=args.check)),
+        "apt-repo": lambda: sys.exit(handle_apt_repo(args)),
         "bash-budget": lambda: sys.exit(bash_budget_main(project_root)),
         "bootstrap-gap-report": lambda: handle_bootstrap_gap_report(args, project_root),
         "lock-stage": lambda: handle_lock_stage(args, project_root),
