@@ -306,7 +306,48 @@ fi
 # (:func:`build_tier1_script`, emitted by ``image smoke-script --tier 1``) so
 # the two paths cannot diverge (#223). Only the injected DATA differs by caller
 # (HEAD hashes/tools for CI; merge-base for the devcontainer).
-_TIER1_CORE_BODY = _TIER1_MISE_PATHS + _TIER1_IDENTITY_BLOCK + _TIER1_MISE_LS_TOOLSET
+# #251: the default `python3` must BE mise's declared interpreter, not the
+# distro's. The image ships two 3.14s — mise's (python-build-standalone, pinned
+# in the shared fragment) and Ubuntu's /usr/bin/python3 — and NOTHING else
+# pins which one bare `python3` resolves to: the tool-set diff proves only that
+# mise *knows about* python; `which python` proves only that a path exists
+# (protective solely because Debian ships no bare `python`); and tier-2's
+# `uv run --project python pytest` resolves the project venv's interpreter,
+# which uv provisions, so it stays green through a shim regression. Asserts
+# both halves — resolution (sys.executable under mise's installs, which is what
+# separates 3.14.6 from the distro's 3.14.4 at the same minor) and the exact
+# declared version. Dormant when the var is unset, like the guards above.
+_TIER1_PYTHON_DEFAULT = """\
+if [ -n "$EXPECTED_PYTHON_VERSION" ]; then
+  command -v python3 >/dev/null \
+    || { echo "FAIL: python3 not on PATH"; exit 1; }
+  py_exe=$(python3 -c 'import sys; print(sys.executable)')
+  case "$py_exe" in
+    "$MISE_DIR"/installs/python/*) ;;
+    *)
+      echo "FAIL: default python3 is $py_exe, not a mise install under" \
+           "$MISE_DIR/installs/python — the distro python has taken the PATH"
+      exit 1
+      ;;
+  esac
+  py_ver=$(python3 -c 'import platform; print(platform.python_version())')
+  if [ "$py_ver" != "$EXPECTED_PYTHON_VERSION" ]; then
+    echo "FAIL: default python3 is $py_ver, declared $EXPECTED_PYTHON_VERSION"
+    exit 1
+  fi
+  echo "OK: default python3 is mise's $py_ver ($py_exe)"
+else
+  echo "SKIP: no expected python version injected (python guard dormant)"
+fi
+"""
+
+
+_TIER1_CORE_BODY = (
+    _TIER1_MISE_PATHS
+    + _TIER1_IDENTITY_BLOCK
+    + _TIER1_MISE_LS_TOOLSET
+    + _TIER1_PYTHON_DEFAULT
+)
 
 
 # The tier-3 COMPILER substrate: sanitizer compile checks + reflection compiler
@@ -411,6 +452,7 @@ rm -f /tmp/refl-func.cpp /tmp/refl-gcc /tmp/refl-clang
 def _tier1_var_lines(
     expected_identity: Mapping[str, str] | None,
     expected_tools: Mapping[str, str] | None,
+    expected_python: str | None = None,
 ) -> str:
     """Injected-data header lines the tier-1 core reads ($EXPECTED_*)."""
     identity_blob = (
@@ -420,6 +462,7 @@ def _tier1_var_lines(
     return (
         f"EXPECTED_IDENTITY={shlex.quote(identity_blob)}\n"
         f"EXPECTED_TOOL_REQUESTS={shlex.quote(tool_lines)}\n"
+        f"EXPECTED_PYTHON_VERSION={shlex.quote(expected_python or '')}\n"
     )
 
 
@@ -466,6 +509,7 @@ def build_tier1_script(
     *,
     expected_identity: Mapping[str, str] | None = None,
     expected_tools: Mapping[str, str] | None = None,
+    expected_python: str | None = None,
 ) -> str:
     """Standalone tier-1 core smoke script: image identity + exact tool-set.
 
@@ -478,7 +522,7 @@ def build_tier1_script(
     """
     return (
         "set -euo pipefail\n"
-        + _tier1_var_lines(expected_identity, expected_tools)
+        + _tier1_var_lines(expected_identity, expected_tools, expected_python)
         + _TIER1_CORE_BODY
     )
 
@@ -1527,9 +1571,15 @@ def smoke_script_main(tier: int | None) -> int:
     """
     root = _project_root()
     if tier == _SMOKE_SCRIPT_TIER1:
+        # The python pin comes from the SAME merge-base tool set the diff uses
+        # (#140 Gap A base-currency), never a second resolution — a branch that
+        # bumps python is validated by its own CI-built base, not against a
+        # local base that predates the bump.
+        base_tools = resolve_declared_tools_at_base(root)
         script = build_tier1_script(
             expected_identity=resolve_expected_identity_at_base(),
-            expected_tools=resolve_declared_tools_at_base(root),
+            expected_tools=base_tools,
+            expected_python=base_tools.get("python"),
         )
     elif tier == _SMOKE_SCRIPT_TIER3:
         script = build_tier3_script(

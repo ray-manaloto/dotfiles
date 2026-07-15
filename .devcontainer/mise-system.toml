@@ -157,6 +157,32 @@ cargo-binstall = "latest"
 # polly, LLDB, LLD, libFuzzer, libc++, libc++abi, openmp, libclc, libunwind,
 # MLIR, BOLT, flang, libc (libllvmlibc-22-dev), wasm.
 #
+# TWO PYTHONS COEXIST HERE, AND THAT IS CORRECT (Ray, 2026-07-15):
+#
+#   * mise's python (~113 MB, pinned in conf.d/shared.toml) is THE default —
+#     `python3` resolves to /usr/local/share/mise/installs/python/<ver>. It is a
+#     python-build-standalone build: Astral's project, the same artifact
+#     `uv python install` fetches, which is why `uv python list --only-installed`
+#     reports it as cpython-<ver>-linux-x86_64-gnu. mise downloads it directly
+#     (it does NOT shell out to uv); uv's role here is venvs, via
+#     `python.uv_venv_auto = "source"` below.
+#   * Ubuntu's /usr/bin/python3 (~23 MB) is NOT removable: it is a hard Depends:
+#     of the LLVM set above. `apt-get -s remove python3` would also remove
+#     clang-format-22, clang-tidy-22, clang-tools-22, lldb-22, llvm-22-dev,
+#     llvm-22-tools, liblldb-22-dev, libllvm-22-ocaml-dev, python3-clang-22 and
+#     python3-lldb-22. Removing the 23 MB removes the toolchain.
+#
+# This is NOT the conda-LLVM duplication #222 PR-C fixed. That was ONE 186 MB
+# libLLVM.so copied EIGHT times (~6.9 GB of pure redundancy). This is two
+# interpreters with distinct jobs — the pinned dev python, and the one
+# clang-format-22 links against — costing 23 MB against a 17.5 GB image (0.13%).
+# Neither mise nor uv can install python "as the system binary" anyway: both
+# ship relocatable python-build-standalone into a managed prefix by design
+# (mise docs: "not a system-wide installation"; `uv python dir` likewise), with
+# no dist-packages layout, so replacing /usr/bin/python3 would break every
+# apt-installed python module. Tier-1 smoke asserts the DEFAULT python3 is
+# mise's and matches this pin (dotfiles_setup.image._TIER1_PYTHON_DEFAULT).
+#
 # python3-clang-22 — installed, and DELIBERATELY not on the default python
 # (Ray, 2026-07-15). It lands in /usr/lib/python3/dist-packages/, which only
 # /usr/bin/python3 sees; the default `python3` here is the mise shim. That is
