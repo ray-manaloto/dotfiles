@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from dotfiles_setup.ai import AIOrchestrator
+from dotfiles_setup.apt_pins import apt_pins_main
 from dotfiles_setup.apt_repo import LLVM_DEV, RepoQuery, apt_repo_main
 from dotfiles_setup.audit import DevEnvironmentAuditor, ToolManager
 from dotfiles_setup.autofix import autofix_apply_main
@@ -608,6 +609,15 @@ def setup_parser() -> argparse.ArgumentParser:
         "stale (still downloads the .deb to compare)",
     )
     _add_apt_repo_subcommand(subparsers)
+    apt_pins_parser = subparsers.add_parser(
+        "apt-pins",
+        help="Prove every pinned [bootstrap.packages] version still resolves, "
+        "by running apt's solver in a throwaway base container (~30s; "
+        "replaces a ~2.5h CI base rebuild)",
+    )
+    apt_pins_parser.add_argument(
+        "--json", action="store_true", help="Emit the probe result as JSON"
+    )
     subparsers.add_parser(
         "bash-budget",
         help="Enforce zero-bash-logic: every scripts/*.sh + "
@@ -1053,6 +1063,9 @@ def _build_command_handlers(
         "check-doc-refs": lambda: handle_check_doc_refs(project_root),
         "gcc-sha": lambda: sys.exit(gcc_sha_main(project_root, check=args.check)),
         "apt-repo": lambda: sys.exit(handle_apt_repo(args)),
+        "apt-pins": lambda: sys.exit(
+            apt_pins_main(project_root, json_output=args.json)
+        ),
         "bash-budget": lambda: sys.exit(bash_budget_main(project_root)),
         "bootstrap-gap-report": lambda: handle_bootstrap_gap_report(args, project_root),
         "lock-stage": lambda: handle_lock_stage(args, project_root),

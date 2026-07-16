@@ -458,6 +458,28 @@ description = "Check MEMORY.md before trimming it: budget, dead links, and facts
 # Pass flags through: mise run memory-index -- --refs feedback_colima_recommendation
 run = 'uv run --project python dotfiles-setup memory-index'
 
+[tasks.verify-apt-pins]
+description = "Prove every pinned [bootstrap.packages] version still resolves (~60s, no image build)"
+# Thin caller per zero-bash-logic; the probe container, the Dockerfile-ARG
+# reads, and the generated apt script live in
+# python/src/dotfiles_setup/apt_pins.py — which documents each with the probe
+# that established it. Read-only: simulates, installs nothing, builds no image.
+#   mise run verify-apt-pins           # report; rc=1 if any pin is unresolvable
+#   mise run verify-apt-pins -- --json # machine-readable
+#
+# THE POINT (#288, .claude/rules/local-devcontainer-first.md): a pin fails in
+# exactly one way — that exact version stops resolving — and until this task
+# the ONLY thing that noticed was a cold base rebuild (~2.5h of CI). This runs
+# apt's real solver against the digest-pinned base in ~60s. Run it after ANY
+# [bootstrap.packages] edit, BEFORE pushing.
+#
+# It runs a throwaway `docker run` on the ubuntu base, NOT the devcontainer:
+# the devcontainer already has these packages installed, so simulating a pin
+# below an installed version reports FAIL for "apt refuses to downgrade" — a
+# false negative about the container, not the pin (measured 2026-07-16). Not
+# devcontainer lifecycle, so `do-not.md` #3 does not apply.
+run = 'uv run --project python dotfiles-setup apt-pins'
+
 [tasks.renovate-dryrun]
 description = "Report the updates Renovate would raise, from this working tree (no PRs)"
 # Thin caller per zero-bash-logic; the renovate invocation, its three

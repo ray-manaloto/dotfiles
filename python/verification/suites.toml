@@ -1103,3 +1103,25 @@ tokens = [
     "def command_audit_main",
     "def classify",
 ]
+
+[[suite]]
+name = "workflow.apt-pins-enforcement"
+description = "#288 local-first apt-pin gate wiring: `mise run verify-apt-pins` must stay wired to the python probe end-to-end — the mise task shells out to `dotfiles-setup apt-pins`, main.py registers the subcommand, the apt_pins module (pin parsing + the generated apt --simulate script) + its tests exist, and the rule doc records the policy. The probe runs apt's real SOLVER in a throwaway base container because an index lookup cannot see a co-versioned-dependency conflict (a pinned version can be present in the index and still uninstallable); this contract asserts the whole chain so it can't drift out. Same shape as workflow.bash-logic-enforcement."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    "mise.toml",
+    "python/src/dotfiles_setup/main.py",
+    "python/src/dotfiles_setup/apt_pins.py",
+    "tests/test_apt_pins.py",
+    ".claude/rules/local-devcontainer-first.md",
+]
+per_path_tokens = { "mise.toml" = ["tasks.verify-apt-pins", "dotfiles-setup apt-pins"], "python/src/dotfiles_setup/main.py" = ["apt-pins"], "python/src/dotfiles_setup/apt_pins.py" = ["def pinned_apt_packages", "def probe_script", "def apt_pins_main"], ".claude/rules/local-devcontainer-first.md" = ["mise run verify-apt-pins"] }
+tokens = [
+    "dotfiles-setup apt-pins",
+    "def apt_pins_main",
+    "def pinned_apt_packages",
+    "--simulate",
+]

@@ -35,6 +35,18 @@
       "platformAutomerge": true
     },
     {
+      "description": "#288 `apt-ubuntu-pockets`: give every [bootstrap.packages] deb dep ALL FOUR upstreams and let the deb datasource's registryStrategy='merge' (lib/modules/datasource/deb/index.ts) route each by where it is found. This is why no hand-rolled discriminator is needed: probed 2026-07-16, the 58 apt.llvm.org names and Ubuntu's 9308 main-component names across the 3 pockets overlap in EXACTLY 0 packages, so a merge can never cross upstreams, and a 15th Ubuntu package needs no routing config. Ubuntu MUST list all three pockets: the LTS release pocket is frozen at release day, so `suite=resolute` alone pins pre-security-patch versions that DO NOT INSTALL - `curl=8.18.0-1ubuntu2` fails because it hard-depends on its co-versioned `libcurl4t64` and apt will not drag that below its candidate (clean-room probe; see the [bootstrap.packages] header). components=main only: all 66 packages live in main, and adding `universe` would download a 19.6MB / 66741-package index per run for zero extra coverage (that index is what blew #251's 2-minute timeout, and it is why this was wrongly scoped as expensive). The datasource hardcodes Packages.gz, caches per component per run, and sends If-Modified-Since, so 66 deps cost one conditional GET per component on a warm run.",
+      "matchDatasources": [
+        "deb"
+      ],
+      "registryUrls": [
+        "https://apt.llvm.org/resolute?suite=llvm-toolchain-resolute-22&components=main&binaryArch=amd64",
+        "https://archive.ubuntu.com/ubuntu?suite=resolute&components=main&binaryArch=amd64",
+        "https://archive.ubuntu.com/ubuntu?suite=resolute-updates&components=main&binaryArch=amd64",
+        "https://security.ubuntu.com/ubuntu?suite=resolute-security&components=main&binaryArch=amd64"
+      ]
+    },
+    {
       "description": "Parse the gcc-latest version out of the jwakely index hrefs (the html datasource yields full URLs as version candidates; the rolling gcc-latest.deb link has no version and is filtered out). timestamp-optional fixes a real bug (#160 T12.5): the html datasource emits NO releaseTimestamp, and the default minimumReleaseAge behavior holds timestamp-less updates FOREVER.",
       "matchDatasources": [
         "custom.gcc-latest"
@@ -140,16 +152,15 @@
     },
     {
       "customType": "regex",
-      "description": "#251: LLVM apt packages in mise-system.toml [bootstrap.packages], pinned to apt.llvm.org's llvm-toolchain-<codename>-22 suite. Renovate's NATIVE mise manager cannot do this - its schema parses only `tools`/`tasks` and z.object silently strips [bootstrap.packages] - so this regex + the `deb` datasource is the only route. Proven end-to-end against this exact suite (2026-07-15): extract yields depName/currentValue/replaceString, lookup resolves against apt.llvm.org with no warnings. #236 does NOT apply: bootstrap packages are not in mise.lock and a regex manager has no lockfile to regenerate. Only `-22` lines match: the non-LLVM apt entries stay \"latest\" and the version regex (^1:) will not match them.",
+      "description": "#251/#288: EVERY pinned apt package in mise-system.toml [bootstrap.packages] - the 52 LLVM entries from apt.llvm.org and the 14 Ubuntu-archive entries. Renovate's NATIVE mise manager cannot do this - its schema parses only `tools`/`tasks` and z.object silently strips [bootstrap.packages] - so this regex + the `deb` datasource is the only route. Proven end-to-end (2026-07-15 LLVM, 2026-07-16 Ubuntu): extract yields depName/currentValue/replaceString, lookup resolves with no warnings. #236 does NOT apply: bootstrap packages are not in mise.lock and a regex manager has no lockfile to regenerate. The value regex anchors on a LEADING DIGIT, which matches every deb version (incl. the `1:` epoch forms `1:22.1.8~++...` and `1:1.3.dfsg+really1.3.1-1ubuntu3`) while never matching \"latest\" - a negative lookahead is NOT an option here, because Renovate compiles regexes with RE2, which has no lookaround. Routing to the right upstream is NOT done here: the `apt-ubuntu-pockets` packageRules entry below hands every deb dep all four registryUrls and lets registryStrategy='merge' resolve each by where it is found.",
       "managerFilePatterns": [
         "/^\\.devcontainer/mise-system\\.toml$/"
       ],
       "matchStrings": [
-        "\"apt:(?<depName>[a-z0-9.+-]+)\"\\s*=\\s*\"(?<currentValue>1:[^\"]+)\""
+        "\"apt:(?<depName>[a-z0-9.+-]+)\"\\s*=\\s*\"(?<currentValue>[0-9][^\"]*)\""
       ],
       "datasourceTemplate": "deb",
-      "versioningTemplate": "deb",
-      "registryUrlTemplate": "https://apt.llvm.org/resolute?suite=llvm-toolchain-resolute-22&components=main&binaryArch=amd64"
+      "versioningTemplate": "deb"
     }
   ],
   "customDatasources": {
