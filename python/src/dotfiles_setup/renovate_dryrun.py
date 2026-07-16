@@ -41,6 +41,16 @@ The local platform also returns ``persistRepoData: true``, which is the only
 thing suppressing the repository worker's ``deleteLocalFile('.')`` — under
 ``platform=local`` the "localDir" IS this working tree. Do not set
 ``persistRepoData: false``.
+
+A fourth fact, corrected in #299: ``mise.toml`` pins this task to node 24
+because renovate 43.x declares ``engines.node ^24.11.0``. Under node 26 the
+binary **extracts and resolves normally** and then exits non-zero on the
+logged engine error — it does NOT lose data. The pin buys a clean exit code,
+not correctness of the report. The earlier "extracts NOTHING" rationale was a
+true statement about *some older renovate* applied outside the condition that
+made it true; measured against 43.265.1 it is false, and it sent a reader
+hunting a data-loss bug that does not exist. A fact needs its condition, not
+just its source (``.claude/rules/verify-before-advancing.md``).
 """
 
 from __future__ import annotations
@@ -50,7 +60,7 @@ import os
 import subprocess
 import sys
 import tempfile
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 # Renovate resolves `force` AFTER repo config (renovate.json + presets), so it
@@ -110,6 +120,32 @@ class PendingUpdate:
 
 
 @dataclass
+class GroupStats:
+    """Dep tallies for one manager, or one datasource.
+
+    Exists so the report can answer "did my regex extract?" — the question
+    #251 documented and #288 had to answer by bypassing the task and running
+    the binary by hand. A pending-updates list alone cannot: a custom manager
+    that matched zero files and a custom manager whose deps are all current
+    both render as silence.
+    """
+
+    name: str
+    deps: int
+    updates: int
+    skipped: int
+
+    def render(self) -> str:
+        """Render as one aligned report row."""
+        skipped = f", {self.skipped} skipped" if self.skipped else ""
+        dep = "dep " if self.deps == 1 else "deps"
+        return (
+            f"  {self.name:<14} {self.deps:>3} {dep}, "
+            f"{self.updates:>2} pending{skipped}"
+        )
+
+
+@dataclass
 class DryRunResult:
     """The outcome of one local Renovate dry-run."""
 
@@ -119,6 +155,11 @@ class DryRunResult:
     # False when no github.com token was available, i.e. every github-datasource
     # dep was skipped and `updates` is a FLOOR rather than a total.
     complete: bool = True
+    # What each manager/datasource actually extracted. Renovate's native report
+    # carries `manager`, `datasource` and `skipReason` per dep; these were
+    # discarded at the parse seam until #299.
+    managers: list[GroupStats] = field(default_factory=list)
+    datasources: list[GroupStats] = field(default_factory=list)
 
 
 def resolve_github_token(env: dict[str, str] | None = None) -> str | None:
@@ -163,17 +204,56 @@ def run_renovate(report_path: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _tally(
+    counts: dict[str, list[int]], key: str, *, updates: int, skipped: int
+) -> None:
+    """Accumulate one dep into the [deps, updates, skipped] row for `key`."""
+    row = counts.setdefault(key, [0, 0, 0])
+    row[0] += 1
+    row[1] += updates
+    row[2] += skipped
+
+
+def _stats(counts: dict[str, list[int]]) -> list[GroupStats]:
+    """Render the tally rows as GroupStats, busiest first then alphabetical."""
+    return [
+        GroupStats(name=name, deps=row[0], updates=row[1], skipped=row[2])
+        for name, row in sorted(counts.items(), key=lambda kv: (-kv[1][0], kv[0]))
+    ]
+
+
 def parse_report(raw: str, *, complete: bool = True) -> DryRunResult:
-    """Extract the pending updates from renovate's native JSON report."""
+    """Extract the pending updates and extraction tallies from renovate's report.
+
+    The per-manager/per-datasource tallies are the answer to "did it look?" —
+    a manager absent from `managers` matched nothing, which is a different
+    fact from "matched, and everything is current" (deps > 0, updates == 0).
+    Renovate reports both identically in its pending list, which is why #288
+    could not use this task and hand-ran the binary instead (#299).
+    """
     report = json.loads(raw)
     repo = report.get("repositories", {}).get("local", {})
     updates: list[PendingUpdate] = []
+    by_manager: dict[str, list[int]] = {}
+    by_datasource: dict[str, list[int]] = {}
     total = 0
     for manager, files in (repo.get("packageFiles") or {}).items():
         for entry in files:
             package_file = entry.get("packageFile", "?")
             for dep in entry.get("deps", []):
                 total += 1
+                pending = dep.get("updates") or []
+                # A skipReason means renovate declined to look this dep up --
+                # NOT that it is current. Counting it as either would restate
+                # the very confusion this report exists to remove.
+                skipped = 1 if dep.get("skipReason") else 0
+                _tally(by_manager, manager, updates=len(pending), skipped=skipped)
+                _tally(
+                    by_datasource,
+                    dep.get("datasource", "?"),
+                    updates=len(pending),
+                    skipped=skipped,
+                )
                 updates.extend(
                     PendingUpdate(
                         manager=manager,
@@ -182,7 +262,7 @@ def parse_report(raw: str, *, complete: bool = True) -> DryRunResult:
                         current_value=dep.get("currentValue", "?"),
                         new_value=upd.get("newValue", "?"),
                     )
-                    for upd in dep.get("updates") or []
+                    for upd in pending
                 )
     problems = [
         str(p.get("msg", p))
@@ -190,7 +270,12 @@ def parse_report(raw: str, *, complete: bool = True) -> DryRunResult:
         if isinstance(p, dict)
     ]
     return DryRunResult(
-        total_deps=total, updates=updates, problems=problems, complete=complete
+        total_deps=total,
+        updates=updates,
+        problems=problems,
+        complete=complete,
+        managers=_stats(by_manager),
+        datasources=_stats(by_datasource),
     )
 
 
@@ -224,6 +309,17 @@ def render_report(result: DryRunResult) -> str:
             f"Scanned {result.total_deps} deps; "
             f"at least {len(result.updates)} would be updated."
         )
+    # Print the extraction tallies BEFORE the pending list: "which managers
+    # matched, and how much" is the question you cannot answer from the
+    # pending list, and a manager missing from this block extracted nothing.
+    if result.managers:
+        lines.append("")
+        lines.append("Extracted by manager (absent == matched no files):")
+        lines.extend(g.render() for g in result.managers)
+    if result.datasources:
+        lines.append("")
+        lines.append("Looked up by datasource:")
+        lines.extend(g.render() for g in result.datasources)
     if result.updates:
         lines.append("")
         lines.extend(u.render() for u in result.updates)
@@ -262,8 +358,19 @@ def renovate_dryrun_main(*, json_output: bool = False, check: bool = False) -> i
         proc = run_renovate(report_path)
         if proc.returncode != 0 or not report_path.is_file():
             sys.stderr.write(proc.stderr or proc.stdout)
+            # These two failures read identically until you say which is which,
+            # and the difference decides where to look next: a report ON DISK
+            # means extraction worked and the exit code is the complaint (an
+            # unsupported node does exactly this), while no report means the
+            # run died before writing one. Sending a reader to hunt for a file
+            # that is sitting on disk is the bug this message had (#299).
             sys.stderr.write(
-                f"\nrenovate exited {proc.returncode} and produced no report.\n"
+                f"\nrenovate exited {proc.returncode} but DID write its report "
+                f"({report_path}) — extraction ran; the exit code is the "
+                f"complaint. Re-read the errors above.\n"
+                if report_path.is_file()
+                else f"\nrenovate exited {proc.returncode} and produced no "
+                f"report at {report_path}.\n"
             )
             return 1
         result = parse_report(

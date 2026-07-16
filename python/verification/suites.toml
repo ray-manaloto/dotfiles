@@ -197,11 +197,12 @@ tokens = ['npm_config_update_notifier = "false"']
 
 [[suite]]
 name = "build.path-includes-mise-shims"
-description = "Overlay/runtime paths must include the default per-user mise shims path"
+description = "Overlay/runtime paths must include the default per-user mise shims path. PER-PATH by deliberate choice (#299): this contract named three files under combined-text `tokens`, where a token in ANY listed file satisfies it for all. Commit fc8af71 (#34, 2026-04-05) removed devcontainer.json's remoteEnv PATH entry — a file this contract names — inside a multi-topic refactor that never mentioned it, and the union kept the contract GREEN for ~3.5 months. The overlay ENV PATH is the load-bearing site (mise's own docs: shims are the mechanism for non-interactive contexts, and `mise activate` REMOVES the shims dir from PATH in login shells, so `_.path` cannot bootstrap shims), so it is bound explicitly below. `paths` stays as declared: the scope is visible, nothing is deleted, and a prior review's rejection of DELETING these paths is not re-litigated here."
 category = "build"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/Dockerfile.host-user", ".devcontainer/devcontainer.json", "home/.chezmoi.toml.tmpl"]
+per_path_tokens = { ".devcontainer/Dockerfile.host-user" = [".local/share/mise/shims"] }
 tokens = [".local/share/mise/shims"]
 
 [[suite]]
@@ -401,6 +402,14 @@ category = "build"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/Dockerfile", ".devcontainer/mise-system.lock"]
+# Bound per-path (#299): under combined-text `tokens` the lock's conda table
+# could satisfy the Dockerfile's `--locked` requirement and vice versa, so the
+# contract had no opinion about either file individually.
+per_path_tokens = { ".devcontainer/Dockerfile" = [
+  "mise install --system --locked",
+], ".devcontainer/mise-system.lock" = [
+  "[conda-packages.linux-x64",
+] }
 tokens = [
   "mise install --system --locked",
   "[conda-packages.linux-x64",
@@ -916,6 +925,19 @@ paths = [
     "tests/test_sync.py",
     ".claude/skills/devcontainer-sync/SKILL.md",
 ]
+# Bound per-path (#299). Under combined-text `tokens` the skill doc's own
+# quoting of `[tasks.sync]` satisfied the contract, so mise.toml could lose the
+# task entirely and stay green — the documentation of a thing standing in for
+# the thing. test_sync.py is existence-only (paths_required).
+per_path_tokens = { "mise.toml" = [
+    "[tasks.sync]",
+    "dotfiles-setup docker sync",
+], "python/src/dotfiles_setup/sync.py" = [
+    "def sync_main",
+    "def decide_action",
+], ".claude/skills/devcontainer-sync/SKILL.md" = [
+    "mise run sync",
+] }
 tokens = [
     "[tasks.sync]",
     "dotfiles-setup docker sync",
@@ -937,6 +959,23 @@ paths = [
     "tests/test_pr.py",
     ".claude/skills/pr-workflow/SKILL.md",
 ]
+# Bound per-path (#299). Under combined-text `tokens` the skill doc's quoting
+# of `[tasks.ship]` / `--match-head-commit` satisfied the contract for every
+# file, so mise.toml could lose a task and pr.py could lose the head-SHA pin
+# while the suite stayed green. test_pr.py is existence-only (paths_required).
+per_path_tokens = { "mise.toml" = [
+    "[tasks.ship]",
+    "[tasks.land]",
+    "dotfiles-setup pr ship",
+    "dotfiles-setup pr land",
+], "python/src/dotfiles_setup/pr.py" = [
+    "def ship_main",
+    "def land_main",
+    "--match-head-commit",
+], ".claude/skills/pr-workflow/SKILL.md" = [
+    "mise run ship",
+    "mise run land",
+] }
 tokens = [
     "[tasks.ship]",
     "[tasks.land]",
@@ -1049,6 +1088,19 @@ paths = [
     "tests/test_tool_currency.py",
     ".github/workflows/refresh.yml",
 ]
+# Bound per-path (#299). Under combined-text `tokens` the module's own
+# docstring mention of `mise run tool-currency` satisfied the contract, so
+# refresh.yml could stop invoking the task and the suite would not notice —
+# the job wiring is the whole point. test_tool_currency.py is existence-only.
+per_path_tokens = { "mise.toml" = [
+    "[tasks.tool-currency]",
+    "dotfiles-setup tool-currency",
+], "python/src/dotfiles_setup/tool_currency.py" = [
+    "def tool_currency_main",
+], ".github/workflows/refresh.yml" = [
+    "mise run tool-currency",
+    "Tool currency report (daily)",
+] }
 tokens = [
     "[tasks.tool-currency]",
     "dotfiles-setup tool-currency",
@@ -1106,7 +1158,7 @@ tokens = [
 
 [[suite]]
 name = "workflow.apt-pins-enforcement"
-description = "#288 local-first apt-pin gate wiring: `mise run verify-apt-pins` must stay wired to the python probe end-to-end — the mise task shells out to `dotfiles-setup apt-pins`, main.py registers the subcommand, the apt_pins module (pin parsing + the generated apt --simulate script) + its tests exist, and the rule doc records the policy. The probe runs apt's real SOLVER in a throwaway base container because an index lookup cannot see a co-versioned-dependency conflict (a pinned version can be present in the index and still uninstallable); this contract asserts the whole chain so it can't drift out. Same shape as workflow.bash-logic-enforcement."
+description = "#288 local-first apt-pin gate wiring: `mise run verify-apt-pins` must stay wired to the python probe end-to-end — the mise task shells out to `dotfiles-setup apt-pins`, main.py registers the subcommand, the apt_pins module (pin parsing + the generated apt --simulate script) + its tests exist, and the rule doc records the policy. The probe runs apt's real SOLVER in a throwaway base container because an index lookup cannot see a co-versioned-dependency conflict (a pinned version can be present in the index and still uninstallable); this contract asserts the whole chain so it can't drift out. Same shape as workflow.bash-logic-enforcement. EXTENDED in #299: the gate is also wired into ship (`pr.gate_matrix` -> `changes_apt_pin_inputs`), because a probe that runs only when a human remembers is the 'relying on the LLM' layer mise-tasks-only.md says is never sufficient alone — it ran on #288 only because someone remembered."
 category = "workflow"
 check_type = "static"
 handler = "require_tokens"
@@ -1115,10 +1167,12 @@ paths = [
     "mise.toml",
     "python/src/dotfiles_setup/main.py",
     "python/src/dotfiles_setup/apt_pins.py",
+    "python/src/dotfiles_setup/pr.py",
     "tests/test_apt_pins.py",
+    "tests/test_pr.py",
     ".claude/rules/local-devcontainer-first.md",
 ]
-per_path_tokens = { "mise.toml" = ["tasks.verify-apt-pins", "dotfiles-setup apt-pins"], "python/src/dotfiles_setup/main.py" = ["apt-pins"], "python/src/dotfiles_setup/apt_pins.py" = ["def pinned_apt_packages", "def probe_script", "def apt_pins_main"], ".claude/rules/local-devcontainer-first.md" = ["mise run verify-apt-pins"] }
+per_path_tokens = { "mise.toml" = ["tasks.verify-apt-pins", "dotfiles-setup apt-pins"], "python/src/dotfiles_setup/main.py" = ["apt-pins"], "python/src/dotfiles_setup/apt_pins.py" = ["def pinned_apt_packages", "def probe_script", "def apt_pins_main"], "python/src/dotfiles_setup/pr.py" = ["_APT_PIN_PATTERNS", "def changes_apt_pin_inputs", "verify-apt-pins"], "tests/test_pr.py" = ["verify-apt-pins"], ".claude/rules/local-devcontainer-first.md" = ["mise run verify-apt-pins"] }
 tokens = [
     "dotfiles-setup apt-pins",
     "def apt_pins_main",

@@ -32,6 +32,34 @@ The **inverse** bites too. `cmd | grep -q PAT` under `set -o pipefail` returns
 only fail. That broke the #289 base build; see `no_grep_q_under_pipefail` in
 `hk.pkl`.
 
+## Cross-check: when two probes disagree, one of them is broken
+
+The cheapest bug detector available is a **second probe of the same fact by a
+different route**. It needs no fixture and no reasoning: if two probes of one
+fact disagree, you have found a defect *for free* — and it is in a probe far
+more often than in the world. Reach for this the moment a result surprises you,
+before you write up the surprise.
+
+The value is that it names *which* answer to distrust. A lone probe returning
+"MISSING" is indistinguishable from a probe that cannot see; a second route
+returning "PRESENT" proves the first one is blind. Three instances, all
+2026-07-16, all cheap to cross-check and expensive to believe:
+
+| the probe said | the disagreeing route | what was actually broken |
+|---|---|---|
+| pin `curl=8.18.0-1ubuntu2` FAILS to install | same pin in a **clean base container** → installs fine | the **devcontainer was dirty** — it already had a newer curl, and apt refuses to downgrade. The pin was correct; the environment lied. |
+| CI job SKIPPED ⇒ "unaffected by this change" | reading the job's `if:` condition | a SKIPPED job **never asked the question**. "Never ran" is not "ran and found nothing". |
+| every package reports MISSING | running the same command without the outer quoting | the **inner shell ate the variable** — a nested-quote format string expanded to empty, so every lookup compared against `""`. |
+
+A fourth, from the session that wrote this section: a contract was probed by
+renaming `def changes_apt_pin_inputs` → `def changes_apt_pin_inputs_REMOVED`
+to prove the contract would catch its removal. The contract passed, which
+looked like a contract defect — but the renamed symbol **still contains the
+original as a substring**, and the check is a substring match. The probe was
+the bug. Renaming to a genuinely different symbol made it fail correctly.
+(See `feedback_forbid_tokens_substring_fragile` — substring matching turns a
+"removal" probe into a no-op.)
+
 ## Rules
 
 1. **Arm the negative.** Before reporting "X does not exist", run the same probe
@@ -49,6 +77,9 @@ only fail. That broke the #289 base build; see `no_grep_q_under_pipefail` in
 5. **Say which arm you ran.** When reporting a probe result, state the control:
    "bogus-dist → 404 while resolute-22 → 200, so the probe discriminates." A
    result without its control is an opinion.
+6. **Cross-check a surprise before you report it.** A second route to the same
+   fact costs seconds and settles which side is broken. Disagreement is a
+   finding, not noise — and the finding is usually your probe.
 
 ## Applies to
 

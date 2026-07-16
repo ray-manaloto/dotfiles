@@ -34,12 +34,31 @@ def load_manifest(path: Path) -> list[dict[str, Any]]:
     return suites
 
 
+def _missing_paths(entry: dict[str, Any]) -> list[str]:
+    """Return the entry's declared paths that do not exist on disk."""
+    root = _project_root()
+    return [raw for raw in entry.get("paths", []) if not (root / raw).exists()]
+
+
 def run_suite(
     entry: dict[str, Any],
     *,
     handlers: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Execute a single verification suite entry.
+
+    A declared path that no longer exists FAILS the suite unless the entry
+    opts out with ``paths_required = false``. This is enforced here — before
+    dispatch — rather than inside any one handler, because *partial* path loss
+    is invisible from inside: every handler resolves its paths through
+    :func:`_resolve_paths`, which silently drops what is gone, so a suite
+    naming two files keeps passing on the strength of the one that survives.
+    Proven both arms on 2026-07-16 (delete one of two -> still PASSED; delete
+    both -> correctly failed, so the probe discriminated). Spec #299.
+
+    Default-strict rather than opt-in: at the time of the change **0 of 97**
+    suites declared a missing path, so it was a no-op then and a gate since —
+    and a suite written later is protected without its author remembering.
 
     Args:
         entry: Suite entry dictionary with name and handler keys.
@@ -58,6 +77,17 @@ def run_suite(
             "status": "failed",
             "reason": f"Handler '{handler_name}' not found",
         }
+
+    if entry.get("paths_required", True):
+        missing = _missing_paths(entry)
+        if missing:
+            description = entry.get("description", "")
+            reason = f"required path(s) missing: {', '.join(missing)}"
+            return {
+                "name": name,
+                "status": "failed",
+                "reason": f"{description}: {reason}" if description else reason,
+            }
 
     try:
         result: dict[str, Any] = all_handlers[handler_name](entry)
@@ -357,14 +387,8 @@ def _handle_forbid_tokens(entry: dict[str, Any]) -> dict[str, Any]:
 
 def _handle_require_tokens(entry: dict[str, Any]) -> dict[str, Any]:
     description = entry.get("description", "")
-    # Review finding [21]: a listed path that no longer exists must FAIL,
-    # not silently shrink the combined text — otherwise deleting a wired
-    # test file (or the module itself) passes every "must exist" contract.
-    if entry.get("paths_required", False):
-        root = _project_root()
-        missing = [raw for raw in entry.get("paths", []) if not (root / raw).exists()]
-        if missing:
-            fail(f"{description}: required path(s) missing: {', '.join(missing)}")
+    # Review finding [21] (a listed path that no longer exists must FAIL) is
+    # enforced for EVERY handler in run_suite, default-strict — see spec #299.
     # Review findings [19]/[22]: per-path token requirements — combined-text
     # semantics let a token in ANY listed file satisfy the contract, so
     # "wired in settings.json" could be satisfied by the rule doc alone.
