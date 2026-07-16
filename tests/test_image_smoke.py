@@ -18,6 +18,7 @@ from dotfiles_setup.image import (
     _TIER1_IDENTITY_BLOCK,
     _TIER1_PYTHON_DEFAULT,
     _TIER3_COMPILER_BODY,
+    _TIER3_DEFAULT_CLANG,
     IDENTITY_IMAGE_PATHS,
     AnalysisTarget,
     _count_tools_from_mise_ls,
@@ -26,6 +27,7 @@ from dotfiles_setup.image import (
     _format_identity_lines,
     _is_emulated,
     _lookup_pr_number,
+    _parse_apt_llvm_version,
     _parse_build_timing,
     _parse_human_size,
     _repo_without_tag,
@@ -48,6 +50,8 @@ from dotfiles_setup.image import (
     resolve_declared_tools_at_base,
     resolve_expected_identity_at_base,
     resolve_expected_identity_head,
+    resolve_expected_llvm_version,
+    resolve_expected_llvm_version_at_base,
     resolve_expected_p2996_ref,
     resolve_expected_p2996_ref_at_base,
     smoke_script_main,
@@ -60,6 +64,9 @@ _PLAIN_BYTES_VALUE = 512
 # clang-p2996 ref-pin check tests.
 _FAKE_P2996_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"
 _NON_SHA_REF = "p2996-branch"
+
+# A fake apt LLVM release for the #294 default-clang + utility version guards.
+_FAKE_LLVM_VERSION = "22.1.8"
 
 # A fake 64-hex SHA-256 for the image-identity (config-hash) tests.
 _FAKE_CONFIG_SHA256 = "0" * 64
@@ -90,19 +97,23 @@ def test_smoke_docker_cmd_no_volume_mount() -> None:
     assert "--volume" not in cmd
 
 
-def test_smoke_script_does_not_require_llvm_symbolizer() -> None:
-    """Verify the smoke script does not check for llvm-symbolizer."""
-    script = build_smoke_script(_FAKE_P2996_SHA)
+def test_smoke_script_probes_standalone_llvm_tools() -> None:
+    """#294: the standalone LLVM tools now ship (llvm-22 .deb) and are probed.
 
-    assert "llvm-symbolizer" not in script
+    Inverts the pre-#294 guardrail (commits 61e0ec3/82e9a22, "validate the
+    shipped toolchain, not an imagined superset"): back then the conda-narrow
+    image did NOT ship llvm-cov/profdata/symbolizer, so requiring them
+    false-FAILed. Since #222/#251 adopted the full apt.llvm.org suite, all
+    three ship in the declared ``llvm-22`` package, so the smoke asserts them —
+    exactly the "update alongside actual toolchain changes" the guardrail
+    sanctioned.
+    """
+    script = build_smoke_script(
+        _FAKE_P2996_SHA, expected_llvm_version=_FAKE_LLVM_VERSION
+    )
 
-
-def test_smoke_script_does_not_require_standalone_llvm_tools() -> None:
-    """Verify the smoke script does not check for standalone LLVM tools."""
-    script = build_smoke_script(_FAKE_P2996_SHA)
-
-    assert "llvm-cov" not in script
-    assert "llvm-profdata" not in script
+    for util in ("llvm-cov", "llvm-profdata", "llvm-symbolizer", "opt", "llc"):
+        assert util in script
 
 
 def test_smoke_script_injects_p2996_ref_and_strict_match() -> None:
@@ -190,6 +201,198 @@ def test_resolve_expected_p2996_ref_reads_bake_pin(
     # The pin is a 40-hex git SHA.
     assert len(ref) == 40
     assert all(c in "0123456789abcdef" for c in ref)
+
+
+# --- #294: apt LLVM version resolution + tier-3 functional probes ---
+
+
+def test_parse_apt_llvm_version_strips_epoch_and_suffix() -> None:
+    """The release is the MAJOR.MINOR.PATCH past the epoch, before the snapshot.
+
+    Independent-literal expectation (not recomputed the parser's way): a real
+    apt.llvm.org pin shape with epoch + `~++<snapshot>` suffix must yield the
+    bare release.
+    """
+    cfg = (
+        "[bootstrap.packages]\n"
+        '"apt:clang-22" = "1:22.1.8~++20260714015917+ca7933e47d3a-1~exp1~x"\n'
+    )
+    assert _parse_apt_llvm_version(cfg) == "22.1.8"
+
+
+def test_parse_apt_llvm_version_rejects_missing_pin() -> None:
+    """A missing apt:clang-22 pin fails loud, never a silent empty version."""
+    with pytest.raises(TypeError):
+        _parse_apt_llvm_version('[bootstrap.packages]\n"apt:curl" = "latest"\n')
+
+
+def test_resolve_expected_llvm_version_is_release_triple() -> None:
+    """HEAD resolver returns a real MAJOR.MINOR.PATCH from mise-system.toml."""
+    ver = resolve_expected_llvm_version()
+    parts = ver.split(".")
+    assert len(parts) == 3
+    assert all(p.isdigit() for p in parts)
+
+
+def test_resolve_expected_llvm_version_at_base_is_release_triple() -> None:
+    """Merge-base resolver returns a real MAJOR.MINOR.PATCH (== HEAD on main)."""
+    ver = resolve_expected_llvm_version_at_base()
+    parts = ver.split(".")
+    assert len(parts) == 3
+    assert all(p.isdigit() for p in parts)
+
+
+def test_tier3_injects_llvm_version_and_guards_dormant_without_it() -> None:
+    """The version var is injected; unset leaves the version guards SKIP-dormant."""
+    with_ver = build_tier3_script(
+        expected_p2996_ref=_FAKE_P2996_SHA,
+        emulated=True,
+        expected_llvm_version=_FAKE_LLVM_VERSION,
+    )
+    assert f"EXPECTED_LLVM_VERSION={_FAKE_LLVM_VERSION}\n" in with_ver
+
+    without_ver = build_tier3_script(expected_p2996_ref=_FAKE_P2996_SHA, emulated=True)
+    assert "EXPECTED_LLVM_VERSION=''\n" in without_ver
+    assert "clang version guard dormant" in without_ver
+
+
+def test_tier3_probes_openmp_lld_flang_libclc() -> None:
+    """The functional probes (#294) are present and RUN, not just compile."""
+    s = build_tier3_script(
+        expected_p2996_ref=_FAKE_P2996_SHA,
+        emulated=True,
+        expected_llvm_version=_FAKE_LLVM_VERSION,
+    )
+    # openmp: compile + RUN (RUN fires even under emulation, like asan/ubsan).
+    assert "clang++ -fopenmp /tmp/omp.cpp -o /tmp/omp" in s
+    assert "\n/tmp/omp >/dev/null" in s
+    # lld: exercised as a linker, not merely present.
+    assert "clang++ -fuse-ld=lld /tmp/sanitizer.cpp -o /tmp/lld-linked" in s
+    # flang: Fortran compile + RUN, with flang|flang-new fallback.
+    assert "command -v flang 2>/dev/null || command -v flang-new" in s
+    assert "\n/tmp/flang-hello >/dev/null" in s
+    # libclc: bitcode presence across candidate roots (location-robust).
+    assert "-name '*.bc'" in s
+    # The `|| true` is load-bearing (regression: container smoke #294) — find
+    # exits non-zero on a missing start dir, and under `set -e` a bare
+    # `clc_bc=$(find ...)` would abort the script BEFORE the presence check,
+    # dying silently instead of reporting. Guard that it never regresses.
+    assert "-name '*.bc' 2>/dev/null | head -n1 || true" in s
+
+
+def test_tier3_utility_version_smoke_covers_the_standalone_llvm_tools() -> None:
+    """#294 (Ray): opt/llc/llvm-cov/profdata/symbolizer/bolt/mlir-opt all probed."""
+    s = build_tier3_script(
+        expected_p2996_ref=_FAKE_P2996_SHA,
+        emulated=True,
+        expected_llvm_version=_FAKE_LLVM_VERSION,
+    )
+    assert (
+        "for util in opt llc llvm-cov llvm-profdata llvm-symbolizer "
+        "llvm-bolt mlir-opt" in s
+    )
+
+
+def test_tier3_driver_presence_is_in_shared_body_not_ci_only() -> None:
+    """#294: the 7-driver PATH loop moved into the SHARED tier-3 substrate.
+
+    Regression guard: it used to live only in ``build_smoke_script``'s CI tail,
+    so ``verify-container-latest`` (which runs ``build_tier3_script``) never saw
+    it. It must now be in the shared body, and the old CI-only header must be
+    gone (no duplication).
+    """
+    tier3 = build_tier3_script(expected_p2996_ref=_FAKE_P2996_SHA, emulated=True)
+    assert "for tool in clang clang++ clangd clang-tidy clang-format lld lldb" in tier3
+    # The pre-#294 CI-only section header is retired.
+    ci = build_smoke_script(_FAKE_P2996_SHA)
+    assert "=== clang tooling checks ===" not in ci
+
+
+def test_build_smoke_docker_cmd_injects_real_llvm_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The CI docker command injects the resolved release (not the dormant '')."""
+    monkeypatch.delenv("CLANG_P2996_REF", raising=False)
+    cmd = build_smoke_docker_cmd("ghcr.io/ray-manaloto/dotfiles-devcontainer:test")
+    script = cmd[-1]
+    assert "EXPECTED_LLVM_VERSION=''" not in script
+    assert f"EXPECTED_LLVM_VERSION={resolve_expected_llvm_version()}" in script
+
+
+def _run_default_clang_block(
+    tmp_path: Path, clang_real: str, clang_ver_line: str, want_ver: str
+) -> subprocess.CompletedProcess:
+    """Run just the #294 default-clang gate against a stubbed clang++ via bash.
+
+    Stubs ``clang++`` (its ``--version`` prints ``clang_ver_line``) and
+    ``readlink`` (echoes ``clang_real``) on PATH, so the gate's resolution +
+    version assertions run in both directions without a real toolchain. Mirrors
+    ``_run_python_block``.
+    """
+    bin_dir = tmp_path / "stub-bin"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    clang = bin_dir / "clang++"
+    clang.write_text(
+        "#!/usr/bin/env bash\n"
+        f'case "$*" in *--version*) echo {shlex.quote(clang_ver_line)} ;; esac\n'
+    )
+    clang.chmod(0o755)
+    readlink = bin_dir / "readlink"
+    readlink.write_text(f"#!/usr/bin/env bash\necho {shlex.quote(clang_real)}\n")
+    readlink.chmod(0o755)
+    harness = (
+        "set -euo pipefail\n"
+        f"PATH={shlex.quote(str(bin_dir))}:$PATH\n"
+        f"EXPECTED_LLVM_VERSION={shlex.quote(want_ver)}\n" + _TIER3_DEFAULT_CLANG
+    )
+    return subprocess.run(
+        ["bash", "-c", harness], capture_output=True, text=True, check=False
+    )
+
+
+def test_default_clang_block_passes_for_apt_llvm(tmp_path: Path) -> None:
+    """Happy path: clang++ under /usr/lib/llvm-22, --version reports the release."""
+    r = _run_default_clang_block(
+        tmp_path,
+        "/usr/lib/llvm-22/bin/clang",
+        "Ubuntu clang version 22.1.8 (++2026...)",
+        "22.1.8",
+    )
+    assert r.returncode == 0, r.stderr
+    assert "OK: default clang++ is LLVM 22.1.8" in r.stdout
+
+
+def test_default_clang_block_fails_on_wrong_version(tmp_path: Path) -> None:
+    """FAIL arm: right location, wrong release — the version pin is enforced."""
+    r = _run_default_clang_block(
+        tmp_path,
+        "/usr/lib/llvm-22/bin/clang",
+        "Ubuntu clang version 21.1.0 (++2026...)",
+        "22.1.8",
+    )
+    assert r.returncode == 1
+    assert "not LLVM 22.1.8" in r.stdout
+
+
+def test_default_clang_block_fails_on_non_apt_clang(tmp_path: Path) -> None:
+    """FAIL arm: a p2996/conda clang taking bare clang++ is caught."""
+    r = _run_default_clang_block(
+        tmp_path,
+        "/opt/clang-p2996/bin/clang",
+        "clang version 22.1.8",
+        "22.1.8",
+    )
+    assert r.returncode == 1
+    assert "not apt /usr/lib/llvm-*" in r.stdout
+
+
+def test_default_clang_block_dormant_when_version_unset(tmp_path: Path) -> None:
+    """Unset version => the version guard SKIPs (path check still runs)."""
+    r = _run_default_clang_block(
+        tmp_path, "/usr/lib/llvm-22/bin/clang", "clang version 22.1.8", ""
+    )
+    assert r.returncode == 0
+    assert "SKIP" in r.stdout
 
 
 def test_parse_human_size_handles_gigabytes_before_bytes_suffix() -> None:
