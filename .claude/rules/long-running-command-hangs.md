@@ -27,7 +27,25 @@ unbounded wait + pipe-masked exit code.
 
 2. **For any command expected to exceed ~30s, never wait blind.** Either
    bound it with a timeout, or run it in the background and monitor its
-   debug log. For a `mise run lint` run the log is
+   debug log. **EXCEPTION — Mac-side container ops: background-and-idle gets
+   them REAPED.** `mise run ship`/`land`, `verify-local`, `sync`, and image
+   pulls are killed if the turn goes idle waiting on them, so "background it"
+   — the default advice above — is precisely wrong here and cost a killed
+   20-minute image pull (2026-07-16). Measured both ways: a foreground 10-min
+   bound also killed a `ship` mid-`shellcheck` (rc=143). What works is
+   **in-turn polling** — background the command, then keep the turn engaged
+   reading its log until it finishes:
+
+   ```bash
+   deadline=$((SECONDS+540))
+   while [ $SECONDS -lt $deadline ]; do grep -q RC "$LOG" && break; sleep 15; done
+   ```
+
+   **Backgrounding stays correct for CI/remote waits** (`gh pr checks --watch`,
+   `gh run watch`) — those run on GitHub's infrastructure, not this Mac, and
+   nothing local reaps them. The hazard is specifically local, long, Mac-side
+   work. See `feedback_long_mac_ops_keep_turn_engaged`, which this rule used to
+   contradict outright. For a `mise run lint` run the log is
    **`~/.local/state/dotfiles/hk-lint.log`** — the per-run `HK_LOG_FILE`
    the wrapper sets (`lint.py` `DEFAULT_LOG_FILE`). Read THAT one:
    `~/.local/state/hk/hk.log` is a *different* file written by other hk

@@ -93,6 +93,86 @@ def test_parse_report_empty_repo() -> None:
     assert result.updates == []
 
 
+def test_parse_report_tallies_deps_per_manager() -> None:
+    # Independent source of truth: the fixture declares one dep under `regex`
+    # and one under `mise`. The tally must reproduce that split, not the
+    # flattened total the parser already reports.
+    result = renovate_dryrun.parse_report(json.dumps(_REPORT))
+    tallies = {g.name: g for g in result.managers}
+    assert tallies["regex"].deps == 1
+    assert tallies["mise"].deps == 1
+
+
+def test_parse_report_distinguishes_extracted_from_pending() -> None:
+    """A manager that matched but is CURRENT must not read as absent.
+
+    This is the whole point (#251/#288): "my regex extracted 1 dep and it is
+    up to date" and "my regex matched nothing" are the same silence in a
+    pending-updates list, and telling them apart is why #288 had to bypass
+    the task and hand-run the binary.
+    """
+    result = renovate_dryrun.parse_report(json.dumps(_REPORT))
+    regex = next(g for g in result.managers if g.name == "regex")
+    assert regex.deps == 1, "regex DID extract"
+    assert regex.updates == 0, "and its dep is current"
+    # Control arm: a manager that matched nothing is absent entirely, which is
+    # a different report from the one above.
+    assert not [g for g in result.managers if g.name == "npm"]
+
+
+def test_parse_report_tallies_deps_per_datasource() -> None:
+    result = renovate_dryrun.parse_report(json.dumps(_REPORT))
+    tallies = {g.name: g.deps for g in result.datasources}
+    assert tallies == {"deb": 1, "npm": 1}
+
+
+def test_parse_report_counts_a_skipped_dep_as_neither_pending_nor_current() -> None:
+    """A skipReason means renovate declined to look — not that it is current.
+
+    Counting a skipped dep as current is the "never looked" masquerading as
+    "nothing to do" trap this reporting exists to close.
+    """
+    skipped = {
+        "repositories": {
+            "local": {
+                "packageFiles": {
+                    "regex": [
+                        {
+                            "packageFile": ".devcontainer/mise-system.toml",
+                            "deps": [
+                                {
+                                    "depName": "gcc-latest",
+                                    "currentValue": "17.0.0",
+                                    "datasource": "deb",
+                                    "skipReason": "unsupported-datasource",
+                                    "updates": [],
+                                }
+                            ],
+                        }
+                    ]
+                }
+            }
+        }
+    }
+    result = renovate_dryrun.parse_report(json.dumps(skipped))
+    regex = next(g for g in result.managers if g.name == "regex")
+    assert regex.skipped == 1
+    assert regex.updates == 0
+    # Control arm: the clean fixture's deps carry no skipReason, so a parser
+    # that marked everything skipped would fail here.
+    clean = renovate_dryrun.parse_report(json.dumps(_REPORT))
+    assert all(g.skipped == 0 for g in clean.managers)
+
+
+def test_render_report_surfaces_what_each_manager_extracted() -> None:
+    result = renovate_dryrun.parse_report(json.dumps(_REPORT))
+    out = renovate_dryrun.render_report(result)
+    assert "Extracted by manager" in out
+    assert "regex" in out
+    assert "Looked up by datasource" in out
+    assert "deb" in out
+
+
 def test_exit_code_bare_run_is_always_zero() -> None:
     result = renovate_dryrun.parse_report(json.dumps(_REPORT))
     assert result.updates, "fixture must carry drift for this test to mean anything"

@@ -54,6 +54,20 @@ pre-commit --all` — some contracts (e.g., `build.no-stderr-suppression`)
 only run through the verify CLI. Run both locally before pushing
 Dockerfile changes.
 
+Two engine defaults bind every contract you write (#299):
+
+- **`paths_required` defaults to `true`** — a declared path that no longer
+  exists FAILS the suite, for every handler, enforced in `run_suite` before
+  dispatch. Opt out with an explicit `paths_required = false`. Without this,
+  *partial* path loss is silent: handlers resolve paths through
+  `_resolve_paths`, which drops what is gone, so a suite naming two files
+  keeps passing on the strength of the one that survives.
+- **Bare `tokens` is a UNION** (combined text): a token in ANY listed file
+  satisfies the contract for all of them. Use **`per_path_tokens`** to state
+  which file must carry which token — otherwise a contract has no opinion
+  about the files it names (`build.path-includes-mise-shims` named a file that
+  stopped wiring PATH and stayed green ~3.5 months).
+
 Contracts use handler types like `policy_doc` (references a doc file)
 and `regex_forbid` (pattern-based rejection). Note: static contract
 substring matches false-positive on prefixed ENV vars (e.g.,

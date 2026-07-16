@@ -141,6 +141,22 @@ CI_PUSH_PATHS: tuple[str, ...] = (
     ".config/mise/conf.d/shared.toml",
 )
 
+# The inputs to the `verify-apt-pins` probe (apt_pins.MISE_SYSTEM_TOML +
+# apt_pins.DOCKERFILE). BOTH are probe inputs, not just the pin declarations:
+# the Dockerfile carries `ARG BASE_IMAGE` and the LLVM signing key — what the
+# pins get resolved AGAINST — so a base bump can invalidate every pin without
+# touching a pin line.
+#
+# Both are also BASE_INPUT_PATTERNS, i.e. exactly the changes for which ship
+# DEFERS container validation to CI. That is why this gate earns its place:
+# it is the ~60s local probe standing in for the deferred container gate, and
+# an unresolvable pin otherwise surfaces only after a ~37min CI base build
+# (.claude/rules/local-devcontainer-first.md).
+_APT_PIN_PATTERNS = (
+    ".devcontainer/mise-system.toml",
+    ".devcontainer/Dockerfile",
+)
+
 # Conditional gates from verify-before-advancing's check matrix.
 _GHA_PATTERNS = (".github/*", ".github/**/*")
 _DOCS_PATTERNS = (
@@ -210,6 +226,15 @@ def changes_base_image_inputs(paths: list[str]) -> bool:
     return any(_matches_any(p, BASE_INPUT_PATTERNS) for p in paths)
 
 
+def changes_apt_pin_inputs(paths: list[str]) -> bool:
+    """True when the diff changes an input to the apt-pin resolvability probe.
+
+    Either the `[bootstrap.packages]` declarations themselves or the base
+    image / signing key they resolve against (:data:`_APT_PIN_PATTERNS`).
+    """
+    return any(_matches_any(p, _APT_PIN_PATTERNS) for p in paths)
+
+
 def expects_main_run(paths: list[str]) -> bool:
     """True when merging these paths triggers a main ci.yml run.
 
@@ -237,7 +262,8 @@ def gate_matrix(paths: list[str]) -> list[Gate]:
     Always: lint, pytest, verify contracts, hook-selfcheck (the wired
     host-side hooks, end-to-end). Conditional per
     verify-before-advancing: pin-actions on .github changes, lint-docs on
-    agent-doc changes. The full-sync hard gate runs LAST (most expensive)
+    agent-doc changes, verify-apt-pins on apt-pin inputs
+    (:func:`changes_apt_pin_inputs`). The full-sync hard gate runs LAST (most expensive)
     when the devcontainer/image/validation surface changed — EXCEPT when a
     base-image build input changed (:func:`changes_base_image_inputs`), for
     which the local base cannot validate the branch and container validation
@@ -266,6 +292,13 @@ def gate_matrix(paths: list[str]) -> list[Gate]:
         gates.append(Gate("pin-actions", ("mise", "run", "pin-actions")))
     if any(_matches_any(p, _DOCS_PATTERNS) for p in paths):
         gates.append(Gate("lint-docs", ("mise", "run", "lint-docs")))
+    # ~60s in a throwaway base container, and deliberately NOT conditioned on
+    # changes_base_image_inputs: these paths ARE base inputs, so the container
+    # gate below is skipped for them and this probe is the only local check
+    # that a pin still resolves. Local-first (#288/#299) — it exists precisely
+    # to fail in 60s instead of after a ~37min CI base build.
+    if changes_apt_pin_inputs(paths):
+        gates.append(Gate("verify-apt-pins", ("mise", "run", "verify-apt-pins")))
     if touches_surface(paths) and not changes_base_image_inputs(paths):
         gates.append(Gate("sync-full", ("mise", "run", "sync", "--", "--full")))
     return gates

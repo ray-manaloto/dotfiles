@@ -91,6 +91,43 @@ def test_gate_matrix_docs_adds_lint_docs() -> None:
     assert "lint-docs" in names
 
 
+def test_gate_matrix_bootstrap_packages_add_apt_pin_gate() -> None:
+    # The pin declarations, and the Dockerfile the pins resolve AGAINST (its
+    # ARG BASE_IMAGE / signing key) — a base bump can invalidate every pin
+    # without touching a pin line, so both are probe inputs (#299).
+    names = [g.name for g in pr.gate_matrix([".devcontainer/mise-system.toml"])]
+    assert "verify-apt-pins" in names
+    names = [g.name for g in pr.gate_matrix([".devcontainer/Dockerfile"])]
+    assert "verify-apt-pins" in names
+
+
+def test_gate_matrix_unrelated_surface_omits_apt_pin_gate() -> None:
+    # Control arm: the gate costs a ~60s container probe, so an unrelated
+    # change must not pay it. Without this, the test above is satisfied by a
+    # gate matrix that runs verify-apt-pins unconditionally.
+    names = [g.name for g in pr.gate_matrix(["README.md"])]
+    assert "verify-apt-pins" not in names
+    names = [g.name for g in pr.gate_matrix([".github/workflows/ci.yml"])]
+    assert "verify-apt-pins" not in names
+
+
+def test_gate_matrix_apt_pin_gate_survives_the_base_input_deferral() -> None:
+    """The pin gate must fire even though its paths ARE base inputs.
+
+    Base-input changes make ship defer container validation to CI, so the
+    sync-full gate is deliberately absent here. That deferral is exactly why
+    the pin probe earns its place: it is the only local check left that a pin
+    still resolves, and it fails in ~60s instead of after a ~37min CI base
+    build. A future refactor that folds this gate under the same
+    `not changes_base_image_inputs(...)` condition as sync-full would silently
+    disable it for every change that can break a pin.
+    """
+    names = [g.name for g in pr.gate_matrix([".devcontainer/mise-system.toml"])]
+    assert pr.changes_base_image_inputs([".devcontainer/mise-system.toml"])
+    assert "sync-full" not in names
+    assert "verify-apt-pins" in names
+
+
 def test_gate_matrix_non_base_surface_adds_full_sync_last() -> None:
     # A surface change that does NOT rebuild the base (validation tooling /
     # overlay) still runs the local container gate last.

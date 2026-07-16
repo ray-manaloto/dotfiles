@@ -498,11 +498,14 @@ description = "Report the updates Renovate would raise, from this working tree (
 # renovate.json byte-identical to what hosted Renovate reads.
 #
 # tools.node pins THIS TASK to node 24 (#251). Renovate 43.x declares
-# `engines.node ^24.11.0`; under our node 26 the binary exits rc=1 with
-# "Unsupported node environment detected" and extracts NOTHING — which reads
-# like "no deps found", not like an env error. `depends` cannot fix this (it is
-# install ORDER only); `tasks.*.tools` is mise's documented per-task version
-# override ("a tool with a different version... only used for that task").
+# `engines.node ^24.11.0`; under our node 26 the binary logs "Unsupported node
+# environment detected" and exits rc=1. CORRECTED in #299: it still extracts
+# and resolves NORMALLY — the pin buys a clean exit code, not report
+# correctness. (The former "extracts NOTHING" note was true of some older
+# renovate, not of 43.265.1, and cost a hunt for a data-loss bug that does not
+# exist.) `depends` cannot fix this (it is install ORDER only); `tasks.*.tools`
+# is mise's documented per-task version override ("a tool with a different
+# version... only used for that task").
 # Probed 2026-07-15: default task -> v26.5.0, tools.node="24" task -> v24.x.
 # Renovate's own mise manager reads `tasks.*.tools`, so this pin stays current.
 #

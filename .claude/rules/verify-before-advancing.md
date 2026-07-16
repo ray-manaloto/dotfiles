@@ -118,6 +118,25 @@ confirming the delegate's checks actually passed).
 > and gets applied to files its real owner never governed. Cite a figure only
 > where you can name the vendor; when code and a doc disagree, re-read the
 > source before making either match the other. See [[md-size-budgets]].
+>
+> **The other half is SCOPE: a fact needs the CONDITION that makes it true, not
+> just its source.** Provenance alone is not enough. Each fact below is genuine
+> and correctly sourced, and each was still wrong where it was used — because it
+> travelled without its "true when". This is *harder* to catch than invention:
+> the citation checks out, so the claim survives review.
+>
+> | fact | true when | was applied to | what it cost |
+> |---|---|---|---|
+> | 12,000-char limit | Windsurf / agnix AGM-003 | all Claude markdown | a gate enforcing a limit its real owner never set |
+> | renovate "extracts NOTHING" under an unsupported node | some older renovate | 43.265.1, which extracts fine | a hunt for a data-loss bug that does not exist |
+> | 2–2.5h cold build | the p2996 cache **misses** | any `mise-system.toml` touch | a ~4x over-warning; measured ~37 min |
+>
+> A stated condition is also what makes a fact **falsifiable later**: "2.5h when
+> p2996 misses" tells the next reader what to check, while a bare "2.5h" can only
+> be believed or doubted. So when you carry a number, carry its condition — and
+> when you meet one, ask "what has to be true for this to hold, and is it true
+> HERE?" (Deliberately folded into this blockquote rather than given its own
+> eager rule: one idea, one place.)
 
 ## See also
 
