@@ -35,6 +35,15 @@ concurrency:
 env:
   CONTAINER_REGISTRY: ghcr.io
   IMAGE_NAME: ray-manaloto/dotfiles-devcontainer
+  # Silence git's "Using 'master' as the name for the initial branch" hint
+  # that actions/checkout's `git init` emits (#21). git reads GIT_CONFIG_COUNT/
+  # KEY/VALUE directly, so this needs no `git config` step and applies to every
+  # git invocation in the workflow. It MUST be repeated per workflow file: env
+  # does NOT cross workflow_call, and it must be set before checkout runs.
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
+
 jobs:
   analyze:
     # Only for successful CI runs whose event built a fresh image. push-to-main

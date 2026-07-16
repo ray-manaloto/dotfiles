@@ -1125,3 +1125,22 @@ tokens = [
     "def pinned_apt_packages",
     "--simulate",
 ]
+
+[[suite]]
+name = "ci.git-default-branch-env"
+description = "#21: every workflow must set init.defaultBranch via GIT_CONFIG_* env, so actions/checkout's `git init` stops emitting the `Using 'master' as the name for the initial branch` hint. It MUST be per-file: env does NOT cross workflow_call (build-publish.yml is a reusable workflow, and its own env block already says so), which is why PR #21's ci.yml-only fix would have covered 3 of the 6 hint-emitting jobs. per_path_tokens, NOT tokens: plain tokens use combined-text semantics (findings [19]/[22]), so one workflow carrying the env would satisfy the contract for all seven. paths_required fails loudly on a rename. KNOWN GAP: this is an explicit list, so a NEWLY ADDED workflow is not covered — today every workflow runs actions/checkout, so the list and 'workflows that need it' are the same set; if that stops being true, this needs a dynamic check (see bash_budget's tracked-set comparison)."
+category = "ci"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    ".github/workflows/autofix.yml",
+    ".github/workflows/build-publish.yml",
+    ".github/workflows/ci.yml",
+    ".github/workflows/gcc-sha-repair.yml",
+    ".github/workflows/ghcr-cleanup.yml",
+    ".github/workflows/image-analysis.yml",
+    ".github/workflows/refresh.yml",
+]
+per_path_tokens = { ".github/workflows/autofix.yml" = ["GIT_CONFIG_KEY_0: init.defaultBranch"], ".github/workflows/build-publish.yml" = ["GIT_CONFIG_KEY_0: init.defaultBranch"], ".github/workflows/ci.yml" = ["GIT_CONFIG_KEY_0: init.defaultBranch"], ".github/workflows/gcc-sha-repair.yml" = ["GIT_CONFIG_KEY_0: init.defaultBranch"], ".github/workflows/ghcr-cleanup.yml" = ["GIT_CONFIG_KEY_0: init.defaultBranch"], ".github/workflows/image-analysis.yml" = ["GIT_CONFIG_KEY_0: init.defaultBranch"], ".github/workflows/refresh.yml" = ["GIT_CONFIG_KEY_0: init.defaultBranch"] }
+tokens = ["GIT_CONFIG_KEY_0: init.defaultBranch"]
