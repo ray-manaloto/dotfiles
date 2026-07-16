@@ -28,6 +28,47 @@ logger = logging.getLogger(__name__)
 
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
+# Leading MAJOR.MINOR.PATCH of a Debian apt version, past an optional epoch
+# (``1:22.1.8~++2026...`` -> ``22.1.8``). Anchored: the release is always the
+# first token after the epoch, never inside the ``~++<snapshot>`` suffix.
+_LLVM_VERSION_RE = re.compile(r"(?:\d+:)?(\d+\.\d+\.\d+)")
+
+
+def _parse_apt_llvm_version(config_text: str) -> str:
+    """Extract the LLVM release (``MAJOR.MINOR.PATCH``) from ``apt:clang-22``.
+
+    The whole apt.llvm.org suite shares one version string, so the pinned
+    ``clang-22`` package in ``[bootstrap.packages]`` is the natural anchor for
+    "what LLVM release is this image". Fails loud if the pin is absent or
+    unparsable — a silently-empty version would leave the runtime version
+    guard dormant, reintroducing the false-positive it exists to catch.
+    """
+    data = tomllib.loads(config_text)
+    packages = data.get("bootstrap", {}).get("packages", {})
+    pin = packages.get("apt:clang-22")
+    if not isinstance(pin, str):
+        msg = "mise-system.toml [bootstrap.packages] lacks a string 'apt:clang-22' pin"
+        raise TypeError(msg)
+    match = _LLVM_VERSION_RE.match(pin)
+    if match is None:
+        msg = f"could not parse an LLVM release from apt:clang-22 pin {pin!r}"
+        raise ValueError(msg)
+    return match.group(1)
+
+
+def resolve_expected_llvm_version() -> str:
+    """The apt LLVM release the image is expected to ship (HEAD).
+
+    Reads the committed ``mise-system.toml`` pin — feeds ``build_smoke_script``,
+    since CI builds the image FROM branch HEAD. The merge-base sibling
+    (:func:`resolve_expected_llvm_version_at_base`) feeds the devcontainer smoke,
+    whose local base predates a branch's pin bump.
+    """
+    root = _project_root()
+    return _parse_apt_llvm_version(
+        (root / ".devcontainer" / "mise-system.toml").read_text()
+    )
+
 
 def resolve_expected_p2996_ref() -> str:
     """Resolve the clang-p2996 ref the image is expected to be built from.
@@ -363,7 +404,53 @@ _TIER1_CORE_BODY = (
 # $EXPECTED_P2996_REF / $P2996_REF_STRICT (the pinned clang-p2996 ref). Only the
 # injected DATA differs by caller (HEAD ref for CI; merge-base for the
 # devcontainer, whose local base was built from the merge-base pin).
-_TIER3_COMPILER_BODY = """\
+# #294: the default-clang identity + version gate. Extracted as its own
+# constant (like _TIER1_PYTHON_DEFAULT) so its FAIL direction is control-armable
+# in a unit test with a stubbed clang++ — a version guard verified only on a
+# right answer is a probe that can only pass. The image ships several clang++
+# (apt LLVM-22 at /usr/lib/llvm-22/bin, the clang-p2996 reflection build at
+# /opt/clang-p2996/bin, plus conda's); the sanitizer + openmp + lld probes below
+# all invoke BARE clang++, so pin which one that resolves to (the apt LLVM
+# build) and — when the release is injected — that its --version reports it.
+_TIER3_DEFAULT_CLANG = """\
+echo "=== default clang toolchain identity (#294) ==="
+clang_bin=$(command -v clang++ 2>/dev/null || true)
+[ -n "$clang_bin" ] || { echo "FAIL: clang++ not on PATH"; exit 1; }
+clang_real=$(readlink -f "$clang_bin")
+case "$clang_real" in
+  /usr/lib/llvm-*/*) echo "OK: default clang++ -> $clang_real (apt LLVM)" ;;
+  *)
+    echo "FAIL: default clang++ resolves to $clang_real, not apt /usr/lib/llvm-*"
+    exit 1
+    ;;
+esac
+if [ -n "$EXPECTED_LLVM_VERSION" ]; then
+  clang_ver=$(clang++ --version 2>&1 || true)
+  case "$clang_ver" in
+    *"clang version $EXPECTED_LLVM_VERSION"*)
+      echo "OK: default clang++ is LLVM $EXPECTED_LLVM_VERSION" ;;
+    *)
+      echo "FAIL: default clang++ is not LLVM $EXPECTED_LLVM_VERSION"
+      echo "$clang_ver"
+      exit 1
+      ;;
+  esac
+else
+  echo "SKIP: no expected LLVM version injected (clang version guard dormant)"
+fi
+"""
+
+
+_TIER3_COMPILER_BODY = (
+    _TIER3_DEFAULT_CLANG
+    + """\
+echo "=== clang driver presence (#294: moved from CI-only tail) ==="
+# Presence of the apt LLVM driver entrypoints, in the SHARED substrate so the
+# devcontainer smoke (verify-container-latest) runs it too — not just the CI
+# no-mount smoke where it used to live.
+for tool in clang clang++ clangd clang-tidy clang-format lld lldb; do
+  command -v "$tool" >/dev/null 2>&1 || { echo "FAIL: missing $tool"; exit 1; }
+done
 echo "=== sanitizer compile checks ==="
 cat >/tmp/sanitizer.cpp <<'CPP'
 #include <iostream>
@@ -379,6 +466,32 @@ else
   /tmp/san-tsan >/dev/null
 fi
 clang++ -fsanitize=fuzzer-no-link -c /tmp/sanitizer.cpp -o /tmp/san-fuzz.o
+echo "=== openmp compile+link+run (#294: libomp-22-dev) ==="
+# Proves the OpenMP runtime is actually linkable+runnable, not merely that the
+# libomp package installed. Runs even under emulation (like asan/ubsan): OpenMP
+# threading works under Rosetta/QEMU; only TSan's shadow memory does not.
+cat >/tmp/omp.cpp <<'CPP'
+#include <omp.h>
+#include <cstdio>
+int main() {
+  int n = 0;
+#pragma omp parallel reduction(+ : n)
+  n += 1;
+  std::printf("openmp threads=%d\\n", n);
+  return n >= 1 ? 0 : 1;
+}
+CPP
+clang++ -fopenmp /tmp/omp.cpp -o /tmp/omp \
+  || { echo "FAIL: clang++ -fopenmp link failed (libomp-22-dev missing?)"; exit 1; }
+/tmp/omp >/dev/null || { echo "FAIL: openmp binary did not run"; exit 1; }
+echo "OK: openmp -fopenmp compiles, links, runs"
+echo "=== lld linker (#294: -fuse-ld=lld) ==="
+# lld presence is asserted above; this proves it actually LINKS. Reuses the
+# sanitizer source (still on disk — never removed).
+clang++ -fuse-ld=lld /tmp/sanitizer.cpp -o /tmp/lld-linked \
+  || { echo "FAIL: clang++ -fuse-ld=lld link failed"; exit 1; }
+/tmp/lld-linked >/dev/null || { echo "FAIL: lld-linked binary did not run"; exit 1; }
+echo "OK: lld links (-fuse-ld=lld) + binary runs"
 echo "=== reflection compiler checks ==="
 test -x /opt/gcc-latest/bin/g++ \
   || { echo "FAIL: gcc-latest binary missing"; exit 1; }
@@ -445,8 +558,69 @@ P2996_LIBCXX_DIR=$(dirname "$P2996_LIBCXX_SO")
   /tmp/refl-func.cpp -o /tmp/refl-clang \
   || { echo "FAIL: clang-p2996 reflection link failed"; exit 1; }
 /tmp/refl-clang || { echo "FAIL: clang-p2996 reflection binary did not run"; exit 1; }
-rm -f /tmp/refl-func.cpp /tmp/refl-gcc /tmp/refl-clang
+echo "=== llvm utility version smoke (#294) ==="
+# The core LLVM binaries all embed the release in --version. opt/llc/llvm-cov/
+# llvm-profdata/llvm-symbolizer ship in the `llvm-22` package (verified from the
+# .deb: /usr/lib/llvm-22/bin/*); llvm-bolt in `bolt-22`; mlir-opt in
+# `mlir-22-tools`. Match the bare release substring (format-robust across all
+# banners). `case` glob, never `cmd | grep -q` — the latter SIGPIPEs (141) under
+# pipefail (hk no_grep_q_under_pipefail).
+if [ -n "$EXPECTED_LLVM_VERSION" ]; then
+  for util in opt llc llvm-cov llvm-profdata llvm-symbolizer llvm-bolt mlir-opt; do
+    ubin=$(command -v "$util" 2>/dev/null || true)
+    [ -n "$ubin" ] || { echo "FAIL: $util not on PATH"; exit 1; }
+    uver=$("$ubin" --version 2>&1 || true)
+    case "$uver" in
+      *"$EXPECTED_LLVM_VERSION"*) echo "OK: $util reports $EXPECTED_LLVM_VERSION" ;;
+      *)
+        echo "FAIL: $util --version missing $EXPECTED_LLVM_VERSION"
+        echo "$uver"
+        exit 1
+        ;;
+    esac
+  done
+else
+  echo "SKIP: no expected LLVM version injected (utility version guard dormant)"
+fi
+echo "=== flang fortran compile+run (#294: flang-22) ==="
+# Binary name varies across LLVM releases (flang | flang-new); accept either.
+flang_bin=$(command -v flang 2>/dev/null || command -v flang-new 2>/dev/null || true)
+[ -n "$flang_bin" ] || { echo "FAIL: flang/flang-new not on PATH"; exit 1; }
+if [ -n "$EXPECTED_LLVM_VERSION" ]; then
+  fver=$("$flang_bin" --version 2>&1 || true)
+  case "$fver" in
+    *"$EXPECTED_LLVM_VERSION"*) echo "OK: flang reports $EXPECTED_LLVM_VERSION" ;;
+    *)
+      echo "FAIL: flang --version missing $EXPECTED_LLVM_VERSION"
+      echo "$fver"
+      exit 1
+      ;;
+  esac
+fi
+cat >/tmp/hello.f90 <<'F90'
+program hello
+  implicit none
+  print *, "flang ok"
+end program hello
+F90
+"$flang_bin" /tmp/hello.f90 -o /tmp/flang-hello \
+  || { echo "FAIL: flang compile/link failed"; exit 1; }
+/tmp/flang-hello >/dev/null || { echo "FAIL: flang binary did not run"; exit 1; }
+echo "OK: flang compiles + runs a Fortran program"
+echo "=== libclc bitcode presence (#294: libclc-22) ==="
+# libclc-22 ships its OpenCL *.bc bitcode under /usr/lib/clc (verified from the
+# .deb); the extra roots tolerate a future relocation. The trailing `|| true` is
+# load-bearing: `find` exits NON-ZERO if any start dir is absent, and under
+# `set -e` a bare `var=$(find ...)` would then abort the script BEFORE this
+# check runs (a probe that dies at its own setup — probes-need-a-control-arm).
+clc_bc=$(find /usr/lib/clc /usr/lib/clang /usr/lib/llvm-22 \
+  -name '*.bc' 2>/dev/null | head -n1 || true)
+[ -n "$clc_bc" ] || { echo "FAIL: no libclc bitcode (*.bc) found in image"; exit 1; }
+echo "OK: libclc bitcode present ($clc_bc)"
+rm -f /tmp/refl-func.cpp /tmp/refl-gcc /tmp/refl-clang \
+  /tmp/omp.cpp /tmp/omp /tmp/lld-linked /tmp/hello.f90 /tmp/flang-hello
 """
+)
 
 
 def _tier1_var_lines(
@@ -466,7 +640,12 @@ def _tier1_var_lines(
     )
 
 
-def _tier3_var_lines(expected_p2996_ref: str, *, emulated: bool) -> str:
+def _tier3_var_lines(
+    expected_p2996_ref: str,
+    *,
+    emulated: bool,
+    expected_llvm_version: str | None = None,
+) -> str:
     """Injected-data header lines the tier-3 substrate reads.
 
     ``P2996_REF_STRICT`` is set only for a 40-hex SHA (a non-SHA dispatch
@@ -474,6 +653,9 @@ def _tier3_var_lines(expected_p2996_ref: str, *, emulated: bool) -> str:
     ``TSAN_RUN_SKIP`` gates the ThreadSanitizer RUN — the compile always fires
     (it proves the toolchain), but the RUN is skipped under emulation, where
     TSan's shadow-memory ASLR layout is incompatible with Rosetta/QEMU.
+    ``EXPECTED_LLVM_VERSION`` is the apt LLVM release (#294) the default-clang
+    and utility ``--version`` guards assert; empty leaves those guards dormant
+    (unit-test friendly), like the tier-1 guards.
     """
     strict = "1" if _SHA_RE.match(expected_p2996_ref) else ""
     tsan_run_skip = "1" if emulated else ""
@@ -481,6 +663,7 @@ def _tier3_var_lines(expected_p2996_ref: str, *, emulated: bool) -> str:
         f"EXPECTED_P2996_REF={shlex.quote(expected_p2996_ref)}\n"
         f"P2996_REF_STRICT={shlex.quote(strict)}\n"
         f"TSAN_RUN_SKIP={shlex.quote(tsan_run_skip)}\n"
+        f"EXPECTED_LLVM_VERSION={shlex.quote(expected_llvm_version or '')}\n"
     )
 
 
@@ -488,6 +671,7 @@ def build_tier3_script(
     *,
     expected_p2996_ref: str,
     emulated: bool,
+    expected_llvm_version: str | None = None,
 ) -> str:
     """Standalone tier-3 compiler smoke script: sanitizers + reflection.
 
@@ -497,10 +681,16 @@ def build_tier3_script(
     source of truth for the tier-3 compiler substrate. The mount/SSH-dependent
     tier-3 checks (home-volume, TMPDIR, R2 SSH) stay bash-only and are NOT part
     of this substrate. ``emulated`` skips the TSan RUN (the compile still runs).
+    ``expected_llvm_version`` (#294) drives the apt-suite default-clang + utility
+    ``--version`` guards; unset leaves them dormant.
     """
     return (
         "set -euo pipefail\n"
-        + _tier3_var_lines(expected_p2996_ref, emulated=emulated)
+        + _tier3_var_lines(
+            expected_p2996_ref,
+            emulated=emulated,
+            expected_llvm_version=expected_llvm_version,
+        )
         + _TIER3_COMPILER_BODY
     )
 
@@ -533,6 +723,7 @@ def build_smoke_script(
     expected_identity: Mapping[str, str] | None = None,
     expected_tools: Mapping[str, str] | None = None,
     emulated: bool = False,
+    expected_llvm_version: str | None = None,
 ) -> str:
     """Build the inline CI (no-mount) smoke test script.
 
@@ -566,11 +757,20 @@ def build_smoke_script(
     ThreadSanitizer binary is RUN after it is compiled. The compile always
     runs (it proves the toolchain); the RUN is skipped under emulation, where
     TSan's shadow-memory layout is incompatible with Rosetta/QEMU.
+
+    ``expected_llvm_version`` (#294 — apt LLVM-22 runtime coverage) is the
+    release the default-clang identity gate and the ``opt``/``llvm-bolt``/
+    ``mlir-opt``/``flang`` ``--version`` guards assert. Unset leaves those
+    guards dormant (unit-test friendly).
     """
     header = (
         "set -euo pipefail\n"
         + _tier1_var_lines(expected_identity, expected_tools)
-        + _tier3_var_lines(expected_p2996_ref, emulated=emulated)
+        + _tier3_var_lines(
+            expected_p2996_ref,
+            emulated=emulated,
+            expected_llvm_version=expected_llvm_version,
+        )
     )
     return (
         header
@@ -614,10 +814,6 @@ grep -q 'cargo.binstall = true' "$MISE_CFG" || {
 grep -q 'python.uv_venv_auto = "source"' "$MISE_CFG" || {
   echo "FAIL: python uv venv policy missing"; exit 1;
 }
-echo "=== clang tooling checks ==="
-for tool in clang clang++ clangd clang-tidy clang-format lld lldb; do
-  command -v "$tool" >/dev/null 2>&1 || { echo "FAIL: missing $tool"; exit 1; }
-done
 """
         + _TIER3_COMPILER_BODY
         + """\
@@ -665,6 +861,7 @@ def build_smoke_docker_cmd(
         expected_identity=expected_identity,
         expected_tools=resolve_declared_tools(),
         emulated=emulated,
+        expected_llvm_version=resolve_expected_llvm_version(),
     )
     return [
         "docker",
@@ -1539,6 +1736,20 @@ def resolve_expected_p2996_ref_at_base() -> str:
     return _extract_bake_variable(blob.decode(), "CLANG_P2996_REF")
 
 
+def resolve_expected_llvm_version_at_base() -> str:
+    """The apt LLVM release the CURRENT local base was built from (merge-base).
+
+    Merge-base-aware sibling of :func:`resolve_expected_llvm_version`. The local
+    devcontainer's base predates a branch's ``mise-system.toml`` pin bump (the
+    branch's base is built by its own PR CI, never locally), so the devcontainer
+    tier-3 version guard (injected by :func:`build_tier3_script` / ``smoke-script
+    --tier 3``) must expect the MERGE-BASE pin — reading HEAD would false-FAIL on
+    a branch that bumps the LLVM version. On main, merge-base == HEAD.
+    """
+    blob = base_currency_blob(_project_root(), ".devcontainer/mise-system.toml")
+    return _parse_apt_llvm_version(blob.decode())
+
+
 _SMOKE_SCRIPT_TIER1 = 1
 _SMOKE_SCRIPT_TIER3 = 3
 
@@ -1585,6 +1796,7 @@ def smoke_script_main(tier: int | None) -> int:
         script = build_tier3_script(
             expected_p2996_ref=resolve_expected_p2996_ref_at_base(),
             emulated=True,
+            expected_llvm_version=resolve_expected_llvm_version_at_base(),
         )
     else:
         sys.stderr.write(
