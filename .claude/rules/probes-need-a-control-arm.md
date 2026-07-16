@@ -51,15 +51,6 @@ returning "PRESENT" proves the first one is blind. Three instances, all
 | CI job SKIPPED ⇒ "unaffected by this change" | reading the job's `if:` condition | a SKIPPED job **never asked the question**. "Never ran" is not "ran and found nothing". |
 | every package reports MISSING | running the same command without the outer quoting | the **inner shell ate the variable** — a nested-quote format string expanded to empty, so every lookup compared against `""`. |
 
-A fourth, from the session that wrote this section: a contract was probed by
-renaming `def changes_apt_pin_inputs` → `def changes_apt_pin_inputs_REMOVED`
-to prove the contract would catch its removal. The contract passed, which
-looked like a contract defect — but the renamed symbol **still contains the
-original as a substring**, and the check is a substring match. The probe was
-the bug. Renaming to a genuinely different symbol made it fail correctly.
-(See `feedback_forbid_tokens_substring_fragile` — substring matching turns a
-"removal" probe into a no-op.)
-
 ## Rules
 
 1. **Arm the negative.** Before reporting "X does not exist", run the same probe
@@ -69,6 +60,22 @@ the bug. Renaming to a genuinely different symbol made it fail correctly.
    and confirm it **fails**. A gate verified only on clean code is decoration.
    (Doing this caught a broken test harness in this very session — `pkl eval -x`
    returned empty, so `bash -c ""` "passed".)
+
+   **Reintroduce the bug REALISTICALLY — a mutation that isn't the real failure
+   proves nothing.** 2026-07-16: to prove a contract would catch a symbol's
+   removal, the probe renamed `def changes_apt_pin_inputs` →
+   `def changes_apt_pin_inputs_REMOVED`. The contract passed, which read as a
+   contract defect — but the renamed symbol **still contains the original as a
+   substring** and the check is a substring match, so the probe was a no-op.
+   The probe was the bug. Two lessons, and the second is the expensive one:
+   - a mutation must actually *destroy* what the check looks for;
+   - and it must be a break that could **really happen**. The realistic break
+     was not renaming the function at all — it was **deleting the wiring line
+     that calls it**. Probing THAT (`if changes_apt_pin_inputs(paths):` removed
+     from `gate_matrix`) exposed a genuine hole the first probe never reached:
+     the contract stayed green because its token survived in a *comment* and a
+     *docstring*. Ask "what would the regression actually look like?" before
+     mutating — an unrealistic mutation can only ever accuse the wrong party.
 3. **Bound-limited searches are suspect by construction.** `-maxdepth`,
    `head -N`, `--limit`, a time window, a `2>/dev/null`: each can turn "absent"
    into "unreachable". Either remove the bound or prove the target is inside it.
