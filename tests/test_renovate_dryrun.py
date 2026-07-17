@@ -15,7 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 from dotfiles_setup import renovate_dryrun
-from dotfiles_setup.renovate_dryrun import DryRunResult, PendingUpdate
+from dotfiles_setup.renovate_dryrun import DryRunResult, GroupStats, PendingUpdate
 
 # Not a credential: an opaque sentinel whose only job is to survive being
 # carried from one env name to another. Named for that role, not for what it
@@ -171,6 +171,19 @@ def test_render_report_surfaces_what_each_manager_extracted() -> None:
     assert "regex" in out
     assert "Looked up by datasource" in out
     assert "deb" in out
+
+
+def test_group_stats_render_agrees_with_english() -> None:
+    """One dep is "1 dep,", not "1 dep ,".
+
+    Found by adversarial review of #299: padding the NOUN to keep the columns
+    aligned put the pad space inside the phrase, before the comma. Both arms —
+    the plural must keep working, or this is satisfied by dropping the comma.
+    """
+    singular = GroupStats(name="mise", deps=1, updates=1, skipped=0).render()
+    assert "1 dep," in singular
+    assert "1 dep ," not in singular
+    assert "2 deps," in GroupStats(name="regex", deps=2, updates=0, skipped=0).render()
 
 
 def test_exit_code_bare_run_is_always_zero() -> None:

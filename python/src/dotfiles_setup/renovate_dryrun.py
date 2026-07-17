@@ -138,11 +138,10 @@ class GroupStats:
     def render(self) -> str:
         """Render as one aligned report row."""
         skipped = f", {self.skipped} skipped" if self.skipped else ""
-        dep = "dep " if self.deps == 1 else "deps"
-        return (
-            f"  {self.name:<14} {self.deps:>3} {dep}, "
-            f"{self.updates:>2} pending{skipped}"
-        )
+        # Pad the whole "N dep(s)," phrase, not the noun — padding the noun
+        # put the space INSIDE, rendering "1 dep ,".
+        count = f"{self.deps} {'dep' if self.deps == 1 else 'deps'},"
+        return f"  {self.name:<14} {count:>9} {self.updates:>2} pending{skipped}"
 
 
 @dataclass
