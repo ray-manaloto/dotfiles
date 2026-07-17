@@ -11,7 +11,12 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
-from dotfiles_setup.ghcr import GhcrCheckError, _parse_scopes, validate_ghcr_prereqs
+from dotfiles_setup.ghcr import (
+    GhcrCheckError,
+    _expand_scopes,
+    _parse_scopes,
+    validate_ghcr_prereqs,
+)
 
 
 def test_parse_scopes_extracts_all_scopes() -> None:
@@ -20,6 +25,23 @@ def test_parse_scopes_extracts_all_scopes() -> None:
     scopes = _parse_scopes(text)
 
     assert scopes == {"repo", "read:org", "workflow", "write:packages"}
+
+
+def test_expand_scopes_admin_org_implies_read_org() -> None:
+    """admin:org grants read:org transitively (via write:org)."""
+    expanded = _expand_scopes({"admin:org"})
+
+    assert {"write:org", "read:org"} <= expanded
+
+
+def test_expand_scopes_write_packages_implies_read_packages() -> None:
+    """write:packages grants read:packages."""
+    assert "read:packages" in _expand_scopes({"write:packages"})
+
+
+def test_expand_scopes_leaves_unrelated_scopes_untouched() -> None:
+    """A scope with no implications (control arm) is not expanded."""
+    assert _expand_scopes({"workflow"}) == {"workflow"}
 
 
 def test_validate_ghcr_prereqs_requires_packages_write_scope(

@@ -61,6 +61,40 @@ def _parse_scopes(auth_output: str) -> set[str]:
     return {scope.strip() for scope in raw_scopes.split(",") if scope.strip()}
 
 
+# GitHub OAuth scope hierarchy: a broader scope implicitly grants the narrower
+# ones, so `gh auth status` prints only the broad scope actually granted (e.g. a
+# token with `admin:org` never lists `read:org`). A flat set-difference against
+# the required scopes therefore false-positives on an OVER-privileged token —
+# which blocked every push from an admin-scoped token (#268 follow-up). We
+# expand the granted set to its implied closure before checking.
+# Ref: https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps
+_SCOPE_IMPLICATIONS: dict[str, tuple[str, ...]] = {
+    "admin:org": ("write:org", "read:org"),
+    "write:org": ("read:org",),
+    "write:packages": ("read:packages",),
+    "repo": ("repo:status", "repo_deployment", "public_repo"),
+}
+
+
+def _expand_scopes(granted: set[str]) -> set[str]:
+    """Return granted scopes plus every narrower scope they imply.
+
+    Iterates to a fixed point so a chain (admin:org -> write:org -> read:org)
+    resolves fully regardless of how the implication map is flattened.
+    """
+    expanded = set(granted)
+    changed = True
+    while changed:
+        changed = False
+        for parent, children in _SCOPE_IMPLICATIONS.items():
+            if parent in expanded:
+                new_children = set(children) - expanded
+                if new_children:
+                    expanded |= new_children
+                    changed = True
+    return expanded
+
+
 def _require_workflow_permissions(ci_workflow_path: Path) -> None:
     """Ensure the CI workflow explicitly requests package write access."""
     if not ci_workflow_path.exists():
@@ -91,7 +125,9 @@ def validate_ghcr_prereqs(
         message = (auth_result.stderr or auth_result.stdout).strip()
         raise GhcrCheckError(message or "gh auth status failed")
 
-    scopes = _parse_scopes(f"{auth_result.stdout}\n{auth_result.stderr}")
+    scopes = _expand_scopes(
+        _parse_scopes(f"{auth_result.stdout}\n{auth_result.stderr}"),
+    )
     required_scopes = {"repo", "read:org", "workflow", "write:packages"}
     missing_scopes = sorted(required_scopes - scopes)
     if missing_scopes:
