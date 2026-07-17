@@ -241,9 +241,29 @@ def test_token_resolution_falls_back_to_conventional_env() -> None:
     )
 
 
-def test_token_resolution_ignores_the_mcp_pat() -> None:
-    # GITHUB_MCP_PAT is scoped to the MCP server; it is not ours to spend here.
-    assert renovate_dryrun.resolve_github_token({"GITHUB_MCP_PAT": "ghp_mcp"}) is None
+def test_token_resolution_reads_only_the_names_it_declares() -> None:
+    """An unrecognised env name is not a token source — no special cases.
+
+    This replaced `test_token_resolution_ignores_the_mcp_pat`, which asserted
+    the same mechanism but justified it as a security boundary: "GITHUB_MCP_PAT
+    is scoped to the MCP server; it is not ours to spend here." That was false.
+    Measured 2026-07-16: GITHUB_MCP_PAT held the SAME classic PAT as
+    GITHUB_TOKEN (identical sha256), which `_TOKEN_ENV_VARS` already accepts —
+    so the "boundary" excluded a credential renovate was handed anyway, and
+    `resolve_github_token` never reached it (GITHUB_TOKEN resolves first, and
+    fnox exports both at login). The old test only passed because its fixture
+    set GITHUB_MCP_PAT *alone*, an env that never occurs.
+
+    The honest rule is the general one below: only declared names are read.
+    Do NOT re-add GITHUB_MCP_PAT to `_TOKEN_ENV_VARS` — if that Doppler secret
+    is ever narrowed to a read-only PAT, accepting it would silently undercount
+    (8 pending vs 33 — see the module comment).
+    """
+    assert renovate_dryrun.resolve_github_token({"GITHUB_MCP_PAT": "ghp_x"}) is None
+    assert renovate_dryrun.resolve_github_token({"SOME_OTHER_PAT": "ghp_y"}) is None
+    # Control arm: a DECLARED name in the same shape IS read, so the assertions
+    # above are about the name and not about the resolver returning None always.
+    assert renovate_dryrun.resolve_github_token({"GITHUB_TOKEN": "ghp_z"}) == "ghp_z"
 
 
 def test_token_resolution_treats_empty_as_absent() -> None:
