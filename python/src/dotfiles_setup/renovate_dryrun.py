@@ -91,7 +91,6 @@ _RENOVATE_TIMEOUT_S = 900.0
 # run is labelled INCOMPLETE rather than reported as a total.
 #
 # Order: the explicit renovate names first, then the conventional env tokens.
-# GITHUB_MCP_PAT is deliberately absent — it is scoped to the MCP server.
 _TOKEN_ENV_VARS = (
     "GITHUB_COM_TOKEN",
     "RENOVATE_GITHUB_COM_TOKEN",
