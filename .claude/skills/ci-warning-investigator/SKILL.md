@@ -61,7 +61,7 @@ gh search issues "warning message" --repo <tool-org>/<tool-repo> --limit 5
 
 1. Apply the fix in the appropriate config file
 2. Verify locally: rebuild and confirm warning is gone
-3. Run `hk run pre-commit --all --stash none` to validate
+3. Run `mise run lint` to validate (`mise run fmt` to auto-fix)
 4. Commit with message explaining the warning and fix
 
 ### 4b. If Unfixable: Document

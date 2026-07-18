@@ -527,11 +527,11 @@ def setup_parser() -> argparse.ArgumentParser:
     # install command
     subparsers.add_parser("install", help="Execute toolchain installation")
 
-    # lint command — hk pre-commit under a hard timeout so hangs self-abort
+    # lint command — hk check (read-only, ≡ CI) under a hard timeout
     lint_parser = subparsers.add_parser(
         "lint",
-        help="Run hk pre-commit under a hard timeout (default 600s) so a "
-        "hung lint self-aborts instead of wedging",
+        help="Run hk check --all (read-only, ≡ CI) under a hard timeout "
+        "(default 600s) so a hung lint self-aborts instead of wedging",
     )
     lint_parser.add_argument(
         "--timeout",

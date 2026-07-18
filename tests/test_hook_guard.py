@@ -23,6 +23,7 @@ from dotfiles_setup import hook_guard
         ("chezmoi apply", "devcontainer"),
         ("chezmoi update -v", "devcontainer"),
         ("hk run pre-commit --all --stash none", "mise run lint"),
+        ("hk run check --all", "mise run lint"),
         ("devcontainer up --workspace-folder .", "mise run up"),
         ("devcontainer build --workspace-folder .", "mise run dev-rebuild"),
         (

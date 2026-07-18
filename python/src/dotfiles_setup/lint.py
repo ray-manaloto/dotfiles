@@ -1,4 +1,10 @@
-"""Run hk pre-commit under a hard timeout so a hung lint self-aborts.
+"""Run the hk lint gate under a hard timeout so a hung lint self-aborts.
+
+The gate is `hk run check --all` — the **read-only** hook, identical to what
+CI runs (`ci.yml`), so `mise run lint` and CI check the same thing. It does
+NOT auto-fix: a violation fails loud with `rc=1` instead of being silently
+rewritten (the fix path is `mise run fmt` → `hk fix`). `check`, `pre-commit`,
+and `fix` share the same `...allSteps` in `hk.pkl`, so coverage is identical.
 
 hk has **no native timeout** — verified against hk 1.46 (installed) and
 the live v1.48 docs: `hk run` exposes only `--jobs`/`--fail-fast`,
@@ -35,7 +41,9 @@ TIMEOUT_ENV_VAR = "DOTFILES_LINT_TIMEOUT"
 TIMEOUT_EXIT_CODE = 124  # GNU coreutils `timeout` convention
 KILL_GRACE_SECONDS = 10
 LOG_TAIL_LINES = 40
-HK_COMMAND = ("hk", "run", "pre-commit", "--all", "--stash", "none")
+# Read-only gate (no --stash: check never fixes, so it has nothing to stash).
+# Matches CI's `hk run check --all` so local == CI. Fix path is `mise run fmt`.
+HK_COMMAND = ("hk", "run", "check", "--all")
 DEFAULT_LOG_FILE = Path.home() / ".local" / "state" / "dotfiles" / "hk-lint.log"
 
 

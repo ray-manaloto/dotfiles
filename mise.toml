@@ -130,7 +130,7 @@ timeout = "700s"
 # tail of the debug log instead of wedging for hours (see the 7h hang in
 # .claude/rules/long-running-command-hangs.md). Default 600s; override
 # with `--timeout <secs>` or `DOTFILES_LINT_TIMEOUT=<secs> mise run lint`.
-description = "Run hk pre-commit --all --stash none under a hard timeout (default 600s) so a hung lint self-aborts"
+description = "Run hk check --all (read-only, ≡ CI) under a hard timeout (default 600s) so a hung lint self-aborts; fix path is `mise run fmt`"
 run = "uv run --project python dotfiles-setup lint"
 
 [tasks.check]

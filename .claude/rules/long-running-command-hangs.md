@@ -16,12 +16,14 @@ unbounded wait + pipe-masked exit code.
 
 ## Rules
 
-1. **Use `mise run lint`, not raw `hk run pre-commit`.** `mise run lint`
-   wraps hk in an out-of-process hard timeout (hk has none of its own —
-   verified against hk 1.46 and the live v1.48 docs: no `--timeout` flag,
-   no `timeout` step key, no `HK_*` timeout env var). On expiry it kills
-   hk's whole process group and prints the tail of the debug log. Default
-   600s; override with `--timeout <secs>` or
+1. **Use `mise run lint`, not raw `hk run check`/`hk run pre-commit`.**
+   `mise run lint` runs the **read-only** `hk run check --all` (identical
+   to CI — local == CI, no silent source rewriting; the fix path is
+   `mise run fmt` → `hk fix`) wrapped in an out-of-process hard timeout
+   (hk has none of its own — verified against hk 1.46 and the live v1.48
+   docs: no `--timeout` flag, no `timeout` step key, no `HK_*` timeout env
+   var). On expiry it kills hk's whole process group and prints the tail
+   of the debug log. Default 600s; override with `--timeout <secs>` or
    `DOTFILES_LINT_TIMEOUT=<secs> mise run lint`. Source:
    `python/src/dotfiles_setup/lint.py`.
 
