@@ -96,7 +96,7 @@ mise run lint-docs                                        # Validate agent docum
 
 Structured verification via `python/verification/suites.toml` runs as CI
 `contract-preflight`. The `dotfiles-setup verify run` gate is **distinct
-from** `hk run pre-commit --all` — some contracts (e.g.,
+from** `hk run check --all` — some contracts (e.g.,
 `build.no-stderr-suppression`) only run through the verify CLI. Run both
 locally before pushing Dockerfile changes.
 
@@ -156,10 +156,10 @@ Before advancing to the next task or claiming done, EVERY applicable check must 
 - **uv for Python**: `uv run --project python` for all Python commands.
   **Never `uv run --directory python`** — the latter changes cwd and
   breaks relative test paths.
-- **hk for hooks**: `mise run lint` for the lint gate (guard redirects
-  raw hk); `hk fix` for auto-formatting. Always `git add` BEFORE hk —
-  `fix=true` + `--stash none` can strand unstaged edits when new files
-  are present.
+- **hk for hooks**: `mise run lint` for the read-only lint gate (≡ CI;
+  guard redirects raw hk); `mise run fmt` to auto-fix. Always `git add`
+  BEFORE `mise run fmt` — `fix=true` can strand unstaged edits when new
+  files are present.
 
 ### Devcontainer success criteria (durable, do NOT silently drop)
 Gated by `mise run verify-local`. Sessions touching `.devcontainer/` or `mise.toml [tasks.up]` MUST preserve all three. Mechanism: `.devcontainer/AGENTS.md`. Research: `.omc/research/research-20260407-ssh-devcontainer/report.md`.

@@ -8,7 +8,7 @@ A highly resilient, declarative dotfiles setup using **Chezmoi**, **Mise**, and 
 
 ```bash
 mise install                                       # Install all tools
-hk run pre-commit --all                            # Run lint checks (requires HK_PKL_BACKEND=pkl)
+mise run lint                                      # Run lint checks (read-only ≡ CI; `mise run fmt` auto-fixes)
 uv run --project python pytest tests/ -x -q      # Run all 190 tests
 ```
 

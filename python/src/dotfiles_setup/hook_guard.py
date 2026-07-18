@@ -119,11 +119,11 @@ _RULES: tuple[Rule, ...] = (
         _V1,
     ),
     Rule(
-        "hk run pre-commit",
-        re.compile(_CMD + r"hk\s+run\s+pre-commit\b"),
-        "Use `mise run lint` — it wraps hk in a hard timeout (hk has none) "
-        "with log-tail diagnostics. See "
-        ".claude/rules/long-running-command-hangs.md.",
+        "hk run pre-commit/check",
+        re.compile(_CMD + r"hk\s+run\s+(?:pre-commit|check)\b"),
+        "Use `mise run lint` (read-only gate, ≡ CI) — it wraps hk in a hard "
+        "timeout (hk has none) with log-tail diagnostics. To apply fixes use "
+        "`mise run fmt`. See .claude/rules/long-running-command-hangs.md.",
         _V1,
     ),
     Rule(
