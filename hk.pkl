@@ -55,9 +55,27 @@ local allSteps = new Mapping<String, Config.Step> {
   ["ruff"] = (Builtins.ruff) {
     prefix = "uv run --project python"
   }
+  // #268: ordering is `exclusive`, NOT `depends`. `depends` deadlocks hk
+  // whenever `ruff` FAILS: hk never releases the dependent, so the run wedges
+  // at `ruff_format: waiting for ruff` until the lint wrapper's 600s timeout
+  // kills it with rc=124. The diagnostics DO stream (#268 says otherwise —
+  // measured, they scroll past), but the run never reaches its `✗ ruff` summary
+  // or exits, so the gate reports a TIMEOUT, indistinguishable from tool flake.
+  // hk's docs define depends as steps that must "finish"; a failed step HAS
+  // finished, so this is an upstream bug (repro'd on 1.50.0 AND 1.51.0 — a
+  // bump is not the fix).
+  // hk's own python-project.pkl example pairs `depends` with hk's DEFAULT
+  // `fail_fast = true`, which aborts the run before the dependent can hang;
+  // our deliberate `fail_fast = false` (zero-skip: report ALL issues) removes
+  // that accidental cover. Dropping the ordering outright is NOT an option —
+  // probe-verified that `ruff check --fix` then landing after `ruff format`
+  // leaves the file unformatted, failing autofix.yml's post-fix verify.
+  // `exclusive` orders it as a barrier instead: probe-verified rc=1 + printed
+  // errors on a failing tree (check AND fix mode), and one-run convergence on
+  // an autofixable tree. Not yet reported upstream (see #268).
   ["ruff_format"] = (Builtins.ruff_format) {
     prefix = "uv run --project python"
-    depends = List("ruff")
+    exclusive = true
   }
   ["python_check_ast"] = (Builtins.python_check_ast) {
     glob = List("python/src/**/*.py", "tests/**/*.py", "plugins/**/*.py")
@@ -332,6 +350,35 @@ local allSteps = new Mapping<String, Config.Step> {
     glob = List("hk.pkl", "hk-common.pkl", "hk-image.pkl", ".config/mise/conf.d/shared.toml")
     check =
       "set -- $(grep -ohE 'hk@[0-9]+\\.[0-9]+\\.[0-9]+' hk.pkl hk-common.pkl hk-image.pkl | sort -u); pin=$(grep -E '^hk = ' .config/mise/conf.d/shared.toml | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+'); [ $# -eq 1 ] && [ \"$1\" = \"hk@${pin}\" ] || { echo \"hk pin drift: pkl URLs [$*] vs shared.toml pin ${pin} — bump all four together\" >&2; exit 1; }"
+  }
+
+  // --- `depends` is a DEADLOCK LANDMINE under `fail_fast = false` (#268) ---
+  //     hk never releases a dependent whose dependency FAILED: the run wedges
+  //     at `<step>: waiting for <dep>` forever, and `mise run lint` reports a
+  //     600s TIMEOUT (rc=124) rather than the error you needed. hk's own docs
+  //     define depends as steps that must "finish" — a failed step HAS
+  //     finished — so this is an upstream bug, reproduced on BOTH 1.50.0 and
+  //     1.51.0 (a version bump does NOT fix it). hk's default `fail_fast =
+  //     true` aborts the run before a dependent can hang, which is why hk's
+  //     own python-project.pkl example ships `depends` safely; hk.pkl:22 and
+  //     hk-image.pkl:21 both set `fail_fast = false` deliberately (zero-skip:
+  //     report ALL issues), removing that accidental cover. So for THIS repo
+  //     the two keys are mutually exclusive, and `depends` loses.
+  //     Use `exclusive = true` for ordering instead — probe-verified to keep
+  //     ruff-before-ruff_format while exiting rc=1 on a failing tree.
+  //     Anchored to `^<space>depends =` so the prose above (which names the
+  //     key repeatedly) cannot trip it — a forbid-token must be anchored, or
+  //     the doc explaining the ban becomes the thing that fails the gate.
+  //     Retire this step ONLY when upstream releases a dependent on a failed
+  //     dependency and a control-armed probe confirms it. ---
+  //     `test -f` first: bare `! grep …` would PASS on a deleted file (grep
+  //     exits 2 on error and `!` flips that to 0) — the silent-false-negative
+  //     class #299 closed. Same `if grep -nE … >&2` idiom as
+  //     no_grep_q_under_pipefail, and pipefail-safe (no pipe, no `grep -q`).
+  ["no_hk_depends"] {
+    glob = List("hk.pkl", "hk-common.pkl", "hk-image.pkl")
+    check =
+      "for f in hk.pkl hk-common.pkl hk-image.pkl; do test -f \"$f\" || { echo \"no_hk_depends: $f is missing — the check cannot answer, so it fails loud (#299)\" >&2; exit 1; }; done; if grep -nE '^[[:space:]]*depends[[:space:]]*=' hk.pkl hk-common.pkl hk-image.pkl >&2; then echo \"hk config uses 'depends' — it DEADLOCKS under fail_fast=false when the dependency FAILS: the run wedges at 'waiting for <dep>' until mise run lint's 600s timeout (#268). Use 'exclusive = true' to order a step instead.\" >&2; exit 1; fi"
   }
 
   // --- No MCP registration (enforces feedback_no_mcp_registration.md) ---

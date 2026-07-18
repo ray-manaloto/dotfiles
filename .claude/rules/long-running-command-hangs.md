@@ -72,17 +72,32 @@ unbounded wait + pipe-masked exit code.
    after editing hk.pkl" guidance is retired — the cache is
    content-hashed since hk 1.47; see `ci-local-parity.md` rule 5.)
 
-6. **A hanging lint is usually YOUR ruff error, not flaky tooling
-   (issue #268).** A real ruff violation does not fail the gate — it
-   **wedges hk for the full 600s**, and the error is never printed.
-   The `ruff` step has `fix=true`, so a failed check phase makes hk
-   seek a WRITE lock to run the fix (`failed to get write locks …
-   src/file_rw_locks.rs:85:30`) while `ruff_format` sits at `waiting
-   for ruff`. Proven causal 2026-07-14: same tree with 3 ruff errors →
-   wedged at 39/47 steps, 0% CPU, no children; ruff clean → `rc=0`, 47
-   steps. **So: when lint hangs, run `uv run --project python ruff
-   check` DIRECTLY first** — it prints in seconds what hk hides for ten
-   minutes. Fix, then re-run `mise run lint`.
+6. **The ruff-error wedge is FIXED (#268) — and its published diagnosis
+   was wrong.** A ruff violation now fails `mise run lint` with `rc=1`
+   and a `✗ ruff` summary. Root cause was **`depends` + `fail_fast =
+   false`**, not ruff: hk never releases a dependent whose dependency
+   FAILED, so `ruff_format` (which we had given `depends = List("ruff")`)
+   sat at `waiting for ruff` forever. Fixed by ordering with `exclusive
+   = true` instead; `hk.pkl`'s `no_hk_depends` step now blocks `depends`
+   from coming back. Reproduced on hk 1.50.0 AND 1.51.0 — **not** fixed
+   by a bump.
+
+   **Two red herrings this rule itself repeated for two days, both worth
+   remembering:**
+   - *"The `ruff` step has `fix=true`."* It does not. `fix` on a builtin
+     Step is a **command string**; the boolean lives on the **hook**
+     (`hk.pkl` `["pre-commit"] { fix = true }`). Same key name, two
+     meanings, opposite levels.
+   - *"`failed to get write locks …` is the wedge."* It is a **DEBUG-level,
+     non-fatal** retry line from whole-repo hygiene steps contending over
+     the first file alphabetically; it appears on runs that finish fine.
+     The wedge is one line lower: `waiting for <dep>`. **A scary log line
+     adjacent to a hang is not the hang** — confirm a suspect by removing
+     it and re-probing, which is what finally isolated `depends`.
+
+   The durable habit survives: **when lint hangs, run `uv run --project
+   python ruff check` DIRECTLY** — seconds, and it never lies about your
+   own code.
 
 7. **Find the wedged step by name.** Grep the lint output for a
    `❯ <step>` with no matching `✔ <step>` — that names it directly,
