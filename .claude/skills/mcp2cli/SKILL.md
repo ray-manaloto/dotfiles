@@ -8,7 +8,8 @@ description: Invoke MCP servers as one-shot CLI commands (no native registration
 `mcp2cli` runs an MCP server as a subprocess, calls a single tool, prints
 the result, and exits. Unlike `claude mcp add`, nothing is registered with
 Claude Code, so **no tool schemas land in Claude's system prompt**. This
-is the only sanctioned way to reach MCP servers from this repo.
+is the **preferred** way to reach an MCP server for a one-off call; native
+registration is allowed when a plugin requires it (relaxed 2026-07-19).
 
 > See `feedback_no_mcp_registration.md` and
 > `.claude/rules/research-doc-sources.md` for the full rationale.
@@ -146,9 +147,9 @@ schemas never touch Claude's context, the process exits when done, and
 Claude sees only the tool's textual output (which you can further
 trim with `--jq`/`--head`).
 
-Rule of thumb: **if you are about to `claude mcp add`, you almost
-certainly want `mcp2cli` instead.** The exceptions require explicit user
-approval and a written justification in `feedback_no_mcp_registration.md`.
+Rule of thumb: **for a one-off call, prefer `mcp2cli` over `claude mcp
+add`** (no per-conversation schema cost). Register natively when a plugin
+or tool requires it for its features — see `feedback_no_mcp_registration.md`.
 
 ## Repo wiring
 
@@ -157,9 +158,9 @@ approval and a written justification in `feedback_no_mcp_registration.md`.
 - Global shorthands live in `~/.config/mcp2cli/` (user scope).
 - The preference chain (`curl llms.txt → curl .md → mcp2cli → context7-cli
   → raw HTML curl`) is codified in `.claude/rules/research-doc-sources.md`.
-- The ban on `claude mcp add` is enforced locally by the `no_mcp_registration`
-  step in `hk.pkl` and documented in the memory rule
-  `feedback_no_mcp_registration.md`.
+- `mcp2cli` is the preferred path; native `claude mcp add` is allowed when a
+  plugin requires it (the `no_mcp_registration` hk hard-ban was removed
+  2026-07-19). Rationale in `feedback_no_mcp_registration.md`.
 
 ## See also
 

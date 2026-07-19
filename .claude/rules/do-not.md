@@ -28,17 +28,17 @@ self-contained block). Each item's context is preserved verbatim.
 6. **Do NOT trust `gh run watch --exit-status`.** Verify with
    `gh pr checks <n> --json` or `gh run list --json`.
 
-7. **Do NOT register MCP servers via the native Claude Code CLI
-   subcommand** (the one that adds servers via `mcp`). Registering a
-   server injects every tool's JSON schema into every conversation's
-   system prompt forever. Use `mcp2cli` (process-spawn, no schema
-   injection) instead; machine-enforced by the `no_mcp_registration`
-   hk step. See `feedback_no_mcp_registration.md`.
-
-8. **Do NOT switch `docker context` away from `desktop-linux`.** The
+7. **Do NOT switch `docker context` away from `desktop-linux`.** The
    SSH path is Docker-Desktop-only; silent drift caused session
    2026-04-09c's debug goose-chase. See
    `feedback_docker_desktop_runtime.md`.
+
+> **Relaxed 2026-07-19 — MCP registration is no longer a "do not".** Native
+> MCP registration (`claude mcp add`, a plugin's bundled servers, a project
+> `.mcp.json`) is **allowed when a plugin or tool requires it**. `mcp2cli`
+> (process-spawn, no schema-injection tax) stays the *preferred* path for
+> one-off doc/tool calls — a preference, not a gate. See
+> `research-doc-sources.md` and `feedback_no_mcp_registration.md`.
 
 ## See also
 
