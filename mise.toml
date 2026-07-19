@@ -31,11 +31,20 @@ zizmor = "1.26.1"
 "github:ast-grep/ast-grep" = "0.44.1"
 lefthook = "2.1.10"
 "npm:ctx7" = "0.5.4"
-rtk = "0.43.0"                                                      # re-probed at #160 T12.5: mise #10703 (2026.7.0) fixed the github-backend url_api lock hold that pinned this at 0.37.2
+rtk = "0.43.0"                         # re-probed at #160 T12.5: mise #10703 (2026.7.0) fixed the github-backend url_api lock hold that pinned this at 0.37.2
 "npm:skills" = "1.5.16"
 "npm:agent-browser" = "0.31.1"
 "npm:portless" = "0.15.1"
 "pipx:deepagents-cli" = "0.2.2"
+# graphify: host-only knowledge-graph substrate (#310 / T1 #312). The [all]
+# extra resolves on host Python 3.14 — graphify's own PEP 508 markers auto-skip
+# the leiden/graspologic extra (needs <3.13), so clustering falls back to
+# Louvain (accepted). Host-only: root mise.toml is in the container's
+# MISE_IGNORED_CONFIG_PATHS, so this never touches the image. Do NOT run
+# `graphify claude install` (writes into root CLAUDE.md, breaks the @AGENTS.md
+# stub), `graphify hook install` (post-commit auto-rebuild, violates the
+# gated/manual-build rule), or `graphify --watch` (auto-rebuild). See T6 #316.
+"pipx:graphifyy[all]" = "0.9.20"
 aws-cli = { version = "2.35.21", symlink_bins = "true" }
 azure-cli = { version = "2.88.0", uvx_args = "--prerelease=allow" }
 docker-cli = "29.6.1"

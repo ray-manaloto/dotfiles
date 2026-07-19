@@ -24,6 +24,19 @@ from dotfiles_setup.lock_refresh import (
 
 _REPO_ROOT = Path(__file__).parent.parent
 _FEATURE_KEY_RE = re.compile(r'"(ghcr\.io/[^"]+/features/[^"]+)"\s*:')
+_EXTRAS_RE = re.compile(r"\[.*\]$")
+
+
+def _strip_extras(tool: str) -> str:
+    """Drop a pipx `[extras]` suffix so config keys compare to lock keys.
+
+    mise records a pipx tool's lock key WITHOUT its extras suffix (extras
+    affect the install, not the locked identity), so `pipx:graphifyy[all]`
+    in mise.toml is locked as `pipx:graphifyy`. Normalize the config side to
+    match. A genuinely unlocked tool still fails: its normalized name is
+    absent from the lock either way.
+    """
+    return _EXTRAS_RE.sub("", tool)
 
 
 def _lock_tools(lock_path: Path) -> set[str]:
@@ -93,7 +106,10 @@ def test_root_lock_covers_host_config() -> None:
     split the shared entries out of the root lock), so the shared fragment
     locks separately below.
     """
-    config = set(tomllib.loads((_REPO_ROOT / "mise.toml").read_text()).get("tools", {}))
+    config = {
+        _strip_extras(t)
+        for t in tomllib.loads((_REPO_ROOT / "mise.toml").read_text()).get("tools", {})
+    }
     locked = _lock_tools(_REPO_ROOT / "mise.lock")
     assert config - locked == set(), (
         f"tools missing from mise.lock (run `mise run lock`): {sorted(config - locked)}"
