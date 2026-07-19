@@ -381,26 +381,15 @@ local allSteps = new Mapping<String, Config.Step> {
       "for f in hk.pkl hk-common.pkl hk-image.pkl; do test -f \"$f\" || { echo \"no_hk_depends: $f is missing — the check cannot answer, so it fails loud (#299)\" >&2; exit 1; }; done; if grep -nE '^[[:space:]]*depends[[:space:]]*=' hk.pkl hk-common.pkl hk-image.pkl >&2; then echo \"hk config uses 'depends' — it DEADLOCKS under fail_fast=false when the dependency FAILS: the run wedges at 'waiting for <dep>' until mise run lint's 600s timeout (#268). Use 'exclusive = true' to order a step instead.\" >&2; exit 1; fi"
   }
 
-  // --- No MCP registration (enforces feedback_no_mcp_registration.md) ---
-  //     `claude mcp add` and tracked `.mcp.json` files inflate every
-  //     Claude conversation's system prompt with tool schemas. The
-  //     sanctioned alternatives are `mcp2cli` (process spawn) and
-  //     curl-based llms.txt/.md fetches. See
-  //     .claude/rules/research-doc-sources.md and
-  //     .claude/skills/mcp2cli/SKILL.md.
-  //
-  //     Whitelisted paths are the files that legitimately document
-  //     the ban (skills, rules, this hk step itself).
-  //
-  //     Approved exception (2026-04-07): root `.mcp.json` is allowed
-  //     to provision OMC default MCP servers (exa, context7, memory,
-  //     filesystem) at project scope. Nested `**/.mcp.json` files
-  //     remain banned. Tracked in feedback_no_mcp_registration.md;
-  //     planned migration: convert to mcp2cli wrappers later.
-  ["no_mcp_registration"] {
-    check =
-      "! git grep -nE 'claude[[:space:]]+mcp[[:space:]]+add' -- ':!.claude/skills/mcp2cli/SKILL.md' ':!.claude/skills/mintlify/SKILL.md' ':!.claude/rules/research-doc-sources.md' ':!.claude/rules/research-repo-enumeration.md' ':!.claude/CLAUDE.md' ':!AGENTS.md' ':!mise.toml' ':!docs/research/mintlify-catalog.md' ':!hk.pkl' && ! git ls-files '**/.mcp.json' | grep -q ."
-  }
+  // --- (removed 2026-07-19) `no_mcp_registration` hard ban ---
+  //     The `claude mcp add` / nested-`.mcp.json` ban was RELAXED per the
+  //     maintainer: native MCP registration is now ALLOWED when a plugin or
+  //     tool requires it for its features. `mcp2cli` (process-spawn, no
+  //     schema-injection tax) remains the PREFERRED path for one-off doc/
+  //     tool calls — a documented preference, not a gate. The schema-cost
+  //     rationale still holds, so weigh it before registering a server you
+  //     will rarely call. See .claude/rules/research-doc-sources.md and
+  //     feedback_no_mcp_registration.md.
 
   // --- Instruction-markdown size budgets, BY LOAD CLASS ---
   //     Replaces `claude_md_size_limit`, which applied ONE uniform

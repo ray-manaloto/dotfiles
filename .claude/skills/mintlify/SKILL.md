@@ -249,14 +249,15 @@ a mintlify platform update), fetch these directly:
 > Note: the user-provided URL `https://www.mintlify.com/docs/ai/mcp.md`
 > is a 404. The working page is `model-context-protocol.md` above.
 
-## Do NOT `claude mcp add` mintlify servers
+## Prefer `mcp2cli` over `claude mcp add` for mintlify servers
 
-Registering any MCP server via `claude mcp add` injects every tool's
-schema into Claude's system prompt for every conversation forever.
-Forbidden in this repo by `feedback_no_mcp_registration.md` and
-enforced by the `no_mcp_registration` step in `hk.pkl`. Even if a
-live mintlify MCP were reachable (which the catalog entries are not),
-reach it via `mcp2cli` or not at all.
+Registering an MCP server via `claude mcp add` injects every tool's
+schema into Claude's system prompt for every conversation forever, so
+`mcp2cli` is the preferred path here (relaxed 2026-07-19 — native
+registration is allowed when a plugin requires it, but a mintlify docs
+lookup does not). Even if a live mintlify MCP were reachable (which the
+catalog entries are not), reach it via `mcp2cli`. See
+`feedback_no_mcp_registration.md`.
 
 ## See also
 

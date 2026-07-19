@@ -91,35 +91,31 @@ if we need to research Anthropic docs). See
 is specifically on using it against per-repo mintlify subpath URLs,
 not on `mcp2cli` in general.
 
-## The forbidden path: `claude mcp add`
+## `mcp2cli`-first, but MCP registration is allowed when required
 
-**`claude mcp add` is forbidden in this repo.** Registering an MCP
-server via the native Claude Code mechanism injects every tool's JSON
-schema into Claude's system prompt for every conversation, forever.
-Even conversations that never use the tool pay the context tax.
+**Prefer `mcp2cli` (process-spawn) or the curl-based options above** for
+one-off doc/tool lookups. Registering an MCP server natively injects every
+tool's JSON schema into Claude's system prompt for every conversation,
+forever — even conversations that never call the tool pay that context tax.
+So for a server you would query rarely, `mcp2cli` is the cheaper path.
 
-Use `mcp2cli` (process-spawn, no schema injection) or the curl-based
-options in this chain instead. See the memory rule
-`feedback_no_mcp_registration.md` and
-`.claude/skills/mcp2cli/SKILL.md` for the rationale.
+**But native MCP registration is NOT forbidden (relaxed 2026-07-19).** When
+a third-party plugin or tool **requires** MCP for its features, registering
+it (`claude mcp add`, a plugin's bundled servers, or a project `.mcp.json`)
+is allowed — done knowingly, accepting the per-conversation schema cost. The
+former hard ban (the `no_mcp_registration` hk step) has been removed; this is
+now a documented **preference**, not a gate. See the memory rule
+`feedback_no_mcp_registration.md` and `.claude/skills/mcp2cli/SKILL.md` for
+the cost rationale (the reason to still reach for `mcp2cli` first).
 
-This rule is **machine-enforced** by the `no_mcp_registration` step in
-`hk.pkl`. Any commit introducing a `claude mcp add` invocation or a
-tracked `.mcp.json` file will be rejected by the local pre-commit hook
-(and therefore by CI, which runs the same hk config).
+## When to register natively instead
 
-## Exceptions
-
-None by default. If a genuine exception arises (e.g. an MCP server whose
-authentication model cannot be reached any other way), it requires:
-
-1. An explicit written justification in
-   `feedback_no_mcp_registration.md` (memory rule).
-2. User approval.
-3. A targeted exclusion in the `no_mcp_registration` hk step with a
-   comment pointing at the justification.
-
-Without all three, the default answer is "use `mcp2cli` instead."
+`mcp2cli` is the default because it pays no per-conversation schema cost. But
+when a third-party plugin or tool **requires** native MCP for its features,
+registering it is fine (relaxed 2026-07-19 — no longer gated). Judgement call:
+if you'd query the server rarely, `mcp2cli` still wins on cost; if the plugin's
+value depends on Claude selecting its tools natively and you'll use it often,
+register it and accept the schema cost. When unsure, reach for `mcp2cli` first.
 
 ## See also
 

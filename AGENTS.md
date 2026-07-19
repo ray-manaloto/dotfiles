@@ -39,7 +39,7 @@ the official `@devcontainers/cli` (pinned in `mise.toml`).
 | `mise.toml` + `.config/mise/conf.d/shared.toml` | Host tool versions + tasks; the 20 tools shared with the image (hk, pkl, linters, python, uv, chezmoi) live in the exact-pinned shared fragment both host and image merge (#160 T5) |
 | `mise.lock` | Locked tool versions for reproducible installs |
 | `mise.local.toml` | Gitignored per-clone overrides (e.g., `BASE_IMAGE`). See `mise.local.toml.example` |
-| `hk.pkl` | Project git hook config; imports `hk-common.pkl`; enforces `no_lint_skip`, `no_mcp_registration`, `require_pipefail`, `bash_logic_budget`, `claude_md_import_stub`, `claude_agents_md_pairs` |
+| `hk.pkl` | Project git hook config; imports `hk-common.pkl`; enforces `no_lint_skip`, `require_pipefail`, `bash_logic_budget`, `claude_md_import_stub`, `claude_agents_md_pairs` |
 | `hk-common.pkl` | Shared step definitions (hygiene, safety, security, typos) reused by `hk.pkl` and `hk-image.pkl` |
 | `hk-image.pkl` | Image-only hook config for devcontainer validation |
 | `docker-bake.hcl` | BuildKit bake config (`dev`, `dev-load` build targets + `base`/`p2996-cache` CI stages); `IMAGE_REF` consolidates registry+image |
@@ -112,9 +112,9 @@ locally before pushing Dockerfile changes.
   `.claude/rules/zero-skip-policy.md`.
 - **Zero inline suppressions**: The `no_lint_skip` hk step rejects
   `noqa`/`type: ignore`/`pylint: disable`/`nosec` in Python source.
-- **No MCP registration**: Never `claude mcp add` (enforced by the
-  `no_mcp_registration` hk step). Use `mcp2cli`/`llms.txt`/`.md` instead.
-  See `.claude/rules/research-doc-sources.md`.
+- **MCP: `mcp2cli`-first (not banned)**: prefer `mcp2cli`/`llms.txt`/`.md`
+  (no schema-injection tax); native MCP registration IS allowed when a
+  plugin/tool requires it. See `.claude/rules/research-doc-sources.md`.
 - **CI-local parity**: Every CI lint step has a local hk equivalent; every
   hk tool is in `mise.toml`. See `.claude/rules/ci-local-parity.md`.
 - **Research before fixing**: Check docs/changelogs/issues before fixing — don't guess at CI failures.
