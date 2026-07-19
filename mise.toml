@@ -467,6 +467,15 @@ description = "Check MEMORY.md before trimming it: budget, dead links, and facts
 # Pass flags through: mise run memory-index -- --refs feedback_colima_recommendation
 run = 'uv run --project python dotfiles-setup memory-index'
 
+[tasks.graphify-query]
+description = "Deterministically query the project knowledge graph (host-only, #310)"
+# Thin caller (zero-bash-logic); logic in
+# python/src/dotfiles_setup/graphify.py. Deterministic BFS/DFS over
+# graphify-out/graph.json — no LLM, source-cited, ~free (build is separate and
+# gated). Errors clearly if the graph has not been built yet.
+# Pass flags through: mise run graphify-query -- "how does lint work?" --budget 3000
+run = 'uv run --project python dotfiles-setup graphify query'
+
 [tasks.verify-apt-pins]
 description = "Prove every pinned [bootstrap.packages] version still resolves (~60s, no image build)"
 # Thin caller per zero-bash-logic; the probe container, the Dockerfile-ARG
