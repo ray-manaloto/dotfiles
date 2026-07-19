@@ -473,6 +473,10 @@ url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/47161
 version = "0.2.2"
 backend = "pipx:deepagents-cli"
 
+[[tools."pipx:graphifyy"]]
+version = "0.9.20"
+backend = "pipx:graphifyy"
+
 [[tools."pipx:mcp2cli"]]
 version = "3.3.1"
 backend = "pipx:mcp2cli"
