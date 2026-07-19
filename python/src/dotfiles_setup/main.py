@@ -26,6 +26,7 @@ from dotfiles_setup.docker import DevContainerManager
 from dotfiles_setup.gcc_sha import gcc_sha_main
 from dotfiles_setup.ghcr import validate_ghcr_prereqs
 from dotfiles_setup.ghcr_cleanup import plan_cleanup
+from dotfiles_setup.graphify import graphify_main
 from dotfiles_setup.hook_guard import pretooluse_main
 from dotfiles_setup.hook_selfcheck import hook_selfcheck_main
 from dotfiles_setup.image import ImageCommand
@@ -223,6 +224,35 @@ def _add_verify_subcommands(
         action="append",
         dest="categories",
         help="Filter by category (repeatable)",
+    )
+
+
+def _add_graphify_subcommands(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    """Register graphify subcommands (the deterministic query read path, #313).
+
+    Args:
+        subparsers: The parent subparsers action to attach graphify commands to.
+    """
+    graphify_parser = subparsers.add_parser(
+        "graphify", help="Query the project knowledge graph (host-only, #310)"
+    )
+    graphify_sub = graphify_parser.add_subparsers(
+        dest="graphify_command", help="graphify commands"
+    )
+    query_parser = graphify_sub.add_parser(
+        "query", help="Deterministic source-cited query over graphify-out/graph.json"
+    )
+    query_parser.add_argument("question", help="The question to ask the graph")
+    query_parser.add_argument(
+        "--budget", type=int, default=2000, help="Token budget (default: 2000)"
+    )
+    query_parser.add_argument(
+        "--context", type=int, default=None, help="Context depth around each hit"
+    )
+    query_parser.add_argument(
+        "--dfs", action="store_true", help="Traverse depth-first instead of BFS"
     )
 
 
@@ -543,6 +573,7 @@ def setup_parser() -> argparse.ArgumentParser:
 
     _add_docker_subcommands(subparsers)
     _add_verify_subcommands(subparsers)
+    _add_graphify_subcommands(subparsers)
     _add_image_subcommands(subparsers)
     _add_pr_subcommands(subparsers)
 
@@ -744,6 +775,25 @@ def handle_hook(args: argparse.Namespace, project_root: Path) -> None:
         sys.exit(pretooluse_main())
     elif command == "selfcheck":
         sys.exit(hook_selfcheck_main(project_root))
+
+
+def handle_graphify(args: argparse.Namespace, project_root: Path) -> None:
+    """Dispatch a graphify subcommand (the deterministic query read path, #313).
+
+    Args:
+        args: The parsed arguments.
+        project_root: The project root path (the graph lives under it).
+    """
+    if getattr(args, "graphify_command", None) == "query":
+        sys.exit(
+            graphify_main(
+                project_root,
+                question=args.question,
+                budget=args.budget,
+                context=args.context,
+                dfs=args.dfs,
+            )
+        )
 
 
 def handle_audit(config: DotfilesConfig | None = None) -> None:
@@ -1054,6 +1104,7 @@ def _build_command_handlers(
             autofix_apply_main(args.run_id, project_root)
         ),
         "hook": lambda: handle_hook(args, project_root),
+        "graphify": lambda: handle_graphify(args, project_root),
         "version": _version,
         "install": lambda: handle_install(project_root),
         "verify": lambda: handle_verify(args),
