@@ -59,3 +59,7 @@ mise.*.local.toml
 # Maestro Session State (Keep plans, ignore active state)
 docs/maestro/state/active-session.md
 docs/maestro/state/archive/
+
+# graphify knowledge-graph outputs (#310): ignore large/regenerable, keep only the shareable wiki
+graphify-out/
+!graphify-out/wiki/
