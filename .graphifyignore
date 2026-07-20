@@ -1,0 +1,7 @@
+docs/research/mintlify-cache/
+plugins/
+.git/
+graphify-out/
+node_modules/
+.venv/
+**/.venv/

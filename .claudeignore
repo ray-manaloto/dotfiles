@@ -1,0 +1,10 @@
+# Claude Code context exclusions.
+#
+# graphify writes its outputs INTO the workspace on every `extract`/`update`.
+# graph.json + graph.html are multi-MB and change on every run, which
+# invalidates Claude Code's prompt cache and forces a full re-upload at
+# cache-write rates on the following turn. Excluding them is graphify's own
+# documented recommendation (README troubleshooting).
+graphify-out/
+**/graphify-out/
+graph.json
