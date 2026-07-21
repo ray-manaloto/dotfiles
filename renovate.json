@@ -7,7 +7,12 @@
   "schedule": [
     "at any time"
   ],
-  "minimumReleaseAge": null,
+  "minimumReleaseAge": "1 hour",
+  "minimumReleaseAgeBehaviour": "timestamp-optional",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "minimumReleaseAge": "1 hour"
+  },
   "prConcurrentLimit": 20,
   "prHourlyLimit": 0,
   "packageRules": [
