@@ -56,7 +56,7 @@ the official `@devcontainers/cli` (pinned in `mise.toml`).
 | `.claude/` | Claude-specific agents, skills, rules. Has its own `CLAUDE.md` (exempt from the stub check) |
 | `home/` | Chezmoi-managed dotfile templates (its AGENTS.md was removed in #80) |
 | `python/` | Python package `dotfiles_setup` — see `python/AGENTS.md` |
-| `tests/` | Pytest + Bats test suite (697 pytest tests) — see `tests/AGENTS.md` |
+| `tests/` | Pytest + Bats test suite (775 pytest tests) — see `tests/AGENTS.md` |
 | `scripts/` | Utility scripts (`benchmark-docker.sh`, `devcontainer-smoke.sh`) |
 | `docs/` | Documentation, research findings, design specs |
 
@@ -86,7 +86,7 @@ content-hashed since hk 1.47 — no manual cache clearing after edits.
 ## Testing
 
 ```bash
-uv run --project python pytest tests/ -x -q               # All 697 tests
+uv run --project python pytest tests/ -x -q               # All 775 tests
 uv run --project python pytest tests/test_audit.py -x -q  # Single file
 mise run lint                                             # Lint checks only (hk under a hard timeout)
 mise run verify                                 # Verification contracts (suites.toml)
