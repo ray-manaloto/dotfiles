@@ -46,6 +46,7 @@ derive instead.
 | `test_autofix.py` | pytest | autofix.ci artifact applier (`dotfiles_setup.autofix`) — additions, traversal/shape/deletion refusal |
 | `test_bash_budget.py` | pytest | Zero-bash-logic enforcer (`dotfiles_setup.bash_budget`) — allowlist/growth/shrink/stale logic, real-repo `allowlist == tracked` pin, end-to-end CLI |
 | `test_gcc_sha.py` | pytest | gcc-latest sha auto-repair (`dotfiles_setup.gcc_sha`, #249) — pin parse/rewrite (strict subn), injected-fetcher sha compute, drift/no-drift repair, check-mode dry-run, CLI rc |
+| `test_graph_bakeoff.py` | pytest | graphify extraction bake-off harness (`dotfiles_setup.graph_bakeoff`) — fixed-flag invariant, corpus digests, fresh-dir cache isolation, cross-doc by `source_file`, whole-token entity matching + ambiguity guard (#327), null-arm noise floor + significance, matrix runner with the graphify subprocess faked at `_run` |
 | `test_shell_integration.py` | pytest | Tool reachability in login shells (mise, chezmoi, uv, pixi, claude, gemini, codex) |
 | `infra/foundation.bats` | Bats | Bash-level foundation checks (shell script integration) |
 | `infra/runtimes.bats` | Bats | Runtime installation checks (bash) |

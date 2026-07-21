@@ -53,6 +53,19 @@ self-contained block). Each item's context is preserved verbatim.
    the machine-level expression of the PROJECT-ONLY invariant; also never run
    `graphify hook install` or `graphify --watch`.
 
+   **This generalises to EVERY platform, in two flavours (verified 2026-07-21,
+   0.9.22).** Run any `graphify <platform> install` in a **throwaway directory
+   outside this repo**, never here:
+   - ⚠️ **`graphify codex install` breaks our lint gate with OR without
+     `--project`.** Both paths call `_agents_install` (`install.py:1463`), which
+     appends a 13-line / 1,129-byte `## graphify` block to the root
+     `AGENTS.md` — a file at exactly **200/200 lines**. Result: 213 lines and a
+     failed `md_size_budget` step. `--project` only relocates the *skill* file.
+   - ⚠️ **`graphify antigravity install` without `--project` writes OUTSIDE the
+     project** — `~/.gemini/config/skills/graphify/SKILL.md`. With `--project`
+     it stays in-repo (control arm: `_project_install`'s body contains **zero**
+     `Path.home()` calls).
+
 9. **Do NOT commit onto the default branch — branch FIRST.** Create the branch
    *before* the commit, then `mise run ship`. On 2026-07-20 a session committed
    34 files straight onto `main` and had to move them afterwards

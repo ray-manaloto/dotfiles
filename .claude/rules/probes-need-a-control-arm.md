@@ -111,7 +111,29 @@ before you believe it.
 5. **Say which arm you ran.** When reporting a probe result, state the control:
    "bogus-dist → 404 while resolute-22 → 200, so the probe discriminates." A
    result without its control is an opinion.
-6. **Cross-check a surprise before you report it.** A second route to the same
+6. **An INHERITED number is not a measurement — re-derive it or label it.** A
+   figure that arrives from a handoff, a prior session's table, or your own
+   earlier message has *no control arm attached*. Repeating it converts someone
+   else's unverified note into your finding, and the provenance is gone the
+   moment you restate it.
+
+   2026-07-21: a session inherited a 5-row model bake-off table from a handoff
+   and reported it as "same corpus, same flags, so it is comparable". Only the
+   corpus was ever actually constant. graphify records **no backend or model in
+   any artifact** (control arm: the corpus filename *is* recorded), three of the
+   directories were identical in shape, the semantic cache key is model-blind,
+   and every arm was n=1. The whole comparison had to be discarded — after a
+   claim from it ("gemma4 wins on cross-doc edges, 2 to 1") had already been
+   reported to the user as a finding. It was a gap of **one**, from single runs,
+   with no noise floor.
+
+   So: before repeating an inherited number, either (a) re-derive it and say you
+   did, or (b) mark it explicitly as unverified and inherited. And when the
+   number ranks things, ask what the **noise floor** is — a difference smaller
+   than the same-input variance is not a difference. If nothing establishes that
+   floor, the ranking is not reportable at any confidence.
+
+7. **Cross-check a surprise before you report it.** A second route to the same
    fact costs seconds and settles which side is broken. Disagreement is a
    finding, not noise — and the finding is usually your probe.
 
