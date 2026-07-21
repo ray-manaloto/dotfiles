@@ -257,6 +257,44 @@ local allSteps = new Mapping<String, Config.Step> {
   ["ghalint_action"] = Builtins.ghalint_action
   ["zizmor"] = Builtins.zizmor
   //
+  // --- ADR-0001 enforcement: a CI job that commits or pushes must skip hk's
+  //     git hooks. `mise.toml`'s postinstall runs `hk install --mise` on the
+  //     runner, so a job that then commits/pushes fires hooks that CANNOT
+  //     pass there (ghcr_publish_prereqs needs a logged-in gh; test needs
+  //     `claude` on the login-shell PATH). The ADR's Consequences section
+  //     named this as its OPEN gap — "the two known cases are fixed by name
+  //     … correctness now depends on remembering" — so this step must catch a
+  //     NEW job, and deliberately pins nothing by name: it derives the
+  //     git-writing jobs from the tree (a shell git verb at a command
+  //     position, a classified third-party action, or a first-party
+  //     entrypoint that reaches a git write inside python/).
+  //     The check LOGIC lives in python (dotfiles_setup.workflow_hooks) — a
+  //     big inline-bash grep here would itself violate zero-bash-logic, and
+  //     it cannot be a grep anyway: `refresh.yml`/lock-refresh contains no
+  //     `git` command at all and reaches `peter-evans/create-pull-request`
+  //     two composite-action hops down.
+  //     The glob covers python/src too because a NEW `git push` inside
+  //     python/ opens route 3 and must fail until its entrypoint is
+  //     registered — and mise.toml + the shared conf.d fragment because the
+  //     route-3 mise half is DERIVED from the task table: adding
+  //     `[tasks.release]` wrapping `dotfiles-setup pr ship` changes the
+  //     answer, so a task edit must re-run the check.
+  //     NOTE: the check is WHOLE-TREE — `find_violations(root)` scans every
+  //     workflow regardless of which file triggered the step — so this glob
+  //     only decides WHEN it runs, never what it sees. ---
+  ["workflow_hk_skip_hooks"] {
+    glob = List(
+      ".github/workflows/*.yml",
+      ".github/workflows/*.yaml",
+      ".github/actions/**/action.yml",
+      ".github/actions/**/action.yaml",
+      "python/src/dotfiles_setup/*.py",
+      "mise.toml",
+      ".config/mise/conf.d/*.toml"
+    )
+    check = "uv run --project python dotfiles-setup workflow-hooks"
+  }
+  //
   // #154: no pinact / pinact_update steps — they call the GitHub API to
   // resolve SHAs and hit the unauthenticated 60/hr rate limit in CI (the
   // lint job has no GITHUB_TOKEN in env), and pinact_update is a fix-op, not

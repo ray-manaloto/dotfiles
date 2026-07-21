@@ -22,7 +22,7 @@ Decisions that are **domain-shaped rather than agent-behaviour-shaped** — a ch
 devcontainer/image/CI domain that isn't a rule for how an agent should work, and therefore has no
 natural home in `.claude/rules/`.
 
-Expect this directory to stay small. Two decisions live here today:
+Expect this directory to stay small. One decision lives here today:
 
 | ADR | Decision |
 |---|---|

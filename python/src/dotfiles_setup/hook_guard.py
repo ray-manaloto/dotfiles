@@ -31,6 +31,8 @@ import re
 import sys
 from dataclasses import dataclass
 
+from dotfiles_setup.heredoc import HEREDOC_PATTERN, NUL_FILLER, blank_heredoc
+
 
 @dataclass(frozen=True)
 class Rule:
@@ -349,23 +351,16 @@ _SEPARATORS = ";&|\n"
 # and it is neither `\w` nor `\s` — it cannot be absorbed by `_WRAPPER` or any
 # rule token. Substitution is length-preserving so every other offset, and thus
 # every rule's view of the surrounding text, is untouched.
-_FILLER = "\x00"
+_FILLER = NUL_FILLER
 _SEPARATOR_TABLE = str.maketrans(_SEPARATORS, _FILLER * len(_SEPARATORS))
 
-# A heredoc body is stdin DATA that can never be a command. Matches `<<EOF`,
-# `<<'EOF'` and `<<-EOF` (which strips leading TABS from the body *and* the
-# delimiter line — and `_CMD`'s own `\s*` eats that tab, so indenting never
-# spared it). `<<<` here-strings are not matched: a `\w` delimiter cannot start
-# with `<`, and their content is quoted anyway.
-_HEREDOC = re.compile(
-    r"""
-    <<-?[ \t]*(?P<q>['"]?)(?P<delim>[A-Za-z_]\w*)(?P=q)  # the redirect operator
-    [^\n]*\n                                             # rest of that line
-    (?P<inert>(?:[^\n]*\n)*?[ \t]*(?P=delim)[ \t]*)      # body + delimiter line
-    (?=\n|\Z)                                            # delimiter line ends here
-    """,
-    re.VERBOSE,
-)
+# The heredoc pattern + its blanking substitution moved to
+# `dotfiles_setup.heredoc` when `workflow_hooks` became a second consumer: a
+# workflow `run:` block hits the same "a body is data, not a command" problem,
+# and two copies of this regex would drift. Behaviour here is unchanged — the
+# guard redacts EVERY heredoc it sees, because the body is an argument to the
+# tool being guarded. See that module for why `workflow_hooks` instead uses the
+# interpreter-aware `redact_heredoc_bodies`.
 
 # Quoted spans, scanned left-to-right and non-overlapping so alternating quotes
 # resolve correctly. The leading `\\.` consumes an escaped character — critical,
@@ -380,13 +375,6 @@ _QUOTED_SPAN = re.compile(
     """,
     re.VERBOSE | re.DOTALL,
 )
-
-
-def _blank_heredoc(match: re.Match[str]) -> str:
-    """Redact a heredoc body + its delimiter line, keeping the redirect line."""
-    whole = match.group(0)
-    inert = match.group("inert")
-    return whole[: len(whole) - len(inert)] + _FILLER * len(inert)
 
 
 def _blank_quoted(match: re.Match[str]) -> str:
@@ -422,7 +410,7 @@ def _inert_masked(command: str) -> str:
     An unterminated quote closes no span, so nothing is redacted and the real
     separators still anchor — a malformed command cannot launder itself.
     """
-    return _QUOTED_SPAN.sub(_blank_quoted, _HEREDOC.sub(_blank_heredoc, command))
+    return _QUOTED_SPAN.sub(_blank_quoted, HEREDOC_PATTERN.sub(blank_heredoc, command))
 
 
 def rules() -> tuple[Rule, ...]:
