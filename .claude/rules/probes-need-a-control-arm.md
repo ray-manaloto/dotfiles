@@ -50,6 +50,16 @@ returning "PRESENT" proves the first one is blind. Three instances, all
 | pin `curl=8.18.0-1ubuntu2` FAILS to install | same pin in a **clean base container** → installs fine | the **devcontainer was dirty** — it already had a newer curl, and apt refuses to downgrade. The pin was correct; the environment lied. |
 | CI job SKIPPED ⇒ "unaffected by this change" | reading the job's `if:` condition | a SKIPPED job **never asked the question**. "Never ran" is not "ran and found nothing". |
 | every package reports MISSING | running the same command without the outer quoting | the **inner shell ate the variable** — a nested-quote format string expanded to empty, so every lookup compared against `""`. |
+| graphify **issue #959 is OPEN** ⇒ "custom OpenAI endpoints are blocked" | reading the **installed** `llm.py:112` | the feature shipped in **0.8.40**; the issue is stale-open. A viable path was nearly discarded on the strength of an unclosed ticket. |
+| the CC Discord plugin says *"Discord's search API isn't exposed to bots"* (asserted in **3** places) | reading **Discord's own** API docs | `GET /guilds/{id}/messages/search` was documented **2026-03-20** — two days *after* the plugin's first commit. Search is a **plugin** limit, not a platform limit. |
+
+**Source beats issue tracker. A tool's claim about a platform ages.** Both rows
+above are the same shape: a *secondary* artifact (an unclosed issue, a
+dependency's README) was read as the current state of a *primary* one (the
+shipped source, the platform's API). Issues stay open after the fix lands;
+vendored docs freeze at their commit date. When a secondary source says
+"impossible" and the thing matters, **go read the code or the owner's docs**
+before you believe it.
 
 ## Rules
 
@@ -79,6 +89,23 @@ returning "PRESENT" proves the first one is blind. Three instances, all
 3. **Bound-limited searches are suspect by construction.** `-maxdepth`,
    `head -N`, `--limit`, a time window, a `2>/dev/null`: each can turn "absent"
    into "unreachable". Either remove the bound or prove the target is inside it.
+
+   **Display bounds count too — `ls … | tail -15` is a bound.** 2026-07-20: a
+   session ran `ls .omc/plans/ | tail -15`, did not see the handoff's
+   designated "bible", and reported it **missing**. The file existed; `plan-*`
+   simply sorts before `session-*` and fell outside the last 15 lines. `| head`,
+   `| tail`, and a bare `ls` of a large directory are all display bounds.
+
+   **So is checking N exact paths instead of asking "does it exist anywhere".**
+   Same session: an agent was declared non-compliant for "not writing its
+   report" after two specific paths were checked; it had written a 39 KB report
+   to a third. The probe answered "not at these two paths" and was read as "not
+   written". When the question is *existence*, search the tree, not a guess.
+
+   **And a relative time bound can be silently invalid.** `find … -newermt "-20
+   minutes"` returns nothing on macOS/BSD `find`, which does not parse that
+   relative form — indistinguishable from "no recent files". Control-arm any
+   time-bounded search against a window you know contains hits.
 4. **A redirect/timeout/parse-error is not a "no".** HTTP 301/000, a `jq` miss,
    an empty `grep` — distinguish "answered no" from "never asked".
 5. **Say which arm you ran.** When reporting a probe result, state the control:

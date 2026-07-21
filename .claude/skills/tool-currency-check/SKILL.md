@@ -29,12 +29,28 @@ out-of-date pins AND custom code a tool now does natively, in one pass.
 
 ## Procedure
 
-1. **Version drift — `mise outdated`.** Lists pinned-vs-latest for every
+1. **Version drift — `mise outdated --bump`.** Lists pinned-vs-latest for every
    `mise.toml` / `mise-system.toml` tool:
 
    ```bash
-   mise outdated            # host/project tools (root mise.toml)
+   mise outdated --bump --local   # host/project tools (root mise.toml)
    ```
+
+   **`--bump` is mandatory here — bare `mise outdated` is a check that can only
+   pass in this repo.** Every pin is *exact*, so the range that "matches the
+   current config" IS the pin, and nothing can ever be reported outdated.
+   Control-armed 2026-07-20: `mise outdated "pipx:graphifyy"` printed *"All
+   tools are up to date"* while the pin sat at **0.9.20** against PyPI
+   **0.9.22**; `mise outdated hk` said the same while `--bump` showed
+   1.50.0 → 1.51.0. `tool_currency.py` already passes `--bump`; this step used
+   to contradict it. `--local` skips the user's global
+   `~/.config/mise/config.toml`, which otherwise leaks unrelated tools into the
+   report.
+
+   Two more native flags worth knowing: **`--dry-run-code`** exits **1** when
+   anything is outdated (a gate needing no output parsing), and
+   **`--minimum-release-age "90d"`** is a native cooldown — reach for it before
+   hand-rolling any hold logic.
 
    Note which are intentionally held back (comments in `mise.toml`, e.g. `rtk`
    pinned for a lockfile bug) — those are decisions, not drift.

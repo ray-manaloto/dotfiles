@@ -35,6 +35,15 @@
       "platformAutomerge": true
     },
     {
+      "description": "graphify: hold-and-review, never auto-merge. It ships ~2x/day (v0.9.21 12:37Z and v0.9.22 15:41Z on 2026-07-20 alone) as PATCH releases, so the blanket minor/patch automerge above would merge it unread twice a day. It is pre-1.0 with a documented history of SILENT data loss - v0.9.22 alone fixed a node whose source_file uses a URL scheme being evicted on the second update, and a real source dir named env/.env/*_env being pruned as a false-positive virtualenv 'with no trace in any output bucket'. That is exactly the class where a green build hides a corrupted graph, which no CI check can see. minimumReleaseAge 3d is ~6 releases of soak; the PR still opens as a signal, but a human reads the notes and the 2-doc determinism probe gates the merge. NOTE the counter-risk: holding means running known-buggy versions longer, so a held bump must be reviewed promptly, not frozen.",
+      "matchPackageNames": [
+        "graphifyy"
+      ],
+      "automerge": false,
+      "minimumReleaseAge": "3 days",
+      "groupName": null
+    },
+    {
       "description": "#288 `apt-ubuntu-pockets`: give every [bootstrap.packages] deb dep ALL FOUR upstreams and let the deb datasource's registryStrategy='merge' (lib/modules/datasource/deb/index.ts) route each by where it is found. This is why no hand-rolled discriminator is needed: probed 2026-07-16, the 58 apt.llvm.org names and Ubuntu's 9308 main-component names across the 3 pockets overlap in EXACTLY 0 packages, so a merge can never cross upstreams, and a 15th Ubuntu package needs no routing config. Ubuntu MUST list all three pockets: the LTS release pocket is frozen at release day, so `suite=resolute` alone pins pre-security-patch versions that DO NOT INSTALL - `curl=8.18.0-1ubuntu2` fails because it hard-depends on its co-versioned `libcurl4t64` and apt will not drag that below its candidate (clean-room probe; see the [bootstrap.packages] header). components=main only: all 66 packages live in main, and adding `universe` would download a 19.6MB / 66741-package index per run for zero extra coverage (that index is what blew #251's 2-minute timeout, and it is why this was wrongly scoped as expensive). The datasource hardcodes Packages.gz, caches per component per run, and sends If-Modified-Since, so 66 deps cost one conditional GET per component on a warm run.",
       "matchDatasources": [
         "deb"

@@ -110,6 +110,12 @@ _ALLOWED_ABSENT = frozenset(
         "lib/dispatch.sh",
         "lib/spawn.sh",
         "dispatch.sh",
+        # External repo files cited by name (graphify, host-only pipx install).
+        # do-not.md cites install.py for the ~/.claude mutation branches;
+        # probes-need-a-control-arm.md cites llm.py:112 as the source that
+        # refuted the stale issue #959. Neither is ours to track.
+        "install.py",
+        "llm.py",
         # Documented-retired files (docs narrate the retirement).
         "install.sh",
         "mise-system-resolved.json",

@@ -33,6 +33,39 @@ self-contained block). Each item's context is preserved verbatim.
    2026-04-09c's debug goose-chase. See
    `feedback_docker_desktop_runtime.md`.
 
+8. **Do NOT run bare `graphify install` — always pass `--project`.** One flag
+   separates safe from destructive (verified in the installed 0.9.20
+   `install.py`, 2026-07-20):
+   - `graphify claude install` → **project only** (`./CLAUDE.md` +
+     `./.claude/settings.json`).
+   - `graphify install --project` → **project only** (adds
+     `./.claude/skills/graphify/**` + a block in `./.claude/CLAUDE.md`).
+   - ⚠️ `graphify install` **without** `--project` → **mutates `~/.claude`**:
+     ~43 KB of skill files, **appends a `# graphify` H1 to
+     `~/.claude/CLAUDE.md`** (creating it if absent), and sprays
+     `.graphify_version` stamps into every other installed platform's user
+     skill dir.
+
+   Control arm on the safe claim: all **18** `Path.home()` call sites in
+   `install.py` sit on `project=False` branches; the project-scoped call chain
+   contains none. **`CLAUDE_CONFIG_DIR` is NOT containment** — it redirects the
+   skill dir only, while the `~/.claude/CLAUDE.md` write is hardcoded. This is
+   the machine-level expression of the PROJECT-ONLY invariant; also never run
+   `graphify hook install` or `graphify --watch`.
+
+9. **Do NOT commit onto the default branch — branch FIRST.** Create the branch
+   *before* the commit, then `mise run ship`. On 2026-07-20 a session committed
+   34 files straight onto `main` and had to move them afterwards
+   (`git branch <new> && git reset --hard origin/main`). It was recoverable
+   only because nothing had been pushed.
+
+   The guidance already existed in the `git-branch-commit-push-workflow` skill
+   — but that skill carries `disable-model-invocation: true`, which **agnix
+   `--strict` requires** for state-mutating "dangerous" skills, so the model
+   cannot reach it at decision time. Hence this line: an eager rule is the only
+   layer that fires before the mistake. Do not "fix" the skill by removing the
+   flag; the docs gate will reject it, and correctly.
+
 > **Relaxed 2026-07-19 — MCP registration is no longer a "do not".** Native
 > MCP registration (`claude mcp add`, a plugin's bundled servers, a project
 > `.mcp.json`) is **allowed when a plugin or tool requires it**. `mcp2cli`

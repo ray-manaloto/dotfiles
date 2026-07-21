@@ -21,11 +21,29 @@ the file:line anchors the implementing session needs.
 
 ## Rules
 
-1. **Persist at receipt.** When a findings-bearing agent's final report
-   arrives, write it verbatim to
-   `.omc/research/<topic>/agents/<agent-name>.md` (or the artifact
-   directory of the active research effort) in the SAME turn — before
-   acting on its content.
+1. **Persist at receipt, into `.omc/kb/`.** When a findings-bearing agent's
+   final report arrives, write it verbatim to
+   `.omc/kb/reports/agents/<agent-name>.md` in the SAME turn — before acting on
+   its content. Sources the agent fetched go to `.omc/kb/raw/<slug>.md`.
+
+   > **Path changed 2026-07-20; the old path was `.omc/research/<topic>/agents/`.**
+   > `.omc/kb/` is the corpus root and is **tracked in git** (added with
+   > `git add -f`, since `.git/info/exclude` carries `.omc/*`), so artifacts
+   > survive a fresh clone. `.omc/research/**` is not tracked and does not.
+   > The two conventions co-existed for one session and immediately cost
+   > something: an agent correctly followed the *old* rule, the caller looked in
+   > the *new* path, and wrongly reported it as non-compliant. **One path.**
+   > Existing `.omc/research/**` artifacts stay where they are; new ones go to
+   > `.omc/kb/`. See memory `feedback_store_research_in_graphify`.
+
+1b. **Instruct agents to persist INCREMENTALLY, not at the end.** Tell a
+   research delegation to write each source as it fetches it and to write its
+   report early and update it. On 2026-07-20 two agents held everything in
+   memory, died silently after ~40 minutes, and left **nothing**; re-dispatched
+   with an incremental instruction, they produced output within minutes. An
+   agent that dies having written 13 of 20 sources leaves 13. This is the same
+   principle as `PostCompact`/`SubagentStop` capture — durable capture must be
+   incremental, never end-of-run.
 2. **Verbatim means verbatim.** Keep the agent's tables, evidence links,
    probe output, and repos-touched enumeration intact. Annotating
    decisions inline afterwards (e.g. "DECIDED: option A") is encouraged;
