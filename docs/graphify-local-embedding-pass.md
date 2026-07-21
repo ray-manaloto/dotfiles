@@ -83,6 +83,12 @@ the Gemma family, 621 MB, 768 dimensions, ~0 GPU pressure. It is almost
 certainly what #7 meant. Note it produces embeddings *only*; it cannot be
 reused for extraction.
 
+> **`embeddinggemma` is dead weight for graphify itself.** Nothing in 0.9.22 can
+> call it — no `embed.py`, `grep -c -- '--embeddings' cli.py` → 0 (control arm
+> `--token-budget` → 5), and the shipped `METADATA:169` markets the opposite:
+> *"**Not a vector index.** No embeddings, no vector store: a real graph you
+> traverse."* It is pulled for **our own** pass (§6), which runs outside graphify.
+
 *(Worth reporting on #7 — the maintainers are currently debating ONNX Runtime
 vs Ollama for a model that does not embed under either.)*
 
@@ -178,6 +184,23 @@ mention the label** (1,200-char cap). Same nodes, same model, same corpus:
 
 **Every lexical collision drops out of the top 20**, and real relations take the
 top slots. 5 of 16 nodes had no sentence match and fell back to label-only.
+
+### 2.3b Independent corroboration — upstream measured the same collapse
+
+**PR [#1126](https://github.com/Graphify-Labs/graphify/pull/1126)** was the one serious
+attempt to implement #7 (2026-06-05, **closed unmerged**). Its own "Deferred" note records
+that on a pure-code corpus, **87% of the edges it emitted at threshold 0.82 were
+identical-label collisions** — different classes' `.__init__()` embedding identically.
+
+That is the same failure this spec measured from the other end, on a document corpus, with a
+different embedding model, arrived at independently. Two measurements, two corpora, one
+conclusion: **`label` alone is not enough text.** It also means #7's 0.82 is not merely
+unvalidated — it has been measured and found wanting by the only person who tried to build it.
+
+Note #1126 used **ONNX Runtime + `onnx-community/embeddinggemma-300m-ONNX`**, not Ollama.
+Combined with the #7 thread settling on "pull Gemma 4 from Hugging Face", the likely shape of
+any upstream implementation is ONNX/HF rather than an Ollama pull — so §1.2's transport is a
+choice for *our* pass, not a prediction of theirs.
 
 **So the spec's answer to "what gets embedded" is: not what #7 says.** Three
 options, in order of cost:

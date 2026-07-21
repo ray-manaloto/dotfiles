@@ -29,6 +29,7 @@ cross = sum(1 for e in d['links']
 | qwen3:14b (reasoning) | 9 | 6 | 0 | 2,013 |
 | **gemma4:12b** (2026-07-20) | 8 | 6 | **2** | 7,479 |
 | qwen3-coder (30B) | 5 | 4 | 0 | 999 |
+| **claude-cli** (Claude Code sub) | — | — | — | **FAILED, rc=1** |
 
 `gemma4:12b` capabilities: completion, vision, audio, tools, **thinking**
 (no embedding — see `docs/graphify-local-embedding-pass.md` §1.1).
@@ -76,6 +77,43 @@ both label-only and context-enriched. See
 
 **Do not choose a model on this corpus's `x-doc` column.** Re-run on the full
 137-document corpus in `.omc/kb/raw/` before treating cross-doc yield as signal.
+
+## The `claude-cli` backend is BROKEN on Claude Code 2.1.216
+
+graphify has a `claude-cli` backend (`llm.py:205-216`) that routes through the locally
+installed `claude` CLI and bills to a Pro/Max subscription rather than an
+`ANTHROPIC_API_KEY` — pricing declared as `{"input": 0.0, "output": 0.0}`.
+It **does not work**, and the extraction is lost *after* the model has done it:
+
+```
+[graphify] LLM returned invalid JSON, skipping chunk (first 200 chars:
+  'Knowledge graph extracted and delivered — 21 nodes, 20 edges, 3 hyperedges
+   from the Codex↔NIM probe document.')
+[graphify] claude-cli returned a hollow response; treating as truncation…
+[graphify extract] graph is empty — extraction produced no nodes.
+rc=1
+```
+
+Claude Code **did the work** — 21 nodes / 20 edges / 3 hyperedges would have beaten every
+model in the table — then replied with an agentic *summary* instead of the raw JSON
+payload. graphify's `_response_is_hollow` reads that as truncation, bisects, and converges
+on nothing. The two semantic cache entries written are `partial: True`, `nodes: 0`.
+
+### Diagnosis — four arms, cause isolated
+
+| # | hypothesis | probe | result |
+|---|---|---|---|
+| 1 | our repo's ~107 KB eager `CLAUDE.md`/`AGENTS.md` context makes it behave agentically | re-ran in a clean room outside the repo | **REFUTED** — fails identically (`'Graph fragment extracted and delivered.'`) |
+| 2 | user-level `~/.claude/CLAUDE.md` leaks in everywhere | `ls ~/.claude/CLAUDE.md` | **REFUTED** — does not exist, so the clean room really was clean |
+| 3 | `claude -p --output-format json` can't return raw JSON | direct minimal prompt | **REFUTED** — returns `result: '{"nodes":[{"id":"a","label":"A"}],"edges":[]}'` exactly |
+| 4 | graphify's own prompt construction triggers agentic behavior | ← by elimination, and see below | **CONFIRMED** |
+
+`llm.py:1376-1391` documents this exact failure class and claims a fix — deliver the schema
+in the **user turn** and drop `--system-prompt` — explicitly *"verified against Claude Code
+**2.1.197**"*. We run **2.1.216**. The workaround has regressed in the intervening releases.
+
+**Worth reporting upstream.** Until then, `claude-cli` is not a usable ingestion backend, and
+the $0-cost path it advertises is unavailable.
 
 ## Caveats
 
