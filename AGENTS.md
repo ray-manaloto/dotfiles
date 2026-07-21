@@ -22,7 +22,7 @@ mise run up / down                           # Bring up / tear down devcontainer
 mise run sync / ship / land -- <PR#>         # Devcontainer sync + gated PR loop (skills: devcontainer-sync, pr-workflow)
 mise run verify-container-latest             # Gate: container on latest branch code + base (hard)
 uv run --project python pytest tests/ -x -q  # Run tests (see python/AGENTS.md)
-dotfiles-setup verify run                    # Run structured verification contracts
+mise run verify                    # Run structured verification contracts
 mise run pin-actions                         # Verify GHA actions are SHA-pinned
 mise run lint-docs                           # Validate agent documentation (agnix)
 mise run lock                                # Regenerate mise.lock
@@ -89,13 +89,13 @@ content-hashed since hk 1.47 — no manual cache clearing after edits.
 uv run --project python pytest tests/ -x -q               # All 697 tests
 uv run --project python pytest tests/test_audit.py -x -q  # Single file
 mise run lint                                             # Lint checks only (hk under a hard timeout)
-dotfiles-setup verify run                                 # Verification contracts (suites.toml)
+mise run verify                                 # Verification contracts (suites.toml)
 mise run pin-actions                                      # Verify GHA action pinning
 mise run lint-docs                                        # Validate agent documentation
 ```
 
 Structured verification via `python/verification/suites.toml` runs as CI
-`contract-preflight`. The `dotfiles-setup verify run` gate is **distinct
+`contract-preflight`. The `mise run verify` gate is **distinct
 from** `hk run check --all` — some contracts (e.g.,
 `build.no-stderr-suppression`) only run through the verify CLI. Run both
 locally before pushing Dockerfile changes.
@@ -125,7 +125,7 @@ locally before pushing Dockerfile changes.
   work, ask (with a recommended option) until sure; proceed directly on
   clear low-risk tasks. See `.claude/rules/clarify-before-acting.md`.
 - **Local validation first**: Run `mise run lint`, `pytest`, AND
-  `dotfiles-setup verify run` locally before pushing.
+  `mise run verify` locally before pushing.
 - **Research existing tools/services before custom code (HARD GATE)**: prefer an
   existing tool / native feature / CLI / service (`gh` auto-merge, `chezmoi.os`)
   over ANY homegrown code (last resort + justification). See `.claude/rules/use-tool-builtins.md`.
@@ -143,7 +143,7 @@ locally before pushing Dockerfile changes.
 ```bash
 mise run lint                                 # Lint gate (hk under a hard timeout) — then proceed
 uv run --project python pytest tests/ -x -q   # All tests pass — then proceed
-dotfiles-setup verify run                     # Verification contracts pass — then proceed
+mise run verify                     # Verification contracts pass — then proceed
 ```
 
 Commit only after all three exit 0 — validate locally, don't push to test in CI.

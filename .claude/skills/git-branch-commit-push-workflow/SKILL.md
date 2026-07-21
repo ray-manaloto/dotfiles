@@ -1,8 +1,19 @@
 ---
 name: git-branch-commit-push-workflow
-description: "Use when creating branches, commits, pushes, or PRs with plain git; avoids virtual-branch composition bugs where commits silently depend on other applied branches."
+description: "Use when creating branches, commits, pushes, or PRs with plain git. Branch BEFORE committing — never commit directly onto the default branch. Avoids virtual-branch composition bugs where commits silently depend on other applied branches."
 disable-model-invocation: true
 ---
+
+<!--
+`disable-model-invocation: true` is REQUIRED, not an oversight: agnix --strict
+classifies this as a "Dangerous skill" (it mutates git state) and fails the
+docs gate without it. A 2026-07-20 session proposed removing the flag so the
+model could reach this guidance after committing straight onto `main`; the
+gate correctly rejected that. The reachability problem is real, but the fix is
+to state the invariant in an EAGER rule (`do-not.md` #9), not to make a
+state-mutating skill model-invocable.
+-->
+
 
 # Git Branch-Commit-Push Workflow (Plain Git)
 

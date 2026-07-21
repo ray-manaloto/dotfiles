@@ -1,13 +1,17 @@
----
-paths:
-  - "AGENTS.md"
-  - ".claude/**"
-  - "scripts/**"
-  - ".omc/**"
-  - ".omx/**"
----
-
 # AI CLI Invocation Policy
+
+> **This rule is deliberately EAGER (no `paths:` frontmatter).** It guards an
+> *action* — invoking an external AI CLI from Bash — not a file. Path-scoped
+> rules "trigger when Claude **reads** files matching the pattern", and no glob
+> predicts the moment you are about to shell out to `codex`. It was scoped to
+> `AGENTS.md`/`.claude/**`/`scripts/**`/`.omc/**` until 2026-07-20, which meant
+> it could only fire by accident: a session invoked `codex exec "prompt"`
+> positionally (the documented-wrong form), wasted a probe on the resulting
+> stdin hang, and only saw this rule *afterwards*, because it happened to write
+> into `.omc/**`. That is the same defect `zero-skip-policy` and
+> `clean-git-state` were un-scoped for on 2026-07-15. See
+> `.claude/rules/md-size-budgets.md` § "Scoping: the trigger test" — this rule
+> is **behaviour-triggered**, and behaviour-triggered rules stay eager.
 
 When calling external AI CLIs (Codex, Gemini, OpenCode) from Bash, you MUST use the
 correct invocation patterns. Incorrect flags waste tokens and cause silent failures.
