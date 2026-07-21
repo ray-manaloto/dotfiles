@@ -21,13 +21,19 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 from dotfiles_setup.graph_bakeoff import (
     FIXED_FLAGS,
+    NULL_ARM_SUFFIX,
     Arm,
+    RunResult,
     corpus_digest,
     cross_doc_edges,
+    is_significant,
+    make_null_arm,
     match_entity,
+    noise_floor,
     normalize_label,
     parse_out_tokens,
     prepare_run_dir,
+    resolve_nodes,
     score_graph,
 )
 
@@ -258,39 +264,131 @@ def test_score_reports_misses_rather_than_silently_passing() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Issue #327 — the entity matcher is an OPEN decision. These tests pin the
-# placeholder's current behaviour so the change is visible when it lands.
+# Issue #327 — RESOLVED: whole-token containment + an ambiguity guard.
 # ---------------------------------------------------------------------------
 
 
-def test_matcher_placeholder_matches_an_exact_alias() -> None:
-    assert match_entity("Cold Tier", ["cold tier", "frost storage"])
-    assert not match_entity("Mockingbird", ["cold tier", "frost storage"])
+def test_matcher_accepts_a_more_descriptive_label() -> None:
+    """A better label must not score worse than the bare noun.
 
-
-def test_matcher_placeholder_is_strict_and_that_is_the_open_question() -> None:
-    """Documents the strictness trade-off recorded in issue #327.
-
-    The placeholder rejects a MORE descriptive label, which penalises better
-    extraction. Whatever replaces it must decide this deliberately — hence the
-    issue rather than a silent default.
+    This is the failure of the too-strict implementation: exact equality would
+    reject this and quietly reward terse labelling over good extraction.
     """
-    assert not match_entity("Rookery storage layer", ["Rookery"])
+    assert match_entity("Rookery storage layer", ["Rookery"])
+    assert match_entity("Magpie query engine", ["Magpie"])
 
 
-def test_matcher_must_not_let_a_title_node_match_two_entities() -> None:
-    """The hazard a looser matcher would introduce (issue #327).
+def test_matcher_keeps_the_lexical_decoy_separate() -> None:
+    """Rookery and Rookwood share a prefix but no token, so they never conflate.
 
-    'Magpie vs Mockingbird' is a real document-title node. If the matcher used
-    substring containment it would match BOTH alias sets, and the scorer would
-    manufacture a forbidden F2 edge the model never asserted. The placeholder
-    is strict, so it does not — this test locks that property in ahead of the
-    matcher being replaced.
+    This is the failure measured at cos 0.649 in the embedding probe, and the
+    reason whole-TOKEN containment is used rather than raw substring.
     """
-    title = "Magpie vs Mockingbird"
-    assert not (
-        match_entity(title, ["Magpie"]) and match_entity(title, ["Mockingbird"])
+    assert not match_entity("Rookwood", ["Rookery"])
+    assert not match_entity("Rookery", ["Rookwood"])
+    # Control arm: each still matches its own alias, so the negatives above are
+    # not a matcher that simply never fires.
+    assert match_entity("Rookwood", ["Rookwood"])
+    assert match_entity("Rookery", ["Rookery"])
+
+
+def test_matcher_matches_a_concept_under_a_different_name() -> None:
+    """The headline case: one mechanism, three names, near-zero overlap."""
+    aliases = ["cold tier", "frost storage", "archival partitions"]
+    assert match_entity("Frost Storage", aliases)
+    assert match_entity("cold tier", aliases)
+    # Control arm: an unrelated concept does not match the same alias set.
+    assert not match_entity("Shard rebalancing", aliases)
+
+
+def test_ambiguous_title_node_is_dropped_rather_than_double_counted() -> None:
+    """A node matching two entities is excluded (the F2 hazard).
+
+    'Magpie vs Mockingbird' is a real document-title node. Counting it as BOTH
+    entities would manufacture a forbidden edge the model never asserted and
+    penalise it for the harness's own sloppiness.
+    """
+    entities = {
+        "magpie": {"aliases": ["Magpie"]},
+        "mockingbird": {"aliases": ["Mockingbird"]},
+    }
+    graph = _graph(
+        [
+            {"id": "t", "label": "Magpie vs Mockingbird"},
+            {"id": "m", "label": "Magpie"},
+        ],
+        [],
     )
+    resolved = resolve_nodes(graph, entities)
+    assert "t" not in resolved
+    # Control arm: the unambiguous node IS resolved, so the exclusion above is
+    # targeted rather than the guard rejecting everything.
+    assert resolved["m"] == "magpie"
+
+
+def test_ambiguity_guard_prevents_a_phantom_forbidden_edge() -> None:
+    """End to end: a title node must not cost a model decoy resistance."""
+    key = {
+        "entities": {
+            "magpie": {"aliases": ["Magpie"]},
+            "mockingbird": {"aliases": ["Mockingbird"]},
+        },
+        "expected_links": [],
+        "forbidden_links": [{"id": "F2", "a": "magpie", "b": "mockingbird"}],
+    }
+    # Two title nodes with an ordinary edge between them. Under substring
+    # matching both would resolve to BOTH entities and fabricate F2.
+    graph = _graph(
+        [
+            {"id": "t1", "label": "Magpie vs Mockingbird"},
+            {"id": "t2", "label": "Magpie vs Mockingbird (part 2)"},
+        ],
+        [{"source": "t1", "target": "t2"}],
+    )
+    assert score_graph(graph, key).forbidden_hits == []
+
+
+# ---------------------------------------------------------------------------
+# The null arm — the control arm for the whole experiment.
+# ---------------------------------------------------------------------------
+
+
+def test_null_arm_is_identical_except_for_its_name() -> None:
+    """The twin must differ ONLY in name, or it is not a noise measurement."""
+    arm = Arm("q25", "ollama", "qwen2.5-coder:14b")
+    twin = make_null_arm(arm)
+    assert twin.name == f"q25{NULL_ARM_SUFFIX}"
+    assert (twin.backend, twin.model) == (arm.backend, arm.model)
+    assert twin.name != arm.name
+
+
+def _res(arm: str, cross: int) -> RunResult:
+    return RunResult(arm, "gold", 1, 0, 10, 10, cross, 100, 1.0, Path("/x"))
+
+
+def test_noise_floor_is_the_full_same_model_range() -> None:
+    """Noise is how far one model wanders when nothing changes."""
+    a = [_res("q25", 1), _res("q25", 3)]
+    b = [_res("q25-null", 2), _res("q25-null", 4)]
+    assert noise_floor(a, b, "cross_doc") == 3
+
+
+def test_a_gap_inside_the_noise_floor_is_not_a_finding() -> None:
+    """The rule that would have stopped the discarded 2026-07-20 claim.
+
+    That bake-off reported gemma4 beating qwen2.5-coder on cross-doc edges 2 to
+    1 — a gap of ONE, from single runs. If the same model varies by 3 when
+    nothing changes, a gap of 1 says nothing at all.
+    """
+    assert not is_significant(gap=1, floor=3)
+    # Control arm: a gap that genuinely exceeds the floor IS reported, so the
+    # rule is not simply suppressing every result.
+    assert is_significant(gap=5, floor=3)
+
+
+def test_a_tie_with_the_noise_floor_is_not_significant() -> None:
+    """When in doubt the honest answer is 'indistinguishable'."""
+    assert not is_significant(gap=3, floor=3)
 
 
 def test_answer_key_shape_is_validated_before_scoring() -> None:

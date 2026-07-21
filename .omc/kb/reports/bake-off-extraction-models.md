@@ -1,3 +1,25 @@
+> # ⚠️ SUPERSEDED — do not rank models on this document
+>
+> **Retired 2026-07-21 as a ranking corpus.** An audit found this comparison to
+> be anecdote rather than measurement: only the corpus was actually held
+> constant. Model attribution was unverifiable (graphify records no backend or
+> model in any artifact), the semantic cache key is model-blind, every arm was
+> n=1, and the `x-doc` metric is degenerate here because the two documents are
+> topically disjoint.
+>
+> Most concretely: the "gemma4 beats qwen2.5-coder 2 cross-doc edges to 1"
+> claim below is **a gap of one, from single runs, with no noise floor** — there
+> was no way to tell it from run-to-run variance, and it should not have been
+> reported as a finding.
+>
+> The 2-doc probe survives only as a **fast smoke test that the harness runs at
+> all**. Ranking now happens against `tests/fixtures/graphify-gold/` with an
+> answer key, 3 repeats, and a null arm. See
+> `python/src/dotfiles_setup/graph_bakeoff.py`.
+>
+> Kept for its qualitative observations (§"The counts are the wrong metric") and
+> for the `claude-cli` diagnosis, which stand on their own evidence.
+
 # Extraction model bake-off — graphify 0.9.22 on the 2-doc probe corpus
 
 Corpus: `.omc/kb/probe/` — 2 documents.

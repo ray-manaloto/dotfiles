@@ -1,0 +1,70 @@
+{
+  "corpus": "gold",
+  "version": 1,
+  "authored": "2026-07-20",
+  "rationale": "A FICTIONAL domain on purpose. Real tech (Docker, Postgres) lets a model answer from pretraining instead of from the text, which would measure recall of the internet rather than extraction from the corpus. Nothing here exists, so every correct link must have been read.",
+
+  "entities": {
+    "rookery":       {"aliases": ["Rookery"], "docs": ["arch-overview.md", "rookery-runbook.md", "postmortem-2031-04.md", "capacity-plan.md", "magpie-vs-mockingbird.md"]},
+    "magpie":        {"aliases": ["Magpie"], "docs": ["arch-overview.md", "magpie-tuning.md", "postmortem-2031-04.md", "capacity-plan.md", "magpie-vs-mockingbird.md"]},
+    "jackdaw":       {"aliases": ["Jackdaw"], "docs": ["arch-overview.md", "postmortem-2031-04.md", "capacity-plan.md", "magpie-vs-mockingbird.md"]},
+    "cold_storage":  {"aliases": ["cold tier", "frost storage", "archival partitions", "archival storage class"], "docs": ["rookery-runbook.md", "glossary.md", "magpie-tuning.md"]},
+    "materialization_job": {"aliases": ["materialization job"], "docs": ["glossary.md", "arch-overview.md", "postmortem-2031-04.md"]},
+    "rookwood":      {"aliases": ["Rookwood"], "docs": ["arch-overview.md"]},
+    "mockingbird":   {"aliases": ["Mockingbird"], "docs": ["magpie-vs-mockingbird.md"]},
+    "shard_rebalancing": {"aliases": ["shard rebalancing"], "docs": ["magpie-tuning.md"]}
+  },
+
+  "expected_links": [
+    {"id": "L1", "a": "cold_storage", "b": "cold_storage", "cross_doc": true, "difficulty": "hard",
+     "why": "THE headline test. 'cold tier' (rookery-runbook), 'frost storage' (glossary) and 'archival partitions' (magpie-tuning) are ONE mechanism under three names with near-zero lexical overlap. Only real semantics finds this; label matching cannot.",
+     "expect_relation": ["semantically_similar_to", "conceptually_related_to", "references"]},
+
+    {"id": "L2", "a": "magpie", "b": "rookery", "cross_doc": true, "difficulty": "easy",
+     "why": "Stated outright in arch-overview ('Magpie reads from Rookery') and re-attested in the postmortem. A model that misses this is not extracting at all.",
+     "expect_relation": ["references", "calls", "shares_data_with", "conceptually_related_to"]},
+
+    {"id": "L3", "a": "jackdaw", "b": "magpie", "cross_doc": true, "difficulty": "easy",
+     "why": "'Jackdaw submits work to Magpie' (arch-overview), re-attested in the postmortem's causal chain.",
+     "expect_relation": ["references", "calls", "conceptually_related_to"]},
+
+    {"id": "L4", "a": "cold_storage", "b": "magpie", "cross_doc": true, "difficulty": "medium",
+     "why": "magpie-tuning says a query touching archival partitions is slow for STORAGE reasons; rookery-runbook says cold-tier reads are 40x latency. Same causal claim, two documents, different vocabulary.",
+     "expect_relation": ["conceptually_related_to", "semantically_similar_to", "references"]},
+
+    {"id": "L5", "a": "materialization_job", "b": "jackdaw", "cross_doc": true, "difficulty": "medium",
+     "why": "glossary defines the term; arch-overview says Jackdaw decides when one runs; the postmortem's root cause is a failed one. Three docs, one referent.",
+     "expect_relation": ["references", "conceptually_related_to"]}
+  ],
+
+  "expected_contradictions": [
+    {"id": "C1", "docs": ["postmortem-2031-04.md", "capacity-plan.md"], "difficulty": "hard",
+     "claim_a": "postmortem: 'Within 20 minutes Jackdaw had 900 workers' / 'Peak worker count: 900'",
+     "claim_b": "capacity-plan: 'hard ceiling of 250 concurrent workers ... has never been exceeded in production'",
+     "why": "A genuine factual conflict between two documents. graphify has no contradiction relation in its prompt vocabulary, so this is scored as a BONUS, never as a miss."}
+  ],
+
+  "forbidden_links": [
+    {"id": "F1", "a": "rookery", "b": "rookwood", "difficulty": "hard",
+     "why": "LEXICAL DECOY. 'Rookery' and 'Rookwood' share a 4-char prefix and arch-overview states outright they share no code and Rookwood is not deployed. Any similarity edge here is a false positive of exactly the kind measured at 0.649 in the embedding probe."},
+
+    {"id": "F2", "a": "magpie", "b": "mockingbird", "difficulty": "hard",
+     "why": "LEXICAL DECOY. Both bird names, both 'M', and the doc explicitly says 'no code, no storage, no scheduler' shared and 'no architectural relationship whatsoever'. The text actively denies the link, so asserting it is a reading failure, not a judgement call."},
+
+    {"id": "F3", "a": "mockingbird", "b": "rookery", "difficulty": "medium",
+     "why": "Explicitly denied: 'has never read from Rookery'."},
+
+    {"id": "F4", "a": "mockingbird", "b": "jackdaw", "difficulty": "medium",
+     "why": "Explicitly denied: 'has no dependency on Jackdaw'."},
+
+    {"id": "F5", "a": "shard_rebalancing", "b": "magpie", "difficulty": "medium",
+     "why": "magpie-tuning says shard rebalancing 'is unrelated to query latency'. A same-document proximity edge would assert a relationship the sentence denies. Tests whether co-occurrence is being mistaken for relation."}
+  ],
+
+  "scoring_notes": [
+    "recall    = matched expected_links / total expected_links",
+    "precision penalty = any emitted edge matching a forbidden_links pair is a FALSE POSITIVE and is weighted heavily; these are the failure mode actually measured on 2026-07-20.",
+    "L1 and F1/F2 are the discriminating items. A model can score well on L2/L3 by transcribing arch-overview's explicit sentences while still failing every hard item.",
+    "expect_relation is a SET, not a single value: graphify's relation vocabulary is open (validate.py has no VALID_RELATIONS), so models legitimately emit different labels for the same link. Scoring matches the PAIR first; relation agreement is reported separately, never as a miss."
+  ]
+}
