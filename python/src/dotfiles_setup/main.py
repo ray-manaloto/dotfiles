@@ -58,6 +58,7 @@ from dotfiles_setup.renovate_dryrun import renovate_dryrun_main
 from dotfiles_setup.sync import SyncOptions, sync_main
 from dotfiles_setup.tool_currency import tool_currency_main
 from dotfiles_setup.verify import main as verify_main
+from dotfiles_setup.workflow_hooks import workflow_hooks_main
 
 if TYPE_CHECKING:
     from argparse import _SubParsersAction
@@ -690,6 +691,12 @@ def setup_parser() -> argparse.ArgumentParser:
         ".devcontainer/scripts/*.sh must be allowlisted and within its "
         "per-file line budget (new/grown scripts fail — move logic to python/)",
     )
+    subparsers.add_parser(
+        "workflow-hooks",
+        help="Enforce ADR-0001: every CI job that commits or pushes must set "
+        "HK_SKIP_HOOKS: pre-commit,pre-push at job level, or hk's git hooks "
+        "run on the runner and fail",
+    )
     ghcr_cleanup_parser = subparsers.add_parser(
         "ghcr-cleanup",
         help="Plan (default) or execute GHCR retention cleanup for the "
@@ -1166,6 +1173,7 @@ def _build_command_handlers(
             apt_pins_main(project_root, json_output=args.json)
         ),
         "bash-budget": lambda: sys.exit(bash_budget_main(project_root)),
+        "workflow-hooks": lambda: sys.exit(workflow_hooks_main(project_root)),
         "bootstrap-gap-report": lambda: handle_bootstrap_gap_report(args, project_root),
         "lock-stage": lambda: handle_lock_stage(args, project_root),
         "lock-collect": lambda: handle_lock_collect(args, project_root),

@@ -48,12 +48,26 @@ v0.7.0→v1.51.0: zero hits), so the skip must be explicit.
 
 ## Consequences
 
-- Any **new** workflow that commits or pushes must set `HK_SKIP_HOOKS` too. There is no global
-  guard — the two known cases are fixed by name.
-- Correctness now depends on remembering. A contract asserting "every workflow that commits sets
-  `HK_SKIP_HOOKS`" would give this teeth; not written yet.
+- Any **new** workflow that commits or pushes must set `HK_SKIP_HOOKS` too.
+- ~~Correctness now depends on remembering.~~ **Closed 2026-07-21 — the guard now exists.** The
+  `workflow_hk_skip_hooks` hk step runs `dotfiles-setup workflow-hooks`
+  (`python/src/dotfiles_setup/workflow_hooks.py`), which fails when *any* job that commits or
+  pushes does not set `HK_SKIP_HOOKS` covering `pre-commit,pre-push`. It pins **nothing by name** —
+  that would have inherited exactly the weakness this bullet described. A job is judged by shape,
+  on the three routes that reach a local `git`: a hook-firing verb at a shell command position, a
+  third-party action classified as a local writer, or a first-party entrypoint that reaches a git
+  write inside `python/`. Local composite actions are inlined recursively, which is what makes
+  `lock-refresh` visible at all — it contains no `git` command and reaches
+  `peter-evans/create-pull-request` two hops down. A partial value (`pre-commit` alone, which #274
+  shipped) fails, and so does a workflow added tomorrow. Wired end-to-end by the
+  `workflow.adr-0001-enforcement` contract; control arms in `tests/test_workflow_hooks.py`.
+- The check's data has its own hard stops, so it cannot rot quietly: an unrecognised third-party
+  action, a stale verdict, and a new `git` write inside `python/` each fail with their **own**
+  remedy — deliberately never "add the env var", since `HK_SKIP_HOOKS` also silences an explicit
+  `hk run <hook>` and habitually applying it would dissolve the check.
 - `commit-msg` is deliberately **not** skipped: `check_conventional_commit` passes on the bots'
-  messages and is cheap. Add it if that changes.
+  messages and is cheap. Add it if that changes — `REQUIRED_SKIPS` in `workflow_hooks.py` is the
+  one place, and the git verbs it looks for are derived from it.
 
 ## The lesson worth keeping
 

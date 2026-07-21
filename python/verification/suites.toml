@@ -1076,6 +1076,22 @@ tokens = [
 ]
 
 [[suite]]
+name = "workflow.adr-0001-enforcement"
+description = "ADR-0001 wiring: the `workflow_hk_skip_hooks` hk step must stay wired to the python enforcer end-to-end — hk.pkl shells out to `dotfiles-setup workflow-hooks`, main.py registers the subcommand AND calls workflow_hooks_main, the workflow_hooks module's three seams (find_violations / job_writes_to_git+skips_required_hooks / classification_gaps) are actually CALLED, the tests carry the real-case verdicts plus the partial-value control arm AND both arms of the entrypoint CI runs, and the ADR records its 'not written yet' gap as Closed 2026-07-21. The hk step's GLOB is deliberately unbound by any token: the check is whole-tree (find_violations scans every workflow regardless of which file triggered the step), so the glob decides only WHEN it runs, never what it sees. Every token binds a CALL SITE, never a `def`: a `def` token is satisfied by prose and by a docstring, which is how build.path-includes-mise-shims stayed green for ~3.5 months (feedback_forbid_tokens_substring_fragile). per_path_tokens, NOT bare tokens: bare tokens are a UNION across the combined text, so one file carrying a token would satisfy the contract for all five — a contract with no opinion about the files it names. The check LOGIC lives in python because a big inline-bash grep would violate zero-bash-logic AND could not work at all: refresh.yml/lock-refresh contains no `git` command and reaches peter-evans/create-pull-request two composite-action hops down."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    "hk.pkl",
+    "python/src/dotfiles_setup/main.py",
+    "python/src/dotfiles_setup/workflow_hooks.py",
+    "tests/test_workflow_hooks.py",
+    "docs/adr/0001-hk-hooks-do-not-run-in-ci.md",
+]
+per_path_tokens = { "hk.pkl" = ["workflow_hk_skip_hooks", "dotfiles-setup workflow-hooks"], "python/src/dotfiles_setup/main.py" = ["workflow-hooks", "workflow_hooks_main(project_root)"], "python/src/dotfiles_setup/workflow_hooks.py" = ["violations = find_violations(root)", "job_writes_to_git(job, writers) and not skips_required_hooks(job)", "classification_gaps(root)", "mise_task_git_writers(root)", "redact_heredoc_bodies(run_text)"], "tests/test_workflow_hooks.py" = ["workflow_hooks.job_writes_to_git(", "workflow_hooks.find_violations(REPO_ROOT) == []", "HK_SKIP_HOOKS: pre-commit", "workflow_hooks.workflow_hooks_main(tmp_path) == 1", 'setup_parser().parse_args(["workflow-hooks"])'], "docs/adr/0001-hk-hooks-do-not-run-in-ci.md" = ["dotfiles-setup workflow-hooks", "workflow_hk_skip_hooks", "Closed 2026-07-21"] }
+
+[[suite]]
 name = "workflow.tool-currency-wiring"
 description = "Daily tool-currency signal wiring: refresh.yml's tool-currency job must render the report via `mise run tool-currency` (thin caller of the python library) and upsert the standing issue; module + tests must exist. The signal feeds the tool-currency-check skill's release-note review (self-learning loop, 2026-07-07)."
 category = "workflow"
