@@ -99,6 +99,29 @@ _CMD = r"(?:^|[;&|\n]\s*)" + _WRAPPER
 _V1 = "2026-07-07"
 # The three workflow-observation rules landed in #260 (7eae108, 2026-07-14).
 _V2 = "2026-07-14"
+# The two evidence-discipline rules (pipe-to-pager, `&`-detachment) landed
+# 2026-07-21 — guardrails 2 and 3 of the session-2026-07-21 handoff.
+_V3 = "2026-07-21"
+
+# A GATE command: one whose exit code is the answer you are about to act on.
+# Deliberately NOT every command — `git log | head` is fine, and a rule that
+# misfires on legitimate diagnostics erodes trust in the guard.
+#
+# `pytest` is the one token here that also occurs as ordinary prose in this
+# repo's docs, so it is only ever reached through `_CMD` (command position)
+# or the `uv run --project python` prefix below. `rg 'pytest' docs/ | head`
+# must stay allowed; tests/test_hook_guard.py pins that.
+_GATE = (
+    r"(?:mise\s+run\s+"
+    r"(?:lint|fmt|test|verify[\w-]*|ship|land|bakeoff|smoke[\w-]*"
+    r"|lint-docs|pin-actions|check-doc-refs)\b"
+    r"|dotfiles-setup\s+verify\b"
+    r"|hk\s+(?:run|fix|check)\b"
+    r"|pytest\b)"
+)
+# `uv run --project python pytest …` — the canonical runner prefix, which
+# `_WRAPPER` does not model (it covers env/exec/nohup/time/timeout/xargs).
+_RUNNER = r"(?:uv\s+run\s+(?:-\S+\s+\S+\s+)*)?"
 
 _RULES: tuple[Rule, ...] = (
     Rule(
@@ -203,6 +226,56 @@ _RULES: tuple[Rule, ...] = (
         "watches main CI. A one-shot `gh pr checks <n> --json` read is fine. "
         "See .claude/rules/mise-tasks-only.md.",
         _V2,
+    ),
+    # Bash returns the LAST pipeline element's exit code, so `mise run lint
+    # 2>&1 | tail -40` reports tail's 0 even when the gate failed or was
+    # killed. That is how a 7-hour wedged hk run read as a pass (2026-06-29)
+    # and why .claude/rules/long-running-command-hangs.md rule 3 exists — a
+    # rule broken again in the 2026-07-21 session, hence the machine layer.
+    #
+    # The span between the gate and the pager allows `|` on purpose, so
+    # `<gate> | grep x | tail` is caught too, but stops at `;`/`&&`/newline so
+    # the match cannot run past the gate's own segment into an unrelated
+    # `mise run lint && docker ps | tail`. `&` is admitted ONLY as an fd-dup
+    # (`(?<=>)&`, i.e. `2>&1` — near-universal in the very commands this rule
+    # targets); a bare `&` is a background operator and ends the segment.
+    Rule(
+        "gate command piped to head/tail",
+        re.compile(
+            _CMD + _RUNNER + _GATE + r"(?:[^;&\n]|(?<=>)&)*\|\s*(?:tail|head)\b"
+        ),
+        "Do not pipe a gate command into `tail`/`head` — bash returns the "
+        "PIPE's exit code (tail's 0), silently masking a failed or killed "
+        "gate. Redirect to a file and read the recorded rc instead: "
+        '`<cmd> > /tmp/out.log 2>&1; echo "rc=$?" >> /tmp/out.log`, then '
+        "read the file. See .claude/rules/long-running-command-hangs.md "
+        "rule 3 and .claude/rules/verify-before-advancing.md "
+        "(evidence discipline).",
+        _V3,
+    ),
+    # The `&` sibling of the `nohup mise run` rule above: same orphaning, same
+    # redirect. Measured twice on 2026-07-21 — a bare `&` was reaped at ~2min
+    # and a 10-minute foreground bound killed a bake-off at rc=143. The harness
+    # background mechanism is the one path that stays tracked.
+    #
+    # The lookarounds are what make this a BACKGROUND operator and not a false
+    # positive: `(?!&)` excludes `&&`, and `(?<![&>])` excludes both the second
+    # `&` of `&&` and the `&` of a `2>&1` fd-dup (which is otherwise the most
+    # common `&` in a detached command line).
+    Rule(
+        "backgrounded mise run",
+        re.compile(
+            r"(?:^|[;&|\n]\s*)"
+            + _WRAPPER
+            + r"mise\s+run\b[^;\n]*?(?<![&>])&(?!&)\s*(?:$|[;\n])"
+        ),
+        "Do not hand-detach a `mise run` task with a trailing `&`. Long "
+        "Mac-side tasks backgrounded this way get REAPED when the turn goes "
+        "idle. Use the harness background mechanism so it stays tracked and "
+        "reports one clean completion. See "
+        ".claude/rules/long-running-command-hangs.md rule 2 and "
+        ".claude/rules/mise-tasks-only.md.",
+        _V3,
     ),
 )
 

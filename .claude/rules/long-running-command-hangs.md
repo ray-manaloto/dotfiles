@@ -43,6 +43,11 @@ unbounded wait + pipe-masked exit code.
    while [ $SECONDS -lt $deadline ]; do grep -q RC "$LOG" && break; sleep 15; done
    ```
 
+   *Machine-enforced since 2026-07-21* — the PreToolUse guard denies a
+   `&`-detached `mise run` (`hook_guard` rule `backgrounded mise run`), the
+   sibling of the existing `nohup mise run` rule. `&&` and a `2>&1` fd-dup are
+   not background operators and stay allowed.
+
    **Backgrounding stays correct for CI/remote waits** (`gh pr checks --watch`,
    `gh run watch`) — those run on GitHub's infrastructure, not this Mac, and
    nothing local reaps them. The hazard is specifically local, long, Mac-side
@@ -57,6 +62,9 @@ unbounded wait + pipe-masked exit code.
    `mise.toml [env]`). Use a count-diff monitor loop, not a fixed sleep.
 
 3. **Preserve real exit codes — never `cmd 2>&1 | tail -N` to capture.**
+   *Machine-enforced since 2026-07-21* — the PreToolUse guard denies a
+   pipe-to-`tail`/`head` on a **gate** command (`hook_guard` rule `gate command
+   piped to head/tail`). Non-gate diagnostics (`git log | head`) are untouched.
    Bash returns the *last* pipeline command's exit code (tail's `0`),
    silently swallowing the upstream failure or kill. Redirect to a file
    (`cmd > /tmp/out.log 2>&1; echo "rc=$?" >> /tmp/out.log`) and read the

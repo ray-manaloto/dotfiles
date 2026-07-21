@@ -39,6 +39,24 @@ from dotfiles_setup import hook_guard
         ("gh run watch 123 --exit-status", "gh run view"),
         ("gh pr checks 172 --watch", "mise run ship"),
         ("gh pr checks 172 --watch --interval 30", "mise run ship"),
+        # Evidence discipline (_V3). A gate command piped into a pager reports
+        # the PAGER's exit code — the shape that made a 7-hour wedged hk run
+        # read as a pass.
+        ("mise run lint 2>&1 | tail -40", "rc"),
+        ("mise run lint | head -20", "rc"),
+        ("mise run verify | tail", "rc"),
+        ("mise run verify-local 2>&1 | tail -n 50", "rc"),
+        ("uv run --project python pytest tests/ -x -q | tail -30", "rc"),
+        ("pytest tests/ | tail", "rc"),
+        ("dotfiles-setup verify run | head -5", "rc"),
+        ("hk run check --all | tail -40", "mise run lint"),
+        # An intermediate filter must not launder the pipe.
+        ("mise run test 2>&1 | grep -i fail | tail -5", "rc"),
+        # Hand-detachment via a trailing `&` — the `nohup` rule's sibling.
+        ("mise run verify-local &", "harness background"),
+        ("mise run land -- 256 > /tmp/x 2>&1 &", "harness background"),
+        ("mise run bakeoff  &  ", "harness background"),
+        ("mise run lint &\necho started", "harness background"),
     ],
 )
 def test_one_off_commands_denied_with_redirect(
@@ -82,6 +100,41 @@ def test_one_off_commands_denied_with_redirect(
         # Prose mentions inside a commit message (probe 2026-07-07: the
         # unanchored chezmoi rule denied its own documenting commit).
         "git commit -m 'docs: chezmoi apply/update stays devcontainer-only'",
+        # --- control arms for the _V3 pipe rule -------------------------------
+        # A pager on a NON-gate command is ordinary diagnostics.
+        "git log --oneline | head -5",
+        "docker ps --filter label=x | tail -3",
+        "ls .omc/plans/ | tail -15",
+        # The gate commands themselves, unpiped — the canonical form.
+        # (`mise run lint` itself is already pinned above.)
+        "uv run --project python pytest tests/ -x -q",
+        "mise run verify-local",
+        # The PRESCRIBED replacement must not itself be denied: redirect to a
+        # file, record the rc, then read the file.
+        'mise run lint > /tmp/out.log 2>&1; echo "rc=$?" >> /tmp/out.log',
+        "mise run lint > /tmp/out.log 2>&1\ntail -40 /tmp/out.log",
+        # `[^;&\n]*` must not run past the gate's own segment: the pager here
+        # belongs to an unrelated later command.
+        "mise run lint; git log | head -5",
+        "mise run lint && docker ps | tail -3",
+        # `pytest` as prose, not at command position (the token most likely to
+        # false-positive — it appears throughout this repo's docs).
+        "rg 'pytest' docs/ | head -20",
+        "grep -rn pytest .claude/rules/ | tail",
+        # Quoted mention of the denied shape itself — masking must neuter the
+        # pipe, per the module's "test a new rule against a quoted mention".
+        "echo 'never run mise run lint | tail -40'",
+        # --- control arms for the _V3 backgrounding rule ----------------------
+        # `&&` is not a background operator.
+        "mise run lint && mise run test",
+        "mise run lint && echo ok",
+        # A `2>&1` fd-dup is not a background operator either.
+        "mise run lint > /tmp/x 2>&1",
+        # Backgrounding a NON-mise command is out of scope.
+        "sleep 5 &",
+        "docker logs -f x &",
+        # Quoted mention of the denied shape.
+        "echo 'do not run mise run verify-local &'",
     ],
 )
 def test_legitimate_commands_allowed(command: str) -> None:
