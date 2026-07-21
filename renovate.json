@@ -35,12 +35,11 @@
       "platformAutomerge": true
     },
     {
-      "description": "graphify: hold-and-review, never auto-merge. It ships ~2x/day (v0.9.21 12:37Z and v0.9.22 15:41Z on 2026-07-20 alone) as PATCH releases, so the blanket minor/patch automerge above would merge it unread twice a day. It is pre-1.0 with a documented history of SILENT data loss - v0.9.22 alone fixed a node whose source_file uses a URL scheme being evicted on the second update, and a real source dir named env/.env/*_env being pruned as a false-positive virtualenv 'with no trace in any output bucket'. That is exactly the class where a green build hides a corrupted graph, which no CI check can see. minimumReleaseAge 3d is ~6 releases of soak; the PR still opens as a signal, but a human reads the notes and the 2-doc determinism probe gates the merge. NOTE the counter-risk: holding means running known-buggy versions longer, so a held bump must be reviewed promptly, not frozen.",
+      "description": "graphify: review-before-merge, never auto-merge. It ships ~2x/day as PATCH releases, so the blanket minor/patch automerge above would merge it unread twice a day. It is pre-1.0 with a documented history of SILENT data loss - v0.9.22 alone fixed a node whose source_file uses a URL scheme being evicted on the second update, and a real source dir named env/.env/*_env being pruned as a false-positive virtualenv 'with no trace in any output bucket'. That is exactly the class where a green build hides a corrupted graph, which no CI check can see - so `automerge: false` stays, and the 2-doc determinism probe gates the merge. NO minimumReleaseAge (removed 2026-07-20, Ray's call): a soak delay does not add safety on top of automerge:false - it only delays the PR while we keep running the KNOWN-buggy version we are already on. The prior 3-day hold was an agent's prescription, not a measured requirement, and it deviated from this repo's global `minimumReleaseAge: null`. Renovate now opens the PR the moment a release lands; a human still reads the notes before merging.",
       "matchPackageNames": [
         "graphifyy"
       ],
       "automerge": false,
-      "minimumReleaseAge": "3 days",
       "groupName": null
     },
     {
@@ -71,7 +70,7 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "hk pkl schema pin (amends + import package:// URLs) — kept in lockstep with hk releases across hk.pkl, hk-common.pkl, hk-image.pkl. No native/preset manager covers a pkl amends URL. The version appears TWICE per URL (release tag `download/v<X>/` AND package `hk@<X>`); both matchStrings are required so a bump rewrites both — a single-occurrence match produces the 404 URL `v<new>/hk@<old>.zip` (fixed #248).",
+      "description": "hk pkl schema pin (amends + import package:// URLs) \u2014 kept in lockstep with hk releases across hk.pkl, hk-common.pkl, hk-image.pkl. No native/preset manager covers a pkl amends URL. The version appears TWICE per URL (release tag `download/v<X>/` AND package `hk@<X>`); both matchStrings are required so a bump rewrites both \u2014 a single-occurrence match produces the 404 URL `v<new>/hk@<old>.zip` (fixed #248).",
       "managerFilePatterns": [
         "/(^|/)hk(-common|-image)?\\.pkl$/"
       ],
@@ -111,7 +110,7 @@
     },
     {
       "customType": "regex",
-      "description": "gcc-latest.deb dated URL pin. Upstream (kayari) publishes NO checksum/signature — the immutable dated filename is the reproducibility handle. Bumped via the custom.gcc-latest HTML datasource on the jwakely index; no native/preset manager covers a rolling .deb URL. The companion GCC_LATEST_DEB_SHA256 is NOT managed here (Renovate can't hash an artifact); the gcc-sha-repair.yml workflow recomputes + commits it on this bump (#249).",
+      "description": "gcc-latest.deb dated URL pin. Upstream (kayari) publishes NO checksum/signature \u2014 the immutable dated filename is the reproducibility handle. Bumped via the custom.gcc-latest HTML datasource on the jwakely index; no native/preset manager covers a rolling .deb URL. The companion GCC_LATEST_DEB_SHA256 is NOT managed here (Renovate can't hash an artifact); the gcc-sha-repair.yml workflow recomputes + commits it on this bump (#249).",
       "managerFilePatterns": [
         "/\\.devcontainer/Dockerfile$/"
       ],
@@ -137,7 +136,7 @@
     },
     {
       "customType": "regex",
-      "description": "mise installer version pin (curl https://mise.run honors MISE_VERSION). The pin must track a mise version that reads the committed mise-system.lock format — Renovate bumps it, and the CI lock-refresh job regenerates the lock in lockstep.",
+      "description": "mise installer version pin (curl https://mise.run honors MISE_VERSION). The pin must track a mise version that reads the committed mise-system.lock format \u2014 Renovate bumps it, and the CI lock-refresh job regenerates the lock in lockstep.",
       "managerFilePatterns": [
         "/\\.devcontainer/Dockerfile$/"
       ],
@@ -149,7 +148,7 @@
     },
     {
       "customType": "regex",
-      "description": "dive layer-analysis version pin. The upstream action is broken (bare Dockerfile with an empty ARG DOCKER_CLI_VERSION → 404), so image-analysis.yml installs the release tarball directly and the version lives in a workflow env var no native manager parses. Same github-releases shape as the MISE_VERSION pin; the curl URL re-adds the v prefix.",
+      "description": "dive layer-analysis version pin. The upstream action is broken (bare Dockerfile with an empty ARG DOCKER_CLI_VERSION \u2192 404), so image-analysis.yml installs the release tarball directly and the version lives in a workflow env var no native manager parses. Same github-releases shape as the MISE_VERSION pin; the curl URL re-adds the v prefix.",
       "managerFilePatterns": [
         "/\\.github/workflows/image-analysis\\.yml$/"
       ],
