@@ -11,6 +11,8 @@ not a test.
 
 from __future__ import annotations
 
+import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -19,8 +21,10 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
+from dotfiles_setup import graph_bakeoff
 from dotfiles_setup.graph_bakeoff import (
     FIXED_FLAGS,
+    GOLD_CORPUS_RELPATH,
     NULL_ARM_SUFFIX,
     Arm,
     RunResult,
@@ -406,3 +410,130 @@ def test_answer_key_shape_is_validated_before_scoring() -> None:
     }
     with pytest.raises(KeyError):
         score_graph(_graph([], []), broken)
+
+
+# ---------------------------------------------------------------------------
+# The matrix runner and report. The graphify subprocess is faked at the module
+# boundary (`_run`), so these exercise the real orchestration without a model.
+# ---------------------------------------------------------------------------
+
+
+def _fake_proc(stdout: str = "", rc: int = 0) -> subprocess.CompletedProcess[str]:
+    return subprocess.CompletedProcess(args=[], returncode=rc, stdout=stdout, stderr="")
+
+
+def test_execute_matrix_runs_every_combination(
+    tmp_path: Path, corpus: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Corpora x arms x repeats, each in its own directory."""
+    calls: list[tuple[list[str], Path, dict[str, str]]] = []
+
+    def fake_run(
+        args: list[str], *, cwd: Path, env: dict[str, str]
+    ) -> subprocess.CompletedProcess[str]:
+        """Stands in for the graphify subprocess; signature mirrors `_run`."""
+        calls.append((list(args), cwd, dict(env)))
+        return _fake_proc("[graphify extract] tokens: 1 in / 5 out")
+
+    monkeypatch.setattr(graph_bakeoff, "_run", fake_run)
+    monkeypatch.setattr(graph_bakeoff, "gather_versions", dict)
+
+    arms = [Arm("a", "ollama", "m1"), Arm("b", "ollama", "m2")]
+    results = graph_bakeoff.execute_matrix(tmp_path, "t", [corpus], arms, repeats=3)
+
+    assert len(results) == 6
+    assert len(calls) == 6
+    # Control arm: the runs are genuinely distinct on disk, not overwriting.
+    assert len({r.run_dir for r in results}) == 6
+    # Each run executes in its OWN directory, and every ollama arm carries the
+    # serialisation env — graphify never sets OLLAMA_NUM_PARALLEL itself, and
+    # Ollama's default of 4 is the multiplier behind graphify #798.
+    assert len({cwd for _, cwd, _ in calls}) == 6
+    for _, _, env in calls:
+        assert env["OLLAMA_NUM_PARALLEL"] == "1"
+        assert env["GRAPHIFY_OLLAMA_KEEP_ALIVE"] == "0"
+
+
+def test_every_run_gets_its_own_corpus_copy_and_manifest(
+    tmp_path: Path, corpus: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The manifest is what makes a graph attributable after the fact."""
+
+    def stub(
+        args: list[str], *, cwd: Path, env: dict[str, str]
+    ) -> subprocess.CompletedProcess[str]:
+        """Asserts the boundary is called sanely; the test checks the manifest."""
+        assert args[0] == "graphify"
+        assert cwd.is_dir()
+        assert "OLLAMA_NUM_PARALLEL" in env
+        return _fake_proc()
+
+    monkeypatch.setattr(graph_bakeoff, "_run", stub)
+    monkeypatch.setattr(graph_bakeoff, "gather_versions", dict)
+
+    results = graph_bakeoff.execute_matrix(
+        tmp_path, "t", [corpus], [Arm("a", "ollama", "qwen2.5-coder:14b")], repeats=1
+    )
+    manifest = json.loads(
+        (results[0].run_dir / "manifest.json").read_text(encoding="utf-8")
+    )
+
+    assert manifest["backend"] == "ollama"
+    assert manifest["model"] == "qwen2.5-coder:14b"
+    assert set(manifest["corpus_sha256"]) == {"a.md", "b.md"}
+    assert manifest["fixed_flags"] == list(FIXED_FLAGS)
+    # The corpus really was copied in, so the run is self-contained.
+    assert (results[0].run_dir / "corpus" / "a.md").is_file()
+
+
+def test_report_without_a_null_arm_says_gaps_are_uninterpretable() -> None:
+    """No null arm must produce a loud warning, not a confident table.
+
+    A report that ranks arms with no noise floor is exactly the artifact the
+    audit rejected, so the absence has to be visible in the output.
+    """
+    results = [_res("a", 1), _res("b", 9)]
+    report = graph_bakeoff.render_report(results)
+    assert "No null arm" in report
+    assert "uninterpretable" in report
+
+
+def test_report_marks_a_sub_floor_gap_as_indistinguishable() -> None:
+    """The end-to-end expression of the rule, in the rendered table."""
+    results = [
+        _res("ref", 1),
+        _res("ref", 4),  # reference wanders 1..4
+        _res("ref-null", 2),
+        _res("ref-null", 3),
+        _res("other", 2),
+        _res("other", 2),  # median gap well inside the floor
+    ]
+    report = graph_bakeoff.render_report(results)
+    assert "Noise floor" in report
+    assert "indistinguishable" in report
+
+
+def test_report_scores_against_the_answer_key_when_one_exists() -> None:
+    """Recall and decoy columns appear only when a key is supplied."""
+    results = [_res("a", 1)]
+    assert "Answer-key score" not in graph_bakeoff.render_report(results)
+    # Control arm: with a key, the section IS rendered.
+    assert "Answer-key score" in graph_bakeoff.render_report(results, KEY)
+
+
+def test_gold_fixture_key_is_internally_consistent() -> None:
+    """Every link in the shipped gold key names a declared entity.
+
+    Runs against the VERSIONED fixture rather than the workbench copy, so it
+    executes everywhere instead of skipping in CI.
+    """
+    key_path = Path(__file__).parent.parent / GOLD_CORPUS_RELPATH / "ANSWER_KEY.json"
+    key = json.loads(key_path.read_text(encoding="utf-8"))
+    names = set(key["entities"])
+    for link in key["expected_links"] + key["forbidden_links"]:
+        assert link["a"] in names, link["id"]
+        assert link["b"] in names, link["id"]
+    # Every entity's documents must exist in the fixture directory.
+    for name, spec in key["entities"].items():
+        for doc in spec["docs"]:
+            assert (key_path.parent / doc).is_file(), f"{name} -> {doc}"

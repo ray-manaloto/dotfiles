@@ -26,6 +26,12 @@ from dotfiles_setup.docker import DevContainerManager
 from dotfiles_setup.gcc_sha import gcc_sha_main
 from dotfiles_setup.ghcr import validate_ghcr_prereqs
 from dotfiles_setup.ghcr_cleanup import plan_cleanup
+from dotfiles_setup.graph_bakeoff import (
+    DEFAULT_REPEATS,
+    DEFAULT_WORKBENCH,
+    GOLD_CORPUS_RELPATH,
+    bakeoff_main,
+)
 from dotfiles_setup.graphify import graphify_main
 from dotfiles_setup.hook_guard import pretooluse_main
 from dotfiles_setup.hook_selfcheck import hook_selfcheck_main
@@ -253,6 +259,35 @@ def _add_graphify_subcommands(
     )
     query_parser.add_argument(
         "--dfs", action="store_true", help="Traverse depth-first instead of BFS"
+    )
+    bakeoff_parser = graphify_sub.add_parser(
+        "bakeoff",
+        help="Run the extraction bake-off (writes OUTSIDE the repo, to the workbench)",
+    )
+    bakeoff_parser.add_argument(
+        "--corpus",
+        default=None,
+        help=f"Corpus dir (default: the versioned gold fixture, {GOLD_CORPUS_RELPATH})",
+    )
+    bakeoff_parser.add_argument(
+        "--workbench",
+        default=str(DEFAULT_WORKBENCH),
+        help=f"Where runs and reports land (default: {DEFAULT_WORKBENCH})",
+    )
+    bakeoff_parser.add_argument(
+        "--repeats",
+        type=int,
+        default=DEFAULT_REPEATS,
+        help=f"Runs per arm (default: {DEFAULT_REPEATS}); variance needs >1",
+    )
+    bakeoff_parser.add_argument(
+        "--run-id", default="manual", dest="run_id", help="Names the run subtree"
+    )
+    bakeoff_parser.add_argument(
+        "--no-null",
+        action="store_true",
+        dest="no_null",
+        help="Drop the null arm. Removes the noise floor, so no gap is interpretable",
     )
 
 
@@ -792,6 +827,19 @@ def handle_graphify(args: argparse.Namespace, project_root: Path) -> None:
                 budget=args.budget,
                 context=args.context,
                 dfs=args.dfs,
+            )
+        )
+    if getattr(args, "graphify_command", None) == "bakeoff":
+        corpus = (
+            Path(args.corpus) if args.corpus else project_root / GOLD_CORPUS_RELPATH
+        )
+        sys.exit(
+            bakeoff_main(
+                corpus=corpus,
+                workbench=Path(args.workbench),
+                repeats=args.repeats,
+                run_id=args.run_id,
+                no_null=args.no_null,
             )
         )
 

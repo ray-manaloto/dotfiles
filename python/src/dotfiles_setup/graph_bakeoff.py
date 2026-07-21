@@ -540,3 +540,312 @@ def load_answer_key(corpus_dir: Path) -> dict[str, Any] | None:
     if not path.is_file():
         return None
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def gather_versions() -> dict[str, str]:
+    """Record the tool versions a run depended on.
+
+    graphify writes none of this into its own output, which is why the previous
+    comparison could not be attributed after the fact.
+    """
+    versions: dict[str, str] = {}
+    for label, argv in (
+        ("graphify", ["graphify", "--version"]),
+        ("ollama", ["ollama", "--version"]),
+        ("git_sha", ["git", "rev-parse", "HEAD"]),
+    ):
+        try:
+            proc = subprocess.run(
+                argv, capture_output=True, text=True, check=False, timeout=30
+            )
+            versions[label] = proc.stdout.strip() or proc.stderr.strip() or "unknown"
+        except OSError, subprocess.SubprocessError:
+            versions[label] = "unavailable"
+    return versions
+
+
+def build_arms(*, include_null: bool = True) -> list[Arm]:
+    """The default arm list, with a null twin for the reference model.
+
+    Only backends that WORK today are here. Deliberately absent:
+
+    * ``claude-cli`` — the model does the extraction and then returns an agentic
+      summary instead of JSON, so graphify reads truncation and converges on an
+      empty graph. Diagnosed to graphify's prompt construction (a clean room
+      outside the repo fails identically, and ``claude -p --output-format json``
+      returns raw JSON when asked directly).
+    * ``nim`` — reachable only through a custom provider; see
+      :func:`nim_provider_config`.
+    """
+    arms = [
+        Arm("q25c-14b", "ollama", "qwen2.5-coder:14b"),
+        Arm("gemma4-12b", "ollama", "gemma4:12b"),
+        Arm("q3c-30b", "ollama", "qwen3-coder"),
+        Arm("gemini-flash-lite", "gemini", "gemini-3.1-flash-lite"),
+    ]
+    if include_null:
+        # The null twin clones the REFERENCE arm — the one every other arm is
+        # compared against — so the noise floor is measured where it is used.
+        arms.append(make_null_arm(arms[0]))
+    return arms
+
+
+def nim_provider_config() -> dict[str, Any]:
+    """The ``~/.graphify/providers.json`` entry that makes NIM reachable.
+
+    NIM is not one of graphify's nine built-in backends; it is an
+    OpenAI-compatible endpoint reached through the custom-provider mechanism
+    (``llm.py:264`` ``_load_custom_providers``). Written to the GLOBAL path on
+    purpose: a project-local ``./.graphify/providers.json`` is ignored unless
+    ``GRAPHIFY_ALLOW_LOCAL_PROVIDERS=1``, because a provider config controls
+    where your corpus and API key are sent and travels with a cloned repo.
+
+    Not written automatically, and not with a key in it — this returns the shape
+    so the config can be reviewed before it exists.
+
+    One thing that changed: NVIDIA's API Trial ToS §3.3(iv) permits training on
+    submitted content, which is why NIM was vetted and NOT adopted for the real
+    corpus. The gold corpus is **fictional**, so there is nothing confidential
+    to leak — NIM is safe to benchmark on the gold set specifically, and still
+    wrong for ``.omc/kb/raw``.
+    """
+    return {
+        "nim": {
+            "base_url": "https://integrate.api.nvidia.com/v1",
+            "env_key": "NVIDIA_API_KEY",
+            "default_model": "meta/llama-3.3-70b-instruct",
+            "pricing": {"input": 0.0, "output": 0.0},
+            "temperature": 0,
+            "max_tokens": 16384,
+        }
+    }
+
+
+def execute_matrix(
+    workbench: Path,
+    run_id: str,
+    corpora: Sequence[Path],
+    arms: Sequence[Arm],
+    repeats: int = DEFAULT_REPEATS,
+) -> list[RunResult]:
+    """Run every (corpus, arm, repeat) combination sequentially.
+
+    Sequential on purpose. These arms share one machine and one Ollama server,
+    so running them concurrently would make the ``seconds`` column measure
+    contention rather than the model — and ``--max-concurrency 1`` inside each
+    run would be pointless if the runs themselves overlapped.
+    """
+    versions = gather_versions()
+    results: list[RunResult] = []
+    for corpus_dir in corpora:
+        if not corpus_dir.is_dir():
+            msg = f"corpus directory not found: {corpus_dir}"
+            raise BakeoffError(msg)
+        for arm in arms:
+            for repeat in range(1, repeats + 1):
+                spec = RunSpec(workbench, run_id, corpus_dir, arm, repeat, versions)
+                result = execute_run(spec)
+                results.append(result)
+                logger.info(
+                    "%s/%s r%d: rc=%d nodes=%d edges=%d x-doc=%d %.1fs",
+                    corpus_dir.name,
+                    arm.name,
+                    repeat,
+                    result.rc,
+                    result.nodes,
+                    result.edges,
+                    result.cross_doc,
+                    result.seconds,
+                )
+    return results
+
+
+def _score_arm(results: Sequence[RunResult], key: dict[str, Any]) -> Score | None:
+    """Score an arm's BEST run against the answer key.
+
+    Best rather than median: recall is a set, not a scalar, so there is no
+    meaningful median of five link-id lists. The spread lives in the raw metrics
+    beside it, and every run's graph is on disk for inspection.
+    """
+    graphs = [g for r in results if (g := load_graph(r.run_dir)) is not None]
+    if not graphs:
+        return None
+    return max((score_graph(g, key) for g in graphs), key=lambda s: s.recall)
+
+
+def _render_floor(floors: dict[str, float]) -> list[str]:
+    """The noise-floor table, or a loud warning when there is no null arm."""
+    if not floors:
+        return [
+            "> ⚠️ **No null arm in this run — no noise floor.** Every gap below",
+            "> is uninterpretable: nothing distinguishes a real difference from",
+            "> run-to-run variance. Re-run with `build_arms(include_null=True)`.",
+            "",
+        ]
+    return [
+        "## Noise floor (same model, two arms, nothing changed)",
+        "",
+        "| metric | floor |",
+        "|---|---:|",
+        *[f"| {m} | {v:g} |" for m, v in floors.items()],
+        "",
+        "**A cross-arm gap smaller than the floor is not a finding.**",
+        "",
+    ]
+
+
+def _render_metrics(by_arm: dict[str, list[RunResult]]) -> list[str]:
+    """Per-arm medians, each carried with its spread."""
+    lines = [
+        "## Metrics (median ± spread over repeats)",
+        "",
+        "| arm | ok | nodes | edges | x-doc | out tok | secs |",
+        "|---|---:|---:|---:|---:|---:|---:|",
+    ]
+    for arm, runs in by_arm.items():
+        agg = aggregate(runs)
+        cells = " | ".join(
+            f"{agg[m]['median']:g} ±{agg[m]['spread']:g}"
+            for m in ("nodes", "edges", "cross_doc", "out_tokens", "seconds")
+        )
+        lines.append(f"| {arm} | {agg['ok']}/{agg['n']} | {cells} |")
+    return lines
+
+
+def _render_significance(
+    by_arm: dict[str, list[RunResult]], reference: str, floors: dict[str, float]
+) -> list[str]:
+    """Every gap adjudicated against the floor before it is called a difference."""
+    lines = [
+        "",
+        "## Significance vs the reference arm",
+        "",
+        f"Reference: `{reference}`",
+        "",
+        "| arm | metric | gap | floor | verdict |",
+        "|---|---|---:|---:|---|",
+    ]
+    ref_agg = aggregate(by_arm[reference])
+    for arm, runs in by_arm.items():
+        if arm == reference or arm.endswith(NULL_ARM_SUFFIX):
+            continue
+        agg = aggregate(runs)
+        for metric, floor in floors.items():
+            gap = abs(agg[metric]["median"] - ref_agg[metric]["median"])
+            verdict = (
+                "**differs**" if is_significant(gap, floor) else "indistinguishable"
+            )
+            lines.append(f"| {arm} | {metric} | {gap:g} | {floor:g} | {verdict} |")
+    return lines
+
+
+def _render_scores(
+    by_arm: dict[str, list[RunResult]], key: dict[str, Any]
+) -> list[str]:
+    """Answer-key recall and decoy resistance, best run per arm."""
+    lines = [
+        "",
+        "## Answer-key score (best run per arm)",
+        "",
+        "| arm | recall | decoy resistance | missed | asserted decoys |",
+        "|---|---:|---:|---|---|",
+    ]
+    for arm, runs in by_arm.items():
+        score = _score_arm(runs, key)
+        if score is None:
+            lines.append(f"| {arm} | — | — | (no graph produced) | — |")
+            continue
+        lines.append(
+            f"| {arm} | {score.recall:.2f} | {score.decoy_resistance:.2f} "
+            f"| {', '.join(score.recall_misses) or '—'} "
+            f"| {', '.join(score.forbidden_hits) or '—'} |"
+        )
+    return lines
+
+
+def render_report(
+    results: Sequence[RunResult],
+    key: dict[str, Any] | None = None,
+) -> str:
+    """Render the comparison as markdown, with significance against the floor.
+
+    Every number carries its spread, and every cross-arm gap is checked against
+    the same-model noise floor before it is called a difference. An arm whose
+    lead does not clear the floor is reported as *indistinguishable* — the
+    honest reading, and the one the previous bake-off skipped.
+    """
+    by_arm: dict[str, list[RunResult]] = {}
+    for r in results:
+        by_arm.setdefault(r.arm, []).append(r)
+
+    reference = next((a for a in by_arm if f"{a}{NULL_ARM_SUFFIX}" in by_arm), None)
+    floors: dict[str, float] = {}
+    if reference:
+        twin = by_arm[f"{reference}{NULL_ARM_SUFFIX}"]
+        floors = {
+            m: noise_floor(by_arm[reference], twin, m)
+            for m in ("nodes", "edges", "cross_doc")
+        }
+
+    lines = [
+        "# graphify extraction bake-off",
+        "",
+        f"Runs: {len(results)} · arms: {len(by_arm)}",
+        "",
+        *_render_floor(floors),
+        *_render_metrics(by_arm),
+    ]
+    if reference and floors:
+        lines += _render_significance(by_arm, reference, floors)
+    if key:
+        lines += _render_scores(by_arm, key)
+    return "\n".join(lines) + "\n"
+
+
+def bakeoff_main(
+    *,
+    corpus: Path,
+    workbench: Path = DEFAULT_WORKBENCH,
+    repeats: int = DEFAULT_REPEATS,
+    run_id: str = "manual",
+    no_null: bool = False,
+) -> int:
+    """Run the matrix and write the report. Returns a process exit code.
+
+    The report goes to the WORKBENCH, never into the repo — it is result data.
+    """
+    if not corpus.is_dir():
+        logger.error("bakeoff: corpus directory not found: %s", corpus)
+        return 1
+
+    arms = build_arms(include_null=not no_null)
+    logger.info(
+        "bakeoff: %d arms x %d repeats over %s", len(arms), repeats, corpus.name
+    )
+    results = execute_matrix(workbench, run_id, [corpus], arms, repeats)
+
+    key = load_answer_key(corpus)
+    if key is None:
+        logger.warning(
+            "bakeoff: %s has no %s — reporting raw metrics only, no recall or "
+            "decoy scoring. Counts alone cannot rank models.",
+            corpus.name,
+            _ANSWER_KEY,
+        )
+
+    report = render_report(results, key)
+    out = workbench / "reports" / f"{run_id}.md"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(report, encoding="utf-8")
+    logger.info("bakeoff: report written to %s", out)
+
+    failed = [r for r in results if not r.ok]
+    if failed:
+        logger.error(
+            "bakeoff: %d/%d runs produced no graph: %s",
+            len(failed),
+            len(results),
+            ", ".join(sorted({f"{r.arm}" for r in failed})),
+        )
+        return 1
+    return 0
