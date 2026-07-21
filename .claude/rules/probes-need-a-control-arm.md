@@ -106,6 +106,25 @@ before you believe it.
    minutes"` returns nothing on macOS/BSD `find`, which does not parse that
    relative form — indistinguishable from "no recent files". Control-arm any
    time-bounded search against a window you know contains hits.
+
+   **A TOKEN SPELLING is a bound too — this is the most common form.** On
+   2026-07-21 a session grepped `lmstudio` and `lm_studio`, got 0, and reported
+   *"graphify supports NONE of MLX / LM Studio / Jan"* to the user. graphify
+   spells it **`LM Studio`, with a space** — 3 hits, one of them its own
+   `--help`: *"openai also reaches self-hosted OpenAI-compatible servers
+   (llama.cpp, vLLM, LM Studio): set OPENAI_BASE_URL"*. The literal grep was
+   true; the conclusion was backwards. A later agent caught it.
+
+   That session produced **five** bad-bound probes, which is why this paragraph
+   exists: a backtick defeated a search of its own handoff; a hyphen-vs-underscore
+   filename made a present pointer read as absent; a `cd` persisted so the
+   "control arm" ran in the same directory as the test; and zsh's lack of
+   word-splitting made `grep -l $f` (multi-line `$f`) silently match nothing.
+
+   The habit that would have caught every one: **a 0-result grep is not an
+   answer until a control arm has run.** Before reporting absence, grep a term
+   you KNOW is present in the same corpus with the same command shape. If that
+   also returns 0, the probe is broken — not the world.
 4. **A redirect/timeout/parse-error is not a "no".** HTTP 301/000, a `jq` miss,
    an empty `grep` — distinguish "answered no" from "never asked".
 5. **Say which arm you ran.** When reporting a probe result, state the control:
