@@ -493,6 +493,31 @@ description = "Deterministically query the project knowledge graph (host-only, #
 # Pass flags through: mise run graphify-query -- "how does lint work?" --budget 3000
 run = 'uv run --project python dotfiles-setup graphify query'
 
+[tasks.bakeoff]
+description = "Run the graphify extraction bake-off (writes OUTSIDE the repo)"
+# Thin caller (zero-bash-logic); logic in
+# python/src/dotfiles_setup/graph_bakeoff.py.
+#
+# Every artifact lands in the WORKBENCH (~/dev/graphify-bakeoff), never in this
+# repo: bake-off output is result data, not source. The one exception is the
+# gold corpus at tests/fixtures/graphify-gold, which is an INPUT and is
+# versioned so a score is reproducible across machines.
+#
+# Each (corpus, arm, repeat) gets a FRESH directory. That is not tidiness — it
+# is the cache-isolation guarantee. graphify's semantic cache is keyed by file
+# content + relative path and carries NO model identity, so two arms sharing an
+# output tree would silently serve one model's results to the other.
+#
+# The arm list includes a NULL ARM: the reference model run twice under
+# identical conditions. The spread between the twins is the noise floor, and a
+# cross-arm gap smaller than it is reported as "indistinguishable" rather than
+# as a finding. Without it, no gap in the report means anything.
+#
+#   mise run bakeoff                          # gold corpus, 3 repeats, null arm
+#   mise run bakeoff -- --repeats 5
+#   mise run bakeoff -- --corpus .omc/kb/raw --run-id full-corpus
+run = 'uv run --project python dotfiles-setup graphify bakeoff'
+
 [tasks.verify-apt-pins]
 description = "Prove every pinned [bootstrap.packages] version still resolves (~60s, no image build)"
 # Thin caller per zero-bash-logic; the probe container, the Dockerfile-ARG
