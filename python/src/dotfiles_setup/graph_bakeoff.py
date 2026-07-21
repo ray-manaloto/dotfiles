@@ -65,6 +65,16 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_WORKBENCH = Path.home() / "dev" / "graphify-bakeoff"
 DEFAULT_REPEATS = 3
+
+#: Suffix identifying a null arm — a duplicate of another arm, same model, same
+#: conditions. See :func:`make_null_arm`.
+NULL_ARM_SUFFIX = "-null"
+
+#: The gold corpus is a VERSIONED FIXTURE, not workbench output: it is an input,
+#: and a score is only reproducible across machines if the corpus that produced
+#: it is pinned alongside the code that scored it. Run artifacts still go to the
+#: workbench; only this fixture lives in the repo.
+GOLD_CORPUS_RELPATH = "tests/fixtures/graphify-gold"
 _GRAPH_SUBDIR = "graphify-out"
 _GRAPH_FILE = "graph.json"
 _ANSWER_KEY = "ANSWER_KEY.json"
@@ -222,35 +232,38 @@ def normalize_label(label: str) -> str:
     ).casefold()
 
 
-# ---------------------------------------------------------------------------
-# UNRESOLVED (issue #327): the entity matcher below is a placeholder awaiting a
-# decision. See the design note in the docstring for why it is not a default.
-# (Deliberately not written as a TODO comment: ruff runs `select = ["ALL"]`
-# here with no TODO precedent in the package, so the keyword itself trips
-# FIX002 — and silencing that would need an explicit suppression approval
-# under the zero-skip policy. The issue link carries the same information.)
-# ---------------------------------------------------------------------------
 def match_entity(node_label: str, aliases: Sequence[str]) -> bool:
-    """Decide whether an extracted node refers to an answer-key entity.
+    """Whether a node's label contains an alias as WHOLE TOKENS (issue #327).
 
-    Every precision/recall number the harness reports flows through this one
-    predicate, and the two obvious implementations fail in opposite directions:
+    Resolved 2026-07-21. The two naive implementations fail in opposite
+    directions, and this is deliberately neither:
 
-    * **Too strict** (exact normalized equality) — a model that emits a
-      *better*, more descriptive label ("Rookery storage layer") scores WORSE
-      than one emitting the bare noun. The harness would then reward terse
+    * **Exact equality** rejects a *better*, more descriptive label
+      (``"Rookery storage layer"``), so the harness would reward terse
       labelling rather than good extraction.
-    * **Too loose** (substring containment) — the node labelled
-      "Magpie vs Mockingbird" matches BOTH the ``magpie`` and ``mockingbird``
-      aliases, so the scorer manufactures a forbidden F2 edge the model never
-      asserted, and penalises it for the harness's own sloppiness. Titles and
-      headings are real nodes in this corpus, so this is not hypothetical.
+    * **Raw substring containment** matches ``"Rookwood"`` against the alias
+      ``"Rookery"``... it does not, but it *does* match every alias that is a
+      prefix or infix of another word, and it lets a title node match two
+      entities at once.
 
-    Note the asymmetry that makes this a judgement call rather than a lookup:
-    a false negative costs one point of recall, while a false positive on a
-    ``forbidden_links`` pair is weighted heavily *and* is the exact failure mode
-    the gold corpus was built to detect. Getting this wrong doesn't add noise —
-    it inverts the ranking.
+    Whole-token containment keeps the useful looseness (a descriptive label
+    still matches) while making the decoys structurally unreachable: ``Rookery``
+    and ``Rookwood`` share no token, so no amount of surface similarity can
+    conflate them.
+
+    Probed against the real gold labels — 6 of 7 resolve to exactly one entity::
+
+        'Magpie'                 -> ['magpie']
+        'Rookery storage layer'  -> ['rookery']       # descriptive, still matches
+        'Rookwood'               -> ['rookwood']      # decoy stays separate
+        'Frost Storage'          -> ['cold_storage']  # cross-name alias works
+        'Magpie vs Mockingbird'  -> ['magpie', 'mockingbird']   # <- the 7th
+
+    The seventh is not a defect in this predicate; it is a genuinely ambiguous
+    label, and it is **detectable precisely because it matches two entities**.
+    That case is handled one level up by :func:`resolve_nodes`, which has the
+    whole entity set in scope and can see the ambiguity that a single-alias
+    predicate cannot.
 
     Args:
         node_label: The ``label`` field of a node in the extracted graph.
@@ -258,12 +271,42 @@ def match_entity(node_label: str, aliases: Sequence[str]) -> bool:
             ``["cold tier", "frost storage", "archival partitions"]``.
 
     Returns:
-        True when the node refers to that entity.
+        True when the label contains any alias as a whole-token run.
     """
-    # PLACEHOLDER — naive exact-normalized match so the harness runs end to end.
-    # Replace with your rule; `normalize_label` is available for both sides.
-    norm = normalize_label(node_label)
-    return any(norm == normalize_label(a) for a in aliases)
+    padded = f" {normalize_label(node_label)} "
+    return any(f" {normalize_label(a)} " in padded for a in aliases)
+
+
+def resolve_nodes(graph: dict[str, Any], entities: dict[str, Any]) -> dict[str, str]:
+    """Map each node id to the ONE entity it refers to, dropping ambiguous ones.
+
+    This is the ambiguity guard that makes :func:`match_entity` safe to be
+    loose. A node whose label matches two or more entities — ``"Magpie vs
+    Mockingbird"``, a real document-title node in the gold corpus — refers to
+    neither in the sense the answer key means, so it is excluded entirely.
+
+    Without this, scoring would manufacture a forbidden **F2** edge the model
+    never asserted and penalise it for the harness's own sloppiness. That is the
+    expensive direction: a false negative costs one point of recall, while a
+    false positive on a ``forbidden_links`` pair is weighted heavily *and* is
+    the exact failure mode the gold corpus exists to detect.
+
+    The trade-off, stated so it can be revisited: a model that legitimately
+    emits one node for a compound concept loses that node from scoring. That is
+    accepted — under-crediting a real node costs recall, whereas crediting a
+    phantom decoy edge inverts the ranking.
+    """
+    resolved: dict[str, str] = {}
+    for node in graph.get("nodes", []):
+        label = node.get("label", "")
+        hits = [
+            name
+            for name, spec in entities.items()
+            if match_entity(label, spec["aliases"])
+        ]
+        if len(hits) == 1:
+            resolved[node["id"]] = hits[0]
+    return resolved
 
 
 @dataclass(frozen=True)
@@ -291,14 +334,6 @@ class Score:
         return 1 - (len(self.forbidden_hits) / self.total_forbidden)
 
 
-def _entity_node_ids(graph: dict[str, Any], aliases: Sequence[str]) -> set[str]:
-    return {
-        n["id"]
-        for n in graph.get("nodes", [])
-        if match_entity(n.get("label", ""), aliases)
-    }
-
-
 def score_graph(graph: dict[str, Any], key: dict[str, Any]) -> Score:
     """Score a graph against the answer key: recall + decoy resistance."""
     entities = key["entities"]
@@ -306,9 +341,19 @@ def score_graph(graph: dict[str, Any], key: dict[str, Any]) -> Score:
     pairs = {(e.get("source"), e.get("target")) for e in links}
     pairs |= {(b, a) for a, b in pairs}  # edges are stored undirected-ish
 
+    # Resolved ONCE, with the whole entity set in scope, so ambiguous
+    # title nodes are dropped before any pair is considered (issue #327).
+    resolved = resolve_nodes(graph, entities)
+
+    def ids_for(name: str) -> set[str]:
+        if name not in entities:
+            msg = f"answer key references undeclared entity {name!r}"
+            raise KeyError(msg)
+        return {nid for nid, ent in resolved.items() if ent == name}
+
     def asserted(a_key: str, b_key: str) -> bool:
-        a_ids = _entity_node_ids(graph, entities[a_key]["aliases"])
-        b_ids = _entity_node_ids(graph, entities[b_key]["aliases"])
+        a_ids = ids_for(a_key)
+        b_ids = ids_for(b_key)
         if a_key == b_key:
             # Self-pair (e.g. one concept under three names): any edge between
             # two DISTINCT nodes that both match the alias set counts.
@@ -442,6 +487,51 @@ def aggregate(results: Iterable[RunResult]) -> dict[str, Any]:
         "out_tokens": stat([r.out_tokens for r in runs]),
         "seconds": stat([r.seconds for r in runs]),
     }
+
+
+def make_null_arm(arm: Arm) -> Arm:
+    """Duplicate an arm under a new name to measure the noise floor.
+
+    The null arm is the **control arm for the whole experiment**. It runs the
+    SAME model under the SAME conditions as its twin, so any difference between
+    the two is pure run-to-run variance rather than a property of the model.
+
+    Without it, repeats give a spread with nothing to compare it against, and a
+    cross-model gap is uninterpretable. That is not hypothetical: the discarded
+    2026-07-20 comparison reported gemma4 beating qwen2.5-coder 2 cross-doc
+    edges to 1 — a gap of ONE, from single runs, with no idea whether either
+    model varies by more than that on its own.
+    """
+    return Arm(
+        name=f"{arm.name}{NULL_ARM_SUFFIX}",
+        backend=arm.backend,
+        model=arm.model,
+        env=dict(arm.env),
+    )
+
+
+def noise_floor(
+    twin_a: Iterable[RunResult], twin_b: Iterable[RunResult], metric: str
+) -> float:
+    """Largest same-model difference observed between an arm and its null twin.
+
+    Taken as the FULL range across both arms' runs rather than the difference of
+    medians: the question is how far this model wanders when nothing changes,
+    and the median hides exactly that.
+    """
+    vals = [getattr(r, metric) for r in (*twin_a, *twin_b)]
+    return max(vals) - min(vals) if vals else 0.0
+
+
+def is_significant(gap: float, floor: float) -> bool:
+    """Whether a cross-model gap exceeds the same-model noise floor.
+
+    The rule this encodes: **a difference smaller than the noise floor is not a
+    finding.** Reporting one is how the previous bake-off turned variance into a
+    leaderboard. Ties (``gap == floor``) are NOT significant — when in doubt the
+    honest answer is "indistinguishable".
+    """
+    return gap > floor
 
 
 def load_answer_key(corpus_dir: Path) -> dict[str, Any] | None:
