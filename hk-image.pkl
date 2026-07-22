@@ -8,10 +8,10 @@
 //   COPY hk-common.pkl /etc/hk/hk-common.pkl
 //   COPY hk-image.pkl /etc/hk/hk.pkl
 
-amends "package://github.com/jdx/hk/releases/download/v1.50.0/hk@1.50.0#/Config.pkl"
+amends "package://github.com/jdx/hk/releases/download/v1.52.0/hk@1.52.0#/Config.pkl"
 
 // #154: builtins must be assigned from Builtins, not declared bare (see hk.pkl).
-import "package://github.com/jdx/hk/releases/download/v1.50.0/hk@1.50.0#/Builtins.pkl"
+import "package://github.com/jdx/hk/releases/download/v1.52.0/hk@1.52.0#/Builtins.pkl"
 
 import "hk-common.pkl" as common
 
@@ -37,8 +37,10 @@ hooks {
 
       // --- Image-specific: shell scripts installed in the image ---
       // (#154 drops shfmt — lint-only via shellcheck; see hk.pkl rationale.)
+      // hk 1.51 (#1055): the shellcheck builtin's `match_any` cannot combine with
+      // a top-level `types` override — drop it (the builtin's selector covers shell
+      // globs + shebang types). `batch` is orthogonal and stays.
       ["shellcheck"] = (Builtins.shellcheck) {
-        types = List("shell")
         batch = true
       }
     }

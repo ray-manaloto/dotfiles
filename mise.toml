@@ -9,12 +9,12 @@
 editorconfig-checker = "3.8.0"      # provides `ec` — hk editorconfig_checker builtin (#154); host-only (image drops it in T6)
 "npm:@devcontainers/cli" = "0.87.0"
 colima = "0.10.3"                   # Alternate Docker runtime (VZ + Rosetta); Docker Desktop is the CURRENT supported runtime — see AGENTS.md Docker Runtimes + .omc/research/research-20260409c-dockerdesktop-ssh/
-lima = "2.1.4"                      # 2.1.3 fixed CVE-2026-53657 (guest-agent socket root privesc)
+lima = "2.2.0"
 "github:agent-sh/agnix" = "0.40.0"
 "npm:agents-lint" = "0.5.0"
 "pipx:mcp2cli" = "3.3.1"
-"npm:renovate" = "43.272.5"
-biome = "2.5.4"
+"npm:renovate" = "43.278.2"
+biome = "2.5.5"
 # Markdown + Claude-docs linters. Installed now; hk.pkl integration is
 # scheduled for post-devcontainer-work review (see GH issue tracking
 # follow-up). claude_md_size_limit (below in hk.pkl) provides the
@@ -22,17 +22,17 @@ biome = "2.5.4"
 "npm:claude-code-lint" = "0.7.0"
 "npm:@contextlint/cli" = "1.1.1"
 "npm:markdownlint-cli2" = "0.23.1"
-"aqua:jackchuka/mdschema" = "0.13.3"
-rumdl = "v0.2.37"
+"aqua:jackchuka/mdschema" = "0.13.4"
+rumdl = "v0.2.40"
 # zizmor: GHA security scanner — backs the hk zizmor builtin (#160 T12);
 # host-only lint tool, so it lives here (not shared.toml).
-zizmor = "1.27.0"
+zizmor = "1.28.0"
 "npm:oh-my-claude-sisyphus" = "4.15.6"
 "github:ast-grep/ast-grep" = "0.44.1"
 lefthook = "2.1.10"
 "npm:ctx7" = "0.5.5"
 rtk = "0.43.0"                         # re-probed at #160 T12.5: mise #10703 (2026.7.0) fixed the github-backend url_api lock hold that pinned this at 0.37.2
-"npm:skills" = "1.5.19"
+"npm:skills" = "1.5.20"
 "npm:agent-browser" = "0.32.3"
 "npm:portless" = "0.15.4"
 "pipx:deepagents-cli" = "0.2.2"
@@ -58,11 +58,11 @@ rtk = "0.43.0"                         # re-probed at #160 T12.5: mise #10703 (2
 # conda tool in the host config; prebuilt, no source build. Enables
 # `graphify add <youtube-url>` native download+transcribe.
 "conda:ffmpeg" = "8.1.2"
-aws-cli = { version = "2.36.4", symlink_bins = "true" }
+aws-cli = { version = "2.36.5", symlink_bins = "true" }
 azure-cli = { version = "2.88.0", uvx_args = "--prerelease=allow" }
 docker-cli = "29.6.2"
 opencode = "1.18.4"
-"npm:@claude-flow/cli" = "3.32.8"
+"npm:@claude-flow/cli" = "3.32.9"
 "npm:@ralph-orchestrator/ralph-cli" = "2.10.1"
 
 [settings]
