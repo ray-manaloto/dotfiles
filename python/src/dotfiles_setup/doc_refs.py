@@ -66,6 +66,12 @@ DOC_PATHSPECS = (
     "**/AGENTS.md",
     ".claude/rules/*.md",
     ".claude/skills/*/SKILL.md",
+    # graphify's vendored SKILL.md cites its own runtime files
+    # (`graphify-out/.graphify_*.json`, `.graphify_semantic.json`, …) which are
+    # generated at graphify-run time, never committed. They are not repo doc
+    # refs, so exclude the vendored skill — same rationale as the .agnix.toml
+    # and md_budget exemptions for `.claude/skills/graphify/**` (#310-#318).
+    ":!.claude/skills/graphify/SKILL.md",
 )
 
 # Refs that are intentionally absent from the working tree. Keep each entry
