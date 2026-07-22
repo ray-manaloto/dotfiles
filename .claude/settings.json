@@ -100,7 +100,17 @@
     "astral@astral-sh": true,
     "cli-anything@cli-anything": false,
     "mattpocock-skills@mattpocock": true,
-    "ty@claude-code-lsps": false
+    "ty@claude-code-lsps": false,
+    "fable-orchestrator@fable-orchestrator": true,
+    "antigravity@antigravity-for-claude-code": true
+  },
+  "extraKnownMarketplaces": {
+    "fable-orchestrator": {
+      "source": { "source": "github", "repo": "mar3co/fable-orchestrator" }
+    },
+    "antigravity-for-claude-code": {
+      "source": { "source": "github", "repo": "yuting0624/antigravity-for-claude-code" }
+    }
   },
   "prefersReducedMotion": true
 }
