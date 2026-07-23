@@ -19,6 +19,11 @@
 # for the host hk step, not needed in the ~354MB-heavier image).
 [tools]
 actionlint = "1.7.12"
+# bun: the npm package_manager (npm.package_manager = "bun") both host/CI and the
+# image use under mise 2026.7.12 (aube default rejects our low-download npm
+# tools). Shared so both install the same bun; the setup-mise action installs it
+# before the npm: tools that need it.
+bun = "1.3.14"
 chezmoi = "2.71.1"
 ghalint = "1.5.6"
 gitleaks = "8.30.1"

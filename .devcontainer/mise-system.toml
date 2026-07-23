@@ -20,7 +20,8 @@
 [tools]
 # Core runtimes
 node = "latest"
-bun = "latest"
+# bun moved to .config/mise/conf.d/shared.toml (host↔image shared: it is the
+# npm package_manager both sides use; mise-parity forbids declaring it here too).
 go = "latest"
 rust = "latest"
 zig = "latest"

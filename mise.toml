@@ -70,13 +70,26 @@ aws-cli = { version = "2.36.5", symlink_bins = "true" }
 azure-cli = { version = "2.88.0", uvx_args = "--prerelease=allow" }
 docker-cli = "29.6.2"
 opencode = "1.18.4"
-"npm:@claude-flow/cli" = "3.32.9"
-"npm:@ralph-orchestrator/ralph-cli" = "2.10.1"
+# bun (the npm package_manager) is a host↔image SHARED tool → declared in
+# .config/mise/conf.d/shared.toml, not here (mise-parity: a tool used by both
+# sides lives only in the shared fragment).
+# claude-flow + ralph-cli removed 2026-07-23: superseded by the cross-vendor
+# orchestrator adoption (#346, fable-orchestrator + antigravity), and unused by
+# CI/hk/scripts. Re-add if needed for interactive use.
 
 [settings]
 experimental = true
 auto_install = true
 lockfile = true
+# npm.package_manager = "bun": mise 2026.7.12 made the embedded `aube` manager
+# the npm default, whose supply-chain guards (low-download threshold + stricter
+# dependency resolution) reject several of this repo's pinned npm tools
+# (contextlint 978/wk, agents-lint 714/wk; renovate dep-resolution). Keep the
+# same `bun` manager the image bakes (mise-system.toml) so host/CI/image agree.
+# `bun` is declared in [tools] below so CI installs it, and the setup-mise
+# action installs it BEFORE the npm tools that need it (bare runners have no
+# bun). Opt back into aube once its allow mechanism is a documented mise setting.
+npm.package_manager = "bun"
 # #160 T12.5 (decision 15): new tool requests get exact-pinned versions on
 # `mise use` instead of fuzzy ranges — pins are the repo's whole versioning
 # model. (task.timings from the decision does not exist as a setting in mise

@@ -21,7 +21,25 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Install mise
+    # Two-phase install: bun FIRST, then the requested tools. mise 2026.7.12
+    # defaults npm installs to the embedded `aube` manager (supply-chain guards
+    # that reject this repo's low-download npm tools); we pin npm.package_manager
+    # = "bun" to match the image, but a bare runner has no bun, and mise does not
+    # guarantee bun installs before the `npm:` tools that need it in one pass
+    # (WARN "bun may be required but was not found"). Installing bun in its own
+    # mise-action call first removes that ordering hazard. Each call keeps
+    # mise-action's per-install_args caching, so subsets still cache independently.
+    - name: Install mise + bun
       uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
       with:
+        # Pin CI's mise to the version the image bakes (Dockerfile ARG
+        # MISE_VERSION). Unpinned, mise-action installs the latest release, so a
+        # mise release (e.g. 2026.7.12's aube default) can change install
+        # behavior mid-day and break CI with no repo change. Bump in lockstep.
+        version: "2026.7.12"
+        install_args: "bun"
+    - name: Install tools
+      uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+      with:
+        version: "2026.7.12"
         install_args: ${{ inputs.install_args }}
