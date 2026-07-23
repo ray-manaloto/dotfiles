@@ -221,11 +221,23 @@ def _has_provenance_key(node: object) -> bool:
     return False
 
 
+def merged_system_config(repo_root: Path) -> dict[str, object]:
+    """Return the image's merged BASE config tools table (system + shared).
+
+    Name -> pin value (a version string or a `{version = ..., ...}` table).
+    `shared.toml` is spread last so a tool declared in both wins from the
+    shared fragment, matching how the image merges `conf.d/` over the system
+    `config.toml`. The name-only view (`merged_system_config_tools`) and the
+    version-drift gate both read from this one merge.
+    """
+    system = tomllib.loads((repo_root / _SYSTEM_TOML).read_text()).get("tools", {})
+    shared = tomllib.loads((repo_root / _SHARED_TOML).read_text()).get("tools", {})
+    return {**system, **shared}
+
+
 def merged_system_config_tools(repo_root: Path) -> set[str]:
     """Return the tool keys of the image's merged BASE config (system + shared)."""
-    system = tomllib.loads((repo_root / _SYSTEM_TOML).read_text())
-    shared = tomllib.loads((repo_root / _SHARED_TOML).read_text())
-    return set(system.get("tools", {})) | set(shared.get("tools", {}))
+    return set(merged_system_config(repo_root))
 
 
 def runtime_config_tools(repo_root: Path) -> set[str]:
