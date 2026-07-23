@@ -45,3 +45,15 @@ so graphify's default write there (which happened and was reverted) fails
 `mise run lint`. `.claude/CLAUDE.md` is the repo's designated home for exactly
 this kind of Claude-specific content (it is stub-exempt). Re-running
 `graphify install` will re-append to the root `CLAUDE.md`; revert that hunk.
+
+## Cross-vendor orchestration (Fable-5 architect + executor lanes)
+
+fable-orchestrator: implementation lane = codex
+
+Adopted plugins (enabled in `.claude/settings.json`): `fable-orchestrator@fable-orchestrator`
+(Fable-5 architect + `codex` implementer lane, GPT-5.6 Sol) and
+`antigravity@antigravity-for-claude-code` (Google Antigravity/Gemini 3.x via `agy`). CLIs pinned
+host-only in `mise.toml` (`codex`, `antigravity-cli`); auth is per-user. The Claude architect plans
+and **verifies evidence** before "done" — only execution is delegated; terminal fallback is Claude
+Opus. The authoritative routing/fallback doctrine (and its KB-graph grounding) is the
+`orchestrator-routing` skill in the **knowledge-base** repo.
