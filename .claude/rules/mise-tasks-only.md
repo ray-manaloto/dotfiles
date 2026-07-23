@@ -15,6 +15,8 @@ task (wrapping the python library, zero-bash-logic) in the same change.
 | `docker pull …dotfiles-devcontainer…` | `mise run sync` (buildkit, digest-aware, verifying; classic pull wedges on ~38GB) |
 | `gh pr create` (+ push + gates by hand) | `mise run ship` |
 | `gh pr merge` (+ watch + validate by hand) | `mise run land -- <PR#>` |
+| `gh pr create -R …/knowledge-base` | `mise run kb-ship` (in the KB repo) |
+| `gh pr merge -R …/knowledge-base` | `mise run kb-land -- <PR#>` (in the KB repo) |
 | `nohup … mise run <task>` / `mise run <task> &` (hand-detaching a task) | the harness background run — stays tracked, one clean completion (no orphaned process, no hand-rolled log monitor); a `&`-detached Mac-side task gets REAPED when the turn goes idle |
 | `<gate> 2>&1 \| tail -40` (piping a gate command into a pager) | `<gate> > /tmp/out.log 2>&1; echo "rc=$?" >> /tmp/out.log`, then read the file — a pipe returns `tail`'s exit code, masking a failed or killed gate |
 | `gh run watch <id>` (hand-rolled CI wait) | `mise run land -- <PR#>` (watches main CI via --json buckets); one-shot: `gh run view <id> --json conclusion` |
@@ -26,6 +28,20 @@ task (wrapping the python library, zero-bash-logic) in the same change.
 
 Diagnostic/read-only commands (`docker ps`, `gh pr view`, `git status`,
 single-test `pytest path::test` via uv) are NOT wrapped and stay direct.
+
+**The `gh pr` redirects are REPO-AWARE (2026-07-23).** Dispatch is by the
+target repo, resolved from an explicit `-R`/`--repo`: dotfiles (or no `-R`,
+i.e. cwd) → `ship`/`land`; knowledge-base → `kb-ship`/`kb-land`; **any other
+repo → ALLOW**. Allowing the rest is deliberate — no canonical task exists for
+a sibling repo, so a deny would redirect to nothing and merely block real work.
+
+This was a real defect, not a hypothetical: the rules used to match `gh pr
+merge` unconditionally, so a knowledge-base PR was denied and pointed at `mise
+run land` — a *dotfiles* task with no repo parameter that watches dotfiles'
+main CI and re-validates the dotfiles devcontainer. The guard blocked the only
+working command and named a task that could not do the job; KB PRs #1 and #2
+were merged by hand as a result. A guard whose redirect target cannot perform
+the redirected action is not enforcement, it is an outage.
 
 ## Enforcement layers (deep-research verified, 2026-07-07)
 

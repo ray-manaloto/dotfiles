@@ -104,6 +104,23 @@ _V2 = "2026-07-14"
 # The two evidence-discipline rules (pipe-to-pager, `&`-detachment) landed
 # 2026-07-21 — guardrails 2 and 3 of the session-2026-07-21 handoff.
 _V3 = "2026-07-21"
+# The repo-aware gh-pr rules landed 2026-07-23, once the knowledge-base repo
+# grew its own kb-ship/kb-land to redirect to.
+_V4 = "2026-07-23"
+
+# `gh` names a target repo with `-R owner/repo` / `--repo owner/repo` (or
+# `--repo=owner/repo`); with none, it infers from cwd — which, for a guard
+# running in this repo, means dotfiles. Both fragments are SUFFIXES appended
+# after `gh pr create|merge`, and both scan only to the next shell separator so
+# they cannot read a flag belonging to a later command in a compound.
+_GH_REPO = r"(?:-R|--repo)[=\s]\s*"
+_REPO_RE = r"[\w.-]+/[\w.-]+"
+# "an explicit -R naming the knowledge-base repo appears in this command"
+_GH_REPO_IS_KB = rf"(?=[^;&|\n]*{_GH_REPO}ray-manaloto/knowledge-base\b)"
+# "no explicit -R naming a repo OTHER than dotfiles appears in this command" —
+# so a bare `gh pr create` (cwd = dotfiles) still denies, while a sibling repo's
+# is left alone.
+_GH_REPO_NOT_FOREIGN = rf"(?![^;&|\n]*{_GH_REPO}(?!ray-manaloto/dotfiles\b){_REPO_RE})"
 
 # A GATE command: one whose exit code is the answer you are about to act on.
 # Deliberately NOT every command — `git log | head` is fine, and a rule that
@@ -176,9 +193,47 @@ _RULES: tuple[Rule, ...] = (
         "verifies the result.",
         _V1,
     ),
+    # --- gh pr create/merge: REPO-AWARE (#349 follow-up, 2026-07-23) ---
+    #
+    # These rules used to match `gh pr create|merge` unconditionally, which was
+    # wrong the moment a second repo entered the picture: a knowledge-base PR was
+    # denied and redirected to `mise run land`, a DOTFILES task that has no repo
+    # parameter, watches dotfiles' main CI, and re-validates the dotfiles
+    # devcontainer. The guard blocked the only working command and pointed at a
+    # task that cannot do the job. Measured 2026-07-23 — it is why KB PRs #1 and
+    # #2 had to be merged by hand.
+    #
+    # Dispatch is by TARGET repo, resolved from an explicit `-R`/`--repo`:
+    #   dotfiles (or no -R, i.e. cwd)  -> ship / land
+    #   knowledge-base                 -> kb-ship / kb-land
+    #   any other repo                 -> ALLOW
+    # Allowing the rest is deliberate: no canonical task exists for a sibling
+    # repo, so a deny would redirect to nothing and merely block real work. This
+    # is a redirect guard, not a sandbox (it already fails open on `$(…)`,
+    # `sh -c`, and aliases) — see .claude/rules/mise-tasks-only.md.
+    #
+    # KB rules come FIRST because first match wins; the dotfiles rules carry a
+    # negative lookahead so they do not swallow another repo's `-R`.
+    Rule(
+        "gh pr create (knowledge-base)",
+        re.compile(_CMD + r"gh\s+pr\s+create\b" + _GH_REPO_IS_KB),
+        "Use `mise run kb-ship` (in the knowledge-base repo) — it runs that "
+        "repo's lint+test gates BEFORE pushing, so a red branch never becomes "
+        "a PR. `mise run ship` is a dotfiles task and cannot ship a KB PR.",
+        _V4,
+    ),
+    Rule(
+        "gh pr merge (knowledge-base)",
+        re.compile(_CMD + r"gh\s+pr\s+merge\b" + _GH_REPO_IS_KB),
+        "Use `mise run kb-land -- <PR#>` (in the knowledge-base repo) — it "
+        "verifies the checks, then pins the merge to that verified head SHA. "
+        "`mise run land` is a dotfiles task: no repo parameter, and it watches "
+        "dotfiles' main CI.",
+        _V4,
+    ),
     Rule(
         "gh pr create",
-        re.compile(_CMD + r"gh\s+pr\s+create\b"),
+        re.compile(_CMD + r"gh\s+pr\s+create\b" + _GH_REPO_NOT_FOREIGN),
         "Use `mise run ship` — it runs the path-aware gate matrix (incl. "
         "the hard full-sync gate on devcontainer-surface diffs) before the "
         "PR opens, then watches checks to bucket-verified green. See "
@@ -187,7 +242,7 @@ _RULES: tuple[Rule, ...] = (
     ),
     Rule(
         "gh pr merge",
-        re.compile(_CMD + r"gh\s+pr\s+merge\b"),
+        re.compile(_CMD + r"gh\s+pr\s+merge\b" + _GH_REPO_NOT_FOREIGN),
         "Use `mise run land -- <PR#>` — it verifies check buckets, pins the "
         "merge to the verified head SHA, watches main CI, and validates "
         "locally. See .claude/skills/pr-workflow/SKILL.md.",

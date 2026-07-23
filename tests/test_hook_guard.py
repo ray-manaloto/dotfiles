@@ -213,6 +213,66 @@ def test_pull_rule_does_not_span_separators() -> None:
     assert hook_guard.decide(cmd) is None
 
 
+# --- repo-aware gh pr create/merge (2026-07-23) -----------------------------
+#
+# Before this, `gh pr merge -R ray-manaloto/knowledge-base` was denied and
+# redirected to `mise run land` — a DOTFILES task with no repo parameter that
+# watches dotfiles' main CI. The guard blocked the only working command and
+# named a task that cannot do the job; KB PRs #1 and #2 were hand-merged
+# because of it. Each arm below is paired with its opposite: a dispatch table
+# tested in only one direction proves nothing about the others.
+@pytest.mark.parametrize(
+    ("command", "redirect_hint"),
+    [
+        # No -R at all => cwd => dotfiles. The pre-existing behaviour, pinned so
+        # the new lookahead cannot silently stop denying the common case.
+        ("gh pr create --fill", "mise run ship"),
+        ("gh pr merge 42 --squash", "mise run land"),
+        # Explicit dotfiles target routes the same way.
+        ("gh pr create -R ray-manaloto/dotfiles --fill", "mise run ship"),
+        ("gh pr merge 42 -R ray-manaloto/dotfiles --squash", "mise run land"),
+        ("gh pr merge 42 --repo ray-manaloto/dotfiles", "mise run land"),
+        # knowledge-base target routes to the KB tasks, in all flag spellings.
+        ("gh pr create -R ray-manaloto/knowledge-base --fill", "mise run kb-ship"),
+        ("gh pr merge 3 -R ray-manaloto/knowledge-base --squash", "mise run kb-land"),
+        ("gh pr merge 3 --repo ray-manaloto/knowledge-base", "mise run kb-land"),
+        ("gh pr merge 3 --repo=ray-manaloto/knowledge-base", "mise run kb-land"),
+    ],
+)
+def test_gh_pr_routes_by_target_repo(command: str, redirect_hint: str) -> None:
+    reason = hook_guard.decide(command)
+    assert reason is not None, f"expected a deny for {command!r}"
+    assert redirect_hint in reason
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        # A sibling repo has no canonical task to redirect to, so denying would
+        # block real work while pointing at nothing. CONTROL ARM for the table
+        # above: the same verbs, allowed purely because of the target repo.
+        "gh pr create -R ray-manaloto/symphony-cpp --fill",
+        "gh pr merge 7 -R ray-manaloto/symphony-cpp --squash",
+        "gh pr merge 7 --repo someone-else/their-repo",
+        "gh pr create --repo=octocat/hello-world --fill",
+    ],
+)
+def test_gh_pr_allowed_for_other_repos(command: str) -> None:
+    assert hook_guard.decide(command) is None, f"expected ALLOW for {command!r}"
+
+
+def test_foreign_repo_lookahead_does_not_span_separators() -> None:
+    r"""A later command's `-R` must not license an earlier dotfiles `gh pr`.
+
+    Without the `[^;&|\n]*` bound, the lookahead would scan past the separator,
+    see a foreign `-R`, and stop denying a genuine dotfiles `gh pr create`.
+    """
+    cmd = "gh pr create --fill && gh issue list -R octocat/hello-world"
+    reason = hook_guard.decide(cmd)
+    assert reason is not None
+    assert "mise run ship" in reason
+
+
 # --- #265: a separator inside an INERT span is not a separator --------------
 #
 # The two shapes below are the guard's ONLY measured false positives, recovered
