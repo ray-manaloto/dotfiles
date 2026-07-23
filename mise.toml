@@ -57,7 +57,15 @@ rtk = "0.43.0"                         # re-probed at #160 T12.5: mise #10703 (2
 # container's MISE_IGNORED_CONFIG_PATHS). conda backend (pixi) — the first
 # conda tool in the host config; prebuilt, no source build. Enables
 # `graphify add <youtube-url>` native download+transcribe.
-"conda:ffmpeg" = "8.1.2"
+# `os = ["macos"]`: graphify runs ONLY on the macOS host (project-scoped,
+# host-only), so ffmpeg is never needed on Linux. The gate is load-bearing for
+# CI, not cosmetic — CI's lint job runs `mise install --locked` at the repo
+# root on a linux-x64 runner, and mise's conda/rattler backend cannot write a
+# linux lockfile URL (it reports "✓ updated" but silently drops the entry —
+# jdx/mise#7700). Without the gate, --locked fails "No lockfile URL found for
+# conda:ffmpeg on platform linux-x64" and bricks lint. os-gating makes linux
+# skip the tool entirely, so no linux URL is demanded.
+"conda:ffmpeg" = { version = "8.1.2", os = ["macos"] }
 aws-cli = { version = "2.36.5", symlink_bins = "true" }
 azure-cli = { version = "2.88.0", uvx_args = "--prerelease=allow" }
 docker-cli = "29.6.2"
