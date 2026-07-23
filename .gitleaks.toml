@@ -21,6 +21,7 @@ paths = [
   '''\.idea/''',
   '''\.logging/''',
   '''\.mise/''',
+  '''graphify-out/''',
   '''__pycache__/''',
   # Documentation with illustrative `token = "..."` examples, not real secrets.
   '''\.github/workflows/AGENTS\.md''',
