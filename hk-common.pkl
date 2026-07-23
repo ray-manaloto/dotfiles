@@ -34,6 +34,7 @@ excludePaths: List<String> = List(
   ".logging/**",
   ".idea/**",
   ".mise/**",
+  "graphify-out/**",
   "**/__pycache__/**",
 )
 

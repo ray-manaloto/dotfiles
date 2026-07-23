@@ -2955,7 +2955,7 @@ version = "0.2.2"
 backend = "pipx:deepagents-cli"
 
 [[tools."pipx:graphifyy"]]
-version = "0.9.23"
+version = "0.9.25"
 backend = "pipx:graphifyy"
 
 [tools."pipx:graphifyy".options]
