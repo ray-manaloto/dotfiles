@@ -92,6 +92,12 @@ ALLOWLIST: dict[str, BashAllowance] = {
         25,
         "fail-open shim — execs `dotfiles-setup hook pretooluse` (the guard is Python)",
     ),
+    "scripts/graphify-hook-guard.sh": BashAllowance(
+        30,
+        "fail-open shim — execs `graphify hook-guard search|read` (the graphify "
+        "query-first PreToolUse nudge); portable + version-independent vs the "
+        "user-specific abspath graphify's installer embeds",
+    ),
     "scripts/validate-devcontainer-json.sh": BashAllowance(
         73,
         "hk check wrapper — 3-layer devcontainer.json validation via "

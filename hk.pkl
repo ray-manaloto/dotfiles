@@ -1,14 +1,14 @@
-amends "package://github.com/jdx/hk/releases/download/v1.50.0/hk@1.50.0#/Config.pkl"
+amends "package://github.com/jdx/hk/releases/download/v1.52.0/hk@1.52.0#/Config.pkl"
 
 // #154: builtin linters MUST be assigned from Builtins (`= Builtins.name`), not
 // declared as a bare `["name"] {}` block — a bare block is a fresh empty Step
 // (check=null) that hk silently skips (never ran locally or in CI). Extend a
 // builtin with overrides via `["name"] = (Builtins.name) { glob = ... }`.
 // See feedback_hk_builtins_need_assignment.
-import "package://github.com/jdx/hk/releases/download/v1.50.0/hk@1.50.0#/Builtins.pkl"
+import "package://github.com/jdx/hk/releases/download/v1.52.0/hk@1.52.0#/Builtins.pkl"
 // Named Config import for the Mapping<String, Config.Step> type annotation on
 // allSteps (the `amends` clause does not bind a module name).
-import "package://github.com/jdx/hk/releases/download/v1.50.0/hk@1.50.0#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v1.52.0/hk@1.52.0#/Config.pkl"
 
 import "hk-common.pkl" as common
 
@@ -52,8 +52,16 @@ local allSteps = new Mapping<String, Config.Step> {
   //     analysis, so the builtin's {{files}} scoping loses nothing, and the
   //     builtin glob widens coverage to plugins/**. Order per Astral docs:
   //     `ruff check --fix` BEFORE `ruff format`. ---
-  ["ruff"] = (Builtins.ruff) {
-    prefix = "uv run --project python"
+  // Custom shell-string steps (NOT the Builtins.ruff amend): hk 1.51+ moved the
+  // ruff builtin to a structured `argv` command, and "structured commands can't
+  // be combined with `shell` or `prefix`" (#1067) — so `(Builtins.ruff){prefix=…}`
+  // panics ("can't combine structured argv commands with `prefix`"). ruff/ty are
+  // uv dev-deps (not mise tools), so we need the `uv run --project python` prefix;
+  // a string command carries it. `{{files}}` expands to the staged paths.
+  ["ruff"] {
+    glob = List("python/src/**/*.py", "tests/**/*.py", "plugins/**/*.py")
+    check = "uv run --project python ruff check {{files}}"
+    fix = "uv run --project python ruff check --fix {{files}}"
   }
   // #268: ordering is `exclusive`, NOT `depends`. `depends` deadlocks hk
   // whenever `ruff` FAILS: hk never releases the dependent, so the run wedges
@@ -73,8 +81,10 @@ local allSteps = new Mapping<String, Config.Step> {
   // `exclusive` orders it as a barrier instead: probe-verified rc=1 + printed
   // errors on a failing tree (check AND fix mode), and one-run convergence on
   // an autofixable tree. Not yet reported upstream (see #268).
-  ["ruff_format"] = (Builtins.ruff_format) {
-    prefix = "uv run --project python"
+  ["ruff_format"] {
+    glob = List("python/src/**/*.py", "tests/**/*.py", "plugins/**/*.py")
+    check = "uv run --project python ruff format --check {{files}}"
+    fix = "uv run --project python ruff format {{files}}"
     exclusive = true
   }
   ["python_check_ast"] = (Builtins.python_check_ast) {
@@ -177,10 +187,12 @@ local allSteps = new Mapping<String, Config.Step> {
 
   // --- Shell (lint only; #154 drops shfmt — it restyles hand-formatted
   //     scripts). shellcheck still enforces correctness. #160 T12 drops the
-  //     redundant batch override. ---
-  ["shellcheck"] = (Builtins.shellcheck) {
-    types = List("shell")
-  }
+  //     redundant batch override. hk 1.51 (#1055) gave the shellcheck builtin a
+  //     `match_any` selector (shell globs OR shebang types), which "cannot be
+  //     mixed with the top-level `glob` or `types`" — so the old `types` override
+  //     now panics. Dropping it adopts the builtin's match_any, which also catches
+  //     extensionless shebang scripts (a coverage gain). ---
+  ["shellcheck"] = Builtins.shellcheck
 
   // --- Exit-code-masking guard (#142): every shell script with a
   //     shebang MUST declare `set -o pipefail` so a failing stage in

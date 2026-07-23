@@ -28,3 +28,20 @@ The five canonical roles, adopted verbatim (no remapping). See `docs/triage-labe
 Single-context: `CONTEXT.md` (glossary) + `docs/adr/`. See `docs/domain.md`.
 **Our ADRs are `.claude/rules/*.md`** — each carries its own "Why this rule exists"; `docs/adr/`
 holds only domain-shaped decisions.
+## graphify — knowledge-graph substrate
+
+Registered by `graphify install --project` (#310–#318 adoption). Host-only,
+project-scoped; `graphify-out/` is gitignored. When the user types `/graphify`,
+use `.claude/skills/graphify/SKILL.md`.
+
+- Codebase questions: run `graphify query "<question>"` first when
+  `graphify-out/graph.json` exists (`path`/`explain` for relationships/concepts) —
+  a scoped subgraph, smaller than raw grep.
+- After changing code: `graphify update .` (AST-only, no API cost).
+
+**This registration lives here, NOT in the root `CLAUDE.md`:** the
+`claude_md_import_stub` hk gate locks the root file to byte-exactly `@AGENTS.md`,
+so graphify's default write there (which happened and was reverted) fails
+`mise run lint`. `.claude/CLAUDE.md` is the repo's designated home for exactly
+this kind of Claude-specific content (it is stub-exempt). Re-running
+`graphify install` will re-append to the root `CLAUDE.md`; revert that hunk.

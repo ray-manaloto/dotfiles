@@ -16,6 +16,26 @@
             "timeout": 20
           }
         ]
+      },
+      {
+        "matcher": "Bash|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/graphify-hook-guard.sh search",
+            "timeout": 15
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/graphify-hook-guard.sh read",
+            "timeout": 15
+          }
+        ]
       }
     ],
     "SessionStart": [
