@@ -71,7 +71,7 @@
     "typescript-lsp@claude-plugins-official": false,
     "claude-md-management@claude-plugins-official": false,
     "commit-commands@claude-plugins-official": true,
-    "skill-creator@claude-plugins-official": false,
+    "skill-creator@claude-plugins-official": true,
     "claude-code-setup@claude-plugins-official": false,
     "pyright-lsp@claude-plugins-official": false,
     "pyright@claude-code-lsps": false,
@@ -106,10 +106,16 @@
   },
   "extraKnownMarketplaces": {
     "fable-orchestrator": {
-      "source": { "source": "github", "repo": "mar3co/fable-orchestrator" }
+      "source": {
+        "source": "github",
+        "repo": "mar3co/fable-orchestrator"
+      }
     },
     "antigravity-for-claude-code": {
-      "source": { "source": "github", "repo": "yuting0624/antigravity-for-claude-code" }
+      "source": {
+        "source": "github",
+        "repo": "yuting0624/antigravity-for-claude-code"
+      }
     }
   },
   "prefersReducedMotion": true
