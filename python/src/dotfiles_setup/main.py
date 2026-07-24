@@ -56,7 +56,6 @@ from dotfiles_setup.pr import land_main, ship_main
 from dotfiles_setup.renovate import renovate_status_main
 from dotfiles_setup.renovate_dryrun import renovate_dryrun_main
 from dotfiles_setup.sync import SyncOptions, sync_main
-from dotfiles_setup.tool_currency import tool_currency_main
 from dotfiles_setup.verify import main as verify_main
 from dotfiles_setup.workflow_hooks import workflow_hooks_main
 
@@ -476,15 +475,10 @@ def _add_report_parsers(subparsers: _SubParsers) -> None:
     """Register the read-only scan-and-report commands.
 
     Extracted from :func:`setup_parser` to keep it under ruff's statement cap —
-    these four share a shape (scan something, render markdown, change nothing),
-    so they group cleanly rather than being split at an arbitrary line.
+    these share a shape (scan something, render markdown, change nothing), so
+    they group cleanly rather than being split at an arbitrary line. (The daily
+    tool-currency report moved to the shared `kb-setup currency daily` engine.)
     """
-    subparsers.add_parser(
-        "tool-currency",
-        help="Markdown report of tools with upstream movement + release-notes "
-        "links (daily refresh.yml signal; feeds the tool-currency-check skill)",
-    )
-
     command_audit_parser = subparsers.add_parser(
         "command-audit",
         help="Scan recent Claude Code transcripts for one-off Bash commands "
@@ -1141,7 +1135,6 @@ def _build_command_handlers(
         "ai-setup": _ai_setup,
         "docker": lambda: handle_docker(args, project_root, config=config),
         "pr": lambda: handle_pr(args, project_root),
-        "tool-currency": lambda: sys.exit(tool_currency_main()),
         "command-audit": lambda: sys.exit(
             command_audit_main(project_root, limit=args.limit, output=args.output)
         ),

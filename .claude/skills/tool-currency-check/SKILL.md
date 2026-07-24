@@ -27,33 +27,37 @@ out-of-date pins AND custom code a tool now does natively, in one pass.
 - Periodically, to catch custom code that a tool's newer release has superseded
   (the `mise_snapshot.py` → `mise.lock` class of finding).
 
+## The shared engine does the version mechanics
+
+Version currency — in-sync validation, release-note review, tracked-issue
+movement, the six-gate auto-apply bar, the committed report — is the **shared
+engine** (`kb_setup.currency`, a pinned `uv` git dep on the knowledge-base
+package; **one implementation**, D2/G4). This skill's unique value is the
+**judgment layer** the engine does not do: is a piece of custom code now
+superseded by a native tool feature, and do cross-file pins still agree.
+
+Drive the engine, don't re-derive its work:
+
+```bash
+mise run tool-currency                       # the daily report: deep verdicts + broad mise-outdated sweep
+uv run --project python kb-setup currency run --tool graphify --json   # deep due-diligence on one tool
+uv run --project python kb-setup currency apply --tool graphify        # apply an authorized patch bump (edits pin + manifest)
+```
+
+`daily` merges **deep** due-diligence on the tools in `currency.toml` (graphify
+here) with a **broad `mise outdated --bump` sweep** of every other pin — so the
+signal spans all tools, not just the deep set. `--bump` is mandatory (the engine
+passes it): every pin is exact, so bare `mise outdated` can never report
+movement (control-armed 2026-07-20: it said "up to date" while graphify sat at
+0.9.20 vs PyPI 0.9.22). Tools intentionally held back (comments in `mise.toml`,
+e.g. `rtk` for a lockfile bug) are decisions, not drift.
+
 ## Procedure
 
-1. **Version drift — `mise outdated --bump`.** Lists pinned-vs-latest for every
-   `mise.toml` / `mise-system.toml` tool:
-
-   ```bash
-   mise outdated --bump --local   # host/project tools (root mise.toml)
-   ```
-
-   **`--bump` is mandatory here — bare `mise outdated` is a check that can only
-   pass in this repo.** Every pin is *exact*, so the range that "matches the
-   current config" IS the pin, and nothing can ever be reported outdated.
-   Control-armed 2026-07-20: `mise outdated "pipx:graphifyy"` printed *"All
-   tools are up to date"* while the pin sat at **0.9.20** against PyPI
-   **0.9.22**; `mise outdated hk` said the same while `--bump` showed
-   1.50.0 → 1.51.0. `tool_currency.py` already passes `--bump`; this step used
-   to contradict it. `--local` skips the user's global
-   `~/.config/mise/config.toml`, which otherwise leaks unrelated tools into the
-   report.
-
-   Two more native flags worth knowing: **`--dry-run-code`** exits **1** when
-   anything is outdated (a gate needing no output parsing), and
-   **`--minimum-release-age "90d"`** is a native cooldown — reach for it before
-   hand-rolling any hold logic.
-
-   Note which are intentionally held back (comments in `mise.toml`, e.g. `rtk`
-   pinned for a lockfile bug) — those are decisions, not drift.
+1. **Read the daily report / engine verdict first.** Start from
+   `mise run tool-currency` (or the standing issue it feeds) rather than
+   re-deriving the outdated set. A deep-tracked tool with an upgrade carries a
+   verdict + release-note review already; the broad table lists the rest.
 
 2. **Cross-file pin parity.** Some versions are pinned in more than one place
    and must move together. The load-bearing one is **hk**, pinned in the pkl

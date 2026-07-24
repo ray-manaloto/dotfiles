@@ -25,6 +25,7 @@ name = "dotfiles-setup"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "kb-setup" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "python-debian" },
@@ -40,6 +41,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "kb-setup", git = "https://github.com/ray-manaloto/knowledge-base?rev=15a293bed5324c5636078ddbb1b2b6c95bee8f50" },
     { name = "pydantic", specifier = ">=2.12.5" },
     { name = "pydantic-settings", specifier = ">=2.14.2" },
     { name = "python-debian", specifier = ">=1.1.1" },
@@ -61,6 +63,11 @@ sdist = { url = "https://files.pythonhosted.org/packages/72/34/14ca021ce8e5dfedc
 wheels = [
     { url = "https://files.pythonhosted.org/packages/cb/b1/3846dd7f199d53cb17f49cba7e651e9ce294d8497c8c150530ed11865bb8/iniconfig-2.3.0-py3-none-any.whl", hash = "sha256:f631c04d2c48c52b84d0d0549c99ff3859c98df65b3101406327ecc7d53fbf12", size = 7484, upload-time = "2025-10-18T21:55:41.639Z" },
 ]
+
+[[package]]
+name = "kb-setup"
+version = "0.1.0"
+source = { git = "https://github.com/ray-manaloto/knowledge-base?rev=15a293bed5324c5636078ddbb1b2b6c95bee8f50#15a293bed5324c5636078ddbb1b2b6c95bee8f50" }
 
 [[package]]
 name = "packaging"
