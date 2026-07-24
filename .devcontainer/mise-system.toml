@@ -29,7 +29,7 @@ java = "latest"
 deno = "latest"
 ruby = "latest"
 cargo-binstall = "latest"
-# The 20 tools shared with the host (hk, pkl, gitleaks, chezmoi, python, uv,
+# The tools shared with the host (hk, pkl, gitleaks, chezmoi, python, uv,
 # pixi, pinact, and the linters) come from .config/mise/conf.d/shared.toml,
 # COPYd to /usr/local/share/mise/conf.d/ and merged into this system config —
 # exact-pinned so host and image never drift. See epic #160 T5.

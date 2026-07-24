@@ -20,10 +20,10 @@ The user-facing workflow is `mise run up` → work inside → `mise run down`.
 
 ```bash
 mise run build   # docker buildx bake dev-load (build base image locally)
-mise run up      # devcontainer up --workspace-folder . (pinned @devcontainers/cli 0.85.0)
+mise run up      # devcontainer up --workspace-folder . (CLI pinned in mise.toml)
 mise run down    # alias of `mise run stop` — tears the container down
 mise run stop    # docker rm -f filtered on devcontainer.local_folder=$PWD
-                 # (devcontainer CLI v0.85.0 has no `down` verb)
+                 # (the devcontainer CLI has no `down` verb)
 mise run test          # uv run --project python pytest tests/ -x -q (HOST tests)
 mise run pre-commit    # hk run pre-commit --all
 ```

@@ -2,7 +2,7 @@
 # These are Build Type 1 tools: run locally before commits
 
 [tools]
-# The 20 tools shared with the devcontainer image live in
+# The tools shared with the devcontainer image live in
 # .config/mise/conf.d/shared.toml — the single exact-pinned source both this
 # host config and .devcontainer/mise-system.toml merge, so they never drift
 # (Renovate bumps that one file). See epic #160 T5. Below: host-ONLY tools.

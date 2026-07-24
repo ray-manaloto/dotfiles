@@ -91,7 +91,7 @@ this natively now?" surface area.
 
 Partially machine-backed, not fully automatable (judgment is required):
 
-- **hk cross-file version-parity** (planned check-H): asserts `hk@<ver>` is
+- **hk cross-file version-parity** (`hk_version_parity` in `hk.pkl` — SHIPPED): asserts `hk@<ver>` is
   identical across `hk.pkl` / `hk-common.pkl` / `hk-image.pkl` and matches the
   `mise.toml` binary pin — catches pin drift that this rule would otherwise
   catch by hand.

@@ -23,7 +23,7 @@ If the CI step has no local equivalent, add one to hk.pkl before committing.
 
 When adding a new hk step with a `check` command, verify the tool binary
 is listed in the repo's merged mise config — `mise.toml` [tools] OR the
-shared fragment `.config/mise/conf.d/shared.toml` (the 20 host↔image tools;
+shared fragment `.config/mise/conf.d/shared.toml` (the host↔image tools;
 epic #160 T5). mise merges `<repo>/.config/mise/conf.d/*.toml` into the
 project config, so CI's `mise install` (run with cwd at the repo root)
 installs both — parity holds. What must NOT be relied on is a tool present
