@@ -64,6 +64,14 @@ _NON_PATH_CHARS = re.compile(r"[\s*{}<>$()|\"'=@!,;]")
 DOC_PATHSPECS = (
     "AGENTS.md",
     "**/AGENTS.md",
+    # The ONLY CLAUDE.md carrying real content: the root one is locked
+    # byte-exactly to `@AGENTS.md` (claude_md_import_stub) and every subdir
+    # CLAUDE.md is the same one-line stub, so `**/CLAUDE.md` would add only
+    # stubs. `.claude/CLAUDE.md` is stub-EXEMPT precisely so Claude-specific
+    # config can live there — including the fable-orchestrator trigger whose
+    # absence went undetected for an unknown number of sessions (#354). An
+    # uncovered file is exactly where the next stale ref hides.
+    ".claude/CLAUDE.md",
     ".claude/rules/*.md",
     ".claude/skills/*/SKILL.md",
     # graphify's vendored SKILL.md cites its own runtime files
