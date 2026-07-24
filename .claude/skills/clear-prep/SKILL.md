@@ -113,10 +113,14 @@ reflected in docs), find and update every affected doc. Walk these in order:
    (validation-addition J, epic #160 T13) supersedes this loop once landed.
 
 **Constraints (machine-enforced — respect or the gate fails):**
-- `CLAUDE.md` / `AGENTS.md` files have a **200-line / 12,000-char hard
-  limit** (`claude_md_size_limit` hk step; char half machine-enforced from
-  #160 T13). Check BOTH (`wc -l` and `wc -c`); when a file sits at or near
-  either limit, record in the handoff which future edit must trim. Any
+- Markdown size is **class-aware** — see `.claude/rules/md-size-budgets.md`
+  for the table (hk step **`md_size_budget`**, which replaced the retired
+  `claude_md_size_limit`). An `AGENTS.md` additionally carries agnix
+  AGM-003's 12,000-char cap — **Windsurf's rule, not Anthropic's** — which
+  binds first. Do NOT restate a flat "200-line / 12,000-char" limit: that
+  misattribution is exactly what `md-size-budgets.md` exists to kill.
+  Verify with `mise run lint` + `mise run lint-docs`; when a file sits near
+  a limit, record in the handoff which future edit must trim. Any
   addition needs an offsetting trim — prefer collapsing duplication to a
   pointer (rule files / `action.yml` / other docs are the authority) over
   deleting load-bearing facts. Long single-line table rows are more
@@ -225,8 +229,8 @@ resumes from the handoff."*
 - [ ] Session-INDEPENDENT autonomous processes (running GHA runs, Renovate PRs) inventoried in the handoff — NOT waited/blocked on; `main` noted as bot-advanced.
 - [ ] Every doc affected by this session's changes updated; cross-refs grep-clean.
 - [ ] Repo-wide doc-ref sweep run (step 2.5); every MISSING hit fixed or justified in place.
-- [ ] `CLAUDE.md`/`AGENTS.md` files ≤ 200 lines AND ≤ 12,000 chars; at-limit files flagged in the handoff.
-- [ ] Every findings-bearing agent report persisted verbatim under `.omc/research/`; coverage audited.
+- [ ] `mise run lint` + `mise run lint-docs` green (class-aware `md_size_budget` + agnix AGM-003); at-limit files flagged in the handoff.
+- [ ] Every findings-bearing agent report persisted verbatim under `.omc/kb/reports/agents/`; coverage audited.
 - [ ] Durable memory written + `MEMORY.md` pointer added.
 - [ ] Local handoff written under `.omc/plans/` and self-verified (paths, file:line, task names, gate rcs).
 - [ ] Relevant local gate green; doc commit made (if appropriate).

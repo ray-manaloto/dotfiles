@@ -73,5 +73,16 @@ Codex or Gemini. For background tasks, use:
 
 ## Reference
 
-The octopus `orchestrate.sh` (lib/dispatch.sh + lib/spawn.sh) has the canonical
-invocation patterns. When in doubt, check `get_agent_command()` in dispatch.sh.
+**The patterns above ARE the reference — there is no script to consult.** This
+section used to point at the octopus `orchestrate.sh` / `get_agent_command()`.
+That file does not exist in this repo (control-armed: `find . -name
+orchestrate.sh` → 0, while `find . -maxdepth 1 -name hk-common.pkl` → 1, so the
+probe discriminates); it lives only inside the `octo@nyldn-plugins` plugin
+cache, which is `false` in BOTH `.claude/settings.json` and
+`~/.claude/settings.json` and may vanish on plugin GC. A reader could not act
+on it.
+
+When a pattern here looks wrong, **re-probe the CLI itself** (`codex exec
+--help`, `gemini --help`) rather than hunting for a canonical script — these
+flags change between releases, which is how the wrong forms above got
+documented in the first place.

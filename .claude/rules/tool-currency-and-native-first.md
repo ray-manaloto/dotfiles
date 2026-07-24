@@ -72,7 +72,7 @@ getting a *weaker* result (version-only vs sha256-verified) than the native path
    decoupling a cache tier, bumping a pinned version, or swapping custom→native
    goes stale in `P2996-CACHE.md`, the `AGENTS.md` files, isolation wikis, and
    skill files. Update them in the same commit — respecting
-   `claude_md_size_limit` / `claude_agents_md_pairs` / `claude_md_import_stub`.
+   `md_size_budget` / `claude_agents_md_pairs` / `claude_md_import_stub`.
 
 6. **Justify any custom code that survives the check, in writing.** If a native
    feature exists but is genuinely insufficient (rule 4's `get_env()` case),
@@ -91,7 +91,7 @@ this natively now?" surface area.
 
 Partially machine-backed, not fully automatable (judgment is required):
 
-- **hk cross-file version-parity** (planned check-H): asserts `hk@<ver>` is
+- **hk cross-file version-parity** (`hk_version_parity` in `hk.pkl` — SHIPPED): asserts `hk@<ver>` is
   identical across `hk.pkl` / `hk-common.pkl` / `hk-image.pkl` and matches the
   `mise.toml` binary pin — catches pin drift that this rule would otherwise
   catch by hand.

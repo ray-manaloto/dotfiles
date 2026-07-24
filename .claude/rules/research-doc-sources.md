@@ -37,13 +37,26 @@ worked.
    chrome, no JS). Use this once step 1 has told you which page you
    want. This is the primary per-page fetch for mintlify content.
 
-3. **`ctx7` / `/context7-cli` skill** — for libraries whose docs live
-   outside mintlify, or for libraries where `llms.txt`/`.md` doesn't
-   cover what you need. Invoked via the `/context7-cli` skill. Note:
-   the `ctx7` binary itself is a skill-management CLI
-   (subcommands `skills`/`login`/`whoami`/`setup`), not a direct
-   doc-fetcher — the actual doc retrieval happens through the skill
-   wrapper. See `.claude/skills/context7-cli/SKILL.md`.
+3. **`ctx7`** — for libraries whose docs live outside mintlify, or where
+   `llms.txt`/`.md` doesn't cover what you need. It is a **direct
+   doc-fetcher**; call it straight, in two steps:
+
+   ```bash
+   ctx7 library <name> [query]        # resolve a name -> Context7 library ID
+   ctx7 docs <libraryId> <query>      # fetch the docs
+   ```
+
+   Corrected 2026-07-23: this step used to say `ctx7` was "a
+   skill-management CLI … **not** a direct doc-fetcher", routing every
+   lookup through a skill wrapper that adds nothing. Verified against
+   `ctx7 --help` (0.5.5, the `mise.toml` pin): the documented commands are
+   `login/logout/whoami/setup/remove/library/docs/upgrade`.
+
+   The `skills` subcommands still *run* (`ctx7 skills list` → rc=0) but are
+   **hidden from `--help` and deprecated** — "Skill commands are deprecated
+   and will stop working in the next major release." So do not build on
+   them, and do not treat their absence from `--help` as proof they are
+   gone. `.claude/skills/context7-cli/SKILL.md` remains the setup reference.
 
 4. **Raw HTML fetch** (`curl <url>` or `npx @teng-lin/agent-fetch <url>`) —
    **last resort only.** Pays the full HTML-parse cost in agent
