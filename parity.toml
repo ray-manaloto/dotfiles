@@ -1,0 +1,38 @@
+# Cross-repo parity — the declared set both repos must carry (#354 tier 0).
+#
+# WHY THIS FILE EXISTS. dotfiles and knowledge-base both document the same
+# cross-vendor orchestration doctrine, and for a while only one of them
+# actually carried it in config. That is the #354 defect class one level up:
+# a declaration made twice and observed in neither place, invisible from
+# inside either repo because each one looks internally consistent.
+#
+# SCOPE IS DELIBERATELY NARROW (Ray, 2026-07-24). Only the doctrine-bearing
+# core is GATED. Everything else the two repos differ on is REPORTED by
+# `mise run parity` as an advisory divergence block and blocks nothing —
+# because a narrow gate is only honest if the difference it declines to gate
+# is still visible. Measured at the time of writing: 7 plugins, 23 skills, and
+# 22 rules exist in dotfiles and not in knowledge-base.
+#
+# Widening the gate is a one-line edit here plus whatever work it takes to
+# make the other repo true. Do NOT widen it by adding an entry the other repo
+# does not have — that lands a red gate on main.
+
+[shared]
+# Plugins that must be ENABLED (value `true`, not merely present as a key) in
+# both repos' .claude/settings.json. These two are the orchestration lanes the
+# doctrine names; without them the routing docs describe a flow that cannot run.
+plugins = [
+    "fable-orchestrator@fable-orchestrator",
+    "antigravity@antigravity-for-claude-code",
+]
+
+# Whole lines that must appear in both repos' .claude/CLAUDE.md, matched
+# exactly modulo whitespace. The first is THE trigger whose absence opened
+# #354 — the plugin's own setup wizard states the mode line "is inert without
+# the trigger", so the second line without the first is a lane that is
+# declared and never invoked. Substring matching would accept a doc that
+# merely quotes them, which is the state the repo was actually in.
+lines = [
+    "- When the session model is Fable, without being reminded: non-trivial implementation runs the fable-orchestrator architect-as-orchestrator flow — invoke the fable-orchestrator:orchestration skill before delegating and follow it as authoritative for routing, verification, review tiers, and advisor consults.",
+    "- fable-orchestrator: implementation lane = codex",
+]

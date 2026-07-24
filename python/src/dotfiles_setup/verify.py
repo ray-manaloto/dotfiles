@@ -214,6 +214,94 @@ def require_tokens(
     return {"status": "passed"}
 
 
+def _normalise(line: str) -> str:
+    """Collapse every run of whitespace to one space and strip the ends."""
+    return " ".join(line.split())
+
+
+def require_lines(
+    paths: list[Path],
+    lines: list[str],
+    *,
+    description: str = "",
+    per_path_lines: dict[str, list[str]] | None = None,
+) -> dict[str, Any]:
+    """Check that whole LINES are present, matched exactly modulo whitespace.
+
+    Why this is not :func:`require_tokens` (#354 PR 1). The bug that opened
+    #354 was an absent orchestrator *trigger line*. Substring binding notices
+    that absence — but it equally accepts the sentence quoted inside prose that
+    *narrates* the declaration instead of making it, which is the state the
+    repo was actually in. `feedback_forbid_tokens_substring_fragile` and the
+    `per_path_tokens` lesson (#299) both say the same thing from the other
+    direction: a substring is the wrong binding for a sentence. A declaration
+    is a whole line or it is not that declaration.
+
+    Whitespace is normalised, and only whitespace. Re-indenting a list item or
+    reflowing the spaces inside it changes bytes, not meaning, so a gate that
+    fired on that would be a formatter tripwire nobody keeps. Rewording is a
+    different matter and must fail — both directions are pinned in
+    ``tests/test_verify.py``.
+
+    **A bare ``lines`` list must hold in EVERY listed path.** This inverts
+    :func:`require_tokens`'s union default deliberately. That union is the
+    footgun `per_path_tokens` had to be retrofitted to work around — a suite
+    naming two files had no opinion about either, and
+    ``build.path-includes-mise-shims`` stayed green for ~3.5 months on the
+    strength of a file that was not the one it meant. This handler is new, so
+    the strict reading is free; ``per_path_lines`` covers the asymmetric case.
+
+    Args:
+        paths: Files to scan.
+        lines: Lines that must appear in every one of ``paths``.
+        description: Optional description for error messages.
+        per_path_lines: Repo-relative path -> lines that THAT file must carry.
+
+    Returns:
+        Result dictionary with status key.
+
+    Raises:
+        VerificationError: If any required line is missing from any file it
+            was bound to.
+    """
+    problems: list[str] = []
+
+    if per_path_lines:
+        root = _project_root()
+        for raw, wanted in per_path_lines.items():
+            target = root / raw
+            present = (
+                {_normalise(one) for one in target.read_text().splitlines()}
+                if target.exists()
+                else set()
+            )
+            problems.extend(
+                f"{raw}: missing line '{one}'"
+                for one in wanted
+                if _normalise(one) not in present
+            )
+
+    if lines:
+        if not paths:
+            fail(
+                f"{description}: no target files found"
+                if description
+                else "no target files found"
+            )
+        for path in paths:
+            present = {_normalise(one) for one in path.read_text().splitlines()}
+            problems.extend(
+                f"{path}: missing line '{one}'"
+                for one in lines
+                if _normalise(one) not in present
+            )
+
+    if problems:
+        joined = "; ".join(problems)
+        fail(f"{description}: {joined}" if description else joined)
+    return {"status": "passed"}
+
+
 def regex_match(
     paths: list[Path],
     pattern: str,
@@ -412,6 +500,16 @@ def _handle_require_tokens(entry: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+def _handle_require_lines(entry: dict[str, Any]) -> dict[str, Any]:
+    paths = _resolve_paths(entry)
+    return require_lines(
+        paths,
+        entry.get("lines", []),
+        description=entry.get("description", ""),
+        per_path_lines=entry.get("per_path_lines"),
+    )
+
+
 def _handle_regex_match(entry: dict[str, Any]) -> dict[str, Any]:
     paths = _resolve_paths(entry)
     return regex_match(
@@ -454,6 +552,7 @@ def _handle_no_vscode_user(entry: dict[str, Any]) -> dict[str, Any]:
 HANDLERS: dict[str, Any] = {
     "forbid_tokens": _handle_forbid_tokens,
     "require_tokens": _handle_require_tokens,
+    "require_lines": _handle_require_lines,
     "regex_match": _handle_regex_match,
     "regex_forbid": _handle_regex_forbid,
     "dockerfile_structure": _handle_dockerfile_structure,

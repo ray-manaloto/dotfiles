@@ -454,8 +454,14 @@ def _open_or_update_pr(workspace: Path, title: str | None) -> int | None:
     create = ["gh", "pr", "create", "--fill"]
     if title:
         create += ["--title", title]
-    if _stream(create, cwd=workspace) != 0:
-        sys.stdout.write("FAIL  ship: gh pr create failed\n")
+    create_rc = _stream(create, cwd=workspace)
+    if create_rc != 0:
+        # Report the status we SAW, never a prose summary of it (#358, design
+        # principle 8). The knowledge-base twin of this line printed a bare
+        # "PR create failed" through GitHub's 2026-07-24 PR outage, so a hard
+        # server error was indistinguishable from flakiness and got retried
+        # three times before anyone looked at the actual response.
+        sys.stdout.write(f"FAIL  ship: gh pr create rc={create_rc}\n")
         return None
     view = _run(
         ["gh", "pr", "view", "--json", "number"],
@@ -464,7 +470,10 @@ def _open_or_update_pr(workspace: Path, title: str | None) -> int | None:
     )
     if view.returncode != 0 or not view.stdout.strip():
         # Review finding [10]: never JSON-parse an unchecked gh result.
-        sys.stdout.write("FAIL  ship: created PR but could not resolve its number\n")
+        sys.stdout.write(
+            "FAIL  ship: created PR but could not resolve its number "
+            f"(gh pr view rc={view.returncode})\n"
+        )
         return None
     return int(json.loads(view.stdout)["number"])
 
@@ -503,8 +512,9 @@ def ship_main(workspace: Path, *, title: str | None = None) -> int:
     if not run_gates(workspace, gate_matrix(paths)):
         return 1
 
-    if _stream(["git", "push", "-u", "origin", branch], cwd=workspace) != 0:
-        sys.stdout.write("FAIL  ship: git push failed\n")
+    push_rc = _stream(["git", "push", "-u", "origin", branch], cwd=workspace)
+    if push_rc != 0:
+        sys.stdout.write(f"FAIL  ship: git push rc={push_rc}\n")
         return 1
 
     number = _open_or_update_pr(workspace, title)

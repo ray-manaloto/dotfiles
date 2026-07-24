@@ -876,6 +876,15 @@ run = "docker buildx bake validate"
 description = "Verify GHA actions are SHA-pinned"
 run = "pinact run --verify"
 
+[tasks.parity]
+description = "Assert the declared cross-repo shared set (parity.toml) holds in dotfiles + knowledge-base"
+# Reads the sibling repo, so it cannot be an hk step: hk runs on a checkout of
+# THIS repo alone. CI checks knowledge-base out inside the workspace and points
+# KB_REPO_PATH at it (contract-preflight); locally it defaults to the sibling
+# directory and SKIPs loudly when absent. In CI absence is a hard FAIL — see
+# python/src/dotfiles_setup/parity.py for why that asymmetry is the point.
+run = "uv run --project python dotfiles-setup parity"
+
 [tasks.lint-docs]
 description = "Validate agent documentation"
 # --strict: warnings-as-errors (#250) — parity with ci.yml + the hk agnix step.

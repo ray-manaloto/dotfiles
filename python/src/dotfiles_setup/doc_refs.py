@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -263,6 +264,159 @@ def find_local_only_refs(repo_root: Path) -> list[UnresolvedRef]:
                     continue
                 local_only.append(UnresolvedRef(doc=doc, line=lineno, ref=ref))
     return local_only
+
+
+# ---------------------------------------------------------------------------
+# Named-artifact refs (#354 PR 1) — tasks and skills cited by NAME
+# ---------------------------------------------------------------------------
+#
+# The path checker above can only see spans that look like a file path. A span
+# containing whitespace is disqualified by `_NON_PATH_CHARS`, and a bare name
+# with no extension and no `/` never becomes a candidate — so `mise run <task>`
+# and a skill cited by name are both structurally invisible to it. They are
+# also the two most common ways this repo's docs cite something executable:
+# `.claude/rules/mise-tasks-only.md` is a table of task names, and the rules
+# cross-reference skills constantly. A renamed task or a deleted skill leaves
+# the citation behind, silently, which is the #354 defect class exactly.
+
+_TASK_RE = re.compile(r"\bmise run ([A-Za-z0-9][A-Za-z0-9:_.-]*)")
+_SKILL_RE = re.compile(r"`([A-Za-z0-9][A-Za-z0-9:_.-]*)`\s+skill\b")
+_WIKILINK_RE = re.compile(r"\[\[([^\]|`]+)\]\]")
+_FENCE_RE = re.compile(r"^\s*```")
+
+# Task names cited here that belong to a DIFFERENT repo. Keep each justified;
+# prefer fixing the doc over growing this list.
+_EXTERNAL_TASKS = frozenset(
+    {
+        # `mise-tasks-only.md` routes knowledge-base PRs to the KB repo's own
+        # tasks, and says so on the same line. They are correct citations of
+        # something this repo deliberately does not define.
+        "kb-ship",
+        "kb-land",
+    }
+)
+
+# Skills cited by name that this repo does not (and should not) ship.
+_EXTERNAL_SKILLS = frozenset(
+    {
+        # A Claude Code built-in, cited by `mise-tasks-only.md` as the inverse
+        # of `command-audit`. Not a project skill and never will be.
+        "fewer-permission-prompts",
+        # Lives in the knowledge-base repo; `.claude/CLAUDE.md` names the repo
+        # on the same line.
+        "orchestrator-routing",
+    }
+)
+
+
+def declared_mise_tasks(repo_root: Path) -> set[str]:
+    """Every task name and alias this REPO declares, read from its own config.
+
+    Deliberately not ``mise tasks``: that merges the invoking user's global
+    config, so it reports names no file in this repo defines (this Mac's global
+    config contributes four ``update:*`` tasks). A doc in this repo must cite a
+    task this repo declares, so the tracked config is the correct binding — and
+    it keeps the check offline, which is what lets it ride the existing
+    pre-commit step instead of needing a mise subprocess.
+
+    Aliases count: ``down`` is an alias of ``stop`` and three docs cite it, so
+    dropping aliases would report three correct citations as broken.
+    """
+    names: set[str] = set()
+    conf_d = repo_root / ".config" / "mise" / "conf.d"
+    configs = [repo_root / "mise.toml", *sorted(conf_d.glob("*.toml"))]
+    for config in configs:
+        if not config.exists():
+            continue
+        tasks = tomllib.loads(config.read_text()).get("tasks", {})
+        for name, body in tasks.items():
+            names.add(name)
+            alias = body.get("alias") if isinstance(body, dict) else None
+            if isinstance(alias, str):
+                names.add(alias)
+            elif isinstance(alias, list):
+                names.update(a for a in alias if isinstance(a, str))
+    return names
+
+
+def declared_skills(repo_root: Path) -> set[str]:
+    """Project skill names — the directories Claude Code's loader scans."""
+    skills = repo_root / ".claude" / "skills"
+    if not skills.is_dir():
+        return set()
+    return {p.name for p in skills.iterdir() if (p / "SKILL.md").exists()}
+
+
+def _declared_rules(repo_root: Path) -> set[str]:
+    return {p.stem for p in (repo_root / ".claude" / "rules").glob("*.md")}
+
+
+def _doc_lines(repo_root: Path, doc: str) -> list[tuple[int, str, bool]]:
+    """Yield (lineno, text, in_fence) for one doc."""
+    out: list[tuple[int, str, bool]] = []
+    in_fence = False
+    for lineno, line in enumerate((repo_root / doc).read_text().splitlines(), start=1):
+        if _FENCE_RE.match(line):
+            in_fence = not in_fence
+            continue
+        out.append((lineno, line, in_fence))
+    return out
+
+
+def find_unresolved_task_refs(repo_root: Path) -> list[UnresolvedRef]:
+    """Return every ``mise run <task>`` citation naming a task that is absent.
+
+    Scans inline backtick spans AND fenced code blocks. The fence half is not
+    optional: the repo's own Quick Start lists a dozen tasks inside a ```bash
+    fence, so an inline-only scan would leave the most-read task list in the
+    repo unguarded.
+
+    A bare ``mise run`` mention (no task name inside the span) is prose — the
+    next word is not a task. Without that distinction ``mise-tasks-only.md``'s
+    "add a `mise run` task" reports a task named ``task``, and a gate that
+    invents violations is a gate someone switches off.
+    """
+    declared = declared_mise_tasks(repo_root)
+    unresolved: list[UnresolvedRef] = []
+    for doc in _tracked_files(repo_root, DOC_PATHSPECS):
+        for lineno, line, in_fence in _doc_lines(repo_root, doc):
+            candidates = [line] if in_fence else _SPAN_RE.findall(line)
+            for candidate in candidates:
+                for match in _TASK_RE.finditer(candidate):
+                    task = match.group(1)
+                    if task in declared or task in _EXTERNAL_TASKS:
+                        continue
+                    unresolved.append(UnresolvedRef(doc=doc, line=lineno, ref=task))
+    return unresolved
+
+
+def find_unresolved_skill_refs(repo_root: Path) -> list[UnresolvedRef]:
+    """Return every skill cited by NAME that has no ``SKILL.md`` on disk.
+
+    Two citation forms are in live use: ``` `name` skill ``` and ``[[name]]``.
+    Wikilinks resolve against rules as well as skills — ``[[zero-skip-policy]]``
+    is a rule, and resolving them against skills alone would report every one
+    of them as broken.
+
+    Two exclusions, both from running this against the live tree before wiring
+    it up. A backticked ``[[wikilink]]`` NAMES the syntax rather than citing
+    anything (``memory-index-curation`` does exactly that), and a
+    ``plugin:skill`` name belongs to an installed plugin, so a repo-local
+    existence check on it can only be wrong.
+    """
+    known = declared_skills(repo_root) | _declared_rules(repo_root)
+    unresolved: list[UnresolvedRef] = []
+    for doc in _tracked_files(repo_root, DOC_PATHSPECS):
+        for lineno, line, _in_fence in _doc_lines(repo_root, doc):
+            refs = [m.group(1) for m in _SKILL_RE.finditer(line)]
+            # A wikilink inside a backtick span is a syntax mention.
+            stripped = _SPAN_RE.sub(" ", line)
+            refs += [m.group(1) for m in _WIKILINK_RE.finditer(stripped)]
+            for ref in refs:
+                if ":" in ref or ref in known or ref in _EXTERNAL_SKILLS:
+                    continue
+                unresolved.append(UnresolvedRef(doc=doc, line=lineno, ref=ref))
+    return unresolved
 
 
 def find_unresolved_refs(repo_root: Path) -> list[UnresolvedRef]:

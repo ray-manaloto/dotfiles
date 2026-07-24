@@ -182,6 +182,19 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+      - name: Checkout knowledge-base (cross-repo parity)
+        # `eval.cross-repo-parity` compares this repo against the sibling
+        # knowledge-base repo, so the gate needs both trees. actions/checkout
+        # refuses a path outside $GITHUB_WORKSPACE, so it lands inside the
+        # workspace and KB_REPO_PATH points the gate at it. Public repo — no
+        # token needed. If this step is ever dropped, the parity gate FAILS in
+        # CI rather than skipping: a gate that goes quiet when its own wiring
+        # disappears is the #354 bug one level up.
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: ray-manaloto/knowledge-base
+          path: .parity/knowledge-base
+          persist-credentials: false
       - name: Install mise (python + uv)
         # Subset install: only python + uv, both pinned in mise.toml.
         # Replaces the prior actions/setup-python + astral-sh/setup-uv pair.
@@ -193,6 +206,15 @@ jobs:
           uv run --project python dotfiles-setup verify run \
             --category build --category ci --category identity --category architecture \
             --json
+      - name: Validate orchestration + eval contracts
+        run: |
+          uv run --project python dotfiles-setup verify run \
+            --category orchestration --category eval \
+            --json
+      - name: Cross-repo parity gate
+        env:
+          KB_REPO_PATH: ${{ github.workspace }}/.parity/knowledge-base
+        run: mise run parity
   # ============================================================
   # Change detection: gate the Docker build chain (base-prep →
   # p2996-prep → build → smoke-test) AND `promote` on whether the
