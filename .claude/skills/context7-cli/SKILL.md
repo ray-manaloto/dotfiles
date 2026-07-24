@@ -5,19 +5,22 @@ description: Use when the user mentions "ctx7" or "context7", needs current docs
 
 # ctx7 CLI
 
-The Context7 CLI does three things: fetches up-to-date library documentation, manages AI coding skills, and sets up Context7 MCP for your editor.
+The Context7 CLI fetches up-to-date library documentation and sets up Context7 MCP for your editor. It also still carries **deprecated** skill-management commands (see the caveat below).
 
-Make sure the CLI is up to date before running commands:
-
-```bash
-npm install -g ctx7@latest
-```
-
-Or run directly without installing:
+**In this repo `ctx7` is mise-pinned — do NOT `npm install -g` or `npx` it.** The pin is `"npm:ctx7"` in `mise.toml`; `.claude/rules/ci-local-parity.md` rule 3 bans `npx` because it bypasses mise and can resolve a different version than CI. Just call the binary:
 
 ```bash
-npx ctx7@latest <command>
+ctx7 library <name> [query]     # resolve a name -> Context7 library ID
+ctx7 docs <libraryId> <query>   # fetch the docs
 ```
+
+To move the version, bump the `mise.toml` pin (Renovate does this) — not `@latest`.
+
+> ⚠️ **The `ctx7 skills …` commands are DEPRECATED.** They are hidden from
+> `--help` but still execute, printing *"Skill commands are deprecated and will
+> stop working in the next major release."* (verified on the pinned 0.5.5, rc=0).
+> Treat the sections below that use them as historical; do not build on them.
+> Note their absence from `--help` is NOT proof they are gone — they run.
 
 ## What this skill covers
 
