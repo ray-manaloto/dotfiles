@@ -28,9 +28,12 @@ in the devcontainer build-input program:
   lockfile tier**, and native conda locking remains open upstream
   (`jdx/mise#7700`). This is itself a case of "docs/assumption lag code": the
   assumption that conda had reached lockfile parity did not survive probing.
-  **Do NOT retire `mise_snapshot.py` / the snapshot machinery on the conda-lock
-  basis** — until `#7700` closes and a probe confirms `sha256` in the lockfile,
-  the snapshot is the only sha-verified capture we have.
+  **The snapshot machinery is nonetheless GONE** — `mise_snapshot.py` was
+  deleted in `352063a` (#160 T4–T13). This rule told readers "do NOT retire" it
+  for ~2 weeks after it had already been retired, while the
+  `tool-currency-check` skill said "RETIRED in #160 T1" — two docs, opposite
+  claims, neither checked. Corrected 2026-07-24; the durable fact is the conda
+  gap, not the file.
 - **`minimum_release_age` / `lockfile` / `lockfile_platforms`** are native — no
   custom cooldown or platform-scoping machinery needed.
 - **Renovate's native `mise` manager + the `github>jdx/renovate-config` preset**
