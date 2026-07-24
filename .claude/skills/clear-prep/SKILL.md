@@ -97,20 +97,30 @@ reflected in docs), find and update every affected doc. Walk these in order:
    (`.claude/rules/research-repo-enumeration.md`).
 4. **Issue / epic checklists** on GitHub — tick boxes, file follow-ups,
    cross-link (`gh issue edit`, `gh issue comment`).
-5. **Doc-ref integrity — repo-wide, NOT just this session's diff.** Stale
-   refs predating the session escape the diff-scoped greps above (a deleted
-   file's mentions can linger for months — the `home/AGENTS.md` case,
-   deleted in PR #80, found 2026-07-05). Verify every backtick path ref in
-   the agent docs resolves:
-   ```bash
-   git grep -hoE '`[A-Za-z0-9_./-]+\.(md|sh|py|toml|pkl|yml|yaml|json|hcl|lock)`' \
-     -- 'AGENTS.md' 'CLAUDE.md' '*/AGENTS.md' '.claude/rules' '.claude/skills' \
-     | tr -d '`' | sort -u | while read -r p; do [ -e "$p" ] || echo "MISSING: $p"; done
-   ```
-   Judge each MISSING hit: fix the ref, or confirm it is intentionally
-   absent (container path, gitignored, planned file) and make the citing
-   doc say so. Machine gate: `dotfiles-setup check-doc-refs` + hk step
-   (validation-addition J, epic #160 T13) supersedes this loop once landed.
+5. **Doc-ref integrity — machine-gated; do NOT hand-roll a grep sweep.**
+   Stale refs predating the session escape the diff-scoped greps above (a
+   deleted file's mentions can linger for months — the `home/AGENTS.md` case,
+   deleted in PR #80, found 2026-07-05). That sweep is now the **`doc_refs`
+   hk step** (`dotfiles-setup check-doc-refs`, logic in
+   `python/src/dotfiles_setup/doc_refs.py`, pinned by `tests/test_doc_refs.py`),
+   so `mise run lint` already covers it — nothing extra to run here.
+
+   **This step used to print an ad-hoc `git grep | while read` loop, and it
+   was retired 2026-07-24 because it was actively misleading**: it matched
+   bare basenames and reported **~120 false MISSING hits** in one run (a
+   `.claude/rules/*.md` "see also" cites `do-not.md`, which resolves at
+   `.claude/rules/do-not.md`). Filtering by "does this basename exist anywhere
+   in `git ls-files`" still left 58, nearly all legitimately external —
+   container paths, gitignored artifacts, memory files living outside the
+   repo, illustrative examples. Exactly one was real. The checker encodes all
+   of that as `_ALLOWED_ABSENT`, each entry justified; the loop encoded none
+   of it. A sweep whose output is ~99% noise does not get read.
+
+   So: if `mise run lint` is green, doc refs are clean. When the gate DOES
+   fire, judge the hit — fix the ref, or add a justified `_ALLOWED_ABSENT`
+   entry (prefer fixing). Widening the checker's scope is a `DOC_PATHSPECS`
+   change plus a coverage assertion in `tests/test_doc_refs.py`; do not
+   re-add a manual loop.
 
 **Constraints (machine-enforced — respect or the gate fails):**
 - Markdown size is **class-aware** — see `.claude/rules/md-size-budgets.md`

@@ -64,6 +64,14 @@ _NON_PATH_CHARS = re.compile(r"[\s*{}<>$()|\"'=@!,;]")
 DOC_PATHSPECS = (
     "AGENTS.md",
     "**/AGENTS.md",
+    # The ONLY CLAUDE.md carrying real content: the root one is locked
+    # byte-exactly to `@AGENTS.md` (claude_md_import_stub) and every subdir
+    # CLAUDE.md is the same one-line stub, so `**/CLAUDE.md` would add only
+    # stubs. `.claude/CLAUDE.md` is stub-EXEMPT precisely so Claude-specific
+    # config can live there — including the fable-orchestrator trigger whose
+    # absence went undetected for an unknown number of sessions (#354). An
+    # uncovered file is exactly where the next stale ref hides.
+    ".claude/CLAUDE.md",
     ".claude/rules/*.md",
     ".claude/skills/*/SKILL.md",
     # graphify's vendored SKILL.md cites its own runtime files
@@ -122,6 +130,12 @@ _ALLOWED_ABSENT = frozenset(
         # refuted the stale issue #959. Neither is ours to track.
         "install.py",
         "llm.py",
+        # graphify's generated graph, cited by `.claude/CLAUDE.md` as the thing
+        # to query before grepping. `graphify-out/` is gitignored and rebuilt
+        # per-clone, so it exists locally and never in CI — the divergence that
+        # failed PR #359's first run. Same rationale as the vendored graphify
+        # SKILL.md exclusion in DOC_PATHSPECS.
+        "graphify-out/graph.json",
         # Documented-retired files (docs narrate the retirement).
         "install.sh",
         "mise-system-resolved.json",
@@ -208,6 +222,47 @@ def _is_allowlisted(ref: str) -> bool:
     if ref in _ALLOWED_ABSENT:
         return True
     return any(ref.startswith(prefix) for prefix in _ALLOWED_PREFIXES)
+
+
+def find_local_only_refs(repo_root: Path) -> list[UnresolvedRef]:
+    """Return refs that resolve ONLY because the file exists on THIS machine.
+
+    :func:`find_unresolved_refs` accepts a ref when ``(repo_root / ref).exists()``,
+    which is a filesystem stat — so a **gitignored** artifact present locally
+    resolves here and vanishes in a fresh CI checkout. That is a silent
+    local/CI divergence of exactly the shape `.claude/rules/clean-git-state.md`
+    exists to prevent, and it shipped one: adding `.claude/CLAUDE.md` to
+    :data:`DOC_PATHSPECS` passed locally and failed CI on its
+    ``graphify-out/graph.json`` citation (PR #359).
+
+    A ref is local-only when it exists on disk but is neither a tracked file nor
+    a directory containing one. Callers should require every such ref to be
+    allowlisted; the test suite pins that, so the divergence fails locally
+    instead of in CI.
+    """
+    all_tracked = _tracked_files(repo_root, ("*",))
+    tracked = set(all_tracked)
+    local_only: list[UnresolvedRef] = []
+    top_level = frozenset(p.split("/", 1)[0] for p in all_tracked)
+    for doc in _tracked_files(repo_root, DOC_PATHSPECS):
+        text = (repo_root / doc).read_text()
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            for span in _SPAN_RE.findall(line):
+                if not _is_path_candidate(span, top_level):
+                    continue
+                ref = _LINE_SUFFIX_RE.sub("", span)
+                if _is_allowlisted(ref) or not (repo_root / ref).exists():
+                    continue
+                # `git ls-files` never emits a leading "./", but docs write it
+                # (do-not.md contrasts `./CLAUDE.md` with `~/.claude/CLAUDE.md`).
+                # Without this, three tracked files read as local-only.
+                bare = ref.removeprefix("./")
+                if bare in tracked:
+                    continue
+                if any(p.startswith(bare + "/") for p in all_tracked):
+                    continue
+                local_only.append(UnresolvedRef(doc=doc, line=lineno, ref=ref))
+    return local_only
 
 
 def find_unresolved_refs(repo_root: Path) -> list[UnresolvedRef]:
