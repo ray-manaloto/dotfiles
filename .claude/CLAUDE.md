@@ -48,7 +48,16 @@ this kind of Claude-specific content (it is stub-exempt). Re-running
 
 ## Cross-vendor orchestration (Fable-5 architect + executor lanes)
 
-fable-orchestrator: implementation lane = codex
+- When the session model is Fable, without being reminded: non-trivial implementation runs the fable-orchestrator architect-as-orchestrator flow — invoke the fable-orchestrator:orchestration skill before delegating and follow it as authoritative for routing, verification, review tiers, and advisor consults.
+- fable-orchestrator: implementation lane = codex
+
+The first line is the **trigger**, and it is Fable-gated by design — sessions on
+other models read the condition and skip the flow. Until 2026-07-24 only the mode
+line was present, and the plugin's own setup wizard states the mode line "is inert
+without the trigger": the orchestrator declared a lane but left it uninvoked. Default
+`/model` is **Opus 5** for everyday work; switch to **Fable 5** deliberately to arm
+this flow for a multi-task build. `grok` CLI is NOT installed, so `codex` is the
+only viable fixed mode and cross-family review falls to antigravity or Claude.
 
 Adopted plugins (enabled in `.claude/settings.json`): `fable-orchestrator@fable-orchestrator`
 (Fable-5 architect + `codex` implementer lane, GPT-5.6 Sol) and
