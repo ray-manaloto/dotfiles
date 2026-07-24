@@ -72,7 +72,7 @@ getting a *weaker* result (version-only vs sha256-verified) than the native path
    decoupling a cache tier, bumping a pinned version, or swapping custom→native
    goes stale in `P2996-CACHE.md`, the `AGENTS.md` files, isolation wikis, and
    skill files. Update them in the same commit — respecting
-   `claude_md_size_limit` / `claude_agents_md_pairs` / `claude_md_import_stub`.
+   `md_size_budget` / `claude_agents_md_pairs` / `claude_md_import_stub`.
 
 6. **Justify any custom code that survives the check, in writing.** If a native
    feature exists but is genuinely insufficient (rule 4's `get_env()` case),

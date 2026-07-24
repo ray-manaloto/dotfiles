@@ -17,13 +17,28 @@
 import "package://github.com/jdx/hk/releases/download/v1.52.0/hk@1.52.0#/Builtins.pkl"
 import "package://github.com/jdx/hk/releases/download/v1.52.0/hk@1.52.0#/Config.pkl"
 
-// #154: shared `exclude` list for ALL builtin linters — third-party cached
-// docs, generated research artifacts, and gitignored local tool caches (not
-// first-party source). Defined once here and referenced by BOTH hk.pkl (host)
-// and hk-image.pkl (in-image, used by the devcontainer smoke) so they can't
-// drift — a drift is exactly what broke the in-container smoke when hk.pkl had
-// the exclude but hk-image.pkl did not. `gitleaks dir` ignores .gitignore, so
-// the gitignored caches must be listed explicitly.
+// #154: shared `exclude` list for the builtin linters that CONSUME `{{files}}`
+// — third-party cached docs, generated research artifacts, and gitignored local
+// tool caches (not first-party source). Defined once here and referenced by BOTH
+// hk.pkl (host) and hk-image.pkl (in-image, used by the devcontainer smoke) so
+// they can't drift — a drift is exactly what broke the in-container smoke when
+// hk.pkl had the exclude but hk-image.pkl did not.
+//
+// ⚠️ THIS LIST DOES NOT CONSTRAIN `gitleaks`. Corrected 2026-07-23; the previous
+// comment ("`gitleaks dir` ignores .gitignore, so the gitignored caches must be
+// listed explicitly") was read as meaning an entry HERE stops gitleaks scanning
+// a path. It never did. The builtin runs `gitleaks dir … {{ files }}`, and
+// `gitleaks dir` takes only ONE positional path: measured on gitleaks 8.30.1,
+// one file scans that file (1.85 KB), while TWO OR MORE files are silently
+// discarded and it scans the whole cwd instead (45.87 MB) — gitignored dirs
+// included. So gitleaks never reads this list at all, and the other entries look
+// effective only because they happen to hold nothing it flags.
+//
+// gitleaks is scoped by its OWN config, `.gitleaks.toml` (whose header states
+// this correctly). The two lists are kept mirrored on purpose: add a path to
+// BOTH, and expect only the `.gitleaks.toml` half to affect secret scanning.
+// A path that is gitignored AND untracked (e.g. graphify-out/) is invisible to
+// the `{{files}}` builtins anyway — its entry here is for symmetry, not effect.
 excludePaths: List<String> = List(
   "docs/research/mintlify-cache/**",
   "docs/research/trail/findings/**",

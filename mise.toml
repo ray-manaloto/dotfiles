@@ -17,8 +17,8 @@ lima = "2.2.0"
 biome = "2.5.5"
 # Markdown + Claude-docs linters. Installed now; hk.pkl integration is
 # scheduled for post-devcontainer-work review (see GH issue tracking
-# follow-up). claude_md_size_limit (below in hk.pkl) provides the
-# immediate 200-line enforcement per Claude Code memory docs.
+# follow-up). md_size_budget (below in hk.pkl) provides the immediate,
+# class-aware enforcement — see .claude/rules/md-size-budgets.md.
 "npm:claude-code-lint" = "0.7.0"
 "npm:@contextlint/cli" = "1.1.1"
 "npm:markdownlint-cli2" = "0.23.1"

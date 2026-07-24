@@ -43,7 +43,7 @@ max_files_to_validate = 10000
 #  - AGM-006: the deliberate nested-AGENTS.md hierarchy (enforced by the
 #    claude_agents_md_pairs hk step).
 #  - AGM-004: these files carry project context without a literal
-#    "## Project Context" header, and are at the 200-line claude_md_size_limit.
+#    "## Project Context" header, and are at the 200-line md_size_budget cap.
 #  - PE-001: "critical keyword in the 40-60% lost-in-middle zone" is a prompt
 #    heuristic that misfires on reference docs.
 # CONTEXT.md joins them (2026-07-15): it is the domain glossary the mattpocock
