@@ -87,10 +87,33 @@ chezmoi, pinact, agnix, and future additions. Especially the custom machinery in
 `renovate.json` customManagers — the two largest reservoirs of "does the tool do
 this natively now?" surface area.
 
+## How currency is checked now — the shared engine
+
+The version-currency MECHANICS (in-sync validation, release-note review,
+tracked-issue movement, the six-gate auto-apply bar, the committed report) live
+in the **shared `kb_setup.currency` engine** — a pinned `uv` git dep on the
+knowledge-base package, so both repos run ONE implementation (D2/G4; dotfiles'
+old broad-sweep module was deleted). What this repo declares is `currency.toml`
+(graphify is deep-tracked; hk/uv/etc. ride the broad `mise outdated` sweep) and
+two thin mise tasks:
+
+- `mise run tool-currency` → `kb-setup currency daily` — the daily report
+  (deep verdicts + broad sweep) refresh.yml upserts as the standing issue.
+- `mise run tool-currency-check` → `kb-setup currency check` — the offline
+  step-1 drift check the SessionStart hook runs every session (silent unless
+  drift).
+
+This rule's remaining, un-automatable job is the **native-first judgment**: is a
+piece of custom code now superseded by a tool feature (the `mise_snapshot.py` →
+`mise.lock` class)? The engine tracks versions; only a human decides retirement.
+
 ## Machine enforcement
 
 Partially machine-backed, not fully automatable (judgment is required):
 
+- **`workflow.tool-currency-wiring`** (suites.toml) asserts the whole chain:
+  `currency.toml` → the two mise tasks → the `kb-setup` dep in
+  `python/pyproject.toml` → refresh.yml's daily job → the SessionStart hook.
 - **hk cross-file version-parity** (`hk_version_parity` in `hk.pkl` — SHIPPED): asserts `hk@<ver>` is
   identical across `hk.pkl` / `hk-common.pkl` / `hk-image.pkl` and matches the
   `mise.toml` binary pin — catches pin drift that this rule would otherwise

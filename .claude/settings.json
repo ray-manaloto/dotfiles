@@ -44,7 +44,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ \"${CLAUDE_CODE_REMOTE:-}\" = \"true\" ]; then bash scripts/web-setup.sh; fi",
+            "command": "if [ \"${CLAUDE_CODE_REMOTE:-}\" = \"true\" ]; then bash scripts/web-setup.sh; else mise run tool-currency-check; fi",
             "timeout": 600
           }
         ]

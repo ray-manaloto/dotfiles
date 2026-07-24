@@ -470,12 +470,22 @@ description = "Re-run a run's failed jobs: mise run gha-rerun -- <run-id>"
 run = 'gh run rerun --failed'
 
 [tasks.tool-currency]
-description = "Markdown report of tools with upstream movement + release-notes links"
-# Thin caller (zero-bash-logic); logic in
-# python/src/dotfiles_setup/tool_currency.py. Run daily by refresh.yml's
-# tool-currency job (upserts the standing issue); locally it feeds the
-# tool-currency-check skill's release-note review.
-run = 'uv run --project python dotfiles-setup tool-currency'
+description = "Daily tool-currency report: deep due-diligence on the fast-movers + a broad mise-outdated sweep"
+# Thin caller of the SHARED engine (`kb-setup currency`, a pinned uv git dep on
+# the knowledge-base package — one implementation, D2/G4). `daily` renders the
+# standing-issue report: deep-tracked tools (currency.toml) that moved get a
+# per-tool verdict, everything else outdated gets a broad row. Run daily by
+# refresh.yml's tool-currency job; locally it feeds the tool-currency-check skill.
+run = 'uv run --project python kb-setup currency daily'
+
+[tasks.tool-currency-check]
+description = "Offline step-1 drift check for deep-tracked tools (SessionStart hook; silent unless drift)"
+# Subprocess-free, ~10ms, silent when clean, ALWAYS exits 0 — the SessionStart
+# hook runs it every session and must never block over a version pin. Prints a
+# nudge to run the tool-currency skill only when the install drifts from the pin.
+# Logic in the shared engine (kb_setup.currency.sync). Mirrors the KB repo's
+# kb-currency-check task.
+run = 'uv run --project python kb-setup currency check'
 
 [tasks.apt-repo]
 description = "List the packages an apt repository publishes (defaults to apt.llvm.org)"

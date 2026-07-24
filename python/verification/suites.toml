@@ -1093,36 +1093,42 @@ per_path_tokens = { "hk.pkl" = ["workflow_hk_skip_hooks", "dotfiles-setup workfl
 
 [[suite]]
 name = "workflow.tool-currency-wiring"
-description = "Daily tool-currency signal wiring: refresh.yml's tool-currency job must render the report via `mise run tool-currency` (thin caller of the python library) and upsert the standing issue; module + tests must exist. The signal feeds the tool-currency-check skill's release-note review (self-learning loop, 2026-07-07)."
+description = "Tool-currency wiring, now driven by the SHARED engine (kb_setup.currency, a pinned uv git dep on the knowledge-base package — D2/G4: one implementation, dotfiles' old tool_currency.py deleted). Asserts the whole chain: currency.toml declares what is deep-tracked; mise.toml's tool-currency task renders the daily report via `kb-setup currency daily` (deep due-diligence on the fast-movers + a broad `mise outdated` sweep on the rest, 2026-07-24) and tool-currency-check runs the offline step-1 drift check; python/pyproject.toml pins the kb-setup dep; refresh.yml's daily job still renders via `mise run tool-currency` and upserts the standing issue; the SessionStart hook runs the offline check every session. Bound per-path (#299) so no single file's incidental mention can satisfy the contract for another — the job/dep wiring is the whole point."
 category = "workflow"
 check_type = "static"
 handler = "require_tokens"
 paths_required = true
 paths = [
+    "currency.toml",
     "mise.toml",
-    "python/src/dotfiles_setup/tool_currency.py",
-    "tests/test_tool_currency.py",
+    "python/pyproject.toml",
     ".github/workflows/refresh.yml",
+    ".claude/settings.json",
 ]
-# Bound per-path (#299). Under combined-text `tokens` the module's own
-# docstring mention of `mise run tool-currency` satisfied the contract, so
-# refresh.yml could stop invoking the task and the suite would not notice —
-# the job wiring is the whole point. test_tool_currency.py is existence-only.
-per_path_tokens = { "mise.toml" = [
+per_path_tokens = { "currency.toml" = [
+    "[tool.graphify]",
+    "mise_key",
+], "mise.toml" = [
     "[tasks.tool-currency]",
-    "dotfiles-setup tool-currency",
-], "python/src/dotfiles_setup/tool_currency.py" = [
-    "def tool_currency_main",
+    "kb-setup currency daily",
+    "[tasks.tool-currency-check]",
+    "kb-setup currency check",
+], "python/pyproject.toml" = [
+    "kb-setup",
 ], ".github/workflows/refresh.yml" = [
     "mise run tool-currency",
     "Tool currency report (daily)",
+], ".claude/settings.json" = [
+    "tool-currency-check",
 ] }
 tokens = [
+    "[tool.graphify]",
     "[tasks.tool-currency]",
-    "dotfiles-setup tool-currency",
-    "def tool_currency_main",
+    "kb-setup currency daily",
+    "kb-setup currency check",
     "mise run tool-currency",
     "Tool currency report (daily)",
+    "tool-currency-check",
 ]
 
 [[suite]]

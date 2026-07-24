@@ -1,0 +1,48 @@
+# Tool-currency config for THIS repo — read by the shared engine
+# (`kb-setup currency`, a pinned uv git dep on the knowledge-base package).
+#
+# Each repo carries its own config and runs independently (decided 2026-07-23);
+# there is deliberately NO cross-repo assertion here. dotfiles depends on the KB
+# package, never the reverse.
+#
+# DEEP-tracked tools get the full six-step due-diligence loop (in-sync check,
+# release-note review, tracked-issue movement, the interview, a committed
+# report). Everything else pinned in mise.toml / .config/mise/conf.d is covered
+# by the BROAD `mise outdated` sweep in `kb-setup currency daily` — so the daily
+# signal still spans every tool, not just the ones listed here (decided
+# 2026-07-24: deep fast-movers + broad fallback).
+#
+# Only graphify is deep-tracked for now. hk and uv live in
+# `.config/mise/conf.d/shared.toml`, which the engine's offline pin reader does
+# not merge (it parses mise.toml only); deep-tracking a conf.d-pinned tool needs
+# the engine to resolve the pin through mise (a subprocess, so deep-mode only) —
+# a clean follow-up. Until then they ride the broad sweep, which reads the merged
+# config correctly via `mise outdated`.
+
+[tool.graphify]
+mise_key = "pipx:graphifyy"
+binary = "graphify"
+# graphify installs from PyPI via mise's pipx backend, so PyPI is the installable
+# truth; GitHub carries the release notes. (v1.0.0 was tagged on GitHub while
+# PyPI's latest was 0.9.25 — tracking the tag would pin something uninstallable.)
+pypi = "graphifyy"
+github = "Graphify-Labs/graphify"
+extras = ["all"]
+# Packages the `all` extra must ACTUALLY deliver — the same host install both
+# repos share, so these mirror the KB config. graspologic/leidenalg/igraph
+# auto-skip by PEP 508 marker on Python 3.14 (the accepted Louvain fallback), so
+# demanding them would report drift that is not drift.
+extra_probes = ["faster_whisper", "tree_sitter", "tree_sitter_cpp"]
+# Host-only: graphify is a macOS-host tool here. On the Ubuntu daily runner these
+# checks report NOT-APPLICABLE (skipped from the deep signal), never fail — the
+# hard constraint from the tool-currency handoff.
+os = ["macos"]
+
+# No `manifest`/`artifact`/`stamp`: unlike the knowledge-base, this repo does not
+# build a committed graphify corpus — graphify graphs the dotfiles source
+# on demand and `graphify-out/` is gitignored. So step 1 checks the pin, the
+# resolution, and the extras here; the build-stamp checks are the KB's concern.
+
+# Upstream graphify issues (#2101/#2086/#1653/#1824 + the label-communities
+# schema gap) are tracked in the knowledge-base repo, which owns the graphify-KB
+# relationship — not duplicated here, to avoid double-reporting the same movement.

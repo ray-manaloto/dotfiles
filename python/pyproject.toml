@@ -15,6 +15,13 @@ dependencies = [
     # .claude/rules/use-tool-builtins.md.
     "python-debian>=1.1.1",
     "pyyaml>=6.0.3",
+    # The SHARED tool-currency engine (D2/G4: one implementation; dotfiles'
+    # tool_currency.py was deleted, this repo consumes the KB package instead).
+    # SHA-PINNED (D3) so it is reproducible on a clean CI runner and via uv.lock;
+    # neither repo has tags, so a SHA is the only stable pin. Renovate's git-refs
+    # datasource bumps this the same way it bumps CLANG_P2996_REF. Dependency
+    # direction is dotfiles → KB only; the KB never learns about its consumers.
+    "kb-setup @ git+https://github.com/ray-manaloto/knowledge-base@15a293bed5324c5636078ddbb1b2b6c95bee8f50",
 ]
 
 [project.scripts]
