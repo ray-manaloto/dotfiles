@@ -39,8 +39,10 @@ behavior unchanged):
    (`agnix .`; `.agnix.toml` `severity = "Warning"` = non-blocking),
    `mise doctor --json`, `mise.lock` upload + cache. agnix uses the
    `github:agent-sh/agnix` backend (not `npm:agnix`).
-2. **contract-preflight** — Python 3.14 + uv; runs `dotfiles-setup
-   verify run` over `python/verification/suites.toml`.
+2. **contract-preflight** — Python 3.14 + uv; `dotfiles-setup verify run`
+   over `suites.toml` (+ `orchestration`/`eval`, #354), then checks out
+   knowledge-base to `.parity/` and runs `mise run parity` (hard-FAIL on a
+   missing checkout; SKIPs locally).
 3. **base-prep** — `dotfiles-setup base-hash` → probe `:base-<hash16>`
    (`docker manifest inspect`). Hit: <30s. Miss: build the `base` bake
    target (devcontainer-base = apt + mise install + cargo), push it;
@@ -159,11 +161,9 @@ succeed/skip) lets non-build PRs merge without admin.
 
 ## Phase D — on-demand p2996 build (RETIRED 2026-07-07)
 
-The dispatch-build workflow (repository_dispatch `build-p2996` caller,
-#120) was retired with zero lifetime runs. build-publish.yml still resolves
-`inputs.p2996_ref` end-to-end (any non-pr/nightly `tag_strategy` emits
-`:sha` only), so the capability is resurrectable from git history
-(pre-2026-07-07) without redesign.
+Dispatch-build (`repository_dispatch build-p2996`, #120) retired, zero runs.
+`build-publish.yml` still resolves `inputs.p2996_ref` — resurrectable from
+pre-2026-07-07 git history without redesign.
 
 ## Dependabot (`.github/dependabot.yml`)
 
