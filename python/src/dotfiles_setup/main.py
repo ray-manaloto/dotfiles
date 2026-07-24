@@ -21,7 +21,11 @@ from dotfiles_setup.bootstrap_packages import gap_report_failures
 from dotfiles_setup.command_audit import DEFAULT_SESSION_LIMIT, command_audit_main
 from dotfiles_setup.config import DotfilesConfig
 from dotfiles_setup.container import verify_latest_main
-from dotfiles_setup.doc_refs import find_unresolved_refs
+from dotfiles_setup.doc_refs import (
+    find_unresolved_refs,
+    find_unresolved_skill_refs,
+    find_unresolved_task_refs,
+)
 from dotfiles_setup.docker import DevContainerManager
 from dotfiles_setup.gcc_sha import gcc_sha_main
 from dotfiles_setup.ghcr import validate_ghcr_prereqs
@@ -52,6 +56,7 @@ from dotfiles_setup.p2996_hash import (
     compute_repo_p2996_hash,
 )
 from dotfiles_setup.p2996_refresh import refresh as refresh_p2996_ref
+from dotfiles_setup.parity import run as parity_run
 from dotfiles_setup.pr import land_main, ship_main
 from dotfiles_setup.renovate import renovate_status_main
 from dotfiles_setup.renovate_dryrun import renovate_dryrun_main
@@ -131,6 +136,39 @@ def _add_apt_repo_subcommand(subparsers: _SubParsers) -> None:
         "--exclude-runtime",
         action="store_true",
         help="Drop Section: libs packages (they arrive via Depends:)",
+    )
+
+
+def _add_consistency_subcommands(subparsers: _SubParsers) -> None:
+    """Register the doc/config consistency gates (#160 T13, #354 tier 0).
+
+    Grouped because they answer one question from two angles — does every
+    declaration in this repo's agent config still correspond to something real,
+    here and in the sibling repo. Extracted into a helper for the reason
+    `_add_apt_repo_subcommand` was: `setup_parser` sits at ruff's PLR0915
+    statement ceiling.
+
+    Args:
+        subparsers: The parent subparsers action to attach these to.
+    """
+    subparsers.add_parser(
+        "check-doc-refs",
+        help="Verify every path, `mise run <task>`, and skill reference in "
+        "the agent docs resolves to something real (#160 T13 validation J; "
+        "task/skill refs added by #354 PR 1)",
+    )
+    parity_parser = subparsers.add_parser(
+        "parity",
+        help="Assert the declared cross-repo shared set (parity.toml) holds "
+        "in both dotfiles and knowledge-base, and report every other "
+        "divergence as advisory (#354 tier 0)",
+    )
+    parity_parser.add_argument(
+        "--kb-path",
+        type=Path,
+        default=None,
+        help="knowledge-base repo root; defaults to $KB_REPO_PATH, then the "
+        "sibling directory beside this repo",
     )
 
 
@@ -652,11 +690,7 @@ def setup_parser() -> argparse.ArgumentParser:
         help="Bump CLANG_P2996_REF in docker-bake.hcl to the latest "
         "bloomberg/clang-p2996 p2996-branch HEAD (writes only on change)",
     )
-    subparsers.add_parser(
-        "check-doc-refs",
-        help="Verify every backtick path reference in the agent docs "
-        "resolves to a real file (#160 T13 validation J)",
-    )
+    _add_consistency_subcommands(subparsers)
     gcc_sha_parser = subparsers.add_parser(
         "gcc-sha",
         help="Recompute GCC_LATEST_DEB_SHA256 from the pinned gcc-latest "
@@ -1009,13 +1043,41 @@ def handle_apt_repo(args: argparse.Namespace) -> int:
 
 
 def handle_check_doc_refs(project_root: Path) -> None:
-    """Handle check-doc-refs: fail loud on unresolved doc path refs."""
-    unresolved = find_unresolved_refs(project_root)
+    """Handle check-doc-refs: fail loud on any unresolved doc reference.
+
+    Three kinds, one gate. Paths were the original scope (#160 T13); `mise run
+    <task>` and skill names were added by #354 PR 1 because they are
+    structurally invisible to the path checker — a span with whitespace or no
+    file extension is never a path candidate — while being the two things this
+    repo's docs cite most. Each kind names its own kind in the error so a
+    failure says which resolver disagreed.
+    """
+    failures = [
+        ("path", find_unresolved_refs(project_root)),
+        ("mise task", find_unresolved_task_refs(project_root)),
+        ("skill", find_unresolved_skill_refs(project_root)),
+    ]
+    unresolved = [(kind, ref) for kind, refs in failures for ref in refs]
     if unresolved:
-        for ref in unresolved:
-            logger.error("%s:%d: unresolved doc ref `%s`", ref.doc, ref.line, ref.ref)
+        for kind, ref in unresolved:
+            logger.error(
+                "%s:%d: unresolved %s ref `%s`", ref.doc, ref.line, kind, ref.ref
+            )
         sys.exit(1)
-    logger.info("check-doc-refs OK: all doc path references resolve")
+    logger.info("check-doc-refs OK: all doc path, task, and skill references resolve")
+
+
+def handle_parity(args: argparse.Namespace, project_root: Path) -> None:
+    """Handle parity: gate the declared cross-repo set, report the rest.
+
+    Writes the whole report — advisory divergence included — before exiting, so
+    a failure says what diverged rather than only that something did
+    (`.claude/rules/verify-before-advancing.md`, "a gate must report the status
+    it saw").
+    """
+    rc, report = parity_run(project_root, kb_path=args.kb_path)
+    sys.stdout.write(report + "\n")
+    sys.exit(rc)
 
 
 def handle_ghcr_cleanup(args: argparse.Namespace) -> None:
@@ -1160,6 +1222,7 @@ def _build_command_handlers(
         "ghcr-check": lambda: handle_ghcr_check(args, project_root),
         "ghcr-cleanup": lambda: handle_ghcr_cleanup(args),
         "check-doc-refs": lambda: handle_check_doc_refs(project_root),
+        "parity": lambda: handle_parity(args, project_root),
         "gcc-sha": lambda: sys.exit(gcc_sha_main(project_root, check=args.check)),
         "apt-repo": lambda: sys.exit(handle_apt_repo(args)),
         "apt-pins": lambda: sys.exit(

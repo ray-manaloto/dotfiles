@@ -20,6 +20,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 from dotfiles_setup import verify
@@ -153,6 +155,141 @@ def test_bare_tokens_are_a_union_across_paths() -> None:
             handler="require_tokens",
             paths=[_REAL, "python/src/dotfiles_setup/sync.py"],
             tokens=["def sync_main"],
+        )
+    )
+    assert result["status"] == "passed"
+
+
+# ---------------------------------------------------------------------------
+# require_lines (#354 PR 1) — a SENTENCE is not a substring
+# ---------------------------------------------------------------------------
+#
+# The bug that opened #354 was an absent orchestrator trigger LINE. A substring
+# `require_tokens` would notice its absence, but it would equally accept the
+# sentence buried in a longer line, split across a paraphrase, or quoted inside
+# prose that narrates it rather than declares it. A declaration is a whole line
+# or it is not that declaration, so `require_lines` binds the whole line and
+# normalises only whitespace.
+
+_MODE_LINE = "- fable-orchestrator: implementation lane = codex"
+
+_TRIGGER = (
+    "- When the session model is Fable, without being reminded: non-trivial "
+    "implementation runs the fable-orchestrator architect-as-orchestrator flow"
+)
+
+
+def _write(tmp_path: Path, name: str, text: str) -> Path:
+    target = tmp_path / name
+    target.write_text(text)
+    return target
+
+
+def test_require_lines_matches_a_whole_line(tmp_path: Path) -> None:
+    """The baseline pass: an exact line is found."""
+    doc = _write(tmp_path, "a.md", f"intro\n{_TRIGGER}\noutro\n")
+    assert verify.require_lines([doc], [_TRIGGER])["status"] == "passed"
+
+
+def test_require_lines_rejects_a_substring_of_a_longer_line(tmp_path: Path) -> None:
+    """THE distinction from `require_tokens`.
+
+    A declaration quoted inside a narrating sentence is a *mention*, not a
+    declaration. `require_tokens` cannot tell those apart; this handler exists
+    because that difference is exactly what went uncaught in #354.
+    """
+    doc = _write(
+        tmp_path, "a.md", f"Until 2026-07-24 the line `{_TRIGGER}` was absent.\n"
+    )
+    with pytest.raises(verify.VerificationError):
+        verify.require_lines([doc], [_TRIGGER])
+
+
+def test_require_tokens_accepts_that_same_substring(tmp_path: Path) -> None:
+    """Control arm: same input, opposite verdict, so the probe discriminates.
+
+    Without this, the test above is satisfied by a handler that fails
+    everything, and the claim "substring binding is too weak here" is asserted
+    rather than shown.
+    """
+    doc = _write(
+        tmp_path, "a.md", f"Until 2026-07-24 the line `{_TRIGGER}` was absent.\n"
+    )
+    assert verify.require_tokens([doc], [_TRIGGER])["status"] == "passed"
+
+
+def test_require_lines_normalises_whitespace(tmp_path: Path) -> None:
+    """Indentation and internal runs of whitespace must not decide a verdict.
+
+    A markdown formatter re-indenting a list item changes bytes, not meaning.
+    Normalising is what keeps this handler from being a formatter tripwire.
+    """
+    doc = _write(tmp_path, "a.md", "   -   When   the  session model is Fable   \n")
+    assert (
+        verify.require_lines([doc], ["- When the session model is Fable"])["status"]
+        == "passed"
+    )
+
+
+def test_require_lines_rejects_a_paraphrase(tmp_path: Path) -> None:
+    """Normalising whitespace must not soften into normalising words."""
+    doc = _write(tmp_path, "a.md", "- When the session model is Fable 5\n")
+    with pytest.raises(verify.VerificationError):
+        verify.require_lines([doc], ["- When the session model is Fable"])
+
+
+def test_require_lines_requires_the_line_in_every_path(tmp_path: Path) -> None:
+    """The union footgun is closed BY CONSTRUCTION, not by remembering to bind.
+
+    `require_tokens`'s bare `tokens` is a union over the combined text, which
+    is why `per_path_tokens` had to be retrofitted (#299) — a contract naming
+    two files had no opinion about either. This handler is new, so it takes
+    the strict reading as its default: a bare `lines` list must hold in EVERY
+    listed path. Binding per file stays available for the asymmetric case.
+    """
+    present = _write(tmp_path, "a.md", f"{_TRIGGER}\n")
+    absent = _write(tmp_path, "b.md", "unrelated\n")
+    with pytest.raises(verify.VerificationError) as exc:
+        verify.require_lines([present, absent], [_TRIGGER])
+    # The file that carries it is not the complaint — only the one that does not.
+    assert "b.md" in str(exc.value)
+    assert "a.md" not in str(exc.value)
+
+
+def test_require_lines_passes_when_every_path_carries_it(tmp_path: Path) -> None:
+    """Control arm for the match-all default — it must not fail everything."""
+    one = _write(tmp_path, "a.md", f"x\n{_TRIGGER}\n")
+    two = _write(tmp_path, "b.md", f"{_TRIGGER}\ny\n")
+    assert verify.require_lines([one, two], [_TRIGGER])["status"] == "passed"
+
+
+def test_require_lines_fails_on_an_empty_path_list() -> None:
+    """No files is not "nothing to check" — it is a contract pointing at air."""
+    with pytest.raises(verify.VerificationError):
+        verify.require_lines([], [_TRIGGER])
+
+
+def test_per_path_lines_binds_a_line_to_its_file() -> None:
+    """The asymmetric form, driven through the real handler and manifest keys."""
+    result = verify.run_suite(
+        _entry(
+            handler="require_lines",
+            paths=[_REAL],
+            per_path_lines={_REAL: [_MODE_LINE]},
+        )
+    )
+    assert result["status"] == "failed"
+    assert _REAL in result["reason"]
+
+
+def test_require_lines_is_wired_into_the_handler_map() -> None:
+    """A handler nothing dispatches to is the inert declaration one level up."""
+    assert "require_lines" in verify.HANDLERS
+    result = verify.run_suite(
+        _entry(
+            handler="require_lines",
+            paths=[".claude/CLAUDE.md"],
+            lines=[_MODE_LINE],
         )
     )
     assert result["status"] == "passed"

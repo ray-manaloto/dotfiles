@@ -36,6 +36,7 @@ first".
 | `AGENTS.md` / `CLAUDE.md` / `.claude/**/*.md` | `mise run lint-docs` (agnix) **and** the per-load-class budget holds (`md_size_budget`; see [[md-size-budgets]]) |
 | `.devcontainer/**`, `mise-system.toml`, image/Dockerfile | `mise run verify-local` (R1/R2/R3 + persistence) or a direct `docker run <img> …` check; the in-image smoke can't fully run on this arm64 Mac (Rosetta) |
 | Validating **through the devcontainer** (any change you test in-container) | `mise run verify-container-latest` — the running container must bind-mount THIS workspace (source = latest branch code) and pass smoke; **base-currency is a hard gate** (smoke tier-1 identity fails a base predating the current `mise-system.toml`). See "Validate against the latest branch code" below. |
+| `.claude/CLAUDE.md`, `.claude/settings.json`, `parity.toml` | `mise run parity` — the declared cross-repo set must hold in dotfiles AND knowledge-base. SKIPs loudly without the sibling clone; hard-FAILs in CI (#354 tier 0) |
 | Opened a PR | `gh pr checks <n> --watch` until terminal — every check `pass` or `skipping`, **0 fail** |
 | Merged to `main` | Await the main `ci.yml` run and confirm `conclusion == success` (incl. `promote` retagging `:dev`) |
 

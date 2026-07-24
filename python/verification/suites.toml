@@ -1220,3 +1220,169 @@ paths = [
 ]
 per_path_tokens = { ".github/workflows/autofix.yml" = ["GIT_CONFIG_KEY_0: init.defaultBranch"], ".github/workflows/build-publish.yml" = ["GIT_CONFIG_KEY_0: init.defaultBranch"], ".github/workflows/ci.yml" = ["GIT_CONFIG_KEY_0: init.defaultBranch"], ".github/workflows/gcc-sha-repair.yml" = ["GIT_CONFIG_KEY_0: init.defaultBranch"], ".github/workflows/ghcr-cleanup.yml" = ["GIT_CONFIG_KEY_0: init.defaultBranch"], ".github/workflows/image-analysis.yml" = ["GIT_CONFIG_KEY_0: init.defaultBranch"], ".github/workflows/refresh.yml" = ["GIT_CONFIG_KEY_0: init.defaultBranch"] }
 tokens = ["GIT_CONFIG_KEY_0: init.defaultBranch"]
+
+# =============================================================================
+# Orchestration + eval contracts (#354 tier 0) — every declaration gets an
+# observer
+#
+# The defect class these close is not a code bug. Three bugs on 2026-07-24 —
+# an inert orchestrator trigger, a `kb-add` that ingested nav shells, a stale
+# `Workflow({name})` resolution — were all in CONFIG OR WIRING, all exited 0,
+# and all produced a plausible-looking artifact. What they had in common is a
+# declaration that nothing observed.
+#
+# The design test each of these answers: for every line of config that asserts
+# a behaviour, name the thing that would go red if the behaviour stopped.
+# Design: `.omc/specs/eval-harness-design.md` §4 tier 0.
+# =============================================================================
+
+[[suite]]
+name = "orchestration.trigger-armed"
+description = "THE bug that opened #354. `.claude/CLAUDE.md` must carry the Fable-gated trigger line as a WHOLE LINE. Until 2026-07-24 only the mode line was present, and the fable-orchestrator plugin's own setup wizard states the mode line 'is inert without the trigger' — so the repo declared an implementation lane and never invoked it, for an unknown number of sessions, with nothing red anywhere. Uses require_lines, not require_tokens, deliberately: a substring is satisfied by a doc that merely QUOTES the trigger while narrating it, which is a state this repo has actually been in. Whitespace is normalised so re-indentation is not a failure; wording is not, so a paraphrase is."
+category = "orchestration"
+check_type = "static"
+handler = "require_lines"
+paths_required = true
+paths = [".claude/CLAUDE.md"]
+lines = [
+    "- When the session model is Fable, without being reminded: non-trivial implementation runs the fable-orchestrator architect-as-orchestrator flow — invoke the fable-orchestrator:orchestration skill before delegating and follow it as authoritative for routing, verification, review tiers, and advisor consults.",
+]
+
+[[suite]]
+name = "orchestration.mode-line-declared"
+description = "The implementation-lane mode line must be declared as a whole line. It is the half that WAS present while the trigger was missing, so it is pinned separately: a future edit that drops the trigger and keeps the mode line reproduces the original bug exactly, and two contracts fail differently where one would just say 'orchestration broken'. `grok` is not installed on this Mac, so codex is the only viable fixed mode — a change here is a real routing change, not a wording tweak."
+category = "orchestration"
+check_type = "static"
+handler = "require_lines"
+paths_required = true
+paths = [".claude/CLAUDE.md"]
+lines = ["- fable-orchestrator: implementation lane = codex"]
+
+[[suite]]
+name = "orchestration.plugins-enabled"
+description = "The two orchestration plugins must be ENABLED — value `true`, not merely present as a key. That distinction is the whole contract: `\"fable-orchestrator@fable-orchestrator\": false` satisfies any check that asks whether the plugin is listed, while the lane it declares cannot run. The trigger and mode lines above describe a flow that routes through these plugins, so with them off the docs describe a flow that is not available. Bound per_path (#299) so no rule doc's incidental mention of a plugin name can satisfy the contract for settings.json."
+category = "orchestration"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [".claude/settings.json"]
+per_path_tokens = { ".claude/settings.json" = [
+    "\"fable-orchestrator@fable-orchestrator\": true",
+    "\"antigravity@antigravity-for-claude-code\": true",
+] }
+tokens = [
+    "\"fable-orchestrator@fable-orchestrator\": true",
+    "\"antigravity@antigravity-for-claude-code\": true",
+]
+
+[[suite]]
+name = "orchestration.config-placement"
+description = "Script-read config must live where the SCRIPT reads; model-read config where the MODEL reads. Latent trap found 2026-07-24: the fable-orchestrator plugin's `scripts/doctor.sh` parses `fable-orchestrator: codex fast mode = …` from $HOME/.claude/CLAUDE.md and ./CLAUDE.md — NOT from .claude/CLAUDE.md, which is where `claude_md_import_stub` forces our orchestrator config to live (the root CLAUDE.md is locked byte-exactly to `@AGENTS.md`). Nothing is broken today because we do not set fast mode; the moment someone writes it into .claude/CLAUDE.md it is silently ignored, which is an inert declaration by construction. Control-armed: no plugin script parses `implementation lane` at all (grep across the plugin returns only docs and agent descriptions, while the control term `fast mode` returns 4 hits in doctor.sh), so the mode line IS model-read and its placement is correct."
+category = "orchestration"
+check_type = "static"
+handler = "forbid_tokens"
+paths_required = true
+paths = [".claude/CLAUDE.md"]
+strip_comments = false
+tokens = ["codex fast mode"]
+
+[[suite]]
+name = "eval.mise-task-refs-resolve"
+description = "Every `mise run <task>` cited in an agent doc must name a task this repo declares. Structurally invisible to the existing doc-ref checker: `find_unresolved_refs` only considers spans that LOOK like a file path, and a span containing whitespace is disqualified before it is ever a candidate — so the single most-cited executable thing in these docs was unguarded. Task names are read from the tracked mise config, NOT from `mise tasks`, which merges the invoking user's global config and reports names no file here defines (this Mac's global config contributes four `update:*` tasks). Aliases count: `down` is an alias of `stop` and three docs cite it, so an alias-blind resolver reports three correct citations as broken — measured, not theorised. Asserts the whole chain so it cannot silently drift out."
+category = "eval"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    "hk.pkl",
+    "python/src/dotfiles_setup/doc_refs.py",
+    "python/src/dotfiles_setup/main.py",
+    "tests/test_doc_refs.py",
+]
+per_path_tokens = { "hk.pkl" = [
+    "dotfiles-setup check-doc-refs",
+], "python/src/dotfiles_setup/doc_refs.py" = [
+    "def find_unresolved_task_refs",
+    "def declared_mise_tasks",
+], "python/src/dotfiles_setup/main.py" = [
+    "find_unresolved_task_refs(project_root)",
+], "tests/test_doc_refs.py" = [
+    "find_unresolved_task_refs(_ROOT)",
+    "test_task_scanner_catches_a_planted_bad_ref",
+] }
+tokens = ["def find_unresolved_task_refs"]
+
+[[suite]]
+name = "eval.skill-refs-resolve"
+description = "Every skill cited by NAME in an agent doc must exist on disk. Two citation forms are in live use — `` `name` skill `` and `[[name]]` — and neither is a path, so neither is visible to the path checker. Wikilinks resolve against rules as well as skills, because `[[zero-skip-policy]]` is a rule and a skills-only resolver reports every wikilink as broken. Two exclusions, both found by running the scanner against the live tree BEFORE wiring it up rather than by reasoning about it: a backticked `[[wikilink]]` NAMES the syntax (memory-index-curation does exactly that) and would otherwise demand a skill called `wikilink`, and a `plugin:skill` name belongs to an installed plugin, so a repo-local existence check on it can only be wrong."
+category = "eval"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    "hk.pkl",
+    "python/src/dotfiles_setup/doc_refs.py",
+    "python/src/dotfiles_setup/main.py",
+    "tests/test_doc_refs.py",
+]
+per_path_tokens = { "hk.pkl" = [
+    "dotfiles-setup check-doc-refs",
+], "python/src/dotfiles_setup/doc_refs.py" = [
+    "def find_unresolved_skill_refs",
+    "def declared_skills",
+], "python/src/dotfiles_setup/main.py" = [
+    "find_unresolved_skill_refs(project_root)",
+], "tests/test_doc_refs.py" = [
+    "find_unresolved_skill_refs(_ROOT)",
+    "test_skill_scanner_catches_a_planted_bad_ref",
+] }
+tokens = ["def find_unresolved_skill_refs"]
+
+[[suite]]
+name = "eval.cross-repo-parity"
+description = "dotfiles and knowledge-base must not silently diverge on the doctrine they BOTH document. This is the #354 defect class one level up: a declaration made in two places and observed in neither, invisible from inside either repo because each is internally consistent. The gated set is narrow by decision (Ray, 2026-07-24) — the two orchestration plugins plus the trigger/mode lines — and everything else is printed as an advisory divergence block, because a narrow gate is only honest when the difference it declines to gate stays visible (measured at the time of writing: 7 plugins, 23 skills and 22 rules exist in dotfiles and not in knowledge-base). The gate cannot be an hk step: hk runs on a checkout of THIS repo alone, so contract-preflight checks knowledge-base out inside the workspace and points KB_REPO_PATH at it. Absence of that checkout is a hard FAIL in CI and a loud SKIP locally — a gate that goes quiet when its own wiring disappears is the inert trigger reproduced one more time."
+category = "eval"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    "parity.toml",
+    "python/src/dotfiles_setup/parity.py",
+    "mise.toml",
+    ".github/workflows/ci.yml",
+    "tests/test_parity.py",
+]
+per_path_tokens = { "parity.toml" = [
+    "[shared]",
+    "fable-orchestrator@fable-orchestrator",
+], "python/src/dotfiles_setup/parity.py" = [
+    "def find_parity_gaps",
+    "def divergence_report",
+    "if on is True",
+], "mise.toml" = [
+    "[tasks.parity]",
+    "dotfiles-setup parity",
+], ".github/workflows/ci.yml" = [
+    "repository: ray-manaloto/knowledge-base",
+    "KB_REPO_PATH:",
+    "mise run parity",
+], "tests/test_parity.py" = [
+    "test_missing_sibling_repo_fails_in_ci",
+    "test_a_plugin_declared_false_counts_as_absent",
+] }
+tokens = ["def find_parity_gaps"]
+
+[[suite]]
+name = "eval.gate-reports-status"
+description = "A gate must report the STATUS IT SAW, never a prose summary of it (#358, design principle 8). Earned on 2026-07-24: the knowledge-base twin of `_open_or_update_pr` printed a bare 'PR create failed' straight through GitHub's PR-creation outage, so a hard HTTP 500 was indistinguishable from flakiness and the command was retried three times before anyone read the actual response. The same session also learned the sibling lesson — githubstatus.com's components read 'all operational' for ~13 minutes into that outage — which is why the doctrine is probe the capability and report its raw status, not summarise either. Binds the three ship failure paths in pr.py to an `rc=` in their message; each token is a CALL SITE's output, not a `def`, per feedback_forbid_tokens_substring_fragile."
+category = "eval"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = ["python/src/dotfiles_setup/pr.py"]
+per_path_tokens = { "python/src/dotfiles_setup/pr.py" = [
+    "FAIL  ship: gh pr create rc={create_rc}",
+    "FAIL  ship: git push rc={push_rc}",
+    "gh pr view rc={view.returncode}",
+] }
+tokens = ["FAIL  ship: gh pr create rc={create_rc}"]
