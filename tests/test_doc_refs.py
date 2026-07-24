@@ -8,6 +8,7 @@ from dotfiles_setup.doc_refs import (
     DOC_PATHSPECS,
     _is_path_candidate,
     _tracked_files,
+    find_local_only_refs,
     find_unresolved_refs,
 )
 
@@ -68,3 +69,20 @@ def test_scope_covers_every_doc_with_real_content() -> None:
     # The vendored graphify skill is excluded on purpose (it cites its own
     # generated runtime files); keep that exclusion honest.
     assert ".claude/skills/graphify/SKILL.md" not in scanned
+
+
+def test_no_doc_ref_resolves_only_on_this_machine() -> None:
+    """Fail HERE when a doc cites a gitignored file, not in CI.
+
+    `find_unresolved_refs` accepts a ref via a filesystem stat, so an artifact
+    that is present locally and gitignored resolves on a dev box and vanishes
+    in a fresh checkout. That is not hypothetical: adding `.claude/CLAUDE.md`
+    to `DOC_PATHSPECS` passed every local gate and then failed CI on its
+    `graphify-out/graph.json` citation (PR #359) — the exact local/CI
+    divergence `.claude/rules/clean-git-state.md` exists to prevent.
+
+    Every such ref must be a justified `_ALLOWED_ABSENT` entry, which is a
+    reviewable diff, rather than an accident of one machine's working tree.
+    """
+    local_only = find_local_only_refs(Path(__file__).parent.parent)
+    assert local_only == [], [f"{r.doc}:{r.line}: {r.ref}" for r in local_only]
