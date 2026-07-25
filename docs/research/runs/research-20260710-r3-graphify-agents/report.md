@@ -4,7 +4,7 @@ Run: `research-20260710-r3-graphify-agents` · Domain: graphify usefulness +
 per-tool specialized subagents to cut token/context as the research corpus
 grows. Synthesizes three angle reports (`pilot-agents.md`, `graphify-corpus.md`,
 `measure-expand.md`), grounded on r2 Run G's KB architecture
-(`.omc/research/research-20260709-r2-knowledge-base/report.md`), and filtered
+(`docs/research/runs/research-20260709-r2-knowledge-base/report.md`), and filtered
 through a 3-vote adversarial verification pass on the 8 load-bearing claims.
 Written 2026-07-10.
 
@@ -60,7 +60,7 @@ cheaper, surer win.**
 5. **One loud caveat (see Contradictions):** the "user-approved" label the brief
    and the r3 reports attach to the graphify pilot is **not backed by a located
    approval record**, and the repo's own plan
-   (`.omc/plans/plan-20260710-r2-implementation.md:220-223`) lists "graphify
+   (`.agent/plans/plan-20260710-r2-implementation.md:220-223`) lists "graphify
    cadence" as a still-open **P2** question. The *subagent* pilot is low-risk and
    reversible enough to start regardless; the *graphify* seed/cadence should get
    an explicit Ray sign-off before spending build-time LLM tokens.
@@ -113,7 +113,7 @@ frequency, not "most complex tool"** (`pilot-agents.md:47-59`). Ranked:
 | **hk** | Run D §2 only (`hk-pkl-pitchfork.md`) — no dedicated topology-scale report | **3rd / "+1"** |
 
 The mise > docker-family > hk corpus-depth asymmetry is empirically real (Glob
-over `.omc/research/research-20260709-r2-*/report.md` = 9 files; the r3 mise
+over `docs/research/runs/research-20260709-r2-*/report.md` = 9 files; the r3 mise
 angle-report directories all exist; no hk topology-scale report or r3 hk
 directory exists). **Build mise + docker-family first; hk as "+1" only if the
 first two show measurable savings** (verified CONFIRMED — but see the Refuted /
@@ -123,9 +123,9 @@ evidenced, only the corpus-depth proxy is).
 **mise-librarian corpus** (priority order, `pilot-agents.md:74-107`):
 1. `docs/research/mintlify-cache/jdx/mise/{llms.txt,llms-full.txt}` — with an
    explicit staleness caveat (see Q4).
-2. `.omc/research/research-20260709-r2-release-mining/report.md` §1 (mise) +
+2. `docs/research/runs/research-20260709-r2-release-mining/report.md` §1 (mise) +
    Retire/Adopt/Watch table.
-3. `.omc/research/research-20260709-r2-topology/report.md` (Run B).
+3. `docs/research/runs/research-20260709-r2-topology/report.md` (Run B).
 4. `docs/research/runs/research-20260710-r3-mise-{dotfiles,bootstrap,watchlist-releasenotes}/agents/*.md`.
 5. Live repo config (`mise.toml`, `.config/mise/conf.d/shared.toml`,
    `.devcontainer/mise-{system,runtime}.toml`, `mise.lock`) for current pins.
@@ -134,7 +134,7 @@ evidenced, only the corpus-depth proxy is).
      three things must ship in the same PR if it does?"*
 
 **docker-family-librarian corpus** (`pilot-agents.md:116-142`):
-`.omc/research/research-20260709-r2-topology/report.md` (Run B, full);
+`docs/research/runs/research-20260709-r2-topology/report.md` (Run B, full);
 `P2996-CACHE.md`, `docker-bake.hcl`, `.devcontainer/{Dockerfile,AGENTS.md}`;
 `docs/research/mintlify-cache/devcontainers/{cli,spec,features,images}/`;
 `dockerfile-reviewer.md` (complementary — it reviews diffs, the librarian answers
@@ -156,7 +156,7 @@ staleness caveat); `.github/workflows/{AGENTS.md,build-publish.yml}`.
 ## Q3 — The subagent definition shape
 
 Each subagent is a `.claude/agents/*.md` file (skills/agents live under
-`.claude/`, never `.omc/`, per `omc-directory-conventions.md`). Confirmed
+`.claude/`, never `.agent/`, per `agent-artifact-conventions.md`). Confirmed
 mechanics from `code.claude.com/docs/en/sub-agents.md` (fetched 2026-07-10,
 verified 3/3): only `name` and `description` are required; `tools` and `model`
 are optional; the Tips block says "Limit tool access: grant only necessary
@@ -282,7 +282,7 @@ pick the right librarian?) is informational for the 2-3 pilot but *blocking* for
 ## Q6 — Graphify seed design (the parallel, gated experiment)
 
 Per Run G's user-noted architecture, graphify stays **Mac-only, periodic, gated,
-never in the hot query path** (`.omc/research/research-20260709-r2-knowledge-base/report.md:343-345`:
+never in the hot query path** (`docs/research/runs/research-20260709-r2-knowledge-base/report.md:343-345`:
 "Do not wire graphify's MCP server or CLI into the hot day-to-day retrieval path
 regardless of pilot outcome"). The `/graphify` skill is user-level on Ray's Mac,
 absent in the remote container — so the seed/build step can only run on the Mac;
@@ -359,7 +359,7 @@ asserted more strongly than the evidence supports:
    decision as the *research's own recommendation*, and the only documents
    asserting "user-approved" are sibling r3 agent reports circularly citing the
    same Run-G lines. The most authoritative subsequent artifact —
-   `.omc/plans/plan-20260710-r2-implementation.md:220-223` — lists "graphify
+   `.agent/plans/plan-20260710-r2-implementation.md:220-223` — lists "graphify
    cadence" under **P2 open questions still pending Ray's decision**. See
    Contradictions in the structured output. (The *substantive* architectural claim
    — gate graphify, keep it out of the hot path — stands on its own technical
@@ -389,7 +389,7 @@ conclusion (3/3) — is CONFIRMED against re-fetched primary sources.
    both together — they share the identical template and the measurement protocol
    is per-agent anyway, so you get two data points for the same setup cost.*
 5. **Corpus boundary** (carried from Run G): promote durable run outputs to
-   `docs/research/runs/<slug>/` while `.omc/research/` stays per-clone? *Recommended:
+   `docs/research/runs/<slug>/` while `docs/research/runs/` stays per-clone? *Recommended:
    yes — this run already lives under `docs/research/runs/`, and it's the only way a
    fresh clone's librarian can index the full corpus.*
 
@@ -406,7 +406,7 @@ conclusion (3/3) — is CONFIRMED against re-fetched primary sources.
 - [jdx/pitchfork](https://github.com/jdx/pitchfork) — mintlify-cached docs, hk librarian adjacent-ecosystem corpus.
 - [devcontainers/cli](https://github.com/devcontainers/cli) — mintlify-cached docs, part of the docker-family librarian corpus (spec/features/images caches likewise).
 - [knowsuchagency/mcp2cli](https://github.com/knowsuchagency/mcp2cli) — mintlify-cached docs; `--mcp-stdio` stdio-spawn pattern for graphify's MCP server; 96-99% schema-discovery reduction as a savings-ratio calibration point.
-- [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — this repo: Run G KB report, r2 inventory/topology/release-mining reports, r3 sibling angle reports, `.claude/agents/dockerfile-reviewer.md`, `.claude/rules/*`, `.config/mise/conf.d/shared.toml` (hk pin), `docs/research/mintlify-cache/README.md` (refresh date), `.omc/plans/plan-20260710-r2-implementation.md` (graphify-cadence open-question).
+- [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — this repo: Run G KB report, r2 inventory/topology/release-mining reports, r3 sibling angle reports, `.claude/agents/dockerfile-reviewer.md`, `.claude/rules/*`, `.config/mise/conf.d/shared.toml` (hk pin), `docs/research/mintlify-cache/README.md` (refresh date), `.agent/plans/plan-20260710-r2-implementation.md` (graphify-cadence open-question).
 
 Secondary sources (not GitHub-owned):
 - [arXiv:2605.15184](https://arxiv.org/abs/2605.15184) — "Is Grep All You Need?" — grep-vs-vector correctness+harness methodology precedent.

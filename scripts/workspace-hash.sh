@@ -5,7 +5,7 @@
 # stable per-workspace suffix for Docker container/volume names. Sibling
 # clones of dotfiles/ on the same Mac get distinct hashes so volumes
 # don't collide (Codex v3 finding — see
-# .omc/plans/home-volume-consolidation-draft.md C10/C11/C12).
+# .agent/plans/home-volume-consolidation-draft.md C10/C11/C12).
 #
 # Single source of truth replaces three identical-but-copy-pasted blocks
 # in mise.toml that risked drift on the next refactor.

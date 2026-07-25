@@ -6,7 +6,7 @@ Domain: (1) did we identify ALL main tools for release-note mining
 that affects the plan? (3) design the automated skill so ALL tools are
 mined at once on the daily/Renovate cadence.
 
-Grounding: `.omc/research/research-20260709-r2-inventory/report.md`;
+Grounding: `docs/research/runs/research-20260709-r2-inventory/report.md`;
 angle reports `agents/complete-inventory.md`, `agents/missed-mise.md`,
 `agents/skill-automation.md` (this run); adversarial-verification
 verdicts on 8 load-bearing claims (7 CONFIRMED-or-usable, 2 REFUTED —
@@ -188,7 +188,7 @@ it is a reviewable diff gap, not a silent blind spot.
 `docs/research/tool-currency/<date>.md` (matching the existing
 `docs/research/trail/findings/` dated-snapshot precedent), each ending
 with the mandatory `## GitHub repos touched` section. ADOPT→`mise run
-ship`; multi-step→`.omc/plans/`; WATCH→tracked issue. No verdict lives
+ship`; multi-step→`.agent/plans/`; WATCH→tracked issue. No verdict lives
 only in a transcript.
 
 **No-MCP compliant by construction** — every mechanism is a mise-installed

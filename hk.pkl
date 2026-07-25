@@ -481,7 +481,7 @@ local allSteps = new Mapping<String, Config.Step> {
   //     re-attribute them upstream — that error is what this replaces.
   //
   //     Logic lives in python (zero-bash-logic); this is a thin seam.
-  //     Research: .omc/research/research-20260715-md-size-limits/report.md
+  //     Research: docs/research/runs/research-20260715-md-size-limits/report.md
   //
   //     The enforcer MOVED to kb_setup.md_budget (2026-07-25), on the
   //     kb_setup.currency precedent (D2/G4): ONE implementation both repos

@@ -24,7 +24,7 @@ A **web/cloud Claude session is actively working on branch
   (non-fast-forward just means the web session pushed in between — rebase and
   retry). This is normal shared-branch etiquette.
 - ❌ **DO NOT** touch, move, or delete anything under **`docs/research/runs/**`**,
-  **`.omc/**`**, or **`docs/research/**`** — those are the web session's
+  **`.agent/**`**, or **`docs/research/**`** — those are the web session's
   in-flight research artifacts.
 - ❌ **DO NOT** run any research **workflow**, `mise run` build tasks, or the
   devcontainer up/down — none are needed for this fix.

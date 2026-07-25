@@ -153,7 +153,7 @@ _ALLOWED_PREFIXES = (
     "project_",
     "reference_",
     "user_",
-    ".omc/",
+    ".agent/",
     ".omg/",
     ".omx/",
     ".codex/",

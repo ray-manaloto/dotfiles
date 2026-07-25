@@ -74,7 +74,7 @@ the redirected action is not enforcement, it is an outage.
    AFTER its rule's `since` date AND actually executed — see "Reading the
    report" below. Ongoing, not one-shot — a **`SessionEnd` hook** in
    `.claude/settings.json` runs it once per session (`-- --output
-   .omc/command-audit.md`), so the report is always waiting rather than
+   .agent/command-audit.md`), so the report is always waiting rather than
    remember-to-run. `SessionEnd` and not `Stop`: it fires once per session at
    termination and *cannot block*, while `Stop` fires every turn and can block
    (exit 2 continues the turn) — a transcript scan belongs on neither the
@@ -99,7 +99,7 @@ belong in settings.json permission deny rules, not the hook.
 > and the LLM-behavior evidence ranks a hard gate (zero decay) far above
 > per-turn reminders (which decay, cost instruction budget, and sit in the
 > lowest-trust context tier). See
-> `.omc/research/research-20260714-hook-enforcement/report.md`. The improvement
+> `docs/research/runs/research-20260714-hook-enforcement/report.md`. The improvement
 > path is the self-learning loop (`mise run command-audit`, layer 4 above) that
 > mines native transcripts for one-off-command culprits to refine these layers
 > — not more per-turn hooks.
@@ -189,6 +189,6 @@ real invocation; the first must pass, the second must deny.
 - `.claude/rules/verify-before-advancing.md` — the gates the ship/land
   tasks encode.
 - `.claude/rules/long-running-command-hangs.md` — why `mise run lint`.
-- `.omc/research/research-20260707-gha-shipland-enforcement/report.md` —
+- `docs/research/runs/research-20260707-gha-shipland-enforcement/report.md` —
   the evidence base (hooks deny; allow-lists live in permissions; hookify
   is advisory-grade).

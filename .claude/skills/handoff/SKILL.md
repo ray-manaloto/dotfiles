@@ -11,7 +11,7 @@ Claude Code sessions do NOT transfer across surfaces: the web app, desktop
 app, and CLI each keep their own local history, and there is no built-in
 cross-device resume (confirmed against the official docs). The only state that
 crosses the boundary is what you **commit to the branch**. `/clear-prep` writes
-its handoff to `.omc/plans/`, which is gitignored and this-clone-only — perfect
+its handoff to `.agent/plans/`, which is gitignored and this-clone-only — perfect
 for a same-machine `/clear`, useless for web->desktop. This skill writes the
 handoff to a **tracked** path and pushes it, so the next surface just pulls.
 
@@ -78,6 +78,6 @@ git pull`, open Claude Code in the repo, paste that."*
 ## See also
 
 - `.claude/skills/resume/SKILL.md` — the receiving side.
-- `.claude/skills/clear-prep/SKILL.md` — same-machine `/clear` handoff (`.omc/plans/`).
+- `.claude/skills/clear-prep/SKILL.md` — same-machine `/clear` handoff (`.agent/plans/`).
 - `docs/handoffs/README.md` — the protocol + the handoff template.
 - `.claude/skills/git-branch-commit-push-workflow/SKILL.md` — the commit/push path.

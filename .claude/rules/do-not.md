@@ -23,7 +23,7 @@ self-contained block). Each item's context is preserved verbatim.
    `build.no-stderr-suppression` contract rejects it. Let errors be loud.
 
 5. **Do NOT bulk `git add .`** — previous sessions have left phantom
-   state files under `.omc/state/**` that should not be staged.
+   state files under `.agent/state/**` that should not be staged.
 
 6. **Do NOT trust `gh run watch --exit-status`.** Verify with
    `gh pr checks <n> --json` or `gh run list --json`.
@@ -97,4 +97,4 @@ self-contained block). Each item's context is preserved verbatim.
 - `use-tool-builtins.md` — prefer tool builtins over homegrown logic
 - `research-doc-sources.md` — preference chain for doc fetching
 - `notepad-enforcement.md` — agents write findings to notepad as they go
-- `omc-directory-conventions.md` — standard `.omc/` paths
+- `agent-artifact-conventions.md` — standard `.agent/` paths

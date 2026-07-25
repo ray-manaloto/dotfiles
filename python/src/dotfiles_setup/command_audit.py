@@ -51,7 +51,7 @@ denials, and **0** were bypasses:
 frequency-ranked markdown report grouped by command+subcommand.
 
 The loop is RECURRING, not remember-to-run: a ``SessionEnd`` hook in
-``.claude/settings.json`` refreshes ``.omc/command-audit.md`` via ``--output``
+``.claude/settings.json`` refreshes ``.agent/command-audit.md`` via ``--output``
 once per session. SessionEnd (not ``Stop``) is the right event — it fires once
 per session at termination and *cannot block*, whereas ``Stop`` fires every
 turn and can block (exit 2 continues the conversation), which would put a
@@ -654,7 +654,7 @@ def command_audit_main(
     """Scan this project's recent transcripts; report to stdout or ``output``.
 
     ``--output`` is what the SessionEnd hook (``.claude/settings.json``) uses to
-    refresh ``.omc/command-audit.md`` once per session, making the refine loop
+    refresh ``.agent/command-audit.md`` once per session, making the refine loop
     recurring instead of remember-to-run. The no-transcripts branch deliberately
     leaves any existing report untouched rather than clobbering it with a
     notice — and it cannot fire from the hook anyway, since a SessionEnd

@@ -86,7 +86,7 @@ Verifier task structure:
 
 ### Phase 4 — Persist
 
-Write to `.omc/research/<session-id>/`:
+Write to `docs/research/runs/<session-id>/`:
 - `state.json` — sciomc session metadata
 - `stages/stage-{1..N}.md` — verbatim findings per lane
 - `stages/verification.md` — the verifier output
@@ -114,9 +114,9 @@ of wrong-direction implementation work.
 
 - `oh-my-claudecode:sciomc` skill — the formal protocol this draft
   is inspired by
-- `.omc/research/research-20260407-ssh-devcontainer/` — the session
+- `docs/research/runs/research-20260407-ssh-devcontainer/` — the session
   that produced this lesson
-- `.omc/wiki/sciomc-verification-stage.md`
+- `.agent/wiki/sciomc-verification-stage.md`
 - `feedback_sciomc_verification_required.md` (project memory)
 
 ## Promotion criteria

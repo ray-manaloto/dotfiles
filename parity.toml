@@ -69,7 +69,7 @@ rules = [
     "md-size-budgets",
     "mise-tasks-only",
     "notepad-enforcement",
-    "omc-directory-conventions",
+    "agent-artifact-conventions",
     "persistence-gate-retry",
     "probes-need-a-control-arm",
     "research-doc-sources",

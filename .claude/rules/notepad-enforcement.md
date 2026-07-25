@@ -5,7 +5,7 @@ findings to the notepad immediately — not at session end.
 
 ## The notepad is a file, not a tool
 
-The notepad is **`.omc/notepad.md`** (gitignored). Write to it with the ordinary
+The notepad is **`.agent/notepad.md`** (gitignored). Write to it with the ordinary
 Write/Edit tools, appending as you go.
 
 Until 2026-07-15 this rule named
@@ -20,7 +20,7 @@ this same file — the rule does not change.
 ## Rules
 
 1. **Write findings as you go**: After each significant discovery, append it to
-   `.omc/notepad.md`. Mark critical items so they survive a skim.
+   `.agent/notepad.md`. Mark critical items so they survive a skim.
 
 2. **What to record**: Root causes found, design decisions made, dead ends
    explored, verification results, and any context the next agent will need.
@@ -40,11 +40,11 @@ findings had to be re-derived. This policy prevents that waste.
 
 ## Verification
 
-After an agent completes work, check `.omc/notepad.md` for findings. If it is
+After an agent completes work, check `.agent/notepad.md` for findings. If it is
 empty or stale relative to the work performed, the agent did not comply.
 
 ## See also
 
 - `.claude/rules/agent-report-persistence.md` — the full-fidelity layer; this
   rule covers the running condensed findings.
-- `.claude/rules/omc-directory-conventions.md` — where each artifact type lives.
+- `.claude/rules/agent-artifact-conventions.md` — where each artifact type lives.

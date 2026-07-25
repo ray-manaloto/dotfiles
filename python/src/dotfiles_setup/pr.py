@@ -8,7 +8,7 @@ and post-merge LOCAL validation on this Mac. Together they encode the
 verify-before-advancing rule as code instead of discipline.
 
 Design notes (deep-research verified, 2026-07-07 —
-``.omc/research/research-20260707-gha-shipland-enforcement/report.md``):
+``docs/research/runs/research-20260707-gha-shipland-enforcement/report.md``):
 
 - **The CI wait is GitHub's, not ours — native auto-merge, no polling.**
   A base-image build can take hours, so a client-side watch (fixed timeout

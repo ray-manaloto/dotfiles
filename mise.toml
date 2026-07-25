@@ -8,7 +8,7 @@
 # (Renovate bumps that one file). See epic #160 T5. Below: host-ONLY tools.
 editorconfig-checker = "3.8.0"      # provides `ec` — hk editorconfig_checker builtin (#154); host-only (image drops it in T6)
 "npm:@devcontainers/cli" = "0.87.0"
-colima = "0.10.3"                   # Alternate Docker runtime (VZ + Rosetta); Docker Desktop is the CURRENT supported runtime — see AGENTS.md Docker Runtimes + .omc/research/research-20260409c-dockerdesktop-ssh/
+colima = "0.10.3"                   # Alternate Docker runtime (VZ + Rosetta); Docker Desktop is the CURRENT supported runtime — see AGENTS.md Docker Runtimes + docs/research/runs/research-20260409c-dockerdesktop-ssh/
 lima = "2.2.0"
 "github:agent-sh/agnix" = "0.40.0"
 "npm:agents-lint" = "0.5.0"
@@ -221,7 +221,7 @@ description = "Bring the devcontainer up via the official @devcontainers/cli (Ma
 # Outbound agent forwarding (Requirement R2: `ssh -T git@github.com` from
 # inside container) is independent; uses the host-TCP + container-unix-
 # socket proxy pattern spawned from initializeCommand/postStartCommand.
-# Research: .omc/research/research-20260407-ssh-devcontainer/report.md.
+# Research: docs/research/runs/research-20260407-ssh-devcontainer/report.md.
 #
 # Image pull: handled inside `devcontainer up` via buildx (the
 # Dockerfile.host-user `FROM ${BASE_IMAGE}` triggers a registry pull
@@ -518,7 +518,7 @@ description = "Scan recent Claude Code transcripts for one-off Bash culprits to 
 # the report to refine rules/hooks/docs. Pass flags through: mise run
 # command-audit -- --limit 20
 # Also run automatically by the SessionEnd hook in .claude/settings.json
-# (`-- --output .omc/command-audit.md`) — run it by hand for an ad-hoc report.
+# (`-- --output .agent/command-audit.md`) — run it by hand for an ad-hoc report.
 run = 'uv run --project python dotfiles-setup command-audit'
 
 [tasks.memory-index]
@@ -563,7 +563,7 @@ description = "Run the graphify extraction bake-off (writes OUTSIDE the repo)"
 #
 #   mise run bakeoff                          # gold corpus, 3 repeats, null arm
 #   mise run bakeoff -- --repeats 5
-#   mise run bakeoff -- --corpus .omc/kb/raw --run-id full-corpus
+#   mise run bakeoff -- --corpus docs/research/kb/raw --run-id full-corpus
 run = 'uv run --project python dotfiles-setup graphify bakeoff'
 
 [tasks.verify-apt-pins]

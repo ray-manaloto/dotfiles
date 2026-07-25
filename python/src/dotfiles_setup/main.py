@@ -549,7 +549,7 @@ def _add_report_parsers(subparsers: _SubParsers) -> None:
         default=None,
         help="Write the report here instead of stdout (relative paths resolve "
         "against the repo root). Used by the SessionEnd hook to refresh "
-        ".omc/command-audit.md once per session",
+        ".agent/command-audit.md once per session",
     )
 
     memory_index_parser = subparsers.add_parser(

@@ -394,8 +394,8 @@ def _seed_transcript(tmp_path: Path, project: Path, *commands: str) -> Path:
 
 def test_write_report_resolves_relative_to_project_root(tmp_path: Path) -> None:
     """Relative output is repo-anchored (the hook must not depend on cwd)."""
-    dest = ca.write_report("body", tmp_path, Path(".omc/command-audit.md"))
-    assert dest == tmp_path / ".omc" / "command-audit.md"
+    dest = ca.write_report("body", tmp_path, Path(".agent/command-audit.md"))
+    assert dest == tmp_path / ".agent" / "command-audit.md"
     assert dest.read_text() == "body"  # parent created on demand
 
 
@@ -414,8 +414,8 @@ def test_main_output_writes_file_instead_of_stdout(
         "CLAUDE_CONFIG_DIR",
         str(_seed_transcript(tmp_path, project, "git commit -m x", "ls")),
     )
-    assert ca.command_audit_main(project, output=Path(".omc/command-audit.md")) == 0
-    report = (project / ".omc" / "command-audit.md").read_text()
+    assert ca.command_audit_main(project, output=Path(".agent/command-audit.md")) == 0
+    report = (project / ".agent" / "command-audit.md").read_text()
     assert "# Command audit" in report
     assert "`git commit`" in report
     out = capsys.readouterr().out
@@ -440,11 +440,11 @@ def test_main_no_transcripts_leaves_existing_report_intact(
 ) -> None:
     """A miss must not clobber a good report with an empty/notice file."""
     project = tmp_path / "repo"
-    (project / ".omc").mkdir(parents=True)
-    stale = project / ".omc" / "command-audit.md"
+    (project / ".agent").mkdir(parents=True)
+    stale = project / ".agent" / "command-audit.md"
     stale.write_text("previous report")
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "empty"))
-    assert ca.command_audit_main(project, output=Path(".omc/command-audit.md")) == 0
+    assert ca.command_audit_main(project, output=Path(".agent/command-audit.md")) == 0
     assert stale.read_text() == "previous report"
     assert "no transcripts" in capsys.readouterr().out
 

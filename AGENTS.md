@@ -132,8 +132,8 @@ locally before pushing Dockerfile changes.
 - **Chezmoi is devcontainer-only on this Mac**: `chezmoi apply`/`update`
   blocked on host (enforced by `.claude/settings.json` deny rules); read-only ok.
 - **Notepad enforcement**: Agents write findings to notepad during work, not at session end. See `.claude/rules/notepad-enforcement.md`.
-- **OMC directory conventions**: Use standard `.omc/` paths, no ad-hoc
-  directories. See `.claude/rules/omc-directory-conventions.md`.
+- **Agent artifact conventions**: Use standard `.agent/` paths, no ad-hoc
+  directories. See `.claude/rules/agent-artifact-conventions.md`.
 - **Zero-bash logic**: Non-trivial logic (env detection, tool config,
   validation) lives in `python/`. Bash is restricted to thin check/smoke
   wrappers in `scripts/` (the old `install.sh` bootstrap was retired).
@@ -162,7 +162,7 @@ Before advancing to the next task or claiming done, EVERY applicable check must 
   files are present.
 
 ### Devcontainer success criteria (durable, do NOT silently drop)
-Gated by `mise run verify-local`. Sessions touching `.devcontainer/` or `mise.toml [tasks.up]` MUST preserve all three. Mechanism: `.devcontainer/AGENTS.md`. Research: `.omc/research/research-20260407-ssh-devcontainer/report.md`.
+Gated by `mise run verify-local`. Sessions touching `.devcontainer/` or `mise.toml [tasks.up]` MUST preserve all three. Mechanism: `.devcontainer/AGENTS.md`. Research: `docs/research/runs/research-20260407-ssh-devcontainer/report.md`.
 
 | Req | Criterion | Gate |
 |---|---|---|
@@ -188,7 +188,7 @@ via `docker context ls` → `desktop-linux *`). It exposes
 on. Colima lacks an equivalent (`abiosoft/colima#1330`, `#942`) — do
 NOT switch context without validating R2 on the target runtime.
 Colima is a deferred alternative tracked in issue #78. Research:
-`.omc/research/research-20260409c-dockerdesktop-ssh/report.md`.
+`docs/research/runs/research-20260409c-dockerdesktop-ssh/report.md`.
 Benchmarks: `docs/research/trail/findings/docker-benchmarks/`.
 
 ### Do not

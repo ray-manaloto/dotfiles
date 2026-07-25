@@ -54,7 +54,7 @@
 //      (`abiosoft/colima#1330`, `#942`); deferred follow-up #78.
 //
 // Research + rationale:
-//   .omc/research/research-20260409c-dockerdesktop-ssh/report.md
+//   docs/research/runs/research-20260409c-dockerdesktop-ssh/report.md
 //
 // ===============================================================
 // (S1) SECRETS injection via Doppler:
@@ -185,7 +185,7 @@
     // socket is bind-mounted via `mounts` above; this env var points
     // tools at it. Docker-Desktop-only — Colima has no equivalent
     // (`abiosoft/colima#1330`, #942; deferred follow-up #78). See
-    // .omc/research/research-20260409c-dockerdesktop-ssh/report.md.
+    // docs/research/runs/research-20260409c-dockerdesktop-ssh/report.md.
     "SSH_AUTH_SOCK": "/run/host-services/ssh-auth.sock",
   },
   "features": {

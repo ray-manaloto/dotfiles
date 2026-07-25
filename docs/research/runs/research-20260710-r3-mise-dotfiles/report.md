@@ -3,7 +3,7 @@
 Run: `research-20260710-r3-mise-dotfiles` · Synthesis of 3 angle reports
 (`mise-dotfiles-caps.md`, `chezmoi-parity.md`, `coexist-migrate.md`) plus the
 adversarial-verification verdicts on 8 load-bearing claims. Date: 2026-07-10.
-Baseline grounding: `.omc/research/research-20260709-r2-inventory/report.md`.
+Baseline grounding: `docs/research/runs/research-20260709-r2-inventory/report.md`.
 
 ---
 
@@ -182,7 +182,7 @@ is not a simpler setup on the one axis that matters (`promptBoolOnce`).
   content exists" overstated it. **What DID survive:** the release fact
   (v2026.6.6, 2026-06-13) and the local-cache staleness (jdx/mise cache predates
   the feature; last probed 2026-04-06) are both CONFIRMED. Also note (from r2
-  release-mining, `.omc/research/research-20260709-r2-release-mining/report.md`)
+  release-mining, `docs/research/runs/research-20260709-r2-release-mining/report.md`)
   that bootstrap+dotfiles **graduated from experimental to stable in v2026.7.4
   (2026-07-09)** — i.e. it was stabilized the day before this research, not
   still-experimental. Treat "very new" as accurate; treat "unvalidated by any
@@ -269,7 +269,7 @@ CONFIRMED and safe to assert: claims #1 (templating), #2 (no secrets/encryption)
   This makes the "easy" OS gate a rewrite, not a drop-in — strengthens "neither."
 - **Experimental-vs-stable status:** angle #1 §1 said the docs don't mark the
   feature experimental. r2 release-mining
-  (`.omc/research/research-20260709-r2-release-mining/report.md:62`) dates the
+  (`docs/research/runs/research-20260709-r2-release-mining/report.md:62`) dates the
   experimental→stable graduation to **v2026.7.4 (2026-07-09)** — one day before
   this research. Consistent, not contradictory, but worth stating: the feature
   was stable for exactly one day at research time, which *supports* the "very

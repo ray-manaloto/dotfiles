@@ -98,6 +98,6 @@ to verify the config is no longer fatal.
 
 ## Related
 
-- `.omc/wiki/devcontainer-ssh-canonical-pattern.md`
+- `.agent/wiki/devcontainer-ssh-canonical-pattern.md`
 - `feedback_use_tool_builtins.md` (project memory)
 - `man ssh_config` → IgnoreUnknown

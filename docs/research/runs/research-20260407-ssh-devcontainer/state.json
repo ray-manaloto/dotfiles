@@ -1,0 +1,57 @@
+{
+  "id": "research-20260407-ssh-devcontainer",
+  "goal": "Canonical SSH agent forwarding into a Dev Container on macOS-ARM (Colima VZ+Rosetta) running an AMD64 Linux container, using @devcontainers/cli — without introducing tech debt",
+  "status": "complete",
+  "mode": "standard",
+  "iteration": 1,
+  "maxIterations": 10,
+  "stages": [
+    {
+      "id": 1,
+      "name": "containers.dev spec authority",
+      "tier": "MEDIUM",
+      "status": "complete",
+      "findingsFile": "stages/stage-1.md"
+    },
+    {
+      "id": 2,
+      "name": "@devcontainers/cli implementation",
+      "tier": "MEDIUM",
+      "status": "complete",
+      "findingsFile": "stages/stage-2.md"
+    },
+    {
+      "id": 3,
+      "name": "VS Code Dev Containers SSH credentials docs",
+      "tier": "MEDIUM",
+      "status": "complete",
+      "findingsFile": "stages/stage-3.md"
+    },
+    {
+      "id": 4,
+      "name": "devcontainers/features/sshd reality check",
+      "tier": "LOW",
+      "status": "complete",
+      "findingsFile": "stages/stage-4.md"
+    },
+    {
+      "id": 5,
+      "name": "cpp-playground proxy tech-debt audit",
+      "tier": "MEDIUM",
+      "status": "complete",
+      "findingsFile": "stages/stage-5.md"
+    }
+  ],
+  "verification": {
+    "status": "passed",
+    "result": "VERIFIED",
+    "conflicts": [],
+    "gaps_filled": [
+      "Separated CLI lane (mise run up via @devcontainers/cli) from IDE-attach lane (VS Code extension). Only the CLI lane needs the proxy fix; VS Code Dev Containers extension auto-forwards agent per vscode-remote-release#11413."
+    ],
+    "findingsFile": "stages/verification.md",
+    "completedAt": "2026-04-07T20:05:00-05:00"
+  },
+  "createdAt": "2026-04-07T19:45:00-05:00",
+  "updatedAt": "2026-04-07T20:05:00-05:00"
+}

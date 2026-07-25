@@ -3,7 +3,7 @@
 **Pipeline test artifact** for
 `feat/research-tooling-wiring` Commit 5. Supersedes the local-only
 draft at
-`.omc/research/devcontainer-local-build-spec-review-2026-04-06.md`
+`docs/research/runs/devcontainer-local-build-spec-review-2026-04-06.md`
 (gitignored via `.git/info/exclude`, therefore never reaches this PR;
 remains unchanged on disk for local reference).
 
@@ -28,7 +28,7 @@ reader of this PR can see the tooling is alive.
 **In scope:**
 
 - Verdict-by-verdict response to the 5 claims in
-  `.omc/research/devcontainer-local-build-spec-review-2026-04-06.md`.
+  `docs/research/runs/devcontainer-local-build-spec-review-2026-04-06.md`.
 - Upstream doc references for every verdict that depends on a
   third-party tool's current behavior (mise, `@devcontainers/cli`,
   chezmoi).
@@ -37,9 +37,9 @@ reader of this PR can see the tooling is alive.
 **Out of scope (follow-up work):**
 
 - Actually applying the delta back to
-  `.omc/specs/deep-interview-devcontainer-build-mise-chezmoi-resync.md`
+  `docs/specs/deep-interview-devcontainer-build-mise-chezmoi-resync.md`
   and
-  `.omc/plans/ralplan-consensus-devcontainer-build-mise-chezmoi-resync.md`
+  `.agent/plans/ralplan-consensus-devcontainer-build-mise-chezmoi-resync.md`
   — that's the session *after* this PR merges.
 - Running a local Mac `mise run build && mise run up && scripts/devcontainer-smoke.sh`
   end-to-end smoke loop — queued as follow-up §8 item 2 in the R3 plan.
@@ -51,7 +51,7 @@ reader of this PR can see the tooling is alive.
 ## Claim-by-claim verdict
 
 Source claim list:
-`.omc/research/devcontainer-local-build-spec-review-2026-04-06.md`
+`docs/research/runs/devcontainer-local-build-spec-review-2026-04-06.md`
 section "What I (Claude) claimed was pending — REVIEW CAREFULLY".
 
 ### Claim 1 — `[shell_alias]` entries pending in `mise.toml`
@@ -154,7 +154,7 @@ citation to the upstream `llms.txt` above.
 
 **Stale review claim:** "Never actually run end-to-end since the spec
 was written. The chain #52/#53/#54 has been CI-driven. Verify: ask the
-user; check `.omc/notepad.md` / session handoffs for any prior local
+user; check `.agent/notepad.md` / session handoffs for any prior local
 run evidence."
 
 **Verdict: DEFERRED (unchanged).**

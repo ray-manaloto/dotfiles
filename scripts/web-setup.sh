@@ -7,7 +7,7 @@
 #   (`uv run --project python dotfiles-setup hook pretooluse`) needs Python
 #   >=3.14; when it is absent the guard errors on startup and the harness fails
 #   closed, blocking EVERY Bash call — the "web brick". Full analysis:
-#   .omc/research/research-20260709-r2-web-env/report.md. This script installs
+#   docs/research/runs/research-20260709-r2-web-env/report.md. This script installs
 #   the toolchain so the guard can start and the repo gates (mise run lint,
 #   uv run --project python pytest, dotfiles-setup verify run) work.
 #
