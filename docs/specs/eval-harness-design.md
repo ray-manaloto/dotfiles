@@ -320,6 +320,42 @@ and reports a win that isn't there. Every golden query must be phrased the way
 someone who has *not* read the node would ask, and the set should hold a
 **paired** label-echoing variant purely to expose the gap between the two.
 
+**Scope LOCKED 2026-07-25 (Ray) — do not re-litigate:**
+
+1. **ADVISORY, not gated.** The case ships `gated=False`, reporting recall@K per
+   query plus a suite number. A gated floor would be red on arrival at the 0/119
+   baseline, and a floor of **0** is worse than none: it is the check that can
+   only pass, the exact shape principle 1 bans. The floor lands in a later PR,
+   once scoping lifts recall above 0. The runner already waives the control arm
+   for advisory cases.
+2. **MEASUREMENT ONLY — KB #12 P0 scoping is a separate PR.** PR 4 makes 0/119
+   reproducible and citable so the scoping PR that follows can show a real
+   before/after. Folding the fix in was rejected for that reason: the harness
+   and the fix in one diff leaves nothing independently establishing that
+   scoping is what moved the number.
+3. **Runs against the LIVE local graph, with a `precondition` SKIP** — the
+   `tier1.graph-answers` shape. A committed fixture subgraph was rejected on
+   evidence: the failure being measured *is* prose drowning in ~128k code-AST
+   nodes, and a hand-sized fixture has no code mass, so it would measure a
+   problem we do not have. Cost accepted: the number moves when the graph is
+   rebuilt, so **every reported figure carries its corpus stamp** (graph build
+   date + node count). An inherited number without that stamp is not a
+   measurement — `probes-need-a-control-arm.md` rule 6.
+4. **~8 hand-written query PAIRS** — a natural phrasing plus a deliberately
+   label-echoing twin. The gap between the two IS the finding; without the twin,
+   a lexical-overlap win reads as retrieval quality (measured 2026-07-24).
+   Deriving queries from the 119 nodes under test was rejected as tautological
+   (`tests/AGENTS.md`): it would grade paraphrase distance, not retrieval.
+5. **On-demand flag, NOT the ship gates.** 8 pairs = 16 graphify calls, tens of
+   seconds. The `tier1.lane-health` precedent: a case too slow for the free tier
+   stays behind its own flag. An advisory case that cannot block has no claim on
+   every ship, and a slow gate is one people learn to skip.
+6. **Printed only — no committed report.** The number goes into the KB #12
+   thread when it actually moves, which is where the P0→P5 ladder already lives.
+
+Still mandated by this section and not open: the **negative** direction (a query
+whose relevant nodes are absent must return them absent), and per-query `K`.
+
 ### Tier 3 — model-behaviour evals (advisory)
 
 **(d) skills fire when they should.** Per skill, a **hand-written, held-out** set
@@ -506,6 +542,7 @@ Recorded so the next reader can tell a corrected claim from an original one:
 | 4, tier 2 | (c) marked SHIPPED, with the defect it found on day one | the must-ALLOW half was justified from #265's *measured* history; it then found the same class in KB's guard within an hour of existing — the argument for it is no longer historical |
 | 4, tier 2 | recorded that **masking was the WRONG fix for KB**, though it was the right one for dotfiles | KB's real deny carries its payload legitimately quoted, so blanking quoted content would have traded a false positive for a false negative. A fix borrowed from a sibling repo must be re-derived against that repo's own rules, not transplanted |
 | 4, tier 0 | added `eval.tier2-fixture-wiring`, which also binds the `hook-selfcheck` argv | decision 4 said the wiring gate stays additive; a decision only a doc holds is the epic's own defect class, so a change deleting it in favour of the fixtures now fails a contract |
+| 4, tier 2 | PR 4 scope LOCKED — advisory (not gated), measurement-only, live graph with a precondition SKIP, ~8 query pairs, on-demand flag, printed only | a floor of **0** is the can-only-pass check principle 1 bans, and a fixture subgraph cannot reproduce the failure being measured (prose drowning in ~128k code-AST nodes) |
 | — | two test fixtures were CORRECTED, not worked around | KB pinned `gpy -c '…'` as a deny, but `gpy` is a variable name in `graph.py` — a command no session could type, so it pinned a break that cannot happen (`probes-need-a-control-arm.md`: an unrealistic mutation can only accuse the wrong party). And KB had no `test_eval_cases.py` at all, so its control arms were checked at run time and never at commit time |
 
 ## GitHub repos touched
