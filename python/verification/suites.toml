@@ -1033,24 +1033,19 @@ tokens = [
 
 [[suite]]
 name = "workflow.md-budget-enforcement"
-description = "Class-aware markdown budget wiring: the `md_size_budget` hk step must stay wired to the python enforcer end-to-end — hk.pkl shells out to `dotfiles-setup md-budget`, main.py registers the subcommand, the md_budget module (load-class taxonomy + @import closure + the SKILL.md description hard cap) + its tests exist, and the rule doc records the policy with its sources. Also keeps the MISATTRIBUTED figure out: the predecessor `claude_md_size_limit` applied a 12000-byte cap to every CLAUDE.md/AGENTS.md captioned 'per Claude Code memory docs'. The number is real but it is WINDSURF's (docs.windsurf.com: 'Limited to 12,000 characters per file'; AGENTS.md is processed by the same Rules engine), enforced by agnix AGM-003 against AGENTS.md — where the vendor that imposes it can. It is absent from Anthropic's corpus (control-armed: 0 hits vs 5 for MEMORY.md's cap), so the caption named the wrong vendor. This module must not re-adopt it."
+description = "Class-aware markdown budget wiring, now via the SHARED engine. The enforcer MOVED from dotfiles_setup.md_budget to kb_setup.md_budget on 2026-07-25 (kb_setup.currency precedent, D2/G4: one implementation both repos run); dotfiles' copy + its tests were DELETED, so this contract binds the SEAM that survives here — the `md_size_budget` hk step shelling out to `kb-setup md-budget`, the SHA-pinned kb-setup dependency that supplies it, and the rule doc recording the policy with its sources. It deliberately does NOT bind the module internals any more: those live in the KB repo and are covered by ITS tests, and a contract that named a path in another repo could only ever fail. Also keeps the MISATTRIBUTED figure out: the predecessor `claude_md_size_limit` applied a 12000-byte cap to every CLAUDE.md/AGENTS.md captioned 'per Claude Code memory docs'. The number is real but it is WINDSURF's (docs.windsurf.com: 'Limited to 12,000 characters per file'; AGENTS.md is processed by the same Rules engine), enforced by agnix AGM-003 against AGENTS.md — where the vendor that imposes it can. It is absent from Anthropic's corpus (control-armed: 0 hits vs 5 for MEMORY.md's cap), so the caption named the wrong vendor."
 category = "workflow"
 check_type = "static"
 handler = "require_tokens"
 paths_required = true
 paths = [
     "hk.pkl",
-    "python/src/dotfiles_setup/main.py",
-    "python/src/dotfiles_setup/md_budget.py",
-    "tests/test_md_budget.py",
+    "python/pyproject.toml",
     ".claude/rules/md-size-budgets.md",
 ]
-per_path_tokens = { "hk.pkl" = ["md_size_budget", "dotfiles-setup md-budget"], "python/src/dotfiles_setup/main.py" = ["md-budget"], "python/src/dotfiles_setup/md_budget.py" = ["def check", "def md_budget_main", "SKILL_DESCRIPTION_MAX"] }
+per_path_tokens = { "hk.pkl" = ["md_size_budget", "kb-setup md-budget"], "python/pyproject.toml" = ["kb-setup @ git+https://github.com/ray-manaloto/knowledge-base@"], ".claude/rules/md-size-budgets.md" = ["kb-setup md-budget", "SKILL.md", "Windsurf"] }
 tokens = [
-    "dotfiles-setup md-budget",
-    "def md_budget_main",
-    "DOCUMENTED_LINE_TARGET",
-    "SKILL_DESCRIPTION_MAX",
+    "kb-setup md-budget",
 ]
 
 [[suite]]

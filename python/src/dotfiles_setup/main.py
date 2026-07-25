@@ -48,7 +48,6 @@ from dotfiles_setup.lint import (
     run_guarded,
 )
 from dotfiles_setup.lock_refresh import collect_system_lock, stage_system_lock_dir
-from dotfiles_setup.md_budget import md_budget_main
 from dotfiles_setup.memory_index import memory_index_main
 from dotfiles_setup.p2996_hash import (
     compute_repo_base_hash,
@@ -566,12 +565,6 @@ def _add_report_parsers(subparsers: _SubParsers) -> None:
     )
     renovate_parser.add_argument(
         "--json", action="store_true", help="Emit the raw status as JSON"
-    )
-
-    subparsers.add_parser(
-        "md-budget",
-        help="Budget instruction-markdown by LOAD CLASS (eager/lazy/scoped/"
-        "skill) + the SKILL.md description hard cap",
     )
 
     dryrun_parser = subparsers.add_parser(
@@ -1209,7 +1202,6 @@ def _build_command_handlers(
         "renovate-dryrun": lambda: sys.exit(
             renovate_dryrun_main(json_output=args.json, check=args.check)
         ),
-        "md-budget": lambda: sys.exit(md_budget_main(project_root)),
         "autofix-apply": lambda: sys.exit(
             autofix_apply_main(args.run_id, project_root)
         ),

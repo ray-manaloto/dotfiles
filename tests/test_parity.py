@@ -37,9 +37,19 @@ def _repo(root: Path, *, plugins: dict[str, bool], claude_md: str = "") -> Path:
 
 
 def _shared(
-    *, plugins: tuple[str, ...] = (), lines: tuple[str, ...] = ()
+    *,
+    plugins: tuple[str, ...] = (),
+    lines: tuple[str, ...] = (),
+    rules: tuple[str, ...] = (),
 ) -> parity.Shared:
-    return parity.Shared(plugins=plugins, lines=lines)
+    return parity.Shared(plugins=plugins, lines=lines, rules=rules)
+
+
+def _rules(root: Path, *stems: str) -> Path:
+    (root / ".claude" / "rules").mkdir(parents=True, exist_ok=True)
+    for stem in stems:
+        (root / ".claude" / "rules" / f"{stem}.md").write_text(f"# {stem}\n")
+    return root
 
 
 # ---------------------------------------------------------------------------
@@ -178,6 +188,92 @@ def test_resolve_prefers_the_explicit_path_then_env(
     assert parity.resolve_kb_path(None) == tmp_path / "from-env"
     monkeypatch.delenv("KB_REPO_PATH")
     assert parity.resolve_kb_path(None) == (_ROOT.parent / "knowledge-base")
+
+
+# ---------------------------------------------------------------------------
+# Rule parity (widened 2026-07-25, after knowledge-base#24 ported all 22)
+# ---------------------------------------------------------------------------
+
+
+def test_a_rule_missing_from_one_repo_is_a_gap(tmp_path: Path) -> None:
+    """The FAIL direction of the widened axis, and the reason it exists.
+
+    Until knowledge-base#24 this was the real state: dotfiles 22, KB 0. Neither
+    repo could see it, because each was internally consistent.
+    """
+    a = _rules(_repo(tmp_path / "a", plugins={}), "zero-skip-policy")
+    b = _rules(_repo(tmp_path / "b", plugins={}))
+    gaps = parity.find_parity_gaps(
+        {"a": a, "b": b}, _shared(rules=("zero-skip-policy",))
+    )
+    assert [(g.repo, g.kind, g.ref) for g in gaps] == [
+        ("b", "rule", "zero-skip-policy")
+    ]
+
+
+def test_a_rule_present_in_both_is_not_a_gap(tmp_path: Path) -> None:
+    """Control arm: without it, an always-fail implementation passes above."""
+    a = _rules(_repo(tmp_path / "a", plugins={}), "zero-skip-policy")
+    b = _rules(_repo(tmp_path / "b", plugins={}), "zero-skip-policy")
+    assert (
+        parity.find_parity_gaps({"a": a, "b": b}, _shared(rules=("zero-skip-policy",)))
+        == []
+    )
+
+
+def test_a_repo_with_no_rules_dir_is_a_gap_not_a_pass(tmp_path: Path) -> None:
+    """Not being able to see any rules must never read as the rules being fine.
+
+    `declared_rules` returns an empty set for a missing directory, which is the
+    correct read only if the caller treats empty as ABSENT. A membership test
+    written the other way round would report green on a repo with no
+    `.claude/rules/` at all — the exact state this axis was added to catch.
+    """
+    a = _rules(_repo(tmp_path / "a", plugins={}), "do-not")
+    b = _repo(tmp_path / "b", plugins={})  # no .claude/rules/ at all
+    gaps = parity.find_parity_gaps({"a": a, "b": b}, _shared(rules=("do-not",)))
+    assert [(g.repo, g.ref) for g in gaps] == [("b", "do-not")]
+
+
+def test_rule_parity_is_by_stem_not_by_content(tmp_path: Path) -> None:
+    """Each rule is ADAPTED per repo; gating on bytes would force a lie.
+
+    knowledge-base's `local-devcontainer-first` is an ingestion cost ladder,
+    not a container rule. Byte-equality would make one repo carry the other's
+    false statements; what must not drift is WHICH concerns are governed.
+    """
+    a = _repo(tmp_path / "a", plugins={})
+    b = _repo(tmp_path / "b", plugins={})
+    (a / ".claude" / "rules").mkdir(parents=True)
+    (b / ".claude" / "rules").mkdir(parents=True)
+    (a / ".claude" / "rules" / "do-not.md").write_text("# Do not\n\nNo local builds.\n")
+    (b / ".claude" / "rules" / "do-not.md").write_text("# Do not\n\nNever go global.\n")
+    assert parity.find_parity_gaps({"a": a, "b": b}, _shared(rules=("do-not",))) == []
+
+
+def test_a_scoped_rule_still_counts_as_declared(tmp_path: Path) -> None:
+    """`paths:` changes WHEN a rule loads, not whether the concern is governed.
+
+    Filtering to eager-only would let a repo satisfy the gate by scoping a rule
+    into near-irrelevance.
+    """
+    a = _repo(tmp_path / "a", plugins={})
+    (a / ".claude" / "rules").mkdir(parents=True)
+    (a / ".claude" / "rules" / "ci-local-parity.md").write_text(
+        '---\npaths:\n  - "hk.pkl"\n---\n\n# CI parity\n'
+    )
+    assert parity.declared_rules(a) == {"ci-local-parity"}
+
+
+def test_the_declared_rules_match_what_dotfiles_actually_carries() -> None:
+    """The set must describe THIS repo truthfully, or it is fiction.
+
+    Independent source of truth: the real `.claude/rules/` tree on disk, not
+    anything the parity module computes for the comparison.
+    """
+    shared = parity.load_shared(_ROOT / "parity.toml")
+    assert shared.rules
+    assert set(shared.rules) <= parity.declared_rules(_ROOT)
 
 
 # ---------------------------------------------------------------------------
