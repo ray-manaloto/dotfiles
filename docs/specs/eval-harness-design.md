@@ -248,12 +248,36 @@ genuinely broken fixture and drive the same code path against it.
 
 ### Tier 2 — behavioural fixtures
 
-**(c) guard + hooks.** Generalise `hook_selfcheck` from "the wiring exists" to a
-fixture table of `(command, expected decision)` driven through the **wired**
-guard. Must contain a **must-ALLOW** half — false positives are the only defect
-class ever measured here (#265: 2 of 3 recorded denials were false positives;
-bypasses all-time: **0**). A deny-only corpus would grade the guard on the
-direction that has never failed.
+**(c) guard + hooks.** A fixture table of `(command, expected decision)` driven
+through the **wired** guard. Must contain a **must-ALLOW** half — false
+positives are the only defect class ever measured here (#265: 2 of 3 recorded
+denials were false positives; bypasses all-time: **0**). A deny-only corpus
+would grade the guard on the direction that has never failed.
+
+**Scope LOCKED 2026-07-25 (Ray) — do not re-litigate:**
+
+1. **BOTH repos' guards, one shared fixture engine.** The engine lives in
+   `kb_setup` and each repo declares its own table — the shape PR 2 landed. So
+   it is a KB PR + pin bump + a dotfiles PR. Covering only dotfiles was
+   rejected: the rules-parity gate now makes the repos' doctrine symmetric, so
+   leaving KB's guard ungated is the same defect class one level down. KB's
+   `_ALLOWED_READONLY` set (`path`/`explain`/`god-nodes`/`affected`/`diagnose`)
+   is exactly the surface a careless pattern breaks, so it wants the must-ALLOW
+   half as much as dotfiles does.
+2. **The control arm is TABLE-LEVEL, not per-row.** One `Case` per guard: the
+   probe runs every row and passes only if all match; the control runs the table
+   with **expectations inverted** and must FAIL. Each row is thus the other's
+   control, and both degenerate guards are caught — an always-deny guard passes
+   the deny rows and fails the allow rows, an always-allow guard does the
+   inverse, so only a *discriminating* guard passes. Per-row cases were rejected
+   as N controls to maintain with some unrealistic mutations; exempting the
+   table from principle 1 was rejected outright, since this table is the one
+   place false positives have actually been measured.
+3. **`hook_selfcheck` STAYS, additive.** It answers *is the guard WIRED?*; the
+   fixture table answers *does the wired guard DECIDE correctly?* The first is
+   the precondition for the second, so a wiring break fails fast with a clear
+   message instead of surfacing as a wall of fixture mismatches.
+   `workflow.hook-selfcheck-wiring` is untouched.
 
 **(b) KB retrieval.** A golden set of `(query, must-appear node ids, K)`.
 Deterministic given a frozen graph. Metric **recall@K**, per query, plus a
@@ -378,15 +402,20 @@ table with `PASS/FAIL/SKIP(reason)/UNARMED` and a **refusal to count any gated
 case lacking a recorded failing fixture** (principle 1) — `UNARMED` is that
 refusal, and it reddens the run regardless of what the probe said.
 
-**As shipped, `mise run eval` runs tier 1 only.** The line above originally read
-"tiers 0+1(offline)+2"; tier 0 is in fact executed by
-`dotfiles-setup verify run` (the `suites.toml` contracts), which is already its
-own ship gate (`verify-contracts`), and tier 2 does not exist yet. Folding tier 0
-into `eval` would run those contracts twice per ship for no added signal, so the
-open decision — *do the tiers share one command, or one command per engine?* —
-is deliberately left to PR 3, when tier 2 first needs a home. Recorded rather
-than silently resolved, because a spec that promises one command and ships three
-is the inert-declaration defect wearing this epic's own clothes.
+**RESOLVED 2026-07-25 (Ray).** `mise run eval` runs **tiers 1 + 2**; tier 0
+stays in `dotfiles-setup verify run`.
+
+- **Tier 2 joins the eval runner as `Case`s.** That is not merely tidy: the
+  table-level control arm (§4 tier 2) *is* a `Case` whose control runs the
+  fixture table with expectations inverted, so putting it in the runner gets
+  principle 1's enforcement for free rather than reimplementing it.
+- **Tier 0 stays where it is.** Folding ~103 contracts into `eval` would run
+  them twice per ship — once via `verify-contracts`, once via `eval` — for no
+  added signal, unless `verify-contracts` were also removed, which is a bigger
+  change than this epic should carry.
+
+So the honest acceptance criterion is *one command per ENGINE*, not one command
+overall: `verify run` for declaration contracts, `eval` for probes and fixtures.
 
 ---
 
@@ -396,7 +425,7 @@ is the inert-declaration defect wearing this epic's own clothes.
 |---|---|---|---|---|
 | 1 | `require_lines` handler + the 6 `orchestration.*` / `eval.*` contracts | 0 | low | **SHIPPED** — dotfiles#361 (8 contracts, not 6; see §9) |
 | 2 | `mise run eval` runner + reachability probes + `doctor.sh` shim | 1 | low | **SHIPPED** — KB#25 (runner) + KB#26 (precondition) + dotfiles#363 (cases) |
-| 3 | guard fixture corpus (both directions) — generalises `hook_selfcheck` | 2 | low | next |
+| 3 | guard fixture corpus (both directions), BOTH repos' guards; `hook_selfcheck` stays | 2 | low | **next** |
 | 4 | KB golden retrieval set + recall@K (KB repo; pairs with KB #12 P0) | 2 | med | |
 | 5 | held-out trigger sets + headless runner + Wilson CI | 3 | med | |
 | 6 | phase-compliance mining (needs dotfiles #356 first) | 4 | med | |
@@ -445,6 +474,9 @@ Recorded so the next reader can tell a corrected claim from an original one:
 | 4, tier 1 | added "a control arm that returns SKIP is not armed" | the obvious control for the graph canary (a nonexistent graph path) SKIPs by design — it looks armed and proves nothing. The runner caught it before it shipped |
 | 7 | PR table gains a `status` column; PR 1 shipped **8** contracts, not 6 | §9's own first row already recorded two extra contracts added the same day, while §7's summary still said 6 — a stale summary inside a doc that records its own revisions |
 | 7 | noted the rules-parity prerequisite for PRs 3–6 | KB#24 + dotfiles#362 made `parity.toml` gate all 22 rules; a rule added to one repo alone now reddens `main` |
+| 6 | RESOLVED the deferred tier-0/tier-2 command question: `eval` = tiers 1+2, `verify run` = tier 0 | one command per ENGINE, not one overall; folding tier 0 in would run ~103 contracts twice per ship |
+| 4, tier 2 | PR 3 scope LOCKED — both repos' guards, table-level control arm, `hook_selfcheck` stays additive | the table-level arm IS a `Case` with an inverted-table control, so it inherits principle 1's enforcement instead of reimplementing it |
+| — | this spec is now TRACKED at `docs/specs/` | `.omc/` was retired 2026-07-25; the spec previously existed only in one working copy |
 
 ## GitHub repos touched
 
