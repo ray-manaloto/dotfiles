@@ -77,7 +77,7 @@ empty directories per container create to bound growth.
 **Accepted trade-off — data loss on rollout:** First `mise run up`
 after the v5→v6 change orphans the old volumes; runtime-installed
 tools/crates/toolchains must be re-installed. `mise run prune` cleans
-orphans. (See `.omc/plans/home-volume-consolidation-draft.md`.)
+orphans. (See `.agent/plans/home-volume-consolidation-draft.md`.)
 
 **Reset-on-recreate:** `onCreateCommand` runs `chezmoi init --apply
 --force` on every container creation; chezmoi-managed files (`.bashrc`,
@@ -85,7 +85,7 @@ orphans. (See `.omc/plans/home-volume-consolidation-draft.md`.)
 re-rendered from `home/`. The home volume protects unmanaged state
 (caches, history, TMPDIR) — to change managed files, edit `home/`.
 
-SSH-agent forwarding uses Docker Desktop's native magic socket at `/run/host-services/ssh-auth.sock`. No host-side proxy. See `.omc/research/research-20260409c-dockerdesktop-ssh/`.
+SSH-agent forwarding uses Docker Desktop's native magic socket at `/run/host-services/ssh-auth.sock`. No host-side proxy. See `docs/research/runs/research-20260409c-dockerdesktop-ssh/`.
 
 ## Override Model
 
@@ -193,7 +193,7 @@ DD exposes the macOS launchd SSH agent at
 `/run/host-services/ssh-auth.sock`. Bind-mount it and set
 `SSH_AUTH_SOCK` via `containerEnv` (not `remoteEnv`). Authority:
 `devcontainers/cli#441`. Research:
-`.omc/research/research-20260409c-dockerdesktop-ssh/`.
+`docs/research/runs/research-20260409c-dockerdesktop-ssh/`.
 
 **R1 inbound**: `ghcr.io/devcontainers/features/sshd@1.1.0` on internal
 port 2222 → 4444 via `appPort`. Schema only honors `version` +

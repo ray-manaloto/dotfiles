@@ -14,8 +14,14 @@ description = "Non-source paths and documentation examples (no real secrets)."
 paths = [
   '''docs/research/mintlify-cache/''',
   '''docs/research/trail/findings/''',
+  # Promoted from `.omc/` 2026-07-25. Research prose, not code: the hits are a
+  # localhost `curl` example, a docs placeholder (`trig_01ABC...`), and a
+  # markdown link whose text matched `generic-api-key`. Each was read before
+  # allowlisting. Same class as the two entries above.
+  '''docs/research/kb/''',
+  '''docs/research/runs/''',
   '''\.codex/''',
-  '''\.omc/''',
+  '''\.agent/''',
   '''\.omg/''',
   '''\.omx/''',
   '''\.idea/''',

@@ -125,7 +125,7 @@ echo "  OK: TMPDIR=${TMPDIR}"
 
 echo "[tier3] SSH agent forwarding + github auth"
 # Real end-to-end SSH auth via Docker Desktop's native magic socket at
-# /run/host-services/ssh-auth.sock (see .omc/research/research-20260409c-dockerdesktop-ssh/).
+# /run/host-services/ssh-auth.sock (see docs/research/runs/research-20260409c-dockerdesktop-ssh/).
 # Runtime-pinned to Docker Desktop — Colima has no equivalent; issue #78 tracks
 # eventual Colima replication.
 expected_sock="/run/host-services/ssh-auth.sock"

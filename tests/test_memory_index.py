@@ -483,8 +483,8 @@ def test_main_output_writes_file_instead_of_stdout(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     root = _seed_memory(tmp_path, monkeypatch, "- [T](a.md) — #244", a="#244")
-    assert mi.memory_index_main(root, output=Path(".omc/memory-index.md")) == 0
-    assert "Index-only facts" in (root / ".omc" / "memory-index.md").read_text()
+    assert mi.memory_index_main(root, output=Path(".agent/memory-index.md")) == 0
+    assert "Index-only facts" in (root / ".agent" / "memory-index.md").read_text()
     out = capsys.readouterr().out
     assert "wrote" in out
     assert "Index-only facts" not in out  # the body went to the file, not stdout

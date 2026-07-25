@@ -22,7 +22,7 @@
 #
 # All three MUST pass. Any failure exits non-zero and fails the hook.
 #
-# Plan: .omc/plans/home-volume-consolidation-draft.md (v6, session
+# Plan: .agent/plans/home-volume-consolidation-draft.md (v6, session
 # 2026-04-10b). Added in response to Codex v3 finding that a naive JSON
 # parser (`python3 -c 'import json'`) was blocking validation of a
 # legitimately-JSONC file.

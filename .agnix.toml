@@ -4,7 +4,7 @@ exclude = [
     ".git/**",
     ".codex/**",
     ".omx/**",
-    ".omc/**",
+    ".agent/**",
     ".omg/**",
     ".logging/**",
     "plugins/**",
@@ -12,10 +12,15 @@ exclude = [
     # Deep-research artifacts: prose reports whose per-run `agents/` subdir
     # name collides with agnix's agent-definition validation (it treats any
     # **/agents/*.md as an agent file needing YAML frontmatter). These are
-    # research findings, not agent docs — same rationale as the .omc/** exclude
+    # research findings, not agent docs — same rationale as the .agent/** exclude
     # above (r2 reports lived there; r3 moved to this tracked path for
     # visibility on `git pull`).
     "docs/research/runs/**",
+    # Same rationale, promoted from `.omc/kb/` 2026-07-25: persisted agent
+    # REPORTS whose `agents/` subdir name collides with agnix's
+    # agent-definition validation (it treats any **/agents/*.md as an agent
+    # file needing YAML frontmatter). These are findings, not agent docs.
+    "docs/research/kb/**",
     # Cross-surface session handoffs: prose docs with embedded resume prompts,
     # not agent definitions (the /handoff and /resume SKILLs under
     # .claude/skills/ ARE validated as skills — only the handoff output is not).
@@ -57,7 +62,7 @@ disabled_rules = ["XP-003", "AGM-004", "AGM-006", "PE-001"]
 
 [[overrides]]
 # CC-HK-025 is a VERIFIED upstream agnix bug (source-confirmed at 0.37.5, the
-# latest release; see .omc/research/research-20260714-agnix/report.md). It
+# latest release; see docs/research/runs/research-20260714-agnix/report.md). It
 # tests the RAW matcher string (e.g. "startup|resume") against the SessionStart
 # enum {startup,resume,clear,compact} WITHOUT splitting on '|'/',' — but the
 # official Claude Code hooks docs (code.claude.com/docs/en/hooks) parse a

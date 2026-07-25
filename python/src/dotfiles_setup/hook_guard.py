@@ -8,7 +8,7 @@ redirect reason via the documented JSON contract
 bypassPermissions mode).
 
 Why a deny-with-redirect hook and not more: the deep-research pass
-(.omc/research/research-20260707-gha-shipland-enforcement/report.md)
+(docs/research/runs/research-20260707-gha-shipland-enforcement/report.md)
 verified that hooks cannot ALLOW-list (the JSON "approve" path was
 refuted) — allow rules belong to the permission system — and that
 markdown rules alone are "relying on the LLM". So: hard bans and
@@ -366,7 +366,7 @@ _RULES: tuple[Rule, ...] = (
 #
 # Existing tools were researched first and none fits (the hard gate in
 # .claude/rules/use-tool-builtins.md; full report + probe evidence in
-# .omc/research/research-20260714-guard-quoting/agents/native-options.md):
+# docs/research/runs/research-20260714-guard-quoting/agents/native-options.md):
 #   - `shlex(punctuation_chars=True)` — its `whitespace` includes `\n`, so a
 #     newline is never an operator token: a heredoc body and two real
 #     newline-separated commands tokenize IDENTICALLY. Cannot fix one without

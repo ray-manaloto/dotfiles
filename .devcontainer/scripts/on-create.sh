@@ -4,7 +4,7 @@
 #
 # Invocation: bash /workspaces/<repo>/.devcontainer/scripts/on-create.sh <workspace-folder>
 #
-# Plan: .omc/plans/home-volume-consolidation-draft.md (v6, session 2026-04-10b)
+# Plan: .agent/plans/home-volume-consolidation-draft.md (v6, session 2026-04-10b)
 #
 # Executable-bit policy: devcontainer.json invokes this script via
 # `bash <script>` so the +x mode bit is NOT load-bearing for the

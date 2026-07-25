@@ -141,7 +141,7 @@ So scoping is safe only when the rule's trigger genuinely *is* reading a file.
   about to run), `do-not`, `verify-before-advancing`, `clarify-before-acting`,
   `probes-need-a-control-arm`. No glob predicts a decision.
 - **Creation-triggered → CANNOT be scoped.** `zero-bash-logic` governs *new*
-  `.sh` files; `omc-directory-conventions` governs *where to create* an
+  `.sh` files; `agent-artifact-conventions` governs *where to create* an
   artifact. You never read the file first, so the rule would be absent exactly
   when it is needed.
 - **Behaviour-triggered but niche → a skill, not a rule.** "For task-specific
@@ -169,7 +169,7 @@ Every tracked `CLAUDE.md`, `AGENTS.md`, `.claude/rules/*.md`, and
 
 ## See also
 
-- `.omc/research/research-20260715-md-size-limits/report.md` — the primary-source
+- `docs/research/runs/research-20260715-md-size-limits/report.md` — the primary-source
   audit; every figure control-armed.
 - `kb_setup.md_budget` (knowledge-base repo) — the enforcer, and its full
   provenance. Pinned by SHA in `python/pyproject.toml`; its tests moved with

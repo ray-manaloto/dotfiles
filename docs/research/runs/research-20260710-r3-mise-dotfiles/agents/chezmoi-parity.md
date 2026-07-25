@@ -5,7 +5,7 @@ feature the repo's `home/` source tree actually exercises, then maps each to
 whether `mise dotfiles` (mise.jdx.dev/dotfiles.html) can cover it.
 
 Date: 2026-07-10. Baseline grounding:
-`.omc/research/research-20260709-r2-inventory/report.md`.
+`docs/research/runs/research-20260709-r2-inventory/report.md`.
 
 ## Findings
 

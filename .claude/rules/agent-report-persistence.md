@@ -21,20 +21,20 @@ the file:line anchors the implementing session needs.
 
 ## Rules
 
-1. **Persist at receipt, into `.omc/kb/`.** When a findings-bearing agent's
+1. **Persist at receipt, into `docs/research/kb/`.** When a findings-bearing agent's
    final report arrives, write it verbatim to
-   `.omc/kb/reports/agents/<agent-name>.md` in the SAME turn — before acting on
-   its content. Sources the agent fetched go to `.omc/kb/raw/<slug>.md`.
+   `docs/research/kb/reports/agents/<agent-name>.md` in the SAME turn — before acting on
+   its content. Sources the agent fetched go to `.agent/kb/raw/<slug>.md`.
 
-   > **Path changed 2026-07-20; the old path was `.omc/research/<topic>/agents/`.**
-   > `.omc/kb/` is the corpus root and is **tracked in git** (added with
-   > `git add -f`, since `.git/info/exclude` carries `.omc/*`), so artifacts
-   > survive a fresh clone. `.omc/research/**` is not tracked and does not.
+   > **Path changed 2026-07-20; the old path was `docs/research/runs/<topic>/agents/`.**
+   > `docs/research/kb/` is the corpus root and is **tracked in git** (added with
+   > `git add -f`, since `.git/info/exclude` carries `.agent/*`), so artifacts
+   > survive a fresh clone. `docs/research/runs/**` is not tracked and does not.
    > The two conventions co-existed for one session and immediately cost
    > something: an agent correctly followed the *old* rule, the caller looked in
    > the *new* path, and wrongly reported it as non-compliant. **One path.**
-   > Existing `.omc/research/**` artifacts stay where they are; new ones go to
-   > `.omc/kb/`. See memory `feedback_store_research_in_graphify`.
+   > Existing `docs/research/runs/**` artifacts stay where they are; new ones go to
+   > `docs/research/kb/`. See memory `feedback_store_research_in_graphify`.
 
 1b. **Instruct agents to persist INCREMENTALLY, not at the end.** Tell a
    research delegation to write each source as it fetches it and to write its
@@ -72,6 +72,6 @@ which skill or workflow launched them.
   as-you-go findings; this rule covers the full-fidelity layer.
 - `.claude/rules/research-repo-enumeration.md` — every persisted report
   ends with its repos-touched enumeration.
-- `.claude/rules/omc-directory-conventions.md` — `.omc/research/` is the
+- `.claude/rules/agent-artifact-conventions.md` — `docs/research/runs/` is the
   standard home for research artifacts.
 - `.claude/skills/clear-prep/SKILL.md` — the coverage audit gate.

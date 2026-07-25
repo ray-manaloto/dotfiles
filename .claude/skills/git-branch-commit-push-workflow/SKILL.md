@@ -157,5 +157,5 @@ git branch -D <backup-branch>
 
 ## Related
 
-- `.omc/plans/gitbutler-removal-refactor.md` — meta-plan that tracks the
+- `.agent/plans/gitbutler-removal-refactor.md` — meta-plan that tracks the
   2026-04-06 GitButler abandonment and the follow-up cleanup.

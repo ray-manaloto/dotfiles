@@ -5,8 +5,8 @@ cadence with an **event-triggered** topology where the controllable
 "event" is a Renovate PR. Grounded against `renovate.json`,
 `.github/workflows/refresh.yml`, `.github/workflows/ci.yml`,
 `.github/workflows/AGENTS.md`, the three composites under
-`.github/actions/`, R2 Run C (`.omc/research/research-20260709-r2-updater/report.md`),
-and R2 inventory (`.omc/research/research-20260709-r2-inventory/report.md`).
+`.github/actions/`, R2 Run C (`docs/research/runs/research-20260709-r2-updater/report.md`),
+and R2 inventory (`docs/research/runs/research-20260709-r2-inventory/report.md`).
 
 Inputs: three angle reports in `agents/` (renovate-pr-trigger,
 refresh-reusable, daily-safety-cron), each read in full; 10 load-bearing

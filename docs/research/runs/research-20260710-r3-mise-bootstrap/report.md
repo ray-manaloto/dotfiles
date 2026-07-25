@@ -4,7 +4,7 @@ Run: `research-20260710-r3-mise-bootstrap` · Domain synthesis · 2026-07-10 ·
 Writer: synthesis agent. Grounds three angle reports
 (`agents/bootstrap-shell.md`, `agents/launchd-macos.md`,
 `agents/user-integration.md`), the adversarial-verification verdicts on 8
-load-bearing claims, r2 Run F (`.omc/research/research-20260709-r2-mac-automation/report.md`),
+load-bearing claims, r2 Run F (`docs/research/runs/research-20260709-r2-mac-automation/report.md`),
 and `scripts/web-setup.sh`.
 
 Environment note: Bash was broken across every angle (PreToolUse guard has no

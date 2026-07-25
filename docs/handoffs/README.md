@@ -7,7 +7,7 @@ built-in cross-device resume (confirmed against the official Claude Code docs,
 therefore: **commit the state to the branch + leave a handoff doc, then check
 out the branch on the other surface and read it.**
 
-This directory holds those handoff docs. Unlike `.omc/plans/session-*.md`
+This directory holds those handoff docs. Unlike `.agent/plans/session-*.md`
 (which `/clear-prep` writes — gitignored, this-clone-only, for same-machine
 `/clear`), these are **tracked and pushed**, so they survive `git pull` on
 another machine.
@@ -35,7 +35,7 @@ Pulls, reads the handoff, restates the plan, and continues.
 
 | Situation | Use | Lands in |
 |---|---|---|
-| `/clear` and keep going on the **same machine** | `/clear-prep` | `.omc/plans/` (gitignored) |
+| `/clear` and keep going on the **same machine** | `/clear-prep` | `.agent/plans/` (gitignored) |
 | Continue on a **different surface** (web ↔ desktop ↔ CLI) | `/handoff` → `/resume` | `docs/handoffs/` (tracked) |
 
 They share the same doc-sync + validation discipline; only the destination and

@@ -103,4 +103,4 @@ source repo and verify.
 - `feedback_sshd_feature_options_silently_dropped.md` (project memory)
 - `feedback_use_tool_builtins.md` — sibling principle: research the
   tool's official docs before inventing custom logic
-- `.omc/wiki/feature-options-silently-dropped.md`
+- `.agent/wiki/feature-options-silently-dropped.md`

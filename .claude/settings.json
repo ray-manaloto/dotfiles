@@ -55,7 +55,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "mise run command-audit -- --output .omc/command-audit.md",
+            "command": "mise run command-audit -- --output .agent/command-audit.md",
             "timeout": 120
           }
         ]

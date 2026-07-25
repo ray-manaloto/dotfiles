@@ -39,7 +39,7 @@ Rules:
 
 ## Applies to
 
-- `.omc/research/**/*.md` — agent working research (gitignored by
+- `docs/research/runs/**/*.md` — agent working research (gitignored by
   default via per-clone exclude, but still subject to this rule inside
   the scratchpad for consistency).
 - `docs/research/**/*.md` — tracked research artifacts that ship in the
@@ -49,17 +49,17 @@ Rules:
 
 ## Not applies to
 
-- Plans (`.omc/plans/**`, `docs/research/plans/**`) — plans describe
+- Plans (`.agent/plans/**`, `docs/research/plans/**`) — plans describe
   intended work, not research findings.
-- Session handoffs (`.omc/plans/session-*.md`) — the repos touched are
+- Session handoffs (`.agent/plans/session-*.md`) — the repos touched are
   implied by the commits in the session.
 - Rule files, skill files, CLAUDE.md.
 
 ## Enforcement
 
 For tracked research artifacts, this rule is documented but not yet
-machine-enforced: `.omc/research/**` is gitignored at the per-clone
-level, so an hk grep-check on staged `.omc/research/*.md` files is a
+machine-enforced: `docs/research/runs/**` is gitignored at the per-clone
+level, so an hk grep-check on staged `docs/research/runs/*.md` files is a
 no-op in this repo. A future commit can add an hk step targeting
 `docs/research/**/*.md` when the first tracked research artifact lands;
 until then, this rule relies on reviewer enforcement.

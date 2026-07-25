@@ -91,7 +91,7 @@ before you believe it.
    into "unreachable". Either remove the bound or prove the target is inside it.
 
    **Display bounds count too — `ls … | tail -15` is a bound.** 2026-07-20: a
-   session ran `ls .omc/plans/ | tail -15`, did not see the handoff's
+   session ran `ls .agent/plans/ | tail -15`, did not see the handoff's
    designated "bible", and reported it **missing**. The file existed; `plan-*`
    simply sorts before `session-*` and fell outside the last 15 lines. `| head`,
    `| tail`, and a bare `ls` of a large directory are all display bounds.

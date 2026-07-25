@@ -55,7 +55,9 @@ def _full_settings() -> dict:
                 )
             ],
             "SessionEnd": [
-                _hook(None, "mise run command-audit -- --output .omc/command-audit.md")
+                _hook(
+                    None, "mise run command-audit -- --output .agent/command-audit.md"
+                )
             ],
         }
     }

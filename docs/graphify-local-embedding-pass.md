@@ -11,7 +11,7 @@ Modelled on **[Graphify-Labs/graphify#7](https://github.com/Graphify-Labs/graphi
 
 Everything below is grounded in probes against the installed 0.9.22 source and
 a live Ollama 0.32.1. Full archaeology:
-`.omc/kb/reports/agents/graphify-embedding-archaeology.md` (943 lines, with
+`docs/research/kb/reports/agents/graphify-embedding-archaeology.md` (943 lines, with
 file:line citations).
 
 ---
@@ -27,7 +27,7 @@ the *interesting* cross-cutting edges, an embedding pass finds the *exhaustive*
 ones. Both land in the same graph.
 
 > ⚠️ **But see §2.4 — our probe corpus cannot measure this.** The two documents
-> in `.omc/kb/probe/` are topically disjoint, so the correct cross-document edge
+> in `docs/research/kb/probe/` are topically disjoint, so the correct cross-document edge
 > count for that corpus is near zero and `1/15` may already be the ceiling. The
 > motivating number needs re-measuring on the full 137-document corpus before it
 > justifies any build.
@@ -140,7 +140,7 @@ number, or a cluster id.
 ### 2.2 Label-only embedding does not work — measured
 
 The exact experiment #7 proposes, run over the 16 nodes of
-`.omc/kb/graphs/bake-q25c/graphify-out/graph.json` with `embeddinggemma`
+`docs/research/kb/graphs/bake-q25c/graphify-out/graph.json` with `embeddinggemma`
 (120 pairs):
 
 | rank | cos | x-doc | pair |
@@ -218,7 +218,7 @@ worth proposing upstream on #7 independently.
 ### 2.4 ⚠️ The motivating metric is not measurable on the probe corpus
 
 Every threshold in both arms yields **zero** cross-document edges — and that is
-not a failure of the method. `.omc/kb/probe/` holds exactly two documents: a
+not a failure of the method. `docs/research/kb/probe/` holds exactly two documents: a
 YouTube transcript about Graphify + Obsidian, and a session log about Codex ↔
 NVIDIA NIM. **They are topically disjoint.** The true cross-document edge count
 for that corpus is at or near zero.
@@ -227,7 +227,7 @@ This has a consequence beyond this spec: the extraction bake-off has been
 ranking models on an `x-doc` column that **this corpus cannot express**.
 qwen2.5-coder's `1/15` is plausibly the ceiling, not a shortfall. Before either
 this pass or a model choice is justified by cross-document yield, re-measure on
-the full **137-document** corpus in `.omc/kb/raw/`.
+the full **137-document** corpus in `.agent/kb/raw/`.
 
 *(This is the probes-need-a-control-arm rule applied to a metric: a number that
 can only come out low is not evidence about the model.)*
@@ -449,8 +449,8 @@ mise run graph-embed                          # thin task wrapper
 ```
 
 ```bash
-mise run graph-embed -- --graph .omc/kb/graphs/<name>/graphify-out/graph.json \
-                        --corpus .omc/kb/raw \
+mise run graph-embed -- --graph docs/research/kb/graphs/<name>/graphify-out/graph.json \
+                        --corpus docs/research/kb/raw \
                         --model embeddinggemma \
                         --threshold <derived, §3.2> --top-k 5
 ```
@@ -483,7 +483,7 @@ that is the acceptance test.
    independently; do not let it gate us.
 3. **Whether this is worth building at all** until §2.4 is resolved. The
    motivating number (`1/15` cross-document edges) came from a corpus that
-   cannot express the metric. Re-measure on `.omc/kb/raw/` first.
+   cannot express the metric. Re-measure on `.agent/kb/raw/` first.
 
 ---
 
@@ -501,11 +501,11 @@ that is the acceptance test.
   SDK graphify uses for every backend including Ollama; named, source not read.
 - [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — this repo;
   its `graphify-out/graph.json` supplied the 3,157-node key census and
-  `.omc/kb/` supplied the probe corpus.
+  `docs/research/kb/` supplied the probe corpus.
 
 ## See also
 
-- `.omc/kb/reports/agents/graphify-embedding-archaeology.md` — the full
+- `docs/research/kb/reports/agents/graphify-embedding-archaeology.md` — the full
   archaeology with file:line citations and an explicit non-findings table.
 - `.claude/rules/probes-need-a-control-arm.md` — the rule §1.1 and §2.4 apply.
 - `.claude/rules/tool-currency-and-native-first.md` — why #7's asserted

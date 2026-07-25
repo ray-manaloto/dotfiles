@@ -104,7 +104,7 @@ def test_one_off_commands_denied_with_redirect(
         # A pager on a NON-gate command is ordinary diagnostics.
         "git log --oneline | head -5",
         "docker ps --filter label=x | tail -3",
-        "ls .omc/plans/ | tail -15",
+        "ls .agent/plans/ | tail -15",
         # The gate commands themselves, unpiped — the canonical form.
         # (`mise run lint` itself is already pinned above.)
         "uv run --project python pytest tests/ -x -q",

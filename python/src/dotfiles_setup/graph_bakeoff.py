@@ -607,7 +607,7 @@ def nim_provider_config() -> dict[str, Any]:
     submitted content, which is why NIM was vetted and NOT adopted for the real
     corpus. The gold corpus is **fictional**, so there is nothing confidential
     to leak — NIM is safe to benchmark on the gold set specifically, and still
-    wrong for ``.omc/kb/raw``.
+    wrong for ``docs/research/kb/raw``.
     """
     return {
         "nim": {

@@ -42,8 +42,16 @@ import "package://github.com/jdx/hk/releases/download/v1.52.0/hk@1.52.0#/Config.
 excludePaths: List<String> = List(
   "docs/research/mintlify-cache/**",
   "docs/research/trail/findings/**",
+  // Promoted out of `.omc/` on 2026-07-25. Excluded from ALL builtins for the
+  // same reason as the two research trees above — and here it is not merely
+  // convention but REQUIRED: `.claude/rules/agent-report-persistence.md` says
+  // a persisted agent report is kept VERBATIM. Running a typo-fixer or a
+  // whitespace normaliser over archived agent output would edit the record the
+  // rule exists to preserve. Authored docs under `docs/` are still checked.
+  "docs/research/runs/**",
+  "docs/research/kb/**",
   ".codex/**",
-  ".omc/**",
+  ".agent/**",
   ".omg/**",
   ".omx/**",
   ".logging/**",

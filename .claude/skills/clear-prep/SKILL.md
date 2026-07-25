@@ -49,7 +49,7 @@ gh pr list --head "$(git branch --show-current)" --json number,title,state 2>/de
 
 Note: current branch, staged/unstaged/untracked files, open PR + its CI state
 (`gh pr checks <n> --json name,state`), and any in-flight task from the prior
-`.omc/plans/session-*.md`.
+`.agent/plans/session-*.md`.
 
 Also inventory **session runtime state**: in-flight background tasks/agents
 and any scheduled wakeups or crons created this session. Stop what should not
@@ -156,8 +156,8 @@ file rather than duplicating; delete memories proven wrong.
 
 ### b. Local handoff (survives `/clear`; gitignored, this-clone-only)
 
-Write `.omc/plans/session-<YYYY-MM-DD>[-letter].md`
-(`.claude/rules/omc-directory-conventions.md` — handoffs are plans). The
+Write `.agent/plans/session-<YYYY-MM-DD>[-letter].md`
+(`.claude/rules/agent-artifact-conventions.md` — handoffs are plans). The
 handoff must be **self-sufficient** — the resume prompt (step 5) only points
 here, so *everything the next session needs lives in this file*. Include:
 **State at handoff** (branch/PR/merge state, gate results), **what shipped**,
@@ -169,7 +169,7 @@ overwriting.
 
 Full subagent reports must already be on disk per
 `.claude/rules/agent-report-persistence.md`: every findings-bearing agent's
-final report persisted VERBATIM under `.omc/research/<topic>/agents/` at the
+final report persisted VERBATIM under `docs/research/runs/<topic>/agents/` at the
 moment it was received — condensed notepad summaries do NOT count (near-loss
 observed 2026-07-05: 13 reports existed only in context until a manual
 round-2 pass). At clear-prep, audit coverage: enumerate every agent launched
@@ -188,9 +188,9 @@ uv run --project python pytest tests/ -x -q     # if python/ or tests/ touched
 dotfiles-setup verify run                       # if .devcontainer/ or contracts touched
 ```
 
-Stage specific paths (never `git add .` — phantom `.omc/state/**` files;
+Stage specific paths (never `git add .` — phantom `.agent/state/**` files;
 `.claude/rules/do-not.md`). Commit doc updates with the standard trailers.
-The handoff (`.omc/plans/`) is gitignored and memory lives outside the repo —
+The handoff (`.agent/plans/`) is gitignored and memory lives outside the repo —
 neither is committed. If on `main`, branch first; open a PR only if the user
 asks.
 
@@ -218,13 +218,13 @@ this skill exists to prevent.
 Print exactly this (single line, no extra sections):
 
 ```text
-Read and follow .omc/plans/session-<date>.md
+Read and follow .agent/plans/session-<date>.md
 ```
 
 At most, echo the task for the human's benefit on the same line:
 
 ```text
-Resume <task>: read and follow .omc/plans/session-<date>.md
+Resume <task>: read and follow .agent/plans/session-<date>.md
 ```
 
 Then a one-line reminder: *"Run `/clear`, paste that line, and the session
@@ -240,8 +240,8 @@ resumes from the handoff."*
 - [ ] Every doc affected by this session's changes updated; cross-refs grep-clean.
 - [ ] Repo-wide doc-ref sweep run (step 2.5); every MISSING hit fixed or justified in place.
 - [ ] `mise run lint` + `mise run lint-docs` green (class-aware `md_size_budget` + agnix AGM-003); at-limit files flagged in the handoff.
-- [ ] Every findings-bearing agent report persisted verbatim under `.omc/kb/reports/agents/`; coverage audited.
+- [ ] Every findings-bearing agent report persisted verbatim under `docs/research/kb/reports/agents/`; coverage audited.
 - [ ] Durable memory written + `MEMORY.md` pointer added.
-- [ ] Local handoff written under `.omc/plans/` and self-verified (paths, file:line, task names, gate rcs).
+- [ ] Local handoff written under `.agent/plans/` and self-verified (paths, file:line, task names, gate rcs).
 - [ ] Relevant local gate green; doc commit made (if appropriate).
 - [ ] Resume prompt printed for the user to paste after `/clear`.

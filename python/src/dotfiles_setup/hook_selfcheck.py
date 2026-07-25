@@ -60,7 +60,7 @@ _HOOK_SCRIPTS = (_PRETOOLUSE_WRAPPER, _WEB_SETUP)
 # end reasons (clear/logout/resume/...) — it must fire on all of them, hence
 # None. Deliberately NOT a `Stop` hook: Stop fires every turn and can block,
 # which would put a transcript scan on the per-turn path.
-_SESSION_END_REPORT = ".omc/command-audit.md"
+_SESSION_END_REPORT = ".agent/command-audit.md"
 _SETTINGS_WIRING: tuple[tuple[str, tuple[str, ...], str | None], ...] = (
     ("PreToolUse", (_PRETOOLUSE_WRAPPER,), "Bash"),
     ("SessionStart", (_WEB_SETUP, "CLAUDE_CODE_REMOTE"), None),

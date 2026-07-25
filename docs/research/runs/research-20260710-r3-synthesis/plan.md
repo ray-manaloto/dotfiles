@@ -1,7 +1,7 @@
 # r3 Phased Implementation Plan
 
 Supersedes the automation/knowledge portions of
-`.omc/plans/plan-20260710-r2-implementation.md`. Derived from the r3 synthesis
+`.agent/plans/plan-20260710-r2-implementation.md`. Derived from the r3 synthesis
 (`./report.md`) and the five r3 domain reports. Ordering is by dependency, not
 importance: each phase unblocks the next.
 
@@ -152,7 +152,7 @@ Decoupled from Phases 0-3; needs no approval to start the subagent half.
 
 ## Cross-cutting: the tracked-path migration
 
-r2 research lives under `.omc/research/**` (not visible on `git pull main`). r3
+r2 research lives under `docs/research/runs/**` (not visible on `git pull main`). r3
 already lands under the tracked `docs/research/runs/**`. **Migrate the r2
 artifacts** to `docs/research/runs/` (or leave them and index from there) so a
 fresh clone — and any librarian subagent (Phase 4) — can index the full corpus.

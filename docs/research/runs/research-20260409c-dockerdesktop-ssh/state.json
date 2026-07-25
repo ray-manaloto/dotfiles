@@ -1,0 +1,24 @@
+{
+  "id": "research-20260409c-dockerdesktop-ssh",
+  "goal": "Runtime pivot research: Docker Desktop on macOS Apple Silicon for issue #77 rescope",
+  "status": "complete",
+  "mode": "standard",
+  "iteration": 1,
+  "stages": [
+    {"id": 1, "name": "Docker Desktop ssh-agent canonical path", "tier": "HIGH", "status": "complete"},
+    {"id": 2, "name": "Custom proxy deletion feasibility", "tier": "HIGH", "status": "complete"},
+    {"id": 3, "name": "Docker Desktop bind-mount propagation + inotify", "tier": "MEDIUM", "status": "complete"},
+    {"id": 4, "name": "R1 inbound sshd feature alternatives", "tier": "MEDIUM", "status": "complete"},
+    {"id": 5, "name": "Colima/Lima follow-up scope", "tier": "LOW", "status": "complete"}
+  ],
+  "verification": {
+    "status": "passed",
+    "method": "live-probe",
+    "evidence": "docker run --rm -v /run/host-services/ssh-auth.sock:/tmp/ssh-agent -e SSH_AUTH_SOCK=/tmp/ssh-agent alpine ssh-add -l -> EXIT=0, listed ED25519 key",
+    "completedAt": "2026-04-09T15:55:00Z"
+  },
+  "verdict": "DELETE_PROXY",
+  "verdictConfidence": "HIGH",
+  "createdAt": "2026-04-09T15:30:00Z",
+  "updatedAt": "2026-04-09T15:55:00Z"
+}

@@ -120,7 +120,7 @@ tokens = [
 
 [[suite]]
 name = "build.ssh-r1-inbound-wired"
-description = "R1 INBOUND: ssh ${USER}@localhost -p 4444 opens a shell in the container. Requires: (1) the ghcr.io/devcontainers/features/sshd feature (provides openssh-server, internal port 2222 hardcoded); (2) appPort mapping ${DEVCONTAINER_SSH_PORT}:2222; (3) postCreateCommand copies /tmp/dotfiles-host-state/authorized_keys into ~/.ssh/authorized_keys. DO NOT DROP — see AGENTS.md SSH Requirements section and .omc/plans/session-2026-04-09-ssh-rewrite.md."
+description = "R1 INBOUND: ssh ${USER}@localhost -p 4444 opens a shell in the container. Requires: (1) the ghcr.io/devcontainers/features/sshd feature (provides openssh-server, internal port 2222 hardcoded); (2) appPort mapping ${DEVCONTAINER_SSH_PORT}:2222; (3) postCreateCommand copies /tmp/dotfiles-host-state/authorized_keys into ~/.ssh/authorized_keys. DO NOT DROP — see AGENTS.md SSH Requirements section and .agent/plans/session-2026-04-09-ssh-rewrite.md."
 category = "build"
 check_type = "static"
 handler = "require_tokens"
@@ -133,7 +133,7 @@ tokens = [
 
 [[suite]]
 name = "build.ssh-r2-outbound-native-docker-desktop-wired"
-description = "R2 OUTBOUND: ssh -T git@github.com inside the container reaches the host launchd SSH agent via Docker Desktop's native /run/host-services/ssh-auth.sock magic socket. Requires: (1) devcontainer.json bind-mounts /run/host-services/ssh-auth.sock; (2) containerEnv.SSH_AUTH_SOCK points at /run/host-services/ssh-auth.sock; (3) initializeCommand still writes authorized_keys (for R1 orthogonally). Research: .omc/research/research-20260409c-dockerdesktop-ssh/report.md. Runtime pin: Docker Desktop only — Colima has no equivalent (abiosoft/colima#1330, #942), tracked for follow-up in issue #78."
+description = "R2 OUTBOUND: ssh -T git@github.com inside the container reaches the host launchd SSH agent via Docker Desktop's native /run/host-services/ssh-auth.sock magic socket. Requires: (1) devcontainer.json bind-mounts /run/host-services/ssh-auth.sock; (2) containerEnv.SSH_AUTH_SOCK points at /run/host-services/ssh-auth.sock; (3) initializeCommand still writes authorized_keys (for R1 orthogonally). Research: docs/research/runs/research-20260409c-dockerdesktop-ssh/report.md. Runtime pin: Docker Desktop only — Colima has no equivalent (abiosoft/colima#1330, #942), tracked for follow-up in issue #78."
 category = "build"
 check_type = "static"
 handler = "require_tokens"
@@ -1169,7 +1169,7 @@ tokens = [
 
 [[suite]]
 name = "workflow.command-audit-wiring"
-description = "Command-audit self-learning loop wiring: `mise run command-audit` must stay a thin caller of the python library (`dotfiles-setup command-audit`, zero-bash-logic), the command_audit module (transcript scan + classifier) + its tests must exist, and the rule doc must name the loop. The scanner is the inverse of fewer-permission-prompts — it flags one-off Bash commands the PreToolUse guard does not yet cover, so the enforcement layers can be refined over time. The loop is RECURRING: a SessionEnd hook in .claude/settings.json refreshes .omc/command-audit.md via --output once per session (SessionEnd fires once per session and cannot block — unlike Stop, which fires per-turn and can block), hook_selfcheck asserts that wiring, and .gitignore keeps the report local. Also pins the two axes that make the alarm mean anything (measured 2026-07-14: of 155 rule-matching commands, 147 predated their rule, 3 were denials, 0 were bypasses): every hook_guard Rule carries a `since` landing date (without it classify() reads every match as history and the bypass alarm goes dark), and _executed_ids pairs each attempt to its result (a transcript records a denied Bash call identically to an executed one, so denial and evasion are indistinguishable without it). Asserts the chain so the loop can't silently drift out."
+description = "Command-audit self-learning loop wiring: `mise run command-audit` must stay a thin caller of the python library (`dotfiles-setup command-audit`, zero-bash-logic), the command_audit module (transcript scan + classifier) + its tests must exist, and the rule doc must name the loop. The scanner is the inverse of fewer-permission-prompts — it flags one-off Bash commands the PreToolUse guard does not yet cover, so the enforcement layers can be refined over time. The loop is RECURRING: a SessionEnd hook in .claude/settings.json refreshes .agent/command-audit.md via --output once per session (SessionEnd fires once per session and cannot block — unlike Stop, which fires per-turn and can block), hook_selfcheck asserts that wiring, and .gitignore keeps the report local. Also pins the two axes that make the alarm mean anything (measured 2026-07-14: of 155 rule-matching commands, 147 predated their rule, 3 were denials, 0 were bypasses): every hook_guard Rule carries a `since` landing date (without it classify() reads every match as history and the bypass alarm goes dark), and _executed_ids pairs each attempt to its result (a transcript records a denied Bash call identically to an executed one, so denial and evasion are indistinguishable without it). Asserts the chain so the loop can't silently drift out."
 category = "workflow"
 check_type = "static"
 handler = "require_tokens"
@@ -1186,7 +1186,7 @@ paths = [
     "tests/test_hook_guard.py",
     ".claude/rules/mise-tasks-only.md",
 ]
-per_path_tokens = { "mise.toml" = ["[tasks.command-audit]", "dotfiles-setup command-audit"], "python/src/dotfiles_setup/command_audit.py" = ["def command_audit_main", "def classify", "def iter_bash_commands", "def write_report", "def _executed_ids"], "python/src/dotfiles_setup/hook_guard.py" = ["class Rule", "since: str", "def match"], "python/src/dotfiles_setup/main.py" = ["command-audit", "--output"], "python/src/dotfiles_setup/hook_selfcheck.py" = ["SessionEnd", "_SESSION_END_REPORT"], ".claude/settings.json" = ["SessionEnd", "mise run command-audit -- --output .omc/command-audit.md"], ".gitignore" = [".omc/command-audit.md"], "tests/test_command_audit.py" = ["def test_main_output_writes_file_instead_of_stdout", "def test_iter_bash_commands_pairs_results_to_attempts"], "tests/test_hook_guard.py" = ["def test_every_rule_carries_a_usable_since_date"], ".claude/rules/mise-tasks-only.md" = ["mise run command-audit", "SessionEnd", "since"] }
+per_path_tokens = { "mise.toml" = ["[tasks.command-audit]", "dotfiles-setup command-audit"], "python/src/dotfiles_setup/command_audit.py" = ["def command_audit_main", "def classify", "def iter_bash_commands", "def write_report", "def _executed_ids"], "python/src/dotfiles_setup/hook_guard.py" = ["class Rule", "since: str", "def match"], "python/src/dotfiles_setup/main.py" = ["command-audit", "--output"], "python/src/dotfiles_setup/hook_selfcheck.py" = ["SessionEnd", "_SESSION_END_REPORT"], ".claude/settings.json" = ["SessionEnd", "mise run command-audit -- --output .agent/command-audit.md"], ".gitignore" = [".agent/command-audit.md"], "tests/test_command_audit.py" = ["def test_main_output_writes_file_instead_of_stdout", "def test_iter_bash_commands_pairs_results_to_attempts"], "tests/test_hook_guard.py" = ["def test_every_rule_carries_a_usable_since_date"], ".claude/rules/mise-tasks-only.md" = ["mise run command-audit", "SessionEnd", "since"] }
 tokens = [
     "dotfiles-setup command-audit",
     "def command_audit_main",
@@ -1248,7 +1248,7 @@ tokens = ["GIT_CONFIG_KEY_0: init.defaultBranch"]
 #
 # The design test each of these answers: for every line of config that asserts
 # a behaviour, name the thing that would go red if the behaviour stopped.
-# Design: `.omc/specs/eval-harness-design.md` §4 tier 0.
+# Design: `docs/specs/eval-harness-design.md` §4 tier 0.
 # =============================================================================
 
 [[suite]]
