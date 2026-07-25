@@ -287,10 +287,16 @@ def gate_matrix(paths: list[str]) -> list[Gate]:
             "hook-selfcheck",
             ("uv", "run", "--project", "python", "dotfiles-setup", "hook", "selfcheck"),
         ),
-        # Tier-1 reachability (#354 PR 2). Always-run and free: the offline set
-        # spends no API calls, and it catches the class tier 0 structurally
-        # cannot — a declaration that is present and does not resolve. Its live
+        # Tiers 1+2 (#354 PR 2/PR 3). Always-run and free: the offline set spends
+        # no API calls, and it catches the classes tier 0 structurally cannot — a
+        # declaration that is present and does not resolve (tier 1), and a guard
+        # that is declared and wired and still decides wrongly (tier 2). Its live
         # half stays on demand (`mise run eval -- --live`).
+        #
+        # The `hook-selfcheck` gate above STAYS and is not superseded: it answers
+        # "is the guard WIRED?", the precondition for tier 2's "does the wired
+        # guard DECIDE correctly?". Ordered first so a wiring break fails fast
+        # with a clear message instead of a wall of fixture mismatches.
         Gate("eval", ("mise", "run", "eval")),
     ]
     if any(_matches_any(p, _GHA_PATTERNS) for p in paths):

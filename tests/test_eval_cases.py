@@ -1,4 +1,4 @@
-"""Tests for this repo's tier-1 eval cases (dotfiles_setup.eval_cases, #354 PR 2).
+"""Tests for this repo's eval cases (dotfiles_setup.eval_cases, #354 PR 2/PR 3).
 
 The runner (`kb_setup.evals`) is tested in the knowledge-base repo, where it
 lives. What is ours to test is the CASES — and specifically that every gated one
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
-from dotfiles_setup import eval_cases
+from dotfiles_setup import eval_cases, hook_guard
 from kb_setup import evals
 
 _ROOT = Path(__file__).parent.parent.absolute()
@@ -63,6 +63,7 @@ def test_the_expected_cases_are_declared() -> None:
         "tier1.shared-engine-resolves",
         "tier1.graph-answers",
         "tier1.lane-health",
+        "tier2.guard-fixtures",
     }
 
 
@@ -148,6 +149,78 @@ def test_the_precondition_skips_when_graphify_is_absent(
 
     monkeypatch.setattr(eval_cases.shutil, "which", lambda _name: "/usr/bin/graphify")
     assert case.precondition() is None
+
+
+# --- the tier-2 fixture corpus ------------------------------------------------
+
+
+def _fixtures(expected: evals.Decision) -> set[str]:
+    return {f.command for f in eval_cases.GUARD_FIXTURES if f.expected is expected}
+
+
+def test_the_guard_corpus_carries_both_halves() -> None:
+    """Stated at commit time as well as enforced in the engine at run time.
+
+    The must-ALLOW half is not symmetry for its own sake: bypasses of this guard
+    are all-time ZERO while 2 of its 3 recorded denials were false positives, so
+    a deny-only corpus would grade only the direction that has never failed.
+    """
+    assert _fixtures(evals.Decision.DENY), "no must-DENY rows"
+    assert _fixtures(evals.Decision.ALLOW), "no must-ALLOW rows"
+
+
+def test_every_fixture_row_says_what_it_defends() -> None:
+    """A row whose `why` is empty is a string nobody can maintain."""
+    silent = [f.command for f in eval_cases.GUARD_FIXTURES if not f.why.strip()]
+    assert silent == [], f"fixture rows with no stated reason: {silent}"
+
+
+def test_no_duplicate_fixture_commands() -> None:
+    """A duplicated row inflates the corpus without adding coverage."""
+    commands = [f.command for f in eval_cases.GUARD_FIXTURES]
+    assert len(commands) == len(set(commands))
+
+
+def test_the_only_measured_defect_class_is_pinned_as_an_allow_row() -> None:
+    """#265 verbatim: a `|` inside a quoted regex is not a shell separator.
+
+    Pinned by content rather than by count, because a future edit that drops it
+    would otherwise silently remove the row standing on the only defect this
+    guard has ever actually had.
+    """
+    assert 'grep -iE "npx|devcontainer up|gh pr create" docs/' in _fixtures(
+        evals.Decision.ALLOW
+    )
+
+
+def test_the_repo_aware_gh_rules_are_pinned_in_all_three_directions() -> None:
+    """Dotfiles denies, knowledge-base denies, any OTHER repo allows.
+
+    All three are load-bearing and only the third is obvious in hindsight: the
+    unconditional rules that preceded them redirected a KB PR to `mise run
+    land`, a dotfiles task that cannot do the job, and KB PRs #1 and #2 had to
+    be merged by hand (#349). A deny whose redirect target cannot perform the
+    redirected action is not enforcement, it is an outage.
+    """
+    deny, allow = _fixtures(evals.Decision.DENY), _fixtures(evals.Decision.ALLOW)
+    assert "gh pr create --fill" in deny
+    assert "gh pr create -R ray-manaloto/knowledge-base --fill" in deny
+    assert "gh pr create -R some-other/repo --fill" in allow
+
+
+def test_every_denied_fixture_names_a_redirect() -> None:
+    """A deny with no redirect is a wall, not a guard.
+
+    Reached through the real `decide`, so this also proves every deny row still
+    matches a rule at all — the reason string comes from the matched rule.
+    """
+    silent = [
+        f.command
+        for f in eval_cases.GUARD_FIXTURES
+        if f.expected is evals.Decision.DENY
+        and not (hook_guard.decide(f.command) or "").strip()
+    ]
+    assert silent == [], f"denied with no reason: {silent}"
 
 
 def test_the_real_offline_run_is_green_on_this_tree() -> None:
