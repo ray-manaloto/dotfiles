@@ -1049,6 +1049,26 @@ tokens = [
 ]
 
 [[suite]]
+name = "eval.tier1-runner-wiring"
+description = "Tier-1 eval wiring (#354 PR 2). Tier 0 asks whether a thing is DECLARED; tier 1 asks whether it RESOLVES, and the gap between those is exactly what #354 cost — a lane named in doctrine, in both repos, with a passing contract, whose CLI is not installed. This contract asserts the whole chain exists so tier 1 cannot silently stop running: the `eval` mise task, the CLI subcommand, this repo's cases module, its tests, and the `Gate(\"eval\")` entry that puts it in the ship gates. The RUNNER is deliberately NOT bound here — it is `kb_setup.evals`, lives in the knowledge-base repo, and is covered by ITS tests; naming a path outside this tree could only ever fail (`paths_required` is strict, #299). What binds it instead is the SHA-pinned kb-setup dependency plus the `tier1.shared-engine-resolves` case, which imports it at run time. Same shape as `workflow.md-budget-enforcement`: bind the seam that survives here."
+category = "eval"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    "mise.toml",
+    "python/src/dotfiles_setup/main.py",
+    "python/src/dotfiles_setup/eval_cases.py",
+    "python/src/dotfiles_setup/pr.py",
+    "python/pyproject.toml",
+    "tests/test_eval_cases.py",
+]
+per_path_tokens = { "mise.toml" = ["[tasks.eval]", "dotfiles-setup eval"], "python/src/dotfiles_setup/main.py" = ["def handle_eval", "\"eval\": lambda"], "python/src/dotfiles_setup/eval_cases.py" = ["def cases", "DECLARED_LANES", "control="], "python/src/dotfiles_setup/pr.py" = ["Gate(\"eval\"", "\"mise\", \"run\", \"eval\""], "python/pyproject.toml" = ["kb-setup @ git+https://github.com/ray-manaloto/knowledge-base@"], "tests/test_eval_cases.py" = ["test_every_control_arm_actually_fails"] }
+tokens = [
+    "dotfiles-setup eval",
+]
+
+[[suite]]
 name = "workflow.bash-logic-enforcement"
 description = "Zero-bash-logic policy wiring: the `bash_logic_budget` hk step must stay wired to the python enforcer end-to-end — hk.pkl shells out to `dotfiles-setup bash-budget`, main.py registers the subcommand, the bash_budget module (allowlist + per-file growth budget) + its tests exist, and the rule doc records the policy. The check LOGIC lives in python so the enforcer does not itself violate the policy it enforces; this contract asserts the whole chain so it can't drift out."
 category = "workflow"

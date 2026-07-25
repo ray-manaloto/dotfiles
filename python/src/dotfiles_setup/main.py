@@ -11,6 +11,8 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from kb_setup import evals
+
 from dotfiles_setup.ai import AIOrchestrator
 from dotfiles_setup.apt_pins import apt_pins_main
 from dotfiles_setup.apt_repo import LLVM_DEV, RepoQuery, apt_repo_main
@@ -27,6 +29,7 @@ from dotfiles_setup.doc_refs import (
     find_unresolved_task_refs,
 )
 from dotfiles_setup.docker import DevContainerManager
+from dotfiles_setup.eval_cases import cases as eval_cases_for
 from dotfiles_setup.gcc_sha import gcc_sha_main
 from dotfiles_setup.ghcr import validate_ghcr_prereqs
 from dotfiles_setup.ghcr_cleanup import plan_cleanup
@@ -168,6 +171,19 @@ def _add_consistency_subcommands(subparsers: _SubParsers) -> None:
         default=None,
         help="knowledge-base repo root; defaults to $KB_REPO_PATH, then the "
         "sibling directory beside this repo",
+    )
+    eval_parser = subparsers.add_parser(
+        "eval",
+        help="Tier-1 eval (#354 PR 2): tier 0 asks whether a thing is DECLARED, "
+        "this asks whether it RESOLVES — lanes, the shared engine, and the "
+        "graph. Offline and gated; every gated case must carry a control arm "
+        "that fails, or the runner refuses to count it",
+    )
+    eval_parser.add_argument(
+        "--live",
+        action="store_true",
+        help="also run the fable-orchestrator plugin's doctor.sh, which has no "
+        "offline mode and spends one real API call per installed lane CLI",
     )
 
 
@@ -1073,6 +1089,17 @@ def handle_parity(args: argparse.Namespace, project_root: Path) -> None:
     sys.exit(rc)
 
 
+def handle_eval(args: argparse.Namespace, project_root: Path) -> None:
+    """Handle eval: run this repo's tier-1 cases through the SHARED runner.
+
+    The runner is ``kb_setup.evals`` — one implementation, both repos, consumed
+    as the SHA-pinned ``kb-setup`` dependency. Only the cases are ours.
+    """
+    rc, report = evals.run(eval_cases_for(project_root), live=args.live)
+    sys.stdout.write(report + "\n")
+    sys.exit(rc)
+
+
 def handle_ghcr_cleanup(args: argparse.Namespace) -> None:
     """Handle ghcr-cleanup: print the retention plan (never deletes itself).
 
@@ -1215,6 +1242,7 @@ def _build_command_handlers(
         "ghcr-cleanup": lambda: handle_ghcr_cleanup(args),
         "check-doc-refs": lambda: handle_check_doc_refs(project_root),
         "parity": lambda: handle_parity(args, project_root),
+        "eval": lambda: handle_eval(args, project_root),
         "gcc-sha": lambda: sys.exit(gcc_sha_main(project_root, check=args.check)),
         "apt-repo": lambda: sys.exit(handle_apt_repo(args)),
         "apt-pins": lambda: sys.exit(

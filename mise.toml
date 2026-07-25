@@ -885,6 +885,17 @@ description = "Assert the declared cross-repo shared set (parity.toml) holds in 
 # python/src/dotfiles_setup/parity.py for why that asymmetry is the point.
 run = "uv run --project python dotfiles-setup parity"
 
+[tasks.eval]
+description = "Tier-1 eval: does what we DECLARE actually RESOLVE? (offline, gated; `-- --live` adds the lane doctor)"
+# Tier 0 is suites.toml (`orchestration.*` / `eval.*`) — is it DECLARED? This is
+# tier 1 — does it RESOLVE? Different questions: a lane can be named in doctrine,
+# in both repos, with a passing contract, while its CLI is absent (#354).
+# Offline by default so it joins the ship gates for free. `--live` shells out to
+# the fable-orchestrator plugin's doctor.sh, which has NO offline mode and spends
+# one real API call per installed lane. Runner is the SHARED kb_setup.evals;
+# this repo's cases are dotfiles_setup.eval_cases.
+run = "uv run --project python dotfiles-setup eval"
+
 [tasks.lint-docs]
 description = "Validate agent documentation"
 # --strict: warnings-as-errors (#250) — parity with ci.yml + the hk agnix step.
