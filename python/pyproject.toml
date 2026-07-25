@@ -17,13 +17,16 @@ dependencies = [
     "pyyaml>=6.0.3",
     # The SHARED engines (D2/G4: one implementation, never a second copy that
     # drifts). Two live here now: tool-currency (dotfiles' tool_currency.py was
-    # deleted) and md_budget (dotfiles' md_budget.py + tests deleted 2026-07-25;
-    # the `md_size_budget` hk step shells out to `kb-setup md-budget`).
+    # deleted), md_budget (dotfiles' md_budget.py + tests deleted 2026-07-25; the
+    # `md_size_budget` hk step shells out to `kb-setup md-budget`), and the tier-1
+    # eval runner (`kb_setup.evals`; this repo declares its own cases in
+    # dotfiles_setup.eval_cases). THREE gates now ride this pin, which is why
+    # tier1.shared-engine-resolves probes that it actually imports.
     # SHA-PINNED (D3) so it is reproducible on a clean CI runner and via uv.lock;
     # neither repo has tags, so a SHA is the only stable pin. Renovate's git-refs
     # datasource bumps this the same way it bumps CLANG_P2996_REF. Dependency
     # direction is dotfiles → KB only; the KB never learns about its consumers.
-    "kb-setup @ git+https://github.com/ray-manaloto/knowledge-base@3bb49a8cdecc972ceed73e8926b92d48e3f60b7f",
+    "kb-setup @ git+https://github.com/ray-manaloto/knowledge-base@bc69caa769fde443542e6893f8a5075beb5ae55b",
 ]
 
 [project.scripts]

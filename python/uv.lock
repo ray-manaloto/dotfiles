@@ -41,7 +41,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "kb-setup", git = "https://github.com/ray-manaloto/knowledge-base?rev=3bb49a8cdecc972ceed73e8926b92d48e3f60b7f" },
+    { name = "kb-setup", git = "https://github.com/ray-manaloto/knowledge-base?rev=bc69caa769fde443542e6893f8a5075beb5ae55b" },
     { name = "pydantic", specifier = ">=2.12.5" },
     { name = "pydantic-settings", specifier = ">=2.14.2" },
     { name = "python-debian", specifier = ">=1.1.1" },
@@ -67,7 +67,7 @@ wheels = [
 [[package]]
 name = "kb-setup"
 version = "0.1.0"
-source = { git = "https://github.com/ray-manaloto/knowledge-base?rev=3bb49a8cdecc972ceed73e8926b92d48e3f60b7f#3bb49a8cdecc972ceed73e8926b92d48e3f60b7f" }
+source = { git = "https://github.com/ray-manaloto/knowledge-base?rev=bc69caa769fde443542e6893f8a5075beb5ae55b#bc69caa769fde443542e6893f8a5075beb5ae55b" }
 
 [[package]]
 name = "packaging"

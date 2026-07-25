@@ -287,6 +287,11 @@ def gate_matrix(paths: list[str]) -> list[Gate]:
             "hook-selfcheck",
             ("uv", "run", "--project", "python", "dotfiles-setup", "hook", "selfcheck"),
         ),
+        # Tier-1 reachability (#354 PR 2). Always-run and free: the offline set
+        # spends no API calls, and it catches the class tier 0 structurally
+        # cannot — a declaration that is present and does not resolve. Its live
+        # half stays on demand (`mise run eval -- --live`).
+        Gate("eval", ("mise", "run", "eval")),
     ]
     if any(_matches_any(p, _GHA_PATTERNS) for p in paths):
         gates.append(Gate("pin-actions", ("mise", "run", "pin-actions")))
