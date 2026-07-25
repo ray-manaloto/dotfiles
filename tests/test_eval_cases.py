@@ -14,6 +14,10 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
@@ -111,6 +115,39 @@ def test_the_shared_engine_probe_names_what_is_missing() -> None:
     outcome = case.control()
     assert outcome.verdict is evals.Verdict.FAIL
     assert "kb_setup.definitely_not_a_module" in outcome.detail
+
+
+def test_the_graph_case_declares_an_environment_precondition() -> None:
+    """Graphify is HOST-ONLY here, so the canary cannot run in the devcontainer.
+
+    Without this the case failed in-container with `rc=-2, No such file or
+    directory: 'graphify'` and took the whole postCreate smoke down — caught by
+    `sync-full`, which is the reason this test exists rather than a comment.
+    """
+    case = next(c for c in _cases() if c.name == "tier1.graph-answers")
+    assert case.precondition is not None
+
+
+def test_the_precondition_skips_when_graphify_is_absent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Both arms of the environment gate, since it decides whether a gate runs.
+
+    A precondition that could only ever return None would silently reintroduce
+    the in-container failure; one that could only ever skip would disable the
+    case everywhere, which is worse than not having it.
+    """
+    case = next(c for c in _cases() if c.name == "tier1.graph-answers")
+    assert case.precondition is not None
+
+    monkeypatch.setattr(eval_cases.shutil, "which", lambda _name: None)
+    gate = case.precondition()
+    assert gate is not None
+    assert gate.verdict is evals.Verdict.SKIP
+    assert "host-only" in gate.detail
+
+    monkeypatch.setattr(eval_cases.shutil, "which", lambda _name: "/usr/bin/graphify")
+    assert case.precondition() is None
 
 
 def test_the_real_offline_run_is_green_on_this_tree() -> None:

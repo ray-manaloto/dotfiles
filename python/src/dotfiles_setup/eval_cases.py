@@ -21,6 +21,7 @@ genuinely broken fixture and drive the same code path against it.
 from __future__ import annotations
 
 import importlib
+import shutil
 import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -86,6 +87,28 @@ def _broken_doctor() -> evals.Outcome:
         return evals.doctor_health(script, timeout=30)
 
 
+def _graphify_installed() -> evals.Outcome | None:
+    """Environment gate: graphify is HOST-ONLY, so the canary cannot run in-container.
+
+    Found by `sync-full` (the devcontainer smoke): inside the container this
+    case failed with `rc=-2, No such file or directory: 'graphify'` and took
+    the whole postCreate run with it. That is "does not apply here", not "the
+    graph is broken".
+
+    It must be a PRECONDITION, not a SKIP inside the probe: the control arm
+    drives the same code path, so it would skip too, and the runner would
+    correctly mark the case UNARMED and turn the run red. The precondition is
+    evaluated BEFORE the control-arm rule for exactly this reason.
+    """
+    if shutil.which("graphify") is None:
+        return evals.skip(
+            "graphify is not installed in this environment — it is host-only in "
+            "this repo (mise.toml), so the canary cannot look, which is not the "
+            "same as the graph having nothing to say"
+        )
+    return None
+
+
 def cases(repo_root: Path, *, doctor_script: Path | None = None) -> list[evals.Case]:
     """Build this repo's tier-1 cases."""
     doctor = doctor_script if doctor_script is not None else DOCTOR_SCRIPT
@@ -130,6 +153,7 @@ def cases(repo_root: Path, *, doctor_script: Path | None = None) -> list[evals.C
             ),
             probe=lambda: evals.graphify_canary(repo_root, CANARY_QUESTION),
             control=_broken_graph_canary,
+            precondition=_graphify_installed,
         ),
         evals.Case(
             name="tier1.lane-health",
