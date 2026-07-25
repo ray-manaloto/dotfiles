@@ -448,8 +448,9 @@ process to switch on.
 ## 6. Acceptance — the single command
 
 ```
-mise run eval            # deterministic, free, GATE
+mise run eval            # deterministic, free, fast, GATE
 mise run eval -- --live  # + tier 1 live lane checks (one tiny API call per installed lane)
+mise run eval -- --slow  # + the KB golden retrieval set (~3 min, free, ADVISORY)  [KB only]
 mise run eval -- --model # + tier 3, N runs, advisory, costs calls          [not built]
 mise run eval-report     # tier 4 mining → upserts the standing issue       [not built]
 ```
@@ -483,7 +484,7 @@ overall: `verify run` for declaration contracts, `eval` for probes and fixtures.
 | 1 | `require_lines` handler + the 6 `orchestration.*` / `eval.*` contracts | 0 | low | **SHIPPED** — dotfiles#361 (8 contracts, not 6; see §9) |
 | 2 | `mise run eval` runner + reachability probes + `doctor.sh` shim | 1 | low | **SHIPPED** — KB#25 (runner) + KB#26 (precondition) + dotfiles#363 (cases) |
 | 3 | guard fixture corpus (both directions), BOTH repos' guards; `hook_selfcheck` stays | 2 | low | **SHIPPED** — KB#29 (engine + 32-row corpus + a guard fix it found) + dotfiles (40-row corpus + `eval.tier2-fixture-wiring`) |
-| 4 | KB golden retrieval set + recall@K (KB repo; pairs with KB #12 P0) | 2 | med | **next** |
+| 4 | KB golden retrieval set + recall@K (KB repo; pairs with KB #12 P0) | 2 | med | **SHIPPED** — KB#30 (8 pairs + both negatives, advisory, `--slow`); first measurement in §9 |
 | 5 | held-out trigger sets + headless runner + Wilson CI | 3 | med | |
 | 6 | phase-compliance mining (needs dotfiles #356 first) | 4 | med | |
 
@@ -552,3 +553,46 @@ Recorded so the next reader can tell a corrected claim from an original one:
 - [mar3co/fable-orchestrator](https://github.com/mar3co/fable-orchestrator) — installed v1.14.0 `scripts/doctor.sh`, `commands/doctor.md`, `skills/orchestration/SKILL.md`, agent descriptions; native lane-health checks and the permission-canary pattern.
 - [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — `suites.toml`, `verify.py`, `hook_guard.py`, `hook_selfcheck.py`, `command_audit.py`.
 - [ray-manaloto/knowledge-base](https://github.com/ray-manaloto/knowledge-base) — `orchestrator-routing/SKILL.md`, `kb_setup/brain.py`, `brain/**`.
+
+### 2026-07-25 revision (PR 4 shipped)
+
+| § | change | why |
+|---|---|---|
+| 4, tier 2 | (b) SHIPPED as knowledge-base#30, exactly to the locked scope | advisory, measurement-only, live graph + `precondition` SKIP, 8 hand-written pairs, its own flag, printed only |
+| 6 | acceptance gains `mise run eval -- --slow` | a THIRD cost axis, distinct from `--live`: free but ~3 minutes (18 queries, each reloading a ~350 MB graph). Collapsing it into `--live` would make one flag silently buy the other |
+| 4, tier 2 | the golden set's structural rules are machine-enforced, mirroring the guard table's | a set with no ABSENT row is a hard FAIL (else a retriever returning the whole corpus scores perfectly); so is a half-pair, and so is a pair whose halves declare different targets or `k` — their difference would be noise, not a gap |
+| 4, tier 2 | targets are SOURCE DOCUMENTS, not node ids | this graph's ids are 300+ characters of repeated repo name and are never printed by `graphify query`; the source file is stable, printed, and is what a prose chunk's identity actually is |
+| 4, tier 2 | **two** negatives, not one | the spec's off-topic negative can essentially only pass under exact matching. A NEAR-MISS target (`cerebras-knowledge-base-v2.md`, one token from a real source) is the one a sloppy substring matcher fails — the realistic mutation, per `probes-need-a-control-arm.md` |
+
+**The first measurement** (128,333 nodes, graph built 2026-07-24, graphify
+0.9.25; three runs — via `mise`, via `uv`, and again after the review fix —
+all identical):
+
+| phrasing | pairs that scored | mean recall@10 |
+|---|---|---|
+| natural | **1 of 8** | 0.12 |
+| label-echoing twin | **7 of 8** | 0.88 |
+
+Both ABSENT rows returned 0/1, as required. Seven of eight topics are
+retrievable **only** when the query echoes the document's own label text. That
+is knowledge-base#12 with a number on it, and it retires the argument for a
+label-derived golden set outright: such a set would have reported ~0.88 and
+called this corpus healthy.
+
+**Two things the harness itself had to be defended against**, both found after
+the first green run:
+
+- **The retrieval query must be pinned to the STAMPED graph** (`--graph` +
+  `cwd`), not left to resolve against the process cwd. Caught in review; it
+  happened to agree, and a figure whose corpus stamp describes a graph it was
+  not measured against is precisely the defect the stamp exists to prevent.
+- **An ABSENT row must return no HITS, not no RESULTS.** Exempting the negative
+  rows from the "returned nothing at all" check was proposed and rejected: a
+  retriever that returns nothing would then satisfy every negative row — the
+  can-only-pass shape the negative direction exists to prevent.
+
+**Still open, deliberately:** the shared engine grew (`Phrasing`, `GoldenQuery`,
+`retrieval_recall`, `corpus_has`, `Case.slow`), so dotfiles' pinned `kb-setup`
+is one revision behind. The bump is additive and was left out of PR 4 by the
+locked scope (no dotfiles half); three gates ride that pin, so it should be a
+deliberate change of its own.
