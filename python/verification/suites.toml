@@ -1069,6 +1069,23 @@ tokens = [
 ]
 
 [[suite]]
+name = "eval.tier2-fixture-wiring"
+description = "Tier-2 guard fixture wiring (#354 PR 3). Tier 1 asks whether a declaration RESOLVES; tier 2 asks whether the wired PreToolUse guard DECIDES correctly — a guard can be declared, contracted, and wired, and still deny a legitimate command (#265: 2 of this guard's 3 all-time denials were false positives; bypasses all-time 0). This contract asserts that chain: the corpus itself, the `guard_table_case` call that turns it into a gated Case, the `hook_guard.decide` seam so the table grades the REAL decision function rather than a copy, and the two tests that pin the corpus's own properties. It also binds the `hook-selfcheck` gate's argv in pr.py — Ray's locked decision 4 is that the wiring gate STAYS alongside the fixtures (it answers \"is the guard wired?\", the precondition for \"does it decide correctly?\"), so a future change that deletes it in favour of the fixtures fails here. The ENGINE (`run_guard_table`, the inverted-table control arm, the single-direction-table rejection) is deliberately not bound: it is `kb_setup.evals` in the knowledge-base repo, covered by its tests, and naming a path outside this tree could only ever fail (`paths_required` is strict, #299)."
+category = "eval"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    "python/src/dotfiles_setup/eval_cases.py",
+    "python/src/dotfiles_setup/pr.py",
+    "tests/test_eval_cases.py",
+]
+per_path_tokens = { "python/src/dotfiles_setup/eval_cases.py" = ["GUARD_FIXTURES", "evals.guard_table_case(", "hook_guard.decide", "tier2.guard-fixtures"], "python/src/dotfiles_setup/pr.py" = ["\"dotfiles-setup\", \"hook\", \"selfcheck\""], "tests/test_eval_cases.py" = ["test_the_guard_corpus_carries_both_halves", "test_every_denied_fixture_names_a_redirect"] }
+tokens = [
+    "tier2.guard-fixtures",
+]
+
+[[suite]]
 name = "workflow.bash-logic-enforcement"
 description = "Zero-bash-logic policy wiring: the `bash_logic_budget` hk step must stay wired to the python enforcer end-to-end — hk.pkl shells out to `dotfiles-setup bash-budget`, main.py registers the subcommand, the bash_budget module (allowlist + per-file growth budget) + its tests exist, and the rule doc records the policy. The check LOGIC lives in python so the enforcer does not itself violate the policy it enforces; this contract asserts the whole chain so it can't drift out."
 category = "workflow"

@@ -174,10 +174,11 @@ def _add_consistency_subcommands(subparsers: _SubParsers) -> None:
     )
     eval_parser = subparsers.add_parser(
         "eval",
-        help="Tier-1 eval (#354 PR 2): tier 0 asks whether a thing is DECLARED, "
-        "this asks whether it RESOLVES — lanes, the shared engine, and the "
-        "graph. Offline and gated; every gated case must carry a control arm "
-        "that fails, or the runner refuses to count it",
+        help="Eval harness, tiers 1+2 (#354): tier 0 asks whether a thing is "
+        "DECLARED, tier 1 whether it RESOLVES (lanes, the shared engine, the "
+        "graph), tier 2 whether the wired PreToolUse guard DECIDES correctly. "
+        "Offline and gated; every gated case must carry a control arm that "
+        "fails, or the runner refuses to count it",
     )
     eval_parser.add_argument(
         "--live",

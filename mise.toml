@@ -886,10 +886,17 @@ description = "Assert the declared cross-repo shared set (parity.toml) holds in 
 run = "uv run --project python dotfiles-setup parity"
 
 [tasks.eval]
-description = "Tier-1 eval: does what we DECLARE actually RESOLVE? (offline, gated; `-- --live` adds the lane doctor)"
-# Tier 0 is suites.toml (`orchestration.*` / `eval.*`) — is it DECLARED? This is
-# tier 1 — does it RESOLVE? Different questions: a lane can be named in doctrine,
-# in both repos, with a passing contract, while its CLI is absent (#354).
+description = "Eval harness, tiers 1+2 (offline, gated; `-- --live` adds the lane doctor)"
+# Tier 0 is suites.toml (`orchestration.*` / `eval.*`) — is it DECLARED? Tier 1
+# — does it RESOLVE? Tier 2 — does the wired guard DECIDE correctly? All three
+# are different questions: a lane can be named in doctrine, in both repos, with
+# a passing contract, while its CLI is absent (#354); and a guard can be
+# declared AND wired AND still deny a legitimate command (#265).
+#
+# ONE COMMAND PER ENGINE, not one overall: tiers 1+2 share the runner so they
+# share this command, while tier 0 stays in `dotfiles-setup verify run`. Folding
+# tier 0 in here would run ~103 contracts twice per ship.
+#
 # Offline by default so it joins the ship gates for free. `--live` shells out to
 # the fable-orchestrator plugin's doctor.sh, which has NO offline mode and spends
 # one real API call per installed lane. Runner is the SHARED kb_setup.evals;

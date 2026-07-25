@@ -1,8 +1,8 @@
 # Design — eval harness that enforces our workflow (dotfiles #354)
 
-Status: **DESIGN APPROVED; PR 1 is the next build.** Date: 2026-07-24, revised
-same day (§9 records what the revision changed and why).
-Continues `.omc/plans/session-2026-07-24-h.md`. Ray's locked decisions in #354
+Status: **PRs 1–3 SHIPPED; PR 4 (KB golden retrieval set) is the next build.**
+Date: 2026-07-24, revised 2026-07-25 (§9 records every revision and why).
+Continues `.agent/plans/session-2026-07-24-h.md`. Ray's locked decisions in #354
 are inputs, not open questions.
 
 ---
@@ -199,8 +199,9 @@ normalised-whitespace line match) rather than stretching `require_tokens`.
 contracts — the 7 seeded above and `eval.cross-repo-parity`'s companion — all
 control-armed with realistic breaks. Two more tier-0 contracts have landed
 since: `workflow.md-budget-enforcement` was rewritten when `md_budget` moved to
-`kb_setup` (dotfiles#362), and `eval.tier1-runner-wiring` binds PR 2's seam
-(dotfiles#363). `parity.toml` now also gates the **`rules`** axis — all 22
+`kb_setup` (dotfiles#362), `eval.tier1-runner-wiring` binds PR 2's seam
+(dotfiles#363), and `eval.tier2-fixture-wiring` binds PR 3's — including the
+`hook-selfcheck` gate, so decision 4 (the wiring gate stays) is machine-held. `parity.toml` now also gates the **`rules`** axis — all 22
 `.claude/rules/` must exist in both repos (KB#24 + dotfiles#362), matched by
 STEM, not content: each rule is adapted per repo, so byte-equality would force
 one repo to carry the other's false statements.
@@ -248,8 +249,28 @@ genuinely broken fixture and drive the same code path against it.
 
 ### Tier 2 — behavioural fixtures
 
-**(c) guard + hooks.** A fixture table of `(command, expected decision)` driven
-through the **wired** guard. Must contain a **must-ALLOW** half — false
+**(c) guard + hooks — SHIPPED as PR 3** (knowledge-base#29 + dotfiles). Engine:
+`kb_setup.evals.GuardFixture` / `run_guard_table` / `guard_table_case`. Corpora:
+`kb_setup.eval_cases.GUARD_FIXTURES` (32 rows, 16/16) and
+`dotfiles_setup.eval_cases.GUARD_FIXTURES` (40 rows, 20/20). Both join
+`mise run eval` as `tier2.guard-fixtures`.
+
+**It found a live defect on day one, in the direction the design predicted.**
+KB's `_GRAPHIFY_PY` had no command-position anchoring at all, so grepping FOR
+the pattern denied — `grep -rn "import graphify" python/` and
+`rg "_merge_docs.py" .` both DENIED. dotfiles' guard probed clean on all 40
+rows. That asymmetry is itself the finding: dotfiles' guard has been through
+#265's quoting fix and KB's had never been graded at all.
+
+The fix is worth recording because the obvious one is wrong: **masking quoted
+spans — dotfiles' own fix for this class — would have broken the rule it was
+fixing**, since the real deny (`python -c "import graphify"`) carries its
+payload legitimately quoted. The discriminator between the two is the command
+HEAD, not the quoting. A fix borrowed from a sibling without re-deriving it
+would have traded a false positive for a false negative.
+
+**(c) as originally specified.** A fixture table of `(command, expected
+decision)` driven through the **wired** guard. Must contain a **must-ALLOW** half — false
 positives are the only defect class ever measured here (#265: 2 of 3 recorded
 denials were false positives; bypasses all-time: **0**). A deny-only corpus
 would grade the guard on the direction that has never failed.
@@ -425,8 +446,8 @@ overall: `verify run` for declaration contracts, `eval` for probes and fixtures.
 |---|---|---|---|---|
 | 1 | `require_lines` handler + the 6 `orchestration.*` / `eval.*` contracts | 0 | low | **SHIPPED** — dotfiles#361 (8 contracts, not 6; see §9) |
 | 2 | `mise run eval` runner + reachability probes + `doctor.sh` shim | 1 | low | **SHIPPED** — KB#25 (runner) + KB#26 (precondition) + dotfiles#363 (cases) |
-| 3 | guard fixture corpus (both directions), BOTH repos' guards; `hook_selfcheck` stays | 2 | low | **next** |
-| 4 | KB golden retrieval set + recall@K (KB repo; pairs with KB #12 P0) | 2 | med | |
+| 3 | guard fixture corpus (both directions), BOTH repos' guards; `hook_selfcheck` stays | 2 | low | **SHIPPED** — KB#29 (engine + 32-row corpus + a guard fix it found) + dotfiles (40-row corpus + `eval.tier2-fixture-wiring`) |
+| 4 | KB golden retrieval set + recall@K (KB repo; pairs with KB #12 P0) | 2 | med | **next** |
 | 5 | held-out trigger sets + headless runner + Wilson CI | 3 | med | |
 | 6 | phase-compliance mining (needs dotfiles #356 first) | 4 | med | |
 
@@ -477,6 +498,15 @@ Recorded so the next reader can tell a corrected claim from an original one:
 | 6 | RESOLVED the deferred tier-0/tier-2 command question: `eval` = tiers 1+2, `verify run` = tier 0 | one command per ENGINE, not one overall; folding tier 0 in would run ~103 contracts twice per ship |
 | 4, tier 2 | PR 3 scope LOCKED — both repos' guards, table-level control arm, `hook_selfcheck` stays additive | the table-level arm IS a `Case` with an inverted-table control, so it inherits principle 1's enforcement instead of reimplementing it |
 | — | this spec is now TRACKED at `docs/specs/` | `.omc/` was retired 2026-07-25; the spec previously existed only in one working copy |
+
+### 2026-07-25 revision (PR 3 shipped)
+
+| § | change | why |
+|---|---|---|
+| 4, tier 2 | (c) marked SHIPPED, with the defect it found on day one | the must-ALLOW half was justified from #265's *measured* history; it then found the same class in KB's guard within an hour of existing — the argument for it is no longer historical |
+| 4, tier 2 | recorded that **masking was the WRONG fix for KB**, though it was the right one for dotfiles | KB's real deny carries its payload legitimately quoted, so blanking quoted content would have traded a false positive for a false negative. A fix borrowed from a sibling repo must be re-derived against that repo's own rules, not transplanted |
+| 4, tier 0 | added `eval.tier2-fixture-wiring`, which also binds the `hook-selfcheck` argv | decision 4 said the wiring gate stays additive; a decision only a doc holds is the epic's own defect class, so a change deleting it in favour of the fixtures now fails a contract |
+| — | two test fixtures were CORRECTED, not worked around | KB pinned `gpy -c '…'` as a deny, but `gpy` is a variable name in `graph.py` — a command no session could type, so it pinned a break that cannot happen (`probes-need-a-control-arm.md`: an unrealistic mutation can only accuse the wrong party). And KB had no `test_eval_cases.py` at all, so its control arms were checked at run time and never at commit time |
 
 ## GitHub repos touched
 
