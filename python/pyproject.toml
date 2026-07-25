@@ -15,13 +15,15 @@ dependencies = [
     # .claude/rules/use-tool-builtins.md.
     "python-debian>=1.1.1",
     "pyyaml>=6.0.3",
-    # The SHARED tool-currency engine (D2/G4: one implementation; dotfiles'
-    # tool_currency.py was deleted, this repo consumes the KB package instead).
+    # The SHARED engines (D2/G4: one implementation, never a second copy that
+    # drifts). Two live here now: tool-currency (dotfiles' tool_currency.py was
+    # deleted) and md_budget (dotfiles' md_budget.py + tests deleted 2026-07-25;
+    # the `md_size_budget` hk step shells out to `kb-setup md-budget`).
     # SHA-PINNED (D3) so it is reproducible on a clean CI runner and via uv.lock;
     # neither repo has tags, so a SHA is the only stable pin. Renovate's git-refs
     # datasource bumps this the same way it bumps CLANG_P2996_REF. Dependency
     # direction is dotfiles → KB only; the KB never learns about its consumers.
-    "kb-setup @ git+https://github.com/ray-manaloto/knowledge-base@15a293bed5324c5636078ddbb1b2b6c95bee8f50",
+    "kb-setup @ git+https://github.com/ray-manaloto/knowledge-base@3bb49a8cdecc972ceed73e8926b92d48e3f60b7f",
 ]
 
 [project.scripts]

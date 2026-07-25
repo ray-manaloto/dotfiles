@@ -6,16 +6,20 @@
 # a declaration made twice and observed in neither place, invisible from
 # inside either repo because each one looks internally consistent.
 #
-# SCOPE IS DELIBERATELY NARROW (Ray, 2026-07-24). Only the doctrine-bearing
-# core is GATED. Everything else the two repos differ on is REPORTED by
-# `mise run parity` as an advisory divergence block and blocks nothing —
-# because a narrow gate is only honest if the difference it declines to gate
-# is still visible. Measured at the time of writing: 7 plugins, 23 skills, and
-# 22 rules exist in dotfiles and not in knowledge-base.
+# SCOPE STARTED DELIBERATELY NARROW (Ray, 2026-07-24) and has been widened
+# ONCE, on 2026-07-25, to cover `rules`. Everything still outside the gate is
+# REPORTED by `mise run parity` as an advisory divergence block and blocks
+# nothing — because a narrow gate is only honest if the difference it declines
+# to gate is still visible. At the original writing, 7 plugins, 23 skills, and
+# **22 rules** existed in dotfiles and not in knowledge-base. The rules half is
+# what closed: knowledge-base#24 ported all 22, so the `rules` key below states
+# a fact about both repos rather than an aspiration about one.
 #
-# Widening the gate is a one-line edit here plus whatever work it takes to
-# make the other repo true. Do NOT widen it by adding an entry the other repo
-# does not have — that lands a red gate on main.
+# THE ORDER IS LOAD-BEARING, and this is the trap to remember. Widening the
+# gate is a one-line edit here; making the other repo true is not. Adding an
+# entry BEFORE the other repo carries it lands a RED gate on `main` — the gate
+# fails for everyone, immediately, and the fix is a second PR in a different
+# repo. Always: make the other repo true, merge that, THEN widen here.
 
 [shared]
 # Plugins that must be ENABLED (value `true`, not merely present as a key) in
@@ -35,4 +39,44 @@ plugins = [
 lines = [
     "- When the session model is Fable, without being reminded: non-trivial implementation runs the fable-orchestrator architect-as-orchestrator flow — invoke the fable-orchestrator:orchestration skill before delegating and follow it as authoritative for routing, verification, review tiers, and advisor consults.",
     "- fable-orchestrator: implementation lane = codex",
+]
+
+# Rule files (`.claude/rules/<name>.md`, matched by STEM) that must exist in
+# both repos. These are the eager, always-loaded governance layer: an agent
+# session either has zero-skip, verify-before-advancing, and
+# probes-need-a-control-arm in context, or it does not. Until knowledge-base#24
+# the split was dotfiles 22 / knowledge-base 0 — so every KB session ran
+# ungoverned, which no check inside either repo could see. That is the #354
+# defect class exactly: a doctrine that is real in one place and absent in the
+# other, with both repos internally consistent.
+#
+# Presence is by STEM, not by content, and that is on purpose. Each rule is
+# ADAPTED per repo — knowledge-base's `local-devcontainer-first` is an
+# ingestion cost ladder, not a container rule; its `ci-local-parity` states
+# plainly that `.github/` does not exist there. Gating on byte-equality would
+# force one repo to carry the other's false statements. What must not drift is
+# WHICH concerns are governed.
+rules = [
+    "agent-report-persistence",
+    "ai-cli-invocation",
+    "ci-local-parity",
+    "clarify-before-acting",
+    "clean-git-state",
+    "do-not",
+    "gh-cli-watch",
+    "local-devcontainer-first",
+    "long-running-command-hangs",
+    "md-size-budgets",
+    "mise-tasks-only",
+    "notepad-enforcement",
+    "omc-directory-conventions",
+    "persistence-gate-retry",
+    "probes-need-a-control-arm",
+    "research-doc-sources",
+    "research-repo-enumeration",
+    "tool-currency-and-native-first",
+    "use-tool-builtins",
+    "verify-before-advancing",
+    "zero-bash-logic",
+    "zero-skip-policy",
 ]

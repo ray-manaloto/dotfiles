@@ -6,11 +6,15 @@ config — and neither repo could see that, because each was internally
 consistent. That is the #354 defect class raised one level: a declaration made
 in two places and observed in neither.
 
-The gated set is declared as data in ``parity.toml`` and is deliberately
-narrow (Ray, 2026-07-24): the orchestration plugins and the trigger/mode lines.
+The gated set is declared as data in ``parity.toml``: the orchestration plugins,
+the trigger/mode lines, and — since 2026-07-25 — the ``.claude/rules/`` stems.
 Everything else the repos differ on is emitted as an advisory divergence block,
 because a narrow gate is only honest when the difference it declines to gate is
 still printed. Silent truncation reads as "covered everything".
+
+Widening the gate is ordered work, not a config edit: declaring an item before
+the other repo carries it turns ``main`` red for everyone. The ``rules`` axis
+was added only after knowledge-base#24 ported all 22.
 
 Two behaviours here are easy to get backwards, and both are pinned in
 ``tests/test_parity.py``:
@@ -46,6 +50,11 @@ class Shared:
 
     plugins: tuple[str, ...]
     lines: tuple[str, ...]
+    #: Rule STEMS (``.claude/rules/<stem>.md``). Presence, never content — each
+    #: rule is adapted per repo, so byte-equality would force one repo to carry
+    #: the other's false statements. What must not drift is which concerns are
+    #: governed. Defaulted so a ``parity.toml`` predating this axis still loads.
+    rules: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -67,6 +76,7 @@ def load_shared(path: Path) -> Shared:
     return Shared(
         plugins=tuple(data.get("plugins", [])),
         lines=tuple(data.get("lines", [])),
+        rules=tuple(data.get("rules", [])),
     )
 
 
@@ -99,7 +109,13 @@ def shipped_skills(repo_root: Path) -> set[str]:
 
 
 def declared_rules(repo_root: Path) -> set[str]:
-    """Eager rule files under ``.claude/rules/``."""
+    """Rule STEMS under ``.claude/rules/`` — every rule, eager or scoped.
+
+    Scoped rules are included deliberately. ``paths:`` frontmatter changes
+    *when* a rule loads, not whether the repo governs that concern, and the
+    parity question is the latter. Filtering to eager-only would let a repo
+    satisfy the gate by scoping a rule into near-irrelevance.
+    """
     rules = repo_root / ".claude" / "rules"
     if not rules.is_dir():
         return set()
@@ -136,6 +152,12 @@ def find_parity_gaps(repos: dict[str, Path], shared: Shared) -> list[ParityGap]:
             ParityGap(repo=name, kind="line", ref=line)
             for line in shared.lines
             if _normalise(line) not in present
+        )
+        rules = declared_rules(root)
+        gaps.extend(
+            ParityGap(repo=name, kind="rule", ref=rule)
+            for rule in shared.rules
+            if rule not in rules
         )
     return gaps
 
@@ -222,6 +244,6 @@ def run(
 
     lines.append(
         f"OK parity: {len(shared.plugins)} plugin(s) + {len(shared.lines)} line(s) "
-        f"hold in {', '.join(repos)}"
+        f"+ {len(shared.rules)} rule(s) hold in {', '.join(repos)}"
     )
     return 0, "\n".join(lines)

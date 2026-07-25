@@ -482,8 +482,15 @@ local allSteps = new Mapping<String, Config.Step> {
   //
   //     Logic lives in python (zero-bash-logic); this is a thin seam.
   //     Research: .omc/research/research-20260715-md-size-limits/report.md
+  //
+  //     The enforcer MOVED to kb_setup.md_budget (2026-07-25), on the
+  //     kb_setup.currency precedent (D2/G4): ONE implementation both repos
+  //     run, consumed here as the SHA-pinned `kb-setup` dep in
+  //     python/pyproject.toml — never a second copy that drifts. dotfiles'
+  //     md_budget.py + tests were DELETED in the same change, so there is
+  //     nothing left to diverge.
   ["md_size_budget"] {
-    check = "uv run --project python dotfiles-setup md-budget"
+    check = "uv run --project python kb-setup md-budget"
   }
 
   // --- No global skill leakage (presence assertion for project-scoped

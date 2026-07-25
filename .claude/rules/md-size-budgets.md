@@ -11,7 +11,10 @@ paths:
 
 Instruction-markdown budgets differ **by load class**, because the only thing
 that justifies a size limit is **when the bytes are spent**. Enforced by
-`dotfiles-setup md-budget` (hk step `md_size_budget`).
+`kb-setup md-budget` (hk step `md_size_budget`) — the SHARED engine, which
+lives in the knowledge-base repo and is consumed here as a SHA-pinned `uv` git
+dependency. One implementation, both repos; dotfiles' copy was deleted
+2026-07-25 on the `kb_setup.currency` precedent.
 
 This rule is `paths:`-scoped, and legitimately so: its trigger genuinely *is* a
 file — you only need it when editing `hk.pkl` or an instruction doc. That is the
@@ -168,7 +171,11 @@ Every tracked `CLAUDE.md`, `AGENTS.md`, `.claude/rules/*.md`, and
 
 - `.omc/research/research-20260715-md-size-limits/report.md` — the primary-source
   audit; every figure control-armed.
-- `python/src/dotfiles_setup/md_budget.py` — the enforcer.
+- `kb_setup.md_budget` (knowledge-base repo) — the enforcer, and its full
+  provenance. Pinned by SHA in `python/pyproject.toml`; its tests moved with
+  it, so this repo no longer carries a budget test module of its own. What is
+  asserted here is the seam, by `workflow.md-budget-enforcement` in
+  `python/verification/suites.toml`.
 - `.claude/rules/probes-need-a-control-arm.md` — why "0 hits" needed a control.
 - `.claude/rules/use-tool-builtins.md` — the parent principle: check the source
   before inventing; here, before *enforcing*.
