@@ -1,11 +1,13 @@
 # Design — eval harness that enforces our workflow (dotfiles #354)
 
-Status: **PRs 1–4 SHIPPED; PR 5 (tier 3) is the epic's next build** — but it has
-now been deferred twice, because the lever PR 4 made citable kept paying:
-knowledge-base#12 **P0** (scoping) and then **P1** (a BM25/IDF scorer) each moved
-natural-phrasing recall by +2 pairs, and **P2 (RRF fusion) is the next task**
-ahead of PR 5 (§9, 2026-07-26).
-Date: 2026-07-24, revised 2026-07-26 (§9 records every revision and why).
+Status: **PRs 1–4 SHIPPED; PR 5 (tier 3) is the epic's next build.** The lever PR
+4 made citable has now been worked to its end: knowledge-base#12 **P0** (scoping)
+and **P1** (a BM25/IDF scorer) each moved natural-phrasing recall +2 pairs, and
+**P2 (RRF fusion) SHIPPED as a measured NEGATIVE result** — it costs a pair, for
+a structural reason, and the arm is kept as the evidence (§9, 2026-07-27). The
+floor landed with it, so tier 2's retrieval case is now `gated`. Nothing in KB
+#12 remains that is cheaper than PR 5.
+Date: 2026-07-24, revised 2026-07-27 (§9 records every revision and why).
 Continues `.agent/plans/session-2026-07-24-h.md`. Ray's locked decisions in #354
 are inputs, not open questions.
 
@@ -332,6 +334,11 @@ someone who has *not* read the node would ask, and the set should hold a
    only pass, the exact shape principle 1 bans. The floor lands in a later PR,
    once scoping lifts recall above 0. The runner already waives the control arm
    for advisory cases.
+   > **SUPERSEDED 2026-07-27 — that later PR was KB #12 P2.** The case is now
+   > `gated=True` at **natural pairs ≥ 4 of 8**, asserted on the BEST arm. Read
+   > the 2026-07-27 revision before acting on this paragraph, and in particular
+   > note that gating did **not** put retrieval on the ship path: the case is
+   > still `slow=True`, and `kb-ship` does not pass `--slow`.
 2. **MEASUREMENT ONLY — KB #12 P0 scoping is a separate PR.** PR 4 makes 0/119
    reproducible and citable so the scoping PR that follows can show a real
    before/after. Folding the fix in was rejected for that reason: the harness
@@ -550,15 +557,6 @@ Recorded so the next reader can tell a corrected claim from an original one:
 | 4, tier 2 | PR 4 scope LOCKED — advisory (not gated), measurement-only, live graph with a precondition SKIP, ~8 query pairs, on-demand flag, printed only | a floor of **0** is the can-only-pass check principle 1 bans, and a fixture subgraph cannot reproduce the failure being measured (prose drowning in ~128k code-AST nodes) |
 | — | two test fixtures were CORRECTED, not worked around | KB pinned `gpy -c '…'` as a deny, but `gpy` is a variable name in `graph.py` — a command no session could type, so it pinned a break that cannot happen (`probes-need-a-control-arm.md`: an unrealistic mutation can only accuse the wrong party). And KB had no `test_eval_cases.py` at all, so its control arms were checked at run time and never at commit time |
 
-## GitHub repos touched
-
-- [wshobson/agents](https://github.com/wshobson/agents) — `plugins/plugin-eval` + `docs/plugin-eval.md`; the three-layer taxonomy and the triggering-F1 method.
-- [microsoft/SkillOpt](https://github.com/microsoft/SkillOpt) — README (KB source #5); the held-out validation-gate discipline.
-- [mar3co/fable-orchestrator](https://github.com/mar3co/fable-orchestrator) — installed v1.14.0 `scripts/doctor.sh`, `commands/doctor.md`, `skills/orchestration/SKILL.md`, agent descriptions; native lane-health checks and the permission-canary pattern.
-- [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — `suites.toml`, `verify.py`, `hook_guard.py`, `hook_selfcheck.py`, `command_audit.py`.
-- [ray-manaloto/knowledge-base](https://github.com/ray-manaloto/knowledge-base) — `orchestrator-routing/SKILL.md`, `kb_setup/brain.py`, `brain/**`; and for the 2026-07-26 revisions, `kb_setup/evals.py`, `kb_setup/eval_cases.py`, `kb_setup/prose.py`, `kb_setup/graphify_ops.py`, `kb_setup/lexical.py`, `kb_setup/currency/run.py`, `currency.toml`, `sources/graphify.manifest`.
-- [Graphify-Labs/graphify](https://github.com/Graphify-Labs/graphify) — the installed 0.9.25 and 0.9.26 trees (`llm.py`, `skills/claude/**`) and the v0.9.26 release notes; the AST-extractor changes that made the corpus rebuild necessary, and the byte-diff that re-probed the `label_communities` schema gap.
-
 ### 2026-07-25 revision (PR 4 shipped)
 
 | § | change | why |
@@ -707,3 +705,96 @@ Two findings worth carrying, both about checks rather than features:
 #32, #33). Still nothing broken, for the same reason — dotfiles imports the
 runner and never calls `retrieval_recall` — but the gap is no longer small, and
 PR 5 should bump it deliberately or say why it did not.
+
+### 2026-07-27 revision (KB #12 P2 shipped — a measured NEGATIVE result)
+
+P2 was built exactly as locked, and **its premise did not survive measurement.**
+RRF over graphify's traversal order and the BM25/IDF ranking scores **4 of 8**
+natural pairs against `prose+idf`'s **5** — fusion COSTS a pair. Shipped as
+knowledge-base#35; recorded here because it changed the shared engine and because
+the result bounds where the next gain can come from.
+
+**The fourth measurement** (one run, four arms, same 18 queries; corpus
+`unscoped 128,445 nodes / prose 2,105 / graphify 0.9.26`):
+
+| arm | natural | echo |
+|---|---|---|
+| unscoped (baseline) | 1 of 8, mean 0.12 | 7 of 8, mean 0.88 |
+| prose (P0) | 3 of 8, mean 0.38 | 8 of 8, mean 1.00 |
+| **prose+idf (P1) — the best arm** | **5 of 8, mean 0.62** | 8 of 8, mean 1.00 |
+| prose+rrf (P2) | 4 of 8, mean 0.50 | 8 of 8, mean 1.00 |
+
+Both ABSENT rows return 0 hits in **all four** arms.
+
+**Why it loses is structural, not a tuning miss** — and this is the reusable
+finding. `graphify query` returns only **7–12 distinct documents** (25 nodes under
+its ~2000-token budget) against the lexical ranking's ~75, so every document in
+the short list earns an RRF contribution of ~1/61–1/72. Any document in *both*
+lists therefore outranks one with a single strong contribution: `1/61 + 1/135 =
+0.0238` beats `1/63 = 0.0159`. **With one short list and one long one, RRF's
+consensus term degenerates into "membership in the short list"** — and that short
+list is the unranked seed-then-BFS traversal P0 and P1 both measured as carrying
+no relevance signal. `delegate-unavailable` is the clean instance: lexical rank 3,
+absent from graphify's 11, fused rank 13, with all 10 documents ahead of it
+present in both lists.
+
+Consensus itself works. RRF won `many-agents-one-repo`, a topic **neither** input
+arm scored (graphify 12, lexical 36 → fused 10) — the smoothing constant doing
+precisely what Cerebras described. **+1 from consensus, −2 from short-list
+dominance, net −1.** So the honest reading is not "pick a better weight" but *RRF
+wants two comparable rankings, and we have one ranking plus a traversal*: it
+becomes worth revisiting when P3 (reranker) or P5 (embeddings) supplies a genuine
+second scorer.
+
+**No weight was tuned, deliberately.** The formula's `weight` term would reverse
+the two losses, and would be fitted to the same 8 pairs the change is then
+measured on, with no established noise floor — the same reason `lexical.K1` sits
+at the literature default. Tuning a constant against the set that grades it is how
+a harness starts grading itself.
+
+| § | change | why |
+|---|---|---|
+| 4, tier 2 | the case is **`gated=True`** with `floor=RETRIEVAL_FLOOR` (4). §4(b)'s "ADVISORY, not gated" is marked superseded in place | that paragraph's own condition — "the floor lands once scoping lifts recall above 0" — is satisfied. A locked decision that has been overtaken is worse than a stale one when nothing says so |
+| 4, tier 2 | the floor asserts on the **BEST arm**, not the last one, and not a named arm | this run is the argument: the newest arm is not the best one, so a floor on `results[-1]` would have had **zero** headroom while the path it protects had one pair of it. A named arm would hard-code a string into the gate, so a later rename changes what is enforced without touching the gate |
+| 4, tier 2 | **both** nonsense floors are rejected by the engine: `< 1` and `> pair count` | a floor of 0 is the can-only-pass check principle 1 bans; a floor above the pair count is the same defect wearing the opposite sign — the can-only-**fail** check (`hk.pkl`'s `no_grep_q_under_pipefail` is the local instance) |
+| 4, tier 2 | `_measure_arms` extracted from `retrieval_recall`; rot is checked **before** each arm is scored, defects **after all** arms are | a rotten first arm should short-circuit before the expensive later arms run, but a defect report should name every broken arm rather than surface one per 4-minute run |
+| 4, tier 2 | the fused retriever returns a **real `rc`**, inherited from whichever input failed first, with no rows | same shape as `_LexicalRetriever` in the P1 revision. Fusing a healthy ranking with an empty one would print a plausible list built from half the evidence — a defective arm reporting a recall number |
+| — | the enumeration section was moved to the **end** of this file | three revisions had been appended after it, so `research-repo-enumeration.md`'s "MUST end with" no longer held |
+
+**Two measured facts worth keeping, both of which closed off a design option
+before it was built:**
+
+- **Dedup accounts for exactly ZERO.** Document-level fusion dedupes, which is a
+  confound on attributing the delta to fusion. Measured before writing the
+  module: deduping either input alone changes nothing (`prose` 3→3, `prose+idf`
+  5→5), because within the top 10 neither retriever repeats a document often
+  enough to crowd another out. Real in principle, empirically nil here.
+- **Node-level fusion is unavailable, and the reason is a truncation.**
+  It would have been the more faithful choice — each arm's output shape
+  untouched — but it needs a per-node key in BOTH inputs, and `graphify query`
+  **truncates the label it prints** at ~250 characters (`…the core insight being
+  you d [src=…`). A truncated label is not a key, and the line carries no other
+  identifier. This is worth remembering beyond P2: graphify's *printed* output is
+  a display surface, not a data interface.
+
+**One process note.** The negative result was found by an **offline probe run
+before any production code**, whose control arm was that it reproduced the
+published P0/P1 numbers exactly (3/8 and 5/8). That is what made its new number
+(4/8) trustworthy enough to act on — and it turned a locked scope into a
+one-question check-in rather than a day of building toward a wrong assumption.
+`local-devcontainer-first.md`'s reasoning generalises past containers: reproduce
+the *measurement* cheaply before building the thing that changes it.
+
+**The pin is now SIX revisions behind** (`23e4a72` → `35`'s merge commit: PRs #30,
+#31, #32, #33, #35). Unchanged in consequence — dotfiles imports the runner and
+never calls `retrieval_recall` — but PR 5 now inherits a `retrieval_recall` that
+has grown a `floor` keyword, so the bump is no longer purely cosmetic.
+
+## GitHub repos touched
+
+- [wshobson/agents](https://github.com/wshobson/agents) — `plugins/plugin-eval` + `docs/plugin-eval.md`; the three-layer taxonomy and the triggering-F1 method.
+- [microsoft/SkillOpt](https://github.com/microsoft/SkillOpt) — README (KB source #5); the held-out validation-gate discipline.
+- [mar3co/fable-orchestrator](https://github.com/mar3co/fable-orchestrator) — installed v1.14.0 `scripts/doctor.sh`, `commands/doctor.md`, `skills/orchestration/SKILL.md`, agent descriptions; native lane-health checks and the permission-canary pattern.
+- [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — `suites.toml`, `verify.py`, `hook_guard.py`, `hook_selfcheck.py`, `command_audit.py`.
+- [ray-manaloto/knowledge-base](https://github.com/ray-manaloto/knowledge-base) — `orchestrator-routing/SKILL.md`, `kb_setup/brain.py`, `brain/**`; and for the 2026-07-26 revisions, `kb_setup/evals.py`, `kb_setup/eval_cases.py`, `kb_setup/prose.py`, `kb_setup/graphify_ops.py`, `kb_setup/lexical.py`, `kb_setup/currency/run.py`, `currency.toml`, `sources/graphify.manifest`; and for 2026-07-27, the new `kb_setup/fusion.py` + `tests/test_fusion.py` and the floor in `kb_setup/evals.py` (PR #35).
+- [Graphify-Labs/graphify](https://github.com/Graphify-Labs/graphify) — the installed 0.9.25 and 0.9.26 trees (`llm.py`, `skills/claude/**`) and the v0.9.26 release notes; the AST-extractor changes that made the corpus rebuild necessary, and the byte-diff that re-probed the `label_communities` schema gap.
