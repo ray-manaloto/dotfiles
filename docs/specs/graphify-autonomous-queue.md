@@ -152,9 +152,44 @@ fixed-by-construction rather than writing redundant fixes.
 **Phase 3 — parallel lanes.** #16 (idempotency), #22 (hosts), #20 (API refs from
 source), #13, #14, #23, #34. Worktree-isolate any two that touch one file.
 
-**Phase 4 — retrieval, SERIAL.** P4 (1-hop context expansion), then P6 (age
-decay). One arm at a time, `uv run kb-setup eval --slow` between each. **Stop
-with a costed proposal for P3/P5.**
+**Phase 4 — retrieval, SERIAL. GATED on a re-baseline (see §5a).** P4 (1-hop
+context expansion), then P6 (age decay). One arm at a time, `uv run kb-setup
+eval --slow` between each. **Stop with a costed proposal for P3/P5.**
+
+### 5a. Version-skew gate — do this BEFORE measuring any new arm
+
+**graphify is 0.9.27 on PATH; the KB corpus was built by 0.9.26.** Measured
+2026-07-27 after dotfiles #372 merged: `mise which graphify` resolves
+`…/pipx-graphifyy/0.9.27/bin/graphify`, while
+`knowledge-base/graphify-out/.currency-stamp.json` records `"version":
+"0.9.26"` (built 2026-07-26, `artifact_commit 12c0fd3`). knowledge-base's
+`mise.toml` still pins **0.9.26**, so the repos have drifted.
+
+This is a gate, not a note: **0.9.26's prompt was unchanged but its AST
+extractor CHANGED, so a rebuild moves the graph.** Measuring a new arm against a
+corpus built by a different extractor version makes the delta unattributable,
+destroying the property that made P0/P1/P2 citable in the first place.
+
+Required order:
+
+1. Decide the KB pin — match 0.9.27, or hold at 0.9.26 **deliberately and record
+   why**.
+2. `cd <kb root> && mise run kb-build`, logging `graphify --version` as the first
+   line so the artifact proves its own provenance.
+3. `uv run kb-setup eval --slow` — **re-baseline all four arms** and record the
+   table. `RETRIEVAL_FLOOR = 4` is asserted on the best arm and may need
+   revisiting if the rebuild moves `prose+idf` off 5/8.
+4. Only then build P4, then P6.
+
+Treat the existing P2 table as the **0.9.26** record; do not compare a post-
+rebuild number against it without saying so.
+
+**The stale-install PATH hazard moved with the version** — strip `0.9.26`, not
+`0.9.25`, and re-apply it in every Bash call since it does not persist:
+
+```bash
+export PATH="$(echo "$PATH" | tr ':' '\n' | grep -v 'pipx-graphifyy/0.9.26/bin' | paste -sd: -)"
+```
 
 **Phase 5 — dotfiles.** #369 (bot-PR merge path), #375 (release-note review).
 
