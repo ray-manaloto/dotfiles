@@ -1,7 +1,9 @@
 # Design — eval harness that enforces our workflow (dotfiles #354)
 
-Status: **PRs 1–3 SHIPPED; PR 4 (KB golden retrieval set) is the next build.**
-Date: 2026-07-24, revised 2026-07-25 (§9 records every revision and why).
+Status: **PRs 1–4 SHIPPED; PR 5 (tier 3) is the epic's next build** — though the
+lever taken after PR 4 was knowledge-base#12 P0, which PR 4's number made
+citable (§9, 2026-07-26).
+Date: 2026-07-24, revised 2026-07-26 (§9 records every revision and why).
 Continues `.agent/plans/session-2026-07-24-h.md`. Ray's locked decisions in #354
 are inputs, not open questions.
 
@@ -552,7 +554,7 @@ Recorded so the next reader can tell a corrected claim from an original one:
 - [microsoft/SkillOpt](https://github.com/microsoft/SkillOpt) — README (KB source #5); the held-out validation-gate discipline.
 - [mar3co/fable-orchestrator](https://github.com/mar3co/fable-orchestrator) — installed v1.14.0 `scripts/doctor.sh`, `commands/doctor.md`, `skills/orchestration/SKILL.md`, agent descriptions; native lane-health checks and the permission-canary pattern.
 - [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — `suites.toml`, `verify.py`, `hook_guard.py`, `hook_selfcheck.py`, `command_audit.py`.
-- [ray-manaloto/knowledge-base](https://github.com/ray-manaloto/knowledge-base) — `orchestrator-routing/SKILL.md`, `kb_setup/brain.py`, `brain/**`.
+- [ray-manaloto/knowledge-base](https://github.com/ray-manaloto/knowledge-base) — `orchestrator-routing/SKILL.md`, `kb_setup/brain.py`, `brain/**`; and for the 2026-07-26 revision, `kb_setup/evals.py`, `kb_setup/eval_cases.py`, `kb_setup/prose.py`, `kb_setup/graphify_ops.py`.
 
 ### 2026-07-25 revision (PR 4 shipped)
 
@@ -596,3 +598,44 @@ the first green run:
 is one revision behind. The bump is additive and was left out of PR 4 by the
 locked scope (no dotfiles half); three gates ride that pin, so it should be a
 deliberate change of its own.
+
+### 2026-07-26 revision (the lever PR 4 made citable: KB #12 P0)
+
+PR 4 measured; **knowledge-base#12 P0 moved the number** it measured, shipped as
+knowledge-base#31 (`12c0fd3`). Recorded here rather than in the KB alone because
+it changed the SHARED engine PR 5 will build on.
+
+| § | change | why |
+|---|---|---|
+| 4, tier 2 | `retrieval_recall` now takes **arms**, not one retriever: `Arm(name, retrieve, present)` is a corpus plus the retriever that reads it, and the same golden set runs against each | a before/after hand-compared across two invocations is the inherited-number trap (`probes-need-a-control-arm.md` rule 6). One run, one query set, a printed `DELTA` line — reproducible by a later session that was not there |
+| 4, tier 2 | scope is an arm on the RUN, **not** a new `Phrasing` member | the pairing rule (`_golden_set_shape`) polices phrasings; a third phrasing would have made it police an axis it does not describe. `_arms_shape` is its sibling — no arms, or two arms sharing a name, is a hard FAIL |
+| 4, tier 2 | every defect check (dead query path, silent corpus, leaked negative, fixture rot) runs **per arm**, and the membership oracle moved onto the `Arm` | a second corpus must not ride the first one's numbers. Shared, the new arm is checked against the OLD corpus, where every target trivially exists — so a target the scoping filter dropped would report recall 0 forever and read as a retrieval failure rather than the fixture rot it is |
+| 4, tier 2 | the case's control arm now declares **two** arms with the leak in the SECOND | a one-armed control passes a scorer that only ever checks the first arm — the same can-only-pass shape principle 1 bans, one level up |
+
+**The second measurement** (same corpus, same 8 pairs, graphify 0.9.25):
+
+| phrasing | unscoped | prose-scoped |
+|---|---|---|
+| natural | 1 of 8, mean 0.12 | **3 of 8, mean 0.38** |
+| label-echoing twin | 7 of 8, mean 0.88 | **8 of 8, mean 1.00** |
+
+Both ABSENT rows returned 0/1 in **both** arms. Two findings worth carrying:
+
+- **A miss on the unscoped graph is ABSENT, not ranked low.** Where a target
+  falls outside the top-10 it is absent from the entire 31–50-node returned
+  list. The code AST does not out-rank prose; it crowds prose out of the token
+  budget before the caller sees a line. That is what retired the
+  raise-the-budget-and-post-filter design: the truncation has already happened.
+- **A near-synonym field is not the same field.** The drop rule was written as
+  `_origin == "ast"` / `file_type == "code"`; measured, 10 nodes carry
+  `file_type=code` with no `_origin` — prose *about* code, one from
+  `fable-orchestrator.md`, a golden-set target — while 27,674 AST nodes carry a
+  non-`code` `file_type`. Shipped as provenance only. Same class as §9's
+  12,000-char misattribution: a figure or a field that travels without the
+  condition making it true gets applied where it does not hold.
+
+**The pin note above is now understated:** dotfiles' `kb-setup` is **two**
+revisions behind (`23e4a72`), the engine having also grown `Arm` and
+`_arms_shape` and changed `retrieval_recall`'s signature. Nothing is broken —
+dotfiles imports the runner only and never calls `retrieval_recall` — but PR 5
+either bumps the pin deliberately or states that it did not.
