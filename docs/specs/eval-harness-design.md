@@ -1,8 +1,10 @@
 # Design — eval harness that enforces our workflow (dotfiles #354)
 
-Status: **PRs 1–4 SHIPPED; PR 5 (tier 3) is the epic's next build** — though the
-lever taken after PR 4 was knowledge-base#12 P0, which PR 4's number made
-citable (§9, 2026-07-26).
+Status: **PRs 1–4 SHIPPED; PR 5 (tier 3) is the epic's next build** — but it has
+now been deferred twice, because the lever PR 4 made citable kept paying:
+knowledge-base#12 **P0** (scoping) and then **P1** (a BM25/IDF scorer) each moved
+natural-phrasing recall by +2 pairs, and **P2 (RRF fusion) is the next task**
+ahead of PR 5 (§9, 2026-07-26).
 Date: 2026-07-24, revised 2026-07-26 (§9 records every revision and why).
 Continues `.agent/plans/session-2026-07-24-h.md`. Ray's locked decisions in #354
 are inputs, not open questions.
@@ -554,7 +556,8 @@ Recorded so the next reader can tell a corrected claim from an original one:
 - [microsoft/SkillOpt](https://github.com/microsoft/SkillOpt) — README (KB source #5); the held-out validation-gate discipline.
 - [mar3co/fable-orchestrator](https://github.com/mar3co/fable-orchestrator) — installed v1.14.0 `scripts/doctor.sh`, `commands/doctor.md`, `skills/orchestration/SKILL.md`, agent descriptions; native lane-health checks and the permission-canary pattern.
 - [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — `suites.toml`, `verify.py`, `hook_guard.py`, `hook_selfcheck.py`, `command_audit.py`.
-- [ray-manaloto/knowledge-base](https://github.com/ray-manaloto/knowledge-base) — `orchestrator-routing/SKILL.md`, `kb_setup/brain.py`, `brain/**`; and for the 2026-07-26 revision, `kb_setup/evals.py`, `kb_setup/eval_cases.py`, `kb_setup/prose.py`, `kb_setup/graphify_ops.py`.
+- [ray-manaloto/knowledge-base](https://github.com/ray-manaloto/knowledge-base) — `orchestrator-routing/SKILL.md`, `kb_setup/brain.py`, `brain/**`; and for the 2026-07-26 revisions, `kb_setup/evals.py`, `kb_setup/eval_cases.py`, `kb_setup/prose.py`, `kb_setup/graphify_ops.py`, `kb_setup/lexical.py`, `kb_setup/currency/run.py`, `currency.toml`, `sources/graphify.manifest`.
+- [Graphify-Labs/graphify](https://github.com/Graphify-Labs/graphify) — the installed 0.9.25 and 0.9.26 trees (`llm.py`, `skills/claude/**`) and the v0.9.26 release notes; the AST-extractor changes that made the corpus rebuild necessary, and the byte-diff that re-probed the `label_communities` schema gap.
 
 ### 2026-07-25 revision (PR 4 shipped)
 
@@ -639,3 +642,68 @@ revisions behind (`23e4a72`), the engine having also grown `Arm` and
 `_arms_shape` and changed `retrieval_recall`'s signature. Nothing is broken —
 dotfiles imports the runner only and never calls `retrieval_recall` — but PR 5
 either bumps the pin deliberately or states that it did not.
+
+### 2026-07-26 revision (the lever again: KB #12 P1, and the P2 scope)
+
+P0 fixed *which* nodes compete; it did nothing about *how the survivors are
+ordered*, because `graphify query` applies **no relevance score at all** — its
+printed order is seed-then-BFS. P1 supplied the missing scorer (BM25/IDF over
+each node's `label` + `rationale`), shipped as knowledge-base#33 (`23d2bb0`).
+Recorded here for the same reason P0 was: it changed the SHARED engine.
+
+| § | change | why |
+|---|---|---|
+| 4, tier 2 | `_delta_lines` replaces the single baseline→arm loop: each arm is now compared to its **predecessor**, plus one cumulative first→last line at 3+ arms. Two arms are byte-identical to before | with three arms, printing only `unscoped → prose+idf` folds P0 and P1 together, leaving the newest arm's own contribution to hand-subtraction — the inherited-number trap the DELTA line exists to close |
+| 4, tier 2 | an arm's retriever need not shell out. `_LexicalRetriever` is in-process and returns a **real `rc`** (2 when it cannot read its corpus), pinned by a test | `_arm_defect`'s `rc != 0` check has no subprocess exit code to inherit for such an arm. A hardcoded 0 would make that check unfailable — principle 1, one level down |
+| 4, tier 2 | the scorer returns **only** documents scoring above zero, never the corpus padded with zeros | otherwise `_arm_defect`'s silent-corpus check (`returned == 0`) can never fire for that arm. Same shape as the row above |
+
+**The third measurement** (one run, three arms, same 18 queries; corpus
+`unscoped 128,445 nodes / prose 2,105 / graphify 0.9.26`):
+
+| arm | natural | echo |
+|---|---|---|
+| unscoped (baseline) | 1 of 8, mean 0.12 | 7 of 8, mean 0.88 |
+| prose (P0) | 3 of 8, mean 0.38 | 8 of 8, mean 1.00 |
+| **prose+idf (P1)** | **5 of 8, mean 0.62** | 8 of 8, mean 1.00 |
+
+Both ABSENT rows returned 0 hits in **all three** arms — the scorer did not buy
+recall by getting looser. **P1 alone (+2 pairs) matched P0 alone (+2 pairs)**:
+scoring is as large a lever as scoping, and they compose rather than overlap.
+The natural-vs-echo gap, which is the defect KB #12 is about, is down from 5 of
+8 topics to 3.
+
+Two findings worth carrying, both about checks rather than features:
+
+- **A test can assert the right outcome for the wrong reason.** The test
+  claiming IDF is what beats the false-neighbour problem passed with `idf()`
+  stubbed to a constant — BM25's `k1` saturation was doing the work it credited
+  to IDF. Caught only by disabling the feature and re-running. This is
+  `probes-need-a-control-arm.md` rule 2 ("arm the positive") applied to a unit
+  test asserting a *mechanism*, and it generalises: a tautological test is worse
+  than no test, because it is a standing claim nobody re-checks.
+- **A review read through `head -200` is a bounded probe.** The PR's review
+  carried 7 inline findings; a truncated fetch showed 3, and that was reported
+  as the complete set. Two of the missing four were real, one of them the most
+  serious in the review. Rule 3, with the count available and unread. Reconcile
+  a finding list against its own stated total before calling it complete.
+
+**The P2 scope is LOCKED** (Ray, 2026-07-26 — do not re-litigate):
+
+1. **P2 is the next task**, ahead of PR 5.
+2. **RRF ships as a FOURTH arm, `prose+rrf`** — the P0/P1 precedent, so each
+   arm remains the previous plus exactly one change. `_delta_lines` already
+   supports it with no engine change.
+3. **The floor lands with P2**: `tier2.kb-retrieval` flips to `gated=True` with
+   **natural pairs ≥ 4 of 8** — one below the measured 5, so it guards
+   regression rather than asserting aspiration, and a corpus rebuild that moves
+   one topic does not redden the run for a reason unrelated to the code.
+4. **The floor bites only on explicit `--slow` runs.** The case stays
+   `slow=True` and `kb-ship`'s eval gate does not pass `--slow`, so **ship does
+   NOT check retrieval** — stated here explicitly, because a floor everyone
+   believes is enforced on every PR and is not would be exactly the inert
+   declaration this whole epic exists to catch.
+
+**The pin is now FOUR revisions behind** (`23e4a72` → `23d2bb0`: PRs #30, #31,
+#32, #33). Still nothing broken, for the same reason — dotfiles imports the
+runner and never calls `retrieval_recall` — but the gap is no longer small, and
+PR 5 should bump it deliberately or say why it did not.
