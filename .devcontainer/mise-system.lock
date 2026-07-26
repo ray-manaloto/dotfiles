@@ -156,6 +156,10 @@ checksum = "sha256:71118885feab91c61bea4e9532ec46e0653b24f02e563681f822915aee843
 url = "https://conda.anaconda.org/conda-forge/linux-64/libsqlite-3.53.3-h0c1763c_0.conda"
 checksum = "sha256:365376f4815e5e80def2b3462a2419708b7c292da0da85278386c2618621fff4"
 
+[conda-packages.linux-x64."libsqlite-3.53.4-hf4e2dac_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libsqlite-3.53.4-hf4e2dac_0.conda"
+checksum = "sha256:72023efc207fe681e26b65fc9d668062cf0b4f0eacf3431e6eb099b95c1f2efd"
+
 [conda-packages.linux-x64."libssh2-1.11.1-hcf80075_0"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libssh2-1.11.1-hcf80075_0.conda"
 checksum = "sha256:fa39bfd69228a13e553bd24601332b7cfeb30ca11a3ca50bb028108fe90a7661"
@@ -455,15 +459,16 @@ conda_deps = [
     "libexpat-2.8.1-hecca717_1",
     "libffi-3.5.2-h3435931_0",
     "libmpdec-4.0.0-hb03c661_1",
-    "libsqlite-3.53.3-h0c1763c_0",
     "bzip2-1.0.8-hda65f42_9",
     "ld_impl_linux-64-2.46.1-default_hbd61a6d_102",
+    "libsqlite-3.53.4-hf4e2dac_0",
     "openssl-3.6.3-h35e630c_0",
     "tk-8.6.13-noxft_hd70dff1_3",
     "tzdata-2026c-h151e31d_0",
     "zstd-1.5.7-hb78ec9c_6",
     "_openmp_mutex-4.5-20_gnu",
     "libgomp-15.2.0-he0feb66_20",
+    "icu-78.3-h54a6638_2",
     "ca-certificates-2026.7.22-hbd8a1cb_0",
 ]
 
@@ -522,12 +527,13 @@ conda_deps = [
     "libexpat-2.8.1-hecca717_1",
     "libffi-3.5.2-h3435931_0",
     "libmpdec-4.0.0-hb03c661_1",
-    "libsqlite-3.53.3-h0c1763c_0",
     "bzip2-1.0.8-hda65f42_9",
     "ld_impl_linux-64-2.46.1-default_hbd61a6d_102",
+    "libsqlite-3.53.4-hf4e2dac_0",
     "openssl-3.6.3-h35e630c_0",
     "tk-8.6.13-noxft_hd70dff1_3",
     "tzdata-2026c-h151e31d_0",
+    "icu-78.3-h54a6638_2",
     "ca-certificates-2026.7.22-hbd8a1cb_0",
 ]
 
@@ -649,7 +655,7 @@ conda_deps = [
     "gnutls-3.8.13-h18acefa_0",
     "nettle-3.10.1-h4a9d5aa_0",
     "libtasn1-4.21.0-hb03c661_0",
-    "libsqlite-3.53.3-h0c1763c_0",
+    "libsqlite-3.53.4-hf4e2dac_0",
     "attr-2.5.2-hb03c661_1",
     "libattr-2.5.2-hb03c661_1",
     "_openmp_mutex-4.5-20_gnu",

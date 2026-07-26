@@ -100,9 +100,9 @@ checksum = "sha256:2502904a42df6d94bd743f7b73915415391dd6d31d5f50cb57c0a54a108e7
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/lcms2-2.19.1-h9d5b58d_1.conda"
 checksum = "sha256:ed213207bbf11663181941e0931caa9ce748f0544688e8e0fbcf330bca279389"
 
-[conda-packages.linux-arm64."lerc-4.1.0-h52b7260_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/lerc-4.1.0-h52b7260_0.conda"
-checksum = "sha256:8957fd460c1c132c8031f65fd5f56ec3807fd71b7cab2c5e2b0937b13404ab36"
+[conda-packages.linux-arm64."lerc-4.2.0-h52b7260_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/lerc-4.2.0-h52b7260_0.conda"
+checksum = "sha256:0176a71d64fcb5aec43c9e8ab4ae72faa6c6b0b1cda8f40b65e19429ce13c84d"
 
 [conda-packages.linux-arm64."libabseil-20260526.0-cxx17_h6983b43_1"]
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libabseil-20260526.0-cxx17_h6983b43_1.conda"
@@ -608,9 +608,9 @@ checksum = "sha256:2502904a42df6d94bd743f7b73915415391dd6d31d5f50cb57c0a54a108e7
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/lcms2-2.19.1-h9d5b58d_1.conda"
 checksum = "sha256:ed213207bbf11663181941e0931caa9ce748f0544688e8e0fbcf330bca279389"
 
-[conda-packages.linux-arm64-musl."lerc-4.1.0-h52b7260_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/lerc-4.1.0-h52b7260_0.conda"
-checksum = "sha256:8957fd460c1c132c8031f65fd5f56ec3807fd71b7cab2c5e2b0937b13404ab36"
+[conda-packages.linux-arm64-musl."lerc-4.2.0-h52b7260_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/lerc-4.2.0-h52b7260_0.conda"
+checksum = "sha256:0176a71d64fcb5aec43c9e8ab4ae72faa6c6b0b1cda8f40b65e19429ce13c84d"
 
 [conda-packages.linux-arm64-musl."libabseil-20260526.0-cxx17_h6983b43_1"]
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libabseil-20260526.0-cxx17_h6983b43_1.conda"
@@ -1124,9 +1124,9 @@ checksum = "sha256:aad2a703b9d7b038c0f745b853c6bb5f122988fe1a7a096e0e606d9cbec4e
 url = "https://conda.anaconda.org/conda-forge/linux-64/lcms2-2.19.1-h0c24ade_1.conda"
 checksum = "sha256:112b5b9462572d970f4abd2912f76a25ee7db158b1e7260163d91dd8a630db84"
 
-[conda-packages.linux-x64."lerc-4.1.0-hdb68285_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/lerc-4.1.0-hdb68285_0.conda"
-checksum = "sha256:f84cb54782f7e9cea95e810ea8fef186e0652d0fa73d3009914fa2c1262594e1"
+[conda-packages.linux-x64."lerc-4.2.0-hdb68285_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/lerc-4.2.0-hdb68285_0.conda"
+checksum = "sha256:bf9fdebf55d8bc99d83531cdffda00703f4dc5f93a1a956768c147362c72feda"
 
 [conda-packages.linux-x64."level-zero-1.29.0-hb700be7_0"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/level-zero-1.29.0-hb700be7_0.conda"
@@ -1672,9 +1672,9 @@ checksum = "sha256:aad2a703b9d7b038c0f745b853c6bb5f122988fe1a7a096e0e606d9cbec4e
 url = "https://conda.anaconda.org/conda-forge/linux-64/lcms2-2.19.1-h0c24ade_1.conda"
 checksum = "sha256:112b5b9462572d970f4abd2912f76a25ee7db158b1e7260163d91dd8a630db84"
 
-[conda-packages.linux-x64-baseline."lerc-4.1.0-hdb68285_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/lerc-4.1.0-hdb68285_0.conda"
-checksum = "sha256:f84cb54782f7e9cea95e810ea8fef186e0652d0fa73d3009914fa2c1262594e1"
+[conda-packages.linux-x64-baseline."lerc-4.2.0-hdb68285_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/lerc-4.2.0-hdb68285_0.conda"
+checksum = "sha256:bf9fdebf55d8bc99d83531cdffda00703f4dc5f93a1a956768c147362c72feda"
 
 [conda-packages.linux-x64-baseline."level-zero-1.29.0-hb700be7_0"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/level-zero-1.29.0-hb700be7_0.conda"
@@ -2220,9 +2220,9 @@ checksum = "sha256:aad2a703b9d7b038c0f745b853c6bb5f122988fe1a7a096e0e606d9cbec4e
 url = "https://conda.anaconda.org/conda-forge/linux-64/lcms2-2.19.1-h0c24ade_1.conda"
 checksum = "sha256:112b5b9462572d970f4abd2912f76a25ee7db158b1e7260163d91dd8a630db84"
 
-[conda-packages.linux-x64-musl."lerc-4.1.0-hdb68285_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/lerc-4.1.0-hdb68285_0.conda"
-checksum = "sha256:f84cb54782f7e9cea95e810ea8fef186e0652d0fa73d3009914fa2c1262594e1"
+[conda-packages.linux-x64-musl."lerc-4.2.0-hdb68285_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/lerc-4.2.0-hdb68285_0.conda"
+checksum = "sha256:bf9fdebf55d8bc99d83531cdffda00703f4dc5f93a1a956768c147362c72feda"
 
 [conda-packages.linux-x64-musl."level-zero-1.29.0-hb700be7_0"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/level-zero-1.29.0-hb700be7_0.conda"
@@ -2768,9 +2768,9 @@ checksum = "sha256:aad2a703b9d7b038c0f745b853c6bb5f122988fe1a7a096e0e606d9cbec4e
 url = "https://conda.anaconda.org/conda-forge/linux-64/lcms2-2.19.1-h0c24ade_1.conda"
 checksum = "sha256:112b5b9462572d970f4abd2912f76a25ee7db158b1e7260163d91dd8a630db84"
 
-[conda-packages.linux-x64-musl-baseline."lerc-4.1.0-hdb68285_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/lerc-4.1.0-hdb68285_0.conda"
-checksum = "sha256:f84cb54782f7e9cea95e810ea8fef186e0652d0fa73d3009914fa2c1262594e1"
+[conda-packages.linux-x64-musl-baseline."lerc-4.2.0-hdb68285_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/lerc-4.2.0-hdb68285_0.conda"
+checksum = "sha256:bf9fdebf55d8bc99d83531cdffda00703f4dc5f93a1a956768c147362c72feda"
 
 [conda-packages.linux-x64-musl-baseline."level-zero-1.29.0-hb700be7_0"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/level-zero-1.29.0-hb700be7_0.conda"
@@ -3296,9 +3296,9 @@ checksum = "sha256:75c549b55b673e15de8785a8e5dd85bca7eb612eee0ff4dc8d7bdaa15eacb
 url = "https://conda.anaconda.org/conda-forge/win-64/lame-4.0-h4a41cd3_0.conda"
 checksum = "sha256:ed10e660e52e7180cef2e2e90d912c21b8e84fed4f0bccf03dfd42a79b113846"
 
-[conda-packages.windows-x64."lerc-4.1.0-hd936e49_0"]
-url = "https://conda.anaconda.org/conda-forge/win-64/lerc-4.1.0-hd936e49_0.conda"
-checksum = "sha256:45df58fca800b552b17c3914cc9ab0d55a82c5172d72b5c44a59c710c06c5473"
+[conda-packages.windows-x64."lerc-4.2.0-hd936e49_0"]
+url = "https://conda.anaconda.org/conda-forge/win-64/lerc-4.2.0-hd936e49_0.conda"
+checksum = "sha256:93d666f63f284ef77b87b0b1f77b70f7d36d315a132f9afa64bc0012d937ba39"
 
 [conda-packages.windows-x64."libbrotlicommon-1.2.0-hfd05255_1"]
 url = "https://conda.anaconda.org/conda-forge/win-64/libbrotlicommon-1.2.0-hfd05255_1.conda"
@@ -3392,9 +3392,9 @@ checksum = "sha256:218913aeee391460bd0e341b834dbd9c6fa6ae0a4276c0c300266cc99a816
 url = "https://conda.anaconda.org/conda-forge/win-64/librsvg-2.62.3-h15cfe45_0.conda"
 checksum = "sha256:6f678be6074b79fe754660d16857a6edba73dd197ad92086250dc38c11b179ab"
 
-[conda-packages.windows-x64."libsqlite-3.53.3-hf5d6505_0"]
-url = "https://conda.anaconda.org/conda-forge/win-64/libsqlite-3.53.3-hf5d6505_0.conda"
-checksum = "sha256:692dfb73a22c873656d5e393b8f1e2b019a3c8a6486c97cb6900552e64e38c25"
+[conda-packages.windows-x64."libsqlite-3.53.4-hf5d6505_0"]
+url = "https://conda.anaconda.org/conda-forge/win-64/libsqlite-3.53.4-hf5d6505_0.conda"
+checksum = "sha256:62e1c45ec71ab2e5deeeb0e47e7df6a609991e91d46348f16df50c68fee145c8"
 
 [conda-packages.windows-x64."libtiff-4.7.2-h8f73337_0"]
 url = "https://conda.anaconda.org/conda-forge/win-64/libtiff-4.7.2-h8f73337_0.conda"
@@ -3616,9 +3616,9 @@ checksum = "sha256:75c549b55b673e15de8785a8e5dd85bca7eb612eee0ff4dc8d7bdaa15eacb
 url = "https://conda.anaconda.org/conda-forge/win-64/lame-4.0-h4a41cd3_0.conda"
 checksum = "sha256:ed10e660e52e7180cef2e2e90d912c21b8e84fed4f0bccf03dfd42a79b113846"
 
-[conda-packages.windows-x64-baseline."lerc-4.1.0-hd936e49_0"]
-url = "https://conda.anaconda.org/conda-forge/win-64/lerc-4.1.0-hd936e49_0.conda"
-checksum = "sha256:45df58fca800b552b17c3914cc9ab0d55a82c5172d72b5c44a59c710c06c5473"
+[conda-packages.windows-x64-baseline."lerc-4.2.0-hd936e49_0"]
+url = "https://conda.anaconda.org/conda-forge/win-64/lerc-4.2.0-hd936e49_0.conda"
+checksum = "sha256:93d666f63f284ef77b87b0b1f77b70f7d36d315a132f9afa64bc0012d937ba39"
 
 [conda-packages.windows-x64-baseline."libbrotlicommon-1.2.0-hfd05255_1"]
 url = "https://conda.anaconda.org/conda-forge/win-64/libbrotlicommon-1.2.0-hfd05255_1.conda"
@@ -3712,9 +3712,9 @@ checksum = "sha256:218913aeee391460bd0e341b834dbd9c6fa6ae0a4276c0c300266cc99a816
 url = "https://conda.anaconda.org/conda-forge/win-64/librsvg-2.62.3-h15cfe45_0.conda"
 checksum = "sha256:6f678be6074b79fe754660d16857a6edba73dd197ad92086250dc38c11b179ab"
 
-[conda-packages.windows-x64-baseline."libsqlite-3.53.3-hf5d6505_0"]
-url = "https://conda.anaconda.org/conda-forge/win-64/libsqlite-3.53.3-hf5d6505_0.conda"
-checksum = "sha256:692dfb73a22c873656d5e393b8f1e2b019a3c8a6486c97cb6900552e64e38c25"
+[conda-packages.windows-x64-baseline."libsqlite-3.53.4-hf5d6505_0"]
+url = "https://conda.anaconda.org/conda-forge/win-64/libsqlite-3.53.4-hf5d6505_0.conda"
+checksum = "sha256:62e1c45ec71ab2e5deeeb0e47e7df6a609991e91d46348f16df50c68fee145c8"
 
 [conda-packages.windows-x64-baseline."libtiff-4.7.2-h8f73337_0"]
 url = "https://conda.anaconda.org/conda-forge/win-64/libtiff-4.7.2-h8f73337_0.conda"
@@ -4313,12 +4313,12 @@ conda_deps = [
     "libjpeg-turbo-3.2.0-he30d5cf_0",
     "libtiff-4.7.2-hdb009f0_0",
     "libdeflate-1.25-h1af38f5_0",
-    "lerc-4.1.0-h52b7260_0",
     "libflac-1.5.0-he9c94f4_1",
     "zstd-1.5.7-h85ac4a6_6",
     "wayland-1.26.0-h4f8a99f_0",
     "xorg-libxtst-1.2.5-h57736b2_3",
     "libudev1-261.1-hb290c7d_0",
+    "lerc-4.2.0-h52b7260_0",
     "xkeyboard-config-2.48-h80f16a2_0",
 ]
 
@@ -4446,12 +4446,12 @@ conda_deps = [
     "libjpeg-turbo-3.2.0-he30d5cf_0",
     "libtiff-4.7.2-hdb009f0_0",
     "libdeflate-1.25-h1af38f5_0",
-    "lerc-4.1.0-h52b7260_0",
     "libflac-1.5.0-he9c94f4_1",
     "zstd-1.5.7-h85ac4a6_6",
     "wayland-1.26.0-h4f8a99f_0",
     "xorg-libxtst-1.2.5-h57736b2_3",
     "libudev1-261.1-hb290c7d_0",
+    "lerc-4.2.0-h52b7260_0",
     "xkeyboard-config-2.48-h80f16a2_0",
 ]
 
@@ -4590,11 +4590,11 @@ conda_deps = [
     "libjpeg-turbo-3.2.0-hb03c661_0",
     "libtiff-4.7.2-h9d88235_0",
     "libdeflate-1.25-h17f619e_0",
-    "lerc-4.1.0-hdb68285_0",
     "libflac-1.5.0-he200343_1",
     "zstd-1.5.7-hb78ec9c_6",
     "libudev1-261.1-h6f4a2f1_0",
     "xorg-libxtst-1.2.5-hb9d3cd8_3",
+    "lerc-4.2.0-hdb68285_0",
     "xkeyboard-config-2.48-h280c20c_0",
 ]
 
@@ -4733,11 +4733,11 @@ conda_deps = [
     "libjpeg-turbo-3.2.0-hb03c661_0",
     "libtiff-4.7.2-h9d88235_0",
     "libdeflate-1.25-h17f619e_0",
-    "lerc-4.1.0-hdb68285_0",
     "libflac-1.5.0-he200343_1",
     "zstd-1.5.7-hb78ec9c_6",
     "libudev1-261.1-h6f4a2f1_0",
     "xorg-libxtst-1.2.5-hb9d3cd8_3",
+    "lerc-4.2.0-hdb68285_0",
     "xkeyboard-config-2.48-h280c20c_0",
 ]
 
@@ -4876,11 +4876,11 @@ conda_deps = [
     "libjpeg-turbo-3.2.0-hb03c661_0",
     "libtiff-4.7.2-h9d88235_0",
     "libdeflate-1.25-h17f619e_0",
-    "lerc-4.1.0-hdb68285_0",
     "libflac-1.5.0-he200343_1",
     "zstd-1.5.7-hb78ec9c_6",
     "libudev1-261.1-h6f4a2f1_0",
     "xorg-libxtst-1.2.5-hb9d3cd8_3",
+    "lerc-4.2.0-hdb68285_0",
     "xkeyboard-config-2.48-h280c20c_0",
 ]
 
@@ -5019,11 +5019,11 @@ conda_deps = [
     "libjpeg-turbo-3.2.0-hb03c661_0",
     "libtiff-4.7.2-h9d88235_0",
     "libdeflate-1.25-h17f619e_0",
-    "lerc-4.1.0-hdb68285_0",
     "libflac-1.5.0-he200343_1",
     "zstd-1.5.7-hb78ec9c_6",
     "libudev1-261.1-h6f4a2f1_0",
     "xorg-libxtst-1.2.5-hb9d3cd8_3",
+    "lerc-4.2.0-hdb68285_0",
     "xkeyboard-config-2.48-h280c20c_0",
 ]
 
@@ -5114,13 +5114,13 @@ conda_deps = [
     "libjpeg-turbo-3.2.0-hfd05255_0",
     "libtiff-4.7.2-h8f73337_0",
     "libdeflate-1.25-h51727cc_0",
-    "lerc-4.1.0-hd936e49_0",
+    "lerc-4.2.0-hd936e49_0",
     "zstd-1.5.7-h534d264_6",
     "python-3.14.6-h4b44e0e_101_cp314",
     "python_abi-3.14-8_cp314",
-    "libsqlite-3.53.3-hf5d6505_0",
     "packaging-26.2-pyhc364b38_0",
     "libmpdec-4.0.0-hfd05255_1",
+    "libsqlite-3.53.4-hf5d6505_0",
     "tk-8.6.13-h967ab96_3",
     "tzdata-2026c-h151e31d_0",
 ]
@@ -5200,13 +5200,13 @@ conda_deps = [
     "libjpeg-turbo-3.2.0-hfd05255_0",
     "libtiff-4.7.2-h8f73337_0",
     "libdeflate-1.25-h51727cc_0",
-    "lerc-4.1.0-hd936e49_0",
+    "lerc-4.2.0-hd936e49_0",
     "zstd-1.5.7-h534d264_6",
     "python-3.14.6-h4b44e0e_101_cp314",
     "python_abi-3.14-8_cp314",
-    "libsqlite-3.53.3-hf5d6505_0",
     "packaging-26.2-pyhc364b38_0",
     "libmpdec-4.0.0-hfd05255_1",
+    "libsqlite-3.53.4-hf5d6505_0",
     "tk-8.6.13-h967ab96_3",
     "tzdata-2026c-h151e31d_0",
 ]
