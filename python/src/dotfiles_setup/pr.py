@@ -1,4 +1,4 @@
-"""Ship/land: the full PR loop as library code (zero-bash-logic).
+"""Ship/land/automerge: the full PR loop as library code (zero-bash-logic).
 
 ``dotfiles-setup pr ship`` (wrapped by ``mise run ship``) takes the
 current feature branch from "work is committed/staged" to "PR open with
@@ -6,6 +6,16 @@ checks watched"; ``dotfiles-setup pr land <n>`` (wrapped by
 ``mise run land``) takes a green PR through squash-merge, main-CI watch,
 and post-merge LOCAL validation on this Mac. Together they encode the
 verify-before-advancing rule as code instead of discipline.
+
+``dotfiles-setup pr automerge <n>`` (wrapped by ``mise run automerge``) is
+the third verb, and it exists because the first two left a hole (#369): a
+**bot-opened** PR never runs ship, so nothing ever armed auto-merge on it,
+land refuses an OPEN PR, and ``gh pr merge`` is guard-denied — the guard
+denied the only working command and redirected to a task that could not do
+the job. *A guard whose redirect target cannot perform the redirected action
+is not enforcement, it is an outage* — the same shape fixed for
+knowledge-base PRs in #349/#350, here along a different axis (PR provenance
+rather than target repo). See :func:`automerge_main`.
 
 Design notes (deep-research verified, 2026-07-07 —
 ``docs/research/runs/research-20260707-gha-shipland-enforcement/report.md``):
@@ -170,6 +180,24 @@ _DOCS_PATTERNS = (
 )
 
 _GREEN_BUCKETS = frozenset({"pass", "skipping"})
+
+# The GitHub Apps whose PRs `automerge` will arm (#369, scope locked by Ray
+# 2026-07-27). Re-derived, not assumed: `gh pr list --state all --limit 60
+# --json number,author` over this repo returns exactly two non-human logins,
+# and they own all three stuck PRs (#138, #236, #386).
+#
+# A login ALLOWLIST, deliberately, not `author.is_bot`: is_bot would admit any
+# app that ever opens a PR here, whereas the point of the ship/automerge split
+# is that a NAMED set of bots gets the verb that skips the local gates. A user
+# login cannot contain `/`, so an `app/…` login is not spoofable by a human
+# account. Control arm for the discriminator: `sortakool` -> is_bot=false and
+# is absent from this set, so a human PR takes the refusal path.
+BOT_PR_AUTHORS: frozenset[str] = frozenset(
+    {
+        "app/renovate",
+        "app/dotfiles-refresh-bot-org",
+    }
+)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -378,7 +406,9 @@ _AUTOMERGE_ENABLE_ATTEMPTS = 5
 _AUTOMERGE_ENABLE_BACKOFF_S = 20
 
 
-def enable_auto_merge(workspace: Path, pr_number: int, head: str) -> bool:
+def enable_auto_merge(
+    workspace: Path, pr_number: int, head: str, *, verb: str = "ship"
+) -> bool:
     """Enable GitHub-native auto-merge (squash), pinned to the verified head.
 
     GitHub then merges the PR server-side the instant the required ``ci-gate``
@@ -387,6 +417,10 @@ def enable_auto_merge(workspace: Path, pr_number: int, head: str) -> bool:
     GitHub auto-disables auto-merge if new commits are pushed), closing the
     verify-then-merge race. Runs as a subprocess, so it is not a hand-rolled
     watch — GitHub owns the wait.
+
+    ``verb`` only labels the failure line: both ``ship`` and ``automerge``
+    (#369) arm through this one function, so the arming semantics cannot drift
+    apart between the two entrypoints.
     """
     cmd = [
         "gh",
@@ -412,7 +446,7 @@ def enable_auto_merge(workspace: Path, pr_number: int, head: str) -> bool:
     if res.returncode == 0:
         return True
     sys.stdout.write(
-        f"FAIL  ship: could not enable auto-merge on PR #{pr_number}: "
+        f"FAIL  {verb}: could not enable auto-merge on PR #{pr_number}: "
         f"{res.stderr.strip()}\n"
     )
     return False
@@ -552,6 +586,128 @@ def ship_main(workspace: Path, *, title: str | None = None) -> int:
         f"GitHub merges it the instant ci-gate goes green (no poll; a base build "
         f"can take hours). After it merges, run `mise run land -- {number}` for "
         "the post-merge Mac validation (or `mise run sync` on next bring-up).\n"
+    )
+    return 0
+
+
+def _automerge_refusal(pr_number: int, info: dict[str, object]) -> str | None:
+    """The reason `automerge` will not arm this PR, or None when it will.
+
+    Split out from :func:`automerge_main` so every refusal is testable without
+    a subprocess, and so the precondition ORDER is visible in one place. Order
+    is by what the operator most likely got wrong: wrong state, then wrong
+    provenance (the split this verb exists to encode), then draft, then base.
+    """
+    state = info.get("state")
+    if state != "OPEN":
+        follow_up = (
+            f" It is already merged — run `mise run land -- {pr_number}` for the "
+            "post-merge Mac validation."
+            if state == "MERGED"
+            else ""
+        )
+        return (
+            f"FAIL  automerge: PR #{pr_number} is {state}, not OPEN — there is "
+            f"nothing to arm.{follow_up}"
+        )
+    author = info.get("author")
+    login = author.get("login", "") if isinstance(author, dict) else ""
+    if login not in BOT_PR_AUTHORS:
+        return (
+            f"FAIL  automerge: PR #{pr_number} was opened by {login!r}, which is "
+            f"not one of the bots this verb serves "
+            f"({', '.join(sorted(BOT_PR_AUTHORS))}). Use `mise run ship` from the "
+            "branch instead — ship gates the tree BEFORE arming auto-merge and "
+            "automerge does not gate anything, so one verb per provenance means "
+            "no judgement call at the call site."
+        )
+    if info.get("isDraft"):
+        return (
+            f"FAIL  automerge: PR #{pr_number} is a draft — GitHub refuses to "
+            "enable auto-merge on a draft. Mark it ready for review first."
+        )
+    base = info.get("baseRefName")
+    if base != "main":
+        return (
+            f"FAIL  automerge: PR #{pr_number} targets {base!r}, not main. The "
+            "post-merge validation this verb points at (`mise run land`) only "
+            "validates main-based PRs."
+        )
+    if not info.get("headRefOid"):
+        return (
+            f"FAIL  automerge: PR #{pr_number} has no headRefOid — cannot pin the "
+            "arming to a SHA."
+        )
+    return None
+
+
+def automerge_main(workspace: Path, pr_number: int) -> int:
+    """Arm GitHub-native auto-merge on a BOT-opened PR, then exit (#369).
+
+    The missing verb. ship arms auto-merge for work you shipped; a bot-opened
+    PR (Renovate, the refresh bot) never runs ship, so nothing armed it, and
+    land — post-merge validation — refuses an OPEN PR. This closes that hole
+    WITHOUT re-entangling land with merging (the ship/land split deliberately
+    undid that).
+
+    Four properties, all decisions rather than preferences (Ray, 2026-07-27,
+    recorded verbatim on #369):
+
+    - **Bot-authored PRs only** (:data:`BOT_PR_AUTHORS`). A human PR is refused
+      and pointed at ship, because ship gates the tree before arming and this
+      verb does not. One verb per provenance = no judgement call at the call
+      site.
+    - **Arm and exit** — it prints the ``mise run land`` follow-up rather than
+      waiting. Waiting would turn a seconds-long local verb into a 20-40min
+      Mac-side op that gets reaped when the turn goes idle
+      (``feedback_long_mac_ops_keep_turn_engaged``).
+    - **Arm even when the branch is behind main.** Renovate branches sit behind
+      (#369 records #342's base as ``66579dc``), but ``ci-gate`` and the other
+      required checks run against the MERGE RESULT and auto-merge waits for
+      them. A local freshness gate would be a second, weaker opinion about a
+      question GitHub has already answered — and would push against #257
+      (rebase churn).
+    - **Per-PR, never a sweep.** Nothing is armed unless it is named, which is
+      what keeps a HELD PR (#386, pending the corpus re-baseline) held.
+
+    It arms through :func:`enable_auto_merge`, the same call ship uses, pinned
+    with ``--match-head-commit`` to the head SHA read here. If the bot
+    force-pushes a rebase afterwards, the arming no longer matches its head —
+    re-run the verb.
+    """
+    view = _run(
+        [
+            "gh",
+            "pr",
+            "view",
+            str(pr_number),
+            "--json",
+            "state,isDraft,baseRefName,headRefOid,author",
+        ],
+        timeout=_PROBE_TIMEOUT_S,
+        cwd=workspace,
+    )
+    if view.returncode != 0 or not view.stdout.strip():
+        # Report the status we SAW, never a prose summary of it (#358).
+        sys.stdout.write(
+            f"FAIL  automerge: gh pr view rc={view.returncode}: {view.stderr.strip()}\n"
+        )
+        return 1
+    info = json.loads(view.stdout)
+    refusal = _automerge_refusal(pr_number, info)
+    if refusal is not None:
+        sys.stdout.write(f"{refusal}\n")
+        return 1
+    head = str(info["headRefOid"])
+    if not enable_auto_merge(workspace, pr_number, head, verb="automerge"):
+        return 1
+    sys.stdout.write(
+        f"\nautomerge: OK — PR #{pr_number} armed (squash, pinned to "
+        f"{head[:7]}).\nGitHub merges it the instant ci-gate goes green; the "
+        "required checks run against the merge result, so a branch behind main "
+        "is fine.\nNothing was gated locally — that is CI's job here. After it "
+        f"merges, run `mise run land -- {pr_number}` for the post-merge Mac "
+        "validation.\n"
     )
     return 0
 

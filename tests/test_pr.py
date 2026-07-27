@@ -347,6 +347,144 @@ def test_ship_fails_if_auto_merge_enable_fails(
     assert pr.ship_main(_WORKSPACE) == 1
 
 
+# --------------------------------------------------- automerge (#369)
+#
+# The verb exists because ship/land left a hole: a bot PR never runs ship, so
+# nothing armed auto-merge on it, and land refuses an OPEN PR. Every refusal
+# below is a real shape that reached the maintainer, and each is paired with
+# the arming case — a dispatch table tested in one direction proves nothing.
+
+
+def _pr_view(
+    *,
+    state: str = "OPEN",
+    login: str = "app/renovate",
+    base: str = "main",
+    draft: bool = False,
+    head: str = "a" * 40,
+) -> dict[str, object]:
+    return {
+        "state": state,
+        "isDraft": draft,
+        "baseRefName": base,
+        "headRefOid": head,
+        "author": {"login": login, "is_bot": login.startswith("app/")},
+    }
+
+
+def test_automerge_arms_a_bot_pr_and_exits(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The whole point: a Renovate PR gets armed, pinned to its head SHA."""
+    armed: dict[str, object] = {}
+    monkeypatch.setattr(pr, "_run", lambda *_a, **_k: _cp(json.dumps(_pr_view())))
+
+    def fake_enable(_w: Path, n: int, head: str, *, verb: str = "ship") -> bool:
+        armed.update({"pr": n, "head": head, "verb": verb})
+        return True
+
+    monkeypatch.setattr(pr, "enable_auto_merge", fake_enable)
+    assert pr.automerge_main(_WORKSPACE, 236) == 0
+    assert armed == {"pr": 236, "head": "a" * 40, "verb": "automerge"}
+
+
+def test_automerge_arms_the_refresh_bot_too(monkeypatch: pytest.MonkeyPatch) -> None:
+    """#138's author. Both allowlist entries must actually work, not just one."""
+    monkeypatch.setattr(
+        pr,
+        "_run",
+        lambda *_a, **_k: _cp(
+            json.dumps(_pr_view(login="app/dotfiles-refresh-bot-org"))
+        ),
+    )
+    monkeypatch.setattr(pr, "enable_auto_merge", lambda *_a, **_k: True)
+    assert pr.automerge_main(_WORKSPACE, 138) == 0
+
+
+@pytest.mark.parametrize(
+    ("view", "hint"),
+    [
+        # A human PR: ship gates the tree before arming and automerge does not,
+        # so the refusal must point at ship rather than quietly skip the gates.
+        (_pr_view(login="sortakool"), "mise run ship"),
+        # `is_bot` is NOT the discriminator — a NAMED allowlist is.
+        (_pr_view(login="app/some-other-bot"), "mise run ship"),
+        (_pr_view(state="MERGED"), "mise run land"),
+        (_pr_view(state="CLOSED"), "nothing to arm"),
+        (_pr_view(draft=True), "draft"),
+        (_pr_view(base="develop"), "not main"),
+        (_pr_view(head=""), "headRefOid"),
+    ],
+)
+def test_automerge_refuses_and_never_arms(
+    view: dict[str, object],
+    hint: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Each refusal exits 1, says why, and — the load-bearing half — never arms.
+
+    Asserting only the rc would pass a version that armed the PR and *then*
+    printed a complaint.
+    """
+    armed: list[int] = []
+
+    def fake_enable(_w: Path, n: int, _h: str, **_k: object) -> bool:
+        armed.append(n)
+        return True
+
+    monkeypatch.setattr(pr, "_run", lambda *_a, **_k: _cp(json.dumps(view)))
+    monkeypatch.setattr(pr, "enable_auto_merge", fake_enable)
+    assert pr.automerge_main(_WORKSPACE, 7) == 1
+    assert armed == [], "a refused PR must never reach the arming call"
+    assert hint in capsys.readouterr().out
+
+
+def test_automerge_never_asks_github_about_branch_freshness(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Staleness is deliberately NOT a precondition (locked decision 4).
+
+    Renovate branches sit behind main, but ci-gate and the other required
+    checks run against the MERGE RESULT and auto-merge waits for them. A local
+    freshness gate would be a second, weaker opinion about a question GitHub
+    has already answered — and pushes against #257 (rebase churn). Pinned by
+    inspecting the fields the verb actually requests, because "just add a
+    staleness check" is the obvious-looking wrong fix and would start here.
+    """
+    seen: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **_k: object) -> subprocess.CompletedProcess[str]:
+        seen.append(cmd)
+        return _cp(json.dumps(_pr_view()))
+
+    monkeypatch.setattr(pr, "_run", fake_run)
+    monkeypatch.setattr(pr, "enable_auto_merge", lambda *_a, **_k: True)
+    assert pr.automerge_main(_WORKSPACE, 342) == 0
+    fields = seen[0][seen[0].index("--json") + 1]
+    for freshness_field in ("mergeStateStatus", "mergeable", "commits", "baseRefOid"):
+        assert freshness_field not in fields
+
+
+def test_automerge_fails_when_gh_view_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(pr, "_run", lambda *_a, **_k: _cp("", returncode=1))
+    assert pr.automerge_main(_WORKSPACE, 236) == 1
+
+
+def test_automerge_fails_when_arming_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(pr, "_run", lambda *_a, **_k: _cp(json.dumps(_pr_view())))
+    monkeypatch.setattr(pr, "enable_auto_merge", lambda *_a, **_k: False)
+    assert pr.automerge_main(_WORKSPACE, 236) == 1
+
+
+def test_automerge_authors_are_the_two_real_bot_logins() -> None:
+    """Re-derived from `gh pr list --json author`, not invented.
+
+    A user login cannot contain `/`, so every entry must be an `app/…` login —
+    that is what makes the allowlist unspoofable by a human account.
+    """
+    assert {"app/renovate", "app/dotfiles-refresh-bot-org"} == pr.BOT_PR_AUTHORS
+    assert all(login.startswith("app/") for login in pr.BOT_PR_AUTHORS)
+
+
 def test_land_requires_merged(monkeypatch: pytest.MonkeyPatch) -> None:
     """A still-OPEN PR means auto-merge is pending ci-gate — land exits 1."""
     view = {"state": "OPEN", "baseRefName": "main"}

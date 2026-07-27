@@ -107,6 +107,12 @@ _V3 = "2026-07-21"
 # The repo-aware gh-pr rules landed 2026-07-23, once the knowledge-base repo
 # grew its own kb-ship/kb-land to redirect to.
 _V4 = "2026-07-23"
+# The bot-PR arming rule landed 2026-07-27 with `mise run automerge` (#369) —
+# the same "the redirect target must be able to do the job" fix as _V4, along
+# the PR-provenance axis instead of the target-repo one. Until the verb
+# existed, `gh pr merge --auto` on a Renovate PR could only be redirected to
+# `land`, which refuses an OPEN PR.
+_V5 = "2026-07-27"
 
 # `gh` names a target repo with `-R owner/repo` / `--repo owner/repo` (or
 # `--repo=owner/repo`); with none, it infers from cwd — which, for a guard
@@ -240,12 +246,32 @@ _RULES: tuple[Rule, ...] = (
         ".claude/skills/pr-workflow/SKILL.md.",
         _V1,
     ),
+    # `--auto` names the intent exactly — ARM auto-merge — and that is the one
+    # thing `land` cannot do, which is how #369 became an outage: a Renovate PR
+    # never runs ship, so nothing armed it, and the only sanctioned redirect
+    # pointed at a task that refuses an OPEN PR. Ordered BEFORE the generic
+    # merge rule (first match wins) so the precise shape gets the precise
+    # redirect. The repo lookahead sits at the same position as the other
+    # gh-pr rules, so a `-R` naming a foreign repo is seen wherever it appears.
+    Rule(
+        "gh pr merge --auto",
+        re.compile(
+            _CMD + r"gh\s+pr\s+merge\b" + _GH_REPO_NOT_FOREIGN + r"[^;&|\n]*--auto\b"
+        ),
+        "Use `mise run automerge -- <PR#>` for a BOT-opened PR (Renovate / the "
+        "refresh bot) — it checks provenance, then arms auto-merge pinned to "
+        "the head SHA and exits. For your OWN branch use `mise run ship`, which "
+        "gates the tree before arming. See .claude/skills/pr-workflow/SKILL.md.",
+        _V5,
+    ),
     Rule(
         "gh pr merge",
         re.compile(_CMD + r"gh\s+pr\s+merge\b" + _GH_REPO_NOT_FOREIGN),
-        "Use `mise run land -- <PR#>` — it verifies check buckets, pins the "
-        "merge to the verified head SHA, watches main CI, and validates "
-        "locally. See .claude/skills/pr-workflow/SKILL.md.",
+        "Merging is armed, not performed, in this repo — one verb per PR "
+        "provenance: `mise run ship` for your own branch (gates, then arms), "
+        "`mise run automerge -- <PR#>` for a bot-opened PR (#369). Once GitHub "
+        "has merged it, `mise run land -- <PR#>` runs the post-merge main-CI "
+        "check + local validation. See .claude/skills/pr-workflow/SKILL.md.",
         _V1,
     ),
     # `nohup`/manual detachment of a mise task orphans it from the harness

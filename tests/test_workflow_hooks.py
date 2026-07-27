@@ -654,8 +654,18 @@ jobs:
 
 
 def test_derivation_matches_the_real_tree_today() -> None:
-    """The real repo derives exactly `ship` and `land` — the old hand-list."""
+    """The real repo derives `automerge`, `land` and `ship`.
+
+    It was `ship`/`land` — the old hand-list — until #369 added `automerge`,
+    and the derivation picked the new task up with no edit here. That is the
+    mechanism working: `[tasks.automerge]` is a thin caller of
+    `dotfiles-setup pr`, an already-registered git-write module, so the chain
+    resolves without anyone remembering to extend a list. The classification is
+    also correct on the merits — arming auto-merge makes GitHub squash-merge
+    and delete the head branch, so it must not be reachable from a workflow.
+    """
     assert workflow_hooks.mise_task_git_writers(REPO_ROOT) == (
+        ("mise", "run", "automerge"),
         ("mise", "run", "land"),
         ("mise", "run", "ship"),
     )

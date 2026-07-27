@@ -1,22 +1,28 @@
 ---
 name: pr-workflow
-description: Ship and land PRs via `mise run ship` / `mise run land` — the full gated loop from committed work to merged-and-locally-validated main. Use whenever committing work that should become a PR, when asked to merge a green PR, or when validating that the ship/land wiring is intact. Never hand-roll commit→push→PR→merge sequences.
+description: Ship, automerge and land PRs via `mise run ship` / `mise run automerge -- <PR#>` / `mise run land -- <PR#>` — the full gated loop from committed work to merged-and-locally-validated main. Use whenever committing work that should become a PR, when asked to merge a green PR, when a bot-opened PR (Renovate / the refresh bot / a dependency bump) needs merging, or when validating that the ship/land wiring is intact. Never hand-roll commit→push→PR→merge sequences.
 user-invocable: true
 ---
 
-# PR Workflow: ship / land
+# PR Workflow: ship / automerge / land
 
 The full PR loop lives in `python/src/dotfiles_setup/pr.py`
-(zero-bash-logic); `mise run ship` and `mise run land` are thin callers.
-These tasks ARE the canonical workflow — do not hand-roll
+(zero-bash-logic); `mise run ship`, `mise run automerge` and `mise run land`
+are thin callers. These tasks ARE the canonical workflow — do not hand-roll
 `git push` + `gh pr create` + `gh pr merge` sequences when they apply
 (mise-tasks-only policy).
+
+**One verb per PR provenance.** Merging is *armed*, never performed by hand:
+`ship` arms your own branch (after gating it), `automerge` arms a **bot-opened**
+PR (which never runs ship), and `land` is the post-merge validation for either.
+Picking between them is a lookup, not a judgement call.
 
 ## Commands
 
 ```bash
 mise run ship                      # gates → push → PR open/update → enable native auto-merge, return
 mise run ship -- --title "..."     # override the PR title (default: gh --fill)
+mise run automerge -- <PR#>        # BOT PR only: arm native auto-merge and exit (no local gates)
 mise run land -- <PR#>             # (after it auto-merges) confirm merged → main CI → local verify
 ```
 
@@ -55,6 +61,34 @@ mise run land -- <PR#>             # (after it auto-merges) confirm merged → m
    March-2026 422 enable regression. ship prints the `mise run land`
    follow-up for post-merge Mac validation.
 
+## What automerge does (#369)
+
+`mise run automerge -- <PR#>` is the missing verb for a **bot-opened** PR. Only
+ship armed auto-merge, and a bot PR never runs ship; `land` refuses an OPEN PR;
+`gh pr merge` is guard-denied. So #138, #236 and #386 sat green with no
+sanctioned way to merge — *a guard whose redirect target cannot perform the
+redirected action is not enforcement, it is an outage.*
+
+1. Reads `state`, `author`, `isDraft`, `baseRefName`, `headRefOid` and refuses
+   unless the PR is **OPEN**, **non-draft**, **main-based**, and authored by one
+   of `BOT_PR_AUTHORS` (`app/renovate`, `app/dotfiles-refresh-bot-org`). A
+   **human PR is refused** and pointed at `ship`: ship gates the tree before
+   arming and automerge does not, so the split keeps that from being a call the
+   operator has to make.
+2. Arms through the **same** `enable_auto_merge` ship uses — squash,
+   `--delete-branch`, pinned with `--match-head-commit` to the head SHA it just
+   read — then **prints the `land` follow-up and exits**. It does not wait:
+   waiting would turn a seconds-long verb into a 20-40min Mac-side op that gets
+   reaped when the turn goes idle.
+3. **Staleness is deliberately not checked.** Renovate branches sit behind main,
+   but `ci-gate` and the other required checks run against the **merge result**
+   and auto-merge waits for them. A local freshness gate would be a second,
+   weaker opinion about a question GitHub has already answered (and pushes
+   against #257, rebase churn).
+
+Per-PR by construction — nothing is armed unless it is named, which is what
+keeps a deliberately HELD bot PR (e.g. #386) held.
+
 ## What land does
 
 land is the **post-merge validation** step (ship's auto-merge does the merge):
@@ -85,14 +119,18 @@ scopes it to the SHA the local gates validated.
 | CI check failed (PR never auto-merges) | A required check went red, so auto-merge never fires | Triage the run; autofix "✅ Autofix task started" means the bot pushed a fix → new checks run → auto-merges when green |
 | land failed AFTER the merge (CI watch / sync) | Merged-but-unvalidated PR | `mise run land -- <PR#> --resume` replays the idempotent post-merge steps |
 | `land: no main ci.yml run appeared` | A merge that SHOULD trigger a run didn't register (~10 min) | Check Actions; land only expects a run when the diff matches `CI_PUSH_PATHS` (ci.yml on.push.paths) — a merge matching none passes without one (#179) |
+| `automerge: PR #N was opened by '<login>', which is not one of the bots…` | A human/ship-able PR (or a bot not on the allowlist) | Use `mise run ship` from the branch — it gates the tree before arming. Adding a bot means editing `BOT_PR_AUTHORS` + its test, deliberately |
+| `automerge: PR #N is MERGED, not OPEN` | Already merged (auto-merge fired, or it was hand-merged) | `mise run land -- <PR#>` for the post-merge Mac validation |
+| `automerge: could not enable auto-merge` | Same 422 regression / auto-merge-not-configured cause as ship's | Check the repo's auto-merge setting + branch protection, then re-run; if the bot force-pushed a rebase since, re-run anyway (the arming is pinned to the SHA it read) |
 
 ## Wiring audit (meta-validation)
 
-Machine-enforced by `workflow.ship-land-wiring` in
-`python/verification/suites.toml`. By hand: `[tasks.ship]`/`[tasks.land]`
-delegate to `dotfiles-setup pr ...`; `tests/test_pr.py` passes; the
-surface list in `pr.py` covers every path class whose change demands
-full local verification (extend it when new validation code lands).
+Machine-enforced by `workflow.ship-land-wiring` and
+`workflow.automerge-wiring` in `python/verification/suites.toml`. By hand:
+`[tasks.ship]`/`[tasks.automerge]`/`[tasks.land]` delegate to
+`dotfiles-setup pr ...`; `tests/test_pr.py` passes; the surface list in `pr.py`
+covers every path class whose change demands full local verification (extend it
+when new validation code lands).
 
 ## See also
 

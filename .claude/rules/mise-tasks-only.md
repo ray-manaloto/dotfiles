@@ -14,7 +14,8 @@ task (wrapping the python library, zero-bash-logic) in the same change.
 | `devcontainer up` / `devcontainer build` | `mise run up` / `mise run dev-rebuild` (env + workspace-hash guard) |
 | `docker pull …dotfiles-devcontainer…` | `mise run sync` (buildkit, digest-aware, verifying; classic pull wedges on ~38GB) |
 | `gh pr create` (+ push + gates by hand) | `mise run ship` |
-| `gh pr merge` (+ watch + validate by hand) | `mise run land -- <PR#>` |
+| `gh pr merge` (+ watch + validate by hand) | `mise run land -- <PR#>` (post-merge) |
+| `gh pr merge --auto` on a BOT-opened PR (Renovate / refresh bot) | `mise run automerge -- <PR#>` — arms and exits; a human PR is refused (use `ship`) |
 | `gh pr create -R …/knowledge-base` | `mise run kb-ship` (in the KB repo) |
 | `gh pr merge -R …/knowledge-base` | `mise run kb-land -- <PR#>` (in the KB repo) |
 | `nohup … mise run <task>` / `mise run <task> &` (hand-detaching a task) | the harness background run — stays tracked, one clean completion (no orphaned process, no hand-rolled log monitor); a `&`-detached Mac-side task gets REAPED when the turn goes idle |
@@ -42,6 +43,14 @@ main CI and re-validates the dotfiles devcontainer. The guard blocked the only
 working command and named a task that could not do the job; KB PRs #1 and #2
 were merged by hand as a result. A guard whose redirect target cannot perform
 the redirected action is not enforcement, it is an outage.
+
+**It recurred along a second axis — PR PROVENANCE (#369, 2026-07-27).** Only
+`ship` arms auto-merge and a bot PR never runs it; `land` refuses an OPEN PR;
+`gh pr merge` redirected to `land`. #138/#236/#386 sat green, unmergeable.
+`automerge` is the missing verb: **bot-authored PRs ONLY**, armed and exited
+(the required checks run against the merge RESULT, so a branch behind main is
+fine). `ship` gates the tree before arming and `automerge` does not, so one
+verb per provenance means no judgement call at the call site.
 
 ## Enforcement layers (deep-research verified, 2026-07-07)
 
@@ -157,16 +166,12 @@ If a deny ever does look wrong, the workaround remains: write the script
 with the Write tool and run `python3 <file>` — and after ANY deny,
 re-check that the command's intended side effects actually happened.
 
-**Evasion was never the defect — false positives were** (issue #265, now
-closed). The audit's `blocked` bucket measured it: 2 of the 3 denials ever
-recorded were false positives, both from a `|` INSIDE a quoted regex (`grep -iE
-"…|devcontainer up|…"`) reading as a shell separator. The surviving denial —
-an `npx` reached through a real `||` fallback — was correct all along, which is
-why the fix targets 3 → 1 and not 3 → 0.
-
-Twice now a predicted risk has been refuted by probing and the real one turned
-out to be its mirror image (#264's cd-prefix "evasion"; #265's quoting). When
-this guard next looks wrong, measure before believing the prediction.
+**Evasion was never the defect — false positives were** (#265, now closed):
+2 of the 3 denials ever recorded were the quoted-regex shape above, and the
+survivor (an `npx` reached through a real `||` fallback) was correct all along
+— which is why the fix targets 3 → 1, not 3 → 0. Twice now a predicted risk has
+been refuted by probing and the real one turned out to be its mirror image
+(#264's cd-prefix "evasion"; #265's quoting): measure before believing.
 
 ## Extending
 

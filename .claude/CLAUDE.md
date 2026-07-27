@@ -17,7 +17,9 @@ are its output, already adapted.
 ### Issue tracker
 
 GitHub Issues on `ray-manaloto/dotfiles`, via `gh`. See `docs/issue-tracker.md`.
-**`gh pr create`/`merge` are guard-denied — use `mise run ship` / `mise run land`.**
+**`gh pr create`/`merge` are guard-denied. One verb per PR provenance: `mise run ship`
+(your branch), `mise run automerge -- <PR#>` (bot PR, #369), `mise run land -- <PR#>`
+(post-merge).**
 
 ### Triage labels
 
