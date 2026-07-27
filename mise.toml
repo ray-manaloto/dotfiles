@@ -922,6 +922,12 @@ run = "uv run --project python dotfiles-setup p2996-refresh"
 
 [tasks.cc]
 description = "Launch Claude Code rooted in THIS repo with a VERIFIED environment (tmux, --add-dir knowledge-base, auto mode)"
+# raw: mise normally CAPTURES a task's output so it can prefix each line with
+# `[cc]`, which leaves the child with NO TTY — tmux then dies with "open terminal
+# failed: not a terminal", and the buffering even prints that error BEFORE the
+# preflight lines. `raw` connects stdin/stdout/stderr straight through, which an
+# interactive session requires. Without it this task can never attach.
+raw = true
 # Thin BY DESIGN. Every decision — PATH hygiene, the tmux env injection, and a
 # preflight that can REFUSE — lives in `kb_setup.launch`, shared by both repos so
 # the two launchers cannot drift. That module's docstring carries the
