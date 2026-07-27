@@ -828,6 +828,42 @@ its second half: **an invocation token must extend past the renamable
 identifier.** Every `per_path_tokens` entry in `suites.toml` whose token ends at
 an identifier boundary is a candidate for the same hole.
 
+### 2026-07-27-e revision (the -d hole has a SECOND costume, on the test side)
+
+dotfiles#396 (issue #369) added the `mise run automerge` verb, and with it a
+tier-2 fixture row (`gh pr merge 236 --auto --squash` → DENY) plus a
+`workflow.automerge-wiring` contract. The corpus row exists for the reason §
+"one row per rule shape" gives: a rule cannot silently die.
+
+**The finding is not about the contract — it is about the TEST beside it.** The
+-d note above ends by saying every `per_path_tokens` entry ending at an
+identifier boundary is a candidate for the same hole. True, and #394 now scopes
+that sweep. But #396 hit the identical failure shape in a place a token audit
+cannot reach: its guard tests first asserted that the deny **reason** contained
+the substring `mise run automerge`. That assertion is real, specific, and was
+chosen deliberately — and it **could not have failed if the new rule were
+deleted**, because the *generic* `gh pr merge` rule was reworded in the same
+change to name all three verbs, so it matches the command and satisfies the
+substring. The tests were rewritten to bind `hook_guard.match(...).name`.
+
+So the rule generalises past tokens: **an assertion must be unable to survive
+the regression it exists to catch — check what ELSE could satisfy it.** For a
+contract token that means anchoring past the renamable identifier (-d); for a
+test it means binding an identity the regression destroys, not a string some
+sibling also carries. The two are the same defect wearing different clothes,
+and the second one is worse, because a token audit will walk straight past it.
+
+Recorded here rather than only in #394 because tier 2 grades *decisions* and the
+guard tests grade *rules* — this epic owns both surfaces.
+
+**Also measured while scoping #394**, on `0578b64`: the token surface is 188
+bare `tokens` across 90 suites + 206 `per_path_tokens` across 23, over 110
+suites. Restricted to the enforcement seams (`workflow.*` / `eval.*` /
+`orchestration.*`) it is 23 suites, 253 probes — the scope Ray locked. A crude
+"ends at an identifier char" scan flags 148 of the 206 and is far too noisy to
+be a verdict (it hits `scripts/pretooluse-guard.sh`, `permissionDecision`);
+it orders the work, the mutation probe decides.
+
 ## GitHub repos touched
 
 - [wshobson/agents](https://github.com/wshobson/agents) — `plugins/plugin-eval` + `docs/plugin-eval.md`; the three-layer taxonomy and the triggering-F1 method.

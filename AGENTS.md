@@ -19,7 +19,7 @@ caller) → lint → contract-preflight → `changes` → reusable `build-publis
 mise install                                 # Install all tools
 mise run lint                                # Run lint checks (hk under a hard timeout)
 mise run up / down                           # Bring up / tear down devcontainer (.devcontainer/AGENTS.md)
-mise run sync / ship / land -- <PR#>         # Devcontainer sync + gated PR loop (skills: devcontainer-sync, pr-workflow)
+mise run sync / ship / automerge / land -- <PR#>  # Sync + gated PR loop; automerge = bot PRs (skill: pr-workflow)
 mise run verify-container-latest             # Gate: container on latest branch code + base (hard)
 uv run --project python pytest tests/ -x -q  # Run tests (see python/AGENTS.md)
 mise run verify                    # Run structured verification contracts
