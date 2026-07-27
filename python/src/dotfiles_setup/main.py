@@ -59,7 +59,7 @@ from dotfiles_setup.p2996_hash import (
 )
 from dotfiles_setup.p2996_refresh import refresh as refresh_p2996_ref
 from dotfiles_setup.parity import run as parity_run
-from dotfiles_setup.pr import land_main, ship_main
+from dotfiles_setup.pr import automerge_main, land_main, ship_main
 from dotfiles_setup.renovate import renovate_status_main
 from dotfiles_setup.renovate_dryrun import renovate_dryrun_main
 from dotfiles_setup.sync import SyncOptions, sync_main
@@ -498,6 +498,17 @@ def _add_pr_subcommands(
         help="Replay the post-merge steps (main-CI watch, local validation) "
         "for an already-MERGED PR that failed after its merge",
     )
+    # #369: bot-opened PRs never run ship, so nothing ever armed auto-merge on
+    # them and land refuses an OPEN PR — the guard denied the only working
+    # command and redirected to a task that could not do the job.
+    automerge_parser = pr_sub.add_parser(
+        "automerge",
+        help="Arm GitHub-native auto-merge on a BOT-opened PR and exit "
+        "(Renovate / refresh bot); a human PR is refused → use ship",
+    )
+    automerge_parser.add_argument(
+        "number", type=int, help="Bot-opened PR number to arm auto-merge on"
+    )
 
 
 def _add_hook_subcommands(
@@ -842,6 +853,8 @@ def handle_pr(args: argparse.Namespace, project_root: Path) -> None:
         sys.exit(ship_main(project_root, title=args.title))
     elif args.pr_command == "land":
         sys.exit(land_main(project_root, args.number, resume=args.resume))
+    elif args.pr_command == "automerge":
+        sys.exit(automerge_main(project_root, args.number))
 
 
 def handle_hook(args: argparse.Namespace, project_root: Path) -> None:

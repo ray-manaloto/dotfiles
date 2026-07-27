@@ -116,6 +116,13 @@ GUARD_FIXTURES: tuple[evals.GuardFixture, ...] = (
     _D("gh pr create --fill", _DENY, "dotfiles PR — `mise run ship`"),
     _D("gh pr merge 123 --squash", _DENY, "dotfiles PR — `mise run land`"),
     _D(
+        "gh pr merge 236 --auto --squash",
+        _DENY,
+        "the ARMING shape (#369) — must redirect to `mise run automerge`, the "
+        "one thing `land` cannot do; until that verb existed this redirect "
+        "pointed at a task that refuses an OPEN PR",
+    ),
+    _D(
         "gh pr create -R ray-manaloto/knowledge-base --fill",
         _DENY,
         "KB PR — must redirect to kb-ship, NOT ship (the #349 defect)",

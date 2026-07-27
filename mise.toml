@@ -646,6 +646,17 @@ description = "Verify PR green → pinned squash-merge → watch main CI → loc
 #   mise run land -- 172
 run = 'uv run --project python dotfiles-setup pr land'
 
+[tasks.automerge]
+description = "Arm GitHub-native auto-merge on a BOT-opened PR (Renovate / refresh bot), then exit"
+# Thin caller; see pr.py `automerge_main`. The missing verb (#369): a bot PR
+# never runs ship, so nothing armed auto-merge on it, and land refuses an OPEN
+# PR — the guard denied the only working command and redirected to a task that
+# could not do it. Bot-authored PRs ONLY (a human PR is refused → use ship,
+# which gates the tree before arming). Arms and exits; CI's required checks run
+# against the merge result, so a branch behind main is fine:
+#   mise run automerge -- 236
+run = 'uv run --project python dotfiles-setup pr automerge'
+
 [tasks.sync]
 description = "Converge the devcontainer onto the latest CI image + verify (digest fast-path)"
 # Thin caller per zero-bash-logic; the orchestration (registry-vs-local-tag

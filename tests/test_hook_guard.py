@@ -261,6 +261,75 @@ def test_gh_pr_allowed_for_other_repos(command: str) -> None:
     assert hook_guard.decide(command) is None, f"expected ALLOW for {command!r}"
 
 
+# --- #369: `gh pr merge --auto` routes by PR PROVENANCE ---------------------
+#
+# Same defect shape as the repo-aware split above, one axis over. A bot-opened
+# PR never runs ship, so nothing armed auto-merge on it; `land` refuses an OPEN
+# PR; `gh pr merge` was denied and redirected to `land`. The guard denied the
+# only working command and named a task that cannot do the job — #138, #236 and
+# #386 sat green and unmergeable. `--auto` names the ARMING intent exactly, so
+# it gets the precise redirect; the generic merge rule still has to name a verb
+# for each provenance.
+@pytest.mark.parametrize(
+    ("command", "rule_name"),
+    [
+        ("gh pr merge 236 --auto --squash", "gh pr merge --auto"),
+        ("gh pr merge 236 --squash --auto", "gh pr merge --auto"),
+        ("gh pr merge 236 -R ray-manaloto/dotfiles --auto", "gh pr merge --auto"),
+        # The KB rule is ordered first, so a KB `--auto` still routes to kb-land
+        # rather than to a dotfiles task that has no repo parameter (#349).
+        (
+            "gh pr merge 3 --auto -R ray-manaloto/knowledge-base",
+            "gh pr merge (knowledge-base)",
+        ),
+    ],
+)
+def test_gh_pr_merge_auto_routes_to_automerge(command: str, rule_name: str) -> None:
+    """Bound to the RULE, not to a substring of its reason.
+
+    A reason-substring assertion could not see this rule being deleted: the
+    generic merge rule names `mise run automerge` too, so it would match the
+    command and satisfy the substring. Matching on rule identity is what makes
+    deletion (the realistic regression) fail here.
+    """
+    rule = hook_guard.match(command)
+    assert rule is not None, f"expected a deny for {command!r}"
+    assert rule.name == rule_name
+    assert "mise run automerge" in rule.reason or "kb-land" in rule.reason
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        # CONTROL ARM: the arming shape is only guarded where a canonical verb
+        # exists. A sibling repo has none, in either flag order.
+        "gh pr merge 5 --auto -R some-other/repo",
+        "gh pr merge -R some-other/repo 5 --auto",
+        # The redirect TARGETS must not be denied — that is the outage this
+        # whole rule exists to end.
+        "mise run automerge -- 236",
+        "uv run --project python dotfiles-setup pr automerge 236",
+        # Prose describing the ban stays allowed (the #265 class).
+        'echo "gh pr merge 1 --auto is denied"',
+    ],
+)
+def test_automerge_arming_control_arm(command: str) -> None:
+    assert hook_guard.decide(command) is None, f"expected ALLOW for {command!r}"
+
+
+def test_generic_merge_rule_still_names_every_provenance() -> None:
+    """A bare `gh pr merge` must name ship, automerge AND land.
+
+    Before #369 it named only `land`, which cannot merge — the redirect had no
+    working target for a bot PR. The three verbs are the whole dispatch table,
+    so losing any one of them re-opens the outage for that provenance.
+    """
+    reason = hook_guard.decide("gh pr merge 42 --squash")
+    assert reason is not None
+    for verb in ("mise run ship", "mise run automerge", "mise run land"):
+        assert verb in reason, f"{verb!r} missing from the generic merge redirect"
+
+
 def test_foreign_repo_lookahead_does_not_span_separators() -> None:
     r"""A later command's `-R` must not license an earlier dotfiles `gh pr`.
 
