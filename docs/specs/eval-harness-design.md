@@ -790,6 +790,44 @@ the *measurement* cheaply before building the thing that changes it.
 never calls `retrieval_recall` — but PR 5 now inherits a `retrieval_recall` that
 has grown a `floor` keyword, so the bump is no longer purely cosmetic.
 
+### 2026-07-27-d revision (the pin is BUMPED — and it was never cosmetic)
+
+The four revision notes above each closed with "PR 5 should bump the pin
+deliberately or say why it did not." **The bump happened outside PR 5**, as
+dotfiles#392 (issue #391), because the gap turned out to be load-bearing in a
+way none of those notes saw: `23e4a72` predates `kb_setup/launch.py` entirely,
+so **`mise run cc` in this repo had never once worked**. Pin is now
+`737ff6e3b745c096c886ff4a732befc033efb75e` (knowledge-base `main`), which
+carries KB #41–#44 on top of #35. PR 5 inherits a current runner and owes this
+question nothing further.
+
+Two things this correct-but-incomplete note class is worth recording for:
+
+1. **"Nothing is broken" was measured against the wrong surface.** Each note
+   checked the one consumer it knew about (`dotfiles imports the runner and
+   never calls retrieval_recall`) and concluded the gap was inert. It was inert
+   *for the eval runner*. `md_budget` and then `launch` arrived on the same pin
+   without the note's scope widening, and the third one was dead on arrival.
+   A staleness note should name **every** consumer of the pinned artifact, or
+   say it did not enumerate them.
+2. **The gap was visible in this very file and still cost a shipped defect.**
+   #391's issue body cites the "SIX revisions behind" line above as prior
+   evidence. A written-down gap that no gate reads is the same inert
+   declaration this epic exists to catch — which is why the fix shipped a
+   *probe* (`tier1.cc-subcommand-dispatches`, which runs the launcher) and a
+   *contract* (`eval.cc-launcher-wiring`) rather than another revision note.
+
+**Also from #392, a defect in this epic's own contract style.** The new
+`eval.cc-launcher-wiring` contract **passed its own control arm on first
+draft**. It bound `kb-setup cc` — a genuine invocation, satisfying the
+"bind a call site, not a `def`" rule this epic established in #300 — and the
+realistic regression (renaming the subcommand to `ccX`) leaves `kb-setup cc`
+intact as a **prefix**. Anchored to `kb-setup cc --root`; re-probed: renamed
+subcommand → FAIL, `raw = true` removed → FAIL, restored → PASS. The rule needs
+its second half: **an invocation token must extend past the renamable
+identifier.** Every `per_path_tokens` entry in `suites.toml` whose token ends at
+an identifier boundary is a candidate for the same hole.
+
 ## GitHub repos touched
 
 - [wshobson/agents](https://github.com/wshobson/agents) — `plugins/plugin-eval` + `docs/plugin-eval.md`; the three-layer taxonomy and the triggering-F1 method.
