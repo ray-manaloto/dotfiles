@@ -36,7 +36,7 @@ NOT labelled** — see §7.
 | 2 | **Ingestion parallelises; retrieval stays SERIAL** | each retrieval arm must be "the previous plus exactly one change" or the measured delta stops being attributable, and every arm edits the same `_retrieval_arms` tuple |
 | 3 | **Ship AND land autonomously, per issue** | matches how P0/P1/P2 actually ran; `kb-land` is already SHA-pinned and gate-guarded |
 | 4 | **Adversarial review = Claude subagents with distinct lenses.** CodeRabbit is best-effort: **if it is rate-limited, continue** | Ray, rounds 1 and 4. CodeRabbit silently failed to review KB #35 today; an autonomous loop would hit that wall constantly |
-| 5 | **Free retrieval levers only (P4, P6).** P3 (reranker) and P5 (embeddings) STOP with a costed proposal | both spend API budget and were deferred for that reason |
+| 5 | ~~Free retrieval levers only (P4, P6)~~ → **AMENDED 2026-07-27: P4 and P6 are SKIPPED; go straight to the costed P3/P5 proposal** | Phase 0 measured both as unbuildable — see §5b. Ray confirmed after seeing the evidence |
 | 6 | **#375 reports only — it may NOT auto-delete code** | `tool-currency-and-native-first.md` states retirement is a human call |
 | 7 | **#310/T1–T7 is TRIAGE first**, not build | much of it looks already-satisfied (graphify is pinned host-only and KB drives it daily). Close what shipped, with evidence; build only genuine gaps |
 | 8 | **Dynamic workflows are the orchestration primitive** | see §3 |
@@ -134,66 +134,122 @@ Order matters and was derived, not assumed. A **triage agent derives and reports
 the DAG for approval before any build** (Ray, round 2) — the ordering below is
 its input, not its conclusion.
 
-**Phase 0 — triage (no code).** Derive the DAG. Also triage dotfiles #310/T1–T7
-against the live repo: SHIPPED / PARTIAL / NOT-STARTED with evidence; close the
-satisfied ones citing where.
+**Phase 0 is COMPLETE** (workflow `wf_1055118a-aa2`, 2026-07-27). Its verbatim
+report is `docs/research/kb/reports/agents/phase0-queue-triage-dag.md`. The order
+below is its output, adversarially verified — not the assumption it replaced.
 
-**Phase 1 — #21 first (prerequisite).** Verified: **#10, #16 and #21 all modify
-`kb-add`**, and #21 and #22 both touch `kb_setup.fetch`. So the "independent"
-ingestion cluster is really ~2 lanes with a hard prerequisite, not 6 parallel
-tasks. #21 wires the already-lossless `kb-fetch` path into `kb-add`, and
-**kb-fetch's file path is already lossless**, so #21 may close **#10 and #19 by
-construction**.
+```
+Phase 0  P0-a .gitignore wiki re-include · P0-b PATH guard · P0-c name the
+         canonical task · P0-d reconcile do-not.md vs the live graphify hook
+             (all parallel — disjoint files)
 
-**Phase 2 — re-test before building.** After #21, re-probe whether nav shells and
-the 12k truncation still reproduce. If they do not, close #10/#19 as
-fixed-by-construction rather than writing redundant fixes.
+Phase 1  fetch lane, SERIAL on fetch.py:  #21 → #10 → #22 → #16
+         (four issues share python/src/kb_setup/fetch.py + tests/test_fetch.py;
+          worktrees do NOT help — they must land in an order)
 
-**Phase 3 — parallel lanes.** #16 (idempotency), #22 (hosts), #20 (API refs from
-source), #13, #14, #23, #34. Worktree-isolate any two that touch one file.
+Phase 2  parallel:  A #13 (docs half) · B #14-PR1 · C #23a   then D #14-PR2
 
-**Phase 4 — retrieval, SERIAL. GATED on a re-baseline (see §5a).** P4 (1-hop
-context expansion), then P6 (age decay). One arm at a time, `uv run kb-setup
-eval --slow` between each. **Stop with a costed proposal for P3/P5.**
+Phase 3  dotfiles:  #313-fix → #314 → #315 → #317 → #310 (closes last)
 
-### 5a. Version-skew gate — do this BEFORE measuring any new arm
-
-**graphify is 0.9.27 on PATH; the KB corpus was built by 0.9.26.** Measured
-2026-07-27 after dotfiles #372 merged: `mise which graphify` resolves
-`…/pipx-graphifyy/0.9.27/bin/graphify`, while
-`knowledge-base/graphify-out/.currency-stamp.json` records `"version":
-"0.9.26"` (built 2026-07-26, `artifact_commit 12c0fd3`). knowledge-base's
-`mise.toml` still pins **0.9.26**, so the repos have drifted.
-
-This is a gate, not a note: **0.9.26's prompt was unchanged but its AST
-extractor CHANGED, so a rebuild moves the graph.** Measuring a new arm against a
-corpus built by a different extractor version makes the delta unattributable,
-destroying the property that made P0/P1/P2 citable in the first place.
-
-Required order:
-
-1. Decide the KB pin — match 0.9.27, or hold at 0.9.26 **deliberately and record
-   why**.
-2. `cd <kb root> && mise run kb-build`, logging `graphify --version` as the first
-   line so the artifact proves its own provenance.
-3. `uv run kb-setup eval --slow` — **re-baseline all four arms** and record the
-   table. `RETRIEVAL_FLOOR = 4` is asserted on the best arm and may need
-   revisiting if the rebuild moves `prose+idf` off 5/8.
-4. Only then build P4, then P6.
-
-Treat the existing P2 table as the **0.9.26** record; do not compare a post-
-rebuild number against it without saying so.
-
-**The stale-install PATH hazard moved with the version** — strip `0.9.26`, not
-`0.9.25`, and re-apply it in every Bash call since it does not persist:
-
-```bash
-export PATH="$(echo "$PATH" | tr ':' '\n' | grep -v 'pipx-graphifyy/0.9.26/bin' | paste -sd: -)"
+Phase R  pin bump → kb-build → re-baseline all 4 arms → costed P3/P5 proposal
+         (P4/P6 skipped, §5b)
 ```
 
-**Phase 5 — dotfiles.** #369 (bot-PR merge path), #375 (release-note review).
+**Corrections to what this replaced:** the ingestion cluster is a **four**-issue
+serial chain, not "~2 lanes"; **#21 does not subsume #10/#19**; and #16 and #10
+are independently actionable rather than gated behind #21. **KB#20 and KB#34 are
+not code-ready** — #20's premise is false against the pinned graphify
+(`property_signature` occurs 0 times in `extract.py`; control arm
+`method_signature` → 1), and #34 is blocked on the pin decision.
 
----
+**New defect found, worth filing:** graphify's file slicing **splits code
+fences** — `file_slice.py` has zero fence awareness (control arm: `heading` → 3
+hits), and 375 of 5,466 source `.md` files exceed the 20,000-char cap.
+
+### 5a. Version-skew gate — CORRECTED by Phase 0 triage (2026-07-27)
+
+**DECIDED (Ray, 2026-07-27): match knowledge-base's pin to 0.9.27**, rebuild, and
+re-baseline all four arms. dotfiles is on 0.9.27 (`dotfiles/mise.toml:53`),
+knowledge-base pins 0.9.26 (`knowledge-base/mise.toml:23`), and the corpus stamp
+says 0.9.26 (`artifact_commit 12c0fd3`). Note `parity.toml`'s own ordering rule —
+make the other repo true FIRST, then widen the gate; do not add a `pins` axis
+before the bump lands.
+
+**The gate is right to exist. Its ORIGINAL STATED MECHANISM WAS WRONG.** This
+paragraph replaces it:
+
+* ~~"the AST extractor changed, so a rebuild moves the graph P4 ranks over"~~ —
+  **refuted.** The prose edge set contains **zero** AST-produced edges;
+  `prose.py:145-149` (both endpoints must survive) plus the `_origin == "ast"`
+  filter is a *firewall*, not a leak.
+* **The real coupling is `community`**, recomputed over the full 128k-node graph
+  at `_merge_docs.py:36-37` and stamped on every prose node — a node attribute
+  the existing arms already use.
+* **The real precondition is the BINARY, and all four arms share it.** `unscoped`
+  and `prose` shell out to bare `graphify query` (`eval_cases.py:389`), which
+  resolves differently under `mise run eval` than under a bare `uv run`. So:
+  decide the pin, rebuild, re-baseline **all four arms together**, and only then
+  quote a new number.
+
+**Risk to `RETRIEVAL_FLOOR` is lower than first feared and cannot redden a PR.**
+The case is `slow=True` and `kb-ship` does not pass `--slow`, so no ship or CI run
+can go red. The floor is `max` over all four arms, and `prose+rrf` sits exactly on
+it at 4 — so a breach needs `prose+idf` −2 **and** `prose+rrf` −1 simultaneously.
+The only measured rebuild-vs-recall datapoint (0.9.25→0.9.26) moved recall by
+**0** pairs.
+
+**The PATH guard was INERT and is fixed here.** The hazard does not move with the
+version — it **freezes**: the stale entry is held by `MISE_ENV_CACHE` at whatever
+was active when the session's env cache was populated. Measured 2026-07-27: the
+entry actually present is `0.9.25/bin`, at PATH position 32, so a snippet
+stripping `0.9.26/bin` removes nothing. Use the version-agnostic form, and
+re-apply it in every Bash call since it does not persist:
+
+```bash
+export PATH="$(echo "$PATH" | tr ':' '\n' | grep -v 'pipx-graphifyy/[^/]*/bin' | paste -sd: -)"
+```
+
+### 5b. P4 and P6 are SKIPPED — measured, not assumed
+
+**Decision 5 is amended.** Phase 0 measured both "free" levers as unbuildable on
+this corpus:
+
+* **P4 (1-hop context expansion) has a zero gain ceiling.** Of
+  `graph-prose.json`'s 2,644 links, **2,608 (98.6%) are intra-document** and 36
+  cross a document boundary. The eval scores **document-level** recall
+  (`eval_cases.py:500` returns `hit.source_file`), so an intra-document hop lands
+  on a document already counted — and **all 8 golden targets have zero
+  cross-document edges in either direction**. Control-armed on the same probe:
+  `yt-9CiOwbmOKdU-memory.md` 11, `README.md` 6, `ARCHITECTURE.md` 5, so the probe
+  discriminates and the zeros are real.
+* **P6's signal is a batch id, not an age.** `captured_at` is stamped at *ingest*
+  (`fetch.py:51`), not publication, and a whole batch shares one value. The
+  existing freshness threshold is **> 1 month** while the oldest node is six days
+  old, so a flat curve is expected by construction.
+
+**Go straight to the costed P3/P5 proposal.** The 3 remaining misses sit at
+document ranks 15/32/36 of ~75 — a **ranking** deficit, which is precisely what
+P2 established fusion cannot fix without a genuine second scorer.
+
+### 5c. KB#21's mechanism — DECIDED
+
+The design in the issue, the runbook and two shipped artifacts is **impossible**:
+`graphify add <local-file>` cannot work, because `ingest.py:228` calls
+`validate_url` and `security.py:112-116` raises for any scheme outside
+`{http, https}`. `mise.toml:188` and `fetch.py:440` both print that advice and are
+**wrong** — fix them.
+
+**DECIDED (Ray, 2026-07-27): a fetched source reaches the graph via a full
+`kb-build` re-extract.** `kb-fetch` lands the file in `sources/`; `kb-build`
+re-extracts deterministically. That is the route the shipped pipeline already
+uses and needs no new code path. An incremental single-source route stays a
+possible follow-up, not part of this.
+
+**#21 does NOT subsume #10 or #19** — refuted with evidence. #10's criterion
+still fails after #21 because `gate()` has exactly one call site
+(`fetch.py:200`, on the *raw* response) while `extract_markdown` feeds
+`write_source` with no volume re-check. #19 is upstream and unchanged:
+`ingest.py` is byte-identical across 0.9.25/0.9.26/0.9.27.
 
 ## 6. The review structure
 
