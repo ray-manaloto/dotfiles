@@ -3,8 +3,7 @@
     "deny": [
       "Bash(chezmoi apply:*)",
       "Bash(chezmoi update:*)"
-    ],
-    "defaultMode": "auto"
+    ]
   },
   "hooks": {
     "PreToolUse": [
