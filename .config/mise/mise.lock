@@ -612,7 +612,6 @@ checksum = "sha256:682564e7cd35d38307df3cd6c8e9a45a1437d20febac0c8d165809d7c3840
 url = "https://github.com/prefix-dev/pixi/releases/download/v0.73.0/pixi-x86_64-unknown-linux-musl.tar.gz"
 url_api = "https://api.github.com/repos/prefix-dev/pixi/releases/assets/477739425"
 provenance = "github-attestations"
-provenance_verified = true
 
 [tools.pixi."platforms.linux-x64-baseline"]
 checksum = "sha256:682564e7cd35d38307df3cd6c8e9a45a1437d20febac0c8d165809d7c38408d1"
