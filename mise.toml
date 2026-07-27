@@ -919,3 +919,51 @@ run = "uv run --project python dotfiles-setup p2996-hash"
 [tasks.p2996-refresh]
 description = "Bump CLANG_P2996_REF in docker-bake.hcl to the latest bloomberg/clang-p2996 p2996-branch HEAD (writes only on change; the scheduled refresh.yml workflow's p2996-refresh job does this in CI)"
 run = "uv run --project python dotfiles-setup p2996-refresh"
+
+[tasks.cc]
+description = "Launch Claude Code rooted in THIS repo (so its hooks load), sibling repo via --add-dir, inside a tmux session, auto mode on"
+# WHY EVERY PIECE — verified against the docs on 2026-07-27, Claude Code 2.1.220.
+# The sibling repo carries the mirror of this task; keep the two in sync.
+#
+# * ROOTED IN THIS REPO. Hooks and most `.claude/settings.json` keys load from
+#   "the current working directory's `.claude/` folder with NO parent-directory
+#   fallback", and hooks are NOT among the `--add-dir` exceptions. So the
+#   PreToolUse guard only fires for the repo the session is rooted in — which is
+#   why each repo gets its own launcher instead of one combined entrypoint.
+# * `--add-dir`, NOT `permissions.additionalDirectories`. The settings key grants
+#   "file access only and doesn't load any of the configuration"; the FLAG also
+#   loads the sibling's `.claude/skills/` and `.claude/agents/`.
+# * WHAT IS *NOT* HERE, ON PURPOSE. Everything expressible as configuration now
+#   lives in this repo's `.claude/settings.json` instead of a flag (Ray,
+#   2026-07-27 — project-level settings only, never user/global):
+#     - `permissions.defaultMode: "auto"` replaces `--permission-mode auto`
+#       ("a goal doesn't change permissions", so unattended turns need it).
+#     - `env.CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: "1"` makes the
+#       sibling's `CLAUDE.md`, `.claude/CLAUDE.md`, `.claude/rules/*.md` and
+#       `CLAUDE.local.md` load; without it they are silently absent.
+#   `--add-dir` CANNOT move to settings: `permissions.additionalDirectories`
+#   grants "file access only and doesn't load any of the configuration", so the
+#   flag is the only form that also brings the sibling's skills and agents.
+#   UNVERIFIED: the docs do not state whether settings `env` is applied before
+#   memory files load at session start. If the sibling's rules turn out not to be
+#   loaded, move that one var back into this task's environment.
+# * tmux — split-pane teammates require tmux (or iTerm2 + `it2`). Without it
+#   `teammateMode` falls back to in-process, and in-process teammates cannot be
+#   resumed and cannot spawn background subagents. `new-session -A` attaches if
+#   the session exists and creates it otherwise; when already inside tmux we exec
+#   claude directly rather than nesting.
+# * `$MISE_PROJECT_ROOT`, never `$PWD` — measured 2026-07-27: inside a mise task
+#   `$PWD` is wherever mise was invoked from (`/Users/rmanaloto`), NOT the repo.
+run = '''
+set -euo pipefail
+root="$MISE_PROJECT_ROOT"
+sibling="$root/../knowledge-base"
+[ -d "$sibling" ] || { echo "[cc] no sibling repo at $sibling" >&2; exit 2; }
+sibling="$(cd "$sibling" && pwd)"
+if [ -n "${TMUX:-}" ]; then
+  cd "$root"
+  exec claude --add-dir "$sibling"
+fi
+exec tmux new-session -A -s "${CC_TMUX_SESSION:-dotfiles}" -c "$root" \
+  "claude --add-dir '$sibling'"
+'''
