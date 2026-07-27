@@ -267,6 +267,25 @@ Per issue, inside one workflow:
 4. **Ship** — `cd <repo> && mise run kb-ship`, then `kb-land`. Never `gh pr
    create`/`merge`: guard-denied, and correctly so.
 
+**Steps 2 and 3 are BOTH mandatory and neither subsumes the other** (measured,
+knowledge-base #41, 2026-07-27). They find *disjoint* defect classes:
+
+- The **refuters**, each told to attack a named claim, found **semantic**
+  divergences — build vs stamp reading different binaries, `mise where`
+  cwd-sensitivity.
+- The **cold reviewer**, given only the diff, found **structural** ones no
+  refuter looked at: a destructive step ordered before its own validation, a
+  missing branch, and the missing regression test itself.
+
+#41 shipped with a destructive bug (`tmux kill-server` ahead of preflight, so
+any preflight failure destroyed every tmux session on the host and launched
+nothing) because the session judged the refuters had covered the reviewer's
+brief. They had not, and a majority-pass on step 3 does not discharge step 2.
+
+The mechanism is decorrelation, and it is the same reason §4 keeps the two
+repos in one session rather than two: **an agent told what to attack cannot
+report what nobody thought to ask about.** A refuter's brief is its blind spot.
+
 **Gates before any ship** (knowledge-base): `mise run lint` rc=0, `pytest`,
 `kb-setup eval` (and `--slow` for any retrieval change), `brain-audit`.
 
