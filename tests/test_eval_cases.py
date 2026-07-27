@@ -12,6 +12,7 @@ difference between a red gate and a red gate you understand.
 
 from __future__ import annotations
 
+import shutil
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -61,6 +62,7 @@ def test_the_expected_cases_are_declared() -> None:
     assert {c.name for c in _cases()} == {
         "tier1.lanes-declared-or-degraded",
         "tier1.shared-engine-resolves",
+        "tier1.cc-subcommand-dispatches",
         "tier1.graph-answers",
         "tier1.lane-health",
         "tier2.guard-fixtures",
@@ -116,6 +118,37 @@ def test_the_shared_engine_probe_names_what_is_missing() -> None:
     outcome = case.control()
     assert outcome.verdict is evals.Verdict.FAIL
     assert "kb_setup.definitely_not_a_module" in outcome.detail
+
+
+def test_the_launcher_marker_is_what_the_pinned_cli_really_prints() -> None:
+    """Independent source of truth: drive the real pinned CLI and read it.
+
+    A marker constant chosen to match the probe's own expectation is a
+    tautology. This runs `kb-setup cc` — the exact command `mise run cc` runs,
+    minus its arguments — and asserts the marker appears in the real output. If
+    the launcher's refusal wording changes upstream, this goes red here rather
+    than the case quietly going inert.
+    """
+    exe = shutil.which("kb-setup")
+    assert exe is not None, "kb-setup must resolve — `mise run cc` invokes it"
+    rc, out = evals.run_command([exe, "cc"])
+    assert eval_cases.LAUNCHER_REACHED_MARKER in out, f"rc={rc}: {out}"
+
+
+def test_rc_alone_cannot_discriminate_the_launcher_probe() -> None:
+    """Both directions exit 2 — which is *why* the probe grades the marker.
+
+    #391's failure (`unknown command 'cc'`) and the handler's own
+    missing-argument refusal are indistinguishable by exit code. A later edit
+    that "simplified" the probe to `rc == 2` would pass in both directions — a
+    coin with one face. Pinning the equality here makes that visibly wrong.
+    """
+    exe = shutil.which("kb-setup")
+    assert exe is not None
+    reached_rc, _ = evals.run_command([exe, "cc"])
+    unknown_rc, unknown_out = evals.run_command([exe, "no-such-subcommand-xyz"])
+    assert reached_rc == unknown_rc
+    assert eval_cases.LAUNCHER_REACHED_MARKER not in unknown_out
 
 
 def test_the_graph_case_declares_an_environment_precondition() -> None:
