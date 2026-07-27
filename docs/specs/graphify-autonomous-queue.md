@@ -259,12 +259,43 @@ CLI" — so **tmux running inside Ghostty satisfies it**. The blocker is only th
 missing tmux session, not the terminal.
 
 **Transport is a launch-time shell fact (`$TMUX`), not a repo fact** — per-repo
-config can express a preference but cannot create a tmux session. So:
+config can express a preference but cannot create a tmux session. That is why
+each repo ships a launcher task (`mise run cc`, dotfiles#379 / knowledge-base#36)
+rather than leaving it to be typed:
 
 ```bash
-tmux new -s kb          # tmux 3.7b is installed; no OMC involved
-claude                  # teammateMode "tmux" now actually activates
+cd <repo> && mise run cc     # creates-or-attaches tmux, then launches claude
 ```
+
+It roots the session in **that** repo, adds the sibling with `--add-dir`, and
+execs claude directly when already inside tmux instead of nesting. Override the
+session name with `CC_TMUX_SESSION=<name>`.
+
+**Why each repo needs its own launcher, and this is the safety point:** hooks and
+most `.claude/settings.json` keys load from "the current working directory's
+`.claude/` folder with **no parent-directory fallback**", and hooks are **not**
+among the `--add-dir` exceptions. So a dotfiles-rooted session does **not** load
+knowledge-base's PreToolUse guard — its `graphify add`/`update` denies would be
+absent while an agent edits KB. Root the session in the repo whose guard must
+apply.
+
+**What is configuration, not flags** (project-level only — user/global settings
+are not this repo's to change):
+
+| setting, in each repo's `.claude/settings.json` | replaces |
+|---|---|
+| `permissions.defaultMode: "auto"` | `--permission-mode auto` |
+| `env.CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: "1"` | loads the sibling's `CLAUDE.md` + `.claude/rules/*.md`, which are otherwise **silently absent** |
+
+`--add-dir` is the one thing that **cannot** be a setting:
+`permissions.additionalDirectories` grants "file access only and doesn't load any
+of the configuration", while the flag also loads the sibling's `.claude/skills/`
+and `.claude/agents/`.
+
+**UNVERIFIED, worth a first-turn check:** the docs do not say whether settings
+`env` is applied *before* memory files load at session start. If the sibling's
+rules turn out not to be loaded, move that one var back into the task's
+environment.
 
 Split-pane teammates are also **resumable** — the "no session resumption"
 limitation is scoped specifically to *in-process* teammates.
@@ -324,12 +355,18 @@ into the handoff, `/clear`, and let the SessionStart hook re-inject this file.
 
 ## 11. Start here
 
-1. Ray: `! gh pr merge 372 --squash --delete-branch`
-2. Ray: `tmux new -s kb` then `claude`
-3. Turn on auto mode.
+1. Ray: `! gh pr merge 372 --squash --delete-branch` — **done 2026-07-27.**
+2. `cd <repo> && mise run cc`. Root it in **knowledge-base** for the KB phases,
+   so KB's graphify guard is loaded; use dotfiles' launcher for Phase 5.
+3. Auto mode needs nothing — it is `permissions.defaultMode: "auto"` in project
+   settings.
 4. Paste the `/goal` line from §10.
 5. Phase 0 is a triage workflow that reports the DAG **for approval** before any
-   build.
+   build. Its first check is the §5a version-skew gate.
+
+**Known tax:** a branch touching `mise.toml` makes ship's `sync-full` gate run
+`mise install`, which currently compiles `tokei` from source — ~25 minutes, and
+it looks like a hang. Tracked as **#380**.
 
 ## GitHub repos touched
 
