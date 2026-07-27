@@ -20,14 +20,21 @@ dependencies = [
     # deleted), md_budget (dotfiles' md_budget.py + tests deleted 2026-07-25; the
     # `md_size_budget` hk step shells out to `kb-setup md-budget`), and the eval
     # runner (`kb_setup.evals` — tier-1 probes plus the tier-2 guard fixture
-    # engine; this repo declares its own cases in dotfiles_setup.eval_cases).
-    # THREE gates now ride this pin, which is why tier1.shared-engine-resolves
-    # probes that it actually imports.
+    # engine; this repo declares its own cases in dotfiles_setup.eval_cases),
+    # and `kb_setup.launch` (the `mise run cc` launcher).
+    # FOUR gates/entry points now ride this pin, which is why
+    # tier1.shared-engine-resolves probes that it actually imports.
+    #
+    # BUMPING IS NOT A DRIVE-BY (#391): this pin sat at 23e4a724 — a revision
+    # that PREDATES `kb_setup/launch.py` — so `mise run cc` had never once
+    # worked in this repo, while every gate stayed green because no gate
+    # invoked it. A pin is a DECLARATION; only a probe that runs the thing is
+    # RESOLUTION. `tier1.cc-subcommand-dispatches` is that probe.
     # SHA-PINNED (D3) so it is reproducible on a clean CI runner and via uv.lock;
     # neither repo has tags, so a SHA is the only stable pin. Renovate's git-refs
     # datasource bumps this the same way it bumps CLANG_P2996_REF. Dependency
     # direction is dotfiles → KB only; the KB never learns about its consumers.
-    "kb-setup @ git+https://github.com/ray-manaloto/knowledge-base@23e4a724a6ad034fab204a8cd3c827a386d19516",
+    "kb-setup @ git+https://github.com/ray-manaloto/knowledge-base@737ff6e3b745c096c886ff4a732befc033efb75e",
 ]
 
 [project.scripts]

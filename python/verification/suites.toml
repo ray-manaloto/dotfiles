@@ -1086,6 +1086,24 @@ tokens = [
 ]
 
 [[suite]]
+name = "eval.cc-launcher-wiring"
+description = "The `cc` launcher chain, declaration half (#391). `mise run cc` dispatches to `kb-setup cc`, whose handler lives in `kb_setup.launch` — supplied by the SHA-pinned kb-setup dependency. That pin sat at a revision PREDATING `launch.py`, so the task had never worked in this repo across two PRs (#379, #390), while every gate stayed green: lint checks the TOML, not that the subcommand exists at the pinned revision, and nothing else invoked it. This contract binds the declaration side — the task, the argv it runs, the pin that supplies the handler — and `tier1.cc-subcommand-dispatches` binds the RESOLUTION side by really running it. Both halves are needed and neither substitutes: a pin can name a commit and a task can name a subcommand while the two do not meet, which IS the #354 defect class. The handler itself is deliberately not bound — `kb_setup/launch.py` lives in the knowledge-base repo, is covered by ITS tests, and naming a path outside this tree could only ever fail (`paths_required` is strict, #299). Note `raw = true` on the task is bound too: without it mise captures the task's output, the child gets no TTY, and tmux dies with \"open terminal failed\" (#390) — a launcher that cannot attach is as dead as one that cannot dispatch. The mise token is anchored to `kb-setup cc --root` because it was CONTROL-ARMED and the unanchored form failed: renaming the subcommand to `ccX` still contains `kb-setup cc`, so the first draft of this contract passed on the very break it exists to catch."
+category = "eval"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    "mise.toml",
+    "python/pyproject.toml",
+    "python/src/dotfiles_setup/eval_cases.py",
+    "tests/test_eval_cases.py",
+]
+per_path_tokens = { "mise.toml" = ["[tasks.cc]", "kb-setup cc --root", "raw = true"], "python/pyproject.toml" = ["kb-setup @ git+https://github.com/ray-manaloto/knowledge-base@"], "python/src/dotfiles_setup/eval_cases.py" = ["LAUNCHER_SUBCOMMANDS", "LAUNCHER_REACHED_MARKER", "tier1.cc-subcommand-dispatches"], "tests/test_eval_cases.py" = ["test_the_launcher_marker_is_what_the_pinned_cli_really_prints", "test_rc_alone_cannot_discriminate_the_launcher_probe"] }
+tokens = [
+    "tier1.cc-subcommand-dispatches",
+]
+
+[[suite]]
 name = "workflow.bash-logic-enforcement"
 description = "Zero-bash-logic policy wiring: the `bash_logic_budget` hk step must stay wired to the python enforcer end-to-end — hk.pkl shells out to `dotfiles-setup bash-budget`, main.py registers the subcommand, the bash_budget module (allowlist + per-file growth budget) + its tests exist, and the rule doc records the policy. The check LOGIC lives in python so the enforcer does not itself violate the policy it enforces; this contract asserts the whole chain so it can't drift out."
 category = "workflow"

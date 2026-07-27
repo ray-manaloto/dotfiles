@@ -60,7 +60,19 @@ DOCTOR_SCRIPT = Path.home().joinpath(
 #: node labels — that grades lexical overlap and reports a win that isn't there.
 CANARY_QUESTION = "how does the devcontainer get built?"
 
+#: The launcher subcommands the `cc` / `cc-doctor` mise tasks dispatch to. Both
+#: live in `kb_setup.launch` and are reached through the pinned CLI's own
+#: dispatch chain, which is the thing #391 found broken.
+LAUNCHER_SUBCOMMANDS = ("cc", "cc-doctor")
+
+#: What a launcher subcommand prints when dispatch REACHED it and the required
+#: argument is absent. Both refuse on a missing `--sibling` before preflight
+#: runs, so driving them this way exercises real dispatch and launches nothing,
+#: kills no tmux server, and touches no repo.
+LAUNCHER_REACHED_MARKER = "--sibling <path> is required"
+
 _MISSING_BINARY = "definitely-not-a-real-binary-xyz"
+_MISSING_SUBCOMMAND = "definitely-not-a-subcommand"
 
 _D = evals.GuardFixture
 _DENY = evals.Decision.DENY
@@ -226,6 +238,50 @@ def _broken_doctor() -> evals.Outcome:
         return evals.doctor_health(script, timeout=30)
 
 
+def _launcher_dispatches(subcommands: Sequence[str]) -> evals.Outcome:
+    """Does the pinned ``kb-setup`` CLI actually route each subcommand?
+
+    #391: this repo's pin named a revision that predates ``kb_setup/launch.py``,
+    so ``mise run cc`` had never once worked — while every gate stayed green,
+    because a pin is a DECLARATION and no gate ever invoked the thing.
+
+    The rc is **2 in both directions** — the handler's missing-argument refusal
+    and the CLI's own ``unknown command`` both exit 2 — so grading rc here would
+    be a probe that cannot fail. :data:`LAUNCHER_REACHED_MARKER` is the only
+    discriminator, and it is printed by the handler itself.
+    """
+    exe = shutil.which("kb-setup")
+    if exe is None:
+        return evals.fail(
+            "kb-setup does not resolve — the `cc` task runs it through "
+            "`uv run --project python`, so this is the launcher being dead"
+        )
+    unreachable = []
+    for sub in subcommands:
+        rc, out = evals.run_command([exe, sub])
+        if LAUNCHER_REACHED_MARKER not in out:
+            first = next(iter(out.strip().splitlines()), "(no output)")
+            unreachable.append(f"{sub} (rc={rc}): {first}")
+    if unreachable:
+        return evals.fail(
+            "the pinned kb-setup CLI does not dispatch: " + "; ".join(unreachable)
+        )
+    return evals.ok(
+        f"{len(subcommands)} launcher subcommand(s) dispatch through {exe}: "
+        + ", ".join(subcommands)
+    )
+
+
+def _launcher_dispatch_control() -> evals.Outcome:
+    """Control arm: the same probe against a subcommand that cannot exist.
+
+    This is #391's measured failure verbatim — ``kb-setup: unknown command`` —
+    so the control reproduces the real regression rather than a mutation that
+    could not happen.
+    """
+    return _launcher_dispatches((_MISSING_SUBCOMMAND,))
+
+
 def _graphify_installed() -> evals.Outcome | None:
     """Environment gate: graphify is HOST-ONLY, so the canary cannot run in-container.
 
@@ -282,6 +338,17 @@ def cases(repo_root: Path, *, doctor_script: Path | None = None) -> list[evals.C
             ),
             probe=_kb_setup_importable,
             control=_kb_setup_import_control,
+        ),
+        evals.Case(
+            name="tier1.cc-subcommand-dispatches",
+            description=(
+                "the `cc` / `cc-doctor` mise tasks reach a real handler in the "
+                "PINNED kb-setup — #391: the pin predated `launch.py`, so the "
+                "launcher was dead for its whole life and no gate noticed, "
+                "because every gate graded the declaration"
+            ),
+            probe=lambda: _launcher_dispatches(LAUNCHER_SUBCOMMANDS),
+            control=_launcher_dispatch_control,
         ),
         evals.Case(
             name="tier1.graph-answers",
