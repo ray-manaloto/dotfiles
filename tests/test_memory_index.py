@@ -157,6 +157,40 @@ def test_distinctive_facts_ignores_a_short_hex_run() -> None:
     assert mi.distinctive_facts("abc123 is not a sha") == []
 
 
+def test_bare_kb_is_not_a_size_because_kb_means_knowledge_base() -> None:
+    """The live false positive, verbatim from the index hook that produced it.
+
+    `11 KB + 10 dotfiles issues` counts **knowledge-base** issues, not kilobytes.
+    Read as a size it went looking for `11 KB` in the topic file, did not find it
+    (the file says `11 knowledge-base issues + 10 dotfiles`), and was reported as
+    an index-only fact a trim would destroy — failing the gate on the repo's own
+    noun.
+    """
+    hook = (
+        "runbook = `docs/specs/graphify-autonomous-queue.md`;"
+        " 11 KB + 10 dotfiles issues"
+    )
+    assert [f for f in mi.distinctive_facts(hook) if f.kind == "size"] == []
+    assert mi.distinctive_facts("the 25KB auto-load cap") == []
+
+
+def test_every_other_size_unit_still_extracts() -> None:
+    """Control arm for the `KB` exclusion: the class must still be able to fire.
+
+    Without this, dropping a unit is indistinguishable from breaking the size
+    class outright — a probe that can only return "no size found".
+    """
+    for text, expected in [
+        ("image is 17.5 GB", "17.5GB"),
+        ("image is 25.8GB", "25.8GB"),
+        ("blob is 512 B", "512B"),
+        ("page is 64 KiB", "64KiB"),
+        ("cache is 900 MB", "900MB"),
+        ("array is 2 TB", "2TB"),
+    ]:
+        assert mi.Fact("size", expected) in mi.distinctive_facts(text), text
+
+
 # ---------------------------------------------------------- normalized fact matching
 
 
