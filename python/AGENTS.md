@@ -67,6 +67,14 @@ Two engine defaults bind every contract you write (#299):
   which file must carry which token — otherwise a contract has no opinion
   about the files it names (`build.path-includes-mise-shims` named a file that
   stopped wiring PATH and stayed green ~3.5 months).
+- **A single-path `require_tokens` suite MUST use `per_path_tokens`** (#397,
+  gated by `dotfiles-setup token-audit`). With one path the two forms mean the
+  same thing, but only `per_path_tokens` is read by the uniqueness audit — the
+  bare form silently exempts the suite. Ask the audit's question yourself when
+  adding a token: **how many places in that file match it?** More than one and
+  a stand-in can satisfy it. 33 of 33 tail rebindings closed a LIVE hole, and
+  in **11** of them the sole stand-in was a **comment** — so a file's own
+  documentation can satisfy a contract about its wiring.
 
 Contracts use handler types like `policy_doc` (references a doc file)
 and `regex_forbid` (pattern-based rejection). Note: static contract

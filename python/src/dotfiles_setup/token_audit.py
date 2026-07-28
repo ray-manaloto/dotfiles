@@ -43,11 +43,14 @@ temp tree (old token + mutated tree PASSES; the rebound token FAILS naming
 itself), with a control arm over the 103 already-unique tail tokens, every one
 of which correctly reported *not* a hole.
 
-The dominant stand-in was not a sibling registration, as #394's three were — it
-was **a comment or a prose sentence in the same file naming the thing**. A
-Dockerfile that explains its own ``ARG`` above it, a workflow that documents its
-own job, a devcontainer.json whose header block narrates every mount. Deleting
-the wiring left the narration, and the narration satisfied the token.
+A stand-in shape appeared that #394's three did not have: **the file's own
+comment**. Counted, not eyeballed — for 11 of the 33 the sole surviving match
+was a comment line, for 10 it was a comment plus code, and for 12 code alone.
+A Dockerfile explains its own ``ARG`` above it, a workflow documents its own
+job, devcontainer.json narrates every mount in a header block; deleting the
+wiring leaves the narration, and the narration satisfies the token. (PR #403's
+commit message called this "overwhelmingly" the case before anyone counted. It
+is a third. See the spec's 2026-07-28 revision.)
 
 Hence :func:`find_unaudited`: a ``require_tokens`` suite naming exactly one path
 must bind through ``per_path_tokens``, never a bare ``tokens`` list. That form
@@ -77,9 +80,8 @@ MANIFEST = "python/verification/suites.toml"
 #
 # #397 (2026-07-28) brought the `build.*`/`ci.*`/`arch.*` tail under this gate
 # by converting its single-path bare `tokens` to `per_path_tokens`. That
-# surfaced 39 more ambiguities: 31 were the `selfcheck` shape — overwhelmingly
-# a PROSE OR COMMENT MENTION standing in for the wiring line — and were
-# rebound; the 8 below are genuine.
+# surfaced 39 more ambiguities; 33 were the `selfcheck` shape and were rebound
+# (in 11 of those, the sole stand-in was a COMMENT). The 8 below are genuine.
 AMBIGUITY_ALLOWED: dict[tuple[str, str, str], str] = {
     (
         "build.locked-install-with-conda-sha",
