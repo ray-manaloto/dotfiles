@@ -106,7 +106,21 @@ _SHA = re.compile(r"\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b")
 # A byte size, e.g. `17.5 GB` / `25.8GB` / `38GB`. Units are a closed set: an
 # open `[A-Za-z]{1,3}` suffix matches the start of ordinary words after any
 # number ("4 facts"), and each imprecise class costs the report its credibility.
-_SIZE = re.compile(r"\b(?P<n>\d+(?:\.\d+)?)\s*(?P<unit>[KMGT]i?B|B)\b")
+#
+# Bare `KB` is EXCLUDED (`KiB` still counts). In this repo's vocabulary `KB`
+# means **knowledge-base** — the sibling `ray-manaloto/knowledge-base` repo — far
+# more often than kilobytes, and the index writes its sizes in B/GB. The hook
+# `11 KB + 10 dotfiles issues` (11 knowledge-base issues, 10 dotfiles issues) was
+# extracted as an `11 KB` size, found absent from the topic file, and reported as
+# an index-only fact that a trim would destroy. It was neither a size nor
+# index-only: the topic file says `11 knowledge-base issues + 10 dotfiles`.
+#
+# Same trade as `_SHA` above, and made the same way: a real kilobyte figure in a
+# hook now goes unchecked (one missed fact), whereas a unit that cries wolf on
+# the repo's own noun costs the whole report its credibility. Measured before
+# narrowing — across the live index, `KB` had **1** occurrence and it was the
+# knowledge-base sense, i.e. 0 genuine kilobyte uses to lose.
+_SIZE = re.compile(r"\b(?P<n>\d+(?:\.\d+)?)\s*(?P<unit>KiB|[MGT]i?B|B)\b")
 
 _MEMORY_INDEX = "MEMORY.md"
 
