@@ -162,6 +162,13 @@ Claude can derive from the codebase (directory layouts, dependency lists,
 architecture overviews) and keep pitfalls, rationale, and conventions that
 differ from tool defaults. That is `/doctor`'s documented heuristic.
 
+The repo's applied form of that is **`docs/rules-evidence/<rule>.md`**: a rule's
+archaeology, provenance tables and worked-failure logs move to a tracked sibling
+it links by path, keeping the directive plus one canonical example eager. See
+`agent-artifact-conventions.md`. Measured 2026-07-28 — unscoped rules are
+**~88%** of the eager corpus, so this is where the bytes actually are; the first
+four extractions took it 132,683 → 120,356 B.
+
 ## Applies to
 
 Every tracked `CLAUDE.md`, `AGENTS.md`, `.claude/rules/*.md`, and
