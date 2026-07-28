@@ -57,12 +57,24 @@ class Rule:
     rule identity, because grouping them by command head is meaningless — the
     guard's one real denial reaches ``npx`` through a ``||`` fallback after a
     ``cd``+``echo`` preamble, so it groups under ``echo``, naming nothing.
+
+    ``quoted_blind`` selects the masked view the pattern runs against. The
+    default view KEEPS quoted content (only separators inside it are neutered),
+    because several rules must read a literal inside quotes — the
+    ``docker pull "…dotfiles-devcontainer:dev"`` denial is exactly that. A rule
+    that matches a FLAG cannot use that view: ``git commit -m "document
+    --no-verify"`` carries the flag as prose, and denying a commit whose message
+    describes the ban is the guard's one measured defect class (#265, and the
+    unanchored chezmoi rule before it). Such a rule sets ``quoted_blind`` and
+    runs against a view where quoted CONTENT is redacted too, so a flag counts
+    only when it sits at argument position.
     """
 
     name: str
     pattern: re.Pattern[str]
     reason: str
     since: str
+    quoted_blind: bool = False
 
 
 # First match wins. Patterns run against the whole Bash command string;
@@ -113,6 +125,12 @@ _V4 = "2026-07-23"
 # existed, `gh pr merge --auto` on a Renovate PR could only be redirected to
 # `land`, which refuses an OPEN PR.
 _V5 = "2026-07-27"
+# The hook-suppression rules landed 2026-07-27 with `no_commit_to_branch` (#400).
+# They are the ONLY layer that can see a bypass: git decides not to run a hook
+# BEFORE the hook exists as a process, so no pre-commit or pre-push hook can
+# observe its own suppression, and hk's own HK_SKIP_HOOKS is documented CI
+# machinery (ADR-0001). A PreToolUse deny runs before the command.
+_V6 = "2026-07-27"
 
 # `gh` names a target repo with `-R owner/repo` / `--repo owner/repo` (or
 # `--repo=owner/repo`); with none, it infers from cwd — which, for a guard
@@ -360,6 +378,64 @@ _RULES: tuple[Rule, ...] = (
         ".claude/rules/mise-tasks-only.md.",
         _V3,
     ),
+    # --- #400: hook suppression ------------------------------------------
+    #
+    # `-n` is scoped to `commit` DELIBERATELY: it means `--no-verify` there but
+    # `--dry-run` for `git push`, where it is an ordinary read-only probe.
+    # `workflow_hooks.git_write_subcommands` records the same asymmetry from the
+    # other direction (it honours only the long form, because over-flagging a
+    # workflow is the cheap error there; here the flag IS the bypass, so the
+    # short form must be caught).
+    #
+    # The bundled short-option form (`-nm "msg"`) is admitted because git really
+    # does parse it, and `n` is the only single-dash `git commit` option letter
+    # that carries a hook meaning. `--` long options cannot match: the class
+    # after `\s-` is `[a-zA-Z]` only, so a second dash ends it.
+    #
+    # `quoted_blind`: a commit message DESCRIBING the ban must not be denied.
+    # `git commit -m "docs: --no-verify is now guarded"` is the exact shape that
+    # denied its own documenting commit in 2026-07-07's chezmoi probe, and the
+    # default masked view keeps quoted content on purpose (the docker-pull rule
+    # reads a literal out of it). So this rule runs against the view where the
+    # content is redacted too, and a flag counts only at argument position.
+    Rule(
+        "git --no-verify",
+        re.compile(
+            _CMD + r"git\s+[^;&|\n]*?\b(?:"
+            r"commit\b[^;&|\n]*?(?:\s--no-verify\b|\s-[a-zA-Z]*n[a-zA-Z]*(?=\s|$))"
+            r"|push\b[^;&|\n]*?\s--no-verify\b"
+            r")",
+        ),
+        "Do not bypass the git hooks. `--no-verify` (and `git commit -n`) is "
+        "how a stray commit reaches `main` and how an unvalidated branch gets "
+        "pushed — the pre-commit hook is what runs `no_commit_to_branch`, and "
+        "pre-push is what runs the test suite. Fix what the hook reports; if a "
+        "step is genuinely wrong, fix the step. Ship with `mise run ship`. See "
+        ".claude/rules/zero-skip-policy.md and .claude/rules/do-not.md #9.",
+        _V6,
+        quoted_blind=True,
+    ),
+    # hk's native skip vars are REAL and sanctioned — in CI, at job level, where
+    # ADR-0001 requires them (`refresh.yml`, `gcc-sha-repair.yml`). That is
+    # exactly why they need a guard on the interactive side: the escape hatch is
+    # documented, so reaching for it locally looks sanctioned when it is not.
+    # Anchored at command position (a bare `HK_SKIP_HOOKS=…` assignment or an
+    # `export`), so `grep -rn 'HK_SKIP_HOOKS=' .github/` — never at command
+    # position — stays allowed.
+    Rule(
+        "HK_SKIP_HOOKS prefix",
+        re.compile(
+            r"(?:^|[;&|\n]\s*)(?:export\s+)?(?:env\s+)?(?:\w+=\S*\s+)*"
+            r"HK_SKIP_(?:HOOKS|STEPS)="
+        ),
+        "Do not set HK_SKIP_HOOKS / HK_SKIP_STEPS to get past a hook. Those "
+        "exist for CI jobs that commit or push (ADR-0001, enforced by the "
+        "`workflow_hk_skip_hooks` step) — locally they just turn the gate off. "
+        "Fix what the hook reports, or fix the step. See "
+        ".claude/rules/zero-skip-policy.md.",
+        _V6,
+        quoted_blind=True,
+    ),
 )
 
 # NO pytest rule, deliberately (probe-observed 2026-07-07): Claude Code's
@@ -368,6 +444,16 @@ _RULES: tuple[Rule, ...] = (
 # plain `pytest tests/`, indistinguishable from the bare form the rule
 # meant to redirect. A rule here would deny the documented command.
 # Bare-pytest guidance stays doc-level (python/AGENTS.md, mise-tasks-only).
+
+# NO "deny `git commit` while HEAD is a protected branch" rule, deliberately
+# (#400 proposed one). It would have to shell out to `git symbolic-ref` on every
+# Bash call, which makes `match()` depend on live repo state — and `match()` is
+# replayed over MONTHS of transcripts by `dotfiles_setup.command_audit`, which
+# would then classify every historical command against TODAY's branch. A guard
+# whose verdict is not a function of the command cannot be audited.
+# The deterministic layer for that question is the `no_commit_to_branch` hk step
+# in hk.pkl's pre-commit hook (hk 1.52.0, jdx/hk#1075 — probed on all three
+# arms), and the two rules above are what stop it being skipped.
 
 # NO `cd`-prefix unwrap, deliberately (probe-observed 2026-07-14): the
 # "chained-command evasion" the enforcement research predicted for
@@ -494,6 +580,28 @@ def _inert_masked(command: str) -> str:
     return _QUOTED_SPAN.sub(_blank_quoted, HEREDOC_PATTERN.sub(blank_heredoc, command))
 
 
+def _blank_quoted_whole(match: re.Match[str]) -> str:
+    """Redact one quoted span entirely — quotes included, length preserved."""
+    span = match.group(0)
+    if span[0] not in "\"'":
+        return span  # an escaped character, consumed so it cannot open a span
+    return _FILLER * len(span)
+
+
+def _quoted_blind_masked(command: str) -> str:
+    """``command`` with quoted CONTENT redacted, not just its separators.
+
+    The view for rules that match a FLAG rather than a value. `--no-verify`
+    inside `git commit -m "…"` is prose about the ban, not the ban; only an
+    unquoted occurrence sits at argument position. Everything else matches
+    :func:`_inert_masked` — heredocs redacted first, length preserved, so every
+    rule's view of the surrounding offsets is unchanged.
+    """
+    return _QUOTED_SPAN.sub(
+        _blank_quoted_whole, HEREDOC_PATTERN.sub(blank_heredoc, command)
+    )
+
+
 def rules() -> tuple[Rule, ...]:
     """Every deny rule, in match order — the guard's introspection surface.
 
@@ -521,8 +629,9 @@ def match(command: str) -> Rule | None:
     reason — to tell a genuine bypass from pre-rule history.
     """
     target = _inert_masked(command)
+    blind = _quoted_blind_masked(command)
     for rule in _RULES:
-        if rule.pattern.search(target):
+        if rule.pattern.search(blind if rule.quoted_blind else target):
             return rule
     return None
 

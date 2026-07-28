@@ -67,10 +67,25 @@ self-contained block). Each item's context is preserved verbatim.
      `Path.home()` calls).
 
 9. **Do NOT commit onto the default branch — branch FIRST.** Create the branch
-   *before* the commit, then `mise run ship`. On 2026-07-20 a session committed
-   34 files straight onto `main` and had to move them afterwards
-   (`git branch <new> && git reset --hard origin/main`). It was recoverable
-   only because nothing had been pushed.
+   *before* the commit, then `mise run ship`. It happened twice: 34 files on
+   2026-07-20, and 19 on 2026-07-27 straight after `mise run land` (which
+   **leaves you on `main`**). Both were recoverable only because nothing had
+   been pushed — the objection came at push time, from `mise run ship`'s own
+   refusal. Recovery is `git branch <new> && git reset --hard origin/main`.
+
+   **This is now machine-enforced (#400), in three layers:**
+   - `no_commit_to_branch` — an hk BUILTIN, wired in `hk.pkl`'s **pre-commit**
+     hook. Declined in #154 because it treated a detached HEAD as fatal;
+     hk v1.52.0 (`jdx/hk#1075`) fixed it, probed on all four arms here (branch
+     → 0, `main` → 1, detached → 0, `master` → 1). It is deliberately NOT in
+     `allSteps`: that mapping is spread into `check`/`fix`, so `mise run lint`
+     — and CI's lint job, which checks out a real `main` — would fail on it.
+   - the PreToolUse guard denies `--no-verify` / `git commit -n` and a
+     `HK_SKIP_HOOKS=` prefix. **No git hook can catch these** — git decides not
+     to run the hook before the hook exists as a process, so a pre-push hook is
+     not a fix and should not be built.
+   - a repository **ruleset requires a pull request for `main`**, which is the
+     only layer an agent cannot skip. Everything local is advisory.
 
    The guidance already existed in the `git-branch-commit-push-workflow` skill
    — but that skill carries `disable-model-invocation: true`, which **agnix
@@ -78,6 +93,14 @@ self-contained block). Each item's context is preserved verbatim.
    cannot reach it at decision time. Hence this line: an eager rule is the only
    layer that fires before the mistake. Do not "fix" the skill by removing the
    flag; the docs gate will reject it, and correctly.
+
+10. **Do NOT write an environment dump into a tracked file.** Not `env`, not
+    `printenv`, not `export -p`, not a debug log carrying them. The interactive
+    shell holds real credentials, and mise packs the whole delta into
+    `__MISE_DIFF` (zlib + base64) — a form **no secret scanner can read**
+    (measured: gitleaks 2 → 0, betterleaks 1 → 0 on the same content). Write a
+    dump to the scratchpad and delete it. Gated by the `no_env_dump` hk step;
+    see `secrets-out-of-the-shell-env.md`.
 
 > **Relaxed 2026-07-19 — MCP registration is no longer a "do not".** Native
 > MCP registration (`claude mcp add`, a plugin's bundled servers, a project

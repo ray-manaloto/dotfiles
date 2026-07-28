@@ -83,7 +83,12 @@ NOT_ADOPTED: dict[str, str] = {
     "markdown_lint": "Runs markdownlint v1; repo uses markdownlint-cli2 (#154)",
     "mdschema": "Requires a schema file that does not exist yet (#160 T12)",
     "mypy": "Using ty instead",
-    "no_commit_to_branch": "Fails on CI's detached HEAD; branch protection covers it",
+    # `no_commit_to_branch` was here until #400 with the reason "Fails on CI's
+    # detached HEAD; branch protection covers it". Both halves expired: hk
+    # v1.52.0 (jdx/hk#1075) treats a detached HEAD as not-on-a-protected-branch,
+    # and the measured branch protection was `required_pr: false`. It is now
+    # wired in hk.pkl's pre-commit hook, so `stale_entries` would fail on an
+    # entry left here — which is the map staying honest, as designed.
     "pinact": "GitHub API rate-limit in the hook; use `mise run pin-actions`",
     "pylint": "Superseded by ruff",
     "rubocop": "No Ruby source in project",

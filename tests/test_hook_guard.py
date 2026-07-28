@@ -491,6 +491,109 @@ def test_inert_span_redaction_never_costs_a_true_positive(
     assert redirect_hint in reason
 
 
+@pytest.mark.parametrize(
+    ("command", "rule_name"),
+    [
+        # --- `--no-verify`: the long form, on both hook-firing verbs ----------
+        ("git commit --no-verify -m x", "git --no-verify"),
+        ("git push --no-verify", "git --no-verify"),
+        ("git push origin HEAD --no-verify", "git --no-verify"),
+        # `git -C <abs>` is the form this repo's own cwd rule prescribes, so it
+        # is the likeliest way the bypass would actually be typed here.
+        ("git -C /abs/path commit --no-verify -m x", "git --no-verify"),
+        ("cd /x && git commit --no-verify -m y", "git --no-verify"),
+        # The short form, and its bundled variant — `-n` IS `--no-verify` for
+        # commit, and git parses `-nm "msg"` as `-n -m "msg"`.
+        ("git commit -n -m x", "git --no-verify"),
+        ("git commit -nm 'wip'", "git --no-verify"),
+        # --- hk's own skip vars, as a prefix or an export --------------------
+        ("HK_SKIP_HOOKS=pre-commit git commit -m x", "HK_SKIP_HOOKS prefix"),
+        ("HK_SKIP_STEPS=ruff git commit -m x", "HK_SKIP_HOOKS prefix"),
+        ("export HK_SKIP_HOOKS=pre-commit", "HK_SKIP_HOOKS prefix"),
+        ("env HK_SKIP_HOOKS=pre-push git push", "HK_SKIP_HOOKS prefix"),
+        ("FOO=1 HK_SKIP_HOOKS=pre-commit git commit -m x", "HK_SKIP_HOOKS prefix"),
+        ("echo hi\nHK_SKIP_HOOKS=1 git commit -m x", "HK_SKIP_HOOKS prefix"),
+    ],
+)
+def test_hook_suppression_denied(command: str, rule_name: str) -> None:
+    """#400: the ONLY layer that can see a hook bypass.
+
+    Git decides not to run a hook before the hook exists as a process, so no
+    pre-commit or pre-push hook can observe its own suppression. Control-armed
+    against the pre-#400 guard: `git commit --no-verify -m x` and
+    `git push --no-verify` both matched `None`, while `gh pr create` matched —
+    so the probe discriminated and the gap was real, not a blind spot.
+    """
+    rule = hook_guard.match(command)
+    assert rule is not None, command
+    assert rule.name == rule_name
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        # A commit message DESCRIBING the ban must not be denied by it — the
+        # exact shape the unanchored chezmoi rule got wrong in 2026-07-07, and
+        # the reason these two rules are `quoted_blind`.
+        "git commit -m 'docs: --no-verify is now guarded'",
+        'git commit -m "feat(guard): deny git commit -n"',
+        "git commit -m 'chore: set HK_SKIP_HOOKS=pre-commit in refresh.yml'",
+        "grep -rn 'HK_SKIP_HOOKS=' .github/workflows/",
+        "rg -- '--no-verify' .claude/rules/",
+        "echo 'never use HK_SKIP_HOOKS=pre-commit locally'",
+        # `-n` means `--dry-run` for push, not `--no-verify` — a read-only
+        # probe, and denying it would be a pure false positive. The asymmetry is
+        # recorded from the other side in `workflow_hooks.git_write_subcommands`.
+        "git push -n",
+        "git push origin HEAD -n",
+        "git push --dry-run",
+        # Ordinary commits, including short-option clusters with no `n`.
+        "git commit -m x",
+        "git commit -am 'wip'",
+        "git commit --amend --no-edit",
+        "git log -n 5",
+        # A hook-firing verb is required: `git add`/`git status` never fire one.
+        "git add -A",
+    ],
+)
+def test_hook_suppression_false_positives(command: str) -> None:
+    """False positives are the only defect class this guard has ever had (#265)."""
+    assert hook_guard.decide(command) is None
+
+
+def test_skip_var_on_a_redirected_gate_still_names_a_usable_action() -> None:
+    """First-match-wins hands this to the `hk run` rule, and that is fine.
+
+    `HK_SKIP_STEPS=ruff hk run check --all` matches the older, earlier rule, so
+    the reason says "use `mise run lint`" rather than naming the skip var. That
+    redirect is still the correct next action — running the gate WITHOUT the
+    skip is exactly what should happen — so the ordering is left alone. Pinned
+    so it stays a decision rather than an accident of table order.
+    """
+    reason = hook_guard.decide("HK_SKIP_STEPS=ruff hk run check --all")
+    assert reason is not None
+    assert "mise run lint" in reason
+
+
+def test_quoted_blind_view_still_sees_an_unquoted_flag() -> None:
+    """Redacting quoted content must not cost the true positive beside it.
+
+    The three assertions are the two views in contrast, all through the public
+    interface: a quoted message does NOT trip the flag rule, an unquoted flag in
+    the same command DOES, and a rule on the default view still reads a literal
+    out of quotes. That last one is why the views are separate rather than one
+    stricter mask — collapsing them would silently un-deny the pull rule.
+    """
+    assert hook_guard.decide("git commit -m 'docs: explain --no-verify'") is None
+
+    rule = hook_guard.match("git commit -m 'docs: explain the gate' --no-verify")
+    assert rule is not None
+    assert rule.name == "git --no-verify"
+
+    quoted_literal = 'docker pull "ghcr.io/ray-manaloto/dotfiles-devcontainer:dev"'
+    assert hook_guard.match(quoted_literal) is not None
+
+
 @pytest.mark.parametrize("rule", hook_guard.rules(), ids=lambda r: r.name)
 def test_every_rule_carries_a_usable_since_date(rule: hook_guard.Rule) -> None:
     """A rule with no (or a malformed) `since` reports as history forever.

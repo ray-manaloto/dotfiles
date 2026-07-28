@@ -585,6 +585,30 @@ hooks {
     fix = true
     stash = "git"
     steps {
+      // #400: the one layer that fires BEFORE a stray commit lands on main.
+      // Twice now a session has committed onto local `main` straight after
+      // `mise run land` (which leaves you there) — 34 files on 2026-07-20, 19
+      // on 2026-07-27 — and both times the only objection came at PUSH time,
+      // from `mise run ship`'s own refusal. `do-not.md` #9 was the manual
+      // discipline; this is the mechanism.
+      //
+      // Declined in #154 because `hk util no-commit-to-branch` treated
+      // `git symbolic-ref` exiting nonzero as fatal, so it blocked commits
+      // made during an interactive rebase (detached HEAD) — including in CI.
+      // hk v1.52.0 (jdx/hk#1075) now treats a detached HEAD as "not on a
+      // protected branch". PROBED on the pinned 1.52.0 rather than believed
+      // (.claude/rules/probes-need-a-control-arm.md): feature branch -> rc=0,
+      // `main` -> rc=1, `git checkout --detach` -> rc=0, `master` -> rc=1.
+      // Protected set is the builtin's default (main, master), which is right
+      // for this repo; `--branch` would override it.
+      //
+      // Deliberately NOT in `allSteps`: that mapping is spread into `check`
+      // and `fix`, so `mise run lint` (≡ CI's `hk check --all`) would FAIL on
+      // main — and CI's own lint job checks out a real `main` branch, not a
+      // detached HEAD, so it would fail there on every push to main.
+      // pre-commit is the hook where "am I about to commit here?" is the
+      // actual question.
+      ["no_commit_to_branch"] = Builtins.no_commit_to_branch
       ...allSteps
     }
   }
