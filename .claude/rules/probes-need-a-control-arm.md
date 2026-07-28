@@ -14,18 +14,10 @@ nothing reviews them.
 ## Why this rule exists
 
 Session 2026-07-15 produced **five false negatives in one session**, every one
-from a probe that could not have succeeded:
-
-| Probe | Said | Truth |
-|---|---|---|
-| `find … -maxdepth 4 -iname '*grill*'` | "`grill-with-docs` doesn't exist" | It exists at **depth 7**. |
-| `find … -name 'agent-*.jsonl'` | "AGENT DEAD, no transcript" | Alive; teammate transcripts are `<uuid>.jsonl`, so the glob **can never match**. It delivered a 34 KB report. ~10 min of work redone for nothing. |
-| `curl …/resolute/` → 301 | (nothing — 301 for every dist) | A redirect, not evidence. `noble` returned 301 too. |
-| PyPI loop with `jq -e '.info'` | "python-debian NOT ON PYPI" | It is. The very next query returned its metadata. |
-| `clang++ … /dev/null` compile | "openmp FAIL" | My heredoc quoting was broken; openmp was fine. |
-
-Each one was cheap to disprove and expensive to believe. The `find`-based ones
-cost the most: they produced confident, wrong statements to the user.
+from a probe that could not have succeeded. The canonical one:
+`find … -name 'agent-*.jsonl'` reported "AGENT DEAD, no transcript" — teammate
+transcripts are `<uuid>.jsonl`, so the glob **can never match**. The agent was
+alive and had delivered a 34 KB report.
 
 The **inverse** bites too. `cmd | grep -q PAT` under `set -o pipefail` returns
 **141**, so the check fails *because the match succeeded* — a probe that can
@@ -35,31 +27,24 @@ only fail. That broke the #289 base build; see `no_grep_q_under_pipefail` in
 ## Cross-check: when two probes disagree, one of them is broken
 
 The cheapest bug detector available is a **second probe of the same fact by a
-different route**. It needs no fixture and no reasoning: if two probes of one
-fact disagree, you have found a defect *for free* — and it is in a probe far
-more often than in the world. Reach for this the moment a result surprises you,
-before you write up the surprise.
+different route**. No fixture, no reasoning: if two probes of one fact disagree
+you have found a defect for free — and it is in a probe far more often than in
+the world. Reach for it the moment a result surprises you, *before* you write up
+the surprise.
 
-The value is that it names *which* answer to distrust. A lone probe returning
-"MISSING" is indistinguishable from a probe that cannot see; a second route
-returning "PRESENT" proves the first one is blind. Three instances, all
-2026-07-16, all cheap to cross-check and expensive to believe:
+It names *which* answer to distrust. A lone probe returning "MISSING" is
+indistinguishable from a probe that cannot see; a second route returning
+"PRESENT" proves the first one is blind.
 
-| the probe said | the disagreeing route | what was actually broken |
-|---|---|---|
-| pin `curl=8.18.0-1ubuntu2` FAILS to install | same pin in a **clean base container** → installs fine | the **devcontainer was dirty** — it already had a newer curl, and apt refuses to downgrade. The pin was correct; the environment lied. |
-| CI job SKIPPED ⇒ "unaffected by this change" | reading the job's `if:` condition | a SKIPPED job **never asked the question**. "Never ran" is not "ran and found nothing". |
-| every package reports MISSING | running the same command without the outer quoting | the **inner shell ate the variable** — a nested-quote format string expanded to empty, so every lookup compared against `""`. |
-| graphify **issue #959 is OPEN** ⇒ "custom OpenAI endpoints are blocked" | reading the **installed** `llm.py:112` | the feature shipped in **0.8.40**; the issue is stale-open. A viable path was nearly discarded on the strength of an unclosed ticket. |
-| the CC Discord plugin says *"Discord's search API isn't exposed to bots"* (asserted in **3** places) | reading **Discord's own** API docs | `GET /guilds/{id}/messages/search` was documented **2026-03-20** — two days *after* the plugin's first commit. Search is a **plugin** limit, not a platform limit. |
+**Source beats issue tracker; a tool's claim about a platform ages.** The
+recurring shape is a *secondary* artifact (an unclosed issue, a dependency's
+README) read as the current state of a *primary* one (the shipped source, the
+platform's API). Issues stay open after the fix lands; vendored docs freeze at
+their commit date. When a secondary source says "impossible" and it matters,
+**go read the code or the owner's docs**.
 
-**Source beats issue tracker. A tool's claim about a platform ages.** Both rows
-above are the same shape: a *secondary* artifact (an unclosed issue, a
-dependency's README) was read as the current state of a *primary* one (the
-shipped source, the platform's API). Issues stay open after the fix lands;
-vendored docs freeze at their commit date. When a secondary source says
-"impossible" and the thing matters, **go read the code or the owner's docs**
-before you believe it.
+Full case tables — five false negatives, five cross-check disagreements:
+`docs/rules-evidence/probes-need-a-control-arm.md`.
 
 ## Rules
 
@@ -72,59 +57,29 @@ before you believe it.
    returned empty, so `bash -c ""` "passed".)
 
    **Reintroduce the bug REALISTICALLY — a mutation that isn't the real failure
-   proves nothing.** 2026-07-16: to prove a contract would catch a symbol's
-   removal, the probe renamed `def changes_apt_pin_inputs` →
-   `def changes_apt_pin_inputs_REMOVED`. The contract passed, which read as a
-   contract defect — but the renamed symbol **still contains the original as a
-   substring** and the check is a substring match, so the probe was a no-op.
-   The probe was the bug. Two lessons, and the second is the expensive one:
-   - a mutation must actually *destroy* what the check looks for;
-   - and it must be a break that could **really happen**. The realistic break
-     was not renaming the function at all — it was **deleting the wiring line
-     that calls it**. Probing THAT (`if changes_apt_pin_inputs(paths):` removed
-     from `gate_matrix`) exposed a genuine hole the first probe never reached:
-     the contract stayed green because its token survived in a *comment* and a
-     *docstring*. Ask "what would the regression actually look like?" before
-     mutating — an unrealistic mutation can only ever accuse the wrong party.
+   proves nothing.** Two lessons, the second the expensive one: a mutation must
+   actually *destroy* what the check looks for (renaming a symbol leaves the
+   original as a substring, so a substring check is a no-op); and it must be a
+   break that could **really happen** — usually deleting the wiring line that
+   calls a function, not renaming the function. Ask "what would the regression
+   actually look like?" before mutating; an unrealistic mutation can only ever
+   accuse the wrong party. Worked case: `docs/rules-evidence/`.
 3. **Bound-limited searches are suspect by construction.** `-maxdepth`,
    `head -N`, `--limit`, a time window, a `2>/dev/null`: each can turn "absent"
    into "unreachable". Either remove the bound or prove the target is inside it.
 
-   **Display bounds count too — `ls … | tail -15` is a bound.** 2026-07-20: a
-   session ran `ls .agent/plans/ | tail -15`, did not see the handoff's
-   designated "bible", and reported it **missing**. The file existed; `plan-*`
-   simply sorts before `session-*` and fell outside the last 15 lines. `| head`,
-   `| tail`, and a bare `ls` of a large directory are all display bounds.
-
-   **So is checking N exact paths instead of asking "does it exist anywhere".**
-   Same session: an agent was declared non-compliant for "not writing its
-   report" after two specific paths were checked; it had written a 39 KB report
-   to a third. The probe answered "not at these two paths" and was read as "not
-   written". When the question is *existence*, search the tree, not a guess.
-
-   **And a relative time bound can be silently invalid.** `find … -newermt "-20
-   minutes"` returns nothing on macOS/BSD `find`, which does not parse that
-   relative form — indistinguishable from "no recent files". Control-arm any
-   time-bounded search against a window you know contains hits.
-
-   **A TOKEN SPELLING is a bound too — this is the most common form.** On
-   2026-07-21 a session grepped `lmstudio` and `lm_studio`, got 0, and reported
-   *"graphify supports NONE of MLX / LM Studio / Jan"* to the user. graphify
-   spells it **`LM Studio`, with a space** — 3 hits, one of them its own
-   `--help`: *"openai also reaches self-hosted OpenAI-compatible servers
-   (llama.cpp, vLLM, LM Studio): set OPENAI_BASE_URL"*. The literal grep was
-   true; the conclusion was backwards. A later agent caught it.
-
-   That session produced **five** bad-bound probes, which is why this paragraph
-   exists: a backtick defeated a search of its own handoff; a hyphen-vs-underscore
-   filename made a present pointer read as absent; a `cd` persisted so the
-   "control arm" ran in the same directory as the test; and zsh's lack of
-   word-splitting made `grep -l $f` (multi-line `$f`) silently match nothing.
+   Bounds come in more forms than they look: **display bounds** (`| head`,
+   `| tail`, a bare `ls` of a large dir), **checking N exact paths** instead of
+   asking "does it exist anywhere", **relative time bounds** that a given `find`
+   cannot parse, and — most common of all — **a TOKEN SPELLING**. A session once
+   grepped `lmstudio`/`lm_studio`, got 0, and reported the feature unsupported;
+   it is spelled `LM Studio`, with a space.
 
    The habit that would have caught every one: **a 0-result grep is not an
    answer until a control arm has run.** Before reporting absence, grep a term
    you KNOW is present in the same corpus with the same command shape. If that
-   also returns 0, the probe is broken — not the world.
+   also returns 0, the probe is broken — not the world. Worked cases:
+   `docs/rules-evidence/probes-need-a-control-arm.md`.
 4. **A redirect/timeout/parse-error is not a "no".** HTTP 301/000, a `jq` miss,
    an empty `grep` — distinguish "answered no" from "never asked".
 5. **Say which arm you ran.** When reporting a probe result, state the control:
@@ -136,21 +91,12 @@ before you believe it.
    else's unverified note into your finding, and the provenance is gone the
    moment you restate it.
 
-   2026-07-21: a session inherited a 5-row model bake-off table from a handoff
-   and reported it as "same corpus, same flags, so it is comparable". Only the
-   corpus was ever actually constant. graphify records **no backend or model in
-   any artifact** (control arm: the corpus filename *is* recorded), three of the
-   directories were identical in shape, the semantic cache key is model-blind,
-   and every arm was n=1. The whole comparison had to be discarded — after a
-   claim from it ("gemma4 wins on cross-doc edges, 2 to 1") had already been
-   reported to the user as a finding. It was a gap of **one**, from single runs,
-   with no noise floor.
-
    So: before repeating an inherited number, either (a) re-derive it and say you
    did, or (b) mark it explicitly as unverified and inherited. And when the
    number ranks things, ask what the **noise floor** is — a difference smaller
    than the same-input variance is not a difference. If nothing establishes that
-   floor, the ranking is not reportable at any confidence.
+   floor, the ranking is not reportable at any confidence. The bake-off table
+   that had to be discarded: `docs/rules-evidence/probes-need-a-control-arm.md`.
 
 7. **Cross-check a surprise before you report it.** A second route to the same
    fact costs seconds and settles which side is broken. Disagreement is a
