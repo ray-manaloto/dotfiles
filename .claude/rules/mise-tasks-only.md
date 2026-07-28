@@ -89,81 +89,44 @@ call — the wrapper exits 0 when the Python>=3.14 interpreter is absent, e.g. a
 cold web session) but **records every one** (#343). Hard bans that must never
 fail open belong in settings.json permission deny rules, not the hook.
 
-> **Enforcement design note (2026-07-14, research-backed):** we deliberately do
-> NOT re-inject a "use mise tasks" reminder every turn (UserPromptSubmit) or
-> nudge after every command (PostToolUse). Anthropic's guidance routes static
-> conventions to CLAUDE.md and enforcement to the PreToolUse hook, and the
-> LLM-behavior evidence ranks a hard gate (zero decay) far above per-turn
-> reminders (which decay, cost instruction budget, and sit in the lowest-trust
-> tier). See `docs/research/runs/research-20260714-hook-enforcement/report.md`.
-> The improvement path is layer 4 mining transcripts — not more per-turn hooks.
+We deliberately do NOT re-inject a per-turn "use mise tasks" reminder: a hard
+gate has zero decay, while reminders decay and cost instruction budget. The
+improvement path is layer 4 mining transcripts, not more hooks.
 
 ## Reading the command-audit report
 
 Only **`bypass`** is an alarm: a command that matched a rule ALREADY LIVE
 (`timestamp > rule.since`) and that really executed. The others are not:
 
-- **`blocked`** — the guard denied it; it never ran. The guard working. Audit
-  these for FALSE POSITIVES (#265), not for evasion of the matcher.
-- **`pre_rule`** — it predates the rule that matches it. History. **Trust this
-  only as far as `since` is right** — see "`since` dates COVERAGE" below.
-- **`one_off`** — refine-loop candidates, known-noisy (#266): top shapes are
-  sanctioned work (plain git, ad-hoc scripts, wait-loops). Discount until then.
+- **`blocked`** — the guard denied it; it never ran. Audit these for FALSE
+  POSITIVES (#265), not for evasion of the matcher.
+- **`pre_rule`** — it predates the rule that matches it. **Trust only as far as
+  `since` is right** — see "`since` dates COVERAGE" below.
+- **`one_off`** — refine-loop candidates, known-noisy (#266). Discount for now.
 
-Both distinctions are load-bearing: a bare "matched a rule" verdict is almost
-pure noise. Measured over 3,615 commands (2026-07-14): **155** matched a rule —
-**147** predated it, **3** were denials, **0** bypasses. The transcript forces
-the second axis, recording the `tool_use` block whether or not the command ran (a
-deny lands *after* the model emits it), so a denial and a bypass are identical
-until you pair the attempt to its result.
+Both axes are load-bearing: a denial and a bypass look identical until you pair
+the attempt to its result, because the transcript records the `tool_use` block
+whether or not the command ran.
 
-**"Nothing has ever evaded the guard" stood here until 2026-07-28 and was false
-in BOTH directions at once (#343).** Re-judged against the `hook_guard.py` live
-at each command's own timestamp rather than trusting `since`: of 128 rows, **3
-false**, **125 genuine**. The 125 ran because **the guard never ran** — hooks
-execute "in the current directory", so the relative `bash
-scripts/pretooluse-guard.sh` was absent whenever a session worked in the sibling
-repo (rc=127), and a non-zero non-2 PreToolUse exit is a **non-blocking error
-that lets the call proceed**. Every path is now anchored to
-`$CLAUDE_PROJECT_DIR` (settings.json AND the wrapper's equally-relative `uv
---project`), and `hook_selfcheck` drives a **foreign-cwd arm** — both old arms
-ran at the project root, which is precisely why this survived. **A fail-open
-that nothing counts is indistinguishable from enforcement**, so each is now
-recorded (`~/.local/state/dotfiles/guard-fail-open.log`) and reported by
-`command-audit`. Evidence: `docs/research/runs/research-20260728-guard-fail-open/`.
+⚠️ **Do not read "nothing has evaded the matcher" as "nothing has evaded the
+guard".** #343 found **125** commands that bypassed it entirely by never reaching
+it — a relative hook path made the guard absent off-root, and a non-zero non-2
+`PreToolUse` exit is a non-blocking error that lets the call proceed. Fail-opens
+are now recorded (`~/.local/state/dotfiles/guard-fail-open.log`).
 
-## Fixed: prose content in compound commands (#265)
+## Masking, and what stays fail-open by design
 
-The guard used to match the RAW Bash string, so a separator inside
-quoted/heredoc CONTENT read as a shell separator and the denied literal after it
-looked like it sat at a command position (`grep -iE "…|devcontainer up|…"` was
-denied). A deny cancels the ENTIRE compound command, silently skipping its other
-parts — so the cost was a command that looked like it ran.
+Rules match AFTER `hook_guard._inert_masked` neuters every separator that is
+DATA (quoted spans, heredoc bodies), so a quoted mention of a denied literal no
+longer denies (#265).
 
-**Fixed 2026-07-14** by `hook_guard._inert_masked`: separators (`;&|` + newline)
-that are DATA get neutered before the rules run — inside quoted spans (content
-preserved, only separators blanked, since a rule may need to read a quoted
-argument) and inside heredoc bodies (`<<EOF`, `<<'EOF'`, `<<-EOF` — redacted
-whole; a body is stdin data and can never be a command). Rule patterns are
-untouched, so recall is preserved by construction. `blocked` went **3 → 1**,
-keeping the one denial that was always correct.
+Still fail-open BY DESIGN (a redirect guard, not a sandbox): `$(…)`,
+`sh -c`/`eval`, base64, aliases. If a deny looks wrong: write the script with the
+Write tool and run `python3 <file>` — and after ANY deny, re-check that the
+intended side effects actually happened.
 
-Still fail-open BY DESIGN (a redirect guard, not a sandbox): `$(…)`, `sh
--c`/`eval`, base64, aliases. Masking narrows that class deliberately — `eval
-"echo x; gh pr create"` was denied before (the quoted `;` anchored `_CMD`) and is
-allowed now. An accident, not coverage: bare `eval "gh pr create"` was always
-allowed, so only the separator-bearing variant was ever caught. Giving it up IS
-the precision-over-recall trade. If a deny looks wrong: write the script with the
-Write tool and run `python3 <file>` — and after ANY deny, re-check the intended
-side effects happened.
-
-**Against the MATCHER, false positives were the defect, not evasion** (#265): 2
-of the 3 denials ever recorded were the quoted-regex shape, and the survivor (an
-`npx` behind a real `||`) was correct — hence 3 → 1, not 3 → 0. Twice a predicted
-risk was refuted by probing and the real one was its mirror image (#264's
-cd-prefix; #265's quoting): measure before believing. **That scope matters** —
-nothing has evaded the *matcher*, but #343 found 125 commands bypassing the
-guard entirely by never reaching it.
+Full case history — the 3,615-command measurement, the #343 fail-open, the #265
+quoting defect and the #308 back-dating: `docs/rules-evidence/mise-tasks-only.md`.
 
 ## Extending
 
@@ -177,12 +140,10 @@ erodes trust in the guard.
 
 Never bump it on a reword — but **widening a pattern to cover a NEW shape is not
 a reword and needs its own date.** One `Rule` carries one `since`, so a widened
-rule must be **split into two entries**. `68f28c9` (#308) brought `hk run check`
-under the guard on 2026-07-18 by widening the `hk run pre-commit` rule, leaving
-`since` at 2026-07-07 — so the audit back-dated 11 days of coverage and cried
-bypass on three calls the guard of that day correctly allowed (#343). Now `_V1`
-and `_V1B`. **A proxy goes stale silently:** when a bypass count moves, check the
-rule's history (`git log -S` on the pattern) before believing it.
+rule must be **split into two entries** (`_V1` / `_V1B`). **A proxy goes stale
+silently:** when a bypass count moves, check the rule's history (`git log -S` on
+the pattern) before believing it. The #308 back-dating that proved this:
+`docs/rules-evidence/mise-tasks-only.md`.
 
 Rules match AFTER `_inert_masked` has neutered every separator that is data, so
 write the pattern against real shell syntax and let masking handle quoting — do
