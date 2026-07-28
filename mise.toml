@@ -6,9 +6,15 @@
 # .config/mise/conf.d/shared.toml — the single exact-pinned source both this
 # host config and .devcontainer/mise-system.toml merge, so they never drift
 # (Renovate bumps that one file). See epic #160 T5. Below: host-ONLY tools.
-editorconfig-checker = "3.8.0"      # provides `ec` — hk editorconfig_checker builtin (#154); host-only (image drops it in T6)
+editorconfig-checker = "3.8.0" # provides `ec` — hk editorconfig_checker builtin (#154); host-only (image drops it in T6)
+# Second secret scanner (hk `betterleaks` builtin, wired in hk.pkl). HOST-ONLY
+# on purpose: shared.toml is a base image build input, and putting a second
+# scanner in the image would cost a cold rebuild for no gain — the scanning that
+# matters happens at the commit boundary. Measured before adopting: 0 findings
+# over the whole 31.5 MB tree in 199 ms.
+"aqua:betterleaks/betterleaks" = "1.7.1"
 "npm:@devcontainers/cli" = "0.87.0"
-colima = "0.10.3"                   # Alternate Docker runtime (VZ + Rosetta); Docker Desktop is the CURRENT supported runtime — see AGENTS.md Docker Runtimes + docs/research/runs/research-20260409c-dockerdesktop-ssh/
+colima = "0.10.3"                        # Alternate Docker runtime (VZ + Rosetta); Docker Desktop is the CURRENT supported runtime — see AGENTS.md Docker Runtimes + docs/research/runs/research-20260409c-dockerdesktop-ssh/
 lima = "2.2.0"
 "github:agent-sh/agnix" = "0.40.0"
 "npm:agents-lint" = "0.5.0"
@@ -913,6 +919,10 @@ description = "Eval harness, tiers 1+2 (offline, gated; `-- --live` adds the lan
 # one real API call per installed lane. Runner is the SHARED kb_setup.evals;
 # this repo's cases are dotfiles_setup.eval_cases.
 run = "uv run --project python dotfiles-setup eval"
+
+[tasks.hk-audit]
+description = "Regenerate docs/hk-builtins-audit.md from `hk builtins` + the hk configs"
+run = "uv run --project python dotfiles-setup hk-builtins-audit"
 
 [tasks.lint-docs]
 description = "Validate agent documentation"

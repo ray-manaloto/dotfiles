@@ -87,6 +87,13 @@ safety: Mapping<String, Config.Step> = new {
 }
 
 // Security scanning — secret detection via gitleaks.
+//
+// `betterleaks` is the SECOND scanner and lives in hk.pkl, not here: this group
+// is spread into hk-image.pkl, so a tool referenced here must also exist in the
+// image — which means pinning it in the shared mise fragment, which is a base
+// image build input and costs a cold rebuild. The scanning that matters happens
+// at the commit boundary (host + CI lint), so the project config is the right
+// home and the image config is left alone.
 security: Mapping<String, Config.Step> = new {
   ["gitleaks"] = (Builtins.gitleaks) {
     batch = true

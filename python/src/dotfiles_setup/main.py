@@ -29,6 +29,7 @@ from dotfiles_setup.doc_refs import (
     find_unresolved_task_refs,
 )
 from dotfiles_setup.docker import DevContainerManager
+from dotfiles_setup.env_blob_scan import env_blob_scan_main
 from dotfiles_setup.eval_cases import cases as eval_cases_for
 from dotfiles_setup.gcc_sha import gcc_sha_main
 from dotfiles_setup.ghcr import validate_ghcr_prereqs
@@ -40,6 +41,7 @@ from dotfiles_setup.graph_bakeoff import (
     bakeoff_main,
 )
 from dotfiles_setup.graphify import graphify_main
+from dotfiles_setup.hk_builtins_audit import hk_builtins_audit_main
 from dotfiles_setup.hook_guard import pretooluse_main
 from dotfiles_setup.hook_selfcheck import hook_selfcheck_main
 from dotfiles_setup.image import ImageCommand
@@ -63,6 +65,7 @@ from dotfiles_setup.pr import automerge_main, land_main, ship_main
 from dotfiles_setup.renovate import renovate_status_main
 from dotfiles_setup.renovate_dryrun import renovate_dryrun_main
 from dotfiles_setup.sync import SyncOptions, sync_main
+from dotfiles_setup.token_audit import token_audit_main
 from dotfiles_setup.verify import main as verify_main
 from dotfiles_setup.workflow_hooks import workflow_hooks_main
 
@@ -138,6 +141,57 @@ def _add_apt_repo_subcommand(subparsers: _SubParsers) -> None:
         "--exclude-runtime",
         action="store_true",
         help="Drop Section: libs packages (they arrive via Depends:)",
+    )
+
+
+def _add_honesty_subcommands(subparsers: _SubParsers) -> None:
+    """Register the gates that keep a claim and its reality in step.
+
+    Grouped because they answer one question — does this artifact still say
+    something true? A committed environment dump, a generated doc that has
+    drifted from the tool it describes, and a contract token satisfied by a
+    stand-in are the same failure wearing three costumes. Extracted into a
+    helper for the reason `_add_consistency_subcommands` was: `setup_parser`
+    sits at ruff's PLR0915 statement ceiling.
+
+    Args:
+        subparsers: The parent subparsers action to attach these to.
+    """
+    env_blob_parser = subparsers.add_parser(
+        "env-blob-scan",
+        help="Reject a committed environment dump — a __MISE_DIFF-shaped blob, "
+        "any base64 run that decompresses to text naming secret variables, or a "
+        "literal credential value. Covers what gitleaks and betterleaks cannot: "
+        "measured, both are blind to the compressed form",
+    )
+    env_blob_parser.add_argument(
+        "paths",
+        nargs="*",
+        help="Repo-relative files to scan (default: every tracked file)",
+    )
+    hk_audit_parser = subparsers.add_parser(
+        "hk-builtins-audit",
+        help="Regenerate docs/hk-builtins-audit.md from `hk builtins` + the hk "
+        "configs. The hand-written version drifted to claiming 15 builtins were "
+        "used that were not wired, one of them a security scanner",
+    )
+    hk_audit_parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Fail instead of writing when the committed doc is out of date",
+    )
+    subparsers.add_parser(
+        "token-audit",
+        help="Contract-token uniqueness: every per_path_tokens entry should "
+        "match its target file exactly once, because a token matching twice can "
+        "be satisfied by a stand-in (#394). Genuine multiplicity is allowlisted "
+        "with a reason in token_audit.py",
+    )
+    subparsers.add_parser(
+        "bash-budget",
+        help="Enforce zero-bash-logic: every scripts/*.sh + "
+        ".devcontainer/scripts/*.sh must be allowlisted and within its "
+        "per-file line budget (new/grown scripts fail — move logic to python/)",
     )
 
 
@@ -734,12 +788,7 @@ def setup_parser() -> argparse.ArgumentParser:
     apt_pins_parser.add_argument(
         "--json", action="store_true", help="Emit the probe result as JSON"
     )
-    subparsers.add_parser(
-        "bash-budget",
-        help="Enforce zero-bash-logic: every scripts/*.sh + "
-        ".devcontainer/scripts/*.sh must be allowlisted and within its "
-        "per-file line budget (new/grown scripts fail — move logic to python/)",
-    )
+    _add_honesty_subcommands(subparsers)
     subparsers.add_parser(
         "workflow-hooks",
         help="Enforce ADR-0001: every CI job that commits or pushes must set "
@@ -1263,6 +1312,13 @@ def _build_command_handlers(
             apt_pins_main(project_root, json_output=args.json)
         ),
         "bash-budget": lambda: sys.exit(bash_budget_main(project_root)),
+        "token-audit": lambda: sys.exit(token_audit_main(project_root)),
+        "env-blob-scan": lambda: sys.exit(
+            env_blob_scan_main(project_root, args.paths or None)
+        ),
+        "hk-builtins-audit": lambda: sys.exit(
+            hk_builtins_audit_main(project_root, check=args.check)
+        ),
         "workflow-hooks": lambda: sys.exit(workflow_hooks_main(project_root)),
         "bootstrap-gap-report": lambda: handle_bootstrap_gap_report(args, project_root),
         "lock-stage": lambda: handle_lock_stage(args, project_root),

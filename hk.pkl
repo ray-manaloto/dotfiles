@@ -249,6 +249,47 @@ local allSteps = new Mapping<String, Config.Step> {
     check = "uv run --project python dotfiles-setup bash-budget"
   }
 
+  // Rejects a committed environment dump. Deliberately NOT scoped by glob:
+  // an `env` dump can land in any tracked file, and the paths most likely to
+  // receive one (the tracked agent-artifact trees) are exactly the ones
+  // `.gitleaks.toml` allowlists away. Covers only what gitleaks and
+  // betterleaks cannot — measured 2026-07-27, both score 0 on a compressed
+  // dump they both flag in plaintext. See env_blob_scan.py's module docstring
+  // and .claude/rules/secrets-out-of-the-shell-env.md.
+  ["no_env_dump"] {
+    check = "uv run --project python dotfiles-setup env-blob-scan"
+  }
+
+  // Second secret scanner, a SECOND OPINION rather than a replacement — on a
+  // synthetic plaintext dump gitleaks found 2 and betterleaks 1. It was listed
+  // as "used" in docs/hk-builtins-audit.md since that audit was written and was
+  // wired NOWHERE: 0 occurrences in any .pkl against a control of 1 for
+  // `Builtins.gitleaks`. Measured before adopting: 0 findings over the whole
+  // 31.5 MB tree in 199 ms. Lives here rather than in hk-common.pkl's `security`
+  // group because that group is spread into hk-image.pkl, which would require
+  // the shared mise fragment — a base image build input — and a cold rebuild.
+  // Neither scanner can see a compressed env dump; that is `no_env_dump`.
+  ["betterleaks"] = (Builtins.betterleaks) {
+    batch = true
+  }
+
+  // docs/hk-builtins-audit.md is GENERATED. The hand-written version drifted
+  // into claiming 15 builtins were "used" that were not wired — one of them
+  // `betterleaks`, described as a "second scanner alongside gitleaks" and
+  // present in no config at all. Regenerate with `mise run hk-audit`.
+  ["hk_audit"] {
+    check = "uv run --project python dotfiles-setup hk-builtins-audit --check"
+  }
+
+  // #394 step 4, as the audit recommended it. A `per_path_tokens` entry should
+  // match its target file exactly once: the three holes that were live in #394
+  // all survived their anchor because the token matched somewhere OTHER than
+  // the site it meant. Genuine multiplicity is allowlisted with a reason in
+  // token_audit.py; a NEW ambiguity, or a stale allowlist entry, fails.
+  ["contract_token_uniqueness"] {
+    check = "uv run --project python dotfiles-setup token-audit"
+  }
+
   // --- Markdown ---
   // #154: no markdown_lint step — its builtin runs `markdownlint` (cli v1),
   // but the repo standardizes on `markdownlint-cli2` (+ rumdl, mdschema).
