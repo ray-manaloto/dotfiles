@@ -979,17 +979,36 @@ harness's own control arm ran arm A over the **103** already-unique tail tokens
 — all 103 correctly reported *not a hole*, so the 33/33 is a measurement and
 not a stuck needle.
 
-**The stand-in has a different shape here than in the seams.** #394's three
-were sibling *code*: a dispatch branch, another parser's flag, a test
-assertion. The tail's are overwhelmingly **a comment or a prose sentence in the
-same file naming the thing it wires**. `.devcontainer/devcontainer.json` opens
-with a header block narrating every mount and lifecycle command;
-`build-publish.yml` documents its own jobs; the Dockerfile explains each `ARG`
-above it. Delete the wiring and the narration remains — `authorized_keys`,
-`doppler secrets download`, `dotfiles-setup p2996-hash`, `REFRESH_APP_ID`,
-`actions/create-github-app-token` were every one of them satisfied by their own
-documentation. A well-commented file is *more* exposed to this than a terse
-one, which is the opposite of the intuition.
+**A new stand-in shape appears here — and the first write-up of it overstated
+its share.** #394's three were sibling *code*: a dispatch branch, another
+parser's flag, a test assertion. The tail adds **the file's own comment**.
+Classified by deleting each wiring line and asking what the surviving matches
+sit on:
+
+| the surviving stand-in(s) | count |
+|---|---|
+| **a COMMENT alone** | **11** |
+| a comment, plus code | 10 |
+| code only | 12 |
+
+A comment was the *sole* thing keeping **11 of 33** contracts green.
+`authorized_keys`, `doppler secrets download`, `dotfiles-setup p2996-hash`,
+`REFRESH_APP_ID` and `actions/create-github-app-token` were each satisfied by
+the sentence documenting them: `.devcontainer/devcontainer.json` opens with a
+header block narrating every mount and lifecycle command, `build-publish.yml`
+documents its own jobs, and the Dockerfile explains each `ARG` above it.
+
+**The correction matters more than the finding.** PR #403's commit message and
+the first draft of this section said the tail's stand-ins were
+*"overwhelmingly"* comments. Counted afterwards, they are **a third** — real,
+novel (the seams produced none), and a genuine reason a well-commented file
+carries a failure mode a terse one does not, but nowhere near a majority. The
+word was written from the examples that were vivid while triaging, not from a
+count, and it then travelled into four other documents before anything measured
+it. That is `probes-need-a-control-arm.md` §6 from the inside: **a
+characterisation is a measurement claim, and asserting one without counting is
+the same error as repeating an inherited number.** The commit on `main` is
+immutable and stands uncorrected, which is why the number lives here.
 
 Two were the plain prefix-swallow instead: `type=gha,scope=dotfiles-dev` was
 satisfied by the `,mode=max` line below it (now two anchored tokens, so the
