@@ -1105,10 +1105,12 @@ paths = [
     ".claude/settings.json",
     "scripts/pretooluse-guard.sh",
     "python/src/dotfiles_setup/hook_guard.py",
+    "python/src/dotfiles_setup/hook_selfcheck.py",
     "tests/test_hook_guard.py",
+    "tests/test_hook_selfcheck.py",
     ".claude/rules/mise-tasks-only.md",
 ]
-per_path_tokens = { ".claude/settings.json" = ["scripts/pretooluse-guard.sh"], "scripts/pretooluse-guard.sh" = ["dotfiles-setup hook pretooluse\n"], "python/src/dotfiles_setup/hook_guard.py" = ['def _inert_masked(', "_inert_masked(command)", '"permissionDecision": "deny"'], "tests/test_hook_guard.py" = ['def test_separators_inside_inert_spans_do_not_anchor(', 'def test_real_npx_denial_was_a_true_positive(', 'def test_inert_span_redaction_never_costs_a_true_positive(', 'def test_masking_trades_the_incidental_eval_catch('] }
+per_path_tokens = { ".claude/settings.json" = ['bash \"${CLAUDE_PROJECT_DIR:-.}/scripts/pretooluse-guard.sh\"'], "scripts/pretooluse-guard.sh" = ['uv run --project "$ROOT/python" dotfiles-setup hook pretooluse', 'ROOT="${CLAUDE_PROJECT_DIR:-}"', "fail_open() {"], "python/src/dotfiles_setup/hook_guard.py" = ['def _inert_masked(', "_inert_masked(command)", '"permissionDecision": "deny"', '_V1B = "2026-07-18"'], "python/src/dotfiles_setup/hook_selfcheck.py" = ['def check_offroot_arm(', 'def _unanchored_hooks(', 'def _offroot_env('], "tests/test_hook_guard.py" = ['def test_separators_inside_inert_spans_do_not_anchor(', 'def test_real_npx_denial_was_a_true_positive(', 'def test_inert_span_redaction_never_costs_a_true_positive(', 'def test_masking_trades_the_incidental_eval_catch(', 'def test_hk_run_check_before_its_rule_is_history_not_a_bypass(', 'def test_hk_run_check_after_its_rule_is_a_bypass('], "tests/test_hook_selfcheck.py" = ['def test_unanchored_hook_command_fails(', 'def test_real_wrapper_denies_from_a_foreign_cwd(', 'def test_a_newly_added_hook_must_also_be_anchored('] }
 tokens = [
     'dotfiles-setup hook pretooluse`',
     'def pretooluse_main(',
@@ -1469,7 +1471,7 @@ paths = [
     "tests/test_hook_guard.py",
     ".claude/rules/mise-tasks-only.md",
 ]
-per_path_tokens = { "mise.toml" = ["[tasks.command-audit]", "dotfiles-setup command-audit'"], "python/src/dotfiles_setup/command_audit.py" = ['def command_audit_main(', 'def classify(', 'def iter_bash_commands(', 'def write_report(', 'def _executed_ids('], "python/src/dotfiles_setup/hook_guard.py" = ['class Rule:', "since: str", 'def match('], "python/src/dotfiles_setup/main.py" = ['"command-audit",', '"command-audit": lambda', "command_audit_parser.add_argument(\n        \"--output\","], "python/src/dotfiles_setup/hook_selfcheck.py" = ['SessionEnd"', '_SESSION_END_REPORT ='], ".claude/settings.json" = ['SessionEnd"', "mise run command-audit -- --output .agent/command-audit.md"], ".gitignore" = [".agent/command-audit.md"], "tests/test_command_audit.py" = ['def test_main_output_writes_file_instead_of_stdout(', 'def test_iter_bash_commands_pairs_results_to_attempts('], "tests/test_hook_guard.py" = ['def test_every_rule_carries_a_usable_since_date('], ".claude/rules/mise-tasks-only.md" = ['mise run command-audit`', 'SessionEnd`', "Give it a `since`"] }
+per_path_tokens = { "mise.toml" = ["[tasks.command-audit]", "dotfiles-setup command-audit'"], "python/src/dotfiles_setup/command_audit.py" = ['def command_audit_main(', 'def classify(', 'def iter_bash_commands(', 'def write_report(', 'def _executed_ids('], "python/src/dotfiles_setup/hook_guard.py" = ['class Rule:', "since: str", 'def match('], "python/src/dotfiles_setup/main.py" = ['"command-audit",', '"command-audit": lambda', "command_audit_parser.add_argument(\n        \"--output\","], "python/src/dotfiles_setup/hook_selfcheck.py" = ['SessionEnd"', '_SESSION_END_REPORT ='], ".claude/settings.json" = ['SessionEnd"', 'run command-audit -- --output \"${CLAUDE_PROJECT_DIR:-.}/.agent/command-audit.md\"'], ".gitignore" = [".agent/command-audit.md"], "tests/test_command_audit.py" = ['def test_main_output_writes_file_instead_of_stdout(', 'def test_iter_bash_commands_pairs_results_to_attempts('], "tests/test_hook_guard.py" = ['def test_every_rule_carries_a_usable_since_date('], ".claude/rules/mise-tasks-only.md" = ['mise run command-audit`', 'SessionEnd`', "Give it a `since`"] }
 tokens = [
     "dotfiles-setup command-audit'",
     'def command_audit_main(',

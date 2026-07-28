@@ -89,8 +89,13 @@ ALLOWLIST: dict[str, BashAllowance] = {
         74, "hk/mise precondition wrapper — starts Docker Desktop if the daemon is down"
     ),
     "scripts/pretooluse-guard.sh": BashAllowance(
-        25,
-        "fail-open shim — execs `dotfiles-setup hook pretooluse` (the guard is Python)",
+        42,
+        "fail-open shim — runs `dotfiles-setup hook pretooluse` (the guard is "
+        "Python). 25 -> 42 for #343: the shim must anchor every path to "
+        "$CLAUDE_PROJECT_DIR (it runs in the session's cwd, not the repo) and "
+        "must RECORD each fail-open. Both have to be bash — they are the layer "
+        "that runs when Python cannot, so a Python fail-open counter could "
+        "never observe the case it exists to count",
     ),
     "scripts/graphify-hook-guard.sh": BashAllowance(
         30,

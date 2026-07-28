@@ -551,7 +551,74 @@ def _table(groups: list[tuple[str, int, str]], label: str) -> list[str]:
     ]
 
 
-def render_report(result: AuditResult) -> str:
+#: Where `scripts/pretooluse-guard.sh` records a fail-open. Per-user state, not
+#: per-repo: the wrapper may fail open precisely because the repo's toolchain is
+#: not resolvable, so the record cannot depend on it.
+FAIL_OPEN_LOG = Path.home() / ".local" / "state" / "dotfiles" / "guard-fail-open.log"
+
+#: Tab-separated fields the wrapper writes: timestamp, reason, cwd. A short line
+#: is a partial write, not a fail-open — skip it rather than count it wrongly.
+_FAIL_OPEN_FIELDS = 3
+
+
+def fail_open_summary(log: Path | None = None) -> tuple[int, dict[str, int], str]:
+    """``(total, reason -> count, most-recent timestamp)`` from the fail-open log.
+
+    The guard is documented as covering every Bash call, and it exits 0 whether
+    it decided or merely could not run — so without this record the two are
+    indistinguishable from the outside. That is how #343's 125 unchecked
+    commands went unnoticed: nothing counted the times the guard was absent.
+
+    A missing log is ``(0, {}, "")`` — the guard has never failed open on this
+    host, which is the expected state, not an error.
+    """
+    path = log if log is not None else FAIL_OPEN_LOG
+    try:
+        raw = path.read_text(errors="replace")
+    except OSError:
+        return 0, {}, ""
+    reasons: Counter[str] = Counter()
+    latest = ""
+    total = 0
+    for line in raw.splitlines():
+        parts = line.split("\t")
+        if len(parts) < _FAIL_OPEN_FIELDS:
+            continue
+        timestamp, reason = parts[0], parts[1]
+        total += 1
+        reasons[reason] += 1
+        latest = max(latest, timestamp)
+    return total, dict(reasons.most_common()), latest
+
+
+def _fail_open_section(log: Path | None) -> list[str]:
+    """The report's guard-availability section."""
+    total, reasons, latest = fail_open_summary(log)
+    lines = [
+        "## Guard fail-opens (times the guard could not run at all)",
+        "",
+        "The wrapper exits 0 — allowing the call — when it cannot reach its "
+        "interpreter or the guard errors. That is deliberate (a cold web "
+        "session must not be bricked), but an UNCOUNTED fail-open is "
+        "indistinguishable from enforcement. See `.claude/rules/"
+        "mise-tasks-only.md` and issue #343.",
+        "",
+    ]
+    if not total:
+        lines += ["_None recorded — the guard ran every time it was invoked._", ""]
+        return lines
+    lines += [
+        f"**{total}** recorded, most recent `{latest}`.",
+        "",
+        "| count | reason |",
+        "|---:|---|",
+        *(f"| {n} | `{reason}` |" for reason, n in reasons.items()),
+        "",
+    ]
+    return lines
+
+
+def render_report(result: AuditResult, *, fail_open_log: Path | None = None) -> str:
     """A frequency-ranked markdown report for human review of the refine loop."""
     c = result.counts
     lines = [
@@ -597,6 +664,7 @@ def render_report(result: AuditResult) -> str:
             "",
             *_table(result.blocked_groups, "rule"),
         ]
+    lines += _fail_open_section(fail_open_log)
     lines += [
         "## One-off culprits (candidates for a mise task + python function)",
         "",

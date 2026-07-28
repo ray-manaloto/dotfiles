@@ -136,11 +136,6 @@ AMBIGUITY_ALLOWED: dict[tuple[str, str, str], str] = {
     (
         "workflow.command-audit-wiring",
         ".claude/rules/mise-tasks-only.md",
-        "mise run command-audit`",
-    ): "prose: a rule doc naturally names its task more than once",
-    (
-        "workflow.command-audit-wiring",
-        ".claude/rules/mise-tasks-only.md",
         "SessionEnd`",
     ): "prose: the hook event, named where it is chosen and where it is justified",
     (

@@ -12,7 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 import pytest
-from dotfiles_setup import hook_guard
+from dotfiles_setup import command_audit, hook_guard
 
 
 @pytest.mark.parametrize(
@@ -615,6 +615,57 @@ def test_rule_names_are_unique_and_nonempty() -> None:
     names = [r.name for r in hook_guard.rules()]
     assert all(names)
     assert len(set(names)) == len(names)
+
+
+# --- #343: `since` dates COVERAGE, not the Rule object ----------------------
+#
+# `hk run check` was folded into the existing `hk run pre-commit` rule on
+# 2026-07-18 (68f28c9, #308) by widening its pattern to `(?:pre-commit|check)`
+# while leaving `since` at 2026-07-07. The audit then back-dated 11 days of new
+# coverage onto history that predates it and reported three 2026-07-17 calls as
+# guard bypasses. They were correctly ALLOWED by the guard of the day.
+
+
+@pytest.mark.parametrize(
+    ("command", "expected_name", "expected_since"),
+    [
+        ("hk run pre-commit --all", "hk run pre-commit", "2026-07-07"),
+        ("hk run check --all", "hk run check", "2026-07-18"),
+    ],
+)
+def test_hk_shapes_carry_the_date_they_actually_landed(
+    command: str, expected_name: str, expected_since: str
+) -> None:
+    rule = hook_guard.match(command)
+    assert rule is not None, command
+    assert rule.name == expected_name
+    assert rule.since == expected_since
+
+
+def test_hk_run_check_before_its_rule_is_history_not_a_bypass() -> None:
+    """The exact #343 shape: a 2026-07-17 `hk run check` must read as pre_rule.
+
+    Control arm below pins the opposite direction, so this is not a check that
+    can only pass.
+    """
+    before = command_audit.BashCommand(
+        "hk run check --all --plan",
+        session="s",
+        timestamp="2026-07-17T03:16:54.821Z",
+        executed=True,
+    )
+    assert command_audit.classify(before) == "pre_rule"
+
+
+def test_hk_run_check_after_its_rule_is_a_bypass() -> None:
+    """Control arm: the same command AFTER 2026-07-18 must still alarm."""
+    after = command_audit.BashCommand(
+        "hk run check --all --plan",
+        session="s",
+        timestamp="2026-07-19T03:16:54.821Z",
+        executed=True,
+    )
+    assert command_audit.classify(after) == "bypass"
 
 
 def test_match_returns_the_rule_behind_the_reason() -> None:

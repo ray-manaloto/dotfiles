@@ -125,6 +125,15 @@ _V4 = "2026-07-23"
 # existed, `gh pr merge --auto` on a Renovate PR could only be redirected to
 # `land`, which refuses an OPEN PR.
 _V5 = "2026-07-27"
+# `hk run check` came under the guard on 2026-07-18 (68f28c9, #308), when
+# `mise run lint` switched to the read-only `hk run check --all`. It was folded
+# into the EXISTING `hk run pre-commit` rule by widening its pattern to
+# `(?:pre-commit|check)` while leaving `since` at _V1 — so the audit back-dated
+# 11 days of new coverage onto history that predates it, and reported three
+# 2026-07-17 `hk run check` calls as guard bypasses (#343). They were allowed,
+# correctly, by the guard of the day. Hence its own cutoff: a pattern widened to
+# cover a NEW command shape is a NEW rule, whatever it is spelled next to.
+_V1B = "2026-07-18"
 # The hook-suppression rules landed 2026-07-27 with `no_commit_to_branch` (#400).
 # They are the ONLY layer that can see a bypass: git decides not to run a hook
 # BEFORE the hook exists as a process, so no pre-commit or pre-push hook can
@@ -185,12 +194,23 @@ _RULES: tuple[Rule, ...] = (
         _V1,
     ),
     Rule(
-        "hk run pre-commit/check",
-        re.compile(_CMD + r"hk\s+run\s+(?:pre-commit|check)\b"),
+        "hk run pre-commit",
+        re.compile(_CMD + r"hk\s+run\s+pre-commit\b"),
         "Use `mise run lint` (read-only gate, ≡ CI) — it wraps hk in a hard "
         "timeout (hk has none) with log-tail diagnostics. To apply fixes use "
         "`mise run fmt`. See .claude/rules/long-running-command-hangs.md.",
         _V1,
+    ),
+    # Split from the rule above rather than spelled as one `(?:pre-commit|check)`
+    # alternation: the two shapes came under the guard 11 days apart, and a
+    # single Rule can carry only one `since`. See _V1B.
+    Rule(
+        "hk run check",
+        re.compile(_CMD + r"hk\s+run\s+check\b"),
+        "Use `mise run lint` (read-only gate, ≡ CI) — it wraps hk in a hard "
+        "timeout (hk has none) with log-tail diagnostics. To apply fixes use "
+        "`mise run fmt`. See .claude/rules/long-running-command-hangs.md.",
+        _V1B,
     ),
     Rule(
         "devcontainer up",
