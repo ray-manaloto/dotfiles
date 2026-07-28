@@ -221,17 +221,27 @@ def check_pretooluse_endtoend(project_root: Path) -> list[str]:
 def _offroot_env(project_root: Path) -> dict[str, str]:
     """The hook's environment with this process's own venv resolution removed.
 
-    Drops ``VIRTUAL_ENV``/``UV_PROJECT_ENVIRONMENT`` and every ``PATH`` entry
-    inside the project, so the wrapper must resolve the guard from
-    ``$CLAUDE_PROJECT_DIR`` rather than from a venv it inherited. See
-    :func:`check_offroot_arm` for what this bought.
+    Drops ``VIRTUAL_ENV`` and every ``PATH`` entry inside the project, so the
+    wrapper must resolve the guard through ``$CLAUDE_PROJECT_DIR`` rather than
+    through a venv it happened to inherit. See :func:`check_offroot_arm`.
+
+    ``UV_PROJECT_ENVIRONMENT`` is deliberately PRESERVED, and that is a
+    correction, not an oversight. Stripping it broke the devcontainer, where
+    ``devcontainer.json`` sets it to ``/home/$USER/.venvs/dotfiles-python`` on
+    purpose: without it uv falls back to ``<project>/.venv`` inside the
+    bind-mounted workspace and dies on the host's stale copy (``failed to remove
+    directory python/.venv/lib: Directory not empty``). It is environment
+    CONFIGURATION the container requires, not an answer leaked from this
+    process — the distinction the first version got wrong, and only the
+    in-container `sync-full` gate caught it.
+
+    Bound worth stating: where that variable already points at a ready venv
+    holding ``dotfiles-setup``, this arm verifies the wrapper is REACHABLE
+    off-root rather than that it re-resolves its project. The resolution half is
+    covered on the host, and statically everywhere by :func:`_unanchored_hooks`.
     """
     root = str(project_root)
-    env = {
-        k: v
-        for k, v in os.environ.items()
-        if k not in ("VIRTUAL_ENV", "UV_PROJECT_ENVIRONMENT")
-    }
+    env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
     env["PATH"] = os.pathsep.join(
         p for p in env.get("PATH", "").split(os.pathsep) if p and not p.startswith(root)
     )
