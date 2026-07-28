@@ -103,9 +103,19 @@ land is the **post-merge validation** step (ship's auto-merge does the merge):
    can't run in CI. `land` is idempotent (safe to re-run); the `--resume`
    flag is accepted for compatibility but has no separate effect.
 
-The **merge approval is enabling auto-merge at ship** (`main` requires only
-`ci-gate`, no review); GitHub merges when green. `--match-head-commit`
+The **merge approval is enabling auto-merge at ship** (`main` requires
+`ci-gate` and no review); GitHub merges when green. `--match-head-commit`
 scopes it to the SHA the local gates validated.
+
+**A PR is now mandatory, server-side** (#400, 2026-07-27): the repository
+ruleset `main: require a pull request` is active with **0 required approvals
+and no bypass actors**, so a direct push to `main` is refused by GitHub — the
+one layer an agent cannot skip. It costs these verbs nothing, because all three
+already go through a PR; verified end-to-end when PR #401 armed auto-merge under
+the active ruleset and squash-merged itself 181s after `ci-gate` went green,
+with `reviewDecision` empty throughout. If a future ruleset change ever demanded
+an approval, `ship` and `automerge` would arm and then sit — that is the
+symptom to look for, and the fix is the ruleset, not the verb.
 
 ## Failure modes
 
