@@ -33,6 +33,16 @@ never in `.agent/`. Do not create ad-hoc directories in either.
 | `docs/research/kb/reports/` | Persisted verbatim agent reports |
 | `docs/handoffs/` | Cross-surface session handoffs |
 | `docs/adr/` | Domain-shaped decisions (our ADRs are `.claude/rules/*.md`) |
+| `docs/rules-evidence/` | Archaeology extracted OUT of an eager rule: one `<rule>.md` per `.claude/rules/<rule>.md` |
+
+**`docs/rules-evidence/` exists to buy back eager context.** Every unscoped
+`.claude/rules/*.md` loads in full at session start — measured 2026-07-28 with an
+`InstructionsLoaded` hook, they are ~88% of the eager corpus. Scoping cannot fix
+that (`md-size-budgets.md` § "the trigger test"), so the lever is moving the
+case histories, provenance tables and worked-failure logs into a tracked sibling
+the rule links by path. The rule keeps its directive, its operative constraints,
+and **one** canonical worked example; nothing leaves git, it just stops being
+re-injected every session. Name the file after the rule, one-to-one.
 
 **Promoting is the default for anything an eval, a rule, or a future session
 will cite.** The migration surfaced why: five eager rules cited research that
