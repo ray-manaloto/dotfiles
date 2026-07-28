@@ -277,9 +277,19 @@ would have traded a false positive for a false negative.
 
 **(c) as originally specified.** A fixture table of `(command, expected
 decision)` driven through the **wired** guard. Must contain a **must-ALLOW** half — false
-positives are the only defect class ever measured here (#265: 2 of 3 recorded
-denials were false positives; bypasses all-time: **0**). A deny-only corpus
-would grade the guard on the direction that has never failed.
+positives are the only defect class ever measured *in the matcher* (#265: 2 of 3
+recorded denials were false positives). A deny-only corpus would grade the guard
+on the direction that has never failed.
+
+> **"bypasses all-time: 0" stood here until 2026-07-28 and was false (#343).**
+> Re-judged against the `hook_guard.py` live at each command's own timestamp:
+> **125 genuine**, every one because the guard *never ran* — the hook path was
+> relative and hooks execute in the session's cwd, so a non-zero non-2 exit let
+> the call proceed. The matcher was never evaded; it was never reached. That
+> distinction is exactly why tier 2 grades the WIRED guard and tier 1 asks
+> whether it resolves at all — and it is this epic's defect class caught in the
+> epic's own supporting evidence.
+> `docs/research/runs/research-20260728-guard-fail-open/report.md`.
 
 **Scope LOCKED 2026-07-25 (Ray) — do not re-litigate:**
 
