@@ -115,6 +115,13 @@ _ALLOWED_ABSENT = frozenset(
         # Documented-deleted (the doc narrates the deletion, PR #80).
         "home/AGENTS.md",
         "mise_snapshot.py",
+        # fnox config files, all out-of-repo: the real one is the user root
+        # `~/.config/fnox/config.toml`, and the two `.local` names are the
+        # project-scoped override layer the secrets rule PROBED and found is
+        # not honoured at that root. This repo has no fnox config of its own.
+        "config.local.toml",
+        "fnox.toml",
+        "fnox.local.toml",
         # Gitignored but real per-clone files.
         "mise.local.toml",
         "mise.*.local.toml",

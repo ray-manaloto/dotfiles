@@ -1277,6 +1277,70 @@ tokens = [
 ]
 
 [[suite]]
+name = "workflow.hk-builtins-audit"
+description = "The generated hk-builtins audit. `docs/hk-builtins-audit.md` replaced a hand-written 2026-04-05 snapshot that had drifted into asserting 15 builtins were 'used' that were wired nowhere — one of them `betterleaks`, described as a 'second scanner alongside gitleaks' while present in no config at all. A document claiming a security scanner runs when it does not is worse than one that claims nothing, so the tables are now derived from `hk builtins` + the three .pkl files and only NOT_ADOPTED is authored. This contract exists because the generated banner NAMED it before it existed (`Gated by: workflow.hk-builtins-audit`) — the doc written to stop false claims made one in its own header, found 2026-07-27 with `grep -c` returning 0. Binding the chain here makes the banner true rather than deleting the claim: hk step, mise task, CLI subcommand, generator seams (render / stale_entries / the authored map), both directions of the staleness check in tests, and the banner line in the doc itself."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    "hk.pkl",
+    "mise.toml",
+    "python/src/dotfiles_setup/main.py",
+    "python/src/dotfiles_setup/hk_builtins_audit.py",
+    "tests/test_hk_builtins_audit.py",
+    "docs/hk-builtins-audit.md",
+]
+per_path_tokens = { "hk.pkl" = [
+    'hk_audit"',
+    'dotfiles-setup hk-builtins-audit --check"',
+], "mise.toml" = [
+    "[tasks.hk-audit]",
+], "python/src/dotfiles_setup/main.py" = [
+    '"hk-builtins-audit",',
+    "hk_builtins_audit_main(project_root, check=args.check)",
+], "python/src/dotfiles_setup/hk_builtins_audit.py" = [
+    "def render(root: Path)",
+    "def stale_entries(",
+    "NOT_ADOPTED: dict",
+    "GENERATED_BANNER = (",
+], "tests/test_hk_builtins_audit.py" = [
+    "def test_the_committed_doc_matches_the_generator(",
+    "def test_stale_entries_fires_on_a_name_that_is_not_a_builtin(",
+    "def test_stale_entries_fires_when_a_declined_builtin_is_wired(",
+], "docs/hk-builtins-audit.md" = [
+    "Gated by: workflow.hk-builtins-audit",
+] }
+
+[[suite]]
+name = "workflow.branch-guard-enforcement"
+description = "#400: the layers that stop a commit landing on `main`, and stop them being skipped. Twice a session committed onto local `main` straight after `mise run land` (which leaves you there) — 34 files on 2026-07-20, 19 on 2026-07-27 — and both times the only objection came at PUSH time, from `mise run ship`'s own refusal. `no_commit_to_branch` is an hk BUILTIN, declined in #154 because it treated `git symbolic-ref` exiting nonzero as fatal and so blocked commits during an interactive rebase; hk v1.52.0 (jdx/hk#1075) fixed exactly that, and it was PROBED on the pinned binary rather than believed — feature branch rc=0, main rc=1, detached HEAD rc=0, master rc=1. It is wired into the pre-commit hook ONLY, never `allSteps`: that mapping is spread into `check`/`fix`, so `mise run lint` (and CI's lint job, which checks out a real `main`) would fail on every push to main. The guard rules are the other half, because git decides not to run a hook BEFORE the hook exists as a process — no pre-commit or pre-push hook can observe its own suppression, so `--no-verify` and `HK_SKIP_HOOKS` are only visible to a PreToolUse deny. Both rules are `quoted_blind`: a commit message DESCRIBING the ban must not be denied by it, which is the guard's one measured defect class (#265, and the unanchored chezmoi rule that denied its own documenting commit)."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    "hk.pkl",
+    "python/src/dotfiles_setup/hook_guard.py",
+    "tests/test_hook_guard.py",
+    ".claude/rules/do-not.md",
+]
+per_path_tokens = { "hk.pkl" = [
+    "= Builtins.no_commit_to_branch",
+], "python/src/dotfiles_setup/hook_guard.py" = [
+    '"git --no-verify",',
+    '"HK_SKIP_HOOKS prefix",',
+    "def _quoted_blind_masked(",
+    "blind if rule.quoted_blind else target",
+], "tests/test_hook_guard.py" = [
+    "def test_hook_suppression_denied(",
+    "def test_hook_suppression_false_positives(",
+    "def test_quoted_blind_view_still_sees_an_unquoted_flag(",
+], ".claude/rules/do-not.md" = [
+    "`no_commit_to_branch`",
+] }
+
+[[suite]]
 name = "workflow.adr-0001-enforcement"
 description = "ADR-0001 wiring: the `workflow_hk_skip_hooks` hk step must stay wired to the python enforcer end-to-end — hk.pkl shells out to `dotfiles-setup workflow-hooks`, main.py registers the subcommand AND calls workflow_hooks_main, the workflow_hooks module's three seams (find_violations / job_writes_to_git+skips_required_hooks / classification_gaps) are actually CALLED, the tests carry the real-case verdicts plus the partial-value control arm AND both arms of the entrypoint CI runs, and the ADR records its 'not written yet' gap as Closed 2026-07-21. The hk step's GLOB is deliberately unbound by any token: the check is whole-tree (find_violations scans every workflow regardless of which file triggered the step), so the glob decides only WHEN it runs, never what it sees. Every token binds a CALL SITE, never a `def`: a `def` token is satisfied by prose and by a docstring, which is how build.path-includes-mise-shims stayed green for ~3.5 months (feedback_forbid_tokens_substring_fragile). per_path_tokens, NOT bare tokens: bare tokens are a UNION across the combined text, so one file carrying a token would satisfy the contract for all five — a contract with no opinion about the files it names. The check LOGIC lives in python because a big inline-bash grep would violate zero-bash-logic AND could not work at all: refresh.yml/lock-refresh contains no `git` command and reaches peter-evans/create-pull-request two composite-action hops down."
 category = "workflow"

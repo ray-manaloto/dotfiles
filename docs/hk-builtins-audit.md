@@ -8,8 +8,8 @@
 
 - **hk version:** hk 1.52.0
 - **Builtins available:** 144
-- **Wired as builtins:** 27
-- **Steps defined in total:** 60 (33 custom, with their own check/fix commands)
+- **Wired as builtins:** 28
+- **Steps defined in total:** 61 (33 custom, with their own check/fix commands)
 
 A *wired builtin* is referenced as `Builtins.<name>`. A *custom step* is a
 `["name"] { … }` block carrying its own commands — it may share a
@@ -17,7 +17,7 @@ name with a builtin without being one, which is how the previous
 hand-written audit came to list `ruff_format` and `editorconfig-checker`
 as builtins in use.
 
-## Wired builtins (27)
+## Wired builtins (28)
 
 | Builtin | Declared in |
 |---------|-------------|
@@ -39,6 +39,7 @@ as builtins in use.
 | `mise` | hk.pkl |
 | `mixed_line_ending` | hk-common.pkl |
 | `newlines` | hk-common.pkl |
+| `no_commit_to_branch` | hk.pkl |
 | `pkl` | hk.pkl |
 | `python_check_ast` | hk.pkl |
 | `python_debug_statements` | hk.pkl |
@@ -90,7 +91,7 @@ opinion about them, and neither does this table beyond recording them.
 | `uv_lock_check` | hk.pkl |
 | `workflow_hk_skip_hooks` | hk.pkl |
 
-## Deliberately not adopted (25)
+## Deliberately not adopted (24)
 
 The only authored section — a judgement no tool can recover. Edit it in
 `hk_builtins_audit.py`; an entry that stops naming a real builtin, or that
@@ -109,7 +110,6 @@ names one now wired, fails the gate.
 | `markdown_lint` | Runs markdownlint v1; repo uses markdownlint-cli2 (#154) |
 | `mdschema` | Requires a schema file that does not exist yet (#160 T12) |
 | `mypy` | Using ty instead |
-| `no_commit_to_branch` | Fails on CI's detached HEAD; branch protection covers it |
 | `pinact` | GitHub API rate-limit in the hook; use `mise run pin-actions` |
 | `pylint` | Superseded by ruff |
 | `rubocop` | No Ruby source in project |
