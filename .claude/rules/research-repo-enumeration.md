@@ -7,15 +7,12 @@ docs were consulted while producing the artifact.
 
 ## Why
 
-Research artifacts accumulate over time. Without an enumeration section,
-it becomes impossible to answer "which repos have we already researched?"
-or "which repos does this finding depend on?" without re-reading every
-artifact. The enumeration section is the cheap-to-grep index that makes
-artifacts bisectable after the fact.
-
-It also feeds `docs/research/mintlify-catalog.md`: any repo enumerated
-in a research artifact should either already be in the catalog or be
-appended to its request queue during the same commit.
+Without an enumeration section you cannot answer "which repos have we
+already researched?" without re-reading every artifact. It is the
+cheap-to-grep index that makes artifacts bisectable after the fact, and
+it feeds `docs/research/mintlify-catalog.md` — a repo enumerated in an
+artifact should already be in the catalog, or be appended to its request
+queue in the same commit.
 
 ## Format
 
@@ -57,12 +54,10 @@ Rules:
 
 ## Enforcement
 
-For tracked research artifacts, this rule is documented but not yet
-machine-enforced: `docs/research/runs/**` is gitignored at the per-clone
-level, so an hk grep-check on staged `docs/research/runs/*.md` files is a
-no-op in this repo. A future commit can add an hk step targeting
-`docs/research/**/*.md` when the first tracked research artifact lands;
-until then, this rule relies on reviewer enforcement.
+**Reviewer-enforced, not machine-enforced.** An hk grep-check on staged
+`docs/research/runs/*.md` would be a no-op — that tree is gitignored, so
+nothing is ever staged from it. A step targeting `docs/research/**/*.md`
+becomes worth adding once tracked research artifacts are routine.
 
 ## See also
 

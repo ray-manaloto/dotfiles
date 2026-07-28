@@ -8,14 +8,11 @@ findings to the notepad immediately — not at session end.
 The notepad is **`.agent/notepad.md`** (gitignored). Write to it with the ordinary
 Write/Edit tools, appending as you go.
 
-Until 2026-07-15 this rule named
-`mcp__plugin_oh-my-claudecode_t__notepad_write_working` / `..._write_priority`.
-Those tools ship with the `oh-my-claudecode` plugin, which is **disabled** — so
-they are absent from every session, and a `/doctor` scan measured **zero
-invocations across 941 transcripts**. The rule was unfollowable as written; the
-notepad file itself stayed current because sessions wrote it by hand. Naming the
-real mechanism is the fix. If OMC is ever re-enabled, its notepad tools write
-this same file — the rule does not change.
+Do **not** reach for the `oh-my-claudecode` notepad MCP tools this rule used to
+name: that plugin is disabled, so they are absent from every session (measured:
+**0 invocations across 941 transcripts**). A rule naming a mechanism nobody can
+invoke is indistinguishable from no rule at all.
+Detail: `docs/rules-evidence/notepad-enforcement.md`.
 
 ## Rules
 
@@ -34,14 +31,11 @@ this same file — the rule does not change.
 
 ## Why
 
-In the 2026-04-05 session, the python-pro agent and debugger team performed
-extensive analysis but did NOT write to notepad. When context was lost, their
-findings had to be re-derived. This policy prevents that waste.
+2026-04-05: agents performed extensive analysis but did NOT write to the
+notepad. When context was lost, every finding had to be re-derived.
 
-## Verification
-
-After an agent completes work, check `.agent/notepad.md` for findings. If it is
-empty or stale relative to the work performed, the agent did not comply.
+**Verification:** after an agent completes work, check `.agent/notepad.md`. Empty
+or stale relative to the work performed means it did not comply.
 
 ## See also
 

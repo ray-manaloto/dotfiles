@@ -1,14 +1,11 @@
 # Persistence Gate: Retry Once on Transient DNS
 
 The `persistence` gate inside `mise run verify-local` calls
-`@devcontainers/cli up` mid-cycle to bring the container back up. That
-path re-resolves `ghcr.io/devcontainers/features/sshd` for feature
-dependencies, so the gate is **network-sensitive** in a way that's not
-obvious from `mise.toml [tasks.persistence]` alone. A transient DNS
-blip on the host (or in Docker Desktop's DNS layer) surfaces as
-`getaddrinfo ENOTFOUND ghcr.io` and aborts the gate — but the image
-bytes are healthy, the prior gates have already validated R1/R2/R3,
-and the new content-hashed `:dev` lineage is unaffected.
+`@devcontainers/cli up` mid-cycle, which re-resolves the sshd feature —
+so the gate is **network-sensitive** in a way `mise.toml
+[tasks.persistence]` does not show. A transient host (or Docker
+Desktop) DNS blip aborts it while the image bytes are perfectly
+healthy.
 
 ## Retry-once heuristic
 
@@ -33,14 +30,13 @@ Before triaging a `persistence` failure as a real defect:
 
 ## Why this rule exists
 
-Session 2026-05-01 hit this exact pattern: a ~30s host DNS hiccup
-during the persistence gate's bring-back-up produced a
-`verify-local rc=1`. The first-pass log made it look like an
-R-invariant regression in the post-PR-#93 retagged `:dev`. The retry
-ran clean in 18 minutes, all gates green (R1 inbound, R2 outbound,
-R3 amd64, persistence, secrets) — no code changes. Without this rule,
-future sessions would re-run `dev-rebuild` (expensive) before checking
-whether the failure was environmental.
+Session 2026-05-01: a ~30s host DNS hiccup during the gate's
+bring-back-up produced `verify-local rc=1`, and the first-pass log made
+it look like an **R-invariant regression** in the freshly-retagged
+`:dev`. The retry ran clean in 18 minutes, all gates green, no code
+changes. Without the rule, the next session reaches for `dev-rebuild`
+(~30 min) to chase a transient that already cleared.
+Detail: `docs/rules-evidence/persistence-gate-retry.md`.
 
 ## Failure-mode signatures
 

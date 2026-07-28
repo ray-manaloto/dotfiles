@@ -166,8 +166,10 @@ The repo's applied form of that is **`docs/rules-evidence/<rule>.md`**: a rule's
 archaeology, provenance tables and worked-failure logs move to a tracked sibling
 it links by path, keeping the directive plus one canonical example eager. See
 `agent-artifact-conventions.md`. Measured 2026-07-28 — unscoped rules are
-**~88%** of the eager corpus, so this is where the bytes actually are; the first
-four extractions took it 132,683 → 120,356 B.
+**~88%** of the eager corpus, so this is where the bytes actually are. The pass
+took it **132,683 → 105,648 B (−20.4%)** across 19 of 21 eager rules;
+`clarify-before-acting` and `clean-git-state` were left alone as already at the
+directive-plus-one-example floor.
 
 ## Applies to
 

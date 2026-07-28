@@ -1,17 +1,9 @@
 # AI CLI Invocation Policy
 
-> **This rule is deliberately EAGER (no `paths:` frontmatter).** It guards an
-> *action* — invoking an external AI CLI from Bash — not a file. Path-scoped
-> rules "trigger when Claude **reads** files matching the pattern", and no glob
-> predicts the moment you are about to shell out to `codex`. It was scoped to
-> `AGENTS.md`/`.claude/**`/`scripts/**`/`.agent/**` until 2026-07-20, which meant
-> it could only fire by accident: a session invoked `codex exec "prompt"`
-> positionally (the documented-wrong form), wasted a probe on the resulting
-> stdin hang, and only saw this rule *afterwards*, because it happened to write
-> into `.agent/**`. That is the same defect `zero-skip-policy` and
-> `clean-git-state` were un-scoped for on 2026-07-15. See
-> `.claude/rules/md-size-budgets.md` § "Scoping: the trigger test" — this rule
-> is **behaviour-triggered**, and behaviour-triggered rules stay eager.
+> **EAGER on purpose** — behaviour-triggered, so no glob predicts it
+> (`md-size-budgets.md` § "the trigger test"). While it was scoped it could only
+> fire *after* the mistake, and did. Archaeology:
+> `docs/rules-evidence/ai-cli-invocation.md`.
 
 When calling external AI CLIs (Codex, Gemini, OpenCode) from Bash, you MUST use the
 correct invocation patterns. Incorrect flags waste tokens and cause silent failures.
@@ -73,16 +65,9 @@ Codex or Gemini. For background tasks, use:
 
 ## Reference
 
-**The patterns above ARE the reference — there is no script to consult.** This
-section used to point at the octopus `orchestrate.sh` / `get_agent_command()`.
-That file does not exist in this repo (control-armed: `find . -name
-orchestrate.sh` → 0, while `find . -maxdepth 1 -name hk-common.pkl` → 1, so the
-probe discriminates); it lives only inside the `octo@nyldn-plugins` plugin
-cache, which is `false` in BOTH `.claude/settings.json` and
-`~/.claude/settings.json` and may vanish on plugin GC. A reader could not act
-on it.
-
-When a pattern here looks wrong, **re-probe the CLI itself** (`codex exec
---help`, `gemini --help`) rather than hunting for a canonical script — these
-flags change between releases, which is how the wrong forms above got
-documented in the first place.
+**The patterns above ARE the reference — there is no script to consult.** When a
+pattern here looks wrong, **re-probe the CLI itself** (`codex exec --help`,
+`gemini --help`) rather than hunting for a canonical script; these flags change
+between releases, which is how the wrong forms got documented in the first
+place. (This section once pointed at a file that does not exist in this repo —
+control arm and detail: `docs/rules-evidence/ai-cli-invocation.md`.)

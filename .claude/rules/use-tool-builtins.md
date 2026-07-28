@@ -32,69 +32,38 @@ parser, a detector, or a wrapper, STOP and research first.
    or an adjacent native feature (e.g. auto-merge instead of watch-then-merge)
    that sidesteps the flaw. Reinvention is the last resort even then.
 
-### Worked failure (2026-07-11)
-
-Asked to fix a ship/land CI-wait that used a fixed timeout, the agent hand-rolled
-a custom `await_pr_checks_terminal()` polling loop — WITHOUT first researching
-that GitHub offers **native auto-merge** (`gh pr merge --auto`), **merge queue**,
-`gh run watch`, `workflow_run` triggers, and webhooks, several of which eliminate
-the polling entirely. The maintainer had to send the agent back to research. This
-rule is strengthened so that never recurs: research existing tools/services
-first, every time, unprompted.
-
 ## Tool built-in facts (the original case)
 
 Before designing custom detection logic, custom data variables, custom env-var
 parsing, or custom helper scripts to discriminate environments / machines /
 states, **research the tool's official docs first** and prefer its built-in
-facts and canonical patterns over a homegrown solution.
+facts and canonical patterns over a homegrown solution. Check whether a built-in
+fact already discriminates your cases — `chezmoi.os`, mise's `os`/`arch`,
+`runner.os`, `TARGETARCH` — and whether the tool has a *declarative* way to
+express the intent before you write a `run_*` detection script.
 
-## Why this rule exists
+### Worked failure — the chezmoi `is_container` reinvention (2026-04-06g)
 
-In session 2026-04-06g we discovered `home/.chezmoi.toml.tmpl` had ~20 lines
-of custom `$isContainer` env-var detection (`REMOTE_CONTAINERS` /
-`CODESPACES` / `DEVCONTAINER`) feeding a custom `is_container` data variable,
-used by `.chezmoiignore` to gate the mise overlay.
+`home/.chezmoi.toml.tmpl` carried ~20 lines of custom `$isContainer` env-var
+detection (`REMOTE_CONTAINERS` / `CODESPACES` / `DEVCONTAINER`) feeding a custom
+`is_container` data variable, used by `.chezmoiignore` to gate the mise overlay.
+The canonical chezmoi pattern is `{{ eq .chezmoi.os "linux" }}` — a built-in
+runtime fact, always correct, identical across CI / Mac / devcontainer.
 
-The chezmoi.io docs
-(<https://www.chezmoi.io/user-guide/manage-machine-to-machine-differences/>)
-show the canonical pattern is `{{ eq .chezmoi.os "linux" }}` — a built-in
-runtime fact that's always correct, never depends on env vars or stale
-config, and works identically across CI / local Mac / devcontainer.
+**The reinvention introduced a real bug**: a stale
+`~/.config/chezmoi/chezmoi.toml` holding `is_container=false` would have made
+`chezmoi apply` overwrite the user's `~/CLAUDE.md` and run `run_*.sh.tmpl`
+scripts on the **Mac host**. Fixed in `bd40767`.
 
-The reinvention introduced a real bug: the session-F handoff Option B
-would have run `chezmoi apply` against a stale
-`~/.config/chezmoi/chezmoi.toml` with `is_container=false`, overwriting
-the user's `~/CLAUDE.md` and executing `run_*.sh.tmpl` scripts on the
-Mac host.
+A second case — a hand-rolled CI poller written without noticing GitHub's native
+auto-merge, merge queue, and `workflow_run` — plus the full built-ins checklist:
+`docs/rules-evidence/use-tool-builtins.md`.
 
-## Rules
-
-1. **Before writing custom detection logic**, fetch the tool's official
-   docs on the relevant feature (chezmoi.io, mise.jdx.dev, hk.jdx.dev,
-   docs.astral.sh, docs.docker.com, docs.github.com/actions, etc.).
-   Look for built-in facts, canonical patterns, and "common gotchas"
-   sections.
-
-2. **Before introducing a custom data variable**, check whether a
-   built-in fact already discriminates the cases you care about.
-   Examples of built-ins to check first:
-   - chezmoi: `chezmoi.os`, `chezmoi.hostname`, `chezmoi.arch`,
-     `chezmoi.kernel`, `chezmoi.username`
-   - mise: `os`, `arch`, `tool_dir`
-   - GitHub Actions: `runner.os`, `runner.arch`, `github.event_name`
-   - Docker: `TARGETOS`, `TARGETARCH`, `BUILDKIT_INLINE_CACHE`
-
-3. **Before writing detection scripts in `run_*` templates or postinstall
-   hooks**, check whether the tool has a declarative way to express the
-   same intent.
-
-4. **Justify any custom solution in writing.** If you do introduce custom
-   logic, the commit body or rule file must say *why* the built-in
-   approach is insufficient (e.g., "we have 3 Linux variants and
-   chezmoi.os can't tell them apart, so we need a custom fact"). Without
-   that justification, the default answer is "delete the custom logic,
-   use the built-in".
+**Justify any custom solution in writing.** The commit body or rule file must say
+*why* the built-in is insufficient (e.g. "3 Linux variants, `chezmoi.os` can't
+tell them apart"). Without that, the default answer is "delete the custom logic,
+use the built-in" — a later reviewer cannot tell "we checked" from "we never
+looked".
 
 ## Applies to
 

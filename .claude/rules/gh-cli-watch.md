@@ -6,39 +6,21 @@ When waiting on a GHA workflow run or PR check completion via the
 
 ## Why this rule exists
 
-The `gh` CLI has first-class support for live-monitoring with
-appropriate refresh intervals, exit codes, and table updates:
+`gh` has first-class live-monitoring with correct refresh intervals,
+exit codes, and table updates. A hand-rolled loop has none of that: it
+buries the real exit code (the `grep` becomes the shell's exit), races
+on multi-run queues, burns API quota, and shows the operator nothing.
 
-- `gh pr checks <n> --watch [--fail-fast] [--interval N]` — refreshes
-  every 10s by default until terminal state. Exit code reflects
-  pass/fail/pending. Docs: <https://cli.github.com/manual/gh_pr_checks>.
-- `gh run watch <run-id> --exit-status` — same shape for a specific
-  run. Caveat in `feedback_gh_run_watch.md`: cross-verify exit code
-  with `gh run view <id> --json conclusion` after — `--exit-status`
-  has reported 0 prematurely on edge cases.
+The canonical break: under `set -o pipefail`, `cmd | grep -q PAT`
+returns **141** when the match *succeeds* — a check that can only fail.
+That is `hk.pkl`'s `no_grep_q_under_pipefail` step.
 
-Hand-rolled poll loops:
+⚠️ `gh run watch --exit-status` has reported **0 prematurely** — always
+cross-verify with `gh run view <id> --json conclusion`.
 
-- Bury exit codes (the `grep` becomes the shell's exit, masking API
-  errors).
-- Race on multi-run scenarios (`gh run list --limit 1` matches the
-  wrong run when multiple are queued).
-- Burn API quota on aggressive sleeps.
-- Don't redraw / show progress; the operator stares at silence.
-
-## When to reach for Claude Code's `Monitor` tool instead
-
-Only when one of these is true:
-
-1. You need **per-transition notifications** (each new ✔/✗ should
-   surface as a separate event in chat). `gh pr checks --watch` shows
-   a redrawing live table — fine for humans, low signal for an
-   automation that wants to react per-transition.
-2. The command is on a **non-GHA system** with no built-in watch flag.
-3. You need to **filter** the events (e.g., only emit on failure).
-
-For "wait until done, tell me when", prefer `gh pr checks --watch`
-straight up.
+Full rationale, the anti-pattern catalogue, and when Claude Code's
+`Monitor` tool is the right tool instead (per-transition notifications,
+non-GHA systems, event filtering): `docs/rules-evidence/gh-cli-watch.md`.
 
 ## Canonical patterns
 
@@ -67,20 +49,17 @@ gh run view 1234567890 --json conclusion --jq '.conclusion'
 gh pr checks --watch        # auto-detects from current branch
 ```
 
-## Anti-patterns
+## Anti-pattern
 
 ```bash
 # WRONG — hand-rolled poll, no exit-code awareness:
 while ! gh pr checks 123 --json bucket | grep -q success; do
   sleep 30
 done
-
-# WRONG — racy on multi-run queues:
-gh run list --limit 1 --json status
-
-# WRONG — fixed-time wait, never reflects actual completion:
-sleep 600 && gh pr checks 123
 ```
+
+Two more (a racy `gh run list --limit 1`, a fixed `sleep 600`) are in
+the evidence file.
 
 ## Applies to
 
