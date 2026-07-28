@@ -12,7 +12,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash scripts/pretooluse-guard.sh",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/scripts/pretooluse-guard.sh\"",
             "timeout": 20
           }
         ]
@@ -22,7 +22,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash scripts/graphify-hook-guard.sh search",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/scripts/graphify-hook-guard.sh\" search",
             "timeout": 15
           }
         ]
@@ -32,7 +32,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash scripts/graphify-hook-guard.sh read",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/scripts/graphify-hook-guard.sh\" read",
             "timeout": 15
           }
         ]
@@ -44,7 +44,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ \"${CLAUDE_CODE_REMOTE:-}\" = \"true\" ]; then bash scripts/web-setup.sh; else mise run tool-currency-check; fi",
+            "command": "if [ \"${CLAUDE_CODE_REMOTE:-}\" = \"true\" ]; then bash \"${CLAUDE_PROJECT_DIR:-.}/scripts/web-setup.sh\"; else mise -C \"${CLAUDE_PROJECT_DIR:-.}\" run tool-currency-check; fi",
             "timeout": 600
           }
         ]
@@ -55,7 +55,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "mise run command-audit -- --output .agent/command-audit.md",
+            "command": "mise -C \"${CLAUDE_PROJECT_DIR:-.}\" run command-audit -- --output \"${CLAUDE_PROJECT_DIR:-.}/.agent/command-audit.md\"",
             "timeout": 120
           }
         ]

@@ -28,14 +28,13 @@ and returns 0 iff every check passed.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
-from typing import TYPE_CHECKING
+import tempfile
+from pathlib import Path
 
 from dotfiles_setup import hook_guard
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 _PROBE_TIMEOUT_S = 60.0
 
@@ -46,9 +45,10 @@ _DENIED_SAMPLE = "gh pr create --fill"
 _DENIED_HINT = "mise run ship"
 _ALLOWED_SAMPLE = "git status --porcelain"
 
-_PRETOOLUSE_WRAPPER = "scripts/pretooluse-guard.sh"
+#: Public: the tests drive this wrapper and the off-root arm by name.
+PRETOOLUSE_WRAPPER = "scripts/pretooluse-guard.sh"
 _WEB_SETUP = "scripts/web-setup.sh"
-_HOOK_SCRIPTS = (_PRETOOLUSE_WRAPPER, _WEB_SETUP)
+_HOOK_SCRIPTS = (PRETOOLUSE_WRAPPER, _WEB_SETUP)
 
 # Each settings.json hook event -> (command substrings that MUST appear in its
 # wired command(s), required matcher or None). Keeps the project hooks from
@@ -62,14 +62,27 @@ _HOOK_SCRIPTS = (_PRETOOLUSE_WRAPPER, _WEB_SETUP)
 # which would put a transcript scan on the per-turn path.
 _SESSION_END_REPORT = ".agent/command-audit.md"
 _SETTINGS_WIRING: tuple[tuple[str, tuple[str, ...], str | None], ...] = (
-    ("PreToolUse", (_PRETOOLUSE_WRAPPER,), "Bash"),
+    ("PreToolUse", (PRETOOLUSE_WRAPPER,), "Bash"),
     ("SessionStart", (_WEB_SETUP, "CLAUDE_CODE_REMOTE"), None),
-    ("SessionEnd", ("mise run command-audit", _SESSION_END_REPORT), None),
+    ("SessionEnd", ("run command-audit", _SESSION_END_REPORT), None),
 )
+
+# Claude Code runs hooks "in the current directory", not the project root, and
+# exports ${CLAUDE_PROJECT_DIR} so a hook can find its own repo anyway. A hook
+# command that names a bare relative path therefore resolves against whatever
+# directory the session happens to be in — and silently fails open there, since
+# a non-zero non-2 PreToolUse exit is a NON-BLOCKING error that lets the tool
+# call proceed. That is #343: 125 denied Bash calls executed unchecked while the
+# cwd was a sibling repo. Every wired command must anchor its paths.
+_PROJECT_DIR_ANCHOR = "CLAUDE_PROJECT_DIR"
 
 
 def _run(
-    cmd: list[str], *, stdin: str | None = None, cwd: Path | None = None
+    cmd: list[str],
+    *,
+    stdin: str | None = None,
+    cwd: Path | None = None,
+    env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     try:
         return subprocess.run(
@@ -80,6 +93,7 @@ def _run(
             check=False,
             timeout=_PROBE_TIMEOUT_S,
             cwd=cwd,
+            env=env,
         )
     except subprocess.TimeoutExpired:
         return subprocess.CompletedProcess(cmd, 124, "", "probe timed out")
@@ -129,6 +143,32 @@ def check_settings_wiring(settings_path: Path) -> list[str]:
                 f"settings.json {event} hook must be scoped with matcher "
                 f"{matcher!r} (tool events fire on every tool otherwise)"
             )
+    failures.extend(_unanchored_hooks(settings))
+    return failures
+
+
+def _unanchored_hooks(settings: dict) -> list[str]:
+    """Every wired hook command must anchor its paths to ``$CLAUDE_PROJECT_DIR``.
+
+    Hooks run in the session's CURRENT directory, so a bare relative path is
+    resolved against a sibling repo the moment the session works in one — and
+    the guard then fails open silently (#343). Checking the whole hook block
+    rather than a named list is deliberate: the defect is a property of *any*
+    unanchored command, so a hook added later must not be able to reintroduce
+    it unnoticed.
+    """
+    failures: list[str] = []
+    for event, entries in settings.get("hooks", {}).items():
+        if not isinstance(entries, list):
+            continue
+        for matcher, command in _event_entries(settings, str(event)):
+            if _PROJECT_DIR_ANCHOR in command:
+                continue
+            failures.append(
+                f"settings.json {event} hook (matcher={matcher or '-'!r}) does "
+                f"not anchor its paths to ${_PROJECT_DIR_ANCHOR} and will "
+                f"resolve against whatever cwd the session is in: {command!r}"
+            )
     return failures
 
 
@@ -140,7 +180,7 @@ def check_pretooluse_endtoend(project_root: Path) -> list[str]:
     pretooluse`` -> :func:`hook_guard.decide`), not just ``decide`` alone.
     """
     failures: list[str] = []
-    wrapper = str(project_root / _PRETOOLUSE_WRAPPER)
+    wrapper = str(project_root / PRETOOLUSE_WRAPPER)
 
     denied = _run(
         ["bash", wrapper], stdin=_hook_payload(_DENIED_SAMPLE), cwd=project_root
@@ -174,7 +214,83 @@ def check_pretooluse_endtoend(project_root: Path) -> list[str]:
             f"pretooluse wrapper was not silent on the allowed command "
             f"{_ALLOWED_SAMPLE!r}: {allowed.stdout.strip()!r}"
         )
+    failures.extend(check_offroot_arm(project_root, wrapper))
     return failures
+
+
+def _offroot_env(project_root: Path) -> dict[str, str]:
+    """The hook's environment with this process's own venv resolution removed.
+
+    Drops ``VIRTUAL_ENV`` and every ``PATH`` entry inside the project, so the
+    wrapper must resolve the guard through ``$CLAUDE_PROJECT_DIR`` rather than
+    through a venv it happened to inherit. See :func:`check_offroot_arm`.
+
+    ``UV_PROJECT_ENVIRONMENT`` is deliberately PRESERVED, and that is a
+    correction, not an oversight. Stripping it broke the devcontainer, where
+    ``devcontainer.json`` sets it to ``/home/$USER/.venvs/dotfiles-python`` on
+    purpose: without it uv falls back to ``<project>/.venv`` inside the
+    bind-mounted workspace and dies on the host's stale copy (``failed to remove
+    directory python/.venv/lib: Directory not empty``). It is environment
+    CONFIGURATION the container requires, not an answer leaked from this
+    process — the distinction the first version got wrong, and only the
+    in-container `sync-full` gate caught it.
+
+    Bound worth stating: where that variable already points at a ready venv
+    holding ``dotfiles-setup``, this arm verifies the wrapper is REACHABLE
+    off-root rather than that it re-resolves its project. The resolution half is
+    covered on the host, and statically everywhere by :func:`_unanchored_hooks`.
+    """
+    root = str(project_root)
+    env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
+    env["PATH"] = os.pathsep.join(
+        p for p in env.get("PATH", "").split(os.pathsep) if p and not p.startswith(root)
+    )
+    env[_PROJECT_DIR_ANCHOR] = root
+    return env
+
+
+def check_offroot_arm(project_root: Path, wrapper: str) -> list[str]:
+    """The same deny, driven from a cwd that is NOT the project root (#343).
+
+    Both arms above run with ``cwd=project_root``, so they could not observe the
+    defect that let 125 denied commands through: hooks execute in the session's
+    current directory, and every relative path in the chain — settings.json's
+    script path AND the wrapper's own ``uv run --project python`` — resolved
+    against a sibling repo instead. Measured before the fix: rc=127 from the
+    script path, rc=2 from the uv project. Both exit non-zero-non-2, which
+    PreToolUse treats as a non-blocking error, so the call proceeded.
+
+    A throwaway directory is the foreign cwd rather than a sibling clone: the
+    arm must hold on any machine, including CI, where no second repo exists.
+
+    THE ENVIRONMENT IS SCRUBBED, and that is what makes the arm able to fail.
+    The first version inherited ``os.environ`` wholesale — and since the
+    selfcheck itself runs under ``uv run --project python``, the child already
+    had the project's venv on ``PATH``. So ``dotfiles-setup`` resolved no matter
+    what the wrapper asked for, and the probe passed with the defect
+    reintroduced. A probe that inherits a pre-resolved answer cannot observe the
+    resolution it is testing.
+    """
+    with tempfile.TemporaryDirectory() as foreign:
+        result = _run(
+            ["bash", wrapper],
+            stdin=_hook_payload(_DENIED_SAMPLE),
+            cwd=Path(foreign),
+            env=_offroot_env(project_root),
+        )
+    if result.returncode != 0:
+        return [
+            f"pretooluse wrapper exited {result.returncode} when run from a "
+            f"foreign cwd — it must resolve via ${_PROJECT_DIR_ANCHOR}: "
+            f"{result.stderr.strip()}"
+        ]
+    if '"permissionDecision": "deny"' not in result.stdout:
+        return [
+            f"pretooluse wrapper did not DENY {_DENIED_SAMPLE!r} when run from "
+            f"a foreign cwd — the guard fails OPEN off-root (#343). "
+            f"stdout={result.stdout.strip()!r} stderr={result.stderr.strip()!r}"
+        ]
+    return []
 
 
 def check_guard_decisions() -> list[str]:
