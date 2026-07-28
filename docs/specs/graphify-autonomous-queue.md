@@ -439,9 +439,11 @@ into the handoff, `/clear`, and let the SessionStart hook re-inject this file.
 5. Phase 0 is a triage workflow that reports the DAG **for approval** before any
    build. Its first check is the §5a version-skew gate.
 
-**Known tax:** a branch touching `mise.toml` makes ship's `sync-full` gate run
-`mise install`, which currently compiles `tokei` from source — ~25 minutes, and
-it looks like a hang. Tracked as **#380**.
+**Known tax — FIXED (#380).** A branch touching `mise.toml` makes ship's
+`sync-full` gate run `mise install`. That used to compile `tokei` from source
+(~25 minutes, and it looked like a hang — once it wedged outright, aborting
+every overlay tool declared after it). The overlay now pins the `conda:`
+backend, so the whole eager install completes in ~41s.
 
 ## GitHub repos touched
 

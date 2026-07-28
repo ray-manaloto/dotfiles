@@ -28,7 +28,13 @@ btop = "latest"
 "conda:procs" = "latest"
 "conda:ncdu" = "latest"
 dust = "latest"
-tokei = "latest"
+# conda:, not bare `tokei` (#380): tokei ships NO release assets since v12.1.2
+# (2021), so mise's registry defaults it to `cargo:` — a source build that took
+# ~25 min or wedged indefinitely, aborting every overlay tool after it. aqua:
+# and ubi: cannot help (aqua declares it a cargo-type package; ubi finds no
+# asset). conda-forge builds it: 14.0.0 installs in ~4s. Keep the `conda:`
+# prefix on any bump.
+"conda:tokei" = "latest"
 hexyl = "latest"
 "conda:hyperfine" = "latest"
 # Terminal & shell UX
