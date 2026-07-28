@@ -28,17 +28,11 @@ can't rot after a script is deleted.
 ## Why the check logic is in python
 
 A big inline-bash grep in the hk step would itself violate the policy it
-enforces. So the allowlist + budget logic lives in `bash_budget.py`; the hk
-step and the CLI subcommand are thin wrappers over `find_violations`. This
-mirrors `hook_guard.py` (the PreToolUse guard) and `lint.py` (the hk timeout
-wrapper): logic in python, a thin shell/hk seam.
-
-## Wiring (kept honest by a contract)
-
-`workflow.bash-logic-enforcement` in `python/verification/suites.toml` asserts
-the whole chain exists — hk step ↔ `dotfiles-setup bash-budget` ↔ module ↔
-tests ↔ this rule — so the guard can't silently drift out. Same pattern as
-`workflow.mise-tasks-enforcement`.
+enforces — so the logic lives in `bash_budget.py` and the hk step is a thin
+wrapper, mirroring `hook_guard.py` and `lint.py`. The whole chain (hk step ↔
+CLI ↔ module ↔ tests ↔ this rule) is asserted by
+`workflow.bash-logic-enforcement` in suites.toml, so it can't silently drift
+out. Detail: `docs/rules-evidence/zero-bash-logic.md`.
 
 ## Applies to
 

@@ -18,12 +18,9 @@ worked.
    catalog — if yes, the cache is the authoritative source and `curl`
    is only needed for per-page `.md` fetches or cache refresh.
 
-   **Common trap (session 2026-04-09c):** do NOT guess a project's
-   docs domain (e.g., `containers.dev/llms.txt` → 404). The
-   devcontainer spec/CLI/features/images docs are all hosted on
-   mintlify at `www.mintlify.com/devcontainers/<repo>/`, not on
-   `containers.dev`. Grep the cache or the catalog to find the
-   right URL before curling anything.
+   **Common trap:** do NOT guess a project's docs domain
+   (`containers.dev/llms.txt` → 404; the devcontainer docs are on
+   mintlify). Grep the cache or the catalog for the right URL first.
 
 1. **`curl <site>/llms.txt`** — AI-optimized plain-text index, one entry
    per page. Cheapest possible *remote* lookup. Works for every repo in
@@ -46,89 +43,40 @@ worked.
    ctx7 docs <libraryId> <query>      # fetch the docs
    ```
 
-   Corrected 2026-07-23: this step used to say `ctx7` was "a
-   skill-management CLI … **not** a direct doc-fetcher", routing every
-   lookup through a skill wrapper that adds nothing. Verified against
-   `ctx7 --help` (0.5.5, the `mise.toml` pin): the documented commands are
-   `login/logout/whoami/setup/remove/library/docs/upgrade`.
-
-   The `skills` subcommands still *run* (`ctx7 skills list` → rc=0) but are
-   **hidden from `--help` and deprecated** — "Skill commands are deprecated
-   and will stop working in the next major release." So do not build on
-   them, and do not treat their absence from `--help` as proof they are
-   gone. `.claude/skills/context7-cli/SKILL.md` remains the setup reference.
+   Do not build on the deprecated `skills` subcommands — and do not
+   treat their absence from `--help` as proof they are gone (they still
+   run). `.claude/skills/context7-cli/SKILL.md` is the setup reference.
 
 4. **Raw HTML fetch** (`curl <url>` or `npx @teng-lin/agent-fetch <url>`) —
    **last resort only.** Pays the full HTML-parse cost in agent
    context. Use `defuddle` where available to clean HTML before
    parsing.
 
-## Why `mcp2cli` against per-repo mintlify MCPs is NOT in the chain
+## Never `mcp2cli` a per-repo mintlify MCP URL
 
-An earlier revision of this rule listed
-`mcp2cli https://mintlify.com/<owner>/<repo>/mcp <tool>` as a
-fuzzy-search step. **That step does not work** and has been removed.
+`mcp2cli https://mintlify.com/<owner>/<repo>/mcp <tool>` was once step 2
+of this chain. **It does not work.** Those URLs are GET-only *preview
+descriptors*: a `curl GET` returns a plausible JSON tool-schema, while
+the POST `mcp2cli` sends returns `404`. There is no server behind them,
+and an API key does not unlock one (Mintlify keys are org-scoped).
 
-Summary of the probe evidence (full log:
-`docs/research/mintlify-catalog-validation-log.md`):
+The ban is specific to per-repo mintlify subpath URLs. `mcp2cli` stays
+in active use for real MCP servers (`@github`, `@docker`, or a
+customer-domain MCP like `docs.anthropic.com/mcp`) — see
+`.claude/skills/mcp2cli/SKILL.md`. Four probes, incl. the central-MCP
+scope limit: `docs/rules-evidence/research-doc-sources.md`.
 
-- The `https://mintlify.com/<owner>/<repo>/mcp` URLs are **GET-only
-  preview descriptors** auto-generated for every repo Mintlify
-  indexes. `curl GET` returns a JSON tool-schema descriptor; POST
-  (which `mcp2cli` sends to speak MCP protocol) returns `404 Not
-  found`. There is no live MCP server behind the descriptor.
-- **Live mintlify MCP servers exist only at the customer's own
-  documentation domain** (e.g., `docs.anthropic.com/mcp`,
-  `resend.com/docs/mcp`, `docs.perplexity.ai/mcp`). None of the 16
-  repos currently in `docs/research/mintlify-catalog.md` host a
-  live MCP server anywhere — verified against their own domains
-  (`chezmoi.io/mcp`, `starship.rs/mcp`, `mise.jdx.dev/mcp`, etc.)
-  which all return plain nginx 405/404, not MCP protocol.
-- **Mintlify's central MCP** at `https://mintlify.com/docs/mcp`
-  works but is scope-limited to Mintlify's own platform docs (how
-  to build a mintlify site, MDX syntax, agent workflows). It does
-  NOT search the per-repo customer sites in our catalog. Verified
-  with real queries: `search-mintlify --query "mise shell_alias"`
-  returned zero results from `jdx/mise`.
-- **An API key does not unlock this path.** Mintlify API keys are
-  organization-scoped; they authenticate you only against docs
-  owned by the same Mintlify organization as the key. You cannot
-  use a key to access `jdx/mise`, `twpayne/chezmoi`, or any other
-  org's content.
+## `mcp2cli`-first — a preference, not a gate
 
-`mcp2cli` itself remains in active use in this repo for **other**
-MCP servers (e.g., `@github`, `@docker` shorthands from
-`~/CLAUDE.md`, or a customer-domain MCP like `docs.anthropic.com/mcp`
-if we need to research Anthropic docs). See
-`.claude/skills/mcp2cli/SKILL.md` for invocation patterns. The ban
-is specifically on using it against per-repo mintlify subpath URLs,
-not on `mcp2cli` in general.
+**Prefer `mcp2cli` (process-spawn) or the curl steps above** for one-off
+lookups: native registration injects every tool's JSON schema into the system
+prompt for **every** conversation, forever, including ones that never call it.
 
-## `mcp2cli`-first, but MCP registration is allowed when required
-
-**Prefer `mcp2cli` (process-spawn) or the curl-based options above** for
-one-off doc/tool lookups. Registering an MCP server natively injects every
-tool's JSON schema into Claude's system prompt for every conversation,
-forever — even conversations that never call the tool pay that context tax.
-So for a server you would query rarely, `mcp2cli` is the cheaper path.
-
-**But native MCP registration is NOT forbidden (relaxed 2026-07-19).** When
-a third-party plugin or tool **requires** MCP for its features, registering
-it (`claude mcp add`, a plugin's bundled servers, or a project `.mcp.json`)
-is allowed — done knowingly, accepting the per-conversation schema cost. The
-former hard ban (the `no_mcp_registration` hk step) has been removed; this is
-now a documented **preference**, not a gate. See the memory rule
-`feedback_no_mcp_registration.md` and `.claude/skills/mcp2cli/SKILL.md` for
-the cost rationale (the reason to still reach for `mcp2cli` first).
-
-## When to register natively instead
-
-`mcp2cli` is the default because it pays no per-conversation schema cost. But
-when a third-party plugin or tool **requires** native MCP for its features,
-registering it is fine (relaxed 2026-07-19 — no longer gated). Judgement call:
-if you'd query the server rarely, `mcp2cli` still wins on cost; if the plugin's
-value depends on Claude selecting its tools natively and you'll use it often,
-register it and accept the schema cost. When unsure, reach for `mcp2cli` first.
+**Native registration is NOT forbidden** (relaxed 2026-07-19; the
+`no_mcp_registration` hk step is gone). When a plugin or tool *requires* MCP,
+register it knowingly. Judgement call: rare queries → `mcp2cli` wins on cost;
+a plugin whose value depends on native tool selection → register it. When
+unsure, reach for `mcp2cli` first.
 
 ## See also
 

@@ -58,12 +58,8 @@ GitHub Actions, actionlint, pinact, agnix, and any future additions.
 
 ## Why this rule is eager (never `paths:`-scoped)
 
-It has no `paths:` frontmatter deliberately. Path-scoped rules "trigger when
-Claude **reads** files matching the pattern"
-(<https://code.claude.com/docs/en/memory>) — but this rule fires the moment a
-warning is about to be *dismissed*, which no glob can predict. It was scoped
-to `**/*.py`/`hk.pkl`/workflows until 2026-07-15, so a session editing only
-markdown or shell never loaded the rule forbidding skipped warnings — absent
-from exactly the sessions it exists to govern. Rules that guard **judgment**
-stay eager; only rules whose trigger IS a file (e.g. `ci-local-parity.md`) are
-safe to scope. See `.claude/rules/md-size-budgets.md`.
+It fires the moment a warning is about to be *dismissed*, which no glob can
+predict. It was scoped until 2026-07-15, so a session editing only markdown or
+shell never loaded the rule forbidding skipped warnings — absent from exactly
+the sessions it exists to govern. Rules that guard **judgment** stay eager. See
+`md-size-budgets.md` § "Scoping: the trigger test".

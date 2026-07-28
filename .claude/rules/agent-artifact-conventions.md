@@ -4,12 +4,11 @@ Agent working artifacts live under **`.agent/`** (gitignored, machine-local).
 Anything that should survive a clone is **tracked**, and lives under `docs/` —
 never in `.agent/`. Do not create ad-hoc directories in either.
 
-> **Renamed from `.omc/` (2026-07-25).** That tree was named after the
-> `oh-my-claudecode` plugin, which is **not enabled** — a convention named for
-> a tool nothing loads. `.agent/` was verified before adopting, not assumed:
-> control-armed over Claude Code's full docs corpus, `.agent/` → **0 hits**
-> while `CLAUDE.md` → 439, so the probe discriminates. Claude Code claims
-> `.claude/**` exclusively and has no opinion about `.agent/`.
+> **Renamed from `.omc/` (2026-07-25)** — that tree was named after a plugin
+> that is not enabled. `.agent/` was control-armed before adopting, not assumed
+> (`.agent/` → 0 hits in Claude Code's docs, `CLAUDE.md` → 439). Archaeology,
+> and why the ignore lives in `.gitignore` rather than `.git/info/exclude`:
+> `docs/rules-evidence/agent-artifact-conventions.md`.
 
 ## Local, gitignored — swept away by `git clean -xdf`
 
@@ -35,20 +34,18 @@ never in `.agent/`. Do not create ad-hoc directories in either.
 | `docs/adr/` | Domain-shaped decisions (our ADRs are `.claude/rules/*.md`) |
 | `docs/rules-evidence/` | Archaeology extracted OUT of an eager rule: one `<rule>.md` per `.claude/rules/<rule>.md` |
 
-**`docs/rules-evidence/` exists to buy back eager context.** Every unscoped
-`.claude/rules/*.md` loads in full at session start — measured 2026-07-28 with an
-`InstructionsLoaded` hook, they are ~88% of the eager corpus. Scoping cannot fix
-that (`md-size-budgets.md` § "the trigger test"), so the lever is moving the
-case histories, provenance tables and worked-failure logs into a tracked sibling
-the rule links by path. The rule keeps its directive, its operative constraints,
-and **one** canonical worked example; nothing leaves git, it just stops being
+**`docs/rules-evidence/` exists to buy back eager context.** Unscoped
+`.claude/rules/*.md` are ~88% of the eager corpus and scoping cannot fix that
+(`md-size-budgets.md` § "the trigger test"), so the lever is moving case
+histories, provenance tables and worked-failure logs into a tracked sibling the
+rule links by path. The rule keeps its directive, its operative constraints, and
+**one** canonical worked example; nothing leaves git, it just stops being
 re-injected every session. Name the file after the rule, one-to-one.
 
 **Promoting is the default for anything an eval, a rule, or a future session
-will cite.** The migration surfaced why: five eager rules cited research that
-had never been tracked, so every reader outside this one machine hit a dead
-link — and `doc_refs` could not see it, because the whole `.omc/` prefix sat in
-its allowlist. A citation to something only you can open is not a citation.
+will cite** — the migration found five eager rules citing research that had
+never been tracked, so every reader outside this one machine hit a dead link.
+A citation to something only you can open is not a citation.
 
 ## Two things that must NOT be normalised
 
@@ -74,18 +71,6 @@ its allowlist. A citation to something only you can open is not a citation.
    `.agent/` — Claude Code's loader does not scan anywhere else. Frontmatter
    `name` should match the directory name so slash-invocation and auto-loading
    stay consistent. Same for `.claude/rules/` and `.claude/agents/`.
-
-## Why `.gitignore`, not `.git/info/exclude`
-
-`.omc/*` was excluded via `.git/info/exclude`, which is **per-clone and does
-not survive a fresh clone** — which is exactly why every artifact anyone
-actually wanted tracked had to be force-added with `git add -f`. An ignore rule
-that exists on one machine is not a convention, it is an accident. `.agent/` is
-in the real `.gitignore`.
-
-`.omc/` also remains ignored: the statusline HUD configured in the **user-level**
-`~/.claude/settings.json` still recreates `.omc/state/` in whichever repo is
-cwd. Retiring that is a user-config change this repo does not make unasked.
 
 ## Why this rule cannot be `paths:`-scoped
 

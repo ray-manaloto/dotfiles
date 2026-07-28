@@ -44,33 +44,26 @@ If a failure mode recurs, it earns a task + a `python/` module
 ## Pick the right container — a dirty one lies
 
 The environment must match the one whose failure you are predicting, and the
-running devcontainer often is NOT it. Measured 2026-07-16 (#288): simulating
-`curl=8.18.0-1ubuntu2` **failed in the devcontainer** and **passed in a clean
-base container**, because the devcontainer already had a newer curl installed
-and apt refuses to downgrade. The pin was fine; the environment lied.
+running devcontainer often is NOT it. Measured (#288): the same apt pin
+**failed in the devcontainer** and **passed in a clean base container**, because
+the devcontainer already had a newer package and apt refuses to downgrade. The
+pin was fine; the environment lied.
 
-- Predicting the **base build**? Use a throwaway `docker run --rm` on the
-  digest-pinned `BASE_IMAGE` — that is what the build actually starts from. An
-  ephemeral probe container is not devcontainer lifecycle, so `do-not.md` #3
-  does not apply.
-- Predicting **runtime behavior in the shipped image**? Use the devcontainer
-  via `devcontainer exec` — and keep `verify-container-latest`'s rule that it
-  must be current (`verify-before-advancing.md`).
+- Predicting the **base build**? A throwaway `docker run --rm` on the
+  digest-pinned `BASE_IMAGE` — that is what the build actually starts from (an
+  ephemeral probe is not devcontainer lifecycle, so `do-not.md` #3 doesn't bind).
+- Predicting **runtime behavior in the shipped image**? The devcontainer via
+  `devcontainer exec`, kept current per `verify-container-latest`.
 
 Read the base image and any pinned constants **out of the Dockerfile** rather
 than restating them, or the probe drifts into testing an image nobody builds.
 
 ## What this does NOT license
 
-- **It does not replace CI.** A green local probe answers one question. CI
-  still builds, smokes, and publishes. Never skip a gate because a probe passed
-  (`zero-skip-policy.md`).
-- **It does not license local base builds.** `mise run build` / `docker buildx
-  bake dev-load` remain CI-only (`do-not.md` #2). A probe *simulates* or
-  *inspects*; it does not build the image.
-- **It does not make an arm64 Mac a substitute for the amd64 image.** The full
-  smoke cannot run here (Rosetta/TSan); `feedback_image_smoke_mac_rosetta_tsan`
-  still holds. Pass `--platform linux/amd64` and know what the probe can't see.
+A green probe does not replace CI, does not license a local base build
+(`do-not.md` #2), and does not make this arm64 Mac a substitute for the amd64
+image (the full smoke can't run here — Rosetta/TSan). Detail:
+`docs/rules-evidence/local-devcontainer-first.md`.
 
 ## Applies to
 

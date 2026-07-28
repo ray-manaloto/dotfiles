@@ -6,25 +6,26 @@ potentially-slow command and then wait on it indefinitely.
 
 ## Why this rule exists
 
-Session 2026-06-29: a `hk run pre-commit --all --stash none` invocation
-hung at **0% CPU with no child processes for ~7 hours** before it was
-noticed. hk has no native timeout, so nothing aborted it. Worse, the run
-had been launched as `hk ... 2>&1 | tail -40`, so when it was finally
-killed the pipeline reported **exit 0** (tail's exit code) — masking the
-fact that the gate never actually passed. Two traps in one incident:
-unbounded wait + pipe-masked exit code.
+Session 2026-06-29: a `hk run pre-commit --all` invocation hung at **0%
+CPU with no child processes for ~7 hours** — hk has no native timeout,
+so nothing aborted it. It had been launched as `hk ... 2>&1 | tail -40`,
+so when it was finally killed **the pipeline reported exit 0** (tail's),
+masking the fact that the gate never passed. Two traps in one incident;
+both are now operative rules below, and both are guard-enforced.
+
+Case history — the backgrounding reversal, which log file to read, and
+the ruff wedge's two published red herrings:
+`docs/rules-evidence/long-running-command-hangs.md`.
 
 ## Rules
 
 1. **Use `mise run lint`, not raw `hk run check`/`hk run pre-commit`.**
    `mise run lint` runs the **read-only** `hk run check --all` (identical
-   to CI — local == CI, no silent source rewriting; the fix path is
-   `mise run fmt` → `hk fix`) wrapped in an out-of-process hard timeout
-   (hk has none of its own — verified against hk 1.46 and the live v1.48
-   docs: no `--timeout` flag, no `timeout` step key, no `HK_*` timeout env
-   var). On expiry it kills hk's whole process group and prints the tail
-   of the debug log. Default 600s; override with `--timeout <secs>` or
-   `DOTFILES_LINT_TIMEOUT=<secs> mise run lint`. Source:
+   to CI — no silent source rewriting; the fix path is `mise run fmt`)
+   wrapped in an out-of-process hard timeout, because **hk has none of
+   its own**. On expiry it kills hk's whole process group and prints the
+   debug-log tail. Default 600s; override with `--timeout <secs>` or
+   `DOTFILES_LINT_TIMEOUT=<secs>`. Source:
    `python/src/dotfiles_setup/lint.py`.
 
 2. **For any command expected to exceed ~30s, never wait blind.** Either
@@ -32,11 +33,9 @@ unbounded wait + pipe-masked exit code.
    debug log. **EXCEPTION — Mac-side container ops: background-and-idle gets
    them REAPED.** `mise run ship`/`land`, `verify-local`, `sync`, and image
    pulls are killed if the turn goes idle waiting on them, so "background it"
-   — the default advice above — is precisely wrong here and cost a killed
-   20-minute image pull (2026-07-16). Measured both ways: a foreground 10-min
-   bound also killed a `ship` mid-`shellcheck` (rc=143). What works is
-   **in-turn polling** — background the command, then keep the turn engaged
-   reading its log until it finishes:
+   is precisely wrong here (measured both ways — a foreground 10-min bound
+   also killed a `ship` at rc=143). What works is **in-turn polling** —
+   background the command, then keep the turn engaged reading its log:
 
    ```bash
    deadline=$((SECONDS+540))
@@ -49,17 +48,15 @@ unbounded wait + pipe-masked exit code.
    not background operators and stay allowed.
 
    **Backgrounding stays correct for CI/remote waits** (`gh pr checks --watch`,
-   `gh run watch`) — those run on GitHub's infrastructure, not this Mac, and
-   nothing local reaps them. The hazard is specifically local, long, Mac-side
-   work. See `feedback_long_mac_ops_keep_turn_engaged`, which this rule used to
-   contradict outright. For a `mise run lint` run the log is
-   **`~/.local/state/dotfiles/hk-lint.log`** — the per-run `HK_LOG_FILE`
-   the wrapper sets (`lint.py` `DEFAULT_LOG_FILE`). Read THAT one:
-   `~/.local/state/hk/hk.log` is a *different* file written by other hk
-   entrypoints (e.g. the pre-push hook) and is typically stale, which
-   makes a live hang look idle (misread 2026-07-14). mise →
-   `~/.local/state/mise/mise.log` (`MISE_LOG_FILE`, debug level set in
-   `mise.toml [env]`). Use a count-diff monitor loop, not a fixed sleep.
+   `gh run watch`) — those run on GitHub's infrastructure and nothing local
+   reaps them. The hazard is specifically local, long, Mac-side work.
+
+   For `mise run lint` the log is **`~/.local/state/dotfiles/hk-lint.log`**
+   (the per-run `HK_LOG_FILE` the wrapper sets). Read THAT one —
+   `~/.local/state/hk/hk.log` is a *different*, usually stale file, and
+   reading it made a live hang look idle. mise →
+   `~/.local/state/mise/mise.log`. Use a count-diff monitor loop, not a
+   fixed sleep.
 
 3. **Preserve real exit codes — never `cmd 2>&1 | tail -N` to capture.**
    *Machine-enforced since 2026-07-21* — the PreToolUse guard denies a
@@ -78,36 +75,23 @@ unbounded wait + pipe-masked exit code.
 
 5. **hk specifics.** hk parallelises via per-file read/write locks
    *within* a run; a crashed/killed run can leave stale state under
-   `~/.local/state/hk/`. (The old "clear ~/Library/Caches/hk/configs/
-   after editing hk.pkl" guidance is retired — the cache is
-   content-hashed since hk 1.47; see `ci-local-parity.md` rule 5.)
+   `~/.local/state/hk/`. (The old "clear the pkl config cache" guidance is
+   retired — content-hashed since hk 1.47; `ci-local-parity.md` rule 5.)
 
-6. **The ruff-error wedge is FIXED (#268) — and its published diagnosis
-   was wrong.** A ruff violation now fails `mise run lint` with `rc=1`
-   and a `✗ ruff` summary. Root cause was **`depends` + `fail_fast =
-   false`**, not ruff: hk never releases a dependent whose dependency
-   FAILED, so `ruff_format` (which we had given `depends = List("ruff")`)
-   sat at `waiting for ruff` forever. Fixed by ordering with `exclusive
-   = true` instead; `hk.pkl`'s `no_hk_depends` step now blocks `depends`
-   from coming back. Reproduced on hk 1.50.0 AND 1.51.0 — **not** fixed
-   by a bump.
+6. **The ruff-error wedge is FIXED (#268), and it was never ruff.** Root
+   cause was **`depends` + `fail_fast = false`** — hk never releases a
+   dependent whose dependency FAILED, so `ruff_format` sat at `waiting
+   for ruff` forever. `hk.pkl`'s `no_hk_depends` step blocks `depends`
+   from coming back.
 
-   **Two red herrings this rule itself repeated for two days, both worth
-   remembering:**
-   - *"The `ruff` step has `fix=true`."* It does not. `fix` on a builtin
-     Step is a **command string**; the boolean lives on the **hook**
-     (`hk.pkl` `["pre-commit"] { fix = true }`). Same key name, two
-     meanings, opposite levels.
-   - *"`failed to get write locks …` is the wedge."* It is a **DEBUG-level,
-     non-fatal** retry line from whole-repo hygiene steps contending over
-     the first file alphabetically; it appears on runs that finish fine.
-     The wedge is one line lower: `waiting for <dep>`. **A scary log line
-     adjacent to a hang is not the hang** — confirm a suspect by removing
-     it and re-probing, which is what finally isolated `depends`.
+   Generalisation, learned by publishing the wrong diagnosis twice:
+   **a scary log line adjacent to a hang is not the hang** (`failed to
+   get write locks …` is a benign DEBUG retry; the wedge was one line
+   lower). Confirm a suspect by removing it and re-probing. Both red
+   herrings: `docs/rules-evidence/long-running-command-hangs.md`.
 
-   The durable habit survives: **when lint hangs, run `uv run --project
-   python ruff check` DIRECTLY** — seconds, and it never lies about your
-   own code.
+   Durable habit: **when lint hangs, run `uv run --project python ruff
+   check` DIRECTLY** — seconds, and it never lies about your own code.
 
 7. **Find the wedged step by name.** Grep the lint output for a
    `❯ <step>` with no matching `✔ <step>` — that names it directly,
