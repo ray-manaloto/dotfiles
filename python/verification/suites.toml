@@ -20,9 +20,24 @@ version = "2"
 #     registration was deleted, and `--output` by a sibling parser's own flag.
 #     Anchoring does NOT reach this one — bind the unique site.  (#394)
 #
+#     This is the question that finds real holes.  #397 swept the tail and
+#     **33 of 33** rebindings closed a LIVE one, and the stand-in was usually
+#     not a sibling registration — it was **a COMMENT or a prose sentence in
+#     the same file naming the thing**.  A Dockerfile explains its own `ARG`
+#     above it; a workflow documents its own job; devcontainer.json narrates
+#     every mount in a header block.  Delete the wiring, the narration stays,
+#     and the contract never notices.  `dotfiles-setup token-audit` is the
+#     machine form of this question — run it after adding a token.
+#
 # And bare `tokens` is a UNION across every listed path: `permissionDecision`
 # was satisfied by the TEST FILE asserting the string, with the guard's emit
 # deleted.  Use `per_path_tokens` when it matters which file carries it.
+#
+# With ONE path there is nothing to choose between, so a bare list means
+# exactly what `per_path_tokens` means — except that the uniqueness audit
+# cannot see it.  `find_unaudited` therefore REFUSES the single-path bare
+# form.  A bare list over several paths is still the way to say "any of
+# these", and is left alone.  (#397)
 #
 # Tails that cannot be prefix-renamed (`true`, `lambda`, `str`, a date, a
 # `.sh`/`.md` extension, a vendor's product name) need no anchor.
@@ -38,7 +53,7 @@ category = "build"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/Dockerfile"]
-tokens = ["MISE_DATA_DIR=/usr/local/share/mise"]
+per_path_tokens = { ".devcontainer/Dockerfile" = ["MISE_DATA_DIR=/usr/local/share/mise"] }
 
 [[suite]]
 name = "build.mise-install-path-system"
@@ -47,7 +62,7 @@ category = "build"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/Dockerfile"]
-tokens = ["MISE_INSTALL_PATH=/usr/local/bin/mise"]
+per_path_tokens = { ".devcontainer/Dockerfile" = ["MISE_INSTALL_PATH=/usr/local/bin/mise"] }
 
 [[suite]]
 name = "build.no-custom-mise-cache-dir"
@@ -129,9 +144,9 @@ category = "build"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/devcontainer.json"]
-tokens = [
-    "--platform=linux/amd64/v2",
-]
+per_path_tokens = { ".devcontainer/devcontainer.json" = [
+    "\"options\": [\"--platform=linux/amd64/v2\"]",
+] }
 
 [[suite]]
 name = "build.amd64-platform-wired-mise"
@@ -140,9 +155,9 @@ category = "build"
 check_type = "static"
 handler = "require_tokens"
 paths = ["mise.toml"]
-tokens = [
+per_path_tokens = { "mise.toml" = [
     "DOCKER_DEFAULT_PLATFORM = \"linux/amd64/v2\"",
-]
+] }
 
 [[suite]]
 name = "build.ssh-r1-inbound-wired"
@@ -151,11 +166,11 @@ category = "build"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/devcontainer.json"]
-tokens = [
-    "ghcr.io/devcontainers/features/sshd",
+per_path_tokens = { ".devcontainer/devcontainer.json" = [
+    "\"ghcr.io/devcontainers/features/sshd:1\": {}",
     "${localEnv:DEVCONTAINER_SSH_PORT}:2222",
-    "authorized_keys",
-]
+    "install -m 600 /tmp/dotfiles-host-state/authorized_keys ~/.ssh/authorized_keys",
+] }
 
 [[suite]]
 name = "build.ssh-r2-outbound-native-docker-desktop-wired"
@@ -164,12 +179,12 @@ category = "build"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/devcontainer.json"]
-tokens = [
+per_path_tokens = { ".devcontainer/devcontainer.json" = [
     "source=/run/host-services/ssh-auth.sock",
     "target=/run/host-services/ssh-auth.sock",
     "\"SSH_AUTH_SOCK\": \"/run/host-services/ssh-auth.sock\"",
-    "dotfiles-setup docker initialize-host",
-]
+    "dotfiles-setup docker initialize-host\"",
+] }
 
 [[suite]]
 name = "build.uv-link-mode-not-global"
@@ -187,7 +202,7 @@ category = "build"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/Dockerfile"]
-tokens = ["ARG BASE_IMAGE"]
+per_path_tokens = { ".devcontainer/Dockerfile" = ["ARG BASE_IMAGE"] }
 
 
 [[suite]]
@@ -197,7 +212,7 @@ category = "build"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/mise-system.toml"]
-tokens = ["\"apt:gnupg\""]
+per_path_tokens = { ".devcontainer/mise-system.toml" = ["\"apt:gnupg\""] }
 
 [[suite]]
 name = "build.apt-via-mise-bootstrap"
@@ -206,11 +221,11 @@ category = "build"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/Dockerfile"]
-tokens = [
+per_path_tokens = { ".devcontainer/Dockerfile" = [
   "mise bootstrap packages apply --manager apt --yes --update",
   "mise bootstrap packages status --json --missing",
   "/etc/apt/apt.conf.d/99no-install-recommends",
-]
+] }
 
 [[suite]]
 name = "build.npm-no-update-notifier"
@@ -219,7 +234,7 @@ category = "build"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/mise-system.toml"]
-tokens = ['npm_config_update_notifier = "false"']
+per_path_tokens = { ".devcontainer/mise-system.toml" = ['npm_config_update_notifier = "false"'] }
 
 [[suite]]
 name = "build.path-includes-mise-shims"
@@ -229,7 +244,6 @@ check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/Dockerfile.host-user", ".devcontainer/devcontainer.json", "home/.chezmoi.toml.tmpl"]
 per_path_tokens = { ".devcontainer/Dockerfile.host-user" = [".local/share/mise/shims"] }
-tokens = [".local/share/mise/shims"]
 
 [[suite]]
 name = "build.no-custom-cargo-home"
@@ -296,7 +310,7 @@ category = "build"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/Dockerfile"]
-tokens = ["sed -i '/^path-exclude=\\/usr\\/share\\/man\\/\\*$/d' /etc/dpkg/dpkg.cfg.d/excludes"]
+per_path_tokens = { ".devcontainer/Dockerfile" = ["sed -i '/^path-exclude=\\/usr\\/share\\/man\\/\\*$/d' /etc/dpkg/dpkg.cfg.d/excludes"] }
 
 [[suite]]
 name = "build.rustup-skip-path-check"
@@ -305,7 +319,7 @@ category = "build"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/mise-system.toml"]
-tokens = ['RUSTUP_INIT_SKIP_PATH_CHECK = "yes"']
+per_path_tokens = { ".devcontainer/mise-system.toml" = ['RUSTUP_INIT_SKIP_PATH_CHECK = "yes"'] }
 
 [[suite]]
 name = "build.gcc-latest-deb-checksum"
@@ -314,10 +328,10 @@ category = "build"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/Dockerfile"]
-tokens = [
-  "ARG GCC_LATEST_DEB_SHA256=",
-  "sha256sum -c -",
-]
+per_path_tokens = { ".devcontainer/Dockerfile" = [
+    "ARG GCC_LATEST_DEB_SHA256=",
+    "\"${GCC_LATEST_DEB_SHA256}  ${GCC_LATEST_DEB}\" | sha256sum -c -",
+] }
 
 [[suite]]
 name = "build.gcc-latest-reflection"
@@ -326,7 +340,11 @@ category = "build"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/Dockerfile"]
-tokens = ["gcc-latest.deb", "/opt/gcc-latest/bin/g++", "-freflection"]
+per_path_tokens = { ".devcontainer/Dockerfile" = [
+    "gcc-latest.deb",
+    "test -x /opt/gcc-latest/bin/g++",
+    "-freflection \\\n      /tmp/refl-gcc.cpp",
+] }
 
 [[suite]]
 name = "build.clang-p2996-reflection"
@@ -335,7 +353,11 @@ category = "build"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/Dockerfile"]
-tokens = ["clang-p2996", "CLANG_P2996_REF", "COPY --from=clang-builder"]
+per_path_tokens = { ".devcontainer/Dockerfile" = [
+    "-DCMAKE_INSTALL_PREFIX=/opt/clang-p2996",
+    "ARG CLANG_P2996_REF=",
+    "COPY --from=clang-builder",
+] }
 
 [[suite]]
 name = "build.clang-p2996-ref-in-bake"
@@ -344,7 +366,10 @@ category = "build"
 check_type = "static"
 handler = "require_tokens"
 paths = ["docker-bake.hcl"]
-tokens = ["CLANG_P2996_REF"]
+per_path_tokens = { "docker-bake.hcl" = [
+    "variable \"CLANG_P2996_REF\" {",
+    "CLANG_P2996_REF = CLANG_P2996_REF",
+] }
 
 [[suite]]
 name = "build.p2996-cache-target"
@@ -353,11 +378,12 @@ category = "build"
 check_type = "static"
 handler = "require_tokens"
 paths = ["docker-bake.hcl"]
-tokens = [
-  "target \"p2996-cache\"",
-  "p2996-export",
-  "BUILDER_IMAGE",
-]
+per_path_tokens = { "docker-bake.hcl" = [
+    "target \"p2996-cache\"",
+    "target   = \"p2996-export\"",
+    "variable \"BUILDER_IMAGE\" {",
+    "args = {\n    BUILDER_IMAGE",
+] }
 
 [[suite]]
 name = "build.base-cache-target"
@@ -366,10 +392,10 @@ category = "build"
 check_type = "static"
 handler = "require_tokens"
 paths = ["docker-bake.hcl"]
-tokens = [
-  "target \"base\"",
-  "devcontainer-base",
-]
+per_path_tokens = { "docker-bake.hcl" = [
+    "target \"base\"",
+    "target   = \"devcontainer-base\"",
+] }
 
 [[suite]]
 name = "build.no-retired-indirection-args"
@@ -401,12 +427,12 @@ category = "build"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/Dockerfile"]
-tokens = [
+per_path_tokens = { ".devcontainer/Dockerfile" = [
   "BASE_HASH_BEGIN",
   "BASE_HASH_END",
   "P2996_HASH_BEGIN",
   "P2996_HASH_END",
-]
+] }
 
 [[suite]]
 name = "build.p2996-cache-dockerfile-stages"
@@ -415,11 +441,11 @@ category = "build"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/Dockerfile"]
-tokens = [
+per_path_tokens = { ".devcontainer/Dockerfile" = [
   "FROM ${BUILDER_IMAGE} AS clang-builder-cold",
   "AS p2996-export",
   "COPY --from=p2996-export /opt/clang-p2996",
-]
+] }
 
 [[suite]]
 name = "build.locked-install-with-conda-sha"
@@ -436,10 +462,6 @@ per_path_tokens = { ".devcontainer/Dockerfile" = [
 ], ".devcontainer/mise-system.lock" = [
   "[conda-packages.linux-x64",
 ] }
-tokens = [
-  "mise install --system --locked",
-  "[conda-packages.linux-x64",
-]
 
 [[suite]]
 name = "build.base-image-digest-pinned"
@@ -458,12 +480,12 @@ category = "build"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/Dockerfile"]
-tokens = [
+per_path_tokens = { ".devcontainer/Dockerfile" = [
   "FROM devcontainer AS devcontainer-runtime",
   "ENV MISE_ENV=runtime",
   "/usr/local/share/mise/config.runtime.toml",
   "/usr/local/share/mise/mise.runtime.lock",
-]
+] }
 
 [[suite]]
 name = "build.dev-target-publishes-runtime-stage"
@@ -472,7 +494,7 @@ category = "build"
 check_type = "static"
 handler = "require_tokens"
 paths = ["docker-bake.hcl"]
-tokens = ["target   = \"devcontainer-runtime\""]
+per_path_tokens = { "docker-bake.hcl" = ["target   = \"devcontainer-runtime\""] }
 
 [[suite]]
 name = "build.doppler-secrets-wired"
@@ -481,11 +503,11 @@ category = "build"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/devcontainer.json"]
-tokens = [
-    "--env-file",
-    "doppler.env",
-    "doppler secrets download",
-]
+per_path_tokens = { ".devcontainer/devcontainer.json" = [
+    "\"--env-file\",",
+    "dotfiles/doppler.env\",",
+    "&& doppler secrets download --format docker",
+] }
 
 # =============================================================================
 # CI Constraints (~6) — Workflow correctness
@@ -498,7 +520,7 @@ category = "ci"
 check_type = "static"
 handler = "require_tokens"
 paths = ["docker-bake.hcl"]
-tokens = ["type=sbom"]
+per_path_tokens = { "docker-bake.hcl" = ["type=sbom"] }
 
 [[suite]]
 name = "ci.provenance-attestation"
@@ -507,7 +529,7 @@ category = "ci"
 check_type = "static"
 handler = "require_tokens"
 paths = ["docker-bake.hcl"]
-tokens = ["type=provenance,mode=max"]
+per_path_tokens = { "docker-bake.hcl" = ["type=provenance,mode=max"] }
 
 [[suite]]
 name = "ci.bootstrap-gap-report-wired"
@@ -516,11 +538,11 @@ category = "ci"
 check_type = "static"
 handler = "require_tokens"
 paths = [".github/workflows/build-publish.yml"]
-tokens = [
-  "mise bootstrap packages status --json",
-  "dotfiles-setup bootstrap-gap-report",
-  "bootstrap-gap-report.json",
-]
+per_path_tokens = { ".github/workflows/build-publish.yml" = [
+    "mise bootstrap packages status --json",
+    "dotfiles-setup bootstrap-gap-report",
+    "path: /tmp/bootstrap-gap-report.json",
+] }
 
 [[suite]]
 name = "ci.no-mise-data-in-cache-map"
@@ -538,7 +560,10 @@ category = "ci"
 check_type = "static"
 handler = "require_tokens"
 paths = ["docker-bake.hcl"]
-tokens = ["type=gha,scope=dotfiles-dev"]
+per_path_tokens = { "docker-bake.hcl" = [
+    "\"type=gha,scope=dotfiles-dev\",",
+    "\"type=gha,scope=dotfiles-dev,mode=max\",",
+] }
 
 [[suite]]
 name = "ci.no-actions-cache-workaround"
@@ -565,7 +590,7 @@ category = "ci"
 check_type = "static"
 handler = "require_tokens"
 paths = [".github/workflows/ci.yml"]
-tokens = ["ray-manaloto/dotfiles-devcontainer"]
+per_path_tokens = { ".github/workflows/ci.yml" = ["ray-manaloto/dotfiles-devcontainer"] }
 
 [[suite]]
 name = "ci.explicit-packages-write"
@@ -574,7 +599,9 @@ category = "ci"
 check_type = "static"
 handler = "require_tokens"
 paths = [".github/workflows/ci.yml"]
-tokens = ["packages: write"]
+per_path_tokens = { ".github/workflows/ci.yml" = [
+    "\npermissions:\n  contents: read\n  packages: write\n",
+] }
 
 [[suite]]
 name = "ci.push-to-main-skips-build"
@@ -583,7 +610,7 @@ category = "ci"
 check_type = "static"
 handler = "require_tokens"
 paths = [".github/workflows/ci.yml"]
-tokens = ["(github.event_name != 'push' || github.ref != 'refs/heads/main')"]
+per_path_tokens = { ".github/workflows/ci.yml" = ["(github.event_name != 'push' || github.ref != 'refs/heads/main')"] }
 
 [[suite]]
 name = "ci.ci-gate-aggregator-exists"
@@ -592,12 +619,11 @@ category = "ci"
 check_type = "static"
 handler = "require_tokens"
 paths = [".github/workflows/ci.yml"]
-tokens = [
-  "ci-gate:",
-  "needs.build-publish.result",
-  "if: always()",
-  "success|skipped",
-]
+per_path_tokens = { ".github/workflows/ci.yml" = [
+    "  ci-gate:\n    needs: [lint, contract-preflight, changes, build-publish]\n    if: always()\n",
+    "needs.build-publish.result",
+    "success|skipped",
+] }
 
 [[suite]]
 name = "ci.promote-job-exists"
@@ -606,12 +632,12 @@ category = "ci"
 check_type = "static"
 handler = "require_tokens"
 paths = [".github/workflows/ci.yml"]
-tokens = [
-  "promote:",
-  "docker buildx imagetools create",
-  "associatedPullRequests",
-  "force_dev_tag",
-]
+per_path_tokens = { ".github/workflows/ci.yml" = [
+    "promote:",
+    "docker buildx imagetools create",
+    "associatedPullRequests(first:1) { nodes { number } }",
+    "-f force_dev_tag=true",
+] }
 
 [[suite]]
 name = "ci.p2996-prep-job-exists"
@@ -620,14 +646,14 @@ category = "ci"
 check_type = "static"
 handler = "require_tokens"
 paths = [".github/workflows/build-publish.yml"]
-tokens = [
-  "p2996-prep:",
-  "dotfiles-setup p2996-hash",
-  "docker manifest inspect",
-  "p2996-cache",
-  "dev.contexts.p2996-export=docker-image://",
-  "dev.contexts.devcontainer-base=docker-image://",
-]
+per_path_tokens = { ".github/workflows/build-publish.yml" = [
+    "\n  p2996-prep:\n",
+    "hash=$(uv run --project python dotfiles-setup p2996-hash)",
+    "docker manifest inspect",
+    "targets: p2996-cache",
+    "dev.contexts.p2996-export=docker-image://",
+    "dev.contexts.devcontainer-base=docker-image://",
+] }
 
 [[suite]]
 name = "ci.dev-prep-gate-exists"
@@ -636,12 +662,12 @@ category = "ci"
 check_type = "static"
 handler = "require_tokens"
 paths = [".github/workflows/build-publish.yml"]
-tokens = [
-  "dev-prep:",
-  "dotfiles-setup dev-hash",
-  "dev-tag:",
-  "needs.smoke-test.result == 'success'",
-]
+per_path_tokens = { ".github/workflows/build-publish.yml" = [
+    "dev-prep:",
+    "hash=$(uv run --project python dotfiles-setup dev-hash)",
+    "dev-tag:",
+    "needs.smoke-test.result == 'success'",
+] }
 
 [[suite]]
 name = "ci.p2996-ref-dispatch-wired"
@@ -652,10 +678,10 @@ handler = "require_tokens"
 paths = [
   ".github/workflows/build-publish.yml",
 ]
-tokens = [
+per_path_tokens = { ".github/workflows/build-publish.yml" = [
   "inputs.p2996_ref != ''",
   "CLANG_P2996_REF=${P2996_REF}",
-]
+] }
 
 [[suite]]
 name = "ci.refresh-uses-app-token"
@@ -664,12 +690,12 @@ category = "ci"
 check_type = "static"
 handler = "require_tokens"
 paths = [".github/workflows/refresh.yml"]
-tokens = [
-  "actions/create-github-app-token",
-  "REFRESH_APP_ID",
-  "REFRESH_APP_PRIVATE_KEY",
-  "auto-merge:",
-]
+per_path_tokens = { ".github/workflows/refresh.yml" = [
+    "uses: actions/create-github-app-token@",
+    "app-id: ${{ secrets.REFRESH_APP_ID }}",
+    "REFRESH_APP_PRIVATE_KEY",
+    "auto-merge:",
+] }
 
 [[suite]]
 name = "ci.lock-refresh-wired"
@@ -678,12 +704,12 @@ category = "ci"
 check_type = "static"
 handler = "require_tokens"
 paths = [".github/workflows/refresh.yml"]
-tokens = [
-  "lock-refresh:",
-  "uses: ./.github/actions/lock-refresh",
-  ".devcontainer/mise-system.lock",
-  ".devcontainer/devcontainer-lock.json",
-]
+per_path_tokens = { ".github/workflows/refresh.yml" = [
+    "lock-refresh:",
+    "uses: ./.github/actions/lock-refresh",
+    "\n            .devcontainer/mise-system.lock\n",
+    "\n            .devcontainer/devcontainer-lock.json\n",
+] }
 
 [[suite]]
 name = "ci.lint-locked-installs"
@@ -692,7 +718,7 @@ category = "ci"
 check_type = "static"
 handler = "require_tokens"
 paths = [".github/workflows/ci.yml"]
-tokens = ["MISE_LOCKED: \"1\""]
+per_path_tokens = { ".github/workflows/ci.yml" = ["MISE_LOCKED: \"1\""] }
 
 [[suite]]
 name = "ci.refresh-no-dispatch-hack"
@@ -710,7 +736,7 @@ category = "ci"
 check_type = "static"
 handler = "require_tokens"
 paths = ["renovate.json"]
-tokens = ["custom.regex"]
+per_path_tokens = { "renovate.json" = ["custom.regex"] }
 
 [[suite]]
 name = "ci.renovate-extends-jdx-preset"
@@ -719,7 +745,7 @@ category = "ci"
 check_type = "static"
 handler = "require_tokens"
 paths = ["renovate.json"]
-tokens = ["github>jdx/renovate-config"]
+per_path_tokens = { "renovate.json" = ["github>jdx/renovate-config"] }
 
 [[suite]]
 name = "ci.dive-config-present"
@@ -728,7 +754,7 @@ category = "ci"
 check_type = "static"
 handler = "require_tokens"
 paths = [".dive-ci"]
-tokens = ["lowestEfficiency"]
+per_path_tokens = { ".dive-ci" = ["lowestEfficiency"] }
 
 [[suite]]
 name = "ci.trivy-scan-wired"
@@ -737,11 +763,11 @@ category = "ci"
 check_type = "static"
 handler = "require_tokens"
 paths = [".github/workflows/image-analysis.yml"]
-tokens = [
-  "aquasecurity/trivy-action",
-  "github/codeql-action/upload-sarif",
-  "trivy.sarif",
-]
+per_path_tokens = { ".github/workflows/image-analysis.yml" = [
+    "aquasecurity/trivy-action",
+    "github/codeql-action/upload-sarif",
+    "output: trivy.sarif",
+] }
 
 [[suite]]
 name = "ci.mise-task-pre-commit-named"
@@ -750,7 +776,7 @@ category = "ci"
 check_type = "static"
 handler = "require_tokens"
 paths = ["mise.toml"]
-tokens = ["[tasks.pre-commit]"]
+per_path_tokens = { "mise.toml" = ["[tasks.pre-commit]"] }
 
 # =============================================================================
 # Identity Constraints (~6) — User/group handling
@@ -806,7 +832,7 @@ category = "identity"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/Dockerfile.host-user"]
-tokens = ["rm -f /etc/sudoers.d/devcontainer"]
+per_path_tokens = { ".devcontainer/Dockerfile.host-user" = ["rm -f /etc/sudoers.d/devcontainer"] }
 
 [[suite]]
 name = "identity.username-validation"
@@ -828,7 +854,9 @@ category = "architecture"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/devcontainer.json"]
-tokens = ["${localEnv:USER}"]
+per_path_tokens = { ".devcontainer/devcontainer.json" = [
+    "\"remoteUser\": \"${localEnv:USER}\"",
+] }
 
 [[suite]]
 name = "arch.base-image-dockerfile-host-user"
@@ -837,7 +865,7 @@ category = "architecture"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/Dockerfile.host-user"]
-tokens = ["ghcr.io/ray-manaloto/dotfiles-devcontainer:dev"]
+per_path_tokens = { ".devcontainer/Dockerfile.host-user" = ["ghcr.io/ray-manaloto/dotfiles-devcontainer:dev"] }
 
 [[suite]]
 name = "arch.devcontainer-json-base-image-localenv"
@@ -846,7 +874,7 @@ category = "architecture"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/devcontainer.json"]
-tokens = ["${localEnv:BASE_IMAGE}"]
+per_path_tokens = { ".devcontainer/devcontainer.json" = ["${localEnv:BASE_IMAGE}"] }
 
 [[suite]]
 name = "arch.devcontainer-json-no-bare-image-tag"
@@ -864,7 +892,7 @@ category = "architecture"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/devcontainer.json"]
-tokens = ["\"updateRemoteUserUID\": false"]
+per_path_tokens = { ".devcontainer/devcontainer.json" = ["\"updateRemoteUserUID\": false"] }
 
 [[suite]]
 name = "arch.no-mise-home-volume"
@@ -882,7 +910,7 @@ category = "architecture"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/mise-system.toml"]
-tokens = ["npm.package_manager = \"bun\""]
+per_path_tokens = { ".devcontainer/mise-system.toml" = ["npm.package_manager = \"bun\""] }
 
 [[suite]]
 name = "arch.pipx-uses-uvx"
@@ -891,7 +919,7 @@ category = "architecture"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/mise-system.toml"]
-tokens = ["pipx.uvx = true"]
+per_path_tokens = { ".devcontainer/mise-system.toml" = ["pipx.uvx = true"] }
 
 [[suite]]
 name = "arch.cargo-uses-binstall"
@@ -900,7 +928,7 @@ category = "architecture"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/mise-system.toml"]
-tokens = ["cargo.binstall = true"]
+per_path_tokens = { ".devcontainer/mise-system.toml" = ["cargo.binstall = true"] }
 
 # =============================================================================
 # Policy Constraints (~4) — Human-only, not automatable
@@ -1204,7 +1232,7 @@ tokens = [
 
 [[suite]]
 name = "workflow.token-audit-wiring"
-description = "Contract-token uniqueness gate (#394 step 4). The sweep anchored 164 tokens so a prefix-preserving rename could not hide inside them — and then the three holes that were LIVE all survived their anchor, because each token matched somewhere other than the site it meant: `permissionDecision` was satisfied by the test file's own assertion (bare tokens are a union), `selfcheck` by the `elif command ==` dispatch branch after the subparser registration was deleted, `--output` by a sibling parser's identical flag. A word-boundary matcher would have caught none of them, which is why the audit recommended a UNIQUENESS signal instead: a per_path_tokens entry should match its file exactly once, because one match cannot be satisfied by a stand-in. Genuine multiplicity — a lockfile section per package, a doc naming its own task, a reused test fixture — is allowlisted with a reason; a NEW ambiguity fails, and so does a stale entry. Asserts the chain: hk step, CLI subcommand, module, allowlist, tests."
+description = "Contract-token uniqueness gate (#394 step 4). The sweep anchored 164 tokens so a prefix-preserving rename could not hide inside them — and then the three holes that were LIVE all survived their anchor, because each token matched somewhere other than the site it meant: `permissionDecision` was satisfied by the test file's own assertion (bare tokens are a union), `selfcheck` by the `elif command ==` dispatch branch after the subparser registration was deleted, `--output` by a sibling parser's identical flag. A word-boundary matcher would have caught none of them, which is why the audit recommended a UNIQUENESS signal instead: a per_path_tokens entry should match its file exactly once, because one match cannot be satisfied by a stand-in. Genuine multiplicity — a lockfile section per package, a doc naming its own task, a reused test fixture — is allowlisted with a reason; a NEW ambiguity fails, and so does a stale entry. #397 added the second rule the first one needs to be reachable: the audit reads ONLY per_path_tokens, so a bare `tokens` list was exempt from it — and the build/ci/arch tail was 105 such tokens. With a single path the two forms mean the same thing, so `find_unaudited` refuses the bare one; converting the tail then surfaced 39 ambiguities of which 33 were LIVE, the stand-in usually being a COMMENT or prose sentence in the same file rather than a sibling registration. Asserts the chain: hk step, CLI subcommand, module (both checks + the call site wiring the second into find_violations), allowlist, tests (both directions of each rule)."
 category = "workflow"
 check_type = "static"
 handler = "require_tokens"
@@ -1223,12 +1251,16 @@ per_path_tokens = { "hk.pkl" = [
     '"token-audit": lambda',
 ], "python/src/dotfiles_setup/token_audit.py" = [
     "def find_ambiguous(",
+    "def find_unaudited(",
     "def find_violations(",
     "def token_audit_main(",
     "AMBIGUITY_ALLOWED: dict",
+    "problems = find_unaudited(root)",
 ], "tests/test_token_audit.py" = [
     "def test_a_token_matching_once_is_silent(",
     "def test_every_allowlist_entry_is_still_ambiguous(",
+    "def test_a_single_path_bare_token_list_is_reported(",
+    "def test_the_same_binding_as_per_path_tokens_is_silent(",
 ] }
 tokens = [
     'dotfiles-setup token-audit"',
@@ -1484,7 +1516,6 @@ paths = [
     ".github/workflows/refresh.yml",
 ]
 per_path_tokens = { ".github/workflows/autofix.yml" = ["GIT_CONFIG_KEY_0: init.defaultBranch"], ".github/workflows/build-publish.yml" = ["GIT_CONFIG_KEY_0: init.defaultBranch"], ".github/workflows/ci.yml" = ["GIT_CONFIG_KEY_0: init.defaultBranch"], ".github/workflows/gcc-sha-repair.yml" = ["GIT_CONFIG_KEY_0: init.defaultBranch"], ".github/workflows/ghcr-cleanup.yml" = ["GIT_CONFIG_KEY_0: init.defaultBranch"], ".github/workflows/image-analysis.yml" = ["GIT_CONFIG_KEY_0: init.defaultBranch"], ".github/workflows/refresh.yml" = ["GIT_CONFIG_KEY_0: init.defaultBranch"] }
-tokens = ["GIT_CONFIG_KEY_0: init.defaultBranch"]
 
 # =============================================================================
 # Orchestration + eval contracts (#354 tier 0) — every declaration gets an
@@ -1535,10 +1566,6 @@ per_path_tokens = { ".claude/settings.json" = [
     "\"fable-orchestrator@fable-orchestrator\": true",
     "\"antigravity@antigravity-for-claude-code\": true",
 ] }
-tokens = [
-    "\"fable-orchestrator@fable-orchestrator\": true",
-    "\"antigravity@antigravity-for-claude-code\": true",
-]
 
 [[suite]]
 name = "orchestration.config-placement"
@@ -1650,4 +1677,3 @@ per_path_tokens = { "python/src/dotfiles_setup/pr.py" = [
     "FAIL  ship: git push rc={push_rc}",
     "gh pr view rc={view.returncode}",
 ] }
-tokens = ["FAIL  ship: gh pr create rc={create_rc}"]

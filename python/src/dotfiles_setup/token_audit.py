@@ -26,6 +26,33 @@ NEW ambiguity fails.
 
 Same shape as :mod:`dotfiles_setup.bash_budget`: an explicit map with
 justifications, where a stale entry fails too, so the map cannot rot.
+
+## The blind spot this gate had, and the second rule (#397, 2026-07-28)
+
+:func:`find_ambiguous` reads **only** ``per_path_tokens``. A bare ``tokens``
+list was therefore invisible to it — and the ``build.*`` / ``ci.*`` / ``arch.*``
+tail was 105 bare tokens, none of them audited. Converting them cost nothing
+semantically: ``_resolve_paths`` does no globbing, so a bare list over ONE path
+is identical in effect to ``per_path_tokens`` for that path, and 51 of the
+tail's 54 ``require_tokens`` suites named exactly one path.
+
+The gate then had plenty to say. **33 of the 39 ambiguities it surfaced were
+LIVE holes** — delete the real wiring line, leave the other match standing, and
+the contract stays green. Proven both directions against the real engine on a
+temp tree (old token + mutated tree PASSES; the rebound token FAILS naming
+itself), with a control arm over the 103 already-unique tail tokens, every one
+of which correctly reported *not* a hole.
+
+The dominant stand-in was not a sibling registration, as #394's three were — it
+was **a comment or a prose sentence in the same file naming the thing**. A
+Dockerfile that explains its own ``ARG`` above it, a workflow that documents its
+own job, a devcontainer.json whose header block narrates every mount. Deleting
+the wiring left the narration, and the narration satisfied the token.
+
+Hence :func:`find_unaudited`: a ``require_tokens`` suite naming exactly one path
+must bind through ``per_path_tokens``, never a bare ``tokens`` list. That form
+is convertible with zero semantic change, so there is no reason to write it —
+and writing it silently exempts the suite from the rule above.
 """
 
 from __future__ import annotations
@@ -47,6 +74,12 @@ MANIFEST = "python/verification/suites.toml"
 # Measured 2026-07-27: 25 entries were ambiguous; 7 were real defects of the
 # `selfcheck` shape and were fixed by binding the unique site instead. These 18
 # are the genuine remainder.
+#
+# #397 (2026-07-28) brought the `build.*`/`ci.*`/`arch.*` tail under this gate
+# by converting its single-path bare `tokens` to `per_path_tokens`. That
+# surfaced 39 more ambiguities: 31 were the `selfcheck` shape — overwhelmingly
+# a PROSE OR COMMENT MENTION standing in for the wiring line — and were
+# rebound; the 8 below are genuine.
 AMBIGUITY_ALLOWED: dict[tuple[str, str, str], str] = {
     (
         "build.locked-install-with-conda-sha",
@@ -138,6 +171,54 @@ AMBIGUITY_ALLOWED: dict[tuple[str, str, str], str] = {
         ".github/workflows/refresh.yml",
         "Tool currency report (daily)",
     ): "the job step name and the issue title it upserts",
+    # ---- #397: the build.* / ci.* / arch.* tail ----------------------------
+    (
+        "build.amd64-platform-wired-mise",
+        "mise.toml",
+        'DOCKER_DEFAULT_PLATFORM = "linux/amd64/v2"',
+    ): "one per lifecycle task (up / dev-rebuild / verify-image) — PR #86's "
+    "split-brain WAS one task missing it, so multiplicity IS the assertion",
+    (
+        "build.clang-p2996-ref-in-bake",
+        "docker-bake.hcl",
+        "CLANG_P2996_REF = CLANG_P2996_REF",
+    ): "one per target whose cache the ref must invalidate (dev, p2996-cache)",
+    (
+        "ci.sbom-attestation",
+        "docker-bake.hcl",
+        "type=sbom",
+    ): "one per published target (dev / base / p2996-cache); all three attest "
+    "identically by design (#160 T7)",
+    (
+        "ci.provenance-attestation",
+        "docker-bake.hcl",
+        "type=provenance,mode=max",
+    ): "one per published target (dev / base / p2996-cache) — #160 T7",
+    (
+        "ci.p2996-ref-dispatch-wired",
+        ".github/workflows/build-publish.yml",
+        "inputs.p2996_ref != ''",
+    ): "the 'Resolve p2996 ref override' step repeats in p2996-prep / dev-prep "
+    "/ build so all three track the SAME upstream SHA — multiplicity IS the "
+    "assertion",
+    (
+        "ci.p2996-ref-dispatch-wired",
+        ".github/workflows/build-publish.yml",
+        "CLANG_P2996_REF=${P2996_REF}",
+    ): "the same three resolve steps as the sibling token above",
+    (
+        "ci.p2996-prep-job-exists",
+        ".github/workflows/build-publish.yml",
+        "docker manifest inspect",
+    ): "the registry cache-probe idiom is textually IDENTICAL in base-prep / "
+    "p2996-prep / dev-prep, so no substring can discriminate them; the job "
+    "identity is carried by the sibling `p2996-prep:` token",
+    (
+        "ci.dev-prep-gate-exists",
+        ".github/workflows/build-publish.yml",
+        "hash=$(uv run --project python dotfiles-setup dev-hash)",
+    ): "twice by design — dev-prep computes the probe hash, dev-tag recomputes "
+    "it to stamp the validated marker; both clauses are the contract",
 }
 
 
@@ -175,12 +256,32 @@ def find_ambiguous(root: Path) -> list[Ambiguity]:
     return found
 
 
+def find_unaudited(root: Path) -> list[str]:
+    """Single-path ``require_tokens`` suites that bind through a bare list.
+
+    Such a token is invisible to :func:`find_ambiguous`, and the bare form buys
+    nothing: with one path, the union IS that path. A suite naming SEVERAL
+    paths is a different question (#299's union) and is left alone.
+    """
+    return [
+        f"{suite['name']} binds {len(suite['tokens'])} token(s) through a bare "
+        f"`tokens` list over the single path {suite['paths'][0]!r} — that form "
+        f"is invisible to the uniqueness audit and means exactly the same "
+        f"thing as `per_path_tokens`. Move them (#397)."
+        for suite in verify.load_manifest(root / MANIFEST)
+        if suite.get("handler") == "require_tokens"
+        and suite.get("tokens")
+        and len(suite.get("paths", [])) == 1
+    ]
+
+
 def find_violations(root: Path) -> list[str]:
-    """New ambiguity, plus allowlist entries that have stopped being true."""
+    """New ambiguity, unaudited bare tokens, and allowlist entries gone stale."""
     ambiguous = find_ambiguous(root)
     seen = {a.key for a in ambiguous}
 
-    problems = [
+    problems = find_unaudited(root)
+    problems += [
         f"{a.render()} — not in AMBIGUITY_ALLOWED. Bind the ONE site that means "
         f"it (see #394), or add an entry with a reason."
         for a in ambiguous

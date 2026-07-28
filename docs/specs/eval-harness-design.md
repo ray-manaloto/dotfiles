@@ -943,7 +943,80 @@ skipped one element, because an anchor may itself end in `]`
 the manifest and compares the token lists against the plan — the same shape as
 the arms above: a tool that only ever reports success has not been tested.
 
-## GitHub repos touched
+### 2026-07-28 revision (#397: the tail swept — 33 of 33 rebindings were LIVE)
+
+The other ~87 suites, in the order Ray locked: **bare-union first, anchoring
+second.** The re-derivation on `47048ca` matched #397's counts exactly (87 tail
+suites; `build` 43 / `ci` 25 / `arch` 9 / `identity` 6 / `policy` 4) — and
+refuted the issue's premise about *why* the union mattered here.
+
+**The union is structurally absent from the tail.** `_resolve_paths` does no
+globbing, so a bare `tokens` list over ONE path is identical in effect to
+`per_path_tokens` for that path — and **51 of the tail's 54 `require_tokens`
+suites name exactly one path**. The three that name more already carried
+`per_path_tokens` for exactly those tokens; their bare lists were vestigial
+duplicates. Control arm, and the reason the claim is reportable at all: the
+same probe over the **seams** returns **19**, which is where
+`permissionDecision` actually lived.
+
+**The conversion was still the right first move, for a better reason.**
+`token_audit.find_ambiguous` reads only `per_path_tokens`, so every bare token
+was exempt from the uniqueness gate — #394's own step-4 recommendation could
+not see the half of the manifest it was most needed on. Converting brought
+**105 tokens** under it.
+
+| | |
+|---|---|
+| tail bare `require_tokens` tokens | 105 |
+| ambiguities the gate then reported | 39 |
+| **rebound because the hole was LIVE** | **33** |
+| allowlisted (multiplicity IS the assertion) | 8, incl. 2 that survived a rebind |
+
+Each rebinding was armed against the **real engine** on a temp tree: the old
+token PASSES with the wiring line deleted (so the hole was live), the rebound
+token FAILS *with the reason naming it*, and it PASSES on the clean tree. The
+harness's own control arm ran arm A over the **103** already-unique tail tokens
+— all 103 correctly reported *not a hole*, so the 33/33 is a measurement and
+not a stuck needle.
+
+**The stand-in has a different shape here than in the seams.** #394's three
+were sibling *code*: a dispatch branch, another parser's flag, a test
+assertion. The tail's are overwhelmingly **a comment or a prose sentence in the
+same file naming the thing it wires**. `.devcontainer/devcontainer.json` opens
+with a header block narrating every mount and lifecycle command;
+`build-publish.yml` documents its own jobs; the Dockerfile explains each `ARG`
+above it. Delete the wiring and the narration remains — `authorized_keys`,
+`doppler secrets download`, `dotfiles-setup p2996-hash`, `REFRESH_APP_ID`,
+`actions/create-github-app-token` were every one of them satisfied by their own
+documentation. A well-commented file is *more* exposed to this than a terse
+one, which is the opposite of the intuition.
+
+Two were the plain prefix-swallow instead: `type=gha,scope=dotfiles-dev` was
+satisfied by the `,mode=max` line below it (now two anchored tokens, so the
+cache-from and cache-to are asserted separately), and `sha256sum -c -` in the
+Dockerfile was satisfied by **graphviz's** checksum while the contract meant
+gcc-latest's.
+
+**The gate now has a second rule, because the first one had a blind spot by
+construction.** `find_unaudited` refuses a `require_tokens` suite that names
+one path and binds through a bare `tokens` list: that form is convertible with
+zero semantic change, so writing it only ever means exempting the suite from
+the uniqueness audit. A bare list over *several* paths still says "any of
+these" and is left alone. Both directions are pinned in
+`tests/test_token_audit.py`, and armed against the live manifest before
+shipping (reintroduce the bare form on a real suite → reported; the
+`per_path_tokens` form → silent).
+
+**Anchoring — deliberately NOT in this change, and the evidence is against it
+being urgent.** 64 tail tokens still end at an open identifier. But the arm
+that would justify anchoring cannot discriminate: appending to an identifier
+*preserves* the substring by construction, so "does the rename survive?" is
+answered "yes" for every open-tailed token and is exactly equivalent to the
+static property. It is authoring judgment, not a probe. Meanwhile the arm that
+*can* discriminate found 33 live holes, none of which anchoring would have
+reached — the same verdict #394 reached from three cases, now from 33.
+
+### GitHub repos touched
 
 - [wshobson/agents](https://github.com/wshobson/agents) — `plugins/plugin-eval` + `docs/plugin-eval.md`; the three-layer taxonomy and the triggering-F1 method.
 - [microsoft/SkillOpt](https://github.com/microsoft/SkillOpt) — README (KB source #5); the held-out validation-gate discipline.

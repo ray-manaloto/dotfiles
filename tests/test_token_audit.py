@@ -11,6 +11,7 @@ from dotfiles_setup.token_audit import (
     AMBIGUITY_ALLOWED,
     MANIFEST,
     find_ambiguous,
+    find_unaudited,
     find_violations,
     token_audit_main,
 )
@@ -98,6 +99,53 @@ def test_main_returns_one_when_a_binding_is_ambiguous(
 
 def test_main_returns_zero_on_the_real_repo() -> None:
     assert token_audit_main(ROOT) == 0
+
+
+def _single_path_manifest(tmp_path: Path, binding: str) -> Path:
+    """A one-suite manifest naming ONE path, binding it however `binding` says."""
+    (tmp_path / "python/verification").mkdir(parents=True)
+    (tmp_path / MANIFEST).write_text(
+        "[[suite]]\n"
+        'name = "demo.suite"\n'
+        'handler = "require_tokens"\n'
+        'paths = ["target.txt"]\n'
+        f"{binding}\n"
+    )
+    (tmp_path / "target.txt").write_text("wire here\n")
+    return tmp_path
+
+
+def test_a_single_path_bare_token_list_is_reported(tmp_path: Path) -> None:
+    """#397: the bare form is invisible to `find_ambiguous`, so it is refused."""
+    _single_path_manifest(tmp_path, 'tokens = ["wire"]')
+    problems = find_unaudited(tmp_path)
+    assert len(problems) == 1
+    assert "demo.suite" in problems[0]
+    assert "bare `tokens` list" in problems[0]
+
+
+def test_the_same_binding_as_per_path_tokens_is_silent(tmp_path: Path) -> None:
+    """The control arm: the gate must accept the form it redirects TO."""
+    _single_path_manifest(tmp_path, 'per_path_tokens = { "target.txt" = ["wire"] }')
+    assert find_unaudited(tmp_path) == []
+
+
+def test_a_multi_path_bare_token_list_is_left_alone(tmp_path: Path) -> None:
+    """A union over SEVERAL paths is #299's question, not this gate's."""
+    (tmp_path / "python/verification").mkdir(parents=True)
+    (tmp_path / MANIFEST).write_text(
+        "[[suite]]\n"
+        'name = "demo.suite"\n'
+        'handler = "require_tokens"\n'
+        'paths = ["a.txt", "b.txt"]\n'
+        'tokens = ["wire"]\n'
+    )
+    assert find_unaudited(tmp_path) == []
+
+
+def test_the_real_manifest_binds_every_single_path_suite_per_path() -> None:
+    """The gate on the repo itself — #397 converted the last of them."""
+    assert find_unaudited(ROOT) == []
 
 
 def test_an_allowlisted_entry_that_became_unique_is_reported(
