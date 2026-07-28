@@ -49,6 +49,12 @@ v0.7.0→v1.51.0: zero hits), so the skip must be explicit.
 ## Consequences
 
 - Any **new** workflow that commits or pushes must set `HK_SKIP_HOOKS` too.
+- **This is a CI-only sanction. Locally, `HK_SKIP_HOOKS=` is guard-denied**
+  (#400): the PreToolUse rule `HK_SKIP_HOOKS prefix` rejects it at a command
+  position, alongside `--no-verify`. Not a contradiction — a runner *cannot*
+  satisfy `ghcr_publish_prereqs` or `test`, while a Mac can and must. The
+  documented escape hatch being real is precisely why it needed a local guard:
+  reaching for it interactively looks sanctioned when it is not.
 - ~~Correctness now depends on remembering.~~ **Closed 2026-07-21 — the guard now exists.** The
   `workflow_hk_skip_hooks` hk step runs `dotfiles-setup workflow-hooks`
   (`python/src/dotfiles_setup/workflow_hooks.py`), which fails when *any* job that commits or

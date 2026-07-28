@@ -26,6 +26,8 @@ task (wrapping the python library, zero-bash-logic) in the same change.
 | `gh workflow run` / `gh run rerun` | `mise run gha-dispatch -- <wf>` / `mise run gha-rerun -- <id>` |
 | `npx <tool>` | the mise-pinned binary directly |
 | `chezmoi apply/update` on the Mac host | nothing — devcontainer-only |
+| `git commit --no-verify` / `-n` / `-nm`, `git push --no-verify` | nothing — fix what the hook reports. pre-commit is what runs `no_commit_to_branch`; pre-push runs the suite. Git skips a hook BEFORE it exists as a process, so no hook can catch its own suppression and this guard is the only layer (#400). `git push -n` is `--dry-run` and stays allowed |
+| `HK_SKIP_HOOKS=` / `HK_SKIP_STEPS=` as a local command prefix | nothing — they exist for CI jobs that commit or push (ADR-0001, gated by `workflow_hk_skip_hooks`); locally they only turn the gate off |
 
 Diagnostic/read-only commands (`docker ps`, `gh pr view`, `git status`,
 single-test `pytest path::test` via uv) are NOT wrapped and stay direct.
@@ -36,13 +38,11 @@ i.e. cwd) → `ship`/`land`; knowledge-base → `kb-ship`/`kb-land`; **any other
 repo → ALLOW**. Allowing the rest is deliberate — no canonical task exists for
 a sibling repo, so a deny would redirect to nothing and merely block real work.
 
-This was a real defect, not a hypothetical: the rules used to match `gh pr
-merge` unconditionally, so a knowledge-base PR was denied and pointed at `mise
-run land` — a *dotfiles* task with no repo parameter that watches dotfiles'
-main CI and re-validates the dotfiles devcontainer. The guard blocked the only
-working command and named a task that could not do the job; KB PRs #1 and #2
-were merged by hand as a result. A guard whose redirect target cannot perform
-the redirected action is not enforcement, it is an outage.
+A real defect, not a hypothetical: the rules matched `gh pr merge`
+unconditionally, so a knowledge-base PR was denied and pointed at `mise run
+land` — a *dotfiles* task with no repo parameter, which watches dotfiles' main
+CI. KB PRs #1 and #2 were merged by hand as a result. A guard whose redirect
+target cannot perform the redirected action is not enforcement, it is an outage.
 
 **It recurred along a second axis — PR PROVENANCE (#369, 2026-07-27).** Only
 `ship` arms auto-merge and a bot PR never runs it; `land` refuses an OPEN PR;
