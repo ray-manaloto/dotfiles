@@ -828,6 +828,121 @@ its second half: **an invocation token must extend past the renamable
 identifier.** Every `per_path_tokens` entry in `suites.toml` whose token ends at
 an identifier boundary is a candidate for the same hole.
 
+### 2026-07-27-e revision (the -d hole has a SECOND costume, on the test side)
+
+dotfiles#396 (issue #369) added the `mise run automerge` verb, and with it a
+tier-2 fixture row (`gh pr merge 236 --auto --squash` → DENY) plus a
+`workflow.automerge-wiring` contract. The corpus row exists for the reason §
+"one row per rule shape" gives: a rule cannot silently die.
+
+**The finding is not about the contract — it is about the TEST beside it.** The
+-d note above ends by saying every `per_path_tokens` entry ending at an
+identifier boundary is a candidate for the same hole. True, and #394 now scopes
+that sweep. But #396 hit the identical failure shape in a place a token audit
+cannot reach: its guard tests first asserted that the deny **reason** contained
+the substring `mise run automerge`. That assertion is real, specific, and was
+chosen deliberately — and it **could not have failed if the new rule were
+deleted**, because the *generic* `gh pr merge` rule was reworded in the same
+change to name all three verbs, so it matches the command and satisfies the
+substring. The tests were rewritten to bind `hook_guard.match(...).name`.
+
+So the rule generalises past tokens: **an assertion must be unable to survive
+the regression it exists to catch — check what ELSE could satisfy it.** For a
+contract token that means anchoring past the renamable identifier (-d); for a
+test it means binding an identity the regression destroys, not a string some
+sibling also carries. The two are the same defect wearing different clothes,
+and the second one is worse, because a token audit will walk straight past it.
+
+Recorded here rather than only in #394 because tier 2 grades *decisions* and the
+guard tests grade *rules* — this epic owns both surfaces.
+
+**Also measured while scoping #394**, on `0578b64`: the token surface is 188
+bare `tokens` across 90 suites + 206 `per_path_tokens` across 23, over 110
+suites. Restricted to the enforcement seams (`workflow.*` / `eval.*` /
+`orchestration.*`) it is 23 suites, 253 probes — the scope Ray locked. A crude
+"ends at an identifier char" scan flags 148 of the 206 and is far too noisy to
+be a verdict (it hits `scripts/pretooluse-guard.sh`, `permissionDecision`);
+it orders the work, the mutation probe decides.
+
+### 2026-07-27-f revision (#394 swept: 254 tokens, 164 anchored, 3 live holes)
+
+The sweep the -d and -e notes scoped. Scope as Ray locked it: the 23
+enforcement-seam suites, every token gets the mutation, and **audit before
+deciding step 4**. Measured surface matched the scoping figure exactly — 57
+bare + 196 `per_path` = 253 probes.
+
+**The obvious probe is a coin with one face, and its control arm said so.**
+The first mutation was "insert a character after the token", which is the
+prefix-preserving rename stated naively. It reported *survives* for 251 of 252
+tokens — because appending a character after a substring cannot remove that
+substring. The mutation has to rename **the identifier the token binds**, and
+which identifier that is only exists relative to a *named* regression. That is
+why the issue's step 2 is not mechanisable and why the cheap scan is noise: the
+static property (does the tail end open?) is real, but it is the *question*, not
+the answer.
+
+What IS mechanical, and is the arm that carries the weight:
+
+| arm | expectation | what it rules out |
+|---|---|---|
+| destroy every occurrence | FAIL | an **inert** token — one the suite cannot see at all. 0 of 252 were inert. |
+| anchored token, clean tree | PASS | an anchor that is not real text |
+| old token, renamed tree | PASS | anchoring something that was never holed |
+| anchored token, renamed tree | FAIL, **reason naming the anchor** | a failure attributable to some *other* token in the suite |
+
+Outcome: **164 anchored** (all four arms), 69 already closed-tailed, 18 skipped
+because the tail cannot be prefix-renamed at all (`true`, `lambda`, `str`, a
+date, a `.sh`/`.md` extension, `Windsurf`, hk's own `pre-commit`), 1 already
+covered by a sibling token in the same suite. Anchors are derived from the file,
+preferring the **definition** form (`ALLOWLIST:`, `LINE_BUDGET =`) over a quote
+or backtick, because binding `NAME` to a backtick binds a *mention* — which is
+the thing the contract is trying not to accept.
+
+**Three holes were live, and the proof is a deletion, not an append.** Delete
+the real wiring line, leave the longer identifier that already swallows the
+token standing, and ask the contract. At `0578b64` all three PASS; after this
+change all three FAIL:
+
+| token | the line deleted | what kept it green |
+|---|---|---|
+| `permissionDecision` | `"permissionDecision": "deny",` in `hook_guard.py` | `permissionDecisionReason` — **and**, being a bare union token, the test file's own assertions |
+| `selfcheck` (`main.py`) | the `add_parser("selfcheck", …)` registration | `elif command == "selfcheck":`, the dispatch branch |
+| `--output` (`main.py`) | `command_audit_parser`'s `--output` | `memory_index_parser`'s own `--output` |
+
+**Anchoring fixed none of them.** `permissionDecision"` still passed (the union
+reaches the tests, so the fix is a per-path binding, #299's lesson); `selfcheck"`
+still passed (the dispatch branch carries it, so the anchor had to be
+`selfcheck",`); `--output"` still passed (a sibling parser carries it, so the
+token had to become the multi-line `command_audit_parser.add_argument(…)` form).
+
+### Step 4 — the audit's recommendation
+
+**A word-boundary / regex matcher mode would not have caught any of the three.**
+It closes the prefix-rename hole, which after this change is closed by
+authoring anyway; it does nothing about the hole that actually bit, which is
+**ambiguous binding** — the token matching somewhere other than the site it
+means. 22 `per_path` tokens still match more than once in their target file,
+and every one of those is a candidate for the `selfcheck` shape.
+
+So the evidence points away from a matcher and toward a **uniqueness** signal:
+warn when a `per_path` token matches its file more than once, since a
+single-match token cannot be satisfied by a stand-in. That is a cheap authoring
+gate, not a matcher change, and it does not need `forbid_tokens` (#62) to move
+first. Recommended, not built — Ray's call, per the locked scope.
+
+The `build.*` / `ci.*` tail (the other ~87 suites) is untouched and tracked as
+its own issue, so the uncovered half stays visible rather than implied.
+
+**And the rewriter fell into the very trap it was closing.** The script that
+applied the 164 edits replaced the literal `"workflow-hooks"` inside a *longer*
+token — `setup_parser().parse_args(["workflow-hooks"])`, belonging to a
+different path — and produced invalid TOML. Scoping each edit to its own token
+list fixed it; a bracket-depth scan that was not quote-aware then silently
+skipped one element, because an anchor may itself end in `]`
+(`tasks.verify-apt-pins]`). Both were caught by a post-condition that reloads
+the manifest and compares the token lists against the plan — the same shape as
+the arms above: a tool that only ever reports success has not been tested.
+
 ## GitHub repos touched
 
 - [wshobson/agents](https://github.com/wshobson/agents) — `plugins/plugin-eval` + `docs/plugin-eval.md`; the three-layer taxonomy and the triggering-F1 method.

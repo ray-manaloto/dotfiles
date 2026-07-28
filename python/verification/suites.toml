@@ -2,6 +2,32 @@
 version = "2"
 
 # =============================================================================
+# Writing a token (#299, #392, #394) — three questions, in order
+# =============================================================================
+# Token matching is UNANCHORED SUBSTRING in every handler (verify.py
+# forbid_tokens / require_tokens / per_path_tokens). So before adding one:
+#
+#  1. Does it bind an INVOCATION, not a definition or a bare name?  A `def foo`
+#     or a bare `foo` proves the part exists somewhere in the file; prose and a
+#     docstring carry both.  (#299/#300)
+#  2. Does it extend PAST the renamable identifier?  `kb-setup cc` is a prefix
+#     of `kb-setup ccX`, so the rename it exists to catch hides inside it.
+#     Carry the delimiter that follows: `def sync_main(`, `mise run sync\``,
+#     `"permissionDecision": "deny"`.  (#391/#392, swept in #394)
+#  3. How many places in the target file match it?  More than one and a
+#     stand-in can satisfy it: `selfcheck"` was kept green by the
+#     `elif command == "selfcheck":` dispatch branch after the subparser
+#     registration was deleted, and `--output` by a sibling parser's own flag.
+#     Anchoring does NOT reach this one — bind the unique site.  (#394)
+#
+# And bare `tokens` is a UNION across every listed path: `permissionDecision`
+# was satisfied by the TEST FILE asserting the string, with the guard's emit
+# deleted.  Use `per_path_tokens` when it matters which file carries it.
+#
+# Tails that cannot be prefix-renamed (`true`, `lambda`, `str`, a date, a
+# `.sh`/`.md` extension, a vendor's product name) need no anchor.
+#
+# =============================================================================
 # Build Constraints (~15) — Dockerfile structure and correctness
 # =============================================================================
 
@@ -931,19 +957,19 @@ paths = [
 # the thing. test_sync.py is existence-only (paths_required).
 per_path_tokens = { "mise.toml" = [
     "[tasks.sync]",
-    "dotfiles-setup docker sync",
+    "dotfiles-setup docker sync'",
 ], "python/src/dotfiles_setup/sync.py" = [
-    "def sync_main",
-    "def decide_action",
+    'def sync_main(',
+    'def decide_action(',
 ], ".claude/skills/devcontainer-sync/SKILL.md" = [
-    "mise run sync",
+    'mise run sync`',
 ] }
 tokens = [
     "[tasks.sync]",
-    "dotfiles-setup docker sync",
-    "def sync_main",
-    "def decide_action",
-    "mise run sync",
+    "dotfiles-setup docker sync'",
+    'def sync_main(',
+    'def decide_action(',
+    'mise run sync`',
 ]
 
 [[suite]]
@@ -966,26 +992,26 @@ paths = [
 per_path_tokens = { "mise.toml" = [
     "[tasks.ship]",
     "[tasks.land]",
-    "dotfiles-setup pr ship",
-    "dotfiles-setup pr land",
+    "dotfiles-setup pr ship'",
+    "dotfiles-setup pr land'",
 ], "python/src/dotfiles_setup/pr.py" = [
-    "def ship_main",
-    "def land_main",
-    "--match-head-commit",
+    'def ship_main(',
+    'def land_main(',
+    '--match-head-commit"',
 ], ".claude/skills/pr-workflow/SKILL.md" = [
-    "mise run ship",
-    "mise run land",
+    'mise run ship`',
+    'mise run land`',
 ] }
 tokens = [
     "[tasks.ship]",
     "[tasks.land]",
-    "dotfiles-setup pr ship",
-    "dotfiles-setup pr land",
-    "def ship_main",
-    "def land_main",
-    "--match-head-commit",
-    "mise run ship",
-    "mise run land",
+    "dotfiles-setup pr ship'",
+    "dotfiles-setup pr land'",
+    'def ship_main(',
+    'def land_main(',
+    '--match-head-commit"',
+    'mise run ship"',
+    'mise run land"',
 ]
 
 [[suite]]
@@ -1021,7 +1047,7 @@ per_path_tokens = { "mise.toml" = [
     "\"gh pr merge --auto\",",
     "mise run automerge -- <PR#>",
 ], "python/src/dotfiles_setup/eval_cases.py" = [
-    "gh pr merge 236 --auto --squash",
+    'gh pr merge 236 --auto --squash"',
 ], "tests/test_pr.py" = [
     "def test_automerge_refuses_and_never_arms(",
     "def test_automerge_never_asks_github_about_branch_freshness(",
@@ -1053,13 +1079,13 @@ paths = [
     "tests/test_hook_guard.py",
     ".claude/rules/mise-tasks-only.md",
 ]
-per_path_tokens = { ".claude/settings.json" = ["scripts/pretooluse-guard.sh"], "scripts/pretooluse-guard.sh" = ["dotfiles-setup hook pretooluse"], "python/src/dotfiles_setup/hook_guard.py" = ["def _inert_masked", "_inert_masked(command)"], "tests/test_hook_guard.py" = ["def test_separators_inside_inert_spans_do_not_anchor", "def test_real_npx_denial_was_a_true_positive", "def test_inert_span_redaction_never_costs_a_true_positive", "def test_masking_trades_the_incidental_eval_catch"] }
+per_path_tokens = { ".claude/settings.json" = ["scripts/pretooluse-guard.sh"], "scripts/pretooluse-guard.sh" = ["dotfiles-setup hook pretooluse\n"], "python/src/dotfiles_setup/hook_guard.py" = ['def _inert_masked(', "_inert_masked(command)", '"permissionDecision": "deny"'], "tests/test_hook_guard.py" = ['def test_separators_inside_inert_spans_do_not_anchor(', 'def test_real_npx_denial_was_a_true_positive(', 'def test_inert_span_redaction_never_costs_a_true_positive(', 'def test_masking_trades_the_incidental_eval_catch('] }
 tokens = [
-    "dotfiles-setup hook pretooluse",
-    "def pretooluse_main",
-    "permissionDecision",
-    "mise run land",
-    "mise run ship",
+    'dotfiles-setup hook pretooluse`',
+    'def pretooluse_main(',
+    '"permissionDecision": "deny"',
+    'mise run land"',
+    'mise run ship"',
 ]
 
 [[suite]]
@@ -1076,10 +1102,10 @@ paths = [
     "tests/test_hook_selfcheck.py",
     ".claude/rules/mise-tasks-only.md",
 ]
-per_path_tokens = { "python/src/dotfiles_setup/hook_selfcheck.py" = ["def hook_selfcheck_main", "def check_settings_wiring", "def check_pretooluse_endtoend"], "python/src/dotfiles_setup/main.py" = ["selfcheck"], "python/src/dotfiles_setup/pr.py" = ["hook-selfcheck"] }
+per_path_tokens = { "python/src/dotfiles_setup/hook_selfcheck.py" = ['def hook_selfcheck_main(', 'def check_settings_wiring(', 'def check_pretooluse_endtoend('], "python/src/dotfiles_setup/main.py" = ['selfcheck",'], "python/src/dotfiles_setup/pr.py" = ['hook-selfcheck"'] }
 tokens = [
-    "dotfiles-setup hook selfcheck",
-    "def hook_selfcheck_main",
+    'dotfiles-setup hook selfcheck`',
+    'def hook_selfcheck_main(',
 ]
 
 [[suite]]
@@ -1094,9 +1120,9 @@ paths = [
     "python/pyproject.toml",
     ".claude/rules/md-size-budgets.md",
 ]
-per_path_tokens = { "hk.pkl" = ["md_size_budget", "kb-setup md-budget"], "python/pyproject.toml" = ["kb-setup @ git+https://github.com/ray-manaloto/knowledge-base@"], ".claude/rules/md-size-budgets.md" = ["kb-setup md-budget", "SKILL.md", "Windsurf"] }
+per_path_tokens = { "hk.pkl" = ['md_size_budget"', 'kb-setup md-budget"'], "python/pyproject.toml" = ["kb-setup @ git+https://github.com/ray-manaloto/knowledge-base@"], ".claude/rules/md-size-budgets.md" = ['kb-setup md-budget`', "SKILL.md", "Windsurf"] }
 tokens = [
-    "kb-setup md-budget",
+    'kb-setup md-budget"',
 ]
 
 [[suite]]
@@ -1114,9 +1140,9 @@ paths = [
     "python/pyproject.toml",
     "tests/test_eval_cases.py",
 ]
-per_path_tokens = { "mise.toml" = ["[tasks.eval]", "dotfiles-setup eval"], "python/src/dotfiles_setup/main.py" = ["def handle_eval", "\"eval\": lambda"], "python/src/dotfiles_setup/eval_cases.py" = ["def cases", "DECLARED_LANES", "control="], "python/src/dotfiles_setup/pr.py" = ["Gate(\"eval\"", "\"mise\", \"run\", \"eval\""], "python/pyproject.toml" = ["kb-setup @ git+https://github.com/ray-manaloto/knowledge-base@"], "tests/test_eval_cases.py" = ["test_every_control_arm_actually_fails"] }
+per_path_tokens = { "mise.toml" = ["[tasks.eval]", 'dotfiles-setup eval"'], "python/src/dotfiles_setup/main.py" = ['def handle_eval(', "\"eval\": lambda"], "python/src/dotfiles_setup/eval_cases.py" = ['def cases(', 'DECLARED_LANES =', "control="], "python/src/dotfiles_setup/pr.py" = ["Gate(\"eval\"", "\"mise\", \"run\", \"eval\""], "python/pyproject.toml" = ["kb-setup @ git+https://github.com/ray-manaloto/knowledge-base@"], "tests/test_eval_cases.py" = ['test_every_control_arm_actually_fails('] }
 tokens = [
-    "dotfiles-setup eval",
+    'dotfiles-setup eval"',
 ]
 
 [[suite]]
@@ -1131,9 +1157,9 @@ paths = [
     "python/src/dotfiles_setup/pr.py",
     "tests/test_eval_cases.py",
 ]
-per_path_tokens = { "python/src/dotfiles_setup/eval_cases.py" = ["GUARD_FIXTURES", "evals.guard_table_case(", "hook_guard.decide", "tier2.guard-fixtures"], "python/src/dotfiles_setup/pr.py" = ["\"dotfiles-setup\", \"hook\", \"selfcheck\""], "tests/test_eval_cases.py" = ["test_the_guard_corpus_carries_both_halves", "test_every_denied_fixture_names_a_redirect"] }
+per_path_tokens = { "python/src/dotfiles_setup/eval_cases.py" = ['GUARD_FIXTURES:', "evals.guard_table_case(", 'hook_guard.decide,', 'tier2.guard-fixtures"'], "python/src/dotfiles_setup/pr.py" = ["\"dotfiles-setup\", \"hook\", \"selfcheck\""], "tests/test_eval_cases.py" = ['test_the_guard_corpus_carries_both_halves(', 'test_every_denied_fixture_names_a_redirect('] }
 tokens = [
-    "tier2.guard-fixtures",
+    'tier2.guard-fixtures"',
 ]
 
 [[suite]]
@@ -1149,9 +1175,9 @@ paths = [
     "python/src/dotfiles_setup/eval_cases.py",
     "tests/test_eval_cases.py",
 ]
-per_path_tokens = { "mise.toml" = ["[tasks.cc]", "kb-setup cc --root", "raw = true"], "python/pyproject.toml" = ["kb-setup @ git+https://github.com/ray-manaloto/knowledge-base@"], "python/src/dotfiles_setup/eval_cases.py" = ["LAUNCHER_SUBCOMMANDS", "LAUNCHER_REACHED_MARKER", "tier1.cc-subcommand-dispatches"], "tests/test_eval_cases.py" = ["test_the_launcher_marker_is_what_the_pinned_cli_really_prints", "test_rc_alone_cannot_discriminate_the_launcher_probe"] }
+per_path_tokens = { "mise.toml" = ["[tasks.cc]", 'kb-setup cc --root "', "raw = true"], "python/pyproject.toml" = ["kb-setup @ git+https://github.com/ray-manaloto/knowledge-base@"], "python/src/dotfiles_setup/eval_cases.py" = ['LAUNCHER_SUBCOMMANDS =', 'LAUNCHER_REACHED_MARKER =', 'tier1.cc-subcommand-dispatches"'], "tests/test_eval_cases.py" = ['test_the_launcher_marker_is_what_the_pinned_cli_really_prints(', 'test_rc_alone_cannot_discriminate_the_launcher_probe('] }
 tokens = [
-    "tier1.cc-subcommand-dispatches",
+    'tier1.cc-subcommand-dispatches"',
 ]
 
 [[suite]]
@@ -1168,12 +1194,12 @@ paths = [
     "tests/test_bash_budget.py",
     ".claude/rules/zero-bash-logic.md",
 ]
-per_path_tokens = { "hk.pkl" = ["bash_logic_budget", "dotfiles-setup bash-budget"], "python/src/dotfiles_setup/main.py" = ["bash-budget"], "python/src/dotfiles_setup/bash_budget.py" = ["def find_violations", "def bash_budget_main"] }
+per_path_tokens = { "hk.pkl" = ['bash_logic_budget"', 'dotfiles-setup bash-budget"'], "python/src/dotfiles_setup/main.py" = ['bash-budget"'], "python/src/dotfiles_setup/bash_budget.py" = ['def find_violations(', 'def bash_budget_main('] }
 tokens = [
-    "dotfiles-setup bash-budget",
-    "def bash_budget_main",
-    "def find_violations",
-    "ALLOWLIST",
+    'dotfiles-setup bash-budget"',
+    'def bash_budget_main(',
+    'def find_violations(',
+    'ALLOWLIST:',
 ]
 
 [[suite]]
@@ -1190,7 +1216,7 @@ paths = [
     "tests/test_workflow_hooks.py",
     "docs/adr/0001-hk-hooks-do-not-run-in-ci.md",
 ]
-per_path_tokens = { "hk.pkl" = ["workflow_hk_skip_hooks", "dotfiles-setup workflow-hooks"], "python/src/dotfiles_setup/main.py" = ["workflow-hooks", "workflow_hooks_main(project_root)"], "python/src/dotfiles_setup/workflow_hooks.py" = ["violations = find_violations(root)", "job_writes_to_git(job, writers) and not skips_required_hooks(job)", "classification_gaps(root)", "mise_task_git_writers(root)", "redact_heredoc_bodies(run_text)"], "tests/test_workflow_hooks.py" = ["workflow_hooks.job_writes_to_git(", "workflow_hooks.find_violations(REPO_ROOT) == []", "HK_SKIP_HOOKS: pre-commit", "workflow_hooks.workflow_hooks_main(tmp_path) == 1", 'setup_parser().parse_args(["workflow-hooks"])'], "docs/adr/0001-hk-hooks-do-not-run-in-ci.md" = ["dotfiles-setup workflow-hooks", "workflow_hk_skip_hooks", "Closed 2026-07-21"] }
+per_path_tokens = { "hk.pkl" = ['workflow_hk_skip_hooks"', 'dotfiles-setup workflow-hooks"'], "python/src/dotfiles_setup/main.py" = ['workflow-hooks"', "workflow_hooks_main(project_root)"], "python/src/dotfiles_setup/workflow_hooks.py" = ["violations = find_violations(root)", "job_writes_to_git(job, writers) and not skips_required_hooks(job)", "classification_gaps(root)", "mise_task_git_writers(root)", "redact_heredoc_bodies(run_text)"], "tests/test_workflow_hooks.py" = ["workflow_hooks.job_writes_to_git(", "workflow_hooks.find_violations(REPO_ROOT) == []", "HK_SKIP_HOOKS: pre-commit", "workflow_hooks.workflow_hooks_main(tmp_path) == 1", 'setup_parser().parse_args(["workflow-hooks"])'], "docs/adr/0001-hk-hooks-do-not-run-in-ci.md" = ['dotfiles-setup workflow-hooks`', 'workflow_hk_skip_hooks`', "Closed 2026-07-21"] }
 
 [[suite]]
 name = "workflow.tool-currency-wiring"
@@ -1208,26 +1234,26 @@ paths = [
 ]
 per_path_tokens = { "currency.toml" = [
     "[tool.graphify]",
-    "mise_key",
+    'mise_key =',
 ], "mise.toml" = [
     "[tasks.tool-currency]",
-    "kb-setup currency daily",
+    "kb-setup currency daily'",
     "[tasks.tool-currency-check]",
-    "kb-setup currency check",
+    "kb-setup currency check'",
 ], "python/pyproject.toml" = [
-    "kb-setup",
+    'kb-setup m',
 ], ".github/workflows/refresh.yml" = [
-    "mise run tool-currency",
+    'mise run tool-currency >',
     "Tool currency report (daily)",
 ], ".claude/settings.json" = [
-    "tool-currency-check",
+    'tool-currency-check;',
 ] }
 tokens = [
     "[tool.graphify]",
     "[tasks.tool-currency]",
-    "kb-setup currency daily",
-    "kb-setup currency check",
-    "mise run tool-currency",
+    "kb-setup currency daily'",
+    "kb-setup currency check'",
+    'mise run tool-currency >',
     "Tool currency report (daily)",
     "tool-currency-check",
 ]
@@ -1246,11 +1272,11 @@ paths = [
     "tests/test_memory_index.py",
     ".claude/skills/memory-index-curation/SKILL.md",
 ]
-per_path_tokens = { "mise.toml" = ["[tasks.memory-index]", "dotfiles-setup memory-index"], "python/src/dotfiles_setup/memory_index.py" = ["def memory_index_main", "def audit_index", "def distinctive_facts", "def fact_present", "def inbound_refs", "def load_cutoff_line", "LINE_BUDGET", "BYTE_BUDGET"], "python/src/dotfiles_setup/main.py" = ["memory-index", "--refs"], "tests/test_memory_index.py" = ["def test_the_index_does_not_satisfy_its_own_facts", "def test_size_matches_across_a_space_the_prototype_reported_as_missing", "def test_fact_only_in_the_hook_is_index_only_and_fails_the_check", "def test_an_entry_past_the_byte_cutoff_fails_even_when_under_200_lines", "def test_distinctive_facts_ignores_plain_numbers_that_are_all_hex_digits", "def test_a_matching_size_in_an_unrelated_memory_is_not_the_same_fact", "def test_a_fact_in_the_title_is_checked_not_just_the_hook", "def test_inbound_refs_finds_every_citation_form_the_memories_use"], ".claude/skills/memory-index-curation/SKILL.md" = ["mise run memory-index", "--refs", "THEN shorten"] }
+per_path_tokens = { "mise.toml" = ["[tasks.memory-index]", "dotfiles-setup memory-index'"], "python/src/dotfiles_setup/memory_index.py" = ['def memory_index_main(', 'def audit_index(', 'def distinctive_facts(', 'def fact_present(', 'def inbound_refs(', 'def load_cutoff_line(', 'LINE_BUDGET =', 'BYTE_BUDGET ='], "python/src/dotfiles_setup/main.py" = ['memory-index"', '--refs"'], "tests/test_memory_index.py" = ['def test_the_index_does_not_satisfy_its_own_facts(', 'def test_size_matches_across_a_space_the_prototype_reported_as_missing(', 'def test_fact_only_in_the_hook_is_index_only_and_fails_the_check(', 'def test_an_entry_past_the_byte_cutoff_fails_even_when_under_200_lines(', 'def test_distinctive_facts_ignores_plain_numbers_that_are_all_hex_digits(', 'def test_a_matching_size_in_an_unrelated_memory_is_not_the_same_fact(', 'def test_a_fact_in_the_title_is_checked_not_just_the_hook(', 'def test_inbound_refs_finds_every_citation_form_the_memories_use('], ".claude/skills/memory-index-curation/SKILL.md" = ['mise run memory-index`', '--refs <', "THEN shorten"] }
 tokens = [
-    "dotfiles-setup memory-index",
-    "def memory_index_main",
-    "def audit_index",
+    "dotfiles-setup memory-index'",
+    'def memory_index_main(',
+    'def audit_index(',
 ]
 
 [[suite]]
@@ -1272,11 +1298,11 @@ paths = [
     "tests/test_hook_guard.py",
     ".claude/rules/mise-tasks-only.md",
 ]
-per_path_tokens = { "mise.toml" = ["[tasks.command-audit]", "dotfiles-setup command-audit"], "python/src/dotfiles_setup/command_audit.py" = ["def command_audit_main", "def classify", "def iter_bash_commands", "def write_report", "def _executed_ids"], "python/src/dotfiles_setup/hook_guard.py" = ["class Rule", "since: str", "def match"], "python/src/dotfiles_setup/main.py" = ["command-audit", "--output"], "python/src/dotfiles_setup/hook_selfcheck.py" = ["SessionEnd", "_SESSION_END_REPORT"], ".claude/settings.json" = ["SessionEnd", "mise run command-audit -- --output .agent/command-audit.md"], ".gitignore" = [".agent/command-audit.md"], "tests/test_command_audit.py" = ["def test_main_output_writes_file_instead_of_stdout", "def test_iter_bash_commands_pairs_results_to_attempts"], "tests/test_hook_guard.py" = ["def test_every_rule_carries_a_usable_since_date"], ".claude/rules/mise-tasks-only.md" = ["mise run command-audit", "SessionEnd", "since"] }
+per_path_tokens = { "mise.toml" = ["[tasks.command-audit]", "dotfiles-setup command-audit'"], "python/src/dotfiles_setup/command_audit.py" = ['def command_audit_main(', 'def classify(', 'def iter_bash_commands(', 'def write_report(', 'def _executed_ids('], "python/src/dotfiles_setup/hook_guard.py" = ['class Rule:', "since: str", 'def match('], "python/src/dotfiles_setup/main.py" = ['command-audit"', "command_audit_parser.add_argument(\n        \"--output\","], "python/src/dotfiles_setup/hook_selfcheck.py" = ['SessionEnd"', '_SESSION_END_REPORT ='], ".claude/settings.json" = ['SessionEnd"', "mise run command-audit -- --output .agent/command-audit.md"], ".gitignore" = [".agent/command-audit.md"], "tests/test_command_audit.py" = ['def test_main_output_writes_file_instead_of_stdout(', 'def test_iter_bash_commands_pairs_results_to_attempts('], "tests/test_hook_guard.py" = ['def test_every_rule_carries_a_usable_since_date('], ".claude/rules/mise-tasks-only.md" = ['mise run command-audit`', 'SessionEnd`', "since"] }
 tokens = [
-    "dotfiles-setup command-audit",
-    "def command_audit_main",
-    "def classify",
+    "dotfiles-setup command-audit'",
+    'def command_audit_main(',
+    'def classify(',
 ]
 
 [[suite]]
@@ -1295,12 +1321,12 @@ paths = [
     "tests/test_pr.py",
     ".claude/rules/local-devcontainer-first.md",
 ]
-per_path_tokens = { "mise.toml" = ["tasks.verify-apt-pins", "dotfiles-setup apt-pins"], "python/src/dotfiles_setup/main.py" = ["apt-pins"], "python/src/dotfiles_setup/apt_pins.py" = ["def pinned_apt_packages", "def probe_script", "def apt_pins_main"], "python/src/dotfiles_setup/pr.py" = ["_APT_PIN_PATTERNS", "if changes_apt_pin_inputs(paths):", "Gate(\"verify-apt-pins\""], "tests/test_pr.py" = ["verify-apt-pins"], ".claude/rules/local-devcontainer-first.md" = ["mise run verify-apt-pins"] }
+per_path_tokens = { "mise.toml" = ['tasks.verify-apt-pins]', "dotfiles-setup apt-pins'"], "python/src/dotfiles_setup/main.py" = ['apt-pins"'], "python/src/dotfiles_setup/apt_pins.py" = ['def pinned_apt_packages(', 'def probe_script(', 'def apt_pins_main('], "python/src/dotfiles_setup/pr.py" = ['_APT_PIN_PATTERNS =', "if changes_apt_pin_inputs(paths):", "Gate(\"verify-apt-pins\""], "tests/test_pr.py" = ['verify-apt-pins"'], ".claude/rules/local-devcontainer-first.md" = ['mise run verify-apt-pins`'] }
 tokens = [
-    "dotfiles-setup apt-pins",
-    "def apt_pins_main",
-    "def pinned_apt_packages",
-    "--simulate",
+    "dotfiles-setup apt-pins'",
+    'def apt_pins_main(',
+    'def pinned_apt_packages(',
+    '--simulate"',
 ]
 
 [[suite]]
@@ -1401,17 +1427,17 @@ paths = [
     "tests/test_doc_refs.py",
 ]
 per_path_tokens = { "hk.pkl" = [
-    "dotfiles-setup check-doc-refs",
+    'dotfiles-setup check-doc-refs"',
 ], "python/src/dotfiles_setup/doc_refs.py" = [
-    "def find_unresolved_task_refs",
-    "def declared_mise_tasks",
+    'def find_unresolved_task_refs(',
+    'def declared_mise_tasks(',
 ], "python/src/dotfiles_setup/main.py" = [
     "find_unresolved_task_refs(project_root)",
 ], "tests/test_doc_refs.py" = [
     "find_unresolved_task_refs(_ROOT)",
-    "test_task_scanner_catches_a_planted_bad_ref",
+    'test_task_scanner_catches_a_planted_bad_ref(',
 ] }
-tokens = ["def find_unresolved_task_refs"]
+tokens = ['def find_unresolved_task_refs(']
 
 [[suite]]
 name = "eval.skill-refs-resolve"
@@ -1427,17 +1453,17 @@ paths = [
     "tests/test_doc_refs.py",
 ]
 per_path_tokens = { "hk.pkl" = [
-    "dotfiles-setup check-doc-refs",
+    'dotfiles-setup check-doc-refs"',
 ], "python/src/dotfiles_setup/doc_refs.py" = [
-    "def find_unresolved_skill_refs",
-    "def declared_skills",
+    'def find_unresolved_skill_refs(',
+    'def declared_skills(',
 ], "python/src/dotfiles_setup/main.py" = [
     "find_unresolved_skill_refs(project_root)",
 ], "tests/test_doc_refs.py" = [
     "find_unresolved_skill_refs(_ROOT)",
-    "test_skill_scanner_catches_a_planted_bad_ref",
+    'test_skill_scanner_catches_a_planted_bad_ref(',
 ] }
-tokens = ["def find_unresolved_skill_refs"]
+tokens = ['def find_unresolved_skill_refs(']
 
 [[suite]]
 name = "eval.cross-repo-parity"
@@ -1455,23 +1481,23 @@ paths = [
 ]
 per_path_tokens = { "parity.toml" = [
     "[shared]",
-    "fable-orchestrator@fable-orchestrator",
+    'fable-orchestrator@fable-orchestrator"',
 ], "python/src/dotfiles_setup/parity.py" = [
-    "def find_parity_gaps",
-    "def divergence_report",
+    'def find_parity_gaps(',
+    'def divergence_report(',
     "if on is True",
 ], "mise.toml" = [
     "[tasks.parity]",
-    "dotfiles-setup parity",
+    'dotfiles-setup parity"',
 ], ".github/workflows/ci.yml" = [
-    "repository: ray-manaloto/knowledge-base",
+    "repository: ray-manaloto/knowledge-base\n",
     "KB_REPO_PATH:",
-    "mise run parity",
+    "mise run parity\n",
 ], "tests/test_parity.py" = [
-    "test_missing_sibling_repo_fails_in_ci",
-    "test_a_plugin_declared_false_counts_as_absent",
+    'test_missing_sibling_repo_fails_in_ci(',
+    'test_a_plugin_declared_false_counts_as_absent(',
 ] }
-tokens = ["def find_parity_gaps"]
+tokens = ['def find_parity_gaps(']
 
 [[suite]]
 name = "eval.gate-reports-status"
