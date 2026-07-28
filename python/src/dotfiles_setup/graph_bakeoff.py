@@ -49,7 +49,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
 import shutil
 import statistics
 import subprocess
@@ -57,6 +56,8 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+from dotfiles_setup.child_env import without_env_diff
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
@@ -146,7 +147,9 @@ def _run(
     args: Sequence[str], *, cwd: Path, env: dict[str, str]
 ) -> subprocess.CompletedProcess[str]:
     """Execute graphify. The module's only external boundary."""
-    merged = {**os.environ, **env}
+    # `without_env_diff` first: a bake-off arm writes artifacts we read back,
+    # and __MISE_DIFF would carry every exported credential into them.
+    merged = {**without_env_diff(), **env}
     # Wall-clock is bounded by graphify's own --api-timeout in FIXED_FLAGS.
     return subprocess.run(
         list(args), cwd=cwd, env=merged, capture_output=True, text=True, check=False

@@ -13,3 +13,10 @@ ba41c3748e298012 = "ba41c3748e298012"
 # format is not ours to rename, and weakening the check to dodge the word
 # (grepping for the hex anywhere in the output) would match a subkey too.
 fpr = "fpr"
+
+# `sherif` is the real name of an hk builtin (and of its upstream monorepo
+# linter, QuiiBz/sherif), not a misspelling of "sheriff". It reaches this repo
+# through the GENERATED docs/hk-builtins-audit.md, which lists every builtin
+# `hk builtins` reports — so the name is not ours to spell differently, and
+# hand-editing the generated file would fail its own gate on the next run.
+sherif = "sherif"

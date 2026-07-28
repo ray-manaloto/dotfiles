@@ -15,6 +15,8 @@ import sys
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from dotfiles_setup.child_env import without_env_diff
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -35,13 +37,19 @@ class QueryResult:
 
 
 def _run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
-    """Run graphify and capture text output (the sole external boundary)."""
+    """Run graphify and capture text output (the sole external boundary).
+
+    The child does not inherit ``__MISE_DIFF``: graphify writes artifacts we
+    commit, and that variable carries every exported credential in one opaque
+    zlib+base64 field. See `.claude/rules/secrets-out-of-the-shell-env.md`.
+    """
     return subprocess.run(
         args,
         cwd=cwd,
         check=False,
         capture_output=True,
         text=True,
+        env=without_env_diff(),
     )
 
 

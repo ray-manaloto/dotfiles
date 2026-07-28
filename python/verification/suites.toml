@@ -1194,12 +1194,86 @@ paths = [
     "tests/test_bash_budget.py",
     ".claude/rules/zero-bash-logic.md",
 ]
-per_path_tokens = { "hk.pkl" = ['bash_logic_budget"', 'dotfiles-setup bash-budget"'], "python/src/dotfiles_setup/main.py" = ['bash-budget"'], "python/src/dotfiles_setup/bash_budget.py" = ['def find_violations(', 'def bash_budget_main('] }
+per_path_tokens = { "hk.pkl" = ['bash_logic_budget"', 'dotfiles-setup bash-budget"'], "python/src/dotfiles_setup/main.py" = ['"bash-budget",', '"bash-budget": lambda'], "python/src/dotfiles_setup/bash_budget.py" = ['def find_violations(', 'def bash_budget_main('] }
 tokens = [
     'dotfiles-setup bash-budget"',
     'def bash_budget_main(',
     'def find_violations(',
     'ALLOWLIST:',
+]
+
+[[suite]]
+name = "workflow.token-audit-wiring"
+description = "Contract-token uniqueness gate (#394 step 4). The sweep anchored 164 tokens so a prefix-preserving rename could not hide inside them — and then the three holes that were LIVE all survived their anchor, because each token matched somewhere other than the site it meant: `permissionDecision` was satisfied by the test file's own assertion (bare tokens are a union), `selfcheck` by the `elif command ==` dispatch branch after the subparser registration was deleted, `--output` by a sibling parser's identical flag. A word-boundary matcher would have caught none of them, which is why the audit recommended a UNIQUENESS signal instead: a per_path_tokens entry should match its file exactly once, because one match cannot be satisfied by a stand-in. Genuine multiplicity — a lockfile section per package, a doc naming its own task, a reused test fixture — is allowlisted with a reason; a NEW ambiguity fails, and so does a stale entry. Asserts the chain: hk step, CLI subcommand, module, allowlist, tests."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    "hk.pkl",
+    "python/src/dotfiles_setup/main.py",
+    "python/src/dotfiles_setup/token_audit.py",
+    "tests/test_token_audit.py",
+]
+per_path_tokens = { "hk.pkl" = [
+    'contract_token_uniqueness"',
+    'dotfiles-setup token-audit"',
+], "python/src/dotfiles_setup/main.py" = [
+    '"token-audit",',
+    '"token-audit": lambda',
+], "python/src/dotfiles_setup/token_audit.py" = [
+    "def find_ambiguous(",
+    "def find_violations(",
+    "def token_audit_main(",
+    "AMBIGUITY_ALLOWED: dict",
+], "tests/test_token_audit.py" = [
+    "def test_a_token_matching_once_is_silent(",
+    "def test_every_allowlist_entry_is_still_ambiguous(",
+] }
+tokens = [
+    'dotfiles-setup token-audit"',
+    "def find_ambiguous(",
+]
+
+[[suite]]
+name = "workflow.env-dump-enforcement"
+description = "Env-dump gate wiring (2026-07-27). fnox exports real credentials into the interactive shell and mise records the whole delta in `__MISE_DIFF` — zlib+base64 — which every child process inherits, so any tool that writes its environment to a file writes those credentials in a form that looks like noise. Measured, both arms, with synthetic secrets: gitleaks 8.30.1 finds 2 in the plaintext and 0 in the blob; betterleaks 1.7.1 finds 1 and 0. That measured blindness is what justifies custom code here at all (`use-tool-builtins.md`) — both scanners stay wired, and this covers only the decode. Asserts the whole chain: the hk step, the CLI subcommand, the module's three checks (named assignment, bare compressed blob, literal value), its tests, and the rule doc. The hk step is deliberately glob-less because an env dump can land in ANY tracked file — including `docs/research/kb/` and `docs/research/runs/`, which `.gitleaks.toml` allowlists away and git tracks. Tokens follow the #394 rules: an invocation, extended past the renamable identifier, bound to the one site that means it."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    "hk.pkl",
+    "mise.toml",
+    "python/src/dotfiles_setup/main.py",
+    "python/src/dotfiles_setup/env_blob_scan.py",
+    "tests/test_env_blob_scan.py",
+    ".claude/rules/secrets-out-of-the-shell-env.md",
+]
+per_path_tokens = { "hk.pkl" = [
+    'no_env_dump"',
+    'dotfiles-setup env-blob-scan"',
+    "Builtins.betterleaks)",
+], "mise.toml" = [
+    '"aqua:betterleaks/betterleaks" =',
+], "python/src/dotfiles_setup/main.py" = [
+    '"env-blob-scan",', '"env-blob-scan": lambda',
+    "env_blob_scan_main(project_root",
+], "python/src/dotfiles_setup/env_blob_scan.py" = [
+    "def find_violations(",
+    "def decode_blob(",
+    "def env_blob_scan_main(",
+    "ENV_DIFF_NAME =",
+    "EXEMPT_PREFIXES:",
+], "tests/test_env_blob_scan.py" = [
+    "def test_a_bare_blob_with_no_variable_name_is_still_caught(",
+    "def test_a_long_base64_run_that_is_not_compressed_data_is_ignored(",
+    "def test_the_real_repo_is_clean(",
+] }
+tokens = [
+    'dotfiles-setup env-blob-scan"',
+    "def decode_blob(",
+    "Builtins.betterleaks)",
 ]
 
 [[suite]]
@@ -1216,7 +1290,7 @@ paths = [
     "tests/test_workflow_hooks.py",
     "docs/adr/0001-hk-hooks-do-not-run-in-ci.md",
 ]
-per_path_tokens = { "hk.pkl" = ['workflow_hk_skip_hooks"', 'dotfiles-setup workflow-hooks"'], "python/src/dotfiles_setup/main.py" = ['workflow-hooks"', "workflow_hooks_main(project_root)"], "python/src/dotfiles_setup/workflow_hooks.py" = ["violations = find_violations(root)", "job_writes_to_git(job, writers) and not skips_required_hooks(job)", "classification_gaps(root)", "mise_task_git_writers(root)", "redact_heredoc_bodies(run_text)"], "tests/test_workflow_hooks.py" = ["workflow_hooks.job_writes_to_git(", "workflow_hooks.find_violations(REPO_ROOT) == []", "HK_SKIP_HOOKS: pre-commit", "workflow_hooks.workflow_hooks_main(tmp_path) == 1", 'setup_parser().parse_args(["workflow-hooks"])'], "docs/adr/0001-hk-hooks-do-not-run-in-ci.md" = ['dotfiles-setup workflow-hooks`', 'workflow_hk_skip_hooks`', "Closed 2026-07-21"] }
+per_path_tokens = { "hk.pkl" = ['workflow_hk_skip_hooks"', 'dotfiles-setup workflow-hooks"'], "python/src/dotfiles_setup/main.py" = ['"workflow-hooks",', '"workflow-hooks": lambda', "workflow_hooks_main(project_root)"], "python/src/dotfiles_setup/workflow_hooks.py" = ["violations = find_violations(root)", "job_writes_to_git(job, writers) and not skips_required_hooks(job)", "classification_gaps(root)", "mise_task_git_writers(root)", "redact_heredoc_bodies(run_text)"], "tests/test_workflow_hooks.py" = ["workflow_hooks.job_writes_to_git(", "workflow_hooks.find_violations(REPO_ROOT) == []", "HK_SKIP_HOOKS: pre-commit", "workflow_hooks.workflow_hooks_main(tmp_path) == 1", 'setup_parser().parse_args(["workflow-hooks"])'], "docs/adr/0001-hk-hooks-do-not-run-in-ci.md" = ['dotfiles-setup workflow-hooks`', 'workflow_hk_skip_hooks`', "Closed 2026-07-21"] }
 
 [[suite]]
 name = "workflow.tool-currency-wiring"
@@ -1272,7 +1346,7 @@ paths = [
     "tests/test_memory_index.py",
     ".claude/skills/memory-index-curation/SKILL.md",
 ]
-per_path_tokens = { "mise.toml" = ["[tasks.memory-index]", "dotfiles-setup memory-index'"], "python/src/dotfiles_setup/memory_index.py" = ['def memory_index_main(', 'def audit_index(', 'def distinctive_facts(', 'def fact_present(', 'def inbound_refs(', 'def load_cutoff_line(', 'LINE_BUDGET =', 'BYTE_BUDGET ='], "python/src/dotfiles_setup/main.py" = ['memory-index"', '--refs"'], "tests/test_memory_index.py" = ['def test_the_index_does_not_satisfy_its_own_facts(', 'def test_size_matches_across_a_space_the_prototype_reported_as_missing(', 'def test_fact_only_in_the_hook_is_index_only_and_fails_the_check(', 'def test_an_entry_past_the_byte_cutoff_fails_even_when_under_200_lines(', 'def test_distinctive_facts_ignores_plain_numbers_that_are_all_hex_digits(', 'def test_a_matching_size_in_an_unrelated_memory_is_not_the_same_fact(', 'def test_a_fact_in_the_title_is_checked_not_just_the_hook(', 'def test_inbound_refs_finds_every_citation_form_the_memories_use('], ".claude/skills/memory-index-curation/SKILL.md" = ['mise run memory-index`', '--refs <', "THEN shorten"] }
+per_path_tokens = { "mise.toml" = ["[tasks.memory-index]", "dotfiles-setup memory-index'"], "python/src/dotfiles_setup/memory_index.py" = ['def memory_index_main(', 'def audit_index(', 'def distinctive_facts(', 'def fact_present(', 'def inbound_refs(', 'def load_cutoff_line(', 'LINE_BUDGET =', 'BYTE_BUDGET ='], "python/src/dotfiles_setup/main.py" = ['"memory-index",', '"memory-index": lambda', '--refs"'], "tests/test_memory_index.py" = ['def test_the_index_does_not_satisfy_its_own_facts(', 'def test_size_matches_across_a_space_the_prototype_reported_as_missing(', 'def test_fact_only_in_the_hook_is_index_only_and_fails_the_check(', 'def test_an_entry_past_the_byte_cutoff_fails_even_when_under_200_lines(', 'def test_distinctive_facts_ignores_plain_numbers_that_are_all_hex_digits(', 'def test_a_matching_size_in_an_unrelated_memory_is_not_the_same_fact(', 'def test_a_fact_in_the_title_is_checked_not_just_the_hook(', 'def test_inbound_refs_finds_every_citation_form_the_memories_use('], ".claude/skills/memory-index-curation/SKILL.md" = ['mise run memory-index`', '--refs <', "THEN shorten"] }
 tokens = [
     "dotfiles-setup memory-index'",
     'def memory_index_main(',
@@ -1298,7 +1372,7 @@ paths = [
     "tests/test_hook_guard.py",
     ".claude/rules/mise-tasks-only.md",
 ]
-per_path_tokens = { "mise.toml" = ["[tasks.command-audit]", "dotfiles-setup command-audit'"], "python/src/dotfiles_setup/command_audit.py" = ['def command_audit_main(', 'def classify(', 'def iter_bash_commands(', 'def write_report(', 'def _executed_ids('], "python/src/dotfiles_setup/hook_guard.py" = ['class Rule:', "since: str", 'def match('], "python/src/dotfiles_setup/main.py" = ['command-audit"', "command_audit_parser.add_argument(\n        \"--output\","], "python/src/dotfiles_setup/hook_selfcheck.py" = ['SessionEnd"', '_SESSION_END_REPORT ='], ".claude/settings.json" = ['SessionEnd"', "mise run command-audit -- --output .agent/command-audit.md"], ".gitignore" = [".agent/command-audit.md"], "tests/test_command_audit.py" = ['def test_main_output_writes_file_instead_of_stdout(', 'def test_iter_bash_commands_pairs_results_to_attempts('], "tests/test_hook_guard.py" = ['def test_every_rule_carries_a_usable_since_date('], ".claude/rules/mise-tasks-only.md" = ['mise run command-audit`', 'SessionEnd`', "since"] }
+per_path_tokens = { "mise.toml" = ["[tasks.command-audit]", "dotfiles-setup command-audit'"], "python/src/dotfiles_setup/command_audit.py" = ['def command_audit_main(', 'def classify(', 'def iter_bash_commands(', 'def write_report(', 'def _executed_ids('], "python/src/dotfiles_setup/hook_guard.py" = ['class Rule:', "since: str", 'def match('], "python/src/dotfiles_setup/main.py" = ['"command-audit",', '"command-audit": lambda', "command_audit_parser.add_argument(\n        \"--output\","], "python/src/dotfiles_setup/hook_selfcheck.py" = ['SessionEnd"', '_SESSION_END_REPORT ='], ".claude/settings.json" = ['SessionEnd"', "mise run command-audit -- --output .agent/command-audit.md"], ".gitignore" = [".agent/command-audit.md"], "tests/test_command_audit.py" = ['def test_main_output_writes_file_instead_of_stdout(', 'def test_iter_bash_commands_pairs_results_to_attempts('], "tests/test_hook_guard.py" = ['def test_every_rule_carries_a_usable_since_date('], ".claude/rules/mise-tasks-only.md" = ['mise run command-audit`', 'SessionEnd`', "Give it a `since`"] }
 tokens = [
     "dotfiles-setup command-audit'",
     'def command_audit_main(',
@@ -1321,7 +1395,7 @@ paths = [
     "tests/test_pr.py",
     ".claude/rules/local-devcontainer-first.md",
 ]
-per_path_tokens = { "mise.toml" = ['tasks.verify-apt-pins]', "dotfiles-setup apt-pins'"], "python/src/dotfiles_setup/main.py" = ['apt-pins"'], "python/src/dotfiles_setup/apt_pins.py" = ['def pinned_apt_packages(', 'def probe_script(', 'def apt_pins_main('], "python/src/dotfiles_setup/pr.py" = ['_APT_PIN_PATTERNS =', "if changes_apt_pin_inputs(paths):", "Gate(\"verify-apt-pins\""], "tests/test_pr.py" = ['verify-apt-pins"'], ".claude/rules/local-devcontainer-first.md" = ['mise run verify-apt-pins`'] }
+per_path_tokens = { "mise.toml" = ['tasks.verify-apt-pins]', "dotfiles-setup apt-pins'"], "python/src/dotfiles_setup/main.py" = ['"apt-pins",', '"apt-pins": lambda'], "python/src/dotfiles_setup/apt_pins.py" = ['def pinned_apt_packages(', 'def probe_script(', 'def apt_pins_main('], "python/src/dotfiles_setup/pr.py" = ['_APT_PIN_PATTERNS =', "if changes_apt_pin_inputs(paths):", "Gate(\"verify-apt-pins\""], "tests/test_pr.py" = ['verify-apt-pins"'], ".claude/rules/local-devcontainer-first.md" = ['mise run verify-apt-pins`'] }
 tokens = [
     "dotfiles-setup apt-pins'",
     'def apt_pins_main(',
