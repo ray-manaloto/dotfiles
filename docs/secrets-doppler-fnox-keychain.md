@@ -70,7 +70,7 @@ an **empty string**, not an error — see "Incidents".
    file from a template whose per-secret line is:
 
    ```python
-   lines.append(f'{key} = {{ provider = "{provider_name}", value = "{key}" }}')  # :72
+   lines.append(f'{key} = {{ provider = "{provider_name}", value = "{key}" }}')  # :318
    ```
 
    `provider` and `value` only — the function contains **zero** references to
