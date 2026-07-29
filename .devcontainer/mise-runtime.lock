@@ -36,17 +36,17 @@ checksum = "sha256:d789471216e7aba3c184cd054ed61ce3f6dac6f87a50ec69291b9297f8c18
 url = "https://conda.anaconda.org/conda-forge/linux-64/libev-4.33-hd590300_2.conda"
 checksum = "sha256:1cd6048169fa0395af74ed5d8f1716e22c19a81a8a36f934c110ca3ad4dd27b4"
 
-[conda-packages.linux-x64."libgcc-15.2.0-he0feb66_20"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libgcc-15.2.0-he0feb66_20.conda"
-checksum = "sha256:e3b7bb287d1685b15781a6d9e3408d6ddaff23f5a1d0d6c0140619dd3950fe72"
+[conda-packages.linux-x64."libgcc-16.1.0-ha9f2e26_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libgcc-16.1.0-ha9f2e26_0.conda"
+checksum = "sha256:c06e9c8c1836dda7ba50a5f427c1d7bdc4bd31426207c4553221c75ae49c3ec2"
 
-[conda-packages.linux-x64."libgcc-ng-15.2.0-h69a702a_20"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libgcc-ng-15.2.0-h69a702a_20.conda"
-checksum = "sha256:e01a2a027fceea1011d2e74307845fb0c4bd6d195ff27fbf5baeafa55531d128"
+[conda-packages.linux-x64."libgcc-ng-16.1.0-h69a702a_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libgcc-ng-16.1.0-h69a702a_0.conda"
+checksum = "sha256:2d64b3c46de921c910caac4b8da85be84ac1781ddb5d563d4424267753c122cc"
 
-[conda-packages.linux-x64."libgomp-15.2.0-he0feb66_20"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libgomp-15.2.0-he0feb66_20.conda"
-checksum = "sha256:30b8ff1bf43871a17c9de99e56171ef54cfbe690ffa86681628db5a00af97cf7"
+[conda-packages.linux-x64."libgomp-16.1.0-he0feb66_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libgomp-16.1.0-he0feb66_0.conda"
+checksum = "sha256:24b6406687ad439e989071e05e7ddbe5980e048650165e61fff40f906c55cc83"
 
 [conda-packages.linux-x64."libiconv-1.18-h3b78370_2"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libiconv-1.18-h3b78370_2.conda"
@@ -64,9 +64,9 @@ checksum = "sha256:71118885feab91c61bea4e9532ec46e0653b24f02e563681f822915aee843
 url = "https://conda.anaconda.org/conda-forge/linux-64/libssh2-1.11.1-hcf80075_0.conda"
 checksum = "sha256:fa39bfd69228a13e553bd24601332b7cfeb30ca11a3ca50bb028108fe90a7661"
 
-[conda-packages.linux-x64."libstdcxx-15.2.0-h934c35e_20"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libstdcxx-15.2.0-h934c35e_20.conda"
-checksum = "sha256:b5eadda8fb0df262f0d424c4a0c8c1c8d65d904ce622f07936c793ea1b8a39d9"
+[conda-packages.linux-x64."libstdcxx-16.1.0-h934c35e_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libstdcxx-16.1.0-h934c35e_0.conda"
+checksum = "sha256:a791d1b4bbdd8b6bfbe315b011d479975ab9524115035f474c70d7e438bca12f"
 
 [conda-packages.linux-x64."libzlib-1.3.2-h25fd6f3_2"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libzlib-1.3.2-h25fd6f3_2.conda"
@@ -130,18 +130,18 @@ conda_deps = [
     "keyutils-1.6.3-hb9d3cd8_0",
     "libpsl-0.22.0-h49b2146_1",
     "libssh2-1.11.1-hcf80075_0",
-    "libgcc-15.2.0-he0feb66_20",
-    "libstdcxx-15.2.0-h934c35e_20",
+    "libgcc-16.1.0-ha9f2e26_0",
+    "libstdcxx-16.1.0-h934c35e_0",
     "openssl-3.6.3-h35e630c_0",
     "zstd-1.5.7-hb78ec9c_6",
     "_openmp_mutex-4.5-20_gnu",
-    "libgomp-15.2.0-he0feb66_20",
+    "libgomp-16.1.0-he0feb66_0",
     "icu-78.3-h54a6638_2",
     "ca-certificates-2026.7.22-hbd8a1cb_0",
     "ncurses-6.6-hdb14827_0",
     "c-ares-1.34.8-hb03c661_0",
     "libev-4.33-hd590300_2",
-    "libgcc-ng-15.2.0-h69a702a_20",
+    "libgcc-ng-16.1.0-h69a702a_0",
 ]
 
 [[tools."conda:rsync"]]
@@ -156,16 +156,16 @@ checksum = "sha256:0f8b7721bd3c3ccbe88c71211f89783396a1333144963f23105242e808ecd
 url = "https://conda.anaconda.org/conda-forge/linux-64/rsync-3.4.4-h5440a77_0.conda"
 conda_deps = [
     "libzlib-1.3.2-h25fd6f3_2",
-    "libgcc-15.2.0-he0feb66_20",
+    "libgcc-16.1.0-ha9f2e26_0",
     "lz4-c-1.10.0-h5888daf_1",
-    "libstdcxx-15.2.0-h934c35e_20",
+    "libstdcxx-16.1.0-h934c35e_0",
     "libiconv-1.18-h3b78370_2",
     "xxhash-0.8.3-hb47aa4a_0",
     "openssl-3.6.3-h35e630c_0",
     "zstd-1.5.7-hb78ec9c_6",
     "popt-1.19-h3b78370_0",
     "_openmp_mutex-4.5-20_gnu",
-    "libgomp-15.2.0-he0feb66_20",
+    "libgomp-16.1.0-he0feb66_0",
     "ca-certificates-2026.7.22-hbd8a1cb_0",
 ]
 
