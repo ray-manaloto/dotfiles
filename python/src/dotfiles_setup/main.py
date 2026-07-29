@@ -52,6 +52,8 @@ from dotfiles_setup.lint import (
     resolve_timeout,
     run_guarded,
 )
+from dotfiles_setup.lock_integrity import main as lock_integrity_main
+from dotfiles_setup.lock_integrity import scoped_lock_main
 from dotfiles_setup.lock_refresh import collect_system_lock, stage_system_lock_dir
 from dotfiles_setup.memory_index import memory_index_main
 from dotfiles_setup.p2996_hash import (
@@ -192,6 +194,25 @@ def _add_honesty_subcommands(subparsers: _SubParsers) -> None:
         help="Enforce zero-bash-logic: every scripts/*.sh + "
         ".devcontainer/scripts/*.sh must be allowlisted and within its "
         "per-file line budget (new/grown scripts fail — move logic to python/)",
+    )
+    subparsers.add_parser(
+        "lock-check",
+        help="Reject a lockfile that lost platform coverage vs HEAD. A bare "
+        "`mise lock` or any `mise install` on macOS re-locks the whole file for "
+        "this platform and drops the linux conda entries the amd64 image needs "
+        "(#370, jdx/mise#7700) — measured: linux-x64 628 -> 80",
+    )
+    lock_tools_parser = subparsers.add_parser(
+        "lock-tools",
+        help="Re-lock ONLY the named tools (scoped `mise lock <tool>`), then "
+        "assert coverage held. Refuses with no tool named, because the bare "
+        "whole-file form is the destructive one",
+    )
+    lock_tools_parser.add_argument(
+        "tools",
+        nargs="*",
+        help="Full backend-qualified tool keys as written in the config "
+        "(a bare short name exits 0 having silently done nothing)",
     )
 
 
@@ -1312,6 +1333,8 @@ def _build_command_handlers(
             apt_pins_main(project_root, json_output=args.json)
         ),
         "bash-budget": lambda: sys.exit(bash_budget_main(project_root)),
+        "lock-check": lambda: sys.exit(lock_integrity_main(project_root)),
+        "lock-tools": lambda: sys.exit(scoped_lock_main(project_root, args.tools)),
         "token-audit": lambda: sys.exit(token_audit_main(project_root)),
         "env-blob-scan": lambda: sys.exit(
             env_blob_scan_main(project_root, args.paths or None)

@@ -273,6 +273,23 @@ local allSteps = new Mapping<String, Config.Step> {
     batch = true
   }
 
+  // A whole-file re-lock on this macOS host drops every linux conda entry —
+  // the amd64 devcontainer needs exactly those (jdx/mise#7700, #370). BOTH a
+  // bare `mise lock` and any `mise install` do it; only the scoped
+  // `mise lock "<backend/name>"` is safe. Measured 2026-07-29 on mise
+  // 2026.7.16, real writes: bare lock with NO config change took conda entries
+  // 962 -> 427 and linux-x64 628 -> 80; `mise install biome`, one unrelated
+  // aqua tool, 962 -> 417 / 628 -> 80; scoped stayed byte-identical outside the
+  // tool. `mise lock --dry-run` reports "would update ... for linux-x64" for
+  // all 11 platforms and changes nothing, so it cannot expose this — the write
+  // had to be measured. Since `auto_install = true` lets any task reach the
+  // re-lock path, the gate checks the ARTIFACT against HEAD rather than any
+  // command: a coverage LOSS fails, while adding, removing or bumping a tool
+  // passes.
+  ["mise_lock_integrity"] {
+    check = "uv run --project python dotfiles-setup lock-check"
+  }
+
   // docs/hk-builtins-audit.md is GENERATED. The hand-written version drifted
   // into claiming 15 builtins were "used" that were not wired — one of them
   // `betterleaks`, described as a "second scanner alongside gitleaks" and

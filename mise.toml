@@ -12,34 +12,34 @@ editorconfig-checker = "3.8.0" # provides `ec` — hk editorconfig_checker built
 # scanner in the image would cost a cold rebuild for no gain — the scanning that
 # matters happens at the commit boundary. Measured before adopting: 0 findings
 # over the whole 31.5 MB tree in 199 ms.
-"aqua:betterleaks/betterleaks" = "1.7.1"
-"npm:@devcontainers/cli" = "0.87.0"
+"aqua:betterleaks/betterleaks" = "1.7.2"
+"npm:@devcontainers/cli" = "0.88.0"
 colima = "0.10.3"                        # Alternate Docker runtime (VZ + Rosetta); Docker Desktop is the CURRENT supported runtime — see AGENTS.md Docker Runtimes + docs/research/runs/research-20260409c-dockerdesktop-ssh/
 lima = "2.2.0"
-"github:agent-sh/agnix" = "0.40.0"
+"github:agent-sh/agnix" = "0.41.1"
 "npm:agents-lint" = "0.5.0"
 "pipx:mcp2cli" = "3.3.1"
-"npm:renovate" = "43.278.2"
-biome = "2.5.5"
+"npm:renovate" = "44.2.1"
+biome = "2.5.6"
 # Markdown + Claude-docs linters. Installed now; hk.pkl integration is
 # scheduled for post-devcontainer-work review (see GH issue tracking
 # follow-up). md_size_budget (below in hk.pkl) provides the immediate,
 # class-aware enforcement — see .claude/rules/md-size-budgets.md.
 "npm:claude-code-lint" = "0.7.0"
 "npm:@contextlint/cli" = "1.1.1"
-"npm:markdownlint-cli2" = "0.23.1"
-"aqua:jackchuka/mdschema" = "0.13.4"
-rumdl = "v0.2.40"
+"npm:markdownlint-cli2" = "0.23.2"
+"aqua:jackchuka/mdschema" = "0.14.1"
+rumdl = "v0.2.45"
 # zizmor: GHA security scanner — backs the hk zizmor builtin (#160 T12);
 # host-only lint tool, so it lives here (not shared.toml).
 zizmor = "1.28.0"
-"npm:oh-my-claude-sisyphus" = "4.15.6"
-"github:ast-grep/ast-grep" = "0.44.1"
+"npm:oh-my-claude-sisyphus" = "4.15.7"
+"github:ast-grep/ast-grep" = "0.45.0"
 lefthook = "2.1.10"
-"npm:ctx7" = "0.5.5"
-rtk = "0.43.0"                         # re-probed at #160 T12.5: mise #10703 (2026.7.0) fixed the github-backend url_api lock hold that pinned this at 0.37.2
+"npm:ctx7" = "0.5.6"
+rtk = "0.44.1"                         # re-probed at #160 T12.5: mise #10703 (2026.7.0) fixed the github-backend url_api lock hold that pinned this at 0.37.2
 "npm:skills" = "1.5.20"
-"npm:agent-browser" = "0.32.3"
+"npm:agent-browser" = "0.33.1"
 "npm:portless" = "0.15.4"
 "pipx:deepagents-cli" = "0.2.2"
 # graphify: host-only knowledge-graph substrate (#310 / T1 #312). The [all]
@@ -56,7 +56,7 @@ rtk = "0.43.0"                         # re-probed at #160 T12.5: mise #10703 (2
 # instead appended a SECOND, bare `"pipx:graphifyy" = "0.9.22"` entry, leaving
 # the real pin stranded at 0.9.20. The table form is what the bump path can
 # rewrite in place.
-"pipx:graphifyy" = { version = "0.9.29", extras = ["all"] }
+"pipx:graphifyy" = { version = "0.9.30", extras = ["all"] }
 # ffmpeg: system binary the graphify `video` extra (faster-whisper) needs to
 # extract audio before transcription — it is NOT a pip dep, so `graphifyy[all]`
 # cannot supply it. Host-only, same as graphify (root mise.toml is in the
@@ -72,10 +72,10 @@ rtk = "0.43.0"                         # re-probed at #160 T12.5: mise #10703 (2
 # conda:ffmpeg on platform linux-x64" and bricks lint. os-gating makes linux
 # skip the tool entirely, so no linux URL is demanded.
 "conda:ffmpeg" = { version = "8.1.2", os = ["macos"] }
-aws-cli = { version = "2.36.5", symlink_bins = "true" }
+aws-cli = { version = "2.36.10", symlink_bins = "true" }
 azure-cli = { version = "2.88.0", uvx_args = "--prerelease=allow" }
 docker-cli = "29.6.2"
-opencode = "1.18.4"
+opencode = "1.18.9"
 # bun (the npm package_manager) is a host↔image SHARED tool → declared in
 # .config/mise/conf.d/shared.toml, not here (mise-parity: a tool used by both
 # sides lives only in the shared fragment).
@@ -90,8 +90,8 @@ opencode = "1.18.4"
 # symlink the antigravity plugin drives). Host-only (root mise.toml is in the
 # container's MISE_IGNORED_CONFIG_PATHS) — the Claude architect stays the chair;
 # these are executor lanes only. Auth is per-user (codex login / Google account).
-codex = "0.145.0"
-antigravity-cli = "1.1.5"
+codex = "0.146.0"
+antigravity-cli = "1.1.8"
 
 [settings]
 experimental = true
@@ -930,8 +930,18 @@ description = "Validate agent documentation"
 run = "agnix . --strict"
 
 [tasks.lock]
-description = "Regenerate mise.lock"
-run = "mise lock"
+description = "Re-lock the NAMED tool(s), scoped, then assert coverage held"
+# Thin caller; see lock_integrity.py. The task no longer runs a bare
+# `mise lock`, because that form is destructive on this macOS host: it
+# re-locks the WHOLE file for this platform, and macOS mise cannot write
+# linux-x64 conda entries (jdx/mise#7700, #370). Measured 2026-07-29 on mise
+# 2026.7.16 with every tool installed and NO config change — conda entries
+# 962 -> 427, linux-x64 628 -> 80. `mise lock --dry-run` does not reveal it.
+# Invocation names the tool, using the FULL backend-qualified config key:
+#   mise run lock -- "aqua:jackchuka/mdschema"
+# A bare short name exits 0 having silently done nothing, so the wrapper
+# verifies the artifact afterwards instead of trusting the exit code.
+run = 'uv run --project python dotfiles-setup lock-tools'
 
 [tasks.p2996-hash]
 description = "Print the content-hash of P2996 cache inputs (matches the CI :p2996-<hash> tag)"
