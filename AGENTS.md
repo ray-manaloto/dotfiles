@@ -25,7 +25,7 @@ uv run --project python pytest tests/ -x -q  # Run tests (see python/AGENTS.md)
 mise run verify                    # Run structured verification contracts
 mise run pin-actions                         # Verify GHA actions are SHA-pinned
 mise run lint-docs                           # Validate agent documentation (agnix)
-mise run lock                                # Regenerate mise.lock
+mise run lock -- "<backend/name>"            # Re-lock ONE tool (bare form is destructive, #370)
 ```
 
 The devloop is `mise run up` → work inside the container → `mise run down`.
