@@ -106,6 +106,17 @@ Findings, control arms, and the verification that passed while blind:
    short or empty "secret" corrupts every log the tool writes.
 4. **When a scanner reports clean, ask what it can see.** Compression, encoding,
    and a path allowlist each turn "no findings" into "never looked".
+5. **A new env-var consumer is a new `env = true` decision.** With `env = "exec"`,
+   a config that interpolates `${VAR}` gets an **empty string**, not an error — the
+   tool starts, reports healthy, and silently drops to an anonymous tier (context7
+   MCP did exactly this, 2026-07-29). Check the consumer's authenticated
+   *identity*, never its connection status.
+6. **Diagnose by layer, and never run `fnox get` to do it.** A `-v` presence test
+   under `fnox exec` (present) vs the same in a plain shell (absent) identifies
+   `env = "exec"` on its own; `fnox sync --dry-run -p age VAR` answers staleness
+   without reading a value. Full ordered recipe, the result-reading table, and the
+   ⚠️ `bootstrap-config` **wipe hazard** (it drops `env = "exec"`, all 3 opt-ins,
+   and 49 `sync` blocks): `docs/secrets-doppler-fnox-keychain.md`.
 
 ## See also
 

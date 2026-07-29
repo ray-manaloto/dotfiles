@@ -7,10 +7,6 @@
         "EXA_API_KEY": "${EXA_API_KEY}"
       }
     },
-    "context7": {
-      "command": "npx",
-      "args": ["-y", "@upstash/context7-mcp"]
-    },
     "memory": {
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-memory"]

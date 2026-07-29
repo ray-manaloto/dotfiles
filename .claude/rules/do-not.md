@@ -61,12 +61,19 @@ in this repo. Control arms and case history for each entry:
     scratchpad and delete it. Gated by `no_env_dump`; see
     `secrets-out-of-the-shell-env.md`.
 
-> **Relaxed 2026-07-19 — MCP registration is no longer a "do not".** Native
-> MCP registration (`claude mcp add`, a plugin's bundled servers, a project
-> `.mcp.json`) is **allowed when a plugin or tool requires it**. `mcp2cli`
-> (process-spawn, no schema-injection tax) stays the *preferred* path for
-> one-off doc/tool calls — a preference, not a gate. See
-> `research-doc-sources.md` and `feedback_no_mcp_registration.md`.
+11. **Do NOT reach for MCP to solve one of OUR OWN problems.** For anything this
+    project builds, calls, or looks up: the tool's CLI or a plain HTTP **API**
+    first, then `mcp2cli`, and native registration only as a documented last
+    resort. A registered server taxes **every** conversation's system prompt
+    with **every** tool's schema, forever — paying that for a call a `curl`
+    already makes is pure loss.
+
+    ✅ **NOT a "do not": a third-party plugin or skill that REQUIRES MCP.**
+    Enabling one (bundled servers, `claude mcp add`, a project `.mcp.json`) is
+    allowed and needs no justification — there the schema tax buys a capability
+    we cannot build. The hard ban was relaxed 2026-07-19. **Unsure which case
+    you are in? You are in the first one.** See `research-doc-sources.md`
+    § "MCP: two lanes".
 
 ## See also
 

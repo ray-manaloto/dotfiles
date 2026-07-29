@@ -18,12 +18,39 @@ is done. Treat this file as the interim contract.
 
 | layer | role | what it holds here |
 |---|---|---|
-| **Doppler** | shared authority — the value of record | project `dotfiles`, configs `dev` (46 secrets) and **`dev_personal` (50)** |
+| **Doppler** | shared authority — the value of record | project `dotfiles`, config **`dev_personal`** (49 secrets as of 2026-07-29) |
 | **fnox** | declaration + resolution + optional encrypted cache | `~/.config/fnox/config.toml`; providers `keychain`, `age`, `doppler_dotfiles_dev_personal` |
 | **macOS Keychain** | machine-local bootstrap vault | service **`mde-fnox`**, holds `DOPPLER_TOKEN` — the credential that unlocks everything else |
 | **environment** | temporary process delivery | injected by `fnox exec` or shell activation; never the source of truth |
 
 The chain: **Keychain → `DOPPLER_TOKEN` → Doppler → fnox declaration → process env.**
+
+### The `env` mode — the gate on the last layer (added 2026-07-29)
+
+A secret being *declared and resolvable* does **not** mean it reaches the shell.
+Since 2026-07-27 this config is globally:
+
+```toml
+env = "exec"   # secrets stay OUT of the interactive shell
+```
+
+| `env` | interactive shell / `fnox export` | `fnox exec` | `fnox get` |
+|---|:-:|:-:|:-:|
+| `true` (fnox default) | yes | yes | yes |
+| **`"exec"` (ours)** | **no** | yes | yes |
+| `false` | no | no | yes |
+
+Only secrets carrying an explicit per-secret `env = true` are exported. **Three
+are** — `EXA_API_KEY`, `GITHUB_TOKEN`, `MISE_GITHUB_TOKEN` — chosen because their
+consumers can *only* read the environment (an `.mcp.json` `${VAR}` interpolation
+at MCP-server spawn; `gh` and `mise` reading their tokens).
+
+**This is the single most likely cause of "the variable isn't set".** It is not a
+sync failure. See the diagnosis recipe below before suspecting Doppler.
+
+⚠️ **Any consumer that reads a credential from the environment needs either
+`fnox exec --` or an explicit `env = true`.** A new one added without either gets
+an **empty string**, not an error — see "Incidents".
 
 ## Deltas from the honeymoon-period guide (this repo)
 
@@ -32,11 +59,34 @@ The chain: **Keychain → `DOPPLER_TOKEN` → Doppler → fnox declaration → p
    `config = "dev_personal"`). A secret written to `dev` lands in Doppler and
    **never reaches the environment**. This is the single easiest mistake to make
    and it fails silently.
-2. **The config's stated owner is gone.** `~/.config/fnox/config.toml` opens with
-   *"Managed by `mde-py secrets bootstrap-config`. Do not edit by hand."* —
-   but **`mde-py` is not on PATH** (verified 2026-07-20). `fnox edit` is the only
-   remaining route. The header is stale; treat hand-editing as sanctioned until
-   the planned skill replaces it.
+2. **The config's stated owner is gone — and re-running it would be
+   DESTRUCTIVE.** `~/.config/fnox/config.toml` opens with *"Managed by `mde-py
+   secrets bootstrap-config`. Do not edit by hand."* but **`mde-py` is not on
+   PATH** (re-verified 2026-07-29). `fnox edit` is the only route, so
+   hand-editing is sanctioned.
+
+   ⚠️ **The generator still exists in source and would wipe the config's most
+   important fields.** `mde/secrets/manage.py` → `bootstrap_config()` rebuilds the
+   file from a template whose per-secret line is:
+
+   ```python
+   lines.append(f'{key} = {{ provider = "{provider_name}", value = "{key}" }}')  # :72
+   ```
+
+   `provider` and `value` only — the function contains **zero** references to
+   `env`, and preserves only `DOPPLER_TOKEN`. Measured against the live config:
+
+   | field | present now | generator emits |
+   |---|---:|---:|
+   | global `env = "exec"` | 1 | **0** |
+   | per-secret `env = true` | 3 | **0** |
+   | `sync = { provider = "age", … }` | **49** | **0** |
+
+   So a single `bootstrap-config` run silently reverts every secret to
+   shell-exported — undoing the whole reason `env = "exec"` was adopted — and
+   drops every offline age-encrypted copy. **Do not run it** until the generator
+   preserves those fields. Tracked for the sibling repo in
+   knowledge-base issue **#74**.
 3. **fnox is already shell-activated** on this machine (3 `FNOX_*` vars present,
    `DOPPLER_TOKEN` resolving from Keychain). No bootstrap needed.
 4. **An `age` provider is configured** (`recipients = ["age16djrq…"]`), so the
@@ -119,6 +169,51 @@ or a minimal request returning an expected status).
 Never record token prefixes/suffixes, hashes of low-entropy secrets, auth
 headers, raw env dumps, or the contents of a secret-bearing config.
 
+## Diagnose "the variable isn't set" — in this order
+
+Work down the layers. Each step is contract-compliant (no value is read or
+printed), and each **discriminates**, so a pass genuinely rules that layer out.
+
+```sh
+# 1. Is fnox itself healthy?  Expect: "Configuration is healthy" + counts.
+fnox check
+
+# 2. Is the secret DECLARED?  names only, never --values.
+fnox list | grep KEY_NAME
+
+# 3. Does it resolve to a process?  (present here + absent in step 4 == env="exec")
+fnox exec -- zsh -c '[[ -v KEY_NAME ]] && print present || print ABSENT'
+
+# 4. Is it in the plain interactive shell?
+zsh -c '[[ -v KEY_NAME ]] && print present || print ABSENT'
+
+# 5. Is the offline age copy stale vs Doppler?  dry-run reveals no values.
+fnox sync --dry-run -p age KEY_NAME
+#   "Would sync 1 secrets … KEY_NAME (from doppler_…)"  -> a copy would change
+#   "No secrets to sync"                                -> nothing to do / unknown key
+```
+
+**Reading the result:**
+
+| step 3 | step 4 | meaning |
+|---|---|---|
+| present | **ABSENT** | **`env = "exec"` working as designed.** Consumer must use `fnox exec --`, or the secret needs `env = true`. *Not a bug.* |
+| ABSENT | ABSENT | declaration or provider problem — go back to steps 1–2 |
+| present | present | it has `env = true`; if a consumer still sees nothing, the consumer is the fault |
+
+**Always control-arm the negative.** A `0`/ABSENT result is worthless until the
+same command shape returns present for something you *know* is set:
+
+```sh
+zsh -c '[[ -v HOME ]] && print "control ok: [[ -v ]] works"'
+```
+
+A 2026-07-29 session reported a variable "set, 43 chars" and later "unset" from
+two different probes in the same session. The control arm is what settled it.
+
+⚠️ **`env | grep` is forbidden inside a secret-injected process** (see the
+contract above). Use `[[ -v VAR ]]`, which reveals presence without the value.
+
 ## Evidence record
 
 ```text
@@ -132,8 +227,53 @@ Consumer health check: <safe result>
 Timestamp: <ISO-8601>
 ```
 
+## Incidents
+
+### 2026-07-29 — Context7 MCP ran anonymous for days; nothing noticed
+
+The Upstash context7 plugin interpolates `"Authorization": "${CONTEXT7_API_KEY:-}"`.
+That secret is exec-only, so the header resolved to **empty** and the server used
+the anonymous tier — while reporting `✓ connected` the whole time.
+
+What made it invisible:
+
+- **`${VAR:-}` substitutes an empty string instead of failing.** Silent by
+  construction.
+- **Doppler → fnox was perfectly healthy**, so every instinct to blame "the sync"
+  was wrong. `fnox check` green; the value matched Doppler exactly.
+- **The opt-in list was drawn before the consumer existed.** The three `env = true`
+  entries were chosen 2026-07-27 for the three consumers that existed then; the
+  plugin arrived 2026-07-29 and nothing re-checked the list.
+
+Generalisation: **a new env-var consumer is a new opt-in decision, and nothing
+enforces it.** Tracked as dotfiles issue **#418** (project-doctor SessionStart
+check: every `${VAR}` interpolated by an MCP/plugin config must be `env = true`).
+
+### Contract breaches by an agent in that same session — recorded, not excused
+
+While diagnosing the above, the agent violated the operating contract three ways:
+
+1. **Ran `fnox get` and `doppler secrets get`** — both explicitly on the MUST NOT
+   list — to sha256-compare the two values. Output was truncated to 12 hex chars,
+   never the value, but the commands themselves are forbidden.
+2. **Interpolated a live key into `curl -H "Authorization: $K"`** — a secret in a
+   command argument, which the contract forbids because argv is observable.
+3. Reached for `env | grep` on secret names (permitted here only because the
+   variables in question were *absent*; the compliant form is `[[ -v VAR ]]`).
+
+None of it reached a tracked file or the transcript, and the endpoint was the
+credential's legitimate vendor. It was still avoidable: **`fnox sync --dry-run -p age`
+answers the staleness question without reading any value**, and `[[ -v ]]` answers
+presence. Both are in the MAY list. The compliant recipe is now written above so
+the next session reaches for it first.
+
 ## Gotchas
 
+- **A silently-empty credential is the default failure mode.** `${VAR:-}` and
+  `${VAR}` interpolation in MCP/plugin configs yield an empty string when the var
+  is exec-only. The server starts, reports healthy, and degrades to an anonymous
+  or unauthenticated tier. Check the *consumer's* authenticated identity, never
+  its connection status.
 - **A running process keeps its env snapshot.** After a rotation, restart
   consumers — a green write proves nothing about live processes.
 - **`fnox sync` caches**; a Doppler change does not propagate to the encrypted
