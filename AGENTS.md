@@ -112,9 +112,9 @@ locally before pushing Dockerfile changes.
   `.claude/rules/zero-skip-policy.md`.
 - **Zero inline suppressions**: The `no_lint_skip` hk step rejects
   `noqa`/`type: ignore`/`pylint: disable`/`nosec` in Python source.
-- **MCP: `mcp2cli`-first (not banned)**: prefer `mcp2cli`/`llms.txt`/`.md`
-  (no schema-injection tax); native MCP registration IS allowed when a
-  plugin/tool requires it. See `.claude/rules/research-doc-sources.md`.
+- **MCP has two lanes**: a 3rd-party plugin/skill that REQUIRES it → allowed,
+  no justification. Anything WE build/look up → avoid it; API or `mcp2cli`
+  first, register last. Unsure = lane 2. `.claude/rules/research-doc-sources.md`.
 - **CI-local parity**: Every CI lint step has a local hk equivalent; every
   hk tool is in `mise.toml`. See `.claude/rules/ci-local-parity.md`.
 - **Research before fixing**: Check docs/changelogs/issues before fixing — don't guess at CI failures.

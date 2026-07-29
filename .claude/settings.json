@@ -1,4 +1,8 @@
 {
+  "env": {
+    "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD": "1",
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
   "permissions": {
     "deny": [
       "Bash(chezmoi apply:*)",
@@ -69,10 +73,10 @@
     "code-simplifier@claude-plugins-official": false,
     "feature-dev@claude-plugins-official": false,
     "typescript-lsp@claude-plugins-official": false,
-    "claude-md-management@claude-plugins-official": false,
+    "claude-md-management@claude-plugins-official": true,
     "commit-commands@claude-plugins-official": true,
     "skill-creator@claude-plugins-official": true,
-    "claude-code-setup@claude-plugins-official": false,
+    "claude-code-setup@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": false,
     "pyright@claude-code-lsps": false,
     "explanatory-output-style@claude-plugins-official": true,
@@ -102,7 +106,8 @@
     "mattpocock-skills@mattpocock": true,
     "ty@claude-code-lsps": false,
     "fable-orchestrator@fable-orchestrator": true,
-    "antigravity@antigravity-for-claude-code": true
+    "antigravity@antigravity-for-claude-code": true,
+    "context7@context7-marketplace": true
   },
   "extraKnownMarketplaces": {
     "fable-orchestrator": {
@@ -119,9 +124,5 @@
     }
   },
   "prefersReducedMotion": true,
-  "env": {
-    "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD": "1",
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
-  },
   "teammateMode": "auto"
 }

@@ -66,17 +66,38 @@ customer-domain MCP like `docs.anthropic.com/mcp`) — see
 `.claude/skills/mcp2cli/SKILL.md`. Four probes, incl. the central-MCP
 scope limit: `docs/rules-evidence/research-doc-sources.md`.
 
-## `mcp2cli`-first — a preference, not a gate
+## MCP: two lanes. Which lane you are in decides the answer
 
-**Prefer `mcp2cli` (process-spawn) or the curl steps above** for one-off
-lookups: native registration injects every tool's JSON schema into the system
-prompt for **every** conversation, forever, including ones that never call it.
+The cost is the same either way — a natively-registered server injects **every**
+one of its tool schemas into the system prompt of **every** conversation,
+forever, including the ones that never call it. What differs is whether you
+control the alternative.
 
-**Native registration is NOT forbidden** (relaxed 2026-07-19; the
-`no_mcp_registration` hk step is gone). When a plugin or tool *requires* MCP,
-register it knowingly. Judgement call: rare queries → `mcp2cli` wins on cost;
-a plugin whose value depends on native tool selection → register it. When
-unsure, reach for `mcp2cli` first.
+**Lane 1 — a third-party plugin or skill requires MCP: ALLOWED, no
+justification needed.** Enabling a plugin that bundles an MCP server, or a tool
+whose features only work over MCP, is a normal thing to do. You are buying the
+plugin's value and paying its schema cost knowingly. Do not fight it, do not
+wrap it, do not refuse a useful plugin over this. Relaxed 2026-07-19; the
+`no_mcp_registration` hk step is gone and is not coming back.
+
+**Lane 2 — anything THIS project builds, calls, or looks up: AVOID MCP.**
+For our own doc lookups, tool calls and automation, exhaust these first, in
+order:
+
+1. the cache / `llms.txt` / `.md` steps above, or the tool's own CLI;
+2. a plain HTTP **API** (`curl` + `gh api` + a documented endpoint);
+3. **`mcp2cli`** — process-spawn, pays zero per-conversation schema cost;
+4. native registration — **last resort**, and say in the commit body why 1–3
+   could not do it.
+
+The asymmetry is deliberate. In lane 1 the schema tax buys a capability we
+cannot build; in lane 2 it buys something a `curl` already does, so it is pure
+loss — permanent context spend for a call we make twice a month. When a lookup
+is one-off, `mcp2cli` wins outright and there is nothing to weigh.
+
+**If you are unsure which lane you are in, you are in lane 2.** Lane 1 is
+specifically "an external plugin/skill I did not write requires it"; everything
+else is our own code, and our own code uses an API.
 
 ## See also
 
