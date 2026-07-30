@@ -9,7 +9,7 @@ which is easy to get wrong and which bit this repo twice in one session.
 | | |
 |---|---|
 | **Symptom** | `/reload-plugins --force` → *"30 errors during load"*, each *"Plugin X is enabled in project settings but isn't installed here"* |
-| **Root cause** | An `enabledPlugins` entry has an effect **by being present**, not by being `true`. Entries also **aggregate across every project's settings on the machine**, not just the open one. |
+| **Root cause** | An `enabledPlugins` entry has an effect **by being present**, not by being `true`. Entries also **aggregate across every project's settings on the machine**, not just the open one. Accounts for 29 of 30 — the last one needed a restart (see "What was left alone"). |
 | **Fix** | **Delete** stale entries; do not set them `false`. 187 removed across three files. |
 | **Result** | 30 errors → **1**, and that one is correct configuration. Zero behavioural change: every file's set of *enabled* plugins was byte-identical afterwards. |
 
@@ -95,10 +95,20 @@ one above it.**
 
 ## What was left alone, and why
 
-- **`challenger@claude-community`** — the single residual error. Installed and
-  `true` for `macos-development-environment` only, and real in its marketplace. Not
-  a defect; removed from mde because that repo is being retired into this one, not
-  because the config was wrong.
+- **`challenger@claude-community`** — the single residual error, and the one that
+  **bounds the root-cause claim above**. Entry-presence explains 29 of the 30: they
+  vanished exactly when the keys were deleted. It does **not** explain this one.
+  Removing its settings entry changed nothing; removing its **install record**
+  (`claude plugins uninstall … --scope project`) changed nothing either. Afterwards
+  it appeared in **zero** on-disk sources — 55 `settings*.json` files, `~/.claude.json`
+  top-level and all 31 per-project blocks, `installed_plugins.json`, and
+  `plugins/config.json` — each check control-armed, and it was *still* reported.
+  It only cleared on a **session restart**.
+
+  So the honest statement of the mechanism is two-part: **entry presence is what you
+  can fix, and it accounts for the bulk — but the panel also holds error state that no
+  on-disk change clears within a session.** If a residue survives deletion, stop
+  editing files and restart.
 - **`codex@openai-codex`** — a ⚠ warning, not an error: this repo's tracked settings
   enable it, which overrides a `false` at user scope. Intended. To make the user-level
   disable win, put `"codex@openai-codex": false` in `.claude/settings.local.json`.
@@ -109,6 +119,26 @@ one above it.**
   in place for now. `claude plugins prune --dry-run` reports **nothing to prune** at
   either scope; it only handles auto-installed dependencies.
 
+## After the restart: a different failure, and a real one
+
+The restart cleared `challenger` and surfaced two errors that are **not** stale:
+
+```
+fable-orchestrator (project)  Plugin not cached at …/cache/fable-orchestrator/fable-orchestrator/1.14.0
+antigravity (project)         Plugin not cached at …/cache/antigravity-for-claude-code/antigravity/0.21.1
+```
+
+These have consequences — the session's agent roster lost
+`fable-orchestrator:{codex-implementer,codex-reviewer,fable-advisor,grok-*}` and
+`antigravity:antigravity-delegate`. But **the cache is correct**: both directories
+exist at exactly the named paths, both carry `.claude-plugin/plugin.json`, and the
+cached version matches the marketplace checkout's (`1.14.0`, `0.21.1`) in each case.
+Control arm: `last30days`, which loads fine, has the identical structure.
+
+So "not cached" is the loader's index disagreeing with the filesystem, not missing
+content. The remediation printed by the panel — **refresh the plugin cache from
+`/plugin`** — is the supported fix; a forced reinstall is the fallback.
+
 ## Cost worth knowing about
 
 Adding a second repo as a working directory **inherits its entire plugin surface**.
@@ -117,6 +147,17 @@ skills · 42 agents · 12 hooks** — skills and agents from that repo's plugin 
 load into every turn, charged against the eager-context budget this repo works to
 keep near ~112 KB ([[md-size-budgets]], #414). Add the directory to read source;
 drop it when done.
+
+**It also silently widens MCP scope.** The #418 doctor caught this on the next
+session start:
+
+> `mcp-scope`: the `filesystem` server declares 2 directories but the harness sends
+> **3** roots (this workspace plus `permissions.additionalDirectories`) — **and roots
+> REPLACE the server's arguments, so the declared scope restricts nothing.**
+
+That is the same shape as the rest of this document and as the fnox `env` wipe: **a
+declaration that reads like a constraint while enforcing nothing.** Either declare
+the same set in `.mcp.json` or drop the extra working directory.
 
 ## Where this connects
 
