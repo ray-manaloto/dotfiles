@@ -174,6 +174,18 @@
       ],
       "datasourceTemplate": "deb",
       "versioningTemplate": "deb"
+    },
+    {
+      "customType": "regex",
+      "description": "#418: the npm-pinned MCP servers in .mcp.json. Renovate's native npm manager parses package.json/lockfiles only, so it cannot see an npm spec sitting in an `args` array \u2014 and an UNPINNED spec is what this closes: `npx -y <pkg>` resolves the current dist-tag on every spawn, so a server's tool set can change between two sessions with no diff anywhere in this repo, and a tool that appears is a tool no permission rule covers. Pinning without a bump path would just trade drift for rot, hence this manager. `mise run doctor` (mcp-pin) enforces that the pin exists; this keeps it current. Scoped and unscoped specs both matched: the optional leading `@` plus a `/` in the name character class.",
+      "managerFilePatterns": [
+        "/(^|/)\\.mcp\\.json$/"
+      ],
+      "matchStrings": [
+        "\"(?<depName>@?[a-z0-9._/-]+)@(?<currentValue>[0-9][^\"]*)\""
+      ],
+      "datasourceTemplate": "npm",
+      "versioningTemplate": "npm"
     }
   ],
   "customDatasources": {

@@ -4,9 +4,25 @@
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
   },
   "permissions": {
+    "additionalDirectories": [
+      "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base"
+    ],
+    "allow": [
+      "mcp__context7__resolve-library-id",
+      "mcp__memory__create_entities",
+      "mcp__memory__create_relations",
+      "mcp__memory__add_observations",
+      "mcp__memory__delete_entities",
+      "mcp__memory__delete_observations",
+      "mcp__memory__delete_relations"
+    ],
     "deny": [
       "Bash(chezmoi apply:*)",
-      "Bash(chezmoi update:*)"
+      "Bash(chezmoi update:*)",
+      "mcp__filesystem__write_file",
+      "mcp__filesystem__edit_file",
+      "mcp__filesystem__create_directory",
+      "mcp__filesystem__move_file"
     ]
   },
   "hooks": {
@@ -48,7 +64,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ \"${CLAUDE_CODE_REMOTE:-}\" = \"true\" ]; then bash \"${CLAUDE_PROJECT_DIR:-.}/scripts/web-setup.sh\"; else mise -C \"${CLAUDE_PROJECT_DIR:-.}\" run tool-currency-check; fi",
+            "command": "if [ \"${CLAUDE_CODE_REMOTE:-}\" = \"true\" ]; then bash \"${CLAUDE_PROJECT_DIR:-.}/scripts/web-setup.sh\"; else mise -C \"${CLAUDE_PROJECT_DIR:-.}\" run tool-currency-check; mise -C \"${CLAUDE_PROJECT_DIR:-.}\" run doctor; fi",
             "timeout": 600
           }
         ]

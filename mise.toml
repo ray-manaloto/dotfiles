@@ -493,6 +493,24 @@ description = "Offline step-1 drift check for deep-tracked tools (SessionStart h
 # kb-currency-check task.
 run = 'uv run --project python kb-setup currency check'
 
+[tasks.doctor]
+description = "Project doctor: does the declared setup (doctor.toml) match reality on this host? (SessionStart hook; silent unless drift)"
+# Thin caller (zero-bash-logic); logic in
+# python/src/dotfiles_setup/doctor.py. Checks the seam every in-tree gate is
+# blind to (#418): MCP `${VAR}` interpolation that silently resolves EMPTY, an
+# MCP scope declaration the harness's roots replace, and fnox's env mode one
+# `bootstrap-config` run from a wipe. Host-only by nature — it reads
+# ~/.config/fnox and ~/.claude, which a CI runner does not have.
+#
+# ALWAYS exits 0 (findings included) so the SessionStart hook can never disrupt
+# a session; `-- --strict` exits 1 for use as a gate. `-- --live` adds the MCP
+# server spawns, deliberately OFF the per-session path.
+#
+#   mise run doctor                 # what the SessionStart hook runs
+#   mise run doctor -- --verbose    # print a PASS line per clean check
+#   mise run doctor -- --live       # + spawn each stdio server, diff its tools
+run = 'uv run --project python dotfiles-setup doctor'
+
 [tasks.apt-repo]
 description = "List the packages an apt repository publishes (defaults to apt.llvm.org)"
 # Thin caller (zero-bash-logic); logic in

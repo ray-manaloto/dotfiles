@@ -29,6 +29,7 @@ from dotfiles_setup.doc_refs import (
     find_unresolved_task_refs,
 )
 from dotfiles_setup.docker import DevContainerManager
+from dotfiles_setup.doctor import doctor_main
 from dotfiles_setup.env_blob_scan import env_blob_scan_main
 from dotfiles_setup.eval_cases import cases as eval_cases_for
 from dotfiles_setup.gcc_sha import gcc_sha_main
@@ -213,6 +214,31 @@ def _add_honesty_subcommands(subparsers: _SubParsers) -> None:
         nargs="*",
         help="Full backend-qualified tool keys as written in the config "
         "(a bare short name exits 0 having silently done nothing)",
+    )
+    doctor_parser = subparsers.add_parser(
+        "doctor",
+        help="Project doctor: does the declared setup in doctor.toml match "
+        "reality on this host? Covers the seam every in-tree gate is blind to — "
+        "MCP env interpolation, MCP scope vs the harness's roots, fnox env mode "
+        "(#418). Silent when healthy; always exits 0 unless --strict",
+    )
+    doctor_parser.add_argument(
+        "--live",
+        action="store_true",
+        help="Also spawn each stdio MCP server and compare its real tool set to "
+        "the baseline. Off the SessionStart path: a spawn per server is real "
+        "latency for drift that changes rarely",
+    )
+    doctor_parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Exit 1 on findings (for a gate). The default exits 0 so the "
+        "SessionStart hook can never disrupt a session",
+    )
+    doctor_parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Print a PASS line per clean check instead of staying silent",
     )
 
 
@@ -1333,6 +1359,14 @@ def _build_command_handlers(
             apt_pins_main(project_root, json_output=args.json)
         ),
         "bash-budget": lambda: sys.exit(bash_budget_main(project_root)),
+        "doctor": lambda: sys.exit(
+            doctor_main(
+                project_root,
+                live=args.live,
+                strict=args.strict,
+                verbose=args.verbose,
+            )
+        ),
         "lock-check": lambda: sys.exit(lock_integrity_main(project_root)),
         "lock-tools": lambda: sys.exit(scoped_lock_main(project_root, args.tools)),
         "token-audit": lambda: sys.exit(token_audit_main(project_root)),

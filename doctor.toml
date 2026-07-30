@@ -1,0 +1,75 @@
+# doctor.toml — the DECLARED host setup this repo depends on.
+#
+# `mise run doctor` (and the SessionStart hook) checks reality on this host
+# against this file. It is the reviewed baseline: a deviation is drift, and a
+# deliberate change to the setup is a diff here, not a silent edit to a
+# generated user-level file nobody reads.
+#
+# Sibling of `currency.toml` (deep-tracked tool versions) and `parity.toml`
+# (the cross-repo shared set) — declarative sets, checked by a thin task.
+#
+# Every value here is a claim about state OUTSIDE this repo (`~/.config/fnox`,
+# `~/.claude`), which is exactly why no existing gate can see it: `mise run
+# lint`, `pytest`, `mise run verify` and `mise run lint-docs` all only ever
+# look inside the working tree.
+
+[fnox]
+# Global env mode. "exec" keeps credentials OUT of the interactive shell, so
+# they are not inherited by Claude Code, by any MCP server it spawns, or by any
+# agent — see `.claude/rules/secrets-out-of-the-shell-env.md`. The consequence
+# this baseline exists to police: with "exec", a config that interpolates
+# `${VAR}` gets an EMPTY STRING, not an error.
+env = "exec"
+
+# The variables deliberately opted BACK IN to the shell (`env = true`), each
+# because something reads it from the environment at spawn time and degrades
+# SILENTLY without it:
+#
+#   CONTEXT7_API_KEY   the context7 PLUGIN's `.mcp.json` interpolates it into an
+#                      `Authorization` header as `${CONTEXT7_API_KEY:-}` — and
+#                      that default is the trap: exec-only made the header an
+#                      empty string, so the server reported connected and served
+#                      an anonymous tier for weeks. Added 2026-07-30 (#418).
+#   EXA_API_KEY        `.mcp.json` interpolates it when spawning the exa server.
+#   GITHUB_TOKEN       `gh` reports its active account as the environment-
+#                      authenticated one; every ship/land/automerge runs on it.
+#   MISE_GITHUB_TOKEN  mise's GitHub API calls (release lookups) rate-limit
+#                      to 60/h unauthenticated.
+#
+# Anything NOT listed here must stay exec-only. Adding a name is a decision to
+# widen the blast radius of a credential, so it belongs in a reviewed diff.
+# Measured after the change: `fnox export` names exactly these 4 of 49 secrets.
+env_true = [
+    "CONTEXT7_API_KEY",
+    "EXA_API_KEY",
+    "GITHUB_TOKEN",
+    "MISE_GITHUB_TOKEN",
+]
+
+[mcp]
+# Servers whose command line declares a filesystem scope. Claude Code sends MCP
+# Roots, and roots REPLACE the server's own arguments — measured, from the
+# server's own startup line: "Client does not support MCP Roots, using allowed
+# directories set from server args". So when the harness DOES support roots, the
+# argument is inert and the real scope is the harness's working-directory set.
+# A declared scope that differs from that set is a fiction.
+scope_servers = ["filesystem"]
+
+# Harness-namespaced as `mcp__<server>__<tool>`. These MUTATE state, so each
+# needs an explicit permission decision in the TRACKED `.claude/settings.json`
+# (or a PreToolUse matcher). Without one, the answer is given ad-hoc per session
+# and lands in the gitignored `settings.local.json`, where nobody reviews it.
+#
+# The `--live` arm cross-checks this list against the server's real `tools/list`
+# — a server pinned by version cannot change its tool set behind the list, which
+# is why `pinned_servers` below is load-bearing rather than hygiene.
+[mcp.mutating_tools]
+filesystem = ["write_file", "edit_file", "create_directory", "move_file"]
+memory = [
+    "create_entities",
+    "create_relations",
+    "add_observations",
+    "delete_entities",
+    "delete_observations",
+    "delete_relations",
+]

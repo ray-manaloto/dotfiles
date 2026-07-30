@@ -60,10 +60,20 @@ _HOOK_SCRIPTS = (PRETOOLUSE_WRAPPER, _WEB_SETUP)
 # end reasons (clear/logout/resume/...) — it must fire on all of them, hence
 # None. Deliberately NOT a `Stop` hook: Stop fires every turn and can block,
 # which would put a transcript scan on the per-turn path.
+#
+# SessionStart carries the two host-only checkups that no in-tree gate can do:
+# the offline tool-currency drift check, and the #418 project doctor (declared
+# setup vs this host). Both are silent when healthy and both always exit 0, so
+# neither can disrupt a session; asserting them here is what keeps them from
+# quietly falling out of settings.json, which is the only place they are wired.
 _SESSION_END_REPORT = ".agent/command-audit.md"
 _SETTINGS_WIRING: tuple[tuple[str, tuple[str, ...], str | None], ...] = (
     ("PreToolUse", (PRETOOLUSE_WRAPPER,), "Bash"),
-    ("SessionStart", (_WEB_SETUP, "CLAUDE_CODE_REMOTE"), None),
+    (
+        "SessionStart",
+        (_WEB_SETUP, "CLAUDE_CODE_REMOTE", "run tool-currency-check", "run doctor"),
+        None,
+    ),
     ("SessionEnd", ("run command-audit", _SESSION_END_REPORT), None),
 )
 

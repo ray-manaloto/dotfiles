@@ -1251,6 +1251,57 @@ paths = [
 per_path_tokens = { "hk.pkl" = ['mise_lock_integrity"', 'dotfiles-setup lock-check"'], "mise.toml" = ['dotfiles-setup lock-tools'], "python/src/dotfiles_setup/main.py" = ['"lock-check",', '"lock-check": lambda', '"lock-tools": lambda'], "python/src/dotfiles_setup/lock_integrity.py" = ['def regressions(', 'def check_lockfiles(', 'def scoped_lock_main(', 'regressions(committed, path.read_text())', 'declared_host_tools(repo_root)'], "tests/test_lock_integrity.py" = ['def test_conda_platform_loss_is_reported(', 'def test_tool_platform_loss_is_reported(', 'def test_bare_lock_is_refused('], "docs/rules-evidence/local-devcontainer-first.md" = ['jdx/mise#7700'] }
 
 [[suite]]
+name = "workflow.doctor-wiring"
+description = "Project doctor (#418): the declared setup vs reality on this host. Every other gate in this repo reads the working tree, so all of them were blind to the three defects that motivated it — context7 MCP interpolating `${CONTEXT7_API_KEY:-}` against an exec-only fnox secret and therefore running ANONYMOUS while reporting connected; fnox's `env = \"exec\"`, its 3 opt-ins and 49 sync blocks sitting one `bootstrap-config` run from a wipe, because the generator emits provider+value only; and the filesystem server's declared one-directory scope being inert, since MCP Roots REPLACE a server's own arguments (measured, from the server's own startup line: 'Client does not support MCP Roots, using allowed directories set from server args'). Deliberately NOT an hk step and NOT a CI job: it reads ~/.config/fnox and ~/.claude, which a runner does not have, so a SessionStart hook is the only place it can run — and it always exits 0 (`--strict` opts into a non-zero) so it can never disrupt a session, with a crashed check recorded to the error log AND surfaced rather than swallowed (#343's lesson: a fail-open nobody records is indistinguishable from enforcement). The `${VAR}` check's oracle is the doctor's OWN environment rather than a reading of fnox semantics, because the doctor is a child of the process that spawns the servers; fnox is consulted only to explain the absence. Control arms on the live host 2026-07-29: EXA_API_KEY PRESENT (env = true) vs CONTEXT7_API_KEY and AWS_SECRET_ACCESS_KEY absent (exec-only), so the probe discriminates. The live arm is off the per-session path by decision (a spawn per server is real latency for rare drift) and its docstring states what it CANNOT see: a standalone spawn negotiates no roots, so reading its one-directory answer as the session's scope is exactly the false negative the issue was filed over. Version-currency is DELEGATED to the shared kb_setup.currency engine, not re-implemented; the doctor asserts the delegate is both wired AND importable — the gap workflow.tool-currency-wiring cannot see, since a text grep proves the hook is written, not that it can run. Asserts the chain: the declarative baseline, the mise task, the SessionStart wiring, its hook_selfcheck gate, CLI subcommand + handler, module (registration tuples, runner, fail-open recorder), and tests binding both arms plus the registration call site itself."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    "doctor.toml",
+    "mise.toml",
+    ".claude/settings.json",
+    "python/src/dotfiles_setup/main.py",
+    "python/src/dotfiles_setup/doctor.py",
+    "python/src/dotfiles_setup/hook_selfcheck.py",
+    "tests/test_doctor.py",
+]
+per_path_tokens = { "doctor.toml" = [
+    "env_true = [",
+    "scope_servers = [",
+    "[mcp.mutating_tools]",
+], "mise.toml" = [
+    "[tasks.doctor]",
+    "dotfiles-setup doctor'",
+], ".claude/settings.json" = [
+    "run doctor; fi",
+], "python/src/dotfiles_setup/main.py" = [
+    '"doctor": lambda',
+    "doctor_parser = subparsers.add_parser(",
+], "python/src/dotfiles_setup/doctor.py" = [
+    "def read_fnox(",
+    '("mcp-env-opt-in", check_mcp_env_opt_in),',
+    '("mcp-scope", check_mcp_scope),',
+    '("fnox-baseline", check_fnox_baseline),',
+    '("mcp-pin", check_mcp_pin),',
+    '("mcp-guard-coverage", check_mcp_guard_coverage),',
+    '("mcp-duplicate", check_mcp_duplicate),',
+    '("pin-currency-wired", check_pin_currency_wired),',
+    '("mcp-live-tools", check_live_servers),',
+    "CHECKS + (LIVE_CHECKS if live else ())",
+    "_record_crash(name, exc, log_path)",
+    "run_checks(collect(repo_root), live=live)",
+], "python/src/dotfiles_setup/hook_selfcheck.py" = [
+    '"run doctor"',
+], "tests/test_doctor.py" = [
+    "def test_every_check_function_is_actually_registered(",
+    "def test_a_crashed_check_is_recorded_and_surfaced_not_raised(",
+    "def test_env_opt_in_is_silent_when_the_variable_is_set(",
+    "def test_the_sessionstart_hook_runs_the_doctor(",
+    "def test_live_checks_only_run_when_asked(",
+] }
+
+[[suite]]
 name = "workflow.token-audit-wiring"
 description = "Contract-token uniqueness gate (#394 step 4). The sweep anchored 164 tokens so a prefix-preserving rename could not hide inside them — and then the three holes that were LIVE all survived their anchor, because each token matched somewhere other than the site it meant: `permissionDecision` was satisfied by the test file's own assertion (bare tokens are a union), `selfcheck` by the `elif command ==` dispatch branch after the subparser registration was deleted, `--output` by a sibling parser's identical flag. A word-boundary matcher would have caught none of them, which is why the audit recommended a UNIQUENESS signal instead: a per_path_tokens entry should match its file exactly once, because one match cannot be satisfied by a stand-in. Genuine multiplicity — a lockfile section per package, a doc naming its own task, a reused test fixture — is allowlisted with a reason; a NEW ambiguity fails, and so does a stale entry. #397 added the second rule the first one needs to be reachable: the audit reads ONLY per_path_tokens, so a bare `tokens` list was exempt from it — and the build/ci/arch tail was 105 such tokens. With a single path the two forms mean the same thing, so `find_unaudited` refuses the bare one; converting the tail then surfaced 39 ambiguities of which 33 were LIVE, and 11 of those were held green by a COMMENT alone — a stand-in shape the seams never produced. Asserts the chain: hk step, CLI subcommand, module (both checks + the call site wiring the second into find_violations), allowlist, tests (both directions of each rule)."
 category = "workflow"

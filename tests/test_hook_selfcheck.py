@@ -63,7 +63,9 @@ def _full_settings() -> dict:
                 _hook(
                     "startup|resume",
                     'if [ "$CLAUDE_CODE_REMOTE" = "true" ]; then '
-                    f"bash {_ANCHOR}/scripts/web-setup.sh; fi",
+                    f"bash {_ANCHOR}/scripts/web-setup.sh; else "
+                    f"mise -C {_ANCHOR} run tool-currency-check; "
+                    f"mise -C {_ANCHOR} run doctor; fi",
                 )
             ],
             "SessionEnd": [
@@ -102,6 +104,30 @@ def test_wrong_command_fails(tmp_path: Path) -> None:
     settings["hooks"]["SessionStart"] = [_hook("startup|resume", "bash other.sh")]
     failures = _wiring(tmp_path, settings)
     assert any("SessionStart" in f for f in failures)
+
+
+def test_session_start_without_the_doctor_fails(tmp_path: Path) -> None:
+    """The #418 project doctor is wired ONLY here, so only this can protect it.
+
+    It reads ``~/.config/fnox`` and ``~/.claude``, so it can never be an hk step
+    or a CI job — settings.json is its single point of failure.
+    """
+    settings = _full_settings()
+    settings["hooks"]["SessionStart"] = [
+        _hook("startup|resume", f"mise -C {_ANCHOR} run tool-currency-check")
+    ]
+    failures = _wiring(tmp_path, settings)
+    assert any("SessionStart" in f and "run doctor" in f for f in failures)
+
+
+def test_session_start_without_the_currency_check_fails(tmp_path: Path) -> None:
+    """Its sibling checkup — the doctor delegates pin drift to it, so it must run."""
+    settings = _full_settings()
+    settings["hooks"]["SessionStart"] = [
+        _hook("startup|resume", f"mise -C {_ANCHOR} run doctor")
+    ]
+    failures = _wiring(tmp_path, settings)
+    assert any("SessionStart" in f and "tool-currency-check" in f for f in failures)
 
 
 def test_missing_session_end_fails(tmp_path: Path) -> None:
