@@ -53,12 +53,22 @@ The table above is the tool's **measured** behaviour on the pinned 1.31.1 (both
 arms probed), not a restatement of its release notes.
 
 **APPLIED 2026-07-27 by Ray; 4 opt-ins since 2026-07-30** — 45 of 49 exec-only.
-Three must stay `env = true` because this repo runs on them: `.mcp.json`
-interpolates `EXA_API_KEY` at MCP-server spawn, the context7 plugin interpolates
-`CONTEXT7_API_KEY` into an `Authorization` header (exec-only made it an empty
-string and the server served an **anonymous tier while reporting connected**),
-and `gh` reports its active account as the environment-authenticated one. Exec-only
-for those degrades tooling *silently*.
+Four must stay `env = true` because this repo runs on them: the context7 plugin
+interpolates `CONTEXT7_API_KEY` into an `Authorization` header (exec-only made it
+an empty string and the server served an **anonymous tier while reporting
+connected**), `gh` reports its active account as the environment-authenticated
+one, `mise` rate-limits to 60/h without `MISE_GITHUB_TOKEN`, and the
+`/last30days` engine's web lane reads **`EXA_API_KEY` from the process
+environment**. Exec-only for those degrades tooling *silently*.
+
+⚠️ **`EXA_API_KEY`'s stated reason was wrong until 2026-07-30.** It read
+"`.mcp.json` interpolates it at MCP-server spawn" — true when written, false once
+that server was dropped. The credential is still needed, by a consumer nobody had
+recorded: it is **not** in `~/.config/last30days/.env` and **not** in the
+keychain, so last30days reads it straight from the shell (probed: present at
+length 36, against `AWS_SECRET_ACCESS_KEY` absent, so the check discriminates).
+**A reason that names one consumer is a claim that there is only one** — and that
+claim is what nearly dropped a live credential.
 
 ⚠️ **AND IT DOES NOT STAY APPLIED.** Measured 2026-07-30: the config was rewritten
 ~4h40m after the fix, losing the global `env` line **and all 4 opt-ins**, so all 49

@@ -30,7 +30,14 @@ env = "exec"
 #                      that default is the trap: exec-only made the header an
 #                      empty string, so the server reported connected and served
 #                      an anonymous tier for weeks. Added 2026-07-30 (#418).
-#   EXA_API_KEY        `.mcp.json` interpolates it when spawning the exa server.
+#   EXA_API_KEY        the `/last30days` engine's web lane reads it from the
+#                      PROCESS ENVIRONMENT. It is NOT in that plugin's own
+#                      `~/.config/last30days/.env` and NOT in the keychain, so
+#                      exec-only silently drops its web backend from exa to the
+#                      keyless floor. Re-derived 2026-07-30 when `.mcp.json`
+#                      stopped declaring the exa server: the OLD reason on this
+#                      line (".mcp.json interpolates it") is now false, but the
+#                      opt-in stays — a second consumer was always there.
 #   GITHUB_TOKEN       `gh` reports its active account as the environment-
 #                      authenticated one; every ship/land/automerge runs on it.
 #   MISE_GITHUB_TOKEN  mise's GitHub API calls (release lookups) rate-limit
