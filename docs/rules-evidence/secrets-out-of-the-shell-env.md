@@ -101,6 +101,50 @@ Those are telemetry flags, not secrets. The digit-masking was never a mise bug;
 it was collateral from treating a non-secret as a secret. It returns if `mde-py`
 re-bootstraps the config.
 
+## The wipe RECURRED, and its signature is not what we documented (2026-07-30)
+
+The `env = "exec"` mode is **not durable**. Measured, on the day the #418 doctor
+shipped:
+
+| time (local) | event |
+|---|---|
+| 20:07 | `CONTEXT7_API_KEY` opted back in (4th opt-in). Verified: `fnox export` names **4 of 49** |
+| ~20:10 | `mise run doctor` → `fnox-baseline` PASS |
+| **00:47** | **`~/.config/fnox/config.toml` rewritten.** Global `env = "exec"` line GONE, all **4** per-secret `env = true` fields GONE |
+| 05:48 | `mise run doctor` → `fnox-baseline` **DRIFT**, on its first real firing |
+
+For that ~5-hour window every one of the **49** credentials was shell-visible
+again, inherited by every child process — the exact exposure this rule exists to
+prevent. Restored and control-armed: `fnox export` back to 4 of 49, doctor 7/7.
+The wiped file is preserved at
+`~/.config/fnox/config.toml.WIPED-evidence-20260730-055104`.
+
+**Two corrections to what this repo asserted.**
+
+1. **The documented `bootstrap-config` signature is only a PARTIAL match.** The
+   rule says that generator drops `env = "exec"`, the opt-ins **and the 49
+   `sync` blocks**. Here **all 49 sync blocks survived**, along with all 3
+   providers; the file *grew* by 170 bytes while losing 4 lines. Only the `env`
+   fields went. So either that generator changed, or something else did this —
+   and a signature that matches half-way is not an attribution.
+2. **The trigger is UNATTRIBUTED.** No LaunchAgent, no crontab entry, and
+   `mde-py` is not on `PATH` in the shell at all. Naming `bootstrap-config` as
+   the cause here would be exactly the [[probes-need-a-control-arm]] failure of
+   reading a plausible secondary story as a measurement.
+
+**Untested hypothesis, recorded as such:** fnox re-serialising its own config
+after a sync/re-encrypt and dropping `env` fields it does not round-trip on
+write. The 170-byte growth with sync intact fits a re-encrypt rewrite. If true,
+the rule blames the wrong tool entirely. The only arm that can settle it is a
+**real** `fnox sync` write with a before/after hash — a `--dry-run` cannot, since
+the whole suspected defect lives in the write path (the #370 lesson, one tool
+over). Authorized by Ray 2026-07-30, backup first; not yet run.
+
+**The durable lesson:** "APPLIED 2026-07-27 by Ray" was recorded as a settled
+state, and nothing re-read the artifact for three days. A config you do not own
+the generator for is not fixed by editing it once — it is fixed by a check that
+re-reads it, which is what `fnox-baseline` now is.
+
 ## GitHub repos touched
 
 - [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — the
