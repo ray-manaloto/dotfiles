@@ -84,8 +84,11 @@ an **empty string**, not an error — see "Incidents".
 
    So a single `bootstrap-config` run silently reverts every secret to
    shell-exported — undoing the whole reason `env = "exec"` was adopted. **Do not
-   run it** until the generator preserves those fields. Tracked for the sibling
-   repo in knowledge-base issue **#74**.
+   run it** until the generator preserves those fields. Filed upstream as
+   **[macos-development-environment#82](https://github.com/ray-manaloto/macos-development-environment/issues/82)**
+   (2026-07-30), with the suggested fix: preserve the top-level `env` key and any
+   per-secret `env` on keys that still exist. Tracked for the sibling repo in
+   knowledge-base issue **#74**.
 
    ⚠️ **You will not notice by looking at the `sync` blocks — and you do not have
    to run the generator by hand to get hit.** `add_secret` (`:166`) and
