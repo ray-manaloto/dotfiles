@@ -52,16 +52,35 @@ that, not a substitute for it.
 The table above is the tool's **measured** behaviour on the pinned 1.31.1 (both
 arms probed), not a restatement of its release notes.
 
-**APPLIED 2026-07-27 by Ray** — 46 of 49 exec-only, 3 opted back in. Two
-variables must stay `env = true` because this repo runs on them: `.mcp.json`
-interpolates one at MCP-server spawn, and `gh` (every `ship`/`land`/`automerge`
-and `gh api` call) reports its active account as the environment-authenticated
-one. Exec-only for those degrades tooling *silently*.
+**APPLIED 2026-07-27 by Ray; 4 opt-ins since 2026-07-30** — 45 of 49 exec-only.
+Three must stay `env = true` because this repo runs on them: `.mcp.json`
+interpolates `EXA_API_KEY` at MCP-server spawn, the context7 plugin interpolates
+`CONTEXT7_API_KEY` into an `Authorization` header (exec-only made it an empty
+string and the server served an **anonymous tier while reporting connected**),
+and `gh` reports its active account as the environment-authenticated one. Exec-only
+for those degrades tooling *silently*.
+
+⚠️ **AND IT DOES NOT STAY APPLIED.** Measured 2026-07-30: the config was rewritten
+~4h40m after the fix, losing the global `env` line **and all 4 opt-ins**, so all 49
+credentials were shell-visible again until `mise run doctor`'s `fnox-baseline`
+check caught it. **Diagnosed the same day.** `mde-py`'s `bootstrap_config()`
+rebuilds the file from scratch and never re-emits `env`, so it drops the mode and
+every opt-in **by construction**; the full `fnox sync` its callers run next
+(`add`/`update`/`remove_secret`) regenerates all 49 `sync` blocks. That composite
+matches the wipe exactly — the blocks *look* intact because every ciphertext in
+them was replaced. **fnox is EXONERATED**: an authorized write probe rewrote all
+49 values and preserved the mode and all 4 opt-ins, on both its scoped and bulk
+paths. The **invoker** is still unattributed (launchd, every Claude session and
+hook, and interactive history all excluded *with control arms*), so it is
+non-interactive and unlogged. Probe table, re-derived line refs, and the armed
+negatives: `docs/rules-evidence/secrets-out-of-the-shell-env.md`.
 
 ⚠️ **The config is GENERATED** — *"Managed by `mde-py secrets bootstrap-config`.
-Do not edit by hand."* A hand edit survives only until the next bootstrap, so the
-durable fix belongs in `mde-py`'s generator. There is no user-root local override
-to hide it in; that layer is project-scoped only.
+Do not edit by hand."* A hand edit is therefore **not a fix, it is a patch with a
+half-life**; the durable fix belongs upstream. There is no user-root local
+override to hide it in; that layer is project-scoped only. What makes the hand
+edit safe to rely on meanwhile is the check that re-reads the artifact every
+session, not the edit itself.
 
 This also fixed the `[redacted]` digit-masking: two fnox telemetry flags held
 one-character all-digit values and were marked redacted, so mise masked every
@@ -121,8 +140,9 @@ Findings, control arms, and the verification that passed while blind:
    under `fnox exec` (present) vs the same in a plain shell (absent) identifies
    `env = "exec"` on its own; `fnox sync --dry-run -p age VAR` answers staleness
    without reading a value. Full ordered recipe, the result-reading table, and the
-   ⚠️ `bootstrap-config` **wipe hazard** (it drops `env = "exec"`, all 3 opt-ins,
-   and 49 `sync` blocks): `docs/secrets-doppler-fnox-keychain.md`.
+   ⚠️ **wipe hazard** — `mde-py`'s `bootstrap_config()` drops `env = "exec"` and
+   every opt-in (measured twice; diagnosed 2026-07-30, and **not** fnox):
+   `docs/secrets-doppler-fnox-keychain.md`.
 
 ## See also
 
