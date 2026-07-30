@@ -4,9 +4,6 @@
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
   },
   "permissions": {
-    "additionalDirectories": [
-      "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base"
-    ],
     "allow": [
       "mcp__context7__resolve-library-id",
       "mcp__memory__create_entities",
@@ -23,6 +20,9 @@
       "mcp__filesystem__edit_file",
       "mcp__filesystem__create_directory",
       "mcp__filesystem__move_file"
+    ],
+    "additionalDirectories": [
+      "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base"
     ]
   },
   "hooks": {
@@ -83,12 +83,8 @@
     ]
   },
   "enabledPlugins": {
-    "ultrapowers@ultrapowers": false,
-    "ultrapowers-dev@ultrapowers": false,
     "code-review@claude-plugins-official": false,
     "code-simplifier@claude-plugins-official": false,
-    "feature-dev@claude-plugins-official": false,
-    "typescript-lsp@claude-plugins-official": false,
     "claude-md-management@claude-plugins-official": true,
     "commit-commands@claude-plugins-official": true,
     "skill-creator@claude-plugins-official": true,
@@ -96,34 +92,16 @@
     "pyright-lsp@claude-plugins-official": false,
     "pyright@claude-code-lsps": false,
     "explanatory-output-style@claude-plugins-official": true,
-    "plugin-dev@claude-plugins-official": false,
     "hookify@claude-plugins-official": true,
     "learning-output-style@claude-plugins-official": true,
-    "gopls-lsp@claude-plugins-official": false,
-    "csharp-lsp@claude-plugins-official": false,
-    "rust-analyzer-lsp@claude-plugins-official": false,
-    "php-lsp@claude-plugins-official": false,
-    "jdtls-lsp@claude-plugins-official": false,
-    "clangd-lsp@claude-plugins-official": false,
-    "swift-lsp@claude-plugins-official": false,
-    "kotlin-lsp@claude-plugins-official": false,
-    "lua-lsp@claude-plugins-official": false,
-    "ruby-lsp@claude-plugins-official": false,
     "octo@nyldn-plugins": false,
-    "claude-mem@thedotmack": false,
-    "chrome-devtools-mcp@chrome-devtools-plugins": false,
-    "discord@claude-plugins-official": false,
-    "pskoett-ai-skills@claude-community": false,
-    "auto-memory@claude-community": false,
-    "guide@claude-code-guide": false,
-    "codex@openai-codex": false,
+    "codex@openai-codex": true,
     "astral@astral-sh": true,
-    "cli-anything@cli-anything": false,
     "mattpocock-skills@mattpocock": true,
-    "ty@claude-code-lsps": false,
     "fable-orchestrator@fable-orchestrator": true,
     "antigravity@antigravity-for-claude-code": true,
-    "context7@context7-marketplace": true
+    "context7@context7-marketplace": true,
+    "last30days@last30days-skill": true
   },
   "extraKnownMarketplaces": {
     "fable-orchestrator": {
@@ -136,6 +114,18 @@
       "source": {
         "source": "github",
         "repo": "yuting0624/antigravity-for-claude-code"
+      }
+    },
+    "last30days-skill": {
+      "source": {
+        "source": "github",
+        "repo": "mvanhorn/last30days-skill"
+      }
+    },
+    "openai-codex": {
+      "source": {
+        "source": "github",
+        "repo": "openai/codex-plugin-cc"
       }
     }
   },
