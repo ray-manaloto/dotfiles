@@ -91,7 +91,13 @@ Findings, control arms, and the verification that passed while blind:
    `security` group because that group is spread into `hk-image.pkl`, which
    would require pinning the tool in the shared mise fragment — a base image
    build input, and a cold rebuild for no gain at the commit boundary.
-3. **`clean_env()`** (`python/src/dotfiles_setup/child_env.py`) strips
+3. **`mise run doctor`** (#418, SessionStart hook) checks rules 1, 3 and 5 below
+   against this host every session: every `${VAR}` an MCP config interpolates
+   must actually be set in the process that spawns the server, and fnox's env
+   mode + opt-in set must match the reviewed baseline in `doctor.toml`. It is a
+   hook and not an hk step because it reads `~/.config/fnox`, which CI has not
+   got. Rule 5 was doc-only until it existed.
+4. **`clean_env()`** (`python/src/dotfiles_setup/child_env.py`) strips
    `__MISE_DIFF` and the credential-bearing names from processes this repo
    spawns, so the blob stops travelling further than it must.
 

@@ -48,6 +48,37 @@ so graphify's default write there (which happened and was reverted) fails
 this kind of Claude-specific content (it is stub-exempt). Re-running
 `graphify install` will re-append to the root `CLAUDE.md`; revert that hunk.
 
+## Project doctor — declared setup vs reality on this host (#418)
+
+`SessionStart hook → mise run doctor → dotfiles_setup.doctor`, with **`doctor.toml`**
+as the reviewed baseline (sibling of `currency.toml` / `parity.toml`). Silent when
+healthy; always exits 0, so it can never disrupt a session.
+
+It lives here rather than in `AGENTS.md` because everything it reads is Claude
+Code's own setup — `.mcp.json`, enabled-plugin MCP configs, `settings.json` hooks
+and permissions — plus `~/.config/fnox`. **No hk step and no CI job**: a runner
+has none of that state, so the hook is the only place it can run, which is why
+`hook_selfcheck` gates the wiring in `ship`/`land`.
+
+```bash
+mise run doctor                 # what the hook runs
+mise run doctor -- --verbose    # a PASS line per clean check
+mise run doctor -- --live       # + spawn each stdio server, diff its tool set
+mise run doctor -- --strict     # exit 1 on findings (for a gate)
+```
+
+Checks the seam every in-tree gate is blind to: an MCP `${VAR}` that resolves
+**empty** while the server reports connected, a declared MCP scope the harness's
+Roots **replace**, fnox's env mode one `bootstrap-config` run from a wipe,
+unpinned `npx -y` servers, mutating MCP tools with no reviewed permission
+decision, and double-registered servers. Version currency is **delegated** to
+`kb-setup currency check`, not re-implemented.
+
+**Changing your setup means changing `doctor.toml` in a reviewed diff** — that is
+the point. Adding a name to `[fnox].env_true` widens a credential's blast radius;
+adding a `[mcp.mutating_tools]` entry declares something needs a permission
+decision.
+
 ## Cross-vendor orchestration (Fable-5 architect + executor lanes)
 
 - When the session model is Fable, without being reminded: non-trivial implementation runs the fable-orchestrator architect-as-orchestrator flow — invoke the fable-orchestrator:orchestration skill before delegating and follow it as authoritative for routing, verification, review tiers, and advisor consults.

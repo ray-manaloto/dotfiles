@@ -2,21 +2,22 @@
   "mcpServers": {
     "exa": {
       "command": "npx",
-      "args": ["-y", "exa-mcp-server"],
+      "args": ["-y", "exa-mcp-server@3.2.1"],
       "env": {
         "EXA_API_KEY": "${EXA_API_KEY}"
       }
     },
     "memory": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-memory"]
+      "args": ["-y", "@modelcontextprotocol/server-memory@2026.7.4"]
     },
     "filesystem": {
       "command": "npx",
       "args": [
         "-y",
-        "@modelcontextprotocol/server-filesystem",
-        "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles"
+        "@modelcontextprotocol/server-filesystem@2026.7.10",
+        "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles",
+        "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base"
       ]
     }
   }
