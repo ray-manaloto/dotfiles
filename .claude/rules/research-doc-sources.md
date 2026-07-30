@@ -68,10 +68,19 @@ scope limit: `docs/rules-evidence/research-doc-sources.md`.
 
 ## MCP: two lanes. Which lane you are in decides the answer
 
-The cost is the same either way — a natively-registered server injects **every**
-one of its tool schemas into the system prompt of **every** conversation,
-forever, including the ones that never call it. What differs is whether you
-control the alternative.
+⚠️ **This rule used to justify itself with a cost that is no longer real.** It
+claimed a registered server "injects **every** one of its tool schemas into the
+system prompt of **every** conversation, forever". **Measured 2026-07-30 and
+false in this harness:** Claude Code presents MCP tools **deferred — names
+only** — and loads a schema on demand via `ToolSearch`. Across the 3 servers this
+repo registers: **25,925 B of schemas vs 778 B of names, a 33× difference**
+(~6.5k vs ~195 tokens at 4 B/token; both arms read from the same `tools/list`).
+So the standing tax is ~195 tokens for 25 tools, not ~6.5k. Do not cite the old
+sentence, and do not refuse a registration on its strength. Method, per-server
+table and the caveats: `docs/rules-evidence/research-doc-sources.md`.
+
+The residual cost is real but small, and it is the same either way. What actually
+differs between the lanes is whether you control the alternative.
 
 **Lane 1 — a third-party plugin or skill requires MCP: ALLOWED, no
 justification needed.** Enabling a plugin that bundles an MCP server, or a tool
@@ -90,10 +99,12 @@ order:
 4. native registration — **last resort**, and say in the commit body why 1–3
    could not do it.
 
-The asymmetry is deliberate. In lane 1 the schema tax buys a capability we
-cannot build; in lane 2 it buys something a `curl` already does, so it is pure
-loss — permanent context spend for a call we make twice a month. When a lookup
-is one-off, `mcp2cli` wins outright and there is nothing to weigh.
+The asymmetry is deliberate, but **the reason is simplicity, not context spend**
+(that argument was 33× overstated — see above). In lane 1 registration buys a
+capability we cannot build; in lane 2 it buys something a `curl` already does,
+while adding a spawned process, a version to pin, an auth path and a failure mode
+to the setup the doctor has to police. When a lookup is one-off, `mcp2cli` wins
+outright and there is nothing to weigh.
 
 **If you are unsure which lane you are in, you are in lane 2.** Lane 1 is
 specifically "an external plugin/skill I did not write requires it"; everything

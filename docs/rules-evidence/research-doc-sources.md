@@ -75,6 +75,70 @@ server you would query rarely, `mcp2cli`'s process-spawn is strictly cheaper. If
 a plugin's value depends on Claude selecting its tools natively and you will use
 it often, register it and accept the schema cost.
 
+## The MCP schema tax is deferred, and the rule's figure was 33× too high (2026-07-30)
+
+The rule justified its lane-2 preference with a cost claim: a registered server
+"injects **every** one of its tool schemas into the system prompt of **every**
+conversation, forever". Sessions kept contradicting it — MCP tools arrive as a
+**names-only** deferred list, and a `ToolSearch` is offered to load a schema. The
+claim was carried unmeasured for months, so it got measured.
+
+### Method
+
+`scratchpad/mcp_schema_cost.py` speaks JSON-RPC over stdio to each server this
+repo declares in `.mcp.json` (`initialize` → `notifications/initialized` →
+`tools/list`) and reports two numbers from **the same response**:
+
+- **loaded** — `json.dumps(tools)` compact: what the model carries if the schemas
+  are injected eagerly.
+- **names** — the comma-joined `mcp__<server>__<tool>` list: what the deferred
+  presentation actually costs.
+
+Reading both arms off one `tools/list` is the point — a ratio between two
+differently-sourced numbers would not be comparable.
+
+### Result
+
+| server | tools | loaded B | names B | ratio |
+|---|---:|---:|---:|---:|
+| memory | 9 | 10,750 | 262 | 41.0× |
+| filesystem | 14 | 12,973 | 467 | 27.8× |
+| exa | 2 | 2,202 | 49 | 44.9× |
+| **TOTAL** | **25** | **25,925** | **778** | **33.3×** |
+
+At the conventional 4 B/token that is **~6,481 tokens if eager vs ~195 deferred**
+— about **6,286 tokens per conversation** that the rule assumed were being spent
+and are not.
+
+### What this does and does not license
+
+The prescription barely moves; only its *reason* does. Preferring a `curl` over a
+registration is still right for lane 2 — a server adds a spawned process, a pin,
+an auth path and a failure mode — but "permanent context spend" was doing
+argumentative work it had not earned, and it was being used to refuse
+registrations.
+
+### Caveats, stated so the number is not over-read
+
+1. **4 B/token is a convention, not a tokenizer run.** The ratio is exact; the
+   token figures are estimates. JSON schema text is punctuation-dense and likely
+   tokenizes *worse* than 4 B/token, which would make the eager side larger, not
+   smaller.
+2. **Scope is the 3 servers `.mcp.json` declares.** Plugin-bundled servers and the
+   `MCP_DOCKER` gateway are excluded; the gateway is large enough that the #418
+   doctor had to add `Server.repo_owned` to stop it emitting 32 findings, so a
+   whole-host total would be much bigger on both sides of the ratio.
+3. **Deferral is harness behaviour observed on one day**, not a documented
+   guarantee. It may be conditional (tool count, model, settings) and may change.
+   Re-run the script before relying on it.
+4. ⚠️ **The mechanism description that ships with the deferred list did not
+   reproduce.** It states that calling a deferred tool directly "will fail with
+   `InputValidationError`". Two direct calls **succeeded** without any
+   `ToolSearch` — `mcp__memory__read_graph` (no args, so a weak arm) and then
+   `mcp__memory__search_nodes` with its required `query` (the real arm). So
+   whatever the loading mechanism is, "it will fail" is not a reliable
+   description of it, and this evidence does not claim to explain it.
+
 ## GitHub repos touched
 
 - [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — the rule,
