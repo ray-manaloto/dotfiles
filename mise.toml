@@ -19,28 +19,28 @@ lima = "2.2.0"
 "github:agent-sh/agnix" = "0.41.1"
 "npm:agents-lint" = "0.5.0"
 "pipx:mcp2cli" = "3.3.1"
-"npm:renovate" = "44.2.1"
+"npm:renovate" = "44.4.3"
 biome = "2.5.6"
 # Markdown + Claude-docs linters. Installed now; hk.pkl integration is
 # scheduled for post-devcontainer-work review (see GH issue tracking
 # follow-up). md_size_budget (below in hk.pkl) provides the immediate,
 # class-aware enforcement — see .claude/rules/md-size-budgets.md.
-"npm:claude-code-lint" = "0.7.0"
+"npm:claude-code-lint" = "0.7.1"
 "npm:@contextlint/cli" = "1.1.1"
 "npm:markdownlint-cli2" = "0.23.2"
 "aqua:jackchuka/mdschema" = "0.14.1"
-rumdl = "v0.2.45"
+rumdl = "v0.2.46"
 # zizmor: GHA security scanner — backs the hk zizmor builtin (#160 T12);
 # host-only lint tool, so it lives here (not shared.toml).
 zizmor = "1.28.0"
 "npm:oh-my-claude-sisyphus" = "4.15.7"
 "github:ast-grep/ast-grep" = "0.45.0"
 lefthook = "2.1.10"
-"npm:ctx7" = "0.5.6"
+"npm:ctx7" = "0.5.7"
 rtk = "0.44.1"                         # re-probed at #160 T12.5: mise #10703 (2026.7.0) fixed the github-backend url_api lock hold that pinned this at 0.37.2
-"npm:skills" = "1.5.20"
+"npm:skills" = "1.5.21"
 "npm:agent-browser" = "0.33.1"
-"npm:portless" = "0.15.4"
+"npm:portless" = "0.15.5"
 "pipx:deepagents-cli" = "0.2.2"
 # graphify: host-only knowledge-graph substrate (#310 / T1 #312). The [all]
 # extra resolves on host Python 3.14 — graphify's own PEP 508 markers auto-skip
@@ -72,10 +72,10 @@ rtk = "0.44.1"                         # re-probed at #160 T12.5: mise #10703 (2
 # conda:ffmpeg on platform linux-x64" and bricks lint. os-gating makes linux
 # skip the tool entirely, so no linux URL is demanded.
 "conda:ffmpeg" = { version = "8.1.2", os = ["macos"] }
-aws-cli = { version = "2.36.10", symlink_bins = "true" }
+aws-cli = { version = "2.36.12", symlink_bins = "true" }
 azure-cli = { version = "2.88.0", uvx_args = "--prerelease=allow" }
-docker-cli = "29.6.2"
-opencode = "1.18.9"
+docker-cli = "29.7.0"
+opencode = "1.18.10"
 # bun (the npm package_manager) is a host↔image SHARED tool → declared in
 # .config/mise/conf.d/shared.toml, not here (mise-parity: a tool used by both
 # sides lives only in the shared fragment).

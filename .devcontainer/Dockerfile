@@ -11,7 +11,7 @@
 # 26.04 manifest-list (multi-arch resolution preserved); Renovate bumps the
 # digest via the custom `ubuntu` manager (docker datasource). Keep in lockstep
 # with docker-bake.hcl's BASE_IMAGE default (the base hash reads bake).
-ARG BASE_IMAGE=ubuntu:26.04@sha256:b7f48194d4d8b763a478a621cdc81c27be222ba2206ca3ca6bc42b49685f3d9e
+ARG BASE_IMAGE=ubuntu:26.04@sha256:3131b4cc82a783df6c9df078f86e01819a13594b865c2cad47bd1bca2b7063bb
 
 # Builder image for the clang-p2996 compile (#160 T11). DELIBERATELY a
 # separate, rarely-bumped variable (NOT Renovate-tracked): its digest is a
@@ -20,7 +20,7 @@ ARG BASE_IMAGE=ubuntu:26.04@sha256:b7f48194d4d8b763a478a621cdc81c27be222ba2206ca
 # into the final image (only /opt/clang-p2996 is exported), so pinning it
 # older than BASE_IMAGE is ABI-safe while both are the same ubuntu series.
 # Keep in lockstep with docker-bake.hcl's BUILDER_IMAGE default.
-ARG BUILDER_IMAGE=ubuntu:26.04@sha256:b7f48194d4d8b763a478a621cdc81c27be222ba2206ca3ca6bc42b49685f3d9e
+ARG BUILDER_IMAGE=ubuntu:26.04@sha256:3131b4cc82a783df6c9df078f86e01819a13594b865c2cad47bd1bca2b7063bb
 
 # NOTE (#160 T11): the former ARG P2996_SOURCE / ARG DEVCONTAINER_BASE_REF
 # FROM-indirection is retired. CI now injects prebuilt tiers as
@@ -112,7 +112,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # mise.run installer already chmods the binary; the explicit chmod is a
 # belt-and-braces guard against permission drift on the cache mount.
 # renovate: datasource=github-releases depName=jdx/mise
-ARG MISE_VERSION=2026.7.12
+ARG MISE_VERSION=2026.7.18
 RUN curl https://mise.run | MISE_VERSION="v${MISE_VERSION}" sh && \
     chmod +x ${MISE_INSTALL_PATH} && \
     mise --version
@@ -362,7 +362,7 @@ ARG CLANG_P2996_REPO=https://github.com/bloomberg/clang-p2996.git
 # p2996_hash.py reads it from bake, so this default was stale drift. The
 # git-refs Renovate manager rewrites BOTH files in lockstep now that they
 # hold the same SHA.
-ARG CLANG_P2996_REF=7220baffd57ea5b0f8cf59bee494dd5b7cc2b748
+ARG CLANG_P2996_REF=fcbb4e13730733372c0c1ec6d579ed25f95cf8c4
 
 # Self-contained compile toolchain (#160 T11): gcc/g++ via build-essential,
 # cmake + ninja from apt (26.04 ships cmake ≥3.28, well past LLVM's 3.20
@@ -479,7 +479,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # jwakely.github.io index (see renovate.json). Compatibility with the current
 # base image is empirical; if `dpkg -i` fails, build from source.
 # renovate: datasource=custom.gcc-latest depName=gcc-latest versioning=loose
-ARG GCC_LATEST_DEB=gcc-latest_17.0.0-20260705git88752b86ff1a.deb
+ARG GCC_LATEST_DEB=gcc-latest_17.0.0-20260719git6d5d980f76c3.deb
 # Validation D (#160 T13): kayari publishes NO checksum or signature (all
 # 404), so this locally-computed pin is the .deb's only integrity handle.
 # NOT Renovate-managed (Renovate can't compute a sha): a GCC_LATEST_DEB bump
