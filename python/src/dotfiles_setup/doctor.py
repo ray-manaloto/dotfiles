@@ -145,6 +145,23 @@ class Server:
     origin: str
     config: dict[str, object]
 
+    @property
+    def repo_owned(self) -> bool:
+        """True when THIS repo declares the server, so a finding is actionable here.
+
+        The split that keeps the doctor's output worth reading. A check saying
+        "fix this repo's declaration" (scope, pin, tool coverage) must only run on
+        what the repo declares — ``.mcp.json`` or an enabled plugin. A check
+        saying "your setup is broken" (duplicate, health, an interpolation that
+        resolves empty) runs on everything, because a broken server is broken
+        whoever registered it.
+
+        Without this the ``MCP_DOCKER`` gateway alone contributed **32** findings
+        about undeclared mutating tools in a user-global server the repo neither
+        owns nor can fix — noise that trains you to skim past the real ones.
+        """
+        return self.origin == "project" or self.origin.startswith("plugin:")
+
 
 @dataclass(frozen=True)
 class Setup:
@@ -269,17 +286,46 @@ def servers_from(config: Mapping[str, object], origin: str) -> list[Server]:
     ]
 
 
+def claude_json_servers(home: Path, repo_root: Path) -> list[Server]:
+    """MCP servers registered in ``~/.claude.json`` — user-global and per-project.
+
+    **The surface the first version of this module missed**, and the miss cost it
+    the very defect class it was written for: ``check_mcp_duplicate`` reported
+    PASS while ``context7`` and ``filesystem`` were each registered twice — once
+    here as a stale ``mde-mcp-*`` wrapper and once by the plugin / ``.mcp.json``.
+    Reading only ``.mcp.json`` plus the plugin configs made a check that
+    *compares registrations* blind to half of them.
+
+    It is not a cosmetic duplicate. A same-name user-global entry **shadows** the
+    project one, so the broken wrapper won and ``claude mcp list`` stopped showing
+    the project's ``filesystem`` server at all.
+    """
+    data = load_json(home / ".claude.json")
+    servers = servers_from(data, "user")
+    projects = _str_keys(data.get("projects"))
+    entry = _str_keys(projects.get(str(repo_root.resolve())))
+    servers.extend(servers_from(entry, "project-local"))
+    return servers
+
+
 def collect_servers(
     repo_root: Path,
     home: Path,
     *settings: Mapping[str, object],
 ) -> tuple[Server, ...]:
-    """Every MCP server Claude Code loads here: the project's plus each plugin's."""
+    """Every MCP server Claude Code loads here, from all four sources.
+
+    ``.mcp.json`` (project), each enabled plugin's own config, and
+    ``~/.claude.json``'s user-global and per-project blocks. Registering a server
+    in more than one of them is legal and silent, which is why the whole set has
+    to be collected before any check compares them.
+    """
     servers = servers_from(load_json(repo_root / ".mcp.json"), "project")
     for plugin_id in enabled_plugin_ids(*settings):
         path = plugin_mcp_path(home, plugin_id)
         if path is not None:
             servers.extend(servers_from(load_json(path), f"plugin:{plugin_id}"))
+    servers.extend(claude_json_servers(home, repo_root))
     return tuple(servers)
 
 
@@ -460,10 +506,21 @@ def check_mcp_scope(setup: Setup) -> list[str]:
         if name not in registered
     ]
     for server in setup.servers:
-        if server.name not in scope_servers:
+        if server.name not in scope_servers or not server.repo_owned:
             continue
         declared = declared_scope(server)
         if declared == roots:
+            continue
+        if not declared:
+            # A wrapper that takes no path argument (the `mde-mcp-*` shape)
+            # decides its own scope internally. Saying it "declares []" would
+            # read as a bug in the wrapper; the true statement is that nothing
+            # in the config bounds it.
+            findings.append(
+                f"MCP server {server.name!r} ({server.origin}) declares no scope "
+                f"at all, so it takes whatever the harness sends: {roots}. "
+                f"Nothing in the config bounds it."
+            )
             continue
         findings.append(
             f"MCP server {server.name!r} declares scope {declared} but the "
@@ -546,7 +603,11 @@ def check_mcp_pin(setup: Setup) -> list[str]:
     findings: list[str] = []
     for server in setup.servers:
         command = server.config.get("command")
-        if not isinstance(command, str) or Path(command).name not in _PACKAGE_RUNNERS:
+        if (
+            not server.repo_owned
+            or not isinstance(command, str)
+            or Path(command).name not in _PACKAGE_RUNNERS
+        ):
             continue
         findings.extend(
             f"MCP server {server.name!r} ({server.origin}) launches unpinned "
@@ -764,7 +825,7 @@ def check_live_servers(setup: Setup) -> list[str]:
     findings: list[str] = []
     for server in setup.servers:
         command = stdio_command(server)
-        if command is None:
+        if command is None or not server.repo_owned:
             continue
         tools, error = probe_tools(command)
         if error is not None:
@@ -783,6 +844,123 @@ def check_live_servers(setup: Setup) -> list[str]:
                 f"nothing checks they have a reviewed permission decision"
             )
     return findings
+
+
+# `<name>: <target> - <glyph> <status>`, the shape `claude mcp list` prints.
+#
+# Anchored on the GLYPH, and the name is GREEDY. Both are load-bearing, and the
+# fixture caught the version that was not: a name can itself contain colons
+# (`plugin:context7:context7`), so `[^:]+` stopped at the first one and the row
+# was silently DROPPED — and a dropped row is a server reported healthy. Greedy
+# `.+` plus the required glyph makes the engine backtrack to the right split even
+# when the status also contains `: ` (`— -32000: MCP error -32000: …`).
+_MCP_LIST_RE = re.compile(
+    r"^(?P<name>.+): (?P<target>.*) - (?P<glyph>[✔✘⏸!]) (?P<status>.+)$"
+)
+
+#: The one glyph that means the server actually answered.
+_HEALTHY_GLYPH = "✔"
+
+
+@dataclass(frozen=True)
+class ServerHealth:
+    """One row of ``claude mcp list``."""
+
+    name: str
+    target: str
+    status: str
+    healthy: bool
+
+
+def parse_mcp_list(stdout: str) -> list[ServerHealth]:
+    """Rows of a ``claude mcp list`` report.
+
+    Text-parsed because the command has **no ``--json``** (probed: ``unknown
+    option '--json'``). The format is pinned by a test against real captured
+    output, so a change upstream fails loudly instead of silently reporting every
+    server healthy — the failure mode a lenient parser would have.
+    """
+    rows: list[ServerHealth] = []
+    for line in stdout.splitlines():
+        match = _MCP_LIST_RE.match(line.strip())
+        if match is None:
+            continue
+        rows.append(
+            ServerHealth(
+                name=match.group("name"),
+                target=match.group("target").strip(),
+                status=match.group("status").strip(),
+                healthy=match.group("glyph") == _HEALTHY_GLYPH,
+            )
+        )
+    return rows
+
+
+def check_mcp_health(setup: Setup) -> list[str]:
+    """Every registered MCP server must actually connect.
+
+    Delegated to ``claude mcp list`` rather than a hand-rolled handshake per
+    server: it is the harness's own view, it already covers sources this module
+    reads statically *and* ones it cannot (the claude.ai cloud connectors), and it
+    reports authentication state — three things a spawn probe cannot tell us
+    (``use-tool-builtins.md``).
+
+    It is a LIVE check because it health-checks every server, including cloud
+    ones over the network. Measured on this host: six stale ``mde-mcp-*``
+    wrappers failing on a ``mde-secrets.sh`` their removal left behind, two
+    project servers ``Pending approval`` after a ``.mcp.json`` edit, and one
+    cloud connector needing authentication — none of which any static check here
+    can see, and all of which a session would otherwise carry silently.
+
+    ``Pending approval`` is reported but named as such: it is a consent state
+    resolved by ``/mcp``, not a defect.
+    """
+    if shutil.which("claude") is None:
+        return ["`claude` is not on PATH, so server health cannot be checked"]
+    try:
+        result = subprocess.run(
+            ["claude", "mcp", "list"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=_PROBE_TIMEOUT_S,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return [f"`claude mcp list` failed: {exc}"]
+    rows = parse_mcp_list(result.stdout)
+    if not rows:
+        return [
+            "`claude mcp list` returned no parseable rows — the output format "
+            "changed, and until the parser is updated this check reports nothing "
+            f"rather than health (rc={result.returncode})"
+        ]
+    owned = {server.name for server in setup.servers if server.repo_owned}
+    return [
+        health_finding(row, owned=row.name in owned) for row in rows if not row.healthy
+    ]
+
+
+#: A status that is a consent state, not a defect — resolved by approving in `/mcp`.
+_CONSENT_STATES = ("Pending approval", "Needs authentication")
+
+
+def health_finding(row: ServerHealth, *, owned: bool) -> str:
+    """One health finding, worded by KIND — consent states are not failures.
+
+    Reporting "not connected" for a server merely awaiting your approval reads as
+    a defect and sends you debugging something that only needs a click. The
+    distinction is the difference between a doctor and an alarm.
+    """
+    scope = " This repo registers it." if owned else ""
+    if row.status.startswith(_CONSENT_STATES):
+        return (
+            f"MCP server {row.name!r} is waiting on you, not broken: "
+            f"{row.status}. Approve it in `/mcp`.{scope}"
+        )
+    return (
+        f"MCP server {row.name!r} is registered but does not connect: "
+        f"{row.status}.{scope}"
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -804,6 +982,7 @@ CHECKS: tuple[tuple[str, Callable[[Setup], list[str]]], ...] = (
 #: Only run with ``--live``: each entry spawns subprocesses.
 LIVE_CHECKS: tuple[tuple[str, Callable[[Setup], list[str]]], ...] = (
     ("mcp-live-tools", check_live_servers),
+    ("mcp-health", check_mcp_health),
 )
 
 

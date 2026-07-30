@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -701,6 +702,228 @@ def test_doctor_main_exits_zero_when_clean_under_strict(
 # --------------------------------------------------------------------------- #
 # The shipped baseline and wiring
 # --------------------------------------------------------------------------- #
+
+
+# --------------------------------------------------------------------------- #
+# The full registration surface + health (the #418 follow-up)
+# --------------------------------------------------------------------------- #
+
+
+def test_claude_json_servers_reads_user_global_and_per_project(tmp_path: Path) -> None:
+    """The surface the first version missed, which cost it its own defect class."""
+    (tmp_path / ".claude.json").write_text(
+        json.dumps(
+            {
+                "mcpServers": {"context7": {"command": "/bin/mde-mcp-context7"}},
+                "projects": {
+                    "/repo": {"mcpServers": {"pkgsearch": {"url": "https://x/mcp"}}},
+                    "/elsewhere": {"mcpServers": {"nope": {"command": "x"}}},
+                },
+            }
+        )
+    )
+    servers = doctor.claude_json_servers(tmp_path, Path("/repo"))
+    assert {(s.name, s.origin) for s in servers} == {
+        ("context7", "user"),
+        ("pkgsearch", "project-local"),
+    }
+
+
+def test_claude_json_servers_is_empty_without_the_file(tmp_path: Path) -> None:
+    assert doctor.claude_json_servers(tmp_path, Path("/repo")) == []
+
+
+def test_collect_servers_actually_includes_the_claude_json_source(
+    tmp_path: Path,
+) -> None:
+    """Binds the CALL SITE, because the function alone is not the wiring.
+
+    Found by mutation: deleting the ``claude_json_servers`` call from
+    ``collect_servers`` left the whole suite green — every other test injects
+    ``servers`` into a synthetic ``Setup``, so nothing exercised collection. Only
+    the contract caught it, and a contract is not a test. This is the same
+    stand-in shape as `test_every_check_function_is_actually_registered`.
+    """
+    (tmp_path / ".claude.json").write_text(
+        json.dumps({"mcpServers": {"stale-wrapper": {"command": "/bin/mde-mcp-x"}}})
+    )
+    servers = doctor.collect_servers(REPO_ROOT, tmp_path)
+    assert "stale-wrapper" in {s.name for s in servers}
+    assert {s.origin for s in servers if s.name == "stale-wrapper"} == {"user"}
+
+
+def test_duplicate_now_sees_a_user_global_shadow() -> None:
+    """The live miss: a same-name user entry SHADOWS the project one, and won."""
+    setup = _setup(
+        servers=(
+            _server("filesystem", origin="project"),
+            _server("filesystem", origin="user"),
+        )
+    )
+    findings = doctor.check_mcp_duplicate(setup)
+    assert len(findings) == 1
+    assert "project, user" in findings[0]
+
+
+@pytest.mark.parametrize(
+    ("origin", "owned"),
+    [
+        ("project", True),
+        ("plugin:context7@context7-marketplace", True),
+        ("user", False),
+        ("project-local", False),
+    ],
+)
+def test_repo_owned_splits_by_origin(origin: str, *, owned: bool) -> None:
+    """The boundary that keeps output readable — both directions."""
+    assert _server("s", origin=origin).repo_owned is owned
+
+
+def test_pin_ignores_a_user_global_registration() -> None:
+    """Not this repo's pin to fix; flagging it is noise it cannot act on."""
+    setup = _setup(
+        servers=(_server("x", origin="user", command="npx", args=["-y", "unpinned"]),)
+    )
+    assert doctor.check_mcp_pin(setup) == []
+
+
+def test_pin_still_flags_the_same_server_when_the_project_owns_it() -> None:
+    """The control arm for the line above — the scoping must not disable the check."""
+    setup = _setup(
+        servers=(
+            _server("x", origin="project", command="npx", args=["-y", "unpinned"]),
+        )
+    )
+    assert len(doctor.check_mcp_pin(setup)) == 1
+
+
+def test_live_tools_ignores_a_user_global_server(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The MCP_DOCKER flood: 32 findings about a gateway the repo cannot fix."""
+    monkeypatch.setattr(
+        doctor, "probe_tools", lambda _cmd: ({"create_repository"}, None)
+    )
+    setup = _setup(
+        servers=(_server("MCP_DOCKER", origin="user", command="/bin/x", args=[]),)
+    )
+    assert doctor.check_live_servers(setup) == []
+
+
+def test_scope_reports_a_server_that_declares_no_scope_distinctly() -> None:
+    """A wrapper taking no path argument is unbounded, not wrongly declared."""
+    setup = _setup(servers=(_server("filesystem", origin="project", args=["-y", "p"]),))
+    findings = doctor.check_mcp_scope(setup)
+    assert len(findings) == 1
+    assert "declares no scope at all" in findings[0]
+
+
+#: Real captured `claude mcp list` output (2026-07-30), one row of each status
+#: kind. Pinned verbatim: the command has NO `--json`, so the parser is only as
+#: trustworthy as this fixture.
+_MCP_LIST_OUTPUT = """Checking MCP server health…
+
+claude.ai Google Drive: https://drivemcp.googleapis.com/mcp/v1 - ✔ Connected
+claude.ai Asana: https://mcp.asana.com/sse - ! Needs authentication
+plugin:context7:context7: https://mcp.context7.com/mcp (HTTP) - ✔ Connected
+context7: /Users/x/.local/bin/mde-mcp-context7  - ✘ Failed to connect \
+— -32000: MCP error -32000: Connection closed
+exa: npx -y exa-mcp-server@3.2.1 - ⏸ Pending approval (run `claude` to approve)
+"""
+
+
+def test_parse_mcp_list_reads_every_status_kind() -> None:
+    rows = doctor.parse_mcp_list(_MCP_LIST_OUTPUT)
+    by_name = {r.name: r for r in rows}
+    assert by_name["claude.ai Google Drive"].healthy
+    assert by_name["plugin:context7:context7"].healthy
+    assert not by_name["claude.ai Asana"].healthy
+    assert not by_name["context7"].healthy
+    assert not by_name["exa"].healthy
+    assert by_name["exa"].target == "npx -y exa-mcp-server@3.2.1"
+
+
+def test_parse_mcp_list_ignores_the_preamble() -> None:
+    """A banner line must not become a phantom server."""
+    names = {r.name for r in doctor.parse_mcp_list(_MCP_LIST_OUTPUT)}
+    assert not any("Checking MCP server health" in n for n in names)
+
+
+def test_health_reports_a_failure_and_names_repo_ownership(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(doctor.shutil, "which", lambda _c: "/usr/bin/claude")
+    monkeypatch.setattr(
+        doctor,
+        "parse_mcp_list",
+        lambda _s: [
+            doctor.ServerHealth(
+                "context7", "x", "Failed to connect — closed", healthy=False
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        doctor.subprocess,
+        "run",
+        lambda *_a, **_k: subprocess.CompletedProcess([], 0, _MCP_LIST_OUTPUT, ""),
+    )
+    setup = _setup(servers=(_server("context7", origin="project"),))
+    findings = doctor.check_mcp_health(setup)
+    assert len(findings) == 1
+    assert "does not connect" in findings[0]
+    assert "This repo registers it." in findings[0]
+
+
+def test_health_is_silent_when_everything_connects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(doctor.shutil, "which", lambda _c: "/usr/bin/claude")
+    monkeypatch.setattr(
+        doctor,
+        "parse_mcp_list",
+        lambda _s: [doctor.ServerHealth("a", "x", "Connected", healthy=True)],
+    )
+    monkeypatch.setattr(
+        doctor.subprocess,
+        "run",
+        lambda *_a, **_k: subprocess.CompletedProcess([], 0, "out", ""),
+    )
+    assert doctor.check_mcp_health(_setup()) == []
+
+
+@pytest.mark.parametrize(
+    "status", ["Pending approval (run `claude` to approve)", "Needs authentication"]
+)
+def test_health_words_a_consent_state_as_waiting_not_broken(status: str) -> None:
+    """Sending you to debug something that needs a click is how a doctor loses trust."""
+    row = doctor.ServerHealth("exa", "x", status, healthy=False)
+    finding = doctor.health_finding(row, owned=True)
+    assert "waiting on you, not broken" in finding
+    assert "`/mcp`" in finding
+
+
+def test_health_says_so_when_the_output_stops_parsing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A report the parser cannot read must not come out as "all healthy"."""
+    monkeypatch.setattr(doctor.shutil, "which", lambda _c: "/usr/bin/claude")
+    monkeypatch.setattr(
+        doctor.subprocess,
+        "run",
+        lambda *_a, **_k: subprocess.CompletedProcess([], 0, "totally new format", ""),
+    )
+    findings = doctor.check_mcp_health(_setup())
+    assert len(findings) == 1
+    assert "output format" in findings[0]
+
+
+def test_health_reports_a_missing_claude_binary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(doctor.shutil, "which", lambda _c: None)
+    assert doctor.check_mcp_health(_setup()) == [
+        "`claude` is not on PATH, so server health cannot be checked"
+    ]
 
 
 def test_every_check_function_is_actually_registered() -> None:
