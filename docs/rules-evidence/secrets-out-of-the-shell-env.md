@@ -101,49 +101,125 @@ Those are telemetry flags, not secrets. The digit-masking was never a mise bug;
 it was collateral from treating a non-secret as a secret. It returns if `mde-py`
 re-bootstraps the config.
 
-## The wipe RECURRED, and its signature is not what we documented (2026-07-30)
+## The wipe RECURRED — and the diagnosis (2026-07-30)
 
 The `env = "exec"` mode is **not durable**. Measured, on the day the #418 doctor
 shipped:
 
-| time (local) | event |
+| time (**local CDT**) | event |
 |---|---|
-| 20:07 | `CONTEXT7_API_KEY` opted back in (4th opt-in). Verified: `fnox export` names **4 of 49** |
+| 20:07 (Jul 29) | `CONTEXT7_API_KEY` opted back in (4th opt-in). Verified: `fnox export` names **4 of 49** |
 | ~20:10 | `mise run doctor` → `fnox-baseline` PASS |
-| **00:47** | **`~/.config/fnox/config.toml` rewritten.** Global `env = "exec"` line GONE, all **4** per-secret `env = true` fields GONE |
-| 05:48 | `mise run doctor` → `fnox-baseline` **DRIFT**, on its first real firing |
+| **00:47 (Jul 30)** | **`~/.config/fnox/config.toml` rewritten.** Global `env = "exec"` GONE, all **4** per-secret `env = true` GONE |
+| 00:48 | `mise run doctor` → `fnox-baseline` **DRIFT**, on its first real firing |
+| 00:50 | Restored; `fnox export` back to 4 of 49, doctor 7/7 |
 
-For that ~5-hour window every one of the **49** credentials was shell-visible
+For that ~4h40m window every one of the **49** credentials was shell-visible
 again, inherited by every child process — the exact exposure this rule exists to
-prevent. Restored and control-armed: `fnox export` back to 4 of 49, doctor 7/7.
-The wiped file is preserved at
-`~/.config/fnox/config.toml.WIPED-evidence-20260730-055104`.
+prevent. The wiped file is preserved at
+`~/.config/fnox/config.toml.WIPED-evidence-20260730-055104` (that suffix is
+**UTC**; the file dates from 00:51:04 local).
 
-**Two corrections to what this repo asserted.**
+> ⏰ **Read the clock before reading the timeline.** The first write-up of this
+> incident mixed local and UTC stamps in one table, which put the wipe "last
+> night" when it had happened **30 minutes earlier**. `date -u`-derived filenames
+> and locally-observed mtimes do not belong in the same column unlabelled.
 
-1. **The documented `bootstrap-config` signature is only a PARTIAL match.** The
-   rule says that generator drops `env = "exec"`, the opt-ins **and the 49
-   `sync` blocks**. Here **all 49 sync blocks survived**, along with all 3
-   providers; the file *grew* by 170 bytes while losing 4 lines. Only the `env`
-   fields went. So either that generator changed, or something else did this —
-   and a signature that matches half-way is not an attribution.
-2. **The trigger is UNATTRIBUTED.** No LaunchAgent, no crontab entry, and
-   `mde-py` is not on `PATH` in the shell at all. Naming `bootstrap-config` as
-   the cause here would be exactly the [[probes-need-a-control-arm]] failure of
-   reading a plausible secondary story as a measurement.
+### What actually changed in the file
 
-**Untested hypothesis, recorded as such:** fnox re-serialising its own config
-after a sync/re-encrypt and dropping `env` fields it does not round-trip on
-write. The 170-byte growth with sync intact fits a re-encrypt rewrite. If true,
-the rule blames the wrong tool entirely. The only arm that can settle it is a
-**real** `fnox sync` write with a before/after hash — a `--dry-run` cannot, since
-the whole suspected defect lives in the write path (the #370 lesson, one tool
-over). Authorized by Ray 2026-07-30, backup first; not yet run.
+Diffing the three states with a TOML parser (keys and value **lengths** only,
+never values — `scratchpad/fnox_structdiff.py`):
+
+| | pre-wipe backup | WIPED | restored |
+|---|---|---|---|
+| global `env` | `"exec"` | **absent** | `"exec"` |
+| per-secret `env = true` | 3 (pre-CONTEXT7) | **0** | 4 |
+| secrets / providers | 49 / 3 | 49 / 3 | 49 / 3 |
+| `sync.value` ciphertexts | — | **all 49 REPLACED** (net +436 chars) | unchanged from WIPED |
+| outer `value`, `provider` | — | unchanged for all 49 | unchanged |
+
+**This overturns the first write-up's correction #1.** "All 49 sync blocks
+survived" is true only *structurally*: every ciphertext inside them was
+regenerated. The event was a **whole-config rebuild plus a full re-sync**, not a
+surgical removal of `env` fields. A signature read at the wrong granularity
+looked like a half-match when it was a full one.
+
+> 🔬 **`grep -c 'env = true'` is not a control arm for "how many opt-ins".** It
+> counted **5** where the parser counted **4** — the config's own header comment
+> contains the literal string. Parse the format; don't pattern-match it.
+
+### fnox is EXONERATED — hypothesis falsified with an armed probe
+
+The recorded hypothesis was that **fnox itself** drops `env` when it
+re-serialises. Ray authorized a real write against the live store (a `--dry-run`
+could not settle it — the suspected defect lived in the write path, the #370
+lesson one tool over). Backup first, byte-exact restore after, names never values:
+
+| probe | wrote? | `env` preserved? |
+|---|---|---|
+| `fnox activate zsh` | **no** | n/a |
+| `fnox hook-env -s zsh` (the precmd hook) | **no** — hash byte-identical | n/a; correctly exported an opt-in |
+| `fnox sync -g -p age <ONE> -f` | yes — 1/49 ciphertexts | **yes** — global + all 4 |
+| `fnox sync -g -p age -f` (all) | yes — **49/49**, reproducing the wipe's exact ciphertext signature | **yes** — global + all 4 |
+
+The bulk arm is what makes this a real negative: it rewrote every one of the 49
+values, so it *could* have dropped the `env` fields, and did not. **fnox
+round-trips `env` on both its scoped and its bulk write path.**
+
+`fnox activate` is control-armed for free by any agent session: the Bash tool
+sources `~/.zshrc` on every call (that is where the `fnox` shell function comes
+from), and the config mtime does not move across dozens of calls.
+
+### The author: the mde-py composite, not either half alone
+
+`macos-development-environment/src/mde/secrets/manage.py` (line refs
+**re-derived**, not inherited):
+
+- **`bootstrap_config()` — L247.** Rebuilds the file from scratch as a list of
+  literal lines. It emits `KEY = { provider, value }` (**L318**) and preserves
+  **only** `DOPPLER_TOKEN` (L292-296). It never reads or re-emits `env`, so the
+  global `env = "exec"` and every per-secret `env = true` are **dropped by
+  construction**. The "Do not edit by hand" header is written at L275.
+- It writes **no `sync` blocks at all** — so bootstrap alone *cannot* produce the
+  wiped file, which had all 49.
+- **`add_secret` (L166)** and **`remove_secret` (L208)** each call it and then
+  immediately run a **full** `_run_fnox_sync_age()` (**L169** / **L211**), which
+  regenerates all 49 sync blocks with fresh ciphertexts. `update_secret` (L177)
+  is an alias for `add_secret`.
+
+`bootstrap_config` + full sync reproduces the observed signature **exactly**, and
+neither half does on its own. ✅ The inherited `manage.py:318` reference is
+correct.
+
+### The invoker is still unattributed — but the negatives are now armed
+
+Every "not it" below was re-run with a control arm, because the first pass's
+negatives came from bounded probes:
+
+| ruled out | control arm |
+|---|---|
+| launchd | 8 user plists, none match mde/fnox/secret/doppler by **content**; 7 match `Label`, so the grep can see. The mde maintenance/validation agents are not installed. (First pass grepped *labels* with `head -5`.) |
+| any Claude session | **zero** tool calls 00:44-00:49 across **2272 transcripts / 70 projects**; the dotfiles session was idle 00:43:44 → 00:48:19 |
+| a Claude **hook** (invisible to transcripts) | no settings file invokes `mde-py`; `.claude/settings.json` matches `hooks` 6× |
+| an interactive shell command | `sharehistory` is set, so history is complete and immediate (`setopt` returned 19 lines); it holds only `source ~/.zshrc` @ 00:46:51 and `cd` @ 00:48:42 |
+| mde-py running at all | no `bootstrap_config_written` in any log; mde logs are stale since **April** |
+
+**Doppler's audit log is INCONCLUSIVE, not negative** — `doppler activity`
+returns empty because the token lacks workplace scope, while `doppler secrets
+--only-names` returns rows. That is a "never asked", not a "no"
+([[probes-need-a-control-arm]] rule 4).
+
+So the invocation was **non-interactive and unlogged**. `source ~/.zshrc` nine
+seconds earlier is a temporal correlate, but both mechanisms it fires
+(`fnox activate`, then `hook-env` at the next prompt) are measured innocent.
 
 **The durable lesson:** "APPLIED 2026-07-27 by Ray" was recorded as a settled
 state, and nothing re-read the artifact for three days. A config you do not own
 the generator for is not fixed by editing it once — it is fixed by a check that
-re-reads it, which is what `fnox-baseline` now is.
+re-reads it, which is what `fnox-baseline` now is. The second lesson is narrower:
+**an untested hypothesis, left in place, quietly becomes the working story.** The
+rule blamed fnox for a day on nothing but plausibility; one authorized write
+settled it in two commands.
 
 ## GitHub repos touched
 

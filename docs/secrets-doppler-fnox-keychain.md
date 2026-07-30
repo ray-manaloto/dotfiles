@@ -83,10 +83,19 @@ an **empty string**, not an error — see "Incidents".
    | `sync = { provider = "age", … }` | **49** | **0** |
 
    So a single `bootstrap-config` run silently reverts every secret to
-   shell-exported — undoing the whole reason `env = "exec"` was adopted — and
-   drops every offline age-encrypted copy. **Do not run it** until the generator
-   preserves those fields. Tracked for the sibling repo in
-   knowledge-base issue **#74**.
+   shell-exported — undoing the whole reason `env = "exec"` was adopted. **Do not
+   run it** until the generator preserves those fields. Tracked for the sibling
+   repo in knowledge-base issue **#74**.
+
+   ⚠️ **You will not notice by looking at the `sync` blocks — and you do not have
+   to run the generator by hand to get hit.** `add_secret` (`:166`) and
+   `remove_secret` (`:208`) call `bootstrap_config()` and then immediately run a
+   **full** `_run_fnox_sync_age()` (`:169`/`:211`), which regenerates all 49 sync
+   blocks with fresh ciphertexts. So the observable damage is *only* the missing
+   `env` fields, while every ciphertext silently changes. That composite is what
+   hit this host on **2026-07-30**, and diffing it proved **fnox innocent** — an
+   authorized `fnox sync` rewrote all 49 values and kept the mode and every
+   opt-in. Evidence: `docs/rules-evidence/secrets-out-of-the-shell-env.md`.
 3. **fnox is already shell-activated** on this machine (3 `FNOX_*` vars present,
    `DOPPLER_TOKEN` resolving from Keychain). No bootstrap needed.
 4. **An `age` provider is configured** (`recipients = ["age16djrq…"]`), so the

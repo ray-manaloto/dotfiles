@@ -61,14 +61,19 @@ and `gh` reports its active account as the environment-authenticated one. Exec-o
 for those degrades tooling *silently*.
 
 ⚠️ **AND IT DOES NOT STAY APPLIED.** Measured 2026-07-30: the config was rewritten
-~5h after the fix, losing the global `env` line **and all 4 opt-ins**, so all 49
+~4h40m after the fix, losing the global `env` line **and all 4 opt-ins**, so all 49
 credentials were shell-visible again until `mise run doctor`'s `fnox-baseline`
-check caught it. **The documented `bootstrap-config` signature only half-matches**
-— all 49 `sync` blocks survived — and the trigger is **unattributed** (no
-LaunchAgent, no crontab, `mde-py` not even on `PATH`). So do not name that
-generator as the cause; an untested hypothesis is that **fnox itself** drops
-`env` fields when it re-serialises. Full timeline, both corrections and the
-probe that would settle it: `docs/rules-evidence/secrets-out-of-the-shell-env.md`.
+check caught it. **Diagnosed the same day.** `mde-py`'s `bootstrap_config()`
+rebuilds the file from scratch and never re-emits `env`, so it drops the mode and
+every opt-in **by construction**; the full `fnox sync` its callers run next
+(`add`/`update`/`remove_secret`) regenerates all 49 `sync` blocks. That composite
+matches the wipe exactly — the blocks *look* intact because every ciphertext in
+them was replaced. **fnox is EXONERATED**: an authorized write probe rewrote all
+49 values and preserved the mode and all 4 opt-ins, on both its scoped and bulk
+paths. The **invoker** is still unattributed (launchd, every Claude session and
+hook, and interactive history all excluded *with control arms*), so it is
+non-interactive and unlogged. Probe table, re-derived line refs, and the armed
+negatives: `docs/rules-evidence/secrets-out-of-the-shell-env.md`.
 
 ⚠️ **The config is GENERATED** — *"Managed by `mde-py secrets bootstrap-config`.
 Do not edit by hand."* A hand edit is therefore **not a fix, it is a patch with a
@@ -135,9 +140,9 @@ Findings, control arms, and the verification that passed while blind:
    under `fnox exec` (present) vs the same in a plain shell (absent) identifies
    `env = "exec"` on its own; `fnox sync --dry-run -p age VAR` answers staleness
    without reading a value. Full ordered recipe, the result-reading table, and the
-   ⚠️ **wipe hazard** — something drops `env = "exec"` and every opt-in (measured
-   twice; `sync` blocks survived the 2026-07-30 recurrence, so the culprit is NOT
-   established): `docs/secrets-doppler-fnox-keychain.md`.
+   ⚠️ **wipe hazard** — `mde-py`'s `bootstrap_config()` drops `env = "exec"` and
+   every opt-in (measured twice; diagnosed 2026-07-30, and **not** fnox):
+   `docs/secrets-doppler-fnox-keychain.md`.
 
 ## See also
 
