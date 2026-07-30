@@ -71,9 +71,17 @@ Full case tables — five false negatives, five cross-check disagreements:
    Bounds come in more forms than they look: **display bounds** (`| head`,
    `| tail`, a bare `ls` of a large dir), **checking N exact paths** instead of
    asking "does it exist anywhere", **relative time bounds** that a given `find`
-   cannot parse, and — most common of all — **a TOKEN SPELLING**. A session once
-   grepped `lmstudio`/`lm_studio`, got 0, and reported the feature unsupported;
-   it is spelled `LM Studio`, with a space.
+   cannot parse, **YOUR OWN PARSER** (a single-line regex over a multi-line
+   record silently drops the tail — a `^: ts;(.*)$` read of `~/.zsh_history`
+   hid the very command a 4-hour investigation was hunting, and the absence was
+   published as a finding), and — most common of all — **a TOKEN SPELLING**. A
+   session once grepped `lmstudio`/`lm_studio`, got 0, and reported the feature
+   unsupported; it is spelled `LM Studio`, with a space.
+
+   **Arm the component you actually depend on.** That same probe *did* run a
+   control arm — it proved `sharehistory` was set, i.e. that the FILE was
+   complete. True, and irrelevant: the broken part was the READER. A control arm
+   aimed at the wrong link certifies the one thing that was never in doubt.
 
    The habit that would have caught every one: **a 0-result grep is not an
    answer until a control arm has run.** Before reporting absence, grep a term

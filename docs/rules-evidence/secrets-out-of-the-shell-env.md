@@ -191,35 +191,74 @@ from), and the config mtime does not move across dozens of calls.
 neither half does on its own. ✅ The inherited `manage.py:318` reference is
 correct.
 
-### The invoker is still unattributed — but the negatives are now armed
+### The invoker: `mde-secret-add`, run by hand — the DOCUMENTED happy path
 
-Every "not it" below was re-run with a control arm, because the first pass's
-negatives came from bounded probes:
+A first pass reported the invoker "non-interactive and unlogged". **That was
+false, and the fault was the probe, not the world.** The command was in
+`~/.zsh_history` the entire time:
+
+| time (CDT) | event | source |
+|---|---|---|
+| 00:45:36 | Ray asks an agent "i have a linear key how do i set it?" | codex session rollout |
+| 00:46:11 | the agent, reading the mde repo's own docs, answers **"run `mde-secret-add LINEAR_API_KEY`"** | codex session rollout |
+| **00:46:51** | Ray runs `source ~/.zshrc` **then `mde-secret-add LINEAR_API_KEY`** — *one multi-line history entry* | `~/.zsh_history` |
+| **00:47:00** | config rewritten; mode + 4 opt-ins gone, 49 ciphertexts fresh | the artifact |
+| 00:47:19 | Ray confirms "it is set" | codex session rollout |
+
+`add_secret` is an **upsert** and `LINEAR_API_KEY` already existed — which is why
+the key count stayed at 49, and why "an update of an existing key" was deducible
+from the artifact before the command was found.
+
+> 🔬 **A multi-line history entry defeated a single-line parser, and the absence
+> was reported as a finding.** zsh writes an entry as `: <epoch>:<elapsed>;` plus a
+> body that may span lines (continuations end with `\`). The parser was
+> `^: (\d+):(\d+);(.*)$`, so it captured `source ~/.zshrc` and **silently dropped
+> the `mde-secret-add` on the next line**. Split on the *marker* and take
+> everything up to the next one.
+>
+> The control arm that ran was on the wrong property: it confirmed `sharehistory`
+> was set — that the **file** was complete — which was true and irrelevant, because
+> the broken component was the **reader**. Arm the step you actually depend on. The
+> cheap catch here: grep the corpus for a token you know is present
+> (`mde-secret` → 2 hits, ever) instead of trusting a structured parse.
+
+Ruled out along the way, each with a control arm (the first pass's negatives came
+from bounded probes, so they were re-run):
 
 | ruled out | control arm |
 |---|---|
 | launchd | 8 user plists, none match mde/fnox/secret/doppler by **content**; 7 match `Label`, so the grep can see. The mde maintenance/validation agents are not installed. (First pass grepped *labels* with `head -5`.) |
 | any Claude session | **zero** tool calls 00:44-00:49 across **2272 transcripts / 70 projects**; the dotfiles session was idle 00:43:44 → 00:48:19 |
 | a Claude **hook** (invisible to transcripts) | no settings file invokes `mde-py`; `.claude/settings.json` matches `hooks` 6× |
-| an interactive shell command | `sharehistory` is set, so history is complete and immediate (`setopt` returned 19 lines); it holds only `source ~/.zshrc` @ 00:46:51 and `cd` @ 00:48:42 |
-| mde-py running at all | no `bootstrap_config_written` in any log; mde logs are stale since **April** |
+| a mise `enter` hook | **no `[hooks]` in any mde mise config** — the leading hypothesis, killed by reading the config rather than probing |
+| mde-py's own logging | no `bootstrap_config_written` anywhere; mde logs stale since **April**, so this route could never have answered |
 
 **Doppler's audit log is INCONCLUSIVE, not negative** — `doppler activity`
 returns empty because the token lacks workplace scope, while `doppler secrets
---only-names` returns rows. That is a "never asked", not a "no"
+--only-names` returns rows. A "never asked", not a "no"
 ([[probes-need-a-control-arm]] rule 4).
 
-So the invocation was **non-interactive and unlogged**. `source ~/.zshrc` nine
-seconds earlier is a temporal correlate, but both mechanisms it fires
-(`fnox activate`, then `hook-env` at the next prompt) are measured innocent.
+### Why this is severe rather than a one-off
 
-**The durable lesson:** "APPLIED 2026-07-27 by Ray" was recorded as a settled
-state, and nothing re-read the artifact for three days. A config you do not own
-the generator for is not fixed by editing it once — it is fixed by a check that
-re-reads it, which is what `fnox-baseline` now is. The second lesson is narrower:
-**an untested hypothesis, left in place, quietly becomes the working story.** The
-rule blamed fnox for a day on nothing but plausibility; one authorized write
-settled it in two commands.
+`mde-secret-add` / `-update` / `-rm` are **the sanctioned interface** — an agent
+reading the repo's docs recommends them unprompted, which is exactly what
+happened. So **every secret added or updated re-exposes all 49 credentials** to
+the shell until something re-reads the config. Filed with the confirmed trigger as
+[macos-development-environment#82](https://github.com/ray-manaloto/macos-development-environment/issues/82).
+
+**The durable lessons:**
+
+1. "APPLIED 2026-07-27 by Ray" was recorded as settled and nothing re-read the
+   artifact for three days. A config whose generator you do not own is not fixed
+   by editing it once — it is fixed by a check that re-reads it, which is what
+   `fnox-baseline` is.
+2. **An untested hypothesis, left in place, quietly becomes the working story.**
+   The rule blamed fnox for a day on plausibility alone; one authorized write
+   settled it in two commands.
+3. **"I could not find it" is not "it is not there."** Publishing an absence as an
+   attribution ("non-interactive and unlogged") dressed a failed search as a
+   conclusion. An unattributed cause is an open question, and it should be
+   labelled as one until a *source* — not a silence — closes it.
 
 ## GitHub repos touched
 

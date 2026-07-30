@@ -70,10 +70,14 @@ every opt-in **by construction**; the full `fnox sync` its callers run next
 matches the wipe exactly — the blocks *look* intact because every ciphertext in
 them was replaced. **fnox is EXONERATED**: an authorized write probe rewrote all
 49 values and preserved the mode and all 4 opt-ins, on both its scoped and bulk
-paths. The **invoker** is still unattributed (launchd, every Claude session and
-hook, and interactive history all excluded *with control arms*), so it is
-non-interactive and unlogged. Probe table, re-derived line refs, and the armed
-negatives: `docs/rules-evidence/secrets-out-of-the-shell-env.md`.
+paths, and fnox's `env` is a real struct field its writers round-trip.
+
+⚠️ **The trigger is the DOCUMENTED HAPPY PATH.** It was `mde-secret-add
+LINEAR_API_KEY`, run by hand after an agent recommended it from the mde repo's own
+docs. So **every secret you add or update re-exposes all 49 credentials** until
+something re-reads the config — which is the whole job of `fnox-baseline`. Filed
+as `macos-development-environment#82`. Probe table, the timeline and the
+re-derived line refs: `docs/rules-evidence/secrets-out-of-the-shell-env.md`.
 
 ⚠️ **The config is GENERATED** — *"Managed by `mde-py secrets bootstrap-config`.
 Do not edit by hand."* A hand edit is therefore **not a fix, it is a patch with a
