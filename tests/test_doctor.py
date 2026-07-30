@@ -967,8 +967,30 @@ def test_the_sessionstart_hook_runs_the_doctor() -> None:
 def test_collect_reads_the_real_repo_without_touching_the_real_home(
     tmp_path: Path,
 ) -> None:
-    """The `home` seam is what keeps this suite machine-independent."""
+    """The `home` seam is what keeps this suite machine-independent.
+
+    This used to assert the repo's server set was ``{exa, memory, filesystem}``,
+    which doubled as the proof that ``collect`` had really read ``REPO_ROOT``.
+    ``.mcp.json`` was emptied on 2026-07-30 (all three servers measured at 1-2
+    calls across 179 transcripts), so that assertion would now be ``== set()``
+    — a check that can only pass, and indistinguishable from ``collect``
+    reading nothing at all. See ``tests/AGENTS.md`` on probes without a control
+    arm.
+
+    The repo-was-read proof therefore moves to ``doctor.toml``, which is
+    non-empty and unambiguously sourced from ``REPO_ROOT``.
+    """
     setup = doctor.collect(REPO_ROOT, home=tmp_path, environ={})
+
+    # The home seam, and it genuinely discriminates: this machine HAS a real
+    # ~/.config/fnox, so a broken seam flips this to True.
     assert not setup.fnox.exists
-    assert {s.name for s in setup.servers} == {"exa", "memory", "filesystem"}
-    assert all(s.origin == "project" for s in setup.servers)
+
+    # The repo seam — positive evidence that REPO_ROOT was read.
+    assert setup.fnox_baseline().get("env") == "exec"
+    assert setup.mcp_baseline().get("scope_servers")
+
+    # Current declared state, pinned deliberately so a future reader does not
+    # "restore" the stale expectation above. The parsing path itself is covered
+    # by the fixtures in test_collect_servers_* — not by this test.
+    assert [s.name for s in setup.servers] == []

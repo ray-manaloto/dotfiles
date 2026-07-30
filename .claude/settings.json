@@ -101,7 +101,8 @@
     "fable-orchestrator@fable-orchestrator": true,
     "antigravity@antigravity-for-claude-code": true,
     "context7@context7-marketplace": true,
-    "last30days@last30days-skill": true
+    "last30days@last30days-skill": true,
+    "exa@exa": true
   },
   "extraKnownMarketplaces": {
     "fable-orchestrator": {

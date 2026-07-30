@@ -40,10 +40,18 @@ env = "exec"   # secrets stay OUT of the interactive shell
 | **`"exec"` (ours)** | **no** | yes | yes |
 | `false` | no | no | yes |
 
-Only secrets carrying an explicit per-secret `env = true` are exported. **Three
-are** — `EXA_API_KEY`, `GITHUB_TOKEN`, `MISE_GITHUB_TOKEN` — chosen because their
-consumers can *only* read the environment (an `.mcp.json` `${VAR}` interpolation
-at MCP-server spawn; `gh` and `mise` reading their tokens).
+Only secrets carrying an explicit per-secret `env = true` are exported. **Four
+are** — `CONTEXT7_API_KEY`, `EXA_API_KEY`, `GITHUB_TOKEN`, `MISE_GITHUB_TOKEN` —
+chosen because their consumers can *only* read the environment: the context7
+plugin interpolates `${CONTEXT7_API_KEY:-}` into an `Authorization` header, the
+`/last30days` engine's web lane reads `EXA_API_KEY` from the process environment
+(it is in neither that plugin's own `.env` nor the keychain), and `gh` and `mise`
+read their tokens.
+
+⚠️ `EXA_API_KEY`'s recorded reason used to be "an `.mcp.json` `${VAR}`
+interpolation at MCP-server spawn". That stopped being true on 2026-07-30 when
+this repo's `.mcp.json` was emptied — but the credential is still required, by a
+second consumer that had never been written down.
 
 **This is the single most likely cause of "the variable isn't set".** It is not a
 sync failure. See the diagnosis recipe below before suspecting Doppler.
