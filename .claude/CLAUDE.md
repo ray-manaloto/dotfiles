@@ -50,34 +50,31 @@ this kind of Claude-specific content (it is stub-exempt). Re-running
 
 ## Project doctor — declared setup vs reality on this host (#418)
 
-`SessionStart hook → mise run doctor → dotfiles_setup.doctor`, with **`doctor.toml`**
-as the reviewed baseline (sibling of `currency.toml` / `parity.toml`). Silent when
-healthy; always exits 0, so it can never disrupt a session.
+`SessionStart hook → mise run doctor → dotfiles_setup.doctor`, baseline
+**`doctor.toml`** (sibling of `currency.toml` / `parity.toml`). Silent when
+healthy; always exits 0, so it cannot disrupt a session. `-- --verbose` for a PASS
+line per check, `-- --live` adds the MCP spawn + `claude mcp list` probes,
+`-- --strict` exits 1.
 
-It lives here rather than in `AGENTS.md` because everything it reads is Claude
-Code's own setup — `.mcp.json`, enabled-plugin MCP configs, `settings.json` hooks
-and permissions — plus `~/.config/fnox`. **No hk step and no CI job**: a runner
-has none of that state, so the hook is the only place it can run, which is why
-`hook_selfcheck` gates the wiring in `ship`/`land`.
+It lives here, not in `AGENTS.md`, because everything it reads is Claude Code's own
+setup plus `~/.config/fnox`. **No hk step, no CI job** — a runner has none of that
+state, so the hook is the only place it runs, which is why `hook_selfcheck` gates
+the wiring in `ship`/`land`.
 
-```bash
-mise run doctor                 # what the hook runs
-mise run doctor -- --verbose    # a PASS line per clean check
-mise run doctor -- --live       # + spawn each stdio server, diff its tool set
-mise run doctor -- --strict     # exit 1 on findings (for a gate)
-```
+Two invariants worth knowing before editing it:
 
-Checks the seam every in-tree gate is blind to: an MCP `${VAR}` that resolves
-**empty** while the server reports connected, a declared MCP scope the harness's
-Roots **replace**, fnox's env mode one `bootstrap-config` run from a wipe,
-unpinned `npx -y` servers, mutating MCP tools with no reviewed permission
-decision, and double-registered servers. Version currency is **delegated** to
-`kb-setup currency check`, not re-implemented.
+- **MCP registrations come from FOUR places** — `.mcp.json`, each enabled plugin,
+  and `~/.claude.json`'s user-global *and* per-project blocks. A same-name
+  user-global entry **shadows** a project one silently; that is how a broken
+  `mde-mcp-filesystem` wrapper took this repo's filesystem server down. Checks that
+  say "fix this repo's declaration" run only on what the repo declares
+  (`Server.repo_owned`); "your setup is broken" checks run on everything.
+- **Changing your setup means changing `doctor.toml` in a reviewed diff.** Adding
+  to `[fnox].env_true` widens a credential's blast radius; adding to
+  `[mcp.mutating_tools]` declares something needs a permission decision.
 
-**Changing your setup means changing `doctor.toml` in a reviewed diff** — that is
-the point. Adding a name to `[fnox].env_true` widens a credential's blast radius;
-adding a `[mcp.mutating_tools]` entry declares something needs a permission
-decision.
+Version currency is delegated to `kb-setup currency check` and health to
+`claude mcp list` — neither is re-implemented.
 
 ## Cross-vendor orchestration (Fable-5 architect + executor lanes)
 
