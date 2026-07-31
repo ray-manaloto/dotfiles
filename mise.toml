@@ -998,3 +998,13 @@ raw = true
 # from, not the repo (measured). Session name: CC_TMUX_SESSION, default the repo.
 # Single-quoted TOML so the inner double quotes need no escaping.
 run = 'uv run --project python kb-setup cc --root "$MISE_PROJECT_ROOT" --sibling "$MISE_PROJECT_ROOT/../knowledge-base"'
+
+# ---------------------------------------------------------------------------
+# PROTOTYPE — wayfinder #432. Lives on the `prototype/432-secrets-cli-shape`
+# branch only; throwaway, never merged to main. See python/prototypes/README.md.
+# `dir` is required: tui.py imports `policy` as a sibling top-level module.
+# ---------------------------------------------------------------------------
+[tasks.proto-432]
+description = "PROTOTYPE #432: drive the secrets-CLI shape matrix by hand (throwaway)"
+dir = "{{config_root}}/python/prototypes/secrets_cli_shape"
+run = 'uv run --project "$MISE_PROJECT_ROOT/python" python tui.py'
