@@ -115,6 +115,21 @@ class Design:
     #: PROBED: this is what re-exports every credential into the login shell --
     #: it is the mechanism `env = "exec"` exists to defeat.
     keep_shell_eval: bool = False
+    #: Constrain WHICH commands may be exec'd, rather than trusting the exec
+    #: boundary to withhold the value.
+    #:
+    #: PROBED 2026-07-30 -- `exec` DOES NOT CONFINE, in either its MCP or CLI
+    #: form. A caller that chooses the command can always choose a shell:
+    #:
+    #:   fnox exec -- sh -c 'echo ${#EXA_API_KEY}'   ->  36
+    #:   ... same name, not a secret                 ->  0   (arm: discriminates)
+    #:   ... same var, outside fnox                  ->  0   (arm: fnox injects it)
+    #:
+    #: This is not a workaround: `mcp__fnox__exec`'s OWN description instructs
+    #: the caller to do it -- "To use shell expansion, pass ["sh","-c",...]".
+    #: So reference-only cannot be enforced at the exec boundary at all; it can
+    #: only be enforced on the command set.
+    exec_command_allowlist: bool = False
 
 
 @dataclass(frozen=True)
@@ -220,32 +235,55 @@ def _agent(verb: Verb, design: Design) -> Decision:
                     "There is no server-side flag to disable it -- the deny has "
                     "to come from the consumer, or the whole server is unusable.",
                 )
+            if not design.exec_command_allowlist:
+                return Decision(
+                    route=Route.FNOX_MCP_EXEC,
+                    call='mcp__fnox__exec(command=["sh","-c","echo $EXA_API_KEY"])',
+                    leaks=True,
+                    enforced_by=Layer.NONE,
+                    note="EXEC DOES NOT CONFINE. Denying get_secret buys nothing "
+                    "while the caller still picks the command -- and the tool's "
+                    "own description tells it how to ask for a shell. PROBED: "
+                    "`${#EXA_API_KEY}` came back 36 through fnox exec, 0 for a "
+                    "non-secret name and 0 outside fnox.",
+                )
             return Decision(
                 route=Route.FNOX_MCP_EXEC,
-                call='mcp__fnox__exec(command=["gh","api","user"])',
+                call='mcp__fnox__exec(command=["gh","api","user"])  # vs allow-list',
                 leaks=False,
-                enforced_by=Layer.MCP_DENY,
-                note="Reference-only by construction: no shell, secrets injected "
-                "as env, only stdout/stderr returned. get_secret denied alongside.",
+                enforced_by=Layer.HOOK,
+                note="The only thing that actually holds the line: constrain the "
+                "COMMAND SET, not the return value. A shell request (`sh -c`, "
+                "`bash -c`, `env`, `printenv`) is rejected before it runs.",
+            )
+        if not design.exec_command_allowlist:
+            return Decision(
+                route=Route.DOTFILES_CLI,
+                call="fnox exec -- sh -c 'echo $EXA_API_KEY'",
+                leaks=True,
+                enforced_by=Layer.NONE,
+                note="Identical hole via plain Bash, with nothing registered. "
+                "MCP-vs-CLI is NOT a security axis here -- both leak, so pick on "
+                "cost instead (research-doc-sources.md lane 2 says CLI).",
             )
         return Decision(
             route=Route.DOTFILES_CLI,
-            call="dotfiles-secrets exec -- <cmd>",
+            call="dotfiles-secrets exec -- <cmd>   # vs allow-list",
             leaks=False,
             enforced_by=Layer.HOOK,
-            note="Owning exec ourselves means re-implementing what `fnox mcp exec` "
-            "already does -- a use-tool-builtins.md debt.",
+            note="Same allow-list, enforced by the existing PreToolUse guard "
+            "rather than by a second registered server.",
         )
 
     if verb in WRITE_VERBS:
         return Decision(
-            route=Route.DOPPLER_CLI if design.writes_via_doppler_cli else Route.DOTFILES_CLI,
-            call=f"dotfiles-secrets {verb.value} KEY --from-op/--prompt-human",
+            route=Route.BLOCKED,
+            call=f"-- no agent affordance for `{verb.value}` --",
             leaks=False,
             enforced_by=Layer.PLUGIN,
-            note="THE ACTUAL GAP: `fnox mcp` has NO write path at all. If the "
-            "agent must never see the value, the agent cannot supply it either -- "
-            "so a write verb is really 'ask the human for a value I never read'.",
+            note="DECIDED (Ray, #432): the agent cannot write at all. Origination "
+            "is human-only, so there is no agent write path left to secure. The "
+            "agent's move is to ASK: 'run `dotfiles-secrets add LINEAR_API_KEY`'.",
         )
 
     if verb is Verb.LIST:

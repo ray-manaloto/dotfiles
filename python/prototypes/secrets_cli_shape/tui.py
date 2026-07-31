@@ -34,6 +34,7 @@ TOGGLES = {
     "g": ("get_secret_denied", "deny mcp__fnox__get_secret consumer-side"),
     "d": ("writes_via_doppler_cli", "writes go through the `doppler` CLI"),
     "s": ("keep_shell_eval", "human keeps the zsh eval propagation"),
+    "a": ("exec_command_allowlist", "constrain WHICH commands may be exec'd"),
 }
 
 
