@@ -121,13 +121,29 @@ class Design:
     #: environment#82). It checks the MODE, it does not sniff commands.
     hook_backstop: bool = True
 
-    #: DECIDED: plain CLI over Bash, register nothing. PROBED that MCP-vs-CLI is
-    #: NOT a security axis (both leak identically), so the choice falls to cost,
-    #: and research-doc-sources.md lane 2 says CLI.
+    #: DECIDED: plain CLI over Bash, register nothing.
+    #:
+    #: MCP-vs-CLI is a security axis exactly ONE ROW wide, and that row is
+    #: worthless here (measured 2026-07-30):
+    #:
+    #:   control                        | plain CLI          | fnox mcp
+    #:   scope the injected secret set  | profiles -P        | profiles + [mcp] secrets
+    #:   remove the value-handing verb  | NO (`fnox get`)    | YES ([mcp] tools)
+    #:   confine exec                   | no                 | no
+    #:
+    #: Profiles are channel-agnostic, so on the control actually chosen -- least-
+    #: privilege scoping -- the CLI is not disadvantaged. The one MCP-only control
+    #: deletes a verb that was never the hole. Choice falls to cost => lane 2.
     exec_via_fnox_mcp: bool = False
 
-    #: Moot under the above, kept to show why: denying get_secret buys nothing
-    #: while the caller still picks the command.
+    #: Kept to show why it is moot. `get_secret` IS removable -- PROBED, 3 arms:
+    #:   [mcp] tools = ["exec"]               -> ['exec']
+    #:   [mcp] tools = ["get_secret","exec"]  -> ['exec', 'get_secret']
+    #:   no [mcp] block                       -> ['exec', 'get_secret']
+    #: An earlier version of this file claimed it could NOT be disabled, on the
+    #: strength of `fnox mcp --help` carrying no flag for it. That is a search
+    #: bound, not an answer. Removing it still buys nothing while the caller
+    #: picks the command.
     get_secret_denied: bool = True
 
     #: The incumbent zsh `eval "$(...)"` propagation. PROBED: this is what
@@ -145,9 +161,13 @@ class Decision:
     #: correction: this is a number, not a boolean.
     #:
     #: PROBED 2026-07-30 -- `exec` does not confine, in EITHER form:
-    #:   fnox exec -- sh -c 'echo ${#EXA_API_KEY}'  -> 36
-    #:   ... same name, not a secret                ->  0  (arm: discriminates)
-    #:   ... same var, outside fnox                 ->  0  (arm: fnox injects)
+    #:   parent env stripped, no fnox          -> EXA=0   AWS=0   (baseline)
+    #:   parent env stripped, via `fnox exec`  -> EXA=36  AWS=40  <- injected
+    #:   ambient shell, nothing stripped       -> EXA=36  AWS=0
+    #: AWS_SECRET_ACCESS_KEY is exec-only, so it is absent from the shell and
+    #: still reads at 40 through `fnox exec -- sh -c`. That is the discriminator.
+    #: (The first cut of this probe used only EXA_API_KEY -- an `env = true`
+    #: opt-in already in the shell -- so its 36 proved nothing. Re-armed.)
     #: Not a workaround: `mcp__fnox__exec`'s own description says
     #: "To use shell expansion, pass ["sh","-c",...]".
     readable: int
