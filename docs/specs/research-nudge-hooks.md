@@ -10,8 +10,11 @@
 > It proposes a different shape — **ticket-bound receipts plus a fail-closed resolution
 > workflow** — with `SubagentStart` promoted from footnote to primary lever.
 >
-> **The findings are not yet verified.** Read [Appendix B](#appendix-b--verifying-the-findings-before-acting)
-> before acting on any of them; a review is evidence, not a verdict.
+> **The findings are now VERIFIED (2026-07-31)** — see
+> [Appendix C](#appendix-c--verification-results-2026-07-31-measured). Four survive intact; the
+> fifth (`SubagentStart`) survives as a mechanism but its stated premise is measurably wrong —
+> both documented misses launched **zero** subagents. Appendix B is the method; Appendix C is the
+> result.
 >
 > The research below (29 hook events, the md5 cross-check, the statusline sensor, the two
 > hard constraints) stands on its own measurements and survives the redesign. The *design*
@@ -205,6 +208,63 @@ building against it.
 gap, but the two documented misses were both made inline by the main session. Adopting
 `SubagentStart` as the *primary* lever would harden a path that did not fail, while leaving the path
 that did. Worth resolving before the redesign commits to it.
+
+## Appendix C — verification results (2026-07-31, measured)
+
+Appendix B's checks were run. Every number below was **re-derived**, not inherited from the
+handoff ([[probes-need-a-control-arm]] rule 6), and every negative carries its control arm.
+
+**Verdict: 4 of 5 findings survive intact. F2 survives as a mechanism but its stated premise is
+measurably wrong. F5's severity is lower than argued, but its conclusion survives on a stronger
+argument than the one it was filed under.**
+
+| # | Finding | Verdict | Decisive evidence |
+|---|---|---|---|
+| 1 | No tier is a prerequisite | **CONFIRMED** | Read-back: 1.1/1.2 emit `additionalContext` (informational), 1.3 emits `ask` (gates on judgement, not evidence), tier 3 is prose. No tier keys on an artifact existing. |
+| 2 | `SubagentStart` omitted | **mechanism CONFIRMED · premise REFUTED** | Both miss sessions launched **0** subagents (`6b4602f4`: Agent=0, `subagent_type`=0, control Bash=132; `d4299a7a`: 0/0/48) against **239** Agent launches across all 181 project transcripts. `SubagentStart` would have fired **zero times** in the session it is proposed to fix. |
+| 3 | Close-time `ask` is uninformed | **CONFIRMED (both halves)** | (a) hooks.md:1551 verbatim — *"For `allow` and `ask`, shown to the user but not Claude"* (control: `additionalContext`→40, bogus token→0). (b) No ticket-bound receipt convention exists: `reports/agents/` is 16 files named topic+date; 1 of 16 carries a ticket (control: 28 filenames match the date convention). |
+| 4 | Statusline state unscoped / non-atomic | **CONFIRMED · premise now measured** | The path is global — keyed by neither session **nor project** — with no timestamp, atomic replace, or expiry. Concurrency, asserted in Appendix B, measured across all `~/.claude/projects` (251 transcripts, 7 days): **60 of 91 hours (66%) had ≥2 sessions active, peaking at 4.** Collision is the normal case. |
+| 5 | `UserPromptSubmit` fails open | **direction CONFIRMED · magnitude CORRECTED** | See below. |
+
+### Finding 5 in detail — the right conclusion for the wrong reason
+
+The spec's mitigation ("pure string match ⇒ the 30s timeout must never be approached") was
+asserted. Measured on `scripts/pretooluse-guard.sh` — the closest live analogue — 20 sequential
+runs on a genuinely loaded host (load avg 15.23/19.34/31.66): **min 256 ms · median 1013 ms ·
+max 1978 ms**, i.e. **6.6% of the 30s budget, ~15× headroom**. The regex is free; the *wrapper*
+costs about a second. **Timeout is not the realistic failure mode**, so Codex overstates that half.
+
+> A first 20-run batch read max = 3914 ms and was **discarded**: the measuring command had itself
+> spawned 20 background processes. It measured its own load. Re-run clean.
+
+Its *other* half is the real one, and it is stronger than the timeout argument: **absence is
+unobservable**. Armed both directions — hiding the interpreter (`PATH=/usr/bin:/bin`) makes the
+wrapper exit 0 *and* write `interpreter-absent` to the fail-open log; the same input on a normal
+PATH writes nothing. The path works and discriminates, and
+`~/.local/state/dotfiles/guard-fail-open.log` does not exist — a real negative, meaning the
+PreToolUse guard has not failed open since #343's telemetry landed.
+
+⚠️ **But that telemetry is wrapper-side.** A harness-side *timeout kill* never reaches
+`fail_open()`, so it leaves no trace at all. A hook cannot record its own death. Whatever
+establishes that research happened must therefore be **durable evidence outside the hook** — which
+is finding 1's recommendation arriving by a second route.
+
+### The scoping correction F2 forces
+
+`SubagentStart` is not useless — 239 delegations across ~50 transcripts is real traffic, and
+research delegated to a subagent is genuinely uninstrumented. But it addresses a path that **has
+not been observed to fail**, while both observed misses were inline. A redesign that makes it the
+*primary* lever hardens the wrong path. It belongs in the design as a **secondary** lever, and the
+primary one must cover inline main-session work.
+
+### What all five findings converge on
+
+Findings 1, 3 and 5 arrive independently at the same missing thing: **a ticket-bound receipt**.
+F1 wants a completion gate to key on; F3 wants something for the guard to cite; F5 wants evidence
+that survives the hook not running. That artifact does not exist today — which makes it the first
+thing the redesign must define, ahead of any hook.
+
+Finding 4 is separable and should be split out, exactly as Codex recommends.
 
 ## GitHub repos touched
 
