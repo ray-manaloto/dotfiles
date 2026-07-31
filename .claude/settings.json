@@ -102,7 +102,8 @@
     "antigravity@antigravity-for-claude-code": true,
     "context7@context7-marketplace": true,
     "last30days@last30days-skill": true,
-    "exa@exa": true
+    "exa@exa": true,
+    "builder-skills@builder-skills": true
   },
   "extraKnownMarketplaces": {
     "fable-orchestrator": {
@@ -127,6 +128,12 @@
       "source": {
         "source": "github",
         "repo": "openai/codex-plugin-cc"
+      }
+    },
+    "builder-skills": {
+      "source": {
+        "source": "github",
+        "repo": "BuilderIO/skills"
       }
     }
   },
