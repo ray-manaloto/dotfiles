@@ -222,8 +222,8 @@ argument than the one it was filed under.**
 |---|---|---|---|
 | 1 | No tier is a prerequisite | **CONFIRMED** | Read-back: 1.1/1.2 emit `additionalContext` (informational), 1.3 emits `ask` (gates on judgement, not evidence), tier 3 is prose. No tier keys on an artifact existing. |
 | 2 | `SubagentStart` omitted | **mechanism CONFIRMED · premise REFUTED** | Both miss sessions launched **0** subagents (`6b4602f4`: Agent=0, `subagent_type`=0, control Bash=132; `d4299a7a`: 0/0/48) against **239** Agent launches across all 181 project transcripts. `SubagentStart` would have fired **zero times** in the session it is proposed to fix. |
-| 3 | Close-time `ask` is uninformed | **CONFIRMED (both halves)** | (a) hooks.md:1551 verbatim — *"For `allow` and `ask`, shown to the user but not Claude"* (control: `additionalContext`→40, bogus token→0). (b) No ticket-bound receipt convention exists: `reports/agents/` is 16 files named topic+date; 1 of 16 carries a ticket (control: 28 filenames match the date convention). |
-| 4 | Statusline state unscoped / non-atomic | **CONFIRMED · premise now measured** | The path is global — keyed by neither session **nor project** — with no timestamp, atomic replace, or expiry. Concurrency, asserted in Appendix B, measured across all `~/.claude/projects` (251 transcripts, 7 days): **60 of 91 hours (66%) had ≥2 sessions active, peaking at 4.** Collision is the normal case. |
+| 3 | Close-time `ask` is uninformed | **CONFIRMED (both halves)** | (a) hooks.md:1551 verbatim — *"For `allow` and `ask`, shown to the user but not Claude"* (control: `additionalContext`→40, bogus token→0). (b) No ticket-bound receipt convention exists: `reports/agents/` is 16 files, of which **1** (`concurrency-sweep-433.md`) carries a ticket; the other 15 are topic+date. ⚠️ The control arm originally cited here was wrong — see the correction below. |
+| 4 | Statusline state unscoped / non-atomic | **CONFIRMED · premise now measured** | The path is global — keyed by neither session **nor project** — with no timestamp, atomic replace, or expiry. Concurrency, asserted in Appendix B, measured across all `~/.claude/projects` (251 transcript files, 7-day window, bucketed by the hour of each `"timestamp"` inside the file): **61 of 92 hours (66%) had ≥2 transcripts active.** Collision is the normal case. ⚠️ See the correction below on the peak. Note the F4 sub-claim about *wrapping* was **not** checked — see below. |
 | 5 | `UserPromptSubmit` fails open | **direction CONFIRMED · magnitude CORRECTED** | See below. |
 
 ### Finding 5 in detail — the right conclusion for the wrong reason
@@ -266,7 +266,80 @@ thing the redesign must define, ahead of any hook.
 
 Finding 4 is separable and should be split out, exactly as Codex recommends.
 
+## Appendix D — corrections from the two-axis code review (2026-07-31)
+
+Appendix C was then reviewed on a Standards axis and a Spec axis. **The Spec axis found a real
+defect in Appendix C's own evidence**, which is recorded here rather than silently patched.
+
+### D1 — "peaking at 4" was WRONG, and it was my own display bound
+
+Appendix C's F4 row read *"60 of 91 hours (66%) had ≥2 sessions active, **peaking at 4**."* The
+peak does not reproduce. The probe printed only `sorted(multi)[-8:]` — **the last eight hours
+chronologically** — and the peak was read off that sample rather than off the full set.
+
+Re-run over the same window, printing the true maximum:
+
+```
+files=251  hours>=1=92  hours>=2=61 (66%)
+TRUE MAX = 154        top ten hour sizes: [154, 20, 17, 10, 9, 6, 6, 6, 5, 5]
+hours exceeding 4: 12
+```
+
+**12 hours exceed 4**, and the top hour (`2026-07-28T02Z`) has **154** — 78 in the knowledge-base
+project dir, 74 under the home dir, consistent with that day's parallel graphify queue.
+
+This is exactly the failure [[probes-need-a-control-arm]] rule 3 names under **display bounds**
+(`| head`, `| tail`, a bare listing) — committed in a document whose subject is evidence
+discipline, and published to #449 before it was caught.
+
+⚠️ **What the figure actually counts.** Distinct **transcript files** with a timestamp in the hour
+— which conflates interactive sessions with subagent and queue-spawned transcripts. It is an upper
+bound on concurrent human sessions, not a count of them. The hours-with-≥2 figure (61/92, 66%) is
+robust to that; the peak is not. **The conclusion is unaffected and if anything strengthened:
+collision is the normal case.**
+
+### D2 — F3(b)'s control arm was the wrong corpus AND the wrong component
+
+Appendix C cited *"control: 28 filenames match the date convention"*. Two defects:
+
+- **Wrong corpus.** 28 spans `reports/agents/` **plus** `docs/research/runs/` (mostly directories).
+  The claim under test is about `reports/agents/` alone, where only **3** filenames carry a date.
+- **Wrong component** — the more serious one. The claim under test is that **no ticket-bound naming
+  convention exists**. A *date* matcher firing proves the regex machinery works; it does not show
+  that a **ticket** matcher discriminates. That is [[probes-need-a-control-arm]]'s "arm the
+  component you actually depend on" — a control aimed at the link that was never in doubt.
+
+The finding itself stands (1 of 16 carries a ticket, and that one is `concurrency-sweep-433.md`),
+but it stands on the direct enumeration, not on the control that was cited for it.
+
+### D3 — F4's second half was never checked
+
+Appendix B asked for two things on F4. The second — *"Also verify the 'wrapping loses nothing'
+claim"*, against Codex's *"The assertion that wrapping costs and loses nothing is unsupported"* —
+**was not run**, and Appendix C reported F4 as though it had been. Recorded as open, not as done.
+
+### D4 — F1 was answered by read-back, not by the trace that was asked for
+
+Appendix B's F1 confirm column asked to *"Trace the two real misses: would any tier have stopped
+the decision from resolving?"* Appendix C answers from the document's own text instead. The
+conclusion is very likely right — no tier gates on evidence — but the asked-for check was not the
+check performed. Judgement call, recorded for honesty.
+
+### D5 — the md5 was inherited; now re-derived, and its harder half still is not
+
+The `0a8c3a6542d7c5085c1b451b994b9ce8` hash arrived from the prior session. Re-derived:
+`md5 -q` on the mirror returns exactly that, and a sibling doc (`accessibility.md`) returns
+`055854e3…`, so the comparison discriminates. **But that only re-derives the mirror's own hash.**
+The load-bearing claim — that it equals the *live* `code.claude.com` doc — remains inherited from
+the day it was fetched, and a live doc drifts. Treat the mirror as current-as-of-2026-07-30.
+
 ## GitHub repos touched
 
-_None — the sources are Claude Code's own hooks and statusline documentation, mirrored in the
-knowledge-base repo._
+- [ray-manaloto/knowledge-base](https://github.com/ray-manaloto/knowledge-base) — the
+  `sources/agent-harness-docs/docs/claude-code/hooks.md` mirror that every hook-behaviour claim in
+  this document rests on (md5-verified against the live doc, see D5).
+- [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — this repo;
+  `scripts/pretooluse-guard.sh` was read and timed for the F5 latency measurement.
+
+The upstream documentation itself (`code.claude.com/docs/en/hooks.md`) is Claude Code's own hooks
+and statusline reference, not a GitHub repo.
