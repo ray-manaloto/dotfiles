@@ -1,5 +1,17 @@
 # Domain synthesis — mise `[dotfiles]` vs/with chezmoi for THIS repo
 
+> ⚠️ **SUPERSEDED 2026-08-01 by [#448](https://github.com/ray-manaloto/dotfiles/issues/448)
+> (`docs/receipts/448.md`). The recommendation below no longer holds; the analysis is kept as the
+> 2026-07-10 baseline.** Re-measured on mise **2026.8.0**: the HARD BLOCKER (`promptBoolOnce`) is
+> superseded by #439's decision to move `.ssh`/`.gnupg` onto the OS branch; `mode = "copy"`
+> **preserves 0600**; the `is exists` test replaces `stat`; and the `.chezmoiignore` OS gate is
+> replaced by **platform environments** (`mise.macos-arm64.toml` / `mise.linux.toml`) rather than by
+> the config-level `{% if %}` this report left UNVERIFIED — so the `os_family()` correction below,
+> while still factually right, is moot. Three of the four "standing uncertainties" are closed there
+> (the `$remote` env signals: **0 of 5**, with `/.dockerenv` present in the container). **Current
+> verdict: mise `bootstrap dotfiles` is the destination; chezmoi holds through the #431 takeover** —
+> a deferral on blast radius and maturity, not on capability.
+
 Run: `research-20260710-r3-mise-dotfiles` · Synthesis of 3 angle reports
 (`mise-dotfiles-caps.md`, `chezmoi-parity.md`, `coexist-migrate.md`) plus the
 adversarial-verification verdicts on 8 load-bearing claims. Date: 2026-07-10.
