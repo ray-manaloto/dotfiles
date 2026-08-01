@@ -64,9 +64,9 @@ checksum = "sha256:a946b61be1af15ff08c7722e9bac0fab446d8b9896c9f0f35657dfcf887fd
 url = "https://conda.anaconda.org/conda-forge/linux-64/libclang-cpp22.1-22.1.8-default_h6c227bf_3.conda"
 checksum = "sha256:ccb8bd0a8f2d57675b6a60dabb0cc8becb35c2748ac4ec920d7f7625b93c16d8"
 
-[conda-packages.linux-x64."libcurl-8.21.0-hae6b9f4_3"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libcurl-8.21.0-hae6b9f4_3.conda"
-checksum = "sha256:4649ecf9d74893268fbaf748a170ea7bf6cf4493b7ce3c582654b9ffe78c93d3"
+[conda-packages.linux-x64."libcurl-8.21.0-heca4667_4"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libcurl-8.21.0-heca4667_4.conda"
+checksum = "sha256:aff8ef75636d0825ce34911e0bef2f26816e7afd090a9dcb4b9bacab75cbf584"
 
 [conda-packages.linux-x64."libedit-3.1.20250104-pl5321h7949ede_0"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libedit-3.1.20250104-pl5321h7949ede_0.conda"
@@ -132,9 +132,9 @@ checksum = "sha256:ec30e52a3c1bf7d0425380a189d209a52baa03f22fb66dd3eb587acaa765b
 url = "https://conda.anaconda.org/conda-forge/linux-64/liblzma-devel-5.8.3-hb03c661_0.conda"
 checksum = "sha256:7858f6a173206bc8a5bdc8e75690483bb66c0dcc3809ac1cb43c561a4723623a"
 
-[conda-packages.linux-x64."libmicrohttpd-1.0.5-hc2fc477_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libmicrohttpd-1.0.5-hc2fc477_0.conda"
-checksum = "sha256:480c485ee8c662124b1248e88135cfc8e8ece4b21bc44b89eb5b6413831f3614"
+[conda-packages.linux-x64."libmicrohttpd-1.0.9-hc2fc477_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libmicrohttpd-1.0.9-hc2fc477_0.conda"
+checksum = "sha256:19b4abdc785cfdefdf5126353cb8bfcf5e16b2c383c316567d0633e41b41664f"
 
 [conda-packages.linux-x64."libmpdec-4.0.0-hb03c661_1"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libmpdec-4.0.0-hb03c661_1.conda"
@@ -148,9 +148,9 @@ checksum = "sha256:663444d77a42f2265f54fb8b48c5450bfff4388d9c0f8253dd7855f0d9931
 url = "https://conda.anaconda.org/conda-forge/linux-64/libnuma-2.0.18-hb03c661_3.conda"
 checksum = "sha256:17d72848a6480f0b0708f2b2f64292b5fa0e0996ce56f26fc26e4aebb5a9ca81"
 
-[conda-packages.linux-x64."libpsl-0.22.0-hf670292_3"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libpsl-0.22.0-hf670292_3.conda"
-checksum = "sha256:25bac8c350015dd686b61e2ef50fa6aa3fc7393fd5db14046d03a1f571bdf728"
+[conda-packages.linux-x64."libpsl-0.23.0-hf670292_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libpsl-0.23.0-hf670292_0.conda"
+checksum = "sha256:bbb184b81f28a868528b05a81db2448a232a762e47c983330d57b98e1211ae32"
 
 [conda-packages.linux-x64."libsqlite-3.53.3-h0c1763c_0"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libsqlite-3.53.3-h0c1763c_0.conda"
@@ -411,7 +411,8 @@ conda_deps = [
     "libzlib-1.3.2-h25fd6f3_3",
     "rhash-1.4.6-hb9d3cd8_1",
     "bzip2-1.0.8-hda65f42_9",
-    "libcurl-8.21.0-hae6b9f4_3",
+    "libcurl-8.21.0-heca4667_4",
+    "libpsl-0.23.0-hf670292_0",
     "libnghttp2-1.68.1-h877daf1_0",
     "libgcc-16.1.0-ha9f2e26_1",
     "libstdcxx-16.1.0-h934c35e_1",
@@ -420,7 +421,6 @@ conda_deps = [
     "libedit-3.1.20250104-pl5321h7949ede_0",
     "keyutils-1.6.3-hb9d3cd8_0",
     "libssh2-1.11.1-hcf80075_0",
-    "libpsl-0.22.0-hf670292_3",
     "openssl-3.6.3-h35e630c_0",
     "_openmp_mutex-4.5-20_gnu",
     "libgomp-16.1.0-he0feb66_1",
@@ -552,7 +552,8 @@ conda_deps = [
     "libexpat-2.8.1-hecca717_1",
     "libiconv-1.18-h3b78370_2",
     "libzlib-1.3.2-h25fd6f3_3",
-    "libcurl-8.21.0-hae6b9f4_3",
+    "libcurl-8.21.0-heca4667_4",
+    "libpsl-0.23.0-hf670292_0",
     "libnghttp2-1.68.1-h877daf1_0",
     "libgcc-16.1.0-ha9f2e26_1",
     "libstdcxx-16.1.0-h934c35e_1",
@@ -563,7 +564,6 @@ conda_deps = [
     "libedit-3.1.20250104-pl5321h7949ede_0",
     "keyutils-1.6.3-hb9d3cd8_0",
     "libssh2-1.11.1-hcf80075_0",
-    "libpsl-0.22.0-hf670292_3",
     "zstd-1.5.7-hb78ec9c_6",
     "_openmp_mutex-4.5-20_gnu",
     "libgomp-16.1.0-he0feb66_1",
@@ -649,9 +649,10 @@ conda_deps = [
     "zstd-1.5.7-hb78ec9c_6",
     "bzip2-1.0.8-hda65f42_9",
     "libarchive-3.8.9-gpl_hc2c16d8_100",
-    "libcurl-8.21.0-hae6b9f4_3",
+    "libcurl-8.21.0-heca4667_4",
+    "libpsl-0.23.0-hf670292_0",
     "libnghttp2-1.68.1-h877daf1_0",
-    "libmicrohttpd-1.0.5-hc2fc477_0",
+    "libmicrohttpd-1.0.9-hc2fc477_0",
     "gnutls-3.8.13-h18acefa_0",
     "nettle-3.10.1-h4a9d5aa_0",
     "libtasn1-4.21.0-hb03c661_0",
@@ -675,7 +676,6 @@ conda_deps = [
     "libedit-3.1.20250104-pl5321h7949ede_0",
     "keyutils-1.6.3-hb9d3cd8_0",
     "libssh2-1.11.1-hcf80075_0",
-    "libpsl-0.22.0-hf670292_3",
     "icu-78.3-h54a6638_2",
     "libiconv-1.18-h3b78370_2",
     "c-ares-1.34.8-hb03c661_0",
