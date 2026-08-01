@@ -9,6 +9,11 @@ automation spine; this template is the pilot that runs in its place, on the next
 failure mode the whole exercise exists to catch. This is the same discipline
 `.claude/rules/notepad-enforcement.md` already requires.
 
+**If a review finding can be settled by running something, run it before writing the disposition.**
+Across the pilot's 87 findings exactly one was refuted, and it is the only one settled by a probe
+rather than by argument — the probe also produced a better measurement than the claim it defended.
+See § 12.5 of `docs/specs/ticket-bound-receipts.md`.
+
 Delete this header block when you copy it. Delete nothing else — **an empty section is an answer**,
 and "none" written down is worth more than a section quietly removed.
 
@@ -16,9 +21,10 @@ and "none" written down is worth more than a section quietly removed.
 
 # Receipt — #<n>: <ticket title>
 
-**Verdict:** <one sentence — the answer. This exact text goes in the resolution comment.>
+**Verdict:** <the answer, stated so a reader who opens only this line is not misled. Keep it as
+short as the truth allows, and no shorter — the pilot's four verdicts all needed their conditions
+attached, so a length cap was dropped rather than kept and ignored.>
 
-**Kind:** research | decision | task | none-required
 **Resolved:** <YYYY-MM-DD>
 
 ## Sources — what I actually opened
@@ -36,9 +42,20 @@ visible on the page.>
 
 **Query:** `<the actual command or search terms>`
 **Corpus:** `docs/research/kb/reports/`, `docs/specs/`, …
-**Control arm:** `<a term known present> → N hits` / `<a term known absent> → 0`
-*(per `.claude/rules/probes-need-a-control-arm.md` — a 0-result search is not an answer until a
-control has run)*
+
+### Control arm — REQUIRED, and run it before you believe any result
+
+**Known-present term:** `<term>` → **N** hits
+**Known-absent term:** `<term>` → **0** hits
+
+Both lines, with real numbers, or the search below is not evidence
+(`.claude/rules/probes-need-a-control-arm.md`).
+
+**This is the field that has earned its place.** In #440 the whole search was *broken* — zsh does
+not word-split an unquoted variable, so the corpus collapsed to one nonexistent path, `2>/dev/null`
+ate the error, and every query returned 0. A thin search and a blind one look identical; only this
+field tells them apart. If the known-present arm returns 0, **your probe is broken, not the world** —
+fix it and re-run before writing anything below.
 
 | Hit | What I did with it |
 |---|---|

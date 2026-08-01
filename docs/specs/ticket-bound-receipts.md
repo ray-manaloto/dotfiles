@@ -518,3 +518,141 @@ available to lift from — with their findings attached.
 - [ray-manaloto/knowledge-base](https://github.com/ray-manaloto/knowledge-base) — the
   `sources/agent-harness-docs/docs/claude-code/hooks.md` mirror behind the `permissionDecisionReason`
   and `SubagentStart` claims.
+
+---
+
+## 12. Pilot verdict — from data, 2026-08-01
+
+The pilot ran as §"The pilot" specified: three `wayfinder:*` tickets after this one — **#437, #438,
+#440** — each with a hand-written receipt. Four receipts exist in total; #449 is instance #1 and is
+this spec's own.
+
+| receipt | bytes | review findings | disposition | prior-art rows |
+|---|---|---|---|---|
+| `449.md` (#1) | 7,084 | 42, over 3 rounds | 42 accepted, **0 refuted** | 6 |
+| `437.md` (#2) | 14,217 | 11 (2 crit) | 8 acc / 3 partial / **0 refuted** | 13 |
+| `438.md` (#3) | 29,980 | 14 (2 crit) | 11 acc / 3 partial / **0 refuted** | 14 |
+| `440.md` (#4) | 21,201 | 20 (2 crit) | 13 acc / 6 partial / **1 refuted** | 9 |
+| **total** | | **87** | **1 refuted (1.1%)** | |
+
+### 1. Which fields were real, which became ritual?
+
+**Real, and the highest-value field in all four: the adversarial review.** It was never once
+clean, and it changed the *recommendation* — not the wording — in #437, #438 and #440. In #440 it
+did so twice: it moved the gate from the `[hooks]` key to the unscoped command, and it demolished
+the "permanently kill" framing by pointing out that a warn-only host check prevents nothing.
+
+**Real, and specifically the DISMISSAL column: prior art.** Its value is not the hit list, it is
+the written reason each hit did not apply. #438: **10 of 10** non-zero upstream hits were term
+collisions. #440: **6 of 7** non-zero hits were collisions on "hook" (devcontainer lifecycle,
+Claude Code). Without the column, "9 hits found" reads as coverage; with it, the reader can see
+most of them were noise.
+
+**Real, and the only field that has ever caught its own section lying: the control arm.** In #440
+the prior-art search was not thin, it was **broken** — zsh does not word-split an unquoted
+variable, so the corpus list collapsed to one nonexistent path, `2>/dev/null` ate the error, and
+every query returned 0. The control arm (`chezmoi` → 0 files, when it should be 51) is the only
+reason this was caught rather than published as "no prior art exists".
+
+**Ritual: `Kind`.** Four receipts, one observed value (`decision`). A field with no variance
+carries no information.
+
+**Ritual: `Resolved`.** Derivable from the close event.
+
+**Drifting toward ritual: `Sources`.** 9, 9, 9, 11 bullets. Three consecutive receipts landing on
+exactly nine is the shape of a habit-count rather than a measurement.
+
+**Not honoured once: the "one sentence" verdict.** 0 of 4 complied; every verdict grew into a
+paragraph, because the honest answer to a grilling ticket has conditions attached. Either drop the
+constraint or stop pretending it exists.
+
+### 2. Did anyone read a receipt after the ticket closed?
+
+**Yes — three times, and each read changed something.** #437's receipt was re-read during #438, and
+its finding-8 correction is what let that session recognise it had repeated the same misattribution.
+This session re-read #438's receipt and map line for the `lease.rs` facts, and #437's 13-row
+prior-art table to calibrate this one.
+
+**The honest limit: every reader has been the same author, in an adjacent session on the same map.**
+There is no evidence a receipt has been read by anyone outside the work that produced it. The field
+is proven useful for *continuity*, not yet for *audit*.
+
+### 3. Did query drift actually happen?
+
+**Yes in #438 — and something worse in #440.** #438's review objected that four queries do not
+establish absence; nine more were run and the objection was correct. #440 did not drift at all: its
+search was **broken**, returning 0 for every query for a reason that had nothing to do with the
+query text.
+
+That is the pilot's sharpest design conclusion. **The query is not the thing worth checking; the
+control arm is.** A drifted query returns too few real hits. A broken probe returns zero and looks
+identical to a clean corpus. Only the control arm distinguishes them.
+
+**The same failure then happened while writing this section, which is the strongest evidence in the
+pilot that it is not a one-off.** Committing §12 tripped hk's `typos` step on two hyphenated
+prefixes in the text above. Checking the file by hand said *clean* — twice over, for two
+independent reasons: `typos --diff` emits **nothing** when a correction is ambiguous (the offending
+prefix had two candidate expansions, so there was no single diff to print), and the `rc=0` read back
+was `head`'s, not `typos`'. Two display bounds stacked, in a probe written by someone who had spent
+the session documenting display bounds. The rule that catches it is mechanical, not attentional:
+**never read an exit code through a pipe, and never accept a clean result from a checker without
+seeding a failure it must catch.**
+
+*(Writing this paragraph tripped the same step a third time — quoting the offending token, even
+inside backticks, is still an occurrence of it. Hence the periphrasis.)*
+
+### 4. What did writing it by hand cost?
+
+Roughly **half a session** per ticket, consistently, across #438 and #440.
+
+But the honest finding is that **this cost cannot be separated from the cost of doing the ticket
+well.** The review *is* the answer-finding step, not a write-up step — in #440 it produced two of
+the three substantive corrections, and the third came from re-running a probe *because* a finding
+demanded it. So the receipt cannot be cost-justified as a distinct artifact, and any future
+proposal that frames it as "documentation overhead" has modelled it wrongly.
+
+### 5. The 0-refuted question this pilot was asked to answer
+
+The ticket-2 handoff asked whether 0 refutations meant the review was well-calibrated or the
+receipts were under-defended. With #440 the tally is **87 findings, 1 refuted — 1.1%**.
+
+**The receipts are under-defended.** A reviewer that survives 99% of its claims against a written
+artifact is not evidence of a supernatural reviewer; it is evidence the artifact is written with
+less rigour than the review applies to it.
+
+The corrective is visible in the one refutation. #440's finding #9 (the `--platform` result rests
+on unproved comma-parsing) was **settled by running an arm, not by arguing** — and the arm both
+refuted the finding and produced a *better* measurement than the original, showing per-platform
+behaviour the first probe had missed entirely. Every other finding across four receipts was
+disposed of by reasoning.
+
+**Process change, worth more than any field: when a review finding is empirically settleable, run
+the probe before disposing of it.** One of 87 dispositions did this, and it is the only one that
+reversed.
+
+### 6. What gets automated
+
+**Still nothing.** The pilot does not overturn the 2026-07-31 decision; it narrows what a future
+build could justify.
+
+- The **review** is the value, and it is already a single CLI call. What cannot be automated is the
+  **disposition**, which is judgement — and the disposition is where the value lands.
+- The **control arm** is the one field that is both machine-checkable and empirically load-bearing
+  (it caught a broken probe in 1 of 4 receipts). But round 3 already established that a verifier can
+  only prove *a* query ran, and #440's failure was a query that *did* run and returned nothing. A
+  verifier would have passed it. **So even the strongest candidate would not have caught the
+  pilot's one real miss.**
+
+That is the pilot's answer to §425 "Build order": **do not start it.**
+
+### 7. Three edits to `TEMPLATE.md`, and nothing else
+
+1. **Drop `Kind`** — no variance across four instances.
+2. **Promote the control arm to a required field of its own**, with both arms' counts stated, out of
+   its current parenthetical under Prior art. It is the only field that has caught its own section
+   lying.
+3. **Drop the "one sentence" constraint on Verdict** — 0 of 4 complied, and the non-compliance was
+   correct each time.
+
+Plus one line in the template's header, which is a process rule rather than a field: *if a review
+finding can be settled by running something, run it before writing the disposition.*
