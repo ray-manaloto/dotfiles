@@ -535,6 +535,17 @@ this spec's own.
 | `440.md` (#4) | 21,201 | 20 (2 crit) | 13 acc / 6 partial / **1 refuted** | 9 |
 | **total** | | **87** | **1 refuted (1.1%)** | |
 
+> **Post-pilot data point, 2026-08-01 — the §12.5 prediction held.** `448.md` (#5) is the first
+> receipt written under the new *settle-it-by-running* rule: **26 findings, 3 refuted (11.5%)**, and
+> **every one of the three was settled by a probe** rather than by argument — `copy` preserves 0600,
+> and #434's `rc=1` was re-derived live rather than inherited. That is a 10× refutation rate off one
+> template edit, which supports §12.5's reading that 1.1% measured **under-defended receipts**, not
+> a calibrated reviewer. It also produced the practice's sharpest result so far: the review
+> **reversed the verdict outright** (the load-bearing claim had probed only implicit config
+> discovery, not whether the repo could own the *entrypoint*). Running total: **113 findings, 4
+> refuted**. This does not reopen §12's build/no-build verdict — the automation the pilot rejected
+> would still not have caught any of the three.
+
 ### 1. Which fields were real, which became ritual?
 
 **Real, and the highest-value field in all four: the adversarial review.** It was never once
