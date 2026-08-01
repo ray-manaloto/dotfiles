@@ -76,14 +76,18 @@ Used by `/wayfinder`. The **map** is a single issue with **child** issues as tic
   map's sub-issues / task list), drop any with an open blocker
   (`issue_dependencies_summary.blocked_by > 0`) or an assignee; first in map order wins.
 - **Claim**: `gh issue edit <n> --add-assignee @me` — the session's first write.
-- **Receipt** (pilot, from #449): a `wayfinder:*` ticket carries a hand-written
+- **Receipt** (standing practice since #449): a `wayfinder:*` ticket carries a hand-written
   **`docs/receipts/<n>.md`**, copied from `docs/receipts/TEMPLATE.md` and filled **as you work, not
   at close** — sources actually opened, the prior-art search with its control arm, the adversarial
-  review result. Running for the next **three** wayfinder tickets, then judged. **There is no tool
-  and no gate, deliberately**: three adversarial review rounds killed the automation (42 findings,
-  0 refuted) because only the prior-art search is machine-verifiable, and even then only that *a*
-  query ran. Design of record + the 42 reasons: `docs/specs/ticket-bound-receipts.md` (⛔ NOT FOR
-  BUILD). Worked example: `docs/receipts/449.md`.
+  review result. **There is no tool and no gate, deliberately**: three adversarial review rounds
+  killed the automation (42 findings, 0 refuted) because only the prior-art search is
+  machine-verifiable, and even then only that *a* query ran. Design of record + the 42 reasons:
+  `docs/specs/ticket-bound-receipts.md` (⛔ NOT FOR BUILD). Worked example: `docs/receipts/449.md`.
+  **The three-ticket pilot (#437, #438, #440) ran and was judged on 2026-08-01 — verdict: keep the
+  practice, still build nothing** (§12). 87 findings across 4 receipts, **1 refuted**: read as the
+  receipts being under-defended rather than the reviewer calibrated, so **if a review finding can be
+  settled by running something, run it before writing the disposition**. Even a control-arm verifier
+  would have *passed* #440's real failure, because the query ran and returned nothing.
 - **Resolve**: `gh issue comment <n> --body "<answer>"`, then `gh issue close <n>`, then append a
   context pointer to the map's Decisions-so-far. The verdict goes in the **comment**; the evidence
   stays in the **receipt**, linked — they carry different content, never mirrored.

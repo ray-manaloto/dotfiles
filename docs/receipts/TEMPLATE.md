@@ -2,8 +2,10 @@
 
 **Hand-written. There is no tool, and that is deliberate** — see
 `docs/specs/ticket-bound-receipts.md` § "Decision". Three adversarial review rounds killed the
-automation spine; this template is the pilot that runs in its place, on the next three
-`wayfinder:*` tickets, to find out which fields are worth anything before anything is built.
+automation spine, and the three-ticket pilot that ran in its place (#437, #438, #440) was **judged
+on 2026-08-01**: keep the practice, **still build nothing** (§12). This template carries the pilot's
+three edits — `Kind` dropped, the control arm promoted to a required field, the one-sentence Verdict
+cap dropped. **Use it for every `wayfinder:*` ticket.**
 
 **Fill it as you work, not at resolution time.** A receipt written from memory at close is the
 failure mode the whole exercise exists to catch. This is the same discipline
