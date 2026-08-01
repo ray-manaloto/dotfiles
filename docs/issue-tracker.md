@@ -76,8 +76,17 @@ Used by `/wayfinder`. The **map** is a single issue with **child** issues as tic
   map's sub-issues / task list), drop any with an open blocker
   (`issue_dependencies_summary.blocked_by > 0`) or an assignee; first in map order wins.
 - **Claim**: `gh issue edit <n> --add-assignee @me` — the session's first write.
+- **Receipt** (pilot, from #449): a `wayfinder:*` ticket carries a hand-written
+  **`docs/receipts/<n>.md`**, copied from `docs/receipts/TEMPLATE.md` and filled **as you work, not
+  at close** — sources actually opened, the prior-art search with its control arm, the adversarial
+  review result. Running for the next **three** wayfinder tickets, then judged. **There is no tool
+  and no gate, deliberately**: three adversarial review rounds killed the automation (42 findings,
+  0 refuted) because only the prior-art search is machine-verifiable, and even then only that *a*
+  query ran. Design of record + the 42 reasons: `docs/specs/ticket-bound-receipts.md` (⛔ NOT FOR
+  BUILD). Worked example: `docs/receipts/449.md`.
 - **Resolve**: `gh issue comment <n> --body "<answer>"`, then `gh issue close <n>`, then append a
-  context pointer to the map's Decisions-so-far.
+  context pointer to the map's Decisions-so-far. The verdict goes in the **comment**; the evidence
+  stays in the **receipt**, linked — they carry different content, never mirrored.
 
 ### Prerequisites — all verified live on 2026-07-15
 
