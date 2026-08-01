@@ -56,7 +56,7 @@ rtk = "0.44.1"                         # re-probed at #160 T12.5: mise #10703 (2
 # instead appended a SECOND, bare `"pipx:graphifyy" = "0.9.22"` entry, leaving
 # the real pin stranded at 0.9.20. The table form is what the bump path can
 # rewrite in place.
-"pipx:graphifyy" = { version = "0.9.30", extras = ["all"] }
+"pipx:graphifyy" = { version = "0.9.31", extras = ["all"] }
 # ffmpeg: system binary the graphify `video` extra (faster-whisper) needs to
 # extract audio before transcription — it is NOT a pip dep, so `graphifyy[all]`
 # cannot supply it. Host-only, same as graphify (root mise.toml is in the
