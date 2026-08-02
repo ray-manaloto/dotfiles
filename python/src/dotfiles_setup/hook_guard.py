@@ -21,6 +21,13 @@ untouched. This module also absorbs the two legacy shell guards (npx,
 chezmoi apply/update) which exited 1 — a NON-blocking code for
 PreToolUse; the intent was clearly to block, so consolidating here
 fixes them.
+
+It also dispatches ``AskUserQuestion`` to :mod:`dotfiles_setup.ask_quality`
+(the ask-quality standard, Ray 2026-08-02). One entrypoint for both tools
+rather than a second hook script, because a new ``scripts/*.sh`` would need
+its own ``bash_budget`` allowlist entry to carry logic that belongs in
+``python/`` anyway (``.claude/rules/zero-bash-logic.md``). The settings.json
+matcher is ``Bash|AskUserQuestion``; dispatch is on ``tool_name``.
 """
 
 from __future__ import annotations
@@ -31,6 +38,7 @@ import re
 import sys
 from dataclasses import dataclass
 
+from dotfiles_setup import ask_quality
 from dotfiles_setup.heredoc import HEREDOC_PATTERN, NUL_FILLER, blank_heredoc
 
 
@@ -662,24 +670,53 @@ def decide(command: str) -> str | None:
     return rule.reason if rule is not None else None
 
 
-def _read_command() -> str:
-    """Bash command from the hook stdin JSON (env-var fallback)."""
+def _read_payload() -> tuple[str, dict[str, object]]:
+    """``(tool_name, tool_input)`` from the hook stdin JSON (env-var fallback).
+
+    Returns:
+        The pending call's tool name (``""`` when the payload omits it, which
+        is the pre-dispatch shape every existing Bash test uses) and its
+        ``tool_input`` object.
+    """
     raw = sys.stdin.read() if not sys.stdin.isatty() else ""
     if raw:
         try:
             payload = json.loads(raw)
         except json.JSONDecodeError:
             payload = {}
+        if not isinstance(payload, dict):
+            payload = {}
         tool_input = payload.get("tool_input", payload)
-        if isinstance(tool_input, dict):
-            return str(tool_input.get("command", ""))
+        return (
+            str(payload.get("tool_name", "")),
+            tool_input if isinstance(tool_input, dict) else {},
+        )
     legacy = os.environ.get("CLAUDE_TOOL_INPUT", "")
     if legacy:
         try:
-            return str(json.loads(legacy).get("command", ""))
-        except json.JSONDecodeError, AttributeError:
-            return ""
-    return ""
+            parsed = json.loads(legacy)
+        except json.JSONDecodeError:
+            return "", {}
+        if isinstance(parsed, dict):
+            return str(parsed.get("tool_name", "")), parsed
+    return "", {}
+
+
+def _read_command() -> str:
+    """Bash command from the hook stdin JSON (env-var fallback)."""
+    return str(_read_payload()[1].get("command", ""))
+
+
+def decide_payload(tool_name: str, tool_input: dict[str, object]) -> str | None:
+    """Deny reason for a pending tool call, dispatched on ``tool_name``.
+
+    ``AskUserQuestion`` goes to the ask-quality standard; everything else is
+    treated as a Bash command (the historical shape — an absent ``tool_name``
+    must keep behaving exactly as it did before dispatch existed).
+    """
+    if tool_name == "AskUserQuestion":
+        return ask_quality.decide(tool_input)
+    return decide(str(tool_input.get("command", "")))
 
 
 def pretooluse_main() -> int:
@@ -689,7 +726,8 @@ def pretooluse_main() -> int:
     contract); a crash here would fail OPEN (hook errors do not block),
     which is the acceptable failure mode for a redirect guard.
     """
-    reason = decide(_read_command())
+    tool_name, tool_input = _read_payload()
+    reason = decide_payload(tool_name, tool_input)
     if reason is not None:
         sys.stdout.write(
             json.dumps(

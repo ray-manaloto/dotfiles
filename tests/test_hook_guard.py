@@ -144,7 +144,9 @@ def test_legitimate_commands_allowed(command: str) -> None:
 def test_pretooluse_emits_deny_json(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr(hook_guard, "_read_command", lambda: "gh pr create")
+    monkeypatch.setattr(
+        hook_guard, "_read_payload", lambda: ("Bash", {"command": "gh pr create"})
+    )
     assert hook_guard.pretooluse_main() == 0
     out = capsys.readouterr().out
     assert '"permissionDecision": "deny"' in out
@@ -154,7 +156,9 @@ def test_pretooluse_emits_deny_json(
 def test_pretooluse_silent_on_allowed(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr(hook_guard, "_read_command", lambda: "git status")
+    monkeypatch.setattr(
+        hook_guard, "_read_payload", lambda: ("Bash", {"command": "git status"})
+    )
     assert hook_guard.pretooluse_main() == 0
     assert capsys.readouterr().out == ""
 

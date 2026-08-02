@@ -1095,6 +1095,23 @@ tokens = [
 ]
 
 [[suite]]
+name = "workflow.ask-quality-enforcement"
+description = "The AskUserQuestion quality standard (Ray, 2026-08-02) must stay wired end-to-end: .claude/settings.json's PreToolUse matcher covers AskUserQuestion as well as Bash, hook_guard dispatches on tool_name into dotfiles_setup.ask_quality, that module enforces the three checkable components (a first-and-only `(Recommended)` option, `PRO:`/`CON:` in every option description, a citation marker or the explicit `[no prior evidence]` escape), hook_selfcheck drives BOTH arms through the real wrapper, and the rule doc states the standard. The matcher is one alternation string, which is the specific drift this pins: a wiring check that only looked for `Bash` would keep passing after AskUserQuestion were dropped from it, and the gate would go silently absent for that tool exactly as #343 did for off-root Bash. Both regressions were mutation-tested on 2026-08-02 and are caught by DIFFERENT checks — reverting the matcher fails settings-wiring, deleting the dispatch call site fails pretooluse-endtoend — so neither check can stand in for the other. What is deliberately NOT asserted anywhere: whether asking was the right call at all. No hook can observe an ask that never happened, so that half lives in the rule and the memory."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    ".claude/settings.json",
+    "python/src/dotfiles_setup/ask_quality.py",
+    "python/src/dotfiles_setup/hook_guard.py",
+    "python/src/dotfiles_setup/hook_selfcheck.py",
+    "tests/test_ask_quality.py",
+    ".claude/rules/clarify-before-acting.md",
+]
+per_path_tokens = { ".claude/settings.json" = ['"matcher": "Bash|AskUserQuestion"'], "python/src/dotfiles_setup/ask_quality.py" = ['RECOMMENDED_MARKER = "(Recommended)"', 'NO_EVIDENCE_ESCAPE = "[no prior evidence]"', "def find_violations(", "_CITATION_RE = re.compile("],"python/src/dotfiles_setup/hook_guard.py" = ['if tool_name == "AskUserQuestion":', "return ask_quality.decide(tool_input)", "def decide_payload("], "python/src/dotfiles_setup/hook_selfcheck.py" = ['("Bash", "AskUserQuestion")', "def check_ask_quality_endtoend(", "def _ask_payload("], "tests/test_ask_quality.py" = ["def test_uncited_ask_is_denied(", "def test_compliant_ask_is_allowed(", "def test_cli_denies_a_noncompliant_ask(", "def test_cli_allows_a_compliant_ask(", "def test_dispatch_still_denies_a_guarded_bash_command("], ".claude/rules/clarify-before-acting.md" = ["`Bash|AskUserQuestion`", "[no prior evidence]", "python/src/dotfiles_setup/ask_quality.py"] }
+
+[[suite]]
 name = "workflow.mise-tasks-enforcement"
 description = "mise-tasks-only policy wiring: the PreToolUse Bash guard must stay wired end-to-end — .claude/settings.json invokes `bash scripts/pretooluse-guard.sh`, that fail-open wrapper execs `dotfiles-setup hook pretooluse`, the guard module + its tests exist, and the rule doc names the canonical task map. The wrapper adds one hop of indirection (web-brick fix: fail open when the Python>=3.14 interpreter is absent) — this contract asserts BOTH hops so neither drifts out of the chain. Also pins the #265 precision fix: rules run against `_inert_masked(command)`, never the raw string, so a separator inside a quoted span or a heredoc body cannot fake a command position. That masking is the MATCHER's only measured defect class — 2 of its 3 denials were quoting false positives, and a deny cancels the WHOLE compound command, so a wrong one silently skips the rest. (Scope matters: nothing has evaded the matcher, but #343 measured 125 commands bypassing the guard entirely by never reaching it — a relative hook path resolving against a sibling repo — which is why this contract now also pins the $CLAUDE_PROJECT_DIR anchoring and the foreign-cwd arm.) Pinned here because the masking lives one call away from the rules and a refactor that dropped it would restore every false positive while every rule test still passed."
 category = "workflow"
