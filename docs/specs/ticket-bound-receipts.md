@@ -568,6 +568,34 @@ this spec's own.
 > reported "0 findings" for a host carrying 2 live errors, and that clean number was written down
 > before the control arm caught it.
 
+> **Third post-pilot data point, 2026-08-02 — the highest finding count yet, and the pattern held for
+> a third consecutive receipt.** `441.md` (#7): **22 findings (5 critical, 15 major, 2 minor), 17
+> accepted / 3 refuted by probe / 2 partial**. Running total: **149 findings, 7 refuted (4.7%)**.
+> Post-template-edit the rate is 6 refuted of 62 (9.7%) against the pilot's 1 of 87 (1.1%), which is
+> now n=3 either side and starting to look like a real effect rather than #448's single outlier —
+> though every refutation still comes from the same lever, **settling a finding by running something
+> instead of arguing**.
+>
+> **The review changed the recommendation for the third consecutive receipt — 6 of 7 overall**, and
+> this one did it twice. It killed the draft's headline claim (that `fnox proxy run` catches fnox's
+> silent fail-open) by identifying that the fixture's rule table referenced a top-only *and* a
+> profile-only secret, so **no** single profile could satisfy it and all six arms were forced to
+> rc=1; re-run realistically, a missing profile starts at rc=0. And it pointed at
+> `fnox.<profile>.toml`, a **second** profile mechanism the draft had never tested, which turned out
+> to be the thing the ticket was actually asking about — flipping the literal answer from "fnox has
+> no such overlay" to "fnox has it and we cannot reach it".
+>
+> **The process defect this receipt adds is not caught by any control-arm rule, including the ones
+> the last two receipts added.** Both of its bad fixtures were *armed* — each had working positive
+> and negative controls — and both were still worthless, because **a fixture built to demonstrate a
+> thing cannot test it**. The proxy fixture admitted only one outcome; the profile-file fixture ran
+> inside a tree whose parent held a `fnox.toml`, so the config search silently merged a foreign file.
+> Control arms verify that the *probe* can distinguish; they say nothing about whether the *fixture*
+> allows both answers. The question that catches this class — and it belongs in the template — is
+> **"could this fixture have produced the other result?"**, asked before reading the output. Neither
+> instance was self-caught: the first came from the reviewer, the second only surfaced because the
+> first forced a re-run.
+
 ### 1. Which fields were real, which became ritual?
 
 **Real, and the highest-value field in all four: the adversarial review.** It was never once

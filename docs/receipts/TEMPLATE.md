@@ -69,6 +69,15 @@ it fails silently. In #436 a probe read the wrong attribute off a result object,
 findings** for a host carrying **2 live errors**, and that clean number was written into a draft
 before the control arm caught it. If a probe reports "nothing found", prove it can report something.
 
+⚠️ **Ask "could this FIXTURE have produced the other result?" — control arms do not answer it.**
+A fixture can be fully armed and still worthless. #441 built one whose rule table referenced two
+secrets no single profile could hold, so **all six arms were forced to the same outcome**, and the
+draft published that outcome as a finding; re-run realistically it reversed. A second fixture in the
+same session ran inside a tree whose *parent* held a config file, which the tool silently merged.
+Both had working positive and negative controls. Controls prove the **probe** discriminates; only
+this question proves the **setup** admits both answers. Ask it before reading the output — neither
+instance was self-caught.
+
 | Hit | What I did with it |
 |---|---|
 | `path` | read — <what it changed> **or** dismissed — <why it does not apply> |
