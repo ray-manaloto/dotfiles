@@ -85,7 +85,8 @@ Used by `/wayfinder`. The **map** is a single issue with **child** issues as tic
   `docs/specs/ticket-bound-receipts.md` (⛔ NOT FOR BUILD). Worked example: `docs/receipts/449.md`.
   **The three-ticket pilot (#437, #438, #440) ran and was judged on 2026-08-01 — verdict: keep the
   practice, still build nothing** (§12). Across the **7 reviewed** receipts: **149 findings, 7
-  refuted (4.7%)** — #445 and #446 ran `lens: none` and sit outside that denominator. The pilot's
+  refuted (4.7%)** — #445, #446 and #460 ran `lens: none` and sit outside that denominator, and they
+  are the **three most recently resolved**, so the lens has now been off three in a row. The pilot's
   first 4 were 87/1, read as the receipts being under-defended, so the template gained **if a review
   finding can be settled by running something, run it before writing the disposition** — and #448,
   the first receipt written under that rule, went **3 refuted of 26**, every one settled by a probe.

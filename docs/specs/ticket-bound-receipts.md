@@ -651,6 +651,36 @@ this spec's own.
 > receipts corrected their ticket's premise. If a sixth field is ever added, that is the candidate;
 > the pilot's §7 conclusion (three edits and nothing else) still stands until then.
 
+> **Sixth post-pilot data point, 2026-08-02 — a receipt about control arms shipped an unmeasured
+> number, and no field caught it.** `460.md` (#10) also ran `lens: none`, so the reviewed denominator
+> is again unchanged at **149 findings, 7 refuted (4.7%)** across **7** receipts. But 445, 446 and
+> 460 are the **three most recently resolved**, so the review lens has now been off **three in a
+> row** — the fifth data point's "two of the last three" is now a trend, not a blip, and §1's claim
+> that the fields are "the whole apparatus" on an unreviewed receipt is carrying more weight each
+> time.
+>
+> It did not hold here. The receipt's own **Adversarial review** section claimed "the sixth
+> consecutive `lens: none`" — a number written from memory, never measured, in the one field whose
+> job is to describe the receipt practice itself. It is the **third** of ten (445, 446, 460).
+> Nothing caught it: not the control-arm field (which governs the prior-art search, not prose
+> elsewhere in the document), not lint, not the author. It **merged**, and needed a second PR (#482)
+> to correct on `main`.
+>
+> Two things follow. First, **the control-arm discipline is scoped to one field and the rest of the
+> receipt is unguarded** — a receipt is mostly prose, and prose carries numbers. The fifth data point
+> concluded that "only the arm that *runs* was load-bearing"; this one narrows it further, to only
+> the arm that runs *in the field that has one*. Second, and worse for the no-review verdict: this is
+> exactly the defect class a cold reviewer finds cheaply — an unsourced count is visible without any
+> session context. Three consecutive unreviewed receipts is how it got through.
+>
+> That is not an argument to reinstate the lens by default (§12 judged the cost honestly), but it is
+> the first measured cost of *not* running it, and it should be weighed the next time `lens: none` is
+> chosen for a receipt that makes claims about the practice. #460 also corrected its own ticket's
+> premise — the body records fnox **v1.31.1** as installed where the live binary is **v1.32.0** —
+> which adds to the premise-correction pattern the fifth data point named; deliberately **not**
+> restated as a new count here, since inventing an unverified figure is the very thing this entry
+> exists to record.
+
 ### 1. Which fields were real, which became ritual?
 
 **Real, and the highest-value field in all four: the adversarial review.** It was never once
