@@ -697,3 +697,67 @@ def test_read_command_real_hook_payload() -> None:
     assert res.returncode == 0
     assert '"permissionDecision": "deny"' in res.stdout
     assert "mise run ship" in res.stdout
+
+
+# --- secret_value_substitution (#474 shape; landed 2026-08-02) --------------
+#
+# A presence probe printed a live Doppler token into a session transcript. The
+# rule denies a credential variable reaching STDOUT; both directions are pinned
+# because the trap is that the SAFE form is a prefix of the leaking one.
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        # the exact command that leaked, verbatim
+        'fnox exec -- sh -c \'printf "under fnox exec: %s\\n" '
+        '"${DOPPLER_TOKEN:+PRESENT}${DOPPLER_TOKEN:-ABSENT}"\'',
+        # the leak survives a shell -c body, which is where it actually happened
+        "sh -c 'echo \"${AWS_SECRET_ACCESS_KEY:-none}\"'",
+        'bash -c "echo $GITHUB_TOKEN"',
+        # bare and braced interpolation
+        'echo "$DOPPLER_TOKEN"',
+        'echo "${AWS_SECRET_ACCESS_KEY}"',
+        # every value-emitting substitution operator
+        'printf "%s" "${CONTEXT7_API_KEY:-none}"',
+        'echo "${GITHUB_PAT:=x}"',
+        # not the first command in the line
+        'ls; echo "$EXA_API_KEY"',
+        'echo "${MY_PASSWORD}"',
+        'echo "$FOO_CREDENTIALS"',
+    ],
+)
+def test_printing_a_credential_is_denied(command: str) -> None:
+    reason = hook_guard.decide(command)
+    assert reason is not None, command
+    assert "stdout IS the session" in reason
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        # `:+` / `+` emit the FLAG, never the value — the forms the rule
+        # RECOMMENDS. Denying these would leave no compliant way to probe.
+        'echo "${DOPPLER_TOKEN:+SET}"',
+        'echo "${DOPPLER_TOKEN+SET}"',
+        '[ -n "$DOPPLER_TOKEN" ] && echo SET || echo ABSENT',
+        'printenv DOPPLER_TOKEN >/dev/null; echo "rc=$?"',
+        # handing a credential to a CONSUMER is the correct way to use one
+        'curl -H "Authorization: Bearer $CONTEXT7_API_KEY" https://example.com',
+        # location-shaped names hold a path, not a value (`_PAT` matched inside
+        # `_PATH` before the leading lookahead was added — a measured defect)
+        'echo "$SSH_KEY_PATH"',
+        'echo "$AWS_KEY_FILE"',
+        'echo "$SECRET_NAME"',
+        'echo "$TOKEN_ID"',
+        # ordinary variables, including the repo's own anchor idiom
+        'echo "${CLAUDE_PROJECT_DIR:-.}"',
+        'echo "$HOME"',
+        'bash "${CLAUDE_PROJECT_DIR:-.}/scripts/pretooluse-guard.sh"',
+        # prose and search are diagnostics, not leaks
+        'git commit -m "never echo $API_KEY in a probe"',
+        'grep -rn "echo \\$DOPPLER_TOKEN" docs/',
+    ],
+)
+def test_safe_credential_handling_is_allowed(command: str) -> None:
+    assert hook_guard.decide(command) is None, command

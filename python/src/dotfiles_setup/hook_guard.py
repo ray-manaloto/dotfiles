@@ -142,6 +142,54 @@ _V5 = "2026-07-27"
 # correctly, by the guard of the day. Hence its own cutoff: a pattern widened to
 # cover a NEW command shape is a NEW rule, whatever it is spelled next to.
 _V1B = "2026-07-18"
+# The secret-value-substitution rule landed 2026-08-02 after a presence probe
+# printed a live Doppler token into the session transcript — the SECOND such
+# leak that day, both by an agent holding
+# `.claude/rules/secrets-out-of-the-shell-env.md` rule 7. Prose was the only
+# layer (the rule said so itself, and #474 tracks the gap); this is the first
+# machine layer for the shape.
+_V7 = "2026-08-02"
+
+# Variable names that carry credentials. Suffix/infix match on an ALL-CAPS
+# environment name, minus the path-ish tails (`SSH_KEY_PATH`, `AWS_KEY_FILE`)
+# that name a location rather than a value — those are the false-positive class
+# a print-context rule would otherwise pick up.
+# The LEADING lookahead rejects location-shaped names outright. It has to come
+# first and span the whole name: as a trailing check it backtracks, because
+# `_PAT` matches inside `SSH_KEY_PATH` and the tail then sees only `H`. That
+# false positive was measured, not imagined.
+_CREDENTIAL_NAME = (
+    r"(?![A-Z0-9_]*(?:_PATH|_FILE|_DIR|_NAME|_ID)\b)"
+    r"[A-Z][A-Z0-9_]*"
+    r"(?:TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIALS?|APIKEY|API_KEY|_KEY|_PAT)"
+    r"[A-Z0-9_]*"
+    # `${VAR:+FLAG}` and `${VAR+FLAG}` emit the FLAG, never the value — they are
+    # the forms this rule tells you to use, so they must not trip it.
+    r"(?!:?\+)"
+)
+# Command position, PLUS the start of a shell `-c` body. The second alternative
+# is what catches the exact shape that leaked — `fnox exec -- sh -c 'printf …
+# ${TOKEN:-}'` — where the print sits inside a quoted `-c` argument that `_CMD`
+# cannot see and `_inert_masked` deliberately neuters.
+#
+# It is `-c` specifically, not "any opening quote": the looser form denied
+# `grep -rn "echo \$DOPPLER_TOKEN" docs/`, i.e. searching for the bad pattern.
+# That is a legitimate diagnostic, and a redirect that misfires on diagnostics
+# is the trust-eroding class this guard is warned about.
+#
+# Residual, accepted: only the FIRST command in a `-c` body anchors, because a
+# separator inside the quoted span is already neutered by the masking pass. The
+# leak shape puts the print first, and the alternative — un-neutering quoted
+# separators — would reopen the #265 false-positive class wholesale.
+_PRINT_POS = r"(?:^|[;&|\n]\s*|-c\s*['\"]\s*)"
+# A printing builtin, then — within the SAME command segment — a reference to a
+# credential-named variable. Scoped to print context on purpose: handing a
+# credential to a consumer (`curl -H "Authorization: Bearer $API_KEY"`) is the
+# correct way to use one and stays allowed. Putting the value on STDOUT is what
+# is never right, because stdout is the transcript.
+_PRINTS_SECRET = re.compile(
+    _PRINT_POS + r"(?:echo|printf|print)\b[^;&|\n]*\$\{?" + _CREDENTIAL_NAME
+)
 # The hook-suppression rules landed 2026-07-27 with `no_commit_to_branch` (#400).
 # They are the ONLY layer that can see a bypass: git decides not to run a hook
 # BEFORE the hook exists as a process, so no pre-commit or pre-push hook can
@@ -463,6 +511,20 @@ _RULES: tuple[Rule, ...] = (
         ".claude/rules/zero-skip-policy.md.",
         _V6,
         quoted_blind=True,
+    ),
+    Rule(
+        "secret_value_substitution",
+        _PRINTS_SECRET,
+        "Do not print a credential variable — stdout IS the session "
+        "transcript, and nothing downstream redacts it. A presence probe must "
+        'emit a FLAG, never a value: use `[ -n "$VAR" ] && echo SET || echo '
+        "ABSENT`, or `printenv VAR >/dev/null` and read the rc. Note "
+        "`${VAR:-ABSENT}` and `${VAR:=x}` are VALUE-EMITTING for a set "
+        "variable — `${VAR:+SET}${VAR:-ABSENT}` prints the secret, which is "
+        "exactly how a live Doppler token reached a transcript on 2026-08-02. "
+        "Passing a credential to a consumer is fine; printing it is not. See "
+        ".claude/rules/secrets-out-of-the-shell-env.md rule 7.",
+        _V7,
     ),
 )
 
