@@ -596,6 +596,32 @@ this spec's own.
 > instance was self-caught: the first came from the reviewer, the second only surfaced because the
 > first forced a re-run.
 
+> **Fourth post-pilot data point, 2026-08-02 — the first receipt with NO adversarial review, and the
+> control group nobody planned.** `445.md` (#8) ran `lens: none` and recorded it in the field rather
+> than omitting the section. Running total is therefore unchanged at **149 findings, 7 refuted
+> (4.7%)** across **7** reviewed receipts; #445 sits outside that denominator, and "the review
+> changed the recommendation" stays **6 of 7**.
+>
+> Its value is as the missing arm. The last three receipts each had the *reviewer* catch a reversal;
+> this one had none — and **two claims were published to the user before being cross-checked, then
+> self-corrected**. A `.zshenv` render was reported as a credential-stripping *blocker* (it is not:
+> the rendered file ends with a live `_mise_hook` that re-derives the environment), and a
+> `status --missing` gate was read as broken in both directions (it was the author's own pipe eating
+> the exit code — `feedback_pipe_kills_exit_code`, in a session whose template warns about it). Both
+> were caught, both by the author, both **after** the wrong version had been sent. So the honest
+> reading of §1's "highest-value field" claim is narrower than it looked: the review's contribution
+> is not that errors get caught, it is **that they get caught before publication**. Self-correction
+> works and is cheap; it just arrives late, and a receipt closed a few minutes earlier would have
+> shipped both errors.
+>
+> A third defect has no field at all and is not a receipt problem: **the probe's own output leaked a
+> secret.** A `${(P)k}` expansion meant as a presence flag printed four live credential values into
+> the session transcript. Every existing layer in this repo guards a *file write* or a *spawn*; none
+> guards *stdout of a command an agent runs*. Filed as
+> [#474](https://github.com/ray-manaloto/dotfiles/issues/474), deferred behind #431. Worth recording
+> here only because it is the second consecutive receipt whose worst moment came from the probe
+> apparatus rather than from the reasoning.
+
 ### 1. Which fields were real, which became ritual?
 
 **Real, and the highest-value field in all four: the adversarial review.** It was never once
