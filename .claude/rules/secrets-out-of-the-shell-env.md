@@ -162,12 +162,29 @@ Findings, control arms, and the verification that passed while blind:
    output of a command an agent runs, and that output lands in the session
    transcript. Measured 2026-08-02: a `${(P)k}` expansion meant as a presence flag
    printed four live credential values, and all four had to be rotated. They were
-   the four `env = true` opt-ins — with `env = "exec"` the other 45 are not in the
-   shell to print, so **the exposed set is exactly the opt-in set**, and it is
-   knowable in advance. Use `${VAR:+SET}`, `[ -n "$VAR" ]` or
+   the four `env = true` opt-ins. Use `${VAR:+SET}`, `[ -n "$VAR" ]` or
    `printenv VAR >/dev/null` and read the rc; never interpolate the value into a
    format string "just to check". Gap tracked in #474; no machine layer exists yet,
    so this rule is the only layer.
+
+   ⚠️ **IT RECURRED THE SAME DAY — the safe form is only safe ALONE.**
+   `${VAR:+SET}${VAR:-ABSENT}` opens with the form this rule recommends and is a
+   **leak**: `:-` and `:=` are *value-emitting* substitutions, so a **set**
+   variable prints `SET<the secret>` (an *unset* one prints `ABSENT`, which is why
+   it survives review and why an unset-only control arm certifies nothing — arm it
+   on a variable that IS set). Want both branches? `[ -n "$VAR" ] && echo SET ||
+   echo ABSENT`. **Now machine-enforced** — `hook_guard`'s
+   `secret_value_substitution` denies `${<CREDENTIAL_NAME>:-|:=}` in a Bash
+   command; that closes the #474 gap for this shape, and this rule still carries
+   every other shape.
+
+   ⚠️ **The blast radius is NOT capped at the opt-ins.** This file claimed
+   *"exactly the opt-in set, knowable in advance"* — **false for a probe run under
+   `fnox exec`**. The leaked `DOPPLER_TOKEN` is **exec-only** (same command:
+   `PRESENT` under `fnox exec`, `ABSENT` in a plain shell); wrapping the probe put
+   it in reach. Any of the 49 is printable that way; only an *unwrapped* probe is
+   capped at four. Full incident, the reproduction table and both corrections:
+   `docs/rules-evidence/secrets-out-of-the-shell-env.md`.
 
 ## See also
 

@@ -260,6 +260,61 @@ the shell until something re-reads the config. Filed with the confirmed trigger 
    conclusion. An unattributed cause is an open question, and it should be
    labelled as one until a *source* — not a silence — closes it.
 
+## The `:-` fallback leak — 2026-08-02-g, the same rule's second breach that day
+
+Rule 7 was written earlier the same day, after a `${(P)k}` expansion printed four
+live credentials. Hours later, an agent **holding that rule and citing it** ran:
+
+```sh
+printf "%s" "${DOPPLER_TOKEN:+PRESENT}${DOPPLER_TOKEN:-ABSENT}"
+```
+
+which printed `PRESENT` followed by the live `dp.ct.` Doppler CLI token. It had to
+be rotated.
+
+### Why it passed review
+
+`${VAR:+PRESENT}` is the form the rule *recommends*. The construct opens with it,
+so it reads as compliant. The leak is the second half: **`:-` is a value-emitting
+substitution** — for a *set* variable it expands to the value, not to the fallback.
+Reproduced on a harmless value:
+
+| Expression (with `FOO=visible-safe-value`) | Output |
+|---|---|
+| `${FOO:+SET}` | `SET` |
+| `[ -n "$FOO" ] && echo SET \|\| echo ABSENT` | `SET` |
+| **`${FOO:+SET}${FOO:-ABSENT}`** | **`SETvisible-safe-value`** |
+| `${NOPE_UNSET:+SET}${NOPE_UNSET:-ABSENT}` (unset) | `ABSENT` |
+
+The last row is the whole trap: on an **unset** variable the bad form looks
+perfect.
+
+### Two corrections it forced in the rule
+
+1. **"The exposed set is exactly the opt-in set" was FALSE.** The rule claimed the
+   blast radius was the four `env = true` opt-ins, "knowable in advance".
+   `DOPPLER_TOKEN` is **exec-only** — measured in the same command, `PRESENT` under
+   `fnox exec` and `ABSENT` in a plain shell — and it leaked anyway, because the
+   probe wrapped *itself* in `fnox exec`. Any of the 49 is printable by a probe
+   that does that; only an **unwrapped** probe is capped at the four.
+2. **The control arm certified nothing.** The probe did carry one: a nonexistent
+   variable, returning `ABSENT`. That exercises the `:-` branch only on an unset
+   variable — the single case where it cannot leak. Arming only the absent
+   direction is `probes-need-a-control-arm.md` rule 8: a fixture that could not
+   have produced the other outcome. **Arm a presence probe on a variable that IS
+   set, with a value you can afford to see, before pointing it at a real one.**
+
+### Incidental finding (why the probe was running at all)
+
+It was checking whether a Doppler token already exists before ticket #487
+provisions one. It does: `DOPPLER_TOKEN` lives in the keychain via fnox, declared
+by mde's `bootstrap_config` (`src/mde/secrets/manage.py:296`) as a *declaration
+only*. `doppler me` reports the CLI authenticated as `type: cli`, name
+`dotfiles-20260327` — a **personal CLI login**, and the `dp.ct.` prefix confirms
+`DOPPLER_TOKEN` is that same class. So #487's premise ("provision a token") is
+wrong: one exists, it is the opposite of scoped/read-only/expiring, and the ticket
+should begin by assessing it.
+
 ## GitHub repos touched
 
 - [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — the
