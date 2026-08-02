@@ -75,6 +75,16 @@ The deny is deterministic — it applies even in bypassPermissions mode — and
 its reason names what to fix. `hook selfcheck` (run by `ship`/`land`) drives
 both arms through the real wrapper, so the wiring cannot regress silently.
 
+**Confirmed against the vendor docs and a live probe (2026-08-02)**, not
+assumed: `AskUserQuestion` is a documented PreToolUse matcher value
+(`$CC/hooks.md:1394`); hooks reload from `settings.json` **without a
+restart** (`$CC/settings.md:177`); and a `deny` **prevents the call** while
+its reason is **shown to Claude** (`$CC/hooks.md:1544`) — so a rejected ask costs the user
+nothing and tells the agent exactly what to revise. The probe: an
+otherwise-compliant ask minus its citation was denied through the wired path,
+naming that one rule. `$CC` is the knowledge-base's offline claude-code doc
+tree — see `research-doc-sources.md` step 00 for the path.
+
 **What no hook can see is an ask that never happened.** A gate can only judge
 the shape of a question you chose to ask; it is blind to the case this rule
 exists for — quietly guessing instead. That half is carried by rule 1 and by
