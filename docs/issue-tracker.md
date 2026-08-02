@@ -84,12 +84,16 @@ Used by `/wayfinder`. The **map** is a single issue with **child** issues as tic
   machine-verifiable, and even then only that *a* query ran. Design of record + the 42 reasons:
   `docs/specs/ticket-bound-receipts.md` (⛔ NOT FOR BUILD). Worked example: `docs/receipts/449.md`.
   **The three-ticket pilot (#437, #438, #440) ran and was judged on 2026-08-01 — verdict: keep the
-  practice, still build nothing** (§12). Across 5 receipts: **113 findings, 4 refuted**. The pilot's
+  practice, still build nothing** (§12). Across the **7 reviewed** receipts: **149 findings, 7
+  refuted (4.7%)** — #445 and #446 ran `lens: none` and sit outside that denominator. The pilot's
   first 4 were 87/1, read as the receipts being under-defended, so the template gained **if a review
   finding can be settled by running something, run it before writing the disposition** — and #448,
   the first receipt written under that rule, went **3 refuted of 26**, every one settled by a probe.
-  It also had the review **reverse the verdict outright**. Even a control-arm verifier would have
-  *passed* #440's real failure, because the query ran and returned nothing.
+  It also had the review **reverse the verdict outright**. A *machine* control-arm verifier would
+  still have **passed** #440's real failure, because the query ran and returned nothing — but the
+  **human** arm catches it: in #446 the known-present term returned 0, which is the only reason a
+  broken search did not become the receipt. On an unreviewed receipt the fields are the whole
+  apparatus.
 - **Resolve**: `gh issue comment <n> --body "<answer>"`, then `gh issue close <n>`, then append a
   context pointer to the map's Decisions-so-far. The verdict goes in the **comment**; the evidence
   stays in the **receipt**, linked — they carry different content, never mirrored.

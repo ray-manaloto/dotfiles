@@ -622,6 +622,35 @@ this spec's own.
 > here only because it is the second consecutive receipt whose worst moment came from the probe
 > apparatus rather than from the reasoning.
 
+> **Fifth post-pilot data point, 2026-08-02 — the control-arm field did a reviewer's job, and that is
+> the first time any field has.** `446.md` (#9) also ran `lens: none`, so the reviewed denominator
+> stays **149 findings, 7 refuted (4.7%)** across **7** receipts, and two of the last three receipts
+> are now unreviewed. The trend that matters is elsewhere.
+>
+> §1 argued the control arm is the field that has earned its place, and #440 was the evidence: a
+> search broken by zsh's non-word-splitting of an unquoted `$CORPUS`, with `2>/dev/null` eating the
+> error. **It happened again here, in a session that had #440's warning printed in the very template
+> being filled in** — the known-present arm returned **0**, the query set returned a clean-looking
+> "no prior art", and the arm is the only reason that did not become the receipt. Re-run with literal
+> paths, the same queries surfaced five hits, one of which
+> (`.claude/skills/tmux-extended-keys/SKILL.md`, reached via `436.md`) turned out to be the decisive
+> source for half the verdict and is now [#479](https://github.com/ray-manaloto/dotfiles/issues/479).
+>
+> Two readings follow, and both are uncomfortable. The useful one: **a required field caught a defect
+> the author could not see, which is precisely what §1 claimed adversarial review was for** — so on
+> an unreviewed receipt the fields are not ritual, they are the whole apparatus. The other: **a
+> warning printed in the template did not prevent the mistake it describes.** Documentation of a
+> footgun is not a guard against it; only the arm that *runs* was load-bearing. That is an argument
+> for [#337](https://github.com/ray-manaloto/dotfiles/issues/337) (machine-enforce "a 0-result grep
+> is not an answer") rather than for more prose, and it is now a durable memory
+> (`feedback_zsh_no_word_splitting`) rather than a fourth burial inside a session note.
+>
+> One field-shaped gap, recorded not fixed: the receipt's **Sources** list is where a *premise
+> correction* surfaced — #446 named two remainder keys and its subject file had four — but no field
+> asks "does the ticket's own framing survive contact with the artifact?". Three of the last five
+> receipts corrected their ticket's premise. If a sixth field is ever added, that is the candidate;
+> the pilot's §7 conclusion (three edits and nothing else) still stands until then.
+
 ### 1. Which fields were real, which became ritual?
 
 **Real, and the highest-value field in all four: the adversarial review.** It was never once
