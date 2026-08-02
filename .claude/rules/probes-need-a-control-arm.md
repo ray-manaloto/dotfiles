@@ -88,6 +88,12 @@ Full case tables — five false negatives, five cross-check disagreements:
    you KNOW is present in the same corpus with the same command shape. If that
    also returns 0, the probe is broken — not the world. Worked cases:
    `docs/rules-evidence/probes-need-a-control-arm.md`.
+
+   **Invent the known-absent term FRESH every time — writing one down destroys
+   it.** A control string published in a report or receipt is now IN the corpus,
+   so the next run's "absent" arm returns hits and the probe silently stops
+   discriminating. Measured 2026-08-01: `zzqqxx`, the arm three prior receipts
+   all used, returned **5 files** — three of them those receipts.
 4. **A redirect/timeout/parse-error is not a "no".** HTTP 301/000, a `jq` miss,
    an empty `grep` — distinguish "answered no" from "never asked".
 5. **Say which arm you ran.** When reporting a probe result, state the control:
