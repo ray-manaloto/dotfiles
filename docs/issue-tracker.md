@@ -16,6 +16,32 @@ Adapted from the `setup-matt-pocock-skills` seed template. Consumed by
 > `/setup-matt-pocock-skills`** — it also edits the root `CLAUDE.md`, which the
 > `claude_md_import_stub` hk step rejects (that file must be byte-exactly `@AGENTS.md\n`).
 
+## ⚠️ The protocol's own verbs are USER-INVOKED ONLY — name the command, never hand-roll it
+
+The chain is **`/wayfinder` → `/to-spec` → `/to-tickets` → `/triage` / `/implement`**. Every verb in
+it carries `disable-model-invocation: true`, so **an agent cannot invoke any of them.** Measured
+2026-08-02 across all 17 `skills/engineering/*` — the **9** with that flag are *exactly* the 9 absent
+from the agent's invocable skill list, against **8** present with it off:
+
+| User-invoked only (agent CANNOT call) | Agent-invocable |
+|---|---|
+| `wayfinder` · `to-spec` · `to-tickets` · `triage` · `implement` · `ask-matt` · `grill-with-docs` · `improve-codebase-architecture` · `setup-matt-pocock-skills` | `research` · `prototype` · `grilling`¹ · `domain-modeling` · `tdd` · `code-review` · `codebase-design` · `diagnosing-bugs` · `resolving-merge-conflicts` |
+
+¹ `grilling` lives under `skills/productivity/`, not `skills/engineering/`.
+
+**When the next step in the protocol is one of the left column: STOP, tell the human which command
+to type, and do not produce its output by hand.** Hand-rolling a protocol verb is a
+[`use-tool-builtins.md`](../.claude/rules/use-tool-builtins.md) violation, and it silently drops
+whatever that skill's process adds — `to-spec` alone contributes a **seam sketch checked with the
+user**, **User Stories**, **Testing Decisions**, and a standing *"do NOT include specific file paths
+or code snippets — they go stale fast"*.
+
+**Why this is written down:** on 2026-08-02 a session reached the edge of #431's map, felt the pull
+to *"just write the spec"* — which `wayfinder`'s own **Plan, don't do** section names as the signal
+to **hand off** — and hand-wrote `docs/specs/secrets-takeover.md` instead of saying "run
+`/to-spec`". The unreachable verb is the mechanism: the correct next action was invisible from the
+agent's side, so it substituted its own. See `.claude/rules/use-tool-builtins.md`.
+
 ## ⚠️ Repo-specific: PR creation is guard-denied
 
 **`gh pr create` is DENIED by this repo's PreToolUse guard** (`hook_guard.py`, rule `"gh pr create"`).
@@ -98,6 +124,14 @@ Used by `/wayfinder`. The **map** is a single issue with **child** issues as tic
 - **Resolve**: `gh issue comment <n> --body "<answer>"`, then `gh issue close <n>`, then append a
   context pointer to the map's Decisions-so-far. The verdict goes in the **comment**; the evidence
   stays in the **receipt**, linked — they carry different content, never mirrored.
+- ⚠️ **An empty ticket queue is NOT the map's done-condition.** Done is *"nothing left to decide
+  before someone goes and does the thing"*, and resolving a ticket is supposed to **graduate** any
+  fog it made specifiable into fresh tickets (`wayfinder` step 5). So a map with **zero open
+  children and a full "Not yet specified"** has not finished — the frontier stalled, because
+  graduation stopped happening. Apply wayfinder's own test to every fog item before declaring done:
+  **ticket it when the question is already sharp, even if blocked**; leave it as fog only when you
+  cannot yet phrase it that precisely. Observed on #431, 2026-08-02: queue empty, **19** fog items,
+  at least three of them sharp enough to ticket that day.
 
 ### Prerequisites — all verified live on 2026-07-15
 

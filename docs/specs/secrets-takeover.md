@@ -16,6 +16,31 @@ Nothing assembles them. That is this file's whole job.
 **This spec is a planning artifact.** No code ships from it. Each step becomes ordinary work with
 its own PR and its own gates.
 
+> ## ⚠️ STATUS — this is an INPUT to `/to-spec`, not its output (corrected 2026-08-02)
+>
+> This file was hand-written. The protocol is **`/wayfinder` → `/to-spec` → `/to-tickets` →
+> `/implement`** (`docs/issue-tracker.md`), and `/to-spec` is **user-invoked only** — so the session
+> that reached the edge of #431's map substituted its own document for the skill's. What that
+> dropped, concretely: `/to-spec`'s **seam sketch checked with the user**, its **User Stories** and
+> **Testing Decisions** sections, and its standing *"do NOT include specific file paths or code
+> snippets — they go stale fast"* (which **A2 below actively contradicts**).
+>
+> **Two things follow, and neither is optional:**
+>
+> 1. **The map is not done, so `/to-spec` is not yet due.** `wayfinder`'s done-condition is
+>    *"nothing left to decide"*, and resolving a ticket must **graduate** newly-sharp fog into fresh
+>    tickets. #431 has **zero open children and 19 fog items** — the frontier stalled. Sharp items
+>    become `wayfinder:<type>` tickets **before** any spec is written.
+> 2. **A6 is superseded for sharp items.** "Name every open item as open in the spec" is the wrong
+>    instrument under wayfinder: a fog item you can phrase precisely is a **ticket**, not a spec
+>    bullet. § 5 stays as the classification work-product, but it is a *triage input* for
+>    graduation, not the resting place.
+>
+> What survives unchanged: the assembled decisions (§§ 1–4), the evidence index (§ 8), and the
+> `NEW` decisions in § 6 — those are real work, and `/to-spec` should consume them.
+> Publishing to `docs/specs/` rather than a tracker issue is **not** part of the error: #431's Notes
+> says *"Specs here are persistent… we do not adopt the disposable-spec habit."*
+
 **Resolution decreases with distance** (approved 2026-08-02). Phases 1–2 carry PR-sized steps;
 phases 3–4 carry the transition, its exit gate and its open items, and are deepened when their
 preconditions come near. That is deliberate: #448 records `mise dotfiles` → `mise bootstrap
@@ -90,6 +115,12 @@ Resolving them is explicitly out of scope — the lock is *name them as open*. O
 failure.
 
 *Fails when:* an open item is absent, or unclassified, or quietly answered.
+
+⚠️ **SUPERSEDED IN PART (2026-08-02) — see the STATUS banner.** Under `wayfinder`, a fog item you can
+**phrase precisely** is a **ticket**, not a spec bullet, *"even if it's blocked and you can't act on
+it yet."* So A6's classification is the right *triage*, and the wrong *destination* for the sharp
+ones. § 5 stands as the work-product; the sharp rows graduate to `wayfinder:<type>` child issues
+before `/to-spec` runs.
 
 ### A7 — Rollback per transition
 
