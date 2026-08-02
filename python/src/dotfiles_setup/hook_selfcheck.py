@@ -51,9 +51,17 @@ _WEB_SETUP = "scripts/web-setup.sh"
 _HOOK_SCRIPTS = (PRETOOLUSE_WRAPPER, _WEB_SETUP)
 
 # Each settings.json hook event -> (command substrings that MUST appear in its
-# wired command(s), required matcher or None). Keeps the project hooks from
+# wired command(s), required matchers or None). Keeps the project hooks from
 # silently drifting out of .claude/settings.json (the wiring the end-to-end
-# check then exercises). PreToolUse must stay scoped to Bash.
+# check then exercises).
+#
+# PreToolUse must stay scoped, and to BOTH tools it guards: `Bash` (the
+# mise-tasks-only redirects) and `AskUserQuestion` (the ask-quality standard,
+# Ray 2026-08-02 — see dotfiles_setup.ask_quality). Each is asserted
+# separately, because the matcher is one alternation string: a check that only
+# looked for "Bash" would keep passing if AskUserQuestion were dropped from it,
+# and the guard would go silently absent for that tool exactly as #343 did for
+# off-root Bash.
 #
 # SessionEnd runs the command-audit refine loop once per session (the recurring
 # half of mise-tasks-only enforcement). A matcher would SCOPE it to particular
@@ -67,8 +75,8 @@ _HOOK_SCRIPTS = (PRETOOLUSE_WRAPPER, _WEB_SETUP)
 # neither can disrupt a session; asserting them here is what keeps them from
 # quietly falling out of settings.json, which is the only place they are wired.
 _SESSION_END_REPORT = ".agent/command-audit.md"
-_SETTINGS_WIRING: tuple[tuple[str, tuple[str, ...], str | None], ...] = (
-    ("PreToolUse", (PRETOOLUSE_WRAPPER,), "Bash"),
+_SETTINGS_WIRING: tuple[tuple[str, tuple[str, ...], tuple[str, ...] | None], ...] = (
+    ("PreToolUse", (PRETOOLUSE_WRAPPER,), ("Bash", "AskUserQuestion")),
     (
         "SessionStart",
         (_WEB_SETUP, "CLAUDE_CODE_REMOTE", "run tool-currency-check", "run doctor"),
@@ -137,7 +145,7 @@ def check_settings_wiring(settings_path: Path) -> list[str]:
         settings = json.loads(settings_path.read_text())
     except (OSError, json.JSONDecodeError) as exc:
         return [f"could not read {settings_path}: {exc}"]
-    for event, required, matcher in _SETTINGS_WIRING:
+    for event, required, matchers in _SETTINGS_WIRING:
         entries = _event_entries(settings, event)
         if not entries:
             failures.append(f"settings.json has no {event} hook wired")
@@ -148,11 +156,12 @@ def check_settings_wiring(settings_path: Path) -> list[str]:
             for token in required
             if token not in joined
         )
-        if matcher is not None and not any(matcher in m for m, _ in entries):
-            failures.append(
-                f"settings.json {event} hook must be scoped with matcher "
-                f"{matcher!r} (tool events fire on every tool otherwise)"
-            )
+        failures.extend(
+            f"settings.json {event} hook must be scoped with matcher "
+            f"{matcher!r} (tool events fire on every tool otherwise)"
+            for matcher in matchers or ()
+            if not any(matcher in m for m, _ in entries)
+        )
     failures.extend(_unanchored_hooks(settings))
     return failures
 
@@ -224,7 +233,74 @@ def check_pretooluse_endtoend(project_root: Path) -> list[str]:
             f"pretooluse wrapper was not silent on the allowed command "
             f"{_ALLOWED_SAMPLE!r}: {allowed.stdout.strip()!r}"
         )
+    failures.extend(check_ask_quality_endtoend(project_root, wrapper))
     failures.extend(check_offroot_arm(project_root, wrapper))
+    return failures
+
+
+def _ask_payload(*, cited: bool) -> str:
+    """A single-select AskUserQuestion that differs ONLY in whether it cites.
+
+    Both arms are otherwise compliant (recommendation first, PRO:/CON: on every
+    option), so a difference in the wrapper's verdict can only come from the
+    citation rule — the control arm for the deny.
+    """
+    where = "per `mise.toml`" if cited else "which do you prefer"
+    return json.dumps(
+        {
+            "tool_name": "AskUserQuestion",
+            "tool_input": {
+                "questions": [
+                    {
+                        "question": f"Selfcheck probe — {where}?",
+                        "header": "Probe",
+                        "multiSelect": False,
+                        "options": [
+                            {
+                                "label": "A (Recommended)",
+                                "description": "PRO: a. CON: b.",
+                            },
+                            {"label": "B", "description": "PRO: c. CON: d."},
+                        ],
+                    }
+                ]
+            },
+        }
+    )
+
+
+def check_ask_quality_endtoend(project_root: Path, wrapper: str) -> list[str]:
+    """Drive the ask-quality gate through the REAL wrapper (deny + allow).
+
+    The wiring check proves ``AskUserQuestion`` is in the matcher; this proves
+    the guard actually decides on it. Without the allow arm the deny would be
+    indistinguishable from a gate that denies every ask.
+    """
+    failures: list[str] = []
+
+    denied = _run(["bash", wrapper], stdin=_ask_payload(cited=False), cwd=project_root)
+    if denied.returncode != 0:
+        failures.append(
+            f"pretooluse wrapper exited {denied.returncode} on a non-compliant "
+            f"AskUserQuestion (must exit 0): {denied.stderr.strip()}"
+        )
+    elif '"permissionDecision": "deny"' not in denied.stdout:
+        failures.append(
+            "pretooluse wrapper did not DENY an uncited AskUserQuestion — the "
+            f"ask-quality gate is not reachable. stdout={denied.stdout.strip()!r}"
+        )
+
+    allowed = _run(["bash", wrapper], stdin=_ask_payload(cited=True), cwd=project_root)
+    if allowed.returncode != 0:
+        failures.append(
+            f"pretooluse wrapper exited {allowed.returncode} on a compliant "
+            f"AskUserQuestion: {allowed.stderr.strip()}"
+        )
+    elif allowed.stdout.strip():
+        failures.append(
+            "pretooluse wrapper was not silent on a COMPLIANT AskUserQuestion — "
+            f"the gate denies every ask: {allowed.stdout.strip()!r}"
+        )
     return failures
 
 

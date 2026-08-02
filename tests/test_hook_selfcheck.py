@@ -57,7 +57,10 @@ def _full_settings() -> dict:
     return {
         "hooks": {
             "PreToolUse": [
-                _hook("Bash", f"bash {_ANCHOR}/scripts/pretooluse-guard.sh")
+                _hook(
+                    "Bash|AskUserQuestion",
+                    f"bash {_ANCHOR}/scripts/pretooluse-guard.sh",
+                )
             ],
             "SessionStart": [
                 _hook(
@@ -97,6 +100,22 @@ def test_missing_matcher_fails(tmp_path: Path) -> None:
     settings["hooks"]["PreToolUse"] = [_hook(None, "bash scripts/pretooluse-guard.sh")]
     failures = _wiring(tmp_path, settings)
     assert any("PreToolUse" in f and "matcher" in f for f in failures)
+
+
+def test_partial_matcher_fails(tmp_path: Path) -> None:
+    """A matcher covering only SOME guarded tools must fail.
+
+    The realistic regression: someone reverts PreToolUse to ``"Bash"`` and the
+    ask-quality gate goes silently absent for AskUserQuestion. A check that
+    merely looked for ``"Bash"`` somewhere in the matcher would still pass.
+    """
+    settings = _full_settings()
+    settings["hooks"]["PreToolUse"] = [
+        _hook("Bash", f"bash {_ANCHOR}/scripts/pretooluse-guard.sh")
+    ]
+    failures = _wiring(tmp_path, settings)
+    assert any("AskUserQuestion" in f for f in failures)
+    assert not any("'Bash'" in f for f in failures)
 
 
 def test_wrong_command_fails(tmp_path: Path) -> None:
