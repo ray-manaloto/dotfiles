@@ -115,10 +115,50 @@ it explicitly as unverified and inherited. And when the number ranks things, ask
 what the **noise floor** is — a difference smaller than the same-input variance is
 not a difference.
 
+## Rule 8 — two rigged fixtures in one session, both fully control-armed (#441, 2026-08-02)
+
+Rules 1–7 all target the **probe**. These two failures were in the **fixture**, and
+the existing arms could not see them: each probe genuinely discriminated, on a
+world that only ever allowed one answer.
+
+**Case 1 — the fixture no scope could satisfy.** Testing whether `fnox proxy run`
+is bound by the active profile, the config declared a top-level-only secret
+(`TOP_TOKEN`), a profile-only secret (`AGENT_TOKEN`), and `[[proxy.rules]]` for
+**both**. Every single-profile scope therefore lacked at least one ruled secret, so
+startup validation could only ever reject it: six arms, six `rc=1`, and the draft
+reported *"the proxy catches fnox's silent fail-open"*.
+
+Rebuilt to mirror the design actually proposed — top level holds the secrets, the
+profile **duplicates** one, and the rule names that one — a missing profile
+**starts cleanly at `rc=0`**. The real behaviour is the opposite of the finding:
+the proxy does not gate on the profile at all, it caps the injected set at the rule
+table. Caught by an adversarial reviewer, not by the session that built it.
+
+**Case 2 — the fixture with a parent.** Testing whether `fnox.<profile>.toml` is
+loaded, the sandbox sat inside a directory whose **parent** already held a
+`fnox.toml` from an earlier probe. fnox searches parent directories, so it silently
+merged both: `config-files` printed `fnox.toml` **twice** and a foreign secret
+appeared in the results. Surfaced only because case 1 forced a re-run; the clean
+re-run added an explicit ancestor check (`walk up from the test root, assert no
+fnox.toml`) as a fixture arm.
+
+**Why arms don't catch this.** A control arm answers *"can this probe report the
+other value?"* Both probes could. The unasked question is *"can this WORLD produce
+the other value?"* — and no amount of arming the probe reaches it. Two habits:
+
+- Ask it **before** reading the output. Afterwards, a result that confirms the
+  hypothesis reads as evidence rather than as a fixture artifact.
+- **Prefer a fixture that mirrors the real configuration** over one that cleanly
+  isolates the variable. Case 1's fixture was *better designed* as an experiment —
+  disjoint names, no confounds — and that is exactly what made it wrong: the real
+  system duplicates names across the two layers, which is the whole mechanism.
+
 ## GitHub repos touched
 
 - [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — the probes,
   `hk.pkl`'s `no_grep_q_under_pipefail`, and the #289 base build.
+- [jdx/fnox](https://github.com/jdx/fnox) — the tool both rule-8 fixtures probed
+  (`fnox proxy run`, profile config files), at the installed v1.32.0.
 
 graphify's issue #959 and its `LM Studio` spelling are cited above as
 cross-check examples. Its upstream repo is deliberately **not** enumerated here:

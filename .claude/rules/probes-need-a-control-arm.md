@@ -116,6 +116,18 @@ Full case tables — five false negatives, five cross-check disagreements:
    fact costs seconds and settles which side is broken. Disagreement is a
    finding, not noise — and the finding is usually your probe.
 
+8. **Arm the FIXTURE too: "could this setup have produced the other result?"**
+   Rules 1–7 verify the *probe* discriminates. They say nothing about whether
+   the *world you built for it* admits both answers — and a fully-armed probe on
+   a rigged fixture yields a confident wrong finding. Canonical case: a #441
+   fixture whose rule table named two secrets **no single profile could hold**,
+   so all six arms were forced to the same outcome; that outcome was published
+   as a finding and reversed once the fixture was rebuilt realistically. Ask the
+   question *before* reading the output, and prefer a fixture that mirrors the
+   real configuration over one that isolates the variable. A second case (a
+   parent-directory config the tool silently merged) and both re-runs:
+   `docs/rules-evidence/probes-need-a-control-arm.md`.
+
 ## Applies to
 
 Every probe whose answer you act on or report: shell one-liners, `find`/`grep`
