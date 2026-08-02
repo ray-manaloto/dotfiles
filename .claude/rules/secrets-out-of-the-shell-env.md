@@ -157,6 +157,17 @@ Findings, control arms, and the verification that passed while blind:
    ⚠️ **wipe hazard** — `mde-py`'s `bootstrap_config()` drops `env = "exec"` and
    every opt-in (measured twice; diagnosed 2026-07-30, and **not** fnox):
    `docs/secrets-doppler-fnox-keychain.md`.
+7. **⚠️ A probe's OWN STDOUT is an uncovered surface — print presence, never a
+   value.** Every gate above guards a *file write* or a *spawn*; none guards the
+   output of a command an agent runs, and that output lands in the session
+   transcript. Measured 2026-08-02: a `${(P)k}` expansion meant as a presence flag
+   printed four live credential values, and all four had to be rotated. They were
+   the four `env = true` opt-ins — with `env = "exec"` the other 45 are not in the
+   shell to print, so **the exposed set is exactly the opt-in set**, and it is
+   knowable in advance. Use `${VAR:+SET}`, `[ -n "$VAR" ]` or
+   `printenv VAR >/dev/null` and read the rc; never interpolate the value into a
+   format string "just to check". Gap tracked in #474; no machine layer exists yet,
+   so this rule is the only layer.
 
 ## See also
 
