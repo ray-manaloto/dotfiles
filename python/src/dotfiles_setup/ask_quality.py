@@ -38,6 +38,40 @@ the right call.
 Deliberately NOT gated: whether the recommendation is *good*, whether the
 citation is *relevant*, or whether the cons are honest. Those are review, not
 lint.
+
+Harness contract — every line below is from the vendor's own docs, on disk in the
+knowledge-base's offline claude-code tree, cited here as ``$CC`` (see
+``.claude/rules/research-doc-sources.md`` step 00 for the path), and confirmed by
+a live probe on 2026-08-02:
+
+- ``$CC/hooks.md:1394`` lists ``AskUserQuestion`` **by name** among PreToolUse
+  matcher values, and ``$CC/hooks.md:246`` states the matcher runs against
+  ``tool_name``. So the dispatch in :func:`hook_guard.decide_payload` is the
+  documented seam, not a guess.
+- ``$CC/settings.md:177``: Claude Code watches settings files and reloads them,
+  and *"this includes ``permissions``, ``hooks``"* — so a matcher edit takes
+  effect **without a restart**. (``$CC/hooks.md:616`` says the same for hooks
+  specifically.) The gate went live in the session that wrote it.
+- ``$CC/hooks.md:1544`` PreToolUse decision control: ``"deny"`` **prevents the tool
+  call**, and ``permissionDecisionReason`` for a deny is *"shown to Claude"*.
+  That is what makes this gate usable rather than merely obstructive — the
+  reason below is the revision instruction, and the user never sees the
+  rejected ask.
+- The payload shape this module reads (``questions[].question`` / ``header`` /
+  ``multiSelect`` / ``options[].label`` / ``description`` / ``preview``) is the
+  documented one: ``$CC/hooks.md:1523`` and
+  ``$CC/agent-sdk__python.md:2560``.
+
+⚠️ ``$CC/hooks.md:1529``'s own example option is ``{"label": "React"}`` — no
+description — so the vendor's illustrative snippet would fail this gate. That is
+fine and deliberate: the SDK schema documents ``description`` as a plain ``str``
+(not optional), and this is a project standard that is stricter than the tool's
+minimum. Do not "fix" the gate to match the snippet.
+
+**Live probe, 2026-08-02** — an otherwise-compliant ask with the citation
+removed was DENIED through the real wired path, the reason naming exactly that
+one rule (so the recommendation and PRO:/CON: checks passed in the same run) and
+the question never reaching the user. Both arms in one call.
 """
 
 from __future__ import annotations

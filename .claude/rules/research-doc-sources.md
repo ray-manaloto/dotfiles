@@ -8,6 +8,40 @@ worked.
 
 ## The chain
 
+00. **For AGENT-HARNESS behaviour, grep the knowledge-base's offline sources
+    FIRST.** `~/dev/github/ray-manaloto/knowledge-base/sources/` holds **36
+    source trees / 6,446 markdown files** (measured 2026-08-02), including
+    `agent-harness-docs/docs/{claude-code,codex,cursor,opencode,pi}` — the
+    **vendor's own docs**, on disk, greppable, zero round-trips.
+
+    ```bash
+    KB=~/dev/github/ray-manaloto/knowledge-base/sources
+    CC=$KB/agent-harness-docs/docs/claude-code   # cited as `$CC/...` elsewhere
+    grep -rn "<topic>" "$CC/"
+    ```
+
+    **This is where every question about how the harness itself behaves is
+    answered** — hook events and their matcher values, settings precedence and
+    reload semantics, tool input schemas, permission modes, the SDK surface.
+    Anything of the form *"does Claude Code do X"* is a **step-00 question**,
+    and reaching the web for it is a step you already had cheaper.
+
+    ⚠️ **Why this is step 00 and not a footnote.** It was in this chain
+    **nowhere** until 2026-08-02 (control-armed: `agent-harness-docs` → **0**
+    hits across `.claude/rules/`, `.claude/skills/` and `AGENTS.md`, against
+    `mintlify-cache` → 2 files, so the probe discriminates). The measured cost:
+    a session shipped a PreToolUse gate and **reported "unproven — I don't know
+    if the harness fires PreToolUse for `AskUserQuestion`, or whether a
+    mid-session `settings.json` edit is picked up"**. Both were sitting on this
+    disk. `$CC/hooks.md:1394` **names
+    `AskUserQuestion`** in the PreToolUse matcher list; `$CC/settings.md:177`
+    states hooks reload **without a restart**. An
+    unanswered question is expensive; an unanswered question whose answer you
+    already have locally is pure loss.
+
+    Step 0 below is a *different* corpus — mintlify docs for third-party
+    libraries. Neither substitutes for the other.
+
 0. **Grep the local cache first.** Every repo in
    `docs/research/mintlify-catalog.md` has both `llms.txt` and
    `llms-full.txt` pre-fetched under
