@@ -546,6 +546,28 @@ this spec's own.
 > refuted**. This does not reopen §12's build/no-build verdict — the automation the pilot rejected
 > would still not have caught any of the three.
 
+> **Second post-pilot data point, 2026-08-01 — and it cuts against the refutation-rate story.**
+> `436.md` (#6): **14 findings (4 critical), 12 accepted / 2 partial / 0 refuted**, under the same
+> settle-it-by-running rule that produced #448's 11.5%. Running total: **127 findings, 4 refuted
+> (3.1%)**. One receipt does not establish a rate, and the honest reading is that **#448's 11.5% is
+> not yet a trend** — n=2 either side of the template edit.
+>
+> What *did* repeat is the more valuable signal: **the review reversed the verdict outright for the
+> second consecutive receipt.** The draft had dropped two of the ticket's seven prior decisions as
+> over-investment, citing #440's "host tier is detection only" — which is about the host **mise**
+> config and says nothing about chezmoi hooks. The reviewer caught the misapplication, and the
+> probes it prompted found **three more live bypasses in the shipped guard** than the ticket had
+> ever recorded (`-S` / `--source` / `--config` are chezmoi *global* flags, so they precede the
+> subcommand and escape a command-anchored regex). So the pattern worth tracking is not the
+> refutation rate but **how often the review changes the recommendation**: 5 of 6 receipts now.
+>
+> Two process defects surfaced that no field currently catches. **A published control term stops
+> being a control** — `zzqqxx`, the known-absent arm of #437/#438/#440, now returns 5 hits *because
+> those receipts wrote it down*; the template should not name a fixed string. And **the probe's own
+> reader is an unarmed component**: a probe here read the wrong attribute off a result object and
+> reported "0 findings" for a host carrying 2 live errors, and that clean number was written down
+> before the control arm caught it.
+
 ### 1. Which fields were real, which became ritual?
 
 **Real, and the highest-value field in all four: the adversarial review.** It was never once

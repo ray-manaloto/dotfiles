@@ -59,6 +59,16 @@ ate the error, and every query returned 0. A thin search and a blind one look id
 field tells them apart. If the known-present arm returns 0, **your probe is broken, not the world** —
 fix it and re-run before writing anything below.
 
+⚠️ **Invent a FRESH known-absent string each time — never reuse the last receipt's.** Writing one
+down publishes it into the corpus, so it stops being absent. Measured in #436: `zzqqxx`, the arm
+#437/#438/#440 all used, now returns **5 hits** — three of them those very receipts. A control term
+that the control arm itself created is a coin with one face.
+
+⚠️ **Arm the READER, not just the corpus.** The probe's own parsing is a component you depend on and
+it fails silently. In #436 a probe read the wrong attribute off a result object, printed **0
+findings** for a host carrying **2 live errors**, and that clean number was written into a draft
+before the control arm caught it. If a probe reports "nothing found", prove it can report something.
+
 | Hit | What I did with it |
 |---|---|
 | `path` | read — <what it changed> **or** dismissed — <why it does not apply> |
