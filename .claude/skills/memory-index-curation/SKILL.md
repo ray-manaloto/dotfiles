@@ -96,6 +96,16 @@ mise-system.toml") is not extractable and is not checked: a clean `rc=0` means
 no distinctive fact is lost, **not** that the line is safe to delete unread.
 Read what you are trimming.
 
+⚠️ **Quantify that before you trust a clean run: 152 of 164 hooks (93%) were
+prose-only** when this was measured on 2026-08-02, i.e. the extractor found
+*nothing to check* in them. So "no index-only facts" was a statement about **12
+entries** presented as one about the index. It is a floor, never a clearance.
+Widening the extractor to backticked spans and bolded claims would reach 44%;
+the remaining 56% is judgment. Numbers, and the redesign they argue for:
+**[#476](https://github.com/ray-manaloto/dotfiles/issues/476) — read it before
+curating again**, especially if you are about to spend agents on this (the first
+run put **52%** of its tokens into its *least* accurate phase).
+
 The classes are narrow on purpose. An earlier prototype cast wider and
 over-reported (`25.8GB` vs `25.8 GB`), and a checker that cries wolf gets
 ignored — which costs more than the facts it would have caught. One deliberate
