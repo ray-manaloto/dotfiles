@@ -946,11 +946,24 @@ def test_every_check_function_is_actually_registered() -> None:
 
 
 def test_the_shipped_baseline_parses_and_declares_what_the_checks_read() -> None:
-    """A baseline missing a section makes its check silently cover nothing."""
+    """A baseline missing a section makes its check silently cover nothing.
+
+    The ``env`` value is pinned deliberately, so flipping the host's posture
+    cannot happen without a reviewed diff here as well. It was ``"exec"`` until
+    **2026-08-02**, when Ray reversed it to ``True`` — all credentials available
+    to every terminal and agent. See
+    ``.claude/rules/secrets-out-of-the-shell-env.md``.
+    """
     setup = doctor.collect(REPO_ROOT)
     fnox = setup.fnox_baseline()
-    assert fnox.get("env") == "exec"
-    assert isinstance(fnox.get("env_true"), list)
+    assert fnox.get("env") is True
+    opt_in = fnox.get("env_true")
+    assert isinstance(opt_in, list)
+    # Under ``env = true`` this list is the FULL shell-visible set, not a short
+    # opt-in list, and ``_opt_in_findings`` compares it as a SET in both
+    # directions. A duplicate would silently shrink what is actually compared.
+    assert opt_in, "env_true must not be empty — an empty set sanctions nothing"
+    assert len(opt_in) == len(set(opt_in)), "env_true has duplicate names"
     mcp = setup.mcp_baseline()
     assert mcp.get("scope_servers")
     assert isinstance(mcp.get("mutating_tools"), dict)
@@ -987,7 +1000,7 @@ def test_collect_reads_the_real_repo_without_touching_the_real_home(
     assert not setup.fnox.exists
 
     # The repo seam — positive evidence that REPO_ROOT was read.
-    assert setup.fnox_baseline().get("env") == "exec"
+    assert setup.fnox_baseline().get("env") is True
     assert setup.mcp_baseline().get("scope_servers")
 
     # Current declared state, pinned deliberately so a future reader does not

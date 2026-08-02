@@ -536,11 +536,18 @@ def check_fnox_baseline(setup: Setup) -> list[str]:
     """The env mode and opt-in set must match the reviewed baseline.
 
     This is the ``bootstrap-config`` tripwire. That generator emits ``provider``
-    + ``value`` only, so a regeneration drops the global ``env = "exec"``, every
-    per-secret opt-in, and every ``sync`` block in one go — silently widening 46
-    credentials from exec-only to "in every child process". Checking the NAME
+    + ``value`` only, so a regeneration drops the global ``env``, every
+    per-secret override, and every ``sync`` block in one go. Checking the NAME
     SET rather than a count is deliberate: a swap keeps the count and is exactly
     the change worth catching.
+
+    .. note::
+       The posture this guarded was **reversed on 2026-08-02**: the baseline is
+       now ``env = true`` with the full 49-name set, because all credentials are
+       deliberately available to every terminal and agent. The check is unchanged
+       and still discriminates in both directions — what moved is the sanctioned
+       state, not the mechanism. See
+       ``.claude/rules/secrets-out-of-the-shell-env.md``.
     """
     expected = setup.fnox_baseline()
     if not expected:

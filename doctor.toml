@@ -14,43 +14,78 @@
 # look inside the working tree.
 
 [fnox]
-# Global env mode. "exec" keeps credentials OUT of the interactive shell, so
-# they are not inherited by Claude Code, by any MCP server it spawns, or by any
-# agent — see `.claude/rules/secrets-out-of-the-shell-env.md`. The consequence
-# this baseline exists to police: with "exec", a config that interpolates
-# `${VAR}` gets an EMPTY STRING, not an error.
-env = "exec"
+# Global env mode. ⚠️ CHANGED 2026-08-02 (Ray): "exec" -> true.
+#
+# Every secret is now available in the interactive shell and is therefore
+# inherited by every child process — Claude Code, its subagents, and any MCP
+# server they spawn. That is the DELIBERATE, stated requirement ("available to
+# all terminals and ai/llm agents"), reversing the 2026-07-27 exec-only posture.
+# The accepted risk is written up in
+# `.claude/rules/secrets-out-of-the-shell-env.md`; this line is only the
+# tripwire that keeps the state intentional.
+env = true
 
-# The variables deliberately opted BACK IN to the shell (`env = true`), each
-# because something reads it from the environment at spawn time and degrades
-# SILENTLY without it:
+# With env = true the shell-visible set is EVERY declared secret, so this list
+# is the full 49-name set rather than a short opt-in list. Keeping it exhaustive
+# is what preserves the check's value: `_opt_in_findings` compares NAME SETS in
+# both directions, so a renamed, added or dropped secret is still caught — a
+# count would not catch a swap. This also lands what
+# https://github.com/ray-manaloto/dotfiles/issues/460 measured as the fix for
+# the doctor's blind zone: it found 14 of 49 secrets sat past the deepest thing
+# the baseline checked, so a truncating write could lose them silently.
 #
-#   CONTEXT7_API_KEY   the context7 PLUGIN's `.mcp.json` interpolates it into an
-#                      `Authorization` header as `${CONTEXT7_API_KEY:-}` — and
-#                      that default is the trap: exec-only made the header an
-#                      empty string, so the server reported connected and served
-#                      an anonymous tier for weeks. Added 2026-07-30 (#418).
-#   EXA_API_KEY        the `/last30days` engine's web lane reads it from the
-#                      PROCESS ENVIRONMENT. It is NOT in that plugin's own
-#                      `~/.config/last30days/.env` and NOT in the keychain, so
-#                      exec-only silently drops its web backend from exa to the
-#                      keyless floor. Re-derived 2026-07-30 when `.mcp.json`
-#                      stopped declaring the exa server: the OLD reason on this
-#                      line (".mcp.json interpolates it") is now false, but the
-#                      opt-in stays — a second consumer was always there.
-#   GITHUB_TOKEN       `gh` reports its active account as the environment-
-#                      authenticated one; every ship/land/automerge runs on it.
-#   MISE_GITHUB_TOKEN  mise's GitHub API calls (release lookups) rate-limit
-#                      to 60/h unauthenticated.
-#
-# Anything NOT listed here must stay exec-only. Adding a name is a decision to
-# widen the blast radius of a credential, so it belongs in a reviewed diff.
-# Measured after the change: `fnox export` names exactly these 4 of 49 secrets.
+# Names are not secrets. Adding or removing an entry here is a deliberate change
+# to what this host carries, and belongs in a reviewed diff.
 env_true = [
+    "AUTH_TOKEN",
+    "AWS_ACCESS_KEY_ID",
+    "AWS_DEFAULT_REGION",
+    "AWS_REGION",
+    "AWS_SECRET_ACCESS_KEY",
+    "BRAVE_API_KEY",
+    "BSKY_APP_PASSWORD",
+    "BSKY_HANDLE",
     "CONTEXT7_API_KEY",
+    "CT0",
+    "DB_PASSWORD",
+    "DOPPLER_TOKEN",
     "EXA_API_KEY",
+    "GEMINI_API_KEY",
+    "GEMINI_TELEMETRY_ENABLED",
+    "GEMINI_TELEMETRY_LOG_PROMPTS",
+    "GEMINI_TELEMETRY_OTLP_ENDPOINT",
+    "GEMINI_TELEMETRY_OTLP_PROTOCOL",
+    "GEMINI_TELEMETRY_TARGET",
+    "GITHUB_API_TOKEN",
+    "GITHUB_MCP_PAT",
     "GITHUB_TOKEN",
+    "GOOGLE_CLIENT_ID",
+    "GOOGLE_CLIENT_SECRET",
+    "GRAFANA_PASSWORD",
+    "LANGSMITH_API_KEY",
+    "LANGSMITH_WORKSPACE_ID",
+    "LINEAR_API_KEY",
+    "LOKI_S3_ACCESS_KEY",
+    "LOKI_S3_BUCKET",
+    "LOKI_S3_SECRET_KEY",
+    "MIMIR_S3_ACCESS_KEY",
+    "MIMIR_S3_BUCKET",
+    "MIMIR_S3_SECRET_KEY",
     "MISE_GITHUB_TOKEN",
+    "NEXTAUTH_SECRET",
+    "NEXTAUTH_URL",
+    "NVIDIA_20260705",
+    "NVIDIA_API_KEY",
+    "OPENLIT_ENDPOINT",
+    "OPENLIT_UI_PASSWORD",
+    "OPENLIT_UI_USER",
+    "OTEL_EXPORTER_OTLP_ENDPOINT",
+    "OTEL_EXPORTER_OTLP_PROTOCOL",
+    "SCRAPECREATORS_API_KEY",
+    "SKILLSMP_API_KEY",
+    "TEMPO_S3_ACCESS_KEY",
+    "TEMPO_S3_BUCKET",
+    "TEMPO_S3_SECRET_KEY",
 ]
 
 [mcp]
