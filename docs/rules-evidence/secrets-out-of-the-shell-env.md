@@ -278,8 +278,10 @@ the shell until something re-reads the config. Filed with the confirmed trigger 
 > (merged `716b17d`) — `bootstrap_config()` now reconciles through `fnox` itself, so
 > there is no template to drop a field from. Everything above is the record of the
 > incident as it stood, kept verbatim; the current account is
-> `docs/secrets-doppler-fnox-keychain.md` § "The config is generated". ⚠️ The sibling
-> tracker **knowledge-base #74 is still OPEN** and now describes a fixed upstream.
+> `docs/secrets-doppler-fnox-keychain.md` § "The config is generated". The sibling
+> tracker **knowledge-base #74 was CLOSED 2026-08-03** with its evidence comment — it
+> described a fixed upstream, and its "prefer `fnox exec --`" recommendation was the
+> inverse of the chosen posture.
 
 **The durable lessons:**
 
@@ -443,7 +445,8 @@ guide with no successor text anywhere, which is deletion, not a move. Kept here.
 - **The sibling-repo defect is tracked on our side too.** `bootstrap_config()`'s
   wipe class is filed upstream as `macos-development-environment#82` **and** as
   **knowledge-base issue #74**. That second pointer was the only record of our
-  own tracking of it.
+  own tracking of it. *[2026-08-03: both are now CLOSED — #82 by mde #83
+  (`716b17d`), KB #74 with an evidence comment.]*
 - **Eventual intent (Ray, 2026-07-20): migrate the integration into a skill**,
   and have the dotfiles repo manage the macOS environment. Neither is done, so
   the guide remains the interim contract.
