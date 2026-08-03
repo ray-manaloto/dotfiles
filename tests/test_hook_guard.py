@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
 import re
 import subprocess
 import sys
@@ -697,6 +698,133 @@ def test_read_command_real_hook_payload() -> None:
     assert res.returncode == 0
     assert '"permissionDecision": "deny"' in res.stdout
     assert "mise run ship" in res.stdout
+
+
+# --- the hook's import surface (#526) ---------------------------------------
+#
+# Every PreToolUse call — AskUserQuestion as much as Bash, Edit and Write —
+# reaches ONE guard module by importing the whole CLI, which drags in the
+# settings module and pydantic behind it. Nothing observed that, so nothing
+# would have noticed it changing. These tests are the observation; they assert
+# TODAY's unimproved reality and change no production code.
+#
+# The surface is read in a FRESH interpreter: pytest has already imported the
+# package by the time any test runs, so an in-process check could only fail and
+# would prove nothing about the hook's own process.
+#
+# Mechanism: a `sitecustomize.py` on PYTHONPATH dumping `sorted(sys.modules)`
+# at `atexit`. `atexit` fires at PROCESS EXIT, not after `import`, so this
+# covers modules pulled in by runtime construction too — `DotfilesConfig()`
+# necessarily imports its own module, which is why the import surface is a
+# sound proxy for the whole process.
+#
+# The unimproved value is asserted deliberately (probes-need-a-control-arm
+# rule 2): a gate only ever seen passing is decoration. Its control arm is
+# `test_the_import_surface_probe_sees_a_lean_process` below — the same probe on
+# a bare guard import reports NONE of these modules, which is also the exact
+# shape #528 will invert this assertion to.
+#
+# ⚠️ `atexit` is skipped on `os._exit`, a fatal signal, and a hard crash, and
+# the dead child STILL exits 0 (measured: rc=0, no dump written). So the
+# snapshot's EXISTENCE is load-bearing — rc alone would let a corpse read as a
+# pristine import surface, a check that can only pass.
+
+_SITECUSTOMIZE = """\
+import atexit
+import json
+import os
+import pathlib
+import sys
+
+_dest = os.environ.get("DOTFILES_IMPORT_SNAPSHOT")
+if _dest:
+    atexit.register(
+        lambda: pathlib.Path(_dest).write_text(
+            json.dumps(sorted(sys.modules)), encoding="utf-8"
+        )
+    )
+"""
+
+# The settings module, plus the transitive validation dependency it is heavy
+# BECAUSE of. `pydantic_settings` is what `dotfiles_setup.config` imports;
+# `pydantic` is what that pulls in.
+_HEAVY_MODULES = ("dotfiles_setup.config", "pydantic_settings", "pydantic")
+
+
+def _import_surface(tmp_path: Path, argv: list[str], stdin: str = "") -> list[str]:
+    """`sorted(sys.modules)` at exit of a fresh interpreter running ``argv``."""
+    probe = tmp_path / "probe"
+    probe.mkdir()
+    (probe / "sitecustomize.py").write_text(_SITECUSTOMIZE, encoding="utf-8")
+    snapshot = tmp_path / "modules.json"
+    res = subprocess.run(
+        argv,
+        input=stdin,
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=Path(__file__).parent.parent,
+        env={
+            **os.environ,
+            "PYTHONPATH": str(probe),
+            "DOTFILES_IMPORT_SNAPSHOT": str(snapshot),
+        },
+        timeout=120,
+    )
+    assert res.returncode == 0, f"probe child failed: {res.stderr}"
+    # BOTH, in this order, and neither is redundant: a child killed by
+    # `os._exit` or a signal skips `atexit` yet can still exit 0, so the
+    # missing snapshot is the only evidence that it died.
+    assert snapshot.exists(), (
+        f"no import snapshot at {snapshot}: the child exited "
+        f"{res.returncode} without reaching atexit — stderr: {res.stderr}"
+    )
+    modules: list[str] = json.loads(snapshot.read_text(encoding="utf-8"))
+    return modules
+
+
+def test_real_hook_dispatch_imports_the_settings_module(tmp_path: Path) -> None:
+    """[#526]: a real dispatch through the real entry point is NOT lean today."""
+    modules = _import_surface(
+        tmp_path,
+        ["uv", "run", "--project", "python", "dotfiles-setup", "hook", "pretooluse"],
+        stdin=json.dumps(
+            {"tool_name": "Bash", "tool_input": {"command": "gh pr create --fill"}}
+        ),
+    )
+    # The guard is what the dispatch exists to reach — if it is absent the
+    # probe watched the wrong process and the rest of this test is vacuous.
+    assert "dotfiles_setup.hook_guard" in modules
+    resident = [name for name in _HEAVY_MODULES if name in modules]
+    assert resident == list(_HEAVY_MODULES), (
+        "the hook's import surface changed: expected every module in "
+        f"{list(_HEAVY_MODULES)} resident after a real dispatch, found "
+        f"{resident}. If this is #528 landing, invert the assertion to "
+        "`resident == []` rather than relaxing it."
+    )
+
+
+def test_the_import_surface_probe_sees_a_lean_process(tmp_path: Path) -> None:
+    """Control arm for the gate above: the probe CAN report a lean surface.
+
+    Without this, a probe that reported every module resident unconditionally
+    would pass the gate identically to one that works. This is also the exact
+    shape #528 makes the real dispatch take.
+    """
+    modules = _import_surface(
+        tmp_path,
+        [
+            "uv",
+            "run",
+            "--project",
+            "python",
+            "python",
+            "-c",
+            "import dotfiles_setup.hook_guard",
+        ],
+    )
+    assert "dotfiles_setup.hook_guard" in modules
+    assert [name for name in _HEAVY_MODULES if name in modules] == []
 
 
 # --- secret_value_substitution (#474 shape; landed 2026-08-02) --------------
