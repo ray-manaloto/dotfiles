@@ -28,9 +28,17 @@ _WRAPPER = _PROJECT_ROOT / "scripts" / "pretooluse-guard.sh"
 # (`probes-need-a-control-arm.md` rule 2), so it is pinned at what it really is
 # before anything depends on it. #527 lowers them by collapsing the three
 # `rev-parse`/`symbolic-ref` calls into one; that ticket updates these.
+#
+# Asserted as EQUALITY, not as a `<=` budget, and that is load-bearing: the
+# dangerous regression here REMOVES a call rather than adding one. Measured —
+# dropping the `origin/HEAD` lookup (the rejected "name-only short-circuit")
+# moves 3 -> 2 and 4 -> 3, which a budget would wave through while the guard
+# silently stopped consulting the real default branch.
 _GIT_CALLS_OUTSIDE_REPO = 1  # rev-parse --show-toplevel, which fails
 _GIT_CALLS_ON_FEATURE_BRANCH = 3  # + abbrev-ref HEAD, + symbolic-ref origin/HEAD
 _GIT_CALLS_DENY_ON_DEFAULT = 4  # + check-ignore
+
+_WRAPPER_TIMEOUT_S = 120
 
 
 def _run(args: list[str], cwd: Path) -> None:
@@ -81,7 +89,7 @@ def _advertise_default(root: Path, branch: str) -> None:
     )
 
 
-def _guard_via_wrapper(target: Path, trace: Path) -> tuple[str, int]:
+def _guard_via_wrapper(target: Path, tmp_path: Path) -> tuple[str, int]:
     """Run the REAL wired guard on `target`; return (stdout, git call count).
 
     The count comes from git's own tracing facility pointed at a path — not a
@@ -89,6 +97,7 @@ def _guard_via_wrapper(target: Path, trace: Path) -> tuple[str, int]:
     job (`use-tool-builtins.md`), and writing to a path rather than stderr is
     what lets it survive the guard's captured pipes.
     """
+    trace = tmp_path / "git-trace.log"
     payload = json.dumps(
         {"tool_name": "Write", "tool_input": {"file_path": str(target), "content": "x"}}
     )
@@ -104,11 +113,24 @@ def _guard_via_wrapper(target: Path, trace: Path) -> tuple[str, int]:
             "CLAUDE_PROJECT_DIR": str(_PROJECT_ROOT),
         },
         check=False,
-        timeout=120,
+        timeout=_WRAPPER_TIMEOUT_S,
     )
     assert proc.returncode == 0, proc.stderr
     text = trace.read_text() if trace.exists() else ""
-    return proc.stdout, text.count("built-in: git ")
+    # Three failure modes, told apart — otherwise a broken INSTRUMENT reads as
+    # a faster guard, and `probes-need-a-control-arm.md` rule 4 (a parse error
+    # is not a "no") is exactly what this counter would violate. Every arm here
+    # runs `rev-parse` at least once, so:
+    #   empty file                     -> GIT_TRACE never ran
+    #   has `rev-parse`, but no token  -> git's trace FORMAT changed
+    #   token present                  -> the count means what it says
+    # `built-in: git ` is git's human-readable format, not a documented
+    # contract, which is why it is checked rather than trusted.
+    assert text, f"GIT_TRACE recorded nothing at {trace} — the tracer never ran"
+    assert "rev-parse" in text, f"GIT_TRACE wrote something odd: {text[:200]}"
+    calls = text.count("built-in: git ")
+    assert calls, "git's trace format changed — 'built-in: git ' gone, but git ran"
+    return proc.stdout, calls
 
 
 @pytest.fixture
@@ -238,6 +260,7 @@ def test_denies_on_the_advertised_default_branch(remote_repo: Path) -> None:
     assert reason is not None
     assert "default branch" in reason
     assert "git checkout -b" in reason
+    assert "tracked.md" in reason
 
 
 def test_allows_a_feature_branch_when_the_default_is_advertised(
@@ -272,7 +295,7 @@ def test_a_write_outside_any_repo_costs_one_git_call(tmp_path: Path) -> None:
     """The early exit really is early: one failed root lookup, nothing more."""
     outside = tmp_path / "not-a-repo"
     outside.mkdir()
-    stdout, calls = _guard_via_wrapper(outside / "MEMORY.md", tmp_path / "t.log")
+    stdout, calls = _guard_via_wrapper(outside / "MEMORY.md", tmp_path)
     assert stdout.strip() == ""
     assert calls == _GIT_CALLS_OUTSIDE_REPO
 
@@ -282,7 +305,7 @@ def test_an_allowed_write_on_a_feature_branch_costs_three_git_calls(
 ) -> None:
     """Root, branch, remote default — three processes for one allow."""
     _run(["git", "checkout", "-b", "feat/x"], remote_repo)
-    stdout, calls = _guard_via_wrapper(remote_repo / "tracked.md", tmp_path / "t.log")
+    stdout, calls = _guard_via_wrapper(remote_repo / "tracked.md", tmp_path)
     assert stdout.strip() == ""
     assert calls == _GIT_CALLS_ON_FEATURE_BRANCH
 
@@ -293,6 +316,6 @@ def test_a_denied_write_costs_four_git_calls(remote_repo: Path, tmp_path: Path) 
     Counting alone would pass just as happily if the guard had decided
     nothing at all, so the decision is pinned in the same assertion.
     """
-    stdout, calls = _guard_via_wrapper(remote_repo / "tracked.md", tmp_path / "t.log")
+    stdout, calls = _guard_via_wrapper(remote_repo / "tracked.md", tmp_path)
     assert '"permissionDecision": "deny"' in stdout
     assert calls == _GIT_CALLS_DENY_ON_DEFAULT
