@@ -37,17 +37,27 @@ Five shapes, all drawn from real finds in this repo. Look for these by name:
 
 ### 1. Persist findings incrementally, to disk, as you go
 
-Write your report file **before** you have finished auditing, and update it after
-each finding. Not at the end.
+**Your first action, before you read a single audited file, is to create the
+tracked report** at `docs/research/kb/reports/agents/staleness-auditor-<scope>.md`
+— a title and a ground-truth line are enough to start. Rewrite it after every
+finding. Not at the end, and not once you "have something worth writing."
 
-- Report: `docs/research/kb/reports/agents/staleness-auditor-<scope>.md` (tracked).
-- Running condensed findings: append to `.agent/notepad.md`.
+That file is the deliverable. `.agent/notepad.md` is **gitignored**, so an append
+there is a scratch note, not persistence — it is a **supplement to** the tracked
+report, never a substitute for it. Append to it too if it helps you think.
 
 Two agents in the 2026-08-03 run held everything in memory, died on an auth error
 around the 40-minute mark, and left **nothing**. A third survived only because it
 appended as it went. An agent that dies having written 7 of 12 findings leaves 7;
-one planning to write at the end leaves 0. Append with a shell heredoc rather than
-rewriting a large file.
+one planning to write at the end leaves 0.
+
+⚠️ **This agent's own first run failed exactly here, which is why the wording is
+now an order rather than a list.** It persisted diligently — to the notepad only —
+and never created the tracked report, so the one artifact that survives a clone had
+to be written by the caller after the fact. An earlier draft of this section
+offered the two paths as co-equal bullets; presented with a cheap option and a
+durable one, the agent took the cheap one. Delivering the report in your final
+message does **not** discharge this: a message is not a file.
 
 ### 2. Deliver before you go idle
 
