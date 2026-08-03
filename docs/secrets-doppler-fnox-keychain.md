@@ -49,7 +49,7 @@ What still binds, and binds *harder* at 50 credentials than it did at 4:
 
 | layer | role | what it holds here |
 |---|---|---|
-| **Doppler** | shared authority — the value of record | project `dotfiles`; configs **`dev_personal`** (49 secrets) and **`dev`** (43) |
+| **Doppler** | shared authority — the value of record | project `dotfiles`; config **`dev_personal`** (49 secrets) serves host + devcontainer since 2026-08-03. `dev` (43, a strict subset) is now an opt-out only |
 | **fnox** | declaration + resolution + optional encrypted cache | `~/.config/fnox/config.toml`; providers `keychain`, `age`, `doppler_dotfiles_dev_personal` |
 | **macOS Keychain** | machine-local bootstrap vault | service **`mde-fnox`**, holding **two** accounts: `DOPPLER_TOKEN` (the credential that unlocks everything else) and `DOPPLER_RO_TOKEN` (#487's scoped read-only token, deliberately kept out of the shell) |
 | **environment** | process delivery | injected by shell activation (all 50) or `fnox exec`; never the source of truth |
@@ -95,16 +95,17 @@ shows a single `default` profile.
 A per-secret `env` **overrides** the global. That is why flipping the global
 alone changes nothing here — all 50 inline values would still win.
 
-## Two Doppler configs, two lanes — `dev` is not a mistake
+## One config: both lanes read `dev_personal` (aligned 2026-08-03)
 
-This is the correction the previous version of this file most needed. It called
-writing to `dev` "the single easiest mistake to make". It is not; `dev` is a
-real lane with its own consumer.
+This file has now been wrong about `dev` twice in opposite directions. It first
+called writing to `dev` "the single easiest mistake to make"; the 2026-08-03
+rewrite corrected that to "`dev` is a real lane with its own consumer". Both are
+superseded — the lane existed, but **nothing in it was ever container-specific**.
 
 | config | real secrets | who reads it |
 |---|---:|---|
-| **`dev_personal`** | **49** | fnox on this host — every declaration maps to `providers.doppler_dotfiles_dev_personal` |
-| **`dev`** | **43** | the devcontainer: `.devcontainer/devcontainer.json:198` downloads `${DOPPLER_CONFIG:-dev}`, pinned to `dev` by `mise.toml:251,277,771` |
+| **`dev_personal`** | **49** | **everything** — fnox on this host (every declaration maps to `providers.doppler_dotfiles_dev_personal`) **and** the devcontainer (`.devcontainer/devcontainer.json:198` downloads `${DOPPLER_CONFIG:-dev_personal}`, pinned by `mise.toml:251,277,771`) |
+| **`dev`** | **43** | nothing, by default. Retained as a per-clone opt-out via `mise.local.toml` `[tasks.up] env = { DOPPLER_CONFIG = "dev" }` |
 
 (Both report 3 more names than that — Doppler auto-injects `DOPPLER_PROJECT`,
 `DOPPLER_CONFIG`, `DOPPLER_ENVIRONMENT`.)
@@ -113,23 +114,57 @@ Measured 2026-08-03: **`dev` ⊂ `dev_personal`** exactly — 0 names in `dev` a
 absent from `dev_personal`, and `dev_personal` carries 6 extra. Its 49 match
 fnox's 49 doppler-backed declarations one for one.
 
-So the operative rule is narrower than "never use `dev`":
+### The 6 extras, and why the split bought nothing
 
-- **A host credential written to `dev` never reaches fnox** — declare it in
-  `dev_personal`. This still fails silently.
-- **A credential the devcontainer needs must be in `dev`**, or `mise run up`
-  ships without it.
+Every one is consumed on the **host**, never in the container:
 
-⚠️ **Latent and unfixed — the *scoping mismatch*, not the token.** #487 is
-**CLOSED/COMPLETED** (2026-08-02): the scoped read-only token
-`dotfiles-fnox-ro-20260802` exists, in keychain `mde-fnox` under account
-`DOPPLER_RO_TOKEN`. What is unfixed is that it is scoped to **`dev_personal`**
-while the devcontainer downloads **`dev`**. Repointing `DOPPLER_TOKEN` at it
-would break `mise run up`, and the `build.doppler-secrets-wired` contract stays
-green straight through — its `per_path_tokens` assert an `--env-file`, the
-`doppler.env` path, and `&& doppler secrets download --format docker`, and
-**name no config at all** (`python/verification/suites.toml:507-511`). Decide
-the scoping before swapping the token.
+| name | consumer | why the container never needed it |
+|---|---|---|
+| `AGE_PRIVATE_KEY` | fnox age-cache decryption | `fnox` is **0 lines** in `mise-system.toml` + `Dockerfile` (control: gh/uv/python → 15) |
+| `GITHUB_API_TOKEN` | `renovate_dryrun.py:98`; mise priority **2** | host task `mise.toml:615` |
+| `MISE_GITHUB_TOKEN` | `renovate_dryrun.py:99`; mise priority **1**; `Dockerfile:311,564` derive it from `GITHUB_TOKEN` at build time | see below |
+| `NVIDIA_API_KEY` | `graph_bakeoff.py:618` (NIM benchmark) | graphify is 0 lines in the image, 25 in host `mise.toml` |
+| `LINEAR_API_KEY` · `NVIDIA_20260705` | **other projects on this host** (Ray, 2026-08-03) | not this repo's consumers either way |
+
+⚠️ **The two GitHub token names are aliases, not capabilities.** mise resolves
+`MISE_GITHUB_TOKEN` → `GITHUB_API_TOKEN` → `GITHUB_TOKEN`, and **`GITHUB_TOKEN`
+was already in `dev`** — so the container's `on-create.sh:54` `mise install -y`
+was authenticated all along, at priority 3. Two routes agree, control-armed:
+the cached priority table (`docs/research/mintlify-cache/jdx/mise/llms-full.txt:4004-4008`)
+and live source `jdx/mise:src/env.rs:591`,
+`get_token(&["MISE_GITHUB_TOKEN","GITHUB_API_TOKEN","GITHUB_TOKEN"])` (control:
+a bogus var in the same file → 0). A KB review report corroborates that
+`GITHUB_TOKEN` and `MISE_GITHUB_TOKEN` held **identical values** under two names.
+
+So the split cost a second name set that **nothing asserts**, and bought no
+capability. What it *did* buy — and what alignment gives up — is stated next.
+
+### The accepted cost, stated rather than argued away
+
+`AGE_PRIVATE_KEY` is the key that decrypts the fnox age cache (which is why it
+is the one declaration with no `sync` block). Under the split it never left the
+host; it now reaches the container's `--env-file`. **This was decided knowingly
+on 2026-08-03**, with the cost on the table, in exchange for one name set that
+`doctor.toml` already models. Do not "fix" it back without re-deciding it.
+
+### Still true, and now the only rule
+
+- **A credential written to `dev` reaches nothing** unless a clone opts in.
+  Declare host credentials in `dev_personal`. This still fails silently.
+
+⚠️ **The contract still names no config, and that gap is unchanged.**
+`build.doppler-secrets-wired`'s `per_path_tokens` assert an `--env-file`, the
+`doppler.env` path, and `&& doppler secrets download --format docker` —
+**no config at all** (`python/verification/suites.toml:507-511`). A wrong
+`DOPPLER_CONFIG` stays green. Alignment reduced the blast radius (there is one
+right answer now instead of two) but did not close it.
+
+✅ **What alignment unblocks:** #487's scoped read-only token
+`dotfiles-fnox-ro-20260802` (keychain `mde-fnox`, account `DOPPLER_RO_TOKEN`) is
+scoped to **`dev_personal`**, which is now what the devcontainer downloads — so
+the scoping mismatch that made repointing `DOPPLER_TOKEN` break `mise run up` is
+gone. Stated as unblocked, **not as verified**: the swap has not been tried, and
+the contract above cannot tell you if it regresses.
 
 ## The config is generated, and the generator is one command away
 
@@ -311,9 +346,11 @@ headers, raw env dumps, or the contents of a secret-bearing config.
 
 ## Add a secret
 
-1. Confirm key name, **which config** (`dev_personal` for the host,
-   `dev` if the devcontainer needs it, both if both), consumer, scope, rotation
-   expectation, and that no existing credential can be reused.
+1. Confirm key name, consumer, scope, rotation expectation, and that no existing
+   credential can be reused. **The config is `dev_personal`** — since the
+   2026-08-03 alignment it serves the host and the devcontainer both, so there
+   is no longer a "which config" judgement call. Write to `dev` only if a clone
+   has opted out via `mise.local.toml`.
 2. Human creates/reveals the credential at the provider.
 3. Interactive setter — **no value argument**, so nothing enters argv or history:
 

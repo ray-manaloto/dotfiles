@@ -66,9 +66,12 @@
 // No doppler CLI needed inside the container.
 //
 // Doppler project/config defaults come from mise.toml [tasks.up].env
-// (DOPPLER_PROJECT=dotfiles, DOPPLER_CONFIG=dev). Override per-clone
-// via mise.local.toml. Future: migrate to mise-env-fnox integration
-// with doppler provider inside the container (#83).
+// (DOPPLER_PROJECT=dotfiles, DOPPLER_CONFIG=dev_personal). Override
+// per-clone via mise.local.toml. Aligned onto dev_personal 2026-08-03:
+// dev was a strict subset (43 of 49) and the 6 extras are host-side
+// consumers, so the split bought nothing the container could use while
+// costing a second name set nothing asserted. Future: migrate to
+// mise-env-fnox integration with doppler provider in-container (#83).
 // ===============================================================
 {
   "$schema": "https://raw.githubusercontent.com/devcontainers/spec/main/schemas/devContainer.schema.json",
@@ -195,7 +198,7 @@
   "forwardPorts": [2222],
   "updateRemoteUserUID": false,
   "init": true,
-  "initializeCommand": "mkdir -p ~/.local/state/dotfiles && doppler secrets download --format docker --no-file --project \"${DOPPLER_PROJECT:-dotfiles}\" --config \"${DOPPLER_CONFIG:-dev}\" > ~/.local/state/dotfiles/doppler.env && [ -s ~/.local/state/dotfiles/doppler.env ] && uv run --project python dotfiles-setup docker initialize-host",
+  "initializeCommand": "mkdir -p ~/.local/state/dotfiles && doppler secrets download --format docker --no-file --project \"${DOPPLER_PROJECT:-dotfiles}\" --config \"${DOPPLER_CONFIG:-dev_personal}\" > ~/.local/state/dotfiles/doppler.env && [ -s ~/.local/state/dotfiles/doppler.env ] && uv run --project python dotfiles-setup docker initialize-host",
   "onCreateCommand": "bash /workspaces/${localWorkspaceFolderBasename}/.devcontainer/scripts/on-create.sh /workspaces/${localWorkspaceFolderBasename}",
   "postCreateCommand": "sudo chown ${localEnv:USER}:${localEnv:USER} /run/host-services/ssh-auth.sock && install -d -m 700 ~/.ssh && install -m 600 /tmp/dotfiles-host-state/authorized_keys ~/.ssh/authorized_keys && ssh-keyscan -t rsa,ecdsa,ed25519 github.com >> ~/.ssh/known_hosts && [ -s ~/.ssh/known_hosts ] && chmod 600 ~/.ssh/known_hosts && scripts/devcontainer-smoke.sh",
   // Re-chown the Docker Desktop magic SSH socket on EVERY container
