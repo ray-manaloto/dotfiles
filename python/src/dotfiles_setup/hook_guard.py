@@ -38,7 +38,7 @@ import re
 import sys
 from dataclasses import dataclass
 
-from dotfiles_setup import ask_quality
+from dotfiles_setup import ask_quality, branch_guard
 from dotfiles_setup.heredoc import HEREDOC_PATTERN, NUL_FILLER, blank_heredoc
 
 
@@ -783,12 +783,15 @@ def _read_command() -> str:
 def decide_payload(tool_name: str, tool_input: dict[str, object]) -> str | None:
     """Deny reason for a pending tool call, dispatched on ``tool_name``.
 
-    ``AskUserQuestion`` goes to the ask-quality standard; everything else is
-    treated as a Bash command (the historical shape — an absent ``tool_name``
-    must keep behaving exactly as it did before dispatch existed).
+    ``AskUserQuestion`` goes to the ask-quality standard; the file-modifying
+    tools go to the default-branch guard; everything else is treated as a Bash
+    command (the historical shape — an absent ``tool_name`` must keep behaving
+    exactly as it did before dispatch existed).
     """
     if tool_name == "AskUserQuestion":
         return ask_quality.decide(tool_input)
+    if branch_guard.handles(tool_name):
+        return branch_guard.decide(tool_input)
     return decide(str(tool_input.get("command", "")))
 
 

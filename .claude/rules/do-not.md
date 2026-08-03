@@ -42,16 +42,28 @@ in this repo. Control arms and case history for each entry:
    fails our size gate either way. Run any `graphify <platform> install` in a
    **throwaway directory outside this repo**, never here.
 
-9. **Do NOT commit onto the default branch — branch FIRST.** Create the branch
-   *before* the commit, then `mise run ship`. It has happened twice, the second
-   time straight after `mise run land` (which **leaves you on `main`**).
-   Recovery is `git branch <new> && git reset --hard origin/main`.
+9. **Do NOT commit — or WRITE — onto the default branch. Branch FIRST.** Create
+   the branch *before* the first edit, then `mise run ship`. It has happened
+   three times, twice straight after `mise run land` (which **leaves you on
+   `main`**). Recovery is `git branch <new> && git reset --hard origin/main`;
+   uncommitted work carries across a `git checkout -b` untouched.
 
-   Machine-enforced (#400) in three layers: hk's `no_commit_to_branch` in the
-   **pre-commit** hook, the PreToolUse guard denying `--no-verify` / `git commit
-   -n` / a `HK_SKIP_HOOKS=` prefix (**no git hook can catch those** — git skips
-   the hook before it exists as a process), and a repository **ruleset requiring
-   a PR for `main`** — the only layer an agent cannot skip.
+   ⚠️ **"Don't commit" was too late a gate.** On 2026-08-03 a whole session's
+   work — including two sub-agent reports — accumulated on `main` and nothing
+   said a word, because **hk is a git-hook system and never sees a write**. It
+   would only have fired at the commit. Ray's standing instruction is therefore
+   *"all work should be on a branch that can be on a PR"*, enforced *whenever
+   anything is modified*.
+
+   Machine-enforced (#400) in four layers, earliest first: the **PreToolUse
+   `branch_guard`** denying `Edit`/`Write`/`NotebookEdit` on a repo file while
+   on the default branch (git-ignored paths and anything outside the repo stay
+   allowed, so `.agent/`, `mise.local.toml` and the scratchpad are unaffected);
+   hk's `no_commit_to_branch` in the **pre-commit** hook; the PreToolUse guard
+   denying `--no-verify` / `git commit -n` / a `HK_SKIP_HOOKS=` prefix (**no git
+   hook can catch those** — git skips the hook before it exists as a process);
+   and a repository **ruleset requiring a PR for `main`** — the only layer an
+   agent cannot skip.
 
 10. **Do NOT write an environment dump into a tracked file.** Not `env`, not
     `printenv`, not `export -p`, not a debug log carrying them. The interactive
