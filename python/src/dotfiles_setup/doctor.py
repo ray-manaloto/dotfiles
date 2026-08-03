@@ -129,7 +129,17 @@ class FnoxState:
         the same question. It is used to EXPLAIN an absence, which is what makes
         a finding actionable rather than merely true.
         """
-        mode = self.per_secret.get(name, self.env_mode)
+        # `read_fnox` stores ``fields.get("env")``, so a declaration with NO
+        # ``env`` field lands here as an explicit ``None`` — the key EXISTS, and
+        # a ``dict.get(name, default)`` would never reach its default. Inherit on
+        # ``None``, not on absence, or "absent means inherit" is a lie for every
+        # declared secret. Invisible under ``env = "exec"`` (both paths returned
+        # False); wrong under ``env = true``, where it would report all 50 as
+        # shell-invisible after a `bootstrap_config()` regeneration — i.e. a
+        # false alarm on precisely the event this tripwire exists to catch.
+        mode = self.per_secret.get(name)
+        if mode is None:
+            mode = self.env_mode
         return mode is True
 
     def declares(self, name: str) -> bool:

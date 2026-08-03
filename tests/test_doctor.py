@@ -230,10 +230,18 @@ def test_fnox_baseline_flags_a_missing_baseline_section() -> None:
 @pytest.mark.parametrize(
     ("env_mode", "per_secret", "expected"),
     [
-        # No per-secret field: the global mode decides.
+        # No per-secret field: the global mode decides. ⚠️ `{}` is a shape
+        # `read_fnox` NEVER produces — it stores `fields.get("env")`, so a
+        # declaration without the field arrives as an explicit `None`. These
+        # rows passed while that real shape was broken; the `None` rows below
+        # are the ones with teeth.
         (True, {}, True),
         ("exec", {}, False),
         (False, {}, False),
+        # The REAL shape from `read_fnox`: key present, value None => inherit.
+        (True, {"V": None}, True),
+        ("exec", {"V": None}, False),
+        (False, {"V": None}, False),
         # A per-secret field overrides the global mode, in both directions.
         ("exec", {"V": True}, True),
         (True, {"V": "exec"}, False),

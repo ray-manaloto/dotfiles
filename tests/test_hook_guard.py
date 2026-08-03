@@ -725,6 +725,17 @@ def test_read_command_real_hook_payload() -> None:
         'ls; echo "$EXA_API_KEY"',
         'echo "${MY_PASSWORD}"',
         'echo "$FOO_CREDENTIALS"',
+        # ⚠️ Credentials a SHAPE regex cannot see. Measured 2026-08-02 against
+        # the live 50-name set: all three were printable. `CT0` and the
+        # date-named NVIDIA key carry no lexical signal at all; the AWS key id
+        # was rejected by the `_ID` lookahead written for location-ish names.
+        # An opaque name is exactly the case a suffix rule cannot cover, so the
+        # literal list is load-bearing, not belt-and-braces.
+        'echo "${CT0:-ABSENT}"',
+        'echo "$CT0"',
+        'echo "${NVIDIA_20260705:-none}"',
+        'printf "%s" "$NVIDIA_API_KEY"',
+        'echo "${AWS_ACCESS_KEY_ID:-none}"',
     ],
 )
 def test_printing_a_credential_is_denied(command: str) -> None:
