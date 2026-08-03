@@ -158,11 +158,22 @@ _V7 = "2026-08-02"
 # first and span the whole name: as a trailing check it backtracks, because
 # `_PAT` matches inside `SSH_KEY_PATH` and the tail then sees only `H`. That
 # false positive was measured, not imagined.
+# ⚠️ A SHAPE regex cannot cover an opaque or date-named credential. Measured
+# 2026-08-02 against the live 50-name set: `CT0`, `NVIDIA_20260705` and
+# `AWS_ACCESS_KEY_ID` were all printable — the first two carry no lexical signal
+# at all, and the third is rejected by the `_ID` lookahead written for
+# location-ish names (`GOOGLE_CLIENT_ID`). That is exactly the shape that leaked
+# twice the same day. Literal names close the gap the shape cannot see; keep this
+# list aligned with `doctor.toml`'s reviewed `env_true` set, which is the only
+# authoritative inventory of what this host actually carries.
+_CREDENTIAL_LITERALS = r"CT0|NVIDIA_\d+|AWS_ACCESS_KEY_ID|AWS_SESSION_TOKEN"
 _CREDENTIAL_NAME = (
+    r"(?:" + _CREDENTIAL_LITERALS + r"|"
     r"(?![A-Z0-9_]*(?:_PATH|_FILE|_DIR|_NAME|_ID)\b)"
     r"[A-Z][A-Z0-9_]*"
     r"(?:TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIALS?|APIKEY|API_KEY|_KEY|_PAT)"
     r"[A-Z0-9_]*"
+    r")"
     # `${VAR:+FLAG}` and `${VAR+FLAG}` emit the FLAG, never the value — they are
     # the forms this rule tells you to use, so they must not trip it.
     r"(?!:?\+)"
