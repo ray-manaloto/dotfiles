@@ -135,7 +135,8 @@ the scoping before swapping the token.
 
 `~/.config/fnox/config.toml` opens with *"Managed by `mde-py secrets
 bootstrap-config`. Do not edit by hand."* Everything below was re-measured
-2026-08-03, and it corrects the reassuring version this file used to carry.
+2026-08-03 **after mde #83 merged**, and it supersedes two earlier accounts this
+file carried — see "How this section was wrong twice" at the end.
 
 **`which mde-py` returns rc=1 — and that means nothing.** (Control: `which fnox`
 rc=0.) `mde-secret-add` is a **live shell function in every interactive shell**,
@@ -145,64 +146,56 @@ documented happy path is one command away right now.
 
 **That venv is an editable install** — `mde.pth` points at
 `…/macos-development-environment/src` — so *which code runs depends on which
-branch that sibling repo has checked out*. There is no pinned copy.
+branch that sibling repo has checked out*. There is no pinned copy. That is why
+this section talks about branches at all, and it is still true after the fix.
 
-**The fix is checked out, and that is not the same as shipped.** Commit
-`691e866` (2026-08-01, *"stop rewriting the fnox config — reconcile through fnox
-instead"*) adds and drops declarations by invoking the `fnox` binary, writing the
-file directly only when it does not exist — so it **cannot** drop the `env` mode
-or a per-secret opt-in. As of 2026-08-03 it lives on the local branch
-`fix/bootstrap-config-reroute-through-fnox` only: **not** an ancestor of
-`origin/main` (rc=1, control on an `origin/main` commit rc=0), **no PR open**,
-and issue
-**[macos-development-environment#82](https://github.com/ray-manaloto/macos-development-environment/issues/82)**
-still **OPEN**.
+### The fix is shipped — `main` is now the safe place to be
 
-⚠️ **So the template-rewrite hazard is currently held off by a checked-out
-branch, not by a fix anyone has landed.** Verified two ways on 2026-08-03: that
-repo's `HEAD` is `691e866` with `manage.py` clean (control — the probe *can* see
-dirt: `.claude/settings.json` shows ` M`), and importing the module through the
-venv the wrapper actually calls resolves to that working tree and finds
-`_reconcile_declarations` (control: a bogus attribute → `False`), a symbol that
-exists only in the fix.
+[macos-development-environment#82](https://github.com/ray-manaloto/macos-development-environment/issues/82)
+is **CLOSED** (2026-08-03T08:55:50Z), fixed by
+[#83](https://github.com/ray-manaloto/macos-development-environment/pull/83),
+squash-merged as **`716b17d`** on `main`. The fix (`691e866`, *"stop rewriting
+the fnox config — reconcile through fnox instead"*) adds and drops declarations
+by invoking the `fnox` binary, writing the file directly only when it does not
+exist — so it **cannot** drop the `env` mode or a per-secret opt-in.
 
-### Which branch you land on decides which failure you get
+Re-derived on `origin/main`, control-armed: `git ls-tree -r --name-only
+origin/main -- src/mde/secrets/manage.py` → **1** row (control `README.md` → 1),
+and `git show origin/main:<path> | grep -c _reconcile_declarations` → **2**
+(control, a bogus symbol → **0**). `_reconcile_declarations` exists only in the
+fix, so its presence on `origin/main` is the fix's presence.
 
-`src/mde/secrets/manage.py` is on **neither** `main` **nor** `origin/main` — the
-whole CRUD wrapper arrived in `7bf7a55`, which was never merged. Three
-independent routes, each control-armed: `git ls-tree -r --name-only <ref> --
-<path>` → **0** rows for both (control `README.md` → 1); `git log <ref> --
-<path>` → **0** commits for both (control, the fix branch → 2); and
-`git show <ref>:<path> | grep` → 0. Counted across every local and remote ref,
-**64 branches carry `manage.py` WITHOUT the fix and exactly 1 carries it with**.
+### The residual hazard is one stale local branch
 
-| you check out | `mde-secret-add` does |
+Across all **45** local and remote-tracking refs in that clone, exactly **4**
+carry `src/mde/secrets/manage.py` at all:
+
+| ref | `mde-secret-add` does |
 |---|---|
-| `fix/bootstrap-config-reroute-through-fnox` (today) | reconciles through `fnox`; cannot drop the mode or an opt-in |
-| any of the **64** other branches carrying `manage.py` | the #82 template rewrite — **silent**, and the hazard this section describes |
-| `main` / `origin/main` | **fails loudly** — `mde/secrets/__init__.py:76` imports `manage` lazily inside the call, so the module is simply absent |
+| `origin/main` · `origin/HEAD` | reconciles through `fnox`; **cannot** drop the mode or an opt-in |
+| local `fix/bootstrap-config-reroute-through-fnox` (upstream deleted on merge) | same code — it *is* `691e866` |
+| local `feat/secrets-crud-architecture-a` | ⚠️ **the pre-fix template rewrite — silent.** The only remaining carrier |
+| every other ref (41) | **fails loudly** — `mde/secrets/__init__.py:76` imports `manage` lazily inside the call, so the module is simply absent |
 
-**Nothing in this repo detects which of those three you are on.**
+**Nothing in this repo detects which of those you are on**, so the residual risk
+is real but now narrow: delete `feat/secrets-crud-architecture-a` and it is zero.
 
-> ⚠️ **This table replaces a wrong claim shipped in #515**, which said the
-> pre-fix code was "on `origin/main`" and that `git checkout main` silently
-> restores the hazard. It does not — that checkout breaks the tool instead. The
-> probe that produced the error was `git cat-file -e <ref>:<path>`, which
-> **returned rc=128 and rc=0 for the same ref minutes apart**; `ls-tree` and
-> `git log -- <path>` agreed with each other and with `git show | grep`, so the
-> odd one out was the probe. When two routes disagree, one of them is broken —
-> and it is usually the probe, not the world.
+⚠️ **Do not carry the "64 pre-fix branches" figure forward.** It was true when
+measured, against a ref set holding ~40 stale remote-tracking branches; a
+`git fetch --prune` on 2026-08-03 removed them, and the count is **1** now. An
+inherited number is not a measurement — re-derive it or label it.
 
 ### What still happens on every add/remove, on any branch that HAS the wrapper
 
 `add_secret` / `update_secret` (a literal alias) / `remove_secret` each call
 `bootstrap_config()` and then run a **full** `_run_fnox_sync_age()` —
 `fnox sync --provider age --global --force` — so **all 49 sync ciphertexts are
-regenerated** on the fix branch and on the 64 pre-fix branches alike.
+regenerated**, on `main` and on the stale pre-fix branch alike. #83 changed
+`bootstrap_config`; it did not change the sync, so this survives the fix.
 
-On those 64, `bootstrap_config()` additionally rebuilds the file from a template
-emitting `provider` + `value` only, preserving just `DOPPLER_TOKEN`. That is the
-wipe class of #82. What it would cost now:
+On the one pre-fix branch, `bootstrap_config()` additionally rebuilds the file
+from a template emitting `provider` + `value` only, preserving just
+`DOPPLER_TOKEN`. That is the wipe class of #82. What it would cost now:
 
 ⚠️ **The mode hazard inverted on 2026-08-02 and the rest did not.** fnox's
 default `env` is `true`, so a regeneration now lands on the *desired* mode — the
@@ -212,14 +205,32 @@ mode**. What stays fragile:
 - **any declaration** the template does not know about — including
   `AGE_PRIVATE_KEY`, which is doppler-primary with no sync block;
 - **all 49 `sync` ciphertexts**, silently replaced — this one happens on every
-  branch;
+  branch, fixed or not, because the fix changed `bootstrap_config`, not the sync;
 - the inline per-secret `env = true` on all 50 — cosmetic while the global says
   `true`, load-bearing the moment it does not.
 
 **fnox is exonerated** — an authorized write probe rewrote all 49 values on both
-its scoped and bulk paths and preserved the mode and every opt-in. The defect is
-mde's, not fnox's. Full probe table and the wipe timeline:
+its scoped and bulk paths and preserved the mode and every opt-in. The defect was
+mde's, not fnox's, and #83 removed it at the source: there is no template to drop
+a field from any more. Full probe table and the wipe timeline:
 `docs/rules-evidence/secrets-out-of-the-shell-env.md`.
+
+### How this section was wrong twice
+
+Both errors are cheap to repeat, so they are recorded rather than deleted.
+
+1. **#515 claimed the pre-fix code was "on `origin/main`"** and that a
+   `git checkout main` silently restored the hazard. It did not — at the time
+   that checkout *broke* the tool instead, because `manage.py` was absent from
+   `main` entirely. The probe behind it was `git cat-file -e <ref>:<path>`, which
+   **returned rc=128 and rc=0 for the same ref minutes apart**; `ls-tree`,
+   `git log -- <path>` and `git show | grep` all agreed with each other. When two
+   routes disagree, one is broken — usually the probe, not the world. Corrected
+   in #516.
+2. **#516's replacement went stale in one day**, because it described a fix held
+   off by a *checked-out branch* and #83 then merged it to `main`. A claim about
+   where code lives has a shelf life measured in merges; state the ref and the
+   date, and re-derive before relying on it.
 
 The durable layer is not this document and not a hand edit: it is
 `mise run doctor`'s `fnox-baseline` check, which re-reads the artifact every
@@ -342,11 +353,11 @@ headers, raw env dumps, or the contents of a secret-bearing config.
 `echo 'value' | doppler secrets set KEY` (plaintext through the tool call).
 
 ⚠️ **`mde-secret-add KEY` does steps 3-7 in one command and is the sanctioned
-mde interface — and it churns all 49 sync ciphertexts every time.** It does not
-rewrite the whole config *while* the sibling repo stays on the #82 fix branch;
-on any of the 64 pre-fix branches it does, and on either `main` it fails on
-import instead. See "The config is generated" above before reaching for it, and
-it still does not touch `doctor.toml` for you.
+mde interface — and it churns all 49 sync ciphertexts every time.** Since #83
+merged it no longer rewrites the whole config on `main` or on any current
+branch; the one stale local branch that still would is named in "The residual
+hazard is one stale local branch" above. It still does not touch `doctor.toml`
+for you.
 
 ## Diagnose "the variable isn't set" — in this order
 
