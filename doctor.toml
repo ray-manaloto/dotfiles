@@ -26,12 +26,12 @@
 env = true
 
 # With env = true the shell-visible set is EVERY declared secret, so this list
-# is the full 49-name set rather than a short opt-in list. Keeping it exhaustive
+# is the full 50-name set rather than a short opt-in list. Keeping it exhaustive
 # is what preserves the check's value: `_opt_in_findings` compares NAME SETS in
 # both directions, so a renamed, added or dropped secret is still caught — a
 # count would not catch a swap. This also lands what
 # https://github.com/ray-manaloto/dotfiles/issues/460 measured as the fix for
-# the doctor's blind zone: it found 14 of 49 secrets sat past the deepest thing
+# the doctor's blind zone: it found 14 of the then-49 secrets sat past the deepest thing
 # the baseline checked, so a truncating write could lose them silently.
 #
 # Names are not secrets. Adding or removing an entry here is a deliberate change

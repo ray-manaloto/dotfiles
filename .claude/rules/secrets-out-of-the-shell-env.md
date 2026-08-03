@@ -1,6 +1,6 @@
 # Secrets in the Shell Environment
 
-⚠️ **REVERSED 2026-08-02 by Ray, deliberately.** All 49 credentials are now
+⚠️ **REVERSED 2026-08-02 by Ray, deliberately.** All 50 credentials are now
 `env = true` — available in every terminal and inherited by every child process,
 including Claude Code, its subagents and any MCP server they spawn. The stated
 requirement was *"in sync and available to all terminals and ai/llm agents"*.
@@ -12,32 +12,50 @@ is one axis — where credentials live. What did not change: an environment dump
 still unscannable and must never be committed (rule 1, gated by `no_env_dump`), a
 probe must still never print a value (rule 7, gated by `secret_value_substitution`),
 a non-secret must still not be marked secret (rule 3), and a clean scanner still
-means "ask what it can see" (rule 4). With 49 credentials in every child instead
-of 4, the blast radius of breaking any of those is **12× larger**, not smaller.
+means "ask what it can see" (rule 4). With 50 credentials in every child instead
+of 4, the blast radius of breaking any of those is **12.5× larger**, not smaller.
 
 **What the reversal costs, stated plainly rather than argued away:** the exposure
 [#470](https://github.com/ray-manaloto/dotfiles/issues/470) documents is now
-accepted, not mitigated; `__MISE_DIFF` again carries all 49 in a form no scanner
+accepted, not mitigated; `__MISE_DIFF` again carries all 50 in a form no scanner
 reads; and the confinement work in
 [#432](https://github.com/ray-manaloto/dotfiles/issues/432) (SCOPED-READ) and
 [#441](https://github.com/ray-manaloto/dotfiles/issues/441) (agent profile) is
 scoped to a hazard the host no longer avoids. Those tickets need re-judging.
 
 **The tripwire moved, it did not go away.** `doctor.toml` now pins `env = true`
-plus the **full 49-name set**, so an addition, a removal or a *rename* is still
-caught in both directions (control-armed: a rename keeping the count at 49 is
+plus the **full 50-name set**, so an addition, a removal or a *rename* is still
+caught in both directions (control-armed: a rename keeping the count at 50 is
 reported both ways). That also lands what
 [#460](https://github.com/ray-manaloto/dotfiles/issues/460) measured as the fix
-for the doctor's blind zone — 14 of 49 secrets previously sat past the deepest
+for the doctor's blind zone — 14 of the then-49 secrets sat past the deepest
 thing the baseline checked.
 
-⚠️ **Never declare a keychain-backed secret without putting fnox on the item's
-ACL.** fnox resolves every declaration on **every shell prompt**, and a keychain
-item created by `security add-generic-password` does not list fnox, so the read
-blocks on a GUI dialog forever. On 2026-08-02 that produced **190 stuck
-processes**, load 13.5, and a locked login keychain. Create with
-`-T <fnox real binary>` — noting the real path is version-pinned under
-`~/.local/share/mise/installs/fnox/<version>/`, so the grant breaks on upgrade.
+⚠️ **A keychain credential can hang a background process forever — and that hang
+is NOT a locked keychain.** `security show-keychain-info` **prompts
+unconditionally**, so its hang proves nothing; believing it cost ~2 hours on
+2026-08-02. Arm it instead: **fnox reads a keychain secret in 0.03s**, which a
+locked keychain cannot do. What actually blocks is an *authorization* dialog for
+an item a non-GUI process may not read — and nothing can answer that dialog.
+Measured: `gh` and `doppler` both kept their tokens in the keychain and hung
+forever from background processes (**190 stuck processes**, load 13.5). The
+discriminating arm is the same command with an isolated config dir, which returns
+in **0.45s**. Both entries were deleted (`security delete-generic-password -s
+'gh:github.com'` / `-s 'doppler-cli'`) and both now fall through to their ENV
+token.
+
+⚠️ **This reaches fnox, because fnox's doppler provider SHELLS OUT to the
+`doppler` CLI** (its error text is `Doppler: command failed`, a subprocess
+failure). A hung `doppler` therefore hangs every **uncached** Doppler read — on
+every shell prompt. That is why `AGE_PRIVATE_KEY` could not be declared until the
+`doppler-cli` entry was gone; two attempts auto-rolled-back and the declaration
+was wrongly blamed.
+
+If you *do* create a keychain item with `security add-generic-password`, grant the
+reader on the ACL with `-T <real binary>` — the fnox path is version-pinned under
+`~/.local/share/mise/installs/fnox/<version>/`, so that grant breaks on upgrade.
+⚠️ And `security find-generic-password -w` returns **HEX** for a multi-line value
+(`AGE_PRIVATE_KEY`: 377 bytes back vs 188 stored), so any consumer must decode.
 
 ## What happened originally, and why no scanner caught it
 
@@ -116,7 +134,7 @@ the `EXA_API_KEY` misattribution, and the measured wipe timeline — is in
    rather than exporting."* That is no longer the posture (2026-08-02). The
    consequence to internalise: `fnox exec` is no longer a confinement boundary,
    because the parent shell already has everything. **Rules 1, 4 and 7 are now the
-   only things between 49 credentials and a transcript or a commit** — there is no
+   only things between 50 credentials and a transcript or a commit** — there is no
    second line behind them any more.
 3. **Do not mark a non-secret as a secret.** Redaction is value-based, so a
    short or empty "secret" corrupts every log the tool writes.
@@ -129,15 +147,19 @@ the `EXA_API_KEY` misattribution, and the measured wipe timeline — is in
    whenever anything is exec-only or absent. Under `env = true` that trap is gone
    and the reviewed decision moves to the other end: **adding a secret to fnox now
    puts it in every terminal and every agent by default**, so it must be added to
-   `doctor.toml`'s 49-name `env_true` set in the same reviewed diff, or the doctor
+   `doctor.toml`'s 50-name `env_true` set in the same reviewed diff, or the doctor
    reports drift on the next session and someone "fixes" it back.
-6. **Diagnose by layer, and never run `fnox get` to do it.** A `-v` presence test
-   under `fnox exec` (present) vs the same in a plain shell (absent) identifies
-   `env = "exec"` on its own; `fnox sync --dry-run -p age VAR` answers staleness
-   without reading a value. Full ordered recipe, the result-reading table, and the
-   ⚠️ **wipe hazard** — `mde-py`'s `bootstrap_config()` drops `env = "exec"` and
-   every opt-in (measured twice; diagnosed 2026-07-30, and **not** fnox):
-   `docs/secrets-doppler-fnox-keychain.md`.
+6. **Diagnose by layer, and never run `fnox get` to do it** (it prints a value).
+   ⚠️ **The old first suspect is retired.** A present-under-`fnox exec` /
+   absent-in-shell split used to mean `env = "exec"` working as designed; under
+   `env = true` that outcome is **unreachable**, so an absent variable is a REAL
+   failure — never dismiss it. Order the new suspects: (a) a **hung `doppler` CLI**,
+   since fnox shells out to it and any uncached doppler-primary secret resolves
+   through that child; (b) a stale **`MISE_ENV_CACHE`** entry, which can serve a
+   dead name in ONE directory long after the config is byte-identically restored,
+   and which `grep` cannot see because it is encrypted; (c) the declaration itself.
+   ⚠️ `docs/secrets-doppler-fnox-keychain.md` still documents the exec-only era and
+   its result table now MISLEADS — read it as history until it is rewritten.
 7. **⚠️ A probe's OWN STDOUT is an uncovered surface — print presence, never a
    value.** Every gate above guards a *file write* or a *spawn*; none guards the
    output of a command an agent runs, and that output lands in the session
@@ -159,12 +181,13 @@ the `EXA_API_KEY` misattribution, and the measured wipe timeline — is in
    command; that closes the #474 gap for this shape, and this rule still carries
    every other shape.
 
-   ⚠️ **The blast radius is NOT capped at the opt-ins.** This file claimed
-   *"exactly the opt-in set, knowable in advance"* — **false for a probe run under
-   `fnox exec`**. The leaked `DOPPLER_TOKEN` is **exec-only** (same command:
-   `PRESENT` under `fnox exec`, `ABSENT` in a plain shell); wrapping the probe put
-   it in reach. Any of the 49 is printable that way; only an *unwrapped* probe is
-   capped at four. Full incident, the reproduction table and both corrections:
+   ⚠️ **There is no blast-radius cap any more.** Under `env = true` **all 50** are
+   printable by any probe, wrapped or not — the `fnox exec` distinction that made
+   this a surprise is gone, and `DOPPLER_TOKEN` is itself in the sanctioned shell
+   set now. (History: the file claimed the exposure was "exactly the opt-in set";
+   that was already false under `fnox exec`, and the reversal widened it to
+   everything.) The correction runs in the **worse** direction — assume every
+   credential is reachable from any shell.
    `docs/rules-evidence/secrets-out-of-the-shell-env.md`.
 
 ## See also
