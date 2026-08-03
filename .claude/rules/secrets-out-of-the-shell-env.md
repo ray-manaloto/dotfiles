@@ -159,8 +159,8 @@ the `EXA_API_KEY` misattribution, and the measured wipe timeline — is in
    through that child; (b) a stale **`MISE_ENV_CACHE`** entry, which can serve a
    dead name in ONE directory long after the config is byte-identically restored,
    and which `grep` cannot see because it is encrypted; (c) the declaration itself.
-   ⚠️ `docs/secrets-doppler-fnox-keychain.md` still documents the exec-only era and
-   its result table now MISLEADS — read it as history until it is rewritten.
+   The recipes live in `docs/secrets-doppler-fnox-keychain.md` (rewritten to this
+   posture 2026-08-03).
 7. **⚠️ A probe's OWN STDOUT is an uncovered surface — print presence, never a
    value.** Every gate above guards a *file write* or a *spawn*; none guards the
    output of a command an agent runs, and that output lands in the session
