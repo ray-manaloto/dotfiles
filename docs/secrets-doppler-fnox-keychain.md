@@ -215,11 +215,29 @@ fnox sync --dry-run -p age KEY_NAME
 
 **Reading the result:**
 
+⚠️ **REWRITTEN 2026-08-02 — the old table's top row is now UNREACHABLE and reading it
+would make you dismiss a real failure.** It said a present-under-`fnox exec` /
+absent-in-shell split was *"`env = "exec"` working as designed. Not a bug."* Since Ray
+reversed the posture to `env = true` globally (**all 50 secrets shell-visible by
+decision**), that outcome cannot occur — **an absent variable is a genuine fault.**
+
 | step 3 | step 4 | meaning |
 |---|---|---|
-| present | **ABSENT** | **`env = "exec"` working as designed.** Consumer must use `fnox exec --`, or the secret needs `env = true`. *Not a bug.* |
-| ABSENT | ABSENT | declaration or provider problem — go back to steps 1–2 |
-| present | present | it has `env = true`; if a consumer still sees nothing, the consumer is the fault |
+| present | present | **healthy** — this is the expected state for all 50 |
+| present | **ABSENT** | ⚠️ **A REAL FAULT.** Under `env = true` nothing should be exec-only. Do not dismiss it. |
+| ABSENT | ABSENT | declaration or provider problem — see the suspect order below |
+
+**Suspect order when a variable is missing** (new first suspect since 2026-08-02):
+
+1. ⚠️ **A hung `doppler` CLI.** fnox's doppler provider **shells out** to it (tell:
+   `Doppler: command failed`), so any *uncached* doppler-primary secret — e.g.
+   `AGE_PRIVATE_KEY`, which cannot have an age cache — resolves through a child
+   `doppler` process. If that CLI blocks on a keychain authorization dialog, the read
+   hangs forever from a non-GUI process and no dialog can be answered.
+2. **A stale `MISE_ENV_CACHE` entry.** It can serve a dead name in **one directory**
+   long after the config is byte-identically restored, and `grep` cannot find it —
+   the cache is encrypted. Clear `~/.local/state/mise/env-cache`.
+3. **The declaration itself** — steps 1–2 above.
 
 **Always control-arm the negative.** A `0`/ABSENT result is worthless until the
 same command shape returns present for something you *know* is set:
