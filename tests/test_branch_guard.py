@@ -22,21 +22,28 @@ from dotfiles_setup import branch_guard, hook_guard
 _PROJECT_ROOT = Path(__file__).parent.parent.absolute()
 _WRAPPER = _PROJECT_ROOT / "scripts" / "pretooluse-guard.sh"
 
-# Git subprocesses ONE guard decision costs today, measured end-to-end through
-# the real wired wrapper. These are the current, unimproved numbers on purpose:
-# a gate only ever observed in its passing state is decoration
-# (`probes-need-a-control-arm.md` rule 2), so it is pinned at what it really is
-# before anything depends on it. #527 lowers them by collapsing the three
-# `rev-parse`/`symbolic-ref` calls into one; that ticket updates these.
+# Git subprocesses ONE guard decision costs, measured end-to-end through the
+# real wired wrapper. #525 pinned the pre-collapse numbers (1 / 3 / 4); #527
+# collapsed worktree root, branch and advertised default into a single
+# `rev-parse`, and these are the post-collapse measurements.
 #
 # Asserted as EQUALITY, not as a `<=` budget, and that is load-bearing: the
 # dangerous regression here REMOVES a call rather than adding one. Measured —
 # dropping the `origin/HEAD` lookup (the rejected "name-only short-circuit")
-# moves 3 -> 2 and 4 -> 3, which a budget would wave through while the guard
-# silently stopped consulting the real default branch.
-_GIT_CALLS_OUTSIDE_REPO = 1  # rev-parse --show-toplevel, which fails
-_GIT_CALLS_ON_FEATURE_BRANCH = 3  # + abbrev-ref HEAD, + symbolic-ref origin/HEAD
-_GIT_CALLS_DENY_ON_DEFAULT = 4  # + check-ignore
+# moved 3 -> 2 and 4 -> 3 before the collapse, which a budget would wave
+# through while the guard silently stopped consulting the real default branch.
+# Post-collapse the same regression shows up as the combined call losing its
+# ref argument, which equality still catches and a budget still would not.
+_GIT_CALLS_OUTSIDE_REPO = 1  # the combined rev-parse, which fails 128
+_GIT_CALLS_ON_FEATURE_BRANCH = 1  # the combined rev-parse, which resolves
+_GIT_CALLS_DENY_ON_DEFAULT = 2  # + check-ignore
+# The fallback: a repo whose `origin/HEAD` does not resolve costs the combined
+# call PLUS the three separate ones, because output from a call that did not
+# return 0 is never parsed (#527). Pinned so the trade is a measured number
+# rather than an accident — and so the fallback cannot silently become the
+# common path, which is the shape a regression in the combined arg vector would
+# take: every count here would go up while every behavioural test stayed green.
+_GIT_CALLS_FALLBACK_ON_FEATURE_BRANCH = 4
 
 _WRAPPER_TIMEOUT_S = 120
 
@@ -300,17 +307,17 @@ def test_a_write_outside_any_repo_costs_one_git_call(tmp_path: Path) -> None:
     assert calls == _GIT_CALLS_OUTSIDE_REPO
 
 
-def test_an_allowed_write_on_a_feature_branch_costs_three_git_calls(
+def test_an_allowed_write_on_a_feature_branch_costs_one_git_call(
     remote_repo: Path, tmp_path: Path
 ) -> None:
-    """Root, branch, remote default — three processes for one allow."""
+    """Root, branch, remote default — ONE process for one allow (#527)."""
     _run(["git", "checkout", "-b", "feat/x"], remote_repo)
     stdout, calls = _guard_via_wrapper(remote_repo / "tracked.md", tmp_path)
     assert stdout.strip() == ""
     assert calls == _GIT_CALLS_ON_FEATURE_BRANCH
 
 
-def test_a_denied_write_costs_four_git_calls(remote_repo: Path, tmp_path: Path) -> None:
+def test_a_denied_write_costs_two_git_calls(remote_repo: Path, tmp_path: Path) -> None:
     """The deny path adds the ignore check. Asserted WITH the decision.
 
     Counting alone would pass just as happily if the guard had decided
@@ -319,3 +326,20 @@ def test_a_denied_write_costs_four_git_calls(remote_repo: Path, tmp_path: Path) 
     stdout, calls = _guard_via_wrapper(remote_repo / "tracked.md", tmp_path)
     assert '"permissionDecision": "deny"' in stdout
     assert calls == _GIT_CALLS_DENY_ON_DEFAULT
+
+
+def test_the_unadvertised_default_falls_back_and_costs_four(
+    repo: Path, tmp_path: Path
+) -> None:
+    """A repo with no ``origin/HEAD`` pays the combined call AND the three.
+
+    This is the #527 trade, pinned rather than assumed. It also proves the two
+    paths are really distinct: if the combined call silently stopped resolving
+    the advertised default, THIS count would not move but
+    ``test_an_allowed_write_on_a_feature_branch_costs_one_git_call`` would —
+    and vice versa. One number cannot cover both.
+    """
+    _run(["git", "checkout", "-b", "feat/x"], repo)
+    stdout, calls = _guard_via_wrapper(repo / "tracked.md", tmp_path)
+    assert stdout.strip() == ""
+    assert calls == _GIT_CALLS_FALLBACK_ON_FEATURE_BRANCH

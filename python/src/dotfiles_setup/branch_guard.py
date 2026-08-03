@@ -41,6 +41,28 @@ _FALLBACK_DEFAULTS = ("main", "master")
 
 _TOOLS = frozenset({"Edit", "Write", "NotebookEdit"})
 
+# Worktree root, current branch and the remote's advertised default, in one
+# invocation (#527). `--abbrev-ref` is sticky — it applies to every ref after
+# it — so `HEAD` prints the branch and `refs/remotes/origin/HEAD` prints
+# `origin/<default>`, the same shape `symbolic-ref --short` produced.
+#
+# `--quiet --verify` is what makes the fallback distinguishable rather than
+# indistinguishable: it turns an unresolvable `origin/HEAD` into a quiet exit 1
+# with clean stdout. Without it git exits 128 — the same code as "not a
+# repository" — AND prints the unresolved ref back on stdout, where it looks
+# just like a resolved answer to anything that reads the line.
+_COMBINED_FACTS = [
+    "rev-parse",
+    "--show-toplevel",
+    "--abbrev-ref",
+    "HEAD",
+    "--quiet",
+    "--verify",
+    "refs/remotes/origin/HEAD",
+]
+_COMBINED_FACT_COUNT = 3
+_UNRESOLVED_REF_RC = 1
+
 _REASON = (
     "You are on the default branch ({branch}) and about to modify {path}.\n"
     "All work belongs on a branch that can become a PR — branch FIRST, then edit.\n"
@@ -55,8 +77,14 @@ _REASON = (
 )
 
 
-def _git(args: list[str], cwd: Path) -> str | None:
-    """Run a read-only git command, returning stripped stdout or None."""
+def _git_capture(args: list[str], cwd: Path) -> tuple[int, str] | None:
+    """``(returncode, stripped stdout)``, or None when git could not be run.
+
+    The None is NOT "git said no" — it is "git never answered" (missing binary,
+    timeout). ``probes-need-a-control-arm.md`` rule 4: a process that never ran
+    is not a negative result, and the two are told apart here so that
+    :func:`_protected` can act on the return code.
+    """
     try:
         proc = subprocess.run(
             ["git", *args],
@@ -68,13 +96,19 @@ def _git(args: list[str], cwd: Path) -> str | None:
         )
     except OSError, subprocess.SubprocessError:
         return None
-    if proc.returncode != 0:
+    return proc.returncode, proc.stdout.strip()
+
+
+def _git(args: list[str], cwd: Path) -> str | None:
+    """Run a read-only git command, returning stripped stdout or None."""
+    res = _git_capture(args, cwd)
+    if res is None or res[0] != 0:
         return None
-    return proc.stdout.strip()
+    return res[1]
 
 
-def repo_root(start: Path) -> Path | None:
-    """Absolute root of the git worktree containing ``start``, or None.
+def _probe_dir(start: Path) -> Path | None:
+    """The nearest existing ancestor directory of ``start``, or None.
 
     ``start`` routinely does NOT exist yet — a Write creating a new file, often
     inside a directory that does not exist either. So walk up to the first
@@ -89,6 +123,14 @@ def repo_root(start: Path) -> Path | None:
         if parent == probe:  # reached the filesystem root
             return None
         probe = parent
+    return probe
+
+
+def repo_root(start: Path) -> Path | None:
+    """Absolute root of the git worktree containing ``start``, or None."""
+    probe = _probe_dir(start)
+    if probe is None:
+        return None
     out = _git(["rev-parse", "--show-toplevel"], probe)
     return Path(out).resolve() if out else None
 
@@ -131,18 +173,74 @@ def _target(tool_input: dict[str, object]) -> Path | None:
         return None
 
 
+def _separate_facts(probe: Path) -> tuple[Path, str, tuple[str, ...]] | None:
+    """``(root, branch, defaults)`` via the three pre-#527 invocations.
+
+    The fallback for when the combined call could not deliver the advertised
+    default. It re-asks from scratch rather than reusing anything the combined
+    call printed: that output belongs to an invocation that did not return 0,
+    and #527's rule is that such output is never parsed.
+    """
+    out = _git(["rev-parse", "--show-toplevel"], probe)
+    if out is None:
+        return None
+    root = Path(out).resolve()
+    branch = _git(["rev-parse", "--abbrev-ref", "HEAD"], root)
+    if branch is None:
+        return None
+    return root, branch, default_branch(root)
+
+
 def _protected(target: Path) -> tuple[Path, str] | None:
     """``(root, branch)`` when ``target`` sits in a repo on its default branch.
 
     None means "not our business": outside any repo (the scratchpad, the
     auto-memory dir), or on a feature branch, or on a detached HEAD — which is
     not a branch anyone ships from.
+
+    Worktree root, current branch and the remote's advertised default all come
+    from ONE ``git`` invocation (#527). Process startup is the entire cost of a
+    read-only git call, so asking for three facts costs about what asking for
+    one did, and the common in-repo decision went 3 invocations to 1.
+
+    The return code carries the whole decision, and the three cases are
+    genuinely different — which is why ``--quiet --verify`` is in the arg
+    vector. Without it a missing ``origin/HEAD`` is a *fatal* 128, identical to
+    "not a repository", and it also echoes the unresolved ref back on stdout
+    where it reads exactly like an answer:
+
+    - **0** — every fact resolved. The common path, and the whole point.
+    - **1** — a repository, but ``origin/HEAD`` does not resolve (no remote, a
+      hand-added one, a stock CI checkout). ``--quiet --verify`` reports that
+      quietly, so it is distinguishable; fall back to the separate invocations
+      and the conventional pair behaves exactly as it did before.
+    - **anything else** — no usable repository here (or an unborn HEAD). Allow,
+      which is what the fallback would conclude anyway: its first call runs in
+      this same directory and fails the same way. Short-circuiting keeps a
+      write outside any repo — the scratchpad, the auto-memory dir, the hot
+      path — at the single invocation it has always cost.
     """
-    root = repo_root(target)
-    if root is None or not target.is_relative_to(root):
+    probe = _probe_dir(target)
+    if probe is None:
         return None
-    branch = _git(["rev-parse", "--abbrev-ref", "HEAD"], root)
-    if branch is None or branch == "HEAD" or branch not in default_branch(root):
+    combined = _git_capture(_COMBINED_FACTS, probe)
+    if combined is None:  # git never ran — fail open
+        return None
+    code, out = combined
+    lines = out.splitlines()
+    if code == 0 and len(lines) == _COMBINED_FACT_COUNT:
+        root, branch, advertised = Path(lines[0]).resolve(), lines[1], lines[2]
+        defaults = (
+            (advertised.split("/", 1)[1],) if "/" in advertised else _FALLBACK_DEFAULTS
+        )
+    elif code == _UNRESOLVED_REF_RC:
+        resolved = _separate_facts(probe)
+        if resolved is None:
+            return None
+        root, branch, defaults = resolved
+    else:
+        return None
+    if not target.is_relative_to(root) or branch == "HEAD" or branch not in defaults:
         return None
     return root, branch
 
