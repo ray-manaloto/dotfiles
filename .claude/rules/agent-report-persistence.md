@@ -34,6 +34,14 @@ the file:line anchors the implementing session needs. Three incidents:
    silently after ~40 minutes and left **nothing**. An agent that dies having
    written 13 of 20 sources leaves 13; one planning to write at the end leaves
    0. Durable capture must be incremental, never end-of-run.
+
+   ⚠️ **A rule nothing pushes into the prompt is not a layer.** On 2026-08-03 this
+   requirement went into **none of four briefs**, two agents died and left nothing,
+   and the one survivor persisted on its own initiative. Put it in the **agent
+   definition** — `.claude/agents/staleness-auditor.md` carries it, so it rides
+   every delegation instead of being remembered per-brief — and add one line to any
+   ad-hoc brief. Pair it with **deliver before idle**: an agent that *finished* and
+   went idle without sending its report was a total loss in the same run.
 2. **Verbatim means verbatim.** Keep the agent's tables, evidence links,
    probe output, and repos-touched enumeration intact. Annotating
    decisions inline afterwards (e.g. "DECIDED: option A") is encouraged;
