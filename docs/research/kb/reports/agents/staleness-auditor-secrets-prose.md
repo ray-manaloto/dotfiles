@@ -93,7 +93,31 @@ Recorded here rather than trimmed from the report above, per rule 2 (verbatim).
 
 Findings independently re-probed by the caller are annotated in the session
 handoff. One correction to the agent's finding 2 wording: the four commits are
-**not** "stranded on a local branch" — they are pushed, on PR **#510**, which is
+**not** "stranded on a local branch" — they are pushed, on PR **#510**, which was
 OPEN with auto-merge armed and `mergeState: DIRTY` since `main` advanced. The
-substance stands: they are not on `main`, so `main` still carries the stale
+substance stands: they were not on `main`, so `main` still carried the stale
 gate #4 and the two live defects.
+
+### DISPOSITION (2026-08-03, Ray approved all three follow-ups)
+
+- **Finding 1 — RESOLVED.** `gh:github.com` deleted with
+  `security delete-generic-password`. Control-armed both directions: before rc=0
+  → after **rc=44**, while `mde-fnox` stayed rc=0 (so the probe had not gone
+  blind) and a fresh absent term returned rc=44. `gh auth status` still rc=0 via
+  `GITHUB_TOKEN`, and a **file-based** fallback the report did not note also
+  survives at `~/.config/gh/hosts.yml` — so the entry was a third copy, and
+  deleting it costs no re-login. The audited claim at
+  `.claude/rules/secrets-out-of-the-shell-env.md:43` ("both entries were
+  deleted … both now fall through to their ENV token") is **true as of this
+  change**, so it needs no edit.
+- **Finding 2 — RESOLVED.** `main` merged into the branch; #510 went
+  `DIRTY` → `BLOCKED` (conflict cleared, awaiting checks). ⚠️ The first merge
+  attempt was **not a merge** — a `check_conventional_commit` rejection cleared
+  `MERGE_HEAD`, so the retry landed as a single-parent commit carrying main's
+  contents without its lineage, and GitHub kept reporting `DIRTY`. Caught by two
+  probes disagreeing (`git merge-base --is-ancestor` said no while the PR head
+  *was* the commit); `git rev-list --parents -n1` settled it. Redone as a real
+  two-parent merge, verified `main-is-ancestor rc=0` with the inverse as control.
+- **Findings 3-5 — still open.** `docs/secrets-doppler-fnox-keychain.md` has not
+  been rewritten; the reversal banner and the `:204` fix are unshipped.
+- **Finding 6 (`REFUTED`) — no action, correctly.**
