@@ -88,18 +88,45 @@ activated and the variable was "absent". The control arm, the same probe against
 the pre-fix config, ALSO said "absent", which is the only reason it was caught.
 `-i` is what makes the probe able to answer.
 
-## The same setting fixed the `[redacted]` digit-masking
+## The `[redacted]` digit-masking — fixed by `env = "exec"`, and BACK since the reversal
 
 mise redacts every occurrence of a redacted variable's **value** in task output.
-fnox marked all 49 of its variables redacted, and two of them —
-`GEMINI_TELEMETRY_ENABLED` and `GEMINI_TELEMETRY_LOG_PROMPTS` — held
-**one-character, all-digit values**. So mise faithfully masked every digit in
-every `mise run` line, which is why a number read from `mise run` output could
-not be trusted. `LANGSMITH_WORKSPACE_ID` was worse: an **empty** value.
+fnox marks all of its variables redacted, and two of them —
+`GEMINI_TELEMETRY_ENABLED` and `GEMINI_TELEMETRY_LOG_PROMPTS` — hold
+**one-character, all-digit values**. So mise faithfully masks every digit in
+every `mise run` line, which is why a number read from `mise run` output cannot
+be trusted. `LANGSMITH_WORKSPACE_ID` is worse: an **empty** value.
 
 Those are telemetry flags, not secrets. The digit-masking was never a mise bug;
-it was collateral from treating a non-secret as a secret. It returns if `mde-py`
-re-bootstraps the config.
+it is collateral from treating a non-secret as a secret.
+
+`env = "exec"` removed the condition on 2026-07-27 by keeping them out of the
+shell. ⚠️ **The 2026-08-02 posture reversal put it straight back** — under
+`env = true` all three are exported again. Re-measured 2026-08-03, with a
+control arm:
+
+```
+$ mise run p2996-hash
+0748f3[redacted]46e984492                             # 25 chars
+$ uv run --project python dotfiles-setup p2996-hash   # CONTROL: same command, no mise
+0748f3146e984492                                      # 16 chars, rc=0
+```
+
+Same prefix, same suffix; `mise run` replaced exactly one character. **Read
+every number from a non-`mise` invocation or a recorded `rc=`.**
+
+⚠️ **The prediction this section carried — "it returns if `mde-py` re-bootstraps
+the config" — named the wrong trigger.** A **policy reversal** fired instead,
+and the re-bootstrap it named is now fixed at source (mde #82). A hedge that
+names one cause is not coverage of the class.
+
+## Creating a keychain item (moved out of the eager rule, 2026-08-03)
+
+Grant the reader on the ACL (`security add-generic-password -T <real binary>`) —
+fnox's path is version-pinned, so the grant breaks on upgrade. And `-w` returns
+**HEX** for a multi-line value (`AGE_PRIVATE_KEY`: 377 bytes back vs 188), so
+consumers must decode. Operational trivia about *creating* an item, not about
+the hazard the rule governs, so it lives here.
 
 ## The wipe RECURRED — and the diagnosis (2026-07-30)
 
@@ -527,6 +554,10 @@ This also fixed the `[redacted]` digit-masking: two fnox telemetry flags held
 one-character all-digit values and were marked redacted, so mise masked every
 digit in every `mise run` line. Never a mise bug — collateral from treating a
 non-secret as a secret. **It returns if `mde-py` re-bootstraps the config.**
+
+*[2026-08-03: it did return — via the posture reversal, not a re-bootstrap, and
+the re-bootstrap is now fixed at source. See "The `[redacted]` digit-masking"
+above. The paragraph above is preserved as written.]*
 
 Findings, control arms, and the verification that passed while blind:
 `docs/rules-evidence/secrets-out-of-the-shell-env.md`.

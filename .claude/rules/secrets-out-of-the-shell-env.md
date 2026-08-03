@@ -20,8 +20,10 @@ of 4, the blast radius of breaking any of those is **12.5× larger**, not smalle
 accepted, not mitigated; `__MISE_DIFF` again carries all 50 in a form no scanner
 reads; and the confinement work in
 [#432](https://github.com/ray-manaloto/dotfiles/issues/432) (SCOPED-READ) and
-[#441](https://github.com/ray-manaloto/dotfiles/issues/441) (agent profile) is
-scoped to a hazard the host no longer avoids. Those tickets need re-judging.
+[#441](https://github.com/ray-manaloto/dotfiles/issues/441) (agent profile) —
+both **closed COMPLETED**, 07-31 and 08-02 — reached conclusions scoped to a
+hazard the host no longer avoids. Those *findings* need re-judging before
+anything is built on them; the tickets themselves are done.
 
 **The tripwire moved, it did not go away.** `doctor.toml` now pins `env = true`
 plus the **full 50-name set**, so an addition, a removal or a *rename* is still
@@ -49,11 +51,6 @@ token.
 hangs every **uncached** Doppler read, on every shell prompt. That is why
 `AGE_PRIVATE_KEY` would not declare until the `doppler-cli` entry was gone — two
 attempts auto-rolled-back and the declaration was wrongly blamed.
-
-Creating a keychain item with `security add-generic-password`? Grant the reader on
-the ACL (`-T <real binary>`) — fnox's path is version-pinned, so the grant breaks
-on upgrade. And `-w` returns **HEX** for a multi-line value (`AGE_PRIVATE_KEY`:
-377 bytes back vs 188), so consumers must decode.
 
 ## What happened originally, and why no scanner caught it
 
@@ -168,8 +165,8 @@ the `EXA_API_KEY` misattribution, and the measured wipe timeline — is in
    printed four live credential values, and all four had to be rotated. They were
    the four `env = true` opt-ins. Use `${VAR:+SET}`, `[ -n "$VAR" ]` or
    `printenv VAR >/dev/null` and read the rc; never interpolate the value into a
-   format string "just to check". Gap tracked in #474; no machine layer exists yet,
-   so this rule is the only layer.
+   format string "just to check". Gap tracked in #474, still OPEN: one shape is
+   now gated (below), every other shape is carried by this rule alone.
 
    ⚠️ **IT RECURRED THE SAME DAY — the safe form is only safe ALONE.**
    `${VAR:+SET}${VAR:-ABSENT}` opens with the form this rule recommends and is a
