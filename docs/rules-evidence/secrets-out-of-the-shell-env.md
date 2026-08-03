@@ -315,12 +315,117 @@ only*. `doppler me` reports the CLI authenticated as `type: cli`, name
 wrong: one exists, it is the opposite of scoped/read-only/expiring, and the ticket
 should begin by assessing it.
 
+## Moved here 2026-08-03 from `docs/secrets-doppler-fnox-keychain.md`
+
+That guide was rewritten to the current `env = true` posture. Its exec-era
+sections are kept verbatim below rather than deleted — they overlap the account
+above but were measured independently, and one table (the generator's emitted
+field set) exists nowhere else.
+
+### The `env` mode as that guide documented it (added 2026-07-29)
+
+> A secret being *declared and resolvable* does **not** mean it reaches the shell.
+> Since 2026-07-27 this config is globally:
+>
+> ```toml
+> env = "exec"   # secrets stay OUT of the interactive shell
+> ```
+>
+> | `env` | interactive shell / `fnox export` | `fnox exec` | `fnox get` |
+> |---|:-:|:-:|:-:|
+> | `true` (fnox default) | yes | yes | yes |
+> | **`"exec"` (ours)** | **no** | yes | yes |
+> | `false` | no | no | yes |
+>
+> Only secrets carrying an explicit per-secret `env = true` are exported. **Four
+> are** — `CONTEXT7_API_KEY`, `EXA_API_KEY`, `GITHUB_TOKEN`, `MISE_GITHUB_TOKEN` —
+> chosen because their consumers can *only* read the environment: the context7
+> plugin interpolates `${CONTEXT7_API_KEY:-}` into an `Authorization` header, the
+> `/last30days` engine's web lane reads `EXA_API_KEY` from the process environment
+> (it is in neither that plugin's own `.env` nor the keychain), and `gh` and `mise`
+> read their tokens.
+>
+> ⚠️ `EXA_API_KEY`'s recorded reason used to be "an `.mcp.json` `${VAR}`
+> interpolation at MCP-server spawn". That stopped being true on 2026-07-30 when
+> this repo's `.mcp.json` was emptied — but the credential is still required, by a
+> second consumer that had never been written down.
+>
+> **This is the single most likely cause of "the variable isn't set".** It is not a
+> sync failure.
+
+The `:90` row of that guide said **3** per-secret opt-ins while `:43` said four.
+That inconsistency predated the reversal and was never reconciled; the count was
+3 on 2026-07-27 and 4 from 2026-07-29.
+
+### The generator's emitted field set — measured against the live config
+
+Unique to that guide, and the sharpest statement of the #82 defect: what
+`bootstrap_config()` **emits** versus what the config **held** at the time.
+
+> | field | present now | generator emits |
+> |---|---:|---:|
+> | global `env = "exec"` | 1 | **0** |
+> | per-secret `env = true` | 3 | **0** |
+> | `sync = { provider = "age", … }` | **49** | **0** |
+>
+> So a single `bootstrap-config` run silently reverts every secret to
+> shell-exported — undoing the whole reason `env = "exec"` was adopted.
+
+### 2026-07-29 — Context7 MCP ran anonymous for days; nothing noticed
+
+The incident that produced rule 5's "check the consumer's authenticated
+identity, never its connection status", kept in full because the *shape*
+outlives the posture that caused it.
+
+> The Upstash context7 plugin interpolates `"Authorization": "${CONTEXT7_API_KEY:-}"`.
+> That secret is exec-only, so the header resolved to **empty** and the server used
+> the anonymous tier — while reporting `✓ connected` the whole time.
+>
+> What made it invisible:
+>
+> - **`${VAR:-}` substitutes an empty string instead of failing.** Silent by
+>   construction.
+> - **Doppler → fnox was perfectly healthy**, so every instinct to blame "the sync"
+>   was wrong. `fnox check` green; the value matched Doppler exactly.
+> - **The opt-in list was drawn before the consumer existed.** The three `env = true`
+>   entries were chosen 2026-07-27 for the three consumers that existed then; the
+>   plugin arrived 2026-07-29 and nothing re-checked the list.
+>
+> Generalisation: **a new env-var consumer is a new opt-in decision, and nothing
+> enforces it.** Tracked as dotfiles issue **#418** (project-doctor SessionStart
+> check: every `${VAR}` interpolated by an MCP/plugin config must be `env = true`).
+
+Under `env = true` the *mechanism* is gone — nothing is exec-only, so no
+interpolation resolves empty for that reason. The **failure shape** is not: any
+credential that is absent, misnamed, or unset still yields an empty string
+through `${VAR:-}`, and the consumer still degrades quietly.
+
+### Smaller facts that had no other home
+
+Caught by an adversarial audit of the rewrite: these four were removed from the
+guide with no successor text anywhere, which is deletion, not a move. Kept here.
+
+- **The sibling-repo defect is tracked on our side too.** `bootstrap_config()`'s
+  wipe class is filed upstream as `macos-development-environment#82` **and** as
+  **knowledge-base issue #74**. That second pointer was the only record of our
+  own tracking of it.
+- **Eventual intent (Ray, 2026-07-20): migrate the integration into a skill**,
+  and have the dotfiles repo manage the macOS environment. Neither is done, so
+  the guide remains the interim contract.
+- **fnox is shell-activated on this machine** — 3 `FNOX_*` variables present in
+  a live process, `DOPPLER_TOKEN` resolving from the keychain. No bootstrap step
+  is needed on this host.
+- **An `age` provider is configured** with `recipients = ["age16djrq…"]`, which
+  is what makes the encrypted-cache path (`fnox sync`) available at all.
+
 ## GitHub repos touched
 
 - [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — the
   `no_env_dump` gate, `env_blob_scan.py`, and the history pickaxe.
 - [ray-manaloto/knowledge-base](https://github.com/ray-manaloto/knowledge-base) —
   the second public repo checked by the same pickaxe.
+- [ray-manaloto/macos-development-environment](https://github.com/ray-manaloto/macos-development-environment)
+  — `src/mde/secrets/manage.py`, issue #82, and the unmerged fix branch.
 
 ## The exec-only era (2026-07-27 → 2026-08-02) — moved out of the rule verbatim
 
