@@ -44,18 +44,16 @@ in **0.45s**. Both entries were deleted (`security delete-generic-password -s
 'gh:github.com'` / `-s 'doppler-cli'`) and both now fall through to their ENV
 token.
 
-⚠️ **This reaches fnox, because fnox's doppler provider SHELLS OUT to the
-`doppler` CLI** (its error text is `Doppler: command failed`, a subprocess
-failure). A hung `doppler` therefore hangs every **uncached** Doppler read — on
-every shell prompt. That is why `AGE_PRIVATE_KEY` could not be declared until the
-`doppler-cli` entry was gone; two attempts auto-rolled-back and the declaration
-was wrongly blamed.
+⚠️ **This reaches fnox: its doppler provider SHELLS OUT to the `doppler` CLI**
+(error text `Doppler: command failed` — a subprocess failure). A hung `doppler`
+hangs every **uncached** Doppler read, on every shell prompt. That is why
+`AGE_PRIVATE_KEY` would not declare until the `doppler-cli` entry was gone — two
+attempts auto-rolled-back and the declaration was wrongly blamed.
 
-If you *do* create a keychain item with `security add-generic-password`, grant the
-reader on the ACL with `-T <real binary>` — the fnox path is version-pinned under
-`~/.local/share/mise/installs/fnox/<version>/`, so that grant breaks on upgrade.
-⚠️ And `security find-generic-password -w` returns **HEX** for a multi-line value
-(`AGE_PRIVATE_KEY`: 377 bytes back vs 188 stored), so any consumer must decode.
+Creating a keychain item with `security add-generic-password`? Grant the reader on
+the ACL (`-T <real binary>`) — fnox's path is version-pinned, so the grant breaks
+on upgrade. And `-w` returns **HEX** for a multi-line value (`AGE_PRIVATE_KEY`:
+377 bytes back vs 188), so consumers must decode.
 
 ## What happened originally, and why no scanner caught it
 
@@ -120,9 +118,12 @@ the `EXA_API_KEY` misattribution, and the measured wipe timeline — is in
    mode + opt-in set must match the reviewed baseline in `doctor.toml`. It is a
    hook and not an hk step because it reads `~/.config/fnox`, which CI has not
    got. Rule 5 was doc-only until it existed.
-4. **`clean_env()`** (`python/src/dotfiles_setup/child_env.py`) strips
-   `__MISE_DIFF` and the credential-bearing names from processes this repo
-   spawns, so the blob stops travelling further than it must.
+4. **`without_env_diff()`** (`child_env.py`) strips `__MISE_DIFF` from spawned
+   children — really wired, at `graphify.py` and `graph_bakeoff.py`. ⚠️ Its
+   sibling **`clean_env()` has ZERO production call sites** (control arm: the
+   same grep finds both `without_env_diff` ones), yet this file claimed it as a
+   gate — the defect it convicts betterleaks of, two entries above. Leave it
+   unused: wiring it would strip `GITHUB_TOKEN` from tools that need it.
 
 ## Rules
 
@@ -182,13 +183,11 @@ the `EXA_API_KEY` misattribution, and the measured wipe timeline — is in
    every other shape.
 
    ⚠️ **There is no blast-radius cap any more.** Under `env = true` **all 50** are
-   printable by any probe, wrapped or not — the `fnox exec` distinction that made
-   this a surprise is gone, and `DOPPLER_TOKEN` is itself in the sanctioned shell
-   set now. (History: the file claimed the exposure was "exactly the opt-in set";
-   that was already false under `fnox exec`, and the reversal widened it to
-   everything.) The correction runs in the **worse** direction — assume every
-   credential is reachable from any shell.
-   `docs/rules-evidence/secrets-out-of-the-shell-env.md`.
+   printable by any probe, wrapped or not; `DOPPLER_TOKEN` is itself in the
+   sanctioned shell set. (This file once claimed "exactly the opt-in set" — already
+   false under `fnox exec`, and the reversal widened it to everything.) The
+   correction runs in the **worse** direction: assume every credential is reachable
+   from any shell. `docs/rules-evidence/secrets-out-of-the-shell-env.md`.
 
 ## See also
 
