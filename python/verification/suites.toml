@@ -1109,7 +1109,7 @@ paths = [
     "tests/test_ask_quality.py",
     ".claude/rules/clarify-before-acting.md",
 ]
-per_path_tokens = { ".claude/settings.json" = ['"matcher": "Bash|AskUserQuestion"'], "python/src/dotfiles_setup/ask_quality.py" = ['RECOMMENDED_MARKER = "(Recommended)"', 'NO_EVIDENCE_ESCAPE = "[no prior evidence]"', "def find_violations(", "_CITATION_RE = re.compile("],"python/src/dotfiles_setup/hook_guard.py" = ['if tool_name == "AskUserQuestion":', "return ask_quality.decide(tool_input)", "def decide_payload("], "python/src/dotfiles_setup/hook_selfcheck.py" = ['("Bash", "AskUserQuestion")', "def check_ask_quality_endtoend(", "def _ask_payload("], "tests/test_ask_quality.py" = ["def test_uncited_ask_is_denied(", "def test_compliant_ask_is_allowed(", "def test_cli_denies_a_noncompliant_ask(", "def test_cli_allows_a_compliant_ask(", "def test_dispatch_still_denies_a_guarded_bash_command("], ".claude/rules/clarify-before-acting.md" = ["`Bash|AskUserQuestion`", "[no prior evidence]", "python/src/dotfiles_setup/ask_quality.py"] }
+per_path_tokens = { ".claude/settings.json" = ['"matcher": "Bash|AskUserQuestion|Edit|Write|NotebookEdit"'], "python/src/dotfiles_setup/ask_quality.py" = ['RECOMMENDED_MARKER = "(Recommended)"', 'NO_EVIDENCE_ESCAPE = "[no prior evidence]"', "def find_violations(", "_CITATION_RE = re.compile("],"python/src/dotfiles_setup/hook_guard.py" = ['if tool_name == "AskUserQuestion":', "return ask_quality.decide(tool_input)", "def decide_payload("], "python/src/dotfiles_setup/hook_selfcheck.py" = ['("Bash", "AskUserQuestion")', "def check_ask_quality_endtoend(", "def _ask_payload("], "tests/test_ask_quality.py" = ["def test_uncited_ask_is_denied(", "def test_compliant_ask_is_allowed(", "def test_cli_denies_a_noncompliant_ask(", "def test_cli_allows_a_compliant_ask(", "def test_dispatch_still_denies_a_guarded_bash_command("], ".claude/rules/clarify-before-acting.md" = ["`Bash|AskUserQuestion`", "[no prior evidence]", "python/src/dotfiles_setup/ask_quality.py"] }
 
 [[suite]]
 name = "workflow.mise-tasks-enforcement"
@@ -1775,3 +1775,19 @@ per_path_tokens = { "python/src/dotfiles_setup/pr.py" = [
     "FAIL  ship: git push rc={push_rc}",
     "gh pr view rc={view.returncode}",
 ] }
+
+[[suite]]
+name = "workflow.branch-write-guard-wiring"
+description = "All work belongs on a branch that can become a PR (do-not.md #9), enforced at the moment a file CHANGES rather than the moment it is committed. hk's `no_commit_to_branch` (hk.pkl) already covers the commit, but hk is a git-hook system and never sees a write — so work can pile up on the default branch invisibly until something finally tries to commit. That is exactly what happened in session 2026-08-03-f: `mise run land` left the session on `main` and two sub-agents wrote their reports into the working tree there, unremarked. This contract pins the write-time layer end-to-end: the settings.json matcher must still name the file-modifying tools (a matcher that silently loses `Edit|Write` disables the guard while every unit test keeps passing — the #343 shape), `decide_payload` must still ROUTE to the module, the module must keep the two fail-open escapes that stop it blocking legitimate writes (git-ignored paths and paths outside the repo), and the nonexistent-ancestor walk must survive, because without it a Write creating a file in a new directory fails open on precisely the case the guard exists for."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    ".claude/settings.json",
+    "python/src/dotfiles_setup/hook_guard.py",
+    "python/src/dotfiles_setup/branch_guard.py",
+    "tests/test_branch_guard.py",
+    ".claude/rules/do-not.md",
+]
+per_path_tokens = { ".claude/settings.json" = ['"matcher": "Bash|AskUserQuestion|Edit|Write|NotebookEdit"'], "python/src/dotfiles_setup/hook_guard.py" = ["if branch_guard.handles(tool_name):", "return branch_guard.decide(tool_input)"], "python/src/dotfiles_setup/branch_guard.py" = ["def decide(", "def handles(", "if is_ignored(target, root):", "while not probe.is_dir():", '_FALLBACK_DEFAULTS = ("main", "master")'], "tests/test_branch_guard.py" = ["def test_denies_a_new_untracked_file_on_default_branch(", "def test_allows_same_file_on_a_feature_branch(", "def test_allows_gitignored_paths_on_default_branch(", "def test_allows_paths_outside_any_repo(", "def test_dispatch_routes_edit_to_the_branch_guard("], ".claude/rules/do-not.md" = ["Branch FIRST", "denying `Edit`/`Write`/`NotebookEdit` on a repo file"] }

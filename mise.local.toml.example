@@ -20,9 +20,13 @@
 #     recovering.
 #   - BASE_IMAGE — pin to a specific tag/SHA for reproducible rebuilds.
 #     Default ghcr.io/ray-manaloto/dotfiles-devcontainer:dev.
+#   - DOPPLER_CONFIG — which Doppler config the devcontainer downloads.
+#     Default dev_personal (aligned 2026-08-03, PR #522); set to "dev" for the
+#     43-secret subset that omits AGE_PRIVATE_KEY and the host-only tokens.
 #
 # DO NOT check in mise.local.toml; it is gitignored by design.
 
 [env]
 DEVCONTAINER_SSH_PORT = "4444"
 # BASE_IMAGE = "ghcr.io/ray-manaloto/dotfiles-devcontainer:<sha>"
+# DOPPLER_CONFIG = "dev"

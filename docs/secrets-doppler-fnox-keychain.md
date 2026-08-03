@@ -104,8 +104,8 @@ superseded — the lane existed, but **nothing in it was ever container-specific
 
 | config | real secrets | who reads it |
 |---|---:|---|
-| **`dev_personal`** | **49** | **everything** — fnox on this host (every declaration maps to `providers.doppler_dotfiles_dev_personal`) **and** the devcontainer (`.devcontainer/devcontainer.json:198` downloads `${DOPPLER_CONFIG:-dev_personal}`, pinned by `mise.toml:251,277,771`) |
-| **`dev`** | **43** | nothing, by default. Retained as a per-clone opt-out via `mise.local.toml` `[tasks.up] env = { DOPPLER_CONFIG = "dev" }` |
+| **`dev_personal`** | **49** | **everything** — fnox on this host (every declaration maps to `providers.doppler_dotfiles_dev_personal`) **and** the devcontainer (`.devcontainer/devcontainer.json` `initializeCommand` downloads `${DOPPLER_CONFIG:-dev_personal}`, pinned by `mise.toml:251,277,771`) |
+| **`dev`** | **43** | nothing, by default. Retained as a per-clone opt-out: a top-level `[env] DOPPLER_CONFIG = "dev"` in `mise.local.toml` (**never** a `[tasks.up]` block — that replaces the whole task) |
 
 (Both report 3 more names than that — Doppler auto-injects `DOPPLER_PROJECT`,
 `DOPPLER_CONFIG`, `DOPPLER_ENVIRONMENT`.)

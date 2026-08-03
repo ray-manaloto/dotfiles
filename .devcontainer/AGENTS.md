@@ -48,17 +48,17 @@ spec), not a bootstrap shell wrapper:
 service token needed inside the container.
 
 Doppler project/config defaults (`dotfiles`/`dev_personal`) come from
-`mise.toml [tasks.up].env` (`:251`, `:277`, `:771`). Override per-clone via
-`mise.local.toml`: `[tasks.up] env = { DOPPLER_CONFIG = "dev" }`.
+`mise.toml [tasks.up].env` (`:251`, `:277`, `:771`), templated
+`{{ env.DOPPLER_CONFIG | default(value='dev_personal') }}`. Override per-clone
+via a top-level `[env]` block in `mise.local.toml` — `DOPPLER_CONFIG = "dev"` —
+**never** by redefining `[tasks.up]`, which replaces the whole task and strips
+its `run` body (`mise.local.toml.example:9-13`).
 
-**Aligned onto `dev_personal` 2026-08-03.** `dev` (43) was a strict subset of
-`dev_personal` (49) — measured, 0 names in `dev` absent from `dev_personal`. The
-6 extras all have host-side consumers (fnox's age key, the mise/renovate token
-aliases, an NVIDIA benchmark key), so the container never used them; what the
-split cost was a second name set that **nothing asserts** — `doctor.toml` models
-`dev_personal` only, and `build.doppler-secrets-wired` names no config at all.
-The accepted trade-off is that `AGE_PRIVATE_KEY` — the key that decrypts the
-fnox age cache — now reaches the container's `--env-file`.
+**Aligned onto `dev_personal` 2026-08-03** (`dev` was a strict subset; its 6
+extras are all host-side). ⚠️ Accepted cost: `AGE_PRIVATE_KEY`, which decrypts
+the fnox age cache, now reaches the container's `--env-file`. Rationale,
+measurements and the still-open contract gap:
+`docs/secrets-doppler-fnox-keychain.md` § "One config".
 
 Future: migrate to mise-env-fnox with doppler provider inside the
 container for runtime secret resolution (#83).

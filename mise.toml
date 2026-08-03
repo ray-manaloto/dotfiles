@@ -248,7 +248,7 @@ description = "Bring the devcontainer up via the official @devcontainers/cli (Ma
 # it would silently ignore a mise.local.toml `[env]` override. The default
 # keeps these TASK-scoped (no global leak of BASE_IMAGE / the amd64
 # platform into unrelated subprocesses) unless the user opts in.
-env = { BASE_IMAGE = "{{ env.BASE_IMAGE | default(value='ghcr.io/ray-manaloto/dotfiles-devcontainer:dev') }}", DOCKER_DEFAULT_PLATFORM = "linux/amd64/v2", DEVCONTAINER_SSH_PORT = "{{ env.DEVCONTAINER_SSH_PORT | default(value='4444') }}", DOPPLER_PROJECT = "dotfiles", DOPPLER_CONFIG = "dev_personal" }
+env = { BASE_IMAGE = "{{ env.BASE_IMAGE | default(value='ghcr.io/ray-manaloto/dotfiles-devcontainer:dev') }}", DOCKER_DEFAULT_PLATFORM = "linux/amd64/v2", DEVCONTAINER_SSH_PORT = "{{ env.DEVCONTAINER_SSH_PORT | default(value='4444') }}", DOPPLER_PROJECT = "dotfiles", DOPPLER_CONFIG = "{{ env.DOPPLER_CONFIG | default(value='dev_personal') }}" }
 run = '''
 set -euo pipefail
 # v6 collision guard: compute an 8-char hash of $PWD so sibling clones
@@ -274,7 +274,7 @@ description = "Force a full rebuild + re-pull of :dev (lifecycle hooks fire)"
 # the host-user overlay without cached layers. Lifecycle hooks
 # (initializeCommand → onCreateCommand → postCreateCommand) all fire.
 # BASE_IMAGE + DEVCONTAINER_SSH_PORT templated for per-clone override — see the up task.
-env = { BASE_IMAGE = "{{ env.BASE_IMAGE | default(value='ghcr.io/ray-manaloto/dotfiles-devcontainer:dev') }}", DOCKER_DEFAULT_PLATFORM = "linux/amd64/v2", DEVCONTAINER_SSH_PORT = "{{ env.DEVCONTAINER_SSH_PORT | default(value='4444') }}", DOPPLER_PROJECT = "dotfiles", DOPPLER_CONFIG = "dev_personal" }
+env = { BASE_IMAGE = "{{ env.BASE_IMAGE | default(value='ghcr.io/ray-manaloto/dotfiles-devcontainer:dev') }}", DOCKER_DEFAULT_PLATFORM = "linux/amd64/v2", DEVCONTAINER_SSH_PORT = "{{ env.DEVCONTAINER_SSH_PORT | default(value='4444') }}", DOPPLER_PROJECT = "dotfiles", DOPPLER_CONFIG = "{{ env.DOPPLER_CONFIG | default(value='dev_personal') }}" }
 run = '''
 set -euo pipefail
 DEVCONTAINER_WORKSPACE_HASH="$(scripts/workspace-hash.sh)"
@@ -768,7 +768,7 @@ echo "OK: R1 inbound ssh ${USER}@localhost -p ${port} works"
 
 [tasks.verify-secrets]
 description = "S1: doppler env file exists and contains secrets"
-env = { DOPPLER_PROJECT = "dotfiles", DOPPLER_CONFIG = "dev_personal" }
+env = { DOPPLER_PROJECT = "dotfiles", DOPPLER_CONFIG = "{{ env.DOPPLER_CONFIG | default(value='dev_personal') }}" }
 run = '''
 set -euo pipefail
 envfile="${HOME}/.local/state/dotfiles/doppler.env"

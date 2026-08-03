@@ -28,7 +28,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash|AskUserQuestion",
+        "matcher": "Bash|AskUserQuestion|Edit|Write|NotebookEdit",
         "hooks": [
           {
             "type": "command",
