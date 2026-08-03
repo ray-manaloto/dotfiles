@@ -321,3 +321,99 @@ should begin by assessing it.
   `no_env_dump` gate, `env_blob_scan.py`, and the history pickaxe.
 - [ray-manaloto/knowledge-base](https://github.com/ray-manaloto/knowledge-base) —
   the second public repo checked by the same pickaxe.
+
+## The exec-only era (2026-07-27 → 2026-08-02) — moved out of the rule verbatim
+
+Ray **reversed this posture on 2026-08-02**: all 49 credentials are now `env = true`,
+available in every terminal and to every agent. The section below is the adoption
+history of the exec-only mode it replaced, kept verbatim because the *mechanisms* it
+documents are still live — `bootstrap_config()` still regenerates the config, and the
+`fnox` env-mode table is still how the tool behaves.
+
+⚠️ **One thing inverts usefully:** fnox's default `env` is `true` and
+`bootstrap_config()` emits only `provider` + `value`, so a regeneration now lands on
+the *desired* state for the mode. The wipe class that ate `env = "exec"` and its four
+opt-ins is **benign for the mode** under the new posture; what stays fragile is any
+added declaration and the `sync` blocks.
+
+## The source fix — fnox already ships it
+
+fnox **v1.30.0** (2026-07-09) added an exec-only env mode whose release notes
+name this exact threat: it keeps secrets out of the interactive shell *"where AI
+coding agents and other inherited processes would see them"*, while still
+injecting them into `fnox exec` subprocesses. fnox here is **1.31.1**, so it is
+available now.
+
+```toml
+# fnox.toml — one line flips the whole config to default-deny
+env = "exec"
+
+[secrets]
+AWS_SECRET_ACCESS_KEY = { provider = "…" }              # exec-only
+SOME_PROMPT_VAR       = { provider = "…", env = true }  # explicit opt-back-in
+```
+
+| `env` | shell / `fnox export` | `fnox exec` | `fnox get` |
+|---|:-:|:-:|:-:|
+| `true` (default) | yes | yes | yes |
+| `"exec"` | **no** | yes | yes |
+| `false` | no | no | yes |
+
+With `env = "exec"` there is no delta for mise to record, so `__MISE_DIFF`
+stops carrying credentials at the source. Everything below is the net under
+that, not a substitute for it.
+
+The table above is the tool's **measured** behaviour on the pinned 1.31.1 (both
+arms probed), not a restatement of its release notes.
+
+**APPLIED 2026-07-27 by Ray; 4 opt-ins since 2026-07-30** — 45 of 49 exec-only.
+Four must stay `env = true` because this repo runs on them: the context7 plugin
+interpolates `CONTEXT7_API_KEY` into an `Authorization` header (exec-only made it
+an empty string and the server served an **anonymous tier while reporting
+connected**), `gh` reports its active account as the environment-authenticated
+one, `mise` rate-limits to 60/h without `MISE_GITHUB_TOKEN`, and the
+`/last30days` engine's web lane reads **`EXA_API_KEY` from the process
+environment**. Exec-only for those degrades tooling *silently*.
+
+⚠️ **`EXA_API_KEY`'s stated reason was wrong until 2026-07-30.** It read
+"`.mcp.json` interpolates it at MCP-server spawn" — true when written, false once
+that server was dropped. The credential is still needed, by a consumer nobody had
+recorded: it is **not** in `~/.config/last30days/.env` and **not** in the
+keychain, so last30days reads it straight from the shell (probed: present at
+length 36, against `AWS_SECRET_ACCESS_KEY` absent, so the check discriminates).
+**A reason that names one consumer is a claim that there is only one** — and that
+claim is what nearly dropped a live credential.
+
+⚠️ **AND IT DOES NOT STAY APPLIED.** Measured 2026-07-30: the config was rewritten
+~4h40m after the fix, losing the global `env` line **and all 4 opt-ins**, so all 49
+credentials were shell-visible again until `mise run doctor`'s `fnox-baseline`
+check caught it. **Diagnosed the same day.** `mde-py`'s `bootstrap_config()`
+rebuilds the file from scratch and never re-emits `env`, so it drops the mode and
+every opt-in **by construction**; the full `fnox sync` its callers run next
+(`add`/`update`/`remove_secret`) regenerates all 49 `sync` blocks. That composite
+matches the wipe exactly — the blocks *look* intact because every ciphertext in
+them was replaced. **fnox is EXONERATED**: an authorized write probe rewrote all
+49 values and preserved the mode and all 4 opt-ins, on both its scoped and bulk
+paths, and fnox's `env` is a real struct field its writers round-trip.
+
+⚠️ **The trigger is the DOCUMENTED HAPPY PATH.** It was `mde-secret-add
+LINEAR_API_KEY`, run by hand after an agent recommended it from the mde repo's own
+docs. So **every secret you add or update re-exposes all 49 credentials** until
+something re-reads the config — which is the whole job of `fnox-baseline`. Filed
+as `macos-development-environment#82`. Probe table, the timeline and the
+re-derived line refs: `docs/rules-evidence/secrets-out-of-the-shell-env.md`.
+
+⚠️ **The config is GENERATED** — *"Managed by `mde-py secrets bootstrap-config`.
+Do not edit by hand."* A hand edit is therefore **not a fix, it is a patch with a
+half-life**; the durable fix belongs upstream. There is no user-root local
+override to hide it in; that layer is project-scoped only. What makes the hand
+edit safe to rely on meanwhile is the check that re-reads the artifact every
+session, not the edit itself.
+
+This also fixed the `[redacted]` digit-masking: two fnox telemetry flags held
+one-character all-digit values and were marked redacted, so mise masked every
+digit in every `mise run` line. Never a mise bug — collateral from treating a
+non-secret as a secret. **It returns if `mde-py` re-bootstraps the config.**
+
+Findings, control arms, and the verification that passed while blind:
+`docs/rules-evidence/secrets-out-of-the-shell-env.md`.
