@@ -79,14 +79,14 @@ fnox's `env` setting has three values: `true` (default — shell, `exec` and `ge
 global**, which is why flipping the global alone changes nothing.
 
 ⚠️ **The config is GENERATED** — *"Managed by `mde-py secrets bootstrap-config`. Do
-not edit by hand."* `bootstrap_config()` rebuilds it from scratch and re-emits only
-`provider` + `value`, so it drops the global `env`, every per-secret override and
-every `sync` block **by construction**. Its trigger is the documented happy path:
-any `mde-secret-add` / `update` / `remove`. That is a real defect
-(`macos-development-environment#82`), **not** an fnox bug — an authorized write probe
-round-tripped fnox's own writers with the mode and all opt-ins preserved, on both the
-scoped and bulk paths. So any hand edit here is **a patch with a half-life**, and the
-durable layer is the doctor check that re-reads the artifact every session.
+not edit by hand."* `bootstrap_config()` used to rebuild it re-emitting only `provider`
++ `value`, dropping the global `env`, every per-secret override and every `sync` block
+**by construction**, on the documented `mde-secret-add` / `update` / `remove` path.
+✅ **FIXED 2026-08-03** — `macos-development-environment#82` CLOSED, #83 merged as
+`716b17d`: declarations are added and removed by invoking `fnox` itself, so there is no
+template left to drop a field from. fnox was never at fault. What SURVIVES the fix: every
+add/remove still churns all 49 `sync` ciphertexts, and one stale local branch still
+carries the pre-fix code — so the durable layer is still the doctor check, not a hand edit.
 
 The exec-only era's full adoption history — the mode table, the four opt-in reasons,
 the `EXA_API_KEY` misattribution, and the measured wipe timeline — is in
