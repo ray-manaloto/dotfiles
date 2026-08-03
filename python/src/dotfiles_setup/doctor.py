@@ -10,9 +10,18 @@ seam (#418):
    ``${CONTEXT7_API_KEY:-}``; the variable is exec-only in fnox, so the header
    resolved to an EMPTY STRING. The server reported ``connected`` throughout —
    the failure mode is a silent tier downgrade, not an error.
-2. **The fnox env-mode settings are one ``bootstrap-config`` run from a wipe.**
-   The generator emits ``provider`` + ``value`` only, so ``env = "exec"``, the
-   opt-ins, and every ``sync`` block vanish on regeneration.
+2. **The fnox env-mode settings were one ``bootstrap-config`` run from a wipe.**
+   The generator emitted ``provider`` + ``value`` only, so ``env = "exec"``, the
+   opt-ins, and every ``sync`` block vanished on regeneration.
+   ✅ **Fixed upstream 2026-08-03** — ``macos-development-environment#82``
+   CLOSED, #83 merged as ``716b17d``: declarations are reconciled through
+   ``fnox`` itself and the file is written only when it does not exist, so
+   there is no template left to drop a field from. Two reasons this check still
+   earns its place: every add/remove still churns all 49 ``sync`` ciphertexts,
+   and one stale local branch still carries the pre-fix code. Since 2026-08-02
+   the mode is ``env = true`` by decision (all 50 in every shell), so item 1's
+   "exec-only" is history too — what ``fnox-baseline`` now pins is that mode
+   plus the full 50-name set.
 3. **The filesystem MCP server's real scope was not its declared scope.**
    ``.mcp.json`` names one directory; the session had two, because MCP Roots
    *replace* the server's own arguments.

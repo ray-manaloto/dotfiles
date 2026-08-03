@@ -41,6 +41,23 @@ its own PR and its own gates.
 > Publishing to `docs/specs/` rather than a tracker issue is **not** part of the error: #431's Notes
 > says *"Specs here are persistent… we do not adopt the disposable-spec habit."*
 
+> ## ⚠️ STATUS 2 — the secrets posture moved under this spec (added 2026-08-03)
+>
+> This file was written **2026-08-02, before** two ground-truth moves, and its secrets facts
+> have not been re-derived since:
+>
+> 1. **The posture reversed.** fnox is `env = true`: **all 50** credentials are in every shell
+>    and every agent, by design (Ray, 2026-08-02). Every "`env = "exec"`" and "the four
+>    `env = true` opt-ins" below (`:517`, `:600`, `:659`) is the **retired** posture. § 5
+>    item 16 still stands — #470 is open — but the number is 50, not 4.
+> 2. **The wipe class is fixed at source.** `macos-development-environment#82` is CLOSED, #83
+>    merged as `716b17d`: `bootstrap_config()` reconciles declarations through `fnox` and
+>    writes the file only when it does not exist. The `:184`, `:426` and `:635` sentences
+>    describe a regeneration that no longer happens. What **survives** is the full
+>    `_run_fnox_sync_age()` on every add/remove — all 49 `sync` ciphertexts churned.
+>
+> The decisions in §§ 1–4 and § 6 are unaffected; the rationale sentences above are not.
+
 **Resolution decreases with distance** (approved 2026-08-02). Phases 1–2 carry PR-sized steps;
 phases 3–4 carry the transition, its exit gate and its open items, and are deepened when their
 preconditions come near. That is deliberate: #448 records `mise dotfiles` → `mise bootstrap
@@ -656,7 +673,7 @@ The spec is single-entry (A1); this table is where to look when you want the *wo
 | `docs/receipts/448.md` | chezmoi vs mise; the deferral's real reason. |
 | `docs/receipts/460.md` | The doctor's blind zone; `fnox check` as a probe that can only pass. |
 | `origin/prototype/432-secrets-cli-shape` | The CLI shape spike. **Never merges.** `git show origin/prototype/432-secrets-cli-shape:python/prototypes/secrets_cli_shape/policy.py`. |
-| `.claude/rules/secrets-out-of-the-shell-env.md` | The live secrets doctrine — `env = "exec"`, the 4 opt-ins, the `mde-py` wipe. |
+| `.claude/rules/secrets-out-of-the-shell-env.md` | The live secrets doctrine — `env = true` (all 50 in every shell, by design since 2026-08-02), the `no_env_dump` / `secret_value_substitution` gates, and the record of the exec-only era it replaced. |
 
 ## GitHub repos touched
 
