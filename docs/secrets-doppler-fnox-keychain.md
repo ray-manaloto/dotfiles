@@ -156,8 +156,7 @@ or a per-secret opt-in. As of 2026-08-03 it lives on the local branch
 `origin/main` (rc=1, control on an `origin/main` commit rc=0), **no PR open**,
 and issue
 **[macos-development-environment#82](https://github.com/ray-manaloto/macos-development-environment/issues/82)**
-still **OPEN**. `src/mde/secrets/manage.py` does not exist on `origin/main` at
-all (`git cat-file -e` rc=128; control on `sync.py` rc=0).
+still **OPEN**.
 
 ⚠️ **So the template-rewrite hazard is currently held off by a checked-out
 branch, not by a fix anyone has landed.** Verified two ways on 2026-08-03: that
@@ -167,20 +166,43 @@ venv the wrapper actually calls resolves to that working tree and finds
 `_reconcile_declarations` (control: a bogus attribute → `False`), a symbol that
 exists only in the fix.
 
-**A `git checkout main` in that sibling repo silently restores the old
-behaviour, and nothing in this repo detects it.**
+### Which branch you land on decides which failure you get
 
-### What still happens on every add/remove, fix or no fix
+`src/mde/secrets/manage.py` is on **neither** `main` **nor** `origin/main` — the
+whole CRUD wrapper arrived in `7bf7a55`, which was never merged. Three
+independent routes, each control-armed: `git ls-tree -r --name-only <ref> --
+<path>` → **0** rows for both (control `README.md` → 1); `git log <ref> --
+<path>` → **0** commits for both (control, the fix branch → 2); and
+`git show <ref>:<path> | grep` → 0. Counted across every local and remote ref,
+**64 branches carry `manage.py` WITHOUT the fix and exactly 1 carries it with**.
+
+| you check out | `mde-secret-add` does |
+|---|---|
+| `fix/bootstrap-config-reroute-through-fnox` (today) | reconciles through `fnox`; cannot drop the mode or an opt-in |
+| any of the **64** other branches carrying `manage.py` | the #82 template rewrite — **silent**, and the hazard this section describes |
+| `main` / `origin/main` | **fails loudly** — `mde/secrets/__init__.py:76` imports `manage` lazily inside the call, so the module is simply absent |
+
+**Nothing in this repo detects which of those three you are on.**
+
+> ⚠️ **This table replaces a wrong claim shipped in #515**, which said the
+> pre-fix code was "on `origin/main`" and that `git checkout main` silently
+> restores the hazard. It does not — that checkout breaks the tool instead. The
+> probe that produced the error was `git cat-file -e <ref>:<path>`, which
+> **returned rc=128 and rc=0 for the same ref minutes apart**; `ls-tree` and
+> `git log -- <path>` agreed with each other and with `git show | grep`, so the
+> odd one out was the probe. When two routes disagree, one of them is broken —
+> and it is usually the probe, not the world.
+
+### What still happens on every add/remove, on any branch that HAS the wrapper
 
 `add_secret` / `update_secret` (a literal alias) / `remove_secret` each call
 `bootstrap_config()` and then run a **full** `_run_fnox_sync_age()` —
 `fnox sync --provider age --global --force` — so **all 49 sync ciphertexts are
-regenerated** whichever branch is checked out.
+regenerated** on the fix branch and on the 64 pre-fix branches alike.
 
-On `origin/main`'s version, `bootstrap_config()` additionally rebuilds the file
-from a template emitting `provider` + `value` only, preserving just
-`DOPPLER_TOKEN`. That is the wipe class of #82, and it is what returns on a
-branch switch. What it would cost now:
+On those 64, `bootstrap_config()` additionally rebuilds the file from a template
+emitting `provider` + `value` only, preserving just `DOPPLER_TOKEN`. That is the
+wipe class of #82. What it would cost now:
 
 ⚠️ **The mode hazard inverted on 2026-08-02 and the rest did not.** fnox's
 default `env` is `true`, so a regeneration now lands on the *desired* mode — the
@@ -322,8 +344,9 @@ headers, raw env dumps, or the contents of a secret-bearing config.
 ⚠️ **`mde-secret-add KEY` does steps 3-7 in one command and is the sanctioned
 mde interface — and it churns all 49 sync ciphertexts every time.** It does not
 rewrite the whole config *while* the sibling repo stays on the #82 fix branch;
-on `origin/main` it does. See "The config is generated" above before reaching
-for it, and it still does not touch `doctor.toml` for you.
+on any of the 64 pre-fix branches it does, and on either `main` it fails on
+import instead. See "The config is generated" above before reaching for it, and
+it still does not touch `doctor.toml` for you.
 
 ## Diagnose "the variable isn't set" — in this order
 
