@@ -37,6 +37,7 @@ env = true
 # Names are not secrets. Adding or removing an entry here is a deliberate change
 # to what this host carries, and belongs in a reviewed diff.
 env_true = [
+    "AGE_PRIVATE_KEY",
     "AUTH_TOKEN",
     "AWS_ACCESS_KEY_ID",
     "AWS_DEFAULT_REGION",
