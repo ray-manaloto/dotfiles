@@ -699,8 +699,8 @@ This is the honest answer to "an agent you can't SEE is an agent you can't impro
 ### ⚠️ What the subagent surface does NOT show — the real gaps
 
 1. **Failed subagents leave the `/tasks` list** (`:779`). Completed ones persist; failures vanish. The list is **success-biased** and cannot be used to audit failures.
-2. **No live token/cost figure per subagent.** The transcript's `preTokens` appears only at a compaction boundary — an agent that never compacts reports nothing.
-3. **No aggregate view across subagents.** Agent view's row summaries, state icons, PR linkage and notifications (below) are **session-level features and do not apply to subagents.**
+2. ~~**No live token/cost figure per subagent.**~~ ⚠️ **CORRECTED — this was wrong, see §9A.** Per-subagent `tokenCount`, `model`, `contextWindowSize` and `effort` are exposed live via `subagentStatusLine` (`statusline.md:1028–1032`), and per-agent cost attribution exists via OTEL `agent_id` / `parent_agent_id` and the gateway headers. What is true is narrower: **none of it is on by default** — every one of those surfaces requires configuration.
+3. **No aggregate view across subagents in the default UI.** Agent view's row summaries, state icons, PR linkage and notifications are **session-level features that do not apply to subagents**. The subagent panel's default row is only `name · description · token count` (`statusline.md:1017`) — replaceable, but only by writing a `subagentStatusLine` command.
 4. **A `SubagentStart` hook's exit-2 stderr goes to the subagent's own transcript, not the parent** (`hooks.md:739`) — a spawn-time complaint is invisible where you are looking.
 5. **A `maxTurns` truncation has no documented signal** (§8).
 6. **Nothing shows a subagent's tool set.** Given §1 — filter 2 removes tools **with no error** and the same definition resolves differently in foreground vs background — there is no surface that answers "what tools does this running agent actually have?"
@@ -765,6 +765,172 @@ Shape-based sweep of `^### ` headings in `errors.md` matching agent/task/tool/sp
 
 One adjacent entry worth carrying: **`Session agent no longer available`** (`sub-agents.md:737`) — resuming a session whose `--agent` definition has been deleted "continues with the default tools and system prompt and shows a warning naming the agent." ⚠️ **Fail-open**: a session pinned to a restrictive agent silently reverts to **full default tools** if the definition disappears. For a read-only auditor agent, deleting the file *widens* its capability rather than blocking it.
 
+## 9A. The observability surfaces that are OFF BY DEFAULT
+
+Added on a second pass after the lead named six candidate surfaces. **Seven of eight are real; one is not.** Existence sweep, corpus-wide file counts, controls invented fresh this run:
+
+| Token | Files | Verdict |
+|---|---|---|
+| `forward-subagent-text` | 5 | ✅ real |
+| `FORWARD_SUBAGENT_TEXT` | 4 | ✅ real |
+| `x-claude-code-agent-id` | 2 | ✅ real |
+| `x-claude-code-parent-agent-id` | 2 | ✅ real |
+| `agent_path_count` | 1 | ✅ real — **but not agent observability**, see below |
+| `read-agent-traces` | 1 | ✅ real — a doc anchor, not a knob |
+| `subagent-statusline` | 1 | ✅ real — an example script path; the **setting** is `subagentStatusLine` |
+| `blue_for_subagents_only` | **0** | ❌ **REFUTED — does not exist in the corpus** |
+| — controls — | | |
+| `zblarnthok` (invented) | 0 | absent, as expected |
+| `x-claude-code-frobnicator` (invented) | 0 | absent, as expected |
+| `agent_wibble_count` (invented) | 0 | absent, as expected |
+| `SubagentStop` (known-present) | 11 | present |
+| `CLAUDE_CODE_FORK_SUBAGENT` (known-present) | 4 | present |
+
+Both arms fire, so the `blue_for_subagents_only` zero is a real negative rather than a blind probe. Do not build on that token.
+
+**This section is the answer to "an agent you can't SEE is an agent you can't improve."** The visibility exists — it is just not wired up by default. The gap is configuration, not capability.
+
+### 9A.1 `subagentStatusLine` — the per-agent telemetry that already exists
+
+`statusline.md:1015–1036`. A `settings.json` setting that "renders a custom row body for **each subagent** shown in the agent panel below the prompt", replacing the default `name · description · token count` row.
+
+```json
+{ "subagentStatusLine": { "type": "command", "command": "~/.claude/subagent-statusline.sh" } }
+```
+
+The command "runs once per refresh tick and receives **all visible subagent rows** as a single JSON object on stdin", with the base hook fields, a `columns` width, and a `tasks` array. **Each task carries** (`statusline.md:1028`):
+
+`id`, `name`, `type`, `status`, `description`, `label`, `startTime`, `model`, `effort`, `contextWindowSize`, `tokenCount`, `tokenSamples`, `cwd`
+
+That is 13 fields per live subagent, refreshed on a tick. Specifically:
+
+- **`tokenCount` + `contextWindowSize`** — "computed the same way as the main status line's `context_window.context_window_size`, **so you can render a per-row percentage from `tokenCount`**" (`:1030`). Live context pressure per agent. Requires v2.1.205+; **omitted for a task whose model isn't resolved yet**.
+- **`model`** — the *resolved* model ID, which settles §1's "what is this agent actually running" question for the model axis.
+- **`effort`** — v2.1.214+. ⚠️ "reports the **configured value as written**: if the model doesn't support that level, the effort Claude Code actually applies **may differ**." So it is a declaration, not a measurement. Absent when the subagent inherits the session effort.
+- **`startTime`** + **`status`** — the two fields needed to distinguish *stalled* from *working*, which the default row cannot express.
+- **`tokenSamples`** — undocumented beyond the name. UNVERIFIED shape.
+
+Output protocol: one JSON line per row, `{"id": "<task id>", "content": "<row body>"}`. `content` renders as-is **including ANSI colors and OSC 8 hyperlinks**. Omit an `id` to keep default rendering; emit empty `content` to **hide** a row.
+
+Gating (`:1036`): "The same trust and **`disableAllHooks`** gates that apply to `statusLine` apply here." Plugins can ship a default `subagentStatusLine`.
+
+⚠️ **Adjacent trap** (`statusline.md:153`): "The event-driven triggers can go quiet when the main session is idle, **for example while a coordinator waits on background subagents**." Set `refreshInterval` (minimum `1`s) or the orchestrator's own status line freezes for exactly the duration of a fan-out — the period you most want to watch.
+
+**Assessment: this is the single highest-value unwired surface for a team design.** A ~30-line script turns the subagent panel into a live dashboard of every agent's model, context %, effort and age. Nothing else in this report gives that much observability for that little work.
+
+### 9A.2 Cost and trace attribution — `agent_id` / `parent_agent_id`
+
+Two independent transports, both real.
+
+**(a) LLM-gateway headers** (`llm-gateway-protocol.md:78–79`):
+
+| Header | Meaning |
+|---|---|
+| `x-claude-code-agent-id` | "Identifier of the **subagent** that issued the request, present **only on requests from an agent Claude Code spawned inside the session**. Use it with the session ID to **attribute cost to parallel agents**" |
+| `x-claude-code-parent-agent-id` | "Identifier of the agent that spawned the requesting agent, **present only for nested agents**" |
+
+The presence rules are the useful part: absent ⇒ main session; `agent-id` without `parent-agent-id` ⇒ depth 1; both ⇒ nested. **The header pair alone reconstructs the spawn tree**, which is what §8's depth limit otherwise makes invisible.
+
+**(b) OTEL spans and metrics** (`monitoring-usage.md:207–208`, `:239–240`, `:248`). The same two attributes ride `claude_code.llm_request` **and** `claude_code.tool` spans:
+
+- `agent_id` — "Identifier of the subagent **or teammate** that issued the request / ran the tool. **Absent on the main session**."
+- `parent_agent_id` — "Absent for the main session **and for agents spawned directly from it**."
+- `subagent_type` — on Agent/Task tool spans (`:248`).
+- `query_source` — `"main"` | `"subagent"` | `"auxiliary"` (`:530`), or a subagent name in the finer-grained events (`:206`, `:636`).
+- `agent.name` — ⚠️ **redacted by default for your own agents**: "Built-in agent names and agents from **official-marketplace plugins appear verbatim**. Other **user-defined agent names are rep[laced]**" (`:533`). Same rule for `plugin.name` (`:535`). So a custom role's name does **not** reach your telemetry backend in the clear — you must join on `agent_id` instead. This would silently defeat a dashboard keyed on role name.
+
+Span tree (`monitoring-usage.md:172–181`): each user prompt starts a `claude_code.interaction` root span; the Agent tool's subagent `claude_code.llm_request` / `claude_code.tool` spans hang beneath it. `monitoring-usage.md:1122` names the intended use directly — "Attributing spend to specific skills, plugins, or **subagent types** via the `skill.name`, `plugin.name`, and `agent.name` attributes."
+
+`OTEL_LOG_TOOL_CONTENT=1` adds full tool input/output bodies as span events, truncated at 60 KB (`CLAUDE_CODE_OTEL_CONTENT_MAX_LENGTH`, v2.1.214+) (`agent-sdk__observability.md:242`). That is the only documented route to *what a subagent actually did*, tool call by tool call, outside its transcript.
+
+⚠️ **`read-agent-traces` is a doc anchor** (`agent-sdk__observability.md:37`, `:242`), i.e. the "Read agent traces" section — not a flag or setting. Reported so it is not mistaken for a knob.
+
+⚠️ **`agent_path_count` is a red herring for this purpose.** `monitoring-usage.md:928` defines it as "number of **agent directories the plugin declares**" — a *plugin inventory* metric. It counts declarations, not running agents, and tells you nothing about execution.
+
+### 9A.3 `--forward-subagent-text` — live visibility into a deep tree
+
+The closest thing to streaming observability, and it is **headless-only**.
+
+`cli-reference.md:87`: "Emit subagent **text and thinking blocks** in the output stream as `assistant` and `user` messages with **`parent_tool_use_id` set**, so you can reconstruct each subagent's transcript. **Without this flag, Claude Code emits only subagent `tool_use` and `tool_result` blocks.** Requires `--print` and `--output-format stream-json`." v2.1.211+.
+
+`headless.md:171` states the default plainly: "By default, Claude Code emits **only** subagent `tool_use` and `tool_result` blocks."
+
+**Nested depth is covered, and that is the part the lead was right to chase** (`changelog.md:23`): "Added **nested subagent forwarding** in stream-json: subagents spawned at **depth-2+** now appear when `--forward-subagent-text` is set, **keyed by their spawning Agent `tool_use` id`**." So the full depth-3 tree is reconstructible — `parent_tool_use_id` is the join key.
+
+The env var differs from the flag in one operationally important way (`env-vars.md:266`): `CLAUDE_CODE_FORWARD_SUBAGENT_TEXT=1` gives "the same behavior… Use the variable when a harness invokes `claude` and can't pass the flag itself. **Unlike the flag, which exits with an error outside non-interactive mode with stream-json output, the variable is ig[nored]**."
+
+⚠️ **The flag is a hard error in the wrong mode; the variable is silently ignored.** Setting the variable globally is therefore safe but proves nothing — it does nothing in an interactive session, which is where this repo's agent work happens. **This surface does not help an interactive team run at all.** It is for a CI/headless harness that wraps `claude -p`.
+
+### 9A.4 Transcripts — and yes, `agent_transcript_path` is the documented way in
+
+Confirmed from §9: subagent transcripts live at `~/.claude/projects/{project}/{sessionId}/subagents/agent-{agentId}.jsonl` (`sub-agents.md:967`), survive main-conversation compaction, and are deleted after `cleanupPeriodDays` (default 30).
+
+**Can the parent read them?** Yes, and the harness hands over the path rather than making you derive it. `hooks.md:2048`: `SubagentStop` receives **`agent_transcript_path`** — "the `transcript_path` is the **main session's** transcript, while **`agent_transcript_path` is the subagent's own**, stored in a nested `subagents/` folder."
+
+So the documented pattern for parent-side inspection of a finished agent is a `SubagentStop` hook reading `agent_transcript_path`. They are ordinary files, so any agent with `Read` can also open them directly.
+
+⚠️ **Two caveats that would break a naive implementation**, both already cited above and both load-bearing here:
+
+1. `hooks.md:632` — the transcript "is written **asynchronously and may lag** the in-memory conversation", so a `SubagentStop` hook that reads `agent_transcript_path` for the agent's *final text* can race it. Use **`last_assistant_message`**, which the same event provides, for that specific need.
+2. `SubagentStop` **does not fire for agent-team teammates** (§6) — `TeammateIdle` is the teammate event.
+
+### 9A.5 `claude agents`, `--bg`, `/background`, and the supervisor
+
+For completeness, since the lead asked and since §9 established these are *session*-level, not subagent-level.
+
+**Entry points:**
+
+| Command | Effect | Cite |
+|---|---|---|
+| `claude agents` | Open agent view. `--cwd <path>` filters to sessions under that dir; **`--json` prints active sessions as JSON** | `cli-reference.md:28`, `agent-view.md:78` |
+| `claude --bg` / `--background` | Start a session straight to the background, return immediately, print the session ID and management commands | `cli-reference.md:70`, `agent-view.md:397` |
+| `/background` (alias `/bg`) | Move the **current** conversation to the background, freeing your terminal | `agent-view.md:358`, `:362` |
+| `/fork` | Send a **copy** to the background while you keep working where you are | `agent-view.md:358`, `:366` |
+| `claude stop <id>` (alias `claude kill`) | Stop a background session | `cli-reference.md:45` |
+| `claude rm <id>` | Remove from the list; **the transcript stays** locally, reachable via `claude --resume` | `cli-reference.md:43` |
+| `claude daemon status` | Supervisor reachability, PID, version, socket dir, live session count | `agent-view.md:~665` |
+
+Notable combinations: `claude --agent code-reviewer --bg "…"` runs a **defined subagent as a background session's main agent** (`agent-view.md:405–408`) — the one path that gives a role definition full session-level observability. `--name` labels it (`:416`). ⚠️ `--bg` is **rejected before session creation** when combined with `-p`/`--print` (v2.1.198+, `:403`) — the prompt is a positional argument, not a `-p` value. `--exec` runs a shell command as a PTY-backed background job instead of a Claude session (`cli-reference.md:84`).
+
+**The supervisor** (`agent-view.md:594–600`): a **per-user** process, separate from your terminal and from agent view, started automatically the first time you background a session or open agent view; not managed directly. It **keeps one pre-warmed worker ready** so a dispatch starts without a cold launch — on dispatch it assigns that worker, applies the session's directory, settings and credentials, then starts a replacement. If a binary update removed the launching binary, the process starts the supervisor from another installed copy.
+
+**State on disk** (`agent-view.md:655–675`):
+
+| Path | Contents |
+|---|---|
+| `~/.claude/daemon.log` | Supervisor log |
+| `~/.claude/daemon/roster.json` | Running background sessions, used to reconnect after restart |
+| `~/.claude/jobs/<id>/state.json` | Per-session state shown in agent view |
+| `~/.claude/jobs/<id>/tmp/` | Per-session scratch. **Writes here don't prompt for permission.** Removed with the session |
+
+Each background session gets **`CLAUDE_JOB_DIR`** pointing at `~/.claude/jobs/<id>`, "so shell commands the session runs can write temporary files to `$CLAUDE_JOB_DIR/tmp` without colliding with parallel sessions."
+
+⚠️ **`CLAUDE_CONFIG_DIR` forks the supervisor**: "the supervisor uses that directory instead of `~/.claude` and **runs as a separate instance with its own sessions**" (`:657`). Sessions dispatched under one config dir are invisible from the other — a ready-made "my background session vanished" incident.
+
+Version-skew handling (`:669–673`): `claude daemon status` warns when the running supervisor version differs from the invoked `claude`; fix with `claude daemon stop --any` (or `claude daemon stop` when installed as an OS service). Sessions survive the mismatch — an older version updating `state.json` "preserves fields it doesn't recognize", and `roster.json` follows the same rule since v2.1.200.
+
+**Turning it off** (`agent-view.md:676`): `disableAgentView: true` **or** `CLAUDE_CODE_DISABLE_AGENT_VIEW`; enforceable via managed settings. It disables "background agents **and** agent view **entirely**" — not just the UI. Cross-effect already noted in §3: with agent view off, `/subtask` is unavailable and **`/fork` reverts to starting the forked subagent** (`sub-agents.md:997`).
+
+### 9A.6 Host-specific: fork mode is LIVE here
+
+Verified on this machine, not assumed:
+
+```
+CLAUDE_CODE_FORK_SUBAGENT=1              ← set
+CLAUDE_CODE_DISABLE_BACKGROUND_TASKS     ← unset
+CLAUDE_CODE_DISABLE_AGENT_VIEW           ← unset
+declared at: ~/.claude/settings.json:10  "CLAUDE_CODE_FORK_SUBAGENT": "1"
+```
+
+Per §3/§4, on this host **today**:
+
+1. **Every subagent runs in the background**, fork or not (`sub-agents.md:1011`).
+2. **`background:` frontmatter is inert** — fork mode removes the `run_in_background` parameter from the Agent tool (`:783`).
+3. Therefore **filter 2 applies to every subagent this repo spawns** — the reduced 19-tool built-in set is the *only* set in play, and no agent definition can opt out.
+4. `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS` is unset, so nothing is overriding it.
+
+⚠️ **Consequence for the team design: writing `background: true` (or expecting a foreground subagent) in any role definition is a no-op on this host.** Design against the background tool set as the *only* tool set, and note that a teammate spawning its own subagent is the one path that still gets the foreground set (`agent-teams.md:426`) — which on this host would be the sole source of tool-set variance.
+
 ## Cross-cutting: the recurring failure shape
 
 Nine sections, one pattern worth naming on its own. **Almost every subagent constraint fails silently.**
@@ -786,7 +952,34 @@ Nine sections, one pattern worth naming on its own. **Almost every subagent cons
 
 Design implication: **a delegated agent cannot be trusted to report its own misconfiguration, and the parent gets no signal either.** Any team design needs an explicit capability self-check — an agent that states, in its report, what it could actually do — because no harness surface provides one.
 
-## Open items and UNVERIFIED claims
+## Open items and UNVERIFIED claims — the work queue
+
+Every claim above that is UNVERIFIED, UNDOCUMENTED, or inherited, each with the one-line experiment that would settle it. Ordered by decision impact, not by section. **P1 = changes the design; P2 = changes an implementation detail; P3 = tidy-up.**
+
+| # | P | Claim / question | § | Experiment that settles it |
+|---|---|---|---|---|
+| 1 | **P1** | Does a **fork's `AskUserQuestion`** actually reach the human, or is it present-but-inert like its `Agent` at depth? | 3, 2 | With `CLAUDE_CODE_FORK_SUBAGENT=1` (already set), run `/subtask ask me a multiple-choice question about X` and observe whether a prompt renders. Inert ⇒ error or silent no-op. |
+| 2 | **P1** | **Is `AskUserQuestion` genuinely unreachable from every delegated path?** If so, `clarify-before-acting`'s `ask_quality` gate covers the lead only. | 2 | Spawn a general-purpose subagent instructed to call `AskUserQuestion`; confirm the tool is absent from its pool and that no prompt reaches the terminal. Control arm: same agent calls `Read`, which must succeed. |
+| 3 | **P1** | **Real parallelism cap**: does `CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY` (10) bind before `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` (20)? Does a queued agent hold a concurrency slot? | 8 | Spawn 16 trivial subagents that each log a timestamp to a distinct file; check whether start times cluster in two waves of ~10. Control arm: repeat with the var set to `16` and confirm one wave. |
+| 4 | **P1** | **`maxTurns` exhaustion has no documented signal** — is a truncated report distinguishable from a complete one? | 8 | Spawn an agent with `maxTurns: 2` on a task needing ~6 turns; inspect the returned result and its transcript tail for any marker. If none, treat every delegated report as possibly truncated. |
+| 5 | **P1** | `Grep`, `Glob`, `TodoWrite` absent from this teammate's pool despite being in the documented background set — explicit spawn-time narrowing, or a doc/impl gap? | 1 | The lead reports the `tools` value it passed when spawning this agent. If it passed none, it is a doc gap worth reporting upstream. |
+| 6 | **P2** | **`tokenSamples`** in the `subagentStatusLine` `tasks` array — shape and meaning undocumented. | 9A.1 | Wire a `subagentStatusLine` script that dumps raw stdin to a file; spawn one subagent; read the JSON. Settles items 6 and 7 together. |
+| 7 | **P2** | Are all 13 `tasks` fields actually populated in practice, and does `status` distinguish **stalled** from **working**? | 9A.1 | Same dump. Compare a working agent against one blocked on a permission prompt; diff the `status` values. |
+| 8 | **P2** | **`agent.name` redaction** — are user-defined agent names really replaced in OTEL, making role-name dashboards impossible? | 9A.2 | Enable OTEL to a local collector, spawn a custom-named agent, inspect the `agent.name` attribute on its `claude_code.llm_request` span. Control arm: spawn `Explore`, whose name should appear verbatim. |
+| 9 | **P2** | Subagent memory: are **non-`MEMORY.md` topic files** read on demand as they are for main-session auto memory, or inert? | 5 | Give an agent `memory: local`, write a `debugging.md` beside its `MEMORY.md` containing a distinctive token, and ask a question that token answers without naming the file. |
+| 10 | **P2** | Does setting **`memory:` on a `tools: Read, Grep, Glob` agent** actually grant `Write`/`Edit`, breaking read-only intent? | 5 | Define exactly that agent and ask it to write a file outside its memory dir. If it can, "read-only + memory" is a contradiction to ban in role definitions. |
+| 11 | **P2** | **Empty `tools: []`** and a `disallowedTools` that eats the whole list both launch a toolless agent with no error — still true on the installed version? | 8 | Define an agent with `tools: []`; spawn it; confirm it launches and returns something useless rather than erroring. Control arm: `tools: [Grpe]` must produce the zero-tools refusal. |
+| 12 | **P2** | **Teammate transcript naming** (`<uuid>.jsonl`) — inherited from `.claude/rules/probes-need-a-control-arm.md`, **not re-derived by me**; the corpus documents only the subagent path. | 9 | `ls` the session dir while a teammate runs, and compare against `{sessionId}/subagents/agent-*.jsonl` for a subagent running at the same time. Fixes the rule file either way. |
+| 13 | **P2** | **Agent-team teammate limits** — `sub-agents.md:910` says teammates "follow their own limits"; those limits appear on no page I read. | 8 | Grep `agent-teams.md` by shape for numeric caps; if absent, ask the lead to spawn teammates until refusal and record the message. |
+| 14 | **P3** | Does a **plugin subagent's ignored `hooks`/`mcpServers`/`permissionMode`** really produce no warning? | 7 | Put a `PreToolUse` hook in a plugin agent's frontmatter, spawn it, and confirm the hook does not fire and nothing is logged outside the debug log. |
+| 15 | **P3** | Does the **`--agent` definition-deleted fail-open** really restore *full default tools*? | 9 | Start `claude --agent <restrictive>`, delete the file, resume, and check whether `Write` is now available. A widening-on-delete is worth a rule if confirmed. |
+| 16 | **P3** | **Version band.** All `min-version` markers I saw are ≤ v2.1.219; the companion report is captioned 2.1.221. I did **not** diff offline vs live. | — | `claude --version`, then diff the two `sub-agents.md` texts MDX-comment-stripped before relying on any post-2.1.219 behaviour. |
+
+**Refuted, needs no experiment:** `blue_for_subagents_only` does not exist in the corpus (0 files; three invented controls also 0, two known-present controls 11 and 4). `agent_path_count` is real but is a **plugin-inventory** metric (`monitoring-usage.md:928`), not agent observability. `read-agent-traces` is a doc anchor, not a knob.
+
+**Settled during this pass, previously open:** whether the parent can read a subagent's transcript (yes — `agent_transcript_path` on `SubagentStop`, `hooks.md:2048`); whether per-agent token spend is observable (yes — `subagentStatusLine.tasks[].tokenCount`, correcting my own §9 claim); and whether fork mode is active on this host (yes — `~/.claude/settings.json:10`).
+
+### Original narrative list (retained)
 
 Listed so nothing above is read as settled when it isn't.
 
@@ -803,4 +996,4 @@ Listed so nothing above is read as settled when it isn't.
 
 _None._ Every source read was the offline vendor documentation tree at `~/dev/github/ray-manaloto/knowledge-base/sources/agent-harness-docs/docs/claude-code/` (Anthropic's Claude Code docs, mirrored from `code.claude.com/docs/en/`), plus first-party observation of this session's own tool pool. No GitHub repository source, README, issue tracker, or mintlify site was queried.
 
-Pages read: `sub-agents.md` (in full), `agent-view.md`, `agent-teams.md`, `hooks.md`, `errors.md`, `tools-reference.md`, `env-vars.md`, `settings.md`, `memory.md`, `claude-directory.md`, `agent-sdk__user-input.md`, `agent-sdk__subagents.md`, `agent-sdk__claude-code-features.md`, `agent-sdk__hosting.md`.
+Pages read: `sub-agents.md` (in full), `agent-view.md`, `statusline.md`, `monitoring-usage.md`, `llm-gateway-protocol.md`, `headless.md`, `cli-reference.md`, `changelog.md`, `whats-new__2026-w29.md`, `agent-sdk__observability.md`, `agent-teams.md`, `hooks.md`, `errors.md`, `tools-reference.md`, `env-vars.md`, `settings.md`, `memory.md`, `claude-directory.md`, `agent-sdk__user-input.md`, `agent-sdk__subagents.md`, `agent-sdk__claude-code-features.md`, `agent-sdk__hosting.md`.

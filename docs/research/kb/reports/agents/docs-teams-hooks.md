@@ -1,6 +1,17 @@
 # Agent Teams & the Hook Surface That Governs Them — Claude Code reference
 
-**Status:** IN PROGRESS — skeleton written, sections appended as derived.
+**Status:** COMPLETE — all nine sections written.
+
+**The three answers the brief was commissioned for:**
+
+1. 🔴 **`SubagentStart` CANNOT refuse to start an agent** (`hooks.md:2027`, `:724`). The branch gate
+   must be a **`PreToolUse` hook matching `Agent`**, reading `.tool_input.subagent_type` — §2.
+2. 🔴 **Agent teams do NOT isolate teammates in worktrees** (`agents.md:45`). Nine teammates share
+   one checkout; partitioning is by prompt only — §7.
+3. ✅ **`TeammateIdle` (exit 2) and `SubagentStop` (`decision: "block"`) CAN force more work** —
+   bounded at **8 consecutive blocks** (`CLAUDE_CODE_STOP_HOOK_BLOCK_CAP`), after which the harness
+   overrides the hook and ends the turn anyway — §3.
+
 **Date:** 2026-08-04
 **Repo:** `/Users/rmanaloto/dev/github/ray-manaloto/dotfiles`, branch `research/agent-team-design`
 **Companion:** `docs/research/kb/reports/agents/harness-settings-reference.md` (frontmatter
@@ -27,7 +38,7 @@ route. Four routes were run; **all four return exactly the same 30 names.**
 |---|---|---|---|
 | A | Section headers inside the `## Hook events` block (`hooks.md:935`–`2814`) | `sed -n '935,2814p' hooks.md \| grep '^### '` | **30** |
 | B | JSON payload field, across the **whole 175-page doc tree** | `grep -rhoE '"hook_event_name":\s*"[A-Za-z]+"' .` | **30** |
-| C | The exit-code-2 behaviour table (`hooks.md:706`–`741`) | table rows | **30** |
+| C | The exit-code-2 behaviour table (`hooks.md:706`–`737`) | table rows | **30** |
 | D | The matcher table (`hooks.md:228`–`244`) | table rows, expanding grouped cells | **30** |
 
 Routes A and B were set-differenced in both directions: `comm -23` → empty, `comm -13` → empty.
@@ -52,34 +63,34 @@ Lifecycle order, as the doc orders them (`hooks.md:937`).
 |---|---|---|---|---|---|---|
 | 1 | `SessionStart` | New session **or resume** (`hooks.md:941`) | `source`; optional `model` — the **only** event that can get `model`, and not guaranteed (`hooks.md:645`) | **No** — stderr to user only (`hooks.md:725`) | Context only, **plus** `initialUserMessage`, `watchPaths`, `sessionTitle`, `reloadSkills` (`hooks.md:874`) | `startup`\|`resume`\|`clear`\|`compact`\|`fork` (`:229`) |
 | 2 | `Setup` | **Only** `--init-only`, or `--init`/`--maintenance` with `-p`. Never on normal startup (`hooks.md:1061`) | — | **No** (`hooks.md:726`) | Context only | `init`\|`maintenance` (`:230`) |
-| 3 | `InstructionsLoaded` | A `CLAUDE.md` or `.claude/rules/*.md` is loaded — at session start for eager files, **and again later** for lazy loads (`hooks.md:1117`) | `load_reason` | **No** — exit code **ignored** (`hooks.md:740`) | No | `session_start`\|`nested_traversal`\|`path_glob_match`\|`include`\|`compact` (`:240`) |
+| 3 | `InstructionsLoaded` | A `CLAUDE.md` or `.claude/rules/*.md` is loaded — at session start for eager files, **and again later** for lazy loads (`hooks.md:1117`) | `load_reason` | **No** — exit code **ignored** (`hooks.md:736`) | No | `session_start`\|`nested_traversal`\|`path_glob_match`\|`include`\|`compact` (`:240`) |
 | 4 | `UserPromptSubmit` | User submits a prompt, before Claude processes it (`hooks.md:1152`) | `prompt` | **Yes** — blocks **and erases the prompt** (`hooks.md:710`) | No — injects `additionalContext` only, cannot replace the prompt (`hooks.md:882`) | **none** (`:244`) |
 | 5 | `UserPromptExpansion` | A user-typed command expands into a prompt. Covers the path `PreToolUse` misses: typing `/skillname` directly **bypasses `PreToolUse` on the `Skill` tool** (`hooks.md:1212`) | command name | **Yes** — blocks the expansion (`:711`) | `additionalContext` | command name (`:241`) |
-| 6 | `MessageDisplay` | While assistant text **streams**; runs once per rendered batch of lines, so a long message fires it several times (`hooks.md:1260`) | the lines being rendered | **No** — original text is displayed (`:741`) | **Yes** — `displayContent` replaces on-screen text. **Display-only**: transcript and what Claude sees keep the original (`:873`) | **none** (`:244`) |
-| 7 | `PreToolUse` | After Claude builds tool parameters, before the call (`hooks.md:1394`) | `tool_name`, `tool_input`, `tool_use_id` | **Yes** — blocks the call (`:707`) | **Yes** — `updatedInput` replaces the tool's arguments (`:879`) | tool name (`:228`) |
-| 8 | `PermissionRequest` | Claude Code is about to ask **you** for permission. Also runs where no prompt can be shown (background subagents in headless) — **and if no hook decides, the call is DENIED** (`hooks.md:1625`) | permission request detail | **Yes** — denies (`:708`) | **Yes** — `decision.updatedInput` (`:880`) | tool name (`:228`) |
-| 9 | `PostToolUse` | Immediately after a tool succeeds (`hooks.md:1715`) | `tool_name`, `tool_input`, `tool_response` | **No** — the tool already ran; stderr shown to Claude (`:721`) | **Yes** — `updatedToolOutput` replaces the result (`:881`) | tool name (`:228`) |
-| 10 | `PostToolUseFailure` | A tool that started executing **failed**, or an MCP tool returned an error (`hooks.md:1785`) | as `PostToolUse` + error | **No** (`:722`) | No | tool name (`:228`) |
-| 11 | `PostToolBatch` | **Once** after every tool call in a batch resolves, before the next model call. `PostToolUse` fires per-tool and therefore concurrently on parallel calls; this fires exactly once with the full batch (`hooks.md:1841`) | the batch | **Yes** — stops the agentic loop before the next model call (`:723`) | No | **none** (`:244`) |
-| 12 | `PermissionDenied` | **Auto mode's classifier** denied a call. Does *not* fire for a manual deny, a `PreToolUse` block, or a `deny` rule (`hooks.md:1898`) | tool name + denial | **No** — the denial already happened (`:724`) | `retry: true` tells the model it may retry (`:869`) | tool name (`:228`) |
-| 13 | `Notification` | Claude Code sends a notification (`hooks.md:1944`) | `message` | **No** — stderr to user only (`:725`) | No | 8 values incl. `agent_needs_input`, `agent_completed` (`:232`) |
-| 14 | `SubagentStart` | A subagent is spawned via the Agent tool (`hooks.md:2008`) | `agent_id`, `agent_type` | 🔴 **NO — see §2** (`hooks.md:2029`, `:727`) | Context only (`additionalContext` into the subagent) | agent type (`:233`) |
-| 15 | `SubagentStop` | A subagent finished responding (`hooks.md:2042`) | `stop_hook_active`, `agent_id`, `agent_type`, `agent_transcript_path`, `last_assistant_message`, `background_tasks`, `session_crons` | **Yes** — prevents the subagent stopping (`:712`) | `additionalContext` | agent type (`:235`) |
-| 16 | `TaskCreated` | A task is being created via `TaskCreate` (`hooks.md:2073`) | task fields, `team_name` (**deprecated**, `agent-teams.md:18`) | **Yes** — **rolls back the creation** (`:713`) | No | **none** (`:244`) |
-| 17 | `TaskCompleted` | A task is marked complete — **either** by `TaskUpdate` **or** when a teammate finishes its turn with in-progress tasks (`hooks.md:2128`) | task fields, `team_name` (deprecated) | **Yes** — prevents completion (`:714`) | No | **none** (`:244`) |
-| 18 | `Stop` | Main agent finished responding. **Does not run on a user interrupt**; API errors fire `StopFailure` instead (`hooks.md:2184`) | `stop_hook_active`, `last_assistant_message`, `background_tasks`, `session_crons` | **Yes** — see §3 (`:711`) | `additionalContext` | **none** (`:244`) |
-| 19 | `StopFailure` | Instead of `Stop` when the turn ends on an API error (`hooks.md:2284`) | error type | **No** — "output and exit code are ignored" (`:720`) | No | 10 error types incl. `rate_limit`, `max_output_tokens` (`:239`) |
-| 20 | `TeammateIdle` | 🟢 A **teammate** is about to go idle after finishing its turn (`hooks.md:2312`) | teammate id, `team_name` (deprecated) | **Yes** — teammate gets stderr and **continues working** (`:715`) | No | **none** (`:244`) |
-| 21 | `ConfigChange` | A settings/policy/skill file changes mid-session (`hooks.md:2359`) | `source`, optional `file_path` | **Yes** — blocks the change, **except `policy_settings`** (`:716`) | No | `user_settings`\|`project_settings`\|`local_settings`\|`policy_settings`\|`skills` (`:236`) |
-| 22 | `CwdChanged` | Working directory changes, e.g. Claude runs `cd` (`hooks.md:2428`) | old/new cwd; has `CLAUDE_ENV_FILE` (`:2431`) | **No** (`:727`) | Env persistence via `CLAUDE_ENV_FILE` | **none** (`:237`) |
-| 23 | `FileChanged` | A watched file changes **on disk** (`hooks.md:2461`) | path | **No** (`:728`) | No | **literal filenames to watch** — the matcher *is* the watch list, and uses a narrower exact-match set (`:220`,`:238`) |
-| 24 | `WorktreeCreate` | A worktree is being created — `--worktree`, subagent `isolation: "worktree"`, or a background session (`hooks.md:2502`) | worktree request | **Yes** — ⚠️ **any non-zero exit aborts creation**, unlike every other event (`:699`,`:737`) | **Replaces** the default `git worktree` behaviour entirely; returns the path. `.worktreeinclude` is then **not processed** (`:2504`) | **none** (`:244`) |
-| 25 | `WorktreeRemove` | A worktree is being removed (`hooks.md:2558`) | worktree | **No** — failures logged in debug only (`:738`) | No | **none** (`:244`) |
-| 26 | `PreCompact` | Before a compact operation (`hooks.md:2605`) | trigger, custom instructions | **Yes** — **blocks compaction** (`:735`) | No | `manual`\|`auto` (`:234`) |
-| 27 | `PostCompact` | After compaction completes (`hooks.md:2635`) | summary | **No** (`:736`) | No | `manual`\|`auto` (`:234`) |
-| 28 | `SessionEnd` | Session ends (`hooks.md:2663`) | exit reason | **No** (`:726`) | No | `clear`\|`resume`\|`logout`\|`prompt_input_exit`\|`bypass_permissions_disabled`\|`other` (`:231`) |
-| 29 | `Elicitation` | An **MCP server** requests user input mid-task; a hook can answer programmatically and skip the dialog (`hooks.md:2701`) | elicitation request | **Yes** — denies (`:733`) | **Yes** — `action` + `content` form values (`:871`) | MCP server name (`:242`) |
-| 30 | `ElicitationResult` | After a user answers an MCP elicitation (`hooks.md:2771`) | the response | **Yes** — blocks; action becomes decline (`:734`) | **Yes** — `content` overrides the user's answer (`:872`) | MCP server name (`:243`) |
+| 6 | `MessageDisplay` | While assistant text **streams**; runs once per rendered batch of lines, so a long message fires it several times (`hooks.md:1260`) | the lines being rendered | **No** — original text is displayed (`:737`) | **Yes** — `displayContent` replaces on-screen text. **Display-only**: transcript and what Claude sees keep the original (`:873`) | **none** (`:244`) |
+| 7 | `PreToolUse` | After Claude builds tool parameters, before the call (`hooks.md:1394`) | `tool_name`, `tool_input`, `tool_use_id` | **Yes** — blocks the call (`:708`) | **Yes** — `updatedInput` replaces the tool's arguments (`:879`) | tool name (`:228`) |
+| 8 | `PermissionRequest` | Claude Code is about to ask **you** for permission. Also runs where no prompt can be shown (background subagents in headless) — **and if no hook decides, the call is DENIED** (`hooks.md:1625`) | permission request detail | **Yes** — denies (`:709`) | **Yes** — `decision.updatedInput` (`:880`) | tool name (`:228`) |
+| 9 | `PostToolUse` | Immediately after a tool succeeds (`hooks.md:1715`) | `tool_name`, `tool_input`, `tool_response` | **No** — the tool already ran; stderr shown to Claude (`:719`) | **Yes** — `updatedToolOutput` replaces the result (`:881`) | tool name (`:228`) |
+| 10 | `PostToolUseFailure` | A tool that started executing **failed**, or an MCP tool returned an error (`hooks.md:1785`) | as `PostToolUse` + error | **No** (`:720`) | No | tool name (`:228`) |
+| 11 | `PostToolBatch` | **Once** after every tool call in a batch resolves, before the next model call. `PostToolUse` fires per-tool and therefore concurrently on parallel calls; this fires exactly once with the full batch (`hooks.md:1841`) | the batch | **Yes** — stops the agentic loop before the next model call (`:721`) | No | **none** (`:244`) |
+| 12 | `PermissionDenied` | **Auto mode's classifier** denied a call. Does *not* fire for a manual deny, a `PreToolUse` block, or a `deny` rule (`hooks.md:1898`) | tool name + denial | **No** — the denial already happened (`:722`) | `retry: true` tells the model it may retry (`:869`) | tool name (`:228`) |
+| 13 | `Notification` | Claude Code sends a notification (`hooks.md:1944`) | `message` | **No** — stderr to user only (`:723`) | No | 8 values incl. `agent_needs_input`, `agent_completed` (`:232`) |
+| 14 | `SubagentStart` | A subagent is spawned via the Agent tool (`hooks.md:2008`) | `agent_id`, `agent_type` | 🔴 **NO — see §2** (`hooks.md:2027`, `:724`) | Context only (`additionalContext` into the subagent) | agent type (`:233`) |
+| 15 | `SubagentStop` | A subagent finished responding (`hooks.md:2042`) | `stop_hook_active`, `agent_id`, `agent_type`, `agent_transcript_path`, `last_assistant_message`, `background_tasks`, `session_crons` | **Yes** — prevents the subagent stopping (`:713`) | `additionalContext` | agent type (`:235`) |
+| 16 | `TaskCreated` | A task is being created via `TaskCreate` (`hooks.md:2073`) | task fields, `team_name` (**deprecated**, `agent-teams.md:18`) | **Yes** — **rolls back the creation** (`:715`) | No | **none** (`:244`) |
+| 17 | `TaskCompleted` | A task is marked complete — **either** by `TaskUpdate` **or** when a teammate finishes its turn with in-progress tasks (`hooks.md:2128`) | task fields, `team_name` (deprecated) | **Yes** — prevents completion (`:716`) | No | **none** (`:244`) |
+| 18 | `Stop` | Main agent finished responding. **Does not run on a user interrupt**; API errors fire `StopFailure` instead (`hooks.md:2184`) | `stop_hook_active`, `last_assistant_message`, `background_tasks`, `session_crons` | **Yes** — see §3 (`:712`) | `additionalContext` | **none** (`:244`) |
+| 19 | `StopFailure` | Instead of `Stop` when the turn ends on an API error (`hooks.md:2284`) | error type | **No** — "output and exit code are ignored" (`:718`) | No | 10 error types incl. `rate_limit`, `max_output_tokens` (`:239`) |
+| 20 | `TeammateIdle` | 🟢 A **teammate** is about to go idle after finishing its turn (`hooks.md:2312`) | teammate id, `team_name` (deprecated) | **Yes** — teammate gets stderr and **continues working** (`:714`) | No | **none** (`:244`) |
+| 21 | `ConfigChange` | A settings/policy/skill file changes mid-session (`hooks.md:2359`) | `source`, optional `file_path` | **Yes** — blocks the change, **except `policy_settings`** (`:717`) | No | `user_settings`\|`project_settings`\|`local_settings`\|`policy_settings`\|`skills` (`:236`) |
+| 22 | `CwdChanged` | Working directory changes, e.g. Claude runs `cd` (`hooks.md:2428`) | old/new cwd; has `CLAUDE_ENV_FILE` (`:2431`) | **No** (`:728`) | Env persistence via `CLAUDE_ENV_FILE` | **none** (`:237`) |
+| 23 | `FileChanged` | A watched file changes **on disk** (`hooks.md:2461`) | path | **No** (`:729`) | No | **literal filenames to watch** — the matcher *is* the watch list, and uses a narrower exact-match set (`:220`,`:238`) |
+| 24 | `WorktreeCreate` | A worktree is being created — `--worktree`, subagent `isolation: "worktree"`, or a background session (`hooks.md:2502`) | worktree request | **Yes** — ⚠️ **any non-zero exit aborts creation**, unlike every other event (`:699`,`:734`) | **Replaces** the default `git worktree` behaviour entirely; returns the path. `.worktreeinclude` is then **not processed** (`:2504`) | **none** (`:244`) |
+| 25 | `WorktreeRemove` | A worktree is being removed (`hooks.md:2558`) | worktree | **No** — failures logged in debug only (`:735`) | No | **none** (`:244`) |
+| 26 | `PreCompact` | Before a compact operation (`hooks.md:2605`) | trigger, custom instructions | **Yes** — **blocks compaction** (`:730`) | No | `manual`\|`auto` (`:234`) |
+| 27 | `PostCompact` | After compaction completes (`hooks.md:2635`) | summary | **No** (`:731`) | No | `manual`\|`auto` (`:234`) |
+| 28 | `SessionEnd` | Session ends (`hooks.md:2663`) | exit reason | **No** (`:727`) | No | `clear`\|`resume`\|`logout`\|`prompt_input_exit`\|`bypass_permissions_disabled`\|`other` (`:231`) |
+| 29 | `Elicitation` | An **MCP server** requests user input mid-task; a hook can answer programmatically and skip the dialog (`hooks.md:2701`) | elicitation request | **Yes** — denies (`:732`) | **Yes** — `action` + `content` form values (`:871`) | MCP server name (`:242`) |
+| 30 | `ElicitationResult` | After a user answers an MCP elicitation (`hooks.md:2771`) | the response | **Yes** — blocks; action becomes decline (`:733`) | **Yes** — `content` overrides the user's answer (`:872`) | MCP server name (`:243`) |
 
 ### 1.3 Timeouts
 
@@ -153,10 +164,10 @@ The brief asks this because the repo wants a gate that refuses to start a *writi
 default branch. The answer is **no, not with `SubagentStart`**, stated twice in the vendor docs:
 
 > *"SubagentStart hooks **can't block subagent creation**, but they can inject context into the
-> subagent."* — `hooks.md:2029`
+> subagent."* — `hooks.md:2027`
 
 > `SubagentStart` | Can block? **No** | *"Shows stderr to user only"* — the exit-code-2 table,
-> `hooks.md:727`
+> `hooks.md:724`
 
 Reinforced structurally: `SubagentStart` sits in the decision-control table's **"Context only"**
 row alongside `SessionStart` and `Setup`, whose entry ends *"No blocking or decision control"*
@@ -167,7 +178,7 @@ row alongside `SessionStart` and `Setup`, whose entry ends *"No blocking or deci
 One extra detail worth knowing when debugging: as of v2.1.199 a `SubagentStart` exit-2 stderr does
 render, but **in the subagent's own transcript, not the parent conversation**, as a
 `<hook name> hook error` notice — *"Claude doesn't see it, and the session or subagent proceeds"*
-(`hooks.md:743`). So a hook written as a gate looks like it did something while the agent runs on
+(`hooks.md:739`). So a hook written as a gate looks like it did something while the agent runs on
 regardless. That is the worst possible failure shape: a gate that can only pass, which
 `probes-need-a-control-arm.md` exists to catch.
 
@@ -356,7 +367,7 @@ the subagent as its next instruction"* (`hooks.md:2069`). Up to 8 consecutive ti
 For an agent team, the sibling event is **`TeammateIdle`**, which is the *right* one to use for a
 teammate — a teammate is a session, not an Agent-tool subagent. Exit 2 sends stderr as feedback and
 the teammate **continues working instead of going idle**; `{"continue": false, "stopReason": …}`
-stops it entirely (`hooks.md:2337-2343`). Payload is `teammate_name` plus the deprecated
+stops it entirely (`hooks.md:2341-2342`). Payload is `teammate_name` plus the deprecated
 `team_name` (`hooks.md:2320`). No matcher — it fires for every teammate, so the hook script must
 branch on `teammate_name` itself.
 
@@ -370,7 +381,7 @@ if [ ! -f "./dist/output.js" ]; then
 fi
 exit 0
 ```
-— `hooks.md:2348`
+— `hooks.md:2346-2352`
 
 Substituting this repo's report path for `dist/output.js` is a direct, documented fix for the
 twice-observed failure in `feedback_agent_team_delivery_discipline` (an agent that finished and
@@ -1196,10 +1207,123 @@ config. (Tracing does export `TRACEPARENT` into Bash/PowerShell subprocesses so 
 their spans under the same trace — `monitoring-usage.md:158` — but that is the trace *context*, not
 the exporter *destination*.)
 
+## 9. Cross-cutting findings and corroborations
+
+### 9.1 The 8-block cap, three independent routes
+
+Beyond `env-vars.md:336` and `hooks.md:2194`, `best-practices.md:47` states it a third time, in a
+different context (the "deterministic gate" pattern): *"a Stop hook runs your check as a script and
+blocks the turn from ending until it passes. **Claude Code overrides the hook and ends the turn
+after 8 consecutive blocks.**"* `changelog.md` records the same number alongside the override
+variable. Three routes, one number — this one is safe to build on.
+
+`best-practices.md:50` also frames the escalation this repo would care about: *"Each step trades
+setup for attention. The prompt version works on any task today. The `/goal` and Stop hook versions
+are what let an unattended run finish correctly **without you**."*
+
+### 9.2 The vendor's own hooks-vs-prose doctrine
+
+Independently arrived at, and identical to `mise-tasks-only.md`'s enforcement-layer doctrine:
+
+> *"Use hooks for actions that must happen every time with zero exceptions… **Unlike CLAUDE.md
+> instructions which are advisory, hooks are deterministic and guarantee the action happens.**"* —
+> `best-practices.md:245,248`
+
+> *"Like CLAUDE.md, rules are **guidance Claude reads, not configuration Claude Code enforces**.
+> For guaranteed behavior use hooks or permissions."* — `claude-directory.md:168`
+
+That is the vendor stating, about `.claude/rules/*.md` specifically, what this repo learned the
+expensive way: markdown alone is never the only layer. It applies directly to
+`agent-report-persistence.md` rule 1b, which has now failed twice in prose form and has a
+documented hook (`TeammateIdle`, §3.4) available to carry it.
+
+### 9.3 🔴 `~/.claude/teams/` is undocumented in the directory reference
+
+`claude-directory.md` — the page whose whole job is *"Where Claude Code reads CLAUDE.md,
+settings.json, hooks, skills, commands, subagents, workflows, rules, and auto memory"* (`:7`) —
+mentions `teams/` **0 times**. **Control arm:** `tasks/` in the same file → **3** hits (`:1531`,
+`:1628`, plus the per-session cleanup list), so the file does cover team-adjacent state and the
+probe discriminates.
+
+Consequence: `~/.claude/teams/{team-name}/config.json` and `inboxes/*.json` are documented **only**
+in `agent-teams.md:226-235`. Anyone auditing the `.claude` surface from the directory reference —
+including a security or backup review — will miss the mailbox files entirely. `claude-directory.md`
+does list `~/.claude/tasks/` under *"Nothing user-facing"* (`:1628`), which is also where a team's
+**persistent** task list lives.
+
+### 9.4 Where the pieces this repo needs actually live
+
+Mapping the two gates the companion report §2.4 called for onto the documented surface:
+
+| Wanted | Documented mechanism | Verdict |
+|---|---|---|
+| Refuse to start a writing agent on the default branch | **`PreToolUse` matcher `Agent`**, read `.tool_input.subagent_type`, return `permissionDecision: "deny"` (§2.2) | ✅ Works. `SubagentStart` **cannot** (§2.1) — and cannot even run a `prompt`/`agent` hook (§5.3) |
+| Force an agent to deliver its report before idling | **`TeammateIdle`** exit 2 for teammates (§3.4, vendor example at `hooks.md:2346-2352`); **`SubagentStop`** `decision: "block"` for Agent-tool subagents (§2.4) | ✅ Works, bounded at 8 consecutive blocks |
+| Tell every delegated agent its branch, report path and persistence rule | **`SubagentStart`** `additionalContext`, injected before the subagent's first prompt (§2.3) | ✅ Works — this is what `SubagentStart` is *for* |
+| Isolate 9 teammates' file writes | — | 🔴 **Nothing.** Teams do not use worktrees (§7.1); partition by prompt |
+| Attribute cost per named role | Spans' `agent_id`/`parent_agent_id` (§8.3) | 🟠 Spans yes; the cost **metric** reports `"custom"` for all user-defined agents (§8.4) |
+| Escalate a question to the human from inside a teammate | — | 🔴 `AskUserQuestion` is removed from every delegated agent (companion report §2.4 item 1). `SendMessage` to the lead is the only route; the **lead** owns the ask |
+
 ## Open items and UNVERIFIED claims
 
-_(pending)_
+Per this repo's evidence policy, every claim above carries a `file:line` except these.
+
+- **UNVERIFIED — `MessageDisplay`'s hook-type support.** It appears in none of the three lists at
+  `hooks.md:2821-2852`. The §1 count of 30 is unaffected (four other routes).
+- **UNVERIFIED — whether `continueOnBlock` applies to `agent`-type hooks.** Listed on the prompt
+  table (`hooks.md:2891`), absent from the agent table (`:2968-2973`), while the prose says the
+  fields are "the same" (`:2966`).
+- **UNVERIFIED — where teammate usage lands in the `/usage` breakdown.** The attribution buckets
+  are skills, subagents, plugins, MCP servers (`costs.md:36`); teammates are not named. Control arm
+  run (§8.2) — the absence is real, the *destination* is unknown.
+- **UNVERIFIED — which auto-compaction branch applies on `claude-opus-5[1m]`.** `env-vars.md:189`
+  names Sonnet 4.6 / Opus 4.6 and a set of conditions for *proactive* compaction and gives Opus 4.8
+  as an at-the-limit example; Opus 5 is in neither list. Decides whether a `PreCompact` block is
+  recoverable or fatal (§4.2).
+- **UNVERIFIED — the arXiv 2607.22917v2 claim** about compaction eroding working detail. Inherited
+  from the brief, not read. §4 answers what the harness offers **without** relying on it.
+- **NOT RE-DERIVED — the ~340 ms/edit guard cost** quoted in §5.4. Inherited from memory
+  `project_session_2026-08-03-f` and labelled as such per `probes-need-a-control-arm.md` rule 6.
+  §8.3 explains why the natural re-derivation (`claude_code.hook` spans) is unavailable here.
+- **NOT MEASURED — every behavioural claim in this report.** This is a documentation review. No
+  hook was configured, no teammate spawned, no probe run against a live session. Absences are
+  control-armed **against the documentation corpus**, which establishes that the docs are silent,
+  **not** that the harness lacks the behaviour. `probes-need-a-control-arm.md` rule 3's warning
+  applies in full: a doc corpus is a bounded search space.
+- **Citations were audited, and 33 were wrong.** After drafting, every `file:line` in a sample of
+  ~45 was re-resolved with `sed -n "${N}p" <file>`. The exit-code-2 table's 30 per-row citations
+  were **systematically off by 1–5 lines** (an off-by-N introduced when transcribing a long table),
+  plus three prose refs. All 33 are corrected above and re-verified to land on the named event.
+  **Control arm:** the same re-resolution on the untouched refs (`hooks.md:874`, `:1550`, `:1555`,
+  `:2194`, `agent-teams.md:226`, `:370`, `:426`, `costs.md:36`, `monitoring-usage.md:533`,
+  `settings.md:373`, `worktrees.md:93`) returned the expected text unchanged — so the audit
+  discriminates between a good and a bad citation rather than flagging everything. Treat any
+  `file:line` in this report as verified for the audited sample and *spot-checked* elsewhere; the
+  quoted text, not the line number, is the load-bearing part.
+- **Version note.** The offline tree was treated as current per the brief. `agent-teams.md:18`
+  self-describes as *"as of v2.1.178"* while this host runs **2.1.221** (companion report §2), so
+  the teams page is the one most likely to lag its own subject. Claims carrying an explicit
+  "requires vX" note are the reliable ones; the unversioned prose on that page is the weakest tier
+  of evidence in this report.
 
 ## GitHub repos touched
 
-_(pending)_
+- [anthropics/claude-code](https://github.com/anthropics/claude-code) — the subject: every `$CC/*.md`
+  page cited (`hooks.md`, `agent-teams.md`, `agents.md`, `worktrees.md`, `settings.md`,
+  `env-vars.md`, `costs.md`, `monitoring-usage.md`, `context-window.md`, `best-practices.md`,
+  `claude-directory.md`, `features-overview.md`, `champion-kit.md`, `sub-agents.md`,
+  `agent-view.md`, `changelog.md`) is vendored from this repo's docs. Also the linked
+  `examples/hooks/bash_command_validator_example.py` reference implementation (`hooks.md:933`).
+- [ray-manaloto/knowledge-base](https://github.com/ray-manaloto/knowledge-base) — hosts the offline
+  vendor doc tree at `sources/agent-harness-docs/docs/claude-code`; the sole corpus for this report.
+- [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — the consuming repo: its
+  `.claude/rules/*.md`, `hook_guard.py`/`branch_guard`, and the companion
+  `harness-settings-reference.md` are what §9.4 maps the documented mechanisms onto.
+- [mkusaka/it2](https://github.com/mkusaka/it2) — required CLI for `teammateMode: "iterm2"`, and the
+  subject of the setup prompt under `"auto"`/`"tmux"` (`agent-teams.md:109,127-130`).
+- [tmux/tmux](https://github.com/tmux/tmux) — split-pane backend; its wiki is the vendor's install
+  pointer, and `tmux ls` / `tmux kill-session` is the orphaned-session fix (`agent-teams.md:129,410`).
+
+_Non-GitHub sources: `https://code.claude.com/docs/en/*.md` (the live equivalents of every page
+above, not re-fetched for this report — the offline tree was used per the brief);
+`https://git-scm.com/docs/git-worktree` (linked by `worktrees.md:9`)._
