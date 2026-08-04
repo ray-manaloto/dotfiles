@@ -16,6 +16,10 @@ evidence base and are kept alongside this file:
 | `docs/research/kb/reports/agents/market-scan.md` | 2,298-plugin marketplace enumeration · independent sweep · `/last30days` |
 | `docs/research/kb/reports/agents/harness-settings-reference.md` | every knob: frontmatter × env vars × settings.json × mode |
 | `docs/research/kb/reports/agents/lane-economics.md` | Codex offload · Fable routing · cost model |
+| `docs/research/kb/reports/agents/docs-channels.md` | channels · permission relay · remote control · scheduled tasks |
+| `docs/research/kb/reports/agents/docs-subagents-deep.md` | the full subagent surface · tool filters · forks · memory · observability |
+| `docs/research/kb/reports/agents/docs-teams-hooks.md` | agent teams · every hook event · worktrees · cost · telemetry |
+| `docs/research/kb/reports/agents/docs-remainder-sweep.md` | re-enumeration of all 174 doc pages · skills · plugins · headless · checkpointing |
 
 Offline vendor docs are cited as `$CC/<page>.md:<line>`, where `$CC` is
 `~/dev/github/ray-manaloto/knowledge-base/sources/agent-harness-docs/docs/claude-code`.
@@ -414,21 +418,106 @@ team size.
 
 ---
 
-## 9. Before any team ships — the blocking fixes
+## 9. Enforcement — which hooks can actually stop an agent
 
-The audit turned three of these from "nice to have" into preconditions:
+A second doc sweep (`docs-teams-hooks`, `docs-subagents-deep`, `docs-channels`,
+`docs-remainder-sweep`) enumerated the hook surface **by shape rather than by expectation**, and
+it overturned the enforcement design.
+
+### ⚠️ `SubagentStart` cannot block
+
+> *"SubagentStart hooks **can't block subagent creation**, but they can inject context into the
+> subagent."* — `$CC/hooks.md:2029`, and again in the exit-code table at `:727`
+
+Worse, the failure is silent in the wrong direction: as of v2.1.199 a `SubagentStart` exit-2
+stderr renders **in the subagent's own transcript, not the parent conversation** —
+*"Claude doesn't see it, and the session or subagent proceeds"* (`$CC/hooks.md:743`). A hook
+written there as a gate **looks like it fired while the agent runs on regardless**: a gate that
+can only pass, which is exactly what `probes-need-a-control-arm.md` exists to catch.
+`continue: false` is not an escape hatch either.
+
+So the branch precondition **cannot** be enforced at spawn. It can only inject context — telling
+the agent it is on the wrong branch and must not write.
+
+### 🟢 Four hooks that *can* block, and one of them fixes a recurring failure
+
+| Hook | Blocking effect |
+|---|---|
+| **`TeammateIdle`** | teammate receives stderr and **continues working** (`$CC/hooks.md:715`, `:2312`) |
+| **`SubagentStop`** | prevents the subagent stopping (`:712`, `:2042`) — payload includes `agent_transcript_path`, `last_assistant_message`, `background_tasks` |
+| **`TaskCreated`** | **rolls the creation back** (`:713`) |
+| **`TaskCompleted`** | prevents completion (`:714`) — fires on `TaskUpdate` *and* when a teammate ends a turn with in-progress tasks |
+
+**`TeammateIdle` and `SubagentStop` are the mechanism the repeatedly-failing
+"a delegated agent must deliver before going idle" rule has always needed.** That rule has now
+failed three times, twice in this very session — two agents ended with sections still marked
+`_(to be filled)_` and had to be chased by hand. It stops being prose and becomes a hook.
+
+### Observability — three surfaces, and they do not overlap
+
+The sweep corrected the brief's own premise: **`agent-view.md` is not about subagents.** It
+documents background *sessions*; the page even carries a troubleshooting entry titled
+*"`claude agents` lists subagents instead of opening agent view"* — i.e. printing your subagents
+is that command's **failure** mode.
+
+| Surface | Watches |
+|---|---|
+| Agent view (`claude agents`) | background **sessions** — full conversations with their own supervisor |
+| Subagent panel + `/tasks` | subagents and forks **inside one session** |
+| Agent panel below the prompt | agent-team **teammates** |
+
+**The durable substrate is the transcript**, and it is better than the panels:
+`~/.claude/projects/{project}/{sessionId}/subagents/agent-{agentId}.jsonl`, stored separately so
+it is **unaffected by main-conversation compaction**, resumable, retained for `cleanupPeriodDays`
+(default 30). Compaction events appear inline as a `compact_boundary` record carrying
+`preTokens`, so context pressure per agent is measurable from the file.
+
+⚠️ **What is not visible**, and it is the field's exact criticism: **failed subagents leave the
+`/tasks` list while completed ones persist** — the list is success-biased and cannot be used to
+audit failures. There is no live per-subagent token figure (`preTokens` appears only at a
+compaction boundary, so an agent that never compacts reports nothing), and no aggregate view
+across subagents.
+
+### Channels — what they are, and the one thing they might buy
+
+**Channels are not agent-to-agent.** A channel is an MCP server that pushes *external* events
+(Telegram, Discord, iMessage, CI webhooks) into a running session. Agent-to-agent stays
+`SendMessage` plus the team mailbox.
+
+What they do offer is **permission relay** — the only documented way to answer a permission
+prompt from outside the terminal without pre-approving it. Whether relay reaches a *teammate's*
+prompt is **UNDOCUMENTED in both directions**, control-armed: `teammate|subagent` in the channels
+docs → **0** (control `request_id` → present); `channel` in the teams doc → **0** (control
+`permission` → 7). Neither corpus acknowledges the other. The two documented facts compose
+favourably — teammate prompts *"bubble up"* to the lead session, and relay attaches to *the
+session's* permission dialog — so it probably works, and the experiment is cheap. **Not
+asserted.**
+
+⚠️ Two things to weigh before depending on it: channels are a **research preview** (flags absent
+from `claude --help`, Anthropic-curated plugin allowlist, no Bedrock/GCP/Foundry, protocol *"may
+change"*), and **relay hands the approver full tool-approval authority over the session** —
+anyone on the channel allowlist can approve a `Bash` call.
+
+### One live fact about this machine
+
+`CLAUDE_CODE_FORK_SUBAGENT=1` is set in user settings, and fork mode **removes the
+`run_in_background` parameter from the Agent tool** — so every subagent here is already
+background and the `background:` frontmatter field is **inert**.
+
+## 10. Before any team ships
 
 1. **Amend `.claude/rules/clarify-before-acting.md`** so a delegated agent escalates by
-   `SendMessage` and the lead owns every `AskUserQuestion`. Until then the rule is a requirement
-   nine agents will violate silently.
+   `SendMessage` and the lead owns every `AskUserQuestion`. Until then it is a requirement every
+   delegated agent violates silently.
 2. **Set `worktree.baseRef: "head"`** before any agent runs with `isolation: worktree`, or it
    works from a tree without the branch's commits.
 3. **Set `teammateDefaultModel`** deliberately rather than inheriting the harness default.
 4. **Reserve `ship` / `land` / `automerge` to the lead**, in the spawn prompt.
-5. **Finish the ~340 ms/edit guard optimisation** before multiplying it by the team size.
-6. Decide whether the branch precondition becomes a **`SubagentStart` hook** rather than a habit.
+5. **Wire `SubagentStop` / `TeammateIdle`** to enforce report delivery — the branch precondition
+   goes in `SubagentStart` as *injected context*, since it cannot block there.
+6. **Finish the ~340 ms/edit guard optimisation** before multiplying it by the team size.
 
-## 10. Open questions
+## 11. Open questions
 
 1. **How many roles to build before the first run?** Eight definitions written before the
    team has run once are eight guesses. The vendor advises starting small.
