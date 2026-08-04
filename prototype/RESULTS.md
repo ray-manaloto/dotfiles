@@ -9,7 +9,7 @@ evidence (`.claude/rules/probes-need-a-control-arm.md`).
 | # | Claim | Verdict |
 |---|---|---|
 | 0 | *(unplanned)* Passing `name` to the Agent tool changes **what kind of agent you get** | 🔴 **CONFIRMED — and it invalidates an assumption in `docs/agent-team.md`** |
-| 1 | A dynamic workflow works: `agent({schema})`, `pipeline()`, per-stage `model`, resume | ⏳ **NOT RUN** |
+| 1 | A dynamic workflow works: `agent({schema})`, `pipeline()`, per-stage `model`, resume | 🟢 **CONFIRMED — all four, with corroboration** |
 | 2 | A frontmatter `Stop` hook can block a delegated agent from finishing | 🟡 **INCONCLUSIVE — the hook never fired, for the reason in claim 0** |
 | 3 | `TeammateIdle` is reachable from the CLI, not TypeScript-SDK-only | 🟢 **REFUTED the doubt — the CLI ships it** |
 | 4 | `memory: project` persists a fact across spawns | 🟡 **INCONCLUSIVE — nothing was written, for the reason in claim 0** |
@@ -142,16 +142,60 @@ strength of a third-party repo's verifier; the vendor states it outright.
 
 ## Claim 1 — does a dynamic workflow actually work?
 
-**NOT RUN.** This is the load-bearing claim under `docs/agent-team.md` §2 and it remains
-untested. Preflight is clean: `CLAUDE_CODE_DISABLE_WORKFLOWS` is absent and the version
-(2.1.221) is well past the 2.1.154 minimum.
+**CONFIRMED.** Run `wf_c18255a9-2ea`, 6 agents, **0 errors**, **10.0 s** wall clock.
 
-What still needs measuring: whether `agent({schema})` returns a validated object, whether
-`pipeline()` fans out as documented, whether a per-stage `model` actually reaches a different
-model (and by what signal — the run journal is the candidate), and whether resume replays from
-the first unfinished agent as the docs claim.
+### 1a. `agent({schema})` returns a validated object, not prose
 
----
+```json
+{"token": "WORKFLOW-SCHEMA-OK", "n": 7}
+```
+
+`is_object: true`, `token_matches: true`, `n_is_number: true`. The integer came back as a
+number, so the schema is enforced at the tool-call layer rather than hopefully parsed.
+
+### 1b. `pipeline()` fans out one agent per item
+
+3 items in → **3 results out, 0 nulls**. Tokens `FAN-alpha` / `FAN-beta` / `FAN-gamma` with
+indices `0` / `1` / `2` — so the stage callback's index argument is real and ordering is
+preserved in the returned array even though the journal shows `beta` completing before `alpha`.
+
+### 1c. Per-stage `model` routing reaches a different model — **two independent signals**
+
+This was the sub-claim most at risk of a weak probe, because a model's self-report is not
+authoritative. Both arms agree:
+
+| Signal | Routed stage (`model: 'haiku'`) | Unrouted stage |
+|---|---|---|
+| **Harness's own record** (`agent-*.meta.json`) | `{"agentType":"workflow-subagent","spawnDepth":1,"model":"haiku"}` | `{"agentType":"workflow-subagent","spawnDepth":1}` — **no model key** |
+| Agent self-report | `claude-haiku-4-5-20251001` | `claude-opus-5[1m]` |
+
+**Exactly one of the six agents carries a `model` key**, and it is the one the script routed.
+That is the harness's metadata, not the model's opinion — the self-report merely corroborates.
+
+### 1d. Bonus finding — workflow agents are **subagents**, not teammates
+
+Their transcripts land on the subagent path
+(`…/subagents/workflows/wf_<id>/agent-<id>.jsonl`) and their metadata says
+`agentType: "workflow-subagent"`, `spawnDepth: 1`. **None appears in the team config.**
+
+That matters for claim 0: routing work through a workflow keeps the subagent characteristics
+that a *named* direct spawn silently gives away.
+
+### 1e. ⚠️ Cost signal worth recording
+
+**465,028 subagent tokens for six trivial agents** — roughly **78 k per agent** for tasks that
+were one sentence each. Every workflow agent pays a full project-context load regardless of how
+small its job is. (Corroborating datapoint from the same session: an unnamed direct subagent
+spent 89 k tokens to run a single `echo`.)
+
+This sharpens the resume constraint rather than contradicting it: many small agents preserve
+more *progress*, but each one costs a full context load, so "small" should mean *few, tightly
+scoped stages* — not a wide fan-out over trivia.
+
+### Not tested
+
+**Resume.** The run is resumable by `runId` and the runtime says unchanged `(prompt, opts)`
+pairs replay from cache, but no interrupted run was exercised.
 
 ## What to change in `docs/agent-team.md`
 
