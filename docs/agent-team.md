@@ -115,9 +115,39 @@ Why it fits better than either alternative:
 | **Resume replays from the first agent that did not finish** — everything started after it re-runs even if it completed | **many small agents preserve more progress than one long agent.** A direct constraint on role granularity |
 | Resume works **only within the same session** | cross-session durability is still ours to build — the arXiv paper's failure mode #1, unfixed |
 
-**What each mechanism is now for:** roles are `.claude/agents/*.md` definitions (the only place
-all sixteen knobs apply); a **workflow script** orchestrates them and is the versioned artifact;
-**agent teams** stay reserved for the one thing neither can do — lateral argument between peers.
+**What each mechanism is now for:** roles are `.claude/agents/*.md` definitions; a **workflow
+script** orchestrates them and is the versioned artifact; **agent teams** stay reserved for the
+one thing neither can do — lateral argument between peers.
+
+### ⚠️ MEASURED — `name` decides whether a role runs with its knobs or without them
+
+An earlier draft of this section said role definitions are *"the only place all sixteen knobs
+apply"*. **That is true only for a spawn without a `name`.** Measured on this machine
+(`prototype/RESULTS.md`, branch `prototype/agent-team-mechanisms`):
+
+| Spawn | What you get | In the team config? |
+|---|---|---|
+| `Agent(subagent_type: X, name: "foo")` | a **teammate** — mailbox, addressable | **yes** |
+| `Agent(subagent_type: X)` — no name | a **background subagent** — async, own output file | **no** |
+
+Control arms: the unnamed agent's id appears **0** times in the team config while a named one
+appears **4** with the same command shape; all **17** named spawns of that session are team
+members, and **0** subagent-path transcripts were written in the same window.
+
+Since a teammate honours only `tools` and `model`, **naming a role silently strips `skills`,
+`mcpServers` and `hooks` from its definition** — no warning, no error. A role carefully tuned
+with a `Stop` hook runs with none, and looks like it worked. This was found because a
+frontmatter-hook probe failed in a way its own logging could distinguish: the agent ran, the
+hook never fired, and workspace trust was eliminated as the cause.
+
+**Design consequence.** Either roles are spawned **unnamed** — keeping the full knob set and
+frontmatter hooks, losing the mailbox and addressability — or enforcement moves to session-level
+`settings.json` hooks, which apply inside subagents regardless of how they were spawned. That is
+a choice the design has to make explicitly rather than discover in production.
+
+⚠️ A second difference, found by accident: the two paths **resolve agent types from different
+registries**. A definition created mid-session resolved on the named path and returned
+*"Agent type not found"* on the unnamed one.
 
 **Four pieces of evidence drove the original subagent-over-teams half of this, and still do.**
 
@@ -565,16 +595,19 @@ background and the `background:` frontmatter field is **inert**.
    works from a tree without the branch's commits.
 3. **Set `teammateDefaultModel`** deliberately rather than inheriting the harness default.
 4. **Reserve `ship` / `land` / `automerge` to the lead**, in the spawn prompt.
-5. **Wire `SubagentStop` / `TeammateIdle`** to enforce report delivery — the branch precondition
-   goes in `SubagentStart` as *injected context*, since it cannot block there.
+5. **Wire `SubagentStop` / `TeammateIdle`** to enforce report delivery — in **session-level
+   `settings.json`**, not in role frontmatter, because a frontmatter hook is dropped whenever a
+   role is spawned with a `name` (measured; §2). The branch precondition goes in `SubagentStart`
+   as *injected context*, since it cannot block there.
 6. **Finish the ~340 ms/edit guard optimisation** before multiplying it by the team size.
 7. **Try native `memory: project` on `staleness-auditor` first**, before copying anyone's
    hand-rolled learning ledger. None of the six frameworks reviewed uses the native field at all
    (0 files each, control-armed) — their answers all predate or ignore it, and the 25 KB
    injection window is nowhere near binding for us yet.
-8. **Probe whether `permissionMode`, `hooks` and `mcpServers` are ignored for plugin-scoped
-   agents.** One framework's own verifier asserts they are; it is UNVERIFIED here, and it decides
-   whether the team can ever ship as a plugin.
+8. ✅ **CLOSED — `permissionMode`, `hooks` and `mcpServers` ARE ignored for plugin-scoped
+   agents.** The vendor docs state *"Ignored for plugin subagents"* on exactly those three rows
+   (`$CC/sub-agents.md:282`, `:285`, `:286`; control — a phrase known to be in the same table
+   returns 1). **So the team cannot ship as a plugin if any role needs them.**
 
 ⚠️ **If `claude-self-reflect` is ever considered**, it indexes **every transcript** — and this
 machine's transcripts have carried live credential values twice. It ships a sanitiser whose
