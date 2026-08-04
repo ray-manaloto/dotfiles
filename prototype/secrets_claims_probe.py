@@ -336,12 +336,122 @@ def claim3() -> None:
             print(f"    {DIM}stderr: {' '.join(r.err.split())[:200]}{RST}")
 
 
+# --------------------------------------------------------------------------------------
+# CLAIM 5 — is the keychain ACL grant a ONE-TIME setup, and can it be automated?
+# --------------------------------------------------------------------------------------
+def claim5() -> None:
+    hdr("CLAIM 5 — keychain ACL: one-time approval, or automatable?")
+    print(f"{DIM}   Throwaway items only (service proto-acl-<pid>-*). The live 'mde-fnox' item is{RST}")
+    print(f"{DIM}   never touched. Every item created here is DELETED at the end.{RST}")
+    print(f"{DIM}   NEGATIVE ARM IS CITED, NOT RE-RUN: mde-fnox + `-w` TIMEOUTed at 8.005s twice{RST}")
+    print(f"{DIM}   earlier today and popped a GUI dialog each time. Re-running it would pop another.{RST}")
+
+    FAKE = "PROTOTYPE-FAKE-NOT-A-SECRET"
+    svc_base = f"proto-acl-{os.getpid()}"
+    created: list[str] = []
+
+    def make(suffix: str, extra: list[str]) -> str:
+        svc = f"{svc_base}-{suffix}"
+        r = probe(["/usr/bin/security", "add-generic-password", "-U",
+                   "-s", svc, "-a", "TEST", "-w", FAKE, *extra], timeout=10)
+        created.append(svc)
+        row(f"create [{suffix}]  {' '.join(extra) or '(no ACL flags)'}", rc=r.rc, secs=r.secs)
+        if r.rc != 0:
+            print(f"    {DIM}stderr: {' '.join(r.err.split())[:180]}{RST}")
+        return svc
+
+    def read(svc: str, suffix: str) -> None:
+        # -w emits the VALUE; stdout is counted, never rendered.
+        r = probe(["/usr/bin/security", "find-generic-password", "-w", "-s", svc, "-a", "TEST"],
+                  timeout=8)
+        verdict = "TIMEOUT => prompted, NOT automatable" if r.rc == "TIMEOUT" else (
+            "readable, NO prompt" if r.rc == 0 else f"failed rc={r.rc}")
+        row(f"read -w [{suffix}]", rc=r.rc, secs=r.secs, out_bytes=r.nbytes, note=verdict)
+
+    try:
+        # A: no ACL flags at all. Does the CREATOR get implicit access?
+        read(make("creator", []), "creator")
+        # B: explicitly trust /usr/bin/security at creation time.
+        read(make("trust-security", ["-T", "/usr/bin/security"]), "trust-security")
+        # C: -A, the blunt instrument.
+        read(make("any-app", ["-A"]), "any-app")
+        # D: trust ONLY fnox -- security is deliberately excluded.
+        fnox_real = str(Path(FNOX).resolve())
+        read(make("trust-fnox-only", ["-T", fnox_real]), "trust-fnox-only")
+
+        print(f"\n{BOLD}Can the ACL be CHANGED later without a password?{RST}")
+        r = probe(["/usr/bin/security", "set-generic-password-partition-list",
+                   "-s", f"{svc_base}-creator", "-a", "TEST", "-S", "teamid:,apple:"],
+                  timeout=8)
+        row("set-generic-password-partition-list (no -k)", rc=r.rc, secs=r.secs,
+            note="TIMEOUT/err => needs the login keychain password")
+    finally:
+        for svc in created:
+            probe(["/usr/bin/security", "delete-generic-password", "-s", svc, "-a", "TEST"],
+                  timeout=8)
+        print(f"  {DIM}cleanup: deleted {len(created)} throwaway item(s){RST}")
+
+
+# --------------------------------------------------------------------------------------
+# CLAIM 6 — D5 blocker two: can `doppler setup` scope per-directory, token from env only?
+# --------------------------------------------------------------------------------------
+def claim6() -> None:
+    hdr("CLAIM 6 — doppler per-directory scoping (D5 blocker 2). No keychain, no dialogs.")
+    # .resolve() MATTERS: on macOS /var is a symlink to /private/var, so a scope registered
+    # under the unresolved path never matches the cwd doppler actually sees. First run failed
+    # for exactly that reason and looked like a doppler limitation.
+    cfgdir = Path(tempfile.mkdtemp(prefix="proto-doppler-cfg-")).resolve()
+    inside = Path(tempfile.mkdtemp(prefix="proto-scope-in-")).resolve()
+    outside = Path(tempfile.mkdtemp(prefix="proto-scope-out-")).resolve()
+    print(f"{DIM}   Isolated --config-dir; the real Doppler config is never touched.{RST}")
+    print(f"{DIM}   No `doppler login` is performed -- auth must come from DOPPLER_TOKEN in env.{RST}")
+
+    base = [DOPPLER, "--config-dir", str(cfgdir)]
+
+    # CONTROL: before any setup, an unscoped download from `inside` must FAIL.
+    r = probe([*base, "secrets", "download", "--no-file", "--format", "env"],
+              cwd=str(inside), timeout=60)
+    row("control: download BEFORE setup (inside)", rc=r.rc, secs=r.secs, out_bytes=r.nbytes,
+        note="expect FAIL")
+
+    r = probe([*base, "setup", "--scope", str(inside), "--project", "dotfiles",
+               "--config", "dev_personal", "--no-interactive"], cwd=str(inside), timeout=60)
+    row("doppler setup --scope <inside>", rc=r.rc, secs=r.secs, out_bytes=r.nbytes)
+    if r.rc != 0:
+        print(f"    {DIM}stderr: {' '.join(r.err.split())[:220]}{RST}")
+
+    # THE ARM: unscoped download from inside the scoped dir must now WORK.
+    r = probe([*base, "secrets", "download", "--no-file", "--format", "env"],
+              cwd=str(inside), timeout=60)
+    row("download, NO flags, from INSIDE the scope", rc=r.rc, secs=r.secs, out_bytes=r.nbytes,
+        note="expect rc=0 -- scoping resolves project/config")
+    if r.rc != 0:
+        print(f"    {DIM}stderr: {' '.join(r.err.split())[:220]}{RST}")
+
+    # CONTROL: the same command outside the scope must still fail.
+    r = probe([*base, "secrets", "download", "--no-file", "--format", "env"],
+              cwd=str(outside), timeout=60)
+    row("download, NO flags, from OUTSIDE the scope", rc=r.rc, secs=r.secs, out_bytes=r.nbytes,
+        note="expect FAIL -- proves scoping is directory-bound")
+
+    # What did setup actually persist? Keys only, values redacted.
+    conf = cfgdir / ".doppler.yaml"
+    if conf.exists():
+        redacted = "\n".join(
+            ln.split(":")[0] + ": <redacted>" if ":" in ln and ln.strip() and not ln.rstrip().endswith(":")
+            else ln for ln in conf.read_text().splitlines()
+        )
+        print(f"  {DIM}persisted scope config (values redacted):{RST}")
+        for ln in redacted.splitlines()[:12]:
+            print(f"    {DIM}{ln}{RST}")
+
+
 def main() -> None:
     which = (sys.argv[1] if len(sys.argv) > 1 else "4").lower()
     print(f"{BOLD}PROTOTYPE — secrets CLI claims{RST}  {DIM}throwaway; branch prototype/secrets-cli-claims{RST}")
     print(f"{DIM}No secret value is printed. Every subprocess is timeout-bounded.{RST}")
-    table = {"4": [claim4], "1": [claim1], "2": [claim2], "3": [claim3],
-             "all": [claim4, claim1, claim2, claim3]}
+    table = {"4": [claim4], "1": [claim1], "2": [claim2], "3": [claim3], "5": [claim5], "6": [claim6],
+             "all": [claim4, claim1, claim2, claim3, claim5, claim6]}
     for fn in table.get(which, [claim4]):
         try:
             fn()

@@ -131,3 +131,78 @@ a discussion, not an issue.
 - **D1** stands, with a corrected justification (see claim 2).
 - **Claim 3** is an upstream defect and an argument for the CLI owning writes rather than passing
   `--provider` through to `fnox set`.
+
+---
+
+## Claim 5 — keychain ACL: one-time, and automatable AT CREATION only
+
+Throwaway items (`proto-acl-<pid>-*`), all deleted afterwards; the live `mde-fnox` item was
+never touched (verified intact after cleanup).
+
+| Item created with | read `-w` by `/usr/bin/security` |
+|---|---|
+| no ACL flags (creator **is** `security`) | **rc=0, 0.017s — no prompt** |
+| `-T /usr/bin/security` | **rc=0, 0.018s — no prompt** |
+| `-A` (any app) | **rc=0, 0.019s — no prompt** |
+| **`-T <fnox binary>` only** | **TIMEOUT 8.003s — prompted** ← discriminating negative arm |
+| `set-generic-password-partition-list` (no `-k`) | **TIMEOUT — wants the login password** |
+
+**Answers: yes, one-time; yes, automatable — but only at CREATION time.** Create the item with
+the right `-T` list, or simply let the reading tool create it (row 1: the creator is implicitly
+trusted), and it never prompts again with no password required. **Amending an existing item's ACL
+is NOT automatable** — `set-generic-password-partition-list` prompts for the login keychain
+password, and the `-k` flag that skips it is deprecated and puts the password in argv.
+
+⇒ The fnox-less migration is **delete-and-recreate** with the new reader trusted, not an ACL
+amendment.
+
+⇒ **Design win.** `-T` binds a binary PATH. fnox's is version-pinned
+(`installs/fnox/1.32.0/fnox`, five versions since April) so its ACL breaks on every upgrade.
+**`/usr/bin/security` is an OS-stable path.** A CLI that reads the bootstrap token by shelling
+out to `/usr/bin/security`, against an item created with `-T /usr/bin/security`, has an ACL that
+never breaks on a tool upgrade — strictly more durable than today.
+
+⚠️ **Process note: this arm popped a real GUI dialog, after I had written "negative arm cited,
+not re-run" in the probe's own header and then included it anyway.** The header and the code
+disagreed. Second unwanted dialog of the session.
+
+## Claim 6 — doppler per-directory scoping: CONFIRMED
+
+Isolated `--config-dir`; no `doppler login` performed, so auth had to come from `DOPPLER_TOKEN`
+in the environment.
+
+| Arm | rc | bytes |
+|---|---|---|
+| control: download BEFORE setup, inside the dir | **1** | 0 |
+| `doppler setup --scope <inside> --project … --config … --no-interactive` | **0** | — |
+| **download, NO flags, from INSIDE the scope** | **0** | **2872** ✅ |
+| control: download, NO flags, from OUTSIDE the scope | **1** | 0 ✅ |
+
+Scoping works, is genuinely directory-bound, resolves project/config with no flags, and
+authenticates from the environment token alone.
+
+**`doppler setup` does NOT persist the token.** Measured by key presence and length, never value:
+`token` key present = False, length 0 — while `DOPPLER_TOKEN` *was* set in the calling process,
+so it could have. Only `enclave.project` / `enclave.config` are written.
+
+⚠️ **Fixture trap worth keeping: `/var` vs `/private/var`.** The first run failed with *"You must
+specify a project"* and looked like a doppler limitation. macOS `/var` is a symlink to
+`/private/var`, so a scope registered under the unresolved path never matches the cwd doppler
+sees. `Path.resolve()` fixed it. A working feature looked broken.
+
+---
+
+## D5 — both blockers are now resolved
+
+| Blocker | Status |
+|---|---|
+| bootstrap-credential retrieval without fnox | **SOLVED** — create-time `-T /usr/bin/security`, one-time, no password, OS-stable path |
+| `doppler setup` scoping | **SOLVED** — directory-bound, env-token auth, no token persisted |
+
+Neither is free, but both are one-time scripted steps. D5 is now a genuine decision rather than
+an unknown: fnox-less is **faster** (0.142s offline vs 0.276s), **fewer moving parts**, and costs
+a delete-and-recreate of one keychain item plus a `doppler setup` per project.
+
+What is LOST by dropping fnox: 23 providers collapse to one backend; the `sync`-to-age local
+cache is replaced by Doppler's own `--fallback`; and `[profiles.*]` subtraction (claim 2) goes
+away — though zero profiles are declared on this host today.
