@@ -5,7 +5,9 @@
 **Corpus:** `~/dev/github/ray-manaloto/knowledge-base/sources/agent-harness-docs/docs/claude-code`
 (abbreviated `$CC` below) — **174 `.md` pages** + `docs_manifest.json` (175 directory entries).
 
-Status: IN PROGRESS — appended per page as read.
+Status: **COMPLETE.** All 174 pages scored; the 30 named as covered by other agents excluded; the
+remainder ranked and the decisive ones read. All seven design questions answered with `file:line`
+citations. Two claims left explicitly UNVERIFIED (see "Method caveats").
 
 ---
 
@@ -909,7 +911,7 @@ external corroboration, though outside the assigned corpus.)
 #### ⚠️ CONTRADICTION 2 — `TeammateIdle` is TypeScript-only in the SDK, but unqualified in the CLI docs
 
 `$CC/agent-sdk__hooks.md:170` — event compatibility table: `TeammateIdle` → **Python SDK: No**,
-TypeScript SDK: Yes. Corroborated at `$CC/agent-sdk__claude-code-features.md:288`: "The TypeScript
+TypeScript SDK: Yes. Corroborated at `$CC/agent-sdk__claude-code-features.md:285`: "The TypeScript
 SDK supports additional hook events beyond Python, including `SessionStart`, `SessionEnd`,
 **`TeammateIdle`**, and `TaskCompleted`."
 
@@ -938,11 +940,19 @@ elevated-priority instruction channel — conceptually the per-agent analogue of
 `--append-subagent-system-prompt`. Experimental and TS-only; do not design on it, but know it
 exists.
 
-**`disallowedTools` accepts MCP server-level patterns** — `$CC/agent-sdk__typescript.md` field
-table: "MCP server-level patterns are also accepted: `mcp__server` or `mcp__server__*` removes
-every tool from that server, and **`mcp__*` removes every MCP tool from any server**." A one-line
-way to build an MCP-free agent. `$CC/sub-agents.md`'s `disallowedTools` row does not spell this
-out.
+**`disallowedTools` accepts MCP server-level patterns** — `$CC/agent-sdk__typescript.md:788`:
+"MCP server-level patterns are also accepted: `mcp__server` or `mcp__server__*` removes every
+tool from that server, and **`mcp__*` removes every MCP tool from any server**." A one-line way
+to build an MCP-free agent. `$CC/sub-agents.md`'s `disallowedTools` row does not spell this out.
+
+**A scoped deny rule survives `bypassPermissions`** — `$CC/agent-sdk__typescript.md:418`
+(mirrored at `$CC/agent-sdk__python.md:836`): "A bare name such as `"Bash"` **removes the tool
+from Claude's context**. A scoped rule such as `"Bash(rm *)"` **leaves the tool available and
+denies matching calls in every permission mode, including `bypassPermissions`**." This is a
+second Q6 answer and a better one than the mode system: the two forms are not
+strength-ordered variants, they are **different mechanisms** — removal vs. interception — and
+only the scoped form is un-bypassable. The CLI `permissions.md` does not state the
+`bypassPermissions` guarantee this plainly.
 
 **`model: 'inherit'`** — the SDK field table names `'fable'`, `'opus'`, `'sonnet'`, `'haiku'`,
 `'inherit'`, or a full model ID; "If omitted or `'inherit'`, uses the main model."
@@ -950,13 +960,13 @@ out.
 **`effort` accepts an integer**, not just the named levels — SDK type:
 `effort?: "low" | "medium" | "high" | "xhigh" | "max" | number`.
 
-**`AgentMcpServerSpec` is a string OR an inline config** — `$CC/agent-sdk__typescript.md:806-812`:
+**`AgentMcpServerSpec` is a string OR an inline config** — `$CC/agent-sdk__typescript.md:801-806`:
 either "a server name (string referencing a server from the parent's `mcpServers` config)" or an
 inline record. The string form is a **reference to the parent's** server — i.e. per-agent MCP
 scoping by name, which is the clean way to give one agent a server and not another.
 
-**`tools` vs `skills`, stated as a rule** — SDK field table for `tools`: "To preload Skills into
-the agent's context, use the `skills` field rather than listing `'Skill'` here." This sharpens Q1:
+**`tools` vs `skills`, stated as a rule** — `$CC/agent-sdk__typescript.md:787`: "To preload Skills
+into the agent's context, use the `skills` field rather than listing `'Skill'` here." This sharpens Q1:
 `Skill` in `tools` grants *runtime invocation*; `skills:` does *startup injection*. Different
 mechanisms, easily conflated.
 
@@ -969,8 +979,8 @@ it — but the SDK gives the exact shape (`BackgroundTaskSummary`, `SessionCronS
 
 #### The parity table — the single most useful page nobody was assigned
 
-`$CC/agent-sdk__claude-code-features.md:~295-302` maps goals to surfaces, and is where the
-**agent-teams-are-CLI-only** fact (Q3) is stated most plainly. Its subagent row:
+`$CC/agent-sdk__claude-code-features.md:293-302` maps goals to surfaces, and is where the
+**agent-teams-are-CLI-only** fact (Q3) is stated most plainly (`:300`). Its subagent row (`:299`):
 "Delegate an isolated subtask to a fresh context (research, review) → Subagents →
 **`agents` parameter + `allowedTools: ["Agent"]`**" — note delegation requires *explicitly
 allowing the `Agent` tool*, which is easy to forget when constructing a restricted `tools` list.
