@@ -58,6 +58,43 @@ its own PR and its own gates.
 >
 > The decisions in §§ 1–4 and § 6 are unaffected; the rationale sentences above are not.
 
+> ## ⚠️ STATUS 3 — Phase 3's stated purpose is VOID (added 2026-08-04)
+>
+> Do not build § 3 as written. Its exit gate (`:518-535`) rests on converting
+> `fnox exec -P <nonexistent>`'s fail-open into a refusal, called "the CLI's job"
+> and "the arm that proves the CLI added something". **That arm cannot fire.**
+> Ray ruled (2026-08-03) that agents hold **all 50** credentials and confinement is
+> dead as a goal, so nothing passes `-P` and the fail-open is never reached.
+> #432 and #441 are **retired**, not re-judged.
+>
+> Measured this session, superseding the inherited figures:
+>
+> - **The fail-open is real and current** — fnox 1.32.0, both arms: control (no
+>   profile) and `-P <bogus>` each put **50** secrets in the child at `rc=0` with
+>   zero stderr. It is 50 now, not 49. Its blast radius is what Ray already accepted.
+> - **The constraint is FREE CLOUD HOSTING, not licence purity** (Ray, 2026-08-04).
+>   Doppler is therefore **not** disqualified, and the migration this spec's later
+>   phases contemplate is not required.
+> - **fnox stays** — 23 providers, v1.32.0 (2026-08-01). But it **cannot write to
+>   Doppler or Infisical**: neither implements `capabilities()`, both have 0
+>   `put_secret`. And it is **CRU, not CRUD** — the `Provider` trait has no delete
+>   method at all, so remote deletion always needs the vendor CLI.
+> - **mise 2026.8.1 already provides** sops decryption, age encryption,
+>   redaction, per-directory scoping, **and dotfile management** (`[dotfiles]`,
+>   `symlink-each`, `status --json --missing`). Anything the CLI writes over those
+>   is reinvention.
+>
+> **The CLI's replacement justification** is origination (CRUD ownership, retiring
+> `macos-development-environment`, which Ray deprecated 2026-08-04) plus
+> **reconciliation** across five drift seams — Doppler↔fnox, fnox↔`doctor.toml`,
+> host↔devcontainer, keychain↔Doppler, project-scope↔code — of which **three have
+> no owner today**. That is work no existing tool does, because none can see across
+> all four layers.
+>
+> `/to-spec` should rewrite § 3 against this. Evidence:
+> `docs/research/kb/reports/agents/{secrets-backend-*,fnox-*,mise-shell-activation}.md`
+> and the five decision pages in `docs/research/kb/artifacts/`.
+
 **Resolution decreases with distance** (approved 2026-08-02). Phases 1–2 carry PR-sized steps;
 phases 3–4 carry the transition, its exit gate and its open items, and are deepened when their
 preconditions come near. That is deliberate: #448 records `mise dotfiles` → `mise bootstrap
