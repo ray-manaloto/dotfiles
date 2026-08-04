@@ -72,13 +72,54 @@ and therefore in what you can version and improve later (`$CC/workflows.md:23-32
 | Scale | a few per turn | a handful of peers | dozens to hundreds per run |
 | Interruption | restarts the turn | teammates keep running | resumable in-session |
 
-### The decision: subagents are the spine
+### The decision: role definitions in `.claude/agents/`, orchestrated by a workflow script
 
-Orchestrator at layer 1, the role agents at layer 2, their helpers at layer 3. Workflows
-carry any DAG worth versioning. Agent teams are reserved for the one thing subagents
-structurally cannot do — lateral argument between peers.
+**Revised after the market scan.** The first draft of this section said "subagents are the
+spine, with an orchestrator *agent* at layer 1". That is still where the roles live — but the
+thing that *orchestrates* them should be a **dynamic workflow script**, not an agent.
 
-**Four pieces of evidence drive this.**
+The market scan's measurement is what turned it: **every one of the ~58 frameworks surveyed
+hand-rolls orchestration on top of subagents or agent teams, and none uses the workflow
+primitive.** Control-armed — `.claude/workflows/` file count across the ten leading candidates
+was **0/10**, while the identical `jq` shape against `.claude/agents/` returned real file lists
+(guild 15, octopus 10), so the probe discriminates. One of 2,298 marketplace descriptions
+mentions it.
+
+The positive control that it is real and usable came from this machine: the installed
+`code-modernization` plugin gates its skills on *"when the Workflow tool is available"*, and
+`modernize-uplift-migrate` runs **a real dependency DAG** — each unit's `deps` naming sibling
+units so a unit and its dependency never batch together, behind a per-batch circuit breaker.
+That is the pattern this design wants, shipped by Anthropic's own plugin authors.
+
+Why it fits better than either alternative:
+
+- **"DAG-parallelized" is just JavaScript control flow.** `agent(prompt, {schema})` spawns one;
+  `pipeline(list, fn)` fans out; dependency edges are ordinary `await`s. An arbitrary DAG, not a
+  wave barrier — and `schema:` gives **native structured output**, which is the thing all three
+  framework families independently converged on ("agent output is a typed artifact").
+- **It answers two of the arXiv paper's four failure modes outright.** Intermediate results live
+  in **script variables**, not a context window, so compaction cannot erode working detail and no
+  decisions get trapped in a compacted chat. Not a workaround — a different primitive.
+- **Adversarial review is a documented first-class use**: independent agents reviewing each
+  other's findings before they are reported.
+- **Per-stage model routing is the Codex-offload seam** — one stage can be routed without
+  changing the run.
+
+**Constraints that shape the design, not footnotes:**
+
+| Constraint | Consequence |
+|---|---|
+| **No mid-run user input** (only permission prompts pause a run) | human sign-off means **one workflow per gated stage**, never one workflow for the whole pipeline — which is exactly the `gate` node from §1 |
+| **The script has no filesystem or shell access**; agents act, the script coordinates | the orchestrator is *pure coordination* and every side effect goes through a role agent — a feature for write/review isolation, not a limitation |
+| 16 concurrent agents; 1,000 per run | a 9-role team fits; a wide per-file fan-out does not |
+| **Resume replays from the first agent that did not finish** — everything started after it re-runs even if it completed | **many small agents preserve more progress than one long agent.** A direct constraint on role granularity |
+| Resume works **only within the same session** | cross-session durability is still ours to build — the arXiv paper's failure mode #1, unfixed |
+
+**What each mechanism is now for:** roles are `.claude/agents/*.md` definitions (the only place
+all sixteen knobs apply); a **workflow script** orchestrates them and is the versioned artifact;
+**agent teams** stay reserved for the one thing neither can do — lateral argument between peers.
+
+**Four pieces of evidence drove the original subagent-over-teams half of this, and still do.**
 
 **(a) Nested subagents make an orchestrator agent possible.** Default depth is **3 layers**
 below the main conversation, adjustable with `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`
@@ -149,6 +190,17 @@ the mechanism that makes unattended running safe, and `cc10x`'s `AUTO_PROCEED` d
 shape — an autonomy setting with a carved-out exception list that **cannot** auto-answer a
 revert, a failure-stop, a destructive finishing option, or a plan with unresolved open
 decisions, and that logs every auto-choice.
+
+**And `orchestrator` stops being an agent.** Under §2's revision the orchestration is a workflow
+script, so the coordination that role was going to do is code — readable, diffable, resumable —
+rather than a model deciding turn by turn. What survives as an agent is only the judgment the
+script cannot encode.
+
+⚠️ **One measured caution about the self-improving half.** The sentiment sweep surfaced a
+practitioner report of a Mar–Apr 2026 regression that **skill evals could not catch**. An
+optimizer that proposes edits to role files on the strength of its own evals inherits exactly
+that blind spot, which is why the borrowed guards in §6 — a loop that cannot modify its own
+evaluation, and a ledger treated as untrusted data — are load-bearing rather than decorative.
 
 ---
 
@@ -516,6 +568,17 @@ background and the `background:` frontmatter field is **inert**.
 5. **Wire `SubagentStop` / `TeammateIdle`** to enforce report delivery — the branch precondition
    goes in `SubagentStart` as *injected context*, since it cannot block there.
 6. **Finish the ~340 ms/edit guard optimisation** before multiplying it by the team size.
+7. **Try native `memory: project` on `staleness-auditor` first**, before copying anyone's
+   hand-rolled learning ledger. None of the six frameworks reviewed uses the native field at all
+   (0 files each, control-armed) — their answers all predate or ignore it, and the 25 KB
+   injection window is nowhere near binding for us yet.
+8. **Probe whether `permissionMode`, `hooks` and `mcpServers` are ignored for plugin-scoped
+   agents.** One framework's own verifier asserts they are; it is UNVERIFIED here, and it decides
+   whether the team can ever ship as a plugin.
+
+⚠️ **If `claude-self-reflect` is ever considered**, it indexes **every transcript** — and this
+machine's transcripts have carried live credential values twice. It ships a sanitiser whose
+coverage was **not** verified. That needs a secrets audit before adoption, not after.
 
 ## 11. Open questions
 
