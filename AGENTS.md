@@ -49,16 +49,11 @@ the official `@devcontainers/cli` (pinned in `mise.toml`).
 
 ## Subdirectories
 
-| Directory | Purpose |
-|-----------|---------|
-| `.devcontainer/` | Devcontainer spec, Dockerfile, mise-system.toml — see `.devcontainer/AGENTS.md` |
-| `.github/workflows/` | CI pipeline — see `.github/workflows/AGENTS.md` |
-| `.claude/` | Claude-specific agents, skills, rules. Has its own `CLAUDE.md` (exempt from the stub check) |
-| `home/` | Chezmoi-managed dotfile templates (its AGENTS.md was removed in #80) |
-| `python/` | Python package `dotfiles_setup` — see `python/AGENTS.md` |
-| `tests/` | Pytest + Bats test suite — see `tests/AGENTS.md` |
-| `scripts/` | Utility scripts (`benchmark-docker.sh`, `devcontainer-smoke.sh`) |
-| `docs/` | Documentation, research findings, design specs |
+`.devcontainer/`, `.github/workflows/`, `python/` and `tests/` each carry their
+own `AGENTS.md` (guaranteed by `claude_agents_md_pairs`) — read that, not a
+table here. Two exceptions worth knowing: `.claude/` has its own `CLAUDE.md` and
+is exempt from the stub check; `home/` (chezmoi templates) lost its `AGENTS.md`
+in #80 deliberately.
 
 ## Two Build Types
 
@@ -85,14 +80,8 @@ content-hashed since hk 1.47 — no manual cache clearing after edits.
 
 ## Testing
 
-```bash
-uv run --project python pytest tests/ -x -q               # Run the test suite
-uv run --project python pytest tests/test_audit.py -x -q  # Single file
-mise run lint                                             # Lint checks only (hk under a hard timeout)
-mise run verify                                 # Verification contracts (suites.toml)
-mise run pin-actions                                      # Verify GHA action pinning
-mise run lint-docs                                        # Validate agent documentation
-```
+Commands are in **Quick Start** above; append a path for a single file
+(`uv run --project python pytest tests/test_audit.py -x -q`).
 
 Structured verification via `python/verification/suites.toml` runs as CI
 `contract-preflight`. The `mise run verify` gate is **distinct
