@@ -105,6 +105,29 @@ Why it fits better than either alternative:
 - **Per-stage model routing is the Codex-offload seam** — one stage can be routed without
   changing the run.
 
+### ✅ MEASURED — the workflow primitive does what the docs claim
+
+Run `wf_c18255a9-2ea`: 6 agents, **0 errors, 10.0 s** (`prototype/RESULTS.md` claim 1).
+
+- **`agent({schema})` returns a validated object**, with the integer arriving as a number —
+  enforcement at the tool-call layer, not hopeful parsing.
+- **`pipeline()` fans out**: 3 in, 3 out, 0 nulls, indices correct, and array order preserved
+  even though the items completed out of order.
+- **Per-stage `model` routing reaches a different model**, on the harness's own evidence rather
+  than a self-report: **exactly one** of the six `agent-*.meta.json` files carries
+  `{"model":"haiku"}` and it is the routed one — the other five have no model key. The agents'
+  self-reports (`claude-haiku-4-5-20251001` vs `claude-opus-5[1m]`) agree, as the weaker arm.
+- **Workflow agents are subagents, not teammates** — `agentType: "workflow-subagent"`,
+  `spawnDepth: 1`, transcripts on the subagent path, none in the team config. So routing work
+  through a workflow **keeps the characteristics that a named direct spawn gives away**.
+
+⚠️ **Cost, measured:** 465,028 subagent tokens for six one-sentence tasks — **~78 k per agent**.
+Every workflow agent pays a full project-context load regardless of job size. That does not
+contradict the resume constraint below, it sharpens it: *small* must mean **few tightly-scoped
+stages**, not a wide fan-out over trivia.
+
+Not tested: **resume**. The run is resumable by `runId`, but no interrupted run was exercised.
+
 **Constraints that shape the design, not footnotes:**
 
 | Constraint | Consequence |
