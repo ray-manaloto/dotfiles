@@ -31,6 +31,7 @@ call. A crashed guard must not brick every edit.
 
 from __future__ import annotations
 
+import enum
 import subprocess
 from pathlib import Path
 
@@ -126,15 +127,6 @@ def _probe_dir(start: Path) -> Path | None:
     return probe
 
 
-def repo_root(start: Path) -> Path | None:
-    """Absolute root of the git worktree containing ``start``, or None."""
-    probe = _probe_dir(start)
-    if probe is None:
-        return None
-    out = _git(["rev-parse", "--show-toplevel"], probe)
-    return Path(out).resolve() if out else None
-
-
 def default_branch(root: Path) -> tuple[str, ...]:
     """Protected branch names for ``root``.
 
@@ -191,6 +183,54 @@ def _separate_facts(probe: Path) -> tuple[Path, str, tuple[str, ...]] | None:
     return root, branch, default_branch(root)
 
 
+class CombinedResult(enum.Enum):
+    """What the combined ``rev-parse`` established about the probe directory."""
+
+    RESOLVED = "resolved"
+    FALL_BACK = "fall_back"
+    NO_REPOSITORY = "no_repository"
+
+
+def classify(code: int, lines: list[str]) -> CombinedResult:
+    """Which path the combined call's result puts us on.
+
+    Split out as a pure function so every case is testable from a value — the
+    seam is a parameter, not a patch (``tests/AGENTS.md``: mock at system
+    boundaries only, and prefer injecting over constructing). That matters
+    because one case below **cannot be produced by any real git**, so a
+    subprocess-driven test could never reach it.
+
+    ``--quiet --verify`` in the arg vector is what makes these separable at
+    all. Without it a missing ``origin/HEAD`` is a *fatal* 128 — identical to
+    "not a repository" — and git echoes the unresolved ref back on stdout,
+    where it reads exactly like an answer.
+
+    - **0 with every fact present** — resolved. The common path, and the point.
+    - **0 with any other line count** — git ran fine in a repository but did
+      not say what we asked. Unreachable today; it would take a change in
+      git's output. It falls back rather than allowing, because "a repository
+      is present" is established and the permissive reading is not.
+    - **1** — a repository whose ``origin/HEAD`` does not resolve (no remote, a
+      hand-added one, a stock CI checkout). Fall back to the separate
+      invocations; the conventional pair then behaves exactly as before.
+    - **anything else** — no usable repository here (outside any repo, an
+      unborn HEAD, a bare repo). Allow, which is what the fallback concludes
+      anyway: its first call runs in this same directory and fails the same
+      way (armed by ``test_an_unborn_head_repo_is_allowed``). Short-circuiting
+      keeps a write outside any repo — the scratchpad, the auto-memory dir,
+      the hot path — at the single invocation it has always cost.
+    """
+    if code == 0:
+        return (
+            CombinedResult.RESOLVED
+            if len(lines) == _COMBINED_FACT_COUNT
+            else CombinedResult.FALL_BACK
+        )
+    if code == _UNRESOLVED_REF_RC:
+        return CombinedResult.FALL_BACK
+    return CombinedResult.NO_REPOSITORY
+
+
 def _protected(target: Path) -> tuple[Path, str] | None:
     """``(root, branch)`` when ``target`` sits in a repo on its default branch.
 
@@ -202,23 +242,7 @@ def _protected(target: Path) -> tuple[Path, str] | None:
     from ONE ``git`` invocation (#527). Process startup is the entire cost of a
     read-only git call, so asking for three facts costs about what asking for
     one did, and the common in-repo decision went 3 invocations to 1.
-
-    The return code carries the whole decision, and the three cases are
-    genuinely different — which is why ``--quiet --verify`` is in the arg
-    vector. Without it a missing ``origin/HEAD`` is a *fatal* 128, identical to
-    "not a repository", and it also echoes the unresolved ref back on stdout
-    where it reads exactly like an answer:
-
-    - **0** — every fact resolved. The common path, and the whole point.
-    - **1** — a repository, but ``origin/HEAD`` does not resolve (no remote, a
-      hand-added one, a stock CI checkout). ``--quiet --verify`` reports that
-      quietly, so it is distinguishable; fall back to the separate invocations
-      and the conventional pair behaves exactly as it did before.
-    - **anything else** — no usable repository here (or an unborn HEAD). Allow,
-      which is what the fallback would conclude anyway: its first call runs in
-      this same directory and fails the same way. Short-circuiting keeps a
-      write outside any repo — the scratchpad, the auto-memory dir, the hot
-      path — at the single invocation it has always cost.
+    :func:`_classify` owns which of those results means what.
     """
     probe = _probe_dir(target)
     if probe is None:
@@ -228,12 +252,13 @@ def _protected(target: Path) -> tuple[Path, str] | None:
         return None
     code, out = combined
     lines = out.splitlines()
-    if code == 0 and len(lines) == _COMBINED_FACT_COUNT:
+    outcome = classify(code, lines)
+    if outcome is CombinedResult.RESOLVED:
         root, branch, advertised = Path(lines[0]).resolve(), lines[1], lines[2]
         defaults = (
             (advertised.split("/", 1)[1],) if "/" in advertised else _FALLBACK_DEFAULTS
         )
-    elif code == _UNRESOLVED_REF_RC:
+    elif outcome is CombinedResult.FALL_BACK:
         resolved = _separate_facts(probe)
         if resolved is None:
             return None
