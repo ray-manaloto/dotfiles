@@ -76,13 +76,14 @@ def probe(
     env: dict[str, str] | None = None,
     cwd: str | None = None,
     keep_stdout: bool = False,
+    clean_env: bool = False,
 ) -> Result:
     """Run argv under a hard timeout.
 
     stdout is captured but only returned as TEXT when keep_stdout is set — callers that touch
     value-emitting commands get the byte count and nothing else.
     """
-    full_env = {**os.environ, **(env or {})}
+    full_env = dict(env or {}) if clean_env else {**os.environ, **(env or {})}
     t0 = time.perf_counter()
     try:
         p = subprocess.run(
@@ -446,12 +447,69 @@ def claim6() -> None:
             print(f"    {DIM}{ln}{RST}")
 
 
+# --------------------------------------------------------------------------------------
+# CLAIM 7 — Ray's question: fnox-less, does EVERY terminal still get the secrets?
+# --------------------------------------------------------------------------------------
+def claim7() -> None:
+    hdr("CLAIM 7 — does a fnox-less shell still get all the secrets, and what does it cost?")
+    print(f"{DIM}   Each arm runs a CLEAN `zsh -f` (no rc files), populates the env the way that{RST}")
+    print(f"{DIM}   approach would, and prints ONLY A COUNT of how many of the 50 names are set.{RST}")
+
+    names = probe([FNOX, "list", "--no-daemon"], timeout=30, keep_stdout=True)
+    wanted = [ln.split()[0] for ln in names.out.splitlines()[1:] if ln.strip()]
+    print(f"  {DIM}checking for {len(wanted)} declared names{RST}")
+    counter = "c=0; for v in " + " ".join(wanted) + '; do [ -n "${(P)v}" ] && c=$((c+1)); done; echo "SET=$c"'
+
+    # ⚠️ `zsh -f` skips rc files but INHERITS the environment. The first run of this claim
+    # reported SET=47 for the control arm that evaluated NOTHING — the parent session already
+    # exports all 50, so arms A/C/D proved nothing. Every arm now runs under a REPLACED env
+    # (clean_env=True) carrying only PATH/HOME, plus DOPPLER_TOKEN for the doppler arms, which
+    # is exactly what the keychain read would supply in the fnox-less design. The token is
+    # passed through Python's env dict, never through a command line.
+    BASE = {"PATH": os.environ.get("PATH", ""), "HOME": os.environ.get("HOME", ""),
+            "TERM": "dumb"}
+    WITH_TOKEN = {**BASE, "DOPPLER_TOKEN": os.environ.get("DOPPLER_TOKEN", "")}
+
+    def shell_arm(label: str, populate: str, env: dict[str, str], timeout: float = 90.0) -> None:
+        r = probe(["/bin/zsh", "-f", "-c", f"{populate}\n{counter}"], timeout=timeout,
+                  keep_stdout=True, env=env, clean_env=True)
+        got = "".join(ln for ln in r.out.splitlines() if ln.startswith("SET="))
+        row(label, rc=r.rc, secs=r.secs, note=f"{got or 'SET=?'} of {len(wanted)}")
+        if r.rc != 0:
+            print(f"    {DIM}stderr: {' '.join(r.err.split())[:200]}{RST}")
+
+    # A. today's mechanism, one shot
+    shell_arm("A. eval fnox export -f shell", f'eval "$({FNOX} export -f shell)"', BASE)
+
+    # B. what the per-PROMPT hook costs today (this runs on EVERY precmd)
+    r = probe([FNOX, "hook-env", "-s", "zsh"], timeout=30)
+    row("B. fnox hook-env (runs on EVERY prompt today)", rc=r.rc, secs=r.secs, out_bytes=r.nbytes,
+        note="per-prompt cost of the current setup")
+
+    # C. fnox-less: one eval at shell start, offline fallback
+    fb = Path(tempfile.mkdtemp(prefix="proto-fb7-")) / "fb.enc"
+    probe([DOPPLER, "secrets", "download", "--no-file", "--format", "env",
+           "--project", "dotfiles", "--config", "dev_personal", "--fallback", str(fb)], timeout=60)
+    shell_arm("C. eval doppler download --offline",
+              f'eval "$({DOPPLER} secrets download --no-file --format env '
+              f'--project dotfiles --config dev_personal --fallback {fb} --offline)"', WITH_TOKEN)
+
+    # D. fnox-less, online (no fallback yet -- a cold machine)
+    shell_arm("D. eval doppler download (network)",
+              f'eval "$({DOPPLER} secrets download --no-file --format env '
+              f'--project dotfiles --config dev_personal)"', WITH_TOKEN)
+
+    # CONTROL: a clean zsh with NO population must report 0 -- proves the counter can say no.
+    shell_arm("CONTROL: clean zsh, nothing evaluated", "true", BASE)
+    shell_arm("CONTROL: clean zsh + token only", "true", WITH_TOKEN)
+
+
 def main() -> None:
     which = (sys.argv[1] if len(sys.argv) > 1 else "4").lower()
     print(f"{BOLD}PROTOTYPE — secrets CLI claims{RST}  {DIM}throwaway; branch prototype/secrets-cli-claims{RST}")
     print(f"{DIM}No secret value is printed. Every subprocess is timeout-bounded.{RST}")
-    table = {"4": [claim4], "1": [claim1], "2": [claim2], "3": [claim3], "5": [claim5], "6": [claim6],
-             "all": [claim4, claim1, claim2, claim3, claim5, claim6]}
+    table = {"4": [claim4], "1": [claim1], "2": [claim2], "3": [claim3], "5": [claim5], "6": [claim6], "7": [claim7],
+             "all": [claim4, claim1, claim2, claim3, claim5, claim6, claim7]}
     for fn in table.get(which, [claim4]):
         try:
             fn()

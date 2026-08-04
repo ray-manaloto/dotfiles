@@ -206,3 +206,38 @@ a delete-and-recreate of one keychain item plus a `doppler setup` per project.
 What is LOST by dropping fnox: 23 providers collapse to one backend; the `sync`-to-age local
 cache is replaced by Doppler's own `--fallback`; and `[profiles.*]` subtraction (claim 2) goes
 away — though zero profiles are declared on this host today.
+
+---
+
+## Claim 7 — Ray's question: fnox-less, does EVERY terminal still get the secrets?
+
+**Yes.** Each arm runs `zsh -f` under a **replaced** environment (not inherited) and prints only a
+count of how many of the 50 declared names are set.
+
+| Arm | time | names set |
+|---|---|---|
+| CONTROL: clean zsh, nothing evaluated | 0.005s | **0 of 50** ✅ probe can say no |
+| CONTROL: clean zsh + `DOPPLER_TOKEN` only | 0.005s | **1 of 50** ✅ counts exactly what is there |
+| **C. `eval "$(doppler … --offline)"`** | **0.117s** | **49 of 50** |
+| D. `eval "$(doppler …)"` (network) | 0.218s | **49 of 50** |
+| B. `fnox hook-env` — runs on **every prompt** today | **0.009s** | — (steady-state cost of the current setup) |
+
+The 50th is `DOPPLER_TOKEN` itself — the bootstrap credential, which comes from the keychain, not
+from Doppler. So one `.zshrc` line gives every new terminal the full set, and every child process
+(agents, MCP servers) inherits it exactly as today.
+
+**Cost shape differs, and it is worth stating honestly:** fnox is ~0.009s *per prompt* forever;
+the fnox-less line is ~0.117s *once per shell*. Neither is user-perceptible.
+
+⚠️ **Two broken probes caught by their controls, both mine:**
+1. First run used `zsh -f` and reported the do-nothing control at **SET=47** — `-f` skips rc files
+   but **inherits the environment**, and the parent session already exports all 50. Arms A/C/D
+   proved nothing until the env was *replaced* rather than merged. Same class as the known
+   `mise env` echo trap.
+2. Arm **A** (`eval "$(fnox export -f shell)"`) reported **0 of 50** under the minimal env, with
+   `Age identity file not found: …/.config/fnox/age.txt`. That arm is **under-provisioned, not a
+   fnox defect** — the real login shell carries more environment. It is not evidence against fnox
+   and is not counted as such.
+3. A `doppler secrets --only-names` parse reported **0** names present in Doppler while a download
+   in the same run returned 49. The parser was wrong, not Doppler; that output was discarded
+   rather than reported.
