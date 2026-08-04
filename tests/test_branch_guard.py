@@ -44,6 +44,12 @@ _GIT_CALLS_DENY_ON_DEFAULT = 2  # + check-ignore
 # common path, which is the shape a regression in the combined arg vector would
 # take: every count here would go up while every behavioural test stayed green.
 _GIT_CALLS_FALLBACK_ON_FEATURE_BRANCH = 4
+# A repository with no commit yet: the combined call exits 128, same as "not a
+# repository", so it short-circuits at one call and never reaches the fallback.
+# Named separately from `_GIT_CALLS_OUTSIDE_REPO` because it pins a DIFFERENT
+# claim that happens to share a number — routing 128 to the fallback would move
+# this one to 3 while leaving the outside-repo count alone.
+_GIT_CALLS_UNBORN_HEAD = 1
 
 _WRAPPER_TIMEOUT_S = 120
 
@@ -326,6 +332,68 @@ def test_a_denied_write_costs_two_git_calls(remote_repo: Path, tmp_path: Path) -
     stdout, calls = _guard_via_wrapper(remote_repo / "tracked.md", tmp_path)
     assert '"permissionDecision": "deny"' in stdout
     assert calls == _GIT_CALLS_DENY_ON_DEFAULT
+
+
+# --- which combined-call result means what (#527 review, A2/F1) -------------
+#
+# The review found the return-code analysis had a FOURTH case its own docstring
+# did not name: rc 0 with an unexpected line count fell through to "no usable
+# repository" and ALLOWED the write. `_classify` is now a pure function so the
+# case can be asserted from a value — no real git produces it, so a
+# subprocess-driven test could never reach it, and the seam is a parameter
+# rather than a patch (`tests/AGENTS.md`: mock at system boundaries only).
+#
+# Expected values here come from the SPEC of each case, not from re-running the
+# function's own branching — a tautological test would pass by construction.
+
+
+@pytest.mark.parametrize(
+    ("code", "lines", "expected"),
+    [
+        # every fact present — the common path
+        (0, ["/repo", "main", "origin/main"], branch_guard.CombinedResult.RESOLVED),
+        # rc 0, wrong shape: a repository IS established, so the permissive
+        # reading is the wrong one. This is the case the review caught.
+        (0, ["/repo", "main"], branch_guard.CombinedResult.FALL_BACK),
+        (0, [], branch_guard.CombinedResult.FALL_BACK),
+        (
+            0,
+            ["/repo", "main", "origin/main", "extra"],
+            branch_guard.CombinedResult.FALL_BACK,
+        ),
+        # `--quiet --verify` says the ref does not resolve
+        (1, ["/repo", "main"], branch_guard.CombinedResult.FALL_BACK),
+        # not a repository / unborn HEAD / bare repo
+        (128, [], branch_guard.CombinedResult.NO_REPOSITORY),
+        (128, ["/repo", "HEAD"], branch_guard.CombinedResult.NO_REPOSITORY),
+    ],
+)
+def test_classify_routes_each_combined_result(
+    code: int, lines: list[str], expected: branch_guard.CombinedResult
+) -> None:
+    assert branch_guard.classify(code, lines) is expected
+
+
+def test_an_unborn_head_repo_is_allowed_at_one_git_call(tmp_path: Path) -> None:
+    """Arms the docstring's claim that the 128 short-circuit loses nothing.
+
+    A repo with no commit yet exits 128 on the combined call, so it takes the
+    NO_REPOSITORY path and never reaches the fallback. Pre-#527 allowed here
+    too (branch resolution failed), so "identical decision" is one half of what
+    to pin.
+
+    ⚠️ The DECISION alone does not arm this. Route 128 to the fallback instead
+    — the obvious over-correction of the review finding that added `_classify`
+    — and the fallback *also* returns None here (root resolves, branch does
+    not), so an allow-only assertion still passes. The COUNT is what moves:
+    1 -> 3. Assert both, or this test cannot fail.
+    """
+    root = tmp_path / "unborn"
+    root.mkdir()
+    _run(["git", "init", "-b", "main"], root)
+    stdout, calls = _guard_via_wrapper(root / "tracked.md", tmp_path)
+    assert stdout.strip() == ""
+    assert calls == _GIT_CALLS_UNBORN_HEAD
 
 
 def test_the_unadvertised_default_falls_back_and_costs_four(
