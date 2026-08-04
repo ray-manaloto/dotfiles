@@ -1,0 +1,354 @@
+<title>Replacing the mde shell fragment</title>
+
+<style>
+  :root {
+    --ground:#EDEEF0; --surface:#FFFFFF; --sunk:#E3E5E9; --ink:#16181C;
+    --muted:#676D78; --hair:#CFD3D9; --accent:#A97A3D; --accent-w:#F0E4D2;
+    --good:#2E7D5B; --bad:#B3402F; --warn:#8A6A1F;
+    --good-w:#DCEDE5; --bad-w:#F6DED9; --warn-w:#F1E7CE;
+    --f-display: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --f-body: Georgia, "Iowan Old Style", "Times New Roman", serif;
+    --f-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    --col: 68ch;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --ground:#111317; --surface:#191C21; --sunk:#0C0E11; --ink:#E6E8EC;
+      --muted:#8E95A1; --hair:#2C3138; --accent:#D4A468; --accent-w:#33281A;
+      --good:#4FA57E; --bad:#D9705E; --warn:#C9A24D;
+      --good-w:#16281F; --bad-w:#2E1A16; --warn-w:#2A2213; }
+  }
+  :root[data-theme="dark"] { --ground:#111317; --surface:#191C21; --sunk:#0C0E11; --ink:#E6E8EC;
+    --muted:#8E95A1; --hair:#2C3138; --accent:#D4A468; --accent-w:#33281A;
+    --good:#4FA57E; --bad:#D9705E; --warn:#C9A24D;
+    --good-w:#16281F; --bad-w:#2E1A16; --warn-w:#2A2213; }
+  :root[data-theme="light"] { --ground:#EDEEF0; --surface:#FFFFFF; --sunk:#E3E5E9; --ink:#16181C;
+    --muted:#676D78; --hair:#CFD3D9; --accent:#A97A3D; --accent-w:#F0E4D2;
+    --good:#2E7D5B; --bad:#B3402F; --warn:#8A6A1F;
+    --good-w:#DCEDE5; --bad-w:#F6DED9; --warn-w:#F1E7CE; }
+
+  body { background:var(--ground); color:var(--ink); font-family:var(--f-body);
+         font-size:17px; line-height:1.62; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:1180px; margin:0 auto;
+          padding:clamp(2rem,5vw,4.5rem) clamp(1.1rem,4vw,2.5rem) 6rem;
+          display:flex; flex-direction:column; gap:3.5rem; }
+  .col { max-width:var(--col); }
+  .lbl { font-family:var(--f-mono); font-size:0.7rem; letter-spacing:0.16em;
+         text-transform:uppercase; color:var(--muted); }
+  h1,h2,h3 { font-family:var(--f-display); text-wrap:balance; line-height:1.15; letter-spacing:-0.02em; }
+  h1 { font-size:clamp(2rem,5vw,3.1rem); font-weight:700; margin:0.4rem 0 0; }
+  h2 { font-size:clamp(1.35rem,3vw,1.75rem); font-weight:650; margin:0; }
+  h3 { font-size:1rem; font-weight:650; margin:0 0 0.15rem; letter-spacing:-0.01em; }
+  p { margin:0 0 1rem; } p:last-child { margin-bottom:0; }
+  code { font-family:var(--f-mono); font-size:0.87em; background:var(--sunk);
+         padding:0.1em 0.36em; border-radius:3px; word-break:break-word; }
+  pre { background:var(--sunk); border:1px solid var(--hair); border-left:3px solid var(--accent);
+        border-radius:4px; padding:0.85rem 1rem; overflow-x:auto; margin:0;
+        font-family:var(--f-mono); font-size:0.78rem; line-height:1.55; }
+  pre code { background:none; padding:0; font-size:inherit; }
+  pre.bad { border-left-color:var(--bad); }
+  pre.good { border-left-color:var(--good); }
+  header .rule { height:3px; width:68px; background:var(--accent); margin-bottom:1.6rem; }
+  header .sub { color:var(--muted); font-size:1.02rem; margin-top:1.2rem; }
+  section { display:flex; flex-direction:column; gap:1.4rem; }
+  .head { display:flex; flex-direction:column; gap:0.5rem; }
+
+  .chip { display:inline-block; font-family:var(--f-mono); font-size:0.63rem;
+          letter-spacing:0.11em; text-transform:uppercase; padding:0.26em 0.55em;
+          border-radius:3px; white-space:nowrap; font-weight:600; }
+  .c-good{background:var(--good-w);color:var(--good);} .c-bad{background:var(--bad-w);color:var(--bad);}
+  .c-warn{background:var(--warn-w);color:var(--warn);} .c-flat{background:var(--sunk);color:var(--muted);}
+
+  .tablewrap { overflow-x:auto; border:1px solid var(--hair); border-radius:6px; background:var(--surface); }
+  table { border-collapse:collapse; width:100%; min-width:900px; }
+  th,td { text-align:left; padding:0.72rem 0.85rem; border-bottom:1px solid var(--hair);
+          vertical-align:top; font-size:0.86rem; line-height:1.45; }
+  thead th { font-family:var(--f-mono); font-size:0.66rem; letter-spacing:0.1em;
+             text-transform:uppercase; color:var(--muted); font-weight:600; background:var(--sunk); }
+  tbody th { font-family:var(--f-display); font-weight:650; font-size:0.82rem; width:210px; }
+  tbody tr:last-child th, tbody tr:last-child td { border-bottom:none; }
+  .prov { display:block; font-family:var(--f-mono); font-size:0.63rem; letter-spacing:0.06em;
+          text-transform:uppercase; color:var(--muted); margin-top:0.3rem; }
+
+  .seq { background:var(--surface); border:1px solid var(--hair); border-radius:6px;
+         padding:1.1rem 1.2rem 1.4rem; overflow-x:auto; }
+  .seq .cmd { font-family:var(--f-mono); font-size:0.78rem; background:var(--sunk);
+              padding:0.5rem 0.7rem; border-radius:4px; border-left:2px solid var(--accent);
+              margin-bottom:1.1rem; display:inline-block; white-space:nowrap; }
+  .seq-inner { min-width:700px; }
+  .seq-head { display:grid; grid-template-columns:repeat(5,1fr);
+              padding-bottom:0.6rem; border-bottom:1px solid var(--hair); margin-bottom:0.2rem; }
+  .seq-head span { font-family:var(--f-mono); font-size:0.66rem; letter-spacing:0.06em;
+                   text-align:center; color:var(--muted); font-weight:600; }
+  .seq-head span.owner { color:var(--accent); }
+  .seq-body { position:relative; padding-top:0.5rem; }
+  .rails { position:absolute; inset:0; display:grid; grid-template-columns:repeat(5,1fr); pointer-events:none; }
+  .rails i { background:linear-gradient(var(--hair),var(--hair)) center/1px 100% no-repeat; }
+  .step { position:relative; display:grid; grid-template-columns:repeat(10,1fr);
+          align-items:center; min-height:2.55rem; }
+  .bar { grid-column:var(--gc); position:relative; height:2px; background:var(--accent);
+         align-self:center; margin-top:0.55rem; }
+  .bar .t { position:absolute; left:0; right:0; bottom:6px; text-align:center;
+            font-size:0.76rem; line-height:1.3; color:var(--ink); white-space:nowrap; }
+  .bar::after { content:""; position:absolute; top:-4px; width:0; height:0;
+                border-top:5px solid transparent; border-bottom:5px solid transparent; }
+  .bar.r::after { right:-1px; border-left:8px solid var(--accent); }
+  .bar.l::after { left:-1px; border-right:8px solid var(--accent); }
+  .bar.dim { background:var(--muted); }
+  .bar.dim::after { border-left-color:var(--muted); border-right-color:var(--muted); }
+  .bar.dim .t { color:var(--muted); }
+  .bar.warn { background:var(--bad); }
+  .bar.warn::after { border-left-color:var(--bad); border-right-color:var(--bad); }
+  .bar.warn .t { color:var(--bad); font-weight:600; }
+  .bar.ok { background:var(--good); }
+  .bar.ok::after { border-left-color:var(--good); border-right-color:var(--good); }
+  .self { grid-column:var(--gc); align-self:center; margin-top:0.3rem;
+          border:1px solid var(--hair); border-left:2px solid var(--accent);
+          background:var(--ground); border-radius:3px; padding:0.24rem 0.4rem;
+          font-size:0.73rem; text-align:center; line-height:1.25; }
+  .self.warn { border-left-color:var(--bad); color:var(--bad); font-weight:600; }
+  .self.ok { border-left-color:var(--good); }
+  .stepno { position:absolute; left:-0.1rem; top:0.85rem; font-family:var(--f-mono);
+            font-size:0.62rem; color:var(--accent); font-weight:700; }
+  .seq .note { font-size:0.83rem; color:var(--muted); margin-top:1rem; line-height:1.5; }
+
+  .opts { display:flex; flex-direction:column; gap:1.1rem; }
+  .opt { background:var(--surface); border:1px solid var(--hair); border-radius:6px; padding:1.3rem;
+         display:flex; flex-direction:column; gap:0.8rem; }
+  .opt.lead { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
+  .opt .top { display:flex; justify-content:space-between; align-items:flex-start; gap:1rem; flex-wrap:wrap; }
+  .pc { display:grid; gap:0.5rem 1.4rem; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); }
+  .pc div { font-size:0.88rem; line-height:1.5; }
+  .pc b { font-family:var(--f-mono); font-size:0.63rem; letter-spacing:0.11em;
+          text-transform:uppercase; display:block; margin-bottom:0.2rem; }
+  .pc .p b { color:var(--good); } .pc .c b { color:var(--bad); }
+
+  .callout { background:var(--surface); border:1px solid var(--hair);
+             border-left:3px solid var(--accent); border-radius:4px;
+             padding:1.15rem 1.3rem; font-size:0.94rem; }
+  .callout.alarm { border-left-color:var(--bad); }
+  .callout .lbl { display:block; margin-bottom:0.5rem; }
+
+  footer { border-top:1px solid var(--hair); padding-top:1.5rem; font-size:0.8rem;
+           color:var(--muted); font-family:var(--f-mono); line-height:1.7; }
+  @media (prefers-reduced-motion:reduce){ *{animation:none!important;transition:none!important;} }
+</style>
+
+<div class="wrap">
+
+  <header class="col">
+    <div class="rule"></div>
+    <span class="lbl">Blocking decision · retiring 50-mde-secrets.zsh</span>
+    <h1>What replaces the shell activation</h1>
+    <p class="sub">Retiring mde deletes the one file that loads your credentials. Five candidates, measured — and the two most obvious ones both turn out to be traps.</p>
+  </header>
+
+  <!-- ANSWER -->
+  <section>
+    <div class="callout col">
+      <span class="lbl">Both tools can do it — that was the question, and the answer is yes</span>
+      <p><strong>fnox can</strong>, two different ways, and <strong>mise can</strong> via a real global env source: <code>~/.config/mise/config.toml</code>'s <code>[env]</code> applies in <em>every</em> directory, not just from that directory down. Measured: 26 keys survive at <code>/tmp</code> under a sanitised <code>env -i</code>, with a 3/3 control arm.</p>
+      <p style="margin:0">But <strong>mise cannot replace fnox</strong> — only re-house the call. Its two native secret paths are both experimental and file-or-inline only, so using them means re-homing all 50 secrets out of fnox and Doppler. Every viable mise route still ends in <code>fnox export</code>.</p>
+    </div>
+  </section>
+
+  <!-- OPTIONS -->
+  <section>
+    <div class="head col">
+      <span class="lbl">Five candidates</span>
+      <h2>The options</h2>
+    </div>
+
+    <div class="opts">
+
+      <article class="opt lead">
+        <div class="top"><h3>B · <code>fnox export</code> once per shell</h3><span class="chip c-good">Recommended</span></div>
+        <pre class="good"><code># ~/.zshrc.d/50-dotfiles-secrets.zsh, owned by this repo
+eval "$(fnox export -f shell -P shell --no-defaults)"</code></pre>
+        <div class="pc">
+          <div class="p"><b>Pro</b>Scoping actually works here. Verified in an isolated fixture: the scoped arm yields only that profile's secrets, and <code>-P bogus --no-defaults</code> yields <strong>nothing</strong> — fail-closed, unlike every other path. Values round-trip byte-identical through <code>eval</code>, including spaces, quotes and <code>$</code>. Respects per-secret <code>env = false</code>/<code>"exec"</code>.</div>
+          <div class="p"><b>Pro</b>Resolves <strong>once per shell</strong>. No prompt hook at all, so it sidesteps the fnox/mise hook-ordering hazard entirely and cannot wedge a prompt.</div>
+          <div class="c"><b>Con</b>No auto-reload. Rotate a secret and existing shells keep the old value until you re-source or open a new one — <code>activate</code> would have picked it up on the next <code>cd</code>.</div>
+          <div class="c"><b>Con</b>Requires declaring a <code>shell</code> profile you do not have today; your config has <strong>zero</strong> <code>[profiles.*]</code> blocks. Deriving that subset is real work.</div>
+        </div>
+      </article>
+
+      <article class="opt">
+        <div class="top"><h3>A · Relocate <code>fnox activate</code> as-is</h3><span class="chip c-warn">Safest, unscoped</span></div>
+        <pre><code>eval "$(fnox activate zsh)"</code></pre>
+        <div class="pc">
+          <div class="p"><b>Pro</b>A one-line relocation of a mechanism that already works. Zero behaviour change, so it cannot break your morning, and it decouples retiring mde from settling the exposure model.</div>
+          <div class="p"><b>Pro</b>Auto-reloads on <code>cd</code> and on config change, which B does not.</div>
+          <div class="c"><b>Con</b><strong>Cannot be scoped, at all.</strong> <code>-P</code> and <code>--no-defaults</code> are accepted and silently discarded — <code>ActivateCommand</code> has only two fields and the hook is hardcoded. Writing <code>activate -P agent --no-defaults</code> reads as scoped in review and hands over all 50.</div>
+          <div class="c"><b>Con</b>Keeps a per-prompt hook, and its early exit fails on every <code>cd</code>, every config mtime change, and <strong>every new shell</strong>.</div>
+        </div>
+      </article>
+
+      <article class="opt">
+        <div class="top"><h3>C · mise <code>_.source</code> in the global config</h3><span class="chip c-warn">Works, adds moving parts</span></div>
+        <pre><code>[env]
+_.source = "/abs/path/to/load-secrets.sh"   # NEVER a bare `fnox` inside</code></pre>
+        <div class="pc">
+          <div class="p"><b>Pro</b><code>_.source</code> is the only command escape hatch in mise's <code>[env]</code>, it is not experimental, and mise's hook is <em>already installed</em> — so this removes a per-prompt hook rather than adding one. mise's hook also has a dedup fast-path fnox's lacks.</div>
+          <div class="c"><b>Con</b><strong>Reproduced fork bomb.</strong> A bare <code>fnox</code> inside <code>_.source</code> with mise shims on <code>PATH</code> re-enters through the shim: <strong>3,011 processes, load 17.9 → 28.4.</strong> Absolute path returns instantly. Same root cause as mde#75.</div>
+          <div class="c"><b>Con</b><code>env_cache = true</code> with a 1h TTL means <strong>decrypted secrets are cached to disk</strong> — a new exposure surface, and only visible via <code>mise settings --all</code>.</div>
+          <div class="c"><b>Con</b>Delivery through <code>_.source</code> is <strong>unverified end-to-end</strong> — the probing agent's shell lacked <code>AGE_PRIVATE_KEY</code>, so its test arm could never have passed. Needs a re-run in your real shell.</div>
+        </div>
+      </article>
+
+      <article class="opt">
+        <div class="top"><h3>D · mise-native sops or inline age</h3><span class="chip c-bad">Not now</span></div>
+        <div class="pc">
+          <div class="p"><b>Pro</b>Removes fnox from the shell path entirely and gives per-project scoping structurally, by directory.</div>
+          <div class="c"><b>Con</b>Means re-homing all 50 secrets out of fnox and Doppler into files — the migration you have twice declined, to reach the same place.</div>
+          <div class="c"><b>Con</b>Both paths are flagged <strong>experimental</strong> by mise, and direct age returns the <strong>ciphertext as-is</strong> when decryption fails rather than erroring — a silent wrong-value failure.</div>
+        </div>
+      </article>
+
+      <article class="opt">
+        <div class="top"><h3>E · the <code>mise-env-fnox</code> plugin</h3><span class="chip c-bad">No</span></div>
+        <div class="pc">
+          <div class="c"><b>Con</b>Last code change <strong>2026-02-21</strong>, <strong>0 releases</strong>, 7 open issues, 16 stars. Registered on this host but inert.</div>
+          <div class="c"><b>Con</b>Its own README says: <em>"I am not sure this plugin is a good idea… I would probably advise avoiding this."</em> fnox's docs warn it off too, as an "incomplete experiment". When both authors say no, that is the finding.</div>
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- FLOWS -->
+  <section>
+    <div class="head col">
+      <span class="lbl">What actually happens</span>
+      <h2>Shell startup, the two leading options</h2>
+      <p>The difference is not cosmetic — it is where the resolution happens and how often.</p>
+    </div>
+
+    <div class="seq">
+      <h3>A · <code>fnox activate</code> — a hook that re-resolves</h3>
+      <div class="cmd">eval "$(fnox activate zsh)"</div>
+      <div class="seq-inner">
+        <div class="seq-head"><span>you</span><span class="owner">rc fragment</span><span>fnox</span><span>providers</span><span>shell env</span></div>
+        <div class="seq-body">
+          <div class="rails"><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="step"><span class="stepno">1</span><div class="bar r" style="--gc:4/6"><span class="t">emit hook code — no secrets yet</span></div></div>
+          <div class="step"><span class="stepno">2</span><div class="bar r" style="--gc:4/10"><span class="t">_fnox_hook into precmd_functions AND chpwd_functions</span></div></div>
+          <div class="step"><span class="stepno">3</span><div class="bar warn r" style="--gc:6/8"><span class="t">new shell → early exit FAILS → resolve all 50</span></div></div>
+          <div class="step"><span class="stepno">4</span><div class="self" style="--gc:5/7">steady prompt: should_exit_early → 0 bytes, ~2ms</div></div>
+          <div class="step"><span class="stepno">5</span><div class="bar warn r" style="--gc:6/8"><span class="t">every cd → resolve again</span></div></div>
+        </div>
+      </div>
+      <p class="note">Measured warm at <strong>11.78 ms</strong> against a <strong>9.57 ms</strong> bare <code>fnox --version</code> spawn floor — so the steady-state hook costs about 2 ms and is genuinely cheap. The cost lives in steps 3 and 5, which is why a hung provider CLI felt like it wedged "every prompt": it was every new shell and every <code>cd</code>.</p>
+    </div>
+
+    <div class="seq">
+      <h3>B · <code>fnox export</code> — resolve once, then nothing</h3>
+      <div class="cmd">eval "$(fnox export -f shell -P shell --no-defaults)"</div>
+      <div class="seq-inner">
+        <div class="seq-head"><span>you</span><span class="owner">rc fragment</span><span>fnox</span><span>providers</span><span>shell env</span></div>
+        <div class="seq-body">
+          <div class="rails"><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="step"><span class="stepno">1</span><div class="bar r" style="--gc:4/6"><span class="t">export -f shell, scoped profile</span></div></div>
+          <div class="step"><span class="stepno">2</span><div class="bar r" style="--gc:6/8"><span class="t">resolve ONLY the profile's secrets — once</span></div></div>
+          <div class="step"><span class="stepno">3</span><div class="bar ok l" style="--gc:4/8"><span class="t">shell-quoted export lines</span></div></div>
+          <div class="step"><span class="stepno">4</span><div class="bar ok r" style="--gc:4/10"><span class="t">eval → the scoped set is in the shell</span></div></div>
+          <div class="step"><span class="stepno">5</span><div class="self ok" style="--gc:3/5">no hook registered — every later prompt costs zero</div></div>
+        </div>
+      </div>
+      <p class="note">Step 5 is the whole argument. No prompt hook means no per-<code>cd</code> re-resolution, no interaction with mise's hooks, and no path by which a hung provider can touch an already-running shell. The price is step 2 never repeating: a rotated secret needs a new shell.</p>
+    </div>
+  </section>
+
+  <!-- HAZARDS -->
+  <section>
+    <div class="head col">
+      <span class="lbl">Found while measuring</span>
+      <h2>Six hazards, four of them undocumented</h2>
+    </div>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th scope="col">Hazard</th><th scope="col">What happens</th><th scope="col">Status</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><code>_.source</code> fork bomb</th>
+            <td>A bare <code>fnox</code> inside <code>_.source</code> re-enters via mise's shim. <strong>3,011 processes, load 17.9 → 28.4.</strong> Absolute path returns instantly.</td>
+            <td><span class="chip c-bad">Reproduced</span></td></tr>
+          <tr><th scope="row"><code>activate</code> discards its flags</th>
+            <td><code>-P</code> and <code>--no-defaults</code> are accepted and ignored. <code>diff</code> of activate output with and without them is <strong>identical</strong>; control against <code>--no-hook-env</code> shows a 16-line diff, so the probe discriminates.</td>
+            <td><span class="chip c-bad">Verified</span></td></tr>
+          <tr><th scope="row">Hook ordering</th>
+            <td>fnox <strong>prepends</strong> to <code>precmd_functions</code>, so whichever tool is eval'd <em>last</em> runs <em>first</em>. fnox consults an existing env var before resolving, so mise-set names can win. And mise capturing fnox's exports is where <code>__MISE_DIFF</code>'s payload comes from.</td>
+            <td><span class="chip c-warn">Undocumented</span> control-armed: 0 hits for ordering terms against a working control</td></tr>
+          <tr><th scope="row">mise's unset preamble</th>
+            <td><code>mise activate</code> installs a preamble that will <code>unset</code> all 50 credentials — so ordering is not merely cosmetic.</td>
+            <td><span class="chip c-warn">Source-read</span></td></tr>
+          <tr><th scope="row">mise caches decrypted secrets to disk</th>
+            <td><code>env_cache = true</code>, TTL 1h, visible only via <code>mise settings --all</code>. Any mise-mediated route writes plaintext-equivalent material to disk.</td>
+            <td><span class="chip c-warn">Verified setting</span></td></tr>
+          <tr><th scope="row">age fails open on decrypt</th>
+            <td>mise's direct-age path returns the <strong>ciphertext as-is</strong> when decryption fails, rather than erroring — a consumer gets a wrong value instead of a failure.</td>
+            <td><span class="chip c-warn">Docs-stated</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout alarm col">
+      <span class="lbl">A near-miss worth recording</span>
+      <p style="margin:0">The first measurement of mise's global env reported <strong>75 keys including <code>DOPPLER_TOKEN</code> and <code>AGE_PRIVATE_KEY</code></strong> — which would have "proved" mise was already serving your secrets. It was wrong: <code>mise env</code> <strong>echoes the ambient environment</strong>, and those values were inherited from fnox. Sanitised under <code>env -i</code>: <strong>0 of 4</strong>. The first control arm was itself broken, because <code>command -v mise</code> resolves to the shell <em>function</em> rather than the binary. Two layers of probe error, caught before it became a finding.</p>
+    </div>
+  </section>
+
+  <!-- WHO MANAGES THE FILE -->
+  <section>
+    <div class="head col">
+      <span class="lbl">And who manages the fragment itself</span>
+      <h2>mise manages dotfiles — natively, and well</h2>
+      <p><code>mise bootstrap dotfiles</code> is a full dotfile manager driven by a <code>[dotfiles]</code> config section, and it is step 3 of <code>mise bootstrap</code>. So the replacement fragment needs no chezmoi, which matches your earlier ruling that the CLI shouldn't.</p>
+    </div>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th scope="col">Capability</th><th scope="col">What it gives you here</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><code>mode = "symlink-each"</code></th>
+            <td>Walks a source <em>directory</em> and symlinks each file individually, with <code>exclude</code> globs. Exactly right for <code>~/.zshrc.d/</code> — repo-managed fragments and any unmanaged ones coexist, rather than the repo owning the whole directory.</td></tr>
+          <tr><th scope="row"><code>status --json --missing</code></th>
+            <td><strong>Exits 1 when anything is missing, differs, or its source is gone.</strong> That is a drift detector with a machine-readable output, for free — one of the seams I listed as unowned is natively covered for dotfiles.</td></tr>
+          <tr><th scope="row"><code>block</code> / <code>line</code> edits</th>
+            <td>Manages a marker-delimited block, or ensures a single exact line, inside a file mise does <em>not</em> own. So the <code>eval "$(…)"</code> line can be managed inside <code>~/.zshrc</code> without the repo taking over that file.</td></tr>
+          <tr><th scope="row"><code>apply --dry-run</code> · <code>unapply</code></th>
+            <td>Reversible with a preview. <code>unapply</code> deliberately refuses to remove modified or ambiguous files without <code>--force</code>, so it will not silently discard a hand-edit.</td></tr>
+          <tr><th scope="row"><code>add &lt;target&gt;</code></th>
+            <td>Seeds the source <em>from the live target</em>, so adopting the existing file is one command rather than a copy-and-hope.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout alarm col">
+      <span class="lbl">How I nearly told you this didn't exist</span>
+      <p style="margin:0">My first probe grepped <code>mise --help</code> and the local docs cache, found <code>bootstrap</code>/<code>link</code>/<code>sync</code> and two irrelevant "dotfile" mentions, and concluded there was no such feature. <strong>Both control arms passed</strong> — <code>install</code> → 20 hits, <code>tasks</code> → 187 — so the probes were working. They were simply <em>aimed at the wrong surface</em>: top-level help does not list subcommands, and the docs cache is stale. A control arm proves your probe can see; it says nothing about whether you pointed it at the right thing.</p>
+    </div>
+  </section>
+
+  <!-- RECOMMENDATION -->
+  <section>
+    <div class="head col">
+      <span class="lbl">What I would do</span>
+      <h2>Recommendation</h2>
+    </div>
+    <div class="callout col">
+      <p><strong>Take A first, then B — and manage the file with <code>[dotfiles]</code>.</strong> Relocate <code>fnox activate zsh</code> into a repo-owned <code>~/.zshrc.d/</code> fragment today, declared in <code>[dotfiles]</code> with <code>mode = "symlink-each"</code>, and gate it with <code>mise bootstrap dotfiles status --missing</code>. It retires mde, which is the goal you actually stated, changes nothing about how your machine behaves, and needs no chezmoi.</p>
+      <p style="margin:0">Then move to B once a <code>shell</code> profile has been <em>derived</em> rather than guessed. B is the only option where scoping genuinely works and fails closed, and the only one with no prompt hook at all — but it needs a subset list you do not have yet, and the last time a credential's consumer was assumed instead of measured, the assumption was wrong.</p>
+    </div>
+    <div class="callout col">
+      <span class="lbl">Before B ships, one thing must be measured</span>
+      <p style="margin:0">Which secrets the shell actually needs. <code>reconcile</code>'s code-scan is exactly that measurement, which is an argument for building it before the scoping decision rather than after.</p>
+    </div>
+  </section>
+
+  <footer class="col">
+    Evidence: docs/research/kb/reports/agents/{fnox-shell-activation,mise-shell-activation}.md<br>
+    Measured at fnox 1.32.0 · mise 2026.8.1 · probes in isolated FNOX_CONFIG_DIR fixtures, since deleted<br>
+    Unverified: end-to-end delivery through mise <code>_.source</code> (probing shell lacked AGE_PRIVATE_KEY) · cold-path resolution cost against the live 50-secret config, deliberately not measured
+  </footer>
+
+</div>

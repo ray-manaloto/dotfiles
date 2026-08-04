@@ -1,0 +1,330 @@
+<title>Implementing Doppler writes in fnox</title>
+
+<style>
+  :root {
+    --ground:#EDEEF0; --surface:#FFFFFF; --sunk:#E3E5E9; --ink:#16181C;
+    --muted:#676D78; --hair:#CFD3D9; --accent:#A97A3D; --accent-w:#F0E4D2;
+    --good:#2E7D5B; --bad:#B3402F; --warn:#8A6A1F;
+    --good-w:#DCEDE5; --bad-w:#F6DED9; --warn-w:#F1E7CE;
+    --f-display: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --f-body: Georgia, "Iowan Old Style", "Times New Roman", serif;
+    --f-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    --col: 68ch;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --ground:#111317; --surface:#191C21; --sunk:#0C0E11; --ink:#E6E8EC;
+      --muted:#8E95A1; --hair:#2C3138; --accent:#D4A468; --accent-w:#33281A;
+      --good:#4FA57E; --bad:#D9705E; --warn:#C9A24D;
+      --good-w:#16281F; --bad-w:#2E1A16; --warn-w:#2A2213; }
+  }
+  :root[data-theme="dark"] { --ground:#111317; --surface:#191C21; --sunk:#0C0E11; --ink:#E6E8EC;
+    --muted:#8E95A1; --hair:#2C3138; --accent:#D4A468; --accent-w:#33281A;
+    --good:#4FA57E; --bad:#D9705E; --warn:#C9A24D;
+    --good-w:#16281F; --bad-w:#2E1A16; --warn-w:#2A2213; }
+  :root[data-theme="light"] { --ground:#EDEEF0; --surface:#FFFFFF; --sunk:#E3E5E9; --ink:#16181C;
+    --muted:#676D78; --hair:#CFD3D9; --accent:#A97A3D; --accent-w:#F0E4D2;
+    --good:#2E7D5B; --bad:#B3402F; --warn:#8A6A1F;
+    --good-w:#DCEDE5; --bad-w:#F6DED9; --warn-w:#F1E7CE; }
+
+  body { background:var(--ground); color:var(--ink); font-family:var(--f-body);
+         font-size:17px; line-height:1.62; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:1180px; margin:0 auto;
+          padding:clamp(2rem,5vw,4.5rem) clamp(1.1rem,4vw,2.5rem) 6rem;
+          display:flex; flex-direction:column; gap:3.5rem; }
+  .col { max-width:var(--col); }
+  .lbl { font-family:var(--f-mono); font-size:0.7rem; letter-spacing:0.16em;
+         text-transform:uppercase; color:var(--muted); }
+  h1,h2,h3 { font-family:var(--f-display); text-wrap:balance; line-height:1.15; letter-spacing:-0.02em; }
+  h1 { font-size:clamp(2rem,5vw,3.1rem); font-weight:700; margin:0.4rem 0 0; }
+  h2 { font-size:clamp(1.35rem,3vw,1.75rem); font-weight:650; margin:0; }
+  h3 { font-size:1rem; font-weight:650; margin:0 0 0.15rem; letter-spacing:-0.01em; }
+  p { margin:0 0 1rem; } p:last-child { margin-bottom:0; }
+  code { font-family:var(--f-mono); font-size:0.87em; background:var(--sunk);
+         padding:0.1em 0.36em; border-radius:3px; word-break:break-word; }
+  pre { background:var(--sunk); border:1px solid var(--hair); border-left:3px solid var(--accent);
+        border-radius:4px; padding:0.9rem 1rem; overflow-x:auto; margin:0;
+        font-family:var(--f-mono); font-size:0.78rem; line-height:1.55; }
+  pre code { background:none; padding:0; font-size:inherit; }
+  pre.bad { border-left-color:var(--bad); }
+  pre.good { border-left-color:var(--good); }
+  header .rule { height:3px; width:68px; background:var(--accent); margin-bottom:1.6rem; }
+  header .sub { color:var(--muted); font-size:1.02rem; margin-top:1.2rem; }
+  section { display:flex; flex-direction:column; gap:1.4rem; }
+  .head { display:flex; flex-direction:column; gap:0.5rem; }
+
+  .chip { display:inline-block; font-family:var(--f-mono); font-size:0.63rem;
+          letter-spacing:0.11em; text-transform:uppercase; padding:0.26em 0.55em;
+          border-radius:3px; white-space:nowrap; font-weight:600; }
+  .c-good{background:var(--good-w);color:var(--good);} .c-bad{background:var(--bad-w);color:var(--bad);}
+  .c-warn{background:var(--warn-w);color:var(--warn);} .c-flat{background:var(--sunk);color:var(--muted);}
+
+  .tablewrap { overflow-x:auto; border:1px solid var(--hair); border-radius:6px; background:var(--surface); }
+  table { border-collapse:collapse; width:100%; min-width:760px; }
+  th,td { text-align:left; padding:0.7rem 0.85rem; border-bottom:1px solid var(--hair);
+          vertical-align:top; font-size:0.86rem; line-height:1.45; }
+  thead th { font-family:var(--f-mono); font-size:0.66rem; letter-spacing:0.1em;
+             text-transform:uppercase; color:var(--muted); font-weight:600; background:var(--sunk); }
+  tbody th { font-family:var(--f-display); font-weight:650; font-size:0.82rem; width:200px; }
+  tbody tr:last-child th, tbody tr:last-child td { border-bottom:none; }
+
+  /* sequence */
+  .seq { background:var(--surface); border:1px solid var(--hair); border-radius:6px;
+         padding:1.1rem 1.2rem 1.4rem; overflow-x:auto; }
+  .seq .cmd { font-family:var(--f-mono); font-size:0.78rem; background:var(--sunk);
+              padding:0.5rem 0.7rem; border-radius:4px; border-left:2px solid var(--accent);
+              margin-bottom:1.1rem; display:inline-block; white-space:nowrap; }
+  .seq-inner { min-width:700px; }
+  .seq-head { display:grid; grid-template-columns:repeat(5,1fr);
+              padding-bottom:0.6rem; border-bottom:1px solid var(--hair); margin-bottom:0.2rem; }
+  .seq-head span { font-family:var(--f-mono); font-size:0.66rem; letter-spacing:0.06em;
+                   text-align:center; color:var(--muted); font-weight:600; }
+  .seq-head span.owner { color:var(--accent); }
+  .seq-body { position:relative; padding-top:0.5rem; }
+  .rails { position:absolute; inset:0; display:grid; grid-template-columns:repeat(5,1fr); pointer-events:none; }
+  .rails i { background:linear-gradient(var(--hair),var(--hair)) center/1px 100% no-repeat; }
+  .step { position:relative; display:grid; grid-template-columns:repeat(10,1fr);
+          align-items:center; min-height:2.55rem; }
+  .bar { grid-column:var(--gc); position:relative; height:2px; background:var(--accent);
+         align-self:center; margin-top:0.55rem; }
+  .bar .t { position:absolute; left:0; right:0; bottom:6px; text-align:center;
+            font-size:0.76rem; line-height:1.3; color:var(--ink); white-space:nowrap; }
+  .bar::after { content:""; position:absolute; top:-4px; width:0; height:0;
+                border-top:5px solid transparent; border-bottom:5px solid transparent; }
+  .bar.r::after { right:-1px; border-left:8px solid var(--accent); }
+  .bar.l::after { left:-1px; border-right:8px solid var(--accent); }
+  .bar.dim { background:var(--muted); }
+  .bar.dim::after { border-left-color:var(--muted); border-right-color:var(--muted); }
+  .bar.dim .t { color:var(--muted); }
+  .bar.warn { background:var(--bad); }
+  .bar.warn::after { border-left-color:var(--bad); border-right-color:var(--bad); }
+  .bar.warn .t { color:var(--bad); font-weight:600; }
+  .bar.ok { background:var(--good); }
+  .bar.ok::after { border-left-color:var(--good); border-right-color:var(--good); }
+  .self { grid-column:var(--gc); align-self:center; margin-top:0.3rem;
+          border:1px solid var(--hair); border-left:2px solid var(--accent);
+          background:var(--ground); border-radius:3px; padding:0.24rem 0.4rem;
+          font-size:0.73rem; text-align:center; line-height:1.25; }
+  .self.warn { border-left-color:var(--bad); color:var(--bad); font-weight:600; }
+  .self.ok { border-left-color:var(--good); }
+  .stepno { position:absolute; left:-0.1rem; top:0.85rem; font-family:var(--f-mono);
+            font-size:0.62rem; color:var(--accent); font-weight:700; }
+  .seq .note { font-size:0.83rem; color:var(--muted); margin-top:1rem; line-height:1.5; }
+
+  .work { display:flex; flex-direction:column; gap:1.1rem; }
+  .item { background:var(--surface); border:1px solid var(--hair); border-radius:6px; padding:1.25rem;
+          display:flex; flex-direction:column; gap:0.75rem; }
+  .item .top { display:flex; justify-content:space-between; align-items:flex-start; gap:1rem; flex-wrap:wrap; }
+  .item .where { font-family:var(--f-mono); font-size:0.72rem; color:var(--muted); }
+
+  .callout { background:var(--surface); border:1px solid var(--hair);
+             border-left:3px solid var(--accent); border-radius:4px;
+             padding:1.15rem 1.3rem; font-size:0.94rem; }
+  .callout.alarm { border-left-color:var(--bad); }
+  .callout .lbl { display:block; margin-bottom:0.5rem; }
+
+  footer { border-top:1px solid var(--hair); padding-top:1.5rem; font-size:0.8rem;
+           color:var(--muted); font-family:var(--f-mono); line-height:1.7; }
+  @media (prefers-reduced-motion:reduce){ *{animation:none!important;transition:none!important;} }
+</style>
+
+<div class="wrap">
+
+  <header class="col">
+    <div class="rule"></div>
+    <span class="lbl">Upstream change · jdx/fnox · read at 1.32.0</span>
+    <h1>Teaching fnox to write to Doppler</h1>
+    <p class="sub">It does not exist yet, anywhere I can see. It is also small — the provider already shells out to the Doppler CLI, so the write is one more subcommand. Here is exactly what changes, and the separate defect found while looking.</p>
+  </header>
+
+  <!-- DOES IT EXIST -->
+  <section>
+    <div class="head col">
+      <span class="lbl">First question</span>
+      <h2>Does an implementation already exist?</h2>
+      <p>Four routes checked. Three say no; the fourth could not be checked at all, and that is stated rather than glossed.</p>
+    </div>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th scope="col">Route</th><th scope="col">Result</th><th scope="col">Confidence</th></tr></thead>
+        <tbody>
+          <tr>
+            <th scope="row">Unreleased on <code>main</code>?</th>
+            <td><code>main</code> and <code>v1.32.0</code> return the <strong>identical blob sha</strong> for <code>doppler.rs</code> — <code>4c99bb1…</code>. There is no newer implementation waiting to ship.</td>
+            <td><span class="chip c-good">Certain</span></td>
+          </tr>
+          <tr>
+            <th scope="row">In the original provider PR?</th>
+            <td><strong>#376 "feat(provider): add Doppler secrets manager provider"</strong>, merged, added <code>src/providers/doppler.rs</code> at <strong>+464 lines</strong>. Its patch mentions <code>put_secret</code> and <code>fn capabilities</code> <strong>zero times</strong>. Writes were never implemented, not removed later.</td>
+            <td><span class="chip c-good">Certain</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Any other PR?</th>
+            <td>Ten PRs mention Doppler; the only provider-shaped ones are #376 itself and unrelated additions (azure-ac, FOKS, proxy, daemon). None adds a write path.</td>
+            <td><span class="chip c-good">Good</span> — control arm: the same query route returned 3 recent PRs, so the search discriminates</td>
+          </tr>
+          <tr>
+            <th scope="row">In any of the 97 forks?</th>
+            <td><strong>Unknown.</strong> GitHub code search is unavailable on this token — and the control arm for it also returned zero, so that probe is blind rather than empty-handed. I cannot claim no fork has it.</td>
+            <td><span class="chip c-bad">Not checked</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- THE DEFECT -->
+  <section>
+    <div class="head col">
+      <span class="lbl">Found while looking</span>
+      <h2>A separate defect, and it is the more urgent one</h2>
+    </div>
+
+    <div class="callout alarm col">
+      <p>The <code>Provider</code> trait's default <code>put_secret</code> already handles read-only providers correctly — it returns <code>Err("This provider does not support storing secrets")</code>. So fnox <em>knows</em> the right answer.</p>
+      <p style="margin:0"><strong><code>set.rs</code> never asks it.</strong> The dispatch checks for the two writer capabilities, and a read-only provider falls into an <code>else</code> that yields <code>(None, None)</code> — <code>put_secret</code> is not called, so the trait's error never fires. Further down, <code>(None, None)</code> plus a named provider lands in a branch that writes <strong>the raw value</strong> into the config file.</p>
+    </div>
+
+    <pre class="bad"><code>// crates/.../commands/set.rs — the dispatch
+} else {
+    // Not an encryption or remote storage provider
+    (None, None)          // &lt;- put_secret never called
+}
+
+// ...and further down, where that (None, None) lands:
+} else if provider_name_to_use.is_some() {
+    // Provider specified or default provider available
+    // (but not an encryption/remote provider)
+    secret_config.set_value(Some(value.clone()));   // &lt;- CLEARTEXT into fnox.toml
+}</code></pre>
+
+    <div class="callout col">
+      <span class="lbl">Why this matters more than the feature</span>
+      <p style="margin:0">The feature's absence is a limitation you can route around. This is a <strong>silent</strong> failure that plaintexts a credential to disk while appearing to succeed — and it applies to all six read-only providers, not just Doppler. The fix is small and independent: make that <code>else</code> call <code>put_secret</code> (or return its error) instead of yielding <code>(None, None)</code>. <span class="chip c-warn">Read from source, not executed — confirm in a throwaway <code>FNOX_CONFIG_DIR</code> before filing</span></p>
+    </div>
+  </section>
+
+  <!-- BEFORE / AFTER -->
+  <section>
+    <div class="head col">
+      <span class="lbl">Behaviour</span>
+      <h2>What changes, as a flow</h2>
+    </div>
+
+    <div class="seq">
+      <h3>Today <span class="chip c-bad">writes cleartext</span></h3>
+      <div class="cmd">fnox set STRIPE_API_KEY --provider doppler</div>
+      <div class="seq-inner">
+        <div class="seq-head"><span>you</span><span class="owner">fnox set</span><span>provider trait</span><span>doppler CLI</span><span>fnox.toml</span></div>
+        <div class="seq-body">
+          <div class="rails"><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="step"><span class="stepno">1</span><div class="bar r" style="--gc:2/4"><span class="t">value on stdin</span></div></div>
+          <div class="step"><span class="stepno">2</span><div class="bar r dim" style="--gc:4/6"><span class="t">capabilities() → RemoteRead (the default)</span></div></div>
+          <div class="step"><span class="stepno">3</span><div class="self warn" style="--gc:3/5">neither writer branch matches → (None, None)</div></div>
+          <div class="step"><span class="stepno">4</span><div class="bar warn r" style="--gc:6/8"><span class="t">✗ doppler secrets set never runs</span></div></div>
+          <div class="step"><span class="stepno">5</span><div class="bar warn r" style="--gc:4/10"><span class="t">raw value written to disk, rc=0</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="seq">
+      <h3>After <span class="chip c-good">writes through</span></h3>
+      <div class="cmd">fnox set STRIPE_API_KEY --provider doppler</div>
+      <div class="seq-inner">
+        <div class="seq-head"><span>you</span><span class="owner">fnox set</span><span>provider trait</span><span>doppler CLI</span><span>fnox.toml</span></div>
+        <div class="seq-body">
+          <div class="rails"><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="step"><span class="stepno">1</span><div class="bar r" style="--gc:2/4"><span class="t">value on stdin</span></div></div>
+          <div class="step"><span class="stepno">2</span><div class="bar r dim" style="--gc:4/6"><span class="t">capabilities() → RemoteStorage</span></div></div>
+          <div class="step"><span class="stepno">3</span><div class="bar ok r" style="--gc:4/8"><span class="t">put_secret → doppler secrets set, value on STDIN</span></div></div>
+          <div class="step"><span class="stepno">4</span><div class="bar ok l" style="--gc:4/8"><span class="t">returns the key name, never the value</span></div></div>
+          <div class="step"><span class="stepno">5</span><div class="bar ok r" style="--gc:4/10"><span class="t">only a reference written to disk</span></div></div>
+        </div>
+      </div>
+      <p class="note">The whole difference is step 2. Once <code>capabilities()</code> returns <code>RemoteStorage</code>, <code>set.rs</code>'s existing dispatch routes to <code>put_secret</code> on its own — no change needed there for the feature.</p>
+    </div>
+  </section>
+
+  <!-- THE WORK -->
+  <section>
+    <div class="head col">
+      <span class="lbl">The change</span>
+      <h2>Four edits, one of them the real work</h2>
+      <p>All in <code>crates/fnox-core/src/providers/doppler.rs</code> unless noted. The provider is 464 lines today and already shells out to the Doppler CLI, so nothing new has to be invented.</p>
+    </div>
+
+    <div class="work">
+
+      <article class="item">
+        <div class="top"><h3>1 · Let the command helper carry stdin</h3><span class="chip c-warn">The real work</span></div>
+        <p class="where">doppler.rs — <code>execute_doppler_command</code></p>
+        <p>The helper hardcodes <code>cmd.stdin(std::process::Stdio::null())</code>, because every existing call is a read. A write has to pass the value <em>somehow</em>, and it must not be argv — <code>fnox set</code>'s own help warns that argv leaks to shell history and <code>ps</code>, and that applies just as much to the <code>doppler</code> child process it spawns.</p>
+        <pre><code>// today
+cmd.stdin(std::process::Stdio::null());
+
+// needed: an optional payload, piped and written to the child
+cmd.stdin(match stdin_payload {
+    Some(_) =&gt; Stdio::piped(),
+    None    =&gt; Stdio::null(),
+});</code></pre>
+        <p style="margin:0">This is the only edit that touches shared code and the only one that can regress existing reads, so it wants its own test.</p>
+      </article>
+
+      <article class="item">
+        <div class="top"><h3>2 · Declare the capability</h3><span class="chip c-flat">3 lines</span></div>
+        <p class="where">doppler.rs — <code>impl Provider for DopplerProvider</code></p>
+        <pre class="good"><code>fn capabilities(&amp;self) -&gt; Vec&lt;ProviderCapability&gt; {
+    vec![ProviderCapability::RemoteStorage]
+}</code></pre>
+        <p style="margin:0">This single addition is what flips <code>set.rs</code>'s dispatch from the cleartext branch to the <code>put_secret</code> branch.</p>
+      </article>
+
+      <article class="item">
+        <div class="top"><h3>3 · Implement the write</h3><span class="chip c-flat">~15 lines</span></div>
+        <p class="where">doppler.rs — same impl block</p>
+        <pre class="good"><code>async fn put_secret(&amp;self, key: &amp;str, value: &amp;str) -&gt; Result&lt;String&gt; {
+    // project/config flags are added by build_common_args()
+    self.execute_doppler_command_with_stdin(
+        &amp;["secrets", "set", key],
+        value,           // on stdin, never argv
+        Some(key),
+    ).await?;
+    Ok(key.to_string())  // config stores the REFERENCE, not the value
+}</code></pre>
+        <p style="margin:0">Returning the key name rather than the value is what makes the config hold a reference. That contract is already documented on the trait: <em>"Remote storage providers: store remotely and return the key name."</em></p>
+      </article>
+
+      <article class="item">
+        <div class="top"><h3>4 · Docs and the schema</h3><span class="chip c-flat">small</span></div>
+        <p class="where">docs/providers/doppler.md · docs/public/schema.json</p>
+        <p style="margin:0">#376 shipped 250 lines of provider docs and 23 of schema. A write path needs the <code>fnox set --provider doppler</code> example that <code>bitwarden-sm.md:140</code> already has and <code>doppler.md</code> conspicuously lacks — that absence is currently the clearest signal to a reader that writes are unsupported.</p>
+      </article>
+
+    </div>
+
+    <div class="callout col">
+      <span class="lbl">Also worth doing, separately</span>
+      <p style="margin:0">Fix the <code>set.rs</code> fall-through so the other five read-only providers error instead of plaintexting. It is a different change with a different risk profile, and bundling it with a feature makes both harder to review. Two PRs, not one.</p>
+    </div>
+  </section>
+
+  <!-- COST -->
+  <section>
+    <div class="head col">
+      <span class="lbl">What it costs you</span>
+      <h2>The part that is not code</h2>
+    </div>
+    <div class="callout alarm col">
+      <p><strong>You cannot ask first.</strong> <code>jdx/fnox</code> has GitHub Issues <em>disabled</em>. There is no way to propose the change, check whether writes were deliberately withheld, or find out if a maintainer already has an opinion. Every contribution there is speculative by construction.</p>
+      <p><strong>Your CLI cannot depend on it until it ships.</strong> Merge, then release, then your pin moves — on someone else's timeline. If the CLI is blocking on this, you have coupled your schedule to an upstream you cannot even file against.</p>
+      <p style="margin:0"><strong>There is a hedge.</strong> Doppler writes are one subcommand of the Doppler CLI. The CLI can shell out to <code>doppler secrets set</code> directly today, ship now, and drop that path later if the PR lands. That keeps the contribution valuable without making it load-bearing.</p>
+    </div>
+  </section>
+
+  <footer class="col">
+    Read at fnox 1.32.0 · main and v1.32.0 identical for doppler.rs (blob 4c99bb1…) · v1.32.1 not yet tagged<br>
+    Verified here: the trait's put_secret default · set.rs's dispatch and fall-through · execute_doppler_command's null stdin · PR #376's file list<br>
+    Not verified: the cleartext write by execution · whether any of the 97 forks implements it (code search blind on this token, control arm also returned zero)
+  </footer>
+
+</div>
