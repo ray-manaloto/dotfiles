@@ -49,8 +49,11 @@ here) with a **broad `mise outdated --bump` sweep** of every other pin — so th
 signal spans all tools, not just the deep set. `--bump` is mandatory (the engine
 passes it): every pin is exact, so bare `mise outdated` can never report
 movement (control-armed 2026-07-20: it said "up to date" while graphify sat at
-0.9.20 vs PyPI 0.9.22). Tools intentionally held back (comments in `mise.toml`,
-e.g. `rtk` for a lockfile bug) are decisions, not drift.
+0.9.20 vs PyPI 0.9.22). Tools intentionally held back — with a comment in
+`mise.toml` saying why — are decisions, not drift. **Re-read the reason before
+honouring it:** `rtk` was the standing example, held for a github-backend
+lockfile bug; mise #10703 fixed that in 2026.7.0 and the hold was retired
+2026-08-04, so the comment had outlived the constraint by a month.
 
 ## Procedure
 
