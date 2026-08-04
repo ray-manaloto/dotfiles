@@ -636,6 +636,7 @@ checksum = "sha256:63e7cc91ef10eda71765c42e951362a084b2cbcbc93fb55c375c4f3acbfd7
 url = "https://github.com/prefix-dev/pixi/releases/download/v0.73.0/pixi-aarch64-apple-darwin.tar.gz"
 url_api = "https://api.github.com/repos/prefix-dev/pixi/releases/assets/477739268"
 provenance = "github-attestations"
+provenance_verified = true
 
 [tools.pixi."platforms.macos-x64"]
 checksum = "sha256:0c89d86eb3adc35773e3b00f443b68edcfcdd7b61700282d712613bcaf797f61"

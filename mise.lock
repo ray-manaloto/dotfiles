@@ -4036,6 +4036,60 @@ checksum = "sha256:5f9a064baa06f55f34ebd6e8bd7a7449bd774d3e79b023e5b999d351bff80
 url = "https://github.com/jackchuka/mdschema/releases/download/v0.14.1/mdschema_0.14.1_windows_amd64.zip"
 url_api = "https://api.github.com/repos/jackchuka/mdschema/releases/assets/492363111"
 
+[[tools."aqua:rtk-ai/rtk"]]
+version = "0.44.2"
+backend = "aqua:rtk-ai/rtk"
+
+[tools."aqua:rtk-ai/rtk"."platforms.linux-arm64"]
+checksum = "sha256:5cd3f7fa2697faf9e5b77a10ce4e699006e02d4752d792f06550697eb4b8e8a9"
+url = "https://github.com/rtk-ai/rtk/releases/download/v0.44.2/rtk-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/498074086"
+
+[tools."aqua:rtk-ai/rtk"."platforms.linux-x64"]
+checksum = "sha256:d94cc2a3e57fa534892b5235a726e7eeb7523f205a5f8f48f853bfcae7be7e33"
+url = "https://github.com/rtk-ai/rtk/releases/download/v0.44.2/rtk-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/498074079"
+
+[tools."aqua:rtk-ai/rtk"."platforms.linux-x64-baseline"]
+checksum = "sha256:d94cc2a3e57fa534892b5235a726e7eeb7523f205a5f8f48f853bfcae7be7e33"
+url = "https://github.com/rtk-ai/rtk/releases/download/v0.44.2/rtk-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/498074079"
+
+[tools."aqua:rtk-ai/rtk"."platforms.linux-x64-musl"]
+checksum = "sha256:d94cc2a3e57fa534892b5235a726e7eeb7523f205a5f8f48f853bfcae7be7e33"
+url = "https://github.com/rtk-ai/rtk/releases/download/v0.44.2/rtk-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/498074079"
+
+[tools."aqua:rtk-ai/rtk"."platforms.linux-x64-musl-baseline"]
+checksum = "sha256:d94cc2a3e57fa534892b5235a726e7eeb7523f205a5f8f48f853bfcae7be7e33"
+url = "https://github.com/rtk-ai/rtk/releases/download/v0.44.2/rtk-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/498074079"
+
+[tools."aqua:rtk-ai/rtk"."platforms.macos-arm64"]
+checksum = "sha256:b7c2218eca538b54e63fa594a8ce58bd3716851b01b3b0dc026515323baf6393"
+url = "https://github.com/rtk-ai/rtk/releases/download/v0.44.2/rtk-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/498074082"
+
+[tools."aqua:rtk-ai/rtk"."platforms.macos-x64"]
+checksum = "sha256:636f808db86b2cefab7db7dd9393da8b6e4721bb2ffaa0644e3ffa52d3420d81"
+url = "https://github.com/rtk-ai/rtk/releases/download/v0.44.2/rtk-x86_64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/498074081"
+
+[tools."aqua:rtk-ai/rtk"."platforms.macos-x64-baseline"]
+checksum = "sha256:636f808db86b2cefab7db7dd9393da8b6e4721bb2ffaa0644e3ffa52d3420d81"
+url = "https://github.com/rtk-ai/rtk/releases/download/v0.44.2/rtk-x86_64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/498074081"
+
+[tools."aqua:rtk-ai/rtk"."platforms.windows-x64"]
+checksum = "sha256:3a1e114edce9080f8a10663e9c87488363a82f14a5ca8aab2ad416817f89d47c"
+url = "https://github.com/rtk-ai/rtk/releases/download/v0.44.2/rtk-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/498074084"
+
+[tools."aqua:rtk-ai/rtk"."platforms.windows-x64-baseline"]
+checksum = "sha256:3a1e114edce9080f8a10663e9c87488363a82f14a5ca8aab2ad416817f89d47c"
+url = "https://github.com/rtk-ai/rtk/releases/download/v0.44.2/rtk-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/498074084"
+
 [[tools.aws-cli]]
 version = "2.36.10"
 backend = "aqua:aws/aws-cli"
@@ -4059,6 +4113,7 @@ url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.36.10.zip"
 url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.36.10.zip"
 
 [tools.aws-cli."platforms.macos-arm64"]
+checksum = "blake3:0ca50baf45cd4c043974a220fcedcabbc20d84d8681627435b1cc6d23532d5d5"
 url = "https://awscli.amazonaws.com/AWSCLIV2-2.36.10.pkg"
 
 [tools.aws-cli."platforms.macos-x64"]
@@ -5739,65 +5794,6 @@ extras = "all"
 [[tools."pipx:mcp2cli"]]
 version = "3.3.1"
 backend = "pipx:mcp2cli"
-
-[[tools.rtk]]
-version = "0.44.1"
-backend = "github:rtk-ai/rtk"
-
-[tools.rtk."platforms.linux-arm64"]
-checksum = "sha256:ce97a94dbda556125fdbb22c94f538f93ae7dbc2b3de6f497bd60f206959c11c"
-url = "https://github.com/rtk-ai/rtk/releases/download/v0.44.1/rtk-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/492781819"
-
-[tools.rtk."platforms.linux-arm64-musl"]
-checksum = "sha256:ce97a94dbda556125fdbb22c94f538f93ae7dbc2b3de6f497bd60f206959c11c"
-url = "https://github.com/rtk-ai/rtk/releases/download/v0.44.1/rtk-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/492781819"
-
-[tools.rtk."platforms.linux-x64"]
-checksum = "sha256:986f29704469b3d1051e2474105c6c75ab8b73651068dcd61612c1fb3938ad95"
-url = "https://github.com/rtk-ai/rtk/releases/download/v0.44.1/rtk-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/492781820"
-
-[tools.rtk."platforms.linux-x64-baseline"]
-checksum = "sha256:986f29704469b3d1051e2474105c6c75ab8b73651068dcd61612c1fb3938ad95"
-url = "https://github.com/rtk-ai/rtk/releases/download/v0.44.1/rtk-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/492781820"
-
-[tools.rtk."platforms.linux-x64-musl"]
-checksum = "sha256:986f29704469b3d1051e2474105c6c75ab8b73651068dcd61612c1fb3938ad95"
-url = "https://github.com/rtk-ai/rtk/releases/download/v0.44.1/rtk-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/492781820"
-
-[tools.rtk."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:986f29704469b3d1051e2474105c6c75ab8b73651068dcd61612c1fb3938ad95"
-url = "https://github.com/rtk-ai/rtk/releases/download/v0.44.1/rtk-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/492781820"
-
-[tools.rtk."platforms.macos-arm64"]
-checksum = "sha256:a6a8bb086034a5d4f90ff93f965a631ad4937b5974494dd8a51859e3b04908a8"
-url = "https://github.com/rtk-ai/rtk/releases/download/v0.44.1/rtk-aarch64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/492781823"
-
-[tools.rtk."platforms.macos-x64"]
-checksum = "sha256:52475adf4659e95b3560eac117e13bc6ab3320de8b8ce75ba4e7d5f3604613cf"
-url = "https://github.com/rtk-ai/rtk/releases/download/v0.44.1/rtk-x86_64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/492781822"
-
-[tools.rtk."platforms.macos-x64-baseline"]
-checksum = "sha256:52475adf4659e95b3560eac117e13bc6ab3320de8b8ce75ba4e7d5f3604613cf"
-url = "https://github.com/rtk-ai/rtk/releases/download/v0.44.1/rtk-x86_64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/492781822"
-
-[tools.rtk."platforms.windows-x64"]
-checksum = "sha256:e9f2e26c377279c34604d81021347f8a0f16eb539ab54dd17567ab5805b2957d"
-url = "https://github.com/rtk-ai/rtk/releases/download/v0.44.1/rtk-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/492781827"
-
-[tools.rtk."platforms.windows-x64-baseline"]
-checksum = "sha256:e9f2e26c377279c34604d81021347f8a0f16eb539ab54dd17567ab5805b2957d"
-url = "https://github.com/rtk-ai/rtk/releases/download/v0.44.1/rtk-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/492781827"
 
 [[tools.rumdl]]
 version = "v0.2.45"
