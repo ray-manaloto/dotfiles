@@ -96,6 +96,12 @@ env_true = [
 # directories set from server args". So when the harness DOES support roots, the
 # argument is inert and the real scope is the harness's working-directory set.
 # A declared scope that differs from that set is a fiction.
+#
+# ⚠️ `filesystem` is NOT registered on this host, so this entry reports drift
+# every session (2026-08-04). It is kept anyway: `tests/test_doctor.py` uses a
+# truthy `scope_servers` as its control arm proving the parse reached the
+# SHIPPED baseline rather than a fixture, so emptying it destroys that evidence.
+# Clearing this needs a new control arm in the same diff — see #535.
 scope_servers = ["filesystem"]
 
 # Harness-namespaced as `mcp__<server>__<tool>`. These MUTATE state, so each
@@ -106,13 +112,11 @@ scope_servers = ["filesystem"]
 # The `--live` arm cross-checks this list against the server's real `tools/list`
 # — a server pinned by version cannot change its tool set behind the list, which
 # is why `pinned_servers` below is load-bearing rather than hygiene.
+#
+# Empty since 2026-08-04: neither `filesystem` nor `memory` is a registered MCP
+# server on this host any more, so both entries could only report drift. The
+# corresponding `mcp__filesystem__*` deny and `mcp__memory__*` allow rules in
+# `.claude/settings.json` are deliberately LEFT IN PLACE — they cost nothing and
+# stay correct if either server is ever registered again. Declare a server here
+# in the same reviewed diff that registers it.
 [mcp.mutating_tools]
-filesystem = ["write_file", "edit_file", "create_directory", "move_file"]
-memory = [
-    "create_entities",
-    "create_relations",
-    "add_observations",
-    "delete_entities",
-    "delete_observations",
-    "delete_relations",
-]
