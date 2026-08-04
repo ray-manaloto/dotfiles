@@ -26,6 +26,13 @@ exclude = [
     # .claude/skills/ ARE validated as skills — only the handoff output is not).
     "docs/handoffs/**",
     ".claude/skills.bak/**",
+    # Throwaway /prototype probe artifacts: claims tables whose whole value is the
+    # LITERAL paths they measured (`.claude/agent-memory/`, the installed CLI path).
+    # agnix flags those as portability hazards, which is right for an agent-instruction
+    # doc and wrong for a probe receipt — rewording them would destroy the evidence.
+    # Same rationale as docs/research/** above: findings, not agent docs.
+    # Approved by Ray, 2026-08-04c.
+    "prototype/**",
     # Third-party skill reference docs (upstream-controlled, hard-coded paths expected)
     ".claude/skills/context7-cli/references/**",
     # graphify: vendored third-party skill installed by `graphify install --project`

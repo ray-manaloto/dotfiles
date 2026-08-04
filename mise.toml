@@ -766,6 +766,11 @@ echo "${out}" | grep -q "${USER}" || {
 echo "OK: R1 inbound ssh ${USER}@localhost -p ${port} works"
 '''
 
+[tasks.proto-mechanisms]
+description = "PROTOTYPE (throwaway): agent-team mechanism bets — free arms only"
+# Lives on branch prototype/agent-team-mechanisms. Delete with it.
+run = "python3 prototype/probe_static.py"
+
 [tasks.verify-secrets]
 description = "S1: doppler env file exists and contains secrets"
 env = { DOPPLER_PROJECT = "dotfiles", DOPPLER_CONFIG = "{{ env.DOPPLER_CONFIG | default(value='dev_personal') }}" }
