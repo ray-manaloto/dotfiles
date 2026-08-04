@@ -22,18 +22,25 @@ service of it, not ends in themselves.
 | # | Decision | Status |
 |---|---|---|
 | D1 | **Scoping = additive declaration + reconcile.** A project declares what it additionally needs; the CLI checks the declaration against reality. Scoping buys **zero confinement** — accepted, because confinement is already dead as a goal. | Settled |
-| D2 | **Declarations use fnox's native hierarchy** — committed `fnox.toml`, gitignored `fnox.local.toml`. Reconcile **reports** collisions rather than preventing them. No new declaration format. | Settled, contingent on D5 |
+| D2 | ~~Declarations use fnox's native hierarchy~~ → **VOIDED BY D5.** The mechanism it chose (committed `fnox.toml` + gitignored `fnox.local.toml`) leaves with fnox. Its *intent* survives — a project records what it needs and reconcile reports drift — and its new home is `doppler setup --scope` plus whatever the CLI declares. **Re-decide in `/to-spec`.** | **Superseded** |
 | D3 | **Storage is the status quo.** Keychain holds exactly `DOPPLER_TOKEN`; Doppler CLI owns CRUD; the other 49 stay Doppler-sourced. | Settled |
 | D4 | **The highest-value verbs are rotate / classify / retire**, not create. See § 3. | Settled |
-| D5 | **"fnox stays" is PROVISIONAL, pending measurement.** Doppler CLI natively covers CRUD, per-directory scoping, an encrypted offline cache and shell env. `/prototype` decides. | Open |
-| D6 | **Language deferred** — and largely pre-decided. Rust's only genuine win is typed in-process `fnox-core`, which is **read-only**; if D5 removes fnox, that argument disappears entirely. | Open, low variance |
+| D5 | ~~"fnox stays" is PROVISIONAL~~ → **RESOLVED 2026-08-04: DROP FNOX.** The stack becomes **Doppler + macOS keychain**. See § 6. | **Settled** |
+| D6 | **Language deferred** — and largely pre-decided. Rust's only genuine win is typed in-process `fnox-core`, which is **read-only**; D5 removed fnox, so that argument is now moot entirely. | Open, near-zero variance |
 
 ## 2. Measurements that drove them
 
 All control-armed. Full working: `.agent/notepad.md`; agent reports under
 `docs/research/kb/reports/agents/`.
 
-### fnox has no subtraction primitive (⇒ D1)
+### fnox has no subtraction primitive (⇒ D1) — ⚠️ CORRECTED, see § 6
+
+> **This heading is wrong and is kept for the record.** `/prototype` claim 2 measured the opposite
+> against a fixture with a **real declared profile**: `-P shell --no-defaults` yields exactly the
+> profile's 2 secrets out of 52. The six arms below were run with **no profile declared** — and
+> zero `[profiles.*]` exist on this host — so the only outcome they could show was the degenerate
+> 0. fnox **has** a subtraction primitive; it is **profile-selected, not directory-selected**,
+> which is what D1 was actually about. D1 stands; this reason was too strong.
 
 Throwaway project dir + `fnox list --sources`, six arms:
 
@@ -178,3 +185,75 @@ Recorded because each is a reusable trap, not to flagellate.
 - [jdx/usage](https://github.com/jdx/usage) — CLI spec generator; non-Rust viability
 - [jdx/xx](https://github.com/jdx/xx) — jdx-owned utility crate in the shared stack
 - [DopplerHQ/cli](https://github.com/DopplerHQ/cli) — `run` / `secrets download` / `configure` surfaces (v3.76.1)
+
+---
+
+# 6. `/prototype` outcome — D5 RESOLVED: drop fnox (2026-08-04)
+
+Full harness, every arm and every control: branch **`prototype/secrets-cli-claims`**
+(`fce4a80`, `6a27014`, `719c175`), file `prototype/RESULTS.md`. Kept off this branch on purpose —
+throwaway code as a primary source, per the prototype skill's capture step.
+
+**Ray's decision: the stack becomes Doppler + macOS keychain.** This reverses the 2026-08-04
+"fnox stays" ruling, on measurement rather than argument.
+
+## What was measured
+
+| Question | Result |
+|---|---|
+| Does every terminal still get the secrets fnox-less? | **Yes — 49 of 50 in a clean shell, 0.117s offline.** Controls: empty env → 0, token-only → 1 |
+| The 50th? | `DOPPLER_TOKEN` itself — the bootstrap, from the keychain, not from Doppler |
+| Cost shape | fnox `hook-env` ~0.009s on **every prompt**; fnox-less ~0.117s **once per shell** |
+| Is the keychain ACL a one-time approval? | **Yes, and automatable — at CREATION only.** Creator is implicitly trusted; `-T /usr/bin/security` and `-A` both read with no prompt; an item trusting only the fnox binary **TIMEOUTs at 8s** behind a GUI dialog |
+| Can an existing ACL be amended non-interactively? | **No.** `set-generic-password-partition-list` prompts for the login keychain password; `-k` is deprecated and leaks it into argv ⇒ migrate by **delete-and-recreate** |
+| Per-project scoping without fnox? | **Yes.** `doppler setup --scope` is genuinely directory-bound — succeeds inside, fails outside, fails before setup |
+| Does `doppler setup` persist the token? | **No.** Key absent, length 0, while `DOPPLER_TOKEN` *was* set in the caller — so it could have |
+
+## Why this beats the incumbent, per axis
+
+- **Durability.** `-T` binds a binary PATH. fnox's is version-pinned (`installs/fnox/1.32.0/fnox`,
+  five versions since April) so its ACL breaks on every upgrade. **`/usr/bin/security` is
+  OS-stable** — an ACL granted to it never breaks.
+- **Scoping.** `doppler setup --scope` is directory-bound. fnox's `[profiles.*]` subtraction is
+  real (measured: `-P shell --no-defaults` → exactly 2 of 52) but **profile-selected, not
+  directory-selected**, and **zero profiles are declared** on this host.
+- **Simplicity.** Four moving parts (Doppler + fnox + age + keychain) become two. The CLI's write
+  path drops from **4 systems to 2**, which was most of its complexity.
+- **Churn.** The 49-ciphertext re-encrypt on every add/remove disappears with the age cache;
+  Doppler's `--fallback` is per-fetch.
+
+## What is given up, stated plainly
+
+22 unused providers; the age `sync` cache (replaced by Doppler `--fallback`); and profile
+subtraction. The CLI, not fnox, now owns local-cache correctness.
+
+## Carried forward as work
+
+- **The migration is delete-and-recreate** of the `mde-fnox` `DOPPLER_TOKEN` keychain item with
+  `-T /usr/bin/security`, plus a `doppler setup --scope` per project. Both scripted, no password
+  prompts. ⚠️ Register scopes with **resolved** paths — macOS `/var` is a symlink to
+  `/private/var`, and an unresolved scope silently never matches.
+- **Upstream defect to report** (claim 3): `fnox set --provider <doppler>` returns rc=0 and writes
+  the **plaintext value** into the config rather than writing through or refusing. Control arm
+  `age` writes ciphertext. `jdx/fnox` has Issues disabled ⇒ PR or discussion.
+- **D1's stated reason was too strong** — fnox *does* have a subtraction primitive; it is
+  profile-selected, not directory-selected. The decision stands, the justification is corrected.
+- **`mise bootstrap dotfiles` is confirmed usable** (claim 1): `symlink-each` applies and
+  `status --json --missing` exits 1 on missing, differs, dangling-symlink and source-dir-gone.
+
+## Probe discipline — five broken probes, all caught by their own controls
+
+Recorded because the hit rate is the point: a fixture that can only produce one answer is the
+default failure mode, not an unusual one.
+
+1. A grep bounded by **path spelling** (`q1-scope/fnox.toml` vs the printed `q1-scope/./fnox.toml`).
+2. A probe aimed at a **directory containing no source** — caught only because its control arm
+   returned empty.
+3. A `[dotfiles]` fixture whose keys mise rejected, leaving "no dotfiles configured" ⇒ **every arm
+   returned rc=0**; and a later one that removed source *and* target, which nearly shipped as a
+   mise defect that was not one.
+4. A claim-3 control (`plain`) that is **itself a cleartext store**, so both arms leaked and the
+   probe discriminated nothing.
+5. `zsh -f` **inherits the environment**, so a do-nothing control reported **47 of 50 set**; and a
+   `doppler secrets --only-names` parse reported 0 names while a download in the same run returned
+   49. Both discarded rather than published.
