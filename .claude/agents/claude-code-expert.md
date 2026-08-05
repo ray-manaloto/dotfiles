@@ -210,6 +210,9 @@ overturns it, and say in your report that you did.
 | `memory:` writes a topic file, but nothing reads it without the store's own `MEMORY.md` | CONFIRMED | live probe, `prototype/RESULTS.md` claim 4 | 2.1.221 | 2026-08-04 |
 | Workflow resume replays only to the first unfinished agent; everything dispatched after re-runs | CONFIRMED | live probe + binary replay code | 2.1.222 | 2026-08-04 |
 | `permissionMode` / `mcpServers` / `hooks` are ignored for plugin-scoped subagents | CONFIRMED | `$CC/sub-agents.md:282`, `:285`, `:286` | 2.1.221 | 2026-08-04 |
+| **`claude --bg "<positional>"` travels the same user-prompt expansion path as `-p`** — a `disable-model-invocation` verb expands (`<command-name>` frame + token); prefix-only holds; `--bg` + `--print` is a hard rc=1 error by design | CONFIRMED | 5-arm live probe; controls: `-p` arm expanded, unknown-verb arm did not; `docs/receipts/564.md` | 2.1.222 | 2026-08-05 |
+| **An unknown slash verb under `--bg` creates a LIVE background job at rc=0** (transcript shows `Unknown command`) — verb preflight must precede dispatch | CONFIRMED | probe arm C; control: known verb expanded in the same fixture | 2.1.222 | 2026-08-05 |
+| `claude agents --json` returns a top-level ARRAY, not `{agents:[…]}` — code keyed on the wrapper shape silently no-ops | CONFIRMED | live parse; a cleanup loop keyed on `.agents` skipped every job | 2.1.222 | 2026-08-05 |
 
 ## Local hazards that break probes on this host
 
