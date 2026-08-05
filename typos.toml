@@ -20,3 +20,10 @@ fpr = "fpr"
 # `hk builtins` reports — so the name is not ours to spell differently, and
 # hand-editing the generated file would fail its own gate on the next run.
 sherif = "sherif"
+
+# `gae` is a minified symbol name in the Claude Code binary (the settings
+# array-merge function), quoted verbatim as an evidence anchor in the
+# claude-code-expert ledger (#568). The binary's minifier chose the name; it is
+# not ours to respell, and rewording the anchor would break re-derivation
+# against the binary.
+gae = "gae"
