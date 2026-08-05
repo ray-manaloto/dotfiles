@@ -231,6 +231,21 @@ proposes edits to the role files. ⚠️ It is gated — `CLAUDE_CODE_DISABLE_AU
 disables auto memory **and with it the `memory` frontmatter field entirely**
 (`$CC/sub-agents.md:518`).
 
+⚠️ **MEASURED, and it is not automatic** (`prototype/RESULTS.md` claim 4). A subagent with
+`memory: project` **wrote** to the documented path — and the next spawn returned
+`NOTHING IN MEMORY` with **`tool_uses: 0`**. It never read the file. Control arm for the cause:
+the pre-existing, working `~/.claude/agent-memory/researcher/` store carries a **`MEMORY.md`**
+alongside its topic files; the probe store had none. Auto-memory injects `MEMORY.md` and reads
+topic files on demand, so **an unindexed topic file is inert**.
+
+**A role that records a lesson without maintaining its own `MEMORY.md` index has written to a
+store nothing reads.** Any self-improvement design must own that index explicitly.
+
+⚠️ **On the teammate path it is worse than useless.** The same agent, spawned *named*, wrote
+into the **shared session auto-memory** and added an index line to the project's `MEMORY.md` —
+the file loaded into every session, already near its read limit. Nine roles doing that collide
+in one store; nine subagents each get an isolated one that nothing reads unless indexed.
+
 **`provide suggestions` is an output contract, not a role.** Every role's report ends with
 what it would change. A dedicated suggester has no privileged view.
 
@@ -552,6 +567,25 @@ the agent it is on the wrong branch and must not write.
 | **`SubagentStop`** | prevents the subagent stopping (`:712`, `:2042`) — payload includes `agent_transcript_path`, `last_assistant_message`, `background_tasks` |
 | **`TaskCreated`** | **rolls the creation back** (`:713`) |
 | **`TaskCompleted`** | prevents completion (`:714`) — fires on `TaskUpdate` *and* when a teammate ends a turn with in-progress tasks |
+
+### ✅ MEASURED — a `SubagentStop` hook really does force more work
+
+Probed on the **subagent** path (`prototype/RESULTS.md` claim 2):
+
+| | |
+|---|---|
+| call 1 | fired, `stop_hook_active: false` → returned `{"decision":"block", …}` |
+| effect | the agent wrote a witness file **nothing in its prompt had asked for** — the only instruction came from the hook's `reason` |
+| call 2 | fired, `stop_hook_active: true` → allowed; agent finished |
+| agent `tool_uses` | **2** — its own task, plus the forced work |
+
+Both arms in one run. The payload carries **`agent_transcript_path`**, so an enforcing hook can
+*inspect what the agent actually did* rather than merely nag — the difference between a gate and
+a reminder.
+
+⚠️ **Scope:** proven for a frontmatter hook on the **unnamed/subagent** path. On the named
+teammate path the same hook never fired at all (§2). Put enforcement in session-level
+`settings.json`, which applies inside subagents however they were spawned.
 
 **`TeammateIdle` and `SubagentStop` are the mechanism the repeatedly-failing
 "a delegated agent must deliver before going idle" rule has always needed.** That rule has now
