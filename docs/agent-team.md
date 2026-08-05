@@ -47,6 +47,18 @@ settled once reality moves.
 
 ---
 
+> ## ⚠️ 2026-08-05 — wf-dag seven-report sweep: the no-dead-node-detection premise is retired
+>
+> The wf-dag sweep (`docs/research/kb/reports/agents/wf-dag-*.md`, synthesis in
+> `wf-dag-research-synthesis.md`) overturned one more premise this document's recovery
+> thinking was built on:
+>
+> | § | Claim as written | Corrected |
+> |---|---|---|
+> | implicit (the sketched recovery/watchdog work) | nothing detects a dead session — liveness detection and restart must be built | **The harness already detects and auto-respawns a dead `--bg` node** (an eligible worker under a live supervisor). A `kill -9`'d node was respawned in ~36 s with the same `sessionId`, flushed history preserved (unresolved `tool_use` blocks in an interrupted turn are dropped and unwound), `attempt`→2. Detection = `kill(pid,0)` every 5 s + `procStart` compare every 60 s + PTY exit event; respawn = fixed 10 s delay, cap 20, 3-fast-crash breaker, `attempt` resets after a 5-min healthy run. Still NOT auto-recovered: a HUNG node (`tengu_bg_worker_stalled` is emit-only; the docs say opening the session restarts its process — not live-probed), `exec`-mode workers (never auto-respawned), a node with no flushed messages (unrecoverable), and cwd-gone (permanently unrecoverable). Evidence: `wf-dag-recovery.md`; terminal-state predicate + fleet-gate refinements in `docs/receipts/565.md` |
+
+---
+
 Research run 2026-08-04c by seven parallel agents. Their verbatim reports are the
 evidence base and are kept alongside this file:
 
