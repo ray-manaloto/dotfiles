@@ -126,7 +126,23 @@ Every workflow agent pays a full project-context load regardless of job size. Th
 contradict the resume constraint below, it sharpens it: *small* must mean **few tightly-scoped
 stages**, not a wide fan-out over trivia.
 
-Not tested: **resume**. The run is resumable by `runId`, but no interrupted run was exercised.
+✅ **Resume, both halves, now measured** (`prototype/RESULTS.md` claims 1f and 6).
+
+- **Clean resume** — append one stage to a completed run and re-invoke with `resumeFromRunId`:
+  `tool_uses` **6 → 1**, subagent tokens **465,028 → 81,256**, exactly one new transcript file.
+  Cached results come back as real values, not placeholders.
+- **Interrupted resume** — replay stops at the first agent that did not finish, and **everything
+  dispatched after it re-runs even when its result is already in the journal.** Measured on run
+  `wf_99fff833-07e`: an agent that had completed *and* journaled a result re-ran anyway, while the
+  agent ahead of the unfinished one was served from cache — that cache hit is the control arm,
+  without it "everything re-ran" would be indistinguishable from "nothing was cached".
+
+The harness's replay code confirms the mechanism and rules out the group-scoped reading the probe
+alone could not exclude: a **sticky first-miss flag** (`T ? void 0 : results.get(key)`) means that
+after one miss every later call skips the cache lookup entirely. The boundary is **positional**,
+fixed by `agent()` dispatch order — `parallel()` only decides that order. The journal key is a
+rolling chain hash over the preceding call sequence, and `label`/`phase` are excluded from it, so
+renaming a stage is cache-safe while reordering one is not.
 
 **Constraints that shape the design, not footnotes:**
 
@@ -135,7 +151,7 @@ Not tested: **resume**. The run is resumable by `runId`, but no interrupted run 
 | **No mid-run user input** (only permission prompts pause a run) | human sign-off means **one workflow per gated stage**, never one workflow for the whole pipeline — which is exactly the `gate` node from §1 |
 | **The script has no filesystem or shell access**; agents act, the script coordinates | the orchestrator is *pure coordination* and every side effect goes through a role agent — a feature for write/review isolation, not a limitation |
 | 16 concurrent agents; 1,000 per run | a 9-role team fits; a wide per-file fan-out does not |
-| **Resume replays from the first agent that did not finish** — everything started after it re-runs even if it completed | **many small agents preserve more progress than one long agent.** A direct constraint on role granularity |
+| ✅ **MEASURED — resume replays only up to the first agent that did not finish**; everything dispatched after it re-runs even if it completed | **a wide `parallel()` is the worst shape to be interrupted in** — one slow member early in the array discards every finished result after it, at ~78–85 k tokens each. Keep groups narrow, put the long pole **last** within a group, and place stage boundaries *before* slow work. A direct constraint on role granularity |
 | Resume works **only within the same session** | cross-session durability is still ours to build — the arXiv paper's failure mode #1, unfixed |
 
 **What each mechanism is now for:** roles are `.claude/agents/*.md` definitions; a **workflow
@@ -665,6 +681,10 @@ background and the `background:` frontmatter field is **inert**.
    agents.** The vendor docs state *"Ignored for plugin subagents"* on exactly those three rows
    (`$CC/sub-agents.md:282`, `:285`, `:286`; control — a phrase known to be in the same table
    returns 1). **So the team cannot ship as a plugin if any role needs them.**
+9. ✅ **CLOSED — interrupted resume behaves as documented, and it constrains the script's shape**
+   (§2, `prototype/RESULTS.md` claim 6). Write the orchestration script so an interrupt is cheap:
+   narrow `parallel()` groups, the slowest member ordered **last** inside each group, and a stage
+   boundary before any long-running role rather than after it.
 
 ⚠️ **If `claude-self-reflect` is ever considered**, it indexes **every transcript** — and this
 machine's transcripts have carried live credential values twice. It ships a sanitiser whose
