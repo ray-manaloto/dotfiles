@@ -96,3 +96,14 @@ host-only in `mise.toml` (`codex`, `antigravity-cli`); auth is per-user. The Cla
 and **verifies evidence** before "done" — only execution is delegated; terminal fallback is Claude
 Opus. The authoritative routing/fallback doctrine (and its KB-graph grounding) is the
 `orchestrator-routing` skill in the **knowledge-base** repo.
+
+## DAG topology pins (#567)
+
+`.claude/settings.json` pins the DAG substrate (map #556): the `env` block plus
+`fallbackModel` + `switchModelsOnFlag`. `CLAUDE_*` pins go in settings `env`, NEVER a
+shell export (background launch strips them; respawn re-reads only settings). Evidence:
+`docs/receipts/567.md`.
+
+**NOT set — do not "fix" back:** `DISABLE_AUTO_COMPACT` (kills the PreCompact gate),
+`CLAUDE_CODE_SUBAGENT_MODEL` (overrides per-node model choice),
+`CLAUDE_CODE_NO_MODEL_FALLBACK` (kills the availability chain AND Fable credit substitution).
