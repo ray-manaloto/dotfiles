@@ -10,9 +10,9 @@ evidence (`.claude/rules/probes-need-a-control-arm.md`).
 |---|---|---|
 | 0 | *(unplanned)* Passing `name` to the Agent tool changes **what kind of agent you get** | 🔴 **CONFIRMED — and it invalidates an assumption in `docs/agent-team.md`** |
 | 1 | A dynamic workflow works: `agent({schema})`, `pipeline()`, per-stage `model`, resume | 🟢 **CONFIRMED — all four, with corroboration** |
-| 2 | A frontmatter `Stop` hook can block a delegated agent from finishing | 🟡 **INCONCLUSIVE — the hook never fired, for the reason in claim 0** |
+| 2 | A frontmatter `Stop` hook can block a delegated agent from finishing | 🟢 **CONFIRMED on the subagent path — it fired, blocked, and forced extra work** |
 | 3 | `TeammateIdle` is reachable from the CLI, not TypeScript-SDK-only | 🟢 **REFUTED the doubt — the CLI ships it** |
-| 4 | `memory: project` persists a fact across spawns | 🟡 **INCONCLUSIVE — nothing was written, for the reason in claim 0** |
+| 4 | `memory: project` persists a fact across spawns | 🟠 **PARTLY REFUTED — it writes, but the next spawn does not read it** |
 | 5 | `permissionMode` / `hooks` / `mcpServers` are ignored for plugin-scoped subagents | 🟢 **CONFIRMED — already documented, no probe needed** |
 
 ---
@@ -63,47 +63,40 @@ make explicitly, not discover later.
 
 ---
 
-## Claim 2 — can a frontmatter `Stop` hook block?
+## Claim 2 — can a frontmatter `Stop` hook block? **YES, on the subagent path**
 
-**INCONCLUSIVE, and the probe was built to tell you that rather than guess.**
+The first attempt was inconclusive because the agent ran as a teammate (claim 0). Re-run
+**unnamed**, once the agent-type registry had picked the definition up:
 
-`prototype/stop_gate.py` logs to `/tmp/proto-stop-gate.log` on **every** invocation, before it
-decides anything. So an empty log distinguishes *"the hook ran and could not block"* from
-*"the hook never ran"*.
+| Signal | Result |
+|---|---|
+| `/tmp/proto-stop-gate.task-done-unnamed` | written — the agent did its original task |
+| hook log, **call 1** | fired, `stop_hook_active: false` → returned `{"decision":"block", …}` |
+| `/tmp/proto-stop-gate.witness` | **`PROTO-STOP-GATE-OBSERVED`** |
+| hook log, **call 2** | fired, `stop_hook_active: **true**` → allowed, agent finished |
+| agent `tool_uses` | **2** — the original `echo`, plus the forced witness write |
 
-| Signal | Result | Reading |
-|---|---|---|
-| `/tmp/proto-stop-gate.task-done` | **written** | the agent ran and did its work — it was alive |
-| `/tmp/proto-stop-gate.log` | **absent** | the hook **never fired** |
-| `/tmp/proto-stop-gate.witness` | absent | consistent with the hook never firing |
+**The witness file is the finding.** The agent was never asked to write it in its prompt; the
+only instruction to do so came from the hook's `reason`. So a `SubagentStop` hook can **force a
+delegated agent to do work before its turn ends**, which is exactly the mechanism the
+"deliver before you go idle" rule has always needed.
 
-Two candidate causes were checked and one was eliminated:
+Both arms observed in one run: the block path (call 1) and the allow path (call 2).
 
-- **Workspace trust** — `sub-agents.md` says an untrusted folder makes the harness *skip*
-  frontmatter hooks while still running the agent, which matches the symptom exactly.
-  **Eliminated:** this project's `hasTrustDialogAccepted` is `true`. Control arm — of 31
-  recorded projects, **17** are trusted and 14 are not, so the field discriminates.
-- **The agent ran as a teammate** (claim 0). Teammates honour only `tools` and `model` from a
-  definition. **This is the surviving explanation.**
+### The payload, which is what makes enforcement possible
 
-**Remaining step: re-run on the unnamed path — BLOCKED, twice, by the agent-type registry.**
+```
+agent_id · agent_transcript_path · agent_type · background_tasks · cwd ·
+hook_event_name · last_assistant_message · permission_mode · prompt_id ·
+session_crons · session_id · stop_hook_active · transcript_path
+```
 
-Both attempts to spawn `proto-stop-blocker` without a `name` returned
-`Agent type 'proto-stop-blocker' not found`, listing an inventory that omits both agent files
-created during this session.
+**`agent_transcript_path` is present**, so an enforcing hook can *inspect what the agent actually
+did* rather than merely nag. And `stop_hook_active` flips `false` → `true` between calls — the
+loop-guard signal, and the thing `cc-native` warns must be anchored on correctly.
 
-**Control arm.** All four files sit in the same `.claude/agents/` directory. The two that
-existed at session start — `dockerfile-reviewer`, `staleness-auditor` — **do** appear in that
-inventory; the two created mid-session do not. So the probe discriminates, and the registry is
-genuinely narrower than the directory.
-
-⚠️ **Confound, stated rather than hidden.** The two proto files live on a branch, and this
-session checked out other branches in between — so they *disappeared from and reappeared on
-disk*. That is a second explanation for their absence, and this run cannot separate it from
-"created after session start". **Do not cite a mechanism for this until a fresh session settles
-it**: create the agent file on the checked-out branch, restart, and spawn unnamed.
-
----
+⚠️ **Scope:** proven for a frontmatter hook on the **unnamed/subagent** path only. On the named
+teammate path it never fired at all.
 
 ## Claim 3 — is `TeammateIdle` CLI-reachable?
 
@@ -125,14 +118,49 @@ blocking payload. This removes the reason to doubt; it does not verify the behav
 
 ---
 
-## Claim 4 — does `memory: project` persist a fact?
+## Claim 4 — does `memory: project` persist a fact? **It writes. Nothing reads it.**
 
-**INCONCLUSIVE.** `.claude/agent-memory/` was never created, so nothing was written to inspect
-— and the recall arm was never worth running. The agent carrying `memory: project` was spawned
-with a `name`, i.e. as a teammate (claim 0), which is the most likely explanation. Re-run on the
-unnamed path before drawing any conclusion about the field itself.
+Two spawns, both unnamed, second one with no conversation history.
 
----
+| Arm | Result |
+|---|---|
+| **write** | ✅ created `.claude/agent-memory/proto-memory/witness_token_marlinspike.md` — **the documented path** for `memory: project` |
+| **recall** | ❌ returned **`NOTHING IN MEMORY`**, with **`tool_uses: 0`** |
+
+`tool_uses: 0` is the decisive number: the second spawn **never even read the file**. The store
+was not injected into its context, and it did not go looking.
+
+### The likely cause, with a control arm
+
+The probe's store contains **only the topic file**. It has **no `MEMORY.md`**.
+
+| Store | Has `MEMORY.md`? |
+|---|---|
+| `~/.claude/agent-memory/researcher/` (pre-existing, working) | **yes**, alongside 9 topic files |
+| `.claude/agent-memory/proto-memory/` (this probe) | **no** |
+
+Auto-memory injects `MEMORY.md`; topic files are read *on demand*. The agent wrote a topic file
+and never indexed it, so it wrote to a store nothing reads. That settles open item 9 of the
+`docs-subagents-deep` work queue in the unhelpful direction: **an unindexed topic file was
+inert** — neither injected nor spontaneously opened.
+
+**Design consequence:** `memory:` is **not** automatic durable learning. A role that records a
+lesson without maintaining its own `MEMORY.md` index has written to `/dev/null` with extra steps
+— the same failure this repo already documents for its own memory index.
+
+### ⚠️ And the teammate path is actively harmful
+
+The *named* run of the same agent did not write to `.claude/agent-memory/` at all. It wrote into
+the **shared session auto-memory** — `~/.claude/projects/<project>/memory/` — and **added an
+index line to the project's `MEMORY.md`**, the file loaded into every session.
+
+That file was deleted and the index line removed during this run (verified: 0 remaining
+references, `MEMORY.md` intact at 113 entries).
+
+**At nine roles this is a real hazard.** Nine teammates with `memory:` would all write into one
+shared store and index themselves into a `MEMORY.md` that is already near its read limit — while
+nine *subagents* would each get an isolated store, and none of them would be read unless the
+index is maintained.
 
 ## Claim 5 — are fields ignored for plugin-scoped subagents?
 
