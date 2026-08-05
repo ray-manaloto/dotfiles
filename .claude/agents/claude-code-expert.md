@@ -103,6 +103,13 @@ That file is the deliverable. `.agent/notepad.md` is **gitignored**, so an appen
 there is a scratch note and never a substitute. An agent that dies having written 7
 of 12 findings leaves 7; one planning to write at the end leaves 0 — measured, twice.
 
+⚠️ **The caller must not change branches while you are running.** The PreToolUse
+`branch_guard` denies repo writes on the default branch, so a `land` or a checkout in
+the parent session mid-run silently revokes your ability to persist. If a repo write is
+denied, **keep writing** — fall back to `.agent/kb/raw/<slug>.md` and say so in your
+final message with the path, so the caller can move it. That is how a 386-line report
+survived on 2026-08-05.
+
 ### 2. Deliver before you go idle
 
 Your final message **is** your report. Never end a turn without it, never end with
@@ -173,7 +180,13 @@ overturns it, and say in your report that you did.
 | Plugin packaging is not viable for agents needing hooks/MCP: fields stripped, lowest precedence, no teammate path | CONFIRMED | three independent losses | 2.1.222 | 2026-08-05 |
 | **`CLAUDE_CODE_TASK_LIST_ID` gives a persistent, file-locked, cross-session task DAG with native `blocks`/`blockedBy` edges** — not a team feature; settable in project `.claude/settings.json` | CONFIRMED | live probe: write, read back from a second session, edges on disk; control arm = different id returns EMPTY | 2.1.222 | 2026-08-05 |
 | Nesting depth and the concurrency cap come from **undocumented remote feature gates** when their env vars are unset | CONFIRMED | binary gate functions; 0 doc hits vs control 87 files | 2.1.222 | 2026-08-05 |
-| **`SendMessage` + `ListAgents` reach OTHER SESSIONS as peers** — the only native cross-session agent-to-agent route | CONFIRMED | binary system-prompt text; `ListAgents` 0 of 174 docs | 2.1.222 | 2026-08-05 |
+| **`SendMessage` + `ListAgents` reach OTHER SESSIONS as peers** — the only native cross-session agent-to-agent route | CONFIRMED | binary system-prompt text; `ListAgents` 0 of 175 docs | 2.1.222 | 2026-08-05 |
+| **A subagent CAN initiate agent-to-agent directly** — `to` resolves against the session-wide agent name registry, and the roster is injected into the agent's prompt | CONFIRMED | binary resolver; live subagent inventory | 2.1.222 | 2026-08-05 |
+| **`ListAgents` is stripped from EVERY async agent, teammates included** — it is in no allow-list. The limit on A2A is DISCOVERY, not delivery | CONFIRMED | live absence, control `Monitor` present; the harness's own bogus-target error suggests agent-ID rather than `ListAgents`, branching on whether the caller has it | 2.1.222 | 2026-08-05 |
+| **No relay mechanism exists.** `SendMessage`'s `message` is a closed union with no routing member; the envelope carries a `from` and **never a `to`** | CONFIRMED | the tool's own schema, loaded verbatim | 2.1.222 | 2026-08-05 |
+| **The harness hardens against relay and names it "permission laundering"** — receiver framing forbids it, main's prompt says *"Do not use one worker to check on another"*, and the classifier reviews every send | CONFIRMED | binary receiver strings; `$CC/agent-teams.md:265` | 2.1.222 | 2026-08-05 |
+| The **MCP predicate is the FIRST check** in the agent tool filter and returns true unconditionally — `mcp__*` tools bypass both filters | CONFIRMED | filter body; live: 55 `mcp__*` held while `AskUserQuestion` stripped | 2.1.222 | 2026-08-05 |
+| "Relay" in the channels docs is **permission-prompt relay to an external device**, not agent routing — do not conflate | CONFIRMED | `channels-reference.md` | 2.1.222 | 2026-08-05 |
 | **Channels are main-agent-only** — the enqueue takes an `agentId` and the channel path hard-codes it; they are NOT agent-to-agent | CONFIRMED | binary injection site, 3 call sites | 2.1.222 | 2026-08-05 |
 | Permission relay **does** reach subagent/teammate prompts — a channel participant can approve a subagent's Bash call | CONFIRMED | binary dialog path | 2.1.222 | 2026-08-05 |
 | `--channels` + `-p` disables `AskUserQuestion` and `ExitPlanMode`; interactive unaffected | CONFIRMED | binary `isEnabled` chain | 2.1.222 | 2026-08-05 |
