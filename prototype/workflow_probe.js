@@ -67,6 +67,17 @@ const routed = await parallel([
 
 const [haikuRoute, defaultRoute] = routed
 
+// ---- 4. RESUME PROBE (appended after run wf_c18255a9-2ea completed) ----
+// Everything above is byte-identical to the original run, so on resume it must
+// replay from cache. Only this stage is new and should run live. The control arm
+// is the contrast: if the six above re-run, caching does not work.
+phase('Resume')
+log('probe 4: this stage is NEW — the six above must replay from cache')
+const resumeProbe = await agent(
+  'Reply with structured output only. Set token to exactly RESUME-STAGE-RAN and n to exactly 99. Do not read any files.',
+  { schema: TOKEN_SCHEMA, label: 'resume-new-stage', phase: 'Resume' }
+)
+
 return {
   probe1_schema: {
     returned: schemaProbe,
@@ -80,6 +91,10 @@ return {
     nulls: fanned.filter((r) => r === null).length,
     tokens: fanned.map((r) => (r ? r.token : null)),
     indices: fanned.map((r) => (r ? r.n : null)),
+  },
+  probe4_resume: {
+    new_stage: resumeProbe,
+    ran_live: resumeProbe && resumeProbe.token === 'RESUME-STAGE-RAN',
   },
   probe3_routing: {
     haiku_route: haikuRoute,

@@ -86,8 +86,22 @@ Two candidate causes were checked and one was eliminated:
 - **The agent ran as a teammate** (claim 0). Teammates honour only `tools` and `model` from a
   definition. **This is the surviving explanation.**
 
-**Remaining step:** re-run on the unnamed path. Blocked today because the unnamed registry did
-not carry the mid-session agent file — likely needs a fresh session.
+**Remaining step: re-run on the unnamed path — BLOCKED, twice, by the agent-type registry.**
+
+Both attempts to spawn `proto-stop-blocker` without a `name` returned
+`Agent type 'proto-stop-blocker' not found`, listing an inventory that omits both agent files
+created during this session.
+
+**Control arm.** All four files sit in the same `.claude/agents/` directory. The two that
+existed at session start — `dockerfile-reviewer`, `staleness-auditor` — **do** appear in that
+inventory; the two created mid-session do not. So the probe discriminates, and the registry is
+genuinely narrower than the directory.
+
+⚠️ **Confound, stated rather than hidden.** The two proto files live on a branch, and this
+session checked out other branches in between — so they *disappeared from and reappeared on
+disk*. That is a second explanation for their absence, and this run cannot separate it from
+"created after session start". **Do not cite a mechanism for this until a fresh session settles
+it**: create the agent file on the checked-out branch, restart, and spawn unnamed.
 
 ---
 
@@ -192,10 +206,32 @@ This sharpens the resume constraint rather than contradicting it: many small age
 more *progress*, but each one costs a full context load, so "small" should mean *few, tightly
 scoped stages* — not a wide fan-out over trivia.
 
-### Not tested
+### 1f. Resume — **CONFIRMED, and the numbers are unambiguous**
 
-**Resume.** The run is resumable by `runId` and the runtime says unchanged `(prompt, opts)`
-pairs replay from cache, but no interrupted run was exercised.
+Method: append **one** new stage to the already-completed script and re-invoke with
+`resumeFromRunId: wf_c18255a9-2ea`. Everything above the new stage is byte-identical, so it must
+replay from cache. **The control arm is the contrast with the first run.**
+
+| | First run | Resume run |
+|---|---:|---:|
+| agents | 6 | **7** (6 cached + 1 new) |
+| **`tool_uses`** | 6 | **1** |
+| **subagent tokens** | **465,028** | **81,256** |
+| wall clock | 10,052 ms | **3,718 ms** |
+| errors | 0 | 0 |
+| agent transcript files on disk | 6 | **7** (exactly one added) |
+
+**`tool_uses: 1` is the decisive figure** — only one agent actually executed. The token count
+lands at ~81 k, i.e. almost exactly the ~78 k single-agent cost measured in 1e, so the other six
+cost essentially nothing. One new transcript file appeared, not six.
+
+The returned object still carries all four probes' results, so **cached results are real values,
+not placeholders**: `probe1`, `probe2` and `probe3` came back fully populated without re-running.
+
+⚠️ **What this does *not* test:** an **interrupted** run. This resumed a run that had completed
+cleanly. The documented behaviour for a genuine interruption — replay stops at the first agent
+that did not finish, and everything after it re-runs *even if it completed* — remains unverified,
+and it is the half that actually constrains role granularity.
 
 ## What to change in `docs/agent-team.md`
 
