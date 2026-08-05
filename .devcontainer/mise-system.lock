@@ -8,9 +8,9 @@ checksum = "sha256:1dd3fffd892081df9726d7eb7e0dea6198962ba775bd88842135a4ddb4deb
 url = "https://conda.anaconda.org/conda-forge/linux-64/attr-2.5.2-hb03c661_1.conda"
 checksum = "sha256:78c516af87437f52d883193cf167378f592ad445294c69f7c69f56059087c40d"
 
-[conda-packages.linux-x64."bzip2-1.0.8-hda65f42_9"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/bzip2-1.0.8-hda65f42_9.conda"
-checksum = "sha256:0b75d45f0bba3e95dc693336fa51f40ea28c980131fec438afb7ce6118ed05f6"
+[conda-packages.linux-x64."bzip2-1.0.8-hda65f42_10"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/bzip2-1.0.8-hda65f42_10.conda"
+checksum = "sha256:1a0d382c515ebf55f8ee1f38c8b81bc95af5c2acc42ad53b66bc5df932032f96"
 
 [conda-packages.linux-x64."c-ares-1.34.8-hb03c661_0"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/c-ares-1.34.8-hb03c661_0.conda"
@@ -172,9 +172,9 @@ checksum = "sha256:79721dd08aeb0ab9e773f1f9ef41cf4e6c17477e3d72319147619045bce05
 url = "https://conda.anaconda.org/conda-forge/linux-64/libstdcxx-ng-16.1.0-hdf11a46_1.conda"
 checksum = "sha256:2876ca4463d1b394eb969ce4a84d1620aa63fb8202a6397837d1e45ec76c1208"
 
-[conda-packages.linux-x64."libtasn1-4.21.0-hb03c661_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libtasn1-4.21.0-hb03c661_0.conda"
-checksum = "sha256:a3f0c33ef567eb2e3a22d7fea0717a294a5fea4964478aa06b467ce1c93bec38"
+[conda-packages.linux-x64."libtasn1-4.21.0-hb03c661_1"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libtasn1-4.21.0-hb03c661_1.conda"
+checksum = "sha256:566a9d39a9a89ee0ef7cb8ab36de0ab9f01b74039347cab727179da32fb44168"
 
 [conda-packages.linux-x64."libunistring-0.9.10-h7f98852_0"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libunistring-0.9.10-h7f98852_0.tar.bz2"
@@ -192,9 +192,9 @@ checksum = "sha256:9b1bdce27a7e31f7d241aeecff67a1f3101d52a2b1e33ccc2cdf2613072bf
 url = "https://conda.anaconda.org/conda-forge/linux-64/libuv-1.52.1-h280c20c_0.conda"
 checksum = "sha256:e28e4519223f78b3163599ca89c3f2d80bfb53e907e7fc74e806e60d1efa578b"
 
-[conda-packages.linux-x64."libxcrypt-4.4.36-hd590300_1"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libxcrypt-4.4.36-hd590300_1.conda"
-checksum = "sha256:6ae68e0b86423ef188196fff6207ed0c8195dd84273cb5623b85aa08033a410c"
+[conda-packages.linux-x64."libxcrypt-4.4.38-h280c20c_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libxcrypt-4.4.38-h280c20c_0.conda"
+checksum = "sha256:f7e9292dd219a6435bbb1223da9586c3e70d66d169c5a92f08db3f2127df04e9"
 
 [conda-packages.linux-x64."libxml2-16-2.15.3-hca6bf5a_0"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libxml2-16-2.15.3-hca6bf5a_0.conda"
@@ -410,7 +410,7 @@ conda_deps = [
     "libexpat-2.8.1-hecca717_1",
     "libzlib-1.3.2-h25fd6f3_3",
     "rhash-1.4.6-hb9d3cd8_1",
-    "bzip2-1.0.8-hda65f42_9",
+    "bzip2-1.0.8-hda65f42_10",
     "libcurl-8.21.0-heca4667_4",
     "libpsl-0.23.0-hf670292_0",
     "libnghttp2-1.68.1-h877daf1_0",
@@ -459,7 +459,7 @@ conda_deps = [
     "libffi-3.5.2-h3435931_0",
     "libmpdec-4.0.0-hb03c661_1",
     "libzlib-1.3.2-h25fd6f3_3",
-    "bzip2-1.0.8-hda65f42_9",
+    "bzip2-1.0.8-hda65f42_10",
     "ld_impl_linux-64-2.46.1-default_hbd61a6d_102",
     "libsqlite-3.53.4-hf4e2dac_0",
     "openssl-3.6.3-h35e630c_0",
@@ -527,7 +527,7 @@ conda_deps = [
     "libexpat-2.8.1-hecca717_1",
     "libffi-3.5.2-h3435931_0",
     "libmpdec-4.0.0-hb03c661_1",
-    "bzip2-1.0.8-hda65f42_9",
+    "bzip2-1.0.8-hda65f42_10",
     "ld_impl_linux-64-2.46.1-default_hbd61a6d_102",
     "libsqlite-3.53.4-hf4e2dac_0",
     "openssl-3.6.3-h35e630c_0",
@@ -568,8 +568,8 @@ conda_deps = [
     "_openmp_mutex-4.5-20_gnu",
     "libgomp-16.1.0-he0feb66_1",
     "ca-certificates-2026.7.22-hbd8a1cb_0",
-    "bzip2-1.0.8-hda65f42_9",
-    "libxcrypt-4.4.36-hd590300_1",
+    "bzip2-1.0.8-hda65f42_10",
+    "libxcrypt-4.4.38-h280c20c_0",
     "c-ares-1.34.8-hb03c661_0",
     "libev-4.33-hd590300_2",
     "icu-78.3-h54a6638_2",
@@ -616,7 +616,7 @@ conda_deps = [
     "perl-5.32.1-7_hd590300_perl5",
     "libgcc-ng-16.1.0-h69a702a_1",
     "libgcc-16.1.0-ha9f2e26_1",
-    "libxcrypt-4.4.36-hd590300_1",
+    "libxcrypt-4.4.38-h280c20c_0",
     "_openmp_mutex-4.5-20_gnu",
     "libgomp-16.1.0-he0feb66_1",
 ]
@@ -647,7 +647,7 @@ conda_deps = [
     "ncurses-6.6-hdb14827_0",
     "libuuid-2.42.2-h5347b49_0",
     "zstd-1.5.7-hb78ec9c_6",
-    "bzip2-1.0.8-hda65f42_9",
+    "bzip2-1.0.8-hda65f42_10",
     "libarchive-3.8.9-gpl_hc2c16d8_100",
     "libcurl-8.21.0-heca4667_4",
     "libpsl-0.23.0-hf670292_0",
@@ -655,7 +655,6 @@ conda_deps = [
     "libmicrohttpd-1.0.9-hc2fc477_0",
     "gnutls-3.8.13-h18acefa_0",
     "nettle-3.10.1-h4a9d5aa_0",
-    "libtasn1-4.21.0-hb03c661_0",
     "libsqlite-3.53.4-hf4e2dac_0",
     "attr-2.5.2-hb03c661_1",
     "libattr-2.5.2-hb03c661_1",
@@ -683,6 +682,7 @@ conda_deps = [
     "libgcc-ng-16.1.0-h69a702a_1",
     "gmp-6.3.0-hac33072_2",
     "libstdcxx-ng-16.1.0-hdf11a46_1",
+    "libtasn1-4.21.0-hb03c661_1",
     "p11-kit-0.26.4-h3435931_0",
     "libidn2-2.3.8-hfac485b_1",
     "libunistring-0.9.10-h7f98852_0",
@@ -696,8 +696,8 @@ backend = "conda:make"
 channel = "conda-forge"
 
 [tools."conda:make"."platforms.linux-x64"]
-checksum = "sha256:d652c7bd4d3b6f82b0f6d063b0d8df6f54cc47531092d7ff008e780f3261bdda"
-url = "https://conda.anaconda.org/conda-forge/linux-64/make-4.4.1-hb9d3cd8_2.conda"
+checksum = "sha256:4c65d2769847778a6d84db6984ac81bcec6f8958d349f1fe57ae040ccc56a801"
+url = "https://conda.anaconda.org/conda-forge/linux-64/make-4.4.1-hb03c661_3.conda"
 conda_deps = [
     "libgcc-16.1.0-ha9f2e26_1",
     "_openmp_mutex-4.5-20_gnu",
@@ -930,8 +930,8 @@ version = "3.14.6"
 backend = "core:python"
 
 [tools.python."platforms.linux-x64"]
-checksum = "sha256:d6254462d5fe066810a472d286861f6a18f66400008bfa9688e202a5672e88cb"
-url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260728/cpython-3.14.6+20260728-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
+checksum = "sha256:ba960817e542642021135db330d875f410f4e14c64a62e2ae5faf3697ada08b2"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260804/cpython-3.14.6+20260804-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
 
 [[tools.ruby]]
 version = "4.0.5"
