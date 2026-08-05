@@ -4,6 +4,49 @@
 reusable agent team. Iterate on it; file bugs against it; do not treat any section as
 settled once reality moves.
 
+---
+
+> ## ⚠️ 2026-08-05 — a six-scope re-review overturned parts of this document
+>
+> Everything below was researched against the **offline docs alone**. That corpus is
+> demonstrably incomplete — **368 of 614 env vars (60%) are undocumented**, 43 CLI flags
+> are hidden from `--help`, and the gap **concentrates on exactly the multi-agent
+> machinery this document is about**. The trigger: this doc's §8 called
+> `CLAUDE_CODE_BRIEF` inert on a 0-hit docs grep; `--brief` is real and enables
+> `SendUserMessage`.
+>
+> Method going forward is the **three-corpus rule** in `.claude/agents/claude-code-expert.md`
+> — binary, then `claude --help`, then docs, lower wins. Evidence:
+> `docs/research/kb/reports/agents/claude-code-expert-*.md` (6 reports, 3,262 lines).
+>
+> **Claims below that are now REFUTED — do not build on them:**
+>
+> | § | Claim as written | Corrected |
+> |---|---|---|
+> | 2, 3 | subagents can carry the design | **Cross-session durability does not exist for subagents** — ids are namespaced under the session; the graph dies with its parent conversation |
+> | 2 | teams are rejected because a team cannot be versioned | True but the weakest reason. **Teams *lose* capabilities subagents have** — no worktree isolation, frontmatter hooks do not fire, per-role `skills`/`mcpServers` dropped, no background, no nesting — at **~7× cost** |
+> | 4 | "sixteen frontmatter fields" | **19.** The binary's schema adds `observer`, `observerMessage`, `observeSubagents`, all undocumented. `isolation` also accepts `remote` |
+> | 4 | `CLAUDE_CODE_TASK_LIST_ID` is a footnote | **It is the substrate.** A persistent, file-locked, cross-session task DAG with native `blocks`/`blockedBy` edges — not a team feature, and settable in project settings. Probed live, control-armed |
+> | 8 | four user-scope keys "assume inert" | **All live.** Each has a schema, description, multi-scope reads and telemetry. *Existence needs a count; liveness needs a call site* |
+> | 8 | `permissions.defaultMode` is user-scope-only | Honoured from **policy, user AND flag** settings |
+> | 8 | `teammateMode` conflict is a "silent override" | Correct last-wins behaviour; no scope restriction on that key |
+> | 9 | channels might relay to a teammate — "not asserted" | **Relay does reach subagent and teammate prompts.** A channel participant can approve a *subagent's* `Bash` call. Channels remain **main-agent-only** for messages and cannot carry agent-to-agent traffic |
+> | 10 item 7 | try native `memory:` | Unchanged, but note a teammate honours **only** body + `tools` + `model` |
+>
+> **New facts with no home in the text below:** `SendMessage` + **`ListAgents`** reach
+> *other sessions* as peers — the only native cross-session agent-to-agent route, and
+> undocumented. **Nothing gives a subagent a way to ASK** (`AskUserQuestion` has no
+> escape; `SendUserMessage` is one-way and absent from a subagent's tool list), so §10
+> item 1 stands. **Plugin agents cannot be teammates**, refuting `agent-teams.md` itself.
+> **`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS="0"` ENABLES teams** (bare truthiness), so a
+> project cannot turn them off. Nesting depth and the concurrency cap come from
+> **undocumented remote feature gates** when unset — pin them.
+>
+> **Three numbers this session reported were wrong; every qualitative finding held.**
+> The habit that failed: reporting a count without its counting method.
+
+---
+
 Research run 2026-08-04c by seven parallel agents. Their verbatim reports are the
 evidence base and are kept alongside this file:
 
