@@ -66,6 +66,13 @@
       ],
       "extractVersion": "gcc-latest_(?<version>[0-9.]+-\\d+git[0-9a-f]+)\\.deb$",
       "minimumReleaseAgeBehaviour": "timestamp-optional"
+    },
+    {
+      "description": "pixi: strip the upstream v prefix. prefix-dev/pixi tags releases vX.Y.Z, but mise's registry serves unprefixed versions only (zero v-prefixed pixi versions in `mise ls-remote pixi`, measured 2026-08-05) — without this rule Renovate writes pixi = \"v0.76.1\" into shared.toml, mise can never resolve it, and the all-deps PR goes red (PR #455, two consecutive failures).",
+      "matchDepNames": [
+        "pixi"
+      ],
+      "extractVersion": "^v?(?<version>.+)$"
     }
   ],
   "ignoreDeps": [

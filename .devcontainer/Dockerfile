@@ -230,6 +230,11 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ARG GRAPHVIZ_VERSION=15.1.0
 ARG GRAPHVIZ_DEB=ubuntu_26.04_graphviz-15.1.0-cmake.deb
 ARG GRAPHVIZ_DEB_SHA256=f3294aeea3618044022874823344a1154ee7272857e82f248610fcaa7d2dc4c5
+# Re-assert the stage shell: hadolint 2.15.x forgets a stage's SHELL after any
+# mid-stage ARG (minimal repro: FROM + SHELL bash + ARG X=y + RUN with a bashism
+# flags SC3011; drop the ARG and it is clean) and then wrongly lints later RUNs
+# as POSIX sh. Semantically a no-op — the stage shell is already bash (line 83).
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # Pure && chain (any failing step aborts the build loudly); explicit /tmp paths
 # avoid a `cd` (hadolint DL3003). SVG/PNG/neato renders to /dev/null exercise the
 # core+gd plugins and dot+neato layout engines; the trailing grep asserts v15.
@@ -253,7 +258,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     printf 'digraph{a->b}' | dot -Tpng -o /dev/null && \
     printf 'graph{a--b--c--a}' | neato -Tsvg -o /dev/null && \
     dot_version="$(dot -V 2>&1)" && \
-    grep -q 'version 15' <<<"$dot_version"
+    case "$dot_version" in *"version 15"*) ;; *) echo "ERROR: unexpected dot version: $dot_version" >&2; exit 1;; esac
 
 # LLVM-22 C++ toolchain build-time smoke (#222 PR-C).
 # The apt llvm/clang/lld/lldb/clang-tools packages (declared in mise-system.toml
@@ -269,7 +274,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # present (capability parity with the removed conda tools). TSan is not RUN here
 # (build-as-root ASLR layout; the tier-3 smoke covers it on real amd64).
 RUN clangxx_version="$(/usr/lib/llvm-22/bin/clang++ --version)" && \
-    grep -q 'version 22' <<<"$clangxx_version" && \
+    case "$clangxx_version" in *"version 22"*) ;; *) echo "ERROR: unexpected clang++ version: $clangxx_version" >&2; exit 1;; esac && \
     printf '#include <cstdio>\nint main(){printf("ok\\n");return 0;}\n' > /tmp/llvmcheck.cpp && \
     /usr/lib/llvm-22/bin/clang++ -fsanitize=address,undefined /tmp/llvmcheck.cpp -o /tmp/llvmcheck && \
     llvmcheck_out="$(/tmp/llvmcheck)" && \

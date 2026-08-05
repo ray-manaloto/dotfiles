@@ -5477,6 +5477,7 @@ checksum = "sha256:62586e56223b3f8c5e8eaab42b6771de89e5762915ba075f9ce49c565404c
 url = "https://github.com/agent-sh/agnix/releases/download/v0.46.0/agnix-aarch64-apple-darwin.tar.gz"
 url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/502645087"
 provenance = "github-attestations"
+provenance_verified = true
 
 [tools."github:agent-sh/agnix"."platforms.windows-x64"]
 checksum = "sha256:acec62414861c5098db2350f3aa0e23687494bad47357f7cfb42e401200b7ef4"
