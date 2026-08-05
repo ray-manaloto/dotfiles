@@ -1,6 +1,8 @@
 # PROTOTYPE RESULTS — agent-team mechanism bets
 
 Run 2026-08-04c on **Claude Code 2.1.221**, macOS, in `ray-manaloto/dotfiles`.
+Claim 6 was added 2026-08-04d on **2.1.222** — its changelog touches nothing in the workflow
+resume path (checked), but the version differs from claims 0–5 and is recorded rather than assumed.
 Branch `prototype/agent-team-mechanisms` (throwaway — the primary source for these claims).
 
 Every claim reports **both arms**. A probe that has only ever produced one answer is not
@@ -14,6 +16,7 @@ evidence (`.claude/rules/probes-need-a-control-arm.md`).
 | 3 | `TeammateIdle` is reachable from the CLI, not TypeScript-SDK-only | 🟢 **REFUTED the doubt — the CLI ships it** |
 | 4 | `memory: project` persists a fact across spawns | 🟠 **PARTLY REFUTED — it writes, but the next spawn does not read it** |
 | 5 | `permissionMode` / `hooks` / `mcpServers` are ignored for plugin-scoped subagents | 🟢 **CONFIRMED — already documented, no probe needed** |
+| 6 | Resuming an **interrupted** run: replay stops at the first unfinished agent, and everything dispatched after it re-runs *even if it completed* | 🟢 **CONFIRMED — measured, then confirmed at the source** |
 
 ---
 
@@ -256,10 +259,118 @@ cost essentially nothing. One new transcript file appeared, not six.
 The returned object still carries all four probes' results, so **cached results are real values,
 not placeholders**: `probe1`, `probe2` and `probe3` came back fully populated without re-running.
 
-⚠️ **What this does *not* test:** an **interrupted** run. This resumed a run that had completed
-cleanly. The documented behaviour for a genuine interruption — replay stops at the first agent
-that did not finish, and everything after it re-runs *even if it completed* — remains unverified,
-and it is the half that actually constrains role granularity.
+⚠️ **What this does *not* test:** an **interrupted** run — this resumed a run that had completed
+cleanly. That half is **claim 6** below, and it is the half that constrains role granularity.
+
+---
+
+## Claim 6 — resuming an INTERRUPTED run
+
+**CONFIRMED**, by two independent routes: a live interrupt, then the harness's own replay code.
+Run `wf_99fff833-07e`, script `prototype/interrupt_resume_probe.js`, unchanged between the two
+invocations (any edit would have invalidated the cache and destroyed the measurement).
+
+### The fixture, and why it can produce every answer
+
+Four agents, each stamping `START` before its work and `END` after into its own witness log, so
+**execution count is counted per agent** rather than inferred from aggregate tokens:
+
+| agent | dispatch order | designed state at the interrupt |
+|---|---|---|
+| `before` | 1st | finished |
+| `slow` | 2nd (first thunk of a `parallel()`) | **in flight** — a 240 s `python3` sleep |
+| `fast_b` | 3rd (second thunk of the same `parallel()`) | **finished**, but dispatched *after* `slow` |
+| `after` | 4th, past the barrier | never started |
+
+`fast_b` is the discriminating arm and `before` is the control arm. If `before` had re-run too,
+"everything re-ran" would be indistinguishable from "an interrupted run caches nothing", and
+`fast_b`'s reading would mean nothing.
+
+The fixture was **verified before the interrupt, not after** — the poll loop stopped only once
+`before` and `fast_b` had `END` lines and `slow` had a `START` with no `END`, and the `slow`
+agent's `python3 -c 'import time; time.sleep(240)'` child was confirmed alive in `ps`.
+
+### What the interrupt itself did
+
+`TaskStop` on the workflow task:
+
+| Signal | Result |
+|---|---|
+| `slow`'s `python3` child process | **gone** — the abort propagates into the agent's shell child |
+| `journal.jsonl` before vs after the stop | **byte-identical**, 5 lines — the stop writes nothing |
+| orphan record | `slow` left a `started` row with **no matching `result`** |
+
+### The measurement
+
+| agent | run 1 | resume | executions total |
+|---|---|---|---:|
+| `before` | START+END | **nothing** — no new agent, no new witness line, no new transcript | **1** ✅ cached |
+| `slow` | START only (killed mid-body) | START+END, **new agentId** | 2 |
+| `fast_b` | START+END, **`result` in the journal** | START+END, **new agentId** | **2** 🔴 re-ran anyway |
+| `after` | — | START+END | 1 |
+
+Corroborating counts, all from the harness rather than from the agents:
+
+- **transcript files 3 → 6**: exactly **three** new ones, i.e. one per live agent and none for `before`.
+- **`tool_uses: 10`** on the resume, and the per-transcript counts sum to exactly that:
+  `slow` 4 + `fast_b` 3 + `after` 3 = 10, **`before` contributing 0**. A cached agent does not
+  merely return early — it never runs a tool.
+- **journal 5 → 11 lines**, and key `v2:72448e…` (`fast_b`) now carries **two `result` rows**.
+- `subagent_tokens` **253,446** for the 3 live agents ≈ 84 k each, consistent with the ~78 k/agent
+  of 1e. **The wasted work is `fast_b`'s ~84 k — an agent that had already delivered its result.**
+
+### The source, which settles an alternative my fixture could not
+
+My fixture cannot separate *positional* ("everything after the first unfinished call") from
+*group* ("the whole `parallel()` barrier re-runs if any member is unfinished") — both predict
+`fast_b` re-running. The installed binary settles it. In `2.1.222` at offset `249187093`:
+
+```js
+if(a){ he = kgp(ye, ee, b), b = he;
+       let St = T ? void 0 : l?.results.get(he);
+       if(St !== void 0) return /* …progress: cached:true… */ , m(St.result);
+       T = !0;
+       let $e = l?.started.get(he);
+       if($e && $e.length > 0) N("tengu_workflow_journal_started_hit_respawn", {attempts: $e.length}) }
+```
+
+Three things fall straight out of it:
+
+1. **`T` is a sticky first-miss flag.** `T ? void 0 : results.get(he)` — once one lookup misses,
+   `T = !0` and **every later call skips the cache lookup entirely**, whatever the journal holds.
+   That is positional, not group-scoped. `parallel()` is irrelevant except that it fixes the
+   dispatch order.
+2. **The key is a rolling chain hash**: `kgp(prompt, opts, b)` with `b` the *previous* key, then
+   `b = he`. So a key encodes the whole preceding call sequence — which is why `fast_b`'s re-run
+   reused the *same* key under a *new* agentId, and why editing any earlier call invalidates
+   everything downstream.
+3. `Inb(opts)` hashes only `schema`, `model`, `effort`, `isolation`, `agentType` — **`label` and
+   `phase` do not affect the key**, so renaming a stage for readability is cache-safe.
+
+There is even a telemetry event for exactly this case —
+`tengu_workflow_journal_started_hit_respawn`, counting the re-spawn of a key that had already
+started. Control arm for that grep: a known event token returns 2, an invented one returns 0.
+
+### Design consequence — this is the granularity argument, and it is sharper than "many small stages"
+
+The re-run cost of an interrupt is **everything dispatched after the earliest agent that has not
+finished**, at a full ~78–85 k context load each. Two rules follow that were not obvious before:
+
+- **A wide `parallel()` is the worst shape to be interrupted in.** All thunks dispatch at once, so
+  a single slow member early in the array discards every completed result after it. A 10-agent
+  fan-out interrupted while agent 2 is still running throws away 8 finished agents ≈ 650 k tokens.
+- **Order inside a `parallel()` is load-bearing for resume economics** — put the likely-slowest
+  work **last** in the array and the fast members ahead of it survive an interrupt. This follows
+  from the sticky-flag mechanism above; it is *inferred from the source*, not separately measured.
+
+It also tempers 1e's "few, tightly scoped stages": small stages preserve more progress on an
+interrupt, but each still pays a full context load, so the win is only real where a stage boundary
+sits **before** the long pole.
+
+⚠️ **Scope.** `TaskStop` is a *controlled* abort. A hard crash, an OOM, or a machine losing power
+mid-append could leave a torn journal line; `LocalFileJournal.load()` catches the `JSON.parse`
+failure per line, logs it and continues, so a torn tail should degrade to an earlier cache miss
+rather than a crash — read from the source, not measured.
 
 ## What to change in `docs/agent-team.md`
 
@@ -271,6 +382,10 @@ and it is the half that actually constrains role granularity.
    which apply inside subagents regardless.
 3. **§10 item 8** (probe plugin-scoped field ignoring) can be closed — it is documented.
 4. **The `TeammateIdle` contradiction can be closed** as far as availability goes.
+5. **Role granularity now has a measured constraint** (claim 6): an interrupt discards every agent
+   dispatched after the earliest unfinished one, so the orchestration script should keep
+   `parallel()` groups narrow, order the long pole last within a group, and put stage boundaries
+   before slow work rather than after it.
 
 ## GitHub repos touched
 
