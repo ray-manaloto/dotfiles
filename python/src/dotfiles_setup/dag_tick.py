@@ -159,11 +159,18 @@ ESCALATED_STATE = "blocked"
 # ⚠️ **Nothing in this process emits it — #602 owns the projection.** No
 # in-tree component writes the label or the append-only comment (#579 WEDGED,
 # #580 Codex verdict and #590 stall probe each cover something else), so an
-# escalated node is visible in this tick's log ONLY until #602 lands. The
-# spelling is settled (`575.md`: *"#573's receipt `dag:needs-human` — the
-# receipt is later and governs"*); what #575 deferred is the OWNER and the
-# comment format, NOT the projection itself — do not read the deferral as
-# wider than it is.
+# escalated node is visible in this tick's log ONLY until #602 lands.
+#
+# Read the status in three parts, because two rounds of #601 review got it
+# wrong in opposite directions:
+#   - **Ownership is SETTLED, not deferred** — `575.md` R1 assigns projection
+#     to the SCHEDULER, one direction only. That is why this tick must not
+#     emit the label itself: it would be a second writer on the tracker.
+#   - **This label's spelling is SETTLED** — `575.md`: *"#573's receipt
+#     `dag:needs-human` — the receipt is later and governs"*.
+#   - **Only the IMPLEMENTATION is pending** (#602), alongside what `575.md`
+#     genuinely lists as deferred: the general `dag:*` spellings, the
+#     projection's comment format, and each stage's evidence contract.
 NEEDS_HUMAN_LABEL = "dag:needs-human"
 
 # A tempo:"active" state.json this old with no update is WEDGED — classify

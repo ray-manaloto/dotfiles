@@ -536,6 +536,52 @@ def test_plan_needs_human_reason_names_the_label_and_the_no_respawn_rule() -> No
     assert "never respawned BY THIS TICK" in actions[0].reason
 
 
+def _reason_is_honest(reason: str) -> bool:
+    """Does a NEEDS_HUMAN reason claim only what the module actually does?
+
+    Extracted so the check itself can be ARMED — see
+    :data:`_DISHONEST_REASON` and the test below. A predicate only ever
+    applied to the real string is a probe with one face: it cannot show it
+    would reject a wrong one.
+
+    Both clauses are matched CONTIGUOUSLY, and that is the whole point.
+    The first version asserted the loose fragment `"is NOT done here"`,
+    unbound to what was not done; the #601 v2 adversarial review broke it
+    with :data:`_DISHONEST_REASON`, which satisfies the fragment via an
+    unrelated clause while asserting the projection DOES happen. Binding
+    the fragment to its subject is what closes that.
+
+    The label must appear exactly once, so a correct clause cannot be
+    paired with a contradicting second mention.
+    """
+    scoped_respawn = "never respawned BY THIS TICK"
+    scoped_projection = (
+        f"tracker projection to {dag_tick.NEEDS_HUMAN_LABEL} is NOT done here"
+    )
+    forbidden = (
+        "never auto-respawned",
+        f"project + label {dag_tick.NEEDS_HUMAN_LABEL}",
+    )
+    return (
+        scoped_respawn in reason
+        and scoped_projection in reason
+        and reason.count(dag_tick.NEEDS_HUMAN_LABEL) == 1
+        and not any(phrase in reason for phrase in forbidden)
+    )
+
+
+# The counterexample the #601 v2 adversarial review constructed against the
+# first version of this check, kept VERBATIM. It contains the scoped respawn
+# clause and the bare fragment `is NOT done here` (attached to "cleanup"),
+# while asserting the projection DOES happen — so every assertion the first
+# version made returned true on a string that overclaims exactly the way the
+# review's v1 HIGH finding did.
+_DISHONEST_REASON = (
+    "never respawned BY THIS TICK; tracker projection to dag:needs-human "
+    "IS done here; cleanup is NOT done here"
+)
+
+
 def test_plan_needs_human_reason_claims_no_action_this_module_skips() -> None:
     """#601 adversarial review, both HIGH findings — pinned as regressions.
 
@@ -547,19 +593,22 @@ def test_plan_needs_human_reason_claims_no_action_this_module_skips() -> None:
 
     A log line that names an action the code skips is how an operator
     concludes an escalation reached the tracker when it reached a launchd
-    log. Both qualifiers are pinned so a later tidy-up cannot quietly drop
-    them, and the bare overclaims are pinned ABSENT — the assertion that
-    actually fails if the old wording returns.
+    log. Both arms run here: the real string must pass, and the review's
+    own counterexample must FAIL — without the second arm this test could
+    only ever have agreed with whatever the module emits.
     """
     node = dag_tick.ClassifiedNode(
         "abc123", dag_tick.NodeClass.NEEDS_HUMAN, pid_alive=False, state_age_s=None
     )
     reason = dag_tick.plan([node], max_age_s=86400.0)[0].reason
-    assert "BY THIS TICK" in reason
-    assert "is NOT done here" in reason
-    # The scope-free claims the review rejected must not come back. Control
-    # arm for these two: the assertions above prove the phrases they scope
-    # ARE present, so these are not vacuously true of an empty string.
+    assert _reason_is_honest(reason) is True
+    assert _reason_is_honest(_DISHONEST_REASON) is False
+    # And the specific ways a reason can go dishonest, each pinned alone so
+    # a failure names which clause regressed rather than just "not honest".
+    assert "never respawned BY THIS TICK" in reason
+    assert (
+        f"tracker projection to {dag_tick.NEEDS_HUMAN_LABEL} is NOT done here" in reason
+    )
     assert "never auto-respawned" not in reason
     assert f"project + label {dag_tick.NEEDS_HUMAN_LABEL}" not in reason
 
