@@ -54,7 +54,7 @@ implementation details. Code can change entirely; the test shouldn't. The tell
 for an implementation-coupled test is that it breaks under a refactor while
 behavior hasn't changed.
 
-Two anti-patterns have already cost this repo real bugs. Both are **silent
+Three anti-patterns have already cost this repo real bugs. All are **silent
 false negatives**: they surface as a green suite, never as a failure, so only
 a deliberate probe finds them.
 
@@ -68,6 +68,22 @@ a deliberate probe finds them.
   wrong hash, tier-3 on a wrong ref, and every `_inert_masked` case is paired
   with a recall pin. A 2026-07-15 hook probe "passed" while its control proved
   the hook had never fired at all.
+- **Both arms, one axis** — you pinned the true and the false branch of the
+  condition you changed, and stopped. That is not coverage: enumerate every
+  axis the condition *interacts with*, which is derivable with no judgement —
+  **the axes are the union of the function's own parameters and every subject
+  field read by any predicate it calls** (for `classify()`, that is its
+  parameters plus every `Node` field its predicates read). When the table gains
+  a cell, add the axis; **never edit an expected value to make a test pass**,
+  which converts an independent expectation into a transcription of behaviour.
+  ⚠️ The mutation result that reads as proof is this shape's tell:
+  **"deleting the fix breaks ONLY the arm you just wrote" is the SIGNATURE OF
+  THE FAILURE, not evidence of quality** — it means test space and fix space
+  are the same size, which is exactly the condition under which an unenumerated
+  neighbouring cell exists. All three mutation-verified fixes in #601's review
+  loop directly caused the NEXT round's HIGH finding, and the phrase went into
+  three commit bodies as a boast
+  (`docs/research/kb/reports/session-20260806-review-loop-reflection.md`).
 
 ## Mocking
 
