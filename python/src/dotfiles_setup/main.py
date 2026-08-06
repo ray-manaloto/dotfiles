@@ -20,6 +20,7 @@ from dotfiles_setup.audit import DevEnvironmentAuditor, ToolManager
 from dotfiles_setup.autofix import autofix_apply_main
 from dotfiles_setup.bash_budget import bash_budget_main
 from dotfiles_setup.bootstrap_packages import gap_report_failures
+from dotfiles_setup.classifier_tables import classifier_axes_main
 from dotfiles_setup.command_audit import DEFAULT_SESSION_LIMIT, command_audit_main
 from dotfiles_setup.config import DotfilesConfig
 from dotfiles_setup.container import verify_latest_main
@@ -200,6 +201,14 @@ def _add_honesty_subcommands(subparsers: _SubParsers) -> None:
         help="Enforce zero-bash-logic: every scripts/*.sh + "
         ".devcontainer/scripts/*.sh must be allowlisted and within its "
         "per-file line budget (new/grown scripts fail — move logic to python/)",
+    )
+    subparsers.add_parser(
+        "classifier-axes",
+        help="Enforce classifier axis enumeration: every registered "
+        "classifier's declared axes must equal the set DERIVED from its own "
+        "code (its params + every subject field its predicates read). #601 "
+        "lost four review rounds to an axis a sibling predicate already "
+        "consumed but the author's enumeration omitted",
     )
     subparsers.add_parser(
         "lock-check",
@@ -1427,6 +1436,7 @@ def _build_command_handlers(
             apt_pins_main(project_root, json_output=args.json)
         ),
         "bash-budget": lambda: sys.exit(bash_budget_main(project_root)),
+        "classifier-axes": lambda: sys.exit(classifier_axes_main(project_root)),
         "dag-tick": lambda: sys.exit(run_tick(args)),
         "doctor": lambda: sys.exit(
             doctor_main(

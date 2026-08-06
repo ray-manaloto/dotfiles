@@ -20,6 +20,7 @@ writes.
 from __future__ import annotations
 
 import argparse
+import itertools
 import json
 import os
 import sys
@@ -30,7 +31,7 @@ from typing import TYPE_CHECKING
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 import pytest
-from dotfiles_setup import dag_tick
+from dotfiles_setup import classifier_tables, dag_tick
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -592,6 +593,35 @@ _OTHER = "killed"  # non-terminal, non-escalated — the harness's other state
 _IDLE = "idle"
 _ACTIVE = "active"
 
+# The table's axes, IN COLUMN ORDER — the single place they are written down.
+# `test_classify_truth_table_axes_match_the_registry` binds these names to
+# `classifier_tables.REGISTRY`, which DERIVES the real axis set from
+# `classify()` itself. That coupling is the #601 close-out's other half: a new
+# axis appearing in the code fails the gate, the gate forces it into the
+# registry, and the registry forces it into this dict — where it either gets a
+# column (and the exhaustiveness check below demands its rows) or an explicit
+# entry in `_PINNED_AXES`. Restating the axes locally, as this test did until
+# the v7 finding, lets a real axis be absent from BOTH the code's enumeration
+# and the table's, which is exactly how `tempo` went missing.
+#
+# `needs` is crossed as a BOOLEAN (payload present / absent) rather than as the
+# payload string: `is_needs_human` only ever asks `needs is not None`, and
+# `normalize_needs` has its own dedicated tests for the string shapes.
+_AXIS_VALUES: dict[str, tuple[object, ...]] = {
+    "state": (_TERMINAL, "blocked", _OTHER, None),
+    "needs": (False, True),
+    "queued_prompt": (False, True),
+    "pid_alive": (False, True),
+    "tempo": (_IDLE, _ACTIVE),
+}
+
+# Axes the code reads that this table deliberately holds CONSTANT. Each must
+# also be pinned in `classifier_tables.REGISTRY` with the same justification —
+# and the gate independently refuses a pin on any axis that can decide a class
+# the table does not declare out of scope, so neither of these can quietly
+# grow the reach `tempo` turned out to have.
+_PINNED_AXES: frozenset[str] = frozenset({"state_age_s", "stall_after_s"})
+
 _CLASSIFY_TABLE: list[tuple[str | None, bool, bool, bool, str, dag_tick.NodeClass]] = [
     # =====================================================================
     # tempo="idle" — the settled case
@@ -737,22 +767,14 @@ def test_classify_complete_truth_table(
 def test_classify_truth_table_is_exhaustive() -> None:
     """The table must COVER the cross product, not merely sample it.
 
-    Computed from the axis lists rather than hardcoded, so adding an axis
+    Computed from `_AXIS_VALUES` rather than hardcoded, so adding an axis
     value fails here instead of silently leaving cells unenumerated — which
-    is how rounds 5, 6 and 7 each found a live defect.
+    is how rounds 5, 6 and 7 each found a live defect. `_AXIS_VALUES` is in
+    turn bound to the derived registry by the test below, so adding an
+    AXIS (not merely a value) fails too.
     """
-    states = [_TERMINAL, "blocked", _OTHER, None]
-    bools = [False, True]
-    tempos = [_IDLE, _ACTIVE]
-    expected_cells = {
-        (s, n, q, a, t)
-        for s in states
-        for n in bools
-        for q in bools
-        for a in bools
-        for t in tempos
-    }
-    covered = {(row[0], row[1], row[2], row[3], row[4]) for row in _CLASSIFY_TABLE}
+    expected_cells = set(itertools.product(*_AXIS_VALUES.values()))
+    covered = {row[: len(_AXIS_VALUES)] for row in _CLASSIFY_TABLE}
     assert covered == expected_cells
     assert len(_CLASSIFY_TABLE) == len(expected_cells) == 64
 
@@ -773,6 +795,38 @@ def test_classify_truth_table_mapping_matches_the_predicates() -> None:
     actual = Counter(row[5] for row in _CLASSIFY_TABLE)
     assert dict(actual) == _EXPECTED_CLASS_COUNTS
     assert sum(_EXPECTED_CLASS_COUNTS.values()) == 64
+
+
+def test_classify_truth_table_axes_match_the_registry() -> None:
+    """The table's axis list must equal the one DERIVED from `classify()`.
+
+    This is the fourth meta-test, and the one the first three structurally
+    could not be: they all judge the table against itself. An axis the code
+    reads but the table never heard of is invisible to coverage, to the
+    class-diversity check and to the per-class counts alike — every one of
+    them passes on a table that is internally perfect and externally short a
+    column. That is `tempo` in round 7, and `queued_prompt` in rounds 5-6.
+
+    `classifier_tables.REGISTRY` is checked against the real `classify()` by
+    `dotfiles-setup classifier-axes` (the `classifier_axes` hk step), so
+    equality here transitively binds this table to the code. Column ORDER is
+    asserted separately because three of the five axes share the values
+    `(False, True)` — a swap among them is undetectable by the cross product.
+    """
+    spec = classifier_tables.REGISTRY["dotfiles_setup.dag_tick:classify"]
+    assert tuple(_AXIS_VALUES) == (
+        "state",
+        "needs",
+        "queued_prompt",
+        "pid_alive",
+        "tempo",
+    )
+    assert frozenset(_AXIS_VALUES) == spec.axes
+    assert frozenset(spec.pinned_axes) == _PINNED_AXES
+    # The pins are real: no crossed axis may also be pinned, and together they
+    # must account for every axis the code reads.
+    assert not (frozenset(_AXIS_VALUES) & _PINNED_AXES)
+    assert frozenset(_AXIS_VALUES) | _PINNED_AXES == spec.declared()
 
 
 def test_classify_truth_table_reaches_every_class_it_can() -> None:
