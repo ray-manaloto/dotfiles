@@ -401,6 +401,9 @@ must wait for a team to finish.
 | Frontmatter re-derived at 2.1.223: **16 documented + `observer`/`observerMessage`/`observeSubagents` = 19**; `effort`, `maxTurns`, `color` are all real documented fields | CONFIRMED | `$CC/sub-agents.md:282-297` + binary; doc control `initialPrompt` 6 / `maxTurns` 14 vs observer* 0, fresh token 0 | 2.1.223 | 2026-08-06 |
 | Filter-2 background subagents keep `Read/Grep/Glob/Bash/Edit/Write/Skill/SendMessage/Artifact/Monitor/…`; **`Workflow` and `AskUserQuestion` are stripped**; teammates additionally keep all Task* and Cron* tools | CONFIRMED | `$CC/sub-agents.md:331-343` | 2.1.223 | 2026-08-06 |
 | A subagent gets **fresh context** — no conversation history, no invoked skills, no files already read; only a **fork** inherits | CONFIRMED | `$CC/sub-agents.md:921`, `:1009` | 2.1.223 | 2026-08-06 |
+| **`TaskCompleted` fires on TaskUpdate-completion OR a teammate finishing its turn with in-progress tasks**; exit 2 blocks the completion and feeds stderr back; carries `task_id`/`task_subject`/`teammate_name`/`team_name`; ⚠️ **supports NO matchers** — fires on every occurrence | CONFIRMED | `$CC/hooks.md:2252-2262` | 2.1.223 | 2026-08-06 |
+| `Stop` hook: **8 consecutive blocks** then the harness overrides and ends the turn; `stop_hook_active` distinguishes a re-entry; `background_tasks` separates "done" from "waiting on subagents" | CONFIRMED (re-derived, was inherited) | `$CC/hooks.md:2320` | 2.1.223 | 2026-08-06 |
+| ⚠️ **`command_audit.py` is blind to all subagent activity** — `project_transcripts()` globs `*.jsonl` non-recursively in the project dir and never descends into `<session>/subagents/` | CONFIRMED | `python/src/dotfiles_setup/command_audit.py:228-234` | n/a | 2026-08-06 |
 
 ## GitHub repos touched
 
