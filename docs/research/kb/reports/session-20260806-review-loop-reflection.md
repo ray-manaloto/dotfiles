@@ -23,7 +23,36 @@ Three corrections to what this session believed while it was happening:
 
 **The waste is rounds 1–3, and not one of the five reports proposed a fix aimed
 at it.** Those rounds chased a *string* — three commits against two `SHIP`
-verdicts, ~40 minutes, no production change.
+verdicts, no production change.
+
+### The single sharpest datum in the whole corpus
+
+`Node.queued_prompt` and `is_terminal(state, tempo, *, queued_prompt)` exist on
+**`origin/main`**, before this branch was cut (`dag_tick.py:195`, `:262`). The
+census path already populated `queued_prompt=bool(data.get("queuedPrompt"))`.
+
+Commit 1 then wrote `def is_needs_human(state, needs)` — **a sibling predicate
+over the same `Node`, omitting an axis its own sibling two functions above
+already consumed.**
+
+That one missing parameter is F8 (HIGH, round 5) and transitively F12 (HIGH,
+round 6, only reachable because F8's fix opened it). **Two of the three real
+behavioural HIGHs, and two entire rounds, from one omission visible in the
+adjacent function signature.**
+
+### And the dominant failure is not the self-feeding cycle
+
+Of the 7 HIGHs: **2** were genuinely un-findable earlier, **2** were in commit
+1's log string and auditable the minute it was written, and **3 were reachable
+from round 1** — surfacing later *purely because the brief finally asked the
+right question*. Commits 2–5 never touched `execute_respawn`.
+
+> **The dominant failure is four rounds of briefs asking the wrong question
+> about code that had not moved.**
+
+**Both sub-loops terminated by STRUCTURE, never by care** — loop A when
+substring guards were abandoned for golden equality, loop B when cell-patching
+was abandoned for the enumeration. Neither ended with a more careful patch.
 
 ---
 
@@ -71,9 +100,16 @@ nearly the whole loop, **zero eager cost**. Measured headroom: 4,888 B under the
 12,000 AGM-003 cap.
 
 ### A2 · Promote **§T2 + Fix 7** from EVENTUAL — the only pairing with a positive control arm
-- **§T2** — derive a classifier's axes from *its own reads*. `classify` calls
-  `is_terminal(state, tempo, …)`; a check that the table's axes ⊇ the fields the
-  classifier reads **would have caught `tempo`**.
+- **§T2** — derive a classifier's axes from *its own reads*, with this literal
+  definition (loop-forensics R1, and the precision matters — it is
+  signature-derivable with **zero judgement**):
+
+  > **The axes are the union of `classify()`'s parameters and every `Node` field
+  > read by any predicate it calls.**
+
+  Applied at commit 1 this names `queued_prompt` (F8 dies, F12 never exists,
+  rounds 5 and 6 collapse) and names `tempo` (F14 dies at round 7). It shipped
+  anyway as commit 9 — **eight commits late**. Cost: ~30 lines.
 - **Fix 7** — a `classifier_tables.py` registry + cardinality gate, modelled on
   `bash_budget.py`: forces the table to EXIST at commit 1, which catches
   `queued_prompt`.
@@ -81,6 +117,24 @@ nearly the whole loop, **zero eager cost**. Measured headroom: 4,888 B under the
 Neither alone suffices; **together they are the only mechanism in all five
 reports that catches both defects.** Fix 7 was deprioritised as "guarding one
 call site" — that call site produced every HIGH in this record.
+
+### A2b · Two brief questions an enumeration CANNOT replace
+**Gate G is blind to temporal defects** — round 4's classify→execute race is not
+a cell in any state table, and no enumeration would have found it. Two one-line
+additions to every open-hunting brief, neither present in v1–v6:
+
+- **Q-FRESH** — *"for every decision→action pair, is the decision re-validated
+  against freshly-read inputs immediately before the action?"* Kills F7 at
+  round 1.
+- **Q-SCOPE** — *"is this defect in scope for this ticket, or a sibling?"*
+  Round 5's `execute_stop` finding (→#604) cost a round of attention to scope out.
+
+### A2c · Operator-string clause audit (loop-forensics R2)
+**Every clause of an operator-facing string is audited against an enforcing
+`file:line` at write time; a clause with no enforcing line is deleted or
+narrowed before commit.** Kills F1, F2 **and F7** — `never respawned BY THIS
+TICK` had no enforcing line in `execute_respawn`, which is precisely why it was
+false. A one-minute check that waited until round 4. **Loop A never starts.**
 
 ### A3 · loop-forensics **R3** — the cheapest fix, and the only one aimed at the real waste
 **A review round returning SHIP with 0 HIGH and 0 MEDIUM ends the loop; LOWs
@@ -133,7 +187,8 @@ into `<session>/subagents/`. Every teammate transcript is on disk at
 | **Fix 1b** — hook rule denying a round-≥2 brief with no `## Stop condition` | Fires on **0 of 7** real briefs (they lived in the scratchpad; the gate keys on a convention the fix is itself introducing). Worse: its content predicate **PASSES v4/v5/v6** — the three rounds that produced 5 HIGHs — and denies only v2/v3, the cheap ones. It greps for *permission to stop* 80 lines after proving permission is not a stop condition. |
 | **"4 rounds instead of 7"** headline | Gate G **passes** the 32-cell table with `tempo` absent (32 == 4×2×2×2). The replay's saving throw is a reviewer's judgement, not the gate. Keep the phase structure; delete the number. |
 | **REGRESSION-ECHO + Trigger A** | Both first fire at round 6; the phase-1 cap fires at round 2 and dominates. Inert by construction. |
-| **"R2 is WRONG OR MISLEADING"** | **Misapplied, not wrong.** The phrases it was convicted with are not in R2 (`grep` → 0; control → 1, so the probe reads) — they are from the implementer's own commit bodies. Rewording a correct eager rule is the exact scar `verify-before-advancing.md` carries. |
+| **"R2 is WRONG OR MISLEADING"** | **Misapplied, not wrong.** The phrases it was convicted with are not in R2 (`grep` → 0; control → 1, so the probe reads) — they are from the implementer's own commit bodies. Rewording a correct eager rule is the exact scar `verify-before-advancing.md` carries. **⚠️ The LABEL is dropped; the insight underneath it is NOT — see below.** |
+| **REGRESSION-ECHO detector** (fire when a finding blames to the previous fix) | Both arms fire correctly (v5, v6 — exactly the two non-convergent rounds), but it **first has data at round 6**, while the phase-1 round cap fires at round 2 and dominates every branch. Inert by construction alongside a cap. ⚠️ Its load-bearing detail is worth keeping if it is ever revived: **restrict to PRODUCTION line cites** — counting all cited files ranks v7 *highest*, and v7 is the round that converged. |
 
 ---
 
@@ -176,6 +231,43 @@ ticket when a trigger fires**.
 | loop-forensics · cost-analyst · process-designer | **No** — the first is a section of the reflect node's work, the second's discipline is already an eager rule, the third *is* the reflect node. |
 
 ---
+
+## ⚠️ The mutation-testing signature that meant the OPPOSITE of what I thought
+
+Dropping the "R2 is wrong" *label* does not drop this, and it is the most
+counter-intuitive thing in the corpus. Every fix this session was
+mutation-verified, and I wrote the result up as **quality evidence**:
+
+- `8c87eec` — *"deleting the re-check fails the race arm **and ONLY the race arm**"*
+- `796777a` — *"deleting the REPLY_QUEUED wiring fails the visibility arm … **and nothing else**"*
+
+All three such fixes **directly caused the next round's HIGH.** R2's mutation
+standard was met 100%, with **zero predictive power**.
+
+> **"Deleting the fix breaks only the arm you just wrote" is the SIGNATURE OF
+> THE FAILURE, not evidence of quality.** It means test space and fix space are
+> the same size — which is exactly the condition under which an unenumerated
+> neighbouring cell exists.
+
+The rule is correct and silent on this; the evidence file's two expansions are
+both *"mutation too weak to bite"*, never *"mutation complete but irrelevant"*.
+**Put this in `tests/AGENTS.md` with A1 — do not reword the eager rule.**
+
+## The other measured facts worth not re-deriving
+
+- **21 of 23 rules are eager**, and **every gate was green on all 9 commits**
+  (lint 0 · pytest 1369→1453 · verify 115/0) while 4 of 7 rounds returned DO NOT
+  SHIP. The gates and the rules were not the missing layer.
+- **Cost: contiguous work ≥1h21m, span ≤11h17m** (two long gaps are almost
+  certainly sleep). Reported as an interval, not a point estimate. Tokens,
+  reviewer latency and reading time are **not measurable** from artifacts.
+- **The v7 diagnosis was legible in brief v6**, which already asked *"what did
+  `09d2cb9` break?"* — the **cell-level** question. Round 6 duly returned the
+  next cell. The step to *"what is the SPACE of things a fix can break"* is one
+  inference, and it cost a round and a HIGH.
+- Failure class 4 (a claim with no enforcing call site) is on its **third**
+  recorded instance — `secrets-out-of-the-shell-env.md` documents it twice and
+  still did not promote it to a directive.
 
 ## The single most reusable finding
 
