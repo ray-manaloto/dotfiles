@@ -153,8 +153,15 @@ ESCALATED_STATE = "blocked"
 # The tracker label an escalated node projects to. Named here so the log
 # line and any future projection cannot drift apart, but NOT applied by this
 # module: `docs/receipts/575.md` R1 keeps projection one-directional and
-# scheduler-owned, and that receipt explicitly defers the `dag:*` label
-# spellings and the comment format.
+# scheduler-owned, and a tick that labelled directly would put a second
+# writer on the tracker.
+#
+# ⚠️ **The projection itself is UNOWNED as of #601** — no in-tree component
+# and no open ticket (#579 WEDGED, #580 Codex verdict, #590 stall probe all
+# cover something else) emits the label or the append-only comment. So an
+# escalated node is currently visible in this tick's log ONLY. The spelling
+# is settled (`575.md`: *"#573's receipt `dag:needs-human` — the receipt is
+# later and governs"*); what is deferred is the owner and the comment format.
 NEEDS_HUMAN_LABEL = "dag:needs-human"
 
 # A tempo:"active" state.json this old with no update is WEDGED — classify
@@ -333,12 +340,38 @@ def normalize_needs(value: object) -> str | None:
     failure this normalisation feeds is :func:`is_needs_human` returning
     False and the node being respawned into an idle zombie, so an
     unrecognised payload must fail toward "this IS an escalation".
+
+    That branch deliberately does NOT strip, and the asymmetry with the
+    string branch above is the point: an object whose `__str__` returns
+    whitespace would strip to `""`, and `"" or None` would hand back
+    absence — flipping a known-truthy payload to the one answer that gets
+    the node respawned. The string branch can strip safely because there
+    the empty result really does mean nobody was asked anything.
     """
     if isinstance(value, str):
         return value.strip() or None
     if value:
         return str(value)
     return None
+
+
+def is_stalled(
+    tempo: str | None, state_age_s: float | None, stall_after_s: float
+) -> bool:
+    """The stall predicate: `tempo="active"` with a `state.json` gone stale.
+
+    An unknown age (`None`) is NOT stalled — the opposite direction from
+    :func:`_is_stale_dead`, and deliberately so. There, unknown age blocks
+    a respawn (never resurrect what cannot be proven fresh); here it would
+    manufacture a stall report out of a file we simply could not read.
+
+    Extracted so :func:`classify` and the NEEDS_HUMAN note in
+    :func:`classify_background_rows` ask the SAME question — an escalated
+    node that is also stalled classifies NEEDS_HUMAN (see :func:`classify`),
+    so without this the stall fact would be silently unreportable for that
+    shape.
+    """
+    return tempo == "active" and state_age_s is not None and state_age_s > stall_after_s
 
 
 def is_needs_human(state: str | None, needs: str | None) -> bool:
@@ -383,6 +416,16 @@ def classify(
     `done`/`failed`/`stopped` has settled, and a `needs` string left over in
     its `state.json` from an earlier turn must not resurrect it as an open
     question.
+
+    ⚠️ **It therefore also out-ranks WEDGED**, and that costs something a
+    later slice needs. A `tempo:"active"`, stale, escalated node is BOTH
+    stalled and awaiting a human; one class cannot say two things, and
+    NEEDS_HUMAN is the right one to keep (the human's question is the
+    actionable fact, and hiding it is the harm #601 exists to stop). The
+    stall fact is not dropped, though — :func:`classify_background_rows`
+    appends it to the NEEDS_HUMAN note via :func:`is_stalled`, so #579/#590
+    still see it. Reordering the two would invert the harm; extend the note,
+    not the precedence.
     """
     if is_terminal(node.state, node.tempo, queued_prompt=node.queued_prompt):
         return NodeClass.DONE
@@ -390,11 +433,7 @@ def classify(
         return NodeClass.NEEDS_HUMAN
     if not pid_alive:
         return NodeClass.DEAD
-    if (
-        node.tempo == "active"
-        and state_age_s is not None
-        and state_age_s > stall_after_s
-    ):
+    if is_stalled(node.tempo, state_age_s, stall_after_s):
         return NodeClass.WEDGED
     return NodeClass.ALIVE
 
@@ -786,9 +825,20 @@ def classify_background_rows(
             )
         )
         if node_class is NodeClass.NEEDS_HUMAN:
+            # NEEDS_HUMAN out-ranks WEDGED in `classify`, so an escalated
+            # node that is ALSO stalled would otherwise lose its stall
+            # visibility entirely — both facts are true, and #579/#590 want
+            # the second one. Carry it in the same line rather than dropping
+            # it or emitting a competing note.
+            stall_note = (
+                f"; ALSO stalled — tempo active, state.json stale "
+                f"{state_age_s:.0f}s > {ctx.stall_after_s:.0f}s"
+                if is_stalled(node.tempo, state_age_s, ctx.stall_after_s)
+                else ""
+            )
             notes.append(
                 f"dag-tick: NEEDS_HUMAN {node_id} — {_needs_human_reason()}; "
-                f"needs: {node.needs}"
+                f"needs: {node.needs}{stall_note}"
             )
         elif node_class is NodeClass.WEDGED:
             notes.append(

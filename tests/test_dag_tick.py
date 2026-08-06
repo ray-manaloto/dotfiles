@@ -173,15 +173,38 @@ def test_terminal_predicate_arms(
         ("\n\t", None),
         ([], None),
         ({}, None),
-        # A non-string payload a future harness version might write must
-        # fail TOWARD "this is an escalation" — dropping it would respawn
-        # the node into an idle zombie, which is the defect #601 fixes.
-        (["pick one"], "['pick one']"),
-        ({"question": "which?"}, "{'question': 'which?'}"),
     ],
 )
 def test_normalize_needs_both_directions(raw: object, expected: str | None) -> None:
     assert dag_tick.normalize_needs(raw) == expected
+
+
+@pytest.mark.parametrize(
+    ("raw", "fragment"),
+    [
+        (["pick one"], "pick one"),
+        ({"question": "which?"}, "which?"),
+        (42, "42"),
+    ],
+)
+def test_normalize_needs_keeps_a_non_string_payload_as_an_escalation(
+    raw: object, fragment: str
+) -> None:
+    """A shape a future harness version might write must NOT read as absence.
+
+    Asserted as behaviour, not as an exact string: what the module owes is
+    (a) a non-`None` result, so :func:`is_needs_human` still fires and the
+    node is never respawned into an idle zombie, and (b) text an operator
+    can act on in the log line. Pinning the exact `repr` instead would make
+    a CPython formatting detail the contract, which `tests/AGENTS.md`
+    forbids ("never through implementation details").
+    """
+    result = dag_tick.normalize_needs(raw)
+    assert result is not None
+    assert fragment in result
+    # The consequence that actually matters, stated directly rather than
+    # left to be inferred from the non-None above.
+    assert dag_tick.is_needs_human("blocked", result) is True
 
 
 @pytest.mark.parametrize(
@@ -205,6 +228,32 @@ def test_is_needs_human_requires_both_halves(
     state: str | None, needs: str | None, *, expected: bool
 ) -> None:
     assert dag_tick.is_needs_human(state, needs) is expected
+
+
+@pytest.mark.parametrize(
+    ("tempo", "state_age_s", "expected"),
+    [
+        ("active", 200.0, True),
+        # Not stalled: not active, not yet past the threshold, exactly at
+        # it, or an age that could not be read at all.
+        ("idle", 200.0, False),
+        ("blocked", 200.0, False),
+        (None, 200.0, False),
+        ("active", 10.0, False),
+        ("active", 120.0, False),
+        ("active", None, False),
+    ],
+)
+def test_is_stalled_both_directions(
+    tempo: str | None, state_age_s: float | None, *, expected: bool
+) -> None:
+    """Unknown age is NOT stalled — the opposite of `_is_stale_dead`.
+
+    There, unknown age blocks a respawn; here it would invent a stall
+    report out of a file that simply could not be read. The two helpers
+    treat `None` in opposite directions on purpose, so both are pinned.
+    """
+    assert dag_tick.is_stalled(tempo, state_age_s, 120.0) is expected
 
 
 def test_needs_human_state_is_not_terminal() -> None:
@@ -849,6 +898,60 @@ def test_classify_background_rows_needs_human_note_quotes_the_question(
     )
     # Control: it must NOT be reported as the stale-DEAD case it used to be.
     assert not any("stale beyond --max-age" in note for note in result.notes)
+
+
+def test_classify_background_rows_escalated_and_stalled_keeps_both_facts(
+    tmp_path: Path,
+) -> None:
+    """NEEDS_HUMAN out-ranks WEDGED, so the stall must ride in its note.
+
+    A `tempo:"active"`, stale, escalated node is BOTH things. One class
+    cannot say two, and NEEDS_HUMAN is the one to keep — but dropping the
+    stall entirely would cost #579/#590 the visibility they need for this
+    shape, so it is appended instead.
+    """
+    jobs_dir = tmp_path / "jobs"
+    daemon_dir = _roster(tmp_path, {"abc123": os.getpid()})  # live pid
+    _write_state(
+        jobs_dir,
+        "abc123",
+        {"state": "blocked", "tempo": "active", "needs": _LIVE_NEEDS_JULY_13},
+    )
+    state_path = jobs_dir / "abc123" / "state.json"
+    stale = state_path.stat().st_mtime - 300
+    os.utime(state_path, (stale, stale))
+    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir)
+    result = dag_tick.classify_background_rows(
+        [{"id": "abc123", "kind": "background"}], ctx
+    )
+    assert result.classified[0].node_class is dag_tick.NodeClass.NEEDS_HUMAN
+    assert any(
+        "NEEDS_HUMAN abc123" in note and "ALSO stalled" in note for note in result.notes
+    )
+
+
+def test_classify_background_rows_escalated_not_stalled_omits_the_clause(
+    tmp_path: Path,
+) -> None:
+    """The control arm: the stall clause must not print unconditionally.
+
+    Same escalated node, same live pid, but a FRESH state.json — so the
+    added clause is proven to discriminate rather than always fire.
+    """
+    jobs_dir = tmp_path / "jobs"
+    daemon_dir = _roster(tmp_path, {"abc123": os.getpid()})
+    _write_state(
+        jobs_dir,
+        "abc123",
+        {"state": "blocked", "tempo": "active", "needs": _LIVE_NEEDS_JULY_13},
+    )
+    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir)
+    result = dag_tick.classify_background_rows(
+        [{"id": "abc123", "kind": "background"}], ctx
+    )
+    assert result.classified[0].node_class is dag_tick.NodeClass.NEEDS_HUMAN
+    assert any("NEEDS_HUMAN abc123" in note for note in result.notes)
+    assert not any("ALSO stalled" in note for note in result.notes)
 
 
 # ---------------------------------------------------------------------------
