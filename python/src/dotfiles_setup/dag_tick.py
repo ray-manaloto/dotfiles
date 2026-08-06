@@ -230,6 +230,7 @@ class NodeClass(enum.Enum):
     WEDGED = "wedged"
     DONE = "done"
     NEEDS_HUMAN = "needs_human"
+    REPLY_QUEUED = "reply_queued"
 
 
 class ActionKind(enum.Enum):
@@ -419,6 +420,41 @@ def is_needs_human(
     return state == ESCALATED_STATE and needs is not None and not queued_prompt
 
 
+def is_reply_queued(
+    state: str | None, needs: str | None, *, queued_prompt: bool
+) -> bool:
+    """An escalation whose human answer is written but not yet delivered.
+
+    The exact complement of :func:`is_needs_human` on the `queued_prompt`
+    axis: same `blocked ∧ needs`, opposite queued state. Split out because
+    the two need OPPOSITE handling and share every other condition —
+    `is_needs_human` must never respawn, this one is waiting for exactly
+    the restart that delivers the reply.
+
+    ⚠️ **It exists because the #601 v5 fix opened a hole in v6.** Adding
+    `queued_prompt` to :func:`is_needs_human` restored delivery for a DEAD
+    node (DEAD -> RESPAWN consumes the prompt), but a node whose pid is
+    still ALIVE fell through every branch to plain ALIVE — no action, and
+    on a non-verbose tick no note either. So the same shape got LESS
+    visible than before #601 touched it, which is the "watchdog silently
+    stops recovering" failure one commit earlier had called worse than
+    over-recovery.
+
+    The binary makes this reachable, not hypothetical: 2.1.223's reply
+    handler can persist `queuedPrompt` after an `ENOCONN`/`ETIMEOUT` while
+    the roster worker pid is still alive, and its own UI says the reply
+    waits until the session restarts. A live-but-unreachable worker can
+    therefore hold a human's answer indefinitely.
+
+    The action is LOG, not respawn, deliberately: this watchdog only ever
+    respawns a process confirmed dead, and `claude respawn` refuses an
+    already-running session anyway — so a respawn here would be a no-op
+    reported as a recovery. Making it VISIBLE is the whole fix; delivering
+    it to a live-but-unreachable worker is not something this module can do.
+    """
+    return state == ESCALATED_STATE and needs is not None and queued_prompt
+
+
 def classify(
     node: Node,
     *,
@@ -466,6 +502,11 @@ def classify(
         return NodeClass.NEEDS_HUMAN
     if not pid_alive:
         return NodeClass.DEAD
+    # AFTER the DEAD branch on purpose: a queued reply on a DEAD node is
+    # delivered by the respawn DEAD already plans, and must not be diverted
+    # to a log line. This branch is therefore live-nodes-only by position.
+    if is_reply_queued(node.state, node.needs, queued_prompt=node.queued_prompt):
+        return NodeClass.REPLY_QUEUED
     if is_stalled(node.tempo, state_age_s, stall_after_s):
         return NodeClass.WEDGED
     return NodeClass.ALIVE
@@ -551,6 +592,27 @@ def _needs_human_reason() -> str:
     )
 
 
+def _reply_queued_reason() -> str:
+    """The exact wording for a live node holding an undelivered reply.
+
+    Same single-source shape as :func:`_needs_human_reason` — `plan` and
+    the note loop must not say two different things about one node.
+
+    It states what it CANNOT do as well as what it saw: this watchdog only
+    respawns a confirmed-dead process, and `claude respawn` refuses an
+    already-running session, so there is no action available here. Saying
+    so is the point — the failure this class exists to end was silence.
+    """
+    return (
+        "reply queued but undelivered — state=blocked with a needs payload "
+        "AND a queuedPrompt while the process is still alive, so a human "
+        "already answered and the answer is waiting on a restart this "
+        "module must not perform (it respawns only a confirmed-dead "
+        "process, and the CLI refuses an already-running session); "
+        "log-only, and no automated recovery exists for this shape"
+    )
+
+
 def plan(
     classified_nodes: Sequence[ClassifiedNode], *, max_age_s: float
 ) -> list[Action]:
@@ -577,6 +639,10 @@ def plan(
         if classified.node_class is NodeClass.NEEDS_HUMAN:
             actions.append(
                 Action(ActionKind.LOG, classified.node_id, _needs_human_reason())
+            )
+        elif classified.node_class is NodeClass.REPLY_QUEUED:
+            actions.append(
+                Action(ActionKind.LOG, classified.node_id, _reply_queued_reason())
             )
         elif classified.node_class is NodeClass.DEAD:
             if _is_stale_dead(classified.state_age_s, max_age_s):
@@ -908,6 +974,11 @@ def classify_background_rows(
                 f"dag-tick: NEEDS_HUMAN {node_id} — {_needs_human_reason()}; "
                 f"needs: {node.needs}{stall_note}"
             )
+        elif node_class is NodeClass.REPLY_QUEUED:
+            notes.append(
+                f"dag-tick: REPLY_QUEUED {node_id} — {_reply_queued_reason()}; "
+                f"needs: {node.needs}"
+            )
         elif node_class is NodeClass.WEDGED:
             notes.append(
                 f"dag-tick: WEDGED {node_id} — tempo active, state.json "
@@ -964,15 +1035,17 @@ def execute_respawn(
     reached again. Correct, and worth stating — an earlier draft of this
     docstring claimed "the next tick retries", which is not what happens.)
 
-    ⚠️ **ORDERING: the escalation re-check runs LAST, immediately before
-    `Popen`, and the pid check first.** That is not stylistic. The v5 review
-    showed the window is not closed by the check's existence but by its
-    DISTANCE from the spawn: with the state read first, a roster read — real
-    file I/O — sat between the safety check and `Popen`, and a
-    roster-absent-but-running node could write `blocked + needs` inside it
-    (demonstrated: `RESPAWN race2`, with `Popen` observing a state.json that
-    by then read `needs`). Moving it last shrinks the window to the
-    read→spawn gap.
+    ⚠️ **ORDERING: BOTH reads happen first, THEN both decisions, then the
+    spawn.** That is not stylistic, and it took two rounds to get right.
+    The window is not closed by a check's existence but by its DISTANCE
+    from the action: v5 showed that with the state read first, a roster
+    read — real file I/O — sat between the escalation check and `Popen`,
+    and a roster-absent-but-running node could write `blocked + needs`
+    inside it (`RESPAWN race2`). Moving the escalation check last then
+    pushed the PID check behind the state read instead, trading one TOCTOU
+    for the other (`RESPAWN race3`) — a check cannot be last if another
+    also must be. Reading both up front and deciding after leaves neither
+    guard with I/O between it and the spawn.
 
     **It does not eliminate it.** A check-then-act against a file another
     process may write is irreducibly racy without a shared lock, a CAS, or a
@@ -995,10 +1068,12 @@ def execute_respawn(
     crash-respawn recovers exactly this case (`docs/receipts/565.md` arm
     B6: state done + tempo ACTIVE -> RESPAWNED) — this function must too.
     """
-    if background_pid_alive(node_id, read_roster(ctx.daemon_dir), is_alive=is_alive):
-        return f"dag-tick: SKIP respawn {node_id} — pid is alive now (reconciled)"
-    # LAST before the spawn, deliberately — see the ordering note above.
+    # BOTH reads first, THEN both decisions, then the spawn — so neither
+    # guard has file I/O sitting between it and the action it protects.
+    # See the ordering note in the docstring: an earlier version put one
+    # check last and thereby pushed the OTHER one behind a roster read.
     fresh_data, _ = load_state_json(ctx.jobs_dir, node_id)
+    roster = read_roster(ctx.daemon_dir)
     if fresh_data is None:
         return (
             f"dag-tick: SKIP respawn {node_id} — state.json unreadable at "
@@ -1010,6 +1085,8 @@ def execute_respawn(
             f"dag-tick: SKIP respawn {node_id} — escalated since "
             f"classification; {_needs_human_reason()}; needs: {fresh.needs}"
         )
+    if background_pid_alive(node_id, roster, is_alive=is_alive):
+        return f"dag-tick: SKIP respawn {node_id} — pid is alive now (reconciled)"
     try:
         subprocess.Popen(
             [ctx.claude_bin, "respawn", node_id],
@@ -1022,7 +1099,11 @@ def execute_respawn(
         )
     except OSError as exc:
         return f"dag-tick: SKIP respawn {node_id} — claude binary unavailable: {exc}"
-    return f"dag-tick: RESPAWN {node_id}"
+    # "requested", not "done": this never reads the child back (eventual
+    # consistency — the next tick observes the outcome), and the CLI has its
+    # own already-running refusal, so an unqualified "RESPAWN" would report
+    # a refusal as a recovery. Flagged LOW in the #601 v6 review.
+    return f"dag-tick: RESPAWN {node_id} (requested; outcome observed next tick)"
 
 
 def execute_stop(

@@ -421,6 +421,87 @@ def test_execute_tick_respawns_an_escalation_whose_reply_is_queued(
     assert popen_calls == [["claude", "respawn", "dead1"]]
 
 
+def test_classify_queued_reply_on_a_live_node_is_visible_not_silent() -> None:
+    """#601 v6 HIGH: the liveness arm the v5 fix left silent.
+
+    Adding `queued_prompt` to `is_needs_human` restored delivery for a DEAD
+    node, but a node whose pid is still ALIVE fell through every branch to
+    plain ALIVE — no action, and on a non-verbose tick no note either. The
+    same shape became LESS visible than before #601 touched it.
+
+    The binary makes it reachable: 2.1.223's reply handler can persist
+    `queuedPrompt` after an ENOCONN/ETIMEOUT while the worker pid is still
+    alive, and its own UI says the reply waits for a restart. So a
+    live-but-unreachable worker can hold a human's answer indefinitely.
+    """
+    node = _node(
+        state="blocked",
+        tempo="blocked",
+        needs=_LIVE_NEEDS_JULY_13,
+        queued_prompt=True,
+    )
+    assert (
+        dag_tick.classify(node, pid_alive=True, state_age_s=None)
+        is dag_tick.NodeClass.REPLY_QUEUED
+    )
+    # …and it is a LOG action, so the tick reports it every pass.
+    classified = dag_tick.ClassifiedNode(
+        "abc123", dag_tick.NodeClass.REPLY_QUEUED, pid_alive=True, state_age_s=None
+    )
+    actions = dag_tick.plan([classified], max_age_s=86400.0)
+    assert [a.kind for a in actions] == [dag_tick.ActionKind.LOG]
+    assert "reply queued but undelivered" in actions[0].reason
+
+
+def test_classify_queued_reply_on_a_dead_node_still_reaches_respawn() -> None:
+    """The control arm: REPLY_QUEUED must NOT divert the delivery path.
+
+    Same node, dead pid. DEAD -> RESPAWN is what consumes the queued prompt
+    and clears `needs`, so a REPLY_QUEUED branch placed above the DEAD check
+    would re-create the v5 deadlock while looking like an improvement.
+    """
+    node = _node(
+        state="blocked",
+        tempo="blocked",
+        needs=_LIVE_NEEDS_JULY_13,
+        queued_prompt=True,
+    )
+    assert (
+        dag_tick.classify(node, pid_alive=False, state_age_s=None)
+        is dag_tick.NodeClass.DEAD
+    )
+
+
+@pytest.mark.parametrize(
+    ("state", "needs", "queued_prompt", "expected"),
+    [
+        ("blocked", _LIVE_NEEDS_JULY_13, True, True),
+        # The complement of is_needs_human on exactly one axis.
+        ("blocked", _LIVE_NEEDS_JULY_13, False, False),
+        # Every other condition still has to hold.
+        ("blocked", None, True, False),
+        ("done", _LIVE_NEEDS_JULY_13, True, False),
+        (None, _LIVE_NEEDS_JULY_13, True, False),
+    ],
+)
+def test_is_reply_queued_is_the_complement_of_is_needs_human(
+    state: str | None, needs: str | None, *, queued_prompt: bool, expected: bool
+) -> None:
+    """The two predicates must partition `blocked ∧ needs`, never overlap.
+
+    An overlap would be a node that is simultaneously "never respawn" and
+    "waiting for a restart" — the contradiction that produced the v5
+    deadlock, in a new place.
+    """
+    assert (
+        dag_tick.is_reply_queued(state, needs, queued_prompt=queued_prompt) is expected
+    )
+    if expected:
+        assert (
+            dag_tick.is_needs_human(state, needs, queued_prompt=queued_prompt) is False
+        )
+
+
 def test_classify_terminal_state_beats_a_leftover_needs_payload() -> None:
     """A settled node with a stale `needs` string stays DONE, not NEEDS_HUMAN."""
     node = _node(state="done", tempo="idle", needs=_LIVE_NEEDS_JULY_13)
@@ -1122,6 +1203,42 @@ def test_classify_background_rows_reads_the_live_needs_shape(
         dag_tick.NodeClass.NEEDS_HUMAN,
         dag_tick.NodeClass.NEEDS_HUMAN,
     ]
+
+
+def test_classify_background_rows_reply_queued_note_always_prints(
+    tmp_path: Path,
+) -> None:
+    """#601 v6 HIGH: unconditional, because SILENCE was the defect.
+
+    Before this class the same node produced no note at all on a
+    non-verbose tick, so a human's undelivered answer was invisible. A
+    `--verbose`-gated note would not have fixed it — the launchd tick does
+    not run verbose.
+    """
+    jobs_dir = tmp_path / "jobs"
+    daemon_dir = _roster(tmp_path, {"abc123": os.getpid()})  # LIVE pid
+    _write_state(
+        jobs_dir,
+        "abc123",
+        {
+            "state": "blocked",
+            "tempo": "blocked",
+            "needs": _LIVE_NEEDS_JULY_22,
+            "queuedPrompt": "do the full command catalog extraction pass",
+        },
+    )
+    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir)  # verbose=False
+    result = dag_tick.classify_background_rows(
+        [{"id": "abc123", "kind": "background"}], ctx
+    )
+    assert result.classified[0].node_class is dag_tick.NodeClass.REPLY_QUEUED
+    assert any(
+        "REPLY_QUEUED abc123" in note and _LIVE_NEEDS_JULY_22 in note
+        for note in result.notes
+    )
+    # Control: it must NOT be reported as the escalation it is not — the
+    # human already answered, and saying otherwise sends them to re-answer.
+    assert not any("NEEDS_HUMAN abc123" in note for note in result.notes)
 
 
 def test_classify_background_rows_needs_human_note_quotes_the_question(
