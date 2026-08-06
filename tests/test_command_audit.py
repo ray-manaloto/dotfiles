@@ -545,3 +545,97 @@ class TestFalseSignals:
         """CONTROL: ordinary work must not be flagged at all."""
         for cmd in ("git status --short", "mise run lint", "ls -la"):
             assert ca.false_signals(cmd) == []
+
+
+def _session_tree(proj: Path, sid: str, *, workflow: bool = False) -> None:
+    """One session root plus its nested teammate transcripts.
+
+    Mirrors the real layout: subagents at ``<sid>/subagents/agent-*.jsonl``
+    and workflow-spawned ones two levels deeper under
+    ``<sid>/subagents/workflows/wf_*/``.
+    """
+    (proj / f"{sid}.jsonl").write_text("{}\n")
+    subagents = proj / sid / "subagents"
+    subagents.mkdir(parents=True)
+    (subagents / f"agent-{sid}a.jsonl").write_text("{}\n")
+    if workflow:
+        wf = subagents / "workflows" / f"wf_{sid}"
+        wf.mkdir(parents=True)
+        (wf / f"agent-{sid}w.jsonl").write_text("{}\n")
+
+
+def test_project_transcripts_includes_subagent_transcripts(tmp_path: Path) -> None:
+    """Teammate transcripts live under ``<session-id>/subagents/`` — scan them.
+
+    A non-recursive glob is blind to every subagent, which is most of what a
+    guard-coverage audit exists to police (measured on the real project dir,
+    2026-08-06: 214 of 2,176 files visible).
+    """
+    cwd = Path("/repo")
+    proj = tmp_path / ca.encode_cwd(cwd)
+    proj.mkdir()
+    _session_tree(proj, "s0")
+    got = {p.name for p in ca.project_transcripts(tmp_path, cwd, limit=5)}
+    assert got == {"s0.jsonl", "agent-s0a.jsonl"}
+
+
+def test_project_transcripts_includes_workflow_subagent_transcripts(
+    tmp_path: Path,
+) -> None:
+    """Workflow-spawned teammates nest two levels deeper than plain subagents.
+
+    1,796 of this project's 1,962 nested transcripts sit at that depth, so a
+    fixed ``*/subagents/*.jsonl`` glob would still miss 92% of them.
+    """
+    cwd = Path("/repo")
+    proj = tmp_path / ca.encode_cwd(cwd)
+    proj.mkdir()
+    _session_tree(proj, "s0", workflow=True)
+    got = {p.name for p in ca.project_transcripts(tmp_path, cwd, limit=5)}
+    assert "agent-s0w.jsonl" in got
+
+
+def test_project_transcripts_limit_counts_sessions_not_files(tmp_path: Path) -> None:
+    """``limit`` caps SESSIONS; a team-heavy session must not eat the window.
+
+    Truncating after a recursive glob would silently redefine the flag — the
+    report would still print "50 sessions" while covering two or three.
+    """
+    cwd = Path("/repo")
+    proj = tmp_path / ca.encode_cwd(cwd)
+    proj.mkdir()
+    for i in range(3):
+        _session_tree(proj, f"s{i}", workflow=True)
+        ts = 1_000 + i * 10  # s2 newest, s0 oldest
+        os.utime(proj / f"s{i}.jsonl", (ts, ts))
+    got = ca.project_transcripts(tmp_path, cwd, limit=2)
+    roots = [p.name for p in got if p.parent == proj]
+    assert roots == ["s2.jsonl", "s1.jsonl"]  # two sessions, newest first
+    assert len(got) == 6  # ... and ALL of both sessions' transcripts
+    assert not any(p.name.startswith("agent-s0") for p in got)
+
+
+def test_main_counts_sessions_not_transcript_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The rendered "Scanned N session(s)" must stay a session count.
+
+    A subagent transcript carries its PARENT's ``sessionId`` (0 mismatches
+    across 12,006 lines, 2026-08-06), so counting files would inflate the
+    figure by the team size and report sessions that do not exist.
+    """
+    project = tmp_path / "repo"
+    project.mkdir()
+    cfg = tmp_path / "cfg"
+    proj = cfg / "projects" / ca.encode_cwd(project)
+    proj.mkdir(parents=True)
+    (proj / "s.jsonl").write_text(_assistant_bash("ls"))
+    subagents = proj / "s" / "subagents"
+    subagents.mkdir(parents=True)
+    (subagents / "agent-a1.jsonl").write_text(_assistant_bash("git commit -m x", "tu2"))
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(cfg))
+
+    assert ca.command_audit_main(project) == 0
+    report = capsys.readouterr().out
+    assert "Scanned **1** recent session(s)" in report
+    assert "`git commit`" in report  # the subagent's command was actually scanned

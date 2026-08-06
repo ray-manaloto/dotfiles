@@ -225,14 +225,49 @@ def encode_cwd(cwd: Path) -> str:
     return re.sub(r"[/.]", "-", str(cwd))
 
 
+def project_dir(base: Path, cwd: Path) -> Path:
+    """The transcript directory Claude Code keeps for ``cwd``."""
+    return base / encode_cwd(cwd)
+
+
 def project_transcripts(base: Path, cwd: Path, *, limit: int) -> list[Path]:
-    """The ``limit`` most-recent transcript files for ``cwd`` (newest first)."""
-    project_dir = base / encode_cwd(cwd)
-    if not project_dir.is_dir():
+    """Every transcript of the ``limit`` most-recent sessions for ``cwd``.
+
+    A session is ONE top-level ``<session-id>.jsonl`` **plus every teammate
+    transcript nested beneath ``<session-id>/``** — subagents land at
+    ``<session-id>/subagents/agent-*.jsonl``, and workflow-spawned ones a
+    further two levels down at
+    ``<session-id>/subagents/workflows/wf_*/agent-*.jsonl``. Hence ``rglob``
+    and not a fixed ``*/subagents/*.jsonl``: measured on this project's dir
+    (2026-08-06) the depth histogram is 214 roots / 166 direct subagents /
+    **1,796 workflow** transcripts, so a two-level glob would still miss 92%
+    of the nested files.
+
+    The old non-recursive ``glob("*.jsonl")`` therefore saw 214 of 2,176
+    files, and everything it could not see was subagent activity — the bulk
+    of what a guard-coverage audit exists to police.
+
+    ``limit`` counts SESSIONS, not files, and is applied to the roots BEFORE
+    the nested transcripts are pulled in. Truncating after an rglob would
+    silently redefine the flag: one team-heavy session contributes hundreds
+    of files, so a 50-*file* cap collapses the report's window from 50
+    sessions to two or three while still printing "50". Anchoring on roots
+    loses nothing — of the 82 directories under the project dir, the only one
+    with no sibling root ``.jsonl`` is ``memory/``, which is the auto-memory
+    store and holds no transcripts.
+    """
+    proj = project_dir(base, cwd)
+    if not proj.is_dir():
         return []
-    files = [p for p in project_dir.glob("*.jsonl") if p.is_file()]
-    files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-    return files[:limit]
+    roots = [p for p in proj.glob("*.jsonl") if p.is_file()]
+    roots.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    found: list[Path] = []
+    for root in roots[:limit]:
+        found.append(root)
+        nested = [p for p in (proj / root.stem).rglob("*.jsonl") if p.is_file()]
+        nested.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        found.extend(nested)
+    return found
 
 
 def _bash_blocks(content: object) -> Iterator[tuple[str, str]]:
@@ -736,7 +771,9 @@ def command_audit_main(
             "(set CLAUDE_CONFIG_DIR if your Claude config lives elsewhere)\n"
         )
         return 0
-    result = audit(iter_bash_commands(transcripts), sessions=len(transcripts))
+    proj = project_dir(base, project_root)
+    sessions = sum(1 for p in transcripts if p.parent == proj)
+    result = audit(iter_bash_commands(transcripts), sessions=sessions)
     text = render_report(result)
     if output is None:
         sys.stdout.write(text)
