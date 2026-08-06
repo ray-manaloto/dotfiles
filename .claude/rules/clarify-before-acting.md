@@ -67,8 +67,9 @@ avoided shipping the wrong thing.
 
 ## The gate (and the half of this rule no gate can carry)
 
-`.claude/settings.json` wires `PreToolUse` matcher **`Bash|AskUserQuestion`**
-to `scripts/pretooluse-guard.sh`; `hook_guard.decide_payload` dispatches on
+`.claude/settings.json` wires `PreToolUse` matcher
+**`Bash|AskUserQuestion|Edit|Write|NotebookEdit`** to
+`scripts/pretooluse-guard.sh`; `hook_guard.decide_payload` dispatches on
 `tool_name`, and `dotfiles_setup.ask_quality` **denies** an ask that is
 missing the recommendation, the `PRO:`/`CON:` trade-offs, or the citation.
 The deny is deterministic — it applies even in bypassPermissions mode — and

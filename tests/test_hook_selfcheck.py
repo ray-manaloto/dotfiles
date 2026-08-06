@@ -58,7 +58,7 @@ def _full_settings() -> dict:
         "hooks": {
             "PreToolUse": [
                 _hook(
-                    "Bash|AskUserQuestion",
+                    "Bash|AskUserQuestion|Edit|Write|NotebookEdit",
                     f"bash {_ANCHOR}/scripts/pretooluse-guard.sh",
                 )
             ],

@@ -76,7 +76,17 @@ _HOOK_SCRIPTS = (PRETOOLUSE_WRAPPER, _WEB_SETUP)
 # quietly falling out of settings.json, which is the only place they are wired.
 _SESSION_END_REPORT = ".agent/command-audit.md"
 _SETTINGS_WIRING: tuple[tuple[str, tuple[str, ...], tuple[str, ...] | None], ...] = (
-    ("PreToolUse", (PRETOOLUSE_WRAPPER,), ("Bash", "AskUserQuestion")),
+    # All five matcher tools are required, not just the two the guard started
+    # with. The three file-modifying ones route to `branch_guard` (#400); with
+    # only ("Bash", "AskUserQuestion") required, narrowing the live matcher
+    # back would silently kill the write-time default-branch gate while ship
+    # and land both stayed green — a check that can only pass
+    # (`probes-need-a-control-arm.md`).
+    (
+        "PreToolUse",
+        (PRETOOLUSE_WRAPPER,),
+        ("Bash", "AskUserQuestion", "Edit", "Write", "NotebookEdit"),
+    ),
     (
         "SessionStart",
         (_WEB_SETUP, "CLAUDE_CODE_REMOTE", "run tool-currency-check", "run doctor"),
