@@ -511,6 +511,20 @@ description = "Project doctor: does the declared setup (doctor.toml) match reali
 #   mise run doctor -- --live       # + spawn each stdio server, diff its tools
 run = 'uv run --project python dotfiles-setup doctor'
 
+[tasks.dag-tick]
+description = "launchd watchdog tick (#578): census this repo's background agents, classify ALIVE/DEAD/WEDGED/DONE, respawn DEAD and stop lingering DONE. WEDGED is log-only in this slice (#590)"
+# Thin caller (zero-bash-logic); logic in
+# python/src/dotfiles_setup/dag_tick.py. Fired every 60s by the
+# dev.mise.dotfiles-dag-tick LaunchAgent declared below
+# ([bootstrap.macos.launchd.agents.dotfiles-dag-tick]) — that block is
+# inert until a human runs `mise bootstrap macos launchd-agents apply`
+# (never implicit, `.claude/rules/do-not.md`). A single fcntl flock
+# (~/.local/state/dotfiles/dag-tick.lock) makes overlapping ticks a silent
+# no-op rather than a race against a respawn/stop.
+#
+#   mise run dag-tick -- --dry-run --verbose   # manual, read-only preview
+run = 'uv run --project python dotfiles-setup dag-tick'
+
 [tasks.apt-repo]
 description = "List the packages an apt repository publishes (defaults to apt.llvm.org)"
 # Thin caller (zero-bash-logic); logic in
@@ -998,3 +1012,43 @@ raw = true
 # from, not the repo (measured). Session name: CC_TMUX_SESSION, default the repo.
 # Single-quoted TOML so the inner double quotes need no escaping.
 run = 'uv run --project python kb-setup cc --root "$MISE_PROJECT_ROOT" --sibling "$MISE_PROJECT_ROOT/../knowledge-base"'
+
+# macOS user LaunchAgent for the dag-tick watchdog (#578). This section is
+# DECLARATIVE ONLY — mise never writes or loads a LaunchAgent implicitly
+# (`.claude/rules/do-not.md`); a human runs
+# `mise bootstrap macos launchd-agents apply` to write
+# ~/Library/LaunchAgents/dev.mise.dotfiles-dag-tick.plist and load it, and
+# `mise bootstrap macos launchd-agents status` to check drift. Plain
+# `mise bootstrap` (no subcommand) ALSO applies this block — it is step 11
+# of the bootstrap sequence per the LIVE `mise bootstrap --help` at 2026.8.2
+# (the vendored docs snapshot says 7; the binary wins — it gained steps
+# since). Nothing in THIS repo auto-runs either `mise bootstrap` or
+# `mise bootstrap macos launchd-agents apply` — both are always a human's
+# explicit call.
+#
+# Tracked here in `mise.toml`, not in the gitignored `mise.local.toml`, on
+# purpose (#578 respec round 3): this LaunchAgent IS the feature this
+# ticket ships, not a per-clone preference — every clone of this repo gets
+# the same watchdog by declaring it, and a change to its schedule/PATH/
+# working directory is a reviewable diff in this file, not silent drift in
+# a file `git status` never sees.
+#
+# `program` is the literal `mise` BINARY path, not the name — `mise` is a
+# zsh function on this host (shell activation), which launchd cannot exec.
+
+[bootstrap.macos.launchd.agents.dotfiles-dag-tick]
+program = "~/.local/bin/mise"
+args = ["run", "dag-tick"]
+start_interval = 60
+working_directory = "~/dev/github/ray-manaloto/dotfiles"
+stdout_path = "~/Library/Logs/dotfiles-dag-tick.log"
+stderr_path = "~/Library/Logs/dotfiles-dag-tick.err.log"
+# `environment` values are NOT ~-expanded (unlike program/working_directory/
+# std*_path above), so this is the literal absolute PATH launchd needs to
+# find `uv` and the mise-shimmed `dotfiles-setup` the task shells out to.
+# The shims dir is prepended (not appended): it is the non-interactive
+# access path to mise-managed tools (no shell activation, no `mise exec`
+# wrapper needed) — a watchdog-respawned supervisor and the workers it
+# spawns inherit this PATH, and they need mise's own binaries resolvable
+# the same way a `mise run` invocation would find them.
+environment = { PATH = "/Users/rmanaloto/.local/share/mise/shims:/Users/rmanaloto/.local/bin:/opt/homebrew/bin:/usr/bin:/bin" }
