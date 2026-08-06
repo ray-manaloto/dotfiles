@@ -23,6 +23,7 @@ import argparse
 import json
 import os
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -579,78 +580,154 @@ def test_classify_active_with_unknown_age_is_alive_not_wedged() -> None:
 _TERMINAL = "done"  # representative of TERMINAL_STATES
 _OTHER = "killed"  # non-terminal, non-escalated — the harness's other state
 
-_CLASSIFY_TABLE: list[tuple[str | None, bool, bool, bool, dag_tick.NodeClass]] = [
-    # --- terminal state -----------------------------------------------------
-    # Settles regardless of needs/pid... unless a queued prompt defeats it,
-    # which is the harness's own rule (565.md), not ours.
-    (_TERMINAL, False, False, False, dag_tick.NodeClass.DONE),
-    (_TERMINAL, False, False, True, dag_tick.NodeClass.DONE),
-    (_TERMINAL, True, False, False, dag_tick.NodeClass.DONE),
-    (_TERMINAL, True, False, True, dag_tick.NodeClass.DONE),
-    # queued prompt -> not terminal -> ordinary liveness rules resume.
-    (_TERMINAL, False, True, False, dag_tick.NodeClass.DEAD),
-    (_TERMINAL, False, True, True, dag_tick.NodeClass.ALIVE),
-    (_TERMINAL, True, True, False, dag_tick.NodeClass.DEAD),
-    (_TERMINAL, True, True, True, dag_tick.NodeClass.ALIVE),
-    # --- blocked: the state #601 is about ----------------------------------
+# ⚠️ `tempo` is the FIFTH axis, and its inclusion is the #601 v7 finding. The
+# first version of this table pinned tempo="idle" and asserted in a comment,
+# a commit message AND the contract that tempo "only matters for WEDGED".
+# That was wrong in all three: `is_terminal` requires `tempo != "active"`, so
+# a terminal state with tempo="active" is NOT terminal and falls through to
+# the ordinary liveness rules. No test could have caught it, because the test
+# encoded the same wrong assumption. Age stays pinned at None — that keeps
+# WEDGED unreachable (an unknown age is never stalled), so this table isolates
+# classification from staleness, which has its own tests.
+_IDLE = "idle"
+_ACTIVE = "active"
+
+_CLASSIFY_TABLE: list[tuple[str | None, bool, bool, bool, str, dag_tick.NodeClass]] = [
+    # =====================================================================
+    # tempo="idle" — the settled case
+    # =====================================================================
+    # --- terminal state: settles regardless of needs/pid ------------------
+    (_TERMINAL, False, False, False, _IDLE, dag_tick.NodeClass.DONE),
+    (_TERMINAL, False, False, True, _IDLE, dag_tick.NodeClass.DONE),
+    (_TERMINAL, True, False, False, _IDLE, dag_tick.NodeClass.DONE),
+    (_TERMINAL, True, False, True, _IDLE, dag_tick.NodeClass.DONE),
+    # …unless a queued prompt defeats it — the harness's rule (565.md), not
+    # ours. Then ordinary liveness rules resume.
+    (_TERMINAL, False, True, False, _IDLE, dag_tick.NodeClass.DEAD),
+    (_TERMINAL, False, True, True, _IDLE, dag_tick.NodeClass.ALIVE),
+    (_TERMINAL, True, True, False, _IDLE, dag_tick.NodeClass.DEAD),
+    (_TERMINAL, True, True, True, _IDLE, dag_tick.NodeClass.ALIVE),
+    # --- blocked: the state #601 is about --------------------------------
     # No needs -> the plain block, unchanged from main.
-    ("blocked", False, False, False, dag_tick.NodeClass.DEAD),
-    ("blocked", False, False, True, dag_tick.NodeClass.ALIVE),
-    ("blocked", False, True, False, dag_tick.NodeClass.DEAD),
-    ("blocked", False, True, True, dag_tick.NodeClass.ALIVE),
+    ("blocked", False, False, False, _IDLE, dag_tick.NodeClass.DEAD),
+    ("blocked", False, False, True, _IDLE, dag_tick.NodeClass.ALIVE),
+    ("blocked", False, True, False, _IDLE, dag_tick.NodeClass.DEAD),
+    ("blocked", False, True, True, _IDLE, dag_tick.NodeClass.ALIVE),
     # needs, no queued reply -> the escalation. Liveness-independent: the
     # action (log, never respawn) is the same either way.
-    ("blocked", True, False, False, dag_tick.NodeClass.NEEDS_HUMAN),
-    ("blocked", True, False, True, dag_tick.NodeClass.NEEDS_HUMAN),
+    ("blocked", True, False, False, _IDLE, dag_tick.NodeClass.NEEDS_HUMAN),
+    ("blocked", True, False, True, _IDLE, dag_tick.NodeClass.NEEDS_HUMAN),
     # needs AND a queued reply -> the human ALREADY answered. Dead: respawn
     # delivers it. Alive: nothing here can deliver it, so make it visible.
-    ("blocked", True, True, False, dag_tick.NodeClass.DEAD),
-    ("blocked", True, True, True, dag_tick.NodeClass.REPLY_QUEUED),
-    # --- other non-terminal state ------------------------------------------
+    ("blocked", True, True, False, _IDLE, dag_tick.NodeClass.DEAD),
+    ("blocked", True, True, True, _IDLE, dag_tick.NodeClass.REPLY_QUEUED),
+    # --- other non-terminal state ----------------------------------------
     # `needs`/`queuedPrompt` are inert outside `blocked` — an escalation is a
     # property of being blocked, not of the payload existing.
-    (_OTHER, False, False, False, dag_tick.NodeClass.DEAD),
-    (_OTHER, False, False, True, dag_tick.NodeClass.ALIVE),
-    (_OTHER, False, True, False, dag_tick.NodeClass.DEAD),
-    (_OTHER, False, True, True, dag_tick.NodeClass.ALIVE),
-    (_OTHER, True, False, False, dag_tick.NodeClass.DEAD),
-    (_OTHER, True, False, True, dag_tick.NodeClass.ALIVE),
-    (_OTHER, True, True, False, dag_tick.NodeClass.DEAD),
-    (_OTHER, True, True, True, dag_tick.NodeClass.ALIVE),
-    # --- absent/unparseable state ------------------------------------------
+    (_OTHER, False, False, False, _IDLE, dag_tick.NodeClass.DEAD),
+    (_OTHER, False, False, True, _IDLE, dag_tick.NodeClass.ALIVE),
+    (_OTHER, False, True, False, _IDLE, dag_tick.NodeClass.DEAD),
+    (_OTHER, False, True, True, _IDLE, dag_tick.NodeClass.ALIVE),
+    (_OTHER, True, False, False, _IDLE, dag_tick.NodeClass.DEAD),
+    (_OTHER, True, False, True, _IDLE, dag_tick.NodeClass.ALIVE),
+    (_OTHER, True, True, False, _IDLE, dag_tick.NodeClass.DEAD),
+    (_OTHER, True, True, True, _IDLE, dag_tick.NodeClass.ALIVE),
+    # --- absent/unparseable state ----------------------------------------
     # `None` is not terminal and not blocked, so it behaves like any other
     # non-terminal state. (A MISSING state.json never reaches classify at
     # all — classify_background_rows short-circuits it to conservative ALIVE.)
-    (None, False, False, False, dag_tick.NodeClass.DEAD),
-    (None, False, False, True, dag_tick.NodeClass.ALIVE),
-    (None, False, True, False, dag_tick.NodeClass.DEAD),
-    (None, False, True, True, dag_tick.NodeClass.ALIVE),
-    (None, True, False, False, dag_tick.NodeClass.DEAD),
-    (None, True, False, True, dag_tick.NodeClass.ALIVE),
-    (None, True, True, False, dag_tick.NodeClass.DEAD),
-    (None, True, True, True, dag_tick.NodeClass.ALIVE),
+    (None, False, False, False, _IDLE, dag_tick.NodeClass.DEAD),
+    (None, False, False, True, _IDLE, dag_tick.NodeClass.ALIVE),
+    (None, False, True, False, _IDLE, dag_tick.NodeClass.DEAD),
+    (None, False, True, True, _IDLE, dag_tick.NodeClass.ALIVE),
+    (None, True, False, False, _IDLE, dag_tick.NodeClass.DEAD),
+    (None, True, False, True, _IDLE, dag_tick.NodeClass.ALIVE),
+    (None, True, True, False, _IDLE, dag_tick.NodeClass.DEAD),
+    (None, True, True, True, _IDLE, dag_tick.NodeClass.ALIVE),
+    # =====================================================================
+    # tempo="active" — the half the first table could not see
+    # =====================================================================
+    # --- terminal state: NO LONGER TERMINAL. This is the whole finding —
+    # `is_terminal` requires tempo != "active", so every DONE above becomes
+    # an ordinary liveness decision here. A crash mid-activity leaves exactly
+    # this shape, and it is the watchdog's PRIMARY recovery case
+    # (`docs/receipts/565.md` arm B6: state done + tempo ACTIVE -> RESPAWNED).
+    (_TERMINAL, False, False, False, _ACTIVE, dag_tick.NodeClass.DEAD),
+    (_TERMINAL, False, False, True, _ACTIVE, dag_tick.NodeClass.ALIVE),
+    (_TERMINAL, True, False, False, _ACTIVE, dag_tick.NodeClass.DEAD),
+    (_TERMINAL, True, False, True, _ACTIVE, dag_tick.NodeClass.ALIVE),
+    (_TERMINAL, False, True, False, _ACTIVE, dag_tick.NodeClass.DEAD),
+    (_TERMINAL, False, True, True, _ACTIVE, dag_tick.NodeClass.ALIVE),
+    (_TERMINAL, True, True, False, _ACTIVE, dag_tick.NodeClass.DEAD),
+    (_TERMINAL, True, True, True, _ACTIVE, dag_tick.NodeClass.ALIVE),
+    # --- blocked: tempo does NOT reach it. `blocked` was never terminal, so
+    # the terminal branch it changes is not on this path. Enumerated anyway —
+    # "it cannot matter here" is the assumption that produced this axis.
+    ("blocked", False, False, False, _ACTIVE, dag_tick.NodeClass.DEAD),
+    ("blocked", False, False, True, _ACTIVE, dag_tick.NodeClass.ALIVE),
+    ("blocked", False, True, False, _ACTIVE, dag_tick.NodeClass.DEAD),
+    ("blocked", False, True, True, _ACTIVE, dag_tick.NodeClass.ALIVE),
+    ("blocked", True, False, False, _ACTIVE, dag_tick.NodeClass.NEEDS_HUMAN),
+    ("blocked", True, False, True, _ACTIVE, dag_tick.NodeClass.NEEDS_HUMAN),
+    ("blocked", True, True, False, _ACTIVE, dag_tick.NodeClass.DEAD),
+    ("blocked", True, True, True, _ACTIVE, dag_tick.NodeClass.REPLY_QUEUED),
+    # --- other non-terminal state: unchanged, for the same reason.
+    (_OTHER, False, False, False, _ACTIVE, dag_tick.NodeClass.DEAD),
+    (_OTHER, False, False, True, _ACTIVE, dag_tick.NodeClass.ALIVE),
+    (_OTHER, False, True, False, _ACTIVE, dag_tick.NodeClass.DEAD),
+    (_OTHER, False, True, True, _ACTIVE, dag_tick.NodeClass.ALIVE),
+    (_OTHER, True, False, False, _ACTIVE, dag_tick.NodeClass.DEAD),
+    (_OTHER, True, False, True, _ACTIVE, dag_tick.NodeClass.ALIVE),
+    (_OTHER, True, True, False, _ACTIVE, dag_tick.NodeClass.DEAD),
+    (_OTHER, True, True, True, _ACTIVE, dag_tick.NodeClass.ALIVE),
+    # --- absent/unparseable state: unchanged.
+    (None, False, False, False, _ACTIVE, dag_tick.NodeClass.DEAD),
+    (None, False, False, True, _ACTIVE, dag_tick.NodeClass.ALIVE),
+    (None, False, True, False, _ACTIVE, dag_tick.NodeClass.DEAD),
+    (None, False, True, True, _ACTIVE, dag_tick.NodeClass.ALIVE),
+    (None, True, False, False, _ACTIVE, dag_tick.NodeClass.DEAD),
+    (None, True, False, True, _ACTIVE, dag_tick.NodeClass.ALIVE),
+    (None, True, True, False, _ACTIVE, dag_tick.NodeClass.DEAD),
+    (None, True, True, True, _ACTIVE, dag_tick.NodeClass.ALIVE),
 ]
 
+# Per-class cell counts, derived from the PREDICATES rather than from the
+# table — the #601 v7 Q3 finding. Coverage and class-diversity checks both
+# pass on a table that assigns the five classes once and ALIVE to the other
+# 59 cells, so neither constrains the MAPPING. These counts do:
+#   DONE          = terminal ∧ ¬queued ∧ tempo≠active          -> 1*2*1*2*1 = 4
+#   NEEDS_HUMAN   = blocked ∧ needs ∧ ¬queued                  -> 1*1*1*2*2 = 4
+#   REPLY_QUEUED  = blocked ∧ needs ∧ queued ∧ alive           -> 1*1*1*1*2 = 2
+#   DEAD          = every remaining ¬alive cell                -> 32-2-2    = 28
+#   ALIVE         = every remaining alive cell                 -> 32-2-2-2  = 26
+_EXPECTED_CLASS_COUNTS = {
+    dag_tick.NodeClass.DONE: 4,
+    dag_tick.NodeClass.NEEDS_HUMAN: 4,
+    dag_tick.NodeClass.REPLY_QUEUED: 2,
+    dag_tick.NodeClass.DEAD: 28,
+    dag_tick.NodeClass.ALIVE: 26,
+}
 
-@pytest.mark.parametrize(
-    ("state", "has_needs", "queued_prompt", "pid_alive", "expected"), _CLASSIFY_TABLE
-)
+
+@pytest.mark.parametrize("row", _CLASSIFY_TABLE)
 def test_classify_complete_truth_table(
-    state: str | None,
-    *,
-    has_needs: bool,
-    queued_prompt: bool,
-    pid_alive: bool,
-    expected: dag_tick.NodeClass,
+    row: tuple[str | None, bool, bool, bool, str, dag_tick.NodeClass],
 ) -> None:
-    """Every reachable (state, needs, queuedPrompt, pid) combination, decided.
+    """Every reachable (state, needs, queuedPrompt, pid, tempo) combination.
 
-    `tempo="idle"` and `state_age_s=None` pin WEDGED and the --max-age arm
-    out of scope so this table isolates the four axes that pick a class.
+    The row is passed whole rather than unpacked into six parameters — the
+    row IS the unit under test, and unpacking it trips ruff PLR0913 once the
+    fifth axis exists. Suppressing that would violate `no_lint_skip`; taking
+    the tuple is the honest shape.
+
+    `state_age_s=None` is the one remaining pin: an unknown age is never
+    stalled, so WEDGED stays unreachable here and staleness keeps its own
+    tests. That pin is deliberate and asserted below, not assumed.
     """
+    state, has_needs, queued_prompt, pid_alive, tempo, expected = row
     node = _node(
         state=state,
-        tempo="idle",
+        tempo=tempo,
         needs=_LIVE_NEEDS_JULY_13 if has_needs else None,
         queued_prompt=queued_prompt,
     )
@@ -662,25 +739,45 @@ def test_classify_truth_table_is_exhaustive() -> None:
 
     Computed from the axis lists rather than hardcoded, so adding an axis
     value fails here instead of silently leaving cells unenumerated — which
-    is precisely how rounds 5 and 6 each found a live defect.
+    is how rounds 5, 6 and 7 each found a live defect.
     """
     states = [_TERMINAL, "blocked", _OTHER, None]
     bools = [False, True]
+    tempos = [_IDLE, _ACTIVE]
     expected_cells = {
-        (s, n, q, a) for s in states for n in bools for q in bools for a in bools
+        (s, n, q, a, t)
+        for s in states
+        for n in bools
+        for q in bools
+        for a in bools
+        for t in tempos
     }
-    covered = {(row[0], row[1], row[2], row[3]) for row in _CLASSIFY_TABLE}
+    covered = {(row[0], row[1], row[2], row[3], row[4]) for row in _CLASSIFY_TABLE}
     assert covered == expected_cells
-    assert len(_CLASSIFY_TABLE) == len(expected_cells) == 32
+    assert len(_CLASSIFY_TABLE) == len(expected_cells) == 64
+
+
+def test_classify_truth_table_mapping_matches_the_predicates() -> None:
+    """The #601 v7 Q3 fix: constrain the MAPPING, not just the coverage.
+
+    Exhaustiveness and class-diversity together still pass on a table that
+    assigns the five classes once each and ALIVE to the other 59 cells —
+    the reviewer's counterexample. Per-class counts derived from the
+    PREDICATES (see `_EXPECTED_CLASS_COUNTS`) do constrain it: getting one
+    cell wrong moves two counts.
+
+    This is a cross-check of two independent derivations — the per-row
+    literals above, and the closed-form counts — not a recomputation of the
+    code's logic. They can only agree if both are right.
+    """
+    actual = Counter(row[5] for row in _CLASSIFY_TABLE)
+    assert dict(actual) == _EXPECTED_CLASS_COUNTS
+    assert sum(_EXPECTED_CLASS_COUNTS.values()) == 64
 
 
 def test_classify_truth_table_reaches_every_class_it_can() -> None:
-    """Guards against a table that enumerates cells but exercises one answer.
-
-    A 32-row table whose expected column is all ALIVE would satisfy the
-    exhaustiveness check above and prove nothing.
-    """
-    reached = {row[4] for row in _CLASSIFY_TABLE}
+    """Guards against a table that enumerates cells but exercises one answer."""
+    reached = {row[5] for row in _CLASSIFY_TABLE}
     assert reached == {
         dag_tick.NodeClass.DONE,
         dag_tick.NodeClass.DEAD,
@@ -689,8 +786,10 @@ def test_classify_truth_table_reaches_every_class_it_can() -> None:
         dag_tick.NodeClass.REPLY_QUEUED,
     }
     # WEDGED is the one class this table cannot reach, by construction —
-    # tempo is pinned "idle". Stated so its absence reads as deliberate.
+    # age is pinned None. Asserted so its absence reads as deliberate, and
+    # so that a future change making it reachable fails loudly here.
     assert dag_tick.NodeClass.WEDGED not in reached
+    assert dag_tick.is_stalled(_ACTIVE, None, 120.0) is False
 
 
 # ---------------------------------------------------------------------------
