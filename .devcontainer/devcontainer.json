@@ -80,7 +80,7 @@
     "dockerfile": "Dockerfile.host-user",
     "options": ["--platform=linux/amd64/v2"],
     "args": {
-      "DEVCONTAINER_USERNAME": "${localEnv:USER}",
+      "DEVCONTAINER_USER": "${localEnv:USER}",
       "BASE_IMAGE": "${localEnv:BASE_IMAGE}",
     },
   },

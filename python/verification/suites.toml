@@ -806,7 +806,7 @@ category = "identity"
 check_type = "static"
 handler = "regex_match"
 paths = [".devcontainer/Dockerfile.host-user"]
-pattern = 'USER=\$\{?DEVCONTAINER_USERNAME\}?'
+pattern = 'USER=\$\{?DEVCONTAINER_USER\}?'
 
 [[suite]]
 name = "identity.logname-env-set"
@@ -815,16 +815,16 @@ category = "identity"
 check_type = "static"
 handler = "regex_match"
 paths = [".devcontainer/Dockerfile.host-user"]
-pattern = 'LOGNAME=\$\{?DEVCONTAINER_USERNAME\}?'
+pattern = 'LOGNAME=\$\{?DEVCONTAINER_USER\}?'
 
 [[suite]]
 name = "identity.workdir-set"
-description = "WORKDIR must reference DEVCONTAINER_USERNAME"
+description = "WORKDIR must reference DEVCONTAINER_USER"
 category = "identity"
 check_type = "static"
 handler = "regex_match"
 paths = [".devcontainer/Dockerfile.host-user"]
-pattern = 'WORKDIR\s+/home/\$\{?DEVCONTAINER_USERNAME\}?'
+pattern = 'WORKDIR\s+/home/\$\{?DEVCONTAINER_USER\}?'
 
 [[suite]]
 name = "identity.stale-sudoers-cleanup"
@@ -842,7 +842,7 @@ category = "identity"
 check_type = "static"
 handler = "regex_match"
 paths = [".devcontainer/Dockerfile.host-user"]
-pattern = 'DEVCONTAINER_USERNAME.*=.*"root"'
+pattern = 'DEVCONTAINER_USER.*=.*"root"'
 
 # =============================================================================
 # Architecture Constraints (~4) — Structural invariants

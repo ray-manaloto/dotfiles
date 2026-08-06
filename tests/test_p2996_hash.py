@@ -92,7 +92,7 @@ def _seed_repo(tmp_path: Path) -> Path:
         'target "dev" {\n'
         '  target = "devcontainer"\n'
         "  args = {\n"
-        '    DEVCONTAINER_USERNAME = "devcontainer"\n'
+        '    DEVCONTAINER_USER = "devcontainer"\n'
         "  }\n"
         "}\n",
     )
@@ -784,8 +784,8 @@ def test_repo_dev_hash_changes_when_dev_target_modified(tmp_path: Path) -> None:
     bake = tmp_path / "docker-bake.hcl"
     bake.write_text(
         bake.read_text().replace(
-            'DEVCONTAINER_USERNAME = "devcontainer"',
-            'DEVCONTAINER_USERNAME = "ray"',
+            'DEVCONTAINER_USER = "devcontainer"',
+            'DEVCONTAINER_USER = "ray"',
         )
     )
     assert compute_repo_dev_hash(tmp_path) != before

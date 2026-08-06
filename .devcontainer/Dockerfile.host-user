@@ -1,81 +1,82 @@
-# syntax=docker/dockerfile:1.25@sha256:0adf442eae370b6087e08edc7c50b552d80ddf261576f4ebd6421006b2461f12
+# syntax=docker/dockerfile:1.26@sha256:ecfaec9ed6d810b56388c508f4121597bfbba70d41a6dfeee4d8cad5f295fc32
 # Thin host-user overlay — renames default UID 1000 user to match host.
 # Built at `devcontainer up` time, never baked into published image.
 
 ARG BASE_IMAGE=ghcr.io/ray-manaloto/dotfiles-devcontainer:dev
 FROM ${BASE_IMAGE}
-USER root
+# Numeric id (= root): hadolint 2.15 DL3066 wants host-resolvable user-ids.
+USER 0
 
-ARG DEVCONTAINER_USERNAME=devcontainer
+ARG DEVCONTAINER_USER=devcontainer
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Validate username
-RUN if [ -z "${DEVCONTAINER_USERNAME}" ]; then \
-      echo "ERROR: DEVCONTAINER_USERNAME is empty" >&2; exit 1; \
+RUN if [ -z "${DEVCONTAINER_USER}" ]; then \
+      echo "ERROR: DEVCONTAINER_USER is empty" >&2; exit 1; \
     fi && \
-    if [ "${DEVCONTAINER_USERNAME}" = "root" ]; then \
-      echo "ERROR: DEVCONTAINER_USERNAME cannot be root" >&2; exit 1; \
+    if [ "${DEVCONTAINER_USER}" = "root" ]; then \
+      echo "ERROR: DEVCONTAINER_USER cannot be root" >&2; exit 1; \
     fi && \
-    if echo "${DEVCONTAINER_USERNAME}" | grep -qE '[^A-Za-z0-9._-]'; then \
-      echo "ERROR: DEVCONTAINER_USERNAME contains invalid characters" >&2; exit 1; \
+    if echo "${DEVCONTAINER_USER}" | grep -qE '[^A-Za-z0-9._-]'; then \
+      echo "ERROR: DEVCONTAINER_USER contains invalid characters" >&2; exit 1; \
     fi
 
 # Group handling: rename or create GID 1000
 RUN existing_group="$(getent group 1000 | cut -d: -f1 || true)" && \
-    if [ -n "${existing_group}" ] && [ "${existing_group}" != "${DEVCONTAINER_USERNAME}" ]; then \
-      groupmod -n "${DEVCONTAINER_USERNAME}" "${existing_group}"; \
+    if [ -n "${existing_group}" ] && [ "${existing_group}" != "${DEVCONTAINER_USER}" ]; then \
+      groupmod -n "${DEVCONTAINER_USER}" "${existing_group}"; \
     elif [ -z "${existing_group}" ]; then \
-      groupadd --gid 1000 "${DEVCONTAINER_USERNAME}"; \
+      groupadd --gid 1000 "${DEVCONTAINER_USER}"; \
     fi
 
 # User handling: rename existing UID 1000 or create new
 RUN existing_user="$(getent passwd 1000 | cut -d: -f1 || true)" && \
-    if [ -n "${existing_user}" ] && [ "${existing_user}" != "${DEVCONTAINER_USERNAME}" ]; then \
-      usermod --login "${DEVCONTAINER_USERNAME}" \
-              --home "/home/${DEVCONTAINER_USERNAME}" \
+    if [ -n "${existing_user}" ] && [ "${existing_user}" != "${DEVCONTAINER_USER}" ]; then \
+      usermod --login "${DEVCONTAINER_USER}" \
+              --home "/home/${DEVCONTAINER_USER}" \
               --move-home "${existing_user}"; \
     elif [ -z "${existing_user}" ]; then \
-      useradd --uid 1000 --gid 1000 -m -s /bin/bash "${DEVCONTAINER_USERNAME}"; \
+      useradd --uid 1000 --gid 1000 -m -s /bin/bash "${DEVCONTAINER_USER}"; \
     fi
 
 # Sudoers (remove stale base-image entry before creating new)
 RUN rm -f /etc/sudoers.d/devcontainer && \
-    usermod --append --groups sudo "${DEVCONTAINER_USERNAME}" && \
-    printf '%s ALL=(ALL) NOPASSWD:ALL\n' "${DEVCONTAINER_USERNAME}" \
-      > /etc/sudoers.d/"${DEVCONTAINER_USERNAME}" && \
-    chmod 0440 /etc/sudoers.d/"${DEVCONTAINER_USERNAME}"
+    usermod --append --groups sudo "${DEVCONTAINER_USER}" && \
+    printf '%s ALL=(ALL) NOPASSWD:ALL\n' "${DEVCONTAINER_USER}" \
+      > /etc/sudoers.d/"${DEVCONTAINER_USER}" && \
+    chmod 0440 /etc/sudoers.d/"${DEVCONTAINER_USER}"
 
 
 # Pre-stage home directories for volume mount targets and tool paths.
 # v6: ~/.local/tmp added as the TMPDIR target — tools that respect
 # $TMPDIR get persistence for free via the single home volume mount.
 RUN mkdir -p \
-    /home/${DEVCONTAINER_USERNAME}/.cache/uv \
-    /home/${DEVCONTAINER_USERNAME}/.local/bin \
-    /home/${DEVCONTAINER_USERNAME}/.local/state \
-    /home/${DEVCONTAINER_USERNAME}/.local/share/mise \
-    /home/${DEVCONTAINER_USERNAME}/.local/tmp \
-    /home/${DEVCONTAINER_USERNAME}/.cargo \
-    /home/${DEVCONTAINER_USERNAME}/.rustup \
-    /home/${DEVCONTAINER_USERNAME}/.config/gh \
-    /home/${DEVCONTAINER_USERNAME}/.config/mise \
-    /home/${DEVCONTAINER_USERNAME}/.ssh && \
-    chmod 700 /home/${DEVCONTAINER_USERNAME}/.ssh && \
-    chown -R ${DEVCONTAINER_USERNAME}:${DEVCONTAINER_USERNAME} /home/${DEVCONTAINER_USERNAME}
+    /home/${DEVCONTAINER_USER}/.cache/uv \
+    /home/${DEVCONTAINER_USER}/.local/bin \
+    /home/${DEVCONTAINER_USER}/.local/state \
+    /home/${DEVCONTAINER_USER}/.local/share/mise \
+    /home/${DEVCONTAINER_USER}/.local/tmp \
+    /home/${DEVCONTAINER_USER}/.cargo \
+    /home/${DEVCONTAINER_USER}/.rustup \
+    /home/${DEVCONTAINER_USER}/.config/gh \
+    /home/${DEVCONTAINER_USER}/.config/mise \
+    /home/${DEVCONTAINER_USER}/.ssh && \
+    chmod 700 /home/${DEVCONTAINER_USER}/.ssh && \
+    chown -R ${DEVCONTAINER_USER}:${DEVCONTAINER_USER} /home/${DEVCONTAINER_USER}
 
-ENV DEVCONTAINER_USERNAME=${DEVCONTAINER_USERNAME} \
-    USER=${DEVCONTAINER_USERNAME} \
-    LOGNAME=${DEVCONTAINER_USERNAME} \
-    HOME=/home/${DEVCONTAINER_USERNAME} \
+ENV DEVCONTAINER_USER=${DEVCONTAINER_USER} \
+    USER=${DEVCONTAINER_USER} \
+    LOGNAME=${DEVCONTAINER_USER} \
+    HOME=/home/${DEVCONTAINER_USER} \
     MISE_TRUSTED_CONFIG_PATHS="/" \
     MISE_SYSTEM_CONFIG_DIR=/usr/local/share/mise \
-    MISE_CONFIG_DIR=/home/${DEVCONTAINER_USERNAME}/.config/mise \
-    MISE_GLOBAL_CONFIG_FILE=/home/${DEVCONTAINER_USERNAME}/.config/mise/config.toml \
-    TMPDIR=/home/${DEVCONTAINER_USERNAME}/.local/tmp \
-    PATH="/home/${DEVCONTAINER_USERNAME}/.local/bin:/home/${DEVCONTAINER_USERNAME}/.local/share/mise/shims:${PATH}"
+    MISE_CONFIG_DIR=/home/${DEVCONTAINER_USER}/.config/mise \
+    MISE_GLOBAL_CONFIG_FILE=/home/${DEVCONTAINER_USER}/.config/mise/config.toml \
+    TMPDIR=/home/${DEVCONTAINER_USER}/.local/tmp \
+    PATH="/home/${DEVCONTAINER_USER}/.local/bin:/home/${DEVCONTAINER_USER}/.local/share/mise/shims:${PATH}"
 
-WORKDIR /home/${DEVCONTAINER_USERNAME}
-USER ${DEVCONTAINER_USERNAME}
+WORKDIR /home/${DEVCONTAINER_USER}
+USER ${DEVCONTAINER_USER}
 
-WORKDIR /home/${DEVCONTAINER_USERNAME}
+WORKDIR /home/${DEVCONTAINER_USER}

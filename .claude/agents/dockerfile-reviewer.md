@@ -10,7 +10,7 @@ You are a Docker and BuildKit specialist reviewing devcontainer builds for this 
 This project uses a multi-stage Dockerfile with BuildKit features:
 
 - **APT packages**: Uses plain `apt-get` (no snapshot pinning — removed due to snapshot.ubuntu.com unreliability on 26.04); the package list is declared in `mise-system.toml` `[bootstrap.packages]`.
-- **Root build**: The base image builds entirely as root — no `USER` directive. The thin `Dockerfile.host-user` overlay creates `${DEVCONTAINER_USERNAME}` (uid 1000) at devcontainer-up time; do not expect `uid=1000` mount options in the base Dockerfile.
+- **Root build**: The base image builds entirely as root — no `USER` directive. The thin `Dockerfile.host-user` overlay creates `${DEVCONTAINER_USER}` (uid 1000) at devcontainer-up time; do not expect `uid=1000` mount options in the base Dockerfile.
 - **Secret mounts**: `--mount=type=secret,id=github_token` with no uid/gid override — the root build reads the default root-owned 0400 secret directly.
 - **Cache mounts**: apt lists/cache, mise, and uv caches with `sharing=locked`; root-owned in the base build.
 - **Tool install**: `mise install --system --locked` from `mise-system.toml` + the COPYd `conf.d/shared.toml` fragment; the chezmoi bootstrap runs at `onCreateCommand` (`on-create.sh`) — the old `install.sh` entry point was retired.
