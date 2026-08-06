@@ -675,6 +675,26 @@ def background_pid_alive(
     return check(entry.pid)
 
 
+def node_from_state(node_id: str, data: Mapping[str, object]) -> Node:
+    """Build a :class:`Node` from one parsed `state.json`, defensively.
+
+    Shared by :func:`classify_background_rows` (the census path) and
+    :func:`execute_respawn`'s fresh escalation re-check, so the two cannot
+    disagree about what the same file says — the #601 v4 review's HIGH
+    finding was exactly a disagreement of that shape, where only one of the
+    two looked at `needs` at all.
+    """
+    state = data.get("state")
+    tempo = data.get("tempo")
+    return Node(
+        node_id=node_id,
+        state=state if isinstance(state, str) else None,
+        tempo=tempo if isinstance(tempo, str) else None,
+        queued_prompt=bool(data.get("queuedPrompt")),
+        needs=normalize_needs(data.get("needs")),
+    )
+
+
 def load_state_json(
     jobs_dir: Path, node_id: str
 ) -> tuple[dict[str, object] | None, float | None]:
@@ -832,15 +852,7 @@ def classify_background_rows(
                     "classifying ALIVE (conservative)"
                 )
             continue
-        state = data.get("state")
-        tempo = data.get("tempo")
-        node = Node(
-            node_id=node_id,
-            state=state if isinstance(state, str) else None,
-            tempo=tempo if isinstance(tempo, str) else None,
-            queued_prompt=bool(data.get("queuedPrompt")),
-            needs=normalize_needs(data.get("needs")),
-        )
+        node = node_from_state(node_id, data)
         alive = background_pid_alive(node_id, roster, is_alive=is_alive)
         state_age_s = None if mtime is None else max(now - mtime, 0.0)
         node_class = classify(
@@ -894,13 +906,33 @@ def execute_respawn(
     *,
     is_alive: Callable[[int], bool] | None = None,
 ) -> str:
-    """Respawn one DEAD node, after a fresh PID-liveness re-check.
+    """Respawn one DEAD node, after a fresh ESCALATION and PID re-check.
 
     Eventual-consistency doctrine: never wait for or read back the result —
-    the next tick observes it. The skip condition guards against a race
+    the next tick observes it. The skip conditions guard against a race
     between classification (up to one tick, i.e. 60s, stale) and this call:
     if the roster now reports the pid alive, something else already revived
     the node and a second respawn would double-start it.
+
+    ⚠️ **The escalation re-check is the #601 v4 review's HIGH finding, and
+    it is not hypothetical.** `plan()` making NEEDS_HUMAN log-only protects
+    a node only if the CLASSIFICATION saw the escalation. Actions are then
+    executed from that snapshot, and this function used to re-read only the
+    roster — so a node planned DEAD -> RESPAWN that acquired
+    `state=blocked` + `needs` in between was respawned anyway, which is
+    precisely the loss #601 exists to prevent. The reviewer demonstrated
+    it: `snapshot_class=dead -> planned_action=respawn ->
+    latest_class_before_execution=needs_human -> "dag-tick: RESPAWN race1"`.
+    The window is real because a roster read is not instantaneous truth —
+    a node absent from the roster is treated as dead (this module's own
+    negative-evidence rule) while its process may still be running and
+    still able to write `needs`.
+
+    So the fresh re-check now covers BOTH axes it must: the escalation
+    predicate as well as pid liveness. An unreadable `state.json` also
+    SKIPs, deliberately — a node classified DEAD had a readable one, so its
+    disappearance is anomalous, and "never resurrect what cannot be proven"
+    already governs the age check one function over. The next tick retries.
 
     Deliberately PID-liveness only — no `tempo`/in-flight check. The
     harness's own `/restart` refusal ("Can't restart while work is running
@@ -916,6 +948,18 @@ def execute_respawn(
     crash-respawn recovers exactly this case (`docs/receipts/565.md` arm
     B6: state done + tempo ACTIVE -> RESPAWNED) — this function must too.
     """
+    fresh_data, _ = load_state_json(ctx.jobs_dir, node_id)
+    if fresh_data is None:
+        return (
+            f"dag-tick: SKIP respawn {node_id} — state.json unreadable at "
+            "execution; cannot prove it is not an escalation"
+        )
+    fresh = node_from_state(node_id, fresh_data)
+    if is_needs_human(fresh.state, fresh.needs):
+        return (
+            f"dag-tick: SKIP respawn {node_id} — escalated since "
+            f"classification; {_needs_human_reason()}; needs: {fresh.needs}"
+        )
     if background_pid_alive(node_id, read_roster(ctx.daemon_dir), is_alive=is_alive):
         return f"dag-tick: SKIP respawn {node_id} — pid is alive now (reconciled)"
     try:

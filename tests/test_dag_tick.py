@@ -1285,7 +1285,12 @@ def test_execute_respawn_spawns_when_no_evidence_of_life(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     daemon_dir = _roster(tmp_path, {})
-    ctx = _ctx(tmp_path, daemon_dir=daemon_dir)
+    jobs_dir = tmp_path / "jobs"
+    # A node classified DEAD necessarily HAS a readable state.json — a
+    # missing one classifies conservative-ALIVE and never reaches here. The
+    # fixture said otherwise until #601 v4 made `execute_respawn` re-read it.
+    _write_state(jobs_dir, "abc123", {"state": "blocked", "tempo": "idle"})
+    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir)
     calls: list[list[str]] = []
 
     def _fake_popen(argv: list[str], **_kwargs: object) -> None:
@@ -1312,11 +1317,114 @@ def test_execute_respawn_skips_when_pid_alive_now(
     assert "SKIP respawn abc123" in line
 
 
+def test_execute_respawn_skips_a_node_that_escalated_since_classification(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """#601 v4 adversarial review, HIGH — the classify->execute race.
+
+    `plan()` making NEEDS_HUMAN log-only protects a node only if the
+    CLASSIFICATION saw the escalation. Actions execute from that snapshot,
+    and `execute_respawn` used to re-read only the roster — so a node
+    planned DEAD -> RESPAWN that acquired `state=blocked` + `needs` in
+    between was respawned anyway, which is exactly the loss #601 exists to
+    prevent. Reproduced here the way the reviewer demonstrated it: plan
+    from a non-escalated snapshot, then mutate `state.json` before
+    executing.
+
+    The window is real because a roster read is not instantaneous truth: a
+    node absent from the roster counts as dead by this module's own
+    negative-evidence rule while its process may still be running, and a
+    running node is exactly what can write `needs`.
+    """
+    daemon_dir = _roster(tmp_path, {})  # readable, names nobody -> pid dead
+    jobs_dir = tmp_path / "jobs"
+    # The snapshot `plan()` saw: blocked, no needs -> DEAD -> RESPAWN.
+    _write_state(jobs_dir, "race1", {"state": "blocked", "tempo": "idle"})
+    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir)
+    snapshot = dag_tick.classify_background_rows(
+        [{"id": "race1", "kind": "background"}], ctx
+    )
+    assert snapshot.classified[0].node_class is dag_tick.NodeClass.DEAD
+    assert [a.kind for a in dag_tick.plan(snapshot.classified, max_age_s=86400.0)] == [
+        dag_tick.ActionKind.RESPAWN
+    ]
+
+    # …and then the node escalates, before the planned action executes.
+    _write_state(
+        jobs_dir,
+        "race1",
+        {"state": "blocked", "tempo": "blocked", "needs": _LIVE_NEEDS_JULY_13},
+    )
+
+    def _fail_popen(*_args: object, **_kwargs: object) -> None:
+        msg = "a node that escalated since classification must not be respawned"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(dag_tick.subprocess, "Popen", _fail_popen)
+    line = dag_tick.execute_respawn("race1", ctx)
+    assert "SKIP respawn race1" in line
+    assert "escalated since classification" in line
+    assert _LIVE_NEEDS_JULY_13 in line
+
+
+def test_execute_respawn_still_spawns_when_the_node_did_not_escalate(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The control arm for the race fix: same shape, no escalation.
+
+    Identical to the test above through the plan step, but `state.json` is
+    rewritten WITHOUT a `needs` key. The respawn must still fire — a fix
+    that skipped on any re-read, or on any `blocked` state, would silently
+    retire the watchdog's primary recovery path and still pass the arm
+    above.
+    """
+    daemon_dir = _roster(tmp_path, {})
+    jobs_dir = tmp_path / "jobs"
+    _write_state(jobs_dir, "race1", {"state": "blocked", "tempo": "idle"})
+    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir)
+    _write_state(jobs_dir, "race1", {"state": "blocked", "tempo": "blocked"})
+    calls: list[list[str]] = []
+
+    def _fake_popen(argv: list[str], **_kwargs: object) -> None:
+        calls.append(argv)
+
+    monkeypatch.setattr(dag_tick.subprocess, "Popen", _fake_popen)
+    line = dag_tick.execute_respawn("race1", ctx)
+    assert calls == [["claude", "respawn", "race1"]]
+    assert "RESPAWN race1" in line
+
+
+def test_execute_respawn_skips_when_state_json_vanished_before_execution(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """An unreadable `state.json` at execution SKIPs — cannot prove safety.
+
+    A node classified DEAD had a readable one (a missing file classifies
+    conservative-ALIVE and never reaches here), so its disappearance is
+    anomalous. The same "never resurrect what cannot be proven" rule that
+    governs `_is_stale_dead`'s unknown age applies: skip, and let the next
+    tick reconcile.
+    """
+    daemon_dir = _roster(tmp_path, {})
+    ctx = _ctx(tmp_path, jobs_dir=tmp_path / "jobs", daemon_dir=daemon_dir)
+
+    def _fail_popen(*_args: object, **_kwargs: object) -> None:
+        msg = "must not respawn a node whose state cannot be read"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(dag_tick.subprocess, "Popen", _fail_popen)
+    line = dag_tick.execute_respawn("ghost", ctx)
+    assert "SKIP respawn ghost" in line
+    assert "state.json unreadable at execution" in line
+
+
 def test_execute_respawn_missing_binary_returns_skip_line(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     daemon_dir = _roster(tmp_path, {})
-    ctx = _ctx(tmp_path, daemon_dir=daemon_dir)
+    jobs_dir = tmp_path / "jobs"
+    _write_state(jobs_dir, "abc123", {"state": "blocked", "tempo": "idle"})
+    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir)
 
     def _raise_missing(*_args: object, **_kwargs: object) -> None:
         raise FileNotFoundError(2, "No such file or directory", "claude")
