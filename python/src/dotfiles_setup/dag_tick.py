@@ -393,7 +393,10 @@ def try_acquire_lock(lock_path: Path) -> TextIO | None:
     exit 0 silently (overlap guard: two ticks must never race a respawn).
     """
     lock_path.parent.mkdir(parents=True, exist_ok=True)
-    handle = lock_path.open("w")
+    # "a", not "w" — "w" truncates the file on open, which would zero out
+    # the lockfile's bytes out from under another process that already
+    # holds it open (flock is advisory and does not stop the truncate).
+    handle = lock_path.open("a")
     try:
         fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
@@ -408,14 +411,28 @@ def gate_preflight(claude_bin: str) -> Literal["on", "off", "unknown"]:
     Mints a fresh bogus job id per call — a published id stops discriminating
     once it is a real (or once-real) job (`.claude/rules/
     probes-need-a-control-arm.md`).
+
+    `claude_bin` not existing/executable (`FileNotFoundError`/`PermissionError`,
+    both `OSError`) is treated the same as an ambiguous gate read: `run_tick`
+    already logs and exits 0 on anything other than `"on"`, so `"unknown"`
+    is the correct degrade — never let a missing binary raise out of the
+    always-rc-0 tick.
     """
     bogus_id = uuid.uuid4().hex
-    result = subprocess.run(
-        [claude_bin, "logs", bogus_id],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            [claude_bin, "logs", bogus_id],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        logger.warning(
+            "dag-tick: claude binary %r unavailable for gate preflight: %s",
+            claude_bin,
+            exc,
+        )
+        return "unknown"
     return gate_status(result.stderr)
 
 
@@ -423,24 +440,43 @@ def read_census(claude_bin: str, cwd: str) -> list[dict[str, object]]:
     """`claude agents --json --cwd <cwd> --all`, defensively parsed.
 
     Read-only — it does not start or restart the supervisor (`docs/receipts/
-    565.md` §4). Any failure (nonzero rc, malformed JSON, a non-array
-    top-level value) degrades to an empty census rather than raising: a tick
-    that cannot read the fleet should do nothing this tick, not crash the
-    launchd agent.
+    565.md` §4). Every failure mode (missing/unexecutable binary, nonzero
+    rc, malformed JSON, a non-array top-level value) degrades to an empty
+    census rather than raising: a tick that cannot read the fleet should do
+    nothing this tick, not crash the launchd agent. Each failure path logs
+    ONE distinct warning so "the fleet is genuinely empty" (silent) is never
+    confused with "the census read failed" (logged) — before this, both
+    returned `[]` identically and a failure at 3am left no trace.
     """
-    result = subprocess.run(
-        [claude_bin, "agents", "--json", "--cwd", cwd, "--all"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            [claude_bin, "agents", "--json", "--cwd", cwd, "--all"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        logger.warning(
+            "dag-tick: claude binary %r unavailable for census: %s", claude_bin, exc
+        )
+        return []
     if result.returncode != 0:
+        logger.warning(
+            "dag-tick: census read failed rc=%d stderr=%s",
+            result.returncode,
+            result.stderr[:200],
+        )
         return []
     try:
         data = json.loads(result.stdout)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as exc:
+        logger.warning("dag-tick: census stdout was not valid JSON: %s", exc)
         return []
     if not isinstance(data, list):
+        logger.warning(
+            "dag-tick: census top-level JSON was %s, not a list",
+            type(data).__name__,
+        )
         return []
     return [row for row in data if isinstance(row, dict)]
 
@@ -532,26 +568,42 @@ def execute_respawn(node_id: str, *, claude_bin: str, daemon_dir: Path) -> str:
     """
     if background_pid_alive(node_id, read_roster(daemon_dir)):
         return f"dag-tick: SKIP respawn {node_id} — pid is alive now (reconciled)"
-    subprocess.Popen(
-        [claude_bin, "respawn", node_id],
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        env=strip_respawn_env(),
-        cwd=str(Path.home()),
-        start_new_session=True,
-    )
+    try:
+        subprocess.Popen(
+            [claude_bin, "respawn", node_id],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            env=strip_respawn_env(),
+            cwd=str(Path.home()),
+            start_new_session=True,
+        )
+    except OSError as exc:
+        return f"dag-tick: SKIP respawn {node_id} — claude binary unavailable: {exc}"
     return f"dag-tick: RESPAWN {node_id}"
 
 
-def execute_stop(node_id: str, *, claude_bin: str) -> str:
-    """Stop one DONE-but-still-alive node; reports the real exit code."""
-    result = subprocess.run(
-        [claude_bin, "stop", node_id],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+def execute_stop(node_id: str, *, claude_bin: str, daemon_dir: Path) -> str:
+    """Stop one DONE-but-still-alive node, after a fresh pid re-check.
+
+    Mirrors `execute_respawn`'s fresh-re-check shape: classification can be
+    up to one tick (60s) stale, so re-read the roster right before acting.
+    If the pid has already gone since classification (settled on its own,
+    or something else already reaped it), SKIP rather than issue a stop
+    that would log a false FAILED line against a process that no longer
+    exists.
+    """
+    if not background_pid_alive(node_id, read_roster(daemon_dir)):
+        return f"dag-tick: SKIP stop {node_id} — settled since classification"
+    try:
+        result = subprocess.run(
+            [claude_bin, "stop", node_id],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        return f"dag-tick: SKIP stop {node_id} — claude binary unavailable: {exc}"
     if result.returncode == 0:
         return f"dag-tick: STOP {node_id} (rc=0)"
     return (
@@ -588,7 +640,11 @@ def _execute_or_preview(
                 )
             )
         elif action.kind is ActionKind.STOP:
-            lines.append(execute_stop(action.node_id, claude_bin=claude_bin))
+            lines.append(
+                execute_stop(
+                    action.node_id, claude_bin=claude_bin, daemon_dir=daemon_dir
+                )
+            )
     return lines
 
 

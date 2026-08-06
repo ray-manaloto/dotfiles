@@ -1031,4 +1031,9 @@ stderr_path = "~/Library/Logs/dotfiles-dag-tick.err.log"
 # `environment` values are NOT ~-expanded (unlike program/working_directory/
 # std*_path above), so this is the literal absolute PATH launchd needs to
 # find `uv` and the mise-shimmed `dotfiles-setup` the task shells out to.
-environment = { PATH = "/Users/rmanaloto/.local/bin:/opt/homebrew/bin:/usr/bin:/bin" }
+# The shims dir is prepended (not appended): it is the non-interactive
+# access path to mise-managed tools (no shell activation, no `mise exec`
+# wrapper needed) — a watchdog-respawned supervisor and the workers it
+# spawns inherit this PATH, and they need mise's own binaries resolvable
+# the same way a `mise run` invocation would find them.
+environment = { PATH = "/Users/rmanaloto/.local/share/mise/shims:/Users/rmanaloto/.local/bin:/opt/homebrew/bin:/usr/bin:/bin" }

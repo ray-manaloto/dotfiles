@@ -251,6 +251,21 @@ def test_lock_release_allows_reacquire(tmp_path: Path) -> None:
     second.close()
 
 
+def test_try_acquire_lock_does_not_truncate_existing_content(tmp_path: Path) -> None:
+    """#578 respec round 2 lock-mode fix.
+
+    Opening in "w" mode truncates on open, before flock is even attempted —
+    a second process's `open("w")` would zero another holder's bytes out
+    from under it. "a" does not truncate.
+    """
+    lock_path = tmp_path / "dag-tick.lock"
+    lock_path.write_text("PREVIOUS-CONTENT")
+    handle = dag_tick.try_acquire_lock(lock_path)
+    assert handle is not None
+    handle.close()
+    assert lock_path.read_text() == "PREVIOUS-CONTENT"
+
+
 # ---------------------------------------------------------------------------
 # read_roster, pid_is_alive, and background_pid_alive — daemon liveness
 # ---------------------------------------------------------------------------
@@ -460,6 +475,104 @@ def test_classify_background_rows_wedged_note_always_prints(tmp_path: Path) -> N
 
 
 # ---------------------------------------------------------------------------
+# gate_preflight() / read_census() — missing binary + distinct failure logs
+# (#578 respec round 2)
+# ---------------------------------------------------------------------------
+
+
+def test_gate_preflight_missing_binary_returns_unknown(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    def _raise_missing(*_args: object, **_kwargs: object) -> None:
+        raise FileNotFoundError(2, "No such file or directory", "claude")
+
+    monkeypatch.setattr(dag_tick.subprocess, "run", _raise_missing)
+    with caplog.at_level("WARNING"):
+        result = dag_tick.gate_preflight("claude")
+    assert result == "unknown"
+    assert any("gate preflight" in record.getMessage() for record in caplog.records)
+
+
+def test_read_census_missing_binary_returns_empty_and_logs(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    def _raise_missing(*_args: object, **_kwargs: object) -> None:
+        raise FileNotFoundError(2, "No such file or directory", "claude")
+
+    monkeypatch.setattr(dag_tick.subprocess, "run", _raise_missing)
+    with caplog.at_level("WARNING"):
+        result = dag_tick.read_census("claude", "/x")
+    assert result == []
+    assert any(
+        "unavailable for census" in record.getMessage() for record in caplog.records
+    )
+
+
+def test_read_census_nonzero_rc_logs_rc_and_stderr(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(
+        dag_tick.subprocess,
+        "run",
+        lambda *_a, **_k: _FakeCompleted(returncode=17, stderr="permission denied"),
+    )
+    with caplog.at_level("WARNING"):
+        result = dag_tick.read_census("claude", "/x")
+    assert result == []
+    messages = [record.getMessage() for record in caplog.records]
+    assert any(
+        "rc=17" in message and "permission denied" in message for message in messages
+    )
+
+
+def test_read_census_invalid_json_logs_distinct_message(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(
+        dag_tick.subprocess,
+        "run",
+        lambda *_a, **_k: _FakeCompleted(returncode=0, stdout="{not json"),
+    )
+    with caplog.at_level("WARNING"):
+        result = dag_tick.read_census("claude", "/x")
+    assert result == []
+    assert any("not valid JSON" in record.getMessage() for record in caplog.records)
+
+
+def test_read_census_non_list_top_level_logs_distinct_message(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(
+        dag_tick.subprocess,
+        "run",
+        lambda *_a, **_k: _FakeCompleted(returncode=0, stdout=json.dumps({"a": 1})),
+    )
+    with caplog.at_level("WARNING"):
+        result = dag_tick.read_census("claude", "/x")
+    assert result == []
+    assert any("not a list" in record.getMessage() for record in caplog.records)
+
+
+def test_read_census_healthy_empty_fleet_is_silent(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Control arm for the four failure-log tests above.
+
+    A genuinely empty fleet (rc=0, a real empty JSON array) must produce
+    ZERO warnings — this is exactly the case the fix must not turn noisy.
+    """
+    monkeypatch.setattr(
+        dag_tick.subprocess,
+        "run",
+        lambda *_a, **_k: _FakeCompleted(returncode=0, stdout="[]"),
+    )
+    with caplog.at_level("WARNING"):
+        result = dag_tick.read_census("claude", "/x")
+    assert result == []
+    assert caplog.records == []
+
+
+# ---------------------------------------------------------------------------
 # execute_respawn() / execute_stop() — monkeypatched subprocess only
 # ---------------------------------------------------------------------------
 
@@ -550,25 +663,101 @@ def test_execute_respawn_skips_when_pid_alive_now(
     assert "SKIP respawn abc123" in line
 
 
-def test_execute_stop_reports_success(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_execute_stop_reports_success(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    daemon_dir = tmp_path / "daemon"
+    daemon_dir.mkdir()
+    (daemon_dir / "roster.json").write_text(
+        json.dumps({"workers": {"abc123": {"pid": os.getpid()}}})
+    )
     monkeypatch.setattr(
         dag_tick.subprocess,
         "run",
         lambda *_a, **_k: _FakeCompleted(returncode=0),
     )
-    line = dag_tick.execute_stop("abc123", claude_bin="claude")
+    line = dag_tick.execute_stop("abc123", claude_bin="claude", daemon_dir=daemon_dir)
     assert line == "dag-tick: STOP abc123 (rc=0)"
 
 
-def test_execute_stop_reports_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_execute_stop_reports_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    daemon_dir = tmp_path / "daemon"
+    daemon_dir.mkdir()
+    (daemon_dir / "roster.json").write_text(
+        json.dumps({"workers": {"abc123": {"pid": os.getpid()}}})
+    )
     monkeypatch.setattr(
         dag_tick.subprocess,
         "run",
         lambda *_a, **_k: _FakeCompleted(returncode=1, stderr="boom"),
     )
-    line = dag_tick.execute_stop("abc123", claude_bin="claude")
+    line = dag_tick.execute_stop("abc123", claude_bin="claude", daemon_dir=daemon_dir)
     assert "FAILED rc=1" in line
     assert "boom" in line
+
+
+def test_execute_stop_skips_when_pid_already_settled(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Stop-side TOCTOU fix (#578 respec round 2).
+
+    Classification can be up to one tick (60s) stale. If the node's pid is
+    already gone by the time `execute_stop` runs (settled on its own, or
+    reaped by something else), it must SKIP rather than issue a stop against
+    a process that no longer exists — which would otherwise log a false
+    FAILED line.
+    """
+    daemon_dir = tmp_path / "daemon"
+    daemon_dir.mkdir()
+    # Real negative evidence — a readable roster naming no worker.
+    (daemon_dir / "roster.json").write_text(json.dumps({"workers": {}}))
+
+    def _fail(*_args: object, **_kwargs: object) -> None:
+        msg = "must not issue a stop once the pid has already settled"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(dag_tick.subprocess, "run", _fail)
+    line = dag_tick.execute_stop("abc123", claude_bin="claude", daemon_dir=daemon_dir)
+    assert "SKIP stop abc123" in line
+    assert "settled" in line
+
+
+def test_execute_respawn_missing_binary_returns_skip_line(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    daemon_dir = tmp_path / "daemon"
+    daemon_dir.mkdir()
+    (daemon_dir / "roster.json").write_text(json.dumps({"workers": {}}))
+
+    def _raise_missing(*_args: object, **_kwargs: object) -> None:
+        raise FileNotFoundError(2, "No such file or directory", "claude")
+
+    monkeypatch.setattr(dag_tick.subprocess, "Popen", _raise_missing)
+    line = dag_tick.execute_respawn(
+        "abc123", claude_bin="claude", daemon_dir=daemon_dir
+    )
+    assert "SKIP respawn abc123" in line
+    assert "claude binary unavailable" in line
+
+
+def test_execute_stop_missing_binary_returns_skip_line(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    daemon_dir = tmp_path / "daemon"
+    daemon_dir.mkdir()
+    (daemon_dir / "roster.json").write_text(
+        json.dumps({"workers": {"abc123": {"pid": os.getpid()}}})
+    )
+
+    def _raise_missing(*_args: object, **_kwargs: object) -> None:
+        raise FileNotFoundError(2, "No such file or directory", "claude")
+
+    monkeypatch.setattr(dag_tick.subprocess, "run", _raise_missing)
+    line = dag_tick.execute_stop("abc123", claude_bin="claude", daemon_dir=daemon_dir)
+    assert "SKIP stop abc123" in line
+    assert "claude binary unavailable" in line
 
 
 # ---------------------------------------------------------------------------
@@ -686,3 +875,86 @@ def test_run_tick_respawns_a_dead_node(
 
     assert dag_tick.run_tick(_tick_args()) == 0
     assert popen_calls == [["claude", "respawn", "dead1"]]
+
+
+def test_run_tick_stops_a_done_node_with_live_pid(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Dispatcher-level STOP branch, live path (#578 respec round 2).
+
+    Mutation-sensitive: deleting `_execute_or_preview`'s STOP branch would
+    leave `run_calls` without a "stop" entry and drop the STOP report line
+    from stdout — this exercises the public `run_tick` entry point rather
+    than the private dispatcher directly.
+    """
+    monkeypatch.setattr(dag_tick, "LOCK_PATH", tmp_path / "dag-tick.lock")
+    jobs_dir = tmp_path / "jobs"
+    daemon_dir = tmp_path / "daemon"
+    daemon_dir.mkdir()
+    (daemon_dir / "roster.json").write_text(
+        json.dumps({"workers": {"done1": {"pid": os.getpid()}}})
+    )
+    monkeypatch.setattr(dag_tick, "JOBS_DIR", jobs_dir)
+    monkeypatch.setattr(dag_tick, "DAEMON_DIR", daemon_dir)
+    _write_state(jobs_dir, "done1", {"state": "done", "tempo": "idle"})
+    run_calls: list[list[str]] = []
+
+    def _fake_run(argv: list[str], **_kwargs: object) -> _FakeCompleted:
+        if argv[1] == "logs":
+            return _FakeCompleted(returncode=1, stderr="No job matching 'zzbogus'.")
+        if argv[1] == "agents":
+            census = json.dumps([{"id": "done1", "kind": "background", "cwd": "/x"}])
+            return _FakeCompleted(returncode=0, stdout=census)
+        run_calls.append(argv)
+        return _FakeCompleted(returncode=0)
+
+    monkeypatch.setattr(dag_tick.subprocess, "run", _fake_run)
+    assert dag_tick.run_tick(_tick_args()) == 0
+    assert run_calls == [["claude", "stop", "done1"]]
+    captured = capsys.readouterr()
+    assert "dag-tick: STOP done1 (rc=0)" in captured.out
+
+
+def test_run_tick_wedged_node_makes_no_action_subprocess_call(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Dispatcher-level LOG branch, live path (#578 respec round 2).
+
+    A WEDGED node's action is log-only — `_execute_or_preview` must never
+    issue a `claude` verb for it. The fake `subprocess.run`/`Popen` below
+    only answer the gate-preflight and census calls; anything else (a
+    respawn or a stop) raises, so a regression that dispatched a verb for
+    WEDGED would fail this test.
+    """
+    monkeypatch.setattr(dag_tick, "LOCK_PATH", tmp_path / "dag-tick.lock")
+    jobs_dir = tmp_path / "jobs"
+    daemon_dir = tmp_path / "daemon"
+    daemon_dir.mkdir()
+    (daemon_dir / "roster.json").write_text(
+        json.dumps({"workers": {"wedged1": {"pid": os.getpid()}}})
+    )
+    monkeypatch.setattr(dag_tick, "JOBS_DIR", jobs_dir)
+    monkeypatch.setattr(dag_tick, "DAEMON_DIR", daemon_dir)
+    _write_state(jobs_dir, "wedged1", {"state": "blocked", "tempo": "active"})
+    state_path = jobs_dir / "wedged1" / "state.json"
+    stale = state_path.stat().st_mtime - 300
+    os.utime(state_path, (stale, stale))
+
+    def _fake_run(argv: list[str], **_kwargs: object) -> _FakeCompleted:
+        if argv[1] == "logs":
+            return _FakeCompleted(returncode=1, stderr="No job matching 'zzbogus'.")
+        if argv[1] == "agents":
+            census = json.dumps([{"id": "wedged1", "kind": "background", "cwd": "/x"}])
+            return _FakeCompleted(returncode=0, stdout=census)
+        msg = f"a WEDGED node must never trigger a claude verb: {argv}"
+        raise AssertionError(msg)
+
+    def _fail_popen(*_args: object, **_kwargs: object) -> None:
+        msg = "a WEDGED node must never trigger a claude verb"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(dag_tick.subprocess, "run", _fake_run)
+    monkeypatch.setattr(dag_tick.subprocess, "Popen", _fail_popen)
+    assert dag_tick.run_tick(_tick_args()) == 0
+    captured = capsys.readouterr()
+    assert "WEDGED wedged1" in captured.out
