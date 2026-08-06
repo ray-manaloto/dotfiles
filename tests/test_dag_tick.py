@@ -45,10 +45,25 @@ def _node(
     state: str | None = "blocked",
     tempo: str | None = "idle",
     queued_prompt: bool = False,
+    needs: str | None = None,
 ) -> dag_tick.Node:
     return dag_tick.Node(
-        node_id=node_id, state=state, tempo=tempo, queued_prompt=queued_prompt
+        node_id=node_id,
+        state=state,
+        tempo=tempo,
+        queued_prompt=queued_prompt,
+        needs=needs,
     )
+
+
+# The two escalation payloads read live off this host's stale census nodes
+# (#601) — `needs` is a plain string, and one of the pair carries no
+# `suggestedReply` at all. Used verbatim so the fixtures are the real shape,
+# not an invented one.
+_LIVE_NEEDS_JULY_13 = "run `/clear` to proceed to next task"
+_LIVE_NEEDS_JULY_22 = (
+    "do /clear with resume, or run full command-catalog extraction first?"
+)
 
 
 def _write_state(jobs_dir: Path, node_id: str, payload: dict[str, object]) -> None:
@@ -141,6 +156,73 @@ def test_terminal_predicate_arms(
 
 
 # ---------------------------------------------------------------------------
+# normalize_needs() / is_needs_human() — the #601 escalation predicate
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        (_LIVE_NEEDS_JULY_13, _LIVE_NEEDS_JULY_13),
+        (_LIVE_NEEDS_JULY_22, _LIVE_NEEDS_JULY_22),
+        ("  padded question?  ", "padded question?"),
+        # Absence, in every shape state.json can express it.
+        (None, None),
+        ("", None),
+        ("   ", None),
+        ("\n\t", None),
+        ([], None),
+        ({}, None),
+        # A non-string payload a future harness version might write must
+        # fail TOWARD "this is an escalation" — dropping it would respawn
+        # the node into an idle zombie, which is the defect #601 fixes.
+        (["pick one"], "['pick one']"),
+        ({"question": "which?"}, "{'question': 'which?'}"),
+    ],
+)
+def test_normalize_needs_both_directions(raw: object, expected: str | None) -> None:
+    assert dag_tick.normalize_needs(raw) == expected
+
+
+@pytest.mark.parametrize(
+    ("state", "needs", "expected"),
+    [
+        # Both halves present — the one shape that is an escalation.
+        ("blocked", _LIVE_NEEDS_JULY_13, True),
+        ("blocked", _LIVE_NEEDS_JULY_22, True),
+        # `blocked` alone is the plain block the watchdog may still respawn.
+        ("blocked", None, False),
+        # A `needs` payload beside any other state is not an escalation.
+        ("done", _LIVE_NEEDS_JULY_13, False),
+        ("failed", _LIVE_NEEDS_JULY_13, False),
+        ("stopped", _LIVE_NEEDS_JULY_13, False),
+        ("killed", _LIVE_NEEDS_JULY_13, False),
+        (None, _LIVE_NEEDS_JULY_13, False),
+        (None, None, False),
+    ],
+)
+def test_is_needs_human_requires_both_halves(
+    state: str | None, needs: str | None, *, expected: bool
+) -> None:
+    assert dag_tick.is_needs_human(state, needs) is expected
+
+
+def test_needs_human_state_is_not_terminal() -> None:
+    """#601 does NOT make `blocked` terminal — the two predicates are apart.
+
+    Widening `TERMINAL_STATES` would have suppressed the respawn too, but
+    it would also have told the harness's own settle check that a plain
+    blocked node is finished. The escalation is a separate predicate for
+    exactly that reason.
+    """
+    assert dag_tick.ESCALATED_STATE not in dag_tick.TERMINAL_STATES
+    assert (
+        dag_tick.is_terminal(dag_tick.ESCALATED_STATE, "idle", queued_prompt=False)
+        is False
+    )
+
+
+# ---------------------------------------------------------------------------
 # classify() — see docstring for the precedence order it encodes
 # ---------------------------------------------------------------------------
 
@@ -159,6 +241,63 @@ def test_classify_done_regardless_of_pid_alive() -> None:
 
 def test_classify_dead_when_not_terminal_and_pid_not_alive() -> None:
     node = _node(state="blocked", tempo="idle")
+    assert (
+        dag_tick.classify(node, pid_alive=False, state_age_s=None)
+        is dag_tick.NodeClass.DEAD
+    )
+
+
+# --- #601, arm A: blocked + needs + dead pid must NOT be DEAD -------------
+
+
+def test_classify_escalated_dead_pid_is_needs_human_not_dead() -> None:
+    """The defect arm: a dead-pid escalation used to classify DEAD.
+
+    DEAD is what feeds `plan()`'s RESPAWN, and #565 measured that
+    `claude respawn` returns a node IDLE with no prompt — the payload
+    below would be silently discarded.
+    """
+    node = _node(state="blocked", tempo="blocked", needs=_LIVE_NEEDS_JULY_13)
+    assert (
+        dag_tick.classify(node, pid_alive=False, state_age_s=None)
+        is dag_tick.NodeClass.NEEDS_HUMAN
+    )
+
+
+def test_classify_escalated_is_needs_human_regardless_of_pid_or_age() -> None:
+    """NEEDS_HUMAN sits above the liveness check, so neither axis moves it."""
+    node = _node(state="blocked", tempo="blocked", needs=_LIVE_NEEDS_JULY_22)
+    for pid_alive in (True, False):
+        for state_age_s in (None, 1.0, 999_999.0):
+            assert (
+                dag_tick.classify(node, pid_alive=pid_alive, state_age_s=state_age_s)
+                is dag_tick.NodeClass.NEEDS_HUMAN
+            )
+
+
+def test_classify_terminal_state_beats_a_leftover_needs_payload() -> None:
+    """A settled node with a stale `needs` string stays DONE, not NEEDS_HUMAN."""
+    node = _node(state="done", tempo="idle", needs=_LIVE_NEEDS_JULY_13)
+    assert (
+        dag_tick.classify(node, pid_alive=False, state_age_s=None)
+        is dag_tick.NodeClass.DONE
+    )
+
+
+# --- #601, arm B: the control — plain `blocked` must behave as before ------
+
+
+@pytest.mark.parametrize("needs", [None, "", "   "])
+def test_classify_blocked_without_needs_still_dead_on_dead_pid(
+    needs: str | None,
+) -> None:
+    """The control arm the ticket requires: no `needs`, no change.
+
+    Parametrized over every shape `normalize_needs` maps to absence, so a
+    fix that keyed off `state == "blocked"` alone — suppressing ALL
+    respawns rather than only escalations — fails here.
+    """
+    node = _node(state="blocked", tempo="idle", needs=dag_tick.normalize_needs(needs))
     assert (
         dag_tick.classify(node, pid_alive=False, state_age_s=None)
         is dag_tick.NodeClass.DEAD
@@ -280,6 +419,17 @@ def test_gate_status_three_faces(stderr_text: str, expected: str) -> None:
         (dag_tick.NodeClass.WEDGED, False, 10.0, dag_tick.ActionKind.LOG),
         (dag_tick.NodeClass.ALIVE, True, 10.0, None),
         (dag_tick.NodeClass.ALIVE, False, 10.0, None),
+        # #601 — LOG on every axis: live or dead pid, fresh, over-age, and
+        # unknown age. Never RESPAWN.
+        (dag_tick.NodeClass.NEEDS_HUMAN, False, 10.0, dag_tick.ActionKind.LOG),
+        (dag_tick.NodeClass.NEEDS_HUMAN, True, 10.0, dag_tick.ActionKind.LOG),
+        (
+            dag_tick.NodeClass.NEEDS_HUMAN,
+            False,
+            999_999.0,
+            dag_tick.ActionKind.LOG,
+        ),
+        (dag_tick.NodeClass.NEEDS_HUMAN, False, None, dag_tick.ActionKind.LOG),
     ],
 )
 def test_plan_maps_classification_to_actions(
@@ -325,6 +475,42 @@ def test_plan_over_age_dead_reason_names_the_age() -> None:
     assert "stale beyond --max-age" in actions[0].reason
     assert "200000s" in actions[0].reason
     assert "not crash recovery" in actions[0].reason
+
+
+def test_plan_needs_human_reason_names_the_label_and_the_no_respawn_rule() -> None:
+    node = dag_tick.ClassifiedNode(
+        "abc123", dag_tick.NodeClass.NEEDS_HUMAN, pid_alive=False, state_age_s=None
+    )
+    actions = dag_tick.plan([node], max_age_s=86400.0)
+    assert actions[0].kind is dag_tick.ActionKind.LOG
+    assert dag_tick.NEEDS_HUMAN_LABEL in actions[0].reason
+    assert "never auto-respawned" in actions[0].reason
+
+
+def test_plan_never_respawns_a_needs_human_node_at_any_age() -> None:
+    """The `--max-age` demotion, pinned.
+
+    Before #601 the 24h bound was the only thing stopping the two live
+    July escalations from being resurrected. A NEEDS_HUMAN node must now
+    be LOG-only even when its state.json is FRESH — i.e. exactly where
+    `--max-age` would have permitted a respawn.
+    """
+    fresh = dag_tick.ClassifiedNode(
+        "fresh-escalation",
+        dag_tick.NodeClass.NEEDS_HUMAN,
+        pid_alive=False,
+        state_age_s=1.0,
+    )
+    actions = dag_tick.plan([fresh], max_age_s=86400.0)
+    assert [a.kind for a in actions] == [dag_tick.ActionKind.LOG]
+    # The control: same age, same dead pid, but DEAD instead of
+    # NEEDS_HUMAN -> RESPAWN. Proves the age is not what suppressed it.
+    dead = dag_tick.ClassifiedNode(
+        "fresh-dead", dag_tick.NodeClass.DEAD, pid_alive=False, state_age_s=1.0
+    )
+    assert [a.kind for a in dag_tick.plan([dead], max_age_s=86400.0)] == [
+        dag_tick.ActionKind.RESPAWN
+    ]
 
 
 def test_plan_no_age_dead_reason_says_unknown_age() -> None:
@@ -591,6 +777,78 @@ def test_classify_background_rows_stale_dead_note_always_prints(
     assert any(
         "stale beyond --max-age" in note and "abc123" in note for note in result.notes
     )
+
+
+def test_classify_background_rows_reads_the_live_needs_shape(
+    tmp_path: Path,
+) -> None:
+    """#601: the real `state.json` shape, verbatim off this host.
+
+    Both stale census nodes are `state=blocked` / `tempo=blocked` with a
+    string `needs`; only one carries `suggestedReply`. Fixtures mirror
+    that rather than an invented shape, so a wrong field name or a wrong
+    `tempo` assumption cannot pass here.
+    """
+    jobs_dir = tmp_path / "jobs"
+    daemon_dir = _roster(tmp_path, {})  # readable, names nobody -> pid dead
+    _write_state(
+        jobs_dir,
+        "ad8baf35",
+        {"state": "blocked", "tempo": "blocked", "needs": _LIVE_NEEDS_JULY_13},
+    )
+    _write_state(
+        jobs_dir,
+        "fdfdaf90",
+        {
+            "state": "blocked",
+            "tempo": "blocked",
+            "needs": _LIVE_NEEDS_JULY_22,
+            "suggestedReply": "do the full command catalog extraction pass",
+        },
+    )
+    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir)
+    result = dag_tick.classify_background_rows(
+        [
+            {"id": "ad8baf35", "kind": "background"},
+            {"id": "fdfdaf90", "kind": "background"},
+        ],
+        ctx,
+    )
+    assert [c.node_class for c in result.classified] == [
+        dag_tick.NodeClass.NEEDS_HUMAN,
+        dag_tick.NodeClass.NEEDS_HUMAN,
+    ]
+
+
+def test_classify_background_rows_needs_human_note_quotes_the_question(
+    tmp_path: Path,
+) -> None:
+    """Unconditional (not --verbose), and it carries the actual question.
+
+    An escalation note whose text an operator cannot act on is the same
+    silent loss as the respawn — so the payload is in the line, not just
+    the node id.
+    """
+    jobs_dir = tmp_path / "jobs"
+    daemon_dir = _roster(tmp_path, {})
+    _write_state(
+        jobs_dir,
+        "abc123",
+        {"state": "blocked", "tempo": "blocked", "needs": _LIVE_NEEDS_JULY_22},
+    )
+    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir)
+    result = dag_tick.classify_background_rows(
+        [{"id": "abc123", "kind": "background"}], ctx
+    )
+    assert result.classified[0].node_class is dag_tick.NodeClass.NEEDS_HUMAN
+    assert any(
+        "NEEDS_HUMAN abc123" in note
+        and _LIVE_NEEDS_JULY_22 in note
+        and dag_tick.NEEDS_HUMAN_LABEL in note
+        for note in result.notes
+    )
+    # Control: it must NOT be reported as the stale-DEAD case it used to be.
+    assert not any("stale beyond --max-age" in note for note in result.notes)
 
 
 # ---------------------------------------------------------------------------
@@ -1076,6 +1334,64 @@ def test_execute_tick_logs_instead_of_respawning_an_over_age_dead_node(
     captured = capsys.readouterr()
     assert "stale beyond --max-age" in captured.out
     assert "respawn dead1" not in captured.out
+
+
+def test_execute_tick_never_respawns_a_fresh_escalated_node(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """#601 arm A, end to end: `blocked ∧ needs≠∅` + dead pid -> no respawn.
+
+    The state.json is left FRESH on purpose. An over-age fixture would
+    have been suppressed by `--max-age` regardless, so it could not tell a
+    working NEEDS_HUMAN class from the accident that was covering for its
+    absence — this is the arm that fails if the classification is removed.
+    """
+    jobs_dir = tmp_path / "jobs"
+    daemon_dir = _roster(tmp_path, {})  # readable, names nobody -> pid dead
+    _write_state(
+        jobs_dir,
+        "dead1",
+        {"state": "blocked", "tempo": "blocked", "needs": _LIVE_NEEDS_JULY_13},
+    )
+    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir, max_age_s=86400.0)
+
+    def _fail_popen(*_args: object, **_kwargs: object) -> None:
+        msg = "an escalated node must never be respawned"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(dag_tick.subprocess, "run", _fake_run_for_one_dead_node)
+    monkeypatch.setattr(dag_tick.subprocess, "Popen", _fail_popen)
+
+    assert dag_tick.execute_tick(ctx) == 0
+    captured = capsys.readouterr()
+    assert "NEEDS_HUMAN dead1" in captured.out
+    assert _LIVE_NEEDS_JULY_13 in captured.out
+    assert "RESPAWN dead1" not in captured.out
+
+
+def test_execute_tick_still_respawns_a_fresh_blocked_node_without_needs(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """#601 arm B, end to end: the control — one field different, one outcome.
+
+    Identical to arm A but for the absent `needs` key. A fix that keyed off
+    `state == "blocked"` alone would suppress this respawn too, silently
+    retiring the watchdog's primary recovery path.
+    """
+    jobs_dir = tmp_path / "jobs"
+    daemon_dir = _roster(tmp_path, {})
+    _write_state(jobs_dir, "dead1", {"state": "blocked", "tempo": "blocked"})
+    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir, max_age_s=86400.0)
+    popen_calls: list[list[str]] = []
+
+    def _fake_popen(argv: list[str], **_kwargs: object) -> None:
+        popen_calls.append(argv)
+
+    monkeypatch.setattr(dag_tick.subprocess, "run", _fake_run_for_one_dead_node)
+    monkeypatch.setattr(dag_tick.subprocess, "Popen", _fake_popen)
+
+    assert dag_tick.execute_tick(ctx) == 0
+    assert popen_calls == [["claude", "respawn", "dead1"]]
 
 
 def test_execute_tick_stops_a_done_node_with_live_pid(
