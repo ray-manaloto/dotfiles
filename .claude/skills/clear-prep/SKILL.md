@@ -173,9 +173,12 @@ final report persisted VERBATIM under `docs/research/runs/<topic>/agents/` at th
 moment it was received — condensed notepad summaries do NOT count (near-loss
 observed 2026-07-05: 13 reports existed only in context until a manual
 round-2 pass). At clear-prep, audit coverage: enumerate every agent launched
-this session; each findings-bearing one must map to an artifact file (or an
-explicit N/A in the handoff). Anything missing: write it now, verbatim from
-context, before `/clear` destroys the only copy.
+this session; each findings-bearing one must map **both its brief (the prompt
+handed TO it) and its report** to an artifact file (or an explicit N/A in the
+handoff). Anything missing: write it now, verbatim from context, before
+`/clear` destroys the only copy. Briefs are in scope because #601's seven
+review rounds left all seven briefs in an ephemeral scratchpad — the reports
+survived, the questions that produced them did not.
 
 ## 4. Validate, then commit doc changes
 
@@ -240,7 +243,7 @@ resumes from the handoff."*
 - [ ] Every doc affected by this session's changes updated; cross-refs grep-clean.
 - [ ] Repo-wide doc-ref sweep run (step 2.5); every MISSING hit fixed or justified in place.
 - [ ] `mise run lint` + `mise run lint-docs` green (class-aware `md_size_budget` + agnix AGM-003); at-limit files flagged in the handoff.
-- [ ] Every findings-bearing agent report persisted verbatim under `docs/research/kb/reports/agents/`; coverage audited.
+- [ ] Every findings-bearing agent's brief AND report persisted verbatim under `docs/research/kb/reports/agents/`; coverage audited.
 - [ ] Durable memory written + `MEMORY.md` pointer added.
 - [ ] Local handoff written under `.agent/plans/` and self-verified (paths, file:line, task names, gate rcs).
 - [ ] Relevant local gate green; doc commit made (if appropriate).
