@@ -536,23 +536,51 @@ def test_plan_needs_human_reason_names_the_label_and_the_no_respawn_rule() -> No
     assert "never respawned BY THIS TICK" in actions[0].reason
 
 
+# The exact operator-facing string `_needs_human_reason()` must emit — a
+# GOLDEN literal, and the only assertion here that actually closes the hole
+# three review rounds kept reopening.
+#
+# Rounds 1-3 each tried to express "this string is honest" as a set of
+# substring conditions, and the reviewer defeated every version by adding a
+# clause the conditions did not constrain. Its v3 diagnosis is the reason
+# this is a golden and not a fourth attempt at a predicate: the check is
+# *"an exact-template guard, not a semantic classifier"* — it cannot judge
+# meaning, so tightening it is an unwinnable game against an adversary who
+# can always append one more sentence. Equality ends that game: any wording
+# change at all fails here and forces a human to re-read the claim, which is
+# exactly the review that was wanted.
+#
+# This literal is an INDEPENDENT source of truth (`tests/AGENTS.md`: expected
+# values come from a known-good literal), transcribed deliberately — not
+# recomputed from the module, which would make it tautological.
+_EXPECTED_NEEDS_HUMAN_REASON = (
+    "escalated — state=blocked with a needs payload, so a human was asked a "
+    "question a respawn cannot answer; never respawned BY THIS TICK at any "
+    "age (the harness's own supervisor is a separate route this module "
+    "cannot close — #590); tracker projection to dag:needs-human is NOT "
+    "done here — #602"
+)
+
+
 def _reason_is_honest(reason: str) -> bool:
-    """Does a NEEDS_HUMAN reason claim only what the module actually does?
+    """Clause-level diagnostic: WHICH part of the reason regressed.
 
-    Extracted so the check itself can be ARMED — see
-    :data:`_DISHONEST_REASON` and the test below. A predicate only ever
-    applied to the real string is a probe with one face: it cannot show it
-    would reject a wrong one.
+    ⚠️ **This is an exact-template guard, NOT a semantic classifier, and it
+    is not what makes the wording safe** — :data:`_EXPECTED_NEEDS_HUMAN_REASON`
+    is. Kept because equality alone reports "the string changed" and this
+    reports which claim broke.
 
-    Both clauses are matched CONTIGUOUSLY, and that is the whole point.
-    The first version asserted the loose fragment `"is NOT done here"`,
-    unbound to what was not done; the #601 v2 adversarial review broke it
-    with :data:`_DISHONEST_REASON`, which satisfies the fragment via an
-    unrelated clause while asserting the projection DOES happen. Binding
-    the fragment to its subject is what closes that.
+    Its limits are measured, not assumed. The #601 review defeated two
+    successive versions (:data:`_DISHONEST_REASON_V2`,
+    :data:`_DISHONEST_REASON_V3`) by adding clauses no substring condition
+    constrained, and an *honest paraphrase* also returns False here. So it
+    over-rejects and under-rejects at once; treat a True from it as "the
+    named clauses are present", never as "the string is honest".
 
-    The label must appear exactly once, so a correct clause cannot be
-    paired with a contradicting second mention.
+    Both clauses are matched CONTIGUOUSLY — bound to their subject, which is
+    what killed the v2 counterexample — and the label must appear exactly
+    once, so a correct clause cannot be paired with a contradicting second
+    mention of it.
     """
     scoped_respawn = "never respawned BY THIS TICK"
     scoped_projection = (
@@ -570,15 +598,25 @@ def _reason_is_honest(reason: str) -> bool:
     )
 
 
-# The counterexample the #601 v2 adversarial review constructed against the
-# first version of this check, kept VERBATIM. It contains the scoped respawn
-# clause and the bare fragment `is NOT done here` (attached to "cleanup"),
-# while asserting the projection DOES happen — so every assertion the first
-# version made returned true on a string that overclaims exactly the way the
-# review's v1 HIGH finding did.
-_DISHONEST_REASON = (
+# The two counterexamples the #601 adversarial review constructed, kept
+# VERBATIM. Both mislead an operator, and each defeated the version of
+# `_reason_is_honest` that existed when it was written — so they are pinned
+# as inputs the golden must reject and the predicate must not welcome back.
+#
+# v2 broke the loose fragment `is NOT done here` by attaching it to an
+# unrelated "cleanup" clause while asserting the projection DOES happen.
+_DISHONEST_REASON_V2 = (
     "never respawned BY THIS TICK; tracker projection to dag:needs-human "
     "IS done here; cleanup is NOT done here"
+)
+# v3 defeated the CONTIGUOUS-clause fix that closed v2: it satisfies both
+# required clauses, mentions the label exactly once, and carries neither
+# forbidden phrase — then contradicts itself in a trailing sentence the
+# predicate does not constrain at all. This one still passes
+# `_reason_is_honest`, and that is the point: it is why the golden exists.
+_DISHONEST_REASON_V3 = (
+    "never respawned BY THIS TICK; tracker projection to dag:needs-human is "
+    "NOT done here; it is performed later in this same tick"
 )
 
 
@@ -593,24 +631,60 @@ def test_plan_needs_human_reason_claims_no_action_this_module_skips() -> None:
 
     A log line that names an action the code skips is how an operator
     concludes an escalation reached the tracker when it reached a launchd
-    log. Both arms run here: the real string must pass, and the review's
-    own counterexample must FAIL — without the second arm this test could
-    only ever have agreed with whatever the module emits.
+    log.
+
+    ⚠️ **The GOLDEN equality is the guard; the clause assertions are
+    diagnostics.** Three rounds of review each defeated a substring-based
+    version of this check by adding a clause it did not constrain — the last
+    one (:data:`_DISHONEST_REASON_V3`) still satisfies
+    :func:`_reason_is_honest` today. Substring conditions cannot judge
+    meaning, so tightening them is unwinnable; equality ends it, because any
+    wording change fails and forces a human to re-read the claim.
     """
     node = dag_tick.ClassifiedNode(
         "abc123", dag_tick.NodeClass.NEEDS_HUMAN, pid_alive=False, state_age_s=None
     )
     reason = dag_tick.plan([node], max_age_s=86400.0)[0].reason
+    # The complete guard. Both counterexamples fail it, and so does any
+    # future clause a predicate would not have thought to forbid.
+    assert reason == _EXPECTED_NEEDS_HUMAN_REASON
+    assert _DISHONEST_REASON_V2 != _EXPECTED_NEEDS_HUMAN_REASON
+    assert _DISHONEST_REASON_V3 != _EXPECTED_NEEDS_HUMAN_REASON
+    # Diagnostics: name WHICH claim regressed rather than only "it changed".
     assert _reason_is_honest(reason) is True
-    assert _reason_is_honest(_DISHONEST_REASON) is False
-    # And the specific ways a reason can go dishonest, each pinned alone so
-    # a failure names which clause regressed rather than just "not honest".
+    assert _reason_is_honest(_DISHONEST_REASON_V2) is False
     assert "never respawned BY THIS TICK" in reason
     assert (
         f"tracker projection to {dag_tick.NEEDS_HUMAN_LABEL} is NOT done here" in reason
     )
     assert "never auto-respawned" not in reason
     assert f"project + label {dag_tick.NEEDS_HUMAN_LABEL}" not in reason
+
+
+def test_reason_honesty_predicate_is_a_template_guard_not_a_classifier() -> None:
+    """The predicate's measured limits, pinned so nobody over-trusts it.
+
+    `_reason_is_honest` fails in BOTH directions, and both are recorded
+    here rather than in prose alone: it ACCEPTS
+    :data:`_DISHONEST_REASON_V3`, a string that satisfies every clause and
+    then contradicts itself in a sentence the predicate does not constrain;
+    and it REJECTS an honest paraphrase, because it matches a template
+    rather than meaning.
+
+    If a later change makes the predicate reject V3, this test fails —
+    deliberately. That would be a real improvement, and it should be
+    noticed and recorded, not absorbed silently.
+    """
+    honest_paraphrase = (
+        "escalated — a human was asked something a respawn cannot answer; "
+        "this tick will not respawn it, and nothing here writes to the "
+        "tracker"
+    )
+    assert _reason_is_honest(_DISHONEST_REASON_V3) is True
+    assert _reason_is_honest(honest_paraphrase) is False
+    # …while the golden correctly rejects both, which is why it is the guard.
+    assert _DISHONEST_REASON_V3 != _EXPECTED_NEEDS_HUMAN_REASON
+    assert honest_paraphrase != _EXPECTED_NEEDS_HUMAN_REASON
 
 
 def test_plan_never_respawns_a_needs_human_node_at_any_age() -> None:
