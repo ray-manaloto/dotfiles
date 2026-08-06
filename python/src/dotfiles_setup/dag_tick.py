@@ -131,6 +131,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from dotfiles_setup import codex_verdict
+
 if TYPE_CHECKING:
     import argparse
     from collections.abc import Callable, Mapping, Sequence
@@ -185,6 +187,10 @@ DEFAULT_STALL_AFTER_SECONDS = 120.0
 # something whose freshness cannot be proven.
 DEFAULT_MAX_AGE_SECONDS = 86400.0
 
+# #573's rework budget: how many revise/reject rounds one unit of work may
+# take before the node escalates instead of reopening again (#575 R7).
+DEFAULT_MAX_REWORK = 2
+
 # `mise` is a zsh function on this host, not a binary launchd can exec, so
 # the LaunchAgent invokes `~/.local/bin/mise` directly (mise.toml). This
 # default mirrors the same "must be a real executable" constraint for a
@@ -196,6 +202,11 @@ DEFAULT_CLAUDE_BIN = str(Path.home() / ".local" / "bin" / "claude")
 LOCK_PATH = Path.home() / ".local" / "state" / "dotfiles" / "dag-tick.lock"
 
 JOBS_DIR = Path.home() / ".claude" / "jobs"
+# One node's Codex review lane lives under its OWN job dir (#580) rather
+# than a parallel tree: the tick already knows `jobs_dir`, and colocating
+# means a `claude rm` of the node takes its lane with it instead of
+# orphaning a run dir the reaper would keep finding forever.
+CODEX_LANE_DIRNAME = "codex-lane"
 DAEMON_DIR = Path.home() / ".claude" / "daemon"
 
 # The harness's own `/restart` recipe is "flush, strip, respawn" (see the
@@ -319,6 +330,7 @@ class TickContext:
     lock_path: Path
     stall_after_s: float
     max_age_s: float
+    max_rework: int
     dry_run: bool
     verbose: bool
 
@@ -1167,6 +1179,75 @@ def _execute_or_preview(
     return lines
 
 
+def reap_codex_lanes(
+    classified_nodes: Sequence[ClassifiedNode],
+    ctx: TickContext,
+) -> list[str]:
+    """Reap each node's Codex review lane, if it has one (#580).
+
+    One line per lane that had something to say. A node with no lane
+    directory is silent — most nodes never run a review lane, and a line per
+    node per 60s would bury the ones that matter.
+
+    ⚠️ **Log-only in this slice, and that is a scope boundary, not an
+    oversight.** The reaper computes the EDGE (advance / reopen implement /
+    reopen research / needs-human), but nothing here writes it to the
+    tracker: projection is the SCHEDULER's job, one direction only
+    (`docs/receipts/575.md` R1), and #602 is the ticket that implements it.
+    Emitting the label from this process would make the tick a second writer
+    on the tracker. So the reason strings below say what was DECIDED, never
+    that it was applied — the same discipline `_needs_human_reason` carries,
+    and for the same reason: naming an action the code does not perform is
+    how a reader concludes an escalation reached the tracker when it reached
+    a launchd log.
+
+    A `NONE` edge is a genuine no-op (not settled, already processed, or a
+    lane owned by someone else) and is reported only under `--verbose`: those
+    are the steady-state outcomes and would otherwise be the bulk of the log.
+    """
+    lines: list[str] = []
+    for classified in classified_nodes:
+        run_dir = ctx.jobs_dir / classified.node_id / CODEX_LANE_DIRNAME
+        if not run_dir.is_dir():
+            continue
+        result = codex_verdict.reap(
+            run_dir,
+            expected_owner=classified.node_id,
+            rework_count=read_rework_count(run_dir),
+            max_rework=ctx.max_rework,
+        )
+        if result.edge is codex_verdict.Edge.NONE and not ctx.verbose:
+            continue
+        lines.append(
+            f"dag-tick: CODEX-REAP {classified.node_id} "
+            f"[{result.outcome.value}] edge={result.edge.value} — "
+            f"{result.detail}; edge is DECIDED here, not applied — tracker "
+            f"projection is #602"
+        )
+    return lines
+
+
+def read_rework_count(run_dir: Path) -> int:
+    """How many times this unit of work has already been reworked.
+
+    Read from the lane record the launcher maintains. A missing or
+    unparsable count reads as **0**, which is the permissive direction —
+    and that is deliberate: the alternative (assume the budget is spent)
+    would escalate every lane whose launcher had not yet written the field,
+    turning a rollout into an escalation storm. The bound still holds for
+    every lane the launcher does maintain, and #573 owns the counter itself.
+    """
+    try:
+        raw = (run_dir / codex_verdict.LANE_FILENAME).read_text()
+        data = json.loads(raw)
+    except OSError, json.JSONDecodeError:
+        return 0
+    if not isinstance(data, dict):
+        return 0
+    count = data.get("rework_count", 0)
+    return count if isinstance(count, int) and count >= 0 else 0
+
+
 def build_tick_context(args: argparse.Namespace) -> TickContext:
     """Turn CLI args + this module's own path/lock defaults into a `TickContext`.
 
@@ -1184,6 +1265,7 @@ def build_tick_context(args: argparse.Namespace) -> TickContext:
         lock_path=LOCK_PATH,
         stall_after_s=args.stall_after,
         max_age_s=args.max_age,
+        max_rework=args.max_rework,
         dry_run=args.dry_run,
         verbose=args.verbose,
     )
@@ -1230,7 +1312,8 @@ def execute_tick(ctx: TickContext) -> int:
         action_lines = _execute_or_preview(
             plan(result.classified, max_age_s=ctx.max_age_s), ctx
         )
-        for line in (*result.notes, *action_lines):
+        reap_lines = reap_codex_lanes(result.classified, ctx)
+        for line in (*result.notes, *action_lines, *reap_lines):
             sys.stdout.write(f"{line}\n")
         return 0
     finally:

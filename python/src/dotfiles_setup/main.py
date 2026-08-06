@@ -25,6 +25,7 @@ from dotfiles_setup.config import DotfilesConfig
 from dotfiles_setup.container import verify_latest_main
 from dotfiles_setup.dag_tick import (
     DEFAULT_MAX_AGE_SECONDS,
+    DEFAULT_MAX_REWORK,
     DEFAULT_STALL_AFTER_SECONDS,
     run_tick,
 )
@@ -687,6 +688,14 @@ def _add_dag_tick_subcommand(subparsers: _SubParsers) -> None:
         "instead of auto-respawned — not crash recovery beyond this bound "
         f"(default {DEFAULT_MAX_AGE_SECONDS:.0f}s = 24h); an unreadable "
         "state.json age is treated as over-age too",
+    )
+    dag_tick_parser.add_argument(
+        "--max-rework",
+        type=int,
+        default=DEFAULT_MAX_REWORK,
+        help="How many revise/reject rounds one unit of work may take before "
+        "the node escalates instead of reopening again (#573/#575 R7, "
+        f"default {DEFAULT_MAX_REWORK}); an `approve` advances regardless",
     )
     dag_tick_parser.add_argument(
         "--verbose",
