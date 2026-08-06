@@ -23,6 +23,7 @@ from dotfiles_setup.bootstrap_packages import gap_report_failures
 from dotfiles_setup.command_audit import DEFAULT_SESSION_LIMIT, command_audit_main
 from dotfiles_setup.config import DotfilesConfig
 from dotfiles_setup.container import verify_latest_main
+from dotfiles_setup.dag_tick import DEFAULT_STALL_AFTER_SECONDS, run_tick
 from dotfiles_setup.doc_refs import (
     find_unresolved_refs,
     find_unresolved_skill_refs,
@@ -637,13 +638,60 @@ def _add_hook_subcommands(
     )
 
 
+def _add_dag_tick_subcommand(subparsers: _SubParsers) -> None:
+    """Register the launchd watchdog tick (#578): census -> classify -> act.
+
+    Args:
+        subparsers: The parent subparsers action to attach this to.
+    """
+    dag_tick_parser = subparsers.add_parser(
+        "dag-tick",
+        help="launchd watchdog tick: census this repo's background agents, "
+        "classify ALIVE/DEAD/WEDGED/DONE, respawn DEAD nodes and stop "
+        "lingering DONE ones. WEDGED is classify-and-log only in this "
+        "slice — automated stall recovery is #590",
+    )
+    dag_tick_parser.add_argument(
+        "--cwd",
+        default=None,
+        help="Scope the census to background sessions started under this "
+        "path (default: the current working directory)",
+    )
+    dag_tick_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print the planned actions and exit without spawning anything",
+    )
+    dag_tick_parser.add_argument(
+        "--claude-bin",
+        default=None,
+        help="Path to the claude binary (default: `which claude`, falling "
+        "back to ~/.local/bin/claude)",
+    )
+    dag_tick_parser.add_argument(
+        "--stall-after",
+        type=float,
+        default=DEFAULT_STALL_AFTER_SECONDS,
+        help="Seconds a tempo:active state.json may go unmodified before "
+        f"classifying WEDGED (default {DEFAULT_STALL_AFTER_SECONDS:.0f}s)",
+    )
+    dag_tick_parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Print a line per classified node instead of only anomalies",
+    )
+
+
 def _add_report_parsers(subparsers: _SubParsers) -> None:
-    """Register the read-only scan-and-report commands.
+    """Register the read-only scan-and-report commands, plus dag-tick.
 
     Extracted from :func:`setup_parser` to keep it under ruff's statement cap —
     these share a shape (scan something, render markdown, change nothing), so
     they group cleanly rather than being split at an arbitrary line. (The daily
     tool-currency report moved to the shared `kb-setup currency daily` engine.)
+    `dag-tick` (#578) is grouped here too for the same statement-budget reason
+    even though it can act (respawn/stop) — its own registration lives in
+    :func:`_add_dag_tick_subcommand` for readability.
     """
     command_audit_parser = subparsers.add_parser(
         "command-audit",
@@ -709,6 +757,8 @@ def _add_report_parsers(subparsers: _SubParsers) -> None:
         action="store_true",
         help="Exit 1 when any update is pending (gate mode, per sync --check)",
     )
+
+    _add_dag_tick_subcommand(subparsers)
 
 
 def setup_parser() -> argparse.ArgumentParser:
@@ -1359,6 +1409,7 @@ def _build_command_handlers(
             apt_pins_main(project_root, json_output=args.json)
         ),
         "bash-budget": lambda: sys.exit(bash_budget_main(project_root)),
+        "dag-tick": lambda: sys.exit(run_tick(args)),
         "doctor": lambda: sys.exit(
             doctor_main(
                 project_root,
