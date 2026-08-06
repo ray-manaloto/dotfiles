@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.25@sha256:0adf442eae370b6087e08edc7c50b552d80ddf261576f4ebd6421006b2461f12
+# syntax=docker/dockerfile:1.26@sha256:ecfaec9ed6d810b56388c508f4121597bfbba70d41a6dfeee4d8cad5f295fc32
 # check=error=true
 
 # ────────────────────────────────────────────────────────────────────
@@ -11,7 +11,7 @@
 # 26.04 manifest-list (multi-arch resolution preserved); Renovate bumps the
 # digest via the custom `ubuntu` manager (docker datasource). Keep in lockstep
 # with docker-bake.hcl's BASE_IMAGE default (the base hash reads bake).
-ARG BASE_IMAGE=ubuntu:26.04@sha256:b7f48194d4d8b763a478a621cdc81c27be222ba2206ca3ca6bc42b49685f3d9e
+ARG BASE_IMAGE=ubuntu:26.04@sha256:678c6550cc43645e08669028bc177f50be4e7c5b8cca677067b1914d4afc7a03
 
 # Builder image for the clang-p2996 compile (#160 T11). DELIBERATELY a
 # separate, rarely-bumped variable (NOT Renovate-tracked): its digest is a
@@ -20,7 +20,7 @@ ARG BASE_IMAGE=ubuntu:26.04@sha256:b7f48194d4d8b763a478a621cdc81c27be222ba2206ca
 # into the final image (only /opt/clang-p2996 is exported), so pinning it
 # older than BASE_IMAGE is ABI-safe while both are the same ubuntu series.
 # Keep in lockstep with docker-bake.hcl's BUILDER_IMAGE default.
-ARG BUILDER_IMAGE=ubuntu:26.04@sha256:b7f48194d4d8b763a478a621cdc81c27be222ba2206ca3ca6bc42b49685f3d9e
+ARG BUILDER_IMAGE=ubuntu:26.04@sha256:678c6550cc43645e08669028bc177f50be4e7c5b8cca677067b1914d4afc7a03
 
 # NOTE (#160 T11): the former ARG P2996_SOURCE / ARG DEVCONTAINER_BASE_REF
 # FROM-indirection is retired. CI now injects prebuilt tiers as
@@ -112,7 +112,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # mise.run installer already chmods the binary; the explicit chmod is a
 # belt-and-braces guard against permission drift on the cache mount.
 # renovate: datasource=github-releases depName=jdx/mise
-ARG MISE_VERSION=2026.7.12
+ARG MISE_VERSION=2026.8.2
 RUN curl https://mise.run | MISE_VERSION="v${MISE_VERSION}" sh && \
     chmod +x ${MISE_INSTALL_PATH} && \
     mise --version
@@ -230,6 +230,11 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ARG GRAPHVIZ_VERSION=15.1.0
 ARG GRAPHVIZ_DEB=ubuntu_26.04_graphviz-15.1.0-cmake.deb
 ARG GRAPHVIZ_DEB_SHA256=f3294aeea3618044022874823344a1154ee7272857e82f248610fcaa7d2dc4c5
+# Re-assert the stage shell: hadolint 2.15.x forgets a stage's SHELL after any
+# mid-stage ARG (minimal repro: FROM + SHELL bash + ARG X=y + RUN with a bashism
+# flags SC3011; drop the ARG and it is clean) and then wrongly lints later RUNs
+# as POSIX sh. Semantically a no-op — the stage shell is already bash (line 83).
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # Pure && chain (any failing step aborts the build loudly); explicit /tmp paths
 # avoid a `cd` (hadolint DL3003). SVG/PNG/neato renders to /dev/null exercise the
 # core+gd plugins and dot+neato layout engines; the trailing grep asserts v15.
@@ -253,7 +258,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     printf 'digraph{a->b}' | dot -Tpng -o /dev/null && \
     printf 'graph{a--b--c--a}' | neato -Tsvg -o /dev/null && \
     dot_version="$(dot -V 2>&1)" && \
-    grep -q 'version 15' <<<"$dot_version"
+    case "$dot_version" in *"version 15"*) ;; *) echo "ERROR: unexpected dot version: $dot_version" >&2; exit 1;; esac
 
 # LLVM-22 C++ toolchain build-time smoke (#222 PR-C).
 # The apt llvm/clang/lld/lldb/clang-tools packages (declared in mise-system.toml
@@ -269,7 +274,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # present (capability parity with the removed conda tools). TSan is not RUN here
 # (build-as-root ASLR layout; the tier-3 smoke covers it on real amd64).
 RUN clangxx_version="$(/usr/lib/llvm-22/bin/clang++ --version)" && \
-    grep -q 'version 22' <<<"$clangxx_version" && \
+    case "$clangxx_version" in *"version 22"*) ;; *) echo "ERROR: unexpected clang++ version: $clangxx_version" >&2; exit 1;; esac && \
     printf '#include <cstdio>\nint main(){printf("ok\\n");return 0;}\n' > /tmp/llvmcheck.cpp && \
     /usr/lib/llvm-22/bin/clang++ -fsanitize=address,undefined /tmp/llvmcheck.cpp -o /tmp/llvmcheck && \
     llvmcheck_out="$(/tmp/llvmcheck)" && \
@@ -362,7 +367,7 @@ ARG CLANG_P2996_REPO=https://github.com/bloomberg/clang-p2996.git
 # p2996_hash.py reads it from bake, so this default was stale drift. The
 # git-refs Renovate manager rewrites BOTH files in lockstep now that they
 # hold the same SHA.
-ARG CLANG_P2996_REF=7220baffd57ea5b0f8cf59bee494dd5b7cc2b748
+ARG CLANG_P2996_REF=47df3379f88f3c204f5ddff01ab16dbb0d53cb26
 
 # Self-contained compile toolchain (#160 T11): gcc/g++ via build-essential,
 # cmake + ninja from apt (26.04 ships cmake ≥3.28, well past LLVM's 3.20
@@ -479,7 +484,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # jwakely.github.io index (see renovate.json). Compatibility with the current
 # base image is empirical; if `dpkg -i` fails, build from source.
 # renovate: datasource=custom.gcc-latest depName=gcc-latest versioning=loose
-ARG GCC_LATEST_DEB=gcc-latest_17.0.0-20260705git88752b86ff1a.deb
+ARG GCC_LATEST_DEB=gcc-latest_17.0.0-20260719git6d5d980f76c3.deb
 # Validation D (#160 T13): kayari publishes NO checksum or signature (all
 # 404), so this locally-computed pin is the .deb's only integrity handle.
 # NOT Renovate-managed (Renovate can't compute a sha): a GCC_LATEST_DEB bump
@@ -487,7 +492,7 @@ ARG GCC_LATEST_DEB=gcc-latest_17.0.0-20260705git88752b86ff1a.deb
 # the newly-pinned .deb and commits the fix to the Renovate branch — the pin
 # stays byte-exact without the old human-recompute friction. To repair by hand:
 # `uv run --project python dotfiles-setup gcc-sha` (or `--check` to dry-run).
-ARG GCC_LATEST_DEB_SHA256=2503ddace30a46c732b5a764f0d3a7cbae35666f4cc064d34485e0c10652f93a
+ARG GCC_LATEST_DEB_SHA256=42be4e6bcbd5d60f8f738a9d025d6d5b3e73b395d82e9558db3b057952f4905f
 # #222 PR-A (dev-hash only): the kayari .deb ships UNSTRIPPED backend
 # executables — cc1plus 518M, cc1 480M, lto1 463M, lto-dump 463M each carry
 # .debug_*+.symtab (probe-verified). `strip --strip-all` reclaims ~1.68 GB and

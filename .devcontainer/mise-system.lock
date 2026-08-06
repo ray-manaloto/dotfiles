@@ -352,13 +352,18 @@ url = "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.20.1/ca
 url_api = "https://api.github.com/repos/cargo-bins/cargo-binstall/releases/assets/453434840"
 
 [[tools.chezmoi]]
-version = "2.71.1"
+version = "2.72.0"
 backend = "aqua:twpayne/chezmoi"
 
 [tools.chezmoi."platforms.linux-x64"]
-checksum = "sha256:e1fb16c962644d57f4d451c324aa86163d00faf5d035500f41fb48943a66dfed"
-url = "https://github.com/twpayne/chezmoi/releases/download/v2.71.1/chezmoi_2.71.1_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/twpayne/chezmoi/releases/assets/483858082"
+checksum = "sha256:0d6665b96c527d57fdc562bf19e808f80f48c2d977062c03e3e65c6b09eafbce"
+url = "https://github.com/twpayne/chezmoi/releases/download/v2.72.0/chezmoi_2.72.0_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/twpayne/chezmoi/releases/assets/499173854"
+
+[tools.chezmoi."platforms.macos-x64"]
+checksum = "sha256:41be255eacf46b1b333591b4ddc7e90e2aa98ccb8dce47609b8284b856841652"
+url = "https://github.com/twpayne/chezmoi/releases/download/v2.72.0/chezmoi_2.72.0_darwin_amd64.tar.gz"
+url_api = "https://api.github.com/repos/twpayne/chezmoi/releases/assets/499173934"
 
 [[tools."conda:bear"]]
 version = "4.1.5"
@@ -840,22 +845,27 @@ checksum = "sha256:1153d3d50e0ac764b447adfe05c2bcf08e889d42a02e0fe0259bd47f6733a
 url = "https://dl.google.com/go/go1.26.4.linux-amd64.tar.gz"
 
 [[tools.hadolint]]
-version = "2.14.0"
+version = "2.15.1"
 backend = "aqua:hadolint/hadolint"
 
 [tools.hadolint."platforms.linux-x64"]
-checksum = "sha256:6bf226944684f56c84dd014e8b979d27425c0148f61b3bd99bcc6f39e9dc5a47"
-url = "https://github.com/hadolint/hadolint/releases/download/v2.14.0/hadolint-linux-x86_64"
-url_api = "https://api.github.com/repos/hadolint/hadolint/releases/assets/295944080"
+checksum = "sha256:c7187db94eeeeca956519a6af171adc31453941a1e777961f6e680f697c8c507"
+url = "https://github.com/hadolint/hadolint/releases/download/v2.15.1/hadolint-linux-x86_64"
+url_api = "https://api.github.com/repos/hadolint/hadolint/releases/assets/496546506"
+
+[tools.hadolint."platforms.macos-x64"]
+checksum = "sha256:ffe9bb18b23d5ed1eae50237aecdbb523d016e96da0bd4e7aa432040acfc3fde"
+url = "https://github.com/hadolint/hadolint/releases/download/v2.15.1/hadolint-macos-x86_64"
+url_api = "https://api.github.com/repos/hadolint/hadolint/releases/assets/496546509"
 
 [[tools.hk]]
-version = "1.52.0"
+version = "1.54.0"
 backend = "aqua:jdx/hk"
 
 [tools.hk."platforms.linux-x64"]
-checksum = "sha256:d381ec061fda51d5765e7831757107e4c565f195b206feae6fdd298162ab8baa"
-url = "https://github.com/jdx/hk/releases/download/v1.52.0/hk-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/jdx/hk/releases/assets/484573049"
+checksum = "sha256:467f691713b1afbeada4df662bd44696405cd987a5c7f64fee0fe71399628d0c"
+url = "https://github.com/jdx/hk/releases/download/v1.54.0/hk-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/jdx/hk/releases/assets/496037136"
 
 [[tools.java]]
 version = "26.0.1"
@@ -895,35 +905,50 @@ checksum = "sha256:f221dab30d0e9d544332f06fbee2c62186c97d864d5cac8482dba34f1e38b
 url = "https://nodejs.org/dist/v26.4.0/node-v26.4.0-linux-x64.tar.gz"
 
 [[tools.pinact]]
-version = "4.1.0"
+version = "4.1.1"
 backend = "aqua:suzuki-shunsuke/pinact"
 
 [tools.pinact."platforms.linux-x64"]
-checksum = "sha256:8fcbf1b3e95551c82fd995535e3c1defa70e23299ce36eb3afd6c98778de6ca0"
-url = "https://github.com/suzuki-shunsuke/pinact/releases/download/v4.1.0/pinact_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/suzuki-shunsuke/pinact/releases/assets/442249966"
+checksum = "sha256:d1cffebe5704b74e2e5f8a864efb9f7e54768972dc686188c008033fb1797841"
+url = "https://github.com/suzuki-shunsuke/pinact/releases/download/v4.1.1/pinact_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/suzuki-shunsuke/pinact/releases/assets/494702259"
+
+[tools.pinact."platforms.macos-x64"]
+checksum = "sha256:513678fdb0bb59b2742dd06d28f0ee851496a83ba939954009aa6be53f5aec9c"
+url = "https://github.com/suzuki-shunsuke/pinact/releases/download/v4.1.1/pinact_darwin_amd64.tar.gz"
+url_api = "https://api.github.com/repos/suzuki-shunsuke/pinact/releases/assets/494702250"
 
 [[tools."pipx:check-jsonschema"]]
 version = "0.37.4"
 backend = "pipx:check-jsonschema"
 
 [[tools.pixi]]
-version = "0.73.0"
+version = "0.76.1"
 backend = "github:prefix-dev/pixi"
 
 [tools.pixi."platforms.linux-x64"]
-checksum = "sha256:682564e7cd35d38307df3cd6c8e9a45a1437d20febac0c8d165809d7c38408d1"
-url = "https://github.com/prefix-dev/pixi/releases/download/v0.73.0/pixi-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/prefix-dev/pixi/releases/assets/477739425"
+checksum = "sha256:8e2ab7630f5bc1e8aa38d236842e20f565f7aa0834687e53670b7c86ba54c90f"
+url = "https://github.com/prefix-dev/pixi/releases/download/v0.76.1/pixi-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/prefix-dev/pixi/releases/assets/501223455"
+
+[tools.pixi."platforms.macos-x64"]
+checksum = "sha256:4959ceeeb2580948445109da6b656e34f450e19566b3d9f6d28c55ce33fce6ce"
+url = "https://github.com/prefix-dev/pixi/releases/download/v0.76.1/pixi-x86_64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/prefix-dev/pixi/releases/assets/501223389"
 
 [[tools.pkl]]
-version = "0.32.0"
+version = "0.32.1"
 backend = "aqua:apple/pkl"
 
 [tools.pkl."platforms.linux-x64"]
-checksum = "sha256:15e7e7375c28b8542b3d13fe35bccaeb7b9542114008998708385489885f41e7"
-url = "https://github.com/apple/pkl/releases/download/0.32.0/pkl-linux-amd64"
-url_api = "https://api.github.com/repos/apple/pkl/releases/assets/470498153"
+checksum = "sha256:3180b62da95c0cad1d904e9bb6c5f4a8f9032413c21e53194bb91ff1ee5f3211"
+url = "https://github.com/apple/pkl/releases/download/0.32.1/pkl-linux-amd64"
+url_api = "https://api.github.com/repos/apple/pkl/releases/assets/487426567"
+
+[tools.pkl."platforms.macos-x64"]
+checksum = "sha256:5b74b903234047960144f66f2cebdd12d267d9b98e8155ed91d2ae5ed27e2d1f"
+url = "https://github.com/apple/pkl/releases/download/0.32.1/pkl-macos-amd64"
+url_api = "https://api.github.com/repos/apple/pkl/releases/assets/487426599"
 
 [[tools.python]]
 version = "3.14.6"
@@ -1011,22 +1036,32 @@ url = "https://github.com/tamasfe/taplo/releases/download/0.10.0/taplo-linux-x86
 url_api = "https://api.github.com/repos/tamasfe/taplo/releases/assets/257322600"
 
 [[tools.typos]]
-version = "1.48.0"
+version = "1.49.0"
 backend = "aqua:crate-ci/typos"
 
 [tools.typos."platforms.linux-x64"]
-checksum = "sha256:72a930c9a94fc3914aa56835c5b859c892a797d40c1c42638b98d93f16ff519c"
-url = "https://github.com/crate-ci/typos/releases/download/v1.48.0/typos-v1.48.0-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/crate-ci/typos/releases/assets/462429902"
+checksum = "sha256:48bd2d58e02ce713b8c0f1aa239e68ee4f7d8c551013135806e6aed3938d9e10"
+url = "https://github.com/crate-ci/typos/releases/download/v1.49.0/typos-v1.49.0-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/crate-ci/typos/releases/assets/500261019"
+
+[tools.typos."platforms.macos-x64"]
+checksum = "sha256:4cecbf653a9fc45f023abf57f4e2e2f6b138c2d2387b09289beacdd3f0ea7bfd"
+url = "https://github.com/crate-ci/typos/releases/download/v1.49.0/typos-v1.49.0-x86_64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/crate-ci/typos/releases/assets/500259181"
 
 [[tools.uv]]
-version = "0.11.31"
+version = "0.12.2"
 backend = "aqua:astral-sh/uv"
 
 [tools.uv."platforms.linux-x64"]
-checksum = "sha256:89048b7e30a6c459fa7e8f2e91cfdc413dc004dcbddc6c2af5e09df123e3246d"
-url = "https://github.com/astral-sh/uv/releases/download/0.11.31/uv-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/485371115"
+checksum = "sha256:2dbe8209c9592f6d1009b8565f4bf29813427907bee2236023c013101ede343f"
+url = "https://github.com/astral-sh/uv/releases/download/0.12.2/uv-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/502996593"
+
+[tools.uv."platforms.macos-x64"]
+checksum = "sha256:a6e6506a9109801222d65d17461abf4ed13bdecc5d2b13af0495418a82972c6b"
+url = "https://github.com/astral-sh/uv/releases/download/0.12.2/uv-x86_64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/502996573"
 
 [[tools.yamlfmt]]
 version = "0.21.0"
