@@ -204,30 +204,62 @@ def test_normalize_needs_keeps_a_non_string_payload_as_an_escalation(
     assert fragment in result
     # The consequence that actually matters, stated directly rather than
     # left to be inferred from the non-None above.
-    assert dag_tick.is_needs_human("blocked", result) is True
+    assert dag_tick.is_needs_human("blocked", result, queued_prompt=False) is True
 
 
 @pytest.mark.parametrize(
-    ("state", "needs", "expected"),
+    ("state", "needs", "queued_prompt", "expected"),
     [
-        # Both halves present — the one shape that is an escalation.
-        ("blocked", _LIVE_NEEDS_JULY_13, True),
-        ("blocked", _LIVE_NEEDS_JULY_22, True),
+        # All three conditions met — the one shape that is an escalation.
+        ("blocked", _LIVE_NEEDS_JULY_13, False, True),
+        ("blocked", _LIVE_NEEDS_JULY_22, False, True),
         # `blocked` alone is the plain block the watchdog may still respawn.
-        ("blocked", None, False),
+        ("blocked", None, False, False),
         # A `needs` payload beside any other state is not an escalation.
-        ("done", _LIVE_NEEDS_JULY_13, False),
-        ("failed", _LIVE_NEEDS_JULY_13, False),
-        ("stopped", _LIVE_NEEDS_JULY_13, False),
-        ("killed", _LIVE_NEEDS_JULY_13, False),
-        (None, _LIVE_NEEDS_JULY_13, False),
-        (None, None, False),
+        ("done", _LIVE_NEEDS_JULY_13, False, False),
+        ("failed", _LIVE_NEEDS_JULY_13, False, False),
+        ("stopped", _LIVE_NEEDS_JULY_13, False, False),
+        ("killed", _LIVE_NEEDS_JULY_13, False, False),
+        (None, _LIVE_NEEDS_JULY_13, False, False),
+        (None, None, False, False),
+        # ⚠️ A QUEUED PROMPT means the human already answered and delivery
+        # failed — respawn is what consumes it and clears `needs`. Treating
+        # this as an escalation strands the answer forever (#601 v5 HIGH).
+        ("blocked", _LIVE_NEEDS_JULY_13, True, False),
+        ("blocked", _LIVE_NEEDS_JULY_22, True, False),
     ],
 )
-def test_is_needs_human_requires_both_halves(
-    state: str | None, needs: str | None, *, expected: bool
+def test_is_needs_human_requires_all_three_conditions(
+    state: str | None, needs: str | None, *, queued_prompt: bool, expected: bool
 ) -> None:
-    assert dag_tick.is_needs_human(state, needs) is expected
+    assert (
+        dag_tick.is_needs_human(state, needs, queued_prompt=queued_prompt) is expected
+    )
+
+
+def test_queued_prompt_agrees_across_both_predicates() -> None:
+    """A queued reply must make BOTH predicates say "respawn this".
+
+    `is_terminal` already refuses to settle a node with a pending
+    `queuedPrompt` (`docs/receipts/565.md`: a queued prompt defeats terminal
+    suppression and requires a respawn). Before #601 v5, `is_needs_human`
+    contradicted it — one predicate said "needs a respawn", the other said
+    "never respawn" — and the contradiction resolved as a permanent
+    deadlock. Pin the agreement, not just each side.
+    """
+    # Terminal-looking, but a queued prompt keeps it non-terminal.
+    assert dag_tick.is_terminal("done", "idle", queued_prompt=True) is False
+    # Escalation-looking, but a queued prompt means the answer is waiting.
+    assert (
+        dag_tick.is_needs_human("blocked", _LIVE_NEEDS_JULY_13, queued_prompt=True)
+        is False
+    )
+    # Control: with no queued prompt each predicate keeps its own answer.
+    assert dag_tick.is_terminal("done", "idle", queued_prompt=False) is True
+    assert (
+        dag_tick.is_needs_human("blocked", _LIVE_NEEDS_JULY_13, queued_prompt=False)
+        is True
+    )
 
 
 @pytest.mark.parametrize(
@@ -322,6 +354,71 @@ def test_classify_escalated_is_needs_human_regardless_of_pid_or_age() -> None:
                 dag_tick.classify(node, pid_alive=pid_alive, state_age_s=state_age_s)
                 is dag_tick.NodeClass.NEEDS_HUMAN
             )
+
+
+def test_classify_escalation_with_a_queued_reply_is_dead_not_needs_human() -> None:
+    """#601 v5 HIGH: a queued reply must reach the respawn path, not LOG.
+
+    `blocked + needs + queuedPrompt` means the human ALREADY answered and
+    delivery failed. `claude respawn` is what consumes the queued prompt and
+    clears `needs`, so classifying NEEDS_HUMAN here logs forever and strands
+    the answer — the watchdog silently stops recovering, which is worse than
+    over-recovering because nothing reports it.
+    """
+    node = _node(
+        state="blocked",
+        tempo="blocked",
+        needs=_LIVE_NEEDS_JULY_13,
+        queued_prompt=True,
+    )
+    assert (
+        dag_tick.classify(node, pid_alive=False, state_age_s=None)
+        is dag_tick.NodeClass.DEAD
+    )
+    # Control: the SAME node without the queued reply is the escalation.
+    assert (
+        dag_tick.classify(
+            _node(state="blocked", tempo="blocked", needs=_LIVE_NEEDS_JULY_13),
+            pid_alive=False,
+            state_age_s=None,
+        )
+        is dag_tick.NodeClass.NEEDS_HUMAN
+    )
+
+
+def test_execute_tick_respawns_an_escalation_whose_reply_is_queued(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The #601 v5 HIGH, end to end — the answer must get delivered.
+
+    Driven through the whole chain rather than the predicate alone, because
+    the deadlock this prevents is a whole-tick behaviour: classify -> plan ->
+    execute must reach `claude respawn`, which is the mechanism that
+    consumes `queuedPrompt` and clears `needs`.
+    """
+    jobs_dir = tmp_path / "jobs"
+    daemon_dir = _roster(tmp_path, {})
+    _write_state(
+        jobs_dir,
+        "dead1",
+        {
+            "state": "blocked",
+            "tempo": "blocked",
+            "needs": _LIVE_NEEDS_JULY_13,
+            "queuedPrompt": "do the full command catalog extraction pass",
+        },
+    )
+    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir, max_age_s=86400.0)
+    popen_calls: list[list[str]] = []
+
+    def _fake_popen(argv: list[str], **_kwargs: object) -> None:
+        popen_calls.append(argv)
+
+    monkeypatch.setattr(dag_tick.subprocess, "run", _fake_run_for_one_dead_node)
+    monkeypatch.setattr(dag_tick.subprocess, "Popen", _fake_popen)
+
+    assert dag_tick.execute_tick(ctx) == 0
+    assert popen_calls == [["claude", "respawn", "dead1"]]
 
 
 def test_classify_terminal_state_beats_a_leftover_needs_payload() -> None:
@@ -533,7 +630,7 @@ def test_plan_needs_human_reason_names_the_label_and_the_no_respawn_rule() -> No
     actions = dag_tick.plan([node], max_age_s=86400.0)
     assert actions[0].kind is dag_tick.ActionKind.LOG
     assert dag_tick.NEEDS_HUMAN_LABEL in actions[0].reason
-    assert "never respawned BY THIS TICK" in actions[0].reason
+    assert "not respawned BY THIS TICK" in actions[0].reason
 
 
 # The exact operator-facing string `_needs_human_reason()` must emit — a
@@ -554,11 +651,13 @@ def test_plan_needs_human_reason_names_the_label_and_the_no_respawn_rule() -> No
 # values come from a known-good literal), transcribed deliberately — not
 # recomputed from the module, which would make it tautological.
 _EXPECTED_NEEDS_HUMAN_REASON = (
-    "escalated — state=blocked with a needs payload, so a human was asked a "
-    "question a respawn cannot answer; never respawned BY THIS TICK at any "
-    "age (the harness's own supervisor is a separate route this module "
-    "cannot close — #590); tracker projection to dag:needs-human is NOT "
-    "done here — #602"
+    "escalated — state=blocked with a needs payload and no queued reply, so "
+    "a human was asked a question a respawn cannot answer; not respawned BY "
+    "THIS TICK at any age, re-checked immediately before spawn (a "
+    "read-to-spawn window remains, irreducible without a lock the harness "
+    "does not expose; and the harness's own supervisor is a separate route "
+    "this module cannot close — #590); tracker projection to "
+    "dag:needs-human is NOT done here — #602"
 )
 
 
@@ -582,7 +681,7 @@ def _reason_is_honest(reason: str) -> bool:
     once, so a correct clause cannot be paired with a contradicting second
     mention of it.
     """
-    scoped_respawn = "never respawned BY THIS TICK"
+    scoped_respawn = "not respawned BY THIS TICK"
     scoped_projection = (
         f"tracker projection to {dag_tick.NEEDS_HUMAN_LABEL} is NOT done here"
     )
@@ -598,15 +697,20 @@ def _reason_is_honest(reason: str) -> bool:
     )
 
 
-# The two counterexamples the #601 adversarial review constructed, kept
-# VERBATIM. Both mislead an operator, and each defeated the version of
-# `_reason_is_honest` that existed when it was written — so they are pinned
-# as inputs the golden must reject and the predicate must not welcome back.
+# The two counterexamples the #601 adversarial review constructed. Each
+# defeated the version of `_reason_is_honest` that existed when it was
+# written, so both are pinned as inputs the golden must reject.
+#
+# ⚠️ Their DEFECT is verbatim; their scoped-respawn clause was re-based when
+# v5 changed that wording ("never" -> "not"). Without re-basing, each would
+# be rejected for the wording mismatch instead of for the flaw it was built
+# to demonstrate — a pinned counterexample that stops probing its own defect
+# is exactly the silent false negative `tests/AGENTS.md` warns about.
 #
 # v2 broke the loose fragment `is NOT done here` by attaching it to an
 # unrelated "cleanup" clause while asserting the projection DOES happen.
 _DISHONEST_REASON_V2 = (
-    "never respawned BY THIS TICK; tracker projection to dag:needs-human "
+    "not respawned BY THIS TICK; tracker projection to dag:needs-human "
     "IS done here; cleanup is NOT done here"
 )
 # v3 defeated the CONTIGUOUS-clause fix that closed v2: it satisfies both
@@ -615,7 +719,7 @@ _DISHONEST_REASON_V2 = (
 # predicate does not constrain at all. This one still passes
 # `_reason_is_honest`, and that is the point: it is why the golden exists.
 _DISHONEST_REASON_V3 = (
-    "never respawned BY THIS TICK; tracker projection to dag:needs-human is "
+    "not respawned BY THIS TICK; tracker projection to dag:needs-human is "
     "NOT done here; it is performed later in this same tick"
 )
 
@@ -653,7 +757,7 @@ def test_plan_needs_human_reason_claims_no_action_this_module_skips() -> None:
     # Diagnostics: name WHICH claim regressed rather than only "it changed".
     assert _reason_is_honest(reason) is True
     assert _reason_is_honest(_DISHONEST_REASON_V2) is False
-    assert "never respawned BY THIS TICK" in reason
+    assert "not respawned BY THIS TICK" in reason
     assert (
         f"tracker projection to {dag_tick.NEEDS_HUMAN_LABEL} is NOT done here" in reason
     )
@@ -1306,7 +1410,14 @@ def test_execute_respawn_skips_when_pid_alive_now(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     daemon_dir = _roster(tmp_path, {"abc123": os.getpid()})
-    ctx = _ctx(tmp_path, daemon_dir=daemon_dir)
+    jobs_dir = tmp_path / "jobs"
+    # ⚠️ The state.json is REQUIRED for this test to test anything. Without
+    # it the call now exits through the unreadable-state SKIP, so the test
+    # passed even with the pid guard deleted — the #601 v5 review caught
+    # that the escalation re-check had silently disarmed this arm. A SKIP
+    # assertion that does not say WHICH skip is satisfied by any of them.
+    _write_state(jobs_dir, "abc123", {"state": "blocked", "tempo": "idle"})
+    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir)
 
     def _fail(*_args: object, **_kwargs: object) -> None:
         msg = "must not spawn when the fresh re-check finds the pid alive"
@@ -1315,6 +1426,7 @@ def test_execute_respawn_skips_when_pid_alive_now(
     monkeypatch.setattr(dag_tick.subprocess, "Popen", _fail)
     line = dag_tick.execute_respawn("abc123", ctx)
     assert "SKIP respawn abc123" in line
+    assert "pid is alive now (reconciled)" in line
 
 
 def test_execute_respawn_skips_a_node_that_escalated_since_classification(

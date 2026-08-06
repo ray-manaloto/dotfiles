@@ -383,16 +383,40 @@ def is_stalled(
     return tempo == "active" and state_age_s is not None and state_age_s > stall_after_s
 
 
-def is_needs_human(state: str | None, needs: str | None) -> bool:
-    """The escalation predicate: `state=blocked` AND a `needs` payload (#601).
+def is_needs_human(
+    state: str | None, needs: str | None, *, queued_prompt: bool
+) -> bool:
+    """Escalation: `state=blocked`, a `needs` payload, and NO queued reply.
 
-    Both halves are load-bearing. `state == "blocked"` alone is the plain
-    block the watchdog has always been free to respawn; the `needs` payload
-    is what makes it a question *asked of a human*, which `claude respawn`
-    cannot answer — it returns the node IDLE with no prompt
-    (`docs/receipts/565.md`), losing the payload entirely.
+    The first two halves are the escalation itself. `state == "blocked"`
+    alone is the plain block the watchdog has always been free to respawn;
+    the `needs` payload is what makes it a question *asked of a human*,
+    which `claude respawn` cannot answer — it returns the node IDLE with no
+    prompt (`docs/receipts/565.md`), losing the payload entirely.
+
+    ⚠️ **`queued_prompt` is the third half, and omitting it was a HIGH
+    finding in the #601 v5 review — a defect this module INTRODUCED, not
+    one it inherited.** The `needs` lifecycle, settled from the 2.1.223
+    binary: a successfully delivered human reply flips the ledger active and
+    CLEARS `needs`; if delivery fails, the reply handler persists
+    `queuedPrompt` while leaving `state=blocked` and `needs` intact — and
+    `claude respawn` is specifically able to consume that queued prompt and
+    clear `needs`.
+
+    So `blocked ∧ needs ∧ queuedPrompt` does **not** mean "waiting on a
+    human". It means the human ALREADY ANSWERED and the answer is waiting to
+    be delivered — and respawn is the delivery mechanism. Suppressing it
+    there does not protect the question, it strands the answer: the node
+    logs NEEDS_HUMAN every 60s forever while the reply is never delivered.
+    A watchdog that silently stops recovering is a worse outage than one
+    that over-recovers, because nothing ever reports it.
+
+    :func:`is_terminal` already refuses to settle a node with a pending
+    `queuedPrompt`, for exactly this reason (`docs/receipts/565.md`: a
+    queued prompt defeats terminal suppression and requires a respawn).
+    This predicate now agrees with it rather than contradicting it.
     """
-    return state == ESCALATED_STATE and needs is not None
+    return state == ESCALATED_STATE and needs is not None and not queued_prompt
 
 
 def classify(
@@ -438,7 +462,7 @@ def classify(
     """
     if is_terminal(node.state, node.tempo, queued_prompt=node.queued_prompt):
         return NodeClass.DONE
-    if is_needs_human(node.state, node.needs):
+    if is_needs_human(node.state, node.needs, queued_prompt=node.queued_prompt):
         return NodeClass.NEEDS_HUMAN
     if not pid_alive:
         return NodeClass.DEAD
@@ -517,11 +541,13 @@ def _needs_human_reason() -> str:
       tracker when it reached a launchd log.
     """
     return (
-        "escalated — state=blocked with a needs payload, so a human was "
-        "asked a question a respawn cannot answer; never respawned BY THIS "
-        "TICK at any age (the harness's own supervisor is a separate route "
-        "this module cannot close — #590); tracker projection to "
-        f"{NEEDS_HUMAN_LABEL} is NOT done here — #602"
+        "escalated — state=blocked with a needs payload and no queued "
+        "reply, so a human was asked a question a respawn cannot answer; "
+        "not respawned BY THIS TICK at any age, re-checked immediately "
+        "before spawn (a read-to-spawn window remains, irreducible without "
+        "a lock the harness does not expose; and the harness's own "
+        f"supervisor is a separate route this module cannot close — #590); "
+        f"tracker projection to {NEEDS_HUMAN_LABEL} is NOT done here — #602"
     )
 
 
@@ -932,7 +958,28 @@ def execute_respawn(
     predicate as well as pid liveness. An unreadable `state.json` also
     SKIPs, deliberately — a node classified DEAD had a readable one, so its
     disappearance is anomalous, and "never resurrect what cannot be proven"
-    already governs the age check one function over. The next tick retries.
+    already governs the age check one function over. (That refusal makes the
+    node silent rather than retried: a persistently unreadable `state.json`
+    classifies conservative-ALIVE next tick, so `execute_respawn` is not
+    reached again. Correct, and worth stating — an earlier draft of this
+    docstring claimed "the next tick retries", which is not what happens.)
+
+    ⚠️ **ORDERING: the escalation re-check runs LAST, immediately before
+    `Popen`, and the pid check first.** That is not stylistic. The v5 review
+    showed the window is not closed by the check's existence but by its
+    DISTANCE from the spawn: with the state read first, a roster read — real
+    file I/O — sat between the safety check and `Popen`, and a
+    roster-absent-but-running node could write `blocked + needs` inside it
+    (demonstrated: `RESPAWN race2`, with `Popen` observing a state.json that
+    by then read `needs`). Moving it last shrinks the window to the
+    read→spawn gap.
+
+    **It does not eliminate it.** A check-then-act against a file another
+    process may write is irreducibly racy without a shared lock, a CAS, or a
+    "respawn only if the predicate still holds" primitive the harness does
+    not expose. The residual window is stated in the operator-facing reason
+    rather than papered over, because golden equality now enforces that
+    text and an unqualified "never" would be enforcing a falsehood.
 
     Deliberately PID-liveness only — no `tempo`/in-flight check. The
     harness's own `/restart` refusal ("Can't restart while work is running
@@ -948,6 +995,9 @@ def execute_respawn(
     crash-respawn recovers exactly this case (`docs/receipts/565.md` arm
     B6: state done + tempo ACTIVE -> RESPAWNED) — this function must too.
     """
+    if background_pid_alive(node_id, read_roster(ctx.daemon_dir), is_alive=is_alive):
+        return f"dag-tick: SKIP respawn {node_id} — pid is alive now (reconciled)"
+    # LAST before the spawn, deliberately — see the ordering note above.
     fresh_data, _ = load_state_json(ctx.jobs_dir, node_id)
     if fresh_data is None:
         return (
@@ -955,13 +1005,11 @@ def execute_respawn(
             "execution; cannot prove it is not an escalation"
         )
     fresh = node_from_state(node_id, fresh_data)
-    if is_needs_human(fresh.state, fresh.needs):
+    if is_needs_human(fresh.state, fresh.needs, queued_prompt=fresh.queued_prompt):
         return (
             f"dag-tick: SKIP respawn {node_id} — escalated since "
             f"classification; {_needs_human_reason()}; needs: {fresh.needs}"
         )
-    if background_pid_alive(node_id, read_roster(ctx.daemon_dir), is_alive=is_alive):
-        return f"dag-tick: SKIP respawn {node_id} — pid is alive now (reconciled)"
     try:
         subprocess.Popen(
             [ctx.claude_bin, "respawn", node_id],
