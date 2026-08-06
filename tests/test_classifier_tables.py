@@ -643,6 +643,22 @@ def test_an_else_branch_credits_the_axis_with_both_arms() -> None:
     assert derived.gated_classes["tempo"] == frozenset({"DONE", "WEDGED"})
 
 
+def test_a_local_assigned_a_class_is_resolved_not_merely_failed_closed() -> None:
+    """E must be READ, not just refused — and the distinction is invisible above.
+
+    `verdict = K.DONE; return verdict` is ordinary Python. Disabling the local
+    resolution entirely still leaves the parametrized test green, because the
+    unresolvable return then trips the fail-CLOSED path and the pin is refused
+    anyway — the right answer for the wrong reason, which is the one thing a
+    passing test cannot tell you (`feedback_test_right_answer_wrong_reason`).
+    So assert the mechanism: the return resolves, nothing is unreadable, and
+    `tempo` gates exactly DONE.
+    """
+    derived = _derive(_PIN_HEAD + _RETURN_SHAPES["E_name_return"], _PIN_SPEC)
+    assert derived.unreadable_decisions == frozenset()
+    assert derived.gated_classes["tempo"] == frozenset({"DONE"})
+
+
 def test_a_class_reference_is_not_confused_with_a_field_read() -> None:
     """`NodeClass.DONE` and `node.tempo` are both `Attribute(value=Name)`.
 
