@@ -156,12 +156,14 @@ ESCALATED_STATE = "blocked"
 # scheduler-owned, and a tick that labelled directly would put a second
 # writer on the tracker.
 #
-# ⚠️ **The projection itself is UNOWNED as of #601** — no in-tree component
-# and no open ticket (#579 WEDGED, #580 Codex verdict, #590 stall probe all
-# cover something else) emits the label or the append-only comment. So an
-# escalated node is currently visible in this tick's log ONLY. The spelling
-# is settled (`575.md`: *"#573's receipt `dag:needs-human` — the receipt is
-# later and governs"*); what is deferred is the owner and the comment format.
+# ⚠️ **Nothing in this process emits it — #602 owns the projection.** No
+# in-tree component writes the label or the append-only comment (#579 WEDGED,
+# #580 Codex verdict and #590 stall probe each cover something else), so an
+# escalated node is visible in this tick's log ONLY until #602 lands. The
+# spelling is settled (`575.md`: *"#573's receipt `dag:needs-human` — the
+# receipt is later and governs"*); what #575 deferred is the OWNER and the
+# comment format, NOT the projection itself — do not read the deferral as
+# wider than it is.
 NEEDS_HUMAN_LABEL = "dag:needs-human"
 
 # A tempo:"active" state.json this old with no update is WEDGED — classify
@@ -487,11 +489,32 @@ def _needs_human_reason() -> str:
     :func:`classify_background_rows` (the printed note) so the two can
     never say two different things about the same node — the same
     single-source shape as :func:`_stale_dead_reason`.
+
+    ⚠️ **Both scope qualifiers below are load-bearing, not hedging.** The
+    first draft of this string said *"never auto-respawned at any age
+    (project + label dag:needs-human)"*, and the #601 adversarial review
+    raised BOTH halves as HIGH findings — correctly, because each asserted
+    something this module does not do:
+
+    - **"by this tick".** Suppressing :data:`ActionKind.RESPAWN` binds THIS
+      watchdog only. The harness runs its own supervisor whose respawn
+      predicate (`docs/receipts/565.md`) reads state/tempo/`queuedPrompt`
+      and **not** `needs`, so it is a separate route this module cannot
+      close, and whether it fires for a `blocked` node is still the
+      unverified single-route claim #575 handed to #590. An unqualified
+      "never auto-respawned" would tell an operator the question is safe
+      when only one of two routes is known shut.
+    - **"not done here".** Nothing in this process emits the label or the
+      tracker comment (#602). Naming an action in a log line that the code
+      does not perform is how a reader concludes the escalation reached the
+      tracker when it reached a launchd log.
     """
     return (
         "escalated — state=blocked with a needs payload, so a human was "
-        "asked a question a respawn cannot answer; never auto-respawned "
-        f"at any age (project + label {NEEDS_HUMAN_LABEL})"
+        "asked a question a respawn cannot answer; never respawned BY THIS "
+        "TICK at any age (the harness's own supervisor is a separate route "
+        "this module cannot close — #590); tracker projection to "
+        f"{NEEDS_HUMAN_LABEL} is NOT done here — #602"
     )
 
 

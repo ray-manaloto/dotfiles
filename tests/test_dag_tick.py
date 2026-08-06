@@ -533,7 +533,35 @@ def test_plan_needs_human_reason_names_the_label_and_the_no_respawn_rule() -> No
     actions = dag_tick.plan([node], max_age_s=86400.0)
     assert actions[0].kind is dag_tick.ActionKind.LOG
     assert dag_tick.NEEDS_HUMAN_LABEL in actions[0].reason
-    assert "never auto-respawned" in actions[0].reason
+    assert "never respawned BY THIS TICK" in actions[0].reason
+
+
+def test_plan_needs_human_reason_claims_no_action_this_module_skips() -> None:
+    """#601 adversarial review, both HIGH findings — pinned as regressions.
+
+    The first draft said *"never auto-respawned at any age (project + label
+    dag:needs-human)"*, which asserted two things the module does not do:
+    a GLOBAL no-respawn guarantee (it binds this watchdog only — the
+    harness's own supervisor reads state/tempo/queuedPrompt, never `needs`),
+    and a projection that no code here performs (#602 owns it).
+
+    A log line that names an action the code skips is how an operator
+    concludes an escalation reached the tracker when it reached a launchd
+    log. Both qualifiers are pinned so a later tidy-up cannot quietly drop
+    them, and the bare overclaims are pinned ABSENT — the assertion that
+    actually fails if the old wording returns.
+    """
+    node = dag_tick.ClassifiedNode(
+        "abc123", dag_tick.NodeClass.NEEDS_HUMAN, pid_alive=False, state_age_s=None
+    )
+    reason = dag_tick.plan([node], max_age_s=86400.0)[0].reason
+    assert "BY THIS TICK" in reason
+    assert "is NOT done here" in reason
+    # The scope-free claims the review rejected must not come back. Control
+    # arm for these two: the assertions above prove the phrases they scope
+    # ARE present, so these are not vacuously true of an empty string.
+    assert "never auto-respawned" not in reason
+    assert f"project + label {dag_tick.NEEDS_HUMAN_LABEL}" not in reason
 
 
 def test_plan_never_respawns_a_needs_human_node_at_any_age() -> None:
