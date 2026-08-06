@@ -1019,9 +1019,10 @@ run = 'uv run --project python kb-setup cc --root "$MISE_PROJECT_ROOT" --sibling
 # `mise bootstrap macos launchd-agents apply` to write
 # ~/Library/LaunchAgents/dev.mise.dotfiles-dag-tick.plist and load it, and
 # `mise bootstrap macos launchd-agents status` to check drift. Plain
-# `mise bootstrap` (no subcommand) ALSO applies this block — it is step 7
-# of the documented bootstrap sequence (mise docs: bootstrap.html "How it
-# runs"). Nothing in THIS repo auto-runs either `mise bootstrap` or
+# `mise bootstrap` (no subcommand) ALSO applies this block — it is step 11
+# of the bootstrap sequence per the LIVE `mise bootstrap --help` at 2026.8.2
+# (the vendored docs snapshot says 7; the binary wins — it gained steps
+# since). Nothing in THIS repo auto-runs either `mise bootstrap` or
 # `mise bootstrap macos launchd-agents apply` — both are always a human's
 # explicit call.
 #
