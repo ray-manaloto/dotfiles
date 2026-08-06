@@ -6,6 +6,15 @@ subprocess, no filesystem. The census-enrichment and action-execution paths
 are exercised against `tmp_path` fixtures with `subprocess` monkeypatched;
 none of these tests invoke the real `claude` binary or mutate anything on
 this host.
+
+#578 respec round 3 (injection seam, `tests/AGENTS.md` § Mocking): every
+test that used to monkeypatch this module's own `LOCK_PATH`/`JOBS_DIR`/
+`DAEMON_DIR` globals, or `pid_is_alive`, now constructs a
+`dag_tick.TickContext` against `tmp_path` (`_ctx()`) and/or injects a fake
+liveness predicate instead — `subprocess` and `os.environ` stay the only
+things monkeypatched here, since those are external system boundaries, not
+our own module. `_roster()` dedups the repeated mkdir+roster.json fixture
+writes.
 """
 
 from __future__ import annotations
@@ -24,6 +33,89 @@ from dotfiles_setup import dag_tick
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
+
+# ---------------------------------------------------------------------------
+# Shared fixtures
+# ---------------------------------------------------------------------------
+
+
+def _node(
+    *,
+    node_id: str = "abc123",
+    state: str | None = "blocked",
+    tempo: str | None = "idle",
+    queued_prompt: bool = False,
+) -> dag_tick.Node:
+    return dag_tick.Node(
+        node_id=node_id, state=state, tempo=tempo, queued_prompt=queued_prompt
+    )
+
+
+def _write_state(jobs_dir: Path, node_id: str, payload: dict[str, object]) -> None:
+    job_dir = jobs_dir / node_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+    (job_dir / "state.json").write_text(json.dumps(payload))
+
+
+def _roster(tmp_path: Path, workers: dict[str, int]) -> Path:
+    """Write a readable `roster.json` under `tmp_path/"daemon"`.
+
+    Names each `node_id -> pid` in `workers` (an empty dict is a readable
+    roster naming NO worker — real negative pid evidence, distinct from a
+    missing/unreadable roster FILE, which is conservative ALIVE). Returns
+    the daemon dir, since every caller needs it for `_ctx()` /
+    `classify_background_rows` too. Dedups the ~10 repeated
+    mkdir+roster.json writes this file used to carry (#578 respec round 3).
+    """
+    daemon_dir = tmp_path / "daemon"
+    daemon_dir.mkdir(exist_ok=True)
+    payload = {"workers": {node_id: {"pid": pid} for node_id, pid in workers.items()}}
+    (daemon_dir / "roster.json").write_text(json.dumps(payload))
+    return daemon_dir
+
+
+def _ctx(tmp_path: Path, **overrides: object) -> dag_tick.TickContext:
+    """A `TickContext` scoped to `tmp_path`.
+
+    The injection seam (#578 respec round 3) that replaces monkeypatching
+    `LOCK_PATH`/`JOBS_DIR`/`DAEMON_DIR` on the module.
+    """
+    base: dict[str, object] = {
+        "claude_bin": "claude",
+        "cwd": "/x",
+        "jobs_dir": tmp_path / "jobs",
+        "daemon_dir": tmp_path / "daemon",
+        "lock_path": tmp_path / "dag-tick.lock",
+        "stall_after_s": 120.0,
+        "max_age_s": dag_tick.DEFAULT_MAX_AGE_SECONDS,
+        "dry_run": False,
+        "verbose": False,
+    }
+    base.update(overrides)
+    return dag_tick.TickContext(**base)
+
+
+def _tick_args(**overrides: object) -> argparse.Namespace:
+    base: dict[str, object] = {
+        "cwd": None,
+        "dry_run": False,
+        "claude_bin": "claude",
+        "stall_after": 120.0,
+        "max_age": dag_tick.DEFAULT_MAX_AGE_SECONDS,
+        "verbose": False,
+    }
+    base.update(overrides)
+    return argparse.Namespace(**base)
+
+
+class _FakeCompleted:
+    """Stand-in for `subprocess.CompletedProcess` in monkeypatched tests."""
+
+    def __init__(self, *, returncode: int, stderr: str = "", stdout: str = "") -> None:
+        self.returncode = returncode
+        self.stderr = stderr
+        self.stdout = stdout
+
 
 # ---------------------------------------------------------------------------
 # is_terminal() — the 7 terminal-predicate arms from docs/receipts/565.md
@@ -51,18 +143,6 @@ def test_terminal_predicate_arms(
 # ---------------------------------------------------------------------------
 # classify() — see docstring for the precedence order it encodes
 # ---------------------------------------------------------------------------
-
-
-def _node(
-    *,
-    node_id: str = "abc123",
-    state: str | None = "blocked",
-    tempo: str | None = "idle",
-    queued_prompt: bool = False,
-) -> dag_tick.Node:
-    return dag_tick.Node(
-        node_id=node_id, state=state, tempo=tempo, queued_prompt=queued_prompt
-    )
 
 
 def test_classify_done_regardless_of_pid_alive() -> None:
@@ -183,31 +263,36 @@ def test_gate_status_three_faces(stderr_text: str, expected: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# plan() — the classification -> action table
+# plan() — the classification -> action table, incl. --max-age (round 3)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
-    ("node_class", "pid_alive", "expected_kind"),
+    ("node_class", "pid_alive", "state_age_s", "expected_kind"),
     [
-        (dag_tick.NodeClass.DEAD, False, dag_tick.ActionKind.RESPAWN),
-        (dag_tick.NodeClass.DEAD, True, dag_tick.ActionKind.RESPAWN),
-        (dag_tick.NodeClass.DONE, True, dag_tick.ActionKind.STOP),
-        (dag_tick.NodeClass.DONE, False, None),
-        (dag_tick.NodeClass.WEDGED, True, dag_tick.ActionKind.LOG),
-        (dag_tick.NodeClass.WEDGED, False, dag_tick.ActionKind.LOG),
-        (dag_tick.NodeClass.ALIVE, True, None),
-        (dag_tick.NodeClass.ALIVE, False, None),
+        (dag_tick.NodeClass.DEAD, False, 10.0, dag_tick.ActionKind.RESPAWN),
+        (dag_tick.NodeClass.DEAD, True, 10.0, dag_tick.ActionKind.RESPAWN),
+        (dag_tick.NodeClass.DEAD, False, 999_999.0, dag_tick.ActionKind.LOG),
+        (dag_tick.NodeClass.DEAD, False, None, dag_tick.ActionKind.LOG),
+        (dag_tick.NodeClass.DONE, True, 10.0, dag_tick.ActionKind.STOP),
+        (dag_tick.NodeClass.DONE, False, 10.0, None),
+        (dag_tick.NodeClass.WEDGED, True, 10.0, dag_tick.ActionKind.LOG),
+        (dag_tick.NodeClass.WEDGED, False, 10.0, dag_tick.ActionKind.LOG),
+        (dag_tick.NodeClass.ALIVE, True, 10.0, None),
+        (dag_tick.NodeClass.ALIVE, False, 10.0, None),
     ],
 )
 def test_plan_maps_classification_to_actions(
     node_class: dag_tick.NodeClass,
     *,
     pid_alive: bool,
+    state_age_s: float | None,
     expected_kind: dag_tick.ActionKind | None,
 ) -> None:
-    node = dag_tick.ClassifiedNode("abc123", node_class, pid_alive=pid_alive)
-    actions = dag_tick.plan([node])
+    node = dag_tick.ClassifiedNode(
+        "abc123", node_class, pid_alive=pid_alive, state_age_s=state_age_s
+    )
+    actions = dag_tick.plan([node], max_age_s=100.0)
     if expected_kind is None:
         assert actions == []
     else:
@@ -217,12 +302,38 @@ def test_plan_maps_classification_to_actions(
 
 def test_plan_is_pure_and_order_preserving() -> None:
     nodes = [
-        dag_tick.ClassifiedNode("dead-1", dag_tick.NodeClass.DEAD, pid_alive=False),
-        dag_tick.ClassifiedNode("alive-1", dag_tick.NodeClass.ALIVE, pid_alive=True),
-        dag_tick.ClassifiedNode("done-1", dag_tick.NodeClass.DONE, pid_alive=True),
+        dag_tick.ClassifiedNode(
+            "dead-1", dag_tick.NodeClass.DEAD, pid_alive=False, state_age_s=10.0
+        ),
+        dag_tick.ClassifiedNode(
+            "alive-1", dag_tick.NodeClass.ALIVE, pid_alive=True, state_age_s=10.0
+        ),
+        dag_tick.ClassifiedNode(
+            "done-1", dag_tick.NodeClass.DONE, pid_alive=True, state_age_s=10.0
+        ),
     ]
-    actions = dag_tick.plan(nodes)
+    actions = dag_tick.plan(nodes, max_age_s=100.0)
     assert [a.node_id for a in actions] == ["dead-1", "done-1"]
+
+
+def test_plan_over_age_dead_reason_names_the_age() -> None:
+    node = dag_tick.ClassifiedNode(
+        "abc123", dag_tick.NodeClass.DEAD, pid_alive=False, state_age_s=200_000.0
+    )
+    actions = dag_tick.plan([node], max_age_s=86400.0)
+    assert actions[0].kind is dag_tick.ActionKind.LOG
+    assert "stale beyond --max-age" in actions[0].reason
+    assert "200000s" in actions[0].reason
+    assert "not crash recovery" in actions[0].reason
+
+
+def test_plan_no_age_dead_reason_says_unknown_age() -> None:
+    node = dag_tick.ClassifiedNode(
+        "abc123", dag_tick.NodeClass.DEAD, pid_alive=False, state_age_s=None
+    )
+    actions = dag_tick.plan([node], max_age_s=86400.0)
+    assert actions[0].kind is dag_tick.ActionKind.LOG
+    assert "unknown age" in actions[0].reason
 
 
 # ---------------------------------------------------------------------------
@@ -321,14 +432,33 @@ def test_background_pid_alive_missing_entry_is_false() -> None:
     assert dag_tick.background_pid_alive("abc123", {}) is False
 
 
-def test_background_pid_alive_checks_the_roster_pid(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(dag_tick, "pid_is_alive", lambda pid: pid == 111)
-    alive_roster = {"abc123": dag_tick.RosterWorker(pid=111, proc_start=None)}
-    dead_roster = {"abc123": dag_tick.RosterWorker(pid=222, proc_start=None)}
+def test_background_pid_alive_defaults_to_real_pid_is_alive() -> None:
+    alive_roster = {"abc123": dag_tick.RosterWorker(pid=os.getpid(), proc_start=None)}
+    dead_roster = {"abc123": dag_tick.RosterWorker(pid=999_999, proc_start=None)}
     assert dag_tick.background_pid_alive("abc123", alive_roster) is True
     assert dag_tick.background_pid_alive("abc123", dead_roster) is False
+
+
+def test_background_pid_alive_checks_the_injected_predicate() -> None:
+    """#578 respec round 3: inject a fake predicate.
+
+    Instead of monkeypatching `dag_tick.pid_is_alive`
+    (`tests/AGENTS.md` § Mocking — never mock our own module; inject).
+    """
+
+    def _fake_is_alive(pid: int) -> bool:
+        return pid == 111
+
+    alive_roster = {"abc123": dag_tick.RosterWorker(pid=111, proc_start=None)}
+    dead_roster = {"abc123": dag_tick.RosterWorker(pid=222, proc_start=None)}
+    assert (
+        dag_tick.background_pid_alive("abc123", alive_roster, is_alive=_fake_is_alive)
+        is True
+    )
+    assert (
+        dag_tick.background_pid_alive("abc123", dead_roster, is_alive=_fake_is_alive)
+        is False
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -375,51 +505,31 @@ def test_load_state_json_parses_and_returns_mtime(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _write_state(jobs_dir: Path, node_id: str, payload: dict[str, object]) -> None:
-    job_dir = jobs_dir / node_id
-    job_dir.mkdir(parents=True, exist_ok=True)
-    (job_dir / "state.json").write_text(json.dumps(payload))
-
-
 def test_classify_background_rows_missing_state_json_is_conservative_alive(
     tmp_path: Path,
 ) -> None:
-    jobs_dir = tmp_path / "jobs"
-    daemon_dir = tmp_path / "daemon"
-    jobs_dir.mkdir()
-    daemon_dir.mkdir()
+    ctx = _ctx(tmp_path, verbose=True)
     rows: list[dict[str, object]] = [{"id": "ghost", "kind": "background"}]
-    result = dag_tick.classify_background_rows(
-        rows,
-        jobs_dir=jobs_dir,
-        daemon_dir=daemon_dir,
-        stall_after_s=120.0,
-        verbose=True,
-    )
+    result = dag_tick.classify_background_rows(rows, ctx)
     assert result.classified == [
-        dag_tick.ClassifiedNode("ghost", dag_tick.NodeClass.ALIVE, pid_alive=True)
+        dag_tick.ClassifiedNode(
+            "ghost", dag_tick.NodeClass.ALIVE, pid_alive=True, state_age_s=None
+        )
     ]
     assert any("missing/unparseable" in note for note in result.notes)
 
 
 def test_classify_background_rows_dead_when_no_roster_entry(tmp_path: Path) -> None:
+    daemon_dir = _roster(tmp_path, {})
     jobs_dir = tmp_path / "jobs"
-    daemon_dir = tmp_path / "daemon"
-    daemon_dir.mkdir()
-    # A READABLE roster that simply does not name this node — the "even when
-    # its process has exited" case the harness's own docs describe. A missing
-    # roster FILE is a different case (conservative ALIVE) — see the sibling
-    # test below.
-    (daemon_dir / "roster.json").write_text(json.dumps({"workers": {}}))
     _write_state(jobs_dir, "abc123", {"state": "blocked", "tempo": "idle"})
+    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir)
     result = dag_tick.classify_background_rows(
-        [{"id": "abc123", "kind": "background"}],
-        jobs_dir=jobs_dir,
-        daemon_dir=daemon_dir,
-        stall_after_s=120.0,
-        verbose=False,
+        [{"id": "abc123", "kind": "background"}], ctx
     )
     assert result.classified[0].node_class is dag_tick.NodeClass.DEAD
+    # A FRESH DEAD node produces no note by itself (not stale, not
+    # --verbose) — the stale-DEAD note is covered by its own test below.
     assert result.notes == []
 
 
@@ -430,78 +540,156 @@ def test_classify_background_rows_missing_roster_file_is_conservative_alive(
     daemon_dir = tmp_path / "daemon"
     daemon_dir.mkdir()  # exists, but no roster.json inside it
     _write_state(jobs_dir, "abc123", {"state": "blocked", "tempo": "idle"})
+    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir)
     result = dag_tick.classify_background_rows(
-        [{"id": "abc123", "kind": "background"}],
-        jobs_dir=jobs_dir,
-        daemon_dir=daemon_dir,
-        stall_after_s=120.0,
-        verbose=False,
+        [{"id": "abc123", "kind": "background"}], ctx
     )
     assert result.classified[0].node_class is dag_tick.NodeClass.ALIVE
 
 
 def test_classify_background_rows_skips_row_with_no_usable_id(tmp_path: Path) -> None:
-    result = dag_tick.classify_background_rows(
-        [{"kind": "background"}],
-        jobs_dir=tmp_path,
-        daemon_dir=tmp_path,
-        stall_after_s=120.0,
-        verbose=False,
-    )
+    ctx = _ctx(tmp_path)
+    result = dag_tick.classify_background_rows([{"kind": "background"}], ctx)
     assert result.classified == []
     assert result.notes  # anomaly note recorded regardless of --verbose
 
 
 def test_classify_background_rows_wedged_note_always_prints(tmp_path: Path) -> None:
     jobs_dir = tmp_path / "jobs"
-    daemon_dir = tmp_path / "daemon"
-    daemon_dir.mkdir()
-    (daemon_dir / "roster.json").write_text(
-        json.dumps({"workers": {"abc123": {"pid": os.getpid(), "procStart": "x"}}})
-    )
+    daemon_dir = _roster(tmp_path, {"abc123": os.getpid()})
     _write_state(jobs_dir, "abc123", {"state": "blocked", "tempo": "active"})
     state_path = jobs_dir / "abc123" / "state.json"
     stale = state_path.stat().st_mtime - 300
     os.utime(state_path, (stale, stale))
+    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir)
     result = dag_tick.classify_background_rows(
-        [{"id": "abc123", "kind": "background"}],
-        jobs_dir=jobs_dir,
-        daemon_dir=daemon_dir,
-        stall_after_s=120.0,
-        verbose=False,
+        [{"id": "abc123", "kind": "background"}], ctx
     )
     assert result.classified[0].node_class is dag_tick.NodeClass.WEDGED
     assert any("WEDGED abc123" in note for note in result.notes)
 
 
+def test_classify_background_rows_stale_dead_note_always_prints(
+    tmp_path: Path,
+) -> None:
+    """#578 respec round 3 (--max-age): an over-age DEAD node's note.
+
+    It is unconditional (mirroring WEDGED's), so an operator sees WHY it
+    was not respawned even without --verbose.
+    """
+    jobs_dir = tmp_path / "jobs"
+    daemon_dir = _roster(tmp_path, {})
+    _write_state(jobs_dir, "abc123", {"state": "blocked", "tempo": "idle"})
+    state_path = jobs_dir / "abc123" / "state.json"
+    ancient = state_path.stat().st_mtime - 100_000  # ~27.8h — over the 24h default
+    os.utime(state_path, (ancient, ancient))
+    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir)
+    result = dag_tick.classify_background_rows(
+        [{"id": "abc123", "kind": "background"}], ctx
+    )
+    assert result.classified[0].node_class is dag_tick.NodeClass.DEAD
+    assert any(
+        "stale beyond --max-age" in note and "abc123" in note for note in result.notes
+    )
+
+
+# ---------------------------------------------------------------------------
+# The crashed-mid-activity case, driven through the real chain (round 3)
+# ---------------------------------------------------------------------------
+
+
+def test_crashed_mid_activity_flows_through_to_respawn(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The watchdog's primary recovery case.
+
+    #578 respec round 1, reworked round 3 per the cold review's
+    inert-fixture finding (probes rule 8). Drives the crash SHAPE through
+    the real chain — classify_background_rows -> plan -> execute_respawn —
+    instead of writing a state.json that `execute_respawn` cannot read (it
+    hasn't since round 1). A process
+    crashes while its last-written state.json still reads `tempo:"active"`
+    with in-flight work; the roster is readable and names no worker for
+    this node (real negative pid evidence). The control-arm test right
+    below proves this SAME fixture shape produces a DIFFERENT result when
+    the pid IS live.
+    """
+    jobs_dir = tmp_path / "jobs"
+    daemon_dir = _roster(tmp_path, {})
+    _write_state(jobs_dir, "abc123", {"tempo": "active", "inFlight": {"tasks": 1}})
+    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir)
+
+    result = dag_tick.classify_background_rows(
+        [{"id": "abc123", "kind": "background"}], ctx
+    )
+    assert len(result.classified) == 1
+    classified = result.classified[0]
+    assert classified.node_class is dag_tick.NodeClass.DEAD
+    assert classified.state_age_s is not None
+    assert classified.state_age_s < ctx.max_age_s  # fresh crash, not stale
+
+    actions = dag_tick.plan(result.classified, max_age_s=ctx.max_age_s)
+    assert [a.kind for a in actions] == [dag_tick.ActionKind.RESPAWN]
+
+    calls: list[list[str]] = []
+
+    def _fake_popen(argv: list[str], **_kwargs: object) -> None:
+        calls.append(argv)
+
+    monkeypatch.setattr(dag_tick.subprocess, "Popen", _fake_popen)
+    line = dag_tick.execute_respawn(actions[0].node_id, ctx)
+    assert calls == [["claude", "respawn", "abc123"]]
+    assert "RESPAWN abc123" in line
+
+
+def test_crashed_mid_activity_control_arm_live_pid_is_alive(tmp_path: Path) -> None:
+    """Control arm for the test above.
+
+    Probes rule 8: the fixture must be able to produce the OTHER result.
+    Same `tempo:"active"` + in-flight state.json shape, but the roster now
+    names a live pid — the node must classify ALIVE, not DEAD, proving the
+    fixture actually discriminates.
+    """
+    jobs_dir = tmp_path / "jobs"
+    daemon_dir = _roster(tmp_path, {"abc123": os.getpid()})
+    _write_state(jobs_dir, "abc123", {"tempo": "active", "inFlight": {"tasks": 1}})
+    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir)
+
+    result = dag_tick.classify_background_rows(
+        [{"id": "abc123", "kind": "background"}], ctx
+    )
+    assert result.classified[0].node_class is dag_tick.NodeClass.ALIVE
+
+
 # ---------------------------------------------------------------------------
 # gate_preflight() / read_census() — missing binary + distinct failure logs
-# (#578 respec round 2)
 # ---------------------------------------------------------------------------
 
 
 def test_gate_preflight_missing_binary_returns_unknown(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     def _raise_missing(*_args: object, **_kwargs: object) -> None:
         raise FileNotFoundError(2, "No such file or directory", "claude")
 
     monkeypatch.setattr(dag_tick.subprocess, "run", _raise_missing)
+    ctx = _ctx(tmp_path)
     with caplog.at_level("WARNING"):
-        result = dag_tick.gate_preflight("claude")
+        result = dag_tick.gate_preflight(ctx)
     assert result == "unknown"
     assert any("gate preflight" in record.getMessage() for record in caplog.records)
 
 
 def test_read_census_missing_binary_returns_empty_and_logs(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     def _raise_missing(*_args: object, **_kwargs: object) -> None:
         raise FileNotFoundError(2, "No such file or directory", "claude")
 
     monkeypatch.setattr(dag_tick.subprocess, "run", _raise_missing)
+    ctx = _ctx(tmp_path)
     with caplog.at_level("WARNING"):
-        result = dag_tick.read_census("claude", "/x")
+        result = dag_tick.read_census(ctx)
     assert result == []
     assert any(
         "unavailable for census" in record.getMessage() for record in caplog.records
@@ -509,15 +697,16 @@ def test_read_census_missing_binary_returns_empty_and_logs(
 
 
 def test_read_census_nonzero_rc_logs_rc_and_stderr(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     monkeypatch.setattr(
         dag_tick.subprocess,
         "run",
         lambda *_a, **_k: _FakeCompleted(returncode=17, stderr="permission denied"),
     )
+    ctx = _ctx(tmp_path)
     with caplog.at_level("WARNING"):
-        result = dag_tick.read_census("claude", "/x")
+        result = dag_tick.read_census(ctx)
     assert result == []
     messages = [record.getMessage() for record in caplog.records]
     assert any(
@@ -526,35 +715,37 @@ def test_read_census_nonzero_rc_logs_rc_and_stderr(
 
 
 def test_read_census_invalid_json_logs_distinct_message(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     monkeypatch.setattr(
         dag_tick.subprocess,
         "run",
         lambda *_a, **_k: _FakeCompleted(returncode=0, stdout="{not json"),
     )
+    ctx = _ctx(tmp_path)
     with caplog.at_level("WARNING"):
-        result = dag_tick.read_census("claude", "/x")
+        result = dag_tick.read_census(ctx)
     assert result == []
     assert any("not valid JSON" in record.getMessage() for record in caplog.records)
 
 
 def test_read_census_non_list_top_level_logs_distinct_message(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     monkeypatch.setattr(
         dag_tick.subprocess,
         "run",
         lambda *_a, **_k: _FakeCompleted(returncode=0, stdout=json.dumps({"a": 1})),
     )
+    ctx = _ctx(tmp_path)
     with caplog.at_level("WARNING"):
-        result = dag_tick.read_census("claude", "/x")
+        result = dag_tick.read_census(ctx)
     assert result == []
     assert any("not a list" in record.getMessage() for record in caplog.records)
 
 
 def test_read_census_healthy_empty_fleet_is_silent(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     """Control arm for the four failure-log tests above.
 
@@ -566,8 +757,9 @@ def test_read_census_healthy_empty_fleet_is_silent(
         "run",
         lambda *_a, **_k: _FakeCompleted(returncode=0, stdout="[]"),
     )
+    ctx = _ctx(tmp_path)
     with caplog.at_level("WARNING"):
-        result = dag_tick.read_census("claude", "/x")
+        result = dag_tick.read_census(ctx)
     assert result == []
     assert caplog.records == []
 
@@ -577,68 +769,18 @@ def test_read_census_healthy_empty_fleet_is_silent(
 # ---------------------------------------------------------------------------
 
 
-class _FakeCompleted:
-    """Stand-in for `subprocess.CompletedProcess` in monkeypatched tests."""
-
-    def __init__(self, *, returncode: int, stderr: str = "", stdout: str = "") -> None:
-        self.returncode = returncode
-        self.stderr = stderr
-        self.stdout = stdout
-
-
 def test_execute_respawn_spawns_when_no_evidence_of_life(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    daemon_dir = tmp_path / "daemon"
-    daemon_dir.mkdir()
-    # A READABLE roster naming no worker — real negative evidence, distinct
-    # from a missing/unreadable roster file (which is conservative ALIVE and
-    # would wrongly skip the respawn this test is checking for).
-    (daemon_dir / "roster.json").write_text(json.dumps({"workers": {}}))
+    daemon_dir = _roster(tmp_path, {})
+    ctx = _ctx(tmp_path, daemon_dir=daemon_dir)
     calls: list[list[str]] = []
 
     def _fake_popen(argv: list[str], **_kwargs: object) -> None:
         calls.append(argv)
 
     monkeypatch.setattr(dag_tick.subprocess, "Popen", _fake_popen)
-    line = dag_tick.execute_respawn(
-        "abc123", claude_bin="claude", daemon_dir=daemon_dir
-    )
-    assert calls == [["claude", "respawn", "abc123"]]
-    assert "RESPAWN abc123" in line
-
-
-def test_execute_respawn_crashed_mid_activity_respawns(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """The watchdog's primary recovery case (#578 respec round 1).
-
-    A process crashes while its last-written state.json still reads
-    `tempo:"active"` with in-flight work — a dead process never updates
-    that file again. A fresh roster read confirms the pid is dead, so this
-    MUST respawn.
-
-    Before this fix, `execute_respawn`'s fresh re-check also read this exact
-    state.json and skipped whenever `tempo == "active"` or in-flight counts
-    were nonzero — which deadlocked precisely this node, forever, every 60s.
-    The state.json below is written to document that shape; the fresh
-    re-check is now deliberately PID-liveness only and never reads it —
-    that absence of a read is the fix.
-    """
-    jobs_dir = tmp_path / "jobs"
-    daemon_dir = tmp_path / "daemon"
-    daemon_dir.mkdir()
-    (daemon_dir / "roster.json").write_text(json.dumps({"workers": {}}))
-    _write_state(jobs_dir, "abc123", {"tempo": "active", "inFlight": {"tasks": 1}})
-    calls: list[list[str]] = []
-
-    def _fake_popen(argv: list[str], **_kwargs: object) -> None:
-        calls.append(argv)
-
-    monkeypatch.setattr(dag_tick.subprocess, "Popen", _fake_popen)
-    line = dag_tick.execute_respawn(
-        "abc123", claude_bin="claude", daemon_dir=daemon_dir
-    )
+    line = dag_tick.execute_respawn("abc123", ctx)
     assert calls == [["claude", "respawn", "abc123"]]
     assert "RESPAWN abc123" in line
 
@@ -646,54 +788,58 @@ def test_execute_respawn_crashed_mid_activity_respawns(
 def test_execute_respawn_skips_when_pid_alive_now(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    daemon_dir = tmp_path / "daemon"
-    daemon_dir.mkdir()
-    (daemon_dir / "roster.json").write_text(
-        json.dumps({"workers": {"abc123": {"pid": os.getpid()}}})
-    )
+    daemon_dir = _roster(tmp_path, {"abc123": os.getpid()})
+    ctx = _ctx(tmp_path, daemon_dir=daemon_dir)
 
     def _fail(*_args: object, **_kwargs: object) -> None:
         msg = "must not spawn when the fresh re-check finds the pid alive"
         raise AssertionError(msg)
 
     monkeypatch.setattr(dag_tick.subprocess, "Popen", _fail)
-    line = dag_tick.execute_respawn(
-        "abc123", claude_bin="claude", daemon_dir=daemon_dir
-    )
+    line = dag_tick.execute_respawn("abc123", ctx)
     assert "SKIP respawn abc123" in line
+
+
+def test_execute_respawn_missing_binary_returns_skip_line(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    daemon_dir = _roster(tmp_path, {})
+    ctx = _ctx(tmp_path, daemon_dir=daemon_dir)
+
+    def _raise_missing(*_args: object, **_kwargs: object) -> None:
+        raise FileNotFoundError(2, "No such file or directory", "claude")
+
+    monkeypatch.setattr(dag_tick.subprocess, "Popen", _raise_missing)
+    line = dag_tick.execute_respawn("abc123", ctx)
+    assert "SKIP respawn abc123" in line
+    assert "claude binary unavailable" in line
 
 
 def test_execute_stop_reports_success(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    daemon_dir = tmp_path / "daemon"
-    daemon_dir.mkdir()
-    (daemon_dir / "roster.json").write_text(
-        json.dumps({"workers": {"abc123": {"pid": os.getpid()}}})
-    )
+    daemon_dir = _roster(tmp_path, {"abc123": os.getpid()})
+    ctx = _ctx(tmp_path, daemon_dir=daemon_dir)
     monkeypatch.setattr(
         dag_tick.subprocess,
         "run",
         lambda *_a, **_k: _FakeCompleted(returncode=0),
     )
-    line = dag_tick.execute_stop("abc123", claude_bin="claude", daemon_dir=daemon_dir)
+    line = dag_tick.execute_stop("abc123", ctx)
     assert line == "dag-tick: STOP abc123 (rc=0)"
 
 
 def test_execute_stop_reports_failure(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    daemon_dir = tmp_path / "daemon"
-    daemon_dir.mkdir()
-    (daemon_dir / "roster.json").write_text(
-        json.dumps({"workers": {"abc123": {"pid": os.getpid()}}})
-    )
+    daemon_dir = _roster(tmp_path, {"abc123": os.getpid()})
+    ctx = _ctx(tmp_path, daemon_dir=daemon_dir)
     monkeypatch.setattr(
         dag_tick.subprocess,
         "run",
         lambda *_a, **_k: _FakeCompleted(returncode=1, stderr="boom"),
     )
-    line = dag_tick.execute_stop("abc123", claude_bin="claude", daemon_dir=daemon_dir)
+    line = dag_tick.execute_stop("abc123", ctx)
     assert "FAILED rc=1" in line
     assert "boom" in line
 
@@ -709,81 +855,89 @@ def test_execute_stop_skips_when_pid_already_settled(
     a process that no longer exists — which would otherwise log a false
     FAILED line.
     """
-    daemon_dir = tmp_path / "daemon"
-    daemon_dir.mkdir()
-    # Real negative evidence — a readable roster naming no worker.
-    (daemon_dir / "roster.json").write_text(json.dumps({"workers": {}}))
+    daemon_dir = _roster(tmp_path, {})
+    ctx = _ctx(tmp_path, daemon_dir=daemon_dir)
 
     def _fail(*_args: object, **_kwargs: object) -> None:
         msg = "must not issue a stop once the pid has already settled"
         raise AssertionError(msg)
 
     monkeypatch.setattr(dag_tick.subprocess, "run", _fail)
-    line = dag_tick.execute_stop("abc123", claude_bin="claude", daemon_dir=daemon_dir)
+    line = dag_tick.execute_stop("abc123", ctx)
     assert "SKIP stop abc123" in line
     assert "settled" in line
-
-
-def test_execute_respawn_missing_binary_returns_skip_line(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    daemon_dir = tmp_path / "daemon"
-    daemon_dir.mkdir()
-    (daemon_dir / "roster.json").write_text(json.dumps({"workers": {}}))
-
-    def _raise_missing(*_args: object, **_kwargs: object) -> None:
-        raise FileNotFoundError(2, "No such file or directory", "claude")
-
-    monkeypatch.setattr(dag_tick.subprocess, "Popen", _raise_missing)
-    line = dag_tick.execute_respawn(
-        "abc123", claude_bin="claude", daemon_dir=daemon_dir
-    )
-    assert "SKIP respawn abc123" in line
-    assert "claude binary unavailable" in line
 
 
 def test_execute_stop_missing_binary_returns_skip_line(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    daemon_dir = tmp_path / "daemon"
-    daemon_dir.mkdir()
-    (daemon_dir / "roster.json").write_text(
-        json.dumps({"workers": {"abc123": {"pid": os.getpid()}}})
-    )
+    daemon_dir = _roster(tmp_path, {"abc123": os.getpid()})
+    ctx = _ctx(tmp_path, daemon_dir=daemon_dir)
 
     def _raise_missing(*_args: object, **_kwargs: object) -> None:
         raise FileNotFoundError(2, "No such file or directory", "claude")
 
     monkeypatch.setattr(dag_tick.subprocess, "run", _raise_missing)
-    line = dag_tick.execute_stop("abc123", claude_bin="claude", daemon_dir=daemon_dir)
+    line = dag_tick.execute_stop("abc123", ctx)
     assert "SKIP stop abc123" in line
     assert "claude binary unavailable" in line
 
 
 # ---------------------------------------------------------------------------
-# run_tick() — full wiring, subprocess monkeypatched throughout
+# build_tick_context() — the args+defaults -> TickContext mapping
 # ---------------------------------------------------------------------------
 
 
-def _tick_args(**overrides: object) -> argparse.Namespace:
-    base: dict[str, object] = {
-        "cwd": None,
-        "dry_run": False,
-        "claude_bin": "claude",
-        "stall_after": 120.0,
-        "verbose": False,
-    }
-    base.update(overrides)
-    return argparse.Namespace(**base)
+def test_build_tick_context_maps_args_and_module_defaults() -> None:
+    args = _tick_args(
+        claude_bin="/x/claude",
+        cwd="/some/repo",
+        stall_after=5.0,
+        max_age=10.0,
+        dry_run=True,
+        verbose=True,
+    )
+    ctx = dag_tick.build_tick_context(args)
+    assert ctx.claude_bin == "/x/claude"
+    assert ctx.cwd == "/some/repo"
+    assert ctx.jobs_dir == dag_tick.JOBS_DIR
+    assert ctx.daemon_dir == dag_tick.DAEMON_DIR
+    assert ctx.lock_path == dag_tick.LOCK_PATH
+    assert ctx.stall_after_s == 5.0
+    assert ctx.max_age_s == 10.0
+    assert ctx.dry_run is True
+    assert ctx.verbose is True
 
 
-def test_run_tick_exits_zero_silently_when_lock_is_held(
+def test_build_tick_context_defaults_claude_bin_and_cwd(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(dag_tick.shutil, "which", lambda _name: None)
+    args = _tick_args(claude_bin=None, cwd=None)
+    ctx = dag_tick.build_tick_context(args)
+    assert ctx.claude_bin == dag_tick.DEFAULT_CLAUDE_BIN
+    assert ctx.cwd == str(Path.cwd())
+
+
+# ---------------------------------------------------------------------------
+# execute_tick() — full wiring, subprocess monkeypatched throughout
+#
+# #578 respec round 3: exercises `execute_tick` directly against a
+# `tmp_path`-scoped `TickContext` — zero monkeypatching of `LOCK_PATH`/
+# `JOBS_DIR`/`DAEMON_DIR` on this module. `run_tick`'s own args->context
+# wiring is covered separately by the `build_tick_context` tests above;
+# the CLI's end-to-end truth is the live `--dry-run --verbose` smoke check
+# in the verification bundle, which does exercise real host paths.
+# ---------------------------------------------------------------------------
+
+
+def test_execute_tick_exits_zero_silently_when_lock_is_held(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     lock_path = tmp_path / "dag-tick.lock"
     holder = dag_tick.try_acquire_lock(lock_path)
     assert holder is not None
-    monkeypatch.setattr(dag_tick, "LOCK_PATH", lock_path)
+    ctx = _ctx(tmp_path, lock_path=lock_path)
 
     def _fail(*_args: object, **_kwargs: object) -> None:
         msg = "subprocess must never be touched while the lock is held"
@@ -792,15 +946,15 @@ def test_run_tick_exits_zero_silently_when_lock_is_held(
     monkeypatch.setattr(dag_tick.subprocess, "run", _fail)
     monkeypatch.setattr(dag_tick.subprocess, "Popen", _fail)
     try:
-        assert dag_tick.run_tick(_tick_args()) == 0
+        assert dag_tick.execute_tick(ctx) == 0
     finally:
         holder.close()
 
 
-def test_run_tick_skips_when_gate_is_off(
+def test_execute_tick_skips_when_gate_is_off(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.setattr(dag_tick, "LOCK_PATH", tmp_path / "dag-tick.lock")
+    ctx = _ctx(tmp_path)
     census_called = False
 
     def _fake_run(argv: list[str], **_kwargs: object) -> _FakeCompleted:
@@ -813,8 +967,37 @@ def test_run_tick_skips_when_gate_is_off(
         )
 
     monkeypatch.setattr(dag_tick.subprocess, "run", _fake_run)
-    assert dag_tick.run_tick(_tick_args()) == 0
+    assert dag_tick.execute_tick(ctx) == 0
     assert census_called is False
+
+
+def test_execute_tick_proceeds_when_gate_is_unknown(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Gate fail-open (#578 respec round 3).
+
+    "unknown" must PROCEED, not skip — only the documented "off" face
+    skips the tick. `read_census` is itself gated and logs its own
+    failures, so it is the real gate.
+    """
+    ctx = _ctx(tmp_path)
+    census_called = False
+
+    def _fake_run(argv: list[str], **_kwargs: object) -> _FakeCompleted:
+        nonlocal census_called
+        if argv[1] == "logs":
+            return _FakeCompleted(returncode=1, stderr="an unrecognized wording")
+        if argv[1] == "agents":
+            census_called = True
+            return _FakeCompleted(returncode=0, stdout="[]")
+        msg = f"unexpected subprocess.run call: {argv}"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(dag_tick.subprocess, "run", _fake_run)
+    with caplog.at_level("WARNING"):
+        assert dag_tick.execute_tick(ctx) == 0
+    assert census_called is True
+    assert any("unknown" in record.getMessage() for record in caplog.records)
 
 
 def _fake_run_for_one_dead_node(argv: list[str], **_kwargs: object) -> _FakeCompleted:
@@ -827,20 +1010,13 @@ def _fake_run_for_one_dead_node(argv: list[str], **_kwargs: object) -> _FakeComp
     raise AssertionError(msg)
 
 
-def test_run_tick_dry_run_reports_without_spawning(
+def test_execute_tick_dry_run_reports_without_spawning(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr(dag_tick, "LOCK_PATH", tmp_path / "dag-tick.lock")
     jobs_dir = tmp_path / "jobs"
-    daemon_dir = tmp_path / "daemon"
-    daemon_dir.mkdir()
-    # Real negative evidence — a readable roster naming no worker — so the
-    # node classifies DEAD rather than the conservative-ALIVE a missing
-    # roster FILE would produce.
-    (daemon_dir / "roster.json").write_text(json.dumps({"workers": {}}))
-    monkeypatch.setattr(dag_tick, "JOBS_DIR", jobs_dir)
-    monkeypatch.setattr(dag_tick, "DAEMON_DIR", daemon_dir)
+    daemon_dir = _roster(tmp_path, {})
     _write_state(jobs_dir, "dead1", {"state": "blocked", "tempo": "idle"})
+    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir, dry_run=True)
 
     def _fail_popen(*_args: object, **_kwargs: object) -> None:
         msg = "dry-run must never spawn"
@@ -849,22 +1025,18 @@ def test_run_tick_dry_run_reports_without_spawning(
     monkeypatch.setattr(dag_tick.subprocess, "run", _fake_run_for_one_dead_node)
     monkeypatch.setattr(dag_tick.subprocess, "Popen", _fail_popen)
 
-    assert dag_tick.run_tick(_tick_args(dry_run=True)) == 0
+    assert dag_tick.execute_tick(ctx) == 0
     captured = capsys.readouterr()
     assert "[dry-run] would respawn dead1" in captured.out
 
 
-def test_run_tick_respawns_a_dead_node(
+def test_execute_tick_respawns_a_dead_node(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.setattr(dag_tick, "LOCK_PATH", tmp_path / "dag-tick.lock")
     jobs_dir = tmp_path / "jobs"
-    daemon_dir = tmp_path / "daemon"
-    daemon_dir.mkdir()
-    (daemon_dir / "roster.json").write_text(json.dumps({"workers": {}}))
-    monkeypatch.setattr(dag_tick, "JOBS_DIR", jobs_dir)
-    monkeypatch.setattr(dag_tick, "DAEMON_DIR", daemon_dir)
+    daemon_dir = _roster(tmp_path, {})
     _write_state(jobs_dir, "dead1", {"state": "blocked", "tempo": "idle"})
+    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir)
     popen_calls: list[list[str]] = []
 
     def _fake_popen(argv: list[str], **_kwargs: object) -> None:
@@ -873,30 +1045,46 @@ def test_run_tick_respawns_a_dead_node(
     monkeypatch.setattr(dag_tick.subprocess, "run", _fake_run_for_one_dead_node)
     monkeypatch.setattr(dag_tick.subprocess, "Popen", _fake_popen)
 
-    assert dag_tick.run_tick(_tick_args()) == 0
+    assert dag_tick.execute_tick(ctx) == 0
     assert popen_calls == [["claude", "respawn", "dead1"]]
 
 
-def test_run_tick_stops_a_done_node_with_live_pid(
+def test_execute_tick_logs_instead_of_respawning_an_over_age_dead_node(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Dispatcher-level STOP branch, live path (#578 respec round 2).
+    """#578 respec round 3 (--max-age), end to end.
 
-    Mutation-sensitive: deleting `_execute_or_preview`'s STOP branch would
-    leave `run_calls` without a "stop" entry and drop the STOP report line
-    from stdout — this exercises the public `run_tick` entry point rather
-    than the private dispatcher directly.
+    A DEAD node older than `max_age_s` gets a LOG line, never a respawn —
+    and no `Popen` call.
     """
-    monkeypatch.setattr(dag_tick, "LOCK_PATH", tmp_path / "dag-tick.lock")
     jobs_dir = tmp_path / "jobs"
-    daemon_dir = tmp_path / "daemon"
-    daemon_dir.mkdir()
-    (daemon_dir / "roster.json").write_text(
-        json.dumps({"workers": {"done1": {"pid": os.getpid()}}})
-    )
-    monkeypatch.setattr(dag_tick, "JOBS_DIR", jobs_dir)
-    monkeypatch.setattr(dag_tick, "DAEMON_DIR", daemon_dir)
+    daemon_dir = _roster(tmp_path, {})
+    _write_state(jobs_dir, "dead1", {"state": "blocked", "tempo": "idle"})
+    state_path = jobs_dir / "dead1" / "state.json"
+    ancient = state_path.stat().st_mtime - 100_000
+    os.utime(state_path, (ancient, ancient))
+    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir, max_age_s=86400.0)
+
+    def _fail_popen(*_args: object, **_kwargs: object) -> None:
+        msg = "an over-age DEAD node must never be respawned"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(dag_tick.subprocess, "run", _fake_run_for_one_dead_node)
+    monkeypatch.setattr(dag_tick.subprocess, "Popen", _fail_popen)
+
+    assert dag_tick.execute_tick(ctx) == 0
+    captured = capsys.readouterr()
+    assert "stale beyond --max-age" in captured.out
+    assert "respawn dead1" not in captured.out
+
+
+def test_execute_tick_stops_a_done_node_with_live_pid(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    jobs_dir = tmp_path / "jobs"
+    daemon_dir = _roster(tmp_path, {"done1": os.getpid()})
     _write_state(jobs_dir, "done1", {"state": "done", "tempo": "idle"})
+    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir)
     run_calls: list[list[str]] = []
 
     def _fake_run(argv: list[str], **_kwargs: object) -> _FakeCompleted:
@@ -909,36 +1097,22 @@ def test_run_tick_stops_a_done_node_with_live_pid(
         return _FakeCompleted(returncode=0)
 
     monkeypatch.setattr(dag_tick.subprocess, "run", _fake_run)
-    assert dag_tick.run_tick(_tick_args()) == 0
+    assert dag_tick.execute_tick(ctx) == 0
     assert run_calls == [["claude", "stop", "done1"]]
     captured = capsys.readouterr()
     assert "dag-tick: STOP done1 (rc=0)" in captured.out
 
 
-def test_run_tick_wedged_node_makes_no_action_subprocess_call(
+def test_execute_tick_wedged_node_makes_no_action_subprocess_call(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Dispatcher-level LOG branch, live path (#578 respec round 2).
-
-    A WEDGED node's action is log-only — `_execute_or_preview` must never
-    issue a `claude` verb for it. The fake `subprocess.run`/`Popen` below
-    only answer the gate-preflight and census calls; anything else (a
-    respawn or a stop) raises, so a regression that dispatched a verb for
-    WEDGED would fail this test.
-    """
-    monkeypatch.setattr(dag_tick, "LOCK_PATH", tmp_path / "dag-tick.lock")
     jobs_dir = tmp_path / "jobs"
-    daemon_dir = tmp_path / "daemon"
-    daemon_dir.mkdir()
-    (daemon_dir / "roster.json").write_text(
-        json.dumps({"workers": {"wedged1": {"pid": os.getpid()}}})
-    )
-    monkeypatch.setattr(dag_tick, "JOBS_DIR", jobs_dir)
-    monkeypatch.setattr(dag_tick, "DAEMON_DIR", daemon_dir)
+    daemon_dir = _roster(tmp_path, {"wedged1": os.getpid()})
     _write_state(jobs_dir, "wedged1", {"state": "blocked", "tempo": "active"})
     state_path = jobs_dir / "wedged1" / "state.json"
     stale = state_path.stat().st_mtime - 300
     os.utime(state_path, (stale, stale))
+    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir)
 
     def _fake_run(argv: list[str], **_kwargs: object) -> _FakeCompleted:
         if argv[1] == "logs":
@@ -955,6 +1129,6 @@ def test_run_tick_wedged_node_makes_no_action_subprocess_call(
 
     monkeypatch.setattr(dag_tick.subprocess, "run", _fake_run)
     monkeypatch.setattr(dag_tick.subprocess, "Popen", _fail_popen)
-    assert dag_tick.run_tick(_tick_args()) == 0
+    assert dag_tick.execute_tick(ctx) == 0
     captured = capsys.readouterr()
     assert "WEDGED wedged1" in captured.out

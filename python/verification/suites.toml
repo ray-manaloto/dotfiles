@@ -1263,12 +1263,7 @@ paths = [
     "python/src/dotfiles_setup/dag_tick.py",
     "tests/test_dag_tick.py",
 ]
-per_path_tokens = { "mise.toml" = ['[tasks.dag-tick]', 'dotfiles-setup dag-tick', 'program = "~/.local/bin/mise"', 'args = ["run", "dag-tick"]'], "python/src/dotfiles_setup/main.py" = ['"dag-tick",', '"dag-tick": lambda'], "python/src/dotfiles_setup/dag_tick.py" = ['def run_tick(', 'def classify(', 'def plan(', 'def gate_status(', 'def strip_respawn_env(', 'def read_roster(', 'def background_pid_alive(', 'TERMINAL_STATES:'], "tests/test_dag_tick.py" = ['def test_terminal_predicate_arms(', 'def test_strip_respawn_env_removes_denylist_and_bg_prefix(', 'def test_gate_status_three_faces(', 'def test_lock_contention_second_acquire_fails(', 'def test_plan_maps_classification_to_actions('] }
-tokens = [
-    'def run_tick(',
-    'TERMINAL_STATES:',
-    'automated stall recovery is #590',
-]
+per_path_tokens = { "mise.toml" = ['[tasks.dag-tick]', 'dotfiles-setup dag-tick', 'program = "~/.local/bin/mise"', 'args = ["run", "dag-tick"]'], "python/src/dotfiles_setup/main.py" = ['"dag-tick",', '"dag-tick": lambda'], "python/src/dotfiles_setup/dag_tick.py" = ['def run_tick(', 'def classify(', 'def plan(', 'def gate_status(', 'def strip_respawn_env(', 'def read_roster(', 'def background_pid_alive(', 'TERMINAL_STATES:', 'threshold — automated stall recovery is #590'], "tests/test_dag_tick.py" = ['def test_terminal_predicate_arms(', 'def test_strip_respawn_env_removes_denylist_and_bg_prefix(', 'def test_gate_status_three_faces(', 'def test_lock_contention_second_acquire_fails(', 'def test_plan_maps_classification_to_actions('] }
 
 [[suite]]
 name = "workflow.lock-integrity-wiring"

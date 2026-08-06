@@ -23,7 +23,11 @@ from dotfiles_setup.bootstrap_packages import gap_report_failures
 from dotfiles_setup.command_audit import DEFAULT_SESSION_LIMIT, command_audit_main
 from dotfiles_setup.config import DotfilesConfig
 from dotfiles_setup.container import verify_latest_main
-from dotfiles_setup.dag_tick import DEFAULT_STALL_AFTER_SECONDS, run_tick
+from dotfiles_setup.dag_tick import (
+    DEFAULT_MAX_AGE_SECONDS,
+    DEFAULT_STALL_AFTER_SECONDS,
+    run_tick,
+)
 from dotfiles_setup.doc_refs import (
     find_unresolved_refs,
     find_unresolved_skill_refs,
@@ -676,6 +680,15 @@ def _add_dag_tick_subcommand(subparsers: _SubParsers) -> None:
         f"classifying WEDGED (default {DEFAULT_STALL_AFTER_SECONDS:.0f}s)",
     )
     dag_tick_parser.add_argument(
+        "--max-age",
+        type=float,
+        default=DEFAULT_MAX_AGE_SECONDS,
+        help="Seconds a DEAD node's state.json may age before it is logged "
+        "instead of auto-respawned — not crash recovery beyond this bound "
+        f"(default {DEFAULT_MAX_AGE_SECONDS:.0f}s = 24h); an unreadable "
+        "state.json age is treated as over-age too",
+    )
+    dag_tick_parser.add_argument(
         "--verbose",
         action="store_true",
         help="Print a line per classified node instead of only anomalies",
@@ -691,7 +704,12 @@ def _add_report_parsers(subparsers: _SubParsers) -> None:
     tool-currency report moved to the shared `kb-setup currency daily` engine.)
     `dag-tick` (#578) is grouped here too for the same statement-budget reason
     even though it can act (respawn/stop) — its own registration lives in
-    :func:`_add_dag_tick_subcommand` for readability.
+    :func:`_add_dag_tick_subcommand` for readability. #578 respec round 3
+    evaluated calling it directly from :func:`setup_parser` instead (the
+    "divergent-change smell" of a mutating command inside a function
+    documented as read-only) but that trips ruff's PLR0915 on `setup_parser`
+    (51 > 50 statements) — not trivial, so left as-is per the respec's own
+    "only if trivial" qualifier.
     """
     command_audit_parser = subparsers.add_parser(
         "command-audit",

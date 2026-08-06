@@ -20,9 +20,16 @@ edit does not have to re-derive them:
   settles when its `state` is in :data:`TERMINAL_STATES` AND `tempo` is not
   `"active"` AND there is no pending `queuedPrompt`. `killed`/`blocked` are
   deliberately NOT terminal — the harness auto-respawns both.
-- **Fleet-gate preflight**: `claude logs <fresh-bogus-id>` exits rc=1 on
-  BOTH faces (gate on or off), so the state can only be read from stderr
-  TEXT, never the exit code (:func:`gate_status`).
+- **Fleet-gate preflight fails OPEN on an ambiguous read, fails CLOSED only
+  on the documented "off" face.** `claude logs <fresh-bogus-id>` exits rc=1
+  on BOTH the "on" and "off" faces, so the state can only be read from
+  stderr TEXT, never the exit code (:func:`gate_status`). Only `"off"` (the
+  "is disabled by ..." wording) skips the tick — `"unknown"` (a missing
+  binary, or stderr wording that matches neither known face) logs a
+  warning and PROCEEDS: :func:`read_census` is itself gated the same way
+  and now logs its own failures loudly, so it is the real gate. Failing
+  closed on an unrecognized stderr wording would silently retire the whole
+  watchdog the day the harness rewords one error message.
 - **Census** (`claude agents --json --cwd <path> --all`) is a read-only,
   TTY-free, cwd-scoped array read straight off disk — it does NOT start or
   restart the supervisor (`docs/receipts/565.md` §4). A `kind:"background"`
@@ -54,6 +61,33 @@ edit does not have to re-derive them:
   The harness's own crash-respawn recovers exactly this case
   (`docs/receipts/565.md` arm B6: state done + tempo ACTIVE -> RESPAWNED) —
   this tick must too. Do not reintroduce the tempo/in-flight check.
+- **`--max-age` bounds automatic respawn** (:data:`DEFAULT_MAX_AGE_SECONDS`,
+  default 86400s = 24h). A DEAD node only gets a RESPAWN when its
+  `state.json` is fresher than `--max-age`; a node whose age exceeds it, OR
+  whose age could not be determined at all (missing/unparseable
+  `state.json`), gets a LOG action instead (:func:`plan`) — measured live,
+  the first real tick would otherwise have resurrected sessions
+  blocked/dead since July 13 and July 22. Unknown age is treated as
+  over-age deliberately: never resurrect something whose freshness cannot
+  be proven.
+- **The harness's own `/restart` recipe is "flush, strip, respawn"**
+  (`docs/research/kb/reports/agents/wf-dag-recovery.md` §12); this
+  module's copy of that recipe starts at strip, on purpose. §12's flush is
+  a LIVE session flushing its own in-memory state to disk before it
+  restarts itself — a confirmed-dead process has nothing left to flush,
+  because its transcript already holds whatever reached disk before it
+  died. The env strip (:func:`strip_respawn_env`) is the only step of that
+  recipe that still applies to a node this tick respawns from the outside.
+- **Every stateful helper takes an explicit** :class:`TickContext` **,
+  never a module global.** `LOCK_PATH`/`JOBS_DIR`/`DAEMON_DIR` are
+  :func:`build_tick_context`'s OWN defaults, not something any helper
+  reaches for on its own — a test constructs a `TickContext` against
+  `tmp_path` and calls :func:`execute_tick` directly instead of
+  monkeypatching this module's globals. Pid liveness is injected the same
+  way (`background_pid_alive`'s `is_alive` parameter, mirroring
+  `gcc_sha.compute_sha`'s injected fetcher), so a test never monkeypatches
+  this module's own :func:`pid_is_alive` either (`tests/AGENTS.md` §
+  Mocking: never mock our own modules — inject).
 """
 
 from __future__ import annotations
@@ -74,7 +108,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import argparse
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Callable, Mapping, Sequence
     from typing import Literal, TextIO
 
 logger = logging.getLogger(__name__)
@@ -89,6 +123,14 @@ TERMINAL_STATES: frozenset[str] = frozenset({"done", "failed", "stopped"})
 # and log only in this slice; automated stall recovery is #590.
 DEFAULT_STALL_AFTER_SECONDS = 120.0
 
+# A DEAD node whose state.json is older than this is not "just crashed" — it
+# is classify-and-log only, never auto-respawn. Measured live: the fleet's
+# first real tick would otherwise have resurrected sessions blocked/dead
+# since July 13 and July 22 (#578 respec round 3). An UNKNOWN age
+# (state.json missing/unparseable) is ALSO over-age — never resurrect
+# something whose freshness cannot be proven.
+DEFAULT_MAX_AGE_SECONDS = 86400.0
+
 # `mise` is a zsh function on this host, not a binary launchd can exec, so
 # the LaunchAgent invokes `~/.local/bin/mise` directly (mise.toml). This
 # default mirrors the same "must be a real executable" constraint for a
@@ -102,8 +144,10 @@ LOCK_PATH = Path.home() / ".local" / "state" / "dotfiles" / "dag-tick.lock"
 JOBS_DIR = Path.home() / ".claude" / "jobs"
 DAEMON_DIR = Path.home() / ".claude" / "daemon"
 
-# The harness's own `/restart` recipe, verbatim: every var a respawned node
-# must NOT inherit from the incarnation that just died.
+# The harness's own `/restart` recipe is "flush, strip, respawn" (see the
+# module docstring for why flush is intentionally absent here) — this is
+# just the strip half, verbatim: every var a respawned node must NOT
+# inherit from the incarnation that just died.
 _RESPAWN_ENV_DENYLIST: frozenset[str] = frozenset(
     {
         "CLAUDE_CODE_SESSION_KIND",
@@ -153,11 +197,17 @@ class Node:
 
 @dataclass(frozen=True)
 class ClassifiedNode:
-    """One node's classification plus the liveness fact that produced it."""
+    """One node's classification, liveness fact, and state.json age.
+
+    `state_age_s` is `None` when the state.json age could not be determined
+    (missing/unparseable file) — :func:`plan` treats that the same as an
+    over-age DEAD node: an unknown age must never auto-respawn.
+    """
 
     node_id: str
     node_class: NodeClass
     pid_alive: bool
+    state_age_s: float | None
 
 
 @dataclass(frozen=True)
@@ -183,6 +233,30 @@ class ClassificationResult:
 
     classified: list[ClassifiedNode]
     notes: list[str]
+
+
+@dataclass(frozen=True)
+class TickContext:
+    """Everything one tick needs, threaded explicitly through every helper.
+
+    Built once by :func:`build_tick_context` from CLI args plus this
+    module's own path/lock defaults (#578 respec round 3 — the injection
+    seam that replaces a scattered claude_bin/cwd/jobs_dir/daemon_dir/
+    stall_after_s/dry_run parameter list on every helper, and replaces
+    tests monkeypatching `LOCK_PATH`/`JOBS_DIR`/`DAEMON_DIR` with
+    constructing one of these against `tmp_path` instead
+    (`tests/AGENTS.md` § Mocking — never mock our own modules; inject).
+    """
+
+    claude_bin: str
+    cwd: str
+    jobs_dir: Path
+    daemon_dir: Path
+    lock_path: Path
+    stall_after_s: float
+    max_age_s: float
+    dry_run: bool
+    verbose: bool
 
 
 def is_terminal(state: str | None, tempo: str | None, *, queued_prompt: bool) -> bool:
@@ -246,10 +320,41 @@ def strip_respawn_env(env: Mapping[str, str] | None = None) -> dict[str, str]:
     }
 
 
-def plan(classified_nodes: Sequence[ClassifiedNode]) -> list[Action]:
+def _is_stale_dead(state_age_s: float | None, max_age_s: float) -> bool:
+    """True when a DEAD node's age disqualifies it from auto-respawn.
+
+    Unknown age (`None`) counts as stale: never resurrect something whose
+    freshness cannot be proven.
+    """
+    return state_age_s is None or state_age_s > max_age_s
+
+
+def _stale_dead_reason(state_age_s: float | None) -> str:
+    """The exact wording for a stale/unknown-age DEAD node.
+
+    Shared by :func:`plan` (the `Action.reason`) and
+    :func:`classify_background_rows` (the printed note) so the two can
+    never say two different things about the same node.
+    """
+    age_text = "unknown age" if state_age_s is None else f"{state_age_s:.0f}s"
+    return (
+        f"stale beyond --max-age ({age_text}) — not crash recovery; "
+        "claude stop/rm it or respawn manually"
+    )
+
+
+def plan(
+    classified_nodes: Sequence[ClassifiedNode], *, max_age_s: float
+) -> list[Action]:
     """Map classified nodes to actions. Pure — no subprocess calls here.
 
-    DEAD -> respawn (subject to the fresh re-check in :func:`execute_respawn`);
+    DEAD -> respawn (subject to the fresh re-check in
+    :func:`execute_respawn`), UNLESS the node's `state_age_s` exceeds
+    `max_age_s` or could not be determined at all — either way that is a
+    LOG action instead (:func:`_stale_dead_reason`): a genuinely old or
+    unknown-age DEAD node is not the crash-mid-activity case this watchdog
+    exists to recover, and an unknown age must never resurrect something
+    that might have been dead for weeks.
     DONE with a still-live pid -> stop (a lingering process past settle);
     WEDGED -> a log-only action, since automated stall recovery is #590;
     ALIVE, or DONE with no live pid, -> no action.
@@ -257,13 +362,22 @@ def plan(classified_nodes: Sequence[ClassifiedNode]) -> list[Action]:
     actions: list[Action] = []
     for classified in classified_nodes:
         if classified.node_class is NodeClass.DEAD:
-            actions.append(
-                Action(
-                    ActionKind.RESPAWN,
-                    classified.node_id,
-                    "not terminal and the process is not alive",
+            if _is_stale_dead(classified.state_age_s, max_age_s):
+                actions.append(
+                    Action(
+                        ActionKind.LOG,
+                        classified.node_id,
+                        _stale_dead_reason(classified.state_age_s),
+                    )
                 )
-            )
+            else:
+                actions.append(
+                    Action(
+                        ActionKind.RESPAWN,
+                        classified.node_id,
+                        "not terminal and the process is not alive",
+                    )
+                )
         elif classified.node_class is NodeClass.DONE and classified.pid_alive:
             actions.append(
                 Action(
@@ -344,7 +458,12 @@ def pid_is_alive(pid: int) -> bool:
     return True
 
 
-def background_pid_alive(node_id: str, roster: dict[str, RosterWorker] | None) -> bool:
+def background_pid_alive(
+    node_id: str,
+    roster: dict[str, RosterWorker] | None,
+    *,
+    is_alive: Callable[[int], bool] | None = None,
+) -> bool:
     """Is there a live process behind this background node?
 
     `roster` is `None` when the daemon roster could not be read — act
@@ -352,14 +471,17 @@ def background_pid_alive(node_id: str, roster: dict[str, RosterWorker] | None) -
     respawn. A roster that WAS read and does not name this node is real
     negative evidence: a background census row with no roster entry is
     exactly the harness's documented gap — a session "still working or
-    blocked even when its process has exited".
+    blocked even when its process has exited". `is_alive` is a test seam
+    mirroring `gcc_sha.compute_sha`'s injected fetcher — a callable
+    `(pid) -> bool`, defaulting to :func:`pid_is_alive`.
     """
     if roster is None:
         return True
     entry = roster.get(node_id)
     if entry is None:
         return False
-    return pid_is_alive(entry.pid)
+    check = is_alive or pid_is_alive
+    return check(entry.pid)
 
 
 def load_state_json(
@@ -405,23 +527,22 @@ def try_acquire_lock(lock_path: Path) -> TextIO | None:
     return handle
 
 
-def gate_preflight(claude_bin: str) -> Literal["on", "off", "unknown"]:
+def gate_preflight(ctx: TickContext) -> Literal["on", "off", "unknown"]:
     """Run the read-only fleet-gate preflight and classify its stderr.
 
     Mints a fresh bogus job id per call — a published id stops discriminating
     once it is a real (or once-real) job (`.claude/rules/
     probes-need-a-control-arm.md`).
 
-    `claude_bin` not existing/executable (`FileNotFoundError`/`PermissionError`,
-    both `OSError`) is treated the same as an ambiguous gate read: `run_tick`
-    already logs and exits 0 on anything other than `"on"`, so `"unknown"`
-    is the correct degrade — never let a missing binary raise out of the
-    always-rc-0 tick.
+    `ctx.claude_bin` not existing/executable (`FileNotFoundError`/
+    `PermissionError`, both `OSError`) is treated the same as an ambiguous
+    gate read: `"unknown"`, which :func:`execute_tick` now PROCEEDS past
+    (with a warning) rather than skipping — see the module docstring.
     """
     bogus_id = uuid.uuid4().hex
     try:
         result = subprocess.run(
-            [claude_bin, "logs", bogus_id],
+            [ctx.claude_bin, "logs", bogus_id],
             capture_output=True,
             text=True,
             check=False,
@@ -429,14 +550,14 @@ def gate_preflight(claude_bin: str) -> Literal["on", "off", "unknown"]:
     except OSError as exc:
         logger.warning(
             "dag-tick: claude binary %r unavailable for gate preflight: %s",
-            claude_bin,
+            ctx.claude_bin,
             exc,
         )
         return "unknown"
     return gate_status(result.stderr)
 
 
-def read_census(claude_bin: str, cwd: str) -> list[dict[str, object]]:
+def read_census(ctx: TickContext) -> list[dict[str, object]]:
     """`claude agents --json --cwd <cwd> --all`, defensively parsed.
 
     Read-only — it does not start or restart the supervisor (`docs/receipts/
@@ -450,14 +571,16 @@ def read_census(claude_bin: str, cwd: str) -> list[dict[str, object]]:
     """
     try:
         result = subprocess.run(
-            [claude_bin, "agents", "--json", "--cwd", cwd, "--all"],
+            [ctx.claude_bin, "agents", "--json", "--cwd", ctx.cwd, "--all"],
             capture_output=True,
             text=True,
             check=False,
         )
     except OSError as exc:
         logger.warning(
-            "dag-tick: claude binary %r unavailable for census: %s", claude_bin, exc
+            "dag-tick: claude binary %r unavailable for census: %s",
+            ctx.claude_bin,
+            exc,
         )
         return []
     if result.returncode != 0:
@@ -483,11 +606,9 @@ def read_census(claude_bin: str, cwd: str) -> list[dict[str, object]]:
 
 def classify_background_rows(
     rows: Sequence[dict[str, object]],
+    ctx: TickContext,
     *,
-    jobs_dir: Path,
-    daemon_dir: Path,
-    stall_after_s: float,
-    verbose: bool,
+    is_alive: Callable[[int], bool] | None = None,
 ) -> ClassificationResult:
     """Enrich + classify every `kind:"background"` census row.
 
@@ -495,9 +616,10 @@ def classify_background_rows(
     mtime) and the shared daemon roster (pid liveness), then calls
     :func:`classify`. A missing/unparseable `state.json` classifies ALIVE
     directly (act conservatively) rather than feeding a guessed state into
-    the pure predicate.
+    the pure predicate. `is_alive` is forwarded to
+    :func:`background_pid_alive` (a test seam — see its docstring).
     """
-    roster = read_roster(daemon_dir)
+    roster = read_roster(ctx.daemon_dir)
     now = time.time()
     classified: list[ClassifiedNode] = []
     notes: list[str] = []
@@ -506,10 +628,14 @@ def classify_background_rows(
         if not isinstance(node_id, str) or not node_id:
             notes.append("dag-tick: skipping a background row with no usable id")
             continue
-        data, mtime = load_state_json(jobs_dir, node_id)
+        data, mtime = load_state_json(ctx.jobs_dir, node_id)
         if data is None:
-            classified.append(ClassifiedNode(node_id, NodeClass.ALIVE, pid_alive=True))
-            if verbose:
+            classified.append(
+                ClassifiedNode(
+                    node_id, NodeClass.ALIVE, pid_alive=True, state_age_s=None
+                )
+            )
+            if ctx.verbose:
                 notes.append(
                     f"dag-tick: {node_id} state.json missing/unparseable — "
                     "classifying ALIVE (conservative)"
@@ -523,19 +649,30 @@ def classify_background_rows(
             tempo=tempo if isinstance(tempo, str) else None,
             queued_prompt=bool(data.get("queuedPrompt")),
         )
-        alive = background_pid_alive(node_id, roster)
+        alive = background_pid_alive(node_id, roster, is_alive=is_alive)
         state_age_s = None if mtime is None else max(now - mtime, 0.0)
         node_class = classify(
-            node, pid_alive=alive, state_age_s=state_age_s, stall_after_s=stall_after_s
+            node,
+            pid_alive=alive,
+            state_age_s=state_age_s,
+            stall_after_s=ctx.stall_after_s,
         )
-        classified.append(ClassifiedNode(node_id, node_class, pid_alive=alive))
+        classified.append(
+            ClassifiedNode(
+                node_id, node_class, pid_alive=alive, state_age_s=state_age_s
+            )
+        )
         if node_class is NodeClass.WEDGED:
             notes.append(
                 f"dag-tick: WEDGED {node_id} — tempo active, state.json "
-                f"stale {state_age_s:.0f}s > {stall_after_s:.0f}s "
+                f"stale {state_age_s:.0f}s > {ctx.stall_after_s:.0f}s "
                 "(log-only; automated stall recovery is #590)"
             )
-        elif verbose:
+        elif node_class is NodeClass.DEAD and _is_stale_dead(
+            state_age_s, ctx.max_age_s
+        ):
+            notes.append(f"dag-tick: {node_id} {_stale_dead_reason(state_age_s)}")
+        elif ctx.verbose:
             notes.append(
                 f"dag-tick: {node_id} class={node_class.value} "
                 f"state={node.state} tempo={node.tempo} pid_alive={alive}"
@@ -543,7 +680,12 @@ def classify_background_rows(
     return ClassificationResult(classified=classified, notes=notes)
 
 
-def execute_respawn(node_id: str, *, claude_bin: str, daemon_dir: Path) -> str:
+def execute_respawn(
+    node_id: str,
+    ctx: TickContext,
+    *,
+    is_alive: Callable[[int], bool] | None = None,
+) -> str:
     """Respawn one DEAD node, after a fresh PID-liveness re-check.
 
     Eventual-consistency doctrine: never wait for or read back the result —
@@ -566,11 +708,11 @@ def execute_respawn(node_id: str, *, claude_bin: str, daemon_dir: Path) -> str:
     crash-respawn recovers exactly this case (`docs/receipts/565.md` arm
     B6: state done + tempo ACTIVE -> RESPAWNED) — this function must too.
     """
-    if background_pid_alive(node_id, read_roster(daemon_dir)):
+    if background_pid_alive(node_id, read_roster(ctx.daemon_dir), is_alive=is_alive):
         return f"dag-tick: SKIP respawn {node_id} — pid is alive now (reconciled)"
     try:
         subprocess.Popen(
-            [claude_bin, "respawn", node_id],
+            [ctx.claude_bin, "respawn", node_id],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -583,7 +725,12 @@ def execute_respawn(node_id: str, *, claude_bin: str, daemon_dir: Path) -> str:
     return f"dag-tick: RESPAWN {node_id}"
 
 
-def execute_stop(node_id: str, *, claude_bin: str, daemon_dir: Path) -> str:
+def execute_stop(
+    node_id: str,
+    ctx: TickContext,
+    *,
+    is_alive: Callable[[int], bool] | None = None,
+) -> str:
     """Stop one DONE-but-still-alive node, after a fresh pid re-check.
 
     Mirrors `execute_respawn`'s fresh-re-check shape: classification can be
@@ -593,11 +740,12 @@ def execute_stop(node_id: str, *, claude_bin: str, daemon_dir: Path) -> str:
     that would log a false FAILED line against a process that no longer
     exists.
     """
-    if not background_pid_alive(node_id, read_roster(daemon_dir)):
+    roster = read_roster(ctx.daemon_dir)
+    if not background_pid_alive(node_id, roster, is_alive=is_alive):
         return f"dag-tick: SKIP stop {node_id} — settled since classification"
     try:
         result = subprocess.run(
-            [claude_bin, "stop", node_id],
+            [ctx.claude_bin, "stop", node_id],
             capture_output=True,
             text=True,
             check=False,
@@ -614,76 +762,92 @@ def execute_stop(node_id: str, *, claude_bin: str, daemon_dir: Path) -> str:
 
 def _execute_or_preview(
     actions: Sequence[Action],
+    ctx: TickContext,
     *,
-    claude_bin: str,
-    daemon_dir: Path,
-    dry_run: bool,
+    is_alive: Callable[[int], bool] | None = None,
 ) -> list[str]:
-    """Run each planned action, or (under `--dry-run`) describe it only.
+    """Run each planned action, or (under `ctx.dry_run`) describe it only.
 
     A `LOG` action already emitted its line from `classify_background_rows`'s
-    WEDGED note, so there is nothing further to run for it here.
+    WEDGED or stale-DEAD note, so there is nothing further to run for it
+    here on the live path.
     """
     lines: list[str] = []
     for action in actions:
-        if dry_run:
+        if ctx.dry_run:
             lines.append(
                 f"dag-tick: [dry-run] would {action.kind.value} "
                 f"{action.node_id} — {action.reason}"
             )
         elif action.kind is ActionKind.RESPAWN:
-            lines.append(
-                execute_respawn(
-                    action.node_id,
-                    claude_bin=claude_bin,
-                    daemon_dir=daemon_dir,
-                )
-            )
+            lines.append(execute_respawn(action.node_id, ctx, is_alive=is_alive))
         elif action.kind is ActionKind.STOP:
-            lines.append(
-                execute_stop(
-                    action.node_id, claude_bin=claude_bin, daemon_dir=daemon_dir
-                )
-            )
+            lines.append(execute_stop(action.node_id, ctx, is_alive=is_alive))
     return lines
 
 
+def build_tick_context(args: argparse.Namespace) -> TickContext:
+    """Turn CLI args + this module's own path/lock defaults into a `TickContext`.
+
+    The injection seam (#578 respec round 3): :func:`run_tick` calls this
+    once, then threads the result explicitly through :func:`execute_tick`
+    and every helper below it, so nothing downstream reaches for
+    `JOBS_DIR`/`DAEMON_DIR`/`LOCK_PATH` on its own and no test needs to
+    monkeypatch them.
+    """
+    return TickContext(
+        claude_bin=args.claude_bin or shutil.which("claude") or DEFAULT_CLAUDE_BIN,
+        cwd=args.cwd or str(Path.cwd()),
+        jobs_dir=JOBS_DIR,
+        daemon_dir=DAEMON_DIR,
+        lock_path=LOCK_PATH,
+        stall_after_s=args.stall_after,
+        max_age_s=args.max_age,
+        dry_run=args.dry_run,
+        verbose=args.verbose,
+    )
+
+
 def run_tick(args: argparse.Namespace) -> int:
-    """The launchd tick: lock -> gate preflight -> census -> classify -> act -> report.
+    """The launchd tick's CLI entry point.
+
+    Builds a `TickContext` from `args` plus this module's own path/lock
+    defaults, then runs :func:`execute_tick`. Kept as a thin two-line
+    wrapper so tests exercise `execute_tick` directly against a
+    `tmp_path`-scoped context instead of monkeypatching `JOBS_DIR`/
+    `DAEMON_DIR`/`LOCK_PATH` on this module.
+    """
+    return execute_tick(build_tick_context(args))
+
+
+def execute_tick(ctx: TickContext) -> int:
+    """Lock -> gate preflight -> census -> classify -> plan -> act -> report.
 
     Always returns 0 — a launchd `StartInterval` agent has nowhere useful to
     surface a nonzero exit beyond its own log, and every failure mode here
     (lock contention, gate off, a census read failure) degrades to "do
     nothing this tick" by design: the next tick, 60s later, reconciles.
     """
-    claude_bin = args.claude_bin or shutil.which("claude") or DEFAULT_CLAUDE_BIN
-    cwd = args.cwd or str(Path.cwd())
-
-    lock_handle = try_acquire_lock(LOCK_PATH)
+    lock_handle = try_acquire_lock(ctx.lock_path)
     if lock_handle is None:
         return 0
     try:
-        gate = gate_preflight(claude_bin)
-        if gate != "on":
-            logger.warning(
-                "dag-tick: fleet gate preflight is %r — skipping this tick", gate
-            )
+        gate = gate_preflight(ctx)
+        if gate == "off":
+            logger.warning("dag-tick: fleet gate preflight is off — skipping this tick")
             return 0
+        if gate == "unknown":
+            logger.warning(
+                "dag-tick: fleet gate preflight is unknown — proceeding "
+                "anyway; the census read is itself gated and logs its own "
+                "failures loudly, so it is the real gate"
+            )
 
-        rows = read_census(claude_bin, cwd)
+        rows = read_census(ctx)
         bg_rows = [row for row in rows if row.get("kind") == "background"]
-        result = classify_background_rows(
-            bg_rows,
-            jobs_dir=JOBS_DIR,
-            daemon_dir=DAEMON_DIR,
-            stall_after_s=args.stall_after,
-            verbose=args.verbose,
-        )
+        result = classify_background_rows(bg_rows, ctx)
         action_lines = _execute_or_preview(
-            plan(result.classified),
-            claude_bin=claude_bin,
-            daemon_dir=DAEMON_DIR,
-            dry_run=args.dry_run,
+            plan(result.classified, max_age_s=ctx.max_age_s), ctx
         )
         for line in (*result.notes, *action_lines):
             sys.stdout.write(f"{line}\n")
