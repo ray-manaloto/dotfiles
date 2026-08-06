@@ -5,8 +5,9 @@ A `dev.mise.dotfiles-dag-tick` LaunchAgent (declared in `mise.toml`'s
 bootstrap macos launchd-agents apply` — never implicitly, `.claude/rules/
 do-not.md`) fires `mise run dag-tick` every 60s. Each tick takes a read-only
 census of this repo's background Claude Code agents, classifies every node
-ALIVE/DEAD/WEDGED/DONE, and recovers: `claude respawn` for a DEAD node,
-`claude stop` for a DONE node whose process is still lingering.
+ALIVE/DEAD/WEDGED/DONE/NEEDS_HUMAN, and recovers: `claude respawn` for a
+DEAD node, `claude stop` for a DONE node whose process is still lingering.
+A NEEDS_HUMAN node is never touched — see the escalation bullet below.
 
 **Slice 1 deliberately ships WITHOUT automated stall recovery.** WEDGED is
 classify-and-log ONLY — a `tempo:"active"` node whose `state.json` has gone
@@ -20,6 +21,25 @@ edit does not have to re-derive them:
   settles when its `state` is in :data:`TERMINAL_STATES` AND `tempo` is not
   `"active"` AND there is no pending `queuedPrompt`. `killed`/`blocked` are
   deliberately NOT terminal — the harness auto-respawns both.
+- **An ESCALATED node is not a dead one** (#601, decided as `docs/
+  receipts/575.md` R3). `blocked` staying out of :data:`TERMINAL_STATES`
+  is right for a *plain* block, but wrong for the one shape that means "a
+  human was asked a question": `state == "blocked"` AND a non-empty
+  `needs` payload (:func:`is_needs_human`). Such a node classifies
+  :attr:`NodeClass.NEEDS_HUMAN` — log only, **never respawn** — because
+  #565 measured that `claude respawn` returns a node **IDLE with no
+  prompt**, so respawning an escalation produces a zombie that never
+  re-asks and silently discards the `needs`/`suggestedReply` payload
+  #575's R1 makes load-bearing for the tracker projection. Live shape on
+  this host, read from the two stale census nodes: `needs` is a **string**
+  (`"run `/clear` to proceed to next task"`, `"do /clear with resume, or
+  run full command-catalog extraction first?"`), alongside `tempo:
+  "blocked"` and an optional `suggestedReply`. Plain `blocked` with no
+  `needs` is unchanged. Emitting the tracker comment and the
+  `dag:needs-human` label is the SCHEDULER's job, not this tick's — 575's
+  R1 keeps projection one-directional and scheduler-owned, and the receipt
+  defers the label spellings and comment format — so this module names
+  :data:`NEEDS_HUMAN_LABEL` in its log line and stops there.
 - **Fleet-gate preflight fails OPEN on an ambiguous read, fails CLOSED only
   on the documented "off" face.** `claude logs <fresh-bogus-id>` exits rc=1
   on BOTH the "on" and "off" faces, so the state can only be read from
@@ -65,11 +85,16 @@ edit does not have to re-derive them:
   default 86400s = 24h). A DEAD node only gets a RESPAWN when its
   `state.json` is fresher than `--max-age`; a node whose age exceeds it, OR
   whose age could not be determined at all (missing/unparseable
-  `state.json`), gets a LOG action instead (:func:`plan`) — measured live,
-  the first real tick would otherwise have resurrected sessions
-  blocked/dead since July 13 and July 22. Unknown age is treated as
-  over-age deliberately: never resurrect something whose freshness cannot
-  be proven.
+  `state.json`), gets a LOG action instead (:func:`plan`). Unknown age is
+  treated as over-age deliberately: never resurrect something whose
+  freshness cannot be proven. ⚠️ **It is a BACKSTOP, not the escalation
+  safety mechanism** (#601): those two live sessions blocked/dead since
+  July 13 and July 22 are both `blocked ∧ needs≠∅`, so what keeps them
+  from being resurrected is now :attr:`NodeClass.NEEDS_HUMAN`, which holds
+  at any age. Before #601 the 24h bound was the only thing standing
+  between an escalated node and a respawn into an idle zombie — a sanity
+  bound doing safety work by accident, one widened `--max-age` away from
+  the harm.
 - **The harness's own `/restart` recipe is "flush, strip, respawn"**
   (`docs/research/kb/reports/agents/wf-dag-recovery.md` §12); this
   module's copy of that recipe starts at strip, on purpose. §12's flush is
@@ -106,6 +131,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from dotfiles_setup import codex_verdict
+
 if TYPE_CHECKING:
     import argparse
     from collections.abc import Callable, Mapping, Sequence
@@ -119,6 +146,35 @@ logger = logging.getLogger(__name__)
 # deliberately NOT terminal — the harness auto-respawns both.
 TERMINAL_STATES: frozenset[str] = frozenset({"done", "failed", "stopped"})
 
+# The harness's own escalation state (#601 / `docs/receipts/575.md` R3). It
+# is deliberately NOT in TERMINAL_STATES — a plain `blocked` node is still a
+# respawn candidate. It only means "a human was asked something" when a
+# non-empty `needs` payload sits beside it (:func:`is_needs_human`).
+ESCALATED_STATE = "blocked"
+
+# The tracker label an escalated node projects to. Named here so the log
+# line and any future projection cannot drift apart, but NOT applied by this
+# module: `docs/receipts/575.md` R1 keeps projection one-directional and
+# scheduler-owned, and a tick that labelled directly would put a second
+# writer on the tracker.
+#
+# ⚠️ **Nothing in this process emits it — #602 owns the projection.** No
+# in-tree component writes the label or the append-only comment (#579 WEDGED,
+# #580 Codex verdict and #590 stall probe each cover something else), so an
+# escalated node is visible in this tick's log ONLY until #602 lands.
+#
+# Read the status in three parts, because two rounds of #601 review got it
+# wrong in opposite directions:
+#   - **Ownership is SETTLED, not deferred** — `575.md` R1 assigns projection
+#     to the SCHEDULER, one direction only. That is why this tick must not
+#     emit the label itself: it would be a second writer on the tracker.
+#   - **This label's spelling is SETTLED** — `575.md`: *"#573's receipt
+#     `dag:needs-human` — the receipt is later and governs"*.
+#   - **Only the IMPLEMENTATION is pending** (#602), alongside what `575.md`
+#     genuinely lists as deferred: the general `dag:*` spellings, the
+#     projection's comment format, and each stage's evidence contract.
+NEEDS_HUMAN_LABEL = "dag:needs-human"
+
 # A tempo:"active" state.json this old with no update is WEDGED — classify
 # and log only in this slice; automated stall recovery is #590.
 DEFAULT_STALL_AFTER_SECONDS = 120.0
@@ -131,6 +187,10 @@ DEFAULT_STALL_AFTER_SECONDS = 120.0
 # something whose freshness cannot be proven.
 DEFAULT_MAX_AGE_SECONDS = 86400.0
 
+# #573's rework budget: how many revise/reject rounds one unit of work may
+# take before the node escalates instead of reopening again (#575 R7).
+DEFAULT_MAX_REWORK = 2
+
 # `mise` is a zsh function on this host, not a binary launchd can exec, so
 # the LaunchAgent invokes `~/.local/bin/mise` directly (mise.toml). This
 # default mirrors the same "must be a real executable" constraint for a
@@ -142,6 +202,11 @@ DEFAULT_CLAUDE_BIN = str(Path.home() / ".local" / "bin" / "claude")
 LOCK_PATH = Path.home() / ".local" / "state" / "dotfiles" / "dag-tick.lock"
 
 JOBS_DIR = Path.home() / ".claude" / "jobs"
+# One node's Codex review lane lives under its OWN job dir (#580) rather
+# than a parallel tree: the tick already knows `jobs_dir`, and colocating
+# means a `claude rm` of the node takes its lane with it instead of
+# orphaning a run dir the reaper would keep finding forever.
+CODEX_LANE_DIRNAME = "codex-lane"
 DAEMON_DIR = Path.home() / ".claude" / "daemon"
 
 # The harness's own `/restart` recipe is "flush, strip, respawn" (see the
@@ -175,6 +240,8 @@ class NodeClass(enum.Enum):
     DEAD = "dead"
     WEDGED = "wedged"
     DONE = "done"
+    NEEDS_HUMAN = "needs_human"
+    REPLY_QUEUED = "reply_queued"
 
 
 class ActionKind(enum.Enum):
@@ -187,12 +254,20 @@ class ActionKind(enum.Enum):
 
 @dataclass(frozen=True)
 class Node:
-    """The `state.json` fields :func:`classify` needs, for one node."""
+    """The `state.json` fields :func:`classify` needs, for one node.
+
+    `needs` is the escalation payload — the question a `state=blocked`
+    node is waiting on a human to answer — normalized by
+    :func:`normalize_needs` to stripped text, or `None` when absent. It
+    defaults to `None` so a plain `blocked` node reads exactly as it did
+    before #601.
+    """
 
     node_id: str
     state: str | None
     tempo: str | None
     queued_prompt: bool
+    needs: str | None = None
 
 
 @dataclass(frozen=True)
@@ -255,6 +330,7 @@ class TickContext:
     lock_path: Path
     stall_after_s: float
     max_age_s: float
+    max_rework: int
     dry_run: bool
     verbose: bool
 
@@ -272,6 +348,125 @@ def is_terminal(state: str | None, tempo: str | None, *, queued_prompt: bool) ->
     return state in TERMINAL_STATES and tempo != "active" and not queued_prompt
 
 
+def normalize_needs(value: object) -> str | None:
+    """`state.json`'s raw `needs` as escalation text, or `None` when absent.
+
+    On this host the harness writes a plain string — read live off the two
+    stale census nodes: *"run `/clear` to proceed to next task"* and *"do
+    /clear with resume, or run full command-catalog extraction first?"*. A
+    whitespace-only string is NOT an escalation (nobody was asked
+    anything), hence the strip.
+
+    A non-string truthy value — a shape a future harness version might
+    write — is coerced to text rather than dropped, deliberately: the
+    failure this normalisation feeds is :func:`is_needs_human` returning
+    False and the node being respawned into an idle zombie, so an
+    unrecognised payload must fail toward "this IS an escalation".
+
+    That branch deliberately does NOT strip, and the asymmetry with the
+    string branch above is the point: an object whose `__str__` returns
+    whitespace would strip to `""`, and `"" or None` would hand back
+    absence — flipping a known-truthy payload to the one answer that gets
+    the node respawned. The string branch can strip safely because there
+    the empty result really does mean nobody was asked anything.
+    """
+    if isinstance(value, str):
+        return value.strip() or None
+    if value:
+        return str(value)
+    return None
+
+
+def is_stalled(
+    tempo: str | None, state_age_s: float | None, stall_after_s: float
+) -> bool:
+    """The stall predicate: `tempo="active"` with a `state.json` gone stale.
+
+    An unknown age (`None`) is NOT stalled — the opposite direction from
+    :func:`_is_stale_dead`, and deliberately so. There, unknown age blocks
+    a respawn (never resurrect what cannot be proven fresh); here it would
+    manufacture a stall report out of a file we simply could not read.
+
+    Extracted so :func:`classify` and the NEEDS_HUMAN note in
+    :func:`classify_background_rows` ask the SAME question — an escalated
+    node that is also stalled classifies NEEDS_HUMAN (see :func:`classify`),
+    so without this the stall fact would be silently unreportable for that
+    shape.
+    """
+    return tempo == "active" and state_age_s is not None and state_age_s > stall_after_s
+
+
+def is_needs_human(
+    state: str | None, needs: str | None, *, queued_prompt: bool
+) -> bool:
+    """Escalation: `state=blocked`, a `needs` payload, and NO queued reply.
+
+    The first two halves are the escalation itself. `state == "blocked"`
+    alone is the plain block the watchdog has always been free to respawn;
+    the `needs` payload is what makes it a question *asked of a human*,
+    which `claude respawn` cannot answer — it returns the node IDLE with no
+    prompt (`docs/receipts/565.md`), losing the payload entirely.
+
+    ⚠️ **`queued_prompt` is the third half, and omitting it was a HIGH
+    finding in the #601 v5 review — a defect this module INTRODUCED, not
+    one it inherited.** The `needs` lifecycle, settled from the 2.1.223
+    binary: a successfully delivered human reply flips the ledger active and
+    CLEARS `needs`; if delivery fails, the reply handler persists
+    `queuedPrompt` while leaving `state=blocked` and `needs` intact — and
+    `claude respawn` is specifically able to consume that queued prompt and
+    clear `needs`.
+
+    So `blocked ∧ needs ∧ queuedPrompt` does **not** mean "waiting on a
+    human". It means the human ALREADY ANSWERED and the answer is waiting to
+    be delivered — and respawn is the delivery mechanism. Suppressing it
+    there does not protect the question, it strands the answer: the node
+    logs NEEDS_HUMAN every 60s forever while the reply is never delivered.
+    A watchdog that silently stops recovering is a worse outage than one
+    that over-recovers, because nothing ever reports it.
+
+    :func:`is_terminal` already refuses to settle a node with a pending
+    `queuedPrompt`, for exactly this reason (`docs/receipts/565.md`: a
+    queued prompt defeats terminal suppression and requires a respawn).
+    This predicate now agrees with it rather than contradicting it.
+    """
+    return state == ESCALATED_STATE and needs is not None and not queued_prompt
+
+
+def is_reply_queued(
+    state: str | None, needs: str | None, *, queued_prompt: bool
+) -> bool:
+    """An escalation whose human answer is written but not yet delivered.
+
+    The exact complement of :func:`is_needs_human` on the `queued_prompt`
+    axis: same `blocked ∧ needs`, opposite queued state. Split out because
+    the two need OPPOSITE handling and share every other condition —
+    `is_needs_human` must never respawn, this one is waiting for exactly
+    the restart that delivers the reply.
+
+    ⚠️ **It exists because the #601 v5 fix opened a hole in v6.** Adding
+    `queued_prompt` to :func:`is_needs_human` restored delivery for a DEAD
+    node (DEAD -> RESPAWN consumes the prompt), but a node whose pid is
+    still ALIVE fell through every branch to plain ALIVE — no action, and
+    on a non-verbose tick no note either. So the same shape got LESS
+    visible than before #601 touched it, which is the "watchdog silently
+    stops recovering" failure one commit earlier had called worse than
+    over-recovery.
+
+    The binary makes this reachable, not hypothetical: 2.1.223's reply
+    handler can persist `queuedPrompt` after an `ENOCONN`/`ETIMEOUT` while
+    the roster worker pid is still alive, and its own UI says the reply
+    waits until the session restarts. A live-but-unreachable worker can
+    therefore hold a human's answer indefinitely.
+
+    The action is LOG, not respawn, deliberately: this watchdog only ever
+    respawns a process confirmed dead, and `claude respawn` refuses an
+    already-running session anyway — so a respawn here would be a no-op
+    reported as a recovery. Making it VISIBLE is the whole fix; delivering
+    it to a live-but-unreachable worker is not something this module can do.
+    """
+    return state == ESCALATED_STATE and needs is not None and queued_prompt
+
+
 def classify(
     node: Node,
     *,
@@ -283,20 +478,48 @@ def classify(
 
     Order matters: a genuinely-finished node is DONE regardless of
     `pid_alive` (the harness settles it on disk before the process
-    necessarily exits); a non-terminal node with no live process is DEAD; a
-    non-terminal, live, ACTIVE node whose `state.json` has gone stale past
-    `stall_after_s` is WEDGED (classify-and-log only in this slice —
-    automated stall recovery is #590); everything else is ALIVE.
+    necessarily exits); an escalated node is NEEDS_HUMAN regardless of
+    `pid_alive` too (#601 — see below); a non-terminal node with no live
+    process is DEAD; a non-terminal, live, ACTIVE node whose `state.json`
+    has gone stale past `stall_after_s` is WEDGED (classify-and-log only in
+    this slice — automated stall recovery is #590); everything else is
+    ALIVE.
+
+    **NEEDS_HUMAN sits ABOVE the `pid_alive` check on purpose**, and that
+    placement is the whole fix: below it, an escalated node whose process
+    had died would reach `DEAD` first and be respawned into an idle zombie.
+    Being liveness-independent also means a *live* escalated node is now
+    visible as NEEDS_HUMAN rather than hiding in ALIVE — the action is the
+    same either way (log; never respawn), so nothing that used to happen to
+    it stops happening.
+
+    It sits BELOW the terminal check, also on purpose: a node that reached
+    `done`/`failed`/`stopped` has settled, and a `needs` string left over in
+    its `state.json` from an earlier turn must not resurrect it as an open
+    question.
+
+    ⚠️ **It therefore also out-ranks WEDGED**, and that costs something a
+    later slice needs. A `tempo:"active"`, stale, escalated node is BOTH
+    stalled and awaiting a human; one class cannot say two things, and
+    NEEDS_HUMAN is the right one to keep (the human's question is the
+    actionable fact, and hiding it is the harm #601 exists to stop). The
+    stall fact is not dropped, though — :func:`classify_background_rows`
+    appends it to the NEEDS_HUMAN note via :func:`is_stalled`, so #579/#590
+    still see it. Reordering the two would invert the harm; extend the note,
+    not the precedence.
     """
     if is_terminal(node.state, node.tempo, queued_prompt=node.queued_prompt):
         return NodeClass.DONE
+    if is_needs_human(node.state, node.needs, queued_prompt=node.queued_prompt):
+        return NodeClass.NEEDS_HUMAN
     if not pid_alive:
         return NodeClass.DEAD
-    if (
-        node.tempo == "active"
-        and state_age_s is not None
-        and state_age_s > stall_after_s
-    ):
+    # AFTER the DEAD branch on purpose: a queued reply on a DEAD node is
+    # delivered by the respawn DEAD already plans, and must not be diverted
+    # to a log line. This branch is therefore live-nodes-only by position.
+    if is_reply_queued(node.state, node.needs, queued_prompt=node.queued_prompt):
+        return NodeClass.REPLY_QUEUED
+    if is_stalled(node.tempo, state_age_s, stall_after_s):
         return NodeClass.WEDGED
     return NodeClass.ALIVE
 
@@ -343,11 +566,75 @@ def _stale_dead_reason(state_age_s: float | None) -> str:
     )
 
 
+def _needs_human_reason() -> str:
+    """The exact wording for an escalated (NEEDS_HUMAN) node.
+
+    Shared by :func:`plan` (the `Action.reason`) and
+    :func:`classify_background_rows` (the printed note) so the two can
+    never say two different things about the same node — the same
+    single-source shape as :func:`_stale_dead_reason`.
+
+    ⚠️ **Both scope qualifiers below are load-bearing, not hedging.** The
+    first draft of this string said *"never auto-respawned at any age
+    (project + label dag:needs-human)"*, and the #601 adversarial review
+    raised BOTH halves as HIGH findings — correctly, because each asserted
+    something this module does not do:
+
+    - **"by this tick".** Suppressing :data:`ActionKind.RESPAWN` binds THIS
+      watchdog only. The harness runs its own supervisor whose respawn
+      predicate (`docs/receipts/565.md`) reads state/tempo/`queuedPrompt`
+      and **not** `needs`, so it is a separate route this module cannot
+      close, and whether it fires for a `blocked` node is still the
+      unverified single-route claim #575 handed to #590. An unqualified
+      "never auto-respawned" would tell an operator the question is safe
+      when only one of two routes is known shut.
+    - **"not done here".** Nothing in this process emits the label or the
+      tracker comment (#602). Naming an action in a log line that the code
+      does not perform is how a reader concludes the escalation reached the
+      tracker when it reached a launchd log.
+    """
+    return (
+        "escalated — state=blocked with a needs payload and no queued "
+        "reply, so a human was asked a question a respawn cannot answer; "
+        "not respawned BY THIS TICK at any age, re-checked immediately "
+        "before spawn (a read-to-spawn window remains, irreducible without "
+        "a lock the harness does not expose; and the harness's own "
+        f"supervisor is a separate route this module cannot close — #590); "
+        f"tracker projection to {NEEDS_HUMAN_LABEL} is NOT done here — #602"
+    )
+
+
+def _reply_queued_reason() -> str:
+    """The exact wording for a live node holding an undelivered reply.
+
+    Same single-source shape as :func:`_needs_human_reason` — `plan` and
+    the note loop must not say two different things about one node.
+
+    It states what it CANNOT do as well as what it saw: this watchdog only
+    respawns a confirmed-dead process, and `claude respawn` refuses an
+    already-running session, so there is no action available here. Saying
+    so is the point — the failure this class exists to end was silence.
+    """
+    return (
+        "reply queued but undelivered — state=blocked with a needs payload "
+        "AND a queuedPrompt while the process is still alive, so a human "
+        "already answered and the answer is waiting on a restart this "
+        "module must not perform (it respawns only a confirmed-dead "
+        "process, and the CLI refuses an already-running session); "
+        "log-only, and no automated recovery exists for this shape"
+    )
+
+
 def plan(
     classified_nodes: Sequence[ClassifiedNode], *, max_age_s: float
 ) -> list[Action]:
     """Map classified nodes to actions. Pure — no subprocess calls here.
 
+    NEEDS_HUMAN -> a log-only action, ALWAYS and regardless of age or
+    liveness (#601): the human's question is the thing being preserved, and
+    `claude respawn` would discard it. Note this arm is deliberately NOT
+    subject to `max_age_s` — an escalation does not become respawnable by
+    getting old, which is exactly the accident `--max-age` was covering for.
     DEAD -> respawn (subject to the fresh re-check in
     :func:`execute_respawn`), UNLESS the node's `state_age_s` exceeds
     `max_age_s` or could not be determined at all — either way that is a
@@ -361,7 +648,15 @@ def plan(
     """
     actions: list[Action] = []
     for classified in classified_nodes:
-        if classified.node_class is NodeClass.DEAD:
+        if classified.node_class is NodeClass.NEEDS_HUMAN:
+            actions.append(
+                Action(ActionKind.LOG, classified.node_id, _needs_human_reason())
+            )
+        elif classified.node_class is NodeClass.REPLY_QUEUED:
+            actions.append(
+                Action(ActionKind.LOG, classified.node_id, _reply_queued_reason())
+            )
+        elif classified.node_class is NodeClass.DEAD:
             if _is_stale_dead(classified.state_age_s, max_age_s):
                 actions.append(
                     Action(
@@ -482,6 +777,26 @@ def background_pid_alive(
         return False
     check = is_alive or pid_is_alive
     return check(entry.pid)
+
+
+def node_from_state(node_id: str, data: Mapping[str, object]) -> Node:
+    """Build a :class:`Node` from one parsed `state.json`, defensively.
+
+    Shared by :func:`classify_background_rows` (the census path) and
+    :func:`execute_respawn`'s fresh escalation re-check, so the two cannot
+    disagree about what the same file says — the #601 v4 review's HIGH
+    finding was exactly a disagreement of that shape, where only one of the
+    two looked at `needs` at all.
+    """
+    state = data.get("state")
+    tempo = data.get("tempo")
+    return Node(
+        node_id=node_id,
+        state=state if isinstance(state, str) else None,
+        tempo=tempo if isinstance(tempo, str) else None,
+        queued_prompt=bool(data.get("queuedPrompt")),
+        needs=normalize_needs(data.get("needs")),
+    )
 
 
 def load_state_json(
@@ -612,8 +927,8 @@ def classify_background_rows(
 ) -> ClassificationResult:
     """Enrich + classify every `kind:"background"` census row.
 
-    Enrichment reads each node's `state.json` (state/tempo/queuedPrompt +
-    mtime) and the shared daemon roster (pid liveness), then calls
+    Enrichment reads each node's `state.json` (state/tempo/queuedPrompt/
+    needs + mtime) and the shared daemon roster (pid liveness), then calls
     :func:`classify`. A missing/unparseable `state.json` classifies ALIVE
     directly (act conservatively) rather than feeding a guessed state into
     the pure predicate. `is_alive` is forwarded to
@@ -641,14 +956,7 @@ def classify_background_rows(
                     "classifying ALIVE (conservative)"
                 )
             continue
-        state = data.get("state")
-        tempo = data.get("tempo")
-        node = Node(
-            node_id=node_id,
-            state=state if isinstance(state, str) else None,
-            tempo=tempo if isinstance(tempo, str) else None,
-            queued_prompt=bool(data.get("queuedPrompt")),
-        )
+        node = node_from_state(node_id, data)
         alive = background_pid_alive(node_id, roster, is_alive=is_alive)
         state_age_s = None if mtime is None else max(now - mtime, 0.0)
         node_class = classify(
@@ -662,7 +970,28 @@ def classify_background_rows(
                 node_id, node_class, pid_alive=alive, state_age_s=state_age_s
             )
         )
-        if node_class is NodeClass.WEDGED:
+        if node_class is NodeClass.NEEDS_HUMAN:
+            # NEEDS_HUMAN out-ranks WEDGED in `classify`, so an escalated
+            # node that is ALSO stalled would otherwise lose its stall
+            # visibility entirely — both facts are true, and #579/#590 want
+            # the second one. Carry it in the same line rather than dropping
+            # it or emitting a competing note.
+            stall_note = (
+                f"; ALSO stalled — tempo active, state.json stale "
+                f"{state_age_s:.0f}s > {ctx.stall_after_s:.0f}s"
+                if is_stalled(node.tempo, state_age_s, ctx.stall_after_s)
+                else ""
+            )
+            notes.append(
+                f"dag-tick: NEEDS_HUMAN {node_id} — {_needs_human_reason()}; "
+                f"needs: {node.needs}{stall_note}"
+            )
+        elif node_class is NodeClass.REPLY_QUEUED:
+            notes.append(
+                f"dag-tick: REPLY_QUEUED {node_id} — {_reply_queued_reason()}; "
+                f"needs: {node.needs}"
+            )
+        elif node_class is NodeClass.WEDGED:
             notes.append(
                 f"dag-tick: WEDGED {node_id} — tempo active, state.json "
                 f"stale {state_age_s:.0f}s > {ctx.stall_after_s:.0f}s "
@@ -686,13 +1015,56 @@ def execute_respawn(
     *,
     is_alive: Callable[[int], bool] | None = None,
 ) -> str:
-    """Respawn one DEAD node, after a fresh PID-liveness re-check.
+    """Respawn one DEAD node, after a fresh ESCALATION and PID re-check.
 
     Eventual-consistency doctrine: never wait for or read back the result —
-    the next tick observes it. The skip condition guards against a race
+    the next tick observes it. The skip conditions guard against a race
     between classification (up to one tick, i.e. 60s, stale) and this call:
     if the roster now reports the pid alive, something else already revived
     the node and a second respawn would double-start it.
+
+    ⚠️ **The escalation re-check is the #601 v4 review's HIGH finding, and
+    it is not hypothetical.** `plan()` making NEEDS_HUMAN log-only protects
+    a node only if the CLASSIFICATION saw the escalation. Actions are then
+    executed from that snapshot, and this function used to re-read only the
+    roster — so a node planned DEAD -> RESPAWN that acquired
+    `state=blocked` + `needs` in between was respawned anyway, which is
+    precisely the loss #601 exists to prevent. The reviewer demonstrated
+    it: `snapshot_class=dead -> planned_action=respawn ->
+    latest_class_before_execution=needs_human -> "dag-tick: RESPAWN race1"`.
+    The window is real because a roster read is not instantaneous truth —
+    a node absent from the roster is treated as dead (this module's own
+    negative-evidence rule) while its process may still be running and
+    still able to write `needs`.
+
+    So the fresh re-check now covers BOTH axes it must: the escalation
+    predicate as well as pid liveness. An unreadable `state.json` also
+    SKIPs, deliberately — a node classified DEAD had a readable one, so its
+    disappearance is anomalous, and "never resurrect what cannot be proven"
+    already governs the age check one function over. (That refusal makes the
+    node silent rather than retried: a persistently unreadable `state.json`
+    classifies conservative-ALIVE next tick, so `execute_respawn` is not
+    reached again. Correct, and worth stating — an earlier draft of this
+    docstring claimed "the next tick retries", which is not what happens.)
+
+    ⚠️ **ORDERING: BOTH reads happen first, THEN both decisions, then the
+    spawn.** That is not stylistic, and it took two rounds to get right.
+    The window is not closed by a check's existence but by its DISTANCE
+    from the action: v5 showed that with the state read first, a roster
+    read — real file I/O — sat between the escalation check and `Popen`,
+    and a roster-absent-but-running node could write `blocked + needs`
+    inside it (`RESPAWN race2`). Moving the escalation check last then
+    pushed the PID check behind the state read instead, trading one TOCTOU
+    for the other (`RESPAWN race3`) — a check cannot be last if another
+    also must be. Reading both up front and deciding after leaves neither
+    guard with I/O between it and the spawn.
+
+    **It does not eliminate it.** A check-then-act against a file another
+    process may write is irreducibly racy without a shared lock, a CAS, or a
+    "respawn only if the predicate still holds" primitive the harness does
+    not expose. The residual window is stated in the operator-facing reason
+    rather than papered over, because golden equality now enforces that
+    text and an unqualified "never" would be enforcing a falsehood.
 
     Deliberately PID-liveness only — no `tempo`/in-flight check. The
     harness's own `/restart` refusal ("Can't restart while work is running
@@ -708,7 +1080,24 @@ def execute_respawn(
     crash-respawn recovers exactly this case (`docs/receipts/565.md` arm
     B6: state done + tempo ACTIVE -> RESPAWNED) — this function must too.
     """
-    if background_pid_alive(node_id, read_roster(ctx.daemon_dir), is_alive=is_alive):
+    # BOTH reads first, THEN both decisions, then the spawn — so neither
+    # guard has file I/O sitting between it and the action it protects.
+    # See the ordering note in the docstring: an earlier version put one
+    # check last and thereby pushed the OTHER one behind a roster read.
+    fresh_data, _ = load_state_json(ctx.jobs_dir, node_id)
+    roster = read_roster(ctx.daemon_dir)
+    if fresh_data is None:
+        return (
+            f"dag-tick: SKIP respawn {node_id} — state.json unreadable at "
+            "execution; cannot prove it is not an escalation"
+        )
+    fresh = node_from_state(node_id, fresh_data)
+    if is_needs_human(fresh.state, fresh.needs, queued_prompt=fresh.queued_prompt):
+        return (
+            f"dag-tick: SKIP respawn {node_id} — escalated since "
+            f"classification; {_needs_human_reason()}; needs: {fresh.needs}"
+        )
+    if background_pid_alive(node_id, roster, is_alive=is_alive):
         return f"dag-tick: SKIP respawn {node_id} — pid is alive now (reconciled)"
     try:
         subprocess.Popen(
@@ -722,7 +1111,11 @@ def execute_respawn(
         )
     except OSError as exc:
         return f"dag-tick: SKIP respawn {node_id} — claude binary unavailable: {exc}"
-    return f"dag-tick: RESPAWN {node_id}"
+    # "requested", not "done": this never reads the child back (eventual
+    # consistency — the next tick observes the outcome), and the CLI has its
+    # own already-running refusal, so an unqualified "RESPAWN" would report
+    # a refusal as a recovery. Flagged LOW in the #601 v6 review.
+    return f"dag-tick: RESPAWN {node_id} (requested; outcome observed next tick)"
 
 
 def execute_stop(
@@ -769,8 +1162,8 @@ def _execute_or_preview(
     """Run each planned action, or (under `ctx.dry_run`) describe it only.
 
     A `LOG` action already emitted its line from `classify_background_rows`'s
-    WEDGED or stale-DEAD note, so there is nothing further to run for it
-    here on the live path.
+    NEEDS_HUMAN, WEDGED or stale-DEAD note, so there is nothing further to
+    run for it here on the live path.
     """
     lines: list[str] = []
     for action in actions:
@@ -784,6 +1177,75 @@ def _execute_or_preview(
         elif action.kind is ActionKind.STOP:
             lines.append(execute_stop(action.node_id, ctx, is_alive=is_alive))
     return lines
+
+
+def reap_codex_lanes(
+    classified_nodes: Sequence[ClassifiedNode],
+    ctx: TickContext,
+) -> list[str]:
+    """Reap each node's Codex review lane, if it has one (#580).
+
+    One line per lane that had something to say. A node with no lane
+    directory is silent — most nodes never run a review lane, and a line per
+    node per 60s would bury the ones that matter.
+
+    ⚠️ **Log-only in this slice, and that is a scope boundary, not an
+    oversight.** The reaper computes the EDGE (advance / reopen implement /
+    reopen research / needs-human), but nothing here writes it to the
+    tracker: projection is the SCHEDULER's job, one direction only
+    (`docs/receipts/575.md` R1), and #602 is the ticket that implements it.
+    Emitting the label from this process would make the tick a second writer
+    on the tracker. So the reason strings below say what was DECIDED, never
+    that it was applied — the same discipline `_needs_human_reason` carries,
+    and for the same reason: naming an action the code does not perform is
+    how a reader concludes an escalation reached the tracker when it reached
+    a launchd log.
+
+    A `NONE` edge is a genuine no-op (not settled, already processed, or a
+    lane owned by someone else) and is reported only under `--verbose`: those
+    are the steady-state outcomes and would otherwise be the bulk of the log.
+    """
+    lines: list[str] = []
+    for classified in classified_nodes:
+        run_dir = ctx.jobs_dir / classified.node_id / CODEX_LANE_DIRNAME
+        if not run_dir.is_dir():
+            continue
+        result = codex_verdict.reap(
+            run_dir,
+            expected_owner=classified.node_id,
+            rework_count=read_rework_count(run_dir),
+            max_rework=ctx.max_rework,
+        )
+        if result.edge is codex_verdict.Edge.NONE and not ctx.verbose:
+            continue
+        lines.append(
+            f"dag-tick: CODEX-REAP {classified.node_id} "
+            f"[{result.outcome.value}] edge={result.edge.value} — "
+            f"{result.detail}; edge is DECIDED here, not applied — tracker "
+            f"projection is #602"
+        )
+    return lines
+
+
+def read_rework_count(run_dir: Path) -> int:
+    """How many times this unit of work has already been reworked.
+
+    Read from the lane record the launcher maintains. A missing or
+    unparsable count reads as **0**, which is the permissive direction —
+    and that is deliberate: the alternative (assume the budget is spent)
+    would escalate every lane whose launcher had not yet written the field,
+    turning a rollout into an escalation storm. The bound still holds for
+    every lane the launcher does maintain, and #573 owns the counter itself.
+    """
+    try:
+        raw = (run_dir / codex_verdict.LANE_FILENAME).read_text()
+        data = json.loads(raw)
+    except OSError, json.JSONDecodeError:
+        return 0
+    if not isinstance(data, dict):
+        return 0
+    count = data.get("rework_count", 0)
+    return count if isinstance(count, int) and count >= 0 else 0
 
 
 def build_tick_context(args: argparse.Namespace) -> TickContext:
@@ -803,6 +1265,7 @@ def build_tick_context(args: argparse.Namespace) -> TickContext:
         lock_path=LOCK_PATH,
         stall_after_s=args.stall_after,
         max_age_s=args.max_age,
+        max_rework=args.max_rework,
         dry_run=args.dry_run,
         verbose=args.verbose,
     )
@@ -849,7 +1312,8 @@ def execute_tick(ctx: TickContext) -> int:
         action_lines = _execute_or_preview(
             plan(result.classified, max_age_s=ctx.max_age_s), ctx
         )
-        for line in (*result.notes, *action_lines):
+        reap_lines = reap_codex_lanes(result.classified, ctx)
+        for line in (*result.notes, *action_lines, *reap_lines):
             sys.stdout.write(f"{line}\n")
         return 0
     finally:
