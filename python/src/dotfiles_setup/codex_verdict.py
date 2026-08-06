@@ -79,9 +79,13 @@ PROCESSED_FILENAME = "verdict.processed.json"
 # Written by the LAUNCHER, not the model: the CAS re-verifies against this, so
 # the facts it holds (owner, status) must not be something the model can state.
 LANE_FILENAME = "lane.json"
-# `run-lane.sh` writes `EXIT: <code>` here when the lane finishes. Its ABSENCE
-# means still-running or group-killed (#575 R4) — either way, not settled.
+# The settled signal, in the two forms it occurs in. The LOG form is what the
+# real `run-lane.sh` emits (`echo "EXIT: $?" >> "$LOG"`); the marker file is
+# the form a run dir can carry when a launcher writes one instead. Absence of
+# both means still-running or group-killed (#575 R4) — either way, not settled.
 EXIT_MARKER_FILENAME = "exit.marker"
+LANE_LOG_FILENAME = "lane.log"
+_EXIT_LINE_PREFIX = "EXIT: "
 LOCK_FILENAME = ".reap.lock"
 
 _IN_PROGRESS = "in_progress"
@@ -296,14 +300,39 @@ def edge_for(verdict: Verdict, *, rework_count: int, max_rework: int) -> Edge:
 def lane_is_settled(run_dir: Path) -> bool:
     """The default liveness gate: has the lane finished writing?
 
-    ``run-lane.sh`` (#575 R4) writes ``EXIT: <code>`` when the lane exits. Its
-    ABSENCE means still-running OR group-killed — and this returns False for
-    both, deliberately. A group-killed lane never wrote a verdict anyway
+    The signal is ``EXIT: <code>``, and it is accepted in BOTH the forms it
+    occurs in — as a dedicated marker file, or as a line appended to the lane
+    log.
+
+    ⚠️ **The log form is the one the real launcher emits, and reading only the
+    marker file was a defect this module shipped with.** Verified against
+    `~/.claude/plugins/marketplaces/fable-orchestrator/scripts/run-lane.sh`:
+    each lane runs in a backgrounded subshell that does
+    ``echo "EXIT: $?" >> "$LOG"``, and its own header states the contract —
+    *"appends 'EXIT: <code>' to LOG when the CLI exits on its own ... No EXIT
+    line means the group was killed (watchdog or reap) before the CLI
+    returned."* There is no `exit.marker` file anywhere in that script. A gate
+    that looked only for one would have returned False forever, making every
+    lane permanently NOT_SETTLED — the reaper would have been silent rather
+    than wrong, which is worse, because nothing reports silence.
+
+    Absence still means still-running OR group-killed, and this returns False
+    for both, deliberately. A group-killed lane never wrote a verdict anyway
     (measured: SIGKILL leaves no file), so it reaches the reaper on a later
     tick as ``file_missing``, which escalates. Treating "no marker" as settled
     would instead read a file mid-write.
+
+    ⚠️ Note the marker's own stated limit, inherited from the launcher: a grok
+    lane that dies on an internal permission cancellation still exits 0. So
+    `EXIT: 0` proves the CLI returned, never that it did the work — which is
+    exactly why the verdict's CONTENT is validated rather than its presence.
     """
-    return (run_dir / EXIT_MARKER_FILENAME).exists()
+    if (run_dir / EXIT_MARKER_FILENAME).exists():
+        return True
+    try:
+        return _EXIT_LINE_PREFIX in (run_dir / LANE_LOG_FILENAME).read_text()
+    except OSError:
+        return False
 
 
 def _read_lane(run_dir: Path) -> dict[str, object] | None:

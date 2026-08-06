@@ -468,3 +468,39 @@ def test_the_escalating_outcomes_are_exactly_the_inverted_set() -> None:
         cv.ReapOutcome.PARSE_FAILED,
         cv.ReapOutcome.LANE_UNREADABLE,
     }
+
+
+def test_the_liveness_gate_reads_the_launchers_real_marker(tmp_path: Path) -> None:
+    """The form the real launcher actually emits — a log line, not a file.
+
+    ⚠️ This is the arm that was missing when the module first shipped, and its
+    absence made the whole reaper inert. Verified against
+    `~/.claude/plugins/marketplaces/fable-orchestrator/scripts/run-lane.sh`:
+    the lane subshell does `echo "EXIT: $?" >> "$LOG"`, and there is no
+    `exit.marker` file anywhere in that script. A gate reading only the marker
+    file returns False forever, so every lane stays NOT_SETTLED and the reaper
+    reports nothing at all — silent rather than wrong, which is worse, because
+    nothing reports silence.
+
+    Both arms, and the negative one is the point: a log with output but no
+    EXIT line is a lane still running (or group-killed), and must NOT be read.
+    """
+    run_dir = _lane(tmp_path / "run", settled=False)
+    (run_dir / cv.LANE_LOG_FILENAME).write_text("thinking...\nstill working\n")
+    assert cv.lane_is_settled(run_dir) is False
+
+    (run_dir / cv.LANE_LOG_FILENAME).write_text("thinking...\nEXIT: 0\n")
+    assert cv.lane_is_settled(run_dir) is True
+
+
+def test_a_nonzero_exit_line_still_counts_as_settled(tmp_path: Path) -> None:
+    """`EXIT: 1` means the CLI returned — settled, just unsuccessfully.
+
+    The reaper's job is to decide whether the file is safe to READ; whether
+    the run succeeded is the verdict's business. Conflating them would make a
+    failed lane permanently unreapable, which is the stuck-forever shape the
+    inverted defaults exist to prevent.
+    """
+    run_dir = _lane(tmp_path / "run", settled=False)
+    (run_dir / cv.LANE_LOG_FILENAME).write_text("boom\nEXIT: 1\n")
+    assert cv.lane_is_settled(run_dir) is True
