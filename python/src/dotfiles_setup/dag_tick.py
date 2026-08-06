@@ -40,6 +40,20 @@ edit does not have to re-derive them:
   documented gap — the harness's own in-life watchdog (5s pid poll) only
   works while its supervisor process is itself alive, which is precisely
   the failure this tick exists to catch from the outside.
+- **The respawn precondition is PID-liveness only, never `tempo`/in-flight**
+  (:func:`execute_respawn`). The binary's own `/restart` refusal ("Can't
+  restart while work is running in the background") guards a LIVE session
+  from restarting itself out from under its own running background work —
+  that guard does not apply here, because this tick only ever respawns a
+  node whose process is confirmed dead on a FRESH roster read, and a dead
+  process's background work died with it. Checking `tempo == "active"`
+  here (an earlier version of this module did) instead deadlocks the
+  watchdog's primary recovery case forever: a crash mid-activity leaves
+  exactly a `tempo:"active"` state.json behind, and a dead process never
+  updates that file, so the node would be skipped every 60s to infinity.
+  The harness's own crash-respawn recovers exactly this case
+  (`docs/receipts/565.md` arm B6: state done + tempo ACTIVE -> RESPAWNED) —
+  this tick must too. Do not reintroduce the tempo/in-flight check.
 """
 
 from __future__ import annotations
@@ -493,40 +507,31 @@ def classify_background_rows(
     return ClassificationResult(classified=classified, notes=notes)
 
 
-def _has_live_background_work(data: dict[str, object]) -> bool:
-    """True when `state.json` records `tempo:"active"` or queued/in-flight work.
-
-    Used only by the respawn precondition's fresh re-check — never respawn a
-    node with live background work; the next tick reconciles.
-    """
-    if data.get("tempo") == "active":
-        return True
-    in_flight = data.get("inFlight")
-    if isinstance(in_flight, dict):
-        for key in ("tasks", "queued"):
-            value = in_flight.get(key)
-            if isinstance(value, int) and value > 0:
-                return True
-    return False
-
-
-def execute_respawn(
-    node_id: str, *, claude_bin: str, jobs_dir: Path, daemon_dir: Path
-) -> str:
-    """Respawn one DEAD node, after a fresh liveness + in-flight re-check.
+def execute_respawn(node_id: str, *, claude_bin: str, daemon_dir: Path) -> str:
+    """Respawn one DEAD node, after a fresh PID-liveness re-check.
 
     Eventual-consistency doctrine: never wait for or read back the result —
-    the next tick observes it. The two skip conditions guard against a race
-    between classification (up to one tick, i.e. 60s, stale) and this call.
+    the next tick observes it. The skip condition guards against a race
+    between classification (up to one tick, i.e. 60s, stale) and this call:
+    if the roster now reports the pid alive, something else already revived
+    the node and a second respawn would double-start it.
+
+    Deliberately PID-liveness only — no `tempo`/in-flight check. The
+    harness's own `/restart` refusal ("Can't restart while work is running
+    in the background") guards a LIVE session from restarting itself out
+    from under its own running background work; that guard does not apply
+    here, because this function is only ever reached for a node whose
+    process is confirmed dead on a FRESH roster read, and a dead process's
+    background work died with it. Skipping on `tempo == "active"` here
+    would instead create a permanent deadlock on the watchdog's primary
+    recovery case: a crash mid-activity leaves exactly a `tempo:"active"`
+    state.json behind, and a dead process never updates that file, so the
+    node would be skipped every 60s forever. The harness's own
+    crash-respawn recovers exactly this case (`docs/receipts/565.md` arm
+    B6: state done + tempo ACTIVE -> RESPAWNED) — this function must too.
     """
     if background_pid_alive(node_id, read_roster(daemon_dir)):
         return f"dag-tick: SKIP respawn {node_id} — pid is alive now (reconciled)"
-    data, _mtime = load_state_json(jobs_dir, node_id)
-    if data is not None and _has_live_background_work(data):
-        return (
-            f"dag-tick: SKIP respawn {node_id} — live in-flight work on a "
-            "fresh read; next tick reconciles"
-        )
     subprocess.Popen(
         [claude_bin, "respawn", node_id],
         stdin=subprocess.DEVNULL,
@@ -559,7 +564,6 @@ def _execute_or_preview(
     actions: Sequence[Action],
     *,
     claude_bin: str,
-    jobs_dir: Path,
     daemon_dir: Path,
     dry_run: bool,
 ) -> list[str]:
@@ -580,7 +584,6 @@ def _execute_or_preview(
                 execute_respawn(
                     action.node_id,
                     claude_bin=claude_bin,
-                    jobs_dir=jobs_dir,
                     daemon_dir=daemon_dir,
                 )
             )
@@ -623,7 +626,6 @@ def run_tick(args: argparse.Namespace) -> int:
         action_lines = _execute_or_preview(
             plan(result.classified),
             claude_bin=claude_bin,
-            jobs_dir=JOBS_DIR,
             daemon_dir=DAEMON_DIR,
             dry_run=args.dry_run,
         )

@@ -476,7 +476,6 @@ class _FakeCompleted:
 def test_execute_respawn_spawns_when_no_evidence_of_life(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    jobs_dir = tmp_path / "jobs"
     daemon_dir = tmp_path / "daemon"
     daemon_dir.mkdir()
     # A READABLE roster naming no worker — real negative evidence, distinct
@@ -490,7 +489,42 @@ def test_execute_respawn_spawns_when_no_evidence_of_life(
 
     monkeypatch.setattr(dag_tick.subprocess, "Popen", _fake_popen)
     line = dag_tick.execute_respawn(
-        "abc123", claude_bin="claude", jobs_dir=jobs_dir, daemon_dir=daemon_dir
+        "abc123", claude_bin="claude", daemon_dir=daemon_dir
+    )
+    assert calls == [["claude", "respawn", "abc123"]]
+    assert "RESPAWN abc123" in line
+
+
+def test_execute_respawn_crashed_mid_activity_respawns(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The watchdog's primary recovery case (#578 respec round 1).
+
+    A process crashes while its last-written state.json still reads
+    `tempo:"active"` with in-flight work — a dead process never updates
+    that file again. A fresh roster read confirms the pid is dead, so this
+    MUST respawn.
+
+    Before this fix, `execute_respawn`'s fresh re-check also read this exact
+    state.json and skipped whenever `tempo == "active"` or in-flight counts
+    were nonzero — which deadlocked precisely this node, forever, every 60s.
+    The state.json below is written to document that shape; the fresh
+    re-check is now deliberately PID-liveness only and never reads it —
+    that absence of a read is the fix.
+    """
+    jobs_dir = tmp_path / "jobs"
+    daemon_dir = tmp_path / "daemon"
+    daemon_dir.mkdir()
+    (daemon_dir / "roster.json").write_text(json.dumps({"workers": {}}))
+    _write_state(jobs_dir, "abc123", {"tempo": "active", "inFlight": {"tasks": 1}})
+    calls: list[list[str]] = []
+
+    def _fake_popen(argv: list[str], **_kwargs: object) -> None:
+        calls.append(argv)
+
+    monkeypatch.setattr(dag_tick.subprocess, "Popen", _fake_popen)
+    line = dag_tick.execute_respawn(
+        "abc123", claude_bin="claude", daemon_dir=daemon_dir
     )
     assert calls == [["claude", "respawn", "abc123"]]
     assert "RESPAWN abc123" in line
@@ -511,30 +545,7 @@ def test_execute_respawn_skips_when_pid_alive_now(
 
     monkeypatch.setattr(dag_tick.subprocess, "Popen", _fail)
     line = dag_tick.execute_respawn(
-        "abc123", claude_bin="claude", jobs_dir=tmp_path, daemon_dir=daemon_dir
-    )
-    assert "SKIP respawn abc123" in line
-
-
-def test_execute_respawn_skips_when_live_in_flight_work(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    jobs_dir = tmp_path / "jobs"
-    daemon_dir = tmp_path / "daemon"
-    daemon_dir.mkdir()
-    # Real negative evidence (not a missing roster file — see the sibling
-    # test above) so the FIRST skip condition (pid alive now) does not fire
-    # first and mask the in-flight-work check this test targets.
-    (daemon_dir / "roster.json").write_text(json.dumps({"workers": {}}))
-    _write_state(jobs_dir, "abc123", {"tempo": "active"})
-
-    def _fail(*_args: object, **_kwargs: object) -> None:
-        msg = "must not spawn over live in-flight work"
-        raise AssertionError(msg)
-
-    monkeypatch.setattr(dag_tick.subprocess, "Popen", _fail)
-    line = dag_tick.execute_respawn(
-        "abc123", claude_bin="claude", jobs_dir=jobs_dir, daemon_dir=daemon_dir
+        "abc123", claude_bin="claude", daemon_dir=daemon_dir
     )
     assert "SKIP respawn abc123" in line
 
