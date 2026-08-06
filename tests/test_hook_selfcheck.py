@@ -118,6 +118,36 @@ def test_partial_matcher_fails(tmp_path: Path) -> None:
     assert not any("'Bash'" in f for f in failures)
 
 
+def test_a_substring_matcher_does_not_satisfy_a_required_token(
+    tmp_path: Path,
+) -> None:
+    """`NotebookEdit` must NOT satisfy the requirement for bare `Edit`.
+
+    The check compared with ``matcher in m``, and ``"Edit" in "NotebookEdit"``
+    is True — so dropping the standalone `Edit` token while keeping
+    `NotebookEdit` reported fully wired, and branch_guard's write-time gate for
+    plain `Edit` calls would go unenforced with `ship` and `land` both green.
+
+    This is the mutation the original arm could not see. That arm narrowed the
+    matcher to ``Bash|AskUserQuestion``, removing BOTH tokens at once; the real
+    regression drops ONE — someone tidying the alternation list, or a rebase
+    collapsing it. A coarse mutation proves only that the check discriminates
+    coarsely (`probes-need-a-control-arm.md` rule 2).
+    """
+    settings = _full_settings()
+    settings["hooks"]["PreToolUse"] = [
+        _hook(
+            "Bash|AskUserQuestion|Write|NotebookEdit",
+            f"bash {_ANCHOR}/scripts/pretooluse-guard.sh",
+        )
+    ]
+    failures = _wiring(tmp_path, settings)
+    assert any("'Edit'" in f for f in failures)
+    # …and only that one: the four tokens actually present must not be flagged,
+    # or the test would pass for the wrong reason.
+    assert not any("'NotebookEdit'" in f or "'Write'" in f for f in failures)
+
+
 def test_wrong_command_fails(tmp_path: Path) -> None:
     settings = _full_settings()
     settings["hooks"]["SessionStart"] = [_hook("startup|resume", "bash other.sh")]

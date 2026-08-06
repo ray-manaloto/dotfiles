@@ -133,7 +133,7 @@ where the script reads; model-read config where the model reads.**
 4. **Deterministic ⇒ gated. Non-deterministic ⇒ advisory + trend.** A flaky gate
    gets disabled by whoever it blocks, and then we are back to asserted.
 5. **Extend the existing engines; add no new one.** `suites.toml` + `verify.py`
-   (98 contracts), `hook_selfcheck.py`, `command_audit.py`,
+   (116 contracts as of 2026-08-06), `hook_selfcheck.py`, `command_audit.py`,
    `kb_setup.brain.transcript_audit`, `kb_setup.currency` already cover four of
    the five tiers' mechanics. `mise-tasks-only.md` + `zero-bash-logic.md`.
 6. **Advisory output is a standing issue, not a log line.** Same pattern as

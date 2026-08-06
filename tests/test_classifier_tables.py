@@ -84,6 +84,37 @@ def classify(node: Node, *, pid_alive):
     return NodeClass.ALIVE
 """
 
+# The cold-review shape. `_COMMIT1_SOURCE` plus ONE line — `n = node` — with
+# the field reads renamed to match. Built by `.replace()` off the fixture above
+# rather than retyped, so the delta is provably just the rebinding and any
+# difference in the derived set is attributable to it alone.
+_ALIASED_SOURCE = (
+    _COMMIT1_SOURCE.replace(
+        "def classify(node: Node, *, pid_alive, state_age_s, stall_after_s=120.0):\n",
+        "def classify(node: Node, *, pid_alive, state_age_s, stall_after_s=120.0):\n"
+        "    n = node\n",
+    )
+    .replace("node.state", "n.state")
+    .replace("node.tempo", "n.tempo")
+    .replace("node.queued_prompt", "n.queued_prompt")
+    .replace("node.needs", "n.needs")
+)
+
+# The sibling shape, same root cause: a predicate the walk cannot read at all.
+# Nothing about `is_escalated` is visible here, so every field it reads is
+# invisible — including, in real life, the ones the registry names.
+_CROSS_MODULE_SOURCE = """
+from other_module import is_escalated
+
+
+def classify(node: Node, *, pid_alive):
+    if is_escalated(node):
+        return NodeClass.NEEDS_HUMAN
+    if not pid_alive:
+        return NodeClass.DEAD
+    return NodeClass.ALIVE
+"""
+
 _REGISTRY_KEY = "dotfiles_setup.dag_tick:classify"
 
 # A spec pointed at the fixture sources. Built by `dataclasses.replace` off the
@@ -169,6 +200,225 @@ def test_derive_axes_follows_a_predicate_that_takes_the_whole_node() -> None:
     )
 
 
+# ---------------------------------------------------------------------------
+# The subject-alias inversion, and its sibling — found by cold review
+# ---------------------------------------------------------------------------
+#
+# ⚠️ These are not "a hole". Before the fix, adding `n = node` did not make
+# derivation miss the axes — it made it emit `phantom`, instructing the author
+# to DELETE the `queued_prompt`/`tempo`/`state`/`needs` declarations that #601
+# exists to install. An author who complies strips the protection and the gate
+# goes green forever. A miss is a gap; an inverted instruction is a trap, and
+# it landed on the fixture that IS the motivating defect.
+#
+# The control arm throughout is `_COMMIT1_SOURCE` itself: it differs by exactly
+# the rebinding, so "the alias case now equals the control" is a statement the
+# probe can fail.
+
+
+def test_derive_axes_follows_a_local_alias_of_the_subject() -> None:
+    """`n = node` must derive IDENTICALLY to the un-aliased control.
+
+    Equality with the control, not merely "phantom is gone" — a walk that
+    found nothing and stayed quiet would also satisfy the weaker claim, and
+    that is the failure mode being fixed.
+    """
+    assert _ALIASED_SOURCE != _COMMIT1_SOURCE
+    assert "    n = node\n" in _ALIASED_SOURCE
+    control = _derive(_COMMIT1_SOURCE, _BASE_SPEC)
+    aliased = _derive(_ALIASED_SOURCE, _BASE_SPEC)
+    assert aliased.axes == control.axes
+    assert dict(aliased.gated_classes) == dict(control.gated_classes)
+    assert aliased.unresolved == frozenset()
+
+
+def test_an_alias_never_instructs_deleting_the_601_declarations() -> None:
+    """The inversion itself: no `phantom` on the aliased source.
+
+    Armed against a REAL phantom — an axis genuinely removed from the code —
+    so this is not a check that can only pass.
+    """
+    assert _kinds(_BASE_SPEC, _ALIASED_SOURCE, "phantom") == []
+    # …and it CAN still say it: stop reading `n.needs` through the alias and
+    # `phantom` fires naming it. The mutation is asserted to have landed — the
+    # first attempt at this arm silently replaced nothing and "passed".
+    unread = _ALIASED_SOURCE.replace(
+        "if is_needs_human(n.state, n.needs):", "if is_needs_human(n.state, None):"
+    )
+    assert unread != _ALIASED_SOURCE
+    assert "n.needs" not in unread
+    genuine = _kinds(_BASE_SPEC, unread, "phantom")
+    assert len(genuine) == 1
+    assert "needs" in genuine[0].detail
+
+
+@pytest.mark.parametrize(
+    ("label", "binding"),
+    [
+        ("chained targets", "    n = m = node\n    m = m\n"),
+        ("literal tuple unpack", "    n, _ = node, pid_alive\n"),
+        ("annotated by value", "    n: Node = node\n"),
+        ("walrus", "    _ = (n := node)\n"),
+        ("ternary operand", "    n = node if pid_alive else node\n"),
+        ("alias chain", "    _mid = node\n    n = _mid\n"),
+    ],
+)
+def test_every_covered_binding_form_propagates_subject_hood(
+    label: str, binding: str
+) -> None:
+    """Each form `_subject_aliases` claims to cover, held to the control's answer.
+
+    Enumerated rather than testing the single shape the reviewer used — a fix
+    that only handles `n = node` is a special case wearing a general name.
+    """
+    source = _COMMIT1_SOURCE.replace(
+        "def classify(node: Node, *, pid_alive, state_age_s, stall_after_s=120.0):\n",
+        "def classify(node: Node, *, pid_alive, state_age_s, stall_after_s=120.0):\n"
+        + binding,
+    )
+    for read in ("node.state", "node.tempo", "node.queued_prompt", "node.needs"):
+        source = source.replace(read, read.replace("node.", "n."))
+    derived = _derive(source, _BASE_SPEC)
+    assert derived.axes == _derive(_COMMIT1_SOURCE, _BASE_SPEC).axes, label
+
+
+def test_a_cross_module_predicate_is_reported_not_assumed_harmless() -> None:
+    """An unreadable callee must go RED, never silently clean.
+
+    Following imports is out of scope; pretending the walk was complete is
+    not. `is_escalated` is imported, so every field it reads is invisible —
+    the derivation is a lower bound and says so.
+    """
+    derived = _derive(_CROSS_MODULE_SOURCE, _BASE_SPEC)
+    assert derived.axes == frozenset({"pid_alive"})
+    assert any("is_escalated" in call for call in derived.unresolved)
+    kinds = _kinds(_BASE_SPEC, _CROSS_MODULE_SOURCE, "unresolved_subject")
+    assert len(kinds) == 1
+    assert "is_escalated" in kinds[0].detail
+
+
+def test_the_same_source_with_a_local_predicate_is_clean() -> None:
+    """The control arm for the check above: make the callee readable, go green.
+
+    Without this, `unresolved_subject` could be a check that always fires.
+    `_TRANSITIVE_SOURCE` is `_CROSS_MODULE_SOURCE` with the identical predicate
+    defined locally instead of imported.
+    """
+    derived = _derive(_TRANSITIVE_SOURCE, _BASE_SPEC)
+    assert derived.unresolved == frozenset()
+    assert derived.axes == frozenset({"pid_alive", "state", "needs"})
+
+
+def test_phantom_is_withheld_while_anything_is_unresolved() -> None:
+    """`phantom` is the only kind that instructs a DELETION — so it waits.
+
+    With `state`/`needs` declared and the predicate imported, the pre-fix
+    engine emitted `phantom` naming both: an instruction to delete the very
+    declarations the imported predicate still reads. Now the run is red on
+    `unresolved_subject` and the deletion advice is withheld — and says so.
+    """
+    spec = dataclasses.replace(
+        _BASE_SPEC, axes=frozenset({"state", "needs", "pid_alive"}), pinned_axes={}
+    )
+    kinds = [
+        v.kind
+        for v in classifier_tables.violations_for(
+            "f", spec, _derive(_CROSS_MODULE_SOURCE, spec)
+        )
+    ]
+    assert "phantom" not in kinds
+    assert kinds == ["unresolved_subject"]
+    detail = _kinds(spec, _CROSS_MODULE_SOURCE, "unresolved_subject")[0].detail
+    assert "WITHHELD" in detail
+    assert "'needs'" in detail
+    assert "'state'" in detail
+
+
+def test_a_readable_walk_still_reports_a_real_phantom() -> None:
+    """The control: withholding must not be permanent silence.
+
+    Same registry, same missing axes — but a callee the walk can read. The
+    verdict is sound here, so `phantom` fires.
+    """
+    spec = dataclasses.replace(
+        _BASE_SPEC,
+        axes=frozenset({"state", "needs", "pid_alive", "gone"}),
+        pinned_axes={},
+    )
+    kinds = _kinds(spec, _TRANSITIVE_SOURCE, "phantom")
+    assert len(kinds) == 1
+    assert "gone" in kinds[0].detail
+
+
+@pytest.mark.parametrize(
+    ("label", "body"),
+    [
+        ("tuple round-trip", "    pair = (node, pid_alive)\n    n, _ = pair\n"),
+        ("dict storage", '    d = {}\n    d["k"] = node\n    n = d["k"]\n'),
+        ("call returning the subject", '    n = replace(node, state="x")\n'),
+        ("method call taking the subject", "    n = node\n    helper.audit(node)\n"),
+    ],
+)
+def test_an_unmodellable_store_of_the_subject_goes_red(label: str, body: str) -> None:
+    """The forms `_subject_aliases` does NOT cover must fail loud, not quiet.
+
+    This is the generalisation, not a second special case: aliasing covers the
+    bindings it can prove, and anything that hands the subject somewhere else
+    is reported. Otherwise `phantom` returns to its inverted state by a route
+    aliasing never touches.
+    """
+    source = f"""
+def classify(node: Node, *, pid_alive):
+{body}    if n.state == "done":
+        return NodeClass.DONE
+    return NodeClass.ALIVE
+"""
+    spec = dataclasses.replace(
+        _BASE_SPEC, axes=frozenset({"state", "pid_alive"}), pinned_axes={}
+    )
+    assert _kinds(spec, source, "unresolved_subject"), label
+    assert _kinds(spec, source, "phantom") == [], label
+
+
+def test_reading_a_field_into_a_local_is_not_a_store_of_the_subject() -> None:
+    """The control arm for the store check: `x = node.state` must stay CLEAN.
+
+    The test is "does this hand over the SUBJECT", not "does it mention the
+    subject" — a field read is fully recorded at its own line, so flagging it
+    would make `unresolved_subject` fire on ordinary code and the kind would
+    be worth nothing.
+    """
+    source = """
+def classify(node: Node, *, pid_alive):
+    x = node.state
+    if x == "done":
+        return NodeClass.DONE
+    return NodeClass.ALIVE
+"""
+    spec = dataclasses.replace(
+        _BASE_SPEC, axes=frozenset({"state", "pid_alive"}), pinned_axes={}
+    )
+    derived = _derive(source, spec)
+    assert derived.unresolved == frozenset()
+    assert derived.axes == frozenset({"state", "pid_alive"})
+
+
+def test_the_real_registry_resolves_completely() -> None:
+    """Neither shipped classifier hands its subject anywhere unreadable.
+
+    If this ever fails, `unresolved_subject` is telling the truth and the
+    classifier needs its predicate brought in-module — it is not licence to
+    add an escape hatch to the spec.
+    """
+    root = _repo_root()
+    for spec in classifier_tables.REGISTRY.values():
+        derived = classifier_tables.derive_axes(
+            (root / spec.module_path).read_text(), spec
+        )
+        assert derived is not None
+        assert derived.unresolved == frozenset(), spec.function
+
+
 def test_derive_axes_returns_none_for_a_missing_function() -> None:
     """A renamed/removed classifier is `None`, never a silently-empty pass."""
     spec = dataclasses.replace(_BASE_SPEC, function="gone")
@@ -251,6 +501,176 @@ def test_illegal_pin_fires_when_the_exclusion_is_withdrawn() -> None:
     assert "stall_after_s" in details
 
 
+# ---------------------------------------------------------------------------
+# `illegal_pin` across every RETURN SHAPE — found by adversarial critique
+# ---------------------------------------------------------------------------
+#
+# ⚠️ The check that convicts an author of pinning an axis on an unverified
+# premise was itself verified against exactly one return shape. Measured across
+# seven, FOUR allowed the pin. Each fixture below pins `tempo` on round 7's
+# literal false premise under the shipped `table_excluded_classes={"WEDGED"}`;
+# every one must refuse it.
+#
+# `F` is the one that matters: `if tempo == "active": return WEDGED` /
+# `else: return DONE` is round 7's own premise written with an `else`. The
+# branch reader looked at `body` and never `orelse`, so `tempo` was credited
+# with WEDGED alone — an excluded class — and the pin was ALLOWED by the check
+# whose docstring promises the opposite. One syntactic rearrangement of the
+# code the gate was derived from.
+
+_PIN_HEAD = """
+from enum import Enum
+
+
+class K(Enum):
+    DONE = "d"
+    WEDGED = "w"
+    LIVE = "l"
+
+
+class Node:
+    state: str
+    tempo: str
+"""
+
+_RETURN_SHAPES = {
+    "A_bare_return_control": """
+def classify(node: "Node") -> K:
+    if node.tempo != "active" and node.state == "done":
+        return K.DONE
+    return K.LIVE
+""",
+    "B_ternary": """
+def classify(node: "Node") -> K:
+    if node.state == "done":
+        return K.DONE if node.tempo != "active" else K.LIVE
+    return K.LIVE
+""",
+    "C_match_statement": """
+def classify(node: "Node") -> K:
+    match (node.state, node.tempo):
+        case ("done", "idle"):
+            return K.DONE
+        case _:
+            return K.LIVE
+""",
+    "D_dict_dispatch": """
+_M = {("done", "idle"): K.DONE}
+
+
+def classify(node: "Node") -> K:
+    if (node.state, node.tempo) in _M:
+        return _M[(node.state, node.tempo)]
+    return K.LIVE
+""",
+    "E_name_return": """
+def classify(node: "Node") -> K:
+    if node.tempo != "active" and node.state == "done":
+        verdict = K.DONE
+        return verdict
+    return K.LIVE
+""",
+    "F_else_branch_only": """
+def classify(node: "Node") -> K:
+    if node.tempo == "active":
+        return K.WEDGED
+    else:
+        return K.DONE
+""",
+    "G_method_call_predicate": """
+class H:
+    def term(self, node: "Node") -> bool:
+        return node.tempo != "active"
+
+
+_h = H()
+
+
+def classify(node: "Node") -> K:
+    if _h.term(node) and node.state == "done":
+        return K.DONE
+    return K.LIVE
+""",
+}
+
+_PIN_SPEC = dataclasses.replace(
+    _BASE_SPEC,
+    axes=frozenset({"state"}),
+    pinned_axes={"tempo": "claimed to only matter for WEDGED"},
+    table_excluded_classes=frozenset({"WEDGED"}),
+)
+
+
+@pytest.mark.parametrize("shape", sorted(_RETURN_SHAPES))
+def test_illegal_pin_refuses_round_sevens_premise_in_every_return_shape(
+    shape: str,
+) -> None:
+    """No return shape may let `tempo` be pinned as "only matters for WEDGED".
+
+    Some shapes are refused because the gate now READS them (`else`, `match`, a
+    local assigned a class); others because it cannot read them and therefore
+    fails CLOSED (dict dispatch, an unfollowable predicate). Both are correct
+    outcomes; what is not correct is the third one it used to give.
+    """
+    assert _kinds(_PIN_SPEC, _PIN_HEAD + _RETURN_SHAPES[shape], "illegal_pin"), shape
+
+
+def test_the_shipped_pins_are_still_allowed() -> None:
+    """THE control arm: a check that can only deny is not a check.
+
+    `state_age_s`/`stall_after_s` gate only WEDGED, which `dag_tick`'s table
+    declares out of scope, so their pins must survive every tightening above.
+    If this ever goes red alongside the parametrized test, the fix made the
+    kind unconditional rather than correct.
+    """
+    root = _repo_root()
+    for name, spec in classifier_tables.REGISTRY.items():
+        derived = classifier_tables.derive_axes(
+            (root / spec.module_path).read_text(), spec
+        )
+        assert derived is not None
+        assert classifier_tables.violations_for(name, spec, derived) == [], name
+    assert _BASE_SPEC.pinned_axes, "the control arm needs a real pin to be about"
+
+
+def test_an_else_branch_credits_the_axis_with_both_arms() -> None:
+    """F, stated as the mapping rather than the verdict.
+
+    Asserting only "the pin is refused" would also pass if the fix were a
+    blanket refusal. The claim is specific: `tempo` gates DONE *and* WEDGED.
+    """
+    derived = _derive(_PIN_HEAD + _RETURN_SHAPES["F_else_branch_only"], _PIN_SPEC)
+    assert derived.gated_classes["tempo"] == frozenset({"DONE", "WEDGED"})
+
+
+def test_a_class_reference_is_not_confused_with_a_field_read() -> None:
+    """`NodeClass.DONE` and `node.tempo` are both `Attribute(value=Name)`.
+
+    The first version took every one of them as a class, so a probe reported
+    `tempo_gates=['DONE', 'LIVE', 'tempo']` — an AXIS listed among the CLASSES.
+    It failed closed, so nothing was exploitable; it was still evidence the
+    derivation was textual where it claims to be semantic.
+    """
+    derived = _derive(_PIN_HEAD + _RETURN_SHAPES["B_ternary"], _PIN_SPEC)
+    assert derived.gated_classes["tempo"] == frozenset({"DONE", "LIVE"})
+    assert "tempo" not in derived.gated_classes["tempo"]
+    assert "state" not in derived.gated_classes["tempo"]
+
+
+def test_an_unreadable_return_is_reported_not_treated_as_no_classes() -> None:
+    """The fail-CLOSED trigger, named. `return _M[key]` resolves to no member."""
+    derived = _derive(_PIN_HEAD + _RETURN_SHAPES["D_dict_dispatch"], _PIN_SPEC)
+    assert derived.unreadable_decisions
+    assert any("_M[" in reason for reason in derived.unreadable_decisions)
+
+
+def test_a_fully_readable_classifier_reports_nothing_unreadable() -> None:
+    """Control arm for the trigger above: shape A must be entirely readable."""
+    derived = _derive(_PIN_HEAD + _RETURN_SHAPES["A_bare_return_control"], _PIN_SPEC)
+    assert derived.unreadable_decisions == frozenset()
+    assert derived.unresolved == frozenset()
+
+
 def test_phantom_fires_on_an_axis_the_code_no_longer_reads() -> None:
     """FAIL arm: a declared axis nothing in the classifier reads."""
     spec = dataclasses.replace(
@@ -310,6 +730,50 @@ def test_table_missing_fires_when_the_truth_table_symbol_is_gone(
     _stage_repo(tmp_path, tables=False)
     kinds = [v.kind for v in classifier_tables.find_violations(tmp_path)]
     assert kinds == ["table_missing"] * len(classifier_tables.REGISTRY)
+
+
+def test_table_missing_rejects_a_mere_mention_of_the_symbol(tmp_path: Path) -> None:
+    """A COMMENT naming the table used to satisfy the check.
+
+    `spec.table_symbol not in table_source` was an unanchored substring test —
+    the same shape #601's own v1 review filed as a LOW against
+    `per_path_tokens`, reproduced inside the gate written to answer that
+    review. A file whose entire content is a comment naming `_CLASSIFY_TABLE`
+    passed. It must now fail, because nothing in it CROSSES anything.
+    """
+    _stage_repo(tmp_path, tables=True)
+    spec = classifier_tables.REGISTRY[_REGISTRY_KEY]
+    (tmp_path / spec.table_path).write_text(
+        f"# the {spec.table_symbol} used to live here\n"
+        f'"""...and a docstring naming {spec.table_symbol} too."""\n'
+    )
+    kinds = [
+        v.kind
+        for v in classifier_tables.find_violations(tmp_path)
+        if v.classifier == _REGISTRY_KEY
+    ]
+    assert "table_missing" in kinds
+
+
+def test_table_missing_accepts_a_real_binding(tmp_path: Path) -> None:
+    """Control arm: an ASSIGNMENT of the symbol satisfies it, so it can pass.
+
+    Both an annotated and a bare assignment, since the two shipped tables use
+    the annotated form and a future one may not.
+    """
+    spec = classifier_tables.REGISTRY[_REGISTRY_KEY]
+    for binding in (
+        f"{spec.table_symbol}: list[tuple[str, ...]] = []\n",
+        f"{spec.table_symbol} = []\n",
+    ):
+        _stage_repo(tmp_path, tables=True)
+        (tmp_path / spec.table_path).write_text(binding)
+        kinds = [
+            v.kind
+            for v in classifier_tables.find_violations(tmp_path)
+            if v.classifier == _REGISTRY_KEY
+        ]
+        assert "table_missing" not in kinds, binding
 
 
 def test_staged_repo_with_its_tables_is_clean(tmp_path: Path) -> None:

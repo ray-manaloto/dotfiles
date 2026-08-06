@@ -73,14 +73,20 @@ a deliberate probe finds them.
   axis the condition *interacts with*, which is derivable with no judgement —
   **the axes are the union of the function's own parameters and every subject
   field read by any predicate it calls** (for `classify()`, that is its
-  parameters plus every `Node` field its predicates read). When the table gains
-  a cell, add the axis; **never edit an expected value to make a test pass**,
+  parameters plus every `Node` field its predicates read). The `classifier_axes`
+  gate derives this for you — but only for **same-module predicates called by
+  bare name**; for an imported or method predicate it is blind, and you carry
+  the rule yourself. When the table gains a cell, add the axis; **never edit an expected value to make a test pass**,
   which converts an independent expectation into a transcription of behaviour.
   ⚠️ The mutation result that reads as proof is this shape's tell:
   **"deleting the fix breaks ONLY the arm you just wrote" is the SIGNATURE OF
   THE FAILURE, not evidence of quality** — it means test space and fix space
   are the same size, which is exactly the condition under which an unenumerated
-  neighbouring cell exists. All three mutation-verified fixes in #601's review
+  neighbouring cell exists. This is NOT a licence to skip mutation testing, and
+  it does not soften `probes-need-a-control-arm.md`: the mutation here is a
+  GOOD one — deleting the fix is the realistic regression — and its narrow
+  blast radius is a fact about your AXIS ENUMERATION, not about the mutation.
+  All three mutation-verified fixes in #601's review
   loop directly caused the NEXT round's HIGH finding, and the phrase went into
   three commit bodies as a boast
   (`docs/research/kb/reports/session-20260806-review-loop-reflection.md`).

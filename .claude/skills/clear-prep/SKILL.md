@@ -169,7 +169,7 @@ overwriting.
 
 Full subagent reports must already be on disk per
 `.claude/rules/agent-report-persistence.md`: every findings-bearing agent's
-final report persisted VERBATIM under `docs/research/runs/<topic>/agents/` at the
+final report persisted VERBATIM under `docs/research/kb/reports/agents/` at the
 moment it was received — condensed notepad summaries do NOT count (near-loss
 observed 2026-07-05: 13 reports existed only in context until a manual
 round-2 pass). At clear-prep, audit coverage: enumerate every agent launched

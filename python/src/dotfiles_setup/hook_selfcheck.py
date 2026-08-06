@@ -55,13 +55,19 @@ _HOOK_SCRIPTS = (PRETOOLUSE_WRAPPER, _WEB_SETUP)
 # silently drifting out of .claude/settings.json (the wiring the end-to-end
 # check then exercises).
 #
-# PreToolUse must stay scoped, and to BOTH tools it guards: `Bash` (the
-# mise-tasks-only redirects) and `AskUserQuestion` (the ask-quality standard,
-# Ray 2026-08-02 — see dotfiles_setup.ask_quality). Each is asserted
-# separately, because the matcher is one alternation string: a check that only
-# looked for "Bash" would keep passing if AskUserQuestion were dropped from it,
-# and the guard would go silently absent for that tool exactly as #343 did for
-# off-root Bash.
+# PreToolUse must stay scoped, and to ALL FIVE tools it guards: `Bash` (the
+# mise-tasks-only redirects), `AskUserQuestion` (the ask-quality standard, Ray
+# 2026-08-02 — see dotfiles_setup.ask_quality), and `Edit`/`Write`/
+# `NotebookEdit` (the write-time default-branch guard, #400 — see
+# dotfiles_setup.branch_guard). Each is asserted separately, because the
+# matcher is one alternation string: a check that only looked for "Bash" would
+# keep passing if AskUserQuestion were dropped from it, and the guard would go
+# silently absent for that tool exactly as #343 did for off-root Bash.
+#
+# The assertion is exact ALTERNATION-TOKEN membership, never substring
+# containment — "Edit" is a substring of "NotebookEdit", so a containment test
+# let a matcher that dropped bare `Edit` report fully wired. See
+# check_settings_wiring.
 #
 # SessionEnd runs the command-audit refine loop once per session (the recurring
 # half of mise-tasks-only enforcement). A matcher would SCOPE it to particular
@@ -166,11 +172,21 @@ def check_settings_wiring(settings_path: Path) -> list[str]:
             for token in required
             if token not in joined
         )
+        # Exact ALTERNATION-TOKEN membership, never substring containment.
+        # `matcher in m` looks equivalent and is not: "Edit" is a substring of
+        # "NotebookEdit", so a matcher that dropped bare `Edit` while keeping
+        # `NotebookEdit` satisfied the `Edit` requirement and reported fully
+        # wired — the branch_guard write gate for plain `Edit` calls would go
+        # unenforced with ship and land both green. Found by cold review; the
+        # arm that missed it narrowed the matcher to `Bash|AskUserQuestion`,
+        # removing BOTH tokens at once, which is not how the real regression
+        # looks (`probes-need-a-control-arm.md` rule 2 — mutate realistically).
+        tokens = {t.strip() for m, _ in entries for t in m.split("|") if t.strip()}
         failures.extend(
             f"settings.json {event} hook must be scoped with matcher "
             f"{matcher!r} (tool events fire on every tool otherwise)"
             for matcher in matchers or ()
-            if not any(matcher in m for m, _ in entries)
+            if matcher not in tokens
         )
     failures.extend(_unanchored_hooks(settings))
     return failures
