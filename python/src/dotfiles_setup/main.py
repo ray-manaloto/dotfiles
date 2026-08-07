@@ -25,6 +25,7 @@ from dotfiles_setup.codex_lane import run_lane_cli
 from dotfiles_setup.command_audit import DEFAULT_SESSION_LIMIT, command_audit_main
 from dotfiles_setup.config import DotfilesConfig
 from dotfiles_setup.container import verify_latest_main
+from dotfiles_setup.dag_project import run_project
 from dotfiles_setup.dag_tick import (
     DEFAULT_MAX_AGE_SECONDS,
     DEFAULT_MAX_REWORK,
@@ -714,6 +715,51 @@ def _add_dag_tick_subcommand(subparsers: _SubParsers) -> None:
     )
 
 
+def _add_dag_project_subcommand(subparsers: _SubParsers) -> None:
+    """Register the tracker projection for escalated nodes (#602 phase 2).
+
+    Its own registration function for the same reason `dag-tick` has one — the
+    statement budget in :func:`setup_parser`.
+
+    Args:
+        subparsers: The parent subparsers action to attach this to.
+    """
+    dag_project_parser = subparsers.add_parser(
+        "dag-project",
+        help="project NEEDS_HUMAN background nodes to the tracker: the "
+        "dag:needs-human label and one append-only escalation comment per "
+        "(node, question). PHASE 2 is --dry-run only — the write path is "
+        "#602 phase 3",
+    )
+    dag_project_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print exactly what would be posted and post nothing. REQUIRED in "
+        "this slice: without it the command refuses rather than exiting 0 "
+        "having done nothing, which would read as a successful projection",
+    )
+    dag_project_parser.add_argument(
+        "--jobs-dir",
+        default=None,
+        help="Where the background nodes live (default: ~/.claude/jobs)",
+    )
+    dag_project_parser.add_argument(
+        "--stall-after",
+        type=float,
+        default=DEFAULT_STALL_AFTER_SECONDS,
+        help="Seconds a tempo:active state.json may go unmodified before the "
+        "comment also reports the node as stalled — the same threshold "
+        f"`dag-tick` uses (default {DEFAULT_STALL_AFTER_SECONDS:.0f}s)",
+    )
+    dag_project_parser.add_argument(
+        "--projected-at",
+        default=None,
+        help="Pin the rendered timestamp (ISO-8601). Exists so a gate can "
+        "byte-compare this output against a known-good comment without the "
+        "clock being the only difference",
+    )
+
+
 def _add_report_parsers(subparsers: _SubParsers) -> None:
     """Register the read-only scan-and-report commands, plus TWO that act.
 
@@ -806,6 +852,7 @@ def _add_report_parsers(subparsers: _SubParsers) -> None:
     )
 
     _add_dag_tick_subcommand(subparsers)
+    _add_dag_project_subcommand(subparsers)
     _add_codex_lane_subcommand(subparsers)
 
 
@@ -1522,6 +1569,7 @@ def _build_command_handlers(
         "bash-budget": lambda: sys.exit(bash_budget_main(project_root)),
         "classifier-axes": lambda: sys.exit(classifier_axes_main(project_root)),
         "dag-tick": lambda: sys.exit(run_tick(args)),
+        "dag-project": lambda: sys.exit(run_project(args)),
         "codex-lane": lambda: sys.exit(run_lane_cli(args)),
         "doctor": lambda: sys.exit(
             doctor_main(

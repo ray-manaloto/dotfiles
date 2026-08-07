@@ -604,6 +604,24 @@ def _needs_human_reason() -> str:
     )
 
 
+def needs_human_reason() -> str:
+    """The public accessor for :func:`_needs_human_reason` (#602 phase 2).
+
+    A thin re-export, and deliberately not a rename. `dag_project` reproduces
+    this string VERBATIM into the tracker comment rather than paraphrasing it,
+    which means the golden-equality pin in `tests/test_dag_tick.py` now also
+    guards operator-facing tracker content — so the string must keep exactly one
+    definition. Exposing an accessor rather than reaching into the private name
+    keeps that single definition while making the cross-module read legible.
+
+    ⚠️ The wording still says the projection is **"NOT done here — #602"**, and
+    that stays TRUE after #602 ships: `dag_project` is a separate process, and
+    this tick still does not project. Do not "update" it on the strength of the
+    projector existing.
+    """
+    return _needs_human_reason()
+
+
 def _reply_queued_reason() -> str:
     """The exact wording for a live node holding an undelivered reply.
 
