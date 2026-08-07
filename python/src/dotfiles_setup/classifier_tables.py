@@ -227,6 +227,39 @@ REGISTRY: dict[str, ClassifierSpec] = {
             "exists precisely to survive a future git that breaks it"
         ),
     ),
+    "dotfiles_setup.codex_verdict:edge_for": ClassifierSpec(
+        module_path="python/src/dotfiles_setup/codex_verdict.py",
+        function="edge_for",
+        # SUBJECTLESS, like `branch_guard.classify` — the axes ARE the params.
+        subject_param=None,
+        subject_type=None,
+        # ⚠️ `rework_count` and `max_rework` are two PARAMETERS but ONE
+        # question: `edge_for` asks `rework_count >= max_rework` and nothing
+        # else of either, so neither has a standalone partition — only the PAIR
+        # does. The table crosses them as the two sides of that single boolean,
+        # the same convention `branch_guard` uses for `lines` (a list asked
+        # exactly one question is a boolean), extended to a question about two
+        # parameters rather than one. `verdict` is crossed as the enum, all
+        # three members. Nothing is pinned: every axis is finitely modellable,
+        # and pinning a modellable axis is the move `illegal_pin` refuses.
+        axes=frozenset({"verdict", "rework_count", "max_rework"}),
+        table_path="tests/test_codex_verdict.py",
+        table_symbol="_EDGE_TABLE",
+        # `Edge.NONE` is the no-op a reaper returns when there was nothing to
+        # decide — never something a verdict maps to. The table asserts its
+        # absence explicitly (`test_edge_table_reaches_every_edge_a_verdict_
+        # can_produce`), so declaring it out of scope here is a restatement of
+        # an assertion, not a licence granted on trust.
+        table_excluded_classes=frozenset({"NONE"}),
+        reason=(
+            "found by the `unlisted` scan on first contact with #580's merge, "
+            "not by a human — the third real classifier in the repo, shipped "
+            "after this gate was written and caught the moment the two "
+            "branches met. `_EDGE_TABLE` already existed; what was missing is "
+            "the binding that makes a NEW axis in `edge_for` fail here instead "
+            "of silently going unenumerated, which is #601's defect exactly"
+        ),
+    ),
 }
 
 # Where :func:`classifier_shaped` looks for classifiers that OUGHT to be
@@ -907,10 +940,20 @@ def classifier_shaped(source: str) -> set[str]:
     """Function names in ``source`` that RETURN an enum defined in that module.
 
     The discovery predicate behind the ``unlisted`` kind, and the reason it is
-    a gate rather than a heuristic: measured across all 45 modules in
-    ``python/src/dotfiles_setup`` it yields **2 hits, both real classifiers,
-    zero false positives** — because this repo's own style is a pure
-    ``classify`` returning a module-local enum, split out for testability.
+    a gate rather than a heuristic: measured across all 48 modules in
+    ``python/src/dotfiles_setup`` it yields **3 hits, all three real
+    classifiers, zero false positives** (re-measured 2026-08-07; it was 2
+    across 45 when the gate was written). The third arrived on its own:
+    ``codex_verdict.edge_for`` shipped after this module did, and the scan
+    named it the moment the two branches met — which is exactly what a gate
+    that forces the map to GROW is for.
+
+    ⚠️ That third hit also retires a claim the first measurement invited: the
+    original two were **both named** ``classify``, and it would have been easy
+    to read the predicate as recognising that name. It does not — ``edge_for``
+    is not called ``classify``, and it is found anyway, because the only thing
+    tested is whether the return annotation names an enum defined in the SAME
+    module.
 
     Deliberately narrow. It does NOT try to recognise a classifier by name, by
     parameter shape, or by returning an enum imported from elsewhere: a

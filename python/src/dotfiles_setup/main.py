@@ -21,11 +21,13 @@ from dotfiles_setup.autofix import autofix_apply_main
 from dotfiles_setup.bash_budget import bash_budget_main
 from dotfiles_setup.bootstrap_packages import gap_report_failures
 from dotfiles_setup.classifier_tables import classifier_axes_main
+from dotfiles_setup.codex_lane import run_lane_cli
 from dotfiles_setup.command_audit import DEFAULT_SESSION_LIMIT, command_audit_main
 from dotfiles_setup.config import DotfilesConfig
 from dotfiles_setup.container import verify_latest_main
 from dotfiles_setup.dag_tick import (
     DEFAULT_MAX_AGE_SECONDS,
+    DEFAULT_MAX_REWORK,
     DEFAULT_STALL_AFTER_SECONDS,
     run_tick,
 )
@@ -698,6 +700,14 @@ def _add_dag_tick_subcommand(subparsers: _SubParsers) -> None:
         "state.json age is treated as over-age too",
     )
     dag_tick_parser.add_argument(
+        "--max-rework",
+        type=int,
+        default=DEFAULT_MAX_REWORK,
+        help="How many revise/reject rounds one unit of work may take before "
+        "the node escalates instead of reopening again (#573/#575 R7, "
+        f"default {DEFAULT_MAX_REWORK}); an `approve` advances regardless",
+    )
+    dag_tick_parser.add_argument(
         "--verbose",
         action="store_true",
         help="Print a line per classified node instead of only anomalies",
@@ -705,20 +715,30 @@ def _add_dag_tick_subcommand(subparsers: _SubParsers) -> None:
 
 
 def _add_report_parsers(subparsers: _SubParsers) -> None:
-    """Register the read-only scan-and-report commands, plus dag-tick.
+    """Register the read-only scan-and-report commands, plus TWO that act.
 
-    Extracted from :func:`setup_parser` to keep it under ruff's statement cap —
-    these share a shape (scan something, render markdown, change nothing), so
-    they group cleanly rather than being split at an arbitrary line. (The daily
-    tool-currency report moved to the shared `kb-setup currency daily` engine.)
-    `dag-tick` (#578) is grouped here too for the same statement-budget reason
-    even though it can act (respawn/stop) — its own registration lives in
-    :func:`_add_dag_tick_subcommand` for readability. #578 respec round 3
-    evaluated calling it directly from :func:`setup_parser` instead (the
-    "divergent-change smell" of a mutating command inside a function
-    documented as read-only) but that trips ruff's PLR0915 on `setup_parser`
-    (51 > 50 statements) — not trivial, so left as-is per the respec's own
-    "only if trivial" qualifier.
+    Extracted from :func:`setup_parser` to keep it under ruff's statement cap.
+    Most of these share a shape (scan something, render markdown, change
+    nothing) and group cleanly. (The daily tool-currency report moved to the
+    shared `kb-setup currency daily` engine.)
+
+    ⚠️ **Two members do NOT fit that shape, and the name under-describes them.**
+    `dag-tick` (#578) can respawn and stop processes; `codex-lane` (#613) is the
+    most side-effecting command in this file — it mkdirs, unlinks four
+    artifacts, writes two and spawns a **paid** subprocess. Both live here for
+    one reason only: the statement budget. Each has its own registration
+    function (:func:`_add_dag_tick_subcommand`, :func:`_add_codex_lane_subcommand`)
+    so the divergence is at least visible from the call list.
+
+    **The obvious fix was tried and MEASURED to fail — do not retry it.** #578
+    respec round 3 named the divergent-change smell and evaluated calling
+    `dag-tick` from :func:`setup_parser` directly; that trips ruff's PLR0915
+    (51 > 50 statements). The #613 review proposed the softer variant — a
+    sibling grouping function called from :func:`setup_parser`, "one added
+    statement, not four" — and that is exactly the statement there is no room
+    for: adding it reproduced the same PLR0915 failure on the same function.
+    Buying the split back therefore costs a real refactor of
+    :func:`setup_parser`, not a one-liner, and is out of scope for #613.
     """
     command_audit_parser = subparsers.add_parser(
         "command-audit",
@@ -786,6 +806,68 @@ def _add_report_parsers(subparsers: _SubParsers) -> None:
     )
 
     _add_dag_tick_subcommand(subparsers)
+    _add_codex_lane_subcommand(subparsers)
+
+
+def _add_codex_lane_subcommand(subparsers: _SubParsers) -> None:
+    """Register the Codex review-lane producer (#613).
+
+    The half #580 left unbuilt: it shipped the reaper, and nothing wrote the
+    reaper's inputs, so `reap_codex_lanes` found no run directory for any node
+    and was silent.
+
+    Args:
+        subparsers: The parent subparsers action to attach this to.
+    """
+    parser = subparsers.add_parser(
+        "codex-lane",
+        help="Launch one Codex review lane for a node: write the lane record "
+        "and the verdict schema, run `codex exec` with both --output-schema "
+        "and -o, and settle the lane so the dag-tick reaper can consume it",
+    )
+    parser.add_argument(
+        "--node",
+        required=True,
+        help="The background node id that OWNS this lane — the reaper's CAS "
+        "refuses a lane whose owner is not the node it is reaping for",
+    )
+    parser.add_argument(
+        "--prompt-file",
+        type=Path,
+        default=None,
+        help="Read the review prompt from this file (default: stdin, so a "
+        "long diff can be piped without risking ARG_MAX)",
+    )
+    parser.add_argument(
+        "--cwd",
+        type=Path,
+        default=None,
+        help="Where codex runs — the repo under review, so its own git-repo "
+        "check passes (default: the current working directory)",
+    )
+    parser.add_argument(
+        "--rework-count",
+        type=int,
+        default=None,
+        help="Rounds this unit of work has already spent, recorded in the "
+        "lane record and bounded by dag-tick's --max-rework (#573). Omit to "
+        "CARRY FORWARD the previous round's count — a relaunch rewrites the "
+        "very file that holds it, so defaulting to 0 would silently reset the "
+        "budget and the loop --max-rework bounds could never terminate",
+    )
+    parser.add_argument(
+        "--model",
+        default=None,
+        help="Optional `codex exec --model` override (default: codex's own "
+        "configured default)",
+    )
+    parser.add_argument(
+        "--jobs-dir",
+        type=Path,
+        default=None,
+        help="The jobs root to launch under (default: ~/.claude/jobs, the "
+        "same tree dag-tick scans)",
+    )
 
 
 def setup_parser() -> argparse.ArgumentParser:
@@ -1438,6 +1520,7 @@ def _build_command_handlers(
         "bash-budget": lambda: sys.exit(bash_budget_main(project_root)),
         "classifier-axes": lambda: sys.exit(classifier_axes_main(project_root)),
         "dag-tick": lambda: sys.exit(run_tick(args)),
+        "codex-lane": lambda: sys.exit(run_lane_cli(args)),
         "doctor": lambda: sys.exit(
             doctor_main(
                 project_root,

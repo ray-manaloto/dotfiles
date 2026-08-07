@@ -525,6 +525,31 @@ description = "launchd watchdog tick (#578): census this repo's background agent
 #   mise run dag-tick -- --dry-run --verbose   # manual, read-only preview
 run = 'uv run --project python dotfiles-setup dag-tick'
 
+[tasks.codex-lane]
+description = "Launch one Codex review lane for a node (#613): write the lane record + verdict schema, run `codex exec` with BOTH --output-schema and -o, settle the lane for dag-tick's reaper"
+# Thin caller (zero-bash-logic); logic in
+# python/src/dotfiles_setup/codex_lane.py. This is the PRODUCER half of #580 —
+# that ticket shipped a complete reaper and nothing wrote its inputs, so
+# `reap_codex_lanes` found no run directory for any node and was SILENT.
+#
+# NOT a wrapper around the fable-orchestrator plugin's run-lane.sh. The full
+# justification `use-tool-builtins.md` requires lives ONCE, in the codex_lane
+# module docstring — not restated here, because the #613 review found it written
+# out in three files, two carrying a line-number citation into a script that is
+# replaced wholesale on plugin update.
+#
+#   mise run codex-lane -- --node <id> --prompt-file review.md
+#   git diff | mise run codex-lane -- --node <id>     # prompt via stdin
+run = 'uv run --project python dotfiles-setup codex-lane'
+
+[tasks.codex-lane-e2e]
+description = "The #613 end-to-end arm: real launcher -> real `codex exec` -> real reaper, asserting an edge comes out. COSTS CREDITS — deselected from `mise run test` and CI by the codex_exec marker"
+# `-m codex_exec` re-selects what the root pytest.ini deselects by default
+# (last -m wins), the same gating shape as `mise run smoke-exec`. Everything in
+# #580 was unit-level, and a fixture that writes what the code reads structurally
+# cannot catch a producer/consumer mismatch — this is the arm that can.
+run = 'uv run --project python pytest -m codex_exec tests/test_codex_lane_e2e.py -v'
+
 [tasks.apt-repo]
 description = "List the packages an apt repository publishes (defaults to apt.llvm.org)"
 # Thin caller (zero-bash-logic); logic in

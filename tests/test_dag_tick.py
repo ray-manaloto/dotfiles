@@ -31,7 +31,7 @@ from typing import TYPE_CHECKING
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 import pytest
-from dotfiles_setup import classifier_tables, dag_tick
+from dotfiles_setup import classifier_tables, codex_verdict, dag_tick
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -105,6 +105,7 @@ def _ctx(tmp_path: Path, **overrides: object) -> dag_tick.TickContext:
         "lock_path": tmp_path / "dag-tick.lock",
         "stall_after_s": 120.0,
         "max_age_s": dag_tick.DEFAULT_MAX_AGE_SECONDS,
+        "max_rework": dag_tick.DEFAULT_MAX_REWORK,
         "dry_run": False,
         "verbose": False,
     }
@@ -120,6 +121,7 @@ def _tick_args(**overrides: object) -> argparse.Namespace:
         "stall_after": 120.0,
         "max_age": dag_tick.DEFAULT_MAX_AGE_SECONDS,
         "verbose": False,
+        "max_rework": dag_tick.DEFAULT_MAX_REWORK,
     }
     base.update(overrides)
     return argparse.Namespace(**base)
@@ -2326,3 +2328,197 @@ def test_execute_tick_wedged_node_makes_no_action_subprocess_call(
     assert dag_tick.execute_tick(ctx) == 0
     captured = capsys.readouterr()
     assert "WEDGED wedged1" in captured.out
+
+
+# --------------------------------------------------- #580 Codex lane reaping
+
+
+def _codex_lane(
+    ctx: dag_tick.TickContext,
+    node_id: str,
+    *,
+    verdict: str | None = None,
+    lane: dict[str, object] | None = None,
+    settled: bool = True,
+) -> Path:
+    """A Codex review lane under `node_id`'s job dir.
+
+    `lane` overrides fields in the launcher's lane record (owner,
+    rework_count); it is one parameter rather than one per field so this stays
+    under ruff's argument ceiling without a suppression.
+
+    `settled=True` writes the exit marker by default — the liveness gate runs
+    FIRST, so a fixture without it makes every reap return NOT_SETTLED and the
+    assertion below it tests nothing.
+    """
+    run_dir = ctx.jobs_dir / node_id / dag_tick.CODEX_LANE_DIRNAME
+    run_dir.mkdir(parents=True, exist_ok=True)
+    record: dict[str, object] = {"owner": node_id, "status": "in_progress"}
+    record.update(lane or {})
+    (run_dir / codex_verdict.LANE_FILENAME).write_text(json.dumps(record))
+    if verdict is not None:
+        (run_dir / codex_verdict.VERDICT_FILENAME).write_text(
+            json.dumps(
+                {"schema_version": 1, "verdict": verdict, "rationale": "because"}
+            )
+        )
+    if settled:
+        (run_dir / codex_verdict.EXIT_MARKER_FILENAME).write_text("EXIT: 0\n")
+    return run_dir
+
+
+def _classified(node_id: str) -> dag_tick.ClassifiedNode:
+    return dag_tick.ClassifiedNode(
+        node_id=node_id,
+        node_class=dag_tick.NodeClass.ALIVE,
+        pid_alive=True,
+        state_age_s=1.0,
+    )
+
+
+def test_a_node_with_no_codex_lane_is_silent(tmp_path: Path) -> None:
+    """Most nodes never run a review lane.
+
+    A line per node per 60s would bury the ones that matter, so the absence of
+    a lane directory must produce nothing at all.
+    """
+    ctx = _ctx(tmp_path)
+    (ctx.jobs_dir / "n1").mkdir(parents=True)
+    assert dag_tick.reap_codex_lanes([_classified("n1")], ctx) == []
+
+
+def test_an_approved_lane_reports_the_advance_edge(tmp_path: Path) -> None:
+    ctx = _ctx(tmp_path)
+    _codex_lane(ctx, "n1", verdict="approve")
+    lines = dag_tick.reap_codex_lanes([_classified("n1")], ctx)
+    assert len(lines) == 1
+    assert "CODEX-REAP n1" in lines[0]
+    assert "edge=advance" in lines[0]
+
+
+def test_a_missing_verdict_escalates_through_the_tick(tmp_path: Path) -> None:
+    """The inverted OMC default, end to end through the tick.
+
+    A lane that exited without writing a verdict is the common abort outcome
+    (measured on codex 0.146.0: every induced abort leaves no file), so this
+    is the path an unattended fleet actually takes.
+    """
+    ctx = _ctx(tmp_path)
+    _codex_lane(ctx, "n1", verdict=None)
+    lines = dag_tick.reap_codex_lanes([_classified("n1")], ctx)
+    assert len(lines) == 1
+    assert "edge=needs_human" in lines[0]
+    assert "file_missing" in lines[0]
+
+
+def test_the_reap_line_does_not_claim_the_edge_was_applied(tmp_path: Path) -> None:
+    """Projection is the scheduler's job (#575 R1); #602 implements it.
+
+    A log line naming an action this process does not perform is how a reader
+    concludes an escalation reached the tracker when it reached a launchd log
+    — the exact #601 finding that cost two review rounds.
+    """
+    ctx = _ctx(tmp_path)
+    _codex_lane(ctx, "n1", verdict="reject")
+    line = dag_tick.reap_codex_lanes([_classified("n1")], ctx)[0]
+    assert "DECIDED here, not applied" in line
+    assert "#602" in line
+
+
+def test_a_no_op_edge_is_quiet_unless_verbose(tmp_path: Path) -> None:
+    """Both arms: steady-state no-ops would otherwise be the bulk of the log."""
+    quiet = _ctx(tmp_path, verbose=False)
+    _codex_lane(quiet, "n1", verdict="approve", lane={"owner": "somebody-else"})
+    assert dag_tick.reap_codex_lanes([_classified("n1")], quiet) == []
+
+    loud = _ctx(tmp_path, verbose=True)
+    lines = dag_tick.reap_codex_lanes([_classified("n1")], loud)
+    assert len(lines) == 1
+    assert "owner_mismatch" in lines[0]
+
+
+def test_the_tick_honours_the_rework_bound_from_the_lane(tmp_path: Path) -> None:
+    """A revise at the bound escalates instead of reopening implement.
+
+    Both arms, because a bound verified only in the under-budget direction
+    would pass against a reaper that never escalates.
+    """
+    under = _ctx(tmp_path / "a")
+    _codex_lane(under, "n1", verdict="revise", lane={"rework_count": 0})
+    assert (
+        "edge=reopen_implement"
+        in dag_tick.reap_codex_lanes([_classified("n1")], under)[0]
+    )
+
+    spent = _ctx(tmp_path / "b")
+    _codex_lane(spent, "n1", verdict="revise", lane={"rework_count": 2})
+    assert (
+        "edge=needs_human" in dag_tick.reap_codex_lanes([_classified("n1")], spent)[0]
+    )
+
+
+@pytest.mark.parametrize(
+    ("lane_body", "expected"),
+    [
+        (None, 0),  # no lane file at all
+        ("{not json", 0),  # unparsable
+        ("[1,2]", 0),  # JSON, but not an object
+        ('{"owner": "n1"}', 0),  # no rework_count field
+        ('{"rework_count": 3}', 3),
+        ('{"rework_count": 0}', 0),
+        ('{"rework_count": -1}', 0),  # negative is nonsense -> permissive
+        ('{"rework_count": "2"}', 0),  # wrong type -> permissive
+        ('{"rework_count": 2.5}', 0),  # float is not a count
+    ],
+)
+def test_read_rework_count_defaults_permissively(
+    tmp_path: Path, lane_body: str | None, expected: int
+) -> None:
+    """Every malformed shape reads as 0, the PERMISSIVE direction.
+
+    Deliberate: assuming the budget is spent would escalate every lane whose
+    launcher had not yet written the field, turning a rollout into an
+    escalation storm. The row returning 3 is the control arm — without it this
+    table would pass against a function that returns 0 unconditionally.
+    """
+    run_dir = tmp_path / "lane"
+    run_dir.mkdir()
+    if lane_body is not None:
+        (run_dir / codex_verdict.LANE_FILENAME).write_text(lane_body)
+    assert dag_tick.read_rework_count(run_dir) == expected
+
+
+def test_execute_tick_emits_codex_reap_lines(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The WIRING, driven end to end — #580 is explicitly not module-only.
+
+    Asserted through `execute_tick`'s real stdout rather than by grepping its
+    source: a source-substring check passes on a call that is present but
+    unreachable, and "a reaper nobody calls" is the #343 shape — a perfect
+    guard that never runs. The mutation that matters (deleting the
+    `reap_codex_lanes(...)` line from `execute_tick`) fails this test and
+    would NOT fail a source check written against the helper.
+    """
+    jobs_dir = tmp_path / "jobs"
+    daemon_dir = _roster(tmp_path, {})
+    _write_state(jobs_dir, "dead1", {"state": "running", "tempo": "idle"})
+    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir)
+    _codex_lane(ctx, "dead1", verdict="approve")
+
+    monkeypatch.setattr(dag_tick.subprocess, "run", _fake_run_for_one_dead_node)
+
+    def _no_popen(_argv: list[str], **_kwargs: object) -> None:
+        """Stub: a real Popen here would launch `claude` from a test.
+
+        This node classifies ALIVE, so nothing should spawn anyway.
+        """
+
+    monkeypatch.setattr(dag_tick.subprocess, "Popen", _no_popen)
+
+    assert dag_tick.execute_tick(ctx) == 0
+    out = capsys.readouterr().out
+    assert "CODEX-REAP dead1" in out
+    assert "edge=advance" in out
