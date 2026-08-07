@@ -526,7 +526,7 @@ description = "launchd watchdog tick (#578): census this repo's background agent
 run = 'uv run --project python dotfiles-setup dag-tick'
 
 [tasks.dag-project]
-description = "Project NEEDS_HUMAN nodes to the tracker (#602): the dag:needs-human label + one append-only escalation comment per (node, question). PHASE 2 is --dry-run ONLY — the write path is phase 3"
+description = "Project NEEDS_HUMAN nodes to the tracker (#602): the dag:needs-human label + one append-only escalation comment per (node, question), deduped on (node, digest). Pass exactly one of --dry-run or --write — neither REFUSES, because writing is outward-facing"
 # Thin caller (zero-bash-logic); logic in
 # python/src/dotfiles_setup/dag_project.py. The SCHEDULER'S first slice, not a
 # watchdog feature: `docs/receipts/575.md` R1 assigns projection to the
@@ -539,7 +539,8 @@ description = "Project NEEDS_HUMAN nodes to the tracker (#602): the dag:needs-hu
 # prevent. What phase 4 still owns is the LaunchAgent — the schedule, not the
 # verb. The spec is updated to match rather than left disagreeing with the tree.
 #
-#   mise run dag-project -- --dry-run    # the only supported mode in this slice
+#   mise run dag-project -- --dry-run    # print what would be posted
+#   mise run dag-project -- --write      # actually post (outward-facing)
 run = 'uv run --project python dotfiles-setup dag-project'
 
 [tasks.codex-lane]
