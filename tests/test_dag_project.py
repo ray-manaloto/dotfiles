@@ -341,24 +341,6 @@ def test_dry_run_names_the_target_issue_and_the_label(tmp_path: Path) -> None:
     assert "nothing posted" in rendered
 
 
-def test_run_project_refuses_without_dry_run(tmp_path: Path) -> None:
-    """Phase 2 has no write path, and says so rather than exiting 0 doing nothing.
-
-    Both arms, because a refusal that also fires on the supported flag would be
-    indistinguishable from a broken command.
-    """
-    args = argparse.Namespace(
-        dry_run=False,
-        jobs_dir=str(tmp_path),
-        stall_after=120.0,
-        projected_at="2026-08-07T00:00:00Z",
-    )
-    assert dag_project.run_project(args) == 2
-
-    args.dry_run = True
-    assert dag_project.run_project(args) == 0
-
-
 def test_r5_is_unvalidated_for_every_harness_native_payload(tmp_path: Path) -> None:
     """Structural, never semantic — and today that means UNVALIDATED, always.
 
@@ -367,3 +349,209 @@ def test_r5_is_unvalidated_for_every_harness_native_payload(tmp_path: Path) -> N
     without the test having to be rewritten to permit the change.
     """
     assert "UNVALIDATED" in dag_project.r5_verdict(_escalation(tmp_path))
+
+
+# --------------------------------------------------------------------------
+# Phase 3 — the write path. The `gh` CLI is a real system boundary, so it is
+# INJECTED (`tests/AGENTS.md`: prefer injecting over patching), and every test
+# below substitutes a recorder rather than reaching the network.
+# --------------------------------------------------------------------------
+
+
+class _Gh:
+    """A scripted `gh` runner that RECORDS every argv it was handed."""
+
+    def __init__(self, replies: dict[str, dag_project.GhResult] | None = None) -> None:
+        self.calls: list[list[str]] = []
+        self.replies = replies or {}
+
+    def __call__(self, cmd: list[str]) -> dag_project.GhResult:
+        self.calls.append(cmd)
+        for key, reply in self.replies.items():
+            if key in " ".join(cmd):
+                return reply
+        return dag_project.GhResult(rc=0, stdout="[]")
+
+    def verbs(self) -> list[str]:
+        return [" ".join(c[:3]) for c in self.calls]
+
+
+def _comments_json(*markers: str) -> str:
+    return json.dumps([{"body": f"{m}\nbody text"} for m in markers])
+
+
+def test_zero_escalations_makes_zero_api_calls() -> None:
+    """Asserted, not incidental — the common case must not reach the network."""
+    gh = _Gh()
+    assert dag_project.project_all([], repo="o/r", run=gh, projected_at="t") == []
+    assert gh.calls == [], "an idle projector that calls out can misfire when idle"
+
+
+def test_a_fresh_escalation_posts_and_labels(tmp_path: Path) -> None:
+    gh = _Gh()
+    outcomes = dag_project.project_all(
+        [_escalation(tmp_path)], repo="o/r", run=gh, projected_at="t"
+    )
+    assert [o.action for o in outcomes] == ["posted"]
+    joined = gh.verbs()
+    assert "gh issue comment" in joined
+    assert "gh issue edit" in joined
+    assert "gh label create" in joined
+
+
+def test_running_twice_posts_nothing_the_second_time(tmp_path: Path) -> None:
+    """The phase-3 gate: a dedupe verified only on the FIRST run is not a check."""
+    escalation = _escalation(tmp_path)
+    key = f"node={escalation.node_id} digest={escalation.digest}"
+
+    first = _Gh()
+    assert [
+        o.action
+        for o in dag_project.project_all(
+            [escalation], repo="o/r", run=first, projected_at="t"
+        )
+    ] == ["posted"]
+
+    # Second run sees the marker the first one left.
+    second = _Gh(
+        {
+            "issues/623/comments": dag_project.GhResult(
+                rc=0,
+                stdout=_comments_json(
+                    dag_project.marker(escalation.node_id, escalation.digest)
+                ),
+            )
+        }
+    )
+    assert [
+        o.action
+        for o in dag_project.project_all(
+            [escalation], repo="o/r", run=second, projected_at="t"
+        )
+    ] == ["skipped-duplicate"]
+    assert "gh issue comment" not in second.verbs(), "the second run must post NOTHING"
+    assert key in dag_project.marker(escalation.node_id, escalation.digest)
+
+
+def test_a_new_question_from_the_same_node_posts_again(tmp_path: Path) -> None:
+    """Dedupe tracks the QUESTION — a re-escalation must not be silenced."""
+    old_marker = dag_project.marker("ad8baf35", dag_project.payload_digest(_JULY_22))
+    gh = _Gh(
+        {
+            "issues/623/comments": dag_project.GhResult(
+                rc=0, stdout=_comments_json(old_marker)
+            )
+        }
+    )
+    outcomes = dag_project.project_all(
+        [_escalation(tmp_path)], repo="o/r", run=gh, projected_at="t"
+    )
+    assert [o.action for o in outcomes] == ["posted"]
+
+
+def test_an_unreadable_comment_list_skips_rather_than_risking_a_duplicate(
+    tmp_path: Path,
+) -> None:
+    """`None` and `set()` mean OPPOSITE things and must not be collapsed."""
+    gh = _Gh({"issues/623/comments": dag_project.GhResult(rc=1, stderr="boom")})
+    outcomes = dag_project.project_all(
+        [_escalation(tmp_path)], repo="o/r", run=gh, projected_at="t"
+    )
+    assert [o.action for o in outcomes] == ["skipped-unreadable"]
+    assert "gh issue comment" not in gh.verbs()
+
+
+def test_a_closed_standing_issue_is_reopened_then_projected(tmp_path: Path) -> None:
+    """A closed standing escalation issue IS the silence failure."""
+    gh = _Gh({"issue view": dag_project.GhResult(rc=0, stdout="CLOSED\n")})
+    outcomes = dag_project.project_all(
+        [_escalation(tmp_path)], repo="o/r", run=gh, projected_at="t"
+    )
+    assert [o.action for o in outcomes] == ["posted"]
+    assert "gh issue reopen" in gh.verbs()
+
+
+def test_a_closed_bound_issue_falls_back_instead_of_being_reopened(
+    tmp_path: Path,
+) -> None:
+    """Reopening a WORK issue is rework (#575 R7) — never a projector's call."""
+    job_dir = _write_node(tmp_path, "bound", dict(_ESCALATED_STATE))
+    (job_dir / dag_project.BINDING_FILENAME).write_text(
+        json.dumps({"issue": 4242, "repo": "o/r"}), encoding="utf-8"
+    )
+    escalation = dag_project.escalation_from_state(
+        "bound",
+        dict(_ESCALATED_STATE),
+        job_dir=job_dir,
+        mtime=None,
+        stall_after_s=120.0,
+    )
+    assert escalation is not None
+    gh = _Gh({"issue view 4242": dag_project.GhResult(rc=0, stdout="CLOSED\n")})
+    outcomes = dag_project.project_all(
+        [escalation], repo="o/r", run=gh, projected_at="t"
+    )
+    assert [o.action for o in outcomes] == ["posted"]
+    assert outcomes[0].issue == dag_project.DEFAULT_ESCALATION_ISSUE
+    assert "gh issue reopen" not in gh.verbs(), "a work issue must NOT be reopened"
+
+
+def test_an_existing_label_is_success_not_failure() -> None:
+    """The steady state is "already there", and `gh` exits non-zero for it."""
+    gh = _Gh(
+        {
+            "label create": dag_project.GhResult(
+                rc=1, stderr="HTTP 422: Validation Failed (label already exists)"
+            )
+        }
+    )
+    assert dag_project.ensure_label("o/r", run=gh) is True
+
+    broken = _Gh({"label create": dag_project.GhResult(rc=1, stderr="network down")})
+    assert dag_project.ensure_label("o/r", run=broken) is False
+
+
+def test_a_failed_post_is_reported_as_failed(tmp_path: Path) -> None:
+    gh = _Gh({"issue comment": dag_project.GhResult(rc=1, stderr="403")})
+    outcomes = dag_project.project_all(
+        [_escalation(tmp_path)], repo="o/r", run=gh, projected_at="t"
+    )
+    assert [o.action for o in outcomes] == ["failed"]
+    assert "403" in outcomes[0].detail
+
+
+def test_marker_regex_ignores_a_prose_mention() -> None:
+    """A comment DISCUSSING the marker must not register as one."""
+    gh = _Gh(
+        {
+            "issues/623/comments": dag_project.GhResult(
+                rc=0,
+                stdout=json.dumps(
+                    [{"body": "we key on `node=ad8baf35 digest=a5f7040626d9`"}]
+                ),
+            )
+        }
+    )
+    assert dag_project.existing_markers(623, "o/r", run=gh) == set()
+
+
+def test_run_project_refuses_when_neither_or_both_flags_are_given(
+    tmp_path: Path,
+) -> None:
+    """Writing is outward-facing, so it is never a bare invocation's default."""
+    args = argparse.Namespace(
+        dry_run=False,
+        write=False,
+        repo=None,
+        jobs_dir=str(tmp_path),
+        stall_after=120.0,
+        projected_at="t",
+    )
+    assert dag_project.run_project(args) == 2
+
+    args.dry_run = True
+    args.write = True
+    assert dag_project.run_project(args) == 2
+
+    args.write = False
+    assert dag_project.run_project(args) == 0

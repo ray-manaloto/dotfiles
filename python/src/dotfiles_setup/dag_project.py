@@ -60,6 +60,8 @@ import datetime as dt
 import hashlib
 import json
 import logging
+import re
+import subprocess
 import sys
 import time
 from dataclasses import dataclass
@@ -70,7 +72,11 @@ from dotfiles_setup import dag_tick
 
 if TYPE_CHECKING:
     import argparse
-    from collections.abc import Iterable, Mapping, Sequence
+    from collections.abc import Callable, Iterable, Mapping, Sequence
+
+    #: One `gh` invocation. Injected rather than constructed, so a test
+    #: substitutes a value instead of patching a module (`tests/AGENTS.md`).
+    type GhRunner = Callable[[list[str]], GhResult]
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +108,21 @@ MARKER_SCHEMA = 1
 #: How many hex chars of the payload digest ride in the marker. Long enough that
 #: two different questions do not collide, short enough to read in a diff.
 _DIGEST_CHARS = 12
+
+#: Seconds one `gh` call may take before it is treated as FAILED. A projector
+#: that hangs is worse than one that skips: launchd fires the next tick anyway.
+_GH_TIMEOUT_S = 60.0
+
+#: The label's colour and description, applied at creation. Reviewable constants
+#: rather than magic strings at the call site.
+_LABEL_COLOR = "d93f0b"
+_LABEL_DESCRIPTION = (
+    "DAG: an escalated background node is waiting on a human (blocked + needs)"
+)
+
+#: Pulls `node=<id> digest=<hex>` back out of a posted comment. Anchored on the
+#: full marker so a mention of the phrase in prose cannot register as a marker.
+_MARKER_RE = re.compile(r"<!-- dag:needs-human (node=\S+ digest=\S+) schema=\d+ -->")
 
 
 @dataclass(frozen=True)
@@ -499,24 +520,313 @@ def render_dry_run(escalations: Sequence[Escalation], *, projected_at: str) -> s
     return "\n".join(blocks)
 
 
-def run_project(args: argparse.Namespace) -> int:
-    """CLI entry point. **Phase 2 is dry-run only** — the write path is #602 phase 3.
+@dataclass(frozen=True)
+class ProjectionOutcome:
+    """What actually happened to one escalation, named rather than inferred.
 
-    A non-`--dry-run` invocation REFUSES rather than silently doing nothing: a
-    command that accepts a flag it cannot honour is how an operator concludes a
-    projection happened when it did not.
+    `skipped-duplicate` and `skipped-unreadable` are DIFFERENT outcomes and are
+    reported as such: the first means the tracker already carries this question,
+    the second means we could not tell. Collapsing them into one "skipped" is how
+    an operator concludes the escalation is on the tracker when nobody checked.
     """
-    jobs_dir = Path(args.jobs_dir).expanduser() if args.jobs_dir else dag_tick.JOBS_DIR
-    escalations = collect_escalations(jobs_dir, stall_after_s=args.stall_after)
-    if not args.dry_run:
+
+    node_id: str
+    action: str
+    issue: int
+    detail: str
+
+
+@dataclass(frozen=True)
+class GhResult:
+    """One `gh` invocation's outcome — the seam tests substitute (#602 phase 3)."""
+
+    rc: int
+    stdout: str = ""
+    stderr: str = ""
+
+    @property
+    def ok(self) -> bool:
+        """Whether the call succeeded."""
+        return self.rc == 0
+
+
+def default_gh_runner(cmd: list[str]) -> GhResult:
+    """Run one `gh` command, degrading a hang or a missing binary to a FAILURE.
+
+    Same shape as `pr.py`'s `_run`: a hung probe becomes a failed probe, never an
+    uncaught crash. The projector is launchd-fired, so an exception here would
+    surface only in a log nobody reads — which is the failure #602 exists to end.
+    """
+    try:
+        done = subprocess.run(
+            cmd, capture_output=True, text=True, check=False, timeout=_GH_TIMEOUT_S
+        )
+    except subprocess.TimeoutExpired:
+        return GhResult(rc=124, stderr="gh timed out")
+    except OSError as exc:
+        return GhResult(rc=127, stderr=str(exc))
+    return GhResult(rc=done.returncode, stdout=done.stdout, stderr=done.stderr)
+
+
+def existing_markers(issue: int, repo: str, *, run: GhRunner) -> set[str] | None:
+    """Every `(node, digest)` marker already on `issue`, or `None` if unreadable.
+
+    `None` and `set()` mean OPPOSITE things and the caller must not collapse
+    them: an empty set says "read it, nothing there, safe to post"; `None` says
+    "could not read it", and posting then risks a duplicate. The caller SKIPS on
+    `None` — a duplicate escalation comment is noise a human must sort out, while
+    a skipped one is retried on the next tick with nothing lost.
+
+    This reads a SNAPSHOT taken before any write in this run, never a read-back
+    of our own write (`docs/receipts/573.md`: the tracker is eventually
+    consistent, so trust the snapshot and let the next tick reconcile).
+    """
+    result = run(
+        ["gh", "api", f"/repos/{repo}/issues/{issue}/comments", "--paginate"],
+    )
+    if not result.ok:
+        logger.warning(
+            "dag-project: could not read #%s comments (rc=%s) — SKIPPING rather "
+            "than risking a duplicate: %s",
+            issue,
+            result.rc,
+            result.stderr.strip(),
+        )
+        return None
+    try:
+        comments = json.loads(result.stdout or "[]")
+    except json.JSONDecodeError:
+        logger.warning(
+            "dag-project: #%s comment payload was not JSON — SKIPPING", issue
+        )
+        return None
+    if not isinstance(comments, list):
+        return None
+    found: set[str] = set()
+    for comment in comments:
+        body = comment.get("body") if isinstance(comment, dict) else None
+        if isinstance(body, str):
+            found.update(_MARKER_RE.findall(body))
+    return found
+
+
+def issue_state(issue: int, repo: str, *, run: GhRunner) -> str | None:
+    """`OPEN` / `CLOSED` for `issue`, or `None` when it could not be read."""
+    result = run(
+        [
+            "gh",
+            "issue",
+            "view",
+            str(issue),
+            "-R",
+            repo,
+            "--json",
+            "state",
+            "-q",
+            ".state",
+        ]
+    )
+    if not result.ok:
+        return None
+    state = result.stdout.strip().upper()
+    return state or None
+
+
+def ensure_label(repo: str, *, run: GhRunner) -> bool:
+    """Create `dag:needs-human` if absent. An existing label is SUCCESS, not error.
+
+    `gh label create` exits non-zero when the label already exists, which is the
+    steady state — so that specific failure is read as "already there" rather
+    than propagated. Any other failure is reported.
+    """
+    result = run(
+        [
+            "gh",
+            "label",
+            "create",
+            dag_tick.NEEDS_HUMAN_LABEL,
+            "-R",
+            repo,
+            "--color",
+            _LABEL_COLOR,
+            "--description",
+            _LABEL_DESCRIPTION,
+        ]
+    )
+    if result.ok:
+        return True
+    if "already exists" in (result.stderr + result.stdout).lower():
+        return True
+    logger.warning(
+        "dag-project: could not ensure label %s (rc=%s): %s",
+        dag_tick.NEEDS_HUMAN_LABEL,
+        result.rc,
+        result.stderr.strip(),
+    )
+    return False
+
+
+def resolve_target(
+    escalation: Escalation, repo: str, *, run: GhRunner
+) -> tuple[int, str | None]:
+    """Where this escalation actually goes, and a note when that is not its binding.
+
+    The two closed-target arms differ ON PURPOSE (spec §2.2):
+
+    - **The STANDING issue closed** -> reopen it and project. A closed standing
+      escalation issue while escalations exist IS the silence failure, and
+      `docs/receipts/573.md` says only the scheduler transitions state — this is
+      the scheduler.
+    - **A BOUND node's issue closed** -> project to the standing issue instead,
+      naming the closed one. Reopening a work issue is REWORK, whose semantics
+      `575.md` R7 owns (`max_rework` 2, reopen-the-upstream-issue). A projector
+      must not invent them as a side effect of an escalation.
+    """
+    target = escalation.target_issue
+    state = issue_state(target, repo, run=run)
+    if state != "CLOSED":
+        return target, None
+    if escalation.binding is None:
+        reopened = run(["gh", "issue", "reopen", str(target), "-R", repo])
+        if reopened.ok:
+            return target, f"reopened the standing issue #{target}, which was closed"
+        logger.warning("dag-project: could not reopen #%s — projecting anyway", target)
+        return target, f"⚠️ standing issue #{target} is CLOSED and could not be reopened"
+    return (
+        DEFAULT_ESCALATION_ISSUE,
+        f"bound issue #{target} is CLOSED — projected here instead. Reopening a "
+        f"work issue is rework (`575.md` R7), not a projector's call.",
+    )
+
+
+def project_escalation(
+    escalation: Escalation,
+    *,
+    repo: str,
+    run: GhRunner,
+    projected_at: str,
+    seen: dict[int, set[str] | None],
+) -> ProjectionOutcome:
+    """Post one escalation, or skip it, and say which.
+
+    Dedupe is checked against the pre-write SNAPSHOT in `seen`, so two
+    escalations in the same run cannot each read the other's write.
+    """
+    target, note = resolve_target(escalation, repo, run=run)
+    if target not in seen:
+        # `resolve_target` can REDIRECT a bound-but-closed node to the standing
+        # issue, which `project_all` had no reason to pre-read. Read it now
+        # rather than treating an unread target as empty — that would post a
+        # duplicate on every tick.
+        seen[target] = existing_markers(target, repo, run=run)
+    markers = seen[target]
+    key = f"node={escalation.node_id} digest={escalation.digest}"
+    if markers is None:
+        return ProjectionOutcome(escalation.node_id, "skipped-unreadable", target, "")
+    if key in markers:
+        return ProjectionOutcome(escalation.node_id, "skipped-duplicate", target, "")
+    body = render_comment(escalation, projected_at=projected_at)
+    if note:
+        body = f"{body}\n\n⚠️ **Routing note:** {note}"
+    posted = run(
+        ["gh", "issue", "comment", str(target), "-R", repo, "--body", body],
+    )
+    if not posted.ok:
+        return ProjectionOutcome(
+            escalation.node_id, "failed", target, posted.stderr.strip()
+        )
+    labelled = run(
+        [
+            "gh",
+            "issue",
+            "edit",
+            str(target),
+            "-R",
+            repo,
+            "--add-label",
+            dag_tick.NEEDS_HUMAN_LABEL,
+        ]
+    )
+    detail = "" if labelled.ok else "comment posted but the label did not apply"
+    # Record the write against the in-run snapshot so a second escalation with
+    # the same (node, digest) in this run cannot post twice.
+    markers.add(key)
+    return ProjectionOutcome(escalation.node_id, "posted", target, detail)
+
+
+def project_all(
+    escalations: Sequence[Escalation],
+    *,
+    repo: str,
+    run: GhRunner,
+    projected_at: str,
+) -> list[ProjectionOutcome]:
+    """Project every escalation; zero escalations makes ZERO API calls.
+
+    That is asserted rather than incidental: the common case is nothing to do,
+    and a projector that reaches the network when idle can misfire when idle.
+    """
+    if not escalations:
+        return []
+    ensure_label(repo, run=run)
+    targets = {escalation.target_issue for escalation in escalations}
+    seen: dict[int, set[str] | None] = {
+        issue: existing_markers(issue, repo, run=run) for issue in targets
+    }
+    return [
+        project_escalation(
+            escalation, repo=repo, run=run, projected_at=projected_at, seen=seen
+        )
+        for escalation in escalations
+    ]
+
+
+def render_outcomes(outcomes: Sequence[ProjectionOutcome]) -> str:
+    """One operator-facing line per node, plus a total."""
+    if not outcomes:
+        return (
+            "dag-project: 0 escalations — nothing to project, and NO API call was made."
+        )
+    lines = [f"dag-project: {len(outcomes)} escalation(s)"]
+    for outcome in outcomes:
+        suffix = f" ({outcome.detail})" if outcome.detail else ""
+        lines.append(
+            f"  {outcome.action:<20} {outcome.node_id} -> #{outcome.issue}{suffix}"
+        )
+    failed = sum(1 for o in outcomes if o.action == "failed")
+    lines.append(f"  {len(outcomes) - failed} handled, {failed} failed")
+    return "\n".join(lines)
+
+
+def run_project(args: argparse.Namespace) -> int:
+    """CLI entry point.
+
+    **Neither `--dry-run` nor `--write` REFUSES (rc=2), and so does passing
+    both.** Writing to the tracker is outward-facing, so it is never the default
+    a bare invocation falls into — and a command that silently does nothing is
+    how an operator concludes a projection happened when it did not.
+    """
+    if args.dry_run == args.write:
         logger.error(
-            "dag-project: the write path is #602 phase 3 and is NOT implemented — "
-            "re-run with --dry-run. Refusing rather than exiting 0 having done "
-            "nothing, which would read as a successful projection."
+            "dag-project: pass exactly one of --dry-run or --write. Refusing "
+            "rather than guessing: --write posts to the tracker, so it is never "
+            "what a bare invocation falls into."
         )
         return 2
+    jobs_dir = Path(args.jobs_dir).expanduser() if args.jobs_dir else dag_tick.JOBS_DIR
+    escalations = collect_escalations(jobs_dir, stall_after_s=args.stall_after)
     projected_at = args.projected_at or _iso_utc(_now())
-    sys.stdout.write(render_dry_run(escalations, projected_at=projected_at) + "\n")
+    if args.dry_run:
+        sys.stdout.write(render_dry_run(escalations, projected_at=projected_at) + "\n")
+        return 0
+    outcomes = project_all(
+        escalations,
+        repo=args.repo or DEFAULT_REPO,
+        run=default_gh_runner,
+        projected_at=projected_at,
+    )
+    sys.stdout.write(render_outcomes(outcomes) + "\n")
+    return 1 if any(o.action == "failed" for o in outcomes) else 0
     return 0
 
 

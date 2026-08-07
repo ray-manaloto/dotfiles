@@ -608,15 +608,52 @@ only against fixtures it authored proves nothing; these it did not author.
    each mutation kills a different and growing set, which is the health signal
    `tests/AGENTS.md` describes.)
 
-### Phase 3 — the write path
+### Phase 3 — the write path ✅ **DONE 2026-08-07**
 
-Label application, comment posting, marker-based dedupe, closed-target handling
-(§2.2 table). Both arms of every branch tested, per
-`probes-need-a-control-arm.md` rule 2.
+Label application, comment posting, marker-based dedupe, and the §2.2
+closed-target table. The `gh` CLI is a real system boundary, so it is
+**injected** (`GhRunner`) rather than constructed — every test substitutes a
+recorder and none reaches the network.
 
-**Gate:** run twice in a row against a scratch issue; the second run posts
-**nothing**. A dedupe verified only on the first run is a check that can only
-pass.
+**Neither `--dry-run` nor `--write` REFUSES (rc=2), and so does passing both.**
+Writing to the tracker is outward-facing, so it is never what a bare invocation
+falls into.
+
+**Gate — PASSED at the unit level, with one live arm.** Run twice: the first
+posts, the second sees its own marker and posts **nothing** (`gh issue comment`
+absent from the second run's recorded argv). A dedupe verified only on the first
+run is a check that can only pass.
+
+The live arm exercises the REAL `default_gh_runner` and writes nothing: with zero
+escalations, `--write` reported *"NO API call was made"* and #623's comment count
+was unchanged (4 → 4), while the same binary on the fixture produced 2 would-post
+blocks. So the idle path is silent by **measurement**, not by assumption.
+
+⚠️ **What is NOT proven, stated rather than implied: a LIVE two-run against a
+scratch issue.** The dedupe is proven against an injected recorder, which cannot
+catch a mistake in how `gh` itself is invoked — a malformed `--body`, a wrong
+`-R`, an API shape change. Phase 4 (the LaunchAgent) should not be armed until
+that live two-run has happened against a scratch issue with a manufactured
+escalation (`claude --bg --bare` produces one in seconds, §4 phase 2).
+
+Four decisions worth carrying:
+
+- **`None` and `set()` mean OPPOSITE things** when reading a target's existing
+  markers, and the code must not collapse them: empty says *"read it, nothing
+  there, safe to post"*; `None` says *"could not read it"*, and posting then
+  risks a duplicate. Unreadable **SKIPS** — a duplicate escalation is noise a
+  human must sort out, a skip is retried next tick with nothing lost. Reported as
+  a distinct `skipped-unreadable` outcome, never folded into "skipped".
+- **A closed STANDING issue is reopened; a closed BOUND issue is not.** Reopening
+  the standing target is in-bounds (#573: only the scheduler transitions state,
+  and this is the scheduler). Reopening a *work* issue is **rework**, whose
+  semantics `575.md` R7 owns — so a bound-but-closed node falls back to the
+  standing issue with a routing note instead.
+- **An existing label is SUCCESS.** `gh label create` exits non-zero for the
+  steady state, so that one failure is read as "already there" and any other is
+  reported.
+- **The marker regex is anchored on the full HTML comment**, so a comment
+  *discussing* a marker cannot register as one — pinned by a test.
 
 ### Phase 4 — the mise task and the LaunchAgent
 

@@ -734,9 +734,22 @@ def _add_dag_project_subcommand(subparsers: _SubParsers) -> None:
     dag_project_parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Print exactly what would be posted and post nothing. REQUIRED in "
-        "this slice: without it the command refuses rather than exiting 0 "
-        "having done nothing, which would read as a successful projection",
+        help="Print exactly what would be posted and post nothing. Pass exactly "
+        "one of --dry-run or --write: neither (or both) REFUSES rather than "
+        "guessing, because --write is outward-facing and must never be what a "
+        "bare invocation falls into",
+    )
+    dag_project_parser.add_argument(
+        "--write",
+        action="store_true",
+        help="Actually post: ensure the dag:needs-human label, then one "
+        "append-only comment per (node, question), deduped against the target "
+        "issue's existing markers. Mutually exclusive with --dry-run",
+    )
+    dag_project_parser.add_argument(
+        "--repo",
+        default=None,
+        help="owner/repo to project into (default: the tracker this repo uses)",
     )
     dag_project_parser.add_argument(
         "--jobs-dir",
