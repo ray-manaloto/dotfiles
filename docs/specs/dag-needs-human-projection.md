@@ -403,8 +403,20 @@ receive-side gate — `crossSessionInbound` is `["accept","hold","refuse"]`,
 controlling whether an inbound peer message auto-delivers or is held for review —
 and an expanded send-side refusal surface: `reply-only` 1→**11**, `only in reply`
 0→**2**, `recordModelViewOfBridgePeers` 0→**3**, while `bridgeOutboundOnly` held
-at 9/9 and `isBridgeDispatchable` at 2/2. Both axes narrow what a message can do.
-2.1.224 made cross-session messaging **more reviewed, not further-reaching.**
+at 9/9. Both axes narrow what a message can do. 2.1.224 made cross-session
+messaging **more reviewed, not further-reaching.**
+
+⚠️ **`isBridgeDispatchable` (2/2) was cited here as a messaging control arm and
+that was WRONG — it is a SLASH-COMMAND predicate** (`@255903477`, sitting beside
+`isAdvertisedSlashCommand`/`getCommands`). It governs commands, not peer
+delivery. Its flatness across the two versions is therefore not evidence that
+messaging was left alone; it is evidence about an unrelated subsystem. Removed
+rather than silently deleted, because the failure is worth naming: **a control
+arm drawn from the wrong subsystem is worse than no control arm** — a real
+constant, a real measurement, and an inference the numbers cannot support. Same
+shape as the provenance and token-multiplicity defects this spec records
+elsewhere: the datum was true, the *attribution* was not. Caught by the probe
+agent, which flagged it explicitly.
 
 ### 3.2 The two sub-cases
 
