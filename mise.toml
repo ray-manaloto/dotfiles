@@ -1095,3 +1095,45 @@ stderr_path = "~/Library/Logs/dotfiles-dag-tick.err.log"
 # spawns inherit this PATH, and they need mise's own binaries resolvable
 # the same way a `mise run` invocation would find them.
 environment = { PATH = "/Users/rmanaloto/.local/share/mise/shims:/Users/rmanaloto/.local/bin:/opt/homebrew/bin:/usr/bin:/bin" }
+
+# --- #602 phase 4: the tracker projection, on its OWN schedule ---------------
+#
+# Separate from the tick above, and the separation is the design: `575.md` R1
+# assigns projection to the SCHEDULER while the tick is the WATCHDOG, and a tick
+# that labelled directly would put a second writer on the tracker. Keeping them
+# as two agents means #573's pull loop absorbs this one as a phase by re-wiring
+# a LaunchAgent, never by refactoring the watchdog.
+#
+# **300s, not 60s, and that is deliberate.** The watchdog's 60s exists because a
+# crashed process should be recovered fast. A human's QUESTION does not become
+# more answerable at 60s than at 5 minutes, and the tracker is a shared,
+# rate-limited resource. Do not "align" this with the tick.
+#
+# `--write` is passed explicitly because the CLI REFUSES a bare invocation
+# (rc=2): posting to the tracker is outward-facing and must never be what a
+# default falls into. The `--` separates mise's own flags from the task's.
+#
+# ⚠️ Armed only after the LIVE two-run gate passed on 2026-08-07 (scratch issue
+# #629): run 1 posted exactly one comment and applied the label, run 2 skipped as
+# a duplicate and posted NOTHING, and the payload round-tripped verbatim through
+# the real `gh --body`. An injected recorder cannot catch a malformed body or a
+# wrong `-R`; that gate can, and the spec made it the precondition for this block
+# existing. Do not widen this agent's job without re-running it.
+#
+# INERT until a human runs `mise bootstrap macos launchd-agents apply` — never
+# implicit (`.claude/rules/do-not.md`), so a tracked entry cannot surprise CI or
+# a fresh clone.
+[bootstrap.macos.launchd.agents.dotfiles-dag-project]
+program = "~/.local/bin/mise"
+args = ["run", "dag-project", "--", "--write"]
+start_interval = 300
+working_directory = "~/dev/github/ray-manaloto/dotfiles"
+stdout_path = "~/Library/Logs/dotfiles-dag-project.log"
+stderr_path = "~/Library/Logs/dotfiles-dag-project.err.log"
+# Same literal PATH as the tick, and for the same reason: `environment` values
+# are NOT ~-expanded, and `gh` must resolve from the mise shims. Measured under
+# exactly this PATH: `gh auth status` rc=0 via ~/.config/gh/hosts.yml (a `gho_`
+# token with `repo` scope — NOT the shell's GITHUB_TOKEN, which launchd does not
+# inherit), and a live `gh api` call rc=0. That measurement is why this agent
+# needs no credential plumbing of its own.
+environment = { PATH = "/Users/rmanaloto/.local/share/mise/shims:/Users/rmanaloto/.local/bin:/opt/homebrew/bin:/usr/bin:/bin" }
