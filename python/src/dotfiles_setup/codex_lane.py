@@ -8,17 +8,26 @@ repo wrote a ``lane.json``, a ``verdict.json`` or an ``EXIT:`` line — so
 **silent**. Correct by accident rather than wrong, which is the worse failure:
 nothing reports silence. This module is the missing half.
 
-**Why not just call the plugin's ``run-lane.sh``.** ``use-tool-builtins.md``
-requires the justification in writing, and it is a real one rather than a
-preference. The ``fable-orchestrator`` plugin's script was read line by line:
-it ``mktemp``s both its output paths (``:56-57``), so there is no stable run
-directory for a reaper to find; it passes ``--output-last-message`` but never
-``--output-schema``, so the contract would be prompt-enforced — exactly what
-#580 rejected; it writes no lane record at all, so the CAS has no ``owner`` or
-``status`` to verify; and it lives under
-``~/.claude/plugins/marketplaces/``, replaced wholesale on plugin update, so
-none of that could be fixed in a file this repo gates. Three of the four
-artifacts the consumer needs are absent from it by construction.
+**Why not just call the plugin's ``run-lane.sh``** — the justification
+``use-tool-builtins.md`` requires in writing, and **this is its only home**
+(``mise.toml`` and ``suites.toml`` point here rather than restating it; the
+#613 review found three copies, two of them citing that script by line number
+into a file replaced wholesale on plugin update). It is a real reason rather
+than a preference. The ``fable-orchestrator`` plugin's script, read as of
+2026-08-06:
+
+- it ``mktemp``s both its output paths, so there is no stable run directory for
+  a reaper to find;
+- it passes ``--output-last-message`` but never ``--output-schema``, so the
+  contract would be prompt-enforced — exactly what #580 rejected;
+- it writes no lane record at all, so the CAS has no ``owner`` or ``status``
+  to verify.
+
+Three of the four artifacts the consumer needs are absent from it by
+construction. And it lives under ``~/.claude/plugins/marketplaces/``, replaced
+wholesale on plugin update, so none of that could be fixed in a file this repo
+gates. (Line numbers are deliberately omitted: that file is not ours and moves
+under us. Re-read it before trusting this paragraph.)
 
 **What this module deliberately does NOT do.** It does not supervise, retry,
 schedule or project an edge onto the tracker. It launches one lane, settles it,
@@ -44,7 +53,9 @@ directions.
 
 from __future__ import annotations
 
+import fcntl
 import json
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -52,17 +63,31 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from dotfiles_setup import codex_verdict
-from dotfiles_setup.dag_tick import CODEX_LANE_DIRNAME, JOBS_DIR
+from dotfiles_setup.dag_tick import CODEX_LANE_DIRNAME, JOBS_DIR, read_rework_count
 
 if TYPE_CHECKING:
     import argparse
     from collections.abc import Callable, Sequence
 
-# IMPORTED from the consumer, never restated. A duplicated "codex-lane" literal
-# is two sources of one truth, and the drift is silent in the worst direction:
-# the launcher keeps writing to a directory the reaper stopped scanning, and
-# every lane goes quiet. Same reasoning as `write_schema` deriving the schema
-# file from the Python dict rather than tracking a second copy.
+# ⭐ EVERY value both halves compare on is IMPORTED from the consumer, never
+# restated. A second copy is two sources of one truth and it drifts SILENTLY in
+# the worst direction — a wrong dirname means the reaper stops scanning where the
+# launcher writes; a wrong status means the CAS answers STATUS_MISMATCH, which is
+# `Edge.NONE`, which the tick drops unless `--verbose`. Both end in every lane
+# going quiet, which is the exact #613 failure mode.
+#
+# The status was a LOCAL COPY until the #613 review caught it: this module
+# argued the invariant for the dirname in five lines of comment and then broke
+# it eighteen lines later for `"in_progress"`. Same drift, same silence.
+#
+# ⚠️ It is referenced as `codex_verdict.IN_PROGRESS` AT THE CALL SITE rather
+# than aliased here, and that is not style. An alias would still be one
+# assignment holding one value, and a test cannot tell an alias from a restated
+# literal: CPython INTERNS identifier-like string constants, so
+# `alias is codex_verdict.IN_PROGRESS` is True either way. Measured — the
+# identity test written for this in the first pass survived a mutation that
+# restated the literal, i.e. it could only pass. Attribute access at call time
+# leaves no second copy for the two to disagree about.
 LANE_DIRNAME = CODEX_LANE_DIRNAME
 
 # `--output-schema` needs a FILE, and the file is derived from
@@ -73,6 +98,8 @@ CODEX_BIN = "codex"
 # A review lane reads code and returns a judgement; it must not write. One of
 # the three values `codex exec --sandbox` accepts on 0.146.0, and the one
 # `.claude/rules/ai-cli-invocation.md` prescribes for the research/debate shape.
+# An INVARIANT, not a knob — inlined into the argv rather than exposed as a
+# parameter no caller ever overrode.
 READ_ONLY_SANDBOX = "read-only"
 
 # Recorded when the LAUNCHER failed before `codex` returned a code of its own —
@@ -80,8 +107,6 @@ READ_ONLY_SANDBOX = "read-only"
 # is recorded: an unsettled lane is invisible forever, a settled one with no
 # verdict escalates on the next tick.
 LAUNCHER_FAILED_EXIT = 70
-
-_IN_PROGRESS = "in_progress"
 
 # Everything :func:`codex_verdict.lane_is_settled` looks at, plus both halves of
 # the idempotency pair the CAS reads. A relaunch must start from none of them.
@@ -122,7 +147,9 @@ def lane_run_dir(jobs_dir: Path, node_id: str) -> Path:
     return jobs_dir / node_id / LANE_DIRNAME
 
 
-def prepare_lane(jobs_dir: Path, node_id: str, *, rework_count: int = 0) -> Path:
+def prepare_lane(
+    jobs_dir: Path, node_id: str, *, rework_count: int | None = None
+) -> Path:
     """Create the run directory and write everything the consumer reads.
 
     Three artifacts, and each has a distinct reader:
@@ -145,20 +172,46 @@ def prepare_lane(jobs_dir: Path, node_id: str, *, rework_count: int = 0) -> Path
     "no ``verdict.json`` but a ``verdict.processed.json``" as ALREADY_PROCESSED,
     a no-op edge, so a failed round 2 would report nothing instead of escalating.
 
+    ⚠️ **All of that happens under the REAPER'S OWN LOCK.** Clearing an
+    unlocked run directory races :func:`codex_verdict.reap`, which takes an
+    exclusive ``flock`` on ``.reap.lock`` precisely so "two ticks cannot both
+    consume one verdict" — but a lock only excludes writers that take it. The
+    losing interleaving is concrete and it corrupts a GOOD outcome: a tick
+    passes the liveness gate (outside the lock, by design), acquires the lock,
+    and is inside ``_read_payload`` when a relaunch unlinks ``verdict.json``
+    from under it. The reap then answers ``file_missing`` -> ``needs_human`` for
+    a lane that had approved. Found by the #613 review, not in production.
+
+    ⚠️ **``rework_count`` defaults to INHERITING the previous round's value**,
+    not to 0. A relaunch rewrites the very file that holds the count, so a 0
+    default silently reset #573's budget on every round and the loop
+    ``max_rework`` exists to bound could never terminate. Passing an explicit
+    int overrides. Who *increments* it is deliberately not decided here — that
+    is the supervisor's call and #573 owns the counter; this only guarantees the
+    producer never destroys it.
+
     Args:
         jobs_dir: The jobs root the tick scans.
         node_id: The background node that owns this lane.
-        rework_count: How many revise/reject rounds this unit has already had.
+        rework_count: Rounds already spent, or ``None`` to carry forward
+            whatever the previous round recorded (0 for a fresh lane).
 
     Returns:
         The prepared run directory.
     """
     run_dir = lane_run_dir(jobs_dir, node_id)
     run_dir.mkdir(parents=True, exist_ok=True)
-    for name in _STALE_ARTIFACTS:
-        (run_dir / name).unlink(missing_ok=True)
-    write_lane_record(run_dir, node_id, rework_count=rework_count)
-    codex_verdict.write_schema(run_dir / SCHEMA_FILENAME)
+    lock_path = run_dir / codex_verdict.LOCK_FILENAME
+    # "a", not "w": "w" truncates on open, zeroing the lockfile out from under a
+    # process that already holds it (flock is advisory) — the same reasoning as
+    # `codex_verdict.reap` and `dag_tick.try_acquire_lock`.
+    with lock_path.open("a") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        carried = read_rework_count(run_dir) if rework_count is None else rework_count
+        for name in _STALE_ARTIFACTS:
+            (run_dir / name).unlink(missing_ok=True)
+        write_lane_record(run_dir, node_id, rework_count=carried)
+        codex_verdict.write_schema(run_dir / SCHEMA_FILENAME)
     return run_dir
 
 
@@ -182,7 +235,7 @@ def write_lane_record(run_dir: Path, node_id: str, *, rework_count: int) -> Path
         json.dumps(
             {
                 "owner": node_id,
-                "status": _IN_PROGRESS,
+                "status": codex_verdict.IN_PROGRESS,
                 "rework_count": rework_count,
             },
             indent=2,
@@ -192,12 +245,7 @@ def write_lane_record(run_dir: Path, node_id: str, *, rework_count: int) -> Path
     return path
 
 
-def build_codex_argv(
-    run_dir: Path,
-    *,
-    sandbox: str = READ_ONLY_SANDBOX,
-    model: str | None = None,
-) -> list[str]:
+def build_codex_argv(run_dir: Path, *, model: str | None = None) -> list[str]:
     """The `codex exec` invocation, with BOTH output flags.
 
     Verified against the real ``codex-cli 0.146.0`` binary's ``exec --help``,
@@ -213,9 +261,12 @@ def build_codex_argv(
     output is its verdict, and a persisted session would accumulate one
     transcript per review round forever.
 
+    :data:`READ_ONLY_SANDBOX` is inlined rather than exposed as a parameter: it
+    is an invariant of a review lane, not a knob, and a parameter no caller ever
+    overrides is an abstraction for a need that does not exist (#613 review).
+
     Args:
         run_dir: The prepared lane directory, whose paths the flags point at.
-        sandbox: The ``--sandbox`` policy; read-only for a review lane.
         model: Optional ``--model`` override; omitted so codex's own configured
             default applies.
 
@@ -227,7 +278,7 @@ def build_codex_argv(
         "exec",
         "--ephemeral",
         "--sandbox",
-        sandbox,
+        READ_ONLY_SANDBOX,
         "--output-schema",
         str(run_dir / SCHEMA_FILENAME),
         "-o",
@@ -273,6 +324,14 @@ def run_codex(argv: Sequence[str], *, prompt: str, cwd: Path) -> int:
     read it, and capturing it would invite teeing it into ``lane.log`` — see
     the warning on :func:`record_exit` for why that breaks the liveness gate.
 
+    ``codex`` is resolved through ``PATH`` before the spawn so a missing binary
+    escalates with a legible reason. It escalates either way — a bare
+    ``FileNotFoundError`` is a ``BaseException``, so :func:`launch_lane` settles
+    the lane and the next tick reports ``needs_human`` — but an operator reading
+    that line needs to see "the CLI is not on PATH" rather than a review that
+    appears to have failed. `codex` is pinned host-only in `mise.toml`, so under
+    ``mise run codex-lane`` the shim is present and under launchd it may not be.
+
     Args:
         argv: The invocation from :func:`build_codex_argv`.
         prompt: The review prompt, written to stdin.
@@ -281,7 +340,16 @@ def run_codex(argv: Sequence[str], *, prompt: str, cwd: Path) -> int:
 
     Returns:
         Codex's exit code.
+
+    Raises:
+        FileNotFoundError: When ``codex`` is not on ``PATH``.
     """
+    if shutil.which(argv[0]) is None:
+        message = (
+            f"{argv[0]!r} is not on PATH — it is pinned host-only in mise.toml, "
+            "so a launchd or cron context may not carry mise's shims"
+        )
+        raise FileNotFoundError(message)
     completed = subprocess.run(
         list(argv),
         input=prompt,
@@ -300,12 +368,16 @@ class LaneRequest:
     :class:`dag_tick.TickContext`'s injection seam (#578 respec round 3): the
     CLI builds one of these and tests construct one directly, so nothing
     downstream needs monkeypatching and the signature stays readable.
+
+    ``rework_count`` defaults to ``None`` = *carry forward whatever the previous
+    round recorded*. A 0 default silently reset #573's budget on every relaunch —
+    see :func:`prepare_lane`.
     """
 
     node_id: str
     prompt: str
     cwd: Path
-    rework_count: int = 0
+    rework_count: int | None = None
     model: str | None = None
 
 
@@ -373,6 +445,40 @@ def read_prompt(prompt_file: Path | None) -> str:
     return prompt_file.read_text() if prompt_file is not None else sys.stdin.read()
 
 
+def warn_if_node_unknown(jobs_dir: Path, node_id: str) -> bool:
+    """Warn when ``node_id`` has no job directory — a typo is otherwise SILENT.
+
+    :func:`dag_tick.reap_codex_lanes` iterates the CENSUS, not the filesystem
+    (``dag_tick.py``: ``for classified in classified_nodes``), so it only ever
+    looks at nodes the ``claude`` daemon reports. Meanwhile
+    :func:`prepare_lane` does ``mkdir(parents=True)``. Together those mean
+    ``--node nod-abc123`` cheerfully creates a lane, burns a **paid** ``codex
+    exec`` into it, settles it — and no tick ever looks there. No error, no
+    edge, no line. That is precisely the silence #613 was filed about, so the
+    producer must not reproduce it.
+
+    A WARNING and not a hard failure: the job directory is created by the
+    daemon, and a caller launching a lane for a node that is starting up is a
+    legitimate race this must not break. It is on stderr so a launchd log keeps
+    it, and it returns its verdict so callers can test the discrimination.
+
+    Args:
+        jobs_dir: The jobs root the tick scans.
+        node_id: The node id to check.
+
+    Returns:
+        True when a warning was emitted (the node dir did not exist).
+    """
+    if (jobs_dir / node_id).is_dir():
+        return False
+    sys.stderr.write(
+        f"codex-lane: WARNING {node_id!r} has no job directory under {jobs_dir} "
+        "— the tick reaps the census, not the filesystem, so if this id is a "
+        "typo the lane will be launched, paid for, and never read\n"
+    )
+    return True
+
+
 def run_lane_cli(args: argparse.Namespace) -> int:
     """`dotfiles-setup codex-lane`: launch one review lane and settle it.
 
@@ -400,8 +506,10 @@ def run_lane_cli(args: argparse.Namespace) -> int:
             "lane with nothing to review burns a call and escalates\n"
         )
         return 2
+    jobs_dir = args.jobs_dir or JOBS_DIR
+    warn_if_node_unknown(jobs_dir, args.node)
     result = launch_lane(
-        args.jobs_dir or JOBS_DIR,
+        jobs_dir,
         LaneRequest(
             node_id=args.node,
             prompt=prompt,

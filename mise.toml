@@ -532,12 +532,11 @@ description = "Launch one Codex review lane for a node (#613): write the lane re
 # that ticket shipped a complete reaper and nothing wrote its inputs, so
 # `reap_codex_lanes` found no run directory for any node and was SILENT.
 #
-# NOT a wrapper around the fable-orchestrator plugin's run-lane.sh: that script
-# mktemps both output paths (no stable run dir for a reaper to find), never
-# passes --output-schema (the contract would be prompt-enforced, which #580
-# explicitly rejected), writes no lane record for the CAS to verify, and lives
-# under ~/.claude/plugins/marketplaces/ where a plugin update replaces it — so
-# it is not a file this repo can gate.
+# NOT a wrapper around the fable-orchestrator plugin's run-lane.sh. The full
+# justification `use-tool-builtins.md` requires lives ONCE, in the codex_lane
+# module docstring — not restated here, because the #613 review found it written
+# out in three files, two carrying a line-number citation into a script that is
+# replaced wholesale on plugin update.
 #
 #   mise run codex-lane -- --node <id> --prompt-file review.md
 #   git diff | mise run codex-lane -- --node <id>     # prompt via stdin

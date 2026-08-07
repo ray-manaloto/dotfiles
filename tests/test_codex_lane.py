@@ -23,8 +23,11 @@ gated behind the ``codex_exec`` marker because it costs credits.
 
 from __future__ import annotations
 
+import ast
+import fcntl
 import json
 import sys
+import threading
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -130,8 +133,61 @@ def test_prepare_lane_writes_the_facts_the_cas_verifies(tmp_path: Path) -> None:
     run_dir = cl.prepare_lane(tmp_path, NODE_ID, rework_count=3)
     lane = json.loads((run_dir / cv.LANE_FILENAME).read_text())
     assert lane["owner"] == NODE_ID
-    assert lane["status"] == "in_progress"
+    # Against the CONSUMER's constant, never a restated "in_progress" literal —
+    # this file's own opening principle, which the first draft broke here.
+    assert lane["status"] == cv.IN_PROGRESS
     assert lane["rework_count"] == 3
+
+
+def test_the_producer_does_not_restate_the_consumers_status(tmp_path: Path) -> None:
+    """The status the CAS compares must come FROM the consumer, like the dirname.
+
+    ⭐ The #613 review's strongest finding, and both axes found it
+    independently: the module argued this invariant in five lines of comment for
+    ``"codex-lane"`` and then broke it eighteen lines later for
+    ``"in_progress"``. The drift is identically silent — divergence makes every
+    lane STATUS_MISMATCH, which is `Edge.NONE`, which the tick drops unless
+    `--verbose`.
+
+    ⚠️ **Asserted over the module's AST, and both halves of that are deliberate.**
+
+    Not by identity: ``cl.IN_PROGRESS is cv.IN_PROGRESS`` is a check that can
+    ONLY PASS, because CPython interns identifier-like string constants — a
+    restated ``"in_progress"`` is the very same object as the consumer's. That
+    assertion was written first and it survived the mutation that restates the
+    literal, which is how this was caught.
+
+    Not by grepping the text either: the first source-level version matched the
+    COMMENT that explains this very invariant. Parsing drops comments entirely
+    and lets docstrings be excluded by position, so the AST asks the only
+    question that matters — does any *executable* expression in this module
+    carry its own copy of the consumer's value?
+    """
+    tree = ast.parse(Path(cl.__file__).read_text())
+    docstrings = {
+        node.body[0].value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Module | ast.FunctionDef | ast.ClassDef)
+        and node.body
+        and isinstance(node.body[0], ast.Expr)
+        and isinstance(node.body[0].value, ast.Constant)
+    }
+    restated = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant)
+        and node.value == cv.IN_PROGRESS
+        and node not in docstrings
+    ]
+    assert not restated, (
+        f"the producer restated the consumer's status literal at line(s) "
+        f"{[n.lineno for n in restated]} — reference codex_verdict.IN_PROGRESS"
+    )
+
+    lane = json.loads(
+        (cl.prepare_lane(tmp_path, NODE_ID) / cv.LANE_FILENAME).read_text()
+    )
+    assert lane["status"] == cv.IN_PROGRESS
 
 
 def test_the_written_status_is_the_one_the_cas_demands(tmp_path: Path) -> None:
@@ -249,6 +305,78 @@ def test_prepare_lane_clears_a_consumed_verdict_from_the_previous_round(
     result = cv.reap(run_dir, expected_owner=NODE_ID, rework_count=1, max_rework=2)
     assert result.outcome is cv.ReapOutcome.FILE_MISSING
     assert result.edge is cv.Edge.NEEDS_HUMAN
+
+
+def test_a_relaunch_carries_the_previous_rounds_rework_count(tmp_path: Path) -> None:
+    """⭐ A relaunch must not silently reset #573's budget.
+
+    `prepare_lane` rewrites the very file that holds the count, so a 0 default
+    destroyed it on every round: a `revise` reopens implement, the supervisor
+    relaunches, the counter goes back to 0, and the loop `max_rework` exists to
+    bound never terminates. Found by the #613 review; the round-trip test could
+    not see it, because that test supplies the count itself.
+    """
+    cl.prepare_lane(tmp_path, NODE_ID, rework_count=2)
+    run_dir = cl.prepare_lane(tmp_path, NODE_ID)
+    assert dag_tick.read_rework_count(run_dir) == 2
+
+
+def test_an_explicit_rework_count_still_overrides(tmp_path: Path) -> None:
+    """Control for the carry-forward: an explicit value is not ignored.
+
+    Without this, the test above would pass on a `prepare_lane` that had
+    stopped honouring its argument entirely.
+    """
+    cl.prepare_lane(tmp_path, NODE_ID, rework_count=2)
+    run_dir = cl.prepare_lane(tmp_path, NODE_ID, rework_count=0)
+    assert dag_tick.read_rework_count(run_dir) == 0
+
+
+def test_a_fresh_lane_starts_at_zero(tmp_path: Path) -> None:
+    """And carrying forward from nothing is 0, not an error."""
+    assert dag_tick.read_rework_count(cl.prepare_lane(tmp_path, NODE_ID)) == 0
+
+
+# ----------------------------------------------- the reaper's lock, honoured
+
+
+def test_prepare_lane_waits_for_the_reapers_lock(tmp_path: Path) -> None:
+    """⭐ Clearing an UNLOCKED run dir races the reaper and corrupts a good edge.
+
+    `codex_verdict.reap` does everything under an exclusive flock on
+    `.reap.lock` so "two ticks cannot both consume one verdict" — but a lock
+    only excludes writers that take it. The losing interleaving found by the
+    #613 review: a tick passes the liveness gate (outside the lock, by design),
+    acquires the lock, and is inside `_read_payload` when a relaunch unlinks
+    `verdict.json` from under it. The reap then answers `file_missing` ->
+    `needs_human` for a lane that had APPROVED.
+
+    Driven against the REAL lock file the reaper uses, from a second thread.
+    The negative assertion is the safe direction: if the lock works the thread
+    can never proceed while this test holds it, so a slow machine cannot make
+    this flake — it can only make it pass for the wrong reason, which the
+    post-release assertion then catches.
+    """
+    run_dir = cl.prepare_lane(tmp_path, NODE_ID, rework_count=7)
+    started = threading.Event()
+    done = threading.Event()
+
+    def relaunch() -> None:
+        started.set()
+        cl.prepare_lane(tmp_path, NODE_ID, rework_count=0)
+        done.set()
+
+    with (run_dir / cv.LOCK_FILENAME).open("a") as held:
+        fcntl.flock(held.fileno(), fcntl.LOCK_EX)
+        worker = threading.Thread(target=relaunch)
+        worker.start()
+        started.wait(timeout=5)
+        assert not done.wait(timeout=0.5), "prepare_lane ran without the lock"
+        assert dag_tick.read_rework_count(run_dir) == 7, "lane rewritten under us"
+
+    worker.join(timeout=10)
+    assert done.is_set(), "prepare_lane never completed after the lock released"
+    assert dag_tick.read_rework_count(run_dir) == 0
 
 
 # ------------------------------------------------------ the invocation form
@@ -563,6 +691,28 @@ def test_the_tick_arm_is_armed(tmp_path: Path) -> None:
         state_age_s=1.0,
     )
     assert dag_tick.reap_codex_lanes([classified], ctx) == []
+
+
+def test_a_node_with_no_job_directory_is_warned_about(tmp_path: Path) -> None:
+    """⭐ A typo'd `--node` would otherwise be paid for and never read.
+
+    `reap_codex_lanes` iterates the CENSUS, not the filesystem, while
+    `prepare_lane` does `mkdir(parents=True)`. Together, `--node nod-abc123`
+    creates a lane, burns a real `codex exec` into it, settles it, and no tick
+    ever looks there — no error, no edge, no line. That is the exact silence
+    #613 was filed about, which the producer must not reproduce (#613 review).
+    """
+    assert cl.warn_if_node_unknown(tmp_path, "typo-node") is True
+
+
+def test_the_unknown_node_warning_discriminates(tmp_path: Path) -> None:
+    """Control: a node that DOES have a job directory is not warned about.
+
+    Without this, the test above passes on a function that warns
+    unconditionally — which would train an operator to ignore it.
+    """
+    (tmp_path / NODE_ID).mkdir()
+    assert cl.warn_if_node_unknown(tmp_path, NODE_ID) is False
 
 
 def _tick_context(jobs_dir: Path) -> dag_tick.TickContext:

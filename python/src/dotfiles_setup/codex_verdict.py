@@ -88,7 +88,13 @@ LANE_LOG_FILENAME = "lane.log"
 _EXIT_LINE_PREFIX = "EXIT: "
 LOCK_FILENAME = ".reap.lock"
 
-_IN_PROGRESS = "in_progress"
+# PUBLIC because the producer must write exactly what this CAS compares
+# against, and a second copy over there would drift silently: divergence makes
+# every lane STATUS_MISMATCH -> Edge.NONE, which `reap_codex_lanes` drops unless
+# `--verbose`. Every lane goes quiet — the #613 failure mode, reintroduced
+# through the one constant that was not shared. `codex_lane` imports this.
+IN_PROGRESS = "in_progress"
+# Private: nothing outside this module writes a reaped lane.
 _REAPED = "reaped"
 
 
@@ -454,11 +460,11 @@ def _cas_check(
             "verdict was already consumed by an earlier reap",
         )
     status = lane.get("status")
-    if status != _IN_PROGRESS:
+    if status != IN_PROGRESS:
         return ReapResult(
             ReapOutcome.STATUS_MISMATCH,
             OUTCOME_EDGES[ReapOutcome.STATUS_MISMATCH],
-            f"lane status is {status!r}, not {_IN_PROGRESS!r} — left intact",
+            f"lane status is {status!r}, not {IN_PROGRESS!r} — left intact",
         )
     return None
 
