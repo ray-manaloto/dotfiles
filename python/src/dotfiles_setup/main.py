@@ -850,10 +850,12 @@ def _add_codex_lane_subcommand(subparsers: _SubParsers) -> None:
         type=int,
         default=None,
         help="Rounds this unit of work has already spent, recorded in the "
-        "lane record and bounded by dag-tick's --max-rework (#573). Omit to "
-        "CARRY FORWARD the previous round's count — a relaunch rewrites the "
-        "very file that holds it, so defaulting to 0 would silently reset the "
-        "budget and the loop --max-rework bounds could never terminate",
+        "lane record and bounded by dag-tick's --max-rework (#573). Omit for "
+        "the normal path: CARRY FORWARD the previous round's count and CHARGE "
+        "a round when that round's verdict was revise/reject (#616). A "
+        "relaunch rewrites the very file that holds the count, so defaulting "
+        "to 0 would silently reset the budget; never charging would leave it "
+        "unspendable. An explicit value is taken as stated, not incremented",
     )
     parser.add_argument(
         "--model",

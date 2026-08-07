@@ -291,6 +291,44 @@ def test_the_rework_bound_is_a_single_equivalence_class() -> None:
     assert set(by_cell) == set(itertools.product(cv.Verdict, _BOUND_SIDES))
 
 
+@pytest.mark.parametrize("verdict", list(cv.Verdict))
+def test_the_charged_verdicts_are_exactly_the_bounded_ones(
+    verdict: cv.Verdict,
+) -> None:
+    """⭐ `demands_rework` must agree with the bound it feeds (#616).
+
+    The producer charges a rework round for the verdicts this answers True to;
+    `edge_for` escalates the verdicts it bounds. If those two sets ever
+    disagree the loop breaks in one of two silent ways: a verdict charged but
+    never bounded spends a budget nothing enforces, and a verdict bounded but
+    never charged makes `max_rework` UNREACHABLE — which is #616 itself.
+
+    So the assertion is set equality, derived on both sides rather than
+    restated as `{REVISE, REJECT}`. A literal here would be the third copy of
+    the fact, and the one that decides which of the other two is wrong.
+
+    The `max_rework=0` arm is what makes the right-hand side a real
+    measurement: with an already-spent budget, `edge_for` answers
+    `needs_human` for precisely the verdicts it bounds and leaves the rest
+    alone.
+    """
+    spent = cv.edge_for(verdict, rework_count=0, max_rework=0)
+    assert cv.demands_rework(verdict) is (spent is cv.Edge.NEEDS_HUMAN)
+
+
+def test_the_charge_predicate_discriminates() -> None:
+    """Control arm: `demands_rework` is not a constant.
+
+    Parametrised per-verdict above, so a predicate stuck at True (or at False)
+    would fail some rows and pass others — but only if the verdict set really
+    contains both kinds. This pins that, so the test above cannot go vacuous
+    if `Verdict` ever loses a member.
+    """
+    charged = {v for v in cv.Verdict if cv.demands_rework(v)}
+    assert charged, "nothing is ever charged — the budget can never be spent"
+    assert charged != set(cv.Verdict), "everything is charged — approve would be too"
+
+
 # ------------------------------------------------------------------- reaper
 
 

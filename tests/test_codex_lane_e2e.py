@@ -11,17 +11,27 @@ and #613 exists because nothing wrote its inputs. Every #580 test passed because
 its fixtures wrote the artifacts the code reads — a closed loop touching nothing
 real (``probes-need-a-control-arm.md`` rule 8: arm the FIXTURE, not just the
 probe). ``tests/test_codex_lane.py`` closes most of that by driving the real
-reaper, but it still substitutes the ``codex`` process. Exactly one question
-survives that substitution, and only a real call can answer it:
+reaper, but it still substitutes the ``codex`` process. Two questions survive
+that substitution, and only a real call can answer either:
 
-    Does `codex exec --output-schema` actually make the provider return a
-    payload this contract accepts?
+1. Does `codex exec --output-schema` actually make the provider return a
+   payload this contract accepts?
 
-Every guarantee credited to *provider* enforcement rests on that, and nothing
-short of the real binary tests it. If this file goes red while
-``test_codex_lane.py`` stays green, the answer changed — the flag's behaviour,
-the schema dialect it accepts, or the model's compliance — and the fix is here,
-not in the consumer.
+   Every guarantee credited to *provider* enforcement rests on that, and
+   nothing short of the real binary tests it. If this file goes red while
+   ``test_codex_lane.py`` stays green, the answer changed — the flag's
+   behaviour, the schema dialect it accepts, or the model's compliance — and
+   the fix is here, not in the consumer.
+
+2. Does a REAL `revise` payload drive the loop to its bound? (#616)
+
+   Added when the producer learned to spend #573's budget. The arithmetic
+   itself is pinned for free in ``test_codex_lane.py``, so what this buys is
+   narrow and worth stating exactly: that the thing the increment reads is a
+   payload a real provider wrote, and that a second launch into an
+   already-used run directory behaves the same way against the real binary as
+   against the injected runner. Ray's #616 ruling asked for it because every
+   other assertion about the bound supplies the count by hand.
 """
 
 from __future__ import annotations
@@ -30,6 +40,7 @@ import json
 import shutil
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -57,11 +68,16 @@ _PROMPT = (
 )
 
 
-def _request(node_id: str = NODE_ID) -> cl.LaneRequest:
-    """One real lane's inputs, run from the repo root so codex's git check passes."""
+def _request(node_id: str = NODE_ID, prompt: str = _PROMPT) -> cl.LaneRequest:
+    """One real lane's inputs, run from the repo root so codex's git check passes.
+
+    ``rework_count`` is left at its ``None`` default deliberately: that is the
+    carry-forward-and-charge path (#616), and pinning it here would make every
+    lane state its own count — the shape #613 was filed to stop.
+    """
     return cl.LaneRequest(
         node_id=node_id,
-        prompt=_PROMPT,
+        prompt=prompt,
         cwd=Path(__file__).parent.parent,
     )
 
@@ -204,6 +220,101 @@ def _tick_context(jobs_dir: Path) -> dag_tick.TickContext:
         dry_run=False,
         verbose=False,
     )
+
+
+@dataclass(frozen=True)
+class _Round:
+    """One round of the real rework loop: what the producer wrote, what came back."""
+
+    count: int
+    outcome: cv.ReapOutcome
+    edge: cv.Edge
+
+
+# Mirrors `_PROMPT` in shape and for the same reason — the subject under test is
+# the COUNTER, not the model's judgement, so the change under review must be
+# unambiguously wrong and the verdict named outright.
+_REVISE_PROMPT = (
+    "You are a code reviewer returning a structured verdict.\n"
+    "The change under review is: `return a - b` in a function documented as "
+    "'returns the sum of a and b'.\n"
+    "It is wrong and needs another pass. Respond with verdict `revise`.\n"
+)
+
+# The SMALLEST budget a real increment can trip, and that is why it is 1 rather
+# than dag_tick's default of 2: round 1 spends the single allowed rework round,
+# round 2 finds it spent. A larger value proves nothing extra and costs one paid
+# `codex exec` per extra round — this file's stated reason for being small.
+_E2E_MAX_REWORK = 1
+REWORK_NODE_ID = "e2e-rework-node"
+
+
+@pytest.fixture(scope="module")
+def rework_loop(tmp_path_factory: pytest.TempPathFactory) -> list[_Round]:
+    """⭐⭐ TWO real `codex exec` calls, relaunched into the SAME run directory.
+
+    The #616 arm. Launch -> reap -> relaunch -> reap, with nothing substituted:
+    the real producer decides the count, a real model writes the verdict, the
+    real reaper consumes it and applies the bound. Ray's #616 ruling asked for
+    exactly this, because everything else asserting the bound supplies the
+    count by hand — and a test that supplies the value it is checking cannot
+    see that nothing produces it (#613's whole thesis).
+
+    Relaunching into the same run directory is not incidental, it IS the
+    subject: the increment's only evidence is the previous round's
+    `verdict.processed.json`, which lives there and nowhere else.
+
+    Module-scoped so the two assertions below share one pair of paid calls.
+    """
+    _require_codex()
+    jobs_dir = tmp_path_factory.mktemp("codex-lane-rework")
+    rounds: list[_Round] = []
+    for _round in range(_E2E_MAX_REWORK + 1):
+        launched = cl.launch_lane(jobs_dir, _request(REWORK_NODE_ID, _REVISE_PROMPT))
+        count = dag_tick.read_rework_count(launched.run_dir)
+        reaped = cv.reap(
+            launched.run_dir,
+            expected_owner=REWORK_NODE_ID,
+            rework_count=count,
+            max_rework=_E2E_MAX_REWORK,
+        )
+        rounds.append(_Round(count=count, outcome=reaped.outcome, edge=reaped.edge))
+    return rounds
+
+
+def test_a_real_revise_verdict_makes_the_producer_spend_a_round(
+    rework_loop: list[_Round],
+) -> None:
+    """The count rose because a REAL verdict said it should.
+
+    The outcome assertion comes first on purpose: if the model declined to
+    return `revise`, that is a prompt problem and it must not be reported as a
+    counter defect. Only once both rounds really are `revise` does the count
+    sequence mean anything.
+    """
+    assert [r.outcome for r in rework_loop] == [cv.ReapOutcome.REVISE] * len(
+        rework_loop
+    ), "the model did not return `revise` — the prompt, not the counter, is at fault"
+    assert [r.count for r in rework_loop] == [0, 1], (
+        "the producer did not charge a rework round for a real revise verdict"
+    )
+
+
+def test_a_real_revise_loop_escalates_to_needs_human(
+    rework_loop: list[_Round],
+) -> None:
+    """⭐ #573's budget, spent end to end, for the first time.
+
+    The control arm is inside the sequence rather than beside it: round 1
+    returns a REOPEN edge under the SAME `max_rework` that escalates round 2.
+    So `needs_human` is reachable only because the count actually rose — a
+    producer that never incremented yields `[reopen, reopen]`, and a bound that
+    was simply off-by-one would escalate round 1 too.
+    """
+    assert [r.edge for r in rework_loop] == [
+        cv.Edge.REOPEN_IMPLEMENT,
+        cv.Edge.NEEDS_HUMAN,
+    ]
 
 
 def test_the_schema_file_is_one_codex_accepts(
