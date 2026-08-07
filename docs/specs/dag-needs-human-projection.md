@@ -655,13 +655,39 @@ Four decisions worth carrying:
 - **The marker regex is anchored on the full HTML comment**, so a comment
   *discussing* a marker cannot register as one — pinned by a test.
 
-### Phase 4 — the mise task and the LaunchAgent
+### Phase 4 — the mise task and the LaunchAgent ✅ **DONE 2026-08-07**
 
-`[tasks.dag-project]` + `[bootstrap.macos.launchd.agents.dotfiles-dag-project]`,
-`start_interval = 300`, same literal `~/.local/bin/mise` program path and explicit
-`environment` PATH as the tick (the `mise`-is-a-zsh-function trap). **Inert until
-a human runs `mise bootstrap macos launchd-agents apply`** — never implicit
-(`do-not.md`).
+The task landed in phase 2 (see there for why). This phase adds
+`[bootstrap.macos.launchd.agents.dotfiles-dag-project]`: `start_interval = 300`,
+the literal `~/.local/bin/mise` program path (the `mise`-is-a-zsh-function trap),
+the same explicit `environment` PATH as the tick, and `--write` passed
+**explicitly** because a bare invocation refuses. **INERT until a human runs
+`mise bootstrap macos launchd-agents apply`** — never implicit (`do-not.md`).
+
+It is a SECOND agent rather than a phase inside the tick, and that is the design:
+R1 assigns projection to the scheduler while the tick is the watchdog, so #573's
+loop absorbs this by re-wiring a LaunchAgent rather than refactoring the watchdog.
+300s not 60s — a human's question does not become more answerable at 60s, and the
+tracker is a shared rate-limited resource.
+
+**The precondition this spec set is MET.** The live two-run ran against scratch
+issue #629 on 2026-08-07:
+
+| Run | Outcome | Comments on #629 |
+|---|---|---|
+| 1 | `posted 0ecc0cb5 -> #629`, `dag:needs-human` applied | **1** |
+| 2 | `skipped-duplicate` | **1** — posted nothing |
+
+The escalation was **manufactured** (`claude --bg --bare` → `blocked` +
+`needs: "login required — run /login"`, §4 phase 2), and the node was stopped and
+removed before the gate ran, so nothing in `~/.claude/jobs/` was touched. The
+posted comment round-tripped through the real `gh --body`: payload verbatim
+inside its fence, marker intact, the **BOUND** path taken (a `dag-binding.json`
+pointed it at #629, so the bound branch is live-proven too), the reason string
+verbatim, and the em-dash preserved. Scratch issue closed.
+
+That is exactly what an injected recorder cannot check — a malformed `--body`, a
+wrong `-R`, an API shape change — which is why it was the gate.
 
 ### Phase 5 — the binding, written at dispatch
 

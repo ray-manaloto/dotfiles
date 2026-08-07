@@ -84,6 +84,19 @@ MANIFEST = "python/verification/suites.toml"
 # (in 11 of those, the sole stand-in was a COMMENT). The 8 below are genuine.
 AMBIGUITY_ALLOWED: dict[tuple[str, str, str], str] = {
     (
+        "workflow.dag-tick-wiring",
+        "mise.toml",
+        'program = "~/.local/bin/mise"',
+    ): (
+        "two LaunchAgents now declare it — the watchdog tick (#578) and the "
+        "tracker projection (#602 phase 4) — and BOTH must use the literal "
+        "binary path, because `mise` is a zsh function launchd cannot exec. The "
+        "multiplicity IS the assertion, exactly like the lockfile header above: "
+        "binding one site would stop the gate noticing if the OTHER agent "
+        "regressed to the bare name. Each agent's identity is separately pinned "
+        "by its own unique `args = [...]` token."
+    ),
+    (
         "build.locked-install-with-conda-sha",
         ".devcontainer/mise-system.lock",
         "[conda-packages.linux-x64",
