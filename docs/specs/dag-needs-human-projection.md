@@ -571,39 +571,42 @@ fine* — it just is not the payload. The gate only became real when it was
 restated as a **byte comparison against the source**. A rendering check cannot
 detect a fidelity loss that renders nicely.
 
-### Phase 2 — `dag_project.py`, read-only
+### Phase 2 — `dag_project.py`, read-only ✅ **DONE 2026-08-07**
 
-`--dry-run` prints exactly what it would post and posts nothing. Reuses
-`dag_tick`'s predicates per §2.1 invariant 1.
+`--dry-run` prints exactly what it would post and posts nothing; a run WITHOUT it
+**refuses (rc=2)** rather than exiting 0 having done nothing, which would read as
+a successful projection. Reuses `dag_tick`'s predicates per §2.1 invariant 1 —
+`node_from_state`, `is_needs_human`, `normalize_needs`, `is_stalled`, all by
+import. Bound by the new `workflow.dag-projection-wiring` contract, whose FAIL
+arm was proven by deleting the delegation call site.
 
-**Gate:** `--dry-run` output is byte-identical to the phase-1 hand-written
-comments, modulo the timestamp — a projector verified only against fixtures it
-authored has proven nothing.
+⚠️ **The mise task landed HERE, not in phase 4, and the spec is corrected rather
+than left disagreeing with the tree.** `mise-tasks-only.md` says a recurring
+workflow ships its task WITH it, or every invocation is the hand-rolled `uv run`
+that rule exists to prevent. Phase 4 still owns the **LaunchAgent** — the
+schedule, not the verb.
 
-⚠️ **Both phase-1 nodes were `claude rm`'d on 2026-08-07** (their work resolved:
-`ad8baf35` moot, `fdfdaf90`'s proposal filed as #625). Their full `state.json`
-records are preserved verbatim in the #623 comments. **This does NOT weaken the
-gate, and the reason is a measurement, not a hope:**
+**Gate — PASSED, and it was a real control arm.** `--dry-run` was run against a
+fixture of the two real payloads and compared to the comments **already live on
+#623**, which were hand-written before this module existed: marker present in
+both, and all 3 fenced payload blocks reproduced exactly. A projector verified
+only against fixtures it authored proves nothing; these it did not author.
 
-> **A real escalation is MANUFACTURABLE on demand, in seconds.**
-> `claude --bg --bare "<any prompt>"` spawns a background node that lands
-> immediately in `state="blocked"` with `needs: "login required — run /login"`
-> and no `queuedPrompt` — because `--bare` skips keychain reads, so the session
-> has no credentials. Measured 2026-08-07 while reviving the daemon; the node
-> satisfied `is_needs_human()` on the first read.
+**Two defects the gate caught that no test would have:**
 
-That is **better** than the removed files, not a degraded substitute: the
-`state.json` is written by **the harness's own writer**, so it carries whatever
-fields that writer emits at the current CLI version — which a hand-authored
-fixture cannot promise and would silently drift from. Phase 2 should therefore
-build its fixture by spawning one, reading it, and stopping it, rather than by
-transcribing a payload.
-
-**A third R5 data point fell out of it.** `"login required — run /login"` also
-fails R5 — it names no exhausted alternative. That is now **3 of 3** independent
-harness-native payloads `UNVALIDATED`, from three different CLI versions
-(2.1.207, 2.1.217, 2.1.224), which is stronger support for §2.4's structural
-predicate than the two cases the decision was originally made on.
+1. **The mtime was wrong, and `updatedAt` was right.** The fixture was built with
+   `cp`, so the projector reported the day of the COPY as the node's last update
+   while `updatedAt` still held the real one three weeks earlier. Fixed in the
+   CODE, not the fixture: **`updatedAt` is authoritative, the file mtime is the
+   fallback**, and a disagreement between them is reported rather than hidden —
+   it means something that is not the harness touched the file. A timestamp a
+   file operation can rewrite is not a measurement of when a human was asked.
+2. **`git checkout --` cannot restore an UNTRACKED file.** Four mutation arms ran
+   against the new module and every restore silently failed, so the mutations
+   accumulated and the "restored" run was still broken. `git add` the file before
+   mutation-testing it. (The blast radii are still good data: 2 / 3 / 4 / 6 —
+   each mutation kills a different and growing set, which is the health signal
+   `tests/AGENTS.md` describes.)
 
 ### Phase 3 — the write path
 

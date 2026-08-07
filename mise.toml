@@ -525,6 +525,23 @@ description = "launchd watchdog tick (#578): census this repo's background agent
 #   mise run dag-tick -- --dry-run --verbose   # manual, read-only preview
 run = 'uv run --project python dotfiles-setup dag-tick'
 
+[tasks.dag-project]
+description = "Project NEEDS_HUMAN nodes to the tracker (#602): the dag:needs-human label + one append-only escalation comment per (node, question). PHASE 2 is --dry-run ONLY — the write path is phase 3"
+# Thin caller (zero-bash-logic); logic in
+# python/src/dotfiles_setup/dag_project.py. The SCHEDULER'S first slice, not a
+# watchdog feature: `docs/receipts/575.md` R1 assigns projection to the
+# scheduler, one direction only, and a tick that labelled directly would put a
+# second writer on the tracker.
+#
+# The task lands in phase 2 rather than phase 4 as the spec first sequenced it,
+# and the reason is `mise-tasks-only.md`: a recurring workflow ships its task
+# WITH it, or every invocation is the hand-rolled `uv run` the rule exists to
+# prevent. What phase 4 still owns is the LaunchAgent — the schedule, not the
+# verb. The spec is updated to match rather than left disagreeing with the tree.
+#
+#   mise run dag-project -- --dry-run    # the only supported mode in this slice
+run = 'uv run --project python dotfiles-setup dag-project'
+
 [tasks.codex-lane]
 description = "Launch one Codex review lane for a node (#613): write the lane record + verdict schema, run `codex exec` with BOTH --output-schema and -o, settle the lane for dag-tick's reaper"
 # Thin caller (zero-bash-logic); logic in
