@@ -30,7 +30,9 @@ evidence.
 | M5 | **Exactly two live escalations exist**, both `blocked ∧ needs ∧ ¬queuedPrompt`, both `tempo=blocked`. | enumerated `~/.claude/jobs/*/state.json` | 8 job dirs read, 6 non-matching — the filter discriminates |
 | M6 | **Neither live payload names what was exhausted** ⇒ both fail #575 R5. | read verbatim (§2.2) | — |
 | M7 | **2.1.224 added no new delivery route to a blocked node** (§3). | byte-diff of the 2.1.223 and 2.1.224 bundles: every delivery term identical | `crossSessionInbound` 0→18, `peer-send-message` 0→10 on the same command — the probe can produce a delta, and produces none here |
-| M8 | **Neither the `dag:needs-human` label nor a standing escalation issue exists yet.** Both are phase-1 work. | `gh label list` → no `dag:*` label (only `needs-triage`, `needs-info`); `gh issue list --state open` → no escalation issue | 23 labels and 137 open issues returned by the same commands, so neither probe is blind |
+| M8 | **Neither the `dag:needs-human` label nor a standing escalation issue existed** before phase 1. | `gh label list` → no `dag:*` label (only `needs-triage`, `needs-info`); `gh issue list --state open` → no escalation issue | 23 labels and 137 open issues returned by the same commands, so neither probe is blind |
+| M9 | **A real NEEDS_HUMAN node is manufacturable in seconds** — `claude --bg --bare` lands in `blocked` + `needs: "login required — run /login"` (§4 phase 2). | spawned one 2026-08-07; it satisfied `is_needs_human()` on first read | the same `claude agents --json` census showed the two interactive rows as `busy`, not `blocked` — the probe distinguishes the states |
+| M10 | **`claude rm` requires a live daemon, and its error text misattributes the cause.** It says *"the background service may be restarting"* when the supervisor has been dead for days. | `roster.json`'s `supervisorPid` 42939 → `ProcessLookupError`; `~/.claude/daemon/dispatch/` empty; three `claude rm` attempts refused. Spawning any `--bg` session revives it (new PID 50245) and `rm` then succeeds rc=0 | the liveness probe reported the shell's own PID as ALIVE, so it discriminates; and after the fix, `rm` removed exactly the two named nodes while an untargeted node stayed present |
 
 ⚠️ **TWO wrong claims were made during this pass and corrected by evidence.
 Recorded, because both would otherwise read as facts — and the second is the more
@@ -574,9 +576,34 @@ detect a fidelity loss that renders nicely.
 `--dry-run` prints exactly what it would post and posts nothing. Reuses
 `dag_tick`'s predicates per §2.1 invariant 1.
 
-**Gate:** `--dry-run` output for the two live nodes is byte-identical to the
-phase-1 hand-written comments, modulo the timestamp. That is the control arm — a
-projector verified only against fixtures it authored has proven nothing.
+**Gate:** `--dry-run` output is byte-identical to the phase-1 hand-written
+comments, modulo the timestamp — a projector verified only against fixtures it
+authored has proven nothing.
+
+⚠️ **Both phase-1 nodes were `claude rm`'d on 2026-08-07** (their work resolved:
+`ad8baf35` moot, `fdfdaf90`'s proposal filed as #625). Their full `state.json`
+records are preserved verbatim in the #623 comments. **This does NOT weaken the
+gate, and the reason is a measurement, not a hope:**
+
+> **A real escalation is MANUFACTURABLE on demand, in seconds.**
+> `claude --bg --bare "<any prompt>"` spawns a background node that lands
+> immediately in `state="blocked"` with `needs: "login required — run /login"`
+> and no `queuedPrompt` — because `--bare` skips keychain reads, so the session
+> has no credentials. Measured 2026-08-07 while reviving the daemon; the node
+> satisfied `is_needs_human()` on the first read.
+
+That is **better** than the removed files, not a degraded substitute: the
+`state.json` is written by **the harness's own writer**, so it carries whatever
+fields that writer emits at the current CLI version — which a hand-authored
+fixture cannot promise and would silently drift from. Phase 2 should therefore
+build its fixture by spawning one, reading it, and stopping it, rather than by
+transcribing a payload.
+
+**A third R5 data point fell out of it.** `"login required — run /login"` also
+fails R5 — it names no exhausted alternative. That is now **3 of 3** independent
+harness-native payloads `UNVALIDATED`, from three different CLI versions
+(2.1.207, 2.1.217, 2.1.224), which is stronger support for §2.4's structural
+predicate than the two cases the decision was originally made on.
 
 ### Phase 3 — the write path
 
@@ -643,6 +670,15 @@ from phases 1–4 is complete without it.
 6. **`_needs_human_reason()` is reproduced verbatim into a GitHub comment**, so
    the golden-equality test now indirectly pins operator-facing tracker content.
    That is intended, and worth knowing before someone "improves" the string.
+7. ⚠️ **An escalated node whose daemon has died cannot be cleaned up by any
+   automated path — and that is not this spec's to fix.** `claude rm` needs the
+   daemon socket (M10), and `dag_tick` deliberately never acts on a NEEDS_HUMAN
+   node, which is the whole of #601. So the class of node most likely to go
+   stale is exactly the class nothing can remove. Both phase-1 nodes hit this;
+   the manual cure is to spawn any `--bg` session, which revives the supervisor.
+   **This belongs with #590 (stall recovery), not #602** — a projector that
+   started removing nodes would stop being one-directional. Recorded here because
+   #602's own phase 1 is where it surfaced.
 
 ---
 
