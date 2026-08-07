@@ -61,7 +61,7 @@ judgement call at the call site.
    `tests/test_hook_guard.py`.
 2. **ship/land `hook-selfcheck` gate** — `mise run ship` / `land` run
    `dotfiles-setup hook selfcheck` (`hook_selfcheck.py`) as an always-run gate
-   driving the WIRED guard end-to-end: settings.json wiring + `Bash` matcher,
+   driving the WIRED guard end-to-end: settings.json wiring + the five-tool matcher,
    **every hook command anchored to `$CLAUDE_PROJECT_DIR`**, the real wrapper
    denying from **both** the project root and a foreign cwd (#343), and `bash
    -n` on the scripts. A hook regression fails a PR like lint/pytest.

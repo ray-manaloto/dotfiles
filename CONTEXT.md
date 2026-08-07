@@ -56,7 +56,7 @@ Durable; never silently dropped. Gated by `mise run verify-local`.
 | **zero-skip** | No warning/error is ever dismissed. A suppression needs explicit approval. |
 | **zero-bash-logic** | Non-trivial logic lives in `python/`; bash is thin check/smoke wrappers only. Enforced by `bash_budget.py` (allowlist + per-file line budget). |
 | **the stub** | Root `CLAUDE.md` — byte-exactly `@AGENTS.md\n`. Enforced by `claude_md_import_stub`. `.claude/**` is exempt. |
-| **bypass / blocked / pre_rule** | `mise run command-audit` classes. Only **bypass** (matched a live rule AND ran) is an alarm. Measured: **0 bypasses, ever.** |
+| **bypass / blocked / pre_rule** | `mise run command-audit` classes. Only **bypass** (matched a live rule AND ran) is an alarm. ⚠️ The old "0 bypasses, ever" is RETIRED — #343 found **125** commands that bypassed the guard by never reaching it, and until #601's close-out the scan saw 214 of 2,176 transcripts (everything it missed was subagent activity). |
 
 ## Terms we deliberately do NOT use
 

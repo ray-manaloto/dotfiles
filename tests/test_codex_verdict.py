@@ -11,6 +11,7 @@ would be a check that can only pass.
 
 from __future__ import annotations
 
+import itertools
 import json
 import sys
 from pathlib import Path
@@ -19,6 +20,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
+from dotfiles_setup import classifier_tables
 from dotfiles_setup import codex_verdict as cv
 
 # --------------------------------------------------------------- the schema
@@ -160,6 +162,32 @@ def test_parse_preserves_the_rationale() -> None:
 # #575 R7: approve -> advance, revise -> reopen implement, reject -> reopen
 # research, all bounded by #573's max_rework 2 -> dag:needs-human.
 
+# The table's axes, IN COLUMN ORDER — the single place they are written down.
+# `test_edge_table_axes_match_the_registry` binds these names to
+# `classifier_tables.REGISTRY`, which DERIVES the real axis set from
+# `edge_for()` itself. Restating the axes locally is exactly how a real axis
+# went missing from BOTH the code's enumeration and the table's in #601.
+#
+# ⚠️ `rework_count` and `max_rework` are two PARAMETERS but ONE question:
+# `edge_for` asks `rework_count >= max_rework` and nothing else of either, so
+# neither has a standalone partition — only the PAIR does. Both are therefore
+# crossed as the two sides of that single boolean, which is why this table has
+# 3 x 2 meaningful cells rather than 3 x N x M. That modelling decision is
+# ARMED by `test_the_rework_bound_is_a_single_equivalence_class` below: if any
+# two numbers on the same side of the bound disagreed, a real axis would be
+# hiding inside the projection — the #601 defect wearing a different hat.
+_BOUND_SIDES: tuple[bool, ...] = (False, True)  # rework_count >= max_rework
+
+_AXIS_VALUES: dict[str, tuple[object, ...]] = {
+    "verdict": tuple(cv.Verdict),
+    "rework_count": _BOUND_SIDES,
+    "max_rework": _BOUND_SIDES,
+}
+
+# Nothing is held constant: all three axes are finitely modellable, and pinning
+# a modellable axis is the move `illegal_pin` exists to refuse.
+_PINNED_AXES: frozenset[str] = frozenset()
+
 _EDGE_TABLE: list[tuple[cv.Verdict, int, int, cv.Edge]] = [
     # verdict, rework_count, max_rework, expected edge
     (cv.Verdict.APPROVE, 0, 2, cv.Edge.ADVANCE),
@@ -220,6 +248,47 @@ def test_edge_table_reaches_every_edge_a_verdict_can_produce() -> None:
 def test_every_verdict_appears_in_the_edge_table() -> None:
     """Adding a fourth verdict without mapping it must fail HERE, not in prod."""
     assert {row[0] for row in _EDGE_TABLE} == set(cv.Verdict)
+
+
+def test_edge_table_axes_match_the_registry() -> None:
+    """The table's axis list must equal the one DERIVED from `edge_for()`.
+
+    The meta-test the other three structurally could not be: they all judge
+    this table AGAINST ITSELF. An axis `edge_for` reads but the table never
+    heard of is invisible to the edge-reachability check and to the
+    every-verdict check alike — both pass on a table that is internally
+    perfect and externally short a column. That is `tempo` in #601 round 7.
+
+    `edge_for` was found by `classifier_tables`' `unlisted` scan on first
+    contact with this branch, not by a human: it shipped after the gate was
+    written, and the two met at the merge. `_EDGE_TABLE` already existed; what
+    was missing is this binding.
+    """
+    spec = classifier_tables.REGISTRY["dotfiles_setup.codex_verdict:edge_for"]
+    assert tuple(_AXIS_VALUES) == ("verdict", "rework_count", "max_rework")
+    assert frozenset(_AXIS_VALUES) == spec.axes
+    assert frozenset(spec.pinned_axes) == _PINNED_AXES
+    assert frozenset(_AXIS_VALUES) | _PINNED_AXES == spec.declared()
+
+
+def test_the_rework_bound_is_a_single_equivalence_class() -> None:
+    """ARMS THE MODELLING DECISION: the two numbers really are ONE boolean.
+
+    `_AXIS_VALUES` crosses `rework_count`/`max_rework` as the two sides of
+    `rework_count >= max_rework`, which is honest only if nothing else about
+    the numbers changes the answer. Every row sharing a verdict AND a side of
+    the bound must therefore share an edge; if any pair disagreed, a real axis
+    would be hiding inside the projection.
+
+    The second assertion is the control arm — without it the first is vacuous,
+    since a table that never wrote down both sides of the bound would satisfy
+    "no cell disagrees" while proving nothing.
+    """
+    by_cell: dict[tuple[cv.Verdict, bool], set[cv.Edge]] = {}
+    for verdict, rework_count, max_rework, edge in _EDGE_TABLE:
+        by_cell.setdefault((verdict, rework_count >= max_rework), set()).add(edge)
+    assert all(len(edges) == 1 for edges in by_cell.values())
+    assert set(by_cell) == set(itertools.product(cv.Verdict, _BOUND_SIDES))
 
 
 # ------------------------------------------------------------------- reaper

@@ -249,6 +249,34 @@ local allSteps = new Mapping<String, Config.Step> {
     check = "uv run --project python dotfiles-setup bash-budget"
   }
 
+  // Classifier axis enumeration (#601 close-out). DERIVES each registered
+  // classifier's real axis set from its own code — the classifier's params
+  // plus every subject field any predicate it calls reads, transitively — and
+  // rejects a declaration that omits one, or that PINS an axis able to decide
+  // a class the truth table does not declare out of scope. #601 lost four of
+  // its seven adversarial review rounds to exactly two instances of that:
+  // `is_needs_human` omitting `queued_prompt` (which `is_terminal` two
+  // functions above already read), and the first truth table omitting `tempo`
+  // on the false premise that it "only matters for WEDGED".
+  //
+  // The glob covers all THREE files that must move together — the registry,
+  // the classifier, and the truth table — because an edit to any one of them
+  // can invalidate the other two. It names BOTH registered classifiers: a glob
+  // listing only dag_tick would leave branch_guard's entry unwatched, which is
+  // the same "declared but nothing makes it hold" shape the step exists to
+  // reject. Logic lives in python (`classifier_tables`), so this step stays a
+  // thin wrapper, same as `bash_logic_budget`.
+  ["classifier_axes"] {
+    glob = List(
+      "python/src/dotfiles_setup/classifier_tables.py",
+      "python/src/dotfiles_setup/dag_tick.py",
+      "python/src/dotfiles_setup/branch_guard.py",
+      "tests/test_dag_tick.py",
+      "tests/test_branch_guard.py"
+    )
+    check = "uv run --project python dotfiles-setup classifier-axes"
+  }
+
   // Rejects a committed environment dump. Deliberately NOT scoped by glob:
   // an `env` dump can land in any tracked file, and the paths most likely to
   // receive one (the tracked agent-artifact trees) are exactly the ones

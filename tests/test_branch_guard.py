@@ -11,13 +11,15 @@ deny path is a check that can only pass.
 
 from __future__ import annotations
 
+import itertools
 import json
 import os
 import subprocess
+from collections import Counter
 from pathlib import Path
 
 import pytest
-from dotfiles_setup import branch_guard, hook_guard
+from dotfiles_setup import branch_guard, classifier_tables, hook_guard
 
 _PROJECT_ROOT = Path(__file__).parent.parent.absolute()
 _WRAPPER = _PROJECT_ROOT / "scripts" / "pretooluse-guard.sh"
@@ -347,31 +349,128 @@ def test_a_denied_write_costs_two_git_calls(remote_repo: Path, tmp_path: Path) -
 # function's own branching — a tautological test would pass by construction.
 
 
-@pytest.mark.parametrize(
-    ("code", "lines", "expected"),
-    [
-        # every fact present — the common path
-        (0, ["/repo", "main", "origin/main"], branch_guard.CombinedResult.RESOLVED),
-        # rc 0, wrong shape: a repository IS established, so the permissive
-        # reading is the wrong one. This is the case the review caught.
-        (0, ["/repo", "main"], branch_guard.CombinedResult.FALL_BACK),
-        (0, [], branch_guard.CombinedResult.FALL_BACK),
-        (
-            0,
-            ["/repo", "main", "origin/main", "extra"],
-            branch_guard.CombinedResult.FALL_BACK,
-        ),
-        # `--quiet --verify` says the ref does not resolve
-        (1, ["/repo", "main"], branch_guard.CombinedResult.FALL_BACK),
-        # not a repository / unborn HEAD / bare repo
-        (128, [], branch_guard.CombinedResult.NO_REPOSITORY),
-        (128, ["/repo", "HEAD"], branch_guard.CombinedResult.NO_REPOSITORY),
-    ],
-)
-def test_classify_routes_each_combined_result(
-    code: int, lines: list[str], expected: branch_guard.CombinedResult
+# THE COMPLETE TRUTH TABLE. This replaced 7 SAMPLED cases, and the enumeration
+# immediately found TWO cells nobody had written down: `(code=1, exact count)`
+# and `(code=128, exact count)`. Neither is a defect — the code answers both
+# correctly — but "unenumerated" is exactly the state #601's three HIGH findings
+# lived in, and the point of a table is that nobody has to notice.
+#
+# TWO AXES, both crossed as the FINITE PARTITION the code actually reads:
+#   `code`  — compared against exactly two values, so THREE classes.
+#   `lines` — asked exactly one question (`len(lines) == _COMBINED_FACT_COUNT`),
+#             so a BOOLEAN. Same convention `test_dag_tick.py` uses for `needs`.
+# 3 x 2 = 6 cells. `_AXIS_VALUES` is bound to `classifier_tables.REGISTRY`
+# below, which derives the real axis set from `classify()` itself.
+#
+# Every expected value is derived from the SPEC of the case, not read off a run
+# — a table transcribed from behaviour asserts only that the code does what it
+# does (`tests/AGENTS.md`, tautological tests).
+
+_RC_OK = 0
+_RC_UNRESOLVED_REF = 1  # `--quiet --verify` says the ref does not resolve
+_RC_NO_REPO = 128  # not a repository / unborn HEAD / bare repo
+
+# Exactly `_COMBINED_FACT_COUNT` lines: worktree root, branch, advertised default.
+_EXACT_FACTS = ["/repo", "main", "origin/main"]
+# The real 2-line shape an unborn-HEAD repo produces (measured, git 2.50.1).
+_WRONG_COUNT_FACTS = ["/repo", "main"]
+
+_AXIS_VALUES: dict[str, tuple[object, ...]] = {
+    "code": (_RC_OK, _RC_UNRESOLVED_REF, _RC_NO_REPO),
+    "lines": (False, True),  # False = wrong fact count, True = exactly the count
+}
+_PINNED_AXES: frozenset[str] = frozenset()
+
+_COMBINED_TABLE: list[tuple[int, bool, branch_guard.CombinedResult]] = [
+    # rc 0 + every fact present — the common path, and the point.
+    (_RC_OK, True, branch_guard.CombinedResult.RESOLVED),
+    # rc 0, wrong shape: a repository IS established, so the permissive
+    # reading is the wrong one. This is the case the #527 review caught, and
+    # the one whose docstring claims no real git can produce it — enumerated
+    # anyway, because the branch exists to survive a git that breaks that.
+    (_RC_OK, False, branch_guard.CombinedResult.FALL_BACK),
+    # rc 1 — the ref did not resolve. The line count is not consulted on this
+    # path at all, so both cells are FALL_BACK. The `True` cell was one of the
+    # two the sampled version never wrote down.
+    (_RC_UNRESOLVED_REF, True, branch_guard.CombinedResult.FALL_BACK),
+    (_RC_UNRESOLVED_REF, False, branch_guard.CombinedResult.FALL_BACK),
+    # anything else — no usable repository. Line count not consulted either.
+    # The `True` cell was the other one never written down.
+    (_RC_NO_REPO, True, branch_guard.CombinedResult.NO_REPOSITORY),
+    (_RC_NO_REPO, False, branch_guard.CombinedResult.NO_REPOSITORY),
+]
+
+# Derived from the PREDICATES, not counted off the table above — two
+# independent derivations that can only agree if both are right:
+#   RESOLVED      = code==0 ∧ exact                     -> 1*1 = 1
+#   FALL_BACK     = (code==0 ∧ ¬exact) + (code==1 ∧ any) -> 1+2 = 3
+#   NO_REPOSITORY = code==other ∧ any                    -> 1*2 = 2
+_EXPECTED_COMBINED_COUNTS = {
+    branch_guard.CombinedResult.RESOLVED: 1,
+    branch_guard.CombinedResult.FALL_BACK: 3,
+    branch_guard.CombinedResult.NO_REPOSITORY: 2,
+}
+
+
+@pytest.mark.parametrize("row", _COMBINED_TABLE)
+def test_classify_complete_combined_table(
+    row: tuple[int, bool, branch_guard.CombinedResult],
 ) -> None:
+    """Every (code-class, fact-count) combination, exhaustively."""
+    code, exact_count, expected = row
+    lines = _EXACT_FACTS if exact_count else _WRONG_COUNT_FACTS
     assert branch_guard.classify(code, lines) is expected
+
+
+def test_combined_table_is_exhaustive() -> None:
+    """The table must COVER the cross product, not sample it."""
+    expected_cells = set(itertools.product(*_AXIS_VALUES.values()))
+    covered = {row[: len(_AXIS_VALUES)] for row in _COMBINED_TABLE}
+    assert covered == expected_cells
+    assert len(_COMBINED_TABLE) == len(expected_cells) == 6
+
+
+def test_combined_table_mapping_matches_the_predicates() -> None:
+    """Per-class counts constrain the MAPPING, not merely the coverage."""
+    assert dict(Counter(row[2] for row in _COMBINED_TABLE)) == (
+        _EXPECTED_COMBINED_COUNTS
+    )
+    assert sum(_EXPECTED_COMBINED_COUNTS.values()) == 6
+
+
+def test_combined_table_reaches_every_class() -> None:
+    """Guards a table that enumerates cells but exercises one answer."""
+    assert {row[2] for row in _COMBINED_TABLE} == set(branch_guard.CombinedResult)
+
+
+def test_combined_table_axes_match_the_registry() -> None:
+    """The table's axes must equal the ones DERIVED from `classify()`.
+
+    `branch_guard.classify` was found by the `unlisted` scan, not by a human —
+    it is the second classifier in the repo and had no truth table at all.
+    """
+    spec = classifier_tables.REGISTRY["dotfiles_setup.branch_guard:classify"]
+    assert tuple(_AXIS_VALUES) == ("code", "lines")
+    assert frozenset(_AXIS_VALUES) == spec.axes
+    assert frozenset(spec.pinned_axes) == _PINNED_AXES
+    assert frozenset(_AXIS_VALUES) | _PINNED_AXES == spec.declared()
+
+
+@pytest.mark.parametrize(
+    "lines", [[], ["/repo"], ["/repo", "main"], ["a", "b", "c", "d"]]
+)
+def test_wrong_fact_count_is_a_single_equivalence_class(lines: list[str]) -> None:
+    """ARMS THE MODELLING DECISION: `lines` really is a boolean axis.
+
+    The table crosses `lines` as "exact count or not", which is only honest if
+    every non-exact length behaves identically. Nothing else about the list —
+    content, order, whether it is short or LONG — may change the answer. Four
+    lengths (0, 1, 2, 4) must all give FALL_BACK under rc 0; if any did not,
+    the boolean projection would be hiding a real axis, which is the #601
+    defect wearing a different hat.
+    """
+    assert branch_guard.classify(_RC_OK, lines) is branch_guard.CombinedResult.FALL_BACK
+    assert len(lines) != len(_EXACT_FACTS)
 
 
 def test_an_unborn_head_repo_is_allowed_at_one_git_call(tmp_path: Path) -> None:

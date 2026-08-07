@@ -55,8 +55,8 @@ the file:line anchors the implementing session needs. Three incidents:
    doubt, persist.
 5. **Clear-prep audits coverage.** The `/clear-prep` skill enumerates the
    session's agent launches and requires each findings-bearing one to map
-   to an on-disk artifact (or an explicit N/A note in the handoff) before
-   the resume prompt is printed.
+   **both its brief and its report** to an on-disk artifact (or an explicit
+   N/A note in the handoff) before the resume prompt is printed.
 
 ## Applies to
 
