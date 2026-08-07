@@ -303,6 +303,35 @@ def edge_for(verdict: Verdict, *, rework_count: int, max_rework: int) -> Edge:
     return Edge.REOPEN_IMPLEMENT if verdict is Verdict.REVISE else Edge.REOPEN_RESEARCH
 
 
+def demands_rework(verdict: Verdict) -> bool:
+    """Does this verdict send the unit of work back around the loop?
+
+    The question the PRODUCER asks of the round it is replacing before deciding
+    whether the relaunch spends one of #573's rework rounds — see
+    :func:`codex_lane.previous_round_was_rework`, which is the only caller and
+    the reason this exists (#616).
+
+    ⭐ **Derived by ASKING :func:`edge_for`, never by restating
+    ``{REVISE, REJECT}``.** Two copies of "which verdicts are rework" drift
+    silently and in the worst direction: the incrementer stops counting a
+    verdict the bound still bounds, ``rework_count`` stops rising, and
+    ``max_rework`` quietly becomes unreachable — which is #616 itself,
+    reintroduced through the one constant that was not shared. Same anti-drift
+    reasoning that makes ``codex_lane`` IMPORT ``CODEX_LANE_DIRNAME`` rather
+    than restate ``"codex-lane"``.
+
+    The budget it asks with is deliberately UNSPENT (0 of 1) so the bound
+    cannot fire: what is being classified is the verdict, not whether this
+    particular lane has rounds left.
+
+    Written as "not ADVANCE" rather than "one of the two reopen edges" so that
+    a future non-advancing edge counts as rework by default. That direction
+    escalates SOONER, which is the safe one for an unattended loop; the
+    opposite default would let a newly-added edge run forever.
+    """
+    return edge_for(verdict, rework_count=0, max_rework=1) is not Edge.ADVANCE
+
+
 def lane_is_settled(run_dir: Path) -> bool:
     """The default liveness gate: has the lane finished writing?
 

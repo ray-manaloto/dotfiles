@@ -35,7 +35,15 @@ and returns. Projection is the scheduler's job, one direction only
 (``docs/receipts/575.md`` R1, #602); ``reap_codex_lanes`` reports the edge as
 DECIDED, never applied, and this module keeps that boundary intact.
 
-⚠️ **Two invariants here are load-bearing and easy to "fix" back:**
+**It DOES now spend #573's rework budget, and that is a boundary #613 drew and
+#616 deliberately re-crossed** — the exception to the paragraph above, called
+out here so it is not mistaken for drift. The full argument (the supervisor
+does not exist, and no component outside this lock *can* increment atomically)
+is written once, in :func:`prepare_lane`'s docstring. Note what it is not: this
+still decides nothing about *whether* to relaunch, only what the count is when
+someone does.
+
+⚠️ **Three invariants here are load-bearing and easy to "fix" back:**
 
 1. **``lane.log`` carries LAUNCHER writes only, never the model's output.** The
    liveness gate is a substring test for ``EXIT: `` over that file's whole
@@ -46,9 +54,15 @@ DECIDED, never applied, and this module keeps that boundary intact.
 2. **:func:`prepare_lane` CLEARS the previous round's settled signals.** A
    rework relaunch into a dirty run directory would be reaped instantly, before
    the new run wrote anything, because round 1's ``EXIT:`` line is still there.
+3. **The rework increment reads the consumed verdict BEFORE that clearing loop
+   runs.** The two are three lines apart and the order is the whole mechanism:
+   the file being read is one of the files being cleared, so reading first is
+   what charges the round, and clearing second is what makes charging it
+   idempotent. Moving the increment below the loop — the obvious tidy-up, since
+   both touch the same directory — silently reverts #616.
 
-Both are pinned by tests in ``tests/test_codex_lane.py``, control-armed in both
-directions.
+All three are pinned by tests in ``tests/test_codex_lane.py``, control-armed in
+both directions.
 """
 
 from __future__ import annotations
@@ -147,6 +161,43 @@ def lane_run_dir(jobs_dir: Path, node_id: str) -> Path:
     return jobs_dir / node_id / LANE_DIRNAME
 
 
+def previous_round_was_rework(run_dir: Path) -> bool:
+    """Did the round this relaunch replaces end in a verdict demanding rework?
+
+    The increment rule for #573's budget (#616), and its evidence is the
+    reaper's own consumed payload. ``verdict.processed.json`` exists exactly
+    when a verdict was READ and turned into an edge — so it is the record that
+    a rework round actually completed, which is the thing being counted.
+
+    ⚠️ **A verdict that was written but never REAPED is deliberately not
+    counted.** ``verdict.json`` alone means no edge was decided, so no relaunch
+    was decided either; counting it would charge a round to a lane whose result
+    nobody has read yet.
+
+    ⚠️ **Absent, unreadable, or contract-breaking reads as "no"**, matching
+    :func:`dag_tick.read_rework_count`'s permissive direction and for the same
+    reason: the failure that leaves an unparsable payload is ``parse_failed``,
+    which already maps to ``needs_human``, so the automatic loop never
+    relaunches from it. A human who relaunches anyway is making a fresh
+    decision, not spending a rework round — and the alternative (assume the
+    worst on every unreadable byte) escalates lanes that never reworked at all.
+
+    Args:
+        run_dir: The lane's run directory, still holding the previous round's
+            consumed verdict — :func:`prepare_lane` clears it moments later,
+            under the same lock.
+
+    Returns:
+        True when the previous round's verdict demanded another round.
+    """
+    try:
+        raw = (run_dir / codex_verdict.PROCESSED_FILENAME).read_text()
+    except OSError:
+        return False
+    parsed, _why = codex_verdict.parse_verdict(raw)
+    return parsed is not None and codex_verdict.demands_rework(parsed.verdict)
+
+
 def prepare_lane(
     jobs_dir: Path, node_id: str, *, rework_count: int | None = None
 ) -> Path:
@@ -186,15 +237,47 @@ def prepare_lane(
     not to 0. A relaunch rewrites the very file that holds the count, so a 0
     default silently reset #573's budget on every round and the loop
     ``max_rework`` exists to bound could never terminate. Passing an explicit
-    int overrides. Who *increments* it is deliberately not decided here — that
-    is the supervisor's call and #573 owns the counter; this only guarantees the
-    producer never destroys it.
+    int overrides, and an explicit int is taken AS STATED — never incremented
+    on top of.
+
+    ⭐ **And it INCREMENTS (#616), which deliberately re-crosses a boundary
+    #613 drew.** #613 called incrementing "the supervisor's call" and left it
+    out on purpose. That was the right scope for #613 and it is the wrong
+    owner, for two reasons, and the second is the durable one:
+
+    1. **The supervisor does not exist.** Nothing in this package consumes the
+       edge — :func:`dag_tick.reap_codex_lanes` only PRINTS it, and its own
+       output string says so ("edge is DECIDED here, not applied — tracker
+       projection is #602"). So "the supervisor increments" resolved to nobody
+       incrementing, which is #616: the budget could be written and read and
+       bounded against, and never spent.
+    2. **No other component CAN do it correctly.** The evidence an increment
+       needs is the previous round's ``verdict.processed.json``, whose entire
+       lifetime is the window between the reap that renamed it and the clearing
+       loop three lines below — and this function holds the reaper's lock
+       across both ends of that window. An external incrementer would have to
+       read that file OUTSIDE the lock and hand the result back: a
+       read-modify-write split across a lock boundary, which is precisely the
+       race the #613 review found in the clearing loop and precisely what this
+       lock was added to close. The increment is not a policy this function
+       invented; it is the one place the policy can be applied atomically.
+
+    The rule is "a relaunch after a verdict that demanded rework", asked of
+    :func:`previous_round_was_rework` rather than restated here, so an
+    ``approve`` that took two rounds still advances — ``edge_for`` deliberately
+    does not bound ``approve``.
+
+    ⭐ **Idempotent by construction, not by a flag.** The clearing loop below
+    unlinks the very file the increment reads, under the same lock, so calling
+    this twice with no round in between counts ONCE. Nothing has to remember
+    whether it already incremented, and nothing can get that memory wrong.
 
     Args:
         jobs_dir: The jobs root the tick scans.
         node_id: The background node that owns this lane.
         rework_count: Rounds already spent, or ``None`` to carry forward
-            whatever the previous round recorded (0 for a fresh lane).
+            whatever the previous round recorded (0 for a fresh lane) and
+            charge a round if that round demanded rework.
 
     Returns:
         The prepared run directory.
@@ -208,6 +291,8 @@ def prepare_lane(
     with lock_path.open("a") as handle:
         fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
         carried = read_rework_count(run_dir) if rework_count is None else rework_count
+        if rework_count is None and previous_round_was_rework(run_dir):
+            carried += 1
         for name in _STALE_ARTIFACTS:
             (run_dir / name).unlink(missing_ok=True)
         write_lane_record(run_dir, node_id, rework_count=carried)
@@ -370,8 +455,9 @@ class LaneRequest:
     downstream needs monkeypatching and the signature stays readable.
 
     ``rework_count`` defaults to ``None`` = *carry forward whatever the previous
-    round recorded*. A 0 default silently reset #573's budget on every relaunch —
-    see :func:`prepare_lane`.
+    round recorded, and charge a round if that round demanded rework*. A 0
+    default silently reset #573's budget on every relaunch; never charging left
+    it unspendable (#616). See :func:`prepare_lane`.
     """
 
     node_id: str

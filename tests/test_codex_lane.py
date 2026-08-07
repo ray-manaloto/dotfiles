@@ -337,6 +337,164 @@ def test_a_fresh_lane_starts_at_zero(tmp_path: Path) -> None:
     assert dag_tick.read_rework_count(cl.prepare_lane(tmp_path, NODE_ID)) == 0
 
 
+# ------------------------------------ #616: the relaunch SPENDS a rework round
+
+
+def test_a_relaunch_after_a_revise_spends_a_rework_round(tmp_path: Path) -> None:
+    """⭐ #616's headline: carrying the count forward is not enough.
+
+    #613 stopped the producer DESTROYING the counter and left incrementing to
+    "the supervisor". Nothing was the supervisor — `reap_codex_lanes` only
+    prints the edge — so the count carried forward unchanged forever, the
+    `rework_count >= max_rework` bound never tripped, and #573's budget was
+    written, read, and unspendable.
+
+    The evidence is the previous round's CONSUMED verdict, which is the record
+    that a round completed and produced an edge.
+    """
+    run_dir = cl.prepare_lane(tmp_path, NODE_ID)
+    (run_dir / cv.PROCESSED_FILENAME).write_text(_valid_payload("revise"))
+
+    cl.prepare_lane(tmp_path, NODE_ID)
+    assert dag_tick.read_rework_count(run_dir) == 1
+
+
+def test_a_relaunch_after_a_reject_spends_a_round_too(tmp_path: Path) -> None:
+    """`reject` reopens research — a different edge, the same spent round.
+
+    Both rework edges are bounded by `edge_for`, so both must be counted; a
+    producer that charged only `revise` would leave a reject loop unbounded.
+    """
+    run_dir = cl.prepare_lane(tmp_path, NODE_ID)
+    (run_dir / cv.PROCESSED_FILENAME).write_text(_valid_payload("reject"))
+
+    cl.prepare_lane(tmp_path, NODE_ID)
+    assert dag_tick.read_rework_count(run_dir) == 1
+
+
+def test_a_relaunch_after_an_approve_spends_nothing(tmp_path: Path) -> None:
+    """⭐ The control arm. Without it every test above passes on `carried + 1`.
+
+    A producer that incremented on EVERY relaunch would satisfy the three
+    charging tests and be wrong: `edge_for` deliberately does not bound
+    `approve`, because approval ends the loop the bound exists to stop. An
+    approved unit of work advances however many rounds it took to get there.
+    """
+    run_dir = cl.prepare_lane(tmp_path, NODE_ID)
+    (run_dir / cv.PROCESSED_FILENAME).write_text(_valid_payload("approve"))
+
+    cl.prepare_lane(tmp_path, NODE_ID)
+    assert dag_tick.read_rework_count(run_dir) == 0
+
+
+def test_an_unparsable_previous_verdict_spends_nothing(tmp_path: Path) -> None:
+    """The permissive direction, matching `read_rework_count`'s.
+
+    A payload that breaks the contract reaped as `parse_failed` -> `needs_human`,
+    so the automatic loop never relaunched from it. Charging a round here would
+    bill a lane that never reworked, on evidence that is by definition unread.
+    """
+    run_dir = cl.prepare_lane(tmp_path, NODE_ID)
+    (run_dir / cv.PROCESSED_FILENAME).write_text("{not json at all")
+
+    cl.prepare_lane(tmp_path, NODE_ID)
+    assert dag_tick.read_rework_count(run_dir) == 0
+
+
+def test_a_verdict_that_was_never_reaped_spends_nothing(tmp_path: Path) -> None:
+    """An UNCONSUMED `verdict.json` is not evidence a round completed.
+
+    The rename to `verdict.processed.json` is what marks a verdict as read and
+    turned into an edge. A producer that counted `verdict.json` too would charge
+    a round for a result nobody has looked at — and would race the reaper for
+    the same file, which is the exact hazard the lock here exists to avoid.
+    """
+    run_dir = cl.prepare_lane(tmp_path, NODE_ID)
+    (run_dir / cv.VERDICT_FILENAME).write_text(_valid_payload("revise"))
+
+    cl.prepare_lane(tmp_path, NODE_ID)
+    assert dag_tick.read_rework_count(run_dir) == 0
+
+
+def test_the_increment_is_idempotent_without_a_new_round(tmp_path: Path) -> None:
+    """⭐ Two `prepare_lane` calls with no round between them charge ONCE.
+
+    Not by a flag and not by remembering: the clearing loop unlinks the very
+    file the increment reads, under the same lock, so the evidence is consumed
+    by the act of acting on it. A supervisor that retried a failed launch would
+    otherwise burn the whole budget without a single review having run.
+    """
+    run_dir = cl.prepare_lane(tmp_path, NODE_ID)
+    (run_dir / cv.PROCESSED_FILENAME).write_text(_valid_payload("revise"))
+
+    cl.prepare_lane(tmp_path, NODE_ID)
+    assert dag_tick.read_rework_count(run_dir) == 1, "control: the first one charged"
+    cl.prepare_lane(tmp_path, NODE_ID)
+    assert dag_tick.read_rework_count(run_dir) == 1
+
+
+def test_an_explicit_rework_count_is_not_incremented_on_top(tmp_path: Path) -> None:
+    """An explicit value is a STATEMENT of the count, not a base to add to.
+
+    `--rework-count` exists so an operator (and the e2e arm) can place a lane
+    at a known point in its budget. A producer that added the increment on top
+    would make that value mean something different depending on what happened
+    to be on disk.
+    """
+    run_dir = cl.prepare_lane(tmp_path, NODE_ID)
+    (run_dir / cv.PROCESSED_FILENAME).write_text(_valid_payload("revise"))
+
+    cl.prepare_lane(tmp_path, NODE_ID, rework_count=5)
+    assert dag_tick.read_rework_count(run_dir) == 5
+
+
+def test_a_revise_loop_really_reaches_the_bound(tmp_path: Path) -> None:
+    """⭐⭐ The whole #616 claim, with only the codex PROCESS substituted.
+
+    Launch -> reap -> relaunch -> reap -> relaunch -> reap, driving the real
+    producer and the real reaper, and the count is produced by the code under
+    test rather than supplied by the fixture. That is the distinction #613 was
+    filed over: the substituted thing (what the model says) is not the thing
+    being measured (what the counter does with it).
+
+    The bound's own control arm is inside the sequence: rounds 1 and 2 return a
+    REOPEN edge under the SAME `max_rework` that escalates round 3, so
+    `needs_human` at the end is reachable only because the count actually rose.
+    A producer that never incremented yields `[reopen, reopen, reopen]`.
+
+    The paid version of this — the same loop with a real `codex exec` — is in
+    `tests/test_codex_lane_e2e.py`.
+    """
+    max_rework = 2
+    revise = _runner_writing(_valid_payload("revise"))
+    counts: list[int] = []
+    edges: list[cv.Edge] = []
+
+    for _round in range(max_rework + 1):
+        result = cl.launch_lane(
+            tmp_path,
+            cl.LaneRequest(node_id=NODE_ID, prompt="review this", cwd=tmp_path),
+            runner=revise,
+        )
+        count = dag_tick.read_rework_count(result.run_dir)
+        counts.append(count)
+        edges.append(
+            cv.reap(
+                result.run_dir,
+                expected_owner=NODE_ID,
+                rework_count=count,
+                max_rework=max_rework,
+            ).edge
+        )
+
+    assert counts == [0, 1, 2], "the producer did not spend the budget"
+    assert edges == [
+        cv.Edge.REOPEN_IMPLEMENT,
+        cv.Edge.REOPEN_IMPLEMENT,
+        cv.Edge.NEEDS_HUMAN,
+    ]
+
+
 # ----------------------------------------------- the reaper's lock, honoured
 
 

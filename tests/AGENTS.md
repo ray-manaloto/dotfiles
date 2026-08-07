@@ -22,11 +22,11 @@ It is referenced, NOT `@import`ed: agnix rejects `@import` in an `AGENTS.md`
 requires every non-`.claude/` `CLAUDE.md` be solely `@AGENTS.md`. So the index
 is on-demand reference — which is what it should be anyway.
 
-Total: **1,638 pytest tests** run by default (`pytest tests/` collects all
-`test_*.py` files) plus **8 gated exec tests** deselected by default — 4
-`image_exec` (`mise run smoke-exec`, needs Docker + the `:dev` image) and 4
+Total: **1,650 pytest tests** run by default (`pytest tests/` collects all
+`test_*.py` files) plus **10 gated exec tests** deselected by default — 4
+`image_exec` (`mise run smoke-exec`, needs Docker + the `:dev` image) and 6
 `codex_exec` (`mise run codex-lane-e2e`, spawns the real `codex` CLI and
-**costs credits**) — and Bats scenarios under `infra/`.
+**costs credits** — 4 paid calls) — and Bats scenarios under `infra/`.
 
 ## Running tests
 
