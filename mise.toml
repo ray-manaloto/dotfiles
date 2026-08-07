@@ -722,7 +722,7 @@ description = "Gate matrix → push → open/update PR → watch checks to verif
 run = 'uv run --project python dotfiles-setup pr ship'
 
 [tasks.land]
-description = "Verify PR green → pinned squash-merge → watch main CI → local sync validation"
+description = "POST-merge: confirm the PR merged → watch main CI → local sync validation (does NOT merge)"
 # Thin caller; see pr.py. Invocation IS the merge approval:
 #   mise run land -- 172
 run = 'uv run --project python dotfiles-setup pr land'
