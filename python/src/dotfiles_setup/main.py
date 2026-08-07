@@ -20,6 +20,7 @@ from dotfiles_setup.audit import DevEnvironmentAuditor, ToolManager
 from dotfiles_setup.autofix import autofix_apply_main
 from dotfiles_setup.bash_budget import bash_budget_main
 from dotfiles_setup.bootstrap_packages import gap_report_failures
+from dotfiles_setup.codex_lane import run_lane_cli
 from dotfiles_setup.command_audit import DEFAULT_SESSION_LIMIT, command_audit_main
 from dotfiles_setup.config import DotfilesConfig
 from dotfiles_setup.container import verify_latest_main
@@ -786,6 +787,66 @@ def _add_report_parsers(subparsers: _SubParsers) -> None:
     )
 
     _add_dag_tick_subcommand(subparsers)
+    _add_codex_lane_subcommand(subparsers)
+
+
+def _add_codex_lane_subcommand(subparsers: _SubParsers) -> None:
+    """Register the Codex review-lane producer (#613).
+
+    The half #580 left unbuilt: it shipped the reaper, and nothing wrote the
+    reaper's inputs, so `reap_codex_lanes` found no run directory for any node
+    and was silent. Registered here rather than in :func:`setup_parser` for the
+    same statement-budget reason `dag-tick` is.
+
+    Args:
+        subparsers: The parent subparsers action to attach this to.
+    """
+    parser = subparsers.add_parser(
+        "codex-lane",
+        help="Launch one Codex review lane for a node: write the lane record "
+        "and the verdict schema, run `codex exec` with both --output-schema "
+        "and -o, and settle the lane so the dag-tick reaper can consume it",
+    )
+    parser.add_argument(
+        "--node",
+        required=True,
+        help="The background node id that OWNS this lane — the reaper's CAS "
+        "refuses a lane whose owner is not the node it is reaping for",
+    )
+    parser.add_argument(
+        "--prompt-file",
+        type=Path,
+        default=None,
+        help="Read the review prompt from this file (default: stdin, so a "
+        "long diff can be piped without risking ARG_MAX)",
+    )
+    parser.add_argument(
+        "--cwd",
+        type=Path,
+        default=None,
+        help="Where codex runs — the repo under review, so its own git-repo "
+        "check passes (default: the current working directory)",
+    )
+    parser.add_argument(
+        "--rework-count",
+        type=int,
+        default=0,
+        help="Rounds this unit of work has already spent, recorded in the "
+        "lane record and bounded by dag-tick's --max-rework (#573)",
+    )
+    parser.add_argument(
+        "--model",
+        default=None,
+        help="Optional `codex exec --model` override (default: codex's own "
+        "configured default)",
+    )
+    parser.add_argument(
+        "--jobs-dir",
+        type=Path,
+        default=None,
+        help="The jobs root to launch under (default: ~/.claude/jobs, the "
+        "same tree dag-tick scans)",
+    )
 
 
 def setup_parser() -> argparse.ArgumentParser:
@@ -1437,6 +1498,7 @@ def _build_command_handlers(
         ),
         "bash-budget": lambda: sys.exit(bash_budget_main(project_root)),
         "dag-tick": lambda: sys.exit(run_tick(args)),
+        "codex-lane": lambda: sys.exit(run_lane_cli(args)),
         "doctor": lambda: sys.exit(
             doctor_main(
                 project_root,

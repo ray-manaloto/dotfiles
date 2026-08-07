@@ -525,6 +525,32 @@ description = "launchd watchdog tick (#578): census this repo's background agent
 #   mise run dag-tick -- --dry-run --verbose   # manual, read-only preview
 run = 'uv run --project python dotfiles-setup dag-tick'
 
+[tasks.codex-lane]
+description = "Launch one Codex review lane for a node (#613): write the lane record + verdict schema, run `codex exec` with BOTH --output-schema and -o, settle the lane for dag-tick's reaper"
+# Thin caller (zero-bash-logic); logic in
+# python/src/dotfiles_setup/codex_lane.py. This is the PRODUCER half of #580 —
+# that ticket shipped a complete reaper and nothing wrote its inputs, so
+# `reap_codex_lanes` found no run directory for any node and was SILENT.
+#
+# NOT a wrapper around the fable-orchestrator plugin's run-lane.sh: that script
+# mktemps both output paths (no stable run dir for a reaper to find), never
+# passes --output-schema (the contract would be prompt-enforced, which #580
+# explicitly rejected), writes no lane record for the CAS to verify, and lives
+# under ~/.claude/plugins/marketplaces/ where a plugin update replaces it — so
+# it is not a file this repo can gate.
+#
+#   mise run codex-lane -- --node <id> --prompt-file review.md
+#   git diff | mise run codex-lane -- --node <id>     # prompt via stdin
+run = 'uv run --project python dotfiles-setup codex-lane'
+
+[tasks.codex-lane-e2e]
+description = "The #613 end-to-end arm: real launcher -> real `codex exec` -> real reaper, asserting an edge comes out. COSTS CREDITS — deselected from `mise run test` and CI by the codex_exec marker"
+# `-m codex_exec` re-selects what the root pytest.ini deselects by default
+# (last -m wins), the same gating shape as `mise run smoke-exec`. Everything in
+# #580 was unit-level, and a fixture that writes what the code reads structurally
+# cannot catch a producer/consumer mismatch — this is the arm that can.
+run = 'uv run --project python pytest -m codex_exec tests/test_codex_lane_e2e.py -v'
+
 [tasks.apt-repo]
 description = "List the packages an apt repository publishes (defaults to apt.llvm.org)"
 # Thin caller (zero-bash-logic); logic in
