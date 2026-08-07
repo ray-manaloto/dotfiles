@@ -23,8 +23,10 @@ import argparse
 import itertools
 import json
 import os
+import subprocess
 import sys
 from collections import Counter
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -74,7 +76,11 @@ def _write_state(jobs_dir: Path, node_id: str, payload: dict[str, object]) -> No
     (job_dir / "state.json").write_text(json.dumps(payload))
 
 
-def _roster(tmp_path: Path, workers: dict[str, int]) -> Path:
+def _roster(
+    tmp_path: Path,
+    workers: dict[str, int],
+    proc_starts: dict[str, str] | None = None,
+) -> Path:
     """Write a readable `roster.json` under `tmp_path/"daemon"`.
 
     Names each `node_id -> pid` in `workers` (an empty dict is a readable
@@ -83,11 +89,21 @@ def _roster(tmp_path: Path, workers: dict[str, int]) -> Path:
     the daemon dir, since every caller needs it for `_ctx()` /
     `classify_background_rows` too. Dedups the ~10 repeated
     mkdir+roster.json writes this file used to carry (#578 respec round 3).
+
+    `proc_starts` adds the `procStart` a real roster carries beside the pid
+    (#593). Omitting a node leaves the field absent, which is what every
+    pre-#593 fixture means and what the harness's own predicate treats as
+    "pid liveness decides".
     """
     daemon_dir = tmp_path / "daemon"
     daemon_dir.mkdir(exist_ok=True)
-    payload = {"workers": {node_id: {"pid": pid} for node_id, pid in workers.items()}}
-    (daemon_dir / "roster.json").write_text(json.dumps(payload))
+    entries: dict[str, dict[str, object]] = {}
+    for node_id, pid in workers.items():
+        entry: dict[str, object] = {"pid": pid}
+        if proc_starts and node_id in proc_starts:
+            entry["procStart"] = proc_starts[node_id]
+        entries[node_id] = entry
+    (daemon_dir / "roster.json").write_text(json.dumps({"workers": entries}))
     return daemon_dir
 
 
@@ -1322,6 +1338,233 @@ def test_background_pid_alive_checks_the_injected_predicate() -> None:
 
 
 # ---------------------------------------------------------------------------
+# read_proc_start + the procStart identity check — #593 PID-reuse defense
+# ---------------------------------------------------------------------------
+
+
+def test_read_proc_start_reads_a_stable_value_for_a_live_process() -> None:
+    """The reader answers for a live pid, and answers the SAME thing twice.
+
+    Stability matters more than the literal value: the check compares a
+    value recorded at spawn against one read a tick later, so a reader
+    that drifted between two calls on one unchanging process would
+    manufacture a mismatch — and a mismatch respawns.
+    """
+    first = dag_tick.read_proc_start(os.getpid())
+    assert first is not None
+    assert first == dag_tick.read_proc_start(os.getpid())
+
+
+def test_read_proc_start_discriminates_between_two_processes() -> None:
+    """The control arm: it must be able to return a DIFFERENT answer.
+
+    `probes-need-a-control-arm.md` — a reader that returned one constant
+    would make every identity check pass, and the whole #593 defense would
+    be decoration. pid 1 booted before this test process did.
+    """
+    mine = dag_tick.read_proc_start(os.getpid())
+    init = dag_tick.read_proc_start(1)
+    assert mine is not None
+    assert init is not None
+    assert mine != init
+
+
+def test_read_proc_start_is_none_for_a_dead_pid() -> None:
+    assert dag_tick.read_proc_start(999_999) is None
+
+
+def _elapsed_seconds(pid: int) -> float:
+    """`ps -o etime=` -> seconds. An INDEPENDENT route to the same instant.
+
+    `etime` is a duration, so it carries no timezone and no locale at all
+    — which is exactly why it can adjudicate `lstart`'s. Formats:
+    `MM:SS`, `HH:MM:SS`, `DD-HH:MM:SS`.
+    """
+    raw = subprocess.run(
+        ["ps", "-o", "etime=", "-p", str(pid)],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    days, _, clock = raw.rpartition("-")
+    parts = [float(p) for p in clock.split(":")]
+    while len(parts) < 3:
+        parts.insert(0, 0.0)
+    hours, minutes, seconds = parts
+    day_seconds = (float(days) if days else 0.0) * 86400.0
+    return day_seconds + hours * 3600.0 + minutes * 60.0 + seconds
+
+
+@pytest.mark.parametrize("pid", [os.getpid(), 1], ids=["self", "init"])
+def test_read_proc_start_is_utc_not_this_host_local_time(pid: int) -> None:
+    """The one axis nothing else can catch: the reader's `TZ`/`LC_ALL` env.
+
+    Every other test here compares this reader against itself, so dropping
+    `TZ=UTC` stays invisible — the roster's `procStart` is written by the
+    CLI, not by us, and a self-consistent reader that is off by the host's
+    UTC offset would mismatch EVERY real node while passing every
+    self-authored fixture. That is the handoff's "gate against an artifact
+    you did not author", restated as a property: the value must denote the
+    process's real start instant, read as UTC.
+
+    `ps -o etime=` is the independent adjudicator — a duration, so no
+    timezone is involved in producing it. On a host whose local zone IS
+    UTC (a CI runner, typically) the two readings coincide and this test
+    is satisfied vacuously; that is honest, because there the defect it
+    guards against has no observable effect. It discriminates wherever it
+    can: on a UTC-5 host, dropping `TZ=UTC` moves the parsed value 5 hours
+    off, far outside the tolerance below.
+    """
+    value = dag_tick.read_proc_start(pid)
+    assert value is not None
+    parsed = datetime.strptime(value, "%a %b %d %H:%M:%S %Y").replace(tzinfo=UTC)
+    expected = datetime.now(UTC) - timedelta(seconds=_elapsed_seconds(pid))
+    assert abs((parsed - expected).total_seconds()) < 90.0
+
+
+def test_background_pid_alive_no_recorded_proc_start_defers_to_pid() -> None:
+    """An entry with no `procStart` must not be reaped for lacking one.
+
+    Mirrors `isSameProcessAsync(pid, undefined) -> true`. The reader is a
+    tripwire: reaching it at all would mean the absent-record branch fell
+    through to a comparison it has nothing to compare against.
+    """
+
+    def _never(pid: int) -> str | None:
+        msg = f"read the start time for {pid} with nothing recorded"
+        raise AssertionError(msg)
+
+    roster = {"abc123": dag_tick.RosterWorker(pid=111, proc_start=None)}
+    assert (
+        dag_tick.background_pid_alive(
+            "abc123", roster, is_alive=lambda _pid: True, proc_start=_never
+        )
+        is True
+    )
+
+
+def test_background_pid_alive_dead_pid_never_reads_the_start_time() -> None:
+    """A dead pid short-circuits; identity is only asked of a LIVE pid."""
+
+    def _never(pid: int) -> str | None:
+        msg = f"read the start time for dead pid {pid}"
+        raise AssertionError(msg)
+
+    roster = {
+        "abc123": dag_tick.RosterWorker(pid=111, proc_start="Wed Jul 15 10:54:17 2026")
+    }
+    assert (
+        dag_tick.background_pid_alive(
+            "abc123", roster, is_alive=lambda _pid: False, proc_start=_never
+        )
+        is False
+    )
+
+
+def test_background_pid_alive_matching_proc_start_is_alive() -> None:
+    roster = {
+        "abc123": dag_tick.RosterWorker(pid=111, proc_start="Wed Jul 15 10:54:17 2026")
+    }
+    assert (
+        dag_tick.background_pid_alive(
+            "abc123",
+            roster,
+            is_alive=lambda _pid: True,
+            proc_start=lambda _pid: "Wed Jul 15 10:54:17 2026",
+        )
+        is True
+    )
+
+
+def test_background_pid_alive_differing_proc_start_is_dead() -> None:
+    """The #593 defect, pinned: a recycled pid is live but is NOT our node.
+
+    This is the only branch that ADDS a negative, and it is the whole
+    point of the ticket — before it, this case returned True and the node
+    was never respawned.
+    """
+    roster = {
+        "abc123": dag_tick.RosterWorker(pid=111, proc_start="Wed Jul 15 10:54:17 2026")
+    }
+    assert (
+        dag_tick.background_pid_alive(
+            "abc123",
+            roster,
+            is_alive=lambda _pid: True,
+            proc_start=lambda _pid: "Fri Aug  7 19:12:08 2026",
+        )
+        is False
+    )
+
+
+def test_background_pid_alive_unreadable_proc_start_is_alive() -> None:
+    """An unanswered `ps` is NOT a mismatch — it must never respawn.
+
+    Mirrors the harness comparator's `actual === undefined || actual ===
+    recorded`. A `ps` that timed out or was missing carries no evidence
+    either way, and the DEAD branch of this predicate takes an action.
+    """
+    roster = {
+        "abc123": dag_tick.RosterWorker(pid=111, proc_start="Wed Jul 15 10:54:17 2026")
+    }
+    assert (
+        dag_tick.background_pid_alive(
+            "abc123",
+            roster,
+            is_alive=lambda _pid: True,
+            proc_start=lambda _pid: None,
+        )
+        is True
+    )
+
+
+def test_background_pid_alive_blank_proc_start_is_alive() -> None:
+    """A blank reading is UNANSWERED, not a mismatch.
+
+    The dangerous cell next door to the one above: `"" == recorded` is
+    False for every real recorded value, so treating a blank as a reading
+    fails toward the respawn — the exact direction #593 must never fail
+    in. `read_proc_start` already normalizes it, and the predicate
+    re-tests it so an alternate reader cannot reintroduce the hazard.
+    """
+    roster = {
+        "abc123": dag_tick.RosterWorker(pid=111, proc_start="Wed Jul 15 10:54:17 2026")
+    }
+    assert (
+        dag_tick.background_pid_alive(
+            "abc123", roster, is_alive=lambda _pid: True, proc_start=lambda _pid: ""
+        )
+        is True
+    )
+
+
+def test_background_pid_alive_live_arm_recycled_pid_reads_dead() -> None:
+    """End-to-end on the REAL defaults — no seams, no fixtures.
+
+    pid 1 is the honest stand-in for a recycled pid: it is alive, it is
+    not ours, and on this host `os.kill(1, 0)` raises `PermissionError`,
+    which :func:`pid_is_alive` deliberately reads as ALIVE. So the pid
+    check alone CANNOT reject it — only the identity read can, and `ps`
+    answers for another user's process where `kill` is blind. That is the
+    `PermissionError`-reads-alive half of #593, resolved by identity
+    rather than by loosening the liveness rule.
+    """
+    stale = {
+        "abc123": dag_tick.RosterWorker(pid=1, proc_start="Thu Jan  1 00:00:00 1970")
+    }
+    assert dag_tick.pid_is_alive(1) is True
+    assert dag_tick.background_pid_alive("abc123", stale) is False
+
+
+def test_background_pid_alive_live_arm_own_process_reads_alive() -> None:
+    """The passing arm of the same live probe: a real, matching identity."""
+    recorded = dag_tick.read_proc_start(os.getpid())
+    assert recorded is not None, "ps did not answer — the arm below would be vacuous"
+    roster = {"abc123": dag_tick.RosterWorker(pid=os.getpid(), proc_start=recorded)}
+    assert dag_tick.background_pid_alive("abc123", roster) is True
+
+
+# ---------------------------------------------------------------------------
 # load_state_json — reading one job's state.json off disk
 # ---------------------------------------------------------------------------
 
@@ -1681,6 +1924,92 @@ def test_crashed_mid_activity_control_arm_live_pid_is_alive(tmp_path: Path) -> N
         [{"id": "abc123", "kind": "background"}], ctx
     )
     assert result.classified[0].node_class is dag_tick.NodeClass.ALIVE
+
+
+def test_recycled_pid_classifies_dead_and_plans_a_respawn(tmp_path: Path) -> None:
+    """#593 end-to-end: a LIVE pid with the WRONG identity is not our node.
+
+    The fixture is deliberately the hostile one — the roster names a pid
+    that really is running (this test process), so `kill(pid, 0)` says
+    ALIVE and nothing about liveness can reject it. Only the recorded
+    `procStart` disagrees. Before #593 this classified ALIVE and the
+    crashed node was never respawned; the control arm below is the same
+    fixture with the identity that MATCHES.
+    """
+    jobs_dir = tmp_path / "jobs"
+    daemon_dir = _roster(
+        tmp_path,
+        {"abc123": os.getpid()},
+        {"abc123": "Wed Jul 15 10:54:17 2026"},
+    )
+    _write_state(jobs_dir, "abc123", {"tempo": "active", "inFlight": {"tasks": 1}})
+    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir)
+
+    result = dag_tick.classify_background_rows(
+        [{"id": "abc123", "kind": "background"}], ctx
+    )
+    assert result.classified[0].node_class is dag_tick.NodeClass.DEAD
+    assert result.classified[0].pid_alive is False
+    actions = dag_tick.plan(result.classified, max_age_s=ctx.max_age_s)
+    assert [a.kind for a in actions] == [dag_tick.ActionKind.RESPAWN]
+
+
+def test_recycled_pid_control_arm_matching_proc_start_is_alive(tmp_path: Path) -> None:
+    """Control arm: same fixture, the identity the process really has.
+
+    Uses the REAL reader on both sides, so a defect in `read_proc_start`
+    itself (a drifting or constant value) shows up here rather than being
+    hidden behind an injected literal.
+    """
+    recorded = dag_tick.read_proc_start(os.getpid())
+    assert recorded is not None, "ps did not answer — this arm would be vacuous"
+    jobs_dir = tmp_path / "jobs"
+    daemon_dir = _roster(tmp_path, {"abc123": os.getpid()}, {"abc123": recorded})
+    _write_state(jobs_dir, "abc123", {"tempo": "active", "inFlight": {"tasks": 1}})
+    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir)
+
+    result = dag_tick.classify_background_rows(
+        [{"id": "abc123", "kind": "background"}], ctx
+    )
+    assert result.classified[0].node_class is dag_tick.NodeClass.ALIVE
+
+
+def test_execute_respawn_reconciles_on_a_recycled_pid(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The execution-time re-check sees identity too, not just liveness.
+
+    `execute_respawn`'s "pid is alive now (reconciled)" guard exists to
+    stop a double-start. It must not be fooled by the same recycled pid
+    the classifier already rejected — otherwise every #593 recovery would
+    be planned and then silently skipped.
+
+    ⚠️ The identity read is INJECTED here, not left to the default.
+    `monkeypatch.setattr(dag_tick.subprocess, "Popen", ...)` patches the
+    stdlib module itself, and `subprocess.run` is built on `Popen` — so a
+    real :func:`read_proc_start` inside a Popen-patched test dies on the
+    fake. Injecting the seam is what `tests/AGENTS.md` asks for anyway.
+    """
+    jobs_dir = tmp_path / "jobs"
+    daemon_dir = _roster(
+        tmp_path,
+        {"abc123": os.getpid()},
+        {"abc123": "Wed Jul 15 10:54:17 2026"},
+    )
+    _write_state(jobs_dir, "abc123", {"tempo": "active", "inFlight": {"tasks": 1}})
+    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir)
+
+    calls: list[list[str]] = []
+
+    def _fake_popen(argv: list[str], **_kwargs: object) -> None:
+        calls.append(argv)
+
+    monkeypatch.setattr(dag_tick.subprocess, "Popen", _fake_popen)
+    line = dag_tick.execute_respawn(
+        "abc123", ctx, proc_start=lambda _pid: "Fri Aug  7 19:12:08 2026"
+    )
+    assert calls == [["claude", "respawn", "abc123"]]
+    assert "RESPAWN abc123" in line
 
 
 # ---------------------------------------------------------------------------

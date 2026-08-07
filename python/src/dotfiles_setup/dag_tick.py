@@ -52,21 +52,39 @@ edit does not have to re-derive them:
   watchdog the day the harness rewords one error message.
 - **Census** (`claude agents --json --cwd <path> --all`) is a read-only,
   TTY-free, cwd-scoped array read straight off disk — it does NOT start or
-  restart the supervisor (`docs/receipts/565.md` §4). A `kind:"background"`
-  row carries `state` but never `pid`; only `kind:"interactive"` rows carry
-  `pid`. This module only ever acts on `kind:"background"` rows: an
-  interactive row is somebody's live foreground terminal session, which
-  `claude respawn`/`claude stop` were never meant to touch.
+  restart the supervisor (`docs/receipts/565.md` §4). This module only ever
+  acts on `kind:"background"` rows: an interactive row is somebody's live
+  foreground terminal session, which `claude respawn`/`claude stop` were
+  never meant to touch.
+
+  ⚠️ **A `kind:"background"` row DOES carry a `pid` on 2.1.224 — and it is
+  the WRONG process to check.** This docstring said "never `pid`" until
+  #593 sampled a live node: the census reported `pid: 30723`
+  (`claude bg-spare`) while the roster held `pid: 30714`
+  (`claude bg-pty-host`), its parent. Do not "simplify" the roster read
+  away now that a pid is visible in the census — the roster's pid is the
+  one the harness itself pairs with `procStart`, and the census's is a
+  different process.
 - **Background pid liveness is NOT in the census, and often not in
   `state.json` either** — the harness's own docs say a background session
   can appear in the census "even when its process has exited"
   (`agent-view.md`, "List sessions as JSON"). The actual liveness record is
-  `~/.claude/daemon/roster.json`'s per-worker `pid` (`docs/research/kb/
-  reports/agents/wf-dag-recovery.md` §3): read via :func:`read_roster` +
-  :func:`pid_is_alive`. A node with no roster entry at all is exactly the
-  documented gap — the harness's own in-life watchdog (5s pid poll) only
-  works while its supervisor process is itself alive, which is precisely
-  the failure this tick exists to catch from the outside.
+  `~/.claude/daemon/roster.json`'s per-worker `pid` **and the `procStart`
+  beside it** (`docs/research/kb/reports/agents/wf-dag-recovery.md` §3):
+  read via :func:`read_roster`, then :func:`pid_is_alive` +
+  :func:`read_proc_start`. A node with no roster entry at all is exactly
+  the documented gap — the harness's own in-life watchdog (5s pid poll)
+  only works while its supervisor process is itself alive, which is
+  precisely the failure this tick exists to catch from the outside.
+- **A pid is a slot, not an identity (#593).** POSIX recycles pids, so
+  `kill(pid, 0)` alone lets a crashed node read ALIVE forever and
+  suppresses its respawn indefinitely. :func:`background_pid_alive`
+  therefore requires liveness AND a matching `procStart`, mirroring the
+  harness's own roster GC predicate — but it only ever adds a NEGATIVE on
+  a positively-read, differing value; an absent record or an unanswered
+  `ps` both read ALIVE. That asymmetry is deliberate: the DEAD branch
+  respawns, so a false-DEAD double-starts a node while a false-ALIVE costs
+  one 60s cycle. Encoding, tolerance and both arms: `docs/receipts/593.md`.
 - **The respawn precondition is PID-liveness only, never `tempo`/in-flight**
   (:func:`execute_respawn`). The binary's own `/restart` refusal ("Can't
   restart while work is running in the background") guards a LIVE session
@@ -108,11 +126,12 @@ edit does not have to re-derive them:
   :func:`build_tick_context`'s OWN defaults, not something any helper
   reaches for on its own — a test constructs a `TickContext` against
   `tmp_path` and calls :func:`execute_tick` directly instead of
-  monkeypatching this module's globals. Pid liveness is injected the same
-  way (`background_pid_alive`'s `is_alive` parameter, mirroring
-  `gcc_sha.compute_sha`'s injected fetcher), so a test never monkeypatches
-  this module's own :func:`pid_is_alive` either (`tests/AGENTS.md` §
-  Mocking: never mock our own modules — inject).
+  monkeypatching this module's globals. Pid liveness AND process identity
+  are injected the same way (`background_pid_alive`'s `is_alive` and
+  `proc_start` parameters, mirroring `gcc_sha.compute_sha`'s injected
+  fetcher), so a test never monkeypatches this module's own
+  :func:`pid_is_alive` or :func:`read_proc_start` either
+  (`tests/AGENTS.md` § Mocking: never mock our own modules — inject).
 """
 
 from __future__ import annotations
@@ -217,6 +236,12 @@ JOBS_DIR = Path.home() / ".claude" / "jobs"
 # orphaning a run dir the reaper would keep finding forever.
 CODEX_LANE_DIRNAME = "codex-lane"
 DAEMON_DIR = Path.home() / ".claude" / "daemon"
+
+# `ps -o lstart=` bound for the roster identity check (:func:`read_proc_start`)
+# — the same 1s the CLI bundle gives its own `getProcessStartTime`. On expiry
+# the read is UNANSWERED, which reads ALIVE, so a slow `ps` costs one recovery
+# cycle and can never manufacture a respawn.
+PROC_START_TIMEOUT_S = 1.0
 
 # The harness's own `/restart` recipe is "flush, strip, respawn" (see the
 # module docstring for why flush is intentionally absent here) — this is
@@ -797,7 +822,25 @@ def read_roster(daemon_dir: Path) -> dict[str, RosterWorker] | None:
 
 
 def pid_is_alive(pid: int) -> bool:
-    """Best-effort liveness check via `kill(pid, 0)` — no signal is sent."""
+    """Best-effort liveness check via `kill(pid, 0)` — no signal is sent.
+
+    ⚠️ **`PermissionError` (EPERM) reads ALIVE on purpose, and that is NOT
+    the half of #593 that needed fixing.** The 2.1.224 bundle ships TWO
+    predicates over the same syscall: `isProcessRunning` (any throw ->
+    dead) and `isProcessProvablyGone` (`return zt(t)==="ESRCH"` — only a
+    real ESRCH is "gone"; EPERM is not). This function is the second one,
+    and that is right for a caller whose DEAD branch RESPAWNS: a
+    false-DEAD double-starts a node, which #601 exists to prevent, while a
+    false-ALIVE only misses one recovery cycle.
+
+    The EPERM hazard is real, but it is an IDENTITY failure, not a
+    liveness one: a recycled pid landing on another user's process
+    (root's, say) answers `kill(pid, 0)` with EPERM forever. That case is
+    now caught one step later by :func:`background_pid_alive`'s
+    `procStart` comparison — `ps` reads another user's start time fine,
+    so the mismatch is visible exactly where `kill(pid, 0)` is blind.
+    Verified live on pid 1 (`docs/receipts/593.md`).
+    """
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -807,22 +850,88 @@ def pid_is_alive(pid: int) -> bool:
     return True
 
 
+def read_proc_start(pid: int) -> str | None:
+    """A process's start time in the exact encoding the roster records.
+
+    `LC_ALL=C TZ=UTC ps -o lstart= -p <pid>`, trimmed — byte-for-byte the
+    recipe the CLI bundle uses to MINT `procStart` (2.1.224
+    `getProcessStartTime`, and the same command in its async twin). Both
+    env vars are load-bearing, not decoration: the same live process reads
+    `Fri Aug  7 14:12:08 2026` under this host's local zone against a
+    roster holding `Fri Aug  7 19:12:08 2026`, so a reader that dropped
+    `TZ=UTC` would report a mismatch for EVERY node on the fleet.
+
+    `None` means **"`ps` did not answer"** — a dead pid, a missing `ps`, a
+    timeout, empty output. It never means "the times differ"; that
+    distinction is the whole safety property, and the caller relies on it.
+    """
+    try:
+        result = subprocess.run(
+            ["ps", "-o", "lstart=", "-p", str(pid)],
+            capture_output=True,
+            text=True,
+            check=False,
+            env={**os.environ, "LC_ALL": "C", "TZ": "UTC"},
+            timeout=PROC_START_TIMEOUT_S,
+        )
+    except OSError, subprocess.SubprocessError:
+        return None
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip() or None
+
+
 def background_pid_alive(
     node_id: str,
     roster: dict[str, RosterWorker] | None,
     *,
     is_alive: Callable[[int], bool] | None = None,
+    proc_start: Callable[[int], str | None] | None = None,
 ) -> bool:
-    """Is there a live process behind this background node?
+    """Is there a live process behind this background node, and is it OURS?
 
     `roster` is `None` when the daemon roster could not be read — act
     conservatively and assume alive, so a read glitch can never trigger a
     respawn. A roster that WAS read and does not name this node is real
     negative evidence: a background census row with no roster entry is
     exactly the harness's documented gap — a session "still working or
-    blocked even when its process has exited". `is_alive` is a test seam
-    mirroring `gcc_sha.compute_sha`'s injected fetcher — a callable
-    `(pid) -> bool`, defaulting to :func:`pid_is_alive`.
+    blocked even when its process has exited". `is_alive` and `proc_start`
+    are test seams mirroring `gcc_sha.compute_sha`'s injected fetcher,
+    defaulting to :func:`pid_is_alive` and :func:`read_proc_start`.
+
+    **PID liveness alone is not identity (#593).** A pid outlives nothing
+    on POSIX — the OS recycles it, and a recycled pid answers
+    `kill(pid, 0)` exactly like the node's own process did, so a crashed
+    node reads ALIVE forever and is never respawned. The roster carries a
+    `procStart` alongside the pid precisely so the pair identifies a
+    process rather than a slot.
+
+    This mirrors the harness's OWN roster predicate, which reads the same
+    `roster.json` in its GC path and keeps a worker only when
+    `isProcessRunning(pid) && isSameProcessAsync(pid, entry.procStart)`:
+
+    - **no recorded `procStart`** -> pid liveness decides. The harness's
+      `isSameProcessAsync(pid, undefined)` returns `true`; an entry
+      written by a build that did not record one must not be reaped for
+      lacking it.
+    - **`ps` did not answer** -> ALIVE. `isSameProcess`'s comparator
+      (`actual === undefined || actual === recorded`) treats an unread
+      start time as a MATCH, never a mismatch. A `ps` that times out must
+      not be able to trigger a respawn. A BLANK reading counts as
+      unanswered here too, and is checked twice on purpose — the reader
+      normalizes it and this branch re-tests it — because an empty string
+      compared as if it were a real reading differs from every recorded
+      value, i.e. it fails toward the respawn.
+    - **recorded and read, and they differ** -> DEAD. This is the only
+      branch that adds a negative, and it needs a positively-read,
+      differing value to fire.
+
+    Comparison is exact string equality, which is what the harness does on
+    this platform: its one tolerance (a numeric-units escape for the
+    alternate `procStartFt` encoding) sits behind a mode function that is
+    a hard `return false` in all three on-disk bundles, and an `lstart`
+    string is not numeric anyway. Evidence, both arms:
+    `docs/receipts/593.md`.
     """
     if roster is None:
         return True
@@ -830,7 +939,14 @@ def background_pid_alive(
     if entry is None:
         return False
     check = is_alive or pid_is_alive
-    return check(entry.pid)
+    if not check(entry.pid):
+        return False
+    if entry.proc_start is None:
+        return True
+    observed = (proc_start or read_proc_start)(entry.pid)
+    if not observed:
+        return True
+    return observed == entry.proc_start
 
 
 def node_from_state(node_id: str, data: Mapping[str, object]) -> Node:
@@ -979,6 +1095,7 @@ def classify_background_rows(
     ctx: TickContext,
     *,
     is_alive: Callable[[int], bool] | None = None,
+    proc_start: Callable[[int], str | None] | None = None,
 ) -> ClassificationResult:
     """Enrich + classify every `kind:"background"` census row.
 
@@ -986,8 +1103,8 @@ def classify_background_rows(
     needs + mtime) and the shared daemon roster (pid liveness), then calls
     :func:`classify`. A missing/unparseable `state.json` classifies ALIVE
     directly (act conservatively) rather than feeding a guessed state into
-    the pure predicate. `is_alive` is forwarded to
-    :func:`background_pid_alive` (a test seam — see its docstring).
+    the pure predicate. `is_alive` and `proc_start` are forwarded to
+    :func:`background_pid_alive` (test seams — see its docstring).
     """
     roster = read_roster(ctx.daemon_dir)
     now = time.time()
@@ -1012,7 +1129,9 @@ def classify_background_rows(
                 )
             continue
         node = node_from_state(node_id, data)
-        alive = background_pid_alive(node_id, roster, is_alive=is_alive)
+        alive = background_pid_alive(
+            node_id, roster, is_alive=is_alive, proc_start=proc_start
+        )
         state_age_s = None if mtime is None else max(now - mtime, 0.0)
         node_class = classify(
             node,
@@ -1069,6 +1188,7 @@ def execute_respawn(
     ctx: TickContext,
     *,
     is_alive: Callable[[int], bool] | None = None,
+    proc_start: Callable[[int], str | None] | None = None,
 ) -> str:
     """Respawn one DEAD node, after a fresh ESCALATION and PID re-check.
 
@@ -1152,7 +1272,7 @@ def execute_respawn(
             f"dag-tick: SKIP respawn {node_id} — escalated since "
             f"classification; {_needs_human_reason()}; needs: {fresh.needs}"
         )
-    if background_pid_alive(node_id, roster, is_alive=is_alive):
+    if background_pid_alive(node_id, roster, is_alive=is_alive, proc_start=proc_start):
         return f"dag-tick: SKIP respawn {node_id} — pid is alive now (reconciled)"
     try:
         subprocess.Popen(
@@ -1178,6 +1298,7 @@ def execute_stop(
     ctx: TickContext,
     *,
     is_alive: Callable[[int], bool] | None = None,
+    proc_start: Callable[[int], str | None] | None = None,
 ) -> str:
     """Stop one DONE-but-still-alive node, after a fresh TERMINAL + PID re-check.
 
@@ -1253,7 +1374,9 @@ def execute_stop(
             f"classification (state={fresh.state} tempo={fresh.tempo} "
             f"queuedPrompt={fresh.queued_prompt}); work may have been resumed"
         )
-    if not background_pid_alive(node_id, roster, is_alive=is_alive):
+    if not background_pid_alive(
+        node_id, roster, is_alive=is_alive, proc_start=proc_start
+    ):
         return f"dag-tick: SKIP stop {node_id} — settled since classification"
     try:
         result = subprocess.run(
@@ -1277,6 +1400,7 @@ def _execute_or_preview(
     ctx: TickContext,
     *,
     is_alive: Callable[[int], bool] | None = None,
+    proc_start: Callable[[int], str | None] | None = None,
 ) -> list[str]:
     """Run each planned action, or (under `ctx.dry_run`) describe it only.
 
@@ -1292,9 +1416,17 @@ def _execute_or_preview(
                 f"{action.node_id} — {action.reason}"
             )
         elif action.kind is ActionKind.RESPAWN:
-            lines.append(execute_respawn(action.node_id, ctx, is_alive=is_alive))
+            lines.append(
+                execute_respawn(
+                    action.node_id, ctx, is_alive=is_alive, proc_start=proc_start
+                )
+            )
         elif action.kind is ActionKind.STOP:
-            lines.append(execute_stop(action.node_id, ctx, is_alive=is_alive))
+            lines.append(
+                execute_stop(
+                    action.node_id, ctx, is_alive=is_alive, proc_start=proc_start
+                )
+            )
     return lines
 
 
