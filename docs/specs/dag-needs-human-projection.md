@@ -695,24 +695,20 @@ wrong `-R`, an API shape change — which is why it was the gate.
 a dispatcher existing** and may land with #573 rather than here; the unbound path
 from phases 1–4 is complete without it.
 
-### Phase 6 — contracts and docs, in the same change as the code
+### Phase 6 — contracts and docs ✅ **DONE 2026-08-07**
 
-- **Edit `workflow.dag-tick-wiring`'s description** in
-  `python/verification/suites.toml` — it records the deferral in three places
-  (*"#602 owns that projection"*, *"no in-tree component emits the label"*,
-  *"only the IMPLEMENTATION is pending"*). Closing #602 without this leaves the
-  contract asserting a gap that no longer exists.
-- **Edit `dag_tick.py:161-164`** — the `⚠️ Nothing in this process emits it —
-  #602 owns the projection` comment, same reason.
-- ⚠️ **Do NOT edit `_needs_human_reason()`'s `"is NOT done here — #602"`
-  clause.** It is scoped to *this process*, and it stays true after #602 ships:
-  the tick still does not project. It is pinned by golden equality; changing it
-  fails `test_plan_needs_human_reason_claims_no_action_this_module_skips`, and
-  that test is doing its job.
-- Add a `workflow.dag-projection-wiring` contract binding the new chain.
-- Write `docs/receipts/602.md`.
-
----
+- ✅ `workflow.dag-tick-wiring`'s description corrected — it said *"no in-tree
+  component emits the label … visible in this tick's log ONLY until it lands"*,
+  which is now false in the first half and misleading in the second.
+- ✅ `dag_tick.py`'s `NEEDS_HUMAN_LABEL` comment corrected the same way, and it
+  now states the boundary POSITIVELY: the projection exists, it is simply not
+  performed here, and `dag_project` imports this module rather than the reverse.
+- ✅ `docs/receipts/602.md` written.
+- ⚠️ **`_needs_human_reason()` NOT edited, deliberately.** Its clause *"tracker
+  projection to `dag:needs-human` is NOT done here — #602"* stays TRUE: it is
+  scoped to that process, `dag_project` is a different one, and the string is
+  pinned by golden equality — which now also guards operator-facing tracker
+  content, since the comment reproduces it verbatim.
 
 ## 5. Known holes — named, not papered over
 

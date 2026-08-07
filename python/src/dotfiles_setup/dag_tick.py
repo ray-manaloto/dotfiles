@@ -158,10 +158,17 @@ ESCALATED_STATE = "blocked"
 # scheduler-owned, and a tick that labelled directly would put a second
 # writer on the tracker.
 #
-# ⚠️ **Nothing in this process emits it — #602 owns the projection.** No
-# in-tree component writes the label or the append-only comment (#579 WEDGED,
-# #580 Codex verdict and #590 stall probe each cover something else), so an
-# escalated node is visible in this tick's log ONLY until #602 lands.
+# ⚠️ **Nothing in THIS process emits it, and that is still true** — but the
+# projection now EXISTS. `dotfiles_setup.dag_project` (#602, landed 2026-08-07)
+# writes the label and the append-only comment from its own LaunchAgent, on its
+# own 300s schedule, as the scheduler's first slice. So the honest statement is
+# no longer "an escalated node is visible in this tick's log ONLY" — it reaches
+# the tracker, just not from here.
+#
+# **Do NOT read that as licence to emit it from this module.** The one-directional
+# boundary is the whole point: the tick CLASSIFIES, the scheduler PROJECTS, and a
+# tick that labelled directly would be the second writer `575.md` R1 forbids.
+# `dag_project` imports this module's predicates rather than the reverse.
 #
 # Read the status in three parts, because two rounds of #601 review got it
 # wrong in opposite directions:
@@ -170,9 +177,11 @@ ESCALATED_STATE = "blocked"
 #     emit the label itself: it would be a second writer on the tracker.
 #   - **This label's spelling is SETTLED** — `575.md`: *"#573's receipt
 #     `dag:needs-human` — the receipt is later and governs"*.
-#   - **Only the IMPLEMENTATION is pending** (#602), alongside what `575.md`
-#     genuinely lists as deferred: the general `dag:*` spellings, the
-#     projection's comment format, and each stage's evidence contract.
+#   - **The implementation is SHIPPED** (#602 phases 1-4: the standing
+#     escalation issue #623, the comment format, the write path with
+#     `(node, digest)` dedupe, and the LaunchAgent). What remains is phase 5,
+#     the dispatch-time `dag-binding.json`, which is blocked on a dispatcher
+#     existing — an UNBOUND node projects to #623 in the meantime.
 NEEDS_HUMAN_LABEL = "dag:needs-human"
 
 # A tempo:"active" state.json this old with no update is WEDGED — classify
