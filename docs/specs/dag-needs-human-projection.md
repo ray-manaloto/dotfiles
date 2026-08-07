@@ -59,6 +59,21 @@ is the failure mode this file's §0 exists to make expensive — and the only re
 either was caught is that each claim was handed onward with *"verify this"*
 attached rather than *"use this"*.
 
+**C3 — an inherited "correction" that was a TIMEZONE, and a name read as an
+assertion.** The session handoff flagged *"⚠️ #602's body says '2026-07-14'; the
+measured mtime is 2026-07-13 … re-derive, never navigate by them"*, citing
+`tests/test_dag_tick.py`'s `_LIVE_NEEDS_JULY_13` as corroboration. Re-derived:
+`ad8baf35`'s mtime is **`2026-07-14T01:29:08Z`** in UTC and `2026-07-13T20:29` in
+local time (this host is UTC-5), and `state.json`'s own `updatedAt` reads
+`2026-07-14T01:29:08.930Z`. **#602's body was right**; `ls` prints local time, and
+a date stated without a timezone is not a measurement. The cited corroboration is
+worse than neutral: `_LIVE_NEEDS_JULY_13` is a **variable name** whose value is
+the payload string — it asserts no date at all. *A name is not an assertion*, and
+a rule about not inheriting numbers was itself passed on with an uninherited one.
+
+Operational consequence, in the format: **read `updatedAt`, never a formatted
+`ls`**, and always carry the offset.
+
 **M4 is the one that changed the design.** Had the null arm stood, this spec
 would have specified a credential-passing mechanism the tick does not need.
 Recorded here rather than quietly dropped, because the corrected result reverses
@@ -170,9 +185,13 @@ that outlives its node is a pointer to nothing.
 records that OMC's payload lacks one *"which is why a contract change there breaks
 silently"*.
 
-**The standing escalation issue** is a dedicated, permanently-open tracker issue
-whose number is a module constant (`DEFAULT_ESCALATION_ISSUE`) with a
-`--escalation-issue` override — a reviewable diff, not silent per-clone drift.
+**The standing escalation issue is
+[#623](https://github.com/ray-manaloto/dotfiles/issues/623)**, created in phase 1.
+Its number becomes the module constant `DEFAULT_ESCALATION_ISSUE = 623`, with a
+`--escalation-issue` override — a reviewable diff, not silent per-clone drift. The
+issue's own body states its contract (append-only, never closed, never
+machine-written body) so an operator who finds it without this spec still knows
+what it is.
 
 **Rejected: infer the issue from a node's free text.** Measured on the real data,
 it fabricates. `ad8baf35` is NAMED `zstd-compression-level-tuning`, its `intent`
@@ -196,49 +215,83 @@ question onto an unrelated ticket, which is worse than the silence it replaces.
 Dual-audience follows #573's adopted stokowski precedent (*"append-only
 dual-audience comments"*).
 
-```markdown
-<!-- dag:needs-human node=ad8baf35 digest=3f2a91c07b4e schema=1 -->
+**This template is PILOT-VALIDATED**, not proposed — both live escalations were
+projected by hand with it on 2026-08-07 and the round-trip was byte-verified
+(§4 phase 1). An earlier draft of it was wrong in three ways; see the note below.
+
+````markdown
+<!-- dag:needs-human node=ad8baf35 digest=a5f7040626d9 schema=1 -->
 ### 🙋 NEEDS_HUMAN — node `ad8baf35`
 
 **The question** — `needs`, verbatim from `~/.claude/jobs/ad8baf35/state.json`:
 
-> run `/clear` to proceed to next task
+```text
+run `/clear` to proceed to next task
+```
 
 **Suggested reply** — `suggestedReply`: _absent_
 
 | Field | Value |
 |---|---|
 | node | `ad8baf35` |
+| session | `ad8baf35-00fe-4223-80d1-9b0d94d9c338` |
 | state / tempo | `blocked` / `blocked` |
-| `state.json` mtime | 2026-07-13T20:29:08Z |
+| `queuedPrompt` | absent — a question awaiting an answer, not an answer awaiting delivery |
+| `state.json` mtime | 2026-07-14T01:29:08Z (`updatedAt` agrees) |
+| written by CLI | 2.1.207 |
 | binding | **UNBOUND** — no `dag-binding.json`; projected to the standing escalation issue |
 | R5 evidence | ⚠️ **UNVALIDATED** — see below |
-| also stalled | no |
+| also stalled | no (`tempo` is `blocked`, not `active`) |
 | projected by | `dag-project` @ 2026-08-07T14:02:11Z |
 
-**What the watchdog will and will not do** (verbatim from
-`dag_tick._needs_human_reason()`):
+**What the watchdog will and will not do** — reproduced verbatim from
+`dag_tick._needs_human_reason()`, not paraphrased:
 
 > escalated — state=blocked with a needs payload and no queued reply, so a human
 > was asked a question a respawn cannot answer; not respawned BY THIS TICK at any
 > age […]
 
-**How to answer:** reply to this node in FleetView — that respawns it with your
-answer as `initialPrompt` (§3.3). ⚠️ This node's job dir no longer exists, so
-there is nothing left to answer; this comment is a record, not a live question.
-```
+**How to answer:** the job dir still exists, so this is a live question. Reply to
+this node in FleetView — that respawns it with your answer as `initialPrompt`,
+the only route that reaches a not-running job (§3.3). `claude respawn` alone
+returns it **idle with no prompt** and discards the question.
+````
 
-The "How to answer" line has **two forms and the projector must pick the right
-one**: a node whose job dir is present gets the FleetView instruction; a node
-whose job dir is gone gets the record-not-question form. Telling an operator to
-reply to something that cannot receive a reply is the same class of defect as a
-log line naming an action the code does not perform.
+⚠️ **Three defects the by-hand pilot caught in the draft above — this is what
+phase 1 is FOR.** None would have been visible from reading the format; all three
+came from producing one.
+
+1. **A blockquote does not quote verbatim.** The draft used `> run `/clear` …`
+   and `ad8baf35`'s payload **contains backticks**, so GitHub renders them as
+   inline code and the raw characters never appear. A payload is cargo, not prose:
+   it goes in a **fenced `text` block**, always. (This was named as phase 1's
+   specific risk and it fired on the first comment.)
+2. **The example's own timestamp was wrong, by timezone.** The draft read
+   `2026-07-13T20:29:08Z` — that is the **local** time `ls` prints, stamped `Z`.
+   The real UTC mtime is `2026-07-14T01:29:08Z`, which is what `state.json`'s own
+   `updatedAt` says. **Read `updatedAt`, never a formatted `ls`.**
+3. **The example asserted the job dir was gone.** It is not; both job dirs exist,
+   so both nodes get the live-answer form. The draft showed both forms
+   concatenated, which reads as one contradictory instruction.
+
+The "How to answer" line has **two forms and the projector must pick by testing
+`os.path.isdir(job_dir)`**: present → the FleetView instruction; absent → *"this
+comment is a record, not a live question"*. Telling an operator to reply to
+something that cannot receive a reply is the same class of defect as a log line
+naming an action the code does not perform.
+
+**An optional final `⚠️ Context worth having` paragraph is encouraged** and was
+used on both pilot comments. A three-week-old escalation often should not be
+answered at all — `ad8baf35` is asking permission to `/clear` after work that
+merged in July, where `claude rm` is the likelier correct action. Projecting an
+escalation is not a recommendation to resume it, and the comment should say so
+when that is the case.
 
 Rules that make the format a contract rather than a layout:
 
-- **The `needs` payload is quoted VERBATIM and never summarised.** It is the
-  entire cargo; a projector that paraphrases it has lost the thing it exists to
-  carry.
+- **The `needs` payload is quoted VERBATIM, in a fenced block, and never
+  summarised.** It is the entire cargo; a projector that paraphrases it has lost
+  the thing it exists to carry. Same for `suggestedReply` when present.
 - **The reason string is reproduced verbatim from `_needs_human_reason()`**, not
   restated. That string is pinned by **golden equality** in `tests/test_dag_tick.py`
   precisely because it must claim the re-check without claiming the race is gone;
@@ -489,21 +542,32 @@ precisely because it expects the divergence.
 Phased so each phase is independently shippable and independently green. **No
 phase begins before the previous one's gates pass** (`verify-before-advancing.md`).
 
-### Phase 1 — the artifact, no automation *(smallest useful slice)*
+### Phase 1 — the artifact, no automation ✅ **DONE 2026-08-07**
 
-1. Create the standing escalation issue on the tracker; record its number.
-2. Create the `dag:needs-human` label on the repo (it does not exist yet —
-   verify before creating).
-3. **Hand-project the two live escalations** using the §2.3 format, by hand.
+1. ✅ `dag:needs-human` label created (`d93f0b`). Label count 23 → 24.
+2. ✅ Standing escalation issue created: **#623**, labelled, contract in its body.
+3. ✅ Both live escalations hand-projected with the §2.3 format —
+   [`ad8baf35`](https://github.com/ray-manaloto/dotfiles/issues/623#issuecomment-5213944853)
+   and
+   [`fdfdaf90`](https://github.com/ray-manaloto/dotfiles/issues/623#issuecomment-5213947098).
 
 **Why by hand first.** `docs/specs/ticket-bound-receipts.md` piloted exactly this
 way and its §12 verdict is the reason: writing the artifact by hand is what
 reveals which fields are real and which become ritual, *before* a module hardcodes
-them. Two instances is a thin pilot, but two is every case that exists.
+them. Two instances is a thin pilot, but two is every case that exists — **and it
+paid: three format defects fell out of producing the first comment** (§2.3).
 
-**Gate:** both comments render correctly; the marker is invisible; the `needs`
-text survives verbatim through GitHub's markdown (blockquote + backtick handling
-is the specific risk — `ad8baf35`'s payload contains backticks).
+**Gate — PASSED, round-tripped through the API rather than eyeballed.** All three
+payloads (`ad8baf35.needs`, `fdfdaf90.needs`, `fdfdaf90.suggestedReply`) were
+re-fetched from `/issues/623/comments`, extracted from their fenced blocks, and
+compared to `state.json` — **3/3 byte-identical**. Markers: one per comment,
+`node=`+`digest=` pairs unique across the issue.
+
+⚠️ **The gate as originally written would have PASSED the broken draft.** "Renders
+correctly" is an eyeball check, and a backticked payload in a blockquote *renders
+fine* — it just is not the payload. The gate only became real when it was
+restated as a **byte comparison against the source**. A rendering check cannot
+detect a fidelity loss that renders nicely.
 
 ### Phase 2 — `dag_project.py`, read-only
 
