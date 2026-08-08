@@ -78,6 +78,19 @@ Full case tables — five false negatives, five cross-check disagreements:
    session once grepped `lmstudio`/`lm_studio`, got 0, and reported the feature
    unsupported; it is spelled `LM Studio`, with a space.
 
+   **The sneakiest bound is WHEN YOU RAN IT.** Every bound above is in the
+   query; this one is in the world. If the causal condition has already been
+   repaired — often by your own earlier commands — the probe cannot reproduce
+   it, and "cannot reproduce" is not "no cause". Measured 2026-08-08: four
+   independent routes were probed for what spawned 1,174 wedged processes and
+   **all four returned delta=0**, so the result was published as
+   *"unattributed"*. The real answer was that the deleted installs behind it had
+   since been restored, partly by that same session's `mise install`. Before
+   reporting a null, ask **"could this still be true right now?"** and say
+   *"the condition has passed, so this probe cannot speak to it"* — which
+   locates the ignorance in the probe — rather than *"unattributed"*, which
+   locates it in the world.
+
    **Arm the component you actually depend on.** That same probe *did* run a
    control arm — it proved `sharehistory` was set, i.e. that the FILE was
    complete. True, and irrelevant: the broken part was the READER. A control arm
@@ -127,6 +140,25 @@ Full case tables — five false negatives, five cross-check disagreements:
    real configuration over one that isolates the variable. A second case (a
    parent-directory config the tool silently merged) and both re-runs:
    `docs/rules-evidence/probes-need-a-control-arm.md`.
+
+9. **When you must BUILD a check, assert the capability — never sniff for a
+   symptom of its absence.** A symptom check binds something you do not own: a
+   log string, a version number, a warning's wording. When that changes upstream
+   your check silently becomes a no-op that can only pass, and nothing tells you.
+   Instead feed the tool an input it **must fail on** and require the failure —
+   the gate then carries its own control arm on every run, and it tests the
+   thing you depend on rather than a proxy for it.
+
+   Worked case (#644): `renovate-config-validator` warns *"RE2 not usable"* and
+   **still exits 0**, so every regex went unchecked while the gate stayed green.
+   The fix validates a canary config whose only flaw is a lookahead and demands
+   a non-zero exit. It beat a **version** check on its first run by accident:
+   `mise which` reported the fixed version while `PATH` still resolved the stale
+   one, so a version assertion would have consulted the pin and said "fine"
+   while the executing process was blind. **A canary tests the binary that RUNS;
+   a version tests the one you believe you installed.** Note the inversion makes
+   the canary itself load-bearing — pin that it is still genuinely invalid, or a
+   later "tidy-up" neuters the gate toward silence.
 
 ## Applies to
 
