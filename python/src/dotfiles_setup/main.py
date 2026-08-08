@@ -74,6 +74,7 @@ from dotfiles_setup.p2996_hash import (
 )
 from dotfiles_setup.p2996_refresh import refresh as refresh_p2996_ref
 from dotfiles_setup.parity import run as parity_run
+from dotfiles_setup.path_drift import AMBIENT_PATH_ENV, path_drift_main
 from dotfiles_setup.pr import automerge_main, land_main, ship_main
 from dotfiles_setup.renovate import renovate_status_main
 from dotfiles_setup.renovate_dryrun import renovate_dryrun_main
@@ -265,6 +266,28 @@ def _add_honesty_subcommands(subparsers: _SubParsers) -> None:
         "--verbose",
         action="store_true",
         help="Print a PASS line per clean check instead of staying silent",
+    )
+    drift_parser = subparsers.add_parser(
+        "path-drift",
+        help="Does THIS shell resolve the tools mise currently pins? A cached "
+        "activation keeps the old install dir on PATH after a bump, so gates "
+        "run a stale binary while `mise which` reports the new one (#596). "
+        "Exits 2 when it cannot see the shell's own PATH — never 'clean'",
+    )
+    drift_parser.add_argument(
+        "--ambient-path",
+        help="The PATH to examine, captured before mise rewrote it. Defaults to "
+        f"${AMBIENT_PATH_ENV}, then the inherited PATH",
+    )
+    drift_parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Exit 1 on drift (for a gate). The default warns and exits 0",
+    )
+    drift_parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Print a line when the comparison is clean instead of staying silent",
     )
 
 
@@ -1590,6 +1613,13 @@ def _build_command_handlers(
         ),
         "bash-budget": lambda: sys.exit(bash_budget_main(project_root)),
         "renovate-validate": lambda: sys.exit(renovate_validate_main(project_root)),
+        "path-drift": lambda: sys.exit(
+            path_drift_main(
+                ambient_path=args.ambient_path,
+                strict=args.strict,
+                verbose=args.verbose,
+            )
+        ),
         "classifier-axes": lambda: sys.exit(classifier_axes_main(project_root)),
         "dag-tick": lambda: sys.exit(run_tick(args)),
         "dag-project": lambda: sys.exit(run_project(args)),

@@ -74,6 +74,18 @@ from dotfiles_setup.listing_budget import (
     over_cap,
     total_chars,
 )
+from dotfiles_setup.path_drift import (
+    BLIND_ADVICE,
+    DEFAULT_GATE_TOOLS,
+    Provenance,
+    drift_advice,
+)
+
+# Deliberately NOT imported as ``check_*``: ``test_every_check_function_is_
+# actually_registered`` enumerates this module's ``check_*`` names and requires
+# each to be in CHECKS, so an imported one would be an unregistrable false
+# positive — the guard caught this import on its first run.
+from dotfiles_setup.path_drift import check_path_drift as shell_path_drift
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -1044,6 +1056,38 @@ def check_listing_budget(setup: Setup) -> list[str]:
     return findings
 
 
+def check_path_drift(setup: Setup) -> list[str]:
+    """Does THIS shell resolve the tools mise currently pins? (#596).
+
+    Sibling of ``pin-currency-wired`` and deliberately not a duplicate of it:
+    that one asks whether the *installed* version matches the *pin*, which
+    ``kb-setup currency check`` answers from the config. This one asks whether
+    the **shell that is about to run the gates** resolves to that install — a
+    question about a cached activation, invisible to every config-reading check.
+    A shell can be perfectly current by the pin and still execute a binary two
+    versions old, which is how hk 1.52.0 produced two spurious red test runs.
+
+    Host state, so a doctor check and never an hk step: the answer is a property
+    of one operator's shell session, and a CI runner's shell is always fresh.
+
+    ⚠️ The doctor is invoked as ``mise ... run doctor``, and mise repairs ``PATH``
+    before the task starts — so this check is BLIND unless the hook captured the
+    ambient ``PATH`` first. It reports that blindness as a finding rather than as
+    a pass; see :mod:`dotfiles_setup.path_drift` for the measurements.
+    """
+    baseline = _str_keys(setup.baseline.get("path_drift"))
+    declared = _str_list(baseline.get("gate_tools"))
+    gate_tools = tuple(declared) if declared else DEFAULT_GATE_TOOLS
+    report = shell_path_drift(environ=setup.environ)
+    if report.provenance is Provenance.BLIND:
+        return [BLIND_ADVICE]
+    if report.error is not None:
+        return [f"could not compare this shell's PATH with mise: {report.error}"]
+    if not report.drifts:
+        return []
+    return [drift_advice(report.drifts, gate=report.gate_drifts(gate_tools))]
+
+
 # --------------------------------------------------------------------------- #
 # Entry point
 # --------------------------------------------------------------------------- #
@@ -1059,6 +1103,7 @@ CHECKS: tuple[tuple[str, Callable[[Setup], list[str]]], ...] = (
     ("mcp-duplicate", check_mcp_duplicate),
     ("pin-currency-wired", check_pin_currency_wired),
     ("listing-budget", check_listing_budget),
+    ("path-drift", check_path_drift),
 )
 
 #: Only run with ``--live``: each entry spawns subprocesses.
