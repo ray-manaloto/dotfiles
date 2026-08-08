@@ -72,6 +72,30 @@ A citation to something only you can open is not a citation.
    `name` should match the directory name so slash-invocation and auto-loading
    stay consistent. Same for `.claude/rules/` and `.claude/agents/`.
 
+6. **A skill is the TOP of a three-layer stack, never the whole thing**
+   (Ray, 2026-08-08). Build downward: **skill → mise task → python library**
+   (modular modules/functions). The skill carries only what needs *judgement* —
+   when to reach for this, and the non-obvious failure modes; every mechanic
+   lives in the library, and the task is the seam. **No bash**
+   ([[zero-bash-logic]]).
+
+   **Make each layer reusable by PARAMETER, not by copy.** The skill passes
+   arguments through to the task, the task to the library function. A library
+   function that hard-codes this repo's case cannot serve the next caller — make
+   that case the parameter's *default* instead.
+
+   **Author skills with `/skill-creator:skill-creator`, and shape the prose with
+   `/writing-for-agents`.** Hand-written skills drift from the frontmatter and
+   description shape the loader and the matcher depend on — and a `description`
+   over 1,536 chars is silently truncated, taking the keywords Claude matches on
+   with it ([[md-size-budgets]]).
+
+   **The point is token economy.** Every step an agent performs by hand it will
+   perform by hand again, paying full reasoning cost each time. Worked case: the
+   image-lock recipe was re-derived from CI config across ~15 turns and produced
+   a silent 51% lock truncation on the way (#650); three sibling candidates from
+   the same session are #651–#653, and #654 is the skill that finds them.
+
 ## Why this rule cannot be `paths:`-scoped
 
 It is **creation-triggered**: it governs *where to create* an artifact, so you
