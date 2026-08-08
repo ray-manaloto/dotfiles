@@ -6,7 +6,7 @@
 # .config/mise/conf.d/shared.toml — the single exact-pinned source both this
 # host config and .devcontainer/mise-system.toml merge, so they never drift
 # (Renovate bumps that one file). See epic #160 T5. Below: host-ONLY tools.
-editorconfig-checker = "3.10.0" # provides `ec` — hk editorconfig_checker builtin (#154); host-only (image drops it in T6)
+editorconfig-checker = "3.11.1" # provides `ec` — hk editorconfig_checker builtin (#154); host-only (image drops it in T6)
 # Second secret scanner (hk `betterleaks` builtin, wired in hk.pkl). HOST-ONLY
 # on purpose: shared.toml is a base image build input, and putting a second
 # scanner in the image would cost a cold rebuild for no gain — the scanning that
