@@ -50,7 +50,6 @@ __all__ = [
     "ListingEntry",
     "collect_listing",
     "over_cap",
-    "skill_description",
     "total_chars",
 ]
 

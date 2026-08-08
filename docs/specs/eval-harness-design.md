@@ -809,7 +809,8 @@ way none of those notes saw: `23e4a72` predates `kb_setup/launch.py` entirely,
 so **`mise run cc` in this repo had never once worked**. Pin is now
 `737ff6e3b745c096c886ff4a732befc033efb75e` (knowledge-base `main`), which
 carries KB #41–#44 on top of #35. PR 5 inherits a current runner and owes this
-question nothing further.
+question nothing further. **(Superseded 2026-08-07 by `46a3e7d` — dotfiles#640;
+the sentence above records the pin as of this dated note, not the live one.)**
 
 Two things this correct-but-incomplete note class is worth recording for:
 
