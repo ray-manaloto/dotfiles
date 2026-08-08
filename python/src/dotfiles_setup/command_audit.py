@@ -578,7 +578,8 @@ def audit(commands: Iterable[BashCommand], *, sessions: int) -> AuditResult:
     )
 
 
-def _truncate(text: str, width: int = 80) -> str:
+def truncate(text: str, width: int = 80) -> str:
+    """One-line, width-bounded rendering of a command for a report cell."""
     text = text.replace("\n", " ").strip()
     return text if len(text) <= width else text[: width - 1] + "…"
 
@@ -588,7 +589,7 @@ def _table(groups: list[tuple[str, int, str]], label: str) -> list[str]:
     return [
         f"| count | {label} | example |",
         "|---:|---|---|",
-        *(f"| {n} | `{key}` | `{_truncate(ex)}` |" for key, n, ex in groups),
+        *(f"| {n} | `{key}` | `{truncate(ex)}` |" for key, n, ex in groups),
         "",
     ]
 
@@ -752,7 +753,7 @@ def render_report(result: AuditResult, *, fail_open_log: Path | None = None) -> 
         for shape, (n, example) in result.false_signal_groups.items():
             lines += [
                 f"- **{shape}** — {n}x. {false_signal_advice(shape)}",
-                f"  - e.g. `{_truncate(example, 96)}`",
+                f"  - e.g. `{truncate(example, 96)}`",
             ]
         lines += [""]
     else:

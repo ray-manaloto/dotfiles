@@ -81,6 +81,7 @@ from dotfiles_setup.pr import automerge_main, land_main, ship_main
 from dotfiles_setup.renovate import renovate_status_main
 from dotfiles_setup.renovate_dryrun import renovate_dryrun_main
 from dotfiles_setup.renovate_validate import renovate_validate_main
+from dotfiles_setup.session_review import LaneChoice, session_review_main
 from dotfiles_setup.sync import SyncOptions, sync_main
 from dotfiles_setup.token_audit import preflight_main, token_audit_main
 from dotfiles_setup.verify import main as verify_main
@@ -196,6 +197,35 @@ def _add_honesty_subcommands(subparsers: _SubParsers) -> None:
         "--check",
         action="store_true",
         help="Fail instead of writing when the committed doc is out of date",
+    )
+    review_parser = subparsers.add_parser(
+        "session-review",
+        help="Find what this session did BY HAND that should be code (#654). "
+        "Two disjoint lanes: the transcript mine ranks recurring command "
+        "shapes by SESSION SPREAD, and a narrative pass over the notepad and "
+        "handoffs surfaces reasoning sinks that leave no repeated command",
+    )
+    review_lane = review_parser.add_mutually_exclusive_group()
+    review_lane.add_argument(
+        "--transcript-only",
+        action="store_true",
+        help="Lane 1 only. Cheap re-check; misses reasoning sinks",
+    )
+    review_lane.add_argument(
+        "--narrative-only",
+        action="store_true",
+        help="Lane 2 only. Misses the one-offs an agent forgot it ran",
+    )
+    review_parser.add_argument(
+        "--sessions",
+        type=int,
+        default=DEFAULT_SESSION_LIMIT,
+        help="Transcript window, in SESSIONS (not files)",
+    )
+    review_parser.add_argument(
+        "--output",
+        type=Path,
+        help="Write the report here instead of logging it",
     )
     token_audit_parser = subparsers.add_parser(
         "token-audit",
@@ -1706,6 +1736,17 @@ def _build_command_handlers(
         ),
         "lock-check": lambda: sys.exit(lock_integrity_main(project_root)),
         "lock-tools": lambda: sys.exit(scoped_lock_main(project_root, args.tools)),
+        "session-review": lambda: sys.exit(
+            session_review_main(
+                project_root,
+                lanes=LaneChoice(
+                    transcript_only=args.transcript_only,
+                    narrative_only=args.narrative_only,
+                ),
+                sessions=args.sessions,
+                output=args.output,
+            )
+        ),
         "token-audit": lambda: sys.exit(
             preflight_main(
                 project_root,
