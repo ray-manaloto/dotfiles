@@ -97,12 +97,20 @@ env_true = [
 # argument is inert and the real scope is the harness's working-directory set.
 # A declared scope that differs from that set is a fiction.
 #
-# ⚠️ `filesystem` is NOT registered on this host, so this entry reports drift
-# every session (2026-08-04). It is kept anyway: `tests/test_doctor.py` uses a
-# truthy `scope_servers` as its control arm proving the parse reached the
-# SHIPPED baseline rather than a fixture, so emptying it destroys that evidence.
-# Clearing this needs a new control arm in the same diff — see #535.
-scope_servers = ["filesystem"]
+# EMPTY since 2026-08-07, and empty is the TRUTHFUL declaration: no MCP server
+# is registered on this host at all, so none can be filesystem-scoped. It
+# previously held a stale `filesystem` entry that reported drift every session
+# — kept only because `tests/test_doctor.py` asserted this value TRUTHY as its
+# control arm proving the parse reached the SHIPPED baseline rather than a
+# fixture. That resolves #535: the two assertions now check KEY PRESENCE, which
+# still fails on the `{}` an unreadable baseline yields, and a new test
+# (`test_the_baseline_seam_still_discriminates_when_the_file_is_missing`) arms
+# that claim against the realistic failure — a missing `doctor.toml` — rather
+# than against a renamed key.
+#
+# ⚠️ Do NOT re-add a server here to "fix" a test. A baseline entry that exists
+# to satisfy an assertion is a fiction the doctor then reports as drift forever.
+scope_servers = []
 
 # Harness-namespaced as `mcp__<server>__<tool>`. These MUTATE state, so each
 # needs an explicit permission decision in the TRACKED `.claude/settings.json`
@@ -120,3 +128,27 @@ scope_servers = ["filesystem"]
 # stay correct if either server is ever registered again. Declare a server here
 # in the same reviewed diff that registers it.
 [mcp.mutating_tools]
+
+[listing]
+# The skill + agent LISTING — standing context every turn, and the eager class
+# no gate could see until 2026-08-07.
+#
+# Claude Code keeps every discovered skill's name + description (+ when_to_use)
+# and every agent type's name + description resident so it can judge relevance;
+# only the chosen skill's body ever loads. Measured here: 113 entries,
+# 32,595 chars (~8,148 tokens) — larger than MEMORY.md's 21,704 B, and on top of
+# the 125,376 B of eager repo markdown that `kb-setup md-budget` does govern.
+#
+# It cannot be an hk step or a CI job: every input is host state
+# (`~/.claude/plugins`, which plugins this operator enables). A runner has none
+# of it and could only ever report zero — the same reason this whole file exists.
+#
+# ⚠️ The ceiling carries deliberate headroom (~4%) rather than pinning today's
+# exact measurement, and that is a DIFFERENT choice from the corpus ratchet
+# proposed for `.claude/rules/**`. The reason is ownership: those bytes are ours
+# and every change is a reviewed diff, whereas most of these belong to
+# third-party plugins that patch-bump on their own schedule. Pinning exactly
+# would report drift for someone else's changelog, and a doctor that cries wolf
+# is one nobody reads. Crossing 34,000 means a plugin materially grew its
+# listing, or a new one was enabled — both worth a look.
+max_chars = 34000

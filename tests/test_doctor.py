@@ -950,7 +950,12 @@ def test_every_check_function_is_actually_registered() -> None:
         if name.startswith("check_") and callable(getattr(doctor, name))
     }
     assert defined - registered == set(), "a check_* function is not wired into CHECKS"
-    assert len(doctor.CHECKS) == 7, "the 7 checks #418 specifies must all be wired"
+    # 7 from #418, + `listing-budget` (2026-08-07): the skill/agent listing is
+    # standing context every turn and nothing measured it. Raise this ONLY
+    # alongside a new entry in CHECKS — the count is what catches a check that
+    # was defined and never registered, which the set-difference above cannot
+    # see once the function is also removed.
+    assert len(doctor.CHECKS) == 8, "every specified check must be wired"
 
 
 def test_the_shipped_baseline_parses_and_declares_what_the_checks_read() -> None:
@@ -973,8 +978,34 @@ def test_the_shipped_baseline_parses_and_declares_what_the_checks_read() -> None
     assert opt_in, "env_true must not be empty — an empty set sanctions nothing"
     assert len(opt_in) == len(set(opt_in)), "env_true has duplicate names"
     mcp = setup.mcp_baseline()
-    assert mcp.get("scope_servers")
+    # KEY PRESENCE, not truthiness (#535). The arm's job is to distinguish "the
+    # shipped doctor.toml was parsed" from "the parse returned {}" — and an empty
+    # dict has no key at all, so presence still discriminates. Truthiness ALSO
+    # pinned the value non-empty, which made a legitimately-empty declaration
+    # (no MCP server is scoped on this host) unrepresentable, and kept a stale
+    # `filesystem` entry alive purely to satisfy a test.
+    assert "scope_servers" in mcp
     assert isinstance(mcp.get("mutating_tools"), dict)
+
+
+def test_the_baseline_seam_still_discriminates_when_the_file_is_missing(
+    tmp_path: Path,
+) -> None:
+    """The control arm for the assertions above (#535).
+
+    Weakening `scope_servers` from truthiness to key presence is only safe if
+    presence still tells a real parse apart from a failed one. The REALISTIC
+    failure is not a renamed key — it is `collect()` finding no readable
+    `doctor.toml` and falling back to `{}`, which is what it does on any OSError
+    or TOMLDecodeError. Reproduce exactly that, and confirm the seam fails.
+    """
+    setup = doctor.collect(tmp_path, home=tmp_path, environ={})
+
+    assert setup.baseline == {}, "no doctor.toml must yield an empty baseline"
+    # Both forms of the seam fail on the empty parse — so presence is not weaker
+    # than truthiness at the thing the arm actually guards.
+    assert "scope_servers" not in setup.mcp_baseline()
+    assert setup.fnox_baseline().get("env") is not True
 
 
 def test_the_sessionstart_hook_runs_the_doctor() -> None:
@@ -1009,7 +1040,7 @@ def test_collect_reads_the_real_repo_without_touching_the_real_home(
 
     # The repo seam — positive evidence that REPO_ROOT was read.
     assert setup.fnox_baseline().get("env") is True
-    assert setup.mcp_baseline().get("scope_servers")
+    assert "scope_servers" in setup.mcp_baseline()
 
     # Current declared state, pinned deliberately so a future reader does not
     # "restore" the stale expectation above. The parsing path itself is covered

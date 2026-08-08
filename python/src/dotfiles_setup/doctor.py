@@ -66,6 +66,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from dotfiles_setup.listing_budget import (
+    SKILL_DESCRIPTION_MAX,
+    ListingEntry,
+    collect_listing,
+    over_cap,
+    total_chars,
+)
+
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
@@ -198,6 +206,7 @@ class Setup:
     local_settings: dict[str, object]
     fnox: FnoxState
     environ: Mapping[str, str]
+    listing: tuple[ListingEntry, ...] = ()
 
     def fnox_baseline(self) -> dict[str, object]:
         """The ``[fnox]`` section of the baseline; ``{}`` when it is absent."""
@@ -206,6 +215,10 @@ class Setup:
     def mcp_baseline(self) -> dict[str, object]:
         """The ``[mcp]`` section of the baseline; ``{}`` when it is absent."""
         return _str_keys(self.baseline.get("mcp"))
+
+    def listing_baseline(self) -> dict[str, object]:
+        """The ``[listing]`` section of the baseline; ``{}`` when it is absent."""
+        return _str_keys(self.baseline.get("listing"))
 
     def server_names(self) -> set[str]:
         """Names of every registered MCP server, whatever its provenance."""
@@ -373,6 +386,9 @@ def collect(
         local_settings=load_json(repo_root / ".claude" / "settings.local.json"),
         fnox=read_fnox(home / ".config" / "fnox" / "config.toml"),
         environ=environ,
+        listing=collect_listing(
+            repo_root, home, enabled_plugin_ids(user_settings, settings)
+        ),
     )
 
 
@@ -989,6 +1005,42 @@ def health_finding(row: ServerHealth, *, owned: bool) -> str:
     )
 
 
+def check_listing_budget(setup: Setup) -> list[str]:
+    """The skill/agent listing is standing context, and nothing else measures it.
+
+    Two independent findings, deliberately in one check because they share the
+    one collection pass:
+
+    * an over-cap description, which TRUNCATES silently — the only hard failure
+      in the instruction system, and it degrades behaviour rather than costing
+      bytes;
+    * total standing characters against the reviewed ceiling, so this class
+      cannot grow unnoticed the way it already did (~29,874 B before anything
+      looked).
+
+    Host state, so it is a doctor check and not an hk step: a CI runner has no
+    ``~/.claude/plugins`` and could only ever report zero.
+    """
+    findings = [
+        f"{entry.kind} {entry.name!r} ({entry.source}) has a "
+        f"{entry.desc_chars}-char description over the HARD {SKILL_DESCRIPTION_MAX} "
+        f"cap — the tail is TRUNCATED SILENTLY, taking the keywords it is matched "
+        f"on with it: {entry.path}"
+        for entry in over_cap(setup.listing)
+    ]
+    ceiling = setup.listing_baseline().get("max_chars")
+    if isinstance(ceiling, int):
+        total = total_chars(setup.listing)
+        if total > ceiling:
+            findings.append(
+                f"the skill + agent listing is {total} chars of STANDING context "
+                f"(> {ceiling} declared in {BASELINE_FILE}) across "
+                f"{len(setup.listing)} entries — every one is carried every turn. "
+                f"Disable a plugin, or raise the ceiling in a reviewed diff"
+            )
+    return findings
+
+
 # --------------------------------------------------------------------------- #
 # Entry point
 # --------------------------------------------------------------------------- #
@@ -1003,6 +1055,7 @@ CHECKS: tuple[tuple[str, Callable[[Setup], list[str]]], ...] = (
     ("mcp-guard-coverage", check_mcp_guard_coverage),
     ("mcp-duplicate", check_mcp_duplicate),
     ("pin-currency-wired", check_pin_currency_wired),
+    ("listing-budget", check_listing_budget),
 )
 
 #: Only run with ``--live``: each entry spawns subprocesses.
