@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """ADR-0001 enforcement: a CI job that writes to git must skip hk's hooks.
 
 ``mise.toml``'s ``[hooks] postinstall = "mise reshim && hk install --mise"``

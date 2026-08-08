@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Local Renovate dry-run — what WOULD Renovate change, without opening a PR.
 
 ``dotfiles-setup renovate-dryrun`` (wrapped by ``mise run renovate-dryrun``)

@@ -23,7 +23,7 @@ minor | The `run_tick` orchestrator tests completely omit the end-to-end wiring 
 **The respawned node inherits the minimal launchd PATH instead of the user's interactive shell PATH, breaking execution of background tools**
 Evidence:
 ```python
-        env=strip_respawn_env(),
+env = (strip_respawn_env(),)
 ```
 Why it is a defect: `strip_respawn_env` preserves the caller's `os.environ` (minus Claude-specific vars). Because the caller is a launchd agent with a severely restricted `PATH` (defined in `mise.toml` as `/Users/rmanaloto/.local/bin:/opt/homebrew/bin:/usr/bin:/bin`), the respawned node inherits this barebones PATH rather than a full user interactive environment.
 Concrete failure scenario: `dag-tick` respawns a `DEAD` agent. When the agent attempts to run a background build using standard tools like `npm`, `cargo`, or `go` (typically installed in `~/.nvm` or `~/.cargo/bin`), the command fails entirely because those paths are missing from the launchd-inherited environment.

@@ -63,9 +63,7 @@ return _FALLBACK_DEFAULTS
 `_protected()`:
 
 ```python
-defaults = (
-    (advertised.split("/", 1)[1],) if "/" in advertised else _FALLBACK_DEFAULTS
-)
+defaults = (advertised.split("/", 1)[1],) if "/" in advertised else _FALLBACK_DEFAULTS
 ```
 
 Same rule, two sites; a change to how the advertised default is parsed must be

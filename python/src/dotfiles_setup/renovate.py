@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Renovate (Mend hosted) status signal.
 
 ``dotfiles-setup renovate-status`` (wrapped by ``mise run renovate-status``)

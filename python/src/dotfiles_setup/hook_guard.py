@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """PreToolUse Bash guard: canonical mise tasks over one-off commands.
 
 ``dotfiles-setup hook pretooluse`` is the single project PreToolUse hook

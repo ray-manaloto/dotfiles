@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Cross-repo parity gate (#354 tier 0, `eval.cross-repo-parity`).
 
 dotfiles and knowledge-base document the same cross-vendor orchestration

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 Raymond Manaloto
 """Normalize a GitHub Actions run into a triage report using gh."""
 
 from __future__ import annotations

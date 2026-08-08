@@ -343,15 +343,20 @@ it spans two source files, and it is not regenerable by any extractor.
 ```python
 new_sources: set[str] = set()
 for ch in new_chunks:
-    for n in ch.get("nodes", []):          # <- built from NODES only
+    for n in ch.get("nodes", []):  # <- built from NODES only
         ...
         new_sources.add(sf)
 if new_sources:
+
     def _kept(item: dict) -> bool:
         sf = item.get("source_file")
-        return sf not in new_sources and _norm_source_file(sf, _replace_root) not in new_sources
+        return (
+            sf not in new_sources
+            and _norm_source_file(sf, _replace_root) not in new_sources
+        )
+
     existing_nodes = [n for n in existing_nodes if _kept(n)]
-    existing_edges = [e for e in existing_edges if _kept(e)]   # <- edges too
+    existing_edges = [e for e in existing_edges if _kept(e)]  # <- edges too
 ```
 
 An edge is filtered by **its own single `source_file` scalar**, never by its
@@ -374,11 +379,15 @@ PR, open since 2026-07-13 with **no review**. Neither is available to build on.
 
 ```python
 preserved_edges = [
-    edge for edge in existing.get("links", existing.get("edges", []))
-    if edge.get("source") in all_ids and edge.get("target") in all_ids
+    edge
+    for edge in existing.get("links", existing.get("edges", []))
+    if edge.get("source") in all_ids
+    and edge.get("target") in all_ids
     and not source_paths.is_evicted(edge, edge_evicted_source_identities)
-    and not (edge.get("_origin") == "ast"
-             and source_paths.is_evicted(edge, rebuilt_source_identities))
+    and not (
+        edge.get("_origin") == "ast"
+        and source_paths.is_evicted(edge, rebuilt_source_identities)
+    )
 ]
 ```
 

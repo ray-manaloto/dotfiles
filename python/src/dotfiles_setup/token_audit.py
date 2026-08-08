@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Contract-token uniqueness: a token that matches twice can be satisfied twice.
 
 ## Why this exists (#394, 2026-07-27)

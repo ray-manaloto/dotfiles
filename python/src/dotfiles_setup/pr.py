@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Ship/land/automerge: the full PR loop as library code (zero-bash-logic).
 
 ``dotfiles-setup pr ship`` (wrapped by ``mise run ship``) takes the

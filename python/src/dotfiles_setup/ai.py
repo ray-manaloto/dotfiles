@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """AI toolchain orchestration module."""
 
 from __future__ import annotations

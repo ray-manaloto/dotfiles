@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Env-dump detection — the one leak shape no secret scanner can see.
 
 ## Why this exists (2026-07-27)

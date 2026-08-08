@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Compute content-addressed hashes for the two-tier cache pipeline.
 
 The Dockerfile pipeline has three independent slow steps that we cache

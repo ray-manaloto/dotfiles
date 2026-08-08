@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for the doc path-reference checker (#160 T13, validation J)."""
 
 from __future__ import annotations

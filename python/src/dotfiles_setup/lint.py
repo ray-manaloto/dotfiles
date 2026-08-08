@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Run the hk lint gate under a hard timeout so a hung lint self-aborts.
 
 The gate is `hk run check --all` — the **read-only** hook, identical to what

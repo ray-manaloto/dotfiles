@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for the GHCR retention planner (#160 T12.5, decision 13)."""
 
 from __future__ import annotations

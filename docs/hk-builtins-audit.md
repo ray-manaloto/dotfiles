@@ -6,7 +6,7 @@
      Authored content lives in python/src/dotfiles_setup/hk_builtins_audit.py
      (NOT_ADOPTED); everything else is read from `hk builtins` + the configs. -->
 
-- **hk version:** hk 1.54.0
+- **hk version:** hk 1.54.1
 - **Builtins available:** 145
 - **Wired as builtins:** 28
 - **Steps defined in total:** 63 (35 custom, with their own check/fix commands)

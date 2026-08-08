@@ -67,8 +67,12 @@ Default when absent is `EXTRACTED` almost everywhere it is read
 the word "provenance" appears as a field name, and it is only an *input alias*:
 
 ```python
-    confidence = first_present(edge, "confidence", "evidence", "provenance", default="EXTRACTED")
-    score = first_present(edge, "confidence_score", "score", "weight", "probability", default=1.0)
+confidence = first_present(
+    edge, "confidence", "evidence", "provenance", default="EXTRACTED"
+)
+score = first_present(
+    edge, "confidence_score", "score", "weight", "probability", default=1.0
+)
 ```
 
 _(sections 2-8 to follow)_
@@ -102,24 +106,29 @@ def build_merge(
 ### 2a. The destroying lines — `build.py:1114-1131`
 
 ```python
-    new_sources: set[str] = set()
-    for ch in new_chunks:
-        for n in ch.get("nodes", []):
-            sf = n.get("source_file")
-            if not sf:
-                continue
-            new_sources.add(sf)
-            norm = _norm_source_file(sf, _replace_root)
-            if norm:
-                new_sources.add(norm)
-    if new_sources:
-        def _kept(item: dict) -> bool:
-            sf = item.get("source_file")
-            return sf not in new_sources and _norm_source_file(sf, _replace_root) not in new_sources
-        existing_nodes = [n for n in existing_nodes if _kept(n)]
-        existing_edges = [e for e in existing_edges if _kept(e)]
+new_sources: set[str] = set()
+for ch in new_chunks:
+    for n in ch.get("nodes", []):
+        sf = n.get("source_file")
+        if not sf:
+            continue
+        new_sources.add(sf)
+        norm = _norm_source_file(sf, _replace_root)
+        if norm:
+            new_sources.add(norm)
+if new_sources:
 
-    base = [{"nodes": existing_nodes, "edges": existing_edges}] if had_graph else []
+    def _kept(item: dict) -> bool:
+        sf = item.get("source_file")
+        return (
+            sf not in new_sources
+            and _norm_source_file(sf, _replace_root) not in new_sources
+        )
+
+    existing_nodes = [n for n in existing_nodes if _kept(n)]
+    existing_edges = [e for e in existing_edges if _kept(e)]
+
+base = [{"nodes": existing_nodes, "edges": existing_edges}] if had_graph else []
 ```
 
 **Why a hand-added edge dies.** An edge is filtered by **its own single
@@ -181,8 +190,9 @@ disables the guard entirely on the default path. Edge loss is never guarded.
 `cache.py:454-482`:
 
 ```python
-def cache_dir(root: Path = Path("."), kind: str = "ast",
-              prompt_fp: str | None = None) -> Path:
+def cache_dir(
+    root: Path = Path("."), kind: str = "ast", prompt_fp: str | None = None
+) -> Path:
     ...
     _out = Path(_GRAPHIFY_OUT)
     base = _out if _out.is_absolute() else Path(root).resolve() / _out
@@ -308,10 +318,14 @@ no `ollama` python package dependency. `llm.py:1135-1139`:
 `llm.py:1156-1157, 1230` — client construction and the single call site:
 
 ```python
-    client = OpenAI(api_key=api_key, base_url=base_url, timeout=_resolve_api_timeout(),
-                    max_retries=_retries)
-    ...
-    resp = client.chat.completions.create(**kwargs)
+client = OpenAI(
+    api_key=api_key,
+    base_url=base_url,
+    timeout=_resolve_api_timeout(),
+    max_retries=_retries,
+)
+...
+resp = client.chat.completions.create(**kwargs)
 ```
 
 Endpoint path: **`{base_url}/chat/completions`** where `base_url` ends in `/v1`
@@ -692,10 +706,11 @@ def to_json(G: nx.Graph, communities: dict[int, list[str]], output_path: str, *,
 Actual disk write at `export.py:318-320`:
 
 ```python
-    from graphify.paths import write_json_atomic
-    # Atomic write: a crash/ENOSPC mid-write must not truncate a good graph.json.
-    write_json_atomic(output_path, data, indent=2)
-    return True
+from graphify.paths import write_json_atomic
+
+# Atomic write: a crash/ENOSPC mid-write must not truncate a good graph.json.
+write_json_atomic(output_path, data, indent=2)
+return True
 ```
 
 Only three call sites:
@@ -755,9 +770,12 @@ The write path is closed to in-process extension, but three practical seams exis
 (`build.py:540-543`):
 
 ```python
-    real_errors = [e for e in errors if "does not match any node id" not in e]
-    if real_errors:
-        print(f"[graphify] Extraction warning ({len(real_errors)} issues): {real_errors[0]}", file=sys.stderr)
+real_errors = [e for e in errors if "does not match any node id" not in e]
+if real_errors:
+    print(
+        f"[graphify] Extraction warning ({len(real_errors)} issues): {real_errors[0]}",
+        file=sys.stderr,
+    )
 ```
 
 So validation is **non-fatal on the build path**. An injected edge with an

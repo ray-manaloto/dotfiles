@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """This repo's eval cases — tier 1 (reachability, PR 2) and tier 2 (fixtures, PR 3).
 
 The RUNNER is :mod:`kb_setup.evals`, shared with knowledge-base and consumed

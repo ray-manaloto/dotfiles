@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for the command-audit transcript scanner (dotfiles_setup.command_audit).
 
 Covers transcript discovery (env-aware, never hardcoded), defensive JSONL

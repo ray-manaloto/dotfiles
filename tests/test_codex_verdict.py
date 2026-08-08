@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for the Codex verdict contract + reaper (dotfiles_setup.codex_verdict).
 
 #580. The consumer mechanics are ported from OMC verbatim because they are the

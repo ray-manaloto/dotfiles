@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for the local-first apt-pin gate (dotfiles_setup.apt_pins).
 
 Two layers: isolated logic tests (a fixture mise-system.toml / Dockerfile, so

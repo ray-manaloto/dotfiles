@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for the env-dump gate.
 
 Every credential literal here is SYNTHETIC and is built by concatenation, never

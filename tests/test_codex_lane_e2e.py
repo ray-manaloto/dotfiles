@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """⭐ The #613 end-to-end arm: real launcher -> real `codex exec` -> real reaper.
 
 **Gated, not silently skipped.** Every test is marked ``codex_exec``, which the

@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for the Codex review-lane producer (dotfiles_setup.codex_lane).
 
 #613, the follow-up to #580. #580 built a complete, well-tested CONSUMER —

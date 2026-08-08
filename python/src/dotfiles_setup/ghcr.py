@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """GHCR publish prerequisite checks using GitHub CLI."""
 
 from __future__ import annotations

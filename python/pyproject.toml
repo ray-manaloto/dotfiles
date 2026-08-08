@@ -4,8 +4,8 @@ version = "0.1.0"
 description = "Python orchestration library for dotfiles setup"
 requires-python = ">=3.14"
 dependencies = [
-    "pydantic>=2.12.5",
-    "pydantic-settings>=2.14.2",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.15.0",
     # deb822 control-file parser, maintained by Debian's own
     # pkg-python-debian-maint (salsa.debian.org/python-debian-team). Ubuntu
     # ships the same code as `python3-debian`. Used by `apt_repo` to read an
@@ -127,7 +127,7 @@ enable_all = true
 
 [dependency-groups]
 dev = [
-    "pytest>=9.0.3",
+    "pytest>=9.1.1",
     # Linter/formatter and type-checker invoked directly by hk.pkl via
     # `uv run --project python` so hk uses pyproject.toml config with no
     # builtin-step rule dropouts (see Issue #45). Unpinned → `uv lock`

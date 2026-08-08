@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Docker and devcontainer runtime management for dotfiles setup.
 
 R2 outbound SSH agent forwarding now relies on Docker Desktop's native

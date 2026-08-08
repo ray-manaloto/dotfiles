@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """No-new-bash-logic enforcement: allowlist + per-file growth budget.
 
 The zero-bash-logic policy (root `AGENTS.md` — "Non-trivial logic lives in

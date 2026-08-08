@@ -1,14 +1,14 @@
-amends "package://github.com/jdx/hk/releases/download/v1.54.0/hk@1.54.0#/Config.pkl"
+amends "package://github.com/jdx/hk/releases/download/v1.54.1/hk@1.54.1#/Config.pkl"
 
 // #154: builtin linters MUST be assigned from Builtins (`= Builtins.name`), not
 // declared as a bare `["name"] {}` block — a bare block is a fresh empty Step
 // (check=null) that hk silently skips (never ran locally or in CI). Extend a
 // builtin with overrides via `["name"] = (Builtins.name) { glob = ... }`.
 // See feedback_hk_builtins_need_assignment.
-import "package://github.com/jdx/hk/releases/download/v1.54.0/hk@1.54.0#/Builtins.pkl"
+import "package://github.com/jdx/hk/releases/download/v1.54.1/hk@1.54.1#/Builtins.pkl"
 // Named Config import for the Mapping<String, Config.Step> type annotation on
 // allSteps (the `amends` clause does not bind a module name).
-import "package://github.com/jdx/hk/releases/download/v1.54.0/hk@1.54.0#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v1.54.1/hk@1.54.1#/Config.pkl"
 
 import "hk-common.pkl" as common
 
@@ -444,9 +444,20 @@ local allSteps = new Mapping<String, Config.Step> {
   //     `custom.regex` is dropped from enabledManagers (the 3 customManagers
   //     silently go dead) AND when the jdx preset is removed; those two
   //     repo-specific semantics are guarded only by the suites.toml tokens.
+  //
+  //     #644: this shells out to python rather than calling the validator
+  //     directly, because the validator DEGRADES SILENTLY. `re2` is an
+  //     OPTIONAL npm dep of renovate; when it is missing the validator warns
+  //     "RE2 not usable, falling back to RegExp" and **still exits 0**, so
+  //     every regex in renovate.json goes unchecked while the gate stays
+  //     green. Measured: `(?!latest)` in a matchStrings entry passed rc=0 on
+  //     the degraded engine and fails rc=1 with RE2. `renovate-validate`
+  //     asserts the engine FIRST with a lookahead canary (a config that must
+  //     FAIL), then runs the real validation. The validation itself is still
+  //     100% the native tool — nothing here reimplements a regex engine.
   ["renovate_config_validate"] {
     glob = List("renovate.json")
-    check = "renovate-config-validator --strict --no-global renovate.json"
+    check = "uv run --project python dotfiles-setup renovate-validate"
   }
 
   // --- Agent documentation ---

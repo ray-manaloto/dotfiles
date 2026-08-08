@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for image smoke test script generation and size parsing."""
 
 from __future__ import annotations
@@ -649,7 +650,7 @@ def test_smoke_docker_cmd_injects_real_declared_tools() -> None:
     # A representative real tool from .devcontainer/mise-system.toml [tools]...
     assert "node\tlatest" in script
     # ...and from the merged shared conf.d fragment (#160 T5), exact-pinned.
-    assert "python\t3.14.6" in script
+    assert "python\t3.14.7" in script
 
 
 def test_resolve_declared_tools_merges_system_and_shared() -> None:
@@ -660,8 +661,8 @@ def test_resolve_declared_tools_merges_system_and_shared() -> None:
     declared = resolve_declared_tools()
 
     # From the shared fragment, exact-pinned.
-    assert declared["python"] == "3.14.6"
-    assert declared["hk"] == "1.54.0"
+    assert declared["python"] == "3.14.7"
+    assert declared["hk"] == "1.54.1"
     # From mise-system.toml [tools].
     assert declared["node"] == "latest"
     # A representative conda build tool still declared via mise (#222 PR-C moved

@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Image smoke test and metrics logic for devcontainer validation."""
 
 from __future__ import annotations

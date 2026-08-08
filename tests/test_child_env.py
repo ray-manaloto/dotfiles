@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for the child-process environment scrub."""
 
 from __future__ import annotations

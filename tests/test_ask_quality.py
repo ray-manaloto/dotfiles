@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for the AskUserQuestion quality gate.
 
 Every rule is tested in BOTH directions (`.claude/rules/probes-need-a-control-arm.md`):

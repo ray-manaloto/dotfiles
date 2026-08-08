@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Parse the declarative `[bootstrap.packages]` apt set.
 
 `.devcontainer/mise-system.toml` `[bootstrap.packages]` is the single source

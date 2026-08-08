@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Main entry point for the dotfiles-setup CLI."""
 
 from __future__ import annotations
@@ -76,6 +77,7 @@ from dotfiles_setup.parity import run as parity_run
 from dotfiles_setup.pr import automerge_main, land_main, ship_main
 from dotfiles_setup.renovate import renovate_status_main
 from dotfiles_setup.renovate_dryrun import renovate_dryrun_main
+from dotfiles_setup.renovate_validate import renovate_validate_main
 from dotfiles_setup.sync import SyncOptions, sync_main
 from dotfiles_setup.token_audit import token_audit_main
 from dotfiles_setup.verify import main as verify_main
@@ -204,6 +206,13 @@ def _add_honesty_subcommands(subparsers: _SubParsers) -> None:
         help="Enforce zero-bash-logic: every scripts/*.sh + "
         ".devcontainer/scripts/*.sh must be allowlisted and within its "
         "per-file line budget (new/grown scripts fail — move logic to python/)",
+    )
+    subparsers.add_parser(
+        "renovate-validate",
+        help="Validate renovate.json with the native renovate-config-validator, "
+        "first asserting via a lookahead canary that it is really using RE2 — "
+        "a missing OPTIONAL re2 dep makes it warn, fall back to JS RegExp and "
+        "still exit 0, leaving every regex unchecked (#644)",
     )
     subparsers.add_parser(
         "classifier-axes",
@@ -1580,6 +1589,7 @@ def _build_command_handlers(
             apt_pins_main(project_root, json_output=args.json)
         ),
         "bash-budget": lambda: sys.exit(bash_budget_main(project_root)),
+        "renovate-validate": lambda: sys.exit(renovate_validate_main(project_root)),
         "classifier-axes": lambda: sys.exit(classifier_axes_main(project_root)),
         "dag-tick": lambda: sys.exit(run_tick(args)),
         "dag-project": lambda: sys.exit(run_project(args)),

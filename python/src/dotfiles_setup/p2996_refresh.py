@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Auto-bump `CLANG_P2996_REF` to the latest `bloomberg/clang-p2996` HEAD.
 
 clang-p2996 publishes **no releases or tags**; its default branch is ~a

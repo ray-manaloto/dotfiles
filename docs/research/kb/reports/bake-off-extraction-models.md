@@ -38,10 +38,14 @@ Cross-document edges measured by **real `source_file`**, never by splitting node
 ids on `_` (that heuristic gave a false 15/15 for qwen2.5-coder):
 
 ```python
-src = {n['id']: n.get('source_file') for n in d['nodes']}
-cross = sum(1 for e in d['links']
-            if src.get(e['source']) and src.get(e['target'])
-            and src[e['source']] != src[e['target']])
+src = {n["id"]: n.get("source_file") for n in d["nodes"]}
+cross = sum(
+    1
+    for e in d["links"]
+    if src.get(e["source"])
+    and src.get(e["target"])
+    and src[e["source"]] != src[e["target"]]
+)
 ```
 
 | model | nodes | edges | x-doc | out tok |

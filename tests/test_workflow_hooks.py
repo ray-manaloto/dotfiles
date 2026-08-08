@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for the ADR-0001 enforcer (dotfiles_setup.workflow_hooks).
 
 Seven layers, in the order they earn their keep:

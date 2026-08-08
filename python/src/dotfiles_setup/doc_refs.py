@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Backtick doc-reference existence checker (#160 T13, validation J).
 
 Agent docs (AGENTS.md/CLAUDE.md, rules, skills) cite repo files in backtick

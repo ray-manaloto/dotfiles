@@ -369,7 +369,7 @@ Whole mechanism is `stokowski/tracking.py` — **165 lines, no dependencies beyo
 
 ```python
 STATE_PATTERN = re.compile(r"<!-- stokowski:state ({.*?}) -->")
-GATE_PATTERN  = re.compile(r"<!-- stokowski:gate ({.*?}) -->")
+GATE_PATTERN = re.compile(r"<!-- stokowski:gate ({.*?}) -->")
 ```
 
 **Payload fields** — small and closed, no nesting:
@@ -452,8 +452,8 @@ matches. The regex is safe for nested objects.
 **Declaration** (`config.py:115-116`) — both are gate-only fields:
 
 ```python
-rework_to:  str | None = None     # gate only
-max_rework: int | None = None     # gate only
+rework_to: str | None = None  # gate only
+max_rework: int | None = None  # gate only
 ```
 
 Validation is a hard gate at load (`config.py:643-647`): a `gate` state with no

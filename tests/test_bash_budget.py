@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for the zero-bash-logic enforcer (dotfiles_setup.bash_budget).
 
 Two layers: isolated logic tests (monkeypatch the tracked set + ALLOWLIST so

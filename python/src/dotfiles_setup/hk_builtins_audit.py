@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Generate `docs/hk-builtins-audit.md` from `hk builtins` + the hk configs.
 
 ## Why this is generated
@@ -187,8 +188,10 @@ def render(root: Path) -> str:
         f"- **hk version:** {hk_version()}",
         f"- **Builtins available:** {len(available)}",
         f"- **Wired as builtins:** {len(wired)}",
-        f"- **Steps defined in total:** {len(steps)} "
-        f"({len(custom)} custom, with their own check/fix commands)",
+        (
+            f"- **Steps defined in total:** {len(steps)} "
+            f"({len(custom)} custom, with their own check/fix commands)"
+        ),
         "",
         "A *wired builtin* is referenced as `Builtins.<name>`. A *custom step* is a",
         '`["name"] { … }` block carrying its own commands — it may share a',

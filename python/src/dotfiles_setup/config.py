@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Centralized configuration for dotfiles setup.
 
 All environment variables and hardcoded paths are consolidated here

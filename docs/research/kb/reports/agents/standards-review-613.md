@@ -181,8 +181,8 @@ Genuinely compliant against the documented standards I checked:
 `tests/test_codex_lane_e2e.py:88` and `:118` are the same call:
 
 ```python
-result = cl.launch_lane(tmp_path, _request())     # :88,  then asserts the edge
-result = cl.launch_lane(tmp_path, _request())     # :118, then asserts the payload
+result = cl.launch_lane(tmp_path, _request())  # :88,  then asserts the edge
+result = cl.launch_lane(tmp_path, _request())  # :118, then asserts the payload
 ```
 
 Plus two more real invocations at `:145` and `:157`. That is **4 paid `codex exec`

@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for `dotfiles_setup.apt_repo`.
 
 Every test drives the injected `fetcher` seam, so nothing here touches the

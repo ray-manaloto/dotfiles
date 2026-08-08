@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for the graphify knowledge-graph integration — query read path (#313).
 
 The seam is the same as the ghcr module's: the public functions are exercised

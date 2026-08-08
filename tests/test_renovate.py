@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for the Renovate status signal (dotfiles_setup.renovate)."""
 
 from __future__ import annotations

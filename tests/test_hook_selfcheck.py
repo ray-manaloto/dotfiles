@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for the host-side hook self-check (dotfiles_setup.hook_selfcheck).
 
 The self-check drives the WIRED hook entrypoints end-to-end; it is the

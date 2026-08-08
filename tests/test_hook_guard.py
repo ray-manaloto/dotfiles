@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for the PreToolUse mise-tasks-only guard (dotfiles_setup.hook_guard)."""
 
 from __future__ import annotations
@@ -838,8 +839,10 @@ def test_the_import_surface_probe_sees_a_lean_process(tmp_path: Path) -> None:
     "command",
     [
         # the exact command that leaked, verbatim
-        'fnox exec -- sh -c \'printf "under fnox exec: %s\\n" '
-        '"${DOPPLER_TOKEN:+PRESENT}${DOPPLER_TOKEN:-ABSENT}"\'',
+        (
+            'fnox exec -- sh -c \'printf "under fnox exec: %s\\n" '
+            '"${DOPPLER_TOKEN:+PRESENT}${DOPPLER_TOKEN:-ABSENT}"\''
+        ),
         # the leak survives a shell -c body, which is where it actually happened
         "sh -c 'echo \"${AWS_SECRET_ACCESS_KEY:-none}\"'",
         'bash -c "echo $GITHUB_TOKEN"',

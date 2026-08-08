@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for the dotfiles audit command output and exit codes."""
 
 import re

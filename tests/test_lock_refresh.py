@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for `dotfiles_setup.lock_refresh`.
 
 The stage/collect helpers behind the CI lock-refresh job (#160 T8).

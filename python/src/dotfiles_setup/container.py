@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Devcontainer freshness gate: is the running container on the latest code?
 
 The verify-before-advancing rule (`.claude/rules/verify-before-advancing.md`)

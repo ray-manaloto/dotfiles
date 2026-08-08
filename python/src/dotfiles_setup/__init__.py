@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Dotfiles setup orchestration library."""
 
 from pathlib import Path

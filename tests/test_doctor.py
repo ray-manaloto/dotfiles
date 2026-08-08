@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for the project doctor (dotfiles_setup.doctor, #418).
 
 **Every check is armed in both directions.** A doctor check that has only ever
@@ -424,8 +425,10 @@ def test_guard_coverage_distinguishes_a_local_only_rule() -> None:
 def test_guard_coverage_flags_a_stale_baseline_server() -> None:
     findings = doctor.check_mcp_guard_coverage(_setup(servers=()))
     assert findings == [
-        "doctor.toml declares mutating tools for 'filesystem', which is not a "
-        "registered MCP server — the entry is stale"
+        (
+            "doctor.toml declares mutating tools for 'filesystem', which is not a "
+            "registered MCP server — the entry is stale"
+        )
     ]
 
 

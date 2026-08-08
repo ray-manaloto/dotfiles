@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """The Codex verdict contract (a JSON Schema) plus its reaper (#580).
 
 The review lane runs `codex exec`, which returns a verdict the DAG turns into

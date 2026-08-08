@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for GHCR prerequisite validation and scope parsing."""
 
 from __future__ import annotations

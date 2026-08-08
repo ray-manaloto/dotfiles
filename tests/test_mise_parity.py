@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Host↔image mise parity gates (#160 T12.5, decision 16).
 
 Ray's parity principle, verbatim: "macOS local == CI/CD versions." Two

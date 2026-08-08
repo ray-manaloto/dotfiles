@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Quality gate for ``AskUserQuestion`` calls (PreToolUse).
 
 Ray's standing instruction (2026-08-02): *"always use the AskUserQuestion tool

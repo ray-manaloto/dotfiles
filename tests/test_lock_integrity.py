@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for the lockfile platform-coverage gate (dotfiles_setup.lock_integrity).
 
 Why this gate exists alongside ``test_lock_coverage.py``: that module asserts

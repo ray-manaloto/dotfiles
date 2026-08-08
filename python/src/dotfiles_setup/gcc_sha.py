@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Auto-repair `GCC_LATEST_DEB_SHA256` to match the pinned gcc-latest .deb.
 
 kayari.org (jwakely's gcc-latest server) publishes **no checksum or

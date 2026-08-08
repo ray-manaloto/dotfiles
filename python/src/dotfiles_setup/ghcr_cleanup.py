@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """GHCR retention planning for the devcontainer package (#160 T12.5, #13).
 
 The three-tier probe cache accretes one `:base-<hash16>` / `:p2996-<hash16>`
