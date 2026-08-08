@@ -954,11 +954,14 @@ def test_every_check_function_is_actually_registered() -> None:
     }
     assert defined - registered == set(), "a check_* function is not wired into CHECKS"
     # 7 from #418, + `listing-budget` (2026-08-07): the skill/agent listing is
-    # standing context every turn and nothing measured it. Raise this ONLY
+    # standing context every turn and nothing measured it. + `path-drift`
+    # (2026-08-08, #596): whether THIS shell resolves the tools mise pins — a
+    # cached activation keeps the old install dir on PATH, so gates run a stale
+    # binary while `mise which` reports the new one. Raise this ONLY
     # alongside a new entry in CHECKS — the count is what catches a check that
     # was defined and never registered, which the set-difference above cannot
     # see once the function is also removed.
-    assert len(doctor.CHECKS) == 8, "every specified check must be wired"
+    assert len(doctor.CHECKS) == 9, "every specified check must be wired"
 
 
 def test_the_shipped_baseline_parses_and_declares_what_the_checks_read() -> None:

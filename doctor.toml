@@ -152,3 +152,22 @@ scope_servers = []
 # is one nobody reads. Crossing 34,000 means a plugin materially grew its
 # listing, or a new one was enabled — both worth a look.
 max_chars = 34000
+
+[path_drift]
+# Tools whose staleness weakens a GATE rather than merely annoying someone
+# (#596). Every mise tool on PATH is compared — the list is not the scope, it
+# only decides which drifts are named FIRST in the finding, because 14 were
+# stale on this host the day the check was written and a flat list buries the
+# ones that matter.
+#
+# Every name here has actually drifted at least once: hk 1.52.0 vs a 1.54.0 pin
+# (twice in session 2026-08-05g, two spurious red test runs); `npm:renovate`
+# 44.13.2 vs 44.14.10 and `uv` 0.12.2 vs 0.12.3 on 2026-08-08, both surviving an
+# `mise install` that exited 0; `python` 3.14.6 vs 3.14.7 the day after.
+#
+# ⚠️ This check is BLIND unless the SessionStart hook in `.claude/settings.json`
+# captures the shell's PATH into DOTFILES_AMBIENT_PATH before invoking mise —
+# `mise run <task>` REPLACES the stale install dir in PATH, so a probe inside the
+# task can only ever report clean. Blindness is reported as a finding, never as a
+# pass; if you see it, the hook prefix was dropped.
+gate_tools = ["hk", "uv", "python", "ruff", "npm:renovate"]
