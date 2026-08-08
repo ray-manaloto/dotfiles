@@ -44,9 +44,28 @@ Detail: `docs/rules-evidence/persistence-gate-retry.md`.
 |---|---|---|
 | `getaddrinfo ENOTFOUND ghcr.io` | environmental | retry once per heuristic above |
 | `dial tcp: lookup ... no such host` | environmental | retry once per heuristic above |
+| `docker: ... parent snapshot sha256:... does not exist` | environmental (image store) | retry once — `sync` repairs it as a side effect; do NOT reach for a base pull |
 | `FAIL: installed-tool set drifted across stop/up` | real defect | triage `mise-system.toml` ↔ runtime drift |
 | `FAIL: in-volume canary missing` | real defect | home-volume mount regression — investigate volume name / mount opts |
 | `R[123] ... not works` | real defect | the corresponding R-invariant regressed; do NOT retry without diagnosing |
+
+## The image-store signature repairs itself, and that is not luck
+
+Measured 2026-08-08 during a `mise run ship`: `verify-local` died with
+`docker: ... parent snapshot sha256:c8a425d7... does not exist` — a local
+overlay image referencing a layer the store no longer had, with the local
+`:dev` (`3c957a17`) also behind the registry's (`104cdcdc`). Neither DNS
+signature above was present, so the rule's table said nothing.
+
+**Retrying `mise run verify-local` alone returned rc=0 in ~20 minutes.** The
+repair is a side effect of the same failed run: `sync` detects `CONTAINER
+OUTDATED`, runs `dev-rebuild` (rc=0), and the rebuilt overlay no longer
+references the missing snapshot. So the retry-once heuristic covers this class
+too — and the expensive wrong move is inferring a stale base and starting a
+~21.5GB pull, which the earlier `dev-rebuild` had already made unnecessary.
+
+Distinguish it from a REAL base-currency failure: that one surfaces as smoke
+tier-1 identity failing on a config-hash mismatch, not as a missing snapshot.
 
 ## Applies to
 
