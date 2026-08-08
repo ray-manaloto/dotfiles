@@ -69,8 +69,17 @@ defect, opposite fix.
      to the user; it was the only decision in the 2026-08-07 pass that needed a
      ruling.
 3. **Re-run** until `rc=0`.
-4. **Now shorten.** Rewrite the hook as a one-line pointer. Re-run to confirm
-   still `rc=0`.
+4. **Now shorten — and actually reach the number you were given.** Rewrite each
+   fat hook as a one-line pointer. Re-run to confirm still `rc=0`, and re-measure
+   with `wc -c` against the target before you stop.
+
+   ⚠️ **Verifying is not the deliverable; it is what makes the deliverable safe.**
+   Across four sandboxed eval runs on 2026-08-07 every run cleared its target,
+   but the margins were thin — **17,478 / 17,377 / 17,090 / 16,749 B against a
+   17,500 B target**, one of them by 22 bytes. A margin that small is not a
+   result you should assume; it is one you confirm. When the verification is
+   done, keep compressing hooks until `wc -c` clears the target, then say which
+   number you hit.
 
 ## Deleting a memory
 
@@ -88,6 +97,13 @@ mise run memory-index -- --refs feedback_colima_recommendation
   DD-vs-Colima call). It was absorbed into `feedback_docker_desktop_runtime`
   before deletion, and the citation in `feedback_base_image_ci_only` repointed.
 - **No inbound refs is not a clearance.** The colima file had two.
+- ⚠️ **`--refs` cannot see the index entry itself.** It reports the memory
+  *files* that cite a name; `MEMORY.md` is not one of them, so the index line
+  linking the memory you are about to delete is invisible to it. Verified with
+  both arms 2026-08-07: `--refs feedback_codex_worktree` reported **1** citing
+  file while `MEMORY.md` also linked it and went unreported. So after `--refs`,
+  `grep -rn <name> "$(dirname MEMORY.md)"` across the whole memory directory
+  — index included — and resolve what the grep adds.
 
 ## Reading the budget
 
