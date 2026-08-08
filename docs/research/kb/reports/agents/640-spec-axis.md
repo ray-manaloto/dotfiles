@@ -99,8 +99,18 @@ None. All four issue-body steps are complete.
    **both**, and the import token is the exact full line
    `from kb_setup.md_budget import SKILL_DESCRIPTION_MAX, skill_description` —
    which breaks on any reordering or a third imported symbol, while proving
-   nothing the call-site token doesn't. Drop the import token or anchor it
-   loosely.
+   nothing the call-site token doesn't.
+
+   **RESOLVED IN PART, and I withdraw the recommended fix.** The prose
+   self-contradiction is gone in the working tree (it now reads "the tokens bind
+   BOTH the import and the call site — deliberately not one or the other", with
+   both failure modes named). What survives is only the brittleness: the exact
+   full-line import token fails on a reordering or a third symbol, a
+   false-positive class this repo has paid for (#265). But my "anchor it
+   loosely" is wrong on inspection — `skill_description` alone also matches the
+   call site, so the full-line form buys real discrimination. The correctness
+   axis's proposal is better: leave the token, add a comment saying why it is
+   exact. Low severity, no change required to ship.
 2. ~~**`skill_description` added to `__all__`**~~ — **ALREADY FIXED in the
    working tree** while this review was running. At c5ed9e9 the reviewed commit
    re-exported a third-party symbol as this module's public API (the deleted
