@@ -1184,3 +1184,15 @@ description = "Find what this session did BY HAND that should be code (#654): tr
 #   mise run session-review -- --output .agent/session-review.md
 #   mise run session-review -- --narrative-only      # cheap re-check
 run = 'uv run --project python dotfiles-setup session-review'
+
+[tasks.lint-delta]
+description = "Partition linter violations into YOURS vs THE UPGRADE'S by running the previous pinned version against the same tree (#651)"
+# Thin caller; see lint_delta.py. A linter bump makes every newly-enabled rule
+# look like a regression in your own change: measured 2026-08-08, ruff
+# 0.15.20 -> 0.16.2 went 2 -> 138 violations on ONE unchanged tree. The old
+# version IS the control arm, so every difference belongs to the bump.
+#
+#   mise run lint-delta                              # ruff, baseline derived
+#   mise run lint-delta -- --tool ty
+#   mise run lint-delta -- --baseline 0.15.20
+run = 'uv run --project python dotfiles-setup lint-delta'
