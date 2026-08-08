@@ -1169,3 +1169,18 @@ stderr_path = "~/Library/Logs/dotfiles-dag-project.err.log"
 # inherit), and a live `gh api` call rc=0. That measurement is why this agent
 # needs no credential plumbing of its own.
 environment = { PATH = "/Users/rmanaloto/.local/share/mise/shims:/Users/rmanaloto/.local/bin:/opt/homebrew/bin:/usr/bin:/bin" }
+
+[tasks.session-review]
+description = "Find what this session did BY HAND that should be code (#654): transcript mine + narrative pass over the notepad/handoffs"
+# Thin caller; see session_review.py. Two DISJOINT lanes, both on by default —
+# lane 1 ranks recurring command shapes by session spread, lane 2 surfaces the
+# reasoning sinks that leave no repeated command (#650 was ~15 turns with no
+# repeated one-liner, so lane 1 alone would have missed the best candidate).
+# Sibling of `command-audit`, which mines the same transcripts for a different
+# verdict: that one asks "should this be a GUARD REDIRECT", this one asks
+# "should this be a SKILL".
+#
+#   mise run session-review                          # both lanes, to stdout
+#   mise run session-review -- --output .agent/session-review.md
+#   mise run session-review -- --narrative-only      # cheap re-check
+run = 'uv run --project python dotfiles-setup session-review'
