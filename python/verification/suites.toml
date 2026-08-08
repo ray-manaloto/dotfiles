@@ -1986,3 +1986,22 @@ per_path_tokens = { ".claude/skills/session-review/SKILL.md" = ["name: session-r
 tokens = [
     "def is_reportable_shape(",
 ]
+
+[[suite]]
+name = "workflow.lint-delta-control-arm"
+description = "#651: a linter bump must be partitioned into YOURS and THE UPGRADE'S by running the previous pinned version against the SAME TREE — the old version IS the control arm, so every difference is attributable to the tool rather than to the code. Measured 2026-08-08 on one unchanged tree: ruff 0.15.20 reported **2** violations (I001 x1, D403 x1, both genuinely mine) while 0.16.2 reported **138** (+ CPY001 x106, ISC004 x30, all pre-existing). Without the partition the choice reads as 'fix 138 or suppress'; with it, as 'fix 2, then decide policy on two new rule classes' — different decisions with different right answers, and the reason `zero-skip-policy.md` does not have to be argued at that moment. ⚠️ **The refusal is the load-bearing part, which is why `if baseline == current:` is bound as a token.** Comparing a version against ITSELF can only ever report 'no change', and reporting that as a clean bill is precisely the one-faced probe `probes-need-a-control-arm.md` refuses; the entry point exits 2 on it, on an underivable baseline, and on an unknown tool, rather than producing a report that reads as reassurance. ⚠️ **The default baseline is the pin at the previous revision that TOUCHED THE LOCKFILE, not `HEAD~1`** — `previous_lock_revision` is bound for that reason. The previous COMMIT usually did not touch `python/uv.lock` at all (measured here: `HEAD` and `HEAD~1` both pinned ruff 0.16.2, while the previous lockfile revision pinned 0.15.20), so a `HEAD~1` default would silently produce the version-against-itself case on nearly every invocation — a wrong default that fails into the refusal above is still a wrong default, because the operator learns nothing about why. The diff is by RULE CODE and not by line, because the question is which rule CLASSES are new and a line-level diff answers it with a wall of diagnostics that has to be re-summarised by hand — the very work being automated. It is reported in BOTH directions: a code the old version fired and the new one does not is coverage the gate silently LOST, which reads as good news precisely because nothing fails, and `test_a_code_that_stopped_firing_is_reported_as_lost_coverage` is bound so that direction cannot be dropped as redundant. `run_at_version` is bound because the invocation shape is load-bearing: `uvx <tool>@<version>` and NOT the project environment, since the whole point is to run a version the project is not pinned to, which an environment-resolved binary cannot do; a non-zero exit is expected and ignored, because a linter that found violations is the normal case here. Nothing is ruff-specific — `TOOLS` carries each tool's invocation plus how to recover a rule code from its output (ruff via `--output-format json`, ty via the `error[rule-name]` prefix of `--output-format concise`, since ty has no JSON output — checked against the live CLIs, not assumed). The tool proved itself on its own diff: run against this very change it reported 4 attributable to the code and 3 to the upgrade's newly-enabled ISC004, and all seven were in the uncommitted module. Asserts the chain: the skill names itself, mise.toml's task shells out to the CLI, main.py registers and dispatches it, the module carries the baseline derivation, the pinned invocation, the equality refusal and the entry point, and the test file carries the refusal guard and the lost-coverage guard."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    ".claude/skills/lint-delta/SKILL.md",
+    "mise.toml",
+    "python/src/dotfiles_setup/main.py",
+    "python/src/dotfiles_setup/lint_delta.py",
+    "tests/test_lint_delta.py",
+]
+per_path_tokens = { ".claude/skills/lint-delta/SKILL.md" = ["name: lint-delta"], "mise.toml" = ["[tasks.lint-delta]", "dotfiles-setup lint-delta'"], "python/src/dotfiles_setup/main.py" = ['"lint-delta",', '"lint-delta": lambda'], "python/src/dotfiles_setup/lint_delta.py" = ["def previous_lock_revision(", "def run_at_version(", "def lint_delta_main(", "if baseline == current:"], "tests/test_lint_delta.py" = ["def test_a_baseline_equal_to_the_current_pin_is_refused(", "def test_a_code_that_stopped_firing_is_reported_as_lost_coverage("] }
+tokens = [
+    "def previous_lock_revision(",
+]

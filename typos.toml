@@ -27,3 +27,12 @@ sherif = "sherif"
 # not ours to respell, and rewording the anchor would break re-derivation
 # against the binary.
 gae = "gae"
+
+# `CPY001` is ruff's rule code for a missing copyright notice
+# (flake8-copyright), not a misspelling of "COPY"/"CPU". It reaches this repo
+# through #651's measurement of the ruff 0.15.20 -> 0.16.2 bump, where CPY001
+# accounted for 106 of the 138 new violations — the single largest class, so
+# naming it is the point of the record. Astral chose the code; rewording the
+# measurement to dodge the word would make it uncheckable against ruff's own
+# output.
+CPY001 = "CPY001"

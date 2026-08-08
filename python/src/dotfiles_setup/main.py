@@ -65,6 +65,7 @@ from dotfiles_setup.lint import (
     resolve_timeout,
     run_guarded,
 )
+from dotfiles_setup.lint_delta import DEFAULT_PATHS, lint_delta_main
 from dotfiles_setup.lock_integrity import main as lock_integrity_main
 from dotfiles_setup.lock_integrity import scoped_lock_main
 from dotfiles_setup.lock_refresh import collect_system_lock, stage_system_lock_dir
@@ -197,6 +198,29 @@ def _add_honesty_subcommands(subparsers: _SubParsers) -> None:
         "--check",
         action="store_true",
         help="Fail instead of writing when the committed doc is out of date",
+    )
+    delta_parser = subparsers.add_parser(
+        "lint-delta",
+        help="Partition linter violations into YOURS and THE UPGRADE'S (#651) "
+        "by running the previous pinned version against the same tree — the "
+        "old version is the control arm. Diffs by RULE CODE in both "
+        "directions; a rule that STOPPED firing is lost coverage",
+    )
+    delta_parser.add_argument(
+        "--tool",
+        default="ruff",
+        help="Linter to compare (ruff, ty)",
+    )
+    delta_parser.add_argument(
+        "--baseline",
+        help="Version to compare against. Defaults to the pin at the previous "
+        "revision that TOUCHED the lockfile — not HEAD~1, which usually did not",
+    )
+    delta_parser.add_argument(
+        "--paths",
+        nargs="+",
+        default=list(DEFAULT_PATHS),
+        help="Paths to lint",
     )
     review_parser = subparsers.add_parser(
         "session-review",
@@ -1736,6 +1760,14 @@ def _build_command_handlers(
         ),
         "lock-check": lambda: sys.exit(lock_integrity_main(project_root)),
         "lock-tools": lambda: sys.exit(scoped_lock_main(project_root, args.tools)),
+        "lint-delta": lambda: sys.exit(
+            lint_delta_main(
+                project_root,
+                tool=args.tool,
+                baseline=args.baseline,
+                paths=tuple(args.paths),
+            )
+        ),
         "session-review": lambda: sys.exit(
             session_review_main(
                 project_root,
