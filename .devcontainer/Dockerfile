@@ -112,7 +112,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # mise.run installer already chmods the binary; the explicit chmod is a
 # belt-and-braces guard against permission drift on the cache mount.
 # renovate: datasource=github-releases depName=jdx/mise
-ARG MISE_VERSION=2026.8.2
+ARG MISE_VERSION=2026.8.3
 RUN curl https://mise.run | MISE_VERSION="v${MISE_VERSION}" sh && \
     chmod +x ${MISE_INSTALL_PATH} && \
     mise --version
@@ -367,7 +367,7 @@ ARG CLANG_P2996_REPO=https://github.com/bloomberg/clang-p2996.git
 # p2996_hash.py reads it from bake, so this default was stale drift. The
 # git-refs Renovate manager rewrites BOTH files in lockstep now that they
 # hold the same SHA.
-ARG CLANG_P2996_REF=47df3379f88f3c204f5ddff01ab16dbb0d53cb26
+ARG CLANG_P2996_REF=060be17654102019e14810c3f948ef85a490755f
 
 # Self-contained compile toolchain (#160 T11): gcc/g++ via build-essential,
 # cmake + ninja from apt (26.04 ships cmake ≥3.28, well past LLVM's 3.20
