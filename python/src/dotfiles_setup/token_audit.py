@@ -68,6 +68,7 @@ from typing import TYPE_CHECKING
 from dotfiles_setup import verify
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -252,19 +253,65 @@ class Ambiguity:
         return f"{self.suite} [{self.path}] {self.token!r} matches {self.count}x"
 
 
+@dataclass(frozen=True)
+class TokenCount:
+    """How many times one token occurs in one file, and whether that binds."""
+
+    path: str
+    token: str
+    count: int
+    expected: int = 1
+
+    @property
+    def ok(self) -> bool:
+        """True when the token binds exactly the intended number of sites."""
+        return self.count == self.expected
+
+    def render(self) -> str:
+        """One line: the verdict, the token, and what it actually matched."""
+        verdict = (
+            "OK  "
+            if self.ok
+            else "AMBIGUOUS"
+            if self.count > self.expected
+            else "MISSING"
+        )
+        return f"{verdict} {self.token!r} matches {self.count}x in {self.path}"
+
+
+def count_tokens(
+    root: Path,
+    rel_path: str,
+    tokens: Sequence[str],
+    *,
+    expected: int = 1,
+) -> list[TokenCount]:
+    """Count each token in one file — the predicate, at its smallest scope.
+
+    Shared deliberately: :func:`find_ambiguous` walks the whole manifest with
+    it and the pre-flight applies it to one candidate token, so both callers
+    ask the *same* question and cannot drift into two answers. A file that does
+    not exist reads as empty, which surfaces as a count of 0 rather than as an
+    exception — "this path is wrong" and "this token is absent" are the same
+    finding to the caller, and both mean the contract would not bind.
+    """
+    target = root / rel_path
+    text = target.read_text() if target.exists() else ""
+    return [
+        TokenCount(rel_path, token, text.count(token), expected) for token in tokens
+    ]
+
+
 def find_ambiguous(root: Path) -> list[Ambiguity]:
     """Every per-path token that matches its target file other than once."""
     suites = verify.load_manifest(root / MANIFEST)
-    found: list[Ambiguity] = []
-    for suite in suites:
-        for raw, tokens in suite.get("per_path_tokens", {}).items():
-            target = root / raw
-            text = target.read_text() if target.exists() else ""
-            for token in tokens:
-                count = text.count(token)
-                if count != 1:
-                    found.append(Ambiguity(suite["name"], raw, token, count))
-    return found
+    return [
+        Ambiguity(suite["name"], raw, counted.token, counted.count)
+        for suite in suites
+        for raw, tokens in suite.get("per_path_tokens", {}).items()
+        for counted in count_tokens(root, raw, tokens)
+        if not counted.ok
+    ]
 
 
 def find_unaudited(root: Path) -> list[str]:
@@ -305,6 +352,54 @@ def find_violations(root: Path) -> list[str]:
         if (suite, path, token) not in seen
     ]
     return sorted(problems)
+
+
+def preflight_main(
+    root: Path,
+    rel_path: str,
+    tokens: Sequence[str],
+    *,
+    expected: int = 1,
+) -> int:
+    """Pre-flight: prove candidate tokens bind BEFORE the contract is written.
+
+    Same predicate as the whole-suite audit, at the moment it is cheap to act
+    on. The audit can only speak once a contract exists, so its finding arrives
+    after the work — this asks the question while the answer still costs one
+    edit. Both arms are reported, not just failures: a run that prints nothing
+    is indistinguishable from a run that never looked, and the point of a
+    pre-flight is the reassurance as much as the alarm.
+
+    ``expected`` is a parameter because deliberate multiplicity exists —
+    ``AMBIGUITY_ALLOWED`` documents 18 such bindings — so a caller that means
+    "this must bind both clauses" can say so rather than being told it is
+    wrong.
+    """
+    counted = count_tokens(root, rel_path, tokens, expected=expected)
+    for entry in counted:
+        log = logger.info if entry.ok else logger.error
+        log("%s", entry.render())
+    bad = [entry for entry in counted if not entry.ok]
+    if not bad:
+        logger.info(
+            "token-check OK: %d token(s) each bind exactly %d site(s) in %s",
+            len(counted),
+            expected,
+            rel_path,
+        )
+        return 0
+    logger.error(
+        "%d of %d token(s) do not bind %d site(s). A token matching MORE than "
+        "once can be satisfied by a stand-in, so the contract asserts less than "
+        "it claims (#394/#397); a token matching ZERO times means the path or "
+        "the spelling is wrong and the contract would fail on arrival. Pick a "
+        "longer, call-site-shaped substring — never a bare definition or a name "
+        "prose can carry.",
+        len(bad),
+        len(counted),
+        expected,
+    )
+    return 1
 
 
 def token_audit_main(root: Path) -> int:

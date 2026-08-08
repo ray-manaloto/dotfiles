@@ -82,7 +82,7 @@ from dotfiles_setup.renovate import renovate_status_main
 from dotfiles_setup.renovate_dryrun import renovate_dryrun_main
 from dotfiles_setup.renovate_validate import renovate_validate_main
 from dotfiles_setup.sync import SyncOptions, sync_main
-from dotfiles_setup.token_audit import token_audit_main
+from dotfiles_setup.token_audit import preflight_main, token_audit_main
 from dotfiles_setup.verify import main as verify_main
 from dotfiles_setup.workflow_hooks import workflow_hooks_main
 
@@ -197,12 +197,28 @@ def _add_honesty_subcommands(subparsers: _SubParsers) -> None:
         action="store_true",
         help="Fail instead of writing when the committed doc is out of date",
     )
-    subparsers.add_parser(
+    token_audit_parser = subparsers.add_parser(
         "token-audit",
         help="Contract-token uniqueness: every per_path_tokens entry should "
         "match its target file exactly once, because a token matching twice can "
         "be satisfied by a stand-in (#394). Genuine multiplicity is allowlisted "
         "with a reason in token_audit.py",
+    )
+    token_audit_parser.add_argument(
+        "--check",
+        nargs="+",
+        metavar=("FILE", "TOKEN"),
+        help="PRE-FLIGHT (#652): count each TOKEN in FILE and exit non-zero "
+        "unless each binds exactly once, so a candidate contract token is "
+        "proven before the contract is written rather than after `verify` "
+        "reports it. Same predicate as the whole-suite audit",
+    )
+    token_audit_parser.add_argument(
+        "--expect",
+        type=int,
+        default=1,
+        help="Occurrences each token must have (default 1). Deliberate "
+        "multiplicity exists — say so rather than being told it is wrong",
     )
     subparsers.add_parser(
         "bash-budget",
@@ -1690,7 +1706,16 @@ def _build_command_handlers(
         ),
         "lock-check": lambda: sys.exit(lock_integrity_main(project_root)),
         "lock-tools": lambda: sys.exit(scoped_lock_main(project_root, args.tools)),
-        "token-audit": lambda: sys.exit(token_audit_main(project_root)),
+        "token-audit": lambda: sys.exit(
+            preflight_main(
+                project_root,
+                args.check[0],
+                args.check[1:],
+                expected=args.expect,
+            )
+            if args.check
+            else token_audit_main(project_root)
+        ),
         "env-blob-scan": lambda: sys.exit(
             env_blob_scan_main(project_root, args.paths or None)
         ),

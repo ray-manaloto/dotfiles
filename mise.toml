@@ -1018,6 +1018,19 @@ description = "Re-lock the NAMED tool(s), scoped, then assert coverage held"
 # verifies the artifact afterwards instead of trusting the exit code.
 run = 'uv run --project python dotfiles-setup lock-tools'
 
+[tasks.token-check]
+description = "Pre-flight a candidate contract token: does it bind exactly one site in its target file? (#652)"
+# Thin caller; see token_audit.py. Same predicate as the `token-audit` gate in
+# `mise run verify`, asked EARLY — the gate can only speak once the contract
+# exists, so its finding arrives after the work, while this one costs one edit.
+# A token matching more than once can be satisfied by a stand-in, which is how
+# a deleted registration stayed green (#394); a token matching zero times means
+# the path or the spelling is wrong.
+#
+#   mise run token-check -- <file> "<token>" ["<token>" ...]
+#   mise run token-check -- <file> "<token>" --expect 2   # deliberate multiplicity
+run = 'uv run --project python dotfiles-setup token-audit --check'
+
 [tasks.lock-image]
 description = "Regenerate the IMAGE locks (mise-system.lock + mise-runtime.lock) with CI's recipe, coverage-verified; routes into the amd64 devcontainer from macOS"
 # Thin caller; see image_lock.py. Sibling of `lock` above, and the division is
