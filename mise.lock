@@ -5715,7 +5715,7 @@ version = "0.15.5"
 backend = "npm:portless"
 
 [[tools."npm:renovate"]]
-version = "44.14.10"
+version = "44.14.12"
 backend = "npm:renovate"
 
 [[tools."npm:skills"]]
