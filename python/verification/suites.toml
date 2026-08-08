@@ -2005,3 +2005,22 @@ per_path_tokens = { ".claude/skills/lint-delta/SKILL.md" = ["name: lint-delta"],
 tokens = [
     "def previous_lock_revision(",
 ]
+
+[[suite]]
+name = "workflow.reap-protects-before-it-signals"
+description = "#653: a bulk reap is destructive, and the parts that make it safe are exactly the parts a hand-rolled `pkill` leaves out. The 2026-08-08 pile was 1,174 wedged `mise/shims/git` processes each carrying a stuck `fnox export --format json` child — 2,362 to clear, oldest 1d10h — and the cleanup was improvised under pressure, which is when the destructive details get got wrong. ⚠️ **Ancestor-chain protection is the load-bearing one, which is why `def ancestor_pids(` and the CLI's own `protected=protected_pids(processes, self_pid=self_pid),` call site are BOTH bound.** They are two different failures: the function can be perfect while the entry point never calls it, and that is not hypothetical — a mutation deleting exactly that argument broke **zero of 42 tests** on first run, because every protection test drove `select()` directly and nothing asserted the path a user actually invokes (`.claude/rules` mutation discipline: mutate the WIRING, not just the function). `tests/test_reap.py` now carries `def test_the_cli_path_protects_the_ancestor_chain(` and the identical mutation fails. The protection is not theoretical: measured live on a 1,603-process table, `--pattern 'fnox export'` matched **four** processes and **all four were the reaper's own invocation chain** (zsh wrapper -> uv -> the python entry), so the equivalent `pkill -f` would have killed the shell mid-command. ⚠️ **`def parse_etime(` is bound because the age floor is only as good as it is** — `ps` reports elapsed time as `SS`, `MM:SS`, `HH:MM:SS` or `DD-HH:MM:SS`, and a parser that is lenient about a shape it does not recognise turns the floor off silently; it returns `None`, and an age it cannot parse EXCLUDES its process rather than assuming it old. ⚠️ **`def confirm_targets(` is bound because a plan is a snapshot and the kernel recycles PIDs**: the module re-reads the table immediately before signalling and drops any PID whose command changed, so a recycled PID is never signalled on the strength of a stale plan. ⚠️ **`if not request.kill:` binds the posture Ray chose (2026-08-08b): DRY RUN by default, `--kill` required**, named for the irreversible thing rather than a neutral `--apply`, matching `lock` refusing its bare form and `lock-image` refusing the wrong host. The plan prints all four buckets (protected / too young / targets / ages) because a bare target count cannot distinguish a working age floor from a broken one, and it carries the issue's own caveat in the tool's mouth — a reap removes PID and MEMORY pressure and does NOT fix load, since the processes are `stat=S` at ~0 CPU and signalling 2,360 of them spiked the 1-minute average 7.98 -> **137.96**. An unreadable process table exits 2 and says it could not see, never folding into 'nothing matched' (`def test_an_empty_process_table_is_an_error_not_an_all_clear(`). Asserts the chain: the skill names itself, mise.toml's task shells out to the CLI, main.py registers and dispatches it, the module carries the ancestor walk, the etime parser, the identity re-check and the dry-run gate, and the test file carries the wiring guard, the blind-probe guard and the PID-reuse guard."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    ".claude/skills/reap/SKILL.md",
+    "mise.toml",
+    "python/src/dotfiles_setup/main.py",
+    "python/src/dotfiles_setup/reap.py",
+    "tests/test_reap.py",
+]
+per_path_tokens = { ".claude/skills/reap/SKILL.md" = ["name: reap"], "mise.toml" = ["[tasks.reap]", "dotfiles-setup reap'"], "python/src/dotfiles_setup/main.py" = ['"reap",', '"reap": lambda'], "python/src/dotfiles_setup/reap.py" = ["def ancestor_pids(", "def parse_etime(", "def confirm_targets(", "protected=protected_pids(processes, self_pid=self_pid),", "if not request.kill:"], "tests/test_reap.py" = ["def test_the_cli_path_protects_the_ancestor_chain(", "def test_an_empty_process_table_is_an_error_not_an_all_clear(", "def test_a_pid_whose_command_changed_is_dropped_rather_than_signalled("] }
+tokens = [
+    "def ancestor_pids(",
+]

@@ -1196,3 +1196,18 @@ description = "Partition linter violations into YOURS vs THE UPGRADE'S by runnin
 #   mise run lint-delta -- --tool ty
 #   mise run lint-delta -- --baseline 0.15.20
 run = 'uv run --project python dotfiles-setup lint-delta'
+
+[tasks.reap]
+description = "Reap wedged processes by pattern and age, ancestor-protected (#653). DRY RUN unless --kill"
+# Thin caller; see reap.py. The 2026-08-08 pile was 1,174 wedged mise/shims/git
+# processes with a stuck `fnox export` child each — 2,362 to clear, oldest
+# 1d10h. Reaping them safely needs ancestor-chain protection (or it kills the
+# shell that ran it), an age floor, exact matching under a pattern you supply
+# rather than a pkill substring, and TERM-then-KILL with a liveness re-check.
+# `--kill` is required to signal anything, like `lock`/`lock-image` refuse
+# their unsafe forms. A reap removes PID and MEMORY pressure, NOT load.
+#
+#   mise run reap -- --pattern 'fnox export'                    # dry run
+#   mise run reap -- --pattern 'shims/git' --min-age 3600
+#   mise run reap -- --pattern 'fnox export' --kill             # signals
+run = 'uv run --project python dotfiles-setup reap'
