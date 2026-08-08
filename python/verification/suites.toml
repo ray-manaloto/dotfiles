@@ -1947,3 +1947,22 @@ per_path_tokens = { ".claude/skills/lock-image/SKILL.md" = ["name: lock-image", 
 tokens = [
     "def lock_platforms(",
 ]
+
+[[suite]]
+name = "workflow.token-preflight-shares-one-predicate"
+description = "#652: the contract-token uniqueness predicate must exist ONCE and be reachable EARLY. #397's rule is that a `per_path_tokens` entry matching its file more than once can be satisfied by a stand-in, so the contract asserts less than it claims — measured: registering a second subjectless classifier made `subject_param=None,` match twice, and deleting either registry entry would have left the contract green (#394). `dotfiles-setup token-audit` encodes that predicate but can only speak once the contract EXISTS, surfacing in `mise run verify` after the work is done; the pre-flight asks the same question while the answer still costs one edit. ⚠️ **The property this contract protects is that the two scopes cannot drift apart**, which is why `for counted in count_tokens(root, raw, tokens)` is bound as a token rather than merely `def count_tokens(`: the whole-suite walk was re-inlining `text.count(token)` before this change, and re-inlining it again is exactly how the pre-flight would start giving permission the gate later refuses — the worst outcome, since the pre-flight's entire value is being BELIEVED before the contract is written. `test_the_suite_audit_and_the_preflight_agree_on_the_same_input` drives both scopes over one manifest and requires the same verdict, and is bound here for the same reason. Three design points worth keeping: zero and many are reported with DIFFERENT words (`MISSING` vs `AMBIGUOUS`) because they are different defects — many means the contract under-asserts, zero means the path or spelling is wrong and it would fail on arrival; the PASSING arm is printed too, because a silent success is indistinguishable from a probe that never ran and the caller is about to commit those strings into a gate; and `expected` is a parameter rather than a hard-coded 1, because deliberate multiplicity is real — `AMBIGUITY_ALLOWED` documents 18 bindings where both sites ARE the contract. ⚠️ **The count is necessary, not sufficient, and the skill carries that judgement**: a token binding exactly once can still be worthless if it names a DEFINITION rather than a CALL SITE, since a comment or a docstring in the same file satisfies it — #299 shipped `def changes_apt_pin_inputs(` and deleting the whole wiring line left the contract green. The tool proved itself on its first real use: pre-flighting THIS contract's own tokens rejected `\"--check\",` at 5 matches in main.py, so the token bound here is the unique help-string instead. Asserts the chain: the skill names the task, mise.toml's task shells out to the CLI flag, main.py registers the flag and dispatches to the pre-flight while keeping the whole-suite default, the module carries both scopes plus the shared call site, and the test file carries the agreement guard."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    ".claude/skills/token-check/SKILL.md",
+    "mise.toml",
+    "python/src/dotfiles_setup/main.py",
+    "python/src/dotfiles_setup/token_audit.py",
+    "tests/test_token_preflight.py",
+]
+per_path_tokens = { ".claude/skills/token-check/SKILL.md" = ["name: token-check"], "mise.toml" = ["[tasks.token-check]", "dotfiles-setup token-audit --check'"], "python/src/dotfiles_setup/main.py" = ['help="PRE-FLIGHT (#652)', "else token_audit_main(project_root)", "preflight_main("], "python/src/dotfiles_setup/token_audit.py" = ["def count_tokens(", "def preflight_main(", "for counted in count_tokens(root, raw, tokens)"], "tests/test_token_preflight.py" = ["def test_the_suite_audit_and_the_preflight_agree_on_the_same_input("] }
+tokens = [
+    "def count_tokens(",
+]
