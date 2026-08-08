@@ -26,6 +26,7 @@ mise run verify                    # Run structured verification contracts
 mise run pin-actions                         # Verify GHA actions are SHA-pinned
 mise run lint-docs                           # Validate agent documentation (agnix)
 mise run lock -- "<backend/name>"            # Re-lock ONE tool (bare form is destructive, #370)
+mise run lock-image                          # Regenerate the IMAGE locks instead (#650; routes to amd64)
 ```
 
 The devloop is `mise run up` → work inside the container → `mise run down`.
