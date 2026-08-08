@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from kb_setup import evals
 
+from dotfiles_setup import image_lock
 from dotfiles_setup.ai import AIOrchestrator
 from dotfiles_setup.apt_pins import apt_pins_main
 from dotfiles_setup.apt_repo import LLVM_DEV, RepoQuery, apt_repo_main
@@ -57,6 +58,7 @@ from dotfiles_setup.hook_guard import pretooluse_main
 from dotfiles_setup.hook_selfcheck import hook_selfcheck_main
 from dotfiles_setup.image import ImageCommand
 from dotfiles_setup.image import main as image_main
+from dotfiles_setup.image_lock import image_lock_main
 from dotfiles_setup.lint import (
     DEFAULT_TIMEOUT_SECONDS,
     TIMEOUT_ENV_VAR,
@@ -266,6 +268,51 @@ def _add_honesty_subcommands(subparsers: _SubParsers) -> None:
         "--verbose",
         action="store_true",
         help="Print a PASS line per clean check instead of staying silent",
+    )
+    image_lock_parser = subparsers.add_parser(
+        "image-lock",
+        help="Regenerate .devcontainer/mise-system.lock + mise-runtime.lock "
+        "locally, with CI's recipe as a callable (#650): stage the merged "
+        "config, install the image's PINNED mise, converge, then collect with "
+        "platform coverage verified against HEAD. Routes into the amd64 "
+        "devcontainer on a host that cannot write linux conda checksums",
+    )
+    image_lock_parser.add_argument(
+        "--platform",
+        action="append",
+        default=[],
+        dest="platforms",
+        help="Platform to lock; repeatable. Defaults to every platform the "
+        "committed lock already carries — a linux-x64-only pass drops a "
+        "bumped tool's macos-x64 entry",
+    )
+    image_lock_parser.add_argument(
+        "--stage",
+        type=Path,
+        help="Stage directory to reuse (default: a fresh temp dir, removed "
+        "afterwards). Reuse one to resume a rate-limited run",
+    )
+    image_lock_parser.add_argument(
+        "--passes",
+        type=int,
+        default=image_lock.DEFAULT_PASSES,
+        help="Convergence passes; each fills what the previous could not "
+        "resolve under GitHub rate limits",
+    )
+    container = image_lock_parser.add_mutually_exclusive_group()
+    container.add_argument(
+        "--container",
+        dest="container",
+        action="store_true",
+        default=None,
+        help="Always route into the devcontainer (default: only when this "
+        "host cannot write a faithful lock)",
+    )
+    container.add_argument(
+        "--no-container",
+        dest="container",
+        action="store_false",
+        help="Never route; fail loudly on a host that cannot do the job",
     )
     drift_parser = subparsers.add_parser(
         "path-drift",
@@ -1613,6 +1660,15 @@ def _build_command_handlers(
         ),
         "bash-budget": lambda: sys.exit(bash_budget_main(project_root)),
         "renovate-validate": lambda: sys.exit(renovate_validate_main(project_root)),
+        "image-lock": lambda: sys.exit(
+            image_lock_main(
+                project_root,
+                platforms=tuple(args.platforms),
+                stage=args.stage,
+                container=args.container,
+                passes=args.passes,
+            )
+        ),
         "path-drift": lambda: sys.exit(
             path_drift_main(
                 ambient_path=args.ambient_path,

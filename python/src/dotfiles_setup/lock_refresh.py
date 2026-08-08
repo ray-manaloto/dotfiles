@@ -43,6 +43,8 @@ import shutil
 import tomllib
 from typing import TYPE_CHECKING
 
+from dotfiles_setup.lock_integrity import committed_text, regressions
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -144,26 +146,62 @@ def _merge_shared_tools(system_text: str, shared_text: str) -> str:
 def collect_system_lock(repo_root: Path, stage_dir: Path) -> None:
     """Copy the regenerated stage lock back to `.devcontainer/mise-system.lock`.
 
-    Validates before writing: the stage lock must parse as TOML and cover
-    every tool of the merged config — a truncated or partial lock (rate
-    limits, interrupted run) must never overwrite the committed one.
+    Validates before writing, on **two** axes — a truncated or partial lock
+    (rate limits, an interrupted run, the wrong host OS) must never overwrite
+    the committed one:
+
+    1. **tool coverage** — every tool of the merged config is locked;
+    2. **platform coverage** — no tool present in both the committed lock and
+       the candidate lost a platform, and no conda platform family vanished.
+
+    Axis 2 is #648, and axis 1 alone is why it was needed: a regen run on macOS
+    dropped ``mise-system.lock``'s ``linux-x64`` occurrences 131 -> 64 and
+    ``mise-runtime.lock``'s 35 -> 12 while the **tool count never moved** (49
+    and 22, unchanged), so a tool-only predicate returned rc=0 on a near-51%
+    coverage loss. The correct predicate already existed in
+    :mod:`dotfiles_setup.lock_integrity`; it simply was not being called here.
 
     Raises:
-        ValueError: when the stage lock is missing tools from the config.
+        ValueError: when the stage lock is missing tools from the config, or
+            lost platform coverage relative to the committed lock.
     """
     _collect_one(
         stage_dir / "mise.lock",
         repo_root / _SYSTEM_LOCK,
         merged_system_config_tools(repo_root),
+        coverage_baseline(repo_root, _SYSTEM_LOCK),
     )
     _collect_one(
         stage_dir / f"mise.{RUNTIME_ENV}.lock",
         repo_root / _RUNTIME_LOCK,
         runtime_config_tools(repo_root),
+        coverage_baseline(repo_root, _RUNTIME_LOCK),
     )
 
 
-def _collect_one(stage_lock: Path, dest: Path, config_tools: set[str]) -> None:
+def coverage_baseline(repo_root: Path, rel_path: str) -> str | None:
+    """The bytes to measure a candidate lock's coverage against.
+
+    ``HEAD`` first, on purpose: a run that already overwrote the working-tree
+    lock would otherwise be compared against its own damage and certified
+    clean. The on-disk file is the fallback rather than "no check at all",
+    because an untracked lock or a non-git checkout must not silently disable
+    the guard — a weaker baseline still catches the 51% truncation this exists
+    for, whereas ``None`` catches nothing.
+    """
+    from_git = committed_text(repo_root, rel_path)
+    if from_git is not None:
+        return from_git
+    path = repo_root / rel_path
+    return path.read_text() if path.exists() else None
+
+
+def _collect_one(
+    stage_lock: Path,
+    dest: Path,
+    config_tools: set[str],
+    committed: str | None,
+) -> None:
     stage_text = stage_lock.read_text()
     locked_tools = set(tomllib.loads(stage_text).get("tools", {}))
     missing = config_tools - locked_tools
@@ -173,7 +211,26 @@ def _collect_one(stage_lock: Path, dest: Path, config_tools: set[str]) -> None:
             f"(refusing to collect): {sorted(missing)}"
         )
         raise ValueError(msg)
-    dest.write_text(strip_provenance(stage_text))
+    # What is about to be written, not what the stage holds: the committed file
+    # is provenance-stripped, so comparing raw stage text would measure the
+    # stripping rather than the coverage.
+    candidate = strip_provenance(stage_text)
+    # ``committed`` is the git-tracked bytes, never the working tree — a regen
+    # that already overwrote the file would otherwise be compared against its
+    # own damage and certified clean.
+    lost = regressions(committed, candidate) if committed is not None else []
+    if lost:
+        detail = "; ".join(lost)
+        msg = (
+            f"stage lock {stage_lock.name} LOST platform coverage relative to "
+            f"the committed {dest.name} (refusing to collect): {detail}. The "
+            f"usual cause is regenerating on macOS — mise cannot write the "
+            f"linux conda entries there (jdx/mise#7700), and the tool count "
+            f"does not move, so this is invisible to a tool-only check (#648). "
+            f"Regenerate on linux/amd64."
+        )
+        raise ValueError(msg)
+    dest.write_text(candidate)
 
 
 def strip_provenance(lock_text: str) -> str:
