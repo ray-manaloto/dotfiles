@@ -84,8 +84,12 @@ does not exist.
 description of 1,789 chars was being silently truncated at the hard 1,536 cap —
 and the 253 characters cut were its **negative** example, so truncation removed
 the half of the trigger that says when *not* to use it; and the installed,
-SHA-pinned `kb_setup` predates the `when_to_use` fix, so the repo's own
-`md_size_budget` gate is currently measuring `description` alone.
+SHA-pinned `kb_setup` predated the `when_to_use` fix, so the repo's own
+`md_size_budget` gate was measuring `description` alone. **(Fixed 2026-08-07 by
+#642 — the pin moved to `46a3e7d` and the gate now measures the two fields
+combined, verified on the INSTALLED package by behaviour. #640 stays open for
+the second defect folded into it: `md_budget.py:430` still prints tokens as
+`bytes ÷ 4`.)**
 
 `rule_unscoped` is **108,382 B = 86.4%** of repo-eager. The inherited
 "~88% is unscoped rules" figure (dated 2026-07-28) was re-derived, not repeated,
