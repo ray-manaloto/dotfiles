@@ -1018,6 +1018,25 @@ description = "Re-lock the NAMED tool(s), scoped, then assert coverage held"
 # verifies the artifact afterwards instead of trusting the exit code.
 run = 'uv run --project python dotfiles-setup lock-tools'
 
+[tasks.lock-image]
+description = "Regenerate the IMAGE locks (mise-system.lock + mise-runtime.lock) with CI's recipe, coverage-verified; routes into the amd64 devcontainer from macOS"
+# Thin caller; see image_lock.py. Sibling of `lock` above, and the division is
+# by ARTIFACT: `lock` re-locks named tools in the HOST lockfile, this rebuilds
+# the two IMAGE locks wholesale. Until #650 the only thing that knew this
+# recipe was .github/actions/lock-refresh/action.yml, so a session bumping the
+# shared fragment hand-transcribed it from a workflow — ~15 turns on
+# 2026-08-08, ending in a near-committed 51% coverage loss that the collect
+# step returned rc=0 on (#648, now fixed by verifying against HEAD).
+#
+# macOS CANNOT do this: mise there cannot write the linux conda checksums
+# (jdx/mise#7700) and the tool count does not move, so the truncation is
+# silent. The default routes into the devcontainer rather than refusing.
+#
+#   mise run lock-image                          # derive platforms, auto-route
+#   mise run lock-image -- --platform linux-x64  # narrow it deliberately
+#   mise run lock-image -- --no-container        # fail instead of routing
+run = 'uv run --project python dotfiles-setup image-lock'
+
 [tasks.p2996-hash]
 description = "Print the content-hash of P2996 cache inputs (matches the CI :p2996-<hash> tag)"
 run = "uv run --project python dotfiles-setup p2996-hash"

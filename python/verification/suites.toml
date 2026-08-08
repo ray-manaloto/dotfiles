@@ -1926,3 +1926,24 @@ per_path_tokens = { ".claude/settings.json" = ['DOTFILES_AMBIENT_PATH=\"$PATH\" 
 tokens = [
     "def resolve_ambient_path(",
 ]
+
+[[suite]]
+name = "workflow.image-lock-three-layer-stack"
+description = "#650: the image-lock recipe must exist ONCE, as a skill -> mise task -> python library stack, and its coverage check must be wired. Until this landed, the only thing that knew how to regenerate `.devcontainer/mise-system.lock` and `mise-runtime.lock` was CI's `.github/actions/lock-refresh/action.yml`, so a session bumping the shared fragment hand-transcribed the recipe out of a workflow file — ~15 turns on 2026-08-08, ending in a near-committed corruption. ⚠️ **The failure mode is SILENT TRUNCATION with an UNCHANGED TOOL COUNT, which is why the layer count is not the point of this contract — the coverage predicate is.** A regen on darwin dropped `mise-system.lock`'s `linux-x64` occurrences 131 -> 64 and `mise-runtime.lock`'s 35 -> 12 while `[[tools.*]]` stayed at 49 and 22, so `lock-collect`'s tool-only predicate returned rc=0 on a near-51% coverage loss (#648). The correct predicate already existed in `lock_integrity.regressions` and simply was not called; `lock_refresh._collect_one` now calls it, which is why `lost = regressions(committed, candidate)` is bound as a token — deleting exactly that line is the realistic regression, and mutation-testing confirmed it fails precisely `test_collect_refuses_a_lock_that_lost_platform_coverage` and nothing else. `coverage_baseline` is bound alongside it because WHICH baseline is load-bearing: it prefers `git show HEAD:` bytes over the working tree, so a run that already overwrote the lock is not graded against its own damage, and it falls back to the on-disk file rather than to `None` — a `None` baseline would silently disable the guard on an untracked lock, which is the same shape of hole one layer up. The comparison runs on provenance-STRIPPED text so it measures coverage rather than the stripping. Three gotchas are encoded in the library rather than left to be rediscovered, and each has a refusal: darwin cannot write linux conda checksums (jdx/mise#7700) so `host_can_lock` gates on OS **and** machine and the task routes into the amd64 devcontainer by default; `lock_platforms` DERIVES the platform set from the committed lock instead of hard-coding `linux-x64`, because CI's linux-only pass gets away with it only while the committed lock is the seed — the moment a tool is bumped its `macos-x64` entry is replaced and lost (measured: the committed system lock carries six platforms and 29 `macos-x64` tool entries, the runtime lock 9), and `test_the_real_committed_lock_still_carries_a_non_linux_platform` fails loudly if that ever stops being true rather than letting the precaution rot into dead code; and the npm precondition checks `npm` BY NAME because mise's npm backend execs it and bun does not satisfy it despite `npm.package_manager = bun`. Every seam is a parameter with this repo's case as the default (platforms, passes, stage dir, installer fetch, subprocess runner, host facts), per the build mandate — a library that hard-codes this repo cannot serve the next caller. Asserts the chain: the skill names the module it delegates to, mise.toml's task shells out to the CLI, main.py registers and dispatches the subcommand, the module carries its three gate functions, lock_refresh carries the coverage call site and its baseline chooser, and both test files carry the guard that fails when the wiring is removed."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    ".claude/skills/lock-image/SKILL.md",
+    "mise.toml",
+    "python/src/dotfiles_setup/main.py",
+    "python/src/dotfiles_setup/image_lock.py",
+    "python/src/dotfiles_setup/lock_refresh.py",
+    "tests/test_image_lock.py",
+    "tests/test_lock_refresh.py",
+]
+per_path_tokens = { ".claude/skills/lock-image/SKILL.md" = ["name: lock-image", "python/src/dotfiles_setup/image_lock.py"], "mise.toml" = ["[tasks.lock-image]", "dotfiles-setup image-lock'"], "python/src/dotfiles_setup/main.py" = ['"image-lock",', '"image-lock": lambda'], "python/src/dotfiles_setup/image_lock.py" = ["def image_lock_main(", "def lock_platforms(", "def host_can_lock("], "python/src/dotfiles_setup/lock_refresh.py" = ["lost = regressions(committed, candidate)", "def coverage_baseline("], "tests/test_image_lock.py" = ["def test_the_mise_task_calls_the_cli_rather_than_reimplementing_the_recipe("], "tests/test_lock_refresh.py" = ["def test_collect_refuses_a_lock_that_lost_platform_coverage("] }
+tokens = [
+    "def lock_platforms(",
+]
