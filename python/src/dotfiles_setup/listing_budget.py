@@ -39,7 +39,7 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from kb_setup.md_budget import SKILL_DESCRIPTION_MAX
+from kb_setup.md_budget import SKILL_DESCRIPTION_MAX, skill_description
 
 if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Iterable
@@ -49,7 +49,6 @@ __all__ = [
     "SKILL_DESCRIPTION_MAX",
     "ListingEntry",
     "collect_listing",
-    "listed_description",
     "over_cap",
     "total_chars",
 ]
@@ -73,7 +72,13 @@ class ListingEntry:
     """``len(name) + len(description)`` — what the listing actually carries."""
 
     desc_chars: int
-    """The description alone, which is what the 1,536 HARD cap applies to."""
+    """What the 1,536 HARD cap applies to.
+
+    For a skill that is ``description`` + ``when_to_use`` COMBINED, because the
+    harness appends the second to the first in the listing; for an agent it is
+    ``description`` alone, there being no second field. Said as "the description
+    alone" until 2026-08-07 (#640), which was true only of agents.
+    """
 
     path: str
 
@@ -88,37 +93,6 @@ def _field(front: str, name: str) -> str:
         rf"^{name}:\s*(.*?)(?=\n[A-Za-z_-]+:|\Z)", front, re.DOTALL | re.MULTILINE
     )
     return match.group(1).strip() if match else ""
-
-
-def listed_description(raw: str) -> str:
-    """The text the 1,536-char cap applies to: ``description`` + ``when_to_use``.
-
-    BOTH fields, because the cap is on their sum — ``when_to_use`` is *"appended
-    to `description` in the skill listing and counts toward the 1,536-character
-    cap"*.
-
-    ⚠️ **Deliberately NOT `kb_setup.md_budget.skill_description`, and the reason
-    is a live gap rather than a preference.** That function is the right one to
-    reuse *in its source form*, which reads both fields — but the version this
-    repo actually has INSTALLED is SHA-pinned and predates that fix: it reads
-    ``description`` alone. Verified by `inspect.getsource` on the installed
-    package against the knowledge-base working tree, after a test written to the
-    documented behaviour failed. Reusing it would silently under-count any skill
-    that splits its text across the two fields — which is precisely the defect
-    its own docstring says was fixed upstream.
-
-    So this is a second implementation ON PURPOSE, and it should be deleted the
-    moment the ``kb-setup`` pin in ``python/pyproject.toml`` moves past that fix.
-    The same staleness means the repo's own ``md_size_budget`` gate is currently
-    measuring ``description`` only; that is tracked separately, not worked around
-    here.
-    """
-    match = _FRONTMATTER_RE.match(raw)
-    if not match:
-        return ""
-    front = match.group(1)
-    parts = [_field(front, name) for name in ("description", "when_to_use")]
-    return " ".join(part for part in parts if part)
 
 
 def _read(path: Path) -> str | None:
@@ -198,7 +172,9 @@ def _scan(root: Path, kind: str, source: str) -> list[ListingEntry]:
         front = _frontmatter(raw)
         if kind == "skill":
             # description + when_to_use — BOTH, because the cap is on their sum.
-            desc = listed_description(raw)
+            # Upstream now reads both fields (the pin moved past that fix), so
+            # this reuses it rather than carrying a second implementation.
+            desc = skill_description(raw)
             name = _field(front, "name") or path.parent.name
         else:
             desc = _field(front, "description")
@@ -245,7 +221,10 @@ def total_chars(entries: Iterable[ListingEntry]) -> int:
 
 
 def over_cap(entries: Iterable[ListingEntry]) -> list[ListingEntry]:
-    """Entries whose description exceeds the HARD 1,536-character cap.
+    """Entries whose listed text exceeds the HARD 1,536-character cap.
+
+    "Listed text" is ``desc_chars`` — for a skill, ``description`` +
+    ``when_to_use`` combined.
 
     This is the only limit in the whole instruction system that TRUNCATES rather
     than merely costs, and it fails silently — the tail is cut, taking the
