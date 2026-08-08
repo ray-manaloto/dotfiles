@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Memory-index checker: shorten MEMORY.md without silently destroying facts.
 
 ``MEMORY.md`` is the auto-memory index at
@@ -481,9 +482,11 @@ def _budget_section(result: MemoryIndexResult) -> list[str]:
         _budget_line("lines", result.lines, LINE_BUDGET),
         _budget_line("bytes", result.size, BYTE_BUDGET),
         "",
-        f"**{result.entries}** entries. Auto-load stops at 200 lines *or* 25KB, "
-        f"whichever comes first — **{nearer}** is the nearer ceiling here. "
-        "Anything past the cutoff is not loaded at session start.",
+        (
+            f"**{result.entries}** entries. Auto-load stops at 200 lines *or* 25KB, "
+            f"whichever comes first — **{nearer}** is the nearer ceiling here. "
+            "Anything past the cutoff is not loaded at session start."
+        ),
         "",
     ]
     if result.beyond_budget:
@@ -502,17 +505,21 @@ def _budget_section(result: MemoryIndexResult) -> list[str]:
 def _index_only_section(result: MemoryIndexResult) -> list[str]:
     if not result.index_only:
         return [
-            "_None — every distinctive fact in an entry's title or hook is also "
-            "in the file it links to, so shortening one cannot destroy it._",
+            (
+                "_None — every distinctive fact in an entry's title or hook is also "
+                "in the file it links to, so shortening one cannot destroy it._"
+            ),
             "",
         ]
     return [
-        "Each fact below exists **only in the index entry**. Shortening that "
-        "line destroys it, and nothing will warn you. Resolve each one BEFORE "
-        "trimming — but read both sides first: the fix is to migrate the fact "
-        "into the topic file when the index is right, or to correct the hook "
-        "when the topic file already supersedes it (a hook claiming CI green at "
-        "`3adff36` against a file saying `c2cecd7` was the staler of the two).",
+        (
+            "Each fact below exists **only in the index entry**. Shortening that "
+            "line destroys it, and nothing will warn you. Resolve each one BEFORE "
+            "trimming — but read both sides first: the fix is to migrate the fact "
+            "into the topic file when the index is right, or to correct the hook "
+            "when the topic file already supersedes it (a hook claiming CI green at "
+            "`3adff36` against a file saying `c2cecd7` was the staler of the two)."
+        ),
         "",
         *_findings_table(result.index_only),
     ]
@@ -532,11 +539,13 @@ def render_report(result: MemoryIndexResult) -> str:
         lines += [
             "## 🚨 Unreadable entries (skipped by every check above)",
             "",
-            "These look like index entries but do not match "
-            "`- [Title](file.md) — hook`, so nothing above examined them: their "
-            "facts were never compared and their links were never resolved. Fix "
-            "the line — usually a missing `—` separator — and re-run, or the "
-            "clean result above is only true of the lines it could read.",
+            (
+                "These look like index entries but do not match "
+                "`- [Title](file.md) — hook`, so nothing above examined them: their "
+                "facts were never compared and their links were never resolved. Fix "
+                "the line — usually a missing `—` separator — and re-run, or the "
+                "clean result above is only true of the lines it could read."
+            ),
             "",
             *(f"- line {n}: `{line}`" for n, line in result.unparsed),
             "",
@@ -552,8 +561,10 @@ def render_report(result: MemoryIndexResult) -> str:
         lines += [
             "## Facts filed under a different memory (informational)",
             "",
-            "Safe to trim — the fact survives elsewhere. Worth a look only if "
-            "the hook is pointing at the wrong file.",
+            (
+                "Safe to trim — the fact survives elsewhere. Worth a look only if "
+                "the hook is pointing at the wrong file."
+            ),
             "",
             *_findings_table(result.elsewhere),
         ]
@@ -561,8 +572,10 @@ def render_report(result: MemoryIndexResult) -> str:
         lines += [
             "## Unindexed memories (informational)",
             "",
-            "These files exist but no index entry links them. Nothing is lost, "
-            "but an unindexed memory is one Claude has no reason to open.",
+            (
+                "These files exist but no index entry links them. Nothing is lost, "
+                "but an unindexed memory is one Claude has no reason to open."
+            ),
             "",
             *(f"- `{name}`" for name in result.orphans),
             "",
@@ -570,11 +583,13 @@ def render_report(result: MemoryIndexResult) -> str:
     lines += [
         "---",
         "",
-        "Curation order is **verify → migrate/correct → THEN shorten**. Before "
-        "deleting a memory, run `--refs <name>` — a citation from another "
-        "memory, or a live fact inside an otherwise-archived one, is the same "
-        "silent loss by a different route. See "
-        "`.claude/skills/memory-index-curation/SKILL.md`.",
+        (
+            "Curation order is **verify → migrate/correct → THEN shorten**. Before "
+            "deleting a memory, run `--refs <name>` — a citation from another "
+            "memory, or a live fact inside an otherwise-archived one, is the same "
+            "silent loss by a different route. See "
+            "`.claude/skills/memory-index-curation/SKILL.md`."
+        ),
     ]
     return "\n".join(lines) + "\n"
 
@@ -589,16 +604,20 @@ def render_refs(name: str, refs: list[str], *, known: bool) -> str:
         ]
     if refs:
         lines += [
-            f"**{len(refs)}** memory file(s) cite it. Repoint or absorb each "
-            "before deleting — and re-read the file itself for any live fact "
-            "that would go with it:",
+            (
+                f"**{len(refs)}** memory file(s) cite it. Repoint or absorb each "
+                "before deleting — and re-read the file itself for any live fact "
+                "that would go with it:"
+            ),
             "",
             *(f"- `{r}`" for r in refs),
         ]
     else:
         lines += [
-            "_No inbound citations._ Still re-read the file before deleting: an "
-            "archived memory can hold a fact that is still true.",
+            (
+                "_No inbound citations._ Still re-read the file before deleting: an "
+                "archived memory can hold a fact that is still true."
+            ),
         ]
     return "\n".join(lines) + "\n"
 

@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for the devcontainer freshness gate (dotfiles_setup.container)."""
 
 from __future__ import annotations

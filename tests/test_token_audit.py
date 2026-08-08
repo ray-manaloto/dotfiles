@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for the contract-token uniqueness gate (#394 step 4)."""
 
 from __future__ import annotations

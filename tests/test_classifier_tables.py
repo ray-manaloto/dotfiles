@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for the classifier axis gate (dotfiles_setup.classifier_tables).
 
 The gate exists because #601 burned four of seven adversarial review rounds on

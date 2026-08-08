@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 Raymond Manaloto
 """Generate a normalized failure report for a GitHub Actions workflow run."""
 
 from __future__ import annotations

@@ -352,10 +352,11 @@ binding."*
 
 ```python
 #!/usr/bin/env -S usage exec python3
-#USAGE bin "test-exec-help"
-#USAGE flag "-f --force" help="Force the operation"
-#USAGE arg "<file>" help="File to process"
+# USAGE bin "test-exec-help"
+# USAGE flag "-f --force" help="Force the operation"
+# USAGE arg "<file>" help="File to process"
 import os
+
 print(f"force: {os.environ.get('usage_force', '')}")
 ```
 

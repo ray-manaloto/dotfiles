@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Host-side hook self-check: exercise the WIRED hook entrypoints end-to-end.
 
 ``tests/test_hook_guard.py`` calls :func:`hook_guard.decide` *in process* — it
@@ -392,15 +393,19 @@ def check_offroot_arm(project_root: Path, wrapper: str) -> list[str]:
         )
     if result.returncode != 0:
         return [
-            f"pretooluse wrapper exited {result.returncode} when run from a "
-            f"foreign cwd — it must resolve via ${_PROJECT_DIR_ANCHOR}: "
-            f"{result.stderr.strip()}"
+            (
+                f"pretooluse wrapper exited {result.returncode} when run from a "
+                f"foreign cwd — it must resolve via ${_PROJECT_DIR_ANCHOR}: "
+                f"{result.stderr.strip()}"
+            )
         ]
     if '"permissionDecision": "deny"' not in result.stdout:
         return [
-            f"pretooluse wrapper did not DENY {_DENIED_SAMPLE!r} when run from "
-            f"a foreign cwd — the guard fails OPEN off-root (#343). "
-            f"stdout={result.stdout.strip()!r} stderr={result.stderr.strip()!r}"
+            (
+                f"pretooluse wrapper did not DENY {_DENIED_SAMPLE!r} when run from "
+                f"a foreign cwd — the guard fails OPEN off-root (#343). "
+                f"stdout={result.stdout.strip()!r} stderr={result.stderr.strip()!r}"
+            )
         ]
     return []
 

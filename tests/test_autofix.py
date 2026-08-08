@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for the autofix artifact applier (dotfiles_setup.autofix)."""
 
 from __future__ import annotations

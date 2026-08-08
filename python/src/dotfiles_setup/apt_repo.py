@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Enumerate the packages an apt repository publishes.
 
 `bootstrap_packages` parses the packages we *declare* in

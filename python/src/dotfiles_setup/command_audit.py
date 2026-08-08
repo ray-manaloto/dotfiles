@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Command-audit scanner: mine Claude Code transcripts for one-off Bash culprits.
 
 The self-learning half of the mise-tasks-only enforcement loop. The PreToolUse
@@ -436,20 +437,26 @@ _FALSE_SIGNAL_SHAPES: tuple[tuple[str, str, str], ...] = (
     (
         "grep_q_pipefail",
         r"\|\s*grep\s+-q\b",
-        "cmd | grep -q returns 141 under pipefail WHEN THE MATCH SUCCEEDS "
-        '(SIGPIPE); use: out="$(cmd)"; grep -q PAT <<<"$out"',
+        (
+            "cmd | grep -q returns 141 under pipefail WHEN THE MATCH SUCCEEDS "
+            '(SIGPIPE); use: out="$(cmd)"; grep -q PAT <<<"$out"'
+        ),
     ),
     (
         "bounded_find",
         r"\bfind\b[^\n|]*-maxdepth\s+[1-5]\b",
-        "a depth-bounded find turns 'unreachable' into 'absent' — it found "
-        "nothing because it could not look, not because nothing is there",
+        (
+            "a depth-bounded find turns 'unreachable' into 'absent' — it found "
+            "nothing because it could not look, not because nothing is there"
+        ),
     ),
     (
         "nested_quote_exec",
         r"docker\s+exec[^\n]*\bbash\s+-lc\s+[\"']",
-        "nested quoting through `docker exec bash -lc` mangles the payload; "
-        "write the script to a file and `docker cp` it instead",
+        (
+            "nested quoting through `docker exec bash -lc` mangles the payload; "
+            "write the script to a file and `docker cp` it instead"
+        ),
     ),
 )
 
@@ -632,11 +639,13 @@ def _fail_open_section(log: Path | None) -> list[str]:
     lines = [
         "## Guard fail-opens (times the guard could not run at all)",
         "",
-        "The wrapper exits 0 — allowing the call — when it cannot reach its "
-        "interpreter or the guard errors. That is deliberate (a cold web "
-        "session must not be bricked), but an UNCOUNTED fail-open is "
-        "indistinguishable from enforcement. See `.claude/rules/"
-        "mise-tasks-only.md` and issue #343.",
+        (
+            "The wrapper exits 0 — allowing the call — when it cannot reach its "
+            "interpreter or the guard errors. That is deliberate (a cold web "
+            "session must not be bricked), but an UNCOUNTED fail-open is "
+            "indistinguishable from enforcement. See `.claude/rules/"
+            "mise-tasks-only.md` and issue #343."
+        ),
         "",
     ]
     if not total:
@@ -659,19 +668,29 @@ def render_report(result: AuditResult, *, fail_open_log: Path | None = None) -> 
     lines = [
         "# Command audit — one-off Bash culprits",
         "",
-        f"Scanned **{result.sessions}** recent session(s), "
-        f"**{result.total}** Bash command(s).",
+        (
+            f"Scanned **{result.sessions}** recent session(s), "
+            f"**{result.total}** Bash command(s)."
+        ),
         "",
         "| class | count | meaning |",
         "|---|---:|---|",
-        f"| bypass | {c.get('bypass', 0)} | ran DESPITE a live guard rule — "
-        "a real evasion, investigate |",
-        f"| blocked | {c.get('blocked', 0)} | guard denied it (working) — "
-        "audit for false positives |",
-        f"| pre_rule | {c.get('pre_rule', 0)} | matched a rule that post-dates "
-        "it — history, no action |",
-        f"| one_off | {c.get('one_off', 0)} | mutating hand-run — package as a "
-        "mise task |",
+        (
+            f"| bypass | {c.get('bypass', 0)} | ran DESPITE a live guard rule — "
+            "a real evasion, investigate |"
+        ),
+        (
+            f"| blocked | {c.get('blocked', 0)} | guard denied it (working) — "
+            "audit for false positives |"
+        ),
+        (
+            f"| pre_rule | {c.get('pre_rule', 0)} | matched a rule that post-dates "
+            "it — history, no action |"
+        ),
+        (
+            f"| one_off | {c.get('one_off', 0)} | mutating hand-run — package as a "
+            "mise task |"
+        ),
         f"| mise | {c.get('mise', 0)} | already via a mise task / dotfiles_setup CLI |",
         f"| diagnostic | {c.get('diagnostic', 0)} | read-only, legitimately direct |",
         "",
@@ -689,13 +708,15 @@ def render_report(result: AuditResult, *, fail_open_log: Path | None = None) -> 
         lines += [
             "## Guard denials (the guard working — audit for false positives)",
             "",
-            "A denial is only correct if the command really was the shape the "
-            "rule names — a deny cancels the WHOLE compound command, so a wrong "
-            "one silently skips the rest. Separators inside quotes and heredoc "
-            "bodies no longer count as command positions (#265), which is what "
-            "emptied this bucket of its false positives; anything left should "
-            "be a real invocation. Grouped by the rule that fired, because a "
-            "denial's own head names nothing useful.",
+            (
+                "A denial is only correct if the command really was the shape the "
+                "rule names — a deny cancels the WHOLE compound command, so a wrong "
+                "one silently skips the rest. Separators inside quotes and heredoc "
+                "bodies no longer count as command positions (#265), which is what "
+                "emptied this bucket of its false positives; anything left should "
+                "be a real invocation. Grouped by the rule that fired, because a "
+                "denial's own head names nothing useful."
+            ),
             "",
             *_table(result.blocked_groups, "rule"),
         ]
@@ -709,18 +730,22 @@ def render_report(result: AuditResult, *, fail_open_log: Path | None = None) -> 
     else:
         lines += ["_None — no un-wrapped one-off commands found._", ""]
     lines += [
-        "Refine loop: for a high-frequency one-off shape, add a `mise run <task>` "
-        "wrapping a `dotfiles_setup` function (zero-bash-logic), and if it's a "
-        "known bad shape, add a `hook_guard._RULES` redirect — with a `since` "
-        "date, or its first scan reports as history. See "
-        ".claude/rules/mise-tasks-only.md.",
+        (
+            "Refine loop: for a high-frequency one-off shape, add a `mise run <task>` "
+            "wrapping a `dotfiles_setup` function (zero-bash-logic), and if it's a "
+            "known bad shape, add a `hook_guard._RULES` redirect — with a `since` "
+            "date, or its first scan reports as history. See "
+            ".claude/rules/mise-tasks-only.md."
+        ),
         "",
         "## False signals",
         "",
-        "Commands whose ANSWER cannot be trusted — orthogonal to the classes "
-        "above (a diagnostic can still lie). These are not 'wrap it in a task' "
-        "findings; they are 'this probe told you something false'. See "
-        "`.claude/rules/probes-need-a-control-arm.md`.",
+        (
+            "Commands whose ANSWER cannot be trusted — orthogonal to the classes "
+            "above (a diagnostic can still lie). These are not 'wrap it in a task' "
+            "findings; they are 'this probe told you something false'. See "
+            "`.claude/rules/probes-need-a-control-arm.md`."
+        ),
         "",
     ]
     if result.false_signal_groups:

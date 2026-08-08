@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for verifying bootstrap tool installation and versions."""
 
 import shutil

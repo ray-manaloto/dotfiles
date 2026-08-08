@@ -108,8 +108,8 @@ shipped at `eda53d6` (`tests/test_dag_tick.py:660-674`):
 
 ```python
 states = [_TERMINAL, "blocked", _OTHER, None]
-bools  = [False, True]
-assert len(_CLASSIFY_TABLE) == len(expected_cells) == 32   # 4 × 2 × 2 × 2
+bools = [False, True]
+assert len(_CLASSIFY_TABLE) == len(expected_cells) == 32  # 4 × 2 × 2 × 2
 ```
 
 **Gate G passes on that table. `tempo` is absent from it.** cost-analyst concedes

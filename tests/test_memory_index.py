@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for the memory-index checker (dotfiles_setup.memory_index).
 
 Covers memory-dir discovery (env-aware, never hardcoded), index parsing, the

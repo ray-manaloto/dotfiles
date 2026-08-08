@@ -263,14 +263,17 @@ Zero production-code change, and it drives **the real console script** (not a
 ```python
 # scratch/site/sitecustomize.py
 import atexit, json, os, sys
+
 _out = os.environ.get("IMPORT_SURFACE_OUT")
 if _out:
+
     def _dump():
         try:
             with open(_out, "w") as f:
                 json.dump(sorted(sys.modules), f)
         except Exception:
             pass
+
     atexit.register(_dump)
 ```
 

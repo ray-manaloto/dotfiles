@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """The Codex review-lane PRODUCER — what writes the reaper's inputs (#613).
 
 #580 shipped a complete consumer: :mod:`dotfiles_setup.codex_verdict` parses a

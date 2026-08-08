@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for the generated hk-builtins audit."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for the launchd watchdog tick (dotfiles_setup.dag_tick, #578).
 
 Pure/table-driven tests cover the terminal predicate, `classify()`,

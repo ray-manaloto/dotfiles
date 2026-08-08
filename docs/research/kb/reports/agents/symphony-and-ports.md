@@ -273,8 +273,8 @@ Template variables are *flattened* relative to symphony's nested `issue` object 
 Where symphony keeps a free-form `## Codex Workpad` markdown comment for *humans*, stokowski writes **machine-readable HTML comments** to Linear and parses them back for crash recovery (`stokowski/tracking.py`):
 
 ```python
-STATE_PATTERN = re.compile(r"<!-- stokowski:state ({.*?}) -->")   # tracking.py:13
-GATE_PATTERN  = re.compile(r"<!-- stokowski:gate ({.*?}) -->")    # tracking.py:14
+STATE_PATTERN = re.compile(r"<!-- stokowski:state ({.*?}) -->")  # tracking.py:13
+GATE_PATTERN = re.compile(r"<!-- stokowski:gate ({.*?}) -->")  # tracking.py:14
 ```
 
 Each comment carries a JSON payload (`state`, `run`, `timestamp`; gates add `status` and `rework_to`) followed by a human-readable line (`tracking.py:17-49`). This is how the port gets durable state without the database symphony declines to require — the tracker *is* the database. `README.md:182` calls it "state transitions persisted as HTML comments on Linear issues for crash recovery".
@@ -439,8 +439,15 @@ phonyhuman            TOML config → generates WORKFLOW.md → launches Symphon
 Each turn spawns (`claude-shim.py:411-423`):
 
 ```python
-cmd = ["claude", "-p", self.prompt, "--output-format", "stream-json",
-       "--dangerously-skip-permissions", "--verbose"]
+cmd = [
+    "claude",
+    "-p",
+    self.prompt,
+    "--output-format",
+    "stream-json",
+    "--dangerously-skip-permissions",
+    "--verbose",
+]
 allowed = get_allowed_tools()
 if allowed:
     cmd.extend(["--allowedTools"] + allowed)

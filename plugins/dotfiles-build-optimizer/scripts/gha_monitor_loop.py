@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 Raymond Manaloto
 """Repo-local monitor loop for failed GitHub Actions runs."""
 
 from __future__ import annotations

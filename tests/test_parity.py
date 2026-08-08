@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for the cross-repo parity gate (dotfiles_setup.parity, #354 PR 1).
 
 The defect this gate exists for is one level up from the bugs that opened

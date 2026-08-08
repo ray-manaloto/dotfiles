@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Project doctor: does this repo's DECLARED setup match reality on this host?
 
 Every gate this repo has looks *inside the working tree*. ``mise run lint``,
@@ -972,9 +973,11 @@ def check_mcp_health(setup: Setup) -> list[str]:
     rows = parse_mcp_list(result.stdout)
     if not rows:
         return [
-            "`claude mcp list` returned no parseable rows — the output format "
-            "changed, and until the parser is updated this check reports nothing "
-            f"rather than health (rc={result.returncode})"
+            (
+                "`claude mcp list` returned no parseable rows — the output format "
+                "changed, and until the parser is updated this check reports nothing "
+                f"rather than health (rc={result.returncode})"
+            )
         ]
     owned = {server.name for server in setup.servers if server.repo_owned}
     return [

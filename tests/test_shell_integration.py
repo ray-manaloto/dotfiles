@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for shell integration and tool reachability in login shells."""
 
 import re

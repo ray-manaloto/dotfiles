@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Apply an autofix.ci artifact locally (`mise run autofix-apply -- <run-id>`).
 
 The autofix workflow uploads its computed fixes as an ``autofix.ci``

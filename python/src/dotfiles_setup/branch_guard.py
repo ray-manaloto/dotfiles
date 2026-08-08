@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Deny repo-file modifications made while sitting on the default branch.
 
 ``do-not.md`` #9 already says "do NOT commit onto the default branch — branch

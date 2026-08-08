@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for this repo's eval cases (dotfiles_setup.eval_cases, #354 PR 2/PR 3).
 
 The runner (`kb_setup.evals`) is tested in the knowledge-base repo, where it

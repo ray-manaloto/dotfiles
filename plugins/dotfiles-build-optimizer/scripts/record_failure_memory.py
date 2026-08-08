@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 Raymond Manaloto
 """Append a failure-memory entry for the repo-local build optimizer plugin."""
 
 from __future__ import annotations

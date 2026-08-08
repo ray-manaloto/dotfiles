@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Devcontainer sync: converge onto the latest CI-built image, then verify.
 
 ``dotfiles-setup docker sync`` (wrapped by ``mise run sync``) is the one

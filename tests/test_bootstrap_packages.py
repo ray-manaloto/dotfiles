@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for `dotfiles_setup.bootstrap_packages`.
 
 Parses the declarative `[bootstrap.packages]` apt set that `mise bootstrap

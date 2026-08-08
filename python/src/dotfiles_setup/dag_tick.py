@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """The launchd watchdog tick for this repo's background-agent DAG (#578).
 
 A `dev.mise.dotfiles-dag-tick` LaunchAgent (declared in `mise.toml`'s

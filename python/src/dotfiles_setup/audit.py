@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Audit module for dotfiles setup."""
 
 from __future__ import annotations

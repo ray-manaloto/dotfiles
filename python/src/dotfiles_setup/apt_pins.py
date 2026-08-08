@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Prove every pinned `[bootstrap.packages]` version is still installable.
 
 `dotfiles-setup apt-pins` (wrapped by `mise run verify-apt-pins`) answers, in

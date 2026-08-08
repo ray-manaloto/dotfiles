@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Strip credentials from the environment of processes this repo spawns.
 
 `fnox activate` exports real credentials into the interactive shell, and mise

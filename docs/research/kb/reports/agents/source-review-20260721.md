@@ -326,7 +326,7 @@ spelling was the bound, and "not found" read as "not supported".
 ```python
 if backend == "ollama" and extra_body is None:
     ...
-    num_ctx = auto_num_ctx            # min(est_input + out_cap + 2000, 131072), floor 8192
+    num_ctx = auto_num_ctx  # min(est_input + out_cap + 2000, 131072), floor 8192
     keep_alive = os.environ.get("GRAPHIFY_OLLAMA_KEEP_ALIVE", "30m")
     kwargs["extra_body"] = {"options": {"num_ctx": num_ctx}, "keep_alive": keep_alive}
 ```

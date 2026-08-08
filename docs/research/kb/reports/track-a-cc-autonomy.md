@@ -87,7 +87,7 @@ return {
     "hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "permissionDecision": "defer",
-        "permissionDecisionReason": "Awaiting human review of production deploy"
+        "permissionDecisionReason": "Awaiting human review of production deploy",
     }
 }
 ```

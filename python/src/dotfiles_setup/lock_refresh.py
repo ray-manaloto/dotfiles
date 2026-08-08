@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Staging + collection helpers for the CI lock-refresh job (#160 T8).
 
 Three lockfiles keep this repo reproducible, and none can be refreshed by

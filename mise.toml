@@ -19,8 +19,8 @@ lima = "2.2.0"
 "github:agent-sh/agnix" = "v0.46.0"
 "npm:agents-lint" = "0.5.0"
 "pipx:mcp2cli" = "3.3.1"
-"npm:renovate" = "44.13.2"
-biome = "2.5.6"
+"npm:renovate" = "44.14.10"
+biome = "2.5.7"
 # Markdown + Claude-docs linters. Installed now; hk.pkl integration is
 # scheduled for post-devcontainer-work review (see GH issue tracking
 # follow-up). md_size_budget (below in hk.pkl) provides the immediate,
@@ -33,11 +33,11 @@ rumdl = "v0.2.52"
 # zizmor: GHA security scanner — backs the hk zizmor builtin (#160 T12);
 # host-only lint tool, so it lives here (not shared.toml).
 zizmor = "1.29.0"
-"npm:oh-my-claude-sisyphus" = "4.15.7"
-"github:ast-grep/ast-grep" = "0.45.0"
+"npm:oh-my-claude-sisyphus" = "4.15.8"
+"github:ast-grep/ast-grep" = "0.45.1"
 lefthook = "2.1.10"
 "npm:ctx7" = "0.5.7"
-"aqua:rtk-ai/rtk" = "0.44.2"           # aqua is the registry's first backend (`mise registry rtk`); the old bare `rtk` resolved to github: and mise doctor flagged the mismatch
+"aqua:rtk-ai/rtk" = "0.45.0"           # aqua is the registry's first backend (`mise registry rtk`); the old bare `rtk` resolved to github: and mise doctor flagged the mismatch
 "npm:skills" = "1.5.22"
 "npm:agent-browser" = "0.33.2"
 "npm:portless" = "0.15.5"
@@ -56,7 +56,7 @@ lefthook = "2.1.10"
 # instead appended a SECOND, bare `"pipx:graphifyy" = "0.9.22"` entry, leaving
 # the real pin stranded at 0.9.20. The table form is what the bump path can
 # rewrite in place.
-"pipx:graphifyy" = { version = "0.9.35", extras = ["all"] }
+"pipx:graphifyy" = { version = "0.9.36", extras = ["all"] }
 # ffmpeg: system binary the graphify `video` extra (faster-whisper) needs to
 # extract audio before transcription — it is NOT a pip dep, so `graphifyy[all]`
 # cannot supply it. Host-only, same as graphify (root mise.toml is in the
@@ -72,10 +72,10 @@ lefthook = "2.1.10"
 # conda:ffmpeg on platform linux-x64" and bricks lint. os-gating makes linux
 # skip the tool entirely, so no linux URL is demanded.
 "conda:ffmpeg" = { version = "8.1.2", os = ["macos"] }
-aws-cli = { version = "2.36.17", symlink_bins = "true" }
+aws-cli = { version = "2.36.19", symlink_bins = "true" }
 azure-cli = { version = "2.89.0", uvx_args = "--prerelease=allow" }
-docker-cli = "29.7.1"
-opencode = "1.18.13"
+docker-cli = "29.7.2"
+opencode = "1.18.15"
 # bun (the npm package_manager) is a host↔image SHARED tool → declared in
 # .config/mise/conf.d/shared.toml, not here (mise-parity: a tool used by both
 # sides lives only in the shared fragment).
@@ -90,8 +90,8 @@ opencode = "1.18.13"
 # symlink the antigravity plugin drives). Host-only (root mise.toml is in the
 # container's MISE_IGNORED_CONFIG_PATHS) — the Claude architect stays the chair;
 # these are executor lanes only. Auth is per-user (codex login / Google account).
-codex = "0.146.0"
-antigravity-cli = "1.1.10"
+codex = "0.147.0"
+antigravity-cli = "1.1.11"
 
 [settings]
 experimental = true

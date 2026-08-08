@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Classifier axis enumeration: a declared axis list, DERIVED from the code.
 
 #601 spent four of its seven adversarial review rounds on one root cause,

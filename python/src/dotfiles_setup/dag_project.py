@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Project NEEDS_HUMAN nodes to the tracker — the scheduler's first slice (#602).
 
 `dag_tick` (#578/#601) classifies an escalated background node
@@ -467,8 +468,10 @@ def render_comment(escalation: Escalation, *, projected_at: str) -> str:
             marker(escalation.node_id, escalation.digest),
             f"### 🙋 NEEDS_HUMAN — node `{escalation.node_id}`",
             "",
-            "**The question** — `needs`, verbatim from "
-            f"`~/.claude/jobs/{escalation.node_id}/state.json`:",
+            (
+                "**The question** — `needs`, verbatim from "
+                f"`~/.claude/jobs/{escalation.node_id}/state.json`:"
+            ),
             "",
             _fenced(escalation.needs),
             "",
@@ -511,8 +514,10 @@ def render_dry_run(escalations: Sequence[Escalation], *, projected_at: str) -> s
     for escalation in escalations:
         blocks.extend(
             [
-                f"--- would comment on #{escalation.target_issue} "
-                f"and add label `{dag_tick.NEEDS_HUMAN_LABEL}` ---",
+                (
+                    f"--- would comment on #{escalation.target_issue} "
+                    f"and add label `{dag_tick.NEEDS_HUMAN_LABEL}` ---"
+                ),
                 render_comment(escalation, projected_at=projected_at),
                 "",
             ]
@@ -694,8 +699,10 @@ def resolve_target(
         return target, f"⚠️ standing issue #{target} is CLOSED and could not be reopened"
     return (
         DEFAULT_ESCALATION_ISSUE,
-        f"bound issue #{target} is CLOSED — projected here instead. Reopening a "
-        f"work issue is rework (`575.md` R7), not a projector's call.",
+        (
+            f"bound issue #{target} is CLOSED — projected here instead. Reopening a "
+            f"work issue is rework (`575.md` R7), not a projector's call."
+        ),
     )
 
 

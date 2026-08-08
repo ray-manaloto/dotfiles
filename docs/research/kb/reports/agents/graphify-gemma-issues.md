@@ -79,12 +79,15 @@ lands it will most likely arrive as ONNX/HF, not as an Ollama pull.
 The fix is present in 0.9.22 at `llm.py:1193-1233`:
 ```python
 if backend == "ollama" and extra_body is None:
-    num_ctx_raw = os.environ.get("GRAPHIFY_OLLAMA_NUM_CTX", "").strip()      # llm.py:1195
-    estimated_input = len(user_message) // _CHARS_PER_TOKEN + 400            # llm.py:1198
+    num_ctx_raw = os.environ.get("GRAPHIFY_OLLAMA_NUM_CTX", "").strip()  # llm.py:1195
+    estimated_input = len(user_message) // _CHARS_PER_TOKEN + 400  # llm.py:1198
     auto_num_ctx = min(estimated_input + max_completion_tokens + 2000, 131072)
-    auto_num_ctx = max(auto_num_ctx, 8192)                                   # llm.py:1199-1200
+    auto_num_ctx = max(auto_num_ctx, 8192)  # llm.py:1199-1200
     ...
-    kwargs["extra_body"] = {"options": {"num_ctx": num_ctx}, "keep_alive": keep_alive}  # llm.py:1229
+    kwargs["extra_body"] = {
+        "options": {"num_ctx": num_ctx},
+        "keep_alive": keep_alive,
+    }  # llm.py:1229
 ```
 With `_CHARS_PER_TOKEN = 4` (`llm.py:36`) and `max_completion_tokens = 8192` (`llm.py:1127`),
 our `--token-budget 12000` derives **num_ctx ≈ 12000 + 400 + 8192 + 2000 ≈ 22.6k** —

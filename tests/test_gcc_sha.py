@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for `dotfiles_setup.gcc_sha`."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 r"""Heredoc-body detection, shared by the PreToolUse guard and the ADR-0001 check.
 
 A heredoc body is **stdin data**, not a command, and no stdlib shell lexer

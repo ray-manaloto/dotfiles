@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for image smoke test script generation and size parsing."""
 
 from __future__ import annotations

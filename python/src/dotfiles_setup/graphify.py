@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """graphify knowledge-graph integration — deterministic query read path (#313).
 
 Host-only, project-scoped (never mutates ``~/.claude``; see #310). Wraps

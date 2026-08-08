@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for the NEEDS_HUMAN tracker projection (#602 phase 2).
 
 The fixtures are the REAL payloads of the only two escalations that have ever

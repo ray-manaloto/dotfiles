@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for the graphify extraction bake-off harness.
 
 Each test maps to a specific finding from the 2026-07-20 audit that found the

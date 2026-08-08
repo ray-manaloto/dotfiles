@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for the default-branch write guard.
 
 Every test builds a **real git repo** rather than mocking git. The fixture is

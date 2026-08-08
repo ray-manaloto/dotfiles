@@ -462,12 +462,17 @@ Source: `knowledge-base/sources/stokowski/stokowski/tracking.py:13-26`.
 
 ```python
 STATE_PATTERN = re.compile(r"<!-- stokowski:state ({.*?}) -->")
-GATE_PATTERN  = re.compile(r"<!-- stokowski:gate ({.*?}) -->")
+GATE_PATTERN = re.compile(r"<!-- stokowski:gate ({.*?}) -->")
+
 
 def make_state_comment(state, run=1):
-    payload = {"state": state, "run": run, "timestamp": datetime.now(timezone.utc).isoformat()}
+    payload = {
+        "state": state,
+        "run": run,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
     machine = f"<!-- stokowski:state {json.dumps(payload)} -->"
-    human   = f"**[Stokowski]** Entering state: **{state}** (run {run})"
+    human = f"**[Stokowski]** Entering state: **{state}** (run {run})"
     return f"{machine}\n\n{human}"
 ```
 

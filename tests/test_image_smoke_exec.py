@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Containerized real-toolchain execution tests for the #223 smoke cores.
 
 Backlog item 2 (#231 follow-up). The tier-1 tool-set jq/diff block and the

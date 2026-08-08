@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for the devcontainer sync workflow (dotfiles_setup.sync)."""
 
 from __future__ import annotations

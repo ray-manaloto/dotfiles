@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Reject a lockfile that LOST platform coverage (#370).
 
 A whole-file re-lock re-resolves for the platform it runs on, and macOS mise

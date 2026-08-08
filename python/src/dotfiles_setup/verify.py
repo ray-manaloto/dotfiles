@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Verification suite runner with TOML manifest."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 r"""Repeatable graphify extraction bake-off — isolated runs, recorded provenance.
 
 Replaces the ad-hoc 2026-07-20 comparison, which a same-day audit found to be

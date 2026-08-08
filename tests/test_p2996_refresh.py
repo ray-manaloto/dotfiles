@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for `dotfiles_setup.p2996_refresh`."""
 
 from __future__ import annotations

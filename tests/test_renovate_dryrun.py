@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for the local Renovate dry-run (dotfiles_setup.renovate_dryrun).
 
 The report fixtures below are trimmed from a REAL ``reportType=file`` payload

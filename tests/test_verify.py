@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for the verification engine (dotfiles_setup.verify).
 
 Scoped to the behaviour spec #299 changed — path strictness and token binding

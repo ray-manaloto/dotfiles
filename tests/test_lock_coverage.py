@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Lock-coverage gates (#160 T8): every committed lockfile must cover its config.
 
 This is the deterministic, network-free half of the lock-staleness gate — it

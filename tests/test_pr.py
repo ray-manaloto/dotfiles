@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Raymond Manaloto
 """Tests for the ship/land PR workflow (dotfiles_setup.pr)."""
 
 from __future__ import annotations
