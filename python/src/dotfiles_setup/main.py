@@ -79,6 +79,12 @@ from dotfiles_setup.p2996_refresh import refresh as refresh_p2996_ref
 from dotfiles_setup.parity import run as parity_run
 from dotfiles_setup.path_drift import AMBIENT_PATH_ENV, path_drift_main
 from dotfiles_setup.pr import automerge_main, land_main, ship_main
+from dotfiles_setup.reap import (
+    DEFAULT_GRACE_S,
+    DEFAULT_MIN_AGE_S,
+    ReapRequest,
+    reap_main,
+)
 from dotfiles_setup.renovate import renovate_status_main
 from dotfiles_setup.renovate_dryrun import renovate_dryrun_main
 from dotfiles_setup.renovate_validate import renovate_validate_main
@@ -221,6 +227,56 @@ def _add_honesty_subcommands(subparsers: _SubParsers) -> None:
         nargs="+",
         default=list(DEFAULT_PATHS),
         help="Paths to lint",
+    )
+    reap_parser = subparsers.add_parser(
+        "reap",
+        help="Reap wedged processes by pattern and age (#653). DRY RUN by "
+        "default — `--kill` is required to signal anything. Protects this "
+        "process, its whole ancestor chain and init, so it cannot kill the "
+        "shell that launched it",
+    )
+    reap_parser.add_argument(
+        "--pattern",
+        required=True,
+        help="Regex matched against each process's full argv. Searched by "
+        "default; see --full-match. Never a pkill-style bare substring",
+    )
+    reap_parser.add_argument(
+        "--min-age",
+        type=int,
+        default=DEFAULT_MIN_AGE_S,
+        dest="min_age",
+        help="Age floor in seconds; anything younger is spared as possibly "
+        f"live work (default: {DEFAULT_MIN_AGE_S})",
+    )
+    reap_parser.add_argument(
+        "--kill",
+        action="store_true",
+        help="Actually signal the targets. Without this nothing is signalled",
+    )
+    reap_parser.add_argument(
+        "--full-match",
+        action="store_true",
+        dest="full_match",
+        help="Require the pattern to match the ENTIRE argv, not a substring",
+    )
+    reap_parser.add_argument(
+        "--signal",
+        default="TERM",
+        choices=("TERM", "KILL"),
+        dest="signal_name",
+        help="First signal. TERM escalates to KILL for survivors; KILL does not",
+    )
+    reap_parser.add_argument(
+        "--grace",
+        type=float,
+        default=DEFAULT_GRACE_S,
+        help="Seconds between TERM and the liveness re-check that decides KILL",
+    )
+    reap_parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Exit 1 when a dry run finds targets (for use in a gate)",
     )
     review_parser = subparsers.add_parser(
         "session-review",
@@ -1766,6 +1822,19 @@ def _build_command_handlers(
                 tool=args.tool,
                 baseline=args.baseline,
                 paths=tuple(args.paths),
+            )
+        ),
+        "reap": lambda: sys.exit(
+            reap_main(
+                ReapRequest(
+                    pattern=args.pattern,
+                    min_age_s=args.min_age,
+                    kill=args.kill,
+                    full_match=args.full_match,
+                    grace_s=args.grace,
+                    signal_name=args.signal_name,
+                    strict=args.strict,
+                )
             )
         ),
         "session-review": lambda: sys.exit(
