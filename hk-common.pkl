@@ -50,6 +50,18 @@ excludePaths: List<String> = List(
   // rule exists to preserve. Authored docs under `docs/` are still checked.
   "docs/research/runs/**",
   "docs/research/kb/**",
+  // Same reason, third tree (2026-08-08). Specs now carry REQUIREMENTS QUOTED
+  // VERBATIM from the user — `docs/specs/devcontainer-gcc162-dual-arch.md`
+  // opens with "do NOT paraphrase or tidy the verbatim blocks". `typos` flagged
+  // a misspelling inside one such quote: correcting it makes the block no
+  // longer verbatim, and once one word is silently fixed nobody can tell which
+  // others were. The user's wording is the requirement; our tidy-up of it is
+  // not. Authored prose elsewhere under `docs/` is still checked.
+  //
+  // (Naming the flagged word here would re-trigger the very check this entry
+  // exists to satisfy — this file is NOT excluded, and doing so cost one
+  // lint round. The word lives in the spec; that is where to look.)
+  "docs/specs/**",
   ".codex/**",
   ".agent/**",
   ".omg/**",
