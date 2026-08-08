@@ -10,6 +10,30 @@ design; #476's measurements are preserved verbatim.
 
 ---
 
+## 0. ⚠️ Token figures below are SUPERSEDED — read this first
+
+Every token number in this spec was `bytes ÷ 4`. Measured against the harness's
+own `/context all` on 2026-08-07, that divisor is wrong for this corpus by
+**57%** — the real figure is **~2.5 bytes/token** (and ~2.2 for `MEMORY.md`,
+whose dense backticked paths and issue refs tokenise far worse than prose).
+
+| | Stated here | Actual |
+|---|---|---|
+| Repo eager | 31,344 tok | **49,285 tok** |
+| `MEMORY.md` | 5,426 tok | **9,500 tok** |
+| Skill + agent listing | 8,148 tok | **13,800 tok** |
+| **Standing instruction context** | ~44,900 tok | **~72,400 tok** |
+
+**The BYTE measurements stand** — they were taken with the size engine's own
+classifier and cross-checked to the CLI total; only the conversion was wrong,
+and it understated the problem. The trigger-shape classification is unaffected,
+being a partition of the same files. Full capture, per-file token table and the
+control arm: `docs/research/kb/reports/context-baseline-20260807.md`.
+
+⭐ `MEMORY.md` at **9,500 tokens is the single largest instruction file** —
+larger than any rule and than `AGENTS.md`. This spec defers it to phase 4; the
+measurement argues it is the biggest single lever available.
+
 ## 1. The measurement this rests on
 
 Taken fresh 2026-08-07, using `kb_setup.md_budget`'s **own** classifier over
