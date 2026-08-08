@@ -27,6 +27,42 @@ Two routes, one answer.
 Deferred, for contrast: 25 `SKILL.md` = 151,005 B · 242 memory files =
 925,434 B · 2 `paths:`-scoped rules = 12,814 B.
 
+### ⚠️ A FOURTH standing class, found by running the doctor (2026-08-07)
+
+The table above is what `md-budget` can see, and it is not the whole standing
+cost. Claude Code keeps every discovered skill's `name` + `description` (+
+`when_to_use`) and every agent type's `name` + `description` resident **every
+turn** so it can judge relevance; only the chosen skill's body ever loads. That
+listing is eager by any definition, and no gate measured it.
+
+| Standing surface | bytes | ~tokens | Seen by `md-budget`? |
+|---|---|---|---|
+| Repo eager (24 files) | 125,376 | 31,344 | yes |
+| `MEMORY.md` | 21,704 | 5,426 | no |
+| **Skill + agent listing** (113 entries) | **32,595** | **8,148** | **no** |
+| **True standing total** | **~179,675** | **~44,900** | — |
+
+So the headline figure in §1 **understates the standing cost by ~32 KB**, and the
+new class is larger than `MEMORY.md`. It is now measured by a `listing-budget`
+doctor check against a `[listing]` ceiling in `doctor.toml` — a doctor check and
+not an hk step because every input is host state (`~/.claude/plugins`), which a
+CI runner has none of.
+
+⚠️ **The measurement error is part of the record.** The first pass globbed the
+plugin cache and reported 2,164 skills / 531 agents / **~174,820 tokens** — a
+20× overstatement, because the cache holds every version of every plugin
+including disabled ones. The session's own startup line ("39 skills · 31
+agents") was the control arm that caught it. A number counting things the
+harness never loads is worse than no number: it redirects work at a problem that
+does not exist.
+
+⭐ **Two defects surfaced by building the check**, both now fixed: an agent
+description of 1,789 chars was being silently truncated at the hard 1,536 cap —
+and the 253 characters cut were its **negative** example, so truncation removed
+the half of the trigger that says when *not* to use it; and the installed,
+SHA-pinned `kb_setup` predates the `when_to_use` fix, so the repo's own
+`md_size_budget` gate is currently measuring `description` alone.
+
 `rule_unscoped` is **108,382 B = 86.4%** of repo-eager. The inherited
 "~88% is unscoped rules" figure (dated 2026-07-28) was re-derived, not repeated,
 and it holds.
