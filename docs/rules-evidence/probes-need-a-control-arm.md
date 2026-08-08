@@ -153,10 +153,102 @@ the other value?"* — and no amount of arming the probe reaches it. Two habits:
   disjoint names, no confounds — and that is exactly what made it wrong: the real
   system duplicates names across the two layers, which is the whole mechanism.
 
+## Rule 3, the temporal bound — four probes that could not have worked (2026-08-08)
+
+A session found **1,174** wedged `mise/shims/git` processes, each with a stuck
+`fnox export --format json` child (1,190 total), load average 10.4, oldest 1d10h.
+It attributed them to the `mise-env-fnox` plugin, then — correctly — tried to
+prove it.
+
+Four independent routes, each measured as a before/after process-count delta:
+
+| probe | delta |
+|---|---|
+| a mise-shimmed `git` (the shape that parents the stuck procs) | 0 |
+| `mise env` with `MISE_ENV_CACHE` busted | 0 |
+| a fresh `zsh` sourcing `50-mde-secrets.zsh` | 0 |
+| bare `fnox activate zsh` + `cd` | 0 |
+
+The session concluded **"unattributed"** and published that. Two errors in it:
+
+1. **Four arms that all agree are one probe, not four.** Unanimity across routes
+   reads as thoroughness and is the opposite: nothing discriminated, so the
+   result cannot name a culprit *in either direction* — it could not have
+   convicted the plugin nor exonerated it.
+2. **The bound was TIME, and it was invisible because it was not in the query.**
+   The cause was `kb-reclaim` deleting mise versions this repo pins (its own
+   `reclaim.py:530` docstring records removing three python versions on
+   **2026-08-07**, inside the burst window, because `mise ls` resolves configs
+   relative to the CURRENT DIRECTORY). By probe time those installs had been
+   restored — **partly by the same session's own `mise install`** an hour
+   earlier. The precondition was gone, so no route could reproduce it.
+
+The user supplied the answer from a repo the session had not thought to open.
+
+**The habit:** before reporting a null, ask *"could this still be true right
+now?"* — and especially *"did I repair it myself?"*. A session that installs,
+rebuilds or cleans has mutated the very world it is about to interrogate. Report
+**"the condition has passed, so this probe cannot speak to it"** (ignorance in
+the probe) rather than **"unattributed"** (ignorance in the world); only the
+first tells a reader the question is still open.
+
+Note the rule already listed "a time window" as a bound — but that meant a bound
+*inside the search*. This is the world moving under a query with no time bound at
+all, which is why it was not recognised.
+
+## Rule 9, canary over symptom — the #644 gate (2026-08-08)
+
+`renovate-config-validator` compiles `renovate.json`'s regexes with RE2. `re2` is
+an **optional** npm dependency, and npm optional deps fail silently; when absent
+the validator warns *"RE2 not usable, falling back to RegExp"* and **still exits
+0** (`renovate/dist/util/regex.js` sets `RegEx = RegExp` on the catch path).
+Measured: `(?!latest)` in a `matchStrings` entry produced *"Config validated
+successfully"*, rc=0 — the local gate was strictly weaker than CI.
+
+Three candidate guards, and why two lose:
+
+- **Grep stderr for the warning.** Binds a message string nobody here owns. A
+  reword upstream makes the check a no-op — and because this check is *inverted*
+  (absence of a warning means healthy), it fails toward **silence**.
+- **Assert the version.** Refuted by accident on the first run: `mise which`
+  reported the fixed 44.14.10 while `command -v` still resolved the stale
+  44.13.2 that a shell's baked-in `PATH` was holding. A version assertion
+  consults the pin and says "fine" while the executing process is blind.
+  **A canary tests the binary that RUNS; a version tests the one you believe you
+  installed.**
+- **Feed it a canary and require failure.** A config whose only flaw is a
+  negative lookahead must exit non-zero. Control-armed against the two installs
+  on disk — the old version *is* a control arm:
+
+  | renovate | canary exit | verdict |
+  |---|---|---|
+  | 44.13.2 (no re2) | rc=0 | degraded |
+  | 44.14.10 (re2) | rc=1 | healthy |
+
+**The inversion moves the fragility into the canary itself**, so the canary must
+be pinned two ways: it must still contain an RE2-unsupported construct (or a
+"tidy-up" neuters the gate), and it must still be valid for JS `RegExp` (a
+merely malformed pattern fails on *both* engines, so the gate would report
+"healthy" on a degraded one). Mutation-verified with differing blast radii:
+dropping the lookahead fails 4 tests; ignoring the engine verdict fails exactly
+the 2 degradation/ordering tests.
+
+Ordering is a safety property, not style: the engine check runs **before** the
+real validation, or a degraded run prints a green line first and the failure
+mode gets reported as a pass with a footnote.
+
 ## GitHub repos touched
 
 - [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — the probes,
   `hk.pkl`'s `no_grep_q_under_pipefail`, and the #289 base build.
+- [ray-manaloto/knowledge-base](https://github.com/ray-manaloto/knowledge-base) —
+  `kb_setup.reclaim`'s `scan_mise_versions`, whose CWD-relative pin probe is the
+  temporal case's root cause (issue #243).
+- [renovatebot/renovate](https://github.com/renovatebot/renovate) — `util/regex.js`
+  and `config-validator.js`, read from the installed 44.13.2/44.14.10 bundles;
+  URL taken from the package's own `repository` field, not from memory.
+- [jdx/mise-env-fnox](https://github.com/jdx/mise-env-fnox) — the env plugin whose
+  hook shells out to `fnox export`; URL as written in the live mise config.
 - [jdx/fnox](https://github.com/jdx/fnox) — the tool both rule-8 fixtures probed
   (`fnox proxy run`, profile config files), at the installed v1.32.0.
 
