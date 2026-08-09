@@ -23,6 +23,7 @@ from dotfiles_setup.config import (
     CONTAINER_HOST_STATE_DIR,
     DotfilesConfig,
 )
+from dotfiles_setup.platform_target import resolve_platform
 
 logger = logging.getLogger(__name__)
 
@@ -160,8 +161,9 @@ class DevContainerManager:
         """Build the thin host-user overlay image."""
         logger.info("Pulling published base image %s...", self.base_image)
         docker = self._get_bin("docker")
+        platform = resolve_platform()
         subprocess.run(
-            [docker, "pull", "--platform", "linux/amd64/v2", self.base_image],
+            [docker, "pull", "--platform", platform, self.base_image],
             check=True,
             text=True,
             env=os.environ.copy(),
@@ -175,7 +177,7 @@ class DevContainerManager:
                 "--image-name",
                 self.image_name,
                 "--platform",
-                "linux/amd64/v2",
+                platform,
             ]
         )
 

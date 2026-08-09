@@ -117,10 +117,39 @@ def test_an_empty_lock_derives_no_platforms_rather_than_guessing() -> None:
 def test_host_capability_covers_both_axes(
     *, system: str, machine: str, capable: bool
 ) -> None:
-    """OS and machine are separate refusals; an arm64 Linux is not the image."""
-    verdict, reason = image_lock.host_can_lock(system, machine)
+    """OS and machine are separate refusals; an arm64 Linux is not the image.
+
+    The target is stated explicitly (#673): since the accepted machines derive
+    from the platform parameter, a test that let it default would be asserting
+    against whatever the ambient environment exported — and would invert on an
+    unpinned arm64 host.
+    """
+    verdict, reason = image_lock.host_can_lock(
+        system, machine, target_platform="linux/amd64/v2"
+    )
     assert verdict is capable
     assert reason
+
+
+@pytest.mark.parametrize(
+    ("target", "machine", "capable"),
+    [
+        ("linux/amd64/v2", "x86_64", True),
+        ("linux/amd64/v2", "aarch64", False),
+        ("linux/arm64/v8", "aarch64", True),
+        ("linux/arm64/v8", "x86_64", False),
+    ],
+)
+def test_accepted_machines_follow_the_target_platform(
+    *, target: str, machine: str, capable: bool
+) -> None:
+    """The lock host must match the IMAGE, so the gate tracks the parameter.
+
+    Without this the gate would keep demanding x86_64 after #676 publishes
+    arm64 — refusing the only host that could write that lock.
+    """
+    verdict, _ = image_lock.host_can_lock("Linux", machine, target_platform=target)
+    assert verdict is capable
 
 
 def test_the_darwin_refusal_names_the_upstream_defect() -> None:

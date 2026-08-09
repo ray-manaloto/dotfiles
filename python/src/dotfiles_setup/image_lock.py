@@ -54,6 +54,11 @@ from dotfiles_setup.lock_refresh import (
     collect_system_lock,
     stage_system_lock_dir,
 )
+from dotfiles_setup.platform_target import (
+    expected_uname_machine,
+    platform_arch,
+    resolve_platform,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -74,7 +79,19 @@ DEFAULT_PASSES = 5
 
 #: The only host that can write a faithful image lock (gotcha 1).
 REQUIRED_OS = "Linux"
-REQUIRED_MACHINE = frozenset({"x86_64", "amd64"})
+
+
+def required_machines(target_platform: str | None = None) -> frozenset[str]:
+    """Every ``uname -m`` spelling a host may report and still match the image.
+
+    Derived from the one platform parameter (#673) rather than pinned to
+    amd64: the lock has to be written on a host of the IMAGE's architecture,
+    so when #676 publishes arm64 this gate follows the target instead of
+    silently continuing to demand x86_64. Both spellings are accepted because
+    ``uname -m`` and docker disagree on the name.
+    """
+    arch = platform_arch(resolve_platform(target_platform))
+    return frozenset({expected_uname_machine(f"linux/{arch}"), arch})
 
 
 class ImageLockError(RuntimeError):
@@ -95,9 +112,18 @@ def lock_platforms(lock_text: str) -> tuple[str, ...]:
 
 
 def host_can_lock(
-    system: str | None = None, machine: str | None = None
+    system: str | None = None,
+    machine: str | None = None,
+    *,
+    target_platform: str | None = None,
 ) -> tuple[bool, str]:
-    """Can this host write a faithful image lock? Returns the verdict + reason."""
+    """Can this host write a faithful image lock? Returns the verdict + reason.
+
+    ``target_platform`` is the architecture the lock is being written FOR and
+    defaults to the one platform parameter (#673). It is an explicit argument
+    so a caller — and a test — can state which image it means, rather than
+    inheriting whatever the ambient environment happens to say.
+    """
     system = system or platform.system()
     machine = (machine or platform.machine()).lower()
     if system != REQUIRED_OS:
@@ -106,10 +132,12 @@ def host_can_lock(
             f"linux conda checksums off linux (jdx/mise#7700), and the tool "
             f"count does not move, so the truncation is silent"
         )
-    if machine not in REQUIRED_MACHINE:
+    resolved = resolve_platform(target_platform)
+    accepted = required_machines(resolved)
+    if machine not in accepted:
         return False, (
-            f"host machine is {machine}, not one of {sorted(REQUIRED_MACHINE)} "
-            f"— the image is linux/amd64"
+            f"host machine is {machine}, not one of {sorted(accepted)} — the "
+            f"image targets {resolved}"
         )
     return True, f"{system}/{machine}"
 
@@ -281,8 +309,9 @@ def image_lock_main(
     if not capable:
         logger.error(
             "refusing to regenerate the image locks here: %s. Re-run without "
-            "--no-container to route into the amd64 devcontainer, or run this "
-            "on a linux/amd64 host. A regen on the wrong host truncates the "
+            "--no-container to route into the devcontainer, or run this on a "
+            "linux host of the image's own architecture. A regen on the wrong "
+            "host truncates the "
             "lock SILENTLY — the tool count does not move (#648, #650).",
             reason,
         )

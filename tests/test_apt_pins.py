@@ -108,18 +108,40 @@ def test_probe_script_pins_the_signing_fingerprint() -> None:
     assert script.startswith("set -euo pipefail\n")
 
 
-def test_docker_command_forces_amd64() -> None:
-    """The pins resolve for the image's arch, not this ARM Mac's (R3)."""
-    argv = apt_pins.docker_command("ubuntu:26.04@sha256:abc", "echo hi")
+@pytest.mark.parametrize(
+    ("platform", "expected"),
+    [
+        ("linux/amd64/v2", "linux/amd64"),
+        ("linux/arm64/v8", "linux/arm64"),
+    ],
+)
+def test_docker_command_targets_the_images_arch(platform: str, expected: str) -> None:
+    """The pins resolve for the IMAGE's arch, not this ARM Mac's (R3).
+
+    Since #673 that arch comes from the one platform parameter rather than a
+    literal, so both arms are pinned: passing arm64 must really reach docker,
+    or the "parameter" would be a parameter in name only. The microarchitecture
+    level is dropped because apt publishes per architecture, not per level.
+    """
+    argv = apt_pins.docker_command(
+        "ubuntu:26.04@sha256:abc", "echo hi", platform=platform
+    )
     assert argv[:6] == [
         "docker",
         "run",
         "--rm",
         "--platform",
-        "linux/amd64",
+        expected,
         "ubuntu:26.04@sha256:abc",
     ]
     assert argv[-2:] == ["-c", "echo hi"]
+
+
+def test_docker_command_reads_the_repo_pin(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unparameterised, it resolves DOTFILES_PLATFORM — what `mise run` sets."""
+    monkeypatch.setenv("DOTFILES_PLATFORM", "linux/amd64/v2")
+    argv = apt_pins.docker_command("ubuntu:26.04@sha256:abc", "echo hi")
+    assert argv[4] == "linux/amd64"
 
 
 def test_real_tree_declares_every_apt_package_pinned() -> None:

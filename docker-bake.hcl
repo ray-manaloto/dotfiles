@@ -16,6 +16,16 @@ variable "TAG" {
   default = "dev"
 }
 
+# The CI-side mirror of mise.toml's `[env] DOTFILES_PLATFORM` (#673).
+#
+# It repeats the literal instead of resolving it because CI's
+# docker/bake-action jobs do not run under mise and HCL has no way to read a
+# TOML file. The two are held byte-equal by `mise run lint`'s
+# `no_platform_literals` step, so a retarget that edits one and forgets the
+# other fails the gate rather than shipping a split-brain image.
+#
+# bake reads a same-named environment variable into this variable, so
+# `PLATFORM=linux/arm64/v8 docker buildx bake …` overrides it without an edit.
 variable "PLATFORM" {
   default = "linux/amd64/v2"
 }

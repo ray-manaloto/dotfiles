@@ -9,7 +9,7 @@
 - **hk version:** hk 1.54.1
 - **Builtins available:** 145
 - **Wired as builtins:** 28
-- **Steps defined in total:** 63 (35 custom, with their own check/fix commands)
+- **Steps defined in total:** 64 (36 custom, with their own check/fix commands)
 
 A *wired builtin* is referenced as `Builtins.<name>`. A *custom step* is a
 `["name"] { … }` block carrying its own commands — it may share a
@@ -50,7 +50,7 @@ as builtins in use.
 | `yamllint` | hk.pkl |
 | `zizmor` | hk.pkl |
 
-## Custom steps (35)
+## Custom steps (36)
 
 Not builtins. Each carries its own `check`/`fix`, so `hk builtins` has no
 opinion about them, and neither does this table beyond recording them.
@@ -82,6 +82,7 @@ opinion about them, and neither does this table beyond recording them.
 | `no_grep_q_under_pipefail` | hk.pkl |
 | `no_hk_depends` | hk.pkl |
 | `no_lint_skip` | hk.pkl |
+| `no_platform_literals` | hk.pkl |
 | `pre-commit` | hk.pkl, hk-image.pkl |
 | `pre-push` | hk.pkl |
 | `py_ty` | hk.pkl |

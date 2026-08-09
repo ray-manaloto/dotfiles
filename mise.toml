@@ -125,6 +125,30 @@ show_env = true
 postinstall = "mise reshim && hk install --mise"
 
 [env]
+# THE platform default (#673). Everything that targets an architecture — the
+# container tasks below, devcontainer.json's build/run `--platform`, every
+# Python entry point via `platform_target.resolve_platform()`, and
+# scripts/benchmark-docker.sh — resolves from THIS variable, so retargeting is
+# one edit instead of the twelve-plus literals it used to be (miss two and you
+# get a container running one architecture while a probe asserts another — a
+# false pass, not a crash).
+#
+# The value is a full platform TRIPLE, not an arch word: `v2` is a
+# microarchitecture level, and arm64's analogue is `linux/arm64/v8`.
+#
+# It is pinned here rather than left to the host because :dev is amd64-only
+# today; `resolve_platform()` falls back to the HOST's native triple when this
+# is unset, so deleting the pin is what flips the default to native once #676
+# publishes both architectures and #678 brings up a native arm64 container.
+# Templated so a per-clone gitignored mise.local.toml `[env]` (or a shell
+# export) overrides it — the same pattern as BASE_IMAGE below.
+#
+# `docker-bake.hcl` repeats this literal because CI's docker/bake-action jobs
+# do not run under mise and HCL cannot read a TOML file; the two are held equal
+# by `mise run lint`'s `no_platform_literals` step, which also forbids the
+# literal anywhere else.
+DOTFILES_PLATFORM = "{{ env.DOTFILES_PLATFORM | default(value='linux/amd64/v2') }}"
+
 # HK_PKL_BACKEND dropped (#160 T12): hk 1.49's default pklr backend evaluates
 # the import/spread config identically to the pkl CLI (probe: --plan -J output
 # byte-identical minus timestamp). The pkl binary stays pinned in shared.toml
@@ -215,7 +239,10 @@ description = "Bring the devcontainer up via the official @devcontainers/cli (Ma
 #
 # DOCKER_DEFAULT_PLATFORM is task-scoped so it only affects `devcontainer up`
 # (and its child docker calls) — host-level docker/colima invocations are
-# unaffected. Required because the devcontainer image is amd64-only.
+# unaffected. Its VALUE now comes from the global `[env] DOTFILES_PLATFORM`
+# (#673), which is the one place the platform is chosen; the scoping is what
+# stays task-local, because DOTFILES_PLATFORM is inert to docker while
+# DOCKER_DEFAULT_PLATFORM is not.
 #
 # DEVCONTAINER_SSH_PORT is the HOST-side port for the inbound shell
 # (Requirement R1: `ssh ${USER}@localhost -p 4444` opens a shell in the
@@ -246,9 +273,10 @@ description = "Bring the devcontainer up via the official @devcontainers/cli (Ma
 # documented `get_env()` function) is required: `get_env()` reads only the
 # ambient process env and is blind to mise's own merged `[env]` layer, so
 # it would silently ignore a mise.local.toml `[env]` override. The default
-# keeps these TASK-scoped (no global leak of BASE_IMAGE / the amd64
-# platform into unrelated subprocesses) unless the user opts in.
-env = { BASE_IMAGE = "{{ env.BASE_IMAGE | default(value='ghcr.io/ray-manaloto/dotfiles-devcontainer:dev') }}", DOCKER_DEFAULT_PLATFORM = "linux/amd64/v2", DEVCONTAINER_SSH_PORT = "{{ env.DEVCONTAINER_SSH_PORT | default(value='4444') }}", DOPPLER_PROJECT = "dotfiles", DOPPLER_CONFIG = "{{ env.DOPPLER_CONFIG | default(value='dev_personal') }}" }
+# keeps these TASK-scoped (no global leak of BASE_IMAGE, nor of the
+# docker-honoured DOCKER_DEFAULT_PLATFORM, into unrelated subprocesses)
+# unless the user opts in.
+env = { BASE_IMAGE = "{{ env.BASE_IMAGE | default(value='ghcr.io/ray-manaloto/dotfiles-devcontainer:dev') }}", DOCKER_DEFAULT_PLATFORM = "{{ env.DOTFILES_PLATFORM }}", DEVCONTAINER_SSH_PORT = "{{ env.DEVCONTAINER_SSH_PORT | default(value='4444') }}", DOPPLER_PROJECT = "dotfiles", DOPPLER_CONFIG = "{{ env.DOPPLER_CONFIG | default(value='dev_personal') }}" }
 run = '''
 set -euo pipefail
 # v6 collision guard: compute an 8-char hash of $PWD so sibling clones
@@ -274,7 +302,7 @@ description = "Force a full rebuild + re-pull of :dev (lifecycle hooks fire)"
 # the host-user overlay without cached layers. Lifecycle hooks
 # (initializeCommand → onCreateCommand → postCreateCommand) all fire.
 # BASE_IMAGE + DEVCONTAINER_SSH_PORT templated for per-clone override — see the up task.
-env = { BASE_IMAGE = "{{ env.BASE_IMAGE | default(value='ghcr.io/ray-manaloto/dotfiles-devcontainer:dev') }}", DOCKER_DEFAULT_PLATFORM = "linux/amd64/v2", DEVCONTAINER_SSH_PORT = "{{ env.DEVCONTAINER_SSH_PORT | default(value='4444') }}", DOPPLER_PROJECT = "dotfiles", DOPPLER_CONFIG = "{{ env.DOPPLER_CONFIG | default(value='dev_personal') }}" }
+env = { BASE_IMAGE = "{{ env.BASE_IMAGE | default(value='ghcr.io/ray-manaloto/dotfiles-devcontainer:dev') }}", DOCKER_DEFAULT_PLATFORM = "{{ env.DOTFILES_PLATFORM }}", DEVCONTAINER_SSH_PORT = "{{ env.DEVCONTAINER_SSH_PORT | default(value='4444') }}", DOPPLER_PROJECT = "dotfiles", DOPPLER_CONFIG = "{{ env.DOPPLER_CONFIG | default(value='dev_personal') }}" }
 run = '''
 set -euo pipefail
 DEVCONTAINER_WORKSPACE_HASH="$(scripts/workspace-hash.sh)"
@@ -300,7 +328,7 @@ description = "Spot-check cookbook paths in :dev (cargo/rustup cookbook layout +
 # NOT root mise.toml. Root mise.toml tools (hk, pkl, the 5 markdown
 # linters, etc.) live on the HOST, not in the image. Keep assertions here
 # scoped to what mise-system.toml actually provides.
-env = { BASE_IMAGE = "{{ env.BASE_IMAGE | default(value='ghcr.io/ray-manaloto/dotfiles-devcontainer:dev') }}", DOCKER_DEFAULT_PLATFORM = "linux/amd64/v2" }
+env = { BASE_IMAGE = "{{ env.BASE_IMAGE | default(value='ghcr.io/ray-manaloto/dotfiles-devcontainer:dev') }}", DOCKER_DEFAULT_PLATFORM = "{{ env.DOTFILES_PLATFORM }}" }
 run = '''
 # Review finding [29]: --pull=never — an absent local tag must fail loud
 # (use `mise run sync` to fetch via buildkit), never classic-pull ~38GB.
@@ -762,15 +790,22 @@ description = "Gate: running devcontainer is on the latest branch code + current
 run = 'uv run --project python dotfiles-setup docker verify-latest'
 
 [tasks.verify-arch]
-description = "R3: container runs as linux/amd64 x86_64 (not ARM passthrough)"
-# Proves Requirement 3: the container is AMD64 regardless of host arch.
-# Three independent signals: (1) docker image manifest architecture,
-# (2) container uname -m, (3) container arch. All three must report
-# x86_64/amd64. The host can be arm64 (macOS ARM via Docker Desktop
-# Rosetta, or the deferred Colima VZ+Rosetta path) or amd64 (Linux CI
-# runner); we don't check the host.
+description = "R3: container runs as the targeted platform (not host passthrough)"
+# Proves Requirement 3: the container is the architecture we ASKED for,
+# regardless of host arch. Three independent signals: (1) docker image
+# manifest architecture, (2) container uname -m, (3) container arch. All
+# three must agree with $DOTFILES_PLATFORM. The host can be arm64 (macOS ARM
+# via Docker Desktop Rosetta, or the deferred Colima VZ+Rosetta path) or
+# amd64 (Linux CI runner); we don't check the host.
+#
+# #673: the expected values are DERIVED from the one platform parameter
+# rather than hard-coded to amd64/x86_64 — the triple→arch and triple→uname
+# mappings live in python/src/dotfiles_setup/platform_target.py
+# (zero-bash-logic); the two lines below are assignments, not logic.
 run = '''
 set -euo pipefail
+expected_arch="$(uv run --project python dotfiles-setup platform arch)"
+expected_machine="$(uv run --project python dotfiles-setup platform machine)"
 container_name="$(docker ps -q --filter "label=devcontainer.local_folder=$PWD" | head -1)"
 if [ -z "${container_name}" ]; then
   echo "FAIL: no running devcontainer for $PWD" >&2
@@ -780,19 +815,19 @@ echo "==> docker image architecture"
 image_id=$(docker inspect "${container_name}" --format '{{"{{"}}.Image{{"}}"}}')
 image_arch=$(docker image inspect "${image_id}" --format '{{"{{"}}.Architecture{{"}}"}}')
 echo "image: ${image_arch}"
-[ "${image_arch}" = "amd64" ] || { echo "FAIL: image arch is ${image_arch}, expected amd64" >&2; exit 1; }
+[ "${image_arch}" = "${expected_arch}" ] || { echo "FAIL: image arch is ${image_arch}, expected ${expected_arch}" >&2; exit 1; }
 
 echo "==> container uname -m"
 uname_m=$(docker exec "${container_name}" uname -m)
 echo "uname -m: ${uname_m}"
-[ "${uname_m}" = "x86_64" ] || { echo "FAIL: uname -m is ${uname_m}, expected x86_64" >&2; exit 1; }
+[ "${uname_m}" = "${expected_machine}" ] || { echo "FAIL: uname -m is ${uname_m}, expected ${expected_machine}" >&2; exit 1; }
 
 echo "==> container arch"
 arch_out=$(docker exec "${container_name}" arch)
 echo "arch: ${arch_out}"
-[ "${arch_out}" = "x86_64" ] || { echo "FAIL: arch is ${arch_out}, expected x86_64" >&2; exit 1; }
+[ "${arch_out}" = "${expected_machine}" ] || { echo "FAIL: arch is ${arch_out}, expected ${expected_machine}" >&2; exit 1; }
 
-echo "OK: R3 container is linux/amd64 x86_64 on all three signals"
+echo "OK: R3 container is ${DOTFILES_PLATFORM} ${expected_machine} on all three signals"
 '''
 
 [tasks.verify-ssh-inbound]

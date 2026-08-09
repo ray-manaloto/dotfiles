@@ -249,6 +249,26 @@ local allSteps = new Mapping<String, Config.Step> {
     check = "uv run --project python dotfiles-setup bash-budget"
   }
 
+  // One platform parameter (#673). The target architecture used to be the
+  // literal `linux/amd64/v2` repeated across bake config, three mise task
+  // envs, devcontainer.json, five python modules, the benchmark script and
+  // two contracts. Retargeting meant editing every one, and missing two
+  // produces a container running one architecture while a probe asserts
+  // another — a FALSE PASS, not a crash, which is precisely the failure a
+  // reviewer cannot see. The gate is therefore machine-enforced completeness:
+  // careful editing threads the parameter through the sites you remembered,
+  // and this finds the ones you did not.
+  //
+  // Glob-less on purpose — a literal can arrive in any tracked config or
+  // source file, so the scan enumerates the tracked tree rather than a set of
+  // paths someone predicted. Only mise.toml (the pin) and docker-bake.hcl
+  // (its CI-side mirror, held equal by this same step) may
+  // carry it. Logic lives in python/src/dotfiles_setup/platform_target.py;
+  // this step is a thin wrapper, same as `bash_logic_budget`.
+  ["no_platform_literals"] {
+    check = "uv run --project python dotfiles-setup platform-literals"
+  }
+
   // Classifier axis enumeration (#601 close-out). DERIVES each registered
   // classifier's real axis set from its own code — the classifier's params
   // plus every subject field any predicate it calls reads, transitively — and

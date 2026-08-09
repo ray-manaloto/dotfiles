@@ -227,7 +227,7 @@ def _collect_one(
             f"usual cause is regenerating on macOS — mise cannot write the "
             f"linux conda entries there (jdx/mise#7700), and the tool count "
             f"does not move, so this is invisible to a tool-only check (#648). "
-            f"Regenerate on linux/amd64."
+            f"Regenerate on a linux host of the image's architecture."
         )
         raise ValueError(msg)
     dest.write_text(candidate)

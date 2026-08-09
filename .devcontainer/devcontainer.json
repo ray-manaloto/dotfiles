@@ -78,7 +78,13 @@
   "name": "dotfiles-${localWorkspaceFolderBasename}-${localEnv:USER}-${localEnv:DEVCONTAINER_WORKSPACE_HASH}-${localEnv:DEVCONTAINER_SSH_PORT}",
   "build": {
     "dockerfile": "Dockerfile.host-user",
-    "options": ["--platform=linux/amd64/v2"],
+    // #673: the platform is ONE parameter — mise.toml's global
+    // [env] DOTFILES_PLATFORM. `${localEnv:...}` interpolates inside array
+    // elements (same mechanism as runArgs below). Deliberately WITHOUT a
+    // `:default` fallback: a fallback here would be a second platform
+    // literal, and the whole point is that exactly one place chooses. Bring
+    // the container up via `mise run up`, which supplies it.
+    "options": ["--platform=${localEnv:DOTFILES_PLATFORM}"],
     "args": {
       "DEVCONTAINER_USER": "${localEnv:USER}",
       "BASE_IMAGE": "${localEnv:BASE_IMAGE}",
@@ -89,7 +95,7 @@
     "dotfiles-${localWorkspaceFolderBasename}-${localEnv:USER}-${localEnv:DEVCONTAINER_WORKSPACE_HASH}-${localEnv:DEVCONTAINER_SSH_PORT}",
     "--env-file",
     "${localEnv:HOME}/.local/state/dotfiles/doppler.env",
-    "--platform=linux/amd64/v2",
+    "--platform=${localEnv:DOTFILES_PLATFORM}",
   ],
   "remoteUser": "${localEnv:USER}",
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",

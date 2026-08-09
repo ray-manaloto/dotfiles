@@ -187,7 +187,7 @@ AMBIGUITY_ALLOWED: dict[tuple[str, str, str], str] = {
     (
         "build.amd64-platform-wired-mise",
         "mise.toml",
-        'DOCKER_DEFAULT_PLATFORM = "linux/amd64/v2"',
+        'DOCKER_DEFAULT_PLATFORM = "{{ env.DOTFILES_PLATFORM }}"',
     ): "one per lifecycle task (up / dev-rebuild / verify-image) — PR #86's "
     "split-brain WAS one task missing it, so multiplicity IS the assertion",
     (

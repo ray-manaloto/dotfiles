@@ -78,6 +78,12 @@ from dotfiles_setup.p2996_hash import (
 from dotfiles_setup.p2996_refresh import refresh as refresh_p2996_ref
 from dotfiles_setup.parity import run as parity_run
 from dotfiles_setup.path_drift import AMBIENT_PATH_ENV, path_drift_main
+from dotfiles_setup.platform_target import (
+    PLATFORM_FIELDS,
+    platform_literals_main,
+    platform_main,
+    resolve_platform,
+)
 from dotfiles_setup.pr import automerge_main, land_main, ship_main
 from dotfiles_setup.reap import (
     DEFAULT_GRACE_S,
@@ -342,6 +348,26 @@ def _add_honesty_subcommands(subparsers: _SubParsers) -> None:
         "first asserting via a lookahead canary that it is really using RE2 — "
         "a missing OPTIONAL re2 dep makes it warn, fall back to JS RegExp and "
         "still exit 0, leaving every regex unchecked (#644)",
+    )
+    platform_parser = subparsers.add_parser(
+        "platform",
+        help="Print one resolved platform fact (#673): the triple itself, "
+        "docker's architecture name, or the `uname -m` a container of it "
+        "reports. Resolves $DOTFILES_PLATFORM, else this host's native triple",
+    )
+    platform_parser.add_argument(
+        "field",
+        choices=PLATFORM_FIELDS,
+        help="Which fact to print",
+    )
+    subparsers.add_parser(
+        "platform-literals",
+        help="Enforce the one platform parameter (#673): reject a hard-coded "
+        "`linux/<arch>` literal anywhere outside mise.toml and "
+        "docker-bake.hcl. Careful editing threads the parameter through the "
+        "sites you remembered; this finds the ones you did not, and missing "
+        "one yields a container running one architecture while a probe "
+        "asserts another",
     )
     subparsers.add_parser(
         "classifier-axes",
@@ -682,12 +708,20 @@ def _add_image_subcommands(
     smoke_parser.add_argument(
         "--image-ref", required=True, help="Image reference to test"
     )
-    smoke_parser.add_argument("--platform", default="linux/amd64/v2", help="Platform")
+    smoke_parser.add_argument(
+        "--platform",
+        default=None,
+        help="Platform triple; default $DOTFILES_PLATFORM, else host native",
+    )
     size_parser = image_sub.add_parser("size-report", help="Report image size metrics")
     size_parser.add_argument(
         "--image-ref", required=True, help="Image reference to inspect"
     )
-    size_parser.add_argument("--platform", default="linux/amd64/v2", help="Platform")
+    size_parser.add_argument(
+        "--platform",
+        default=None,
+        help="Platform triple; default $DOTFILES_PLATFORM, else host native",
+    )
     benchmark_parser = image_sub.add_parser(
         "benchmark",
         help="Benchmark image smoke/report timings",
@@ -696,7 +730,9 @@ def _add_image_subcommands(
         "--image-ref", required=True, help="Image reference to benchmark"
     )
     benchmark_parser.add_argument(
-        "--platform", default="linux/amd64/v2", help="Platform"
+        "--platform",
+        default=None,
+        help="Platform triple; default $DOTFILES_PLATFORM, else host native",
     )
     benchmark_parser.add_argument(
         "--output-path",
@@ -1482,12 +1518,12 @@ def handle_image(args: argparse.Namespace) -> None:
         cmd = ImageCommand("", command="smoke-script", tier=args.tier)
         sys.exit(image_main(cmd))
     if args.image_command == "smoke":
-        cmd = ImageCommand(args.image_ref, platform=args.platform)
+        cmd = ImageCommand(args.image_ref, platform=resolve_platform(args.platform))
         sys.exit(image_main(cmd))
     if args.image_command == "size-report":
         cmd = ImageCommand(
             args.image_ref,
-            platform=args.platform,
+            platform=resolve_platform(args.platform),
             command="size-report",
         )
         sys.exit(image_main(cmd))
@@ -1495,7 +1531,7 @@ def handle_image(args: argparse.Namespace) -> None:
         output_path = Path(args.output_path) if args.output_path else None
         cmd = ImageCommand(
             args.image_ref,
-            platform=args.platform,
+            platform=resolve_platform(args.platform),
             command="benchmark",
             output_path=output_path,
         )
@@ -1802,6 +1838,8 @@ def _build_command_handlers(
                 verbose=args.verbose,
             )
         ),
+        "platform": lambda: sys.exit(platform_main(args.field)),
+        "platform-literals": lambda: sys.exit(platform_literals_main(project_root)),
         "classifier-axes": lambda: sys.exit(classifier_axes_main(project_root)),
         "dag-tick": lambda: sys.exit(run_tick(args)),
         "dag-project": lambda: sys.exit(run_project(args)),
