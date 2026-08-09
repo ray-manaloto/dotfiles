@@ -98,17 +98,25 @@ SSH-agent forwarding uses Docker Desktop's native magic socket at `/run/host-ser
 
 ## Override Model
 
-- `mise.toml [tasks.up].env` holds the defaults: `BASE_IMAGE`,
-  `DOCKER_DEFAULT_PLATFORM=linux/amd64/v2`.
+- `mise.toml [tasks.up].env` holds `BASE_IMAGE`; its **global** `[env]` holds
+  `DOTFILES_PLATFORM`, the one place the target architecture is chosen (#673).
 - `mise.local.toml` (gitignored, see `mise.local.toml.example`) overrides
-  per-clone. Typical use: pin `BASE_IMAGE` to a specific SHA tag.
+  per-clone. Typical use: pin `BASE_IMAGE` to a specific SHA tag, or
+  `DOTFILES_PLATFORM` to build for the other architecture.
 - No `.env.devcontainer` layering; per-clone overrides via `mise.local.toml` only.
 
-**Platform tag must match in BOTH places.** Update both
-`mise.toml [tasks.up].env.DOCKER_DEFAULT_PLATFORM` AND
-`devcontainer.json build.options[]` (e.g.
-`["--platform=linux/amd64/v2"]`). The `build.amd64-platform-wired`
-contract checks the latter; missing it fails `contract-preflight`.
+**The platform is ONE parameter — do not restate it** (#673). Tasks export
+`DOCKER_DEFAULT_PLATFORM = "{{ env.DOTFILES_PLATFORM }}"`; `devcontainer.json`
+interpolates `${localEnv:DOTFILES_PLATFORM}` at **both** `--platform` sites
+(`build.options` and `runArgs`), with no `:default` fallback — a fallback would
+be a second place choosing. The value lives in `mise.toml`'s global `[env]`,
+mirrored for CI by `docker-bake.hcl`'s `PLATFORM` (bake jobs skip mise).
+
+A literal anywhere else fails `mise run lint`'s `no_platform_literals`, which
+also holds those two defaults equal; `build.amd64-platform-wired*` binds the
+interpolations. Machine-enforced because the failure is silent: an image built
+for one arch and started as another is a **false pass**, not a crash — PR #86
+shipped exactly that split-brain.
 
 ## IDE Workflow
 

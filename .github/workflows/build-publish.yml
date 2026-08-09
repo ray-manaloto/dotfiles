@@ -47,7 +47,7 @@ on:
         default: ""
         type: string
       platform:
-        description: "Reserved (Phase D, #120): target platform override. Unused when empty; docker-bake.hcl PLATFORM (linux/amd64/v2) is authoritative today."
+        description: "Reserved (Phase D, #120): target platform override. Unused when empty; the docker-bake.hcl PLATFORM variable is authoritative today (its default mirrors mise.toml DOTFILES_PLATFORM, #673)."
         required: false
         default: ""
         type: string

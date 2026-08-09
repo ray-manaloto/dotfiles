@@ -69,7 +69,11 @@ ALLOWLIST: dict[str, BashAllowance] = {
         "devcontainer postCreate lifecycle hook — thin wrapper from devcontainer.json",
     ),
     "scripts/benchmark-docker.sh": BashAllowance(
-        167,
+        # 167 -> 171 (#673): four lines resolving the target platform and its
+        # expected `uname -m` from `dotfiles-setup platform`, replacing ten
+        # hard-coded platform/machine literals. Assignments only — the
+        # triple->arch mapping stayed in python.
+        171,
         "docker build/pull timing harness — thin wrapper over docker/hyperfine CLIs",
     ),
     "scripts/check-chezmoi-templates.sh": BashAllowance(

@@ -61,6 +61,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from dotfiles_setup.bootstrap_packages import APT_PREFIX
+from dotfiles_setup.platform_target import os_arch, resolve_platform
 
 #: `[bootstrap.packages]` values meaning "any installed version satisfies".
 UNPINNED = "latest"
@@ -150,18 +151,23 @@ echo "APT_PINS_OK"
 """
 
 
-def docker_command(base_image: str, script: str) -> list[str]:
+def docker_command(
+    base_image: str, script: str, *, platform: str | None = None
+) -> list[str]:
     """Build the throwaway-probe `docker run` argv.
 
-    `--platform linux/amd64` because the pins are resolved for the image's
-    arch, not this ARM Mac's (`AGENTS.md` R3).
+    The probe runs on the IMAGE's architecture, not this ARM Mac's
+    (`AGENTS.md` R3) — resolved from the one platform parameter (#673).
+    :func:`os_arch` drops the microarchitecture level because apt publishes
+    packages per architecture, not per level — both spellings resolve the same
+    pins, and the level-less form is what the probe has always sent.
     """
     return [
         "docker",
         "run",
         "--rm",
         "--platform",
-        "linux/amd64",
+        os_arch(resolve_platform(platform)),
         base_image,
         "bash",
         "-c",

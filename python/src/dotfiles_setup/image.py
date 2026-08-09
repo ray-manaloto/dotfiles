@@ -20,6 +20,11 @@ from typing import TYPE_CHECKING, Any
 
 from dotfiles_setup import _project_root
 from dotfiles_setup.p2996_hash import _extract_bake_variable
+from dotfiles_setup.platform_target import (
+    is_emulated,
+    platform_arch,
+    resolve_platform,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -223,24 +228,12 @@ def _format_expected_tool_lines(declared: Mapping[str, str]) -> str:
 def _is_emulated(target_platform: str) -> bool:
     """True when the host CPU cannot *natively* execute ``target_platform``.
 
-    ThreadSanitizer's shadow-memory layout requires a native x86_64 process;
-    under Rosetta/QEMU emulation (arm64 host running an amd64 image) the TSan
-    RUN aborts with an ASLR/"unexpected memory mapping" fatal. We detect the
-    host↔target arch mismatch in Python — which knows the host arch via
-    ``os.uname()`` — rather than probing ``binfmt_misc`` in-container, because
-    the emulator marker is not reliably visible inside the container.
+    Thin alias for :func:`dotfiles_setup.platform_target.is_emulated` — the
+    host↔target arch mapping moved there in #673 so the platform is decided in
+    exactly one module. Kept as a module-private name because the TSan
+    emulation caveat is documented against this call site.
     """
-    host = os.uname().machine.lower()
-    host_amd64 = host in {"x86_64", "amd64"}
-    host_arm = host in {"arm64", "aarch64"}
-    platform_lc = target_platform.lower()
-    target_amd64 = "amd64" in platform_lc or "x86_64" in platform_lc
-    target_arm = "arm64" in platform_lc or "aarch64" in platform_lc
-    if target_amd64:
-        return not host_amd64
-    if target_arm:
-        return not host_arm
-    return False
+    return is_emulated(target_platform)
 
 
 def _run(
@@ -837,12 +830,15 @@ echo "=== All smoke checks passed ==="
 def build_smoke_docker_cmd(
     image_ref: str,
     *,
-    platform: str = "linux/amd64/v2",
+    platform: str | None = None,
     expected_p2996_ref: str | None = None,
     expected_identity: Mapping[str, str] | None = None,
     emulated: bool | None = None,
 ) -> list[str]:
     """Build the docker command used for smoke validation.
+
+    ``platform`` defaults to :func:`resolve_platform` (#673) — the repo pin,
+    falling back to the host's native triple.
 
     CI smokes the image it just built from branch HEAD, so identity + tool-set
     resolve to the HEAD content (:func:`resolve_expected_identity_head` /
@@ -851,6 +847,7 @@ def build_smoke_docker_cmd(
     injectable override (nothing smokes a *synthetic* set); ``build_smoke_script``
     remains the injection seam for unit tests.
     """
+    platform = resolve_platform(platform)
     if expected_p2996_ref is None:
         expected_p2996_ref = resolve_expected_p2996_ref()
     if expected_identity is None:
@@ -878,8 +875,9 @@ def build_smoke_docker_cmd(
     ]
 
 
-def smoke(image_ref: str, *, platform: str = "linux/amd64/v2") -> dict[str, Any]:
+def smoke(image_ref: str, *, platform: str | None = None) -> dict[str, Any]:
     """Run smoke tests against a container image."""
+    platform = resolve_platform(platform)
     logger.info("Smoking image: %s", image_ref)
     cmd = build_smoke_docker_cmd(image_ref, platform=platform)
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)
@@ -934,21 +932,31 @@ def _repo_without_tag(image_ref: str) -> str:
     return image_ref
 
 
-def _sum_manifest_layer_sizes(raw: str, image_ref: str) -> int:
+def _sum_manifest_layer_sizes(
+    raw: str, image_ref: str, *, platform: str | None = None
+) -> int:
     """Sum compressed layer sizes from an OCI/Docker manifest JSON.
 
     Registry manifests record each layer's *compressed* (download) size, so
     summing them yields the compressed image size without a ``docker save``.
     Handles a single-platform manifest (``layers``) directly and a manifest
-    list / OCI index (``manifests``) by recursing into the linux/amd64 entry.
+    list / OCI index (``manifests``) by recursing into the entry for
+    ``platform`` (#673 — this used to be hard-coded to one architecture,
+    which under a multi-arch manifest would resolve, silently pick that one,
+    and compare it against a container of the other: a false pass, not a
+    crash).
     """
+    target_arch = platform_arch(resolve_platform(platform))
     doc = json.loads(raw)
     layers = doc.get("layers")
     if layers is not None:
         return sum(int(layer.get("size", 0)) for layer in layers)
     for entry in doc.get("manifests", []):
-        platform = entry.get("platform", {})
-        if platform.get("os") == "linux" and platform.get("architecture") == "amd64":
+        entry_platform = entry.get("platform", {})
+        if (
+            entry_platform.get("os") == "linux"
+            and entry_platform.get("architecture") == target_arch
+        ):
             digest = entry.get("digest")
             sub = _run(
                 [
@@ -960,12 +968,12 @@ def _sum_manifest_layer_sizes(raw: str, image_ref: str) -> int:
                     "--raw",
                 ],
             ).stdout
-            return _sum_manifest_layer_sizes(sub, image_ref)
+            return _sum_manifest_layer_sizes(sub, image_ref, platform=platform)
     # Not a recognized manifest shape — fall back to the local gzip measure.
     return _gzip_size_for_image(image_ref)
 
 
-def _compressed_size_for_image(image_ref: str) -> int:
+def _compressed_size_for_image(image_ref: str, *, platform: str | None = None) -> int:
     """Compressed (download) size of an image.
 
     Prefers the registry manifest (``docker buildx imagetools inspect --raw``),
@@ -979,7 +987,7 @@ def _compressed_size_for_image(image_ref: str) -> int:
         ).stdout
     except subprocess.CalledProcessError, FileNotFoundError:
         return _gzip_size_for_image(image_ref)
-    return _sum_manifest_layer_sizes(raw, image_ref)
+    return _sum_manifest_layer_sizes(raw, image_ref, platform=platform)
 
 
 def _parse_human_size(size: str) -> int:
@@ -1039,16 +1047,17 @@ def classify_layer_source(created_by: str) -> str:
 def size_report(
     image_ref: str,
     *,
-    platform: str = "linux/amd64/v2",
+    platform: str | None = None,
     top_layers: int = 10,
 ) -> dict[str, Any]:
     """Report image size and large-layer metrics."""
+    platform = resolve_platform(platform)
     image_size_bytes = int(
         _run(
             ["docker", "image", "inspect", "--format", "{{.Size}}", image_ref],
         ).stdout.strip()
     )
-    compressed_size_bytes = _compressed_size_for_image(image_ref)
+    compressed_size_bytes = _compressed_size_for_image(image_ref, platform=platform)
 
     history_lines = _run(
         ["docker", "history", "--no-trunc", "--format", "{{json .}}", image_ref],
@@ -1125,10 +1134,11 @@ def estimate_pull_time_s(
 def benchmark(
     image_ref: str,
     *,
-    platform: str = "linux/amd64/v2",
+    platform: str | None = None,
     output_path: Path | None = None,
 ) -> dict[str, Any]:
     """Benchmark smoke and size-report timings for an image."""
+    platform = resolve_platform(platform)
     if output_path is None:
         output_path = (
             _project_root() / "artifacts" / "build" / "devcontainer-metrics.json"
@@ -1230,12 +1240,13 @@ def _count_tools_from_mise_ls(raw: str) -> int:
     return total
 
 
-def count_installed_tools(image_ref: str, *, platform: str = "linux/amd64/v2") -> int:
+def count_installed_tools(image_ref: str, *, platform: str | None = None) -> int:
     """Installed tool count inside ``image_ref`` via ``mise ls --json``.
 
     Runs mise in a login shell (``-lc``) so the image's mise activation and
     PATH are in effect, mirroring :func:`build_smoke_docker_cmd`.
     """
+    platform = resolve_platform(platform)
     raw = _run(
         [
             "docker",
@@ -1632,7 +1643,9 @@ class ImageCommand:
     """Parsed image CLI command parameters."""
 
     image_ref: str
-    platform: str = "linux/amd64/v2"
+    # #673: resolved per-instance rather than frozen at import, so a
+    # DOTFILES_PLATFORM override set after import still wins.
+    platform: str = dataclasses.field(default_factory=resolve_platform)
     command: str = "smoke"
     output_path: Path | None = None
     baseline_path: Path | None = None

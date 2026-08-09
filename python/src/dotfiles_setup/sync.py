@@ -66,6 +66,7 @@ from pathlib import Path as PathLib
 from typing import TYPE_CHECKING, Literal
 
 from dotfiles_setup.container import verify_latest
+from dotfiles_setup.platform_target import resolve_platform
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -73,7 +74,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _LOCAL_FOLDER_LABEL = "devcontainer.local_folder"
-_PLATFORM = "linux/amd64/v2"
 _CI_WORKFLOW = "ci.yml"
 
 # Quick network probes (registry manifest inspect, gh API) — bounded so a
@@ -400,7 +400,7 @@ def refresh_local_tag(image_ref: str) -> bool:
             "build",
             "--pull",
             "--platform",
-            _PLATFORM,
+            resolve_platform(),
             "--output",
             "type=docker",
             "-t",

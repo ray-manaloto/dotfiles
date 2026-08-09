@@ -6,8 +6,8 @@ cannot write ``linux-x64`` conda entries (jdx/mise#7700 — the same defect
 :mod:`dotfiles_setup.lock_refresh` records in its module docstring for the image
 lock, and that ``mise.toml`` cites when os-gating ``conda:ffmpeg``). So a
 whole-file re-lock on the Mac host silently strips every linux conda entry from
-``mise.lock``. The devcontainer is linux/amd64, so those are exactly the entries
-the image needs.
+``mise.lock``. The devcontainer is linux on the image's target architecture,
+so those are exactly the entries the image needs.
 
 Measured 2026-07-29 on mise 2026.7.16, from a clean checkout, real writes
 hash-compared against the committed bytes:
