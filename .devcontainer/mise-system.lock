@@ -60,9 +60,9 @@ checksum = "sha256:0cef37eb013dc7091f17161c357afbdef9a9bc79ef6462508face6db3f37d
 url = "https://conda.anaconda.org/conda-forge/linux-64/libcap-2.76-h0b2e76d_0.conda"
 checksum = "sha256:a946b61be1af15ff08c7722e9bac0fab446d8b9896c9f0f35657dfcf887fda8a"
 
-[conda-packages.linux-x64."libclang-cpp22.1-22.1.8-default_h08c5240_4"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libclang-cpp22.1-22.1.8-default_h08c5240_4.conda"
-checksum = "sha256:dbe4fa7be5920e7f085a2a8194224938d98febc7548fda75cbff7caa142800c6"
+[conda-packages.linux-x64."libclang-cpp22.1-22.1.8-default_h08c5240_5"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libclang-cpp22.1-22.1.8-default_h08c5240_5.conda"
+checksum = "sha256:900fe3e1443d2f22a1780274d77200afad4754561c7591b35efc89337c0b9054"
 
 [conda-packages.linux-x64."libcurl-8.21.0-heca4667_4"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libcurl-8.21.0-heca4667_4.conda"
@@ -622,7 +622,7 @@ channel = "conda-forge"
 checksum = "sha256:d377fee4ba38e014417a49855fa8fbaab1c58c990fe59bd03d370e18c2d23999"
 url = "https://conda.anaconda.org/conda-forge/linux-64/include-what-you-use-0.26-hecca717_1.conda"
 conda_deps = [
-    "libclang-cpp22.1-22.1.8-default_h08c5240_4",
+    "libclang-cpp22.1-22.1.8-default_h08c5240_5",
     "libgcc-16.1.0-ha9f2e26_1",
     "libstdcxx-16.1.0-h934c35e_1",
     "libllvm22-22.1.8-hf7376ad_1",
