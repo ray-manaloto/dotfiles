@@ -189,7 +189,7 @@ existing step 00 (agent-harness-docs). **File it there so it survives.**
 |---|---|---|
 | **The cache is ALREADY arch-keyed** | `PLATFORM` feeds *both* content hashes — `P2996-CACHE.md:51` (base) and `:73` (p2996) | Dual-arch forks `:p2996-<hash16>` into two cache images **automatically**. **R1.2 needs NO hash redesign.** |
 | `platforms` is **singular** | `docker-bake.hcl:96` — `platforms = ["${PLATFORM}"]`, in `_common`, inherited by all targets | The single choke point for multi-arch. |
-| `verify-arch` asserts **literal `x86_64`** | `mise.toml:764-771`; its description says *"regardless of host arch"* | That goal is now **wrong** — the invariant must be redefined. |
+| ~~`verify-arch` asserts **literal `x86_64`**~~ ✅ **RESOLVED by #673** (PR #694, merged 2026-08-09) | It now derives both expected values from `dotfiles-setup platform`; measured in-container: `OK: R3 container is linux/amd64/v2 x86_64 on all three signals` | The invariant was redefined as "the container is the architecture we ASKED for", not "the container is amd64". |
 | ⚠️ **CORRECTED** — there IS a deliberate gcc | `Dockerfile:477-494` — **GCC-17 with P2996 reflection**, precompiled `.deb` from kayari.org/jwakely trunk, installed to **`/opt/gcc-latest/bin`**, pinned as `ARG GCC_LATEST_DEB=gcc-latest_17.0.0-20260719git6d5d980f76c3.deb` | **My earlier "no deliberate gcc" claim was FALSE** — I had grepped only `mise-system.toml`, not the `Dockerfile`. This IS Ray's "the gcc latest build we have already". |
 | ⭐ **R1.3's pattern already exists in-repo** | Same block: Renovate bumps it via the `custom.gcc-latest` HTML datasource; a `gcc-sha-repair` workflow (#249) recomputes the sha; `dotfiles-setup gcc-sha [--check]` | **R1.3 has TWO proven precedents**, not one: the p2996 content-hash cache AND this pinned-filename `.deb`. Prefer the cheaper one that fits. |
 | LLVM/clang is a separate deliberate tier | `mise-system.toml:115-134` — moved OUT of conda to apt (#222 PR-C), clang-22, exact-pinned | Not a gcc; do not conflate when counting. |
@@ -241,6 +241,16 @@ the next caller; make that case the parameter's DEFAULT instead."*
 So: **`platform` is a parameter with a host-native default**, and the twelve
 hard-coded `linux/amd64/v2` literals collapse into that one default.
 
+⭐ **Ray's ruling, 2026-08-09 — this sentence and #673's "behaviour unchanged"
+are in direct conflict on an arm64 Mac**, where a host-native default would
+target `linux/arm64/v8` and no arm64 `:dev` exists until #676. Resolution:
+**host-native is the FALLBACK; the repo carries ONE explicit pin.**
+`resolve_platform()` = explicit override → `DOTFILES_PLATFORM` → host native,
+and `mise.toml`'s global `[env]` supplies the pin. Every existing flow resolves
+to what it always did, and **deleting that pin is what flips the default to
+native** once #676 publishes both arches and #678 brings up a native container
+— no other site changes.
+
 #### ⚠️ Concrete bug this must fix — `image.py:943`
 
 The identity check **already** recurses into manifest lists, hard-coded to the
@@ -248,15 +258,54 @@ The identity check **already** recurses into manifest lists, hard-coded to the
 select amd64, and compare that hash to an **arm64** container. Not a crash — a
 **false pass**. Manifest selection must take the same `platform` parameter.
 
+✅ **Parameterised by #673**; the recursion now selects `platform_arch(...)`.
+⚠️ **#674 still owns the rest**, and Ray scoped it 2026-08-09 to **two**
+surfaces: (a) the AC2 control arm — a deliberate architecture mismatch must
+FAIL, kept as a test, which does not exist today; and (b) **`sync.py`'s digest
+convergence** — `registry_digest()` (`sync.py:245`) returns `.Manifest.Digest`
+from `imagetools inspect`, which for a manifest list is the **INDEX** digest,
+while `local_digests()` (`sync.py:267`) returns the tag's `RepoDigests`.
+Whether those still compare like-for-like under a multi-arch `:dev` is an
+**open question to probe, not an established defect** — and "they still match"
+is a welcome answer. ⚠️ `sync.py:127`'s "can never converge" is about a
+**buildkit re-export** minting a new local digest; do NOT cite it as multi-arch
+evidence (this spec did, briefly, and it was wrong). AC3's "passes on both
+architectures" is satisfied by **synthetic manifest fixtures** for now, with
+the real two-arch run deferred to #676 and noted when #674 closes.
+
 #### The 12+ hard-coded sites (the real risk is PARTIAL threading)
+
+✅ **SHIPPED by #673** (PR #694, merged 2026-08-09). The site list below is kept
+as the point-in-time survey it was; do not treat it as current.
 
 `docker-bake.hcl:20` · `mise.toml:251,277,303` · `devcontainer.json:81,92` ·
 `docker.py:164,178` · `image.py:840,881,943,1042` · `apt_pins.py:156,164` ·
 `mise.toml:765,795` (verify-arch) · `hook_guard.py:297`
 
-**Proposed gate (needs Ray's OK):** a contract asserting no literal
-`linux/amd64/v2` survives outside the single default — machine-enforced
-completeness, which careful editing cannot provide.
+⚠️ **The survey was INCOMPLETE, and that is the finding.** `hook_guard.py:297`
+was never a platform literal (it names the *variable*), while
+`scripts/benchmark-docker.sh` (ten sites), `main.py`'s three argparse defaults,
+`sync.py:76`, `image.py:1128,1233,1635`, `token_audit.py:190` and
+`image_lock.py`'s `REQUIRED_MACHINE` were all missing from it. A hand-built list
+of "the places to change" is exactly the artifact this failure mode defeats.
+
+**Proposed gate — APPROVED and shipped as the `no_platform_literals` hk step**
+(`dotfiles-setup platform-literals`, logic in
+`python/src/dotfiles_setup/platform_target.py`, pinned by
+`tests/test_platform_target.py`). It is glob-less and enumerates the tracked
+tree. It **failed on its first real run and named eight sites the change had
+missed** — the completeness argument, demonstrated rather than asserted.
+
+Two deviations from "exactly one default", both deliberate:
+
+1. **Two files carry the literal**, `mise.toml` (the pin every mise-run flow
+   reads) and `docker-bake.hcl` (CI's bake jobs do not run under mise, and HCL
+   cannot read TOML). No single value is readable from HCL + TOML + JSON +
+   Python without codegen — **that is #680's job**. `find_default_drift` holds
+   the two byte-equal, so the duplication cannot diverge silently.
+2. **`platform_target.py` is exempt from its own scan.** It composes every
+   triple from `_MICROARCH_LEVEL` and hard-codes none, but its docstring and
+   scan pattern must be able to NAME them, and it issues no `--platform`.
 
 Note the string is `linux/amd64/**v2**` — a *microarchitecture level*. arm64's
 analogue is `linux/arm64/v8`. **The parameter carries a full platform triple,
