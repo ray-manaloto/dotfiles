@@ -10,7 +10,8 @@ containers on macOS ARM hosts. Two build types:
 
 Registry: `ghcr.io/ray-manaloto/dotfiles-devcontainer`. CI: `ci.yml` (thin
 caller) → lint → contract-preflight → `changes` → reusable `build-publish.yml`
-(base-prep → p2996-prep → dev-prep → build → smoke-test → dev-tag) → `ci-gate`;
+(plan → base-prep → p2996-prep → dev-prep → build → smoke-test → dev-tag →
+manifest; the middle six fan out per architecture, #676) → `ci-gate`;
 `promote` retags on main; benchmark + Trivy async in `image-analysis.yml`.
 
 ## Quick Start
@@ -170,6 +171,7 @@ Gated by `mise run verify-local`. Sessions touching `.devcontainer/` or `mise.to
 | `DEVCONTAINER_SSH_PORT` | `4444` | Host-side port for R1 inbound `ssh ${USER}@localhost -p 4444`; container-internal sshd is hardcoded on `2222` by the feature. Override per-clone via `mise.local.toml` on port collision (volume names do NOT include the port — C10/C11/C12). |
 | `DOTFILES_PLATFORM` | pinned in `mise.toml` `[env]` | **The one platform parameter** (#673). Every `--platform` site resolves from it; unset, it falls back to the host's native triple. `no_platform_literals` rejects a literal elsewhere |
 | `DOCKER_DEFAULT_PLATFORM` | `{{ env.DOTFILES_PLATFORM }}` | Task-scoped export of the above — what docker itself reads |
+| `PLATFORM` | per-leg in CI (#676) | bake's HCL variable, overridden by the same-named env var. **All three content hashes read it too**, so a leg's build and its cache tags cannot describe different architectures |
 
 ### Docker Runtimes
 
