@@ -76,22 +76,28 @@ the **arch** separates amd64 from arm64.
   49152+ ephemeral range); `DEVCONTAINER_SSH_PORT` still pins one per clone.
   `mise run ssh-port` / `mise run names` print them.
 
+⚠️ **The name does NOT identify a container — the id labels do.** The CLI looks
+an existing container up by `--id-label`, inferring one from the **workspace
+folder** when none is given, so `up`/`dev-rebuild`/every `exec` pass
+`$DEVCONTAINER_ID_FLAGS` (`dotfiles.workspace=` + `dotfiles.arch=`). Without
+them an arm64 `up` **finds and reuses** the amd64 container and reports success.
+`mise run stop` resolves its targets via `dotfiles-setup devcontainer teardown`
+for the same reason.
+
 **Why the arch is in the NAME, not in a check:** the home volume carries
 compiled output (`~/.local/share/mise/installs`, `~/.cargo`, `~/.rustup`), and
 docker reuses a named volume on mount without a word — so a shared volume
-interleaves two architectures' binaries and fails far from its cause. Distinct
-names let docker's own uniqueness enforce it.
+interleaves two architectures' binaries and fails far from its cause.
 
 **Migrating a pre-#677 volume:** `mise run migrate-home-volume` (dry-run;
-`-- --apply` executes) copies `…-<hash>-home` into `…-<hash>-<arch>-home` and
-**never deletes the source** — `mise run prune` does, once the new container is
-known good. Run it via mise: a bare CLI call *refuses*, because the old name
-records no arch and an unpinned resolve would take one from the host.
+`-- --apply` executes). It never deletes the source, and refuses rather than
+guessing in three cases. Mechanism, refusals and the marker file:
+**`.devcontainer/TOOL-PERSISTENCE.md`**.
 
-It covers the whole user home, so `~/.cache/mise`, `~/.cache/uv`,
+The volume covers the whole user home, so `~/.cache/mise`, `~/.cache/uv`,
 `~/.bash_history`, `~/.ssh/known_hosts` and TMPDIR persist across `stop/up`.
-The v5 per-directory volumes (`mise-user`, `cargo-user`, `rustup-user`) it
-replaced are orphans; `mise run prune` cleans them.
+The v5 per-directory volumes it replaced are orphans; `mise run prune` cleans
+them.
 
 **TMPDIR persistence:** `Dockerfile.host-user` sets
 `ENV TMPDIR=/home/${USER}/.local/tmp` on the home volume.

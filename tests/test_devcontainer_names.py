@@ -12,10 +12,14 @@ genuinely *in* the name, not merely that two calls returned something.
 from __future__ import annotations
 
 import hashlib
+import re
+from pathlib import Path
 
 import pytest
 from dotfiles_setup.devcontainer_names import (
+    MIGRATION_MARKER,
     NAME_FIELDS,
+    REFUSED_ACTIONS,
     SSH_PORT_BASE,
     SSH_PORT_ENV_VAR,
     SSH_PORT_SPAN,
@@ -27,6 +31,7 @@ from dotfiles_setup.devcontainer_names import (
     plan_home_volume_migration,
     resolve_names,
     ssh_port,
+    teardown_container_ids,
     workspace_hash,
 )
 
@@ -174,15 +179,22 @@ def test_unparsable_override_fails_loud() -> None:
 
 def test_names_env_covers_every_substitution_devcontainer_json_makes() -> None:
     env = names_env(_names())
+    names = _names()
     assert set(env) == {
         "DEVCONTAINER_WORKSPACE_HASH",
         "DEVCONTAINER_ARCH",
         "DEVCONTAINER_NAME",
         "DEVCONTAINER_HOME_VOLUME",
+        "DEVCONTAINER_WORKSPACE_LABEL",
+        "DEVCONTAINER_ARCH_LABEL",
+        "DEVCONTAINER_ID_FLAGS",
         SSH_PORT_ENV_VAR,
     }
-    assert env["DEVCONTAINER_NAME"] == _names().container
-    assert env["DEVCONTAINER_HOME_VOLUME"] == _names().home_volume
+    assert env["DEVCONTAINER_NAME"] == names.container
+    assert env["DEVCONTAINER_HOME_VOLUME"] == names.home_volume
+    # The id-label exports are what makes `up` arch-aware at all; a name-only
+    # export set is exactly the state this ticket shipped and had to fix.
+    assert env["DEVCONTAINER_ID_FLAGS"] == names.id_flags
 
 
 def test_name_field_addresses_every_field() -> None:
@@ -197,6 +209,141 @@ def test_name_field_rejects_an_unknown_field() -> None:
         name_field("hostname", _names())
 
 
+# ------------------------------------------------------------ the id labels
+#
+# These exist because the container NAME turned out to be decorative: in
+# @devcontainers/cli 0.88.0 an existing container is looked up by *id labels*,
+# and with none supplied they are inferred from the workspace folder alone. So
+# an arm64 `up` in a directory that already has an amd64 container found and
+# reused it. The tests below pin the two properties that fix makes load-bearing.
+
+
+def test_id_labels_carry_both_workspace_and_arch() -> None:
+    """Either one alone is wrong.
+
+    Arch alone collides across clones (`--id-label` REPLACES the inferred
+    folder label rather than extending it); workspace alone is what the CLI
+    already inferred, i.e. no change at all.
+    """
+    names = _names()
+    assert names.id_labels == (
+        f"dotfiles.workspace={names.hash}",
+        f"dotfiles.arch={names.arch}",
+    )
+
+
+def test_id_labels_differ_across_architectures_and_clones() -> None:
+    here_amd = _names(platform=AMD64)
+    here_arm = _names(platform=ARM64)
+    there_amd = _names(workspace=OTHER_WORKSPACE, platform=AMD64)
+    assert here_amd.id_labels != here_arm.id_labels
+    assert here_amd.id_labels != there_amd.id_labels
+
+
+def test_id_labels_are_whitespace_free() -> None:
+    """`$DEVCONTAINER_ID_FLAGS` is used UNQUOTED in mise task bodies.
+
+    That is only safe while every value is a hex digest or an arch word. If a
+    component ever gains a space, word splitting silently truncates the flags
+    and container lookup falls back to matching fewer labels than intended.
+    """
+    for names in (_names(), _names(platform=ARM64), _names(workspace=OTHER_WORKSPACE)):
+        for label in names.id_labels:
+            assert label.split() == [label]
+        assert names.id_flags.split() == [
+            "--id-label",
+            names.workspace_label,
+            "--id-label",
+            names.arch_label,
+        ]
+
+
+def test_id_labels_match_the_cli_name_value_format() -> None:
+    """The CLI rejects an id-label that does not match `.+=.+`."""
+    for label in _names().id_labels:
+        name, sep, value = label.partition("=")
+        assert name
+        assert sep
+        assert value
+
+
+def test_every_devcontainer_invocation_in_mise_toml_is_arch_scoped() -> None:
+    """ENUMERATE the call sites; do not assert the one you remember.
+
+    This is the gate that would have caught the original defect. The contracts
+    written alongside the first implementation asserted that the *name* carries
+    the architecture — true, and useless, because nothing looked a container up
+    by name. Container identity is decided by ``--id-label``, so every `up` and
+    every `exec` has to carry them; one that does not silently resolves by
+    workspace folder and can reach the other architecture.
+
+    Written against the file rather than a remembered list, because the count
+    changes (8 `exec` sites today) and a hard-coded one rots into a no-op.
+    """
+    repo_root = Path(__file__).resolve().parent.parent
+    text = (repo_root / "mise.toml").read_text(encoding="utf-8")
+    # Join backslash continuations so a flag on the next line still counts.
+    joined = text.replace("\\\n", " ")
+    # Match a COMMAND, not prose: a `description = "... devcontainer up ..."`
+    # line is documentation and caught this matcher out on its first run.
+    invocation = re.compile(r"""^(?:run\s*=\s*["']+)?devcontainer\s+(?:up|exec)\s""")
+    sites = [
+        stripped
+        for line in joined.splitlines()
+        if (stripped := line.strip()) and invocation.match(stripped)
+    ]
+    # A floor, not an exact count: an exact one rots on the next task edit, but
+    # without any floor a matcher that goes blind reports "all clear" (there
+    # are 9 sites today — 1 `up`, 8 `exec`, plus dev-rebuild's `up`).
+    assert len(sites) >= 5, f"matcher went blind — only found {sites}"
+    unscoped = [
+        line
+        for line in sites
+        if "--id-label" not in line and "$DEVCONTAINER_ID_FLAGS" not in line
+    ]
+    assert not unscoped, (
+        "these devcontainer invocations resolve the container by WORKSPACE "
+        f"FOLDER and can reach the other architecture: {unscoped}"
+    )
+
+
+# ------------------------------------------------------------- the teardown
+
+
+def test_teardown_takes_this_arch_and_pre_677_leftovers() -> None:
+    names = _names()
+    ids = teardown_container_ids(
+        names,
+        this_arch=["mine"],
+        legacy=["mine", "old"],
+        legacy_labelled=["mine"],
+    )
+    assert ids == ["mine", "old"]
+
+
+def test_teardown_leaves_the_other_architecture_alone() -> None:
+    """The whole reason this is not a per-folder docker filter.
+
+    `other` is the sibling architecture's container: it carries one of our
+    workspace labels, so it is NOT a pre-#677 leftover and must survive a stop
+    that was asked about this architecture.
+    """
+    names = _names()
+    ids = teardown_container_ids(
+        names,
+        this_arch=["mine"],
+        legacy=["mine", "other"],
+        legacy_labelled=["mine", "other"],
+    )
+    assert ids == ["mine"]
+    assert "other" not in ids
+
+
+def test_teardown_is_empty_when_nothing_is_up() -> None:
+    ids = teardown_container_ids(_names(), this_arch=[], legacy=[], legacy_labelled=[])
+    assert ids == []
+
+
 # ---------------------------------------------------------- the migration
 
 
@@ -206,16 +353,49 @@ def test_migration_is_skipped_when_the_legacy_volume_is_gone() -> None:
     assert plan.commands == ()
 
 
-def test_migration_is_skipped_when_the_target_already_has_content() -> None:
+def test_completed_migration_is_recognised_by_its_marker() -> None:
     """Re-running after a completed migration must not copy over live state."""
     names = _names()
     plan = plan_home_volume_migration(
         names,
         existing_volumes=(names.legacy_home_volume, names.home_volume),
         target_populated=True,
+        target_marked=True,
     )
     assert plan.action == "already-migrated"
     assert plan.commands == ()
+
+
+def test_populated_but_unmarked_target_refuses_rather_than_guessing() -> None:
+    """The interrupted-copy hole: non-empty is NOT the same as complete.
+
+    A copy that dies partway through a 3.5 GB home leaves a target that is
+    neither empty nor finished. Reading "non-empty" as "done" reported
+    already-migrated and would have sent the user into a truncated home. It is
+    also genuinely ambiguous — the same state is what `mise run up` leaves after
+    real work — so the plan refuses and names both possibilities.
+    """
+    names = _names()
+    plan = plan_home_volume_migration(
+        names,
+        existing_volumes=(names.legacy_home_volume, names.home_volume),
+        target_populated=True,
+        target_marked=False,
+    )
+    assert plan.action == "target-unverified"
+    assert plan.commands == ()
+    assert "docker volume rm" in plan.reason
+
+
+def test_the_copy_writes_its_marker_last_and_in_one_shell() -> None:
+    """Two docker runs could die between them and mark an incomplete copy."""
+    names = _names()
+    plan = plan_home_volume_migration(
+        names, existing_volumes=(names.legacy_home_volume,)
+    )
+    copy = next(" ".join(c) for c in plan.commands if "cp -a" in " ".join(c))
+    assert copy.index("cp -a") < copy.index(MIGRATION_MARKER)
+    assert "set -e" in copy
 
 
 def test_migration_resumes_over_an_interrupted_first_attempt() -> None:
@@ -275,6 +455,50 @@ def test_blank_platform_pin_is_not_a_pin() -> None:
     """An unset variable renders as '', which must not read as an answer."""
     blank = migration_platform_refusal(None, env={"DOTFILES_PLATFORM": "  "})
     assert blank is not None
+
+
+def test_migration_refuses_while_a_container_still_holds_the_source() -> None:
+    """A live home is being WRITTEN to; `cp -a` would capture a torn record.
+
+    Measured on the real host: the pre-#677 volume was 3.5 GB and mounted
+    read-write by a running container. A torn home starts fine and misbehaves
+    later, which is the worst shape of all — so refuse and say `mise run stop`.
+    """
+    names = _names()
+    plan = plan_home_volume_migration(
+        names,
+        existing_volumes=(names.legacy_home_volume,),
+        source_in_use=True,
+    )
+    assert plan.action == "source-in-use"
+    assert plan.commands == ()
+    assert "mise run stop" in plan.reason
+
+
+def test_in_use_refusal_outranks_nothing_to_do() -> None:
+    """Both arms of the in-use flag, on both source states.
+
+    The refusal must not be reachable only when there is work, and a plain
+    absent source must stay a no-op rather than becoming an error.
+    """
+    names = _names()
+    idle = plan_home_volume_migration(
+        names, existing_volumes=(names.legacy_home_volume,), source_in_use=False
+    )
+    assert idle.action == "copy"
+    absent = plan_home_volume_migration(names, existing_volumes=(), source_in_use=True)
+    assert absent.action == "nothing-to-migrate"
+
+
+def test_refused_actions_are_distinguishable_from_nothing_to_do() -> None:
+    """`--apply` exits non-zero on a refusal and zero on a genuine no-op.
+
+    Both produce an empty command list, so without this split a refusal under
+    `--apply` would look exactly like success to any caller reading the rc.
+    """
+    assert "source-in-use" in REFUSED_ACTIONS
+    assert "nothing-to-migrate" not in REFUSED_ACTIONS
+    assert "already-migrated" not in REFUSED_ACTIONS
 
 
 def test_migration_never_deletes_the_legacy_volume() -> None:
