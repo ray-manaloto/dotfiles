@@ -933,6 +933,259 @@ def test_sum_manifest_layer_sizes_single_manifest() -> None:
     )
 
 
+# ------------------------------- #674: architecture selection in an index
+#
+# The fixture is armed: the two architectures carry DIFFERENT layer totals, so
+# "it selected the right entry" is a discriminating result rather than a
+# coincidence (`probes-need-a-control-arm.md` rule 8). It also carries the
+# `unknown/unknown` attestation entry that a real `imagetools inspect --raw` of
+# this repo's `:dev` actually serves — a fixture without one cannot exercise
+# the skip that keeps an attestation from being mistaken for a platform.
+
+_AMD64_LAYER_BYTES = 4096
+_ARM64_LAYER_BYTES = 8192
+_ARCH_LAYER_BYTES = {"amd64": _AMD64_LAYER_BYTES, "arm64": _ARM64_LAYER_BYTES}
+_ARCH_VARIANT = {"amd64": "v2", "arm64": "v8"}
+_ARCH_DIGEST = {"amd64": "sha256:" + "a" * 64, "arm64": "sha256:" + "b" * 64}
+_ATTESTATION_DIGEST = "sha256:" + "c" * 64
+_INDEX_MEDIA_TYPE = "application/vnd.oci.image.index.v1+json"
+
+
+def _index_raw(*arches: str) -> str:
+    """An OCI index shaped like a real buildx one, for the given architectures."""
+    manifests: list[dict[str, object]] = []
+    for arch in arches:
+        manifests.append(
+            {
+                "digest": _ARCH_DIGEST[arch],
+                "platform": {
+                    "os": "linux",
+                    "architecture": arch,
+                    "variant": _ARCH_VARIANT[arch],
+                },
+            }
+        )
+        manifests.append(
+            {
+                "digest": _ATTESTATION_DIGEST,
+                "platform": {"os": "unknown", "architecture": "unknown"},
+                "annotations": {"vnd.docker.reference.type": "attestation-manifest"},
+            }
+        )
+    return json.dumps({"mediaType": _INDEX_MEDIA_TYPE, "manifests": manifests})
+
+
+def _fake_imagetools(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Serve each architecture's sub-manifest by digest; record the refs asked for."""
+    by_digest = {
+        _ARCH_DIGEST[arch]: json.dumps({"layers": [{"size": size}]})
+        for arch, size in _ARCH_LAYER_BYTES.items()
+    }
+    asked: list[str] = []
+
+    def fake_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        ref = cmd[cmd.index("inspect") + 1]
+        asked.append(ref)
+        _, _, digest = ref.partition("@")
+        return subprocess.CompletedProcess(cmd, 0, stdout=by_digest[digest], stderr="")
+
+    monkeypatch.setattr("dotfiles_setup.image._run", fake_run)
+    return asked
+
+
+def _forbid_gzip_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make the local-gzip fallback loud, so a silent fall-through cannot pass."""
+
+    def explode(image_ref: str) -> int:
+        msg = f"gzip fallback must not run for {image_ref}"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr("dotfiles_setup.image._gzip_size_for_image", explode)
+
+
+@pytest.mark.parametrize("arch", ["amd64", "arm64"])
+def test_sum_manifest_layer_sizes_selects_requested_arch(
+    arch: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The index entry matching the REQUESTED architecture is the one summed."""
+    _forbid_gzip_fallback(monkeypatch)
+    asked = _fake_imagetools(monkeypatch)
+
+    total = _sum_manifest_layer_sizes(
+        _index_raw("amd64", "arm64"),
+        "ghcr.io/owner/repo:tag",
+        platform=f"linux/{arch}/{_ARCH_VARIANT[arch]}",
+    )
+
+    assert total == _ARCH_LAYER_BYTES[arch]
+    assert asked == [f"ghcr.io/owner/repo@{_ARCH_DIGEST[arch]}"]
+
+
+def test_sum_manifest_layer_sizes_fails_on_architecture_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#674 AC2 — an index without the requested architecture FAILS, never falls back.
+
+    The control arm. Before this, the loop fell through to the local-gzip
+    measure, so a request for an architecture the registry does not publish
+    returned a number describing whatever the local image happened to be.
+    """
+    _forbid_gzip_fallback(monkeypatch)
+    _fake_imagetools(monkeypatch)
+
+    with pytest.raises(ValueError, match="arm64") as excinfo:
+        _sum_manifest_layer_sizes(
+            _index_raw("amd64"),
+            "ghcr.io/owner/repo:tag",
+            platform="linux/arm64/v8",
+        )
+
+    assert "amd64" in str(excinfo.value)
+
+
+def test_sum_manifest_layer_sizes_never_offers_an_attestation_as_an_alternative(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An `unknown/unknown` attestation entry is not a platform, so it is not offered.
+
+    The assertion is on the OFFER, not merely on the raise. Asserting the raise
+    alone passes whether or not the filter exists — the selection loop already
+    rejects `architecture: unknown` — so it would have been a duplicate of the
+    absent-arch test wearing this test's name (found by review).
+    """
+    _forbid_gzip_fallback(monkeypatch)
+    _fake_imagetools(monkeypatch)
+
+    with pytest.raises(ValueError, match="publishes no") as excinfo:
+        _sum_manifest_layer_sizes(
+            _index_raw("arm64"),
+            "ghcr.io/owner/repo:tag",
+            platform="linux/amd64/v2",
+        )
+
+    message = str(excinfo.value)
+    assert "unknown" not in message
+    assert "available: linux/arm64/v8" in message
+
+
+def test_sum_manifest_layer_sizes_offers_only_attestations_as_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An index of nothing but attestations offers no alternative at all."""
+    _forbid_gzip_fallback(monkeypatch)
+    _fake_imagetools(monkeypatch)
+    attestation_only = json.dumps(
+        {
+            "mediaType": _INDEX_MEDIA_TYPE,
+            "manifests": [
+                {
+                    "digest": _ATTESTATION_DIGEST,
+                    "platform": {"os": "unknown", "architecture": "unknown"},
+                    "annotations": {
+                        "vnd.docker.reference.type": "attestation-manifest"
+                    },
+                }
+            ],
+        }
+    )
+
+    with pytest.raises(ValueError, match="available: none"):
+        _sum_manifest_layer_sizes(
+            attestation_only,
+            "ghcr.io/owner/repo:tag",
+            platform="linux/amd64/v2",
+        )
+
+
+def test_sum_manifest_layer_sizes_rejects_an_unreadable_selected_manifest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A chosen architecture's sub-manifest that cannot be read FAILS, never falls back.
+
+    The AC2 hole one level down (found by review): the index answered and the
+    architecture was already selected, so the local image — possibly a
+    different architecture — is not an acceptable stand-in for it.
+    """
+    _forbid_gzip_fallback(monkeypatch)
+
+    def fake_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            cmd, 0, stdout=json.dumps({"schemaVersion": 1, "fsLayers": []}), stderr=""
+        )
+
+    monkeypatch.setattr("dotfiles_setup.image._run", fake_run)
+
+    with pytest.raises(ValueError, match="not a readable manifest"):
+        _sum_manifest_layer_sizes(
+            _index_raw("amd64"),
+            "ghcr.io/owner/repo:tag",
+            platform="linux/amd64/v2",
+        )
+
+
+def test_sum_manifest_layer_sizes_rejects_matching_arch_on_another_os(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``windows/amd64`` does not satisfy a request for ``linux/amd64``.
+
+    The os and the architecture are separate axes; matching one is not
+    matching the platform, and the message must offer what is really there.
+    """
+    _forbid_gzip_fallback(monkeypatch)
+    _fake_imagetools(monkeypatch)
+    windows_only = json.dumps(
+        {
+            "mediaType": _INDEX_MEDIA_TYPE,
+            "manifests": [
+                {
+                    "digest": _ARCH_DIGEST["amd64"],
+                    "platform": {"os": "windows", "architecture": "amd64"},
+                }
+            ],
+        }
+    )
+
+    with pytest.raises(ValueError, match="windows/amd64"):
+        _sum_manifest_layer_sizes(
+            windows_only, "ghcr.io/owner/repo:tag", platform="linux/amd64/v2"
+        )
+
+
+def test_sum_manifest_layer_sizes_rejects_an_empty_index(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An index publishing nothing is a mismatch, not an unreadable document."""
+    _forbid_gzip_fallback(monkeypatch)
+    _fake_imagetools(monkeypatch)
+
+    with pytest.raises(ValueError, match="available: none"):
+        _sum_manifest_layer_sizes(
+            json.dumps({"mediaType": _INDEX_MEDIA_TYPE, "manifests": []}),
+            "ghcr.io/owner/repo:tag",
+            platform="linux/amd64/v2",
+        )
+
+
+def test_sum_manifest_layer_sizes_unrecognised_shape_still_falls_back(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A doc that is neither a manifest nor an index keeps the local-gzip fallback.
+
+    The other arm of the mismatch test: the fallback is narrowed, not deleted.
+    """
+    monkeypatch.setattr(
+        "dotfiles_setup.image._gzip_size_for_image", lambda _ref: _LAYERS_TOTAL_BYTES
+    )
+
+    total = _sum_manifest_layer_sizes(
+        json.dumps({"schemaVersion": 2}),
+        "ghcr.io/owner/repo:tag",
+        platform="linux/amd64/v2",
+    )
+
+    assert total == _LAYERS_TOTAL_BYTES
+
+
 # --------------------------------------- tier-1 identity (merge-base aware)
 
 

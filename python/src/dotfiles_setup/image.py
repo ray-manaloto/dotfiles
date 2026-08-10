@@ -27,7 +27,7 @@ from dotfiles_setup.platform_target import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable, Iterable, Mapping
     from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -932,8 +932,70 @@ def _repo_without_tag(image_ref: str) -> str:
     return image_ref
 
 
+def _index_platforms(manifests: Iterable[Mapping[str, Any]]) -> list[str]:
+    """Every real platform an index publishes, in index order.
+
+    Buildx writes an ``unknown/unknown`` ``attestation-manifest`` entry beside
+    each real platform (verified against this repo's own ``:dev``), so the
+    entries are filtered rather than listed — an error message that offered
+    ``unknown/unknown`` as an alternative would be worse than none.
+
+    The microarchitecture level is kept when the entry carries one: a platform
+    is a triple, not an arch word (``platform_target``'s module docstring), so
+    an index publishing a levelled triple must not be reported as offering the
+    bare ``os/arch`` — that is exactly the level-dropping this project treats
+    as load-bearing.
+    """
+    seen: list[str] = []
+    for entry in manifests:
+        entry_platform = entry.get("platform", {})
+        os_name = entry_platform.get("os")
+        arch = entry_platform.get("architecture")
+        if os_name in (None, "unknown") or arch in (None, "unknown"):
+            continue
+        variant = entry_platform.get("variant")
+        candidate = f"{os_name}/{arch}/{variant}" if variant else f"{os_name}/{arch}"
+        if candidate not in seen:
+            seen.append(candidate)
+    return seen
+
+
+def _no_such_architecture(
+    image_ref: str, target_arch: str, manifests: Iterable[Mapping[str, Any]]
+) -> ValueError:
+    """The #674 AC2 failure: the index cannot answer for the requested arch."""
+    available = _index_platforms(manifests)
+    offer = ", ".join(available) if available else "none"
+    msg = (
+        f"{image_ref} publishes no linux/{target_arch} manifest "
+        f"(available: {offer}) — refusing to measure a different architecture "
+        f"and report it as {target_arch}"
+    )
+    return ValueError(msg)
+
+
+def _unreadable_selected_manifest(image_ref: str, target_arch: str) -> ValueError:
+    """The sub-manifest for a CHOSEN architecture could not be read.
+
+    Distinct from :func:`_no_such_architecture`: the index did answer, and the
+    architecture was already selected. Falling back to the local image here
+    would report some other architecture's bytes under the label of the one
+    that was asked for — the same false pass #674 closes, one level down.
+    """
+    msg = (
+        f"{image_ref}'s linux/{target_arch} manifest is not a readable "
+        f"manifest document — refusing to fall back to the local image, which "
+        f"may be a different architecture"
+    )
+    return ValueError(msg)
+
+
 def _sum_manifest_layer_sizes(
-    raw: str, image_ref: str, *, platform: str | None = None
+    raw: str,
+    image_ref: str,
+    *,
+    platform: str | None = None,
+    local_fallback_ok: bool = True,
 ) -> int:
     """Sum compressed layer sizes from an OCI/Docker manifest JSON.
 
@@ -945,13 +1007,35 @@ def _sum_manifest_layer_sizes(
     which under a multi-arch manifest would resolve, silently pick that one,
     and compare it against a container of the other: a false pass, not a
     crash).
+
+    An index that carries no entry for ``platform`` **raises** (#674 AC2). It
+    used to fall through to :func:`_gzip_size_for_image`, which measures the
+    *local* image whatever architecture that is — so a request the registry
+    could not satisfy returned a plausible number describing the wrong
+    architecture, and the selection above could never fail. The gzip fallback
+    survives for a genuinely unrecognised document shape, which is a different
+    condition: "I cannot read this" rather than "this does not have what you
+    asked for".
+
+    ``local_fallback_ok`` is what keeps that distinction honest through the
+    recursion. Once an architecture has been *selected*, the local image is no
+    longer an acceptable stand-in for an unreadable sub-manifest — it may be a
+    different architecture, which is the same false pass one level down — so
+    the recursive call clears the flag and an unreadable document raises there.
     """
     target_arch = platform_arch(resolve_platform(platform))
     doc = json.loads(raw)
     layers = doc.get("layers")
     if layers is not None:
         return sum(int(layer.get("size", 0)) for layer in layers)
-    for entry in doc.get("manifests", []):
+    manifests = doc.get("manifests")
+    if manifests is None:
+        # Not a recognized manifest shape. Only the caller that has not yet
+        # committed to an architecture may fall back to the local measure.
+        if not local_fallback_ok:
+            raise _unreadable_selected_manifest(image_ref, target_arch)
+        return _gzip_size_for_image(image_ref)
+    for entry in manifests:
         entry_platform = entry.get("platform", {})
         if (
             entry_platform.get("os") == "linux"
@@ -968,9 +1052,10 @@ def _sum_manifest_layer_sizes(
                     "--raw",
                 ],
             ).stdout
-            return _sum_manifest_layer_sizes(sub, image_ref, platform=platform)
-    # Not a recognized manifest shape — fall back to the local gzip measure.
-    return _gzip_size_for_image(image_ref)
+            return _sum_manifest_layer_sizes(
+                sub, image_ref, platform=platform, local_fallback_ok=False
+            )
+    raise _no_such_architecture(image_ref, target_arch, manifests)
 
 
 def _compressed_size_for_image(image_ref: str, *, platform: str | None = None) -> int:

@@ -259,19 +259,38 @@ select amd64, and compare that hash to an **arm64** container. Not a crash — a
 **false pass**. Manifest selection must take the same `platform` parameter.
 
 ✅ **Parameterised by #673**; the recursion now selects `platform_arch(...)`.
-⚠️ **#674 still owns the rest**, and Ray scoped it 2026-08-09 to **two**
-surfaces: (a) the AC2 control arm — a deliberate architecture mismatch must
-FAIL, kept as a test, which does not exist today; and (b) **`sync.py`'s digest
-convergence** — `registry_digest()` (`sync.py:245`) returns `.Manifest.Digest`
-from `imagetools inspect`, which for a manifest list is the **INDEX** digest,
-while `local_digests()` (`sync.py:267`) returns the tag's `RepoDigests`.
-Whether those still compare like-for-like under a multi-arch `:dev` is an
-**open question to probe, not an established defect** — and "they still match"
-is a welcome answer. ⚠️ `sync.py:127`'s "can never converge" is about a
-**buildkit re-export** minting a new local digest; do NOT cite it as multi-arch
-evidence (this spec did, briefly, and it was wrong). AC3's "passes on both
-architectures" is satisfied by **synthetic manifest fixtures** for now, with
-the real two-arch run deferred to #676 and noted when #674 closes.
+✅ **CLOSED by #674**, across the two surfaces Ray scoped on 2026-08-09:
+
+- **(a) the AC2 control arm — built.** The mismatch path did not merely go
+  unverified, it could not fail: an index with no entry for the requested
+  architecture fell through to `_gzip_size_for_image`, which measures the
+  *local* image whatever architecture that is. It now raises, and the
+  local-gzip fallback is narrowed to a genuinely unreadable document. Four
+  FAIL arms are pinned in `tests/test_image_smoke.py` (absent arch, index of
+  attestations only, `windows/amd64` against a `linux/amd64` request, empty
+  index); both mutations — restoring the fall-through, and dropping the `os`
+  check — are caught.
+- **(b) `sync.py` — probed, and NO change was needed.** Measured both arms
+  against a real multi-architecture tag: `imagetools inspect --format '{{json
+  .Manifest.Digest}}'` and, after a `--platform`-scoped pull of *either*
+  architecture, `image inspect --format '{{json .RepoDigests}}'` return the
+  **same index digest**. A `--platform` pull selects which manifest is
+  materialised, not which digest is recorded, so `SyncStatus.stale` compares
+  like-for-like as written. Recorded in `registry_digest`'s docstring so it is
+  not re-opened. ⚠️ `sync.py:127`'s "can never converge" is about a **buildkit
+  re-export** minting a new local digest; do NOT cite it as multi-arch evidence
+  (this spec did, briefly, and it was wrong).
+
+One fact found while doing it contradicts the framing above: `:dev` is
+**already** an OCI index (an `amd64/v2` entry plus an `unknown/unknown`
+attestation entry), so the recursion runs today rather than lying dormant until
+D1. The (a) defect was therefore **reachable** before dual-arch publication, not
+merely prospective — `dotfiles-setup image size-report --platform linux/arm64/v8`
+against the real `:dev` took the fall-through, and now exits 1 naming
+`available: linux/amd64`. It was not *exercised*, because the repo pin resolves
+to amd64 and every caller inherits it. AC3's "passes on both architectures" is
+satisfied by **synthetic manifest fixtures**; the real two-architecture run is
+deferred to #676.
 
 #### The 12+ hard-coded sites (the real risk is PARTIAL threading)
 
