@@ -257,6 +257,15 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # was chosen to beat by ~21 MB in the first place. The version assertion follows
 # the branch: amd64 asserts the pinned major, apt asserts what dpkg says it just
 # installed — two independent sources either way, never a restated literal.
+#
+# `libgvplugin-neato-layout8` is NOT optional on the apt path. Ubuntu splits the
+# layout engines into separate plugin packages and `graphviz` Depends on only
+# `libgvplugin-gd8` + `libgvplugin-pango8`, so `--no-install-recommends` yields
+# an install where `dot` works and `neato` reports "There is no layout engine
+# support" — the deb path never hits this because it installs its plugin deps
+# by hand. Measured on the digest-pinned arm64 base 2026-08-10: without it the
+# neato render fails and the whole RUN exits 1 (this is what reddened #703);
+# with it, svg/png/neato/version all pass under `set -euo pipefail`.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     export DEBIAN_FRONTEND=noninteractive && \
@@ -270,7 +279,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
       rm -f /usr/lib/graphviz/config8 && \
       expected_major="${GRAPHVIZ_VERSION%%.*}"; \
     else \
-      apt-get install -y --no-install-recommends graphviz && \
+      apt-get install -y --no-install-recommends graphviz libgvplugin-neato-layout8 && \
       expected_major="$(dpkg-query -W -f='${Version}' graphviz | sed 's/^[0-9]*://; s/\..*//')"; \
     fi && \
     dot -c && \

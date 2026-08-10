@@ -157,6 +157,34 @@ def test_each_single_architecture_download_is_gated_on_target_arch() -> None:
         )
 
 
+def test_the_graphviz_fallback_installs_every_engine_the_smoke_exercises() -> None:
+    """A per-architecture fallback must be CAPABILITY-equivalent, not just present.
+
+    The amd64 branch installs graphviz's plugin dependencies by hand; Ubuntu
+    splits the layout engines into separate packages and `graphviz` Depends on
+    only the gd and pango plugins, so `--no-install-recommends` produces an
+    install where `dot` works and `neato` reports "There is no layout engine
+    support". The shared smoke below the branch renders with BOTH, so the
+    fallback silently fails the whole RUN — measured on the arm64 base
+    2026-08-10, and it is what reddened #703 after the gating itself was right.
+    """
+    graphviz_run = next(
+        block
+        for block in _dockerfile().split("\nRUN ")[1:]
+        if "${GRAPHVIZ_DEB}" in block
+    )
+    fallback = graphviz_run.split("else", 1)[1]
+
+    for engine in ("neato",):
+        if f"| {engine} -T" not in graphviz_run:
+            continue
+        assert f"libgvplugin-{engine}-layout" in fallback, (
+            f"the smoke renders with `{engine}`, but the apt fallback does not "
+            f"install its layout plugin — `dot` would work and `{engine}` would "
+            f"not, failing the RUN on every non-amd64 build"
+        )
+
+
 def test_every_stage_that_reads_targetarch_also_declares_it() -> None:
     """The trap that would make this whole change a silent no-op.
 
