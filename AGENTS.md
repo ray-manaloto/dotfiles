@@ -156,7 +156,7 @@ Gated by `mise run verify-local`. Sessions touching `.devcontainer/` or `mise.to
 
 | Req | Criterion | Gate |
 |---|---|---|
-| **R1 inbound** | `ssh ${USER}@localhost -p 4444` opens a shell, no password | `mise run verify-ssh-inbound` |
+| **R1 inbound** | `ssh ${USER}@localhost -p $(mise run ssh-port)` opens a shell, no password | `mise run verify-ssh-inbound` |
 | **R2 outbound** | `ssh -T git@github.com` inside container → "successfully authenticated" | smoke tier 3 |
 | **R3 amd64** | container reports `x86_64` / `amd64` on `uname -m`, `arch`, image manifest | `mise run verify-arch` |
 
@@ -167,7 +167,7 @@ Gated by `mise run verify-local`. Sessions touching `.devcontainer/` or `mise.to
 | `HK_MISE` | `1` | Enable mise integration for hk |
 | `CONTAINER_REGISTRY` | `ghcr.io` | Docker registry (use `CONTAINER_REGISTRY`, not `REGISTRY` — avoids HCL collision) |
 | `DEVCONTAINER_USER` | `${localEnv:USER}` (fallback: `devcontainer`) | Container user (UID 1000); passed through from host `USER` via `devcontainer.json`. Host-user migration is the current state — the legacy `vscode` value has been replaced. |
-| `DEVCONTAINER_SSH_PORT` | `4444` | Host-side port for R1 inbound `ssh ${USER}@localhost -p 4444`; container-internal sshd is hardcoded on `2222` by the feature. Override per-clone via `mise.local.toml` on port collision (volume names do NOT include the port — C10/C11/C12). |
+| `DEVCONTAINER_SSH_PORT` | derived | Host-side port for R1 inbound ssh; container-internal sshd is hardcoded on `2222` by the feature. **Unset by default (#677)** — derived per workspace+architecture into 20000-29999 so two clones and two arches never collide (`mise run ssh-port`; `mise run names` for all three). Pin per-clone via `mise.local.toml`. Volume names still exclude the port (C10/C11/C12). |
 | `DOTFILES_PLATFORM` | pinned in `mise.toml` `[env]` | **The one platform parameter** (#673). Every `--platform` site resolves from it; unset, it falls back to the host's native triple. `no_platform_literals` rejects a literal elsewhere |
 | `DOCKER_DEFAULT_PLATFORM` | `{{ env.DOTFILES_PLATFORM }}` | Task-scoped export of the above — what docker itself reads |
 

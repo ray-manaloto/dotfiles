@@ -93,7 +93,7 @@ SURFACE_PATTERNS: tuple[str, ...] = (
     ".devcontainer/**/*",
     "docker-bake.hcl",
     "scripts/devcontainer-smoke.sh",
-    "scripts/workspace-hash.sh",
+    "python/src/dotfiles_setup/devcontainer_names.py",
     "python/src/dotfiles_setup/container.py",
     "python/src/dotfiles_setup/sync.py",
     "python/src/dotfiles_setup/image.py",

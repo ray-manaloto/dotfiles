@@ -11,7 +11,7 @@ library, zero-bash-logic) in the same change.
 |---|---|
 | `hk run check --all` / `hk run pre-commit --all` | `mise run lint` (read-only ≡ CI, hard timeout + log-tail diagnostics); `mise run fmt` to apply fixes |
 | bare `pytest` | `mise run test`, or `uv run --project python pytest <target>` (doc-level only: the permission engine unwraps runners, so a hook rule would also deny the canonical uv form) |
-| `devcontainer up` / `devcontainer build` | `mise run up` / `mise run dev-rebuild` (env + workspace-hash guard) |
+| `devcontainer up` / `devcontainer build` | `mise run up` / `mise run dev-rebuild` (env + arch-scoped name resolution) |
 | `docker pull …dotfiles-devcontainer…` | `mise run sync` (buildkit, digest-aware, verifying; classic pull wedges on ~38GB) |
 | `gh pr create` (+ push + gates by hand) | `mise run ship` |
 | `gh pr merge` (+ watch + validate by hand) | `mise run land -- <PR#>` (post-merge) |

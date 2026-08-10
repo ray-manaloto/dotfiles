@@ -15,9 +15,15 @@
 # Overridable vars (consumed by the up / dev-rebuild / verify-* tasks):
 #
 #   - DEVCONTAINER_SSH_PORT — host-side port for the inbound ssh shell
-#     (Requirement R1). Default 4444. Bump on port collision; volume names do
-#     NOT include the port (C10/C11/C12), so you keep your home volume when
-#     recovering.
+#     (Requirement R1). UNSET is now the good default: the port is DERIVED
+#     from the workspace path and the architecture (#677), so a second clone
+#     and a second architecture each get a distinct one with no configuration.
+#     `mise run ssh-port` prints it. Pin a value here only if you want a
+#     stable, memorable port for THIS clone (e.g. an IDE ssh config, an
+#     entry in ~/.ssh/config). Volume names still do NOT include the port
+#     (C10/C11/C12), so changing it never costs you the home volume — but it
+#     does pin BOTH architectures to one port, so unset it before bringing a
+#     second architecture up in this directory.
 #   - BASE_IMAGE — pin to a specific tag/SHA for reproducible rebuilds.
 #     Default ghcr.io/ray-manaloto/dotfiles-devcontainer:dev.
 #   - DOPPLER_CONFIG — which Doppler config the devcontainer downloads.
@@ -27,6 +33,6 @@
 # DO NOT check in mise.local.toml; it is gitignored by design.
 
 [env]
-DEVCONTAINER_SSH_PORT = "4444"
+# DEVCONTAINER_SSH_PORT = "4444"   # leave unset to derive per workspace+arch
 # BASE_IMAGE = "ghcr.io/ray-manaloto/dotfiles-devcontainer:<sha>"
 # DOPPLER_CONFIG = "dev"

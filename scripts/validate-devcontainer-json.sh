@@ -49,9 +49,9 @@ echo "[validate-devcontainer-json] Layer 2/3: devcontainer read-configuration"
 # Stub env vars: these are resolved at read time but we don't care about
 # the values — only that substitution succeeds and the JSONC parses.
 parsed="$(
-	DEVCONTAINER_WORKSPACE_HASH=validate \
-		BASE_IMAGE=validate \
+	BASE_IMAGE=validate \
 		DEVCONTAINER_SSH_PORT=4444 \
+		DEVCONTAINER_NAME=validate DEVCONTAINER_HOME_VOLUME=validate \
 		devcontainer read-configuration --workspace-folder .
 )"
 if [ -z "${parsed}" ]; then

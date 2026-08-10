@@ -57,7 +57,24 @@ max_files_to_validate = 10000
 # live; see docs/adr/README.md). Rewording them to satisfy a portability check
 # would delete the fact the section exists to state. Scoped to the exact filename
 # so a stray hard-coded path in new code still flags.
-paths = ["**/AGENTS.md", "**/CLAUDE.md", "AGENTS.md", "CLAUDE.md", "CONTEXT.md"]
+#
+# `.devcontainer/TOOL-PERSISTENCE.md` joins them (2026-08-10, #677): it is the
+# Tool Persistence Matrix CARVED OUT of `.devcontainer/AGENTS.md` when that file
+# outgrew AGM-003's 12,000-char cap — the remedy `md-size-budgets.md` prescribes
+# ("move reference content to a sibling doc and link it by path"). Its `~/.cargo`
+# / `~/.rustup` / `~/.local` paths are the same container-internal paths this
+# override already covers, and they did not become less correct by moving 40
+# lines. Approved by Ray at implementation time rather than assumed
+# ([[zero-skip-policy]]: a suppression needs explicit approval, and widening a
+# disabled_rules glob is one even when it is continuity).
+paths = [
+    "**/AGENTS.md",
+    "**/CLAUDE.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "CONTEXT.md",
+    ".devcontainer/TOOL-PERSISTENCE.md",
+]
 disabled_rules = ["XP-003", "AGM-004", "AGM-006", "PE-001"]
 
 [[overrides]]

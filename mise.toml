@@ -276,15 +276,17 @@ description = "Bring the devcontainer up via the official @devcontainers/cli (Ma
 # keeps these TASK-scoped (no global leak of BASE_IMAGE, nor of the
 # docker-honoured DOCKER_DEFAULT_PLATFORM, into unrelated subprocesses)
 # unless the user opts in.
-env = { BASE_IMAGE = "{{ env.BASE_IMAGE | default(value='ghcr.io/ray-manaloto/dotfiles-devcontainer:dev') }}", DOCKER_DEFAULT_PLATFORM = "{{ env.DOTFILES_PLATFORM }}", DEVCONTAINER_SSH_PORT = "{{ env.DEVCONTAINER_SSH_PORT | default(value='4444') }}", DOPPLER_PROJECT = "dotfiles", DOPPLER_CONFIG = "{{ env.DOPPLER_CONFIG | default(value='dev_personal') }}" }
+env = { BASE_IMAGE = "{{ env.BASE_IMAGE | default(value='ghcr.io/ray-manaloto/dotfiles-devcontainer:dev') }}", DOCKER_DEFAULT_PLATFORM = "{{ env.DOTFILES_PLATFORM }}", DEVCONTAINER_SSH_PORT = "{{ env.DEVCONTAINER_SSH_PORT | default(value='') }}", DOPPLER_PROJECT = "dotfiles", DOPPLER_CONFIG = "{{ env.DOPPLER_CONFIG | default(value='dev_personal') }}" }
 run = '''
 set -euo pipefail
-# v6 collision guard: compute an 8-char hash of $PWD so sibling clones
-# of `dotfiles` on the same host get distinct Docker volume + container
-# names. Exported so devcontainer.json ${localEnv:DEVCONTAINER_WORKSPACE_HASH}
-# substitution picks it up. Single source of truth at scripts/workspace-hash.sh.
-DEVCONTAINER_WORKSPACE_HASH="$(scripts/workspace-hash.sh)"
-export DEVCONTAINER_WORKSPACE_HASH
+# v7 (#677): every devcontainer resource name — container, home volume and
+# SSH port — is resolved by dotfiles_setup.devcontainer_names and exported
+# for devcontainer.json's ${localEnv:...} substitution. All three carry the
+# ARCHITECTURE, so amd64 and arm64 can be up in this directory at once
+# without silently sharing a home volume full of compiled output.
+# Nothing is composed here: [[zero-bash-logic]], and the arch word must come
+# from platform_target, never from a literal (`no_platform_literals`).
+eval "$(uv run --project python dotfiles-setup devcontainer env)"
 # Clear stale host keys for the devcontainer SSH port — each container
 # recreate generates new host keys, causing "REMOTE HOST IDENTIFICATION
 # HAS CHANGED" warnings. ssh-keygen -R removes the old entry. The
@@ -294,6 +296,27 @@ ssh-keygen -R "[localhost]:${DEVCONTAINER_SSH_PORT}" 2>/dev/null || true
 devcontainer up --workspace-folder .
 '''
 
+[tasks.names]
+description = "Print this workspace+architecture's devcontainer names (container, volume, port)"
+# The one place to look when `ssh -p` fails or two containers appear: which
+# resources does THIS directory own, for the CURRENTLY targeted architecture?
+run = 'uv run --project python dotfiles-setup devcontainer env'
+
+[tasks.ssh-port]
+description = "Print the host-side SSH port for this workspace + architecture (R1)"
+# Derived from the workspace path and the arch, so a second clone and a second
+# architecture each get a distinct port with no configuration (#677). Pin one
+# per-clone with DEVCONTAINER_SSH_PORT in mise.local.toml.
+run = 'uv run --project python dotfiles-setup devcontainer name port'
+
+[tasks.migrate-home-volume]
+description = "One-shot: copy a pre-#677 home volume into this architecture's volume"
+# Dry-run by default; pass `-- --apply` to execute. Runs under mise so the
+# repo's DOTFILES_PLATFORM pin decides which architecture the copied home is
+# recorded as — a bare CLI invocation refuses rather than taking it from the
+# host, because the old volume name records no architecture at all.
+run = 'uv run --project python dotfiles-setup devcontainer migrate-home'
+
 [tasks.dev-rebuild]
 description = "Force a full rebuild + re-pull of :dev (lifecycle hooks fire)"
 # Equivalent to a force-refresh. `--remove-existing-container` ensures
@@ -302,11 +325,10 @@ description = "Force a full rebuild + re-pull of :dev (lifecycle hooks fire)"
 # the host-user overlay without cached layers. Lifecycle hooks
 # (initializeCommand → onCreateCommand → postCreateCommand) all fire.
 # BASE_IMAGE + DEVCONTAINER_SSH_PORT templated for per-clone override — see the up task.
-env = { BASE_IMAGE = "{{ env.BASE_IMAGE | default(value='ghcr.io/ray-manaloto/dotfiles-devcontainer:dev') }}", DOCKER_DEFAULT_PLATFORM = "{{ env.DOTFILES_PLATFORM }}", DEVCONTAINER_SSH_PORT = "{{ env.DEVCONTAINER_SSH_PORT | default(value='4444') }}", DOPPLER_PROJECT = "dotfiles", DOPPLER_CONFIG = "{{ env.DOPPLER_CONFIG | default(value='dev_personal') }}" }
+env = { BASE_IMAGE = "{{ env.BASE_IMAGE | default(value='ghcr.io/ray-manaloto/dotfiles-devcontainer:dev') }}", DOCKER_DEFAULT_PLATFORM = "{{ env.DOTFILES_PLATFORM }}", DEVCONTAINER_SSH_PORT = "{{ env.DEVCONTAINER_SSH_PORT | default(value='') }}", DOPPLER_PROJECT = "dotfiles", DOPPLER_CONFIG = "{{ env.DOPPLER_CONFIG | default(value='dev_personal') }}" }
 run = '''
 set -euo pipefail
-DEVCONTAINER_WORKSPACE_HASH="$(scripts/workspace-hash.sh)"
-export DEVCONTAINER_WORKSPACE_HASH
+eval "$(uv run --project python dotfiles-setup devcontainer env)"
 ssh-keygen -R "[localhost]:${DEVCONTAINER_SSH_PORT}" 2>/dev/null || true
 devcontainer up --workspace-folder . --remove-existing-container --build-no-cache
 '''
@@ -359,10 +381,14 @@ run = "devcontainer exec --workspace-folder . bash -l"
 description = "Show the running devcontainer + its named volumes"
 run = '''
 set -euo pipefail
-_hash="$(scripts/workspace-hash.sh)"
+_stem="$(uv run --project python dotfiles-setup devcontainer name legacy-volume)"
+_stem="${_stem%-home}"
+# Both architectures, if both are up — the label is per-FOLDER, not per-arch,
+# so this is the view that shows a collision (#677).
 docker ps --filter "label=devcontainer.local_folder=$PWD" --format 'table {{"{{"}}.Names{{"}}"}}\t{{"{{"}}.Status{{"}}"}}\t{{"{{"}}.Ports{{"}}"}}'
-# Scoped to this clone's hashed home volume (v6 single-volume consolidation).
-docker volume ls --format '{{"{{"}}.Name{{"}}"}}' | grep -E "dotfiles-$(basename "$PWD")-${USER}-${_hash}" || true
+# Scoped to this clone's hashed volumes: every arch's home plus any surviving
+# pre-#677 one, which shares the stem and so shows up here too.
+docker volume ls --format '{{"{{"}}.Name{{"}}"}}' | grep -E "^${_stem}" || true
 '''
 
 [tasks.dev]
@@ -806,9 +832,14 @@ run = '''
 set -euo pipefail
 expected_arch="$(uv run --project python dotfiles-setup platform arch)"
 expected_machine="$(uv run --project python dotfiles-setup platform machine)"
-container_name="$(docker ps -q --filter "label=devcontainer.local_folder=$PWD" | head -1)"
-if [ -z "${container_name}" ]; then
-  echo "FAIL: no running devcontainer for $PWD" >&2
+# #677: select by NAME, not by the devcontainer.local_folder label. That label
+# is per-FOLDER, so once both architectures can be up in one directory it
+# matches TWO containers and the old `| head -1` picked an arbitrary one —
+# R3 would then have asserted the architecture of whichever docker listed
+# first, which is a false pass in exactly the direction R3 exists to catch.
+container_name="$(uv run --project python dotfiles-setup devcontainer name container)"
+if [ -z "$(docker ps -q --filter "name=^${container_name}$")" ]; then
+  echo "FAIL: no running devcontainer named ${container_name}" >&2
   exit 1
 fi
 echo "==> docker image architecture"
@@ -839,10 +870,13 @@ description = "R1: ssh ${USER}@localhost -p ${DEVCONTAINER_SSH_PORT} succeeds fr
 # container. StrictHostKeyChecking=accept-new + UserKnownHostsFile=/dev/
 # null so we don't pollute the host's known_hosts with the container's
 # ephemeral host keys.
-env = { DEVCONTAINER_SSH_PORT = "{{ env.DEVCONTAINER_SSH_PORT | default(value='4444') }}" }
+env = { DEVCONTAINER_SSH_PORT = "{{ env.DEVCONTAINER_SSH_PORT | default(value='') }}" }
 run = '''
 set -euo pipefail
-port="${DEVCONTAINER_SSH_PORT}"
+# Resolved, not defaulted (#677): the port is derived from workspace+arch
+# unless DEVCONTAINER_SSH_PORT pins one, so R1 must ask the same resolver
+# `mise run up` asked rather than restating a number.
+port="$(uv run --project python dotfiles-setup devcontainer name port)"
 echo "==> probing ssh ${USER}@localhost -p ${port}"
 out=$(ssh -o BatchMode=yes \
           -o StrictHostKeyChecking=accept-new \
@@ -911,10 +945,14 @@ mise run verify-secrets
 description = "Full devcontainer prune: stop container, remove volumes, images, and build cache"
 run = '''
 set -euo pipefail
-# Portable hash for this workspace (v6 single-volume collision guard).
 # Scoped prune prevents deleting sibling-clone hashed home volumes
 # (Codex v3 finding — broad-prefix prune was cross-clone destructive).
-_hash="$(scripts/workspace-hash.sh)"
+# The stem is `dotfiles-<basename>-<user>-<hash>`, shared by every
+# architecture's volume AND by the pre-#677 one, so prune stays whole-clone
+# while remaining blind to other clones.
+_stem="$(uv run --project python dotfiles-setup devcontainer name legacy-volume)"
+_stem="${_stem%-home}"
+_hash="$(uv run --project python dotfiles-setup devcontainer name hash)"
 
 # Differentiate "no match" (acceptable, idempotent) from "docker command
 # failed" (must be loud) per feedback_never_suppress_warnings. Pattern:
@@ -931,7 +969,7 @@ fi
 
 echo "==> removing named volumes (scoped to hash ${_hash})"
 all_volumes="$(docker volume ls --format '{{"{{"}}.Name{{"}}"}}')"
-hashed_volumes="$(echo "${all_volumes}" | grep -E "dotfiles-$(basename "$PWD")-${USER}-${_hash}" || true)"
+hashed_volumes="$(echo "${all_volumes}" | grep -E "^${_stem}" || true)"
 if [ -n "${hashed_volumes}" ]; then
   echo "${hashed_volumes}" | xargs docker volume rm
 else
@@ -941,7 +979,7 @@ fi
 # Also clean up any ORPHANED legacy volumes from the pre-v6 per-directory
 # layout (mise-user / cargo-user / rustup-user). Bounded by the
 # basename+user prefix so only this repo's orphans are targeted.
-legacy_volumes="$(echo "${all_volumes}" | grep -E "dotfiles-$(basename "$PWD")-${USER}-(mise-user|cargo-user|rustup-user)$" || true)"
+legacy_volumes="$(echo "${all_volumes}" | grep -E "^dotfiles-$(basename "$PWD")-${USER}-(mise-user|cargo-user|rustup-user)$" || true)"
 if [ -n "${legacy_volumes}" ]; then
   echo "==> removing legacy v5 volumes"
   echo "${legacy_volumes}" | xargs docker volume rm
