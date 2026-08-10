@@ -73,20 +73,21 @@ REAL_CASES: tuple[tuple[str, str, bool], ...] = (
 )
 
 
-# The complete job inventory of `.github/workflows/` as of 2026-07-21, read out
-# of the tree with `parse_jobs` and pinned as an exact set. A floor
-# (`>= len(REAL_CASES)`) would let a parser silently drop 15 of these 19 and
-# still pass — the bad-bound shape `.claude/rules/probes-need-a-control-arm.md`
-# names. Adding or losing a job is a deliberate, reviewable diff to this list.
+# The complete job inventory of `.github/workflows/`, read out of the tree with
+# `parse_jobs` and pinned as an exact set. A floor (`>= len(REAL_CASES)`) would
+# let a parser silently drop most of these and still pass — the bad-bound shape
+# `.claude/rules/probes-need-a-control-arm.md` names. Adding or losing a job is
+# a deliberate, reviewable diff to this list. (#676 added `plan` + `manifest`.)
 EXPECTED_JOBS: frozenset[tuple[str, str]] = frozenset(
     {
-        (".github/workflows/arch-runner-probe.yml", "probe"),
         (".github/workflows/autofix.yml", "autofix"),
         (".github/workflows/build-publish.yml", "base-prep"),
         (".github/workflows/build-publish.yml", "build"),
         (".github/workflows/build-publish.yml", "dev-prep"),
         (".github/workflows/build-publish.yml", "dev-tag"),
+        (".github/workflows/build-publish.yml", "manifest"),
         (".github/workflows/build-publish.yml", "p2996-prep"),
+        (".github/workflows/build-publish.yml", "plan"),
         (".github/workflows/build-publish.yml", "smoke-test"),
         (".github/workflows/ci.yml", "build-publish"),
         (".github/workflows/ci.yml", "changes"),

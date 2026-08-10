@@ -130,11 +130,22 @@ target "dev" {
     CLANG_P2996_REF = CLANG_P2996_REF
   }
   # Tags inherited from docker-metadata-action (CI overrides with SHA/latest/PR tags)
+  #
+  # The scope is SUFFIXED by the architecture (#676). It used to be the bare
+  # `dotfiles-dev` — one scope for every build — which was harmless while only
+  # one architecture was ever built, and is a correctness bug the moment two
+  # are: `type=gha` is content-addressed *within a scope*, so two matrix legs
+  # sharing one would race to overwrite each other's index and each would
+  # repeatedly evict the other's layers. Deriving the suffix from the same
+  # PLATFORM variable that selects the build keeps the two in lockstep by
+  # construction, and adds no literal for `no_platform_literals` to reject.
+  # Probed both arms: unset => `dotfiles-dev-linux-amd64-v2`; PLATFORM exported
+  # as the arm triple => `dotfiles-dev-linux-arm64-v8`.
   cache-from = [
-    "type=gha,scope=dotfiles-dev",
+    "type=gha,scope=dotfiles-dev-${replace(PLATFORM, "/", "-")}",
   ]
   cache-to = [
-    "type=gha,scope=dotfiles-dev,mode=max",
+    "type=gha,scope=dotfiles-dev-${replace(PLATFORM, "/", "-")},mode=max",
   ]
   # mode=max records the full build graph (materials, args, steps) so the
   # published provenance can answer "what exactly went into this image"

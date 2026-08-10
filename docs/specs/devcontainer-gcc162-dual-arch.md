@@ -215,6 +215,32 @@ one push.
 beside a fresh manifest is a confusing failure mode. The identity check must
 resolve *through* the arch it asked for, never through `:dev` alone.
 
+✅ **SHIPPED by #676.** As built, with three deviations from the sketch above
+and one defect the sketch could not have anticipated:
+
+- **"buildx emits all three in one push" is not what happens.** Ray ruled a
+  **native runner matrix** over one bake emitting two platforms, because the
+  arm64 half would compile GCC 16.2 and clang-p2996 under QEMU. So each leg
+  pushes `:<sha>-<arch>` and *only* that; a `manifest` job then assembles the
+  moving tags with `imagetools create`, which references the existing manifests
+  rather than re-uploading bytes. The arm runner label was **measured** before
+  the matrix was built on it (`ubuntu-24.04-arm` → `uname -m` = `aarch64`,
+  run 31355665422, with an amd64 control arm).
+- **Per-commit tags carry the suffix too** (`:<sha>-amd64`), not just the moving
+  ones — smoke-test needs a per-architecture handle at the commit, and the
+  moving tags do not exist until the manifest job runs.
+- **`:dev-<arch>` is safe beside `:dev-<hash16>`**, checked rather than assumed:
+  `ghcr_cleanup`'s planner matches `^(base|p2996|dev)-[0-9a-f]{16}$`, so an
+  architecture word is never a hash-family member.
+- ⚠️ **The blocking defect was in the content hashes, not the tags.**
+  `gather_{base,p2996,dev}_inputs` read `PLATFORM` from the HCL *default* only,
+  while bake reads a same-named **environment variable** — so both matrix legs
+  would have computed ONE `:base-`/`:p2996-`/`:dev-<hash>` tag. The arm64 leg
+  would have probe-HIT the amd64 cache and consumed an amd64 named context into
+  an arm64 build, and `:dev-<hash>` — the marker meaning "this passed smoke" —
+  would have pointed at whichever leg pushed last. `resolve_bake_platform`
+  makes python resolve it exactly as bake does. AC3 was unreachable without it.
+
 ### D2 — Arch selector: **explicit per-arch mise tasks over ONE parameterised library** ✅
 
 Ray, verbatim: *"option 3 / make sure this follows the mandate of: modular skill
@@ -291,6 +317,13 @@ against the real `:dev` took the fall-through, and now exits 1 naming
 to amd64 and every caller inherits it. AC3's "passes on both architectures" is
 satisfied by **synthetic manifest fixtures**; the real two-architecture run is
 deferred to #676.
+
+✅ **The deferred run LANDED in #676** as the `manifest` job's "Assert each
+architecture resolves to its own image" step: `size-report --platform <triple>`
+against the freshly-published index, once per published architecture, requiring
+the measurements to **differ**. Identical measurements mean the index points
+both entries at one image — the failure a "did the pull succeed" check cannot
+see. A fixture is not the registry, and now the registry is checked.
 
 #### The 12+ hard-coded sites (the real risk is PARTIAL threading)
 

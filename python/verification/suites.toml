@@ -557,14 +557,14 @@ pattern = '"mise-data"'
 
 [[suite]]
 name = "ci.gha-cache-enabled"
-description = "Buildx gha cache must remain enabled in bake config"
+description = "Buildx gha cache must remain enabled in bake config, and its scope must be SUFFIXED BY ARCHITECTURE (#676) — one shared scope across a two-architecture matrix has the legs racing to overwrite each other's cache index, which shows up only as builds that never warm."
 category = "ci"
 check_type = "static"
 handler = "require_tokens"
 paths = ["docker-bake.hcl"]
 per_path_tokens = { "docker-bake.hcl" = [
-    "\"type=gha,scope=dotfiles-dev\",",
-    "\"type=gha,scope=dotfiles-dev,mode=max\",",
+    "\"type=gha,scope=dotfiles-dev-${replace(PLATFORM, \"/\", \"-\")}\",",
+    "\"type=gha,scope=dotfiles-dev-${replace(PLATFORM, \"/\", \"-\")},mode=max\",",
 ] }
 
 [[suite]]
@@ -653,22 +653,55 @@ per_path_tokens = { ".github/workflows/build-publish.yml" = [
     "hash=$(uv run --project python dotfiles-setup p2996-hash)",
     "docker manifest inspect",
     "targets: p2996-cache",
-    "dev.contexts.p2996-export=docker-image://",
-    "dev.contexts.devcontainer-base=docker-image://",
+    "dev.contexts.p2996-export=${{ steps.tiers.outputs.p2996_context }}",
+    "dev.contexts.devcontainer-base=${{ steps.tiers.outputs.base_context }}",
+    "p2996_context=docker-image://${p2996_ref}@${p2996_digest}",
+    "base_context=docker-image://${base_ref}@${base_digest}",
 ] }
 
 [[suite]]
 name = "ci.dev-prep-gate-exists"
-description = "The third-tier dev-image content-hash gate (#122) must exist: a dev-prep job probes ':dev-<hash>' (via dotfiles-setup dev-hash) to skip build+smoke on an unchanged image, and a dev-tag job pushes the ':dev-<hash>' marker ONLY after smoke-test passes (validated-marker invariant — what makes the probe-skip safe). Lives in the reusable build-publish.yml (Phase B / #118)."
+description = "The third-tier dev-image content-hash gate (#122) must exist: a dev-prep job probes ':dev-<hash>' (via dotfiles-setup dev-hash) to skip build+smoke on an unchanged image, and a dev-tag job pushes the ':dev-<hash>' marker ONLY after smoke-test passes (validated-marker invariant — what makes the probe-skip safe). Lives in the reusable build-publish.yml (Phase B / #118). Since #676 the probe itself lives in the dev-cache-probe composite: a matrix job has ONE outputs map, so a per-leg hit cannot be published as a job output and each leg asks the registry directly — which is why the composite is named here too."
 category = "ci"
 check_type = "static"
 handler = "require_tokens"
-paths = [".github/workflows/build-publish.yml"]
+paths = [
+  ".github/workflows/build-publish.yml",
+  ".github/actions/dev-cache-probe/action.yml",
+]
 per_path_tokens = { ".github/workflows/build-publish.yml" = [
-    "dev-prep:",
+    "\n  dev-prep:\n",
     "hash=$(uv run --project python dotfiles-setup dev-hash)",
-    "dev-tag:",
-    "needs.smoke-test.result == 'success'",
+    "\n  dev-tag:\n",
+    "needs: [plan, build, smoke-test]\n    if: needs.smoke-test.result == 'success'",
+], ".github/actions/dev-cache-probe/action.yml" = [
+    "hash=$(uv run --project python dotfiles-setup dev-hash)",
+    "if out=$(docker manifest inspect \"${cache_ref}\" 2>&1); then",
+] }
+
+[[suite]]
+name = "ci.build-publish-matrix"
+description = "#676: the image publishes BOTH architectures from one push. The build chain must fan out over `dotfiles-setup platform-matrix` (the one declaration of what ships — it cannot live in YAML, which `no_platform_literals` scans), each leg must export PLATFORM so bake and all three content hashes agree about which architecture it is building, each leg must push only its per-architecture tag, and a manifest job must merge those into the moving tags and then assert the published index really lists every architecture. Publishing a single-architecture image under a moving tag is silent: `docker pull` on the matching host succeeds exactly as before."
+category = "ci"
+check_type = "static"
+handler = "require_tokens"
+paths = [
+  ".github/workflows/build-publish.yml",
+  "python/src/dotfiles_setup/platform_target.py",
+]
+per_path_tokens = { ".github/workflows/build-publish.yml" = [
+    "\n  plan:\n",
+    "\n  manifest:\n",
+    "matrix=$(uv run --project python dotfiles-setup platform-matrix)",
+    "target: ${{ fromJSON(needs.plan.outputs.matrix) }}",
+    "PLATFORM: ${{ matrix.target.platform }}",
+    "type=sha,prefix=,suffix=-${{ matrix.target.tag_suffix }}",
+    "docker buildx imagetools create \"${tags[@]}\" \"${sources[@]}\"",
+    "Assert the index lists every published architecture (AC1)",
+    "Assert each architecture resolves to its own image (AC2 + AC4)",
+], "python/src/dotfiles_setup/platform_target.py" = [
+    "PUBLISHED_ARCHES = (",
+    "def publish_matrix_json() -> str:",
 ] }
 
 [[suite]]

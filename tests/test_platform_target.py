@@ -14,6 +14,7 @@ re-appearing at a site nobody remembered — is invisible in a green run.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -335,3 +336,127 @@ def test_platform_cli_prints_the_resolved_fact(
     result = _cli("platform", field, platform=triple)
     assert result.returncode == 0
     assert result.stdout.strip() == expected
+
+
+# ──────────────────────────────────────────────────────────────────────
+# #676 — the set of architectures the image PUBLISHES.
+#
+# The matrix cannot live in `.github/workflows/*.yml`: those files are scanned
+# by `no_platform_literals`, so a triple written there fails the gate. Declaring
+# it here and feeding it to the workflow through `fromJSON` is what that gate
+# pushes you toward, and it means "which architectures do we ship" has exactly
+# one answer in the tree.
+# ──────────────────────────────────────────────────────────────────────
+
+
+def test_published_targets_cover_every_declared_architecture() -> None:
+    """Each published architecture yields one fully-resolved build target."""
+    targets = platform_target.published_targets()
+    assert [t.arch for t in targets] == list(platform_target.PUBLISHED_ARCHES)
+    for target in targets:
+        assert target.platform.startswith("linux/")
+        assert platform_target.platform_arch(target.platform) == target.arch
+        assert target.runner
+
+
+def test_published_targets_are_natively_built_never_emulated() -> None:
+    """No two architectures may share a runner label.
+
+    Ray's ruling for #676 was a NATIVE runner matrix over one bake with two
+    platforms, because the arm64 half would otherwise compile GCC 16.2 and
+    clang-p2996 under QEMU — the ~2h build `docker-bake.hcl` already calls out.
+    Two architectures pointing at one label is that rejected topology arriving
+    by accident, and it would look like a normal green build.
+    """
+    runners = [t.runner for t in platform_target.published_targets()]
+    assert len(set(runners)) == len(runners), f"shared runner label: {runners}"
+
+
+def test_published_targets_carry_distinct_tags() -> None:
+    """AC2: a per-architecture tag exists for each, and they cannot collide."""
+    suffixes = [t.tag_suffix for t in platform_target.published_targets()]
+    assert len(set(suffixes)) == len(suffixes)
+    assert all(suffixes)
+
+
+def test_the_repo_pin_is_one_of_the_published_architectures() -> None:
+    """The devcontainer must be able to pull what CI publishes.
+
+    `DOTFILES_PLATFORM` selects what `mise run up` asks the registry for. If the
+    pin ever named an architecture the publish matrix omits, every local pull
+    would fail against a manifest that genuinely lists two other architectures —
+    a failure that reads as a registry problem, not a config one.
+    """
+    assert platform_target.find_unpublished_pin(REPO_ROOT) is None
+
+
+def test_a_pin_outside_the_publish_matrix_is_reported(tmp_path: Path) -> None:
+    """FAIL arm: the gate above is decoration unless the drift really fails.
+
+    The fixture writes the same declaration shape `mise.toml` uses, naming an
+    architecture no `PUBLISHED_ARCHES` entry ships.
+    """
+    (tmp_path / "mise.toml").write_text(
+        "[env]\n"
+        'DOTFILES_PLATFORM = "{{ env.DOTFILES_PLATFORM | '
+        "default(value='linux/riscv64/v1') }}\"\n",
+        encoding="utf-8",
+    )
+    message = platform_target.find_unpublished_pin(tmp_path)
+    assert message is not None
+    assert "riscv64" in message
+
+
+def test_a_missing_pin_is_left_to_the_drift_check(tmp_path: Path) -> None:
+    """One edit must not be reported as two problems.
+
+    A deleted pin is `find_default_drift`'s finding; reporting it here as well
+    would put two failures on screen for one cause, and the second names the
+    publish matrix — which is not what broke.
+    """
+    (tmp_path / "mise.toml").write_text("[env]\n", encoding="utf-8")
+    assert platform_target.find_unpublished_pin(tmp_path) is None
+    assert platform_target.find_default_drift(tmp_path) is not None
+
+
+def test_publish_matrix_json_is_parseable_and_complete() -> None:
+    """The exact shape `fromJSON` consumes in the workflow."""
+    entries = json.loads(platform_target.publish_matrix_json())
+    assert isinstance(entries, list)
+    assert {key for entry in entries for key in entry} == {
+        "platform",
+        "arch",
+        "runner",
+        "tag_suffix",
+    }
+    assert len(entries) == len(platform_target.PUBLISHED_ARCHES)
+
+
+def test_publish_matrix_cli_emits_one_line() -> None:
+    """`>> $GITHUB_OUTPUT` is line-oriented: a wrapped payload breaks it."""
+    proc = subprocess.run(
+        [sys.executable, "-m", "dotfiles_setup.main", "platform-matrix"],
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=REPO_ROOT,
+    )
+    assert proc.stdout.count("\n") == 1
+    assert len(json.loads(proc.stdout)) == len(platform_target.PUBLISHED_ARCHES)
+
+
+def test_published_arch_without_a_runner_label_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FAIL arm: adding an architecture without wiring its runner must not pass.
+
+    Silently omitting the label would emit a matrix entry whose `runs-on` is
+    empty — GitHub then queues the job against no runner and it hangs until the
+    job timeout, which reads as a capacity problem rather than a config one.
+
+    Declared through `PUBLISHED_ARCHES`, which is the edit a person actually
+    makes; reaching for the private resolver would test a path no caller uses.
+    """
+    monkeypatch.setattr(platform_target, "PUBLISHED_ARCHES", ("amd64", "riscv64"))
+    with pytest.raises(ValueError, match="riscv64"):
+        platform_target.published_targets()

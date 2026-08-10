@@ -82,6 +82,7 @@ from dotfiles_setup.platform_target import (
     PLATFORM_FIELDS,
     platform_literals_main,
     platform_main,
+    publish_matrix_main,
     resolve_platform,
 )
 from dotfiles_setup.pr import automerge_main, land_main, ship_main
@@ -172,6 +173,48 @@ def _add_apt_repo_subcommand(subparsers: _SubParsers) -> None:
         "--exclude-runtime",
         action="store_true",
         help="Drop Section: libs packages (they arrive via Depends:)",
+    )
+
+
+def _add_platform_subcommands(subparsers: _SubParsers) -> None:
+    """Register the three commands that speak for the one platform parameter.
+
+    Split out of `_add_honesty_subcommands` when #676's `platform-matrix`
+    pushed that function past ruff's PLR0915 ceiling. The grouping is real
+    rather than arithmetic: these three are the read, the fan-out and the gate
+    for a single value, and adding a fourth belongs here too.
+
+    Args:
+        subparsers: The parent subparsers action to attach these to.
+    """
+    platform_parser = subparsers.add_parser(
+        "platform",
+        help="Print one resolved platform fact (#673): the triple itself, "
+        "docker's architecture name, or the `uname -m` a container of it "
+        "reports. Resolves $DOTFILES_PLATFORM, else this host's native triple",
+    )
+    platform_parser.add_argument(
+        "field",
+        choices=PLATFORM_FIELDS,
+        help="Which fact to print",
+    )
+    subparsers.add_parser(
+        "platform-matrix",
+        help="Print the publish matrix (#676) as one line of JSON: every "
+        "architecture the image ships, with its native runner label and "
+        "per-architecture tag suffix. Consumed by build-publish.yml via "
+        "`fromJSON` — the workflow cannot name a platform itself, since "
+        "`no_platform_literals` scans it",
+    )
+    subparsers.add_parser(
+        "platform-literals",
+        help="Enforce the one platform parameter (#673): reject a hard-coded "
+        "`linux/<arch>` literal anywhere outside mise.toml and "
+        "docker-bake.hcl, and reject a repo pin naming an architecture the "
+        "publish matrix does not ship (#676). Careful editing threads the "
+        "parameter through the sites you remembered; this finds the ones you "
+        "did not, and missing one yields a container running one architecture "
+        "while a probe asserts another",
     )
 
 
@@ -349,26 +392,7 @@ def _add_honesty_subcommands(subparsers: _SubParsers) -> None:
         "a missing OPTIONAL re2 dep makes it warn, fall back to JS RegExp and "
         "still exit 0, leaving every regex unchecked (#644)",
     )
-    platform_parser = subparsers.add_parser(
-        "platform",
-        help="Print one resolved platform fact (#673): the triple itself, "
-        "docker's architecture name, or the `uname -m` a container of it "
-        "reports. Resolves $DOTFILES_PLATFORM, else this host's native triple",
-    )
-    platform_parser.add_argument(
-        "field",
-        choices=PLATFORM_FIELDS,
-        help="Which fact to print",
-    )
-    subparsers.add_parser(
-        "platform-literals",
-        help="Enforce the one platform parameter (#673): reject a hard-coded "
-        "`linux/<arch>` literal anywhere outside mise.toml and "
-        "docker-bake.hcl. Careful editing threads the parameter through the "
-        "sites you remembered; this finds the ones you did not, and missing "
-        "one yields a container running one architecture while a probe "
-        "asserts another",
-    )
+    _add_platform_subcommands(subparsers)
     subparsers.add_parser(
         "classifier-axes",
         help="Enforce classifier axis enumeration: every registered "
@@ -1840,6 +1864,7 @@ def _build_command_handlers(
         ),
         "platform": lambda: sys.exit(platform_main(args.field)),
         "platform-literals": lambda: sys.exit(platform_literals_main(project_root)),
+        "platform-matrix": lambda: sys.exit(publish_matrix_main()),
         "classifier-axes": lambda: sys.exit(classifier_axes_main(project_root)),
         "dag-tick": lambda: sys.exit(run_tick(args)),
         "dag-project": lambda: sys.exit(run_project(args)),

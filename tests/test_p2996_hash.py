@@ -8,10 +8,12 @@ import re
 import subprocess
 import sys
 import textwrap
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 from dotfiles_setup.p2996_hash import (
+    BAKE_PLATFORM_ENV_VAR,
     BASE_SECTION_BEGIN,
     BASE_SECTION_END,
     HASH_LENGTH,
@@ -32,6 +34,7 @@ from dotfiles_setup.p2996_hash import (
     gather_base_inputs,
     gather_dev_inputs,
     gather_p2996_inputs,
+    resolve_bake_platform,
 )
 
 # ──────────────────────────────────────────────────────────────────────
@@ -545,13 +548,24 @@ def test_gather_p2996_inputs_missing_marker_raises(tmp_path: Path) -> None:
 # ──────────────────────────────────────────────────────────────────────
 
 
-def _run_dotfiles_setup(subcommand: str, *, env_override: str | None = None) -> str:
+def _run_dotfiles_setup(
+    subcommand: str,
+    *,
+    env_override: str | None = None,
+    platform_env: str | None = None,
+) -> str:
     env = dict(os.environ)
     # Phase D (#120): the CLI reads CLANG_P2996_REF from the environment to
     # override the committed pin. None leaves the ambient env untouched.
     env.pop("CLANG_P2996_REF", None)
+    # #676: the hash resolves PLATFORM the way bake does. Pop it so an ambient
+    # value on the runner cannot make a "the env moved the hash" arm pass for
+    # the wrong reason.
+    env.pop(BAKE_PLATFORM_ENV_VAR, None)
     if env_override is not None:
         env["CLANG_P2996_REF"] = env_override
+    if platform_env is not None:
+        env[BAKE_PLATFORM_ENV_VAR] = platform_env
     result = subprocess.run(
         [sys.executable, "-m", "dotfiles_setup.main", subcommand],
         capture_output=True,
@@ -807,3 +821,145 @@ def test_cli_base_and_p2996_hashes_are_distinct() -> None:
     base = _run_dotfiles_setup("base-hash")
     p2996 = _run_dotfiles_setup("p2996-hash")
     assert base != p2996
+
+
+# ──────────────────────────────────────────────────────────────────────
+# #676 — the hash must resolve PLATFORM the way bake itself does.
+#
+# `docker/bake-action` reads a same-named environment variable into the
+# `PLATFORM` HCL variable, so a matrix leg exporting `PLATFORM=<other triple>`
+# BUILDS that architecture. Before #676 the hash read only the HCL *default*,
+# so both legs computed one `:base-`/`:p2996-`/`:dev-<hash>` tag: the second
+# leg probe-HIT the first leg's cache and consumed a foreign-architecture
+# named context, and the `:dev-<hash>` "smoke-validated" marker pointed at
+# whichever leg pushed last. These arms pin the agreement, in both directions.
+# ──────────────────────────────────────────────────────────────────────
+
+_ARM_TRIPLE = "linux/arm64/v8"
+_AMD_TRIPLE = "linux/amd64/v2"
+
+#: The three `compute_repo_*_hash` helpers share this shape.
+_RepoHash = Callable[..., str]
+
+
+def _bake_text(platform: str = _AMD_TRIPLE) -> str:
+    return f'variable "PLATFORM" {{\n  default = "{platform}"\n}}\n'
+
+
+def test_resolve_bake_platform_falls_back_to_the_hcl_default() -> None:
+    """Env unset => today's behaviour, byte-identical."""
+    assert resolve_bake_platform(_bake_text(), env={}) == _AMD_TRIPLE
+
+
+def test_resolve_bake_platform_prefers_the_env_var_bake_reads() -> None:
+    """The whole point: python and bake resolve the SAME value."""
+    resolved = resolve_bake_platform(
+        _bake_text(), env={BAKE_PLATFORM_ENV_VAR: _ARM_TRIPLE}
+    )
+    assert resolved == _ARM_TRIPLE
+
+
+def test_resolve_bake_platform_ignores_an_empty_env_var() -> None:
+    """An exported-but-empty PLATFORM is bake's fallback case too."""
+    assert resolve_bake_platform(_bake_text(), env={BAKE_PLATFORM_ENV_VAR: "  "}) == (
+        _AMD_TRIPLE
+    )
+
+
+def test_resolve_bake_platform_prefers_an_explicit_override() -> None:
+    """An explicit caller argument outranks both."""
+    resolved = resolve_bake_platform(
+        _bake_text(),
+        override=_ARM_TRIPLE,
+        env={BAKE_PLATFORM_ENV_VAR: "linux/amd64/v2"},
+    )
+    assert resolved == _ARM_TRIPLE
+
+
+def test_resolve_bake_platform_rejects_an_unparsable_env_value() -> None:
+    """FAIL arm: garbage in PLATFORM must raise, never hash silently.
+
+    A generic name like `PLATFORM` can be set by unrelated tooling. Hashing
+    whatever it holds would mint a cache tag nothing can ever hit again; the
+    architecture is asserted instead.
+    """
+    with pytest.raises(ValueError, match="PLATFORM"):
+        resolve_bake_platform(_bake_text(), env={BAKE_PLATFORM_ENV_VAR: "sparc"})
+
+
+@pytest.mark.parametrize(
+    "compute",
+    [compute_repo_base_hash, compute_repo_p2996_hash, compute_repo_dev_hash],
+)
+def test_repo_hashes_differ_between_architectures(
+    tmp_path: Path, compute: _RepoHash
+) -> None:
+    """AC3: cache keys differ between architectures, via the explicit param."""
+    _seed_repo(tmp_path)
+    amd = compute(tmp_path, platform=_AMD_TRIPLE)
+    arm = compute(tmp_path, platform=_ARM_TRIPLE)
+    assert amd != arm, "both architectures resolved to one cache tag"
+
+
+@pytest.mark.parametrize(
+    "compute",
+    [compute_repo_base_hash, compute_repo_p2996_hash, compute_repo_dev_hash],
+)
+def test_repo_hashes_follow_the_platform_env_var(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, compute: _RepoHash
+) -> None:
+    """The arm that dies if env resolution is deleted.
+
+    The parametrized test above passes an explicit argument, so it survives a
+    library that ignores the environment entirely — and the environment is
+    exactly how `docker/bake-action` is driven from a matrix leg. This arm
+    exercises the channel CI actually uses.
+    """
+    _seed_repo(tmp_path)
+    monkeypatch.delenv(BAKE_PLATFORM_ENV_VAR, raising=False)
+    default = compute(tmp_path)
+    monkeypatch.setenv(BAKE_PLATFORM_ENV_VAR, _ARM_TRIPLE)
+    assert compute(tmp_path) != default
+
+
+@pytest.mark.parametrize(
+    "compute",
+    [compute_repo_base_hash, compute_repo_p2996_hash, compute_repo_dev_hash],
+)
+def test_repo_hashes_unchanged_when_env_repeats_the_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, compute: _RepoHash
+) -> None:
+    """No silent retagging: the amd64 hash must not move because of #676.
+
+    Every published `:base-`/`:p2996-`/`:dev-<hash>` tag in GHCR was minted by
+    the old code path. If this change moved the amd64 hash, the next CI run
+    would MISS all three tiers and pay a cold ~2h clang rebuild for nothing.
+    """
+    _seed_repo(tmp_path)
+    monkeypatch.delenv(BAKE_PLATFORM_ENV_VAR, raising=False)
+    default = compute(tmp_path)
+    monkeypatch.setenv(BAKE_PLATFORM_ENV_VAR, _AMD_TRIPLE)
+    assert compute(tmp_path) == default
+
+
+def test_gather_inputs_record_the_resolved_platform(tmp_path: Path) -> None:
+    """The resolved value must reach the dataclass, not just the resolver."""
+    _seed_repo(tmp_path)
+    assert gather_base_inputs(tmp_path, platform=_ARM_TRIPLE).platform == _ARM_TRIPLE
+    assert gather_p2996_inputs(tmp_path, platform=_ARM_TRIPLE).platform == _ARM_TRIPLE
+    dev = gather_dev_inputs(
+        tmp_path,
+        base_hash="0123456789abcdef",
+        p2996_hash="fedcba9876543210",
+        platform=_ARM_TRIPLE,
+    )
+    assert dev.platform == _ARM_TRIPLE
+
+
+@pytest.mark.parametrize("subcommand", ["base-hash", "p2996-hash", "dev-hash"])
+def test_cli_hashes_follow_the_platform_env_var(subcommand: str) -> None:
+    """End-to-end through the CLI seam CI actually invokes."""
+    default = _run_dotfiles_setup(subcommand)
+    other = _run_dotfiles_setup(subcommand, platform_env=_ARM_TRIPLE)
+    assert other != default
+    assert re.fullmatch(r"[0-9a-f]{16}", other)

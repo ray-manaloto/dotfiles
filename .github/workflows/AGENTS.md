@@ -13,7 +13,7 @@ post-failure reporting.
 | File | Purpose |
 |------|---------|
 | `ci.yml` | Thin caller (Phase B, #118): lint → contract-preflight → `changes` (path-gate) → `build-publish` (gated on `changes.build` + push-to-main exemption); OR lint → promote (push to main) |
-| `build-publish.yml` | Reusable (`on: workflow_call`) build chain: base-prep → p2996-prep → dev-prep → build → smoke-test → dev-tag (dev-prep/dev-tag = 3rd content-hash tier, #122). Inputs `{tag_strategy, publish, target, ref, p2996_ref, platform*}` (#120); outputs `{image_ref, digest}`. |
+| `build-publish.yml` | Reusable (`on: workflow_call`) build chain: plan → base-prep → p2996-prep → dev-prep → build → smoke-test → dev-tag → manifest (dev-prep/dev-tag = 3rd content-hash tier, #122; plan/manifest = dual-architecture publish, #676). Inputs `{tag_strategy, publish, target, ref, p2996_ref, platform*}` (#120); outputs `{image_ref, digest}` = the multi-arch INDEX. |
 | `image-analysis.yml` | Async (`workflow_run` on CI success): benchmark metrics + Trivy CVE scan, off the PR critical path. Analyzes `:pr-NNN` resolved from the head sha via `commits/<sha>/pulls` (#231); a PR run with no resolvable PR **fails loud** (non-gating). Resolver: `image resolve-analysis-ref` |
 | `refresh.yml` | Daily cron (00:00), `lock-refresh` job (#160 T8): regenerates all four lockfiles (pinned image mise, linux-x64), PRs via `open-refresh-pr` (App token #119), **auto-merges**. `CLANG_P2996_REF`: Renovate git-refs. |
 | `ghcr-cleanup.yml` | Weekly hash-family retention plan (#160 T12.5); dry-run ALWAYS — delete only via dispatch `delete=true` after plan review. Planner: `dotfiles_setup.ghcr_cleanup` |
@@ -23,11 +23,34 @@ post-failure reporting.
 
 Self-documented in each `action.yml`: `setup-mise` (wraps `jdx/mise-action`
 + `install_args`), `lock-refresh` (regenerates the three lockfiles, #160
-T8), and `open-refresh-pr` (App-token create-PR + optional squash
-auto-merge). **Local-composite checkout gotcha:** `./.github/actions/*`
-resolves from `$GITHUB_WORKSPACE` (empty until checkout), so jobs
-`actions/checkout` FIRST, then the composite. **Composites can't read
-`secrets`** — the App token is minted in `refresh.yml`, passed in.
+T8), `open-refresh-pr` (App-token create-PR + optional squash
+auto-merge), and `dev-cache-probe` (#676: the `:dev-<hash>` probe, shared by
+dev-prep/build/smoke-test). **Local-composite checkout gotcha:**
+`./.github/actions/*` resolves from `$GITHUB_WORKSPACE` (empty until
+checkout), so jobs `actions/checkout` FIRST, then the composite.
+**Composites can't read `secrets`** — the App token is minted in `refresh.yml`.
+
+## Dual-architecture publish (#676)
+
+Both ship from one push. Rationale + tag scheme:
+`docs/specs/devcontainer-gcc162-dual-arch.md` § D1. Three invariants, all of
+which fail SILENTLY (a matching host's `docker pull` succeeds either way):
+
+1. **The published set is declared once** — `platform_target.PUBLISHED_ARCHES`
+   → `dotfiles-setup platform-matrix` → `fromJSON`. Not in YAML:
+   `no_platform_literals` scans it. Each entry carries its **native** runner
+   label (measured, not assumed) and tag suffix.
+2. **Every leg exports `PLATFORM`** — bake and all three content hashes read
+   it, so a leg's build and its cache tags cannot disagree. The gha cache scope
+   is suffixed from the same variable.
+3. **Legs push only `:<sha>-<arch>`**; the `manifest` job assembles the moving
+   tags as an index, then asserts it lists every architecture and that each
+   resolves to a *distinct* image.
+
+⚠️ **A matrix job has ONE `outputs` map — last leg wins.** Hence no outputs on
+the prep jobs: `build` read `needs.base-prep.outputs.cache_ref`, which under a
+matrix hands one leg the other's base image. Legs recompute their own hash
+(deterministic given `PLATFORM`) instead.
 
 ## Pipeline stages
 
@@ -100,8 +123,9 @@ Push-to-main path (after a PR merge):
   (`uid=1000`) — never via `ARG` or env.
 - **`CONTAINER_REGISTRY`** env var, not `REGISTRY` (avoids HCL
   collision with the `REGISTRY` target in `docker-bake.hcl`).
-- **PR builds push** `:pr-NNN` + `:sha-<github.sha>` to GHCR so smoke-test
-  validates the exact image promote retags on merge. No `cacheonly` mode.
+- **PR builds push** `:sha-<github.sha>-<arch>` per leg; `manifest` merges them
+  into `:pr-NNN` + `:sha-<github.sha>`, so smoke validates exactly what promote
+  retags on merge. No `cacheonly` mode.
 - **Push-to-main does NOT rebuild.** The `build-publish` caller is gated
   `if: github.event_name != 'push' || github.ref != 'refs/heads/main'`, so the
   reusable chain is skipped on main; `promote` retags the PR's `:pr-NNN`.
@@ -150,47 +174,18 @@ nightly publishes. Do NOT collapse onto one cron (issue #116).
 ## GitHub App — refresh auto-merge (Phase C, #119)
 
 `refresh.yml` mints an App token (`actions/create-github-app-token`) so its
-PR fires `pull_request` CI on its own (GITHUB_TOKEN PRs don't). **One-time
-repo-admin setup:** (1) create a GitHub App with **contents: write +
-pull-requests: write**, install it, add secrets `REFRESH_APP_ID` (**numeric
-App ID**, not Client ID `Iv…`) + `REFRESH_APP_PRIVATE_KEY`; (2) enable
-**Allow auto-merge**; (3) branch protection on `main` requiring **`ci-gate`**
-— else `--auto` lands before smoke. Policy: lock-refresh auto-merges
-(squash) once ci-gate passes. `ci-gate` (always-run: passes when upstream
-succeed/skip) lets non-build PRs merge without admin.
-
-## Phase D — on-demand p2996 build (RETIRED 2026-07-07)
-
-Dispatch-build (`repository_dispatch build-p2996`, #120) retired, zero runs.
-`build-publish.yml` still resolves `inputs.p2996_ref` — resurrectable from
-pre-2026-07-07 git history without redesign.
-
-## Dependabot (`.github/dependabot.yml`)
-
-- **`interval: "cron"` enforces a 24h minimum.** The schema accepts
-  `interval: "cron"` + `cronjob: "<expr>"` + `timezone: "<tz>"`, but
-  `dependabot-api.githubapp.com` rejects sub-daily (min 24h). Use
-  `0 0 * * *` or longer, never `0 * * * *`. Validated as a check named
-  `.github/dependabot.yml` on every PR touching the file. (#86.)
+PR fires `pull_request` CI on its own (GITHUB_TOKEN PRs don't). Policy:
+lock-refresh auto-merges (squash) once `ci-gate` passes; `ci-gate`
+(always-run: passes when upstream succeed/skip) lets non-build PRs merge
+without admin. **One-time repo-admin setup: `docs/ci-debugging.md`.**
 
 ## Debugging CI failures
 
-- Check the build job diagnostics step first (`docker buildx bake
-  --print`) — it surfaces known warnings without needing the full
-  build log.
-- `mise doctor --json` output in the lint job shows tool resolution
-  issues.
-- **App-installed check error detail** (dependabot, CodeRabbit) lives in
-  the check-runs API: `gh api 'repos/OWNER/REPO/commits/BRANCH/check-runs'
-  --jq '.check_runs[]|select(.name|contains("NAME"))|.output.summary'`.
-- For Docker warning triage, see the `ci-warning-investigator` skill.
-- **`gh run list` returns multiple workflows.** A branch has both a `CI`
-  and an `autofix.ci` run per push; filter `--workflow CI` to disambiguate.
-- **autofix commit-back live** (app installed 2026-07-07, probe #171):
-  fix-computing runs FAIL BY DESIGN (`✅ Autofix task started.`); the app
-  pushes the fix commit → fresh runs. If uninstalled: #94 recipe.
-- **Re-run a failed job** — `gh run rerun RUN_ID --failed` refires only the
-  failed jobs against the same commit (re-verify a fix without a fresh push;
-  validated `ee079c5`).
+`docs/ci-debugging.md` — build diagnostics, the check-runs API, the `gh run
+list` multi-workflow trap, autofix commit-back, `gh run rerun --failed`, the
+matrix traps (#676), Dependabot, retired Phase D, and the App one-time setup.
+Split out for the
+reason `tests/TEST-INDEX.md` was: agnix's 12,000-char AGM-003 cap, and
+look-up-when-red recipes are the on-demand half.
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

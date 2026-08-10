@@ -46,12 +46,13 @@ ticket's.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -63,9 +64,12 @@ __all__ = [
     "DEFAULT_LITERAL_SITES",
     "PLATFORM_ENV_VAR",
     "PLATFORM_FIELDS",
+    "PUBLISHED_ARCHES",
     "PlatformLiteral",
+    "PublishTarget",
     "expected_uname_machine",
     "find_default_drift",
+    "find_unpublished_pin",
     "find_violations",
     "host_arch",
     "host_platform",
@@ -76,6 +80,9 @@ __all__ = [
     "platform_field",
     "platform_literals_main",
     "platform_main",
+    "publish_matrix_json",
+    "publish_matrix_main",
+    "published_targets",
     "resolve_platform",
 ]
 
@@ -131,6 +138,82 @@ _SCAN_EXCLUDED_PREFIXES = (
 # answer. Nothing here issues a `--platform`, so the exemption costs no
 # coverage.
 _SCAN_EXCLUDED_PATHS = ("python/src/dotfiles_setup/platform_target.py",)
+
+
+# The architectures the published image ships as one manifest (#676), in the
+# order the CI matrix runs them.
+PUBLISHED_ARCHES = ("amd64", "arm64")
+
+# The GitHub-hosted runner label that executes each architecture NATIVELY.
+# Native is the whole ruling: a single bake emitting both platforms would build
+# the arm64 half under QEMU, and that half compiles GCC 16.2 and clang-p2996 —
+# the "~2h compiler" rebuild `docker-bake.hcl` already names, paid on emulated
+# CPU. Availability of the arm label is measured, not assumed: a control-armed
+# probe scheduled on it and asserted `uname -m` = aarch64 (#676).
+_RUNNER_LABELS = {"amd64": "ubuntu-latest", "arm64": "ubuntu-24.04-arm"}
+
+
+@dataclass(frozen=True)
+class PublishTarget:
+    """One architecture of the published image, fully resolved for CI.
+
+    ``tag_suffix`` is what turns the moving tag into a per-architecture one
+    (``:<sha>`` → ``:<sha>-arm64``). Every matrix leg must push a DISTINCT tag:
+    they run concurrently against one registry, so two legs sharing a tag do not
+    merge, they overwrite — and the loser's smoke result silently describes an
+    image nobody can pull any more.
+    """
+
+    platform: str
+    arch: str
+    runner: str
+    tag_suffix: str
+
+
+def _publish_target(arch: str) -> PublishTarget:
+    """Resolve one architecture, or raise naming what is unwired.
+
+    Raises ``ValueError`` rather than defaulting a missing runner label to
+    something plausible: an empty ``runs-on`` queues the job against no runner
+    at all, so it hangs to the job timeout and reads as GitHub capacity rather
+    than as this table being incomplete.
+    """
+    level = _MICROARCH_LEVEL.get(arch)
+    runner = _RUNNER_LABELS.get(arch)
+    if level is None or runner is None:
+        missing = "microarchitecture level" if level is None else "runner label"
+        msg = (
+            f"architecture {arch!r} is declared in PUBLISHED_ARCHES but has no "
+            f"{missing} — publishing it would emit an unbuildable matrix entry"
+        )
+        raise ValueError(msg)
+    return PublishTarget(
+        platform=f"linux/{arch}/{level}",
+        arch=arch,
+        runner=runner,
+        tag_suffix=arch,
+    )
+
+
+def published_targets() -> tuple[PublishTarget, ...]:
+    """Every architecture the image publishes, in matrix order."""
+    return tuple(_publish_target(arch) for arch in PUBLISHED_ARCHES)
+
+
+def publish_matrix_json() -> str:
+    """The publish matrix as one line of JSON, for a workflow ``fromJSON``.
+
+    One line because ``>> "$GITHUB_OUTPUT"`` is line-oriented — a pretty-printed
+    payload is read as a truncated first line and the matrix silently loses
+    every architecture after the first.
+    """
+    return json.dumps([asdict(target) for target in published_targets()])
+
+
+def publish_matrix_main() -> int:
+    """CLI entry: print the publish matrix for the CI job that fans out."""
+    sys.stdout.write(f"{publish_matrix_json()}\n")
+    return 0
 
 
 def normalize_arch(token: str) -> str | None:
@@ -343,6 +426,35 @@ def find_default_drift(repo_root: Path) -> str | None:
     return None
 
 
+def find_unpublished_pin(repo_root: Path) -> str | None:
+    """A message when the repo's pin names an architecture CI does not publish.
+
+    ``DOTFILES_PLATFORM`` decides what ``mise run up`` asks the registry for,
+    and :data:`PUBLISHED_ARCHES` decides what CI puts there. Nothing else ties
+    the two together, so they can drift apart in a one-line edit — and the
+    result is a devcontainer that cannot start, reporting a manifest error
+    against a tag that genuinely exists and genuinely lists two other
+    architectures. That reads as a registry problem for as long as it takes
+    someone to compare these two declarations by hand.
+
+    Returns ``None`` when they agree, so it composes with the literal scan in
+    :func:`platform_literals_main`.
+    """
+    pinned = _read_default(repo_root, "mise.toml", _MISE_DEFAULT_RE)
+    if pinned is None:
+        # `find_default_drift` already reports a missing pin, and reporting it
+        # twice would make one edit look like two problems.
+        return None
+    published = {target.platform for target in published_targets()}
+    if pinned not in published:
+        return (
+            f"the repo pins {pinned!r} but the publish matrix ships "
+            f"{sorted(published)} — `mise run up` would ask the registry for an "
+            f"architecture no build produces"
+        )
+    return None
+
+
 #: What ``dotfiles-setup platform <field>`` can print. Shell callers (the
 #: `verify-arch` task) read these instead of re-implementing the triple→arch
 #: and triple→uname mappings in bash ([[zero-bash-logic]]).
@@ -375,10 +487,10 @@ def platform_main(field: str) -> int:
 def platform_literals_main(repo_root: Path) -> int:
     """CLI entry: report re-appearing literals and default drift; exit 1 if any."""
     failed = False
-    drift = find_default_drift(repo_root)
-    if drift is not None:
-        failed = True
-        logger.error("platform-literals FAIL: %s", drift)
+    for message in (find_default_drift(repo_root), find_unpublished_pin(repo_root)):
+        if message is not None:
+            failed = True
+            logger.error("platform-literals FAIL: %s", message)
     violations = find_violations(repo_root)
     if violations:
         failed = True

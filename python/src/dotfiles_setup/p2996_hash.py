@@ -29,9 +29,12 @@ mechanism.
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+
+from dotfiles_setup.platform_target import platform_arch
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -56,6 +59,13 @@ P2996_SECTION_END = "# ──── P2996_HASH_END ────"
 
 # Bake target whose definition feeds the top-tier `:dev-<hash>` cache.
 DEV_BAKE_TARGET = "dev"
+
+# The HCL variable naming the architecture, and — because bake reads a
+# same-named environment variable into every variable — the env var a caller
+# overrides it with. Both spellings are the same channel, which is exactly why
+# the hash must read it: see `resolve_bake_platform`.
+BAKE_PLATFORM_VARIABLE = "PLATFORM"
+BAKE_PLATFORM_ENV_VAR = BAKE_PLATFORM_VARIABLE
 
 
 @dataclass(frozen=True)
@@ -201,6 +211,56 @@ def _extract_bake_variable(bake_text: str, name: str) -> str:
     return match.group(1)
 
 
+def resolve_bake_platform(
+    bake_text: str,
+    *,
+    override: str | None = None,
+    env: dict[str, str] | None = None,
+) -> str:
+    """The architecture bake will build, resolved the way **bake** resolves it.
+
+    ``docker/bake-action`` reads a same-named environment variable into each
+    HCL variable, so a job exporting ``PLATFORM`` genuinely builds that
+    architecture. Reading only the HCL *default* — which is what every hash
+    tier did before #676 — makes python and bake disagree the moment a caller
+    uses that channel, and the disagreement is silent: two architectures reduce
+    to ONE ``:base-``/``:p2996-``/``:dev-<hash>`` tag, so the second build
+    probe-HITs the first's cache image and consumes a foreign-architecture
+    named context, while ``:dev-<hash>`` — the marker that means "this exact
+    content passed smoke" — ends up pointing at whichever leg pushed last.
+
+    Resolution order mirrors bake's: an explicit ``override`` (a caller naming
+    one architecture, e.g. the per-leg identity check), then the environment,
+    then the committed default. With the variable unset the answer is the HCL
+    default, so every hash is byte-identical to its pre-#676 value and no
+    already-published cache tag is orphaned.
+
+    ``PLATFORM`` is a generic name that unrelated tooling can also set, so the
+    value is *asserted* rather than trusted: an unparsable one raises here
+    instead of minting a cache tag no future run can ever hit.
+
+    Raises:
+        ValueError: when the resolved value names no known architecture.
+    """
+    environ = os.environ if env is None else env
+    from_env = environ.get(BAKE_PLATFORM_ENV_VAR, "").strip()
+    resolved = (
+        override
+        or from_env
+        or _extract_bake_variable(bake_text, BAKE_PLATFORM_VARIABLE)
+    )
+    try:
+        platform_arch(resolved)
+    except ValueError as exc:
+        msg = (
+            f"{BAKE_PLATFORM_ENV_VAR}={resolved!r} names no architecture this "
+            f"project builds — a content hash computed from it could never be "
+            f"hit again"
+        )
+        raise ValueError(msg) from exc
+    return resolved
+
+
 def _extract_bake_target_block(bake_text: str, name: str) -> str:
     """Return the full `target "<name>" { ... }` block from bake HCL.
 
@@ -270,8 +330,14 @@ def _file_digest(path: Path) -> str:
     return _sha256_hex(path.read_bytes())
 
 
-def gather_base_inputs(repo_root: Path) -> BaseHashInputs:
-    """Read every input that contributes to the `:base-<hash>` cache."""
+def gather_base_inputs(
+    repo_root: Path, *, platform: str | None = None
+) -> BaseHashInputs:
+    """Read every input that contributes to the `:base-<hash>` cache.
+
+    `platform` names one architecture explicitly; `None` resolves it the way
+    bake does (see :func:`resolve_bake_platform`).
+    """
     bake_text = (repo_root / "docker-bake.hcl").read_text()
     dockerfile_text = (repo_root / ".devcontainer" / "Dockerfile").read_text()
     base_section = _extract_dockerfile_section(
@@ -310,7 +376,7 @@ def gather_base_inputs(repo_root: Path) -> BaseHashInputs:
     )
     return BaseHashInputs(
         base_image=_extract_bake_variable(bake_text, "BASE_IMAGE"),
-        platform=_extract_bake_variable(bake_text, "PLATFORM"),
+        platform=resolve_bake_platform(bake_text, override=platform),
         base_section_digest=_sha256_hex(base_section),
         mise_lock_digest=_file_digest(lock_path),
         mise_system_config_digest=_file_digest(mise_system_config_path),
@@ -337,13 +403,16 @@ def compute_base_hash(inputs: BaseHashInputs) -> str:
     return _sha256_hex(canonical)[:HASH_LENGTH]
 
 
-def compute_repo_base_hash(repo_root: Path) -> str:
+def compute_repo_base_hash(repo_root: Path, *, platform: str | None = None) -> str:
     """Top-level helper: gather + hash the base inputs from `repo_root`."""
-    return compute_base_hash(gather_base_inputs(repo_root))
+    return compute_base_hash(gather_base_inputs(repo_root, platform=platform))
 
 
 def gather_p2996_inputs(
-    repo_root: Path, *, clang_p2996_ref: str | None = None
+    repo_root: Path,
+    *,
+    clang_p2996_ref: str | None = None,
+    platform: str | None = None,
 ) -> P2996HashInputs:
     """Read every input that contributes to the `:p2996-<hash>` cache.
 
@@ -370,7 +439,7 @@ def gather_p2996_inputs(
             else _extract_bake_variable(bake_text, "CLANG_P2996_REF")
         ),
         builder_image=_extract_bake_variable(bake_text, "BUILDER_IMAGE"),
-        platform=_extract_bake_variable(bake_text, "PLATFORM"),
+        platform=resolve_bake_platform(bake_text, override=platform),
         p2996_section_digest=_sha256_hex(p2996_section),
     )
 
@@ -391,7 +460,10 @@ def compute_p2996_hash(inputs: P2996HashInputs) -> str:
 
 
 def compute_repo_p2996_hash(
-    repo_root: Path, *, clang_p2996_ref: str | None = None
+    repo_root: Path,
+    *,
+    clang_p2996_ref: str | None = None,
+    platform: str | None = None,
 ) -> str:
     """Top-level helper: compute the p2996 hash (no base dependency, T11).
 
@@ -399,12 +471,18 @@ def compute_repo_p2996_hash(
     the Phase D (#120) on-demand build path; `None` uses the pin.
     """
     return compute_p2996_hash(
-        gather_p2996_inputs(repo_root, clang_p2996_ref=clang_p2996_ref)
+        gather_p2996_inputs(
+            repo_root, clang_p2996_ref=clang_p2996_ref, platform=platform
+        )
     )
 
 
 def gather_dev_inputs(
-    repo_root: Path, *, base_hash: str, p2996_hash: str
+    repo_root: Path,
+    *,
+    base_hash: str,
+    p2996_hash: str,
+    platform: str | None = None,
 ) -> DevHashInputs:
     """Read every input that contributes to the `:dev-<hash>` cache.
 
@@ -416,7 +494,7 @@ def gather_dev_inputs(
     return DevHashInputs(
         base_hash=base_hash,
         p2996_hash=p2996_hash,
-        platform=_extract_bake_variable(bake_text, "PLATFORM"),
+        platform=resolve_bake_platform(bake_text, override=platform),
         dockerfile_digest=_sha256_hex(dockerfile_text),
         dev_target_digest=_sha256_hex(
             _extract_bake_target_block(bake_text, DEV_BAKE_TARGET)
@@ -449,7 +527,10 @@ def compute_dev_hash(inputs: DevHashInputs) -> str:
 
 
 def compute_repo_dev_hash(
-    repo_root: Path, *, clang_p2996_ref: str | None = None
+    repo_root: Path,
+    *,
+    clang_p2996_ref: str | None = None,
+    platform: str | None = None,
 ) -> str:
     """Top-level helper: compute base + p2996 hashes, then the dev hash.
 
@@ -460,12 +541,19 @@ def compute_repo_dev_hash(
     cache built with — else the marker would point a pinned-ref hash at
     overridden-ref content.
     """
-    base_hash = compute_repo_base_hash(repo_root)
+    base_hash = compute_repo_base_hash(repo_root, platform=platform)
     p2996_hash = compute_p2996_hash(
-        gather_p2996_inputs(repo_root, clang_p2996_ref=clang_p2996_ref)
+        gather_p2996_inputs(
+            repo_root, clang_p2996_ref=clang_p2996_ref, platform=platform
+        )
     )
     return compute_dev_hash(
-        gather_dev_inputs(repo_root, base_hash=base_hash, p2996_hash=p2996_hash)
+        gather_dev_inputs(
+            repo_root,
+            base_hash=base_hash,
+            p2996_hash=p2996_hash,
+            platform=platform,
+        )
     )
 
 

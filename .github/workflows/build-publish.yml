@@ -53,11 +53,11 @@ on:
         type: string
     outputs:
       image_ref:
-        description: "The :<short-sha> ref of the built image (the one promote retags on merge)"
-        value: ${{ jobs.build.outputs.image_ref }}
+        description: "The :<short-sha> MANIFEST ref (the multi-architecture index promote retags on merge)"
+        value: ${{ jobs.manifest.outputs.image_ref }}
       digest:
-        description: "containerimage.digest of the built dev image (best-effort, from bake metadata)"
-        value: ${{ jobs.build.outputs.digest }}
+        description: "Digest of the published :<short-sha> index"
+        value: ${{ jobs.manifest.outputs.digest }}
 env:
   CONTAINER_REGISTRY: ghcr.io
   IMAGE_NAME: ray-manaloto/dotfiles-devcontainer
@@ -81,6 +81,50 @@ permissions:
   packages: write
 jobs:
   # ============================================================
+  # Publish plan (#676): the ONE declaration of which architectures ship.
+  #
+  # It lives in `dotfiles_setup.platform_target` and arrives here as JSON
+  # because `no_platform_literals` scans `.github/workflows/*.yml` — a triple
+  # written in this file fails `mise run lint`. That constraint pushes the set
+  # somewhere better than YAML anyway: one list, unit-tested, with each
+  # architecture's NATIVE runner label and per-architecture tag suffix attached.
+  #
+  # Every build job below fans out over this and exports `PLATFORM` for its leg.
+  # bake reads that env var into its `PLATFORM` variable, and since #676 so do
+  # the three content hashes — so a leg's build and its cache tags cannot
+  # disagree about which architecture is being produced.
+  # ============================================================
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - name: Install mise (python + uv)
+        uses: ./.github/actions/setup-mise
+        with:
+          install_args: "python uv"
+      - name: Resolve the publish matrix
+        id: matrix
+        run: |
+          set -euo pipefail
+          matrix=$(uv run --project python dotfiles-setup platform-matrix)
+          echo "matrix=${matrix}" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Publish plan"
+            echo ""
+            echo '```json'
+            echo "${matrix}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+  # ============================================================
   # Base cache prep: compute content-hash of devcontainer-base inputs
   # (apt + mise install + cargo crates layer) and ensure
   # ghcr.io/<owner>/<repo>:base-<hash16> exists. On hit, exits in <30s.
@@ -89,17 +133,33 @@ jobs:
   # base layer.
   # ============================================================
   base-prep:
-    runs-on: ubuntu-latest
+    needs: [plan]
+    strategy:
+      # One architecture failing must not cancel the other: a partial result is
+      # still diagnosable, and a cancelled leg reports as "cancelled" rather
+      # than naming what broke.
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: ${{ matrix.target.runner }}
     # Cold base rebuild (apt + mise install + cargo crates + conda solve) runs
     # ~20-30 min; conda solve time varies, so keep generous headroom.
     timeout-minutes: 60
     permissions:
       contents: read
       packages: write
-    outputs:
-      hash: ${{ steps.hash.outputs.hash }}
-      cache_ref: ${{ steps.hash.outputs.cache_ref }}
-      digest: ${{ steps.digest.outputs.digest }}
+    # Read by BOTH `docker/bake-action` (into the `PLATFORM` HCL variable) and
+    # `dotfiles-setup base-hash` (#676) — one value, so the image this leg
+    # builds and the tag it is cached under cannot describe different
+    # architectures.
+    env:
+      PLATFORM: ${{ matrix.target.platform }}
+    # NOTE: deliberately NO job `outputs` any more. A matrix job has ONE output
+    # set — the last leg to finish wins — so `needs.base-prep.outputs.cache_ref`
+    # would hand the arm64 build the amd64 base image roughly half the time, and
+    # the digest pin would then fail the solve with a mismatch that names
+    # neither architecture. Downstream jobs recompute the hash for their own
+    # leg instead; it is deterministic, so recomputing is free and unambiguous.
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -210,7 +270,17 @@ jobs:
   # See .devcontainer/P2996-CACHE.md for the cache mechanism.
   # ============================================================
   p2996-prep:
-    runs-on: ubuntu-latest
+    needs: [plan]
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: ${{ matrix.target.runner }}
+    # Native, never emulated: this job compiles clang-p2996 from source, and
+    # under QEMU that is the multi-hour build made several times worse. The arm
+    # runner label was measured, not assumed (#676).
+    env:
+      PLATFORM: ${{ matrix.target.platform }}
     # Cold clang-p2996 build is a multi-hour from-source compile (~2h+). The
     # earlier 60 was far too low and CANCELLED cold rebuilds (regression from
     # #154's timeout-minutes addition; only warm cache-hits — seconds — masked
@@ -220,10 +290,8 @@ jobs:
     permissions:
       contents: read
       packages: write # explicit; do not rely on workflow-level inheritance
-    outputs:
-      hash: ${{ steps.hash.outputs.hash }}
-      cache_ref: ${{ steps.hash.outputs.cache_ref }}
-      digest: ${{ steps.digest.outputs.digest }}
+    # No job `outputs` — see the note on base-prep: a matrix job has one output
+    # set, so cross-leg reads silently mix architectures.
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -353,17 +421,23 @@ jobs:
   # .github/workflows/AGENTS.md § three-tier probe cache.
   # ============================================================
   dev-prep:
-    needs: [base-prep, p2996-prep]
+    needs: [plan, base-prep, p2996-prep]
     if: inputs.tag_strategy == 'pr'
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: ${{ matrix.target.runner }}
     timeout-minutes: 45
     permissions:
       contents: read
       packages: write
-    outputs:
-      hash: ${{ steps.hash.outputs.hash }}
-      cache_ref: ${{ steps.hash.outputs.cache_ref }}
-      hit: ${{ steps.probe.outputs.hit }}
+    env:
+      PLATFORM: ${{ matrix.target.platform }}
+    # `hit` is per-leg and CANNOT be a job output (last leg wins). The `build`
+    # job re-probes for its own architecture instead — the probe is a single
+    # `docker manifest inspect`, so re-running it is cheaper than the class of
+    # bug a shared output invites.
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -382,116 +456,87 @@ jobs:
         env:
           P2996_REF: ${{ inputs.p2996_ref }}
         run: echo "CLANG_P2996_REF=${P2996_REF}" >> "$GITHUB_ENV"
-      - name: Compute dev cache hash
-        id: hash
-        run: |
-          set -euo pipefail
-          hash=$(uv run --project python dotfiles-setup dev-hash)
-          cache_ref="${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:dev-${hash}"
-          {
-            echo "hash=${hash}"
-            echo "cache_ref=${cache_ref}"
-          } >> "$GITHUB_OUTPUT"
-          {
-            echo "## Dev cache lookup"
-            echo ""
-            echo "- Hash: \`${hash}\`"
-            echo "- Cache ref: \`${cache_ref}\`"
-          } >> "$GITHUB_STEP_SUMMARY"
       - name: Log in to Container Registry
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ${{ env.CONTAINER_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Probe dev cache
+      - name: Probe dev cache for this architecture
         id: probe
-        # Same miss/non-miss discrimination as base-prep / p2996-prep:
-        # a "manifest not found" is a legitimate MISS; anything else
-        # (auth/network/registry) fails loud rather than silently
-        # forcing a rebuild. Captures stderr (no `2>/dev/null`) to honor
-        # build.no-stderr-suppression.
-        env:
-          CACHE_REF: ${{ steps.hash.outputs.cache_ref }}
-        run: |
-          set -euo pipefail
-          if out=$(docker manifest inspect "${CACHE_REF}" 2>&1); then
-            echo "hit=true" >> "$GITHUB_OUTPUT"
-            echo "Dev cache HIT — image already built AND smoke-validated; skipping build + smoke-test" >> "$GITHUB_STEP_SUMMARY"
-          else
-            rc=$?
-            if printf '%s\n' "$out" | grep -qiE 'manifest unknown|not found|no such manifest'; then
-              echo "hit=false" >> "$GITHUB_OUTPUT"
-              echo "Dev cache MISS — building + smoke-testing, then tagging the validated marker" >> "$GITHUB_STEP_SUMMARY"
-            else
-              echo "FAIL: docker manifest inspect failed with non-miss error (rc=$rc):" >&2
-              printf '%s\n' "$out" >&2
-              exit "$rc"
-            fi
-          fi
+        uses: ./.github/actions/dev-cache-probe
+        with:
+          image: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}
       - name: Set up Docker Buildx
         if: steps.probe.outputs.hit == 'true'
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
-      - name: Retag validated image to :sha / :pr (cache hit)
+      - name: Retag validated image to the per-architecture tag (cache hit)
         if: steps.probe.outputs.hit == 'true'
-        # On a hit, build + smoke-test are skipped, so the tags they
-        # would have pushed (:sha-<sha>, :pr-NNN) must be created here
-        # from the already-validated :dev-<hash> image. `promote` then
-        # finds :pr-NNN on merge exactly as it would after a real build.
+        # On a hit, build + smoke-test are skipped for THIS architecture, so
+        # the per-architecture tag they would have pushed must be created here
+        # from the already-validated :dev-<hash> image. The `manifest` job then
+        # merges the per-architecture tags into :<sha> / :pr-NNN exactly as it
+        # would after a real build, and `promote` finds :pr-NNN on merge.
+        #
+        # Only the per-architecture tag is written here (#676). The moving tags
+        # are an INDEX over both architectures, so a leg writing them directly
+        # would publish a single-architecture image under a name the other leg
+        # is about to overwrite — the two legs run concurrently, and the loser
+        # would vanish with no error anywhere.
         env:
           IMAGE: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}
-          SOURCE_REF: ${{ steps.hash.outputs.cache_ref }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          SOURCE_REF: ${{ steps.probe.outputs.cache_ref }}
+          TAG_SUFFIX: ${{ matrix.target.tag_suffix }}
           COMMIT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           short_sha=$(printf '%s' "${COMMIT_SHA}" | head -c 7)
-          tags=(--tag "${IMAGE}:${short_sha}")
-          if [ -n "${PR_NUMBER}" ]; then
-            tags+=(--tag "${IMAGE}:pr-${PR_NUMBER}")
-          fi
-          docker buildx imagetools create "${tags[@]}" "${SOURCE_REF}"
+          arch_ref="${IMAGE}:${short_sha}-${TAG_SUFFIX}"
+          docker buildx imagetools create --tag "${arch_ref}" "${SOURCE_REF}"
           source_digest=$(docker buildx imagetools inspect "${SOURCE_REF}" --format '{{.Manifest.Digest}}')
-          sha_digest=$(docker buildx imagetools inspect "${IMAGE}:${short_sha}" --format '{{.Manifest.Digest}}')
-          [ -n "${sha_digest}" ] || { echo "FAIL: empty digest after retag" >&2; exit 1; }
-          if [ "${sha_digest}" != "${source_digest}" ]; then
+          arch_digest=$(docker buildx imagetools inspect "${arch_ref}" --format '{{.Manifest.Digest}}')
+          [ -n "${arch_digest}" ] || { echo "FAIL: empty digest after retag" >&2; exit 1; }
+          if [ "${arch_digest}" != "${source_digest}" ]; then
             echo "FAIL: retag did not propagate the validated digest" >&2
             echo "  source : ${source_digest}" >&2
-            echo "  :sha   : ${sha_digest}" >&2
+            echo "  arch   : ${arch_digest}" >&2
             exit 1
           fi
           {
             echo "## Dev cache retag (validated image reused)"
             echo ""
             echo "- Source: \`${SOURCE_REF}\` (digest \`${source_digest}\`)"
-            echo "- New tags: \`:${short_sha}\`${PR_NUMBER:+, \`:pr-${PR_NUMBER}\`}"
+            echo "- New tag: \`:${short_sha}-${TAG_SUFFIX}\`"
           } >> "$GITHUB_STEP_SUMMARY"
   # ============================================================
   # Build Type 2: Dotfiles environment image (Docker → ghcr.io)
   # ============================================================
   build:
-    needs: [base-prep, p2996-prep, dev-prep]
-    # Run when the dev cache MISSED (PR, image changed) OR when dev-prep
-    # was SKIPPED (nightly/dispatch always rebuilds). Skip only on a hit,
-    # where dev-prep already retagged the validated image. `always()` is
-    # required so a skipped dev-prep doesn't cascade-skip this job; the
-    # explicit upstream success checks restore the failure gating.
+    needs: [plan, base-prep, p2996-prep, dev-prep]
+    # The job now RUNS on a dev-cache hit and no-ops inside (#676). The hit is
+    # per-architecture and a matrix job has one `outputs` map, so it cannot be
+    # read at job level without mixing the two legs — every build/push step
+    # below carries `if: steps.probe.outputs.hit != 'true'` instead. `always()`
+    # is still required so a skipped dev-prep (nightly) doesn't cascade-skip
+    # this job; the explicit upstream success checks restore failure gating.
     if: |
       always()
       && needs.base-prep.result == 'success'
       && needs.p2996-prep.result == 'success'
-      && (needs.dev-prep.result == 'skipped'
-          || (needs.dev-prep.result == 'success' && needs.dev-prep.outputs.hit != 'true'))
-    runs-on: ubuntu-latest
+      && (needs.dev-prep.result == 'skipped' || needs.dev-prep.result == 'success')
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: ${{ matrix.target.runner }}
     # Cold dev assembly (pull p2996 cache + final COPY/overlay + bake) can run
     # longer than a warm build; keep headroom for a cold path.
     timeout-minutes: 120
     permissions:
       contents: read
       packages: write
-    outputs:
-      image_ref: ${{ steps.out.outputs.image_ref }}
-      digest: ${{ steps.out.outputs.digest }}
+    env:
+      PLATFORM: ${{ matrix.target.platform }}
     steps:
       - name: Free runner disk space
         # The multi-stage Dockerfile (clang-p2996 builds clang from
@@ -527,6 +572,18 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
           persist-credentials: false
+      - name: Install mise (python + uv)
+        uses: ./.github/actions/setup-mise
+        with:
+          install_args: "python uv"
+      - name: Resolve p2996 ref override
+        # Phase D (#120): the cache refs resolved below are content-addressed by
+        # hashes that fold in CLANG_P2996_REF, so this job must honor the same
+        # override the prep jobs built with.
+        if: inputs.p2996_ref != ''
+        env:
+          P2996_REF: ${{ inputs.p2996_ref }}
+        run: echo "CLANG_P2996_REF=${P2996_REF}" >> "$GITHUB_ENV"
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
       - name: Log in to Container Registry
@@ -535,20 +592,61 @@ jobs:
           registry: ${{ env.CONTAINER_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Probe dev cache for this architecture
+        id: probe
+        uses: ./.github/actions/dev-cache-probe
+        with:
+          image: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}
+      - name: Resolve prebuilt tier refs for this architecture
+        # #676: these used to be `needs.base-prep.outputs.{cache_ref,digest}`.
+        # Under a matrix that is a correctness bug — one output map, written by
+        # the last leg to finish — so roughly half the time the arm64 build
+        # would be handed the amd64 base image. Recomputing the hash here is
+        # deterministic given PLATFORM (which this job exports), and resolving
+        # the digest from the registry proves the image actually exists before
+        # BuildKit is asked to pin it.
+        id: tiers
+        if: steps.probe.outputs.hit != 'true'
+        env:
+          IMAGE: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}
+        run: |
+          set -euo pipefail
+          base_ref="${IMAGE}:base-$(uv run --project python dotfiles-setup base-hash)"
+          p2996_ref="${IMAGE}:p2996-$(uv run --project python dotfiles-setup p2996-hash)"
+          base_digest=$(docker buildx imagetools inspect "${base_ref}" --format '{{.Manifest.Digest}}')
+          p2996_digest=$(docker buildx imagetools inspect "${p2996_ref}" --format '{{.Manifest.Digest}}')
+          for pair in "base:${base_digest}" "p2996:${p2996_digest}"; do
+            if [ -z "${pair#*:}" ]; then
+              echo "FAIL: empty digest for the ${pair%%:*} tier" >&2
+              exit 1
+            fi
+          done
+          {
+            echo "base_context=docker-image://${base_ref}@${base_digest}"
+            echo "p2996_context=docker-image://${p2996_ref}@${p2996_digest}"
+            echo "p2996_digest=${p2996_digest}"
+          } >> "$GITHUB_OUTPUT"
       - name: Extract metadata
         id: meta
+        if: steps.probe.outputs.hit != 'true'
+        # Labels only (#676). The tag set is now written by `--set dev.tags`
+        # below: every matrix leg pushes ONE per-architecture tag, and the
+        # moving tags (:sha, :pr-NNN, :dev, :latest) are an index the
+        # `manifest` job assembles from them. Letting metadata-action's tags
+        # through here would have each leg push the moving tags as a
+        # SINGLE-architecture image, and the two legs would silently overwrite
+        # one another.
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=dev,enable=${{ inputs.tag_strategy == 'nightly' }}
-            type=raw,value=latest,enable=${{ inputs.tag_strategy == 'nightly' }}
-            type=sha,prefix=
-            type=ref,event=pr
+            type=sha,prefix=,suffix=-${{ matrix.target.tag_suffix }}
       - name: Write GitHub token for build secret
+        if: steps.probe.outputs.hit != 'true'
         run: echo "${{ secrets.GITHUB_TOKEN }}" > /tmp/github_token
       - name: Build and push
         id: bake
+        if: steps.probe.outputs.hit != 'true'
         uses: docker/bake-action@d3418bd7d0e9324001bca92fa8ba175ea7e6dc9b # v7.3.0
         # PUSH=<publish> feeds the bake `PUSH` variable (target output =
         # type=image,push=${PUSH},...zstd...) instead of the `push:` shorthand,
@@ -571,24 +669,25 @@ jobs:
           # fails the solve on any digest mismatch (exact-bytes guarantee).
           set: |
             *.secrets=id=github_token,src=/tmp/github_token
-            dev.contexts.devcontainer-base=docker-image://${{ needs.base-prep.outputs.cache_ref }}@${{ needs.base-prep.outputs.digest }}
-            dev.contexts.p2996-export=docker-image://${{ needs.p2996-prep.outputs.cache_ref }}@${{ needs.p2996-prep.outputs.digest }}
+            dev.contexts.devcontainer-base=${{ steps.tiers.outputs.base_context }}
+            dev.contexts.p2996-export=${{ steps.tiers.outputs.p2996_context }}
       # docker/bake-action v6.8.0+ emits a per-job build summary with inputs,
       # errors, and a downloadable .dockerbuild record by default. The prior
       # hand-rolled "Build performance summary" + "Build diagnostics" steps
       # duplicated this and have been removed.
       - name: Export build outputs
         id: out
-        # Surface the canonical :<short-sha> ref (the one smoke validates and
-        # promote retags on merge) and the dev image digest for callers/Phase
-        # C. Digest is best-effort from bake metadata — never fails the build.
+        # Surface this leg's per-architecture ref and its digest. Digest is
+        # best-effort from bake metadata — never fails the build.
+        if: steps.probe.outputs.hit != 'true'
         env:
           METADATA: ${{ steps.bake.outputs.metadata }}
+          TAG_SUFFIX: ${{ matrix.target.tag_suffix }}
           COMMIT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           short_sha=$(printf '%s' "${COMMIT_SHA}" | head -c 7)
-          image_ref="${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${short_sha}"
+          image_ref="${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${short_sha}-${TAG_SUFFIX}"
           digest=$(printf '%s' "${METADATA:-}" | jq -r '.dev["containerimage.digest"] // empty' 2>/dev/null || true)
           {
             echo "image_ref=${image_ref}"
@@ -599,10 +698,10 @@ jobs:
         # record the exact p2996 artifact digest among its materials —
         # closing the loop from "we injected a digest-pinned context" to
         # "the published attestation proves those bytes went in".
-        if: inputs.publish
+        if: inputs.publish && steps.probe.outputs.hit != 'true'
         env:
           IMAGE_REF: ${{ steps.out.outputs.image_ref }}
-          P2996_DIGEST: ${{ needs.p2996-prep.outputs.digest }}
+          P2996_DIGEST: ${{ steps.tiers.outputs.p2996_digest }}
         run: |
           set -euo pipefail
           provenance=$(docker buildx imagetools inspect "${IMAGE_REF}" --format '{{json .Provenance}}')
@@ -615,23 +714,30 @@ jobs:
         # The content-addressed lineage of this build as a downloadable
         # artifact: which :base-/:p2996- cache refs fed the dev image and
         # what digest came out. Complements the per-job step summaries.
+        if: steps.probe.outputs.hit != 'true'
         env:
-          BASE_REF: ${{ needs.base-prep.outputs.cache_ref }}
-          P2996_REF: ${{ needs.p2996-prep.outputs.cache_ref }}
+          BASE_CONTEXT: ${{ steps.tiers.outputs.base_context }}
+          P2996_CONTEXT: ${{ steps.tiers.outputs.p2996_context }}
+          PLATFORM_TRIPLE: ${{ matrix.target.platform }}
           IMAGE_REF: ${{ steps.out.outputs.image_ref }}
           DIGEST: ${{ steps.out.outputs.digest }}
         run: |
           set -euo pipefail
           {
-            echo "base_cache_ref=${BASE_REF}"
-            echo "p2996_cache_ref=${P2996_REF}"
+            echo "platform=${PLATFORM_TRIPLE}"
+            echo "base_cache_ref=${BASE_CONTEXT}"
+            echo "p2996_cache_ref=${P2996_CONTEXT}"
             echo "image_ref=${IMAGE_REF}"
             echo "digest=${DIGEST}"
           } > /tmp/build-hash-report.txt
       - name: Upload hash report artifact
+        # Per-architecture name: two matrix legs uploading one artifact name is
+        # a hard error on upload-artifact v4+, so the arm64 leg would fail with
+        # a conflict that says nothing about architectures.
+        if: steps.probe.outputs.hit != 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: build-hash-report
+          name: build-hash-report-${{ matrix.target.arch }}
           path: /tmp/build-hash-report.txt
   # ============================================================
   # Smoke test: validate the freshly-pushed image (PR or main).
@@ -640,12 +746,23 @@ jobs:
   # and main publication.
   # ============================================================
   smoke-test:
-    needs: [build]
-    runs-on: ubuntu-latest
+    needs: [plan, build]
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    # NATIVE, and that is the point of AC4: an amd64 runner smoking the arm64
+    # image would need QEMU, and the in-image probes (TSan among them) do not
+    # survive emulation — the smoke would fail for a reason that has nothing to
+    # do with the image.
+    runs-on: ${{ matrix.target.runner }}
     timeout-minutes: 45
     permissions:
       contents: read
       packages: read
+    env:
+      PLATFORM: ${{ matrix.target.platform }}
+      DOTFILES_PLATFORM: ${{ matrix.target.platform }}
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -677,16 +794,49 @@ jobs:
           registry: ${{ env.CONTAINER_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Probe dev cache for this architecture
+        # A hit means this exact content already passed smoke on a previous
+        # run, and `dev-prep` has retagged it — re-smoking it is the ~10 minutes
+        # the third cache tier exists to avoid (#122).
+        id: probe
+        uses: ./.github/actions/dev-cache-probe
+        with:
+          image: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}
       - name: Derive image tag
         id: smoke-tag
         env:
           COMMIT_SHA: ${{ github.sha }}
-        run: echo "tag=$(printf '%s' "${COMMIT_SHA}" | head -c 7)" >> "$GITHUB_OUTPUT"
+          TAG_SUFFIX: ${{ matrix.target.tag_suffix }}
+        run: |
+          set -euo pipefail
+          short_sha=$(printf '%s' "${COMMIT_SHA}" | head -c 7)
+          echo "tag=${short_sha}-${TAG_SUFFIX}" >> "$GITHUB_OUTPUT"
       - name: Pull published image
+        if: steps.probe.outputs.hit != 'true'
         env:
           IMAGE_REF: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.smoke-tag.outputs.tag }}
         run: docker pull "${IMAGE_REF}"
+      - name: Assert the pulled image is this leg's architecture
+        # AC4, and a control arm for the whole matrix. The per-architecture tag
+        # resolves to a single image, so a plain `docker pull` cannot select the
+        # wrong one — but a WIRING mistake (both legs pushing one suffix, a
+        # matrix entry with a stale platform) would produce two tags holding the
+        # same architecture, and every other check in this job would still pass.
+        # Asking the image what it is is the only step that notices.
+        if: steps.probe.outputs.hit != 'true'
+        env:
+          IMAGE_REF: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.smoke-tag.outputs.tag }}
+          EXPECTED_ARCH: ${{ matrix.target.arch }}
+        run: |
+          set -euo pipefail
+          actual=$(docker image inspect "${IMAGE_REF}" --format '{{.Architecture}}')
+          if [ "${actual}" != "${EXPECTED_ARCH}" ]; then
+            echo "FAIL: ${IMAGE_REF} reports architecture '${actual}', expected '${EXPECTED_ARCH}'" >&2
+            exit 1
+          fi
+          echo "OK: ${IMAGE_REF} is ${actual}" >> "$GITHUB_STEP_SUMMARY"
       - name: Smoke published image
+        if: steps.probe.outputs.hit != 'true'
         env:
           IMAGE_REF: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.smoke-tag.outputs.tag }}
         run: |
@@ -700,6 +850,7 @@ jobs:
         # `status --missing` exit code cannot see (unavailable managers emit
         # state "skipped"). Plain `status --json` exits 0 even with gaps, so
         # the JSON is always captured for the artifact; the assert gates.
+        if: steps.probe.outputs.hit != 'true'
         env:
           IMAGE_REF: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.smoke-tag.outputs.tag }}
         run: |
@@ -712,7 +863,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: bootstrap-gap-report
+          name: bootstrap-gap-report-${{ matrix.target.arch }}
           path: /tmp/bootstrap-gap-report.json
           if-no-files-found: ignore
         # smoke (+ the bootstrap gap report above) is the PR-blocking image
@@ -740,13 +891,24 @@ jobs:
   # skipped on the nightly path.
   # ============================================================
   dev-tag:
-    needs: [build, smoke-test]
+    needs: [plan, build, smoke-test]
     if: needs.smoke-test.result == 'success'
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    # This job only moves tags, so it does not need a native runner — but it
+    # DOES need `dev-hash` to resolve this leg's architecture, and that reads
+    # PLATFORM. Running on the matching runner keeps the two facts in one place
+    # rather than making the label and the exported platform independently
+    # correct-by-inspection.
+    runs-on: ${{ matrix.target.runner }}
     timeout-minutes: 15
     permissions:
       contents: read
       packages: write
+    env:
+      PLATFORM: ${{ matrix.target.platform }}
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -779,11 +941,18 @@ jobs:
         env:
           IMAGE: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}
           COMMIT_SHA: ${{ github.sha }}
+          TAG_SUFFIX: ${{ matrix.target.tag_suffix }}
         run: |
           set -euo pipefail
+          # `dev-hash` resolves PLATFORM, so this is THIS leg's hash and the
+          # marker it stamps is per-architecture without any suffix of its own
+          # (#676). Stamping it from the per-architecture source tag is what
+          # keeps that true: marking a multi-architecture index with a
+          # single-architecture hash would make the other leg's probe hit an
+          # image it never validated.
           hash=$(uv run --project python dotfiles-setup dev-hash)
           short_sha=$(printf '%s' "${COMMIT_SHA}" | head -c 7)
-          source_ref="${IMAGE}:${short_sha}"
+          source_ref="${IMAGE}:${short_sha}-${TAG_SUFFIX}"
           marker_ref="${IMAGE}:dev-${hash}"
           # The just-built + smoked image is published at :sha-<sha>;
           # stamp the content-hash marker onto that exact digest.
@@ -802,3 +971,163 @@ jobs:
             echo ""
             echo "- \`${marker_ref}\` → digest \`${source_digest}\` (smoke-validated)"
           } >> "$GITHUB_STEP_SUMMARY"
+  # ============================================================
+  # Manifest merge (#676): the moving tags become an INDEX.
+  #
+  # Every build leg publishes exactly one `:<sha>-<arch>` tag and nothing else,
+  # so until this job runs there is no `:<sha>`, `:pr-NNN`, `:dev` or `:latest`
+  # at this commit. This job assembles them with one
+  # `docker buildx imagetools create -t <moving> <per-arch>…`, which builds an
+  # OCI index referencing both architectures' existing manifests — no bytes are
+  # re-uploaded and no image is rebuilt.
+  #
+  # That split is what makes `docker pull` do the right thing for both callers
+  # this repo has: the Mac asks for `:dev` and the daemon picks the entry
+  # matching what it wants, while anything needing determinism names
+  # `:<sha>-<arch>` and gets exactly one image.
+  #
+  # It runs on `always()` with explicit success checks because the legs may
+  # legitimately have SKIPPED their build+smoke on a dev-cache hit — in that
+  # case the per-architecture tags exist because `dev-prep` retagged them, and
+  # they still need merging.
+  # ============================================================
+  manifest:
+    needs: [plan, dev-prep, build, smoke-test, dev-tag]
+    if: |
+      always()
+      && needs.build.result == 'success'
+      && needs.smoke-test.result == 'success'
+      && (needs.dev-tag.result == 'success' || needs.dev-tag.result == 'skipped')
+      && inputs.publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_ref: ${{ steps.merge.outputs.image_ref }}
+      digest: ${{ steps.merge.outputs.digest }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - name: Install mise (python + uv)
+        uses: ./.github/actions/setup-mise
+        with:
+          install_args: "python uv"
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+      - name: Log in to Container Registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.CONTAINER_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Merge the per-architecture tags into the moving tags
+        id: merge
+        env:
+          IMAGE: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}
+          MATRIX: ${{ needs.plan.outputs.matrix }}
+          COMMIT_SHA: ${{ github.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          NIGHTLY: ${{ inputs.tag_strategy == 'nightly' }}
+        run: |
+          set -euo pipefail
+          short_sha=$(printf '%s' "${COMMIT_SHA}" | head -c 7)
+          # Sources come from the SAME matrix the legs fanned out over, so a
+          # published architecture can never be silently left out of the index.
+          mapfile -t suffixes < <(printf '%s' "${MATRIX}" | jq -r '.[].tag_suffix')
+          sources=()
+          for suffix in "${suffixes[@]}"; do
+            sources+=("${IMAGE}:${short_sha}-${suffix}")
+          done
+          tags=(--tag "${IMAGE}:${short_sha}")
+          if [ -n "${PR_NUMBER}" ]; then
+            tags+=(--tag "${IMAGE}:pr-${PR_NUMBER}")
+          fi
+          if [ "${NIGHTLY}" = "true" ]; then
+            tags+=(--tag "${IMAGE}:dev" --tag "${IMAGE}:latest")
+          fi
+          docker buildx imagetools create "${tags[@]}" "${sources[@]}"
+          # The MOVING per-architecture tags (spec D1): `:dev` is what a caller
+          # pulls to get its own architecture, `:dev-<arch>` is how it names one
+          # deliberately — which is what a cross-architecture identity check and
+          # a `mise.local.toml` pin both need. Written one at a time from the
+          # matching per-architecture source so each stays a single image, never
+          # an index.
+          #
+          # Safe beside the `:dev-<hash16>` content-hash markers despite sharing
+          # the prefix: `ghcr_cleanup`'s retention planner matches
+          # `^(base|p2996|dev)-[0-9a-f]{16}$`, so an architecture word is not a
+          # hash-family member and is never proposed for deletion.
+          if [ "${NIGHTLY}" = "true" ]; then
+            for suffix in "${suffixes[@]}"; do
+              docker buildx imagetools create \
+                --tag "${IMAGE}:dev-${suffix}" "${IMAGE}:${short_sha}-${suffix}"
+            done
+          fi
+          digest=$(docker buildx imagetools inspect "${IMAGE}:${short_sha}" --format '{{.Manifest.Digest}}')
+          [ -n "${digest}" ] || { echo "FAIL: empty digest after manifest merge" >&2; exit 1; }
+          {
+            echo "image_ref=${IMAGE}:${short_sha}"
+            echo "digest=${digest}"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "## Manifest published"
+            echo ""
+            echo "- Index: \`${IMAGE}:${short_sha}\` (digest \`${digest}\`)"
+            printf -- "- Source: \`%s\`\n" "${sources[@]}"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Assert the index lists every published architecture (AC1)
+        env:
+          IMAGE_REF: ${{ steps.merge.outputs.image_ref }}
+          MATRIX: ${{ needs.plan.outputs.matrix }}
+        run: |
+          set -euo pipefail
+          # `imagetools inspect --raw` returns the index document itself, so
+          # this reads what the registry will actually serve rather than what
+          # the merge step believed it wrote.
+          raw=$(docker buildx imagetools inspect "${IMAGE_REF}" --raw)
+          # Attestation entries carry `unknown/unknown` and must not count as
+          # coverage — an index of two attestations and one real image would
+          # otherwise pass a naive count.
+          mapfile -t present < <(printf '%s' "${raw}" \
+            | jq -r '.manifests[].platform | select(.os != "unknown") | .architecture' \
+            | sort -u)
+          mapfile -t expected < <(printf '%s' "${MATRIX}" | jq -r '.[].arch' | sort -u)
+          echo "index architectures: ${present[*]}"
+          if [ "${present[*]}" != "${expected[*]}" ]; then
+            echo "FAIL: ${IMAGE_REF} lists [${present[*]}], expected [${expected[*]}]" >&2
+            exit 1
+          fi
+      - name: Assert each architecture resolves to its own image (AC2 + AC4)
+        # The deferred half of #674's AC3, now runnable for real: that ticket
+        # proved a mismatched architecture FAILS the manifest measure, but only
+        # against synthetic fixtures, because no arm64 image existed to measure.
+        # This is the same probe against the registry — and it is a genuine
+        # two-armed check, since `size-report` exits 1 naming the available
+        # platforms when the requested one is absent.
+        env:
+          IMAGE_REF: ${{ steps.merge.outputs.image_ref }}
+          MATRIX: ${{ needs.plan.outputs.matrix }}
+        run: |
+          set -euo pipefail
+          sums=()
+          while read -r platform; do
+            echo "--- measuring ${platform} of ${IMAGE_REF}"
+            report=$(uv run --project python dotfiles-setup image size-report \
+              --image-ref "${IMAGE_REF}" --platform "${platform}")
+            printf '%s\n' "${report}"
+            sums+=("$(printf '%s' "${report}" | sha256sum)")
+          done < <(printf '%s' "${MATRIX}" | jq -r '.[].platform')
+          # Two architectures whose measurements are byte-identical mean the
+          # index points both entries at one image — the exact failure a plain
+          # "did the pull succeed" check cannot see.
+          unique=$(printf '%s\n' "${sums[@]}" | sort -u | wc -l)
+          if [ "${unique}" -ne "${#sums[@]}" ]; then
+            echo "FAIL: architectures produced identical measurements — the index is not really multi-architecture" >&2
+            exit 1
+          fi
+          echo "OK: each architecture resolves to a distinct image" >> "$GITHUB_STEP_SUMMARY"
