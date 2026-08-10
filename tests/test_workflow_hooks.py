@@ -80,6 +80,7 @@ REAL_CASES: tuple[tuple[str, str, bool], ...] = (
 # names. Adding or losing a job is a deliberate, reviewable diff to this list.
 EXPECTED_JOBS: frozenset[tuple[str, str]] = frozenset(
     {
+        (".github/workflows/arch-runner-probe.yml", "probe"),
         (".github/workflows/autofix.yml", "autofix"),
         (".github/workflows/build-publish.yml", "base-prep"),
         (".github/workflows/build-publish.yml", "build"),
