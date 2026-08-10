@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -305,6 +306,35 @@ def test_every_devcontainer_invocation_in_mise_toml_is_arch_scoped() -> None:
         "these devcontainer invocations resolve the container by WORKSPACE "
         f"FOLDER and can reach the other architecture: {unscoped}"
     )
+
+
+def test_every_task_resolves_the_env_before_its_first_devcontainer_call() -> None:
+    """The flags are useless if they are resolved after they are used.
+
+    Caught for real: `persistence` had the resolver placed after its first two
+    `devcontainer exec` calls, and died with `DEVCONTAINER_ID_FLAGS: unbound
+    variable` on the first `verify-local` run. That is the GOOD failure — `set
+    -u` turned it into a hard stop rather than an empty expansion that silently
+    resolves the container by workspace folder.
+    """
+    repo_root = Path(__file__).resolve().parent.parent
+    config = tomllib.loads((repo_root / "mise.toml").read_text(encoding="utf-8"))
+    tasks = config["tasks"]
+    late = []
+    for name, task in tasks.items():
+        body = task.get("run", "")
+        if not isinstance(body, str) or "$DEVCONTAINER_ID_FLAGS" not in body:
+            continue
+        lines = [ln for ln in body.splitlines() if not ln.lstrip().startswith("#")]
+        resolved = next(
+            (i for i, ln in enumerate(lines) if ln.startswith("eval ")), None
+        )
+        used = next(
+            (i for i, ln in enumerate(lines) if "$DEVCONTAINER_ID_FLAGS" in ln), None
+        )
+        if resolved is None or used is None or resolved > used:
+            late.append(name)
+    assert not late, f"these tasks use the id flags before resolving them: {late}"
 
 
 # ------------------------------------------------------------- the teardown

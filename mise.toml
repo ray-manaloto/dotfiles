@@ -459,6 +459,13 @@ description = "Verify .devcontainer/mise-system.toml tools survive a devcontaine
 # `mise run dev` / `mise run verify-local` brings it up first.
 run = '''
 set -euo pipefail
+# Resolve the id labels BEFORE the first `devcontainer exec` — every exec below
+# needs them, and `set -u` turns a missing one into a hard failure rather than a
+# silent resolve-by-folder (which is exactly how this task reached the OTHER
+# architecture's container). It failed loud on the first real run; that is the
+# design working.
+_dc_env="$(uv run --project python dotfiles-setup devcontainer env)"
+eval "${_dc_env}"
 SNAPSHOT=/tmp/mise-persistence-before.json
 AFTER=/tmp/mise-persistence-after.json
 SYSTEM_TOML=.devcontainer/mise-system.toml
@@ -495,8 +502,6 @@ if [ "$PRE_COUNT" -lt "$EXPECTED_MIN" ]; then
   exit 1
 fi
 
-_dc_env="$(uv run --project python dotfiles-setup devcontainer env)"
-eval "${_dc_env}"
 # (1a) v6 single-home-volume contract: write an in-volume canary file.
 #      This file lives on the persistent home volume; if the volume is
 #      correctly mounted across stop/up, it must survive. Contrast with
