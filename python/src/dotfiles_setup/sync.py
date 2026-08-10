@@ -243,7 +243,23 @@ def _stream(
 
 
 def registry_digest(image_ref: str) -> str | None:
-    """Manifest digest the registry serves for ``image_ref`` (no pull)."""
+    """Manifest digest the registry serves for ``image_ref`` (no pull).
+
+    Under a multi-architecture tag this is the **index** digest, and #674 asked
+    whether that still compares like-for-like against :func:`local_digests`'s
+    ``RepoDigests``. Measured, both arms, against a real ghcr index built the
+    way ours is — buildx, two architectures, an attestation manifest beside
+    each (``ghcr.io/astral-sh/uv:latest``), and cross-checked on a Docker Hub
+    index (``alpine:3.20``). ``imagetools inspect --format '{{json
+    .Manifest.Digest}}'`` and, after a ``docker pull`` scoped to ONE
+    architecture with ``--platform``, ``image inspect --format '{{json
+    .RepoDigests}}'`` return the **same index digest** — for *either*
+    architecture asked for. A ``--platform`` pull selects which manifest is
+    *materialised*, not which digest is *recorded*, so :attr:`SyncStatus.stale`
+    needs no per-architecture handling and none was added. Do not "fix" this on
+    the strength of the ``can never converge`` comment above — that one is
+    about a buildkit re-export, not about manifest lists.
+    """
     res = _run(
         [
             "docker",
