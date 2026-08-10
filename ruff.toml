@@ -15,6 +15,18 @@ extend = "python/pyproject.toml"
 # repo root, so "../tests/*.py" points outside the tree and silently stops
 # matching — the exact "dead config" fragility this file's header warns about.
 "tests/**/*.py" = ["D103", "PLR2004", "S101"]
+# TID251 (#675): the codec's own tests must reach msgspec DIRECTLY, because two
+# of them are the control arms for the whole module — they assert that msgspec
+# unaided fails on a `Path` in both directions, which is the premise `codec.py`
+# rests on and cannot be demonstrated through `codec.py`.
+#
+# It lives HERE and not in python/pyproject.toml's per-file-ignores for the
+# reason this file's header states: with a root table declared, an extended
+# "../tests/…" glob re-anchors to the repo root and silently stops matching.
+# Measured while writing #675 — the entry sat in the pyproject for four probe
+# rounds doing nothing, and S101 stayed clean throughout because THIS line was
+# the one suppressing it. A dead ignore looks exactly like a working one.
+"tests/test_codec.py" = ["D103", "PLR2004", "S101", "TID251"]
 # The plugins are standalone CLI helper scripts where print IS the user
 # interface, so T201 (print) is expected rather than a defect.
 "plugins/**/*.py" = ["T201"]

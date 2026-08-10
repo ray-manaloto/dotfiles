@@ -25,6 +25,7 @@ derive instead.
 |------|-----------|---------|
 | `test_audit.py` | pytest | `dotfiles-setup audit` command output structure and exit codes |
 | `test_bootstrap.py` | pytest | Bootstrap tool availability (`mise`, `chezmoi`, `uv`, `pixi`, python) |
+| `test_codec.py` | pytest | The one module owning msgspec's encode/decode hooks (`dotfiles_setup.codec`, #675). Round-trips a `Path` bare, inside a `Struct` and nested in containers, across both `Format`s; pins the WIRE FORM (a plain string, not a `{"__path__": …}` wrapper a round-trip test cannot distinguish); and arms the premise — msgspec unaided fails on `Path` in BOTH directions, so the module is not decoration. AC3's silent-degradation arm is explicit: an unregistered type must raise rather than fall back to `str(obj)`, which never fails and would encode `<Foo object at 0x…>` as valid JSON. AC4 is gated twice, for different failure modes: ruff TID251 driven END TO END (a file that must be flagged, plus a control that `msgspec.Struct` is not), and a tree sweep that a disabled rule leaves green. The ban list is bound to msgspec's OWN surface — 14 hook-taking entry points enumerated at runtime, so a new one in a future release fails the test instead of widening the hole |
 | `test_config.py` | pytest | Pydantic `DotfilesConfig` and container-path constants |
 | `test_devcontainer_names.py` | pytest | #677 arch-scoped container/home-volume/SSH-port names, the derived port, and the pre-#677 home-volume migration plan |
 | `test_ghcr.py` | pytest | GHCR prerequisite validation and token scope parsing |

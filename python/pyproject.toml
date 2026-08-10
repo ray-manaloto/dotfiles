@@ -35,6 +35,7 @@ dependencies = [
     # datasource bumps this the same way it bumps CLANG_P2996_REF. Dependency
     # direction is dotfiles → KB only; the KB never learns about its consumers.
     "kb-setup @ git+https://github.com/ray-manaloto/knowledge-base@46a3e7d8cbde4b7c591598d54175ae654c96f584",
+    "msgspec>=0.21.1",
 ]
 
 [project.scripts]
@@ -79,6 +80,45 @@ ignore = [
 "src/dotfiles_setup/config.py" = ["S108"]
 # S101 (assert in tests): standard pytest practice — assert is the test mechanism.
 "../tests/*.py" = ["S101"]
+# TID251: `codec.py` is the ONE module allowed to call msgspec's hook-taking
+# entry points — it is what every other caller is redirected to (#675). Without
+# this allowance the ban would make the module it exists to protect unwritable.
+"src/dotfiles_setup/codec.py" = ["TID251"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+# Every msgspec entry point that accepts a conversion hook (#675 AC4).
+#
+# ENUMERATED, not hand-listed: the set was read out of msgspec 0.21.1 by
+# scanning every public callable in `msgspec`, `.json`, `.msgpack`, `.yaml` and
+# `.toml` for `enc_hook`/`dec_hook` in its signature docs. That found FOURTEEN;
+# the four anyone would write from memory (`json.encode/decode`,
+# `msgpack.encode/decode`) are under a third of them. The `Encoder`/`Decoder`
+# classes matter as much as the functions — they take the same hooks and are the
+# form a performance-minded caller reaches for — and `convert`/`to_builtins` are
+# the ones that would slip past entirely.
+#
+# Ruff resolves attribute access AND aliased imports, both verified against this
+# config before it was committed: `msgspec.json.encode(1)` and
+# `from msgspec.json import encode` are each flagged, while `msgspec.Struct`
+# passes. That last one is the control arm — the ban is specific, so declaring a
+# model stays free.
+"msgspec.convert".msg = "route through dotfiles_setup.codec — msgspec's hooks are per-call, so a direct call carries its own conversion table and drifts (#675)"
+"msgspec.to_builtins".msg = "route through dotfiles_setup.codec (#675)"
+"msgspec.json.encode".msg = "use dotfiles_setup.codec.encode (#675)"
+"msgspec.json.decode".msg = "use dotfiles_setup.codec.decode (#675)"
+"msgspec.json.Encoder".msg = "use dotfiles_setup.codec.encode (#675)"
+"msgspec.json.Decoder".msg = "use dotfiles_setup.codec.decode (#675)"
+"msgspec.msgpack.encode".msg = "use dotfiles_setup.codec.encode(fmt=Format.MSGPACK) (#675)"
+"msgspec.msgpack.decode".msg = "use dotfiles_setup.codec.decode(fmt=Format.MSGPACK) (#675)"
+"msgspec.msgpack.Encoder".msg = "use dotfiles_setup.codec.encode(fmt=Format.MSGPACK) (#675)"
+"msgspec.msgpack.Decoder".msg = "use dotfiles_setup.codec.decode(fmt=Format.MSGPACK) (#675)"
+# yaml/toml carry no `Format` yet. The ban is deliberate rather than an
+# oversight: adding a wire format should be a decision recorded in `Format`, not
+# a call site that quietly introduces a third serialization path.
+"msgspec.yaml.encode".msg = "add a codec.Format before introducing a third wire format (#675)"
+"msgspec.yaml.decode".msg = "add a codec.Format before introducing a third wire format (#675)"
+"msgspec.toml.encode".msg = "add a codec.Format before introducing a third wire format (#675)"
+"msgspec.toml.decode".msg = "add a codec.Format before introducing a third wire format (#675)"
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

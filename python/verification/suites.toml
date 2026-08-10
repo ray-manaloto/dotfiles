@@ -2049,3 +2049,20 @@ per_path_tokens = { ".claude/skills/reap/SKILL.md" = ["name: reap"], "mise.toml"
 tokens = [
     "def ancestor_pids(",
 ]
+
+[[suite]]
+name = "workflow.codec-hook-centralisation"
+description = "#675: msgspec's conversion hooks live in ONE module and every call routes through it. The chain pinned here is pyproject's ban list -> the codec module -> the tests that arm both directions. Why a contract on top of the tests: msgspec's hooks are PER-CALL keyword arguments, not a global registration, so nothing about the library forces centralisation — a new call site that passes its own enc_hook works perfectly, and the second copy of the conversion table is the defect. The ban is enforced by ruff TID251 (banned-api), which resolves attribute access AND aliased imports; both arms were verified against this config before it landed, along with a control arm that `msgspec.Struct` still passes so declaring a model stays free. The ban list was ENUMERATED from the installed msgspec rather than hand-written: fourteen public entry points accept a hook, and the four anyone writes from memory (json/msgpack x encode/decode) are under a third of them — `Encoder`/`Decoder`, `convert` and `to_builtins` are the ones that would have slipped past. Two traps are pinned in the module itself. The registry walks the MRO because `Path()` instantiates `PosixPath`, so exact-type keying misses every real path while passing a test written against `PurePath`. The three review fixes are pinned as tokens because each was a silent defect that a green suite shipped: the MRO walk is reached through `typing.get_origin`, because a parametrized generic annotation has no `__mro__` and raised a bare `AttributeError` before any of this module's own error handling ran (and `list[int]` hid it, since `types.GenericAlias` proxies `__mro__` while `typing._GenericAlias` does not); `register()` REFUSES a type msgspec already handles, because msgspec never calls a hook for one and the registration would sit unreachable — measured, `register(Decimal, encode=float, ...)` then encoding gave back the same JSON string with `float` never called; and the seeded path decoder builds `target(value)` rather than `Path(value)`, so a `PureWindowsPath` field decodes to a `PureWindowsPath` instead of encoding fine and failing to read back. And the encode hook RAISES on an unregistered type rather than falling back to `str(obj)` — that fallback never fails, since every object has a `__str__`, so it would encode `<Foo object at 0x10a>` as valid JSON and surface as corrupt data far from here."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    "python/pyproject.toml",
+    "python/src/dotfiles_setup/codec.py",
+    "tests/test_codec.py",
+]
+per_path_tokens = { "python/pyproject.toml" = ['[tool.ruff.lint.flake8-tidy-imports.banned-api]', '"msgspec.convert".msg'], "python/src/dotfiles_setup/codec.py" = ['def enc_hook(', 'def dec_hook(', 'raise UnsupportedTypeError(type(obj), "encode")', 'resolved = typing.get_origin(candidate) or candidate', 'raise AlreadyNativeError(target, native)', '_DECODERS: dict[type, _Decoder] = {PurePath: lambda target, value: target(value)}'], "tests/test_codec.py" = ['def test_the_ban_covers_every_hook_taking_entry_point_msgspec_offers(', 'def test_the_codec_module_itself_is_allowed_to_call_msgspec(', 'def test_no_module_outside_the_codec_calls_msgspec_directly(', 'def test_msgspec_really_cannot_do_this_unaided('] }
+tokens = [
+    "def enc_hook(",
+]
