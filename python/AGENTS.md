@@ -82,10 +82,31 @@ substring matches false-positive on prefixed ENV vars (e.g.,
 `CARGO_HOME=` matches `MISE_CARGO_HOME=`); prefer leading-space anchors
 or `regex_forbid` handlers. See `feedback_forbid_tokens_substring_fragile`.
 
+## Serialization: route every call through `codec` (#675)
+
+`msgspec` is the project's model system (#669). **Never call it directly** —
+use `dotfiles_setup.codec.encode` / `.decode`. Machine-enforced by ruff
+**TID251**, whose ban list covers all **14** msgspec entry points that accept a
+conversion hook (enumerated from the library, not hand-written: `Encoder`/
+`Decoder`, `convert` and `to_builtins` are the ones a from-memory list misses).
+`codec.py` carries the only per-file allowance.
+
+The reason is that msgspec's hooks are **per-call keyword arguments**, not a
+global registration — so a direct call works fine while carrying its own copy of
+the conversion table, and the copies drift. `pathlib.Path` is unsupported in
+**both** directions, and the decode half is the quiet one: it raises only
+because the annotation says `Path`, so a field annotated `str` accepts the value
+and hands you a string that behaves like a path until something calls `.parent`.
+
+Teach it a new type with `codec.register(T, encode=…, decode=…)` — both
+directions, because a half-registration encodes cleanly and loses the type at
+read time in another process. Never add a branch to the hook itself.
+
 ## Dependencies
 
-Key packages: `pydantic` (config), `python-debian` (deb822 parsing for
-`apt_repo`; Ubuntu ships the same code as `python3-debian`), `pytest`
+Key packages: `msgspec` (models + serialization — via `codec` only, above),
+`pydantic` (config; leaving the tree in #683), `python-debian` (deb822 parsing
+for `apt_repo`; Ubuntu ships the same code as `python3-debian`), `pytest`
 (testing). Full lockfile at `uv.lock`.
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->
