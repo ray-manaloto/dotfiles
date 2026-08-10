@@ -189,6 +189,30 @@ per_path_tokens = { ".devcontainer/devcontainer.json" = [
 ] }
 
 [[suite]]
+name = "build.devcontainer-names-arch-scoped"
+description = "#677: the container name, the home volume and the SSH port all carry the architecture, so amd64 and arm64 can be up in one working directory without sharing resources. The home volume is the dangerous one — it holds ~/.local/share/mise/installs, ~/.cargo and ~/.rustup, i.e. compiled output — and docker reuses a named volume on mount without a word, so a shared volume interleaves binaries of two architectures and surfaces far from its cause. devcontainer.json therefore NAMES whole values (${localEnv:DEVCONTAINER_NAME} / ${localEnv:DEVCONTAINER_HOME_VOLUME}) instead of composing them from parts: composition in a JSON string is a place an arch can go missing where neither no_platform_literals nor a reviewer would see it. mise.toml binds the resolver at the two sites that would otherwise re-derive a name — R3's container lookup and R1's port."
+category = "build"
+check_type = "static"
+handler = "require_tokens"
+paths = [".devcontainer/devcontainer.json", "mise.toml"]
+per_path_tokens = { ".devcontainer/devcontainer.json" = [
+    "\"name\": \"${localEnv:DEVCONTAINER_NAME}\"",
+    "\"source=${localEnv:DEVCONTAINER_HOME_VOLUME},target=/home/${localEnv:USER},type=volume\"",
+], "mise.toml" = [
+    "dotfiles-setup devcontainer name container",
+    "dotfiles-setup devcontainer migrate-home",
+] }
+
+[[suite]]
+name = "build.devcontainer-names-not-recomposed"
+description = "#677 companion: reject re-composing a devcontainer resource name from parts inside devcontainer.json. This is the regression the ticket exists to prevent, and it is invisible by construction — a name assembled from ${localWorkspaceFolderBasename} and a hash simply omits the architecture, and every container still starts. Names are resolved once, in dotfiles_setup.devcontainer_names, and arrive here whole."
+category = "build"
+check_type = "static"
+handler = "regex_forbid"
+paths = [".devcontainer/devcontainer.json"]
+pattern = 'dotfiles-\$\{localWorkspaceFolderBasename\}'
+
+[[suite]]
 name = "build.uv-link-mode-not-global"
 description = "UV_LINK_MODE=copy must not be a global ENV (breaks runtime)"
 category = "build"

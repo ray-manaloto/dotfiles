@@ -286,8 +286,9 @@ _RULES: tuple[Rule, ...] = (
         "devcontainer up",
         re.compile(_CMD + r"devcontainer\s+up\b"),
         "Use `mise run up` (or `mise run dev-rebuild` to force-refresh) — "
-        "the task carries BASE_IMAGE/platform/ssh-port env and the "
-        "workspace-hash collision guard a raw `devcontainer up` misses.",
+        "the task carries BASE_IMAGE/platform env and resolves the "
+        "architecture-scoped container/volume/port names a raw "
+        "`devcontainer up` misses (#677).",
         _V1,
     ),
     Rule(

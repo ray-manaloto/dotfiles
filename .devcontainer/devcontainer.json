@@ -22,13 +22,14 @@
 // ===============================================================
 // TWO independent SSH requirements, TWO mechanisms:
 //
-// (R1) INBOUND shell: `ssh ${USER}@localhost -p 4444` from Mac host
+// (R1) INBOUND shell: `ssh ${USER}@localhost -p $(mise run ssh-port)` from host
 //      opens a shell into the container. Provided by:
 //      - `features.ghcr.io/devcontainers/features/sshd` — installs
 //        openssh-server. NOTE: the feature's `port`/`username`/`startNow`
 //        options are silently dropped (see research report); sshd
 //        listens on its hardcoded **2222** internally. External port is
-//        `${DEVCONTAINER_SSH_PORT}` (default 4444) via `appPort`.
+//        `${DEVCONTAINER_SSH_PORT}` via `appPort` — derived per
+//        workspace+architecture (#677), or pinned in mise.local.toml.
 //      - `postCreateCommand` copies the host user's authorized keys
 //        (pre-written by `dotfiles-setup docker initialize-host` on the
 //        host from `ssh-add -L`) into `~/.ssh/authorized_keys` so the
@@ -75,7 +76,12 @@
 // ===============================================================
 {
   "$schema": "https://raw.githubusercontent.com/devcontainers/spec/main/schemas/devContainer.schema.json",
-  "name": "dotfiles-${localWorkspaceFolderBasename}-${localEnv:USER}-${localEnv:DEVCONTAINER_WORKSPACE_HASH}-${localEnv:DEVCONTAINER_SSH_PORT}",
+  // #677: the container/volume/port names are RESOLVED, never composed here.
+  // `mise run up` evals `dotfiles-setup devcontainer env`, which derives all
+  // of them — including the architecture word, which must come from
+  // platform_target and never from a literal (`no_platform_literals`). A JSON
+  // string is also the one place a reviewer cannot see an arch is missing.
+  "name": "${localEnv:DEVCONTAINER_NAME}",
   "build": {
     "dockerfile": "Dockerfile.host-user",
     // #673: the platform is ONE parameter — mise.toml's global
@@ -92,7 +98,7 @@
   },
   "runArgs": [
     "--name",
-    "dotfiles-${localWorkspaceFolderBasename}-${localEnv:USER}-${localEnv:DEVCONTAINER_WORKSPACE_HASH}-${localEnv:DEVCONTAINER_SSH_PORT}",
+    "${localEnv:DEVCONTAINER_NAME}",
     "--env-file",
     "${localEnv:HOME}/.local/state/dotfiles/doppler.env",
     "--platform=${localEnv:DOTFILES_PLATFORM}",
@@ -103,7 +109,11 @@
   "mounts": [
     "source=${localEnv:HOME}/.local/state/dotfiles,target=/tmp/dotfiles-host-state,type=bind",
     "source=/run/host-services/ssh-auth.sock,target=/run/host-services/ssh-auth.sock,type=bind",
-    "source=dotfiles-${localWorkspaceFolderBasename}-${localEnv:USER}-${localEnv:DEVCONTAINER_WORKSPACE_HASH}-home,target=/home/${localEnv:USER},type=volume",
+    // Architecture-scoped (#677). The home volume carries compiled output —
+    // ~/.local/share/mise/installs, ~/.cargo, ~/.rustup — so sharing one
+    // across architectures interleaves binaries silently: docker reuses a
+    // named volume on mount and reports nothing.
+    "source=${localEnv:DEVCONTAINER_HOME_VOLUME},target=/home/${localEnv:USER},type=volume",
   ],
   "containerEnv": {
     // ─ Platform hints ────────────────────────────────────────────────
