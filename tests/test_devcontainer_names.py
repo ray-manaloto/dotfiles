@@ -49,12 +49,22 @@ def _names(
     port_override: str | int | None = None,
     env: dict[str, str] | None = None,
 ) -> DevcontainerNames:
+    """Resolve names against an EXPLICIT empty environment by default.
+
+    `env={}` rather than `env=None`, because `None` means "read `os.environ`"
+    and these tests then depend on the shell they run in. That is not
+    hypothetical: `mise run ship` runs pytest under mise, which exports
+    `DEVCONTAINER_SSH_PORT=4444` from this clone's `mise.local.toml` pin — so
+    both architectures resolved to port 4444 and
+    `test_both_architectures_collide_on_nothing` failed in `ship` after passing
+    in a bare `uv run`. The test was right and the harness was leaky.
+    """
     return resolve_names(
         workspace=workspace,
         user=USER,
         platform=platform,
         port_override=port_override,
-        env=env,
+        env={} if env is None else env,
     )
 
 
@@ -167,6 +177,22 @@ def test_explicit_override_wins_over_derivation() -> None:
 def test_blank_override_falls_through_to_derivation() -> None:
     """An unset var reaches us from mise as the empty string, not as absence."""
     assert _names(env={SSH_PORT_ENV_VAR: "  "}).ssh_port == 21281
+
+
+def test_resolution_is_hermetic_against_an_ambient_pin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An ambient DEVCONTAINER_SSH_PORT must not reach an explicit-env resolve.
+
+    The control arm for the leak that broke `ship`: with the variable really set
+    in the process environment, an `env={}` resolve still derives, and an
+    `env=None` resolve picks the ambient value up. If the first assertion ever
+    starts matching 4444, the test harness has gone porous again.
+    """
+    monkeypatch.setenv(SSH_PORT_ENV_VAR, "4444")
+    assert _names().ssh_port == 21281
+    ambient = resolve_names(workspace=WORKSPACE, user=USER, platform=AMD64)
+    assert ambient.ssh_port == 4444
 
 
 def test_unparsable_override_fails_loud() -> None:
