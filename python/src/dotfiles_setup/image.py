@@ -24,6 +24,7 @@ from dotfiles_setup.platform_target import (
     is_emulated,
     platform_arch,
     resolve_platform,
+    ships_gcc_latest,
 )
 
 if TYPE_CHECKING:
@@ -487,8 +488,14 @@ clang++ -fuse-ld=lld /tmp/sanitizer.cpp -o /tmp/lld-linked \
 /tmp/lld-linked >/dev/null || { echo "FAIL: lld-linked binary did not run"; exit 1; }
 echo "OK: lld links (-fuse-ld=lld) + binary runs"
 echo "=== reflection compiler checks ==="
-test -x /opt/gcc-latest/bin/g++ \
-  || { echo "FAIL: gcc-latest binary missing"; exit 1; }
+if [ -n "$GCC_LATEST_PRESENT" ]; then
+  test -x /opt/gcc-latest/bin/g++ \
+    || { echo "FAIL: gcc-latest binary missing"; exit 1; }
+else
+  echo "SKIP: gcc-latest not shipped on this architecture (upstream is x86_64-only)"
+  test ! -e /opt/gcc-latest/bin/g++ \
+    || { echo "FAIL: gcc-latest present where it is declared unshipped"; exit 1; }
+fi
 test -x /opt/clang-p2996/bin/clang++ \
   || { echo "FAIL: clang-p2996 missing"; exit 1; }
 echo "=== clang-p2996 ref pin check ==="
@@ -544,9 +551,11 @@ if [ -z "$P2996_LIBCXX_SO" ]; then
   echo "FAIL: clang-p2996 libc++.so.1 not found in image"; exit 1
 fi
 P2996_LIBCXX_DIR=$(dirname "$P2996_LIBCXX_SO")
-/opt/gcc-latest/bin/g++ -std=c++26 -freflection /tmp/refl-func.cpp -o /tmp/refl-gcc \
-  || { echo "FAIL: gcc-latest reflection link failed"; exit 1; }
-/tmp/refl-gcc || { echo "FAIL: gcc-latest reflection binary did not run"; exit 1; }
+if [ -n "$GCC_LATEST_PRESENT" ]; then
+  /opt/gcc-latest/bin/g++ -std=c++26 -freflection /tmp/refl-func.cpp -o /tmp/refl-gcc \
+    || { echo "FAIL: gcc-latest reflection link failed"; exit 1; }
+  /tmp/refl-gcc || { echo "FAIL: gcc-latest reflection binary did not run"; exit 1; }
+fi
 /opt/clang-p2996/bin/clang++ -std=c++2c -freflection -freflection-latest \
   -fexpansion-statements -stdlib=libc++ -Wl,-rpath,"$P2996_LIBCXX_DIR" \
   /tmp/refl-func.cpp -o /tmp/refl-clang \
@@ -639,6 +648,7 @@ def _tier3_var_lines(
     *,
     emulated: bool,
     expected_llvm_version: str | None = None,
+    gcc_latest: bool = True,
 ) -> str:
     """Injected-data header lines the tier-3 substrate reads.
 
@@ -650,6 +660,11 @@ def _tier3_var_lines(
     ``EXPECTED_LLVM_VERSION`` is the apt LLVM release (#294) the default-clang
     and utility ``--version`` guards assert; empty leaves those guards dormant
     (unit-test friendly), like the tier-1 guards.
+    ``GCC_LATEST_PRESENT`` gates the kayari GCC-17 checks: that compiler is
+    published for amd64 only, so demanding it on another architecture would
+    fail the smoke over an artifact upstream never built (#698). It defaults to
+    present — the direction that fails LOUDLY when a caller forgets to say,
+    rather than silently dropping a real compiler check.
     """
     strict = "1" if _SHA_RE.match(expected_p2996_ref) else ""
     tsan_run_skip = "1" if emulated else ""
@@ -657,6 +672,7 @@ def _tier3_var_lines(
         f"EXPECTED_P2996_REF={shlex.quote(expected_p2996_ref)}\n"
         f"P2996_REF_STRICT={shlex.quote(strict)}\n"
         f"TSAN_RUN_SKIP={shlex.quote(tsan_run_skip)}\n"
+        f"GCC_LATEST_PRESENT={shlex.quote('1' if gcc_latest else '')}\n"
         f"EXPECTED_LLVM_VERSION={shlex.quote(expected_llvm_version or '')}\n"
     )
 
@@ -666,6 +682,7 @@ def build_tier3_script(
     expected_p2996_ref: str,
     emulated: bool,
     expected_llvm_version: str | None = None,
+    gcc_latest: bool = True,
 ) -> str:
     """Standalone tier-3 compiler smoke script: sanitizers + reflection.
 
@@ -676,7 +693,8 @@ def build_tier3_script(
     tier-3 checks (home-volume, TMPDIR, R2 SSH) stay bash-only and are NOT part
     of this substrate. ``emulated`` skips the TSan RUN (the compile still runs).
     ``expected_llvm_version`` (#294) drives the apt-suite default-clang + utility
-    ``--version`` guards; unset leaves them dormant.
+    ``--version`` guards; unset leaves them dormant. ``gcc_latest`` states
+    whether this architecture's image carries the kayari GCC-17 deb (#698).
     """
     return (
         "set -euo pipefail\n"
@@ -684,6 +702,7 @@ def build_tier3_script(
             expected_p2996_ref,
             emulated=emulated,
             expected_llvm_version=expected_llvm_version,
+            gcc_latest=gcc_latest,
         )
         + _TIER3_COMPILER_BODY
     )
@@ -711,12 +730,40 @@ def build_tier1_script(
     )
 
 
+@dataclasses.dataclass(frozen=True)
+class ImageArch:
+    """What is true of the published image FOR ONE architecture.
+
+    Grouped rather than threaded as loose booleans because they answer a single
+    question and arrive from a single source — the platform triple. ``emulated``
+    (#141) and ``gcc_latest`` (#698) were added two years and two tickets apart
+    and would otherwise be the fourth and sixth parameter of a builder that has
+    no other reason to grow.
+
+    Both defaults describe the amd64 image built natively, which is the case a
+    caller that says nothing almost certainly means — and, for ``gcc_latest``,
+    the direction that fails LOUDLY rather than silently skipping a real
+    compiler check.
+    """
+
+    emulated: bool = False
+    gcc_latest: bool = True
+
+    @classmethod
+    def for_platform(cls, platform: str) -> ImageArch:
+        """Resolve every architecture-dependent fact from one platform triple."""
+        return cls(
+            emulated=_is_emulated(platform),
+            gcc_latest=ships_gcc_latest(platform),
+        )
+
+
 def build_smoke_script(
     expected_p2996_ref: str,
     *,
     expected_identity: Mapping[str, str] | None = None,
     expected_tools: Mapping[str, str] | None = None,
-    emulated: bool = False,
+    arch: ImageArch | None = None,
     expected_llvm_version: str | None = None,
 ) -> str:
     """Build the inline CI (no-mount) smoke test script.
@@ -747,7 +794,7 @@ def build_smoke_script(
     the ``(missing)``-count check alone passes green. An empty/unset value
     leaves the guard dormant (unit-test friendly).
 
-    ``emulated`` (gap B — TSan under Rosetta) controls whether the
+    ``arch.emulated`` (gap B — TSan under Rosetta) controls whether the
     ThreadSanitizer binary is RUN after it is compiled. The compile always
     runs (it proves the toolchain); the RUN is skipped under emulation, where
     TSan's shadow-memory layout is incompatible with Rosetta/QEMU.
@@ -756,14 +803,21 @@ def build_smoke_script(
     release the default-clang identity gate and the ``opt``/``llvm-bolt``/
     ``mlir-opt``/``flang`` ``--version`` guards assert. Unset leaves those
     guards dormant (unit-test friendly).
+
+    ``arch`` (:class:`ImageArch`) carries the architecture-dependent facts.
+    Its ``gcc_latest=False`` does not leave that check dormant the way the
+    guards above do — it asserts the compiler is ABSENT, so "we do not ship it
+    here" is verified rather than merely unexamined.
     """
+    arch = ImageArch() if arch is None else arch
     header = (
         "set -euo pipefail\n"
         + _tier1_var_lines(expected_identity, expected_tools)
         + _tier3_var_lines(
             expected_p2996_ref,
-            emulated=emulated,
+            emulated=arch.emulated,
             expected_llvm_version=expected_llvm_version,
+            gcc_latest=arch.gcc_latest,
         )
     )
     return (
@@ -852,13 +906,14 @@ def build_smoke_docker_cmd(
         expected_p2996_ref = resolve_expected_p2996_ref()
     if expected_identity is None:
         expected_identity = resolve_expected_identity_head()
-    if emulated is None:
-        emulated = _is_emulated(platform)
+    arch = ImageArch.for_platform(platform)
+    if emulated is not None:
+        arch = dataclasses.replace(arch, emulated=emulated)
     script = build_smoke_script(
         expected_p2996_ref,
         expected_identity=expected_identity,
         expected_tools=resolve_declared_tools(),
-        emulated=emulated,
+        arch=arch,
         expected_llvm_version=resolve_expected_llvm_version(),
     )
     return [

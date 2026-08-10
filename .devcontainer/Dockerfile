@@ -230,6 +230,12 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ARG GRAPHVIZ_VERSION=15.1.0
 ARG GRAPHVIZ_DEB=ubuntu_26.04_graphviz-15.1.0-cmake.deb
 ARG GRAPHVIZ_DEB_SHA256=f3294aeea3618044022874823344a1154ee7272857e82f248610fcaa7d2dc4c5
+# BuildKit's automatic target-architecture arg (#698). DECLARED, never defaulted:
+# an automatic ARG a stage does not declare expands to the EMPTY STRING, so an
+# undeclared TARGETARCH would send every architecture — amd64 included — down
+# the else-branch below and silently drop graphviz from the image it works on.
+# Gated by `test_every_stage_that_reads_targetarch_also_declares_it`.
+ARG TARGETARCH
 # Re-assert the stage shell: hadolint 2.15.x forgets a stage's SHELL after any
 # mid-stage ARG (minimal repro: FROM + SHELL bash + ARG X=y + RUN with a bashism
 # flags SC3011; drop the ARG and it is clean) and then wrongly lints later RUNs
@@ -243,22 +249,36 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # devcontainer-base lacks libltdl7 once apt:graphviz is gone → dot would fail to
 # start); libgd3+libcairo2 back the gd plugin (png/gif); libgts backs the neato/
 # fdp/circo/twopi layout engines. Verified on a bare ubuntu:26.04 amd64 base.
+#
+# amd64 ONLY (#698). Upstream publishes four Linux debs — ubuntu_22.04 through
+# ubuntu_26.04 — and every one is amd64; the only arm64 artefact in the 15.1.0
+# release is a macOS .pkg (probed 2026-08-10, GitLab package 62359347, 44 files).
+# So other architectures take apt's graphviz, which is the lean floor this deb
+# was chosen to beat by ~21 MB in the first place. The version assertion follows
+# the branch: amd64 asserts the pinned major, apt asserts what dpkg says it just
+# installed — two independent sources either way, never a restated literal.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     export DEBIAN_FRONTEND=noninteractive && \
-    curl -fLSs -o "/tmp/${GRAPHVIZ_DEB}" "https://gitlab.com/api/v4/projects/4207231/packages/generic/graphviz-releases/${GRAPHVIZ_VERSION}/${GRAPHVIZ_DEB}" && \
-    echo "${GRAPHVIZ_DEB_SHA256}  /tmp/${GRAPHVIZ_DEB}" | sha256sum -c - && \
     apt-get update && \
-    apt-get install -y --no-install-recommends "/tmp/${GRAPHVIZ_DEB}" libltdl7 libexpat1 zlib1g libgd3 libgts-0.7-5t64 libcairo2 && \
-    rm -f "/tmp/${GRAPHVIZ_DEB}" && \
-    rm -f /usr/lib/graphviz/libgvplugin_{ascii,devil,gdk,gs,kitty,lasi,pango,poppler,rsvg,vt,webp,xlib}.so.8 && \
-    rm -f /usr/lib/graphviz/config8 && \
+    if [ "${TARGETARCH}" = "amd64" ]; then \
+      curl -fLSs -o "/tmp/${GRAPHVIZ_DEB}" "https://gitlab.com/api/v4/projects/4207231/packages/generic/graphviz-releases/${GRAPHVIZ_VERSION}/${GRAPHVIZ_DEB}" && \
+      echo "${GRAPHVIZ_DEB_SHA256}  /tmp/${GRAPHVIZ_DEB}" | sha256sum -c - && \
+      apt-get install -y --no-install-recommends "/tmp/${GRAPHVIZ_DEB}" libltdl7 libexpat1 zlib1g libgd3 libgts-0.7-5t64 libcairo2 && \
+      rm -f "/tmp/${GRAPHVIZ_DEB}" && \
+      rm -f /usr/lib/graphviz/libgvplugin_{ascii,devil,gdk,gs,kitty,lasi,pango,poppler,rsvg,vt,webp,xlib}.so.8 && \
+      rm -f /usr/lib/graphviz/config8 && \
+      expected_major="${GRAPHVIZ_VERSION%%.*}"; \
+    else \
+      apt-get install -y --no-install-recommends graphviz && \
+      expected_major="$(dpkg-query -W -f='${Version}' graphviz | sed 's/^[0-9]*://; s/\..*//')"; \
+    fi && \
     dot -c && \
     printf 'digraph{a->b->c;a->c}' | dot -Tsvg -o /dev/null && \
     printf 'digraph{a->b}' | dot -Tpng -o /dev/null && \
     printf 'graph{a--b--c--a}' | neato -Tsvg -o /dev/null && \
     dot_version="$(dot -V 2>&1)" && \
-    case "$dot_version" in *"version 15"*) ;; *) echo "ERROR: unexpected dot version: $dot_version" >&2; exit 1;; esac
+    case "$dot_version" in *"version ${expected_major}."*) ;; *) echo "ERROR: dot reports '$dot_version', expected major ${expected_major}" >&2; exit 1;; esac
 
 # LLVM-22 C++ toolchain build-time smoke (#222 PR-C).
 # The apt llvm/clang/lld/lldb/clang-tools packages (declared in mise-system.toml
@@ -326,6 +346,33 @@ RUN --mount=type=cache,id=mise-cache,target=/usr/local/share/mise/cache,sharing=
 # or mise doctor will report them as missing)
 RUN mise reshim -f && \
     test -n "$(find /usr/local/share/mise/shims -mindepth 1 -maxdepth 1 -print -quit)" || { echo "ERROR: /usr/local/share/mise/shims empty after reshim — mise has no installed tools to shim"; exit 1; }
+
+# Architecture EXECUTION check (#698). Every self-check above counts or stats:
+# `mise ls --installed | wc -l`, `test -d`, a non-empty shims dir. None of them
+# can see the defect this exists for — a tool resolved for the wrong platform
+# downloads, installs, lists and stats exactly like a correct one. The only
+# thing it cannot do is RUN, so this runs it.
+#
+# Assert the capability, never a symptom ([[probes-need-a-control-arm]] rule 9):
+# no `uname -m` comparison, no ELF-header sniffing, no version string — each of
+# those binds something we do not own and goes quietly dead when it changes.
+# A binary that executes on this CPU is the whole claim.
+#
+# The names are cross-checked against `.config/mise/conf.d/shared.toml` by
+# `test_every_execution_probe_is_a_tool_the_image_installs`, so a tool rename
+# fails a unit test rather than a 30-minute base build. They deliberately span
+# backends (aqua/ubi/github/cargo) — the backend is what resolves the platform,
+# so one probe per download path is what makes this more than a spot check.
+ARG ARCH_EXEC_PROBES="jq shfmt hk pkl uv chezmoi"
+RUN checked=0; \
+    for probe in ${ARCH_EXEC_PROBES}; do \
+      bin="/usr/local/share/mise/shims/${probe}"; \
+      test -x "$bin" || { echo "ERROR: expected mise shim ${probe} is missing"; exit 1; }; \
+      "$bin" --version >/dev/null || { echo "ERROR: ${probe} INSTALLED but did not execute on $(uname -m) — its tool was resolved for another architecture (#698)"; exit 1; }; \
+      checked=$((checked + 1)); \
+    done; \
+    test "$checked" -ge 3 || { echo "ERROR: architecture execution check ran only ${checked} probe(s) — ARCH_EXEC_PROBES is empty or was not expanded"; exit 1; }; \
+    echo "OK: ${checked} mise-installed tools execute natively on $(uname -m)"
 
 # Final global permissions check
 RUN chmod -R 777 /usr/local/share/mise /usr/local/share/cargo /usr/local/share/rustup
@@ -493,6 +540,19 @@ ARG GCC_LATEST_DEB=gcc-latest_17.0.0-20260719git6d5d980f76c3.deb
 # stays byte-exact without the old human-recompute friction. To repair by hand:
 # `uv run --project python dotfiles-setup gcc-sha` (or `--check` to dry-run).
 ARG GCC_LATEST_DEB_SHA256=42be4e6bcbd5d60f8f738a9d025d6d5b3e73b395d82e9558db3b057952f4905f
+# amd64 ONLY, permanently (#698). This is not a gap upstream may close — the
+# maintainer states the policy on the index page: "Only the C and C++ compilers
+# are included, and only for x86_64, in a single large package." Probed
+# 2026-08-10: one .deb, and the page's arch-token counts are x86_64=1, arm64=0.
+# The named alternative (Fedora Rawhide's GCC-trunk COPR, "built for more
+# architectures") ships RPMs for Rawhide and cannot serve an Ubuntu 26.04 image.
+#
+# Consequence, decided by Ray 2026-08-10: arm64 ships WITHOUT gcc-latest, and
+# its modern-GCC slot goes to conda-forge gcc — which does publish linux-aarch64
+# (204 files at 16.1.0, identical coverage to linux-64). So the "exactly 3 gcc
+# compilers" invariant is ARCHITECTURE-DEPENDENT: 3 on amd64, 2 on arm64.
+# clang-p2996 is unaffected — it is built from source and is portable.
+ARG TARGETARCH
 # #222 PR-A (dev-hash only): the kayari .deb ships UNSTRIPPED backend
 # executables — cc1plus 518M, cc1 480M, lto1 463M, lto-dump 463M each carry
 # .debug_*+.symtab (probe-verified). `strip --strip-all` reclaims ~1.68 GB and
@@ -502,14 +562,18 @@ ARG GCC_LATEST_DEB_SHA256=42be4e6bcbd5d60f8f738a9d025d6d5b3e73b395d82e9558db3b05
 # in the SAME RUN as dpkg -i, with a trivial compile (invokes the stripped
 # cc1plus) as the loud post-condition — the reflection smoke below is the
 # deeper functional gate.
-RUN curl -fLOSs "https://kayari.org/gcc-latest/${GCC_LATEST_DEB}" && \
-    echo "${GCC_LATEST_DEB_SHA256}  ${GCC_LATEST_DEB}" | sha256sum -c - && \
-    dpkg -i "${GCC_LATEST_DEB}" && \
-    rm -f "${GCC_LATEST_DEB}" && \
-    test -x /opt/gcc-latest/bin/g++ || { echo "ERROR: gcc-latest binary missing after dpkg install"; exit 1; } && \
-    find /opt/gcc-latest -type f \( -name cc1 -o -name cc1plus -o -name lto1 -o -name lto-dump \) -exec strip --strip-all {} + && \
-    printf 'int main(){}\n' | /opt/gcc-latest/bin/g++ -x c++ - -o /tmp/gcc-strip-check && \
-    rm -f /tmp/gcc-strip-check
+RUN if [ "${TARGETARCH}" != "amd64" ]; then \
+      echo "gcc-latest: SKIPPED on ${TARGETARCH} — kayari.org publishes x86_64 only (#698)"; \
+    else \
+      curl -fLOSs "https://kayari.org/gcc-latest/${GCC_LATEST_DEB}" && \
+      echo "${GCC_LATEST_DEB_SHA256}  ${GCC_LATEST_DEB}" | sha256sum -c - && \
+      dpkg -i "${GCC_LATEST_DEB}" && \
+      rm -f "${GCC_LATEST_DEB}" && \
+      { test -x /opt/gcc-latest/bin/g++ || { echo "ERROR: gcc-latest binary missing after dpkg install"; exit 1; }; } && \
+      find /opt/gcc-latest -type f \( -name cc1 -o -name cc1plus -o -name lto1 -o -name lto-dump \) -exec strip --strip-all {} + && \
+      printf 'int main(){}\n' | /opt/gcc-latest/bin/g++ -x c++ - -o /tmp/gcc-strip-check && \
+      rm -f /tmp/gcc-strip-check; \
+    fi
 
 # clang-p2996 (Bloomberg fork; local p2996-export stage on the cold path,
 # digest-pinned :p2996-<hash16> registry context on the warm path)
@@ -519,14 +583,20 @@ COPY --from=p2996-export /opt/clang-p2996 /opt/clang-p2996
 ENV PATH="/opt/gcc-latest/bin:/opt/clang-p2996/bin:${PATH}" \
     LD_RUN_PATH="/opt/gcc-latest/lib64"
 
-# Smoke test: GCC-16 reflection
-RUN printf '#include <meta>\nint main(){return 0;}\n' >/tmp/refl-gcc.cpp && \
-    /opt/gcc-latest/bin/g++ \
-      -std=c++26 \
-      -freflection \
-      /tmp/refl-gcc.cpp \
-      -fsyntax-only && \
-    rm -f /tmp/refl-gcc.cpp
+# Smoke test: GCC-17 reflection. Skipped where gcc-latest itself is skipped —
+# an unconditional check here would fail the arm64 build on a compiler upstream
+# never shipped, which is a false accusation, not a finding (#698).
+RUN if [ "${TARGETARCH}" != "amd64" ]; then \
+      echo "gcc-latest reflection smoke: SKIPPED on ${TARGETARCH} (compiler not installed)"; \
+    else \
+      printf '#include <meta>\nint main(){return 0;}\n' >/tmp/refl-gcc.cpp && \
+      /opt/gcc-latest/bin/g++ \
+        -std=c++26 \
+        -freflection \
+        /tmp/refl-gcc.cpp \
+        -fsyntax-only && \
+      rm -f /tmp/refl-gcc.cpp; \
+    fi
 
 # Smoke test: clang-p2996 reflection
 RUN printf '#include <meta>\nint main(){return 0;}\n' >/tmp/refl-clang.cpp && \

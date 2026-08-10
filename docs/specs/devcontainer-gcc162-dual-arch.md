@@ -1582,6 +1582,53 @@ identical on a Struct. **22 lines replace 60: a net reduction.**
 
 ---
 
+### D31 — arm64 ships WITHOUT `gcc-latest`; the image is deliberately asymmetric ✅
+
+**Ray's call, 2026-08-10, on evidence gathered before any implementation** —
+#698's first acceptance criterion was a research gate precisely because a
+negative answer would have mooted the ticket.
+
+**What was probed, and what the control arms were:**
+
+| Artefact | arm64 build? | Evidence | Control arm |
+|---|---|---|---|
+| graphviz `15.1.0` deb | **No** | GitLab pkg `62359347`, 44 files: four Linux debs (`ubuntu_22.04`…`26.04`), all amd64 | the same listing DOES surface `Darwin_23.6.0_…-arm64.pkg`, so the Linux-arm64 zero is a real negative |
+| `gcc-latest` deb | **No, by policy** | jwakely.github.io states *"Only the C and C++ compilers are included, and only for x86_64"*; 1 deb; page arch tokens `x86_64:1 / arm64:0` | primary source is the maintainer's own prose, not an inferred absence |
+| conda-forge `gcc` | **Yes** | `linux-aarch64`: 204 files, max 16.1.0 | `linux-64`: 204 files, max 16.1.0 — identical, so coverage is not partial |
+
+**The asymmetry that decided it.** `clang-p2996` is **built from source**
+(`Dockerfile` clang-builder stage), so it is architecture-portable — arm64 needs
+a compile, not a new artefact. GCC-17 is a **prebuilt x86_64-only `.deb`**, and
+there is no arm64 path short of building GCC trunk from source. The named
+upstream alternative (Fedora Rawhide's GCC-trunk COPR, *"built for more
+architectures"*) ships **RPMs for Rawhide** and cannot serve an Ubuntu 26.04
+image.
+
+**Consequence for R1's "verify there are only 3 gcc compilers":** that invariant
+is now **architecture-dependent** — 3 on amd64, 2 on arm64 until the conda GCC
+lands. It cannot be asserted as a constant, and `platform_target.GCC_LATEST_ARCHES`
+is the one place the asymmetry is stated. graphviz falls back to apt's package
+on arm64, which was the lean floor the pinned deb was chosen to beat anyway.
+
+⭐ **Ray's earlier "publish both and let CI establish the real failure" call
+(D1) is what produced this.** The predicted failure was mise lock resolution at
+smoke; the actual failure was `base-prep` dying ~30 minutes in on a hand-
+downloaded amd64 `.deb`, a defect class the analysis had not considered. Neither
+`.deb` is visible to any dependency tool here — Renovate tracks their *versions*,
+and nothing tracked their *architectures*, because that dimension did not exist
+while the project was single-arch.
+
+**Also fixed under #698, because a count cannot see this class of defect:** every
+build-time self-check in the image *counted* or *stat*ed (`mise ls --installed |
+wc -l`, `test -d`, a non-empty shims dir), and a wrong-architecture binary is
+present, executable by its mode bits, and counted exactly like a correct one. The
+new `ARCH_EXEC_PROBES` loop **runs** six mise-installed binaries. Per
+[[probes-need-a-control-arm]] rule 9 it asserts the capability rather than
+sniffing a symptom — no `uname -m` comparison, no ELF-header read, no version
+string, each of which would bind something upstream owns and go quietly dead.
+
+---
+
 ## ✅ Promoted to `docs/specs/` — tracked, survives a clone
 
 Done 2026-08-08 on Ray's instruction (Q17). The working copy remains at

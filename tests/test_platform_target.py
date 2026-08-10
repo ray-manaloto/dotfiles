@@ -460,3 +460,114 @@ def test_published_arch_without_a_runner_label_raises(
     monkeypatch.setattr(platform_target, "PUBLISHED_ARCHES", ("amd64", "riscv64"))
     with pytest.raises(ValueError, match="riscv64"):
         platform_target.published_targets()
+
+
+# --------------------------------------------------------------------------
+# The image's OWN architecture (#698) — publishing an arch is not building it
+# --------------------------------------------------------------------------
+
+
+def test_every_published_arch_has_a_mise_lock_platform() -> None:
+    """Mise spells the same axis a third way, and the locks are keyed by it.
+
+    `PUBLISHED_ARCHES` says what CI builds, docker says `amd64`/`arm64`, and
+    mise's lockfiles say `linux-x64`/`linux-arm64`. An architecture published
+    without a lock-platform name resolves its tools for somebody else's CPU.
+    """
+    platforms = platform_target.mise_lock_platforms()
+    assert len(platforms) == len(platform_target.PUBLISHED_ARCHES)
+    assert len(set(platforms)) == len(platforms)
+
+
+def test_a_published_arch_without_a_lock_platform_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FAIL arm: an unmapped architecture must not silently resolve to nothing.
+
+    Declared through `PUBLISHED_ARCHES` — the edit a person actually makes.
+    """
+    monkeypatch.setattr(platform_target, "PUBLISHED_ARCHES", ("amd64", "riscv64"))
+    with pytest.raises(ValueError, match="riscv64"):
+        platform_target.mise_lock_platforms()
+
+
+def test_the_image_config_locks_every_published_architecture() -> None:
+    """#698: the image resolved x86_64 tools while CI published two arches.
+
+    `lockfile_platforms` scopes what `mise lock` writes, so an architecture
+    missing from it gets **no lock entries at all** — and `mise install
+    --locked` then resolves that architecture's tools from somebody else's
+    platform. It survives the build (the self-checks counted tools rather than
+    running them), so nothing fails until a binary is executed.
+    """
+    assert platform_target.find_lock_platform_drift(REPO_ROOT) is None
+
+
+def test_an_uncovered_architecture_is_reported(tmp_path: Path) -> None:
+    """FAIL arm: the gate above is decoration unless a narrow list really fails."""
+    config = tmp_path / ".devcontainer" / "mise-system.toml"
+    config.parent.mkdir(parents=True)
+    config.write_text(
+        '[settings]\nlockfile_platforms = ["linux-x64"]\n', encoding="utf-8"
+    )
+
+    message = platform_target.find_lock_platform_drift(tmp_path)
+
+    assert message is not None
+    assert "linux-arm64" in message
+
+
+def test_a_deleted_lockfile_platforms_declaration_is_reported(tmp_path: Path) -> None:
+    """A missing declaration must not read as 'every architecture is covered'.
+
+    mise's own default is every platform it knows, so a reader could argue the
+    absence is harmless. It is not: the declaration is what `image_lock.py`
+    reads to decide which platforms to regenerate, so deleting it silently
+    narrows the refresh instead of widening it.
+    """
+    config = tmp_path / ".devcontainer" / "mise-system.toml"
+    config.parent.mkdir(parents=True)
+    config.write_text("[settings]\nexperimental = true\n", encoding="utf-8")
+
+    message = platform_target.find_lock_platform_drift(tmp_path)
+
+    assert message is not None
+    assert "lockfile_platforms" in message
+
+
+def test_the_image_config_does_not_pin_a_literal_architecture() -> None:
+    """#698 AC1: `arch` is derived from the build target, never a literal.
+
+    Each matrix leg builds in a container OF its target architecture, so mise's
+    own detection is already the target. A literal `arch` overrides that
+    detection with whatever was true when the line was written.
+    """
+    assert platform_target.find_pinned_image_arch(REPO_ROOT) is None
+
+
+def test_a_literal_arch_pin_in_the_image_config_is_reported(tmp_path: Path) -> None:
+    """FAIL arm: restore the exact line #698 was filed for."""
+    config = tmp_path / ".devcontainer" / "mise-system.toml"
+    config.parent.mkdir(parents=True)
+    config.write_text('[settings]\narch = "x86_64"\n', encoding="utf-8")
+
+    message = platform_target.find_pinned_image_arch(tmp_path)
+
+    assert message is not None
+    assert "x86_64" in message
+
+
+def test_a_commented_out_arch_pin_is_not_a_violation(tmp_path: Path) -> None:
+    """A comment explaining why the pin was removed must not re-trip the gate.
+
+    Without this the honest fix — deleting the line and saying why — fails the
+    check that motivated it, and the next author deletes the explanation.
+    """
+    config = tmp_path / ".devcontainer" / "mise-system.toml"
+    config.parent.mkdir(parents=True)
+    config.write_text(
+        '[settings]\n# arch = "x86_64" was removed by #698\nexperimental = true\n',
+        encoding="utf-8",
+    )
+
+    assert platform_target.find_pinned_image_arch(tmp_path) is None

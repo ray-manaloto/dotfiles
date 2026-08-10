@@ -337,7 +337,7 @@ per_path_tokens = { ".devcontainer/Dockerfile" = [
 
 [[suite]]
 name = "build.gcc-latest-reflection"
-description = "GCC-16 with P2996 reflection must be installed via precompiled .deb"
+description = "GCC-17 with P2996 reflection must be installed via precompiled .deb — and, since #698, ONLY on the architectures that have one. kayari.org publishes the gcc-latest trunk snapshot for x86_64 alone and says so as policy on its index page ('only for x86_64'), so an ungated download fails the arm64 base build outright. Both the install and its reflection smoke therefore carry a TARGETARCH branch, and each branch's skip message is bound here: deleting a branch is the realistic regression, and it would otherwise surface only as a 30-minute base build failing on a .deb that cannot exist. The `-freflection` token pins the smoke's own compile line (1x in the file; bare `-freflection` matches 5x and `/tmp/refl-gcc.cpp` 3x, so neither alone binds a site)."
 category = "build"
 check_type = "static"
 handler = "require_tokens"
@@ -345,7 +345,51 @@ paths = [".devcontainer/Dockerfile"]
 per_path_tokens = { ".devcontainer/Dockerfile" = [
     "gcc-latest.deb",
     "test -x /opt/gcc-latest/bin/g++",
-    "-freflection \\\n      /tmp/refl-gcc.cpp",
+    "-freflection \\\n        /tmp/refl-gcc.cpp",
+    "gcc-latest: SKIPPED on ",
+    "gcc-latest reflection smoke: SKIPPED on ",
+] }
+
+[[suite]]
+name = "build.image-architecture-integrity"
+description = "#698: publishing an architecture is not the same as BUILDING one. #676 shipped an arm64 image whose mise config pinned `arch = \"x86_64\"`, so 131 tool entries resolved for the wrong CPU — and the build never noticed, because every build-time self-check COUNTS or STATS (`mise ls --installed | wc -l`, `test -d`, a non-empty shims dir) and a wrong-architecture binary is present, executable by its mode bits, and counted exactly like a correct one. The only thing it cannot do is run, so `ARG ARCH_EXEC_PROBES` + its loop RUN it; the failure message is bound rather than the loop body because deleting the invocation and keeping a `test -x` is the regression that reproduces the original defect. Three declarations must stay bound together: `PUBLISHED_ARCHES` (what CI builds), `lockfile_platforms` (what the image resolves), and mise's own third spelling of the axis — hence `mise_lock_platforms`, and `find_lock_platform_drift`/`find_pinned_image_arch` wired into the `platform-literals` CLI that `no_platform_literals` already runs. `platforms_to_lock` is bound at its CALL SITE because the library function existing is not the point: `lock_platforms` alone derives from the COMMITTED lock, so a newly-published architecture has no entries and is skipped by the very regen meant to create them — the union with what the publish matrix owes is what breaks that circle. `ships_gcc_latest` is bound at the smoke's call site for the same reason: kayari publishes gcc-latest for x86_64 only (upstream policy, not a gap), so the image is deliberately NOT architecture-symmetric and a smoke that assumed symmetry would fail arm64 over an artifact that does not exist."
+category = "build"
+check_type = "static"
+handler = "require_tokens"
+paths = [
+    ".devcontainer/Dockerfile",
+    ".devcontainer/mise-system.toml",
+    "python/src/dotfiles_setup/platform_target.py",
+    "python/src/dotfiles_setup/image_lock.py",
+    "python/src/dotfiles_setup/image.py",
+    "tests/test_image_arch.py",
+    "tests/test_platform_target.py",
+    "tests/test_image_lock.py",
+]
+per_path_tokens = { ".devcontainer/Dockerfile" = [
+    "ARG ARCH_EXEC_PROBES=",
+    "INSTALLED but did not execute on ",
+], ".devcontainer/mise-system.toml" = [
+    'lockfile_platforms = ["linux-x64", "linux-arm64"]',
+], "python/src/dotfiles_setup/platform_target.py" = [
+    "def mise_lock_platforms(",
+    "def find_lock_platform_drift(",
+    "def find_pinned_image_arch(",
+    "find_lock_platform_drift(repo_root),",
+    "find_pinned_image_arch(repo_root),",
+    "def ships_gcc_latest(",
+    "GCC_LATEST_ARCHES = (",
+], "python/src/dotfiles_setup/image_lock.py" = [
+    "def platforms_to_lock(",
+    "platforms = platforms_to_lock(",
+], "python/src/dotfiles_setup/image.py" = [
+    "gcc_latest=ships_gcc_latest(platform)",
+], "tests/test_image_arch.py" = [
+    "def test_every_stage_that_reads_targetarch_also_declares_it(",
+], "tests/test_platform_target.py" = [
+    "def test_the_image_config_locks_every_published_architecture(",
+], "tests/test_image_lock.py" = [
+    "def test_a_required_platform_absent_from_the_lock_is_still_locked(",
 ] }
 
 [[suite]]

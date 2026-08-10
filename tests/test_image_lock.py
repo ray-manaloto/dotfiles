@@ -26,7 +26,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
-from dotfiles_setup import image_lock
+from dotfiles_setup import image_lock, platform_target
 
 REPO_ROOT = Path(__file__).parent.parent
 
@@ -96,6 +96,46 @@ def test_the_real_committed_lock_still_carries_a_non_linux_platform() -> None:
 
 def test_an_empty_lock_derives_no_platforms_rather_than_guessing() -> None:
     assert image_lock.lock_platforms("") == ()
+
+
+# --------------------------------------------------------------------------- #
+# Widening the publish matrix must widen the regen (#698)
+# --------------------------------------------------------------------------- #
+
+
+def test_a_required_platform_absent_from_the_lock_is_still_locked() -> None:
+    """#698's ordering trap: deriving from the lock can only PRESERVE coverage.
+
+    `lock_platforms` reads the committed file, so a newly-published
+    architecture — which by definition has no entries yet — would be skipped by
+    the very run meant to add it. The regen would report success across the
+    platforms it already had.
+    """
+    platforms = image_lock.platforms_to_lock(
+        _TWO_PLATFORM_LOCK, required=("linux-x64", "linux-arm64")
+    )
+
+    assert platforms == ("linux-arm64", "linux-x64", "macos-x64")
+
+
+def test_every_published_architecture_is_required_by_default() -> None:
+    """The default must be what CI publishes, not what the lock already holds.
+
+    Binds the two declarations together: widening `PUBLISHED_ARCHES` is what
+    makes the next regen produce that architecture's entries.
+    """
+    required = set(platform_target.mise_lock_platforms())
+
+    derived = set(image_lock.platforms_to_lock(_TWO_PLATFORM_LOCK))
+
+    assert required <= derived
+
+
+def test_an_empty_lock_still_yields_the_required_platforms() -> None:
+    """A lock written from nothing must not be born single-architecture."""
+    assert image_lock.platforms_to_lock("", required=("linux-arm64",)) == (
+        "linux-arm64",
+    )
 
 
 # --------------------------------------------------------------------------- #

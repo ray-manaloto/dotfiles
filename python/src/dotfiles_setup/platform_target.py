@@ -62,6 +62,7 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     "DEFAULT_LITERAL_SITES",
+    "GCC_LATEST_ARCHES",
     "PLATFORM_ENV_VAR",
     "PLATFORM_FIELDS",
     "PUBLISHED_ARCHES",
@@ -69,11 +70,14 @@ __all__ = [
     "PublishTarget",
     "expected_uname_machine",
     "find_default_drift",
+    "find_lock_platform_drift",
+    "find_pinned_image_arch",
     "find_unpublished_pin",
     "find_violations",
     "host_arch",
     "host_platform",
     "is_emulated",
+    "mise_lock_platforms",
     "normalize_arch",
     "os_arch",
     "platform_arch",
@@ -84,6 +88,7 @@ __all__ = [
     "publish_matrix_main",
     "published_targets",
     "resolve_platform",
+    "ships_gcc_latest",
 ]
 
 PLATFORM_ENV_VAR = "DOTFILES_PLATFORM"
@@ -152,6 +157,40 @@ PUBLISHED_ARCHES = ("amd64", "arm64")
 # probe scheduled on it and asserted `uname -m` = aarch64 (#676).
 _RUNNER_LABELS = {"amd64": "ubuntu-latest", "arm64": "ubuntu-24.04-arm"}
 
+# The architectures whose image carries the kayari `gcc-latest` trunk snapshot.
+#
+# NOT a subset waiting to be widened: upstream states the policy on its index
+# page — "Only the C and C++ compilers are included, and only for x86_64, in a
+# single large package" — so there is nothing to wait for. arm64's modern-GCC
+# slot is conda-forge's `gcc` instead, which does publish linux-aarch64.
+#
+# The published image is therefore NOT architecture-symmetric, and pretending
+# otherwise is what a smoke check would do if it asserted this compiler
+# unconditionally: it would fail an arm64 build over an artifact that does not
+# exist. clang-p2996 is unaffected — it is built from source (#698).
+GCC_LATEST_ARCHES = ("amd64",)
+
+# mise's own spelling of each architecture — a THIRD name for the same axis,
+# and the one both image lockfiles are keyed by. `uname -m` says x86_64, docker
+# says amd64, mise says linux-x64; treating any two as interchangeable is how
+# #698 shipped an arm64 image holding 131 x86_64 tool resolutions.
+_MISE_LOCK_PLATFORM = {"amd64": "linux-x64", "arm64": "linux-arm64"}
+
+# The image's system-wide mise config. Its `[settings]` decide what the IMAGE
+# resolves, which is a different question from what CI publishes — #698 is
+# precisely the two answers disagreeing.
+IMAGE_MISE_CONFIG = ".devcontainer/mise-system.toml"
+
+_LOCKFILE_PLATFORMS_RE = re.compile(
+    r"^\s*lockfile_platforms\s*=\s*\[(?P<body>[^\]]*)\]", re.MULTILINE
+)
+
+# Anchored at line start so a COMMENTED pin (the honest record of why the line
+# went away) does not re-trip the gate that removed it.
+_PINNED_ARCH_RE = re.compile(
+    r"^\s*arch\s*=\s*[\"'](?P<arch>[^\"']+)[\"']", re.MULTILINE
+)
+
 
 @dataclass(frozen=True)
 class PublishTarget:
@@ -214,6 +253,15 @@ def publish_matrix_main() -> int:
     """CLI entry: print the publish matrix for the CI job that fans out."""
     sys.stdout.write(f"{publish_matrix_json()}\n")
     return 0
+
+
+def ships_gcc_latest(platform: str) -> bool:
+    """Does an image built for ``platform`` carry the kayari gcc-latest deb?
+
+    Asked of the platform rather than answered by a boolean the caller worked
+    out, so the asymmetry in :data:`GCC_LATEST_ARCHES` is stated once.
+    """
+    return platform_arch(platform) in GCC_LATEST_ARCHES
 
 
 def normalize_arch(token: str) -> str | None:
@@ -455,6 +503,93 @@ def find_unpublished_pin(repo_root: Path) -> str | None:
     return None
 
 
+def mise_lock_platforms() -> tuple[str, ...]:
+    """Mise's lock-platform name for every published architecture.
+
+    Raises ``ValueError`` naming the architecture rather than skipping it: a
+    silently-dropped platform produces a lockfile that is complete by its own
+    definition and wrong by the build's, which is the #698 failure exactly.
+    """
+    platforms: list[str] = []
+    for arch in PUBLISHED_ARCHES:
+        platform = _MISE_LOCK_PLATFORM.get(arch)
+        if platform is None:
+            msg = (
+                f"architecture {arch!r} is declared in PUBLISHED_ARCHES but has "
+                f"no mise lock-platform name — its tools would be resolved for "
+                f"another architecture"
+            )
+            raise ValueError(msg)
+        platforms.append(platform)
+    return tuple(platforms)
+
+
+def _image_mise_config(repo_root: Path) -> str | None:
+    try:
+        return (repo_root / IMAGE_MISE_CONFIG).read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+
+def find_lock_platform_drift(repo_root: Path) -> str | None:
+    """A message when the image locks fewer architectures than CI publishes.
+
+    ``lockfile_platforms`` scopes what ``mise lock`` writes, so an architecture
+    absent from it gets **no lock entries at all** — and ``mise install
+    --locked`` then resolves that architecture's tools from whatever platform is
+    present. The build survives it, because the build-time self-checks count
+    installed tools rather than executing them, so the first honest failure is a
+    binary that will not run, hours later at smoke.
+
+    ``image_lock.py`` also reads this declaration to decide which platforms to
+    regenerate, which is why a *missing* declaration is reported rather than
+    read as "all platforms": deleting it narrows the refresh silently.
+    """
+    text = _image_mise_config(repo_root)
+    if text is None:
+        return None
+    match = _LOCKFILE_PLATFORMS_RE.search(text)
+    if match is None:
+        return (
+            f"{IMAGE_MISE_CONFIG} declares no `lockfile_platforms` — "
+            f"`mise run lock-image` reads it to decide which platforms to "
+            f"regenerate, so its absence narrows the locks instead of widening "
+            f"them. Expected {list(mise_lock_platforms())}"
+        )
+    declared = {token.strip().strip("\"'") for token in match.group("body").split(",")}
+    missing = [p for p in mise_lock_platforms() if p not in declared]
+    if missing:
+        return (
+            f"{IMAGE_MISE_CONFIG} locks {sorted(declared - {''})} but the publish "
+            f"matrix ships {list(PUBLISHED_ARCHES)} — {missing} would get no lock "
+            f"entries, so those architectures resolve another platform's tools"
+        )
+    return None
+
+
+def find_pinned_image_arch(repo_root: Path) -> str | None:
+    """A message when the image config pins ``arch`` to a literal (#698 AC1).
+
+    Every matrix leg builds inside a container OF its target architecture, so
+    mise's own detection already *is* the build target. A literal overrides that
+    detection with whatever was true the day the line was written — and unlike a
+    wrong ``--platform``, nothing downstream contradicts it: the image is built
+    for one architecture and filled with another's binaries.
+    """
+    text = _image_mise_config(repo_root)
+    if text is None:
+        return None
+    match = _PINNED_ARCH_RE.search(text)
+    if match is None:
+        return None
+    return (
+        f'{IMAGE_MISE_CONFIG} pins `arch = "{match.group("arch")}"` — the image '
+        f"would resolve that architecture's tools whatever it is being built for. "
+        f"Delete the line: each matrix leg builds in a container of its own "
+        f"architecture, so mise's detection is already the build target"
+    )
+
+
 #: What ``dotfiles-setup platform <field>`` can print. Shell callers (the
 #: `verify-arch` task) read these instead of re-implementing the triple→arch
 #: and triple→uname mappings in bash ([[zero-bash-logic]]).
@@ -487,7 +622,13 @@ def platform_main(field: str) -> int:
 def platform_literals_main(repo_root: Path) -> int:
     """CLI entry: report re-appearing literals and default drift; exit 1 if any."""
     failed = False
-    for message in (find_default_drift(repo_root), find_unpublished_pin(repo_root)):
+    checks = (
+        find_default_drift(repo_root),
+        find_unpublished_pin(repo_root),
+        find_lock_platform_drift(repo_root),
+        find_pinned_image_arch(repo_root),
+    )
+    for message in checks:
         if message is not None:
             failed = True
             logger.error("platform-literals FAIL: %s", message)
