@@ -1186,40 +1186,40 @@ jobs:
         #
         # So compare the thing that is actually arch-derived: the digest each
         # index entry points at, read straight from the published document.
-        # Distinct digests, and each per-architecture TAG resolving to the same
-        # digest as its index entry, is exactly AC2 — and it genuinely fails if
-        # the index ever points two entries at one image.
+        #
+        # ⚠️ And that comparison was wrong a THIRD way, which is why this step is
+        # now python (#703). It read the per-architecture tag with
+        # `--format '{{.Manifest.Digest}}'` — but `dev-tag` creates that tag with
+        # `imagetools create`, whose `--prefer-index` DEFAULTS TRUE, so the tag is
+        # an INDEX wrapping the real manifest plus its attestation.
+        # `{{.Manifest.Digest}}` returns the OUTER index digest while the
+        # multi-architecture index lists the INNER manifest, so the two could
+        # never be equal: a check that can only FAIL, in the step whose own
+        # comment cites `probes-need-a-control-arm.md` about that class.
+        #
+        # `image verify-arch-tags` reads THROUGH whatever the tag is and asserts
+        # the capability instead: exactly one real platform (attestations never
+        # count), matching the tag suffix, at the digest the index lists, with no
+        # two entries sharing a digest. Shape-agnostic on purpose — binding
+        # "buildx emits an index" would bind a default we do not own (rule 9);
+        # the observed shape is REPORTED below instead. Its FAIL arms live in
+        # `tests/test_image_manifest.py`, which is the only place they can: this
+        # step cannot be run locally.
         env:
-          IMAGE: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}
           IMAGE_REF: ${{ steps.merge.outputs.image_ref }}
           MATRIX: ${{ needs.plan.outputs.matrix }}
-          COMMIT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          short_sha=$(printf '%s' "${COMMIT_SHA}" | head -c 7)
-          raw=$(docker buildx imagetools inspect "${IMAGE_REF}" --raw)
-          digests=()
-          while read -r arch suffix; do
-            entry=$(printf '%s' "${raw}" | jq -r \
-              --arg a "${arch}" \
-              '.manifests[] | select(.platform.architecture == $a and .platform.os != "unknown") | .digest')
-            if [ -z "${entry}" ]; then
-              echo "FAIL: no ${arch} entry in ${IMAGE_REF}" >&2
-              exit 1
-            fi
-            tagged=$(docker buildx imagetools inspect "${IMAGE}:${short_sha}-${suffix}" --format '{{.Manifest.Digest}}')
-            if [ "${entry}" != "${tagged}" ]; then
-              echo "FAIL: :${short_sha}-${suffix} is ${tagged} but the index's ${arch} entry is ${entry}" >&2
-              exit 1
-            fi
-            echo "${arch}: ${entry}"
-            digests+=("${entry}")
-          done < <(printf '%s' "${MATRIX}" | jq -r '.[] | "\(.arch) \(.tag_suffix)"')
-          # Two entries sharing a digest mean the index is single-architecture
-          # wearing two labels — which every "did the pull succeed" check passes.
-          unique=$(printf '%s\n' "${digests[@]}" | sort -u | wc -l)
-          if [ "${unique}" -ne "${#digests[@]}" ]; then
-            echo "FAIL: index entries share a digest — not really multi-architecture" >&2
-            exit 1
-          fi
-          echo "OK: each architecture resolves to a distinct image" >> "$GITHUB_STEP_SUMMARY"
+          # Written to a file rather than piped: a pipeline returns the LAST
+          # command's status, and a summary-writing `tee` would report 0 for a
+          # verifier that failed (`long-running-command-hangs.md` rule 3).
+          # `set -e` aborts before the summary block on any breach, whose
+          # message is already on stderr and therefore in the job log.
+          uv run --project python dotfiles-setup image verify-arch-tags \
+            --image-ref "${IMAGE_REF}" \
+            --matrix "${MATRIX}" > ac2-report.txt
+          cat ac2-report.txt
+          {
+            echo "## AC2 — each per-architecture tag resolves to its own image"
+            sed 's/^/- /' ac2-report.txt
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -897,6 +897,24 @@ def _add_image_subcommands(
         required=True,
         help="Untagged registry/name image base (CONTAINER_REGISTRY/IMAGE_NAME)",
     )
+    verify_tags_parser = image_sub.add_parser(
+        "verify-arch-tags",
+        help="build-publish.yml AC2 (#703): assert every <ref>-<suffix> tag "
+        "resolves to exactly one real platform matching its suffix, and to the "
+        "same digest the multi-architecture index lists",
+    )
+    verify_tags_parser.add_argument(
+        "--image-ref",
+        required=True,
+        help="The multi-architecture index ref; per-architecture tags are "
+        "derived as <image-ref>-<tag_suffix>",
+    )
+    verify_tags_parser.add_argument(
+        "--matrix",
+        required=True,
+        help="The build matrix JSON the legs fanned out over "
+        "(needs.plan.outputs.matrix)",
+    )
 
 
 def _add_pr_subcommands(
@@ -1647,6 +1665,13 @@ def handle_image(args: argparse.Namespace) -> None:
             repo=args.repo,
             summary_path=Path(args.summary_path) if args.summary_path else None,
             baseline_path=Path(args.baseline_path) if args.baseline_path else None,
+        )
+        sys.exit(image_main(cmd))
+    if args.image_command == "verify-arch-tags":
+        cmd = ImageCommand(
+            args.image_ref,
+            command="verify-arch-tags",
+            matrix=args.matrix,
         )
         sys.exit(image_main(cmd))
     if args.image_command == "resolve-analysis-ref":

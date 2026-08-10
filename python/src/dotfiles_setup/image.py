@@ -19,6 +19,11 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from dotfiles_setup import _project_root
+from dotfiles_setup.image_manifest import (
+    docker_inspector,
+    parse_matrix,
+    verify_arch_tags,
+)
 from dotfiles_setup.p2996_hash import _extract_bake_variable
 from dotfiles_setup.platform_target import (
     is_emulated,
@@ -1798,6 +1803,9 @@ class ImageCommand:
     event: str | None = None
     head_sha: str | None = None
     image_base: str | None = None
+    #: The build matrix JSON, for `verify-arch-tags` — the same value the legs
+    #: fanned out over, so a published architecture cannot go unverified.
+    matrix: str | None = None
 
 
 def base_currency_blob(repo_root: Path, rel_path: str) -> bytes:
@@ -2034,9 +2042,33 @@ def _handle_resolve_analysis_ref(cmd: ImageCommand) -> int:
     )
 
 
+def _handle_verify_arch_tags(cmd: ImageCommand) -> int:
+    """CLI: `build-publish.yml`'s AC2 — see :mod:`dotfiles_setup.image_manifest`.
+
+    The breach is reported on stderr and exits 1 rather than raising, so the
+    workflow step fails with the two digests in the log instead of a traceback.
+    """
+    if cmd.matrix is None:
+        sys.stderr.write("verify-arch-tags requires --matrix\n")
+        return 2
+    try:
+        lines = verify_arch_tags(
+            index_ref=cmd.image_ref,
+            targets=parse_matrix(cmd.matrix),
+            inspector=docker_inspector(),
+        )
+    except ValueError as exc:
+        sys.stderr.write(f"{exc}\n")
+        return 1
+    for line in lines:
+        sys.stdout.write(f"{line}\n")
+    return 0
+
+
 def main(cmd: ImageCommand) -> int:
     """CLI entry point for image operations (command → handler dispatch)."""
     handlers: dict[str, Callable[[ImageCommand], int]] = {
+        "verify-arch-tags": _handle_verify_arch_tags,
         "smoke-script": _handle_smoke_script,
         "smoke": _handle_smoke,
         "size-report": _handle_size_report,
