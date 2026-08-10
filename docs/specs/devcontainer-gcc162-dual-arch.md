@@ -1535,6 +1535,35 @@ identical on a Struct. **22 lines replace 60: a net reduction.**
 
 ---
 
+### D32 — #677: names carry the arch; the port is DERIVED; the old home is COPIED
+
+Ray, 2026-08-10, asked and answered before implementation:
+
+- **SSH port** — derived from workspace **and** architecture into 20000-29999
+  (`DEVCONTAINER_SSH_PORT` still pins one per clone), *and* this clone gets a
+  gitignored `mise.local.toml` pinning **4444**, so the amd64 devloop keeps the
+  port every doc and ssh config already knows. Chosen over "keep 4444 as a
+  base + offset", which would have preserved the *appearance* of continuity
+  (1% chance of actually landing on 4444) with a 200-slot collision space.
+- **Home volume** — a one-shot `mise run migrate-home-volume` **copies**
+  `…-<hash>-home` into `…-<hash>-<arch>-home` rather than accepting the v5→v6
+  precedent of orphan-and-reinstall. The source is never deleted; `mise run
+  prune` removes it once the new container is known good. Accepted at ask time:
+  the copy needs a raw `docker run` (adjacent to `do-not.md` #3 — it is a data
+  copy, not devcontainer lifecycle) and a half-finished copy is a new state to
+  handle, which is why an existing-but-**empty** target reads as *resume*, never
+  as *done*.
+- **Measured hazard that shaped the CLI:** `dotfiles-setup devcontainer env`
+  resolves `amd64` under `mise run` (the repo pin) and `arm64` from a bare
+  shell on this M-series Mac. The pre-#677 volume name records no architecture,
+  so the migration **refuses** without an explicit platform rather than naming
+  its target for whichever machine happened to ask.
+
+Consequence for R1: the documented probe is now
+`ssh ${USER}@localhost -p $(mise run ssh-port)`, not a literal 4444.
+
+---
+
 ## ✅ Promoted to `docs/specs/` — tracked, survives a clone
 
 Done 2026-08-08 on Ray's instruction (Q17). The working copy remains at

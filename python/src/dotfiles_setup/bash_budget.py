@@ -116,9 +116,6 @@ ALLOWLIST: dict[str, BashAllowance] = {
     "scripts/web-setup.sh": BashAllowance(
         75, "Claude Code web/cloud bootstrap — thin environment wrapper"
     ),
-    "scripts/workspace-hash.sh": BashAllowance(
-        26, "mise up collision-guard wrapper — emits a stable workspace hash"
-    ),
 }
 
 

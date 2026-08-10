@@ -63,30 +63,46 @@ measurements and the still-open contract gap:
 Future: migrate to mise-env-fnox with doppler provider inside the
 container for runtime secret resolution (#83).
 
-## Dynamic Naming (v6 single home volume)
+## Dynamic Naming (v7 architecture-scoped, #677)
 
-Container name and home volume are templated with a workspace-path
-hash so multiple clones of `dotfiles` on the same Mac get distinct
-resources. `mise run up` computes `DEVCONTAINER_WORKSPACE_HASH` in the
-task body via portable `sha256sum`/`shasum` detection.
+Names are **resolved, never composed in config**: `mise run up` evals
+`dotfiles-setup devcontainer env` (`python/src/dotfiles_setup/devcontainer_names.py`)
+and `devcontainer.json` interpolates whole values. The hash separates clones;
+the **arch** separates amd64 from arm64.
 
-- **Container:** `dotfiles-<basename>-<user>-<hash>-<ssh-port>`
-- **Home volume:** `dotfiles-<basename>-<user>-<hash>-home` → `/home/${USER}`
+- **Container:** `dotfiles-<basename>-<user>-<hash>-<arch>-<ssh-port>`
+- **Home volume:** `dotfiles-<basename>-<user>-<hash>-<arch>-home` → `/home/${USER}`
+- **SSH port:** derived from workspace **and** arch into 20000-29999 (below the
+  49152+ ephemeral range); `DEVCONTAINER_SSH_PORT` still pins one per clone.
+  `mise run ssh-port` / `mise run names` print them.
 
-The single home volume replaces the v5 per-directory volumes
-(`mise-user`, `cargo-user`, `rustup-user`). It covers the entire user
-home, so `~/.cache/mise`, `~/.cache/uv`, `~/.bash_history`,
-`~/.ssh/known_hosts`, and TMPDIR all persist across `stop/up`.
+⚠️ **The name does NOT identify a container — the id labels do.** The CLI looks
+an existing container up by `--id-label`, inferring one from the **workspace
+folder** when none is given, so `up`/`dev-rebuild`/every `exec` pass
+`$DEVCONTAINER_ID_FLAGS` (`dotfiles.workspace=` + `dotfiles.arch=`). Without
+them an arm64 `up` **finds and reuses** the amd64 container and reports success.
+`mise run stop` resolves its targets via `dotfiles-setup devcontainer teardown`
+for the same reason.
+
+**Why the arch is in the NAME, not in a check:** the home volume carries
+compiled output (`~/.local/share/mise/installs`, `~/.cargo`, `~/.rustup`), and
+docker reuses a named volume on mount without a word — so a shared volume
+interleaves two architectures' binaries and fails far from its cause.
+
+**Migrating a pre-#677 volume:** `mise run migrate-home-volume` (dry-run;
+`-- --apply` executes). It never deletes the source, and refuses rather than
+guessing in three cases. Mechanism, refusals and the marker file:
+**`.devcontainer/TOOL-PERSISTENCE.md`**.
+
+The volume covers the whole user home, so `~/.cache/mise`, `~/.cache/uv`,
+`~/.bash_history`, `~/.ssh/known_hosts` and TMPDIR persist across `stop/up`.
+The v5 per-directory volumes it replaced are orphans; `mise run prune` cleans
+them.
 
 **TMPDIR persistence:** `Dockerfile.host-user` sets
 `ENV TMPDIR=/home/${USER}/.local/tmp` on the home volume.
 `on-create.sh` sweeps files older than 30 days (atime) and prunes
 empty directories per container create to bound growth.
-
-**Accepted trade-off — data loss on rollout:** First `mise run up`
-after the v5→v6 change orphans the old volumes; runtime-installed
-tools/crates/toolchains must be re-installed. `mise run prune` cleans
-orphans. (See `.agent/plans/home-volume-consolidation-draft.md`.)
 
 **Reset-on-recreate:** `onCreateCommand` runs `chezmoi init --apply
 --force` on every container creation; chezmoi-managed files (`.bashrc`,
@@ -148,22 +164,11 @@ the system install at runtime. No custom `/opt/*` paths.
 
 ## Tool Persistence Matrix
 
-User-overlay paths live on the single home volume
-(`dotfiles-<basename>-<user>-<hash>-home`); `mise run stop && mise run up`
-preserves all state. New in v6: `~/.cache/uv`, `~/.local/tmp` (TMPDIR,
-30-day atime sweep in `on-create.sh`), `~/.bash_history`.
-
-| Tool family | System install (baked) | User overlay | How to add system |
-|---|---|---|---|
-| mise tools | `/usr/local/share/mise/installs/` | `~/.local/share/mise/installs/` | `mise-system.toml` (base) / `mise-runtime.toml` (runtime) + image PR; overlay tier: `home/dot_config/mise/config.toml.tmpl` |
-| cargo crates | `/usr/local/share/cargo/{bin,registry}` | `~/.cargo/{bin,registry}` | base image PR; runtime `cargo install` |
-| rust toolchains | `/usr/local/share/rustup/toolchains/` | `~/.rustup/toolchains/` | `mise-system.toml` `rust = "..."`; runtime `rustup install` |
-| pipx tools | `/usr/local/share/mise/installs/pipx-*` | shadowed by mise overlay | `"pipx:<name>"` in `mise-system.toml` |
-| apt packages | `/usr/{bin,lib,share}/...` | **none — not persistable** | `mise-system.toml [bootstrap.packages]` + base image PR |
-
-**Apt packages have no runtime persistence.** Add system packages to
-`mise-system.toml [bootstrap.packages]` and ship via a base-image PR.
-`sudo apt install` at runtime works but is lost on container recreate.
+Which paths are baked into the image, which live on the home volume, and how
+to promote a tool from one to the other: **`.devcontainer/TOOL-PERSISTENCE.md`**
+(a linked sibling, not an import — AGM-003 caps this file at 12,000 chars).
+Headline: **apt packages have no runtime persistence** — add them to
+`mise-system.toml [bootstrap.packages]` and ship a base-image PR.
 
 ## Build-time self-checks
 
@@ -213,5 +218,5 @@ DD exposes the macOS launchd SSH agent at
 `docs/research/runs/research-20260409c-dockerdesktop-ssh/`.
 
 **R1 inbound**: `ghcr.io/devcontainers/features/sshd@1.1.0` on internal
-port 2222 → 4444 via `appPort`. Schema only honors `version` +
+port 2222 → `mise run ssh-port` via `appPort`. Schema only honors `version` +
 `gatewayPorts`.
