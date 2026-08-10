@@ -232,6 +232,20 @@ and one defect the sketch could not have anticipated:
 - **`:dev-<arch>` is safe beside `:dev-<hash16>`**, checked rather than assumed:
   `ghcr_cleanup`'s planner matches `^(base|p2996|dev)-[0-9a-f]{16}$`, so an
   architecture word is never a hash-family member.
+- ⚠️ **KNOWN OPEN at merge — the image's mise config is amd64-only.**
+  `.devcontainer/mise-system.toml:281` pins `arch = "x86_64"` and `:293`
+  `lockfile_platforms = ["linux-x64"]`; both locks carry **zero** arm64 entries
+  (131/0 and 35/0, measured 2026-08-10). So an arm64 leg resolves x86_64
+  downloads into an arm64 image, and the build-time self-checks *count* tools
+  rather than executing them, so it survives the build and surfaces at smoke.
+  ⭐ **Ray's ruling, 2026-08-10: publish both architectures anyway and let CI
+  establish the real failure**, over the recommended alternative of shipping the
+  plumbing amd64-only behind a one-line `PUBLISHED_ARCHES` flip. Recorded so the
+  first red arm64 leg is recognised rather than re-diagnosed. The fix, when it
+  comes: derive `arch`, add `linux-arm64` to `lockfile_platforms`, regenerate
+  BOTH locks for two platforms (#650's trap — regenerating on macOS truncates
+  **silently** while the tool count holds), and re-verify the apt.llvm.org
+  `[bootstrap.packages]` pins on arm64.
 - ⚠️ **The blocking defect was in the content hashes, not the tags.**
   `gather_{base,p2996,dev}_inputs` read `PLATFORM` from the HCL *default* only,
   while bake reads a same-named **environment variable** — so both matrix legs

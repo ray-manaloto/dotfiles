@@ -629,14 +629,15 @@ per_path_tokens = { ".github/workflows/ci.yml" = [
 
 [[suite]]
 name = "ci.promote-job-exists"
-description = "Push-to-main must trigger the promote job (manifest-only retag of the PR image as :dev/:latest, no rebuild). Direct-push fallback dispatches workflow with force_dev_tag=true."
+description = "Push-to-main must trigger the promote job (manifest-only retag of the PR image as :dev/:latest, no rebuild). Direct-push fallback dispatches workflow with force_dev_tag=true. Since #676 promote ALSO splits the published index into the moving per-architecture tags: advancing :dev without advancing :dev-<arch> leaves a stale image behind a moving name, silently — the pin keeps resolving, just to an older image."
 category = "ci"
 check_type = "static"
 handler = "require_tokens"
 paths = [".github/workflows/ci.yml"]
 per_path_tokens = { ".github/workflows/ci.yml" = [
     "promote:",
-    "docker buildx imagetools create",
+    "--tag \"${IMAGE}:dev\" \\",
+    "--tag \"${IMAGE}:dev-${arch}\" \"${IMAGE}@${digest}\"",
     "associatedPullRequests(first:1) { nodes { number } }",
     "-f force_dev_tag=true",
 ] }
@@ -697,8 +698,10 @@ per_path_tokens = { ".github/workflows/build-publish.yml" = [
     "PLATFORM: ${{ matrix.target.platform }}",
     "type=sha,prefix=,suffix=-${{ matrix.target.tag_suffix }}",
     "docker buildx imagetools create \"${tags[@]}\" \"${sources[@]}\"",
+    "id: probe\n        if: inputs.tag_strategy == 'pr'",
     "Assert the index lists every published architecture (AC1)",
-    "Assert each architecture resolves to its own image (AC2 + AC4)",
+    "Assert each per-architecture tag resolves to its own image (AC2)",
+    "Measure this architecture's image (AC4; #674 AC3, deferred here)",
 ], "python/src/dotfiles_setup/platform_target.py" = [
     "PUBLISHED_ARCHES = (",
     "def publish_matrix_json() -> str:",

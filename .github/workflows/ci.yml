@@ -493,6 +493,31 @@ jobs:
             echo "  :latest: ${latest_digest}" >&2
             exit 1
           fi
+          # The moving PER-ARCHITECTURE tags (#676). `:dev` is a multi-
+          # architecture index, so a caller that must name one architecture —
+          # a cross-architecture identity check, a `mise.local.toml` pin —
+          # reaches for `:dev-<arch>`. Advancing `:dev` without advancing those
+          # leaves a stale image behind a moving name, which is exactly the
+          # confusing failure mode the spec's D1 warns about, and it is silent:
+          # the pin keeps resolving, just to last month's image.
+          #
+          # The architecture list is read from the INDEX rather than passed in,
+          # so it describes what was actually published and cannot drift from
+          # the matrix that produced it. Attestation entries carry
+          # `os: unknown` and are filtered out.
+          raw=$(docker buildx imagetools inspect "${SOURCE_REF}" --raw)
+          while read -r arch digest; do
+            [ -n "${arch}" ] || continue
+            docker buildx imagetools create \
+              --tag "${IMAGE}:dev-${arch}" "${IMAGE}@${digest}"
+            got=$(docker buildx imagetools inspect "${IMAGE}:dev-${arch}" --format '{{.Manifest.Digest}}')
+            if [ "${got}" != "${digest}" ]; then
+              echo "FAIL: :dev-${arch} is ${got}, expected ${digest}" >&2
+              exit 1
+            fi
+            echo "- Per-arch tag: \`:dev-${arch}\` → \`${digest}\`" >> "$GITHUB_STEP_SUMMARY"
+          done < <(printf '%s' "${raw}" | jq -r \
+            '.manifests[] | select(.platform.os != "unknown") | "\(.platform.architecture) \(.digest)"')
           {
             echo "## Promote (tag-only)"
             echo ""

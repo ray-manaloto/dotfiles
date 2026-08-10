@@ -592,11 +592,44 @@ jobs:
           registry: ${{ env.CONTAINER_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Probe dev cache for this architecture
+      # Deliberately NOT the `:dev-<hash>` marker, and deliberately NOT run on
+      # the nightly path. Two distinct bugs live here:
+      #
+      # (1) `dev-prep` is skipped when tag_strategy != 'pr' — the nightly
+      #     exists to catch rolling-tool drift the content hash CANNOT see, so
+      #     it must always rebuild. Probing the marker here would make the
+      #     nightly skip its build (main's content is unchanged since the
+      #     merged PR, so the marker exists), leave `:<sha>-<arch>` unwritten,
+      #     and then fail in `dev-tag`, which retags exactly that.
+      # (2) Asking about the marker a SECOND time opens a race: if a
+      #     concurrent run stamps it between dev-prep's probe (miss) and this
+      #     one (hit), neither job ever writes `:<sha>-<arch>`. Asking instead
+      #     whether dev-prep actually published this leg's tag has no window —
+      #     `needs` guarantees dev-prep finished, so the answer is final.
+      - name: Check whether dev-prep already published this leg's tag
         id: probe
-        uses: ./.github/actions/dev-cache-probe
-        with:
-          image: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}
+        if: inputs.tag_strategy == 'pr'
+        env:
+          IMAGE: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}
+          TAG_SUFFIX: ${{ matrix.target.tag_suffix }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          short_sha=$(printf '%s' "${COMMIT_SHA}" | head -c 7)
+          arch_ref="${IMAGE}:${short_sha}-${TAG_SUFFIX}"
+          if out=$(docker manifest inspect "${arch_ref}" 2>&1); then
+            echo "hit=true" >> "$GITHUB_OUTPUT"
+            echo "Reusing dev-prep's validated ${arch_ref}" >> "$GITHUB_STEP_SUMMARY"
+          else
+            rc=$?
+            if printf '%s\n' "$out" | grep -qiE 'manifest unknown|not found|no such manifest'; then
+              echo "hit=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "FAIL: docker manifest inspect failed with non-miss error (rc=$rc):" >&2
+              printf '%s\n' "$out" >&2
+              exit "$rc"
+            fi
+          fi
       - name: Resolve prebuilt tier refs for this architecture
         # #676: these used to be `needs.base-prep.outputs.{cache_ref,digest}`.
         # Under a matrix that is a correctness bug — one output map, written by
@@ -794,11 +827,25 @@ jobs:
           registry: ${{ env.CONTAINER_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Resolve p2996 ref override
+        # The probe below computes `dev-hash`, which folds in CLANG_P2996_REF.
+        # Without this the override path would compute the PINNED-ref hash here
+        # while every other call site computes the overridden one — a spurious
+        # MISS rather than a wrong skip, but the four sites must agree.
+        if: inputs.p2996_ref != ''
+        env:
+          P2996_REF: ${{ inputs.p2996_ref }}
+        run: echo "CLANG_P2996_REF=${P2996_REF}" >> "$GITHUB_ENV"
       - name: Probe dev cache for this architecture
         # A hit means this exact content already passed smoke on a previous
         # run, and `dev-prep` has retagged it — re-smoking it is the ~10 minutes
-        # the third cache tier exists to avoid (#122).
+        # the third cache tier exists to avoid (#122). Skipped on the nightly
+        # path for the reason `build`'s probe is: the nightly must always
+        # rebuild AND re-validate, since it exists to catch drift the content
+        # hash cannot see. A skipped step yields an empty `hit`, so everything
+        # below runs.
         id: probe
+        if: inputs.tag_strategy == 'pr'
         uses: ./.github/actions/dev-cache-probe
         with:
           image: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}
@@ -835,6 +882,27 @@ jobs:
             exit 1
           fi
           echo "OK: ${IMAGE_REF} is ${actual}" >> "$GITHUB_STEP_SUMMARY"
+      # Name is QUOTED: in an unquoted scalar a space-preceded `#` starts a YAML
+      # comment, so `... deferred to #676)` would silently truncate the step name.
+      - name: "Measure this architecture's image (AC4; #674 AC3, deferred here)"
+        # #674 proved a mismatched architecture FAILS the manifest measure, but
+        # only against SYNTHETIC fixtures — no arm64 image existed to measure. A
+        # fixture is not the registry, so the real run was deferred to the
+        # ticket that publishes one. This is it, and it runs HERE rather than in
+        # `manifest` because `size_report` reads the local daemon: this job has
+        # just pulled the image, and `manifest` never pulls anything.
+        #
+        # Both arms are live: `--platform` is this leg's triple against an image
+        # that really is this architecture, and #674's guard exits 1 naming the
+        # available platforms whenever the two disagree.
+        if: steps.probe.outputs.hit != 'true'
+        env:
+          IMAGE_REF: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.smoke-tag.outputs.tag }}
+          TARGET_PLATFORM: ${{ matrix.target.platform }}
+        run: |
+          set -euo pipefail
+          uv run --project python dotfiles-setup image size-report \
+            --image-ref "${IMAGE_REF}" --platform "${TARGET_PLATFORM}"
       - name: Smoke published image
         if: steps.probe.outputs.hit != 'true'
         env:
@@ -1102,32 +1170,56 @@ jobs:
             echo "FAIL: ${IMAGE_REF} lists [${present[*]}], expected [${expected[*]}]" >&2
             exit 1
           fi
-      - name: Assert each architecture resolves to its own image (AC2 + AC4)
-        # The deferred half of #674's AC3, now runnable for real: that ticket
-        # proved a mismatched architecture FAILS the manifest measure, but only
-        # against synthetic fixtures, because no arm64 image existed to measure.
-        # This is the same probe against the registry — and it is a genuine
-        # two-armed check, since `size-report` exits 1 naming the available
-        # platforms when the requested one is absent.
+      - name: Assert each per-architecture tag resolves to its own image (AC2)
+        # Registry-only, by construction. The obvious-looking check here — run
+        # `image size-report --platform <triple>` once per architecture and
+        # require the reports to differ — is wrong TWICE, and both ways are
+        # instructive:
+        #
+        #   * `size_report` reads the LOCAL daemon (`docker image inspect`,
+        #     `docker history`), and this job never pulls. It would raise on the
+        #     first iteration, every run.
+        #   * Its payload embeds the requested `platform`, so the reports differ
+        #     BY CONSTRUCTION and the "they must differ" branch is unreachable —
+        #     a check that can only pass
+        #     (`.claude/rules/probes-need-a-control-arm.md`).
+        #
+        # So compare the thing that is actually arch-derived: the digest each
+        # index entry points at, read straight from the published document.
+        # Distinct digests, and each per-architecture TAG resolving to the same
+        # digest as its index entry, is exactly AC2 — and it genuinely fails if
+        # the index ever points two entries at one image.
         env:
+          IMAGE: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}
           IMAGE_REF: ${{ steps.merge.outputs.image_ref }}
           MATRIX: ${{ needs.plan.outputs.matrix }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          sums=()
-          while read -r platform; do
-            echo "--- measuring ${platform} of ${IMAGE_REF}"
-            report=$(uv run --project python dotfiles-setup image size-report \
-              --image-ref "${IMAGE_REF}" --platform "${platform}")
-            printf '%s\n' "${report}"
-            sums+=("$(printf '%s' "${report}" | sha256sum)")
-          done < <(printf '%s' "${MATRIX}" | jq -r '.[].platform')
-          # Two architectures whose measurements are byte-identical mean the
-          # index points both entries at one image — the exact failure a plain
-          # "did the pull succeed" check cannot see.
-          unique=$(printf '%s\n' "${sums[@]}" | sort -u | wc -l)
-          if [ "${unique}" -ne "${#sums[@]}" ]; then
-            echo "FAIL: architectures produced identical measurements — the index is not really multi-architecture" >&2
+          short_sha=$(printf '%s' "${COMMIT_SHA}" | head -c 7)
+          raw=$(docker buildx imagetools inspect "${IMAGE_REF}" --raw)
+          digests=()
+          while read -r arch suffix; do
+            entry=$(printf '%s' "${raw}" | jq -r \
+              --arg a "${arch}" \
+              '.manifests[] | select(.platform.architecture == $a and .platform.os != "unknown") | .digest')
+            if [ -z "${entry}" ]; then
+              echo "FAIL: no ${arch} entry in ${IMAGE_REF}" >&2
+              exit 1
+            fi
+            tagged=$(docker buildx imagetools inspect "${IMAGE}:${short_sha}-${suffix}" --format '{{.Manifest.Digest}}')
+            if [ "${entry}" != "${tagged}" ]; then
+              echo "FAIL: :${short_sha}-${suffix} is ${tagged} but the index's ${arch} entry is ${entry}" >&2
+              exit 1
+            fi
+            echo "${arch}: ${entry}"
+            digests+=("${entry}")
+          done < <(printf '%s' "${MATRIX}" | jq -r '.[] | "\(.arch) \(.tag_suffix)"')
+          # Two entries sharing a digest mean the index is single-architecture
+          # wearing two labels — which every "did the pull succeed" check passes.
+          unique=$(printf '%s\n' "${digests[@]}" | sort -u | wc -l)
+          if [ "${unique}" -ne "${#digests[@]}" ]; then
+            echo "FAIL: index entries share a digest — not really multi-architecture" >&2
             exit 1
           fi
           echo "OK: each architecture resolves to a distinct image" >> "$GITHUB_STEP_SUMMARY"

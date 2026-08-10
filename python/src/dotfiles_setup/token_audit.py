@@ -235,6 +235,19 @@ AMBIGUITY_ALLOWED: dict[tuple[str, str, str], str] = {
     (
         "ci.build-publish-matrix",
         ".github/workflows/build-publish.yml",
+        "id: probe\n        if: inputs.tag_strategy == 'pr'",
+    ): "TWICE by design — `build` and `smoke-test` each guard their dev-cache "
+    "probe against the nightly path, and the multiplicity IS the assertion. "
+    "`dev-prep` is skipped when tag_strategy != 'pr', so an unguarded probe "
+    "makes the nightly skip its build (main's content is unchanged since the "
+    "merged PR, so the marker exists), leave `:<sha>-<arch>` unwritten, and "
+    "fail in `dev-tag` — while silently defeating the nightly's whole purpose "
+    "of catching drift the content hash cannot see. Binding one site would "
+    "stop the gate noticing if the OTHER lost its guard. Found by review, "
+    "2026-08-10.",
+    (
+        "ci.build-publish-matrix",
+        ".github/workflows/build-publish.yml",
         "target: ${{ fromJSON(needs.plan.outputs.matrix) }}",
     ): "once per matrixed job by design (#676) — base-prep, p2996-prep, "
     "dev-prep, build, smoke-test and dev-tag each export the leg's platform, "
