@@ -46,12 +46,13 @@ ticket's.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -61,22 +62,34 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     "DEFAULT_LITERAL_SITES",
+    "GCC_LATEST_ARCHES",
+    "LLVM_TARGETS",
     "PLATFORM_ENV_VAR",
     "PLATFORM_FIELDS",
+    "PUBLISHED_ARCHES",
     "PlatformLiteral",
+    "PublishTarget",
     "expected_uname_machine",
     "find_default_drift",
+    "find_lock_platform_drift",
+    "find_pinned_image_arch",
+    "find_unpublished_pin",
     "find_violations",
     "host_arch",
     "host_platform",
     "is_emulated",
+    "mise_lock_platforms",
     "normalize_arch",
     "os_arch",
     "platform_arch",
     "platform_field",
     "platform_literals_main",
     "platform_main",
+    "publish_matrix_json",
+    "publish_matrix_main",
+    "published_targets",
     "resolve_platform",
+    "ships_gcc_latest",
 ]
 
 PLATFORM_ENV_VAR = "DOTFILES_PLATFORM"
@@ -131,6 +144,166 @@ _SCAN_EXCLUDED_PREFIXES = (
 # answer. Nothing here issues a `--platform`, so the exemption costs no
 # coverage.
 _SCAN_EXCLUDED_PATHS = ("python/src/dotfiles_setup/platform_target.py",)
+
+
+# The architectures the published image ships as one manifest (#676), in the
+# order the CI matrix runs them.
+PUBLISHED_ARCHES = ("amd64", "arm64")
+
+# The GitHub-hosted runner label that executes each architecture NATIVELY.
+# Native is the whole ruling: a single bake emitting both platforms would build
+# the arm64 half under QEMU, and that half compiles GCC 16.2 and clang-p2996 —
+# the "~2h compiler" rebuild `docker-bake.hcl` already names, paid on emulated
+# CPU. Availability of the arm label is measured, not assumed: a control-armed
+# probe scheduled on it and asserted `uname -m` = aarch64 (#676).
+_RUNNER_LABELS = {"amd64": "ubuntu-latest", "arm64": "ubuntu-24.04-arm"}
+
+# The architectures whose image carries the kayari `gcc-latest` trunk snapshot.
+#
+# NOT a subset waiting to be widened: upstream states the policy on its index
+# page — "Only the C and C++ compilers are included, and only for x86_64, in a
+# single large package" — so there is nothing to wait for. arm64's modern-GCC
+# slot is conda-forge's `gcc` instead, which does publish linux-aarch64.
+#
+# The published image is therefore NOT architecture-symmetric, and pretending
+# otherwise is what a smoke check would do if it asserted this compiler
+# unconditionally: it would fail an arm64 build over an artifact that does not
+# exist. clang-p2996 is unaffected — it is built from source (#698).
+GCC_LATEST_ARCHES = ("amd64",)
+
+# mise's own spelling of each architecture — a THIRD name for the same axis,
+# and the one both image lockfiles are keyed by. `uname -m` says x86_64, docker
+# says amd64, mise says linux-x64; treating any two as interchangeable is how
+# #698 shipped an arm64 image holding 131 x86_64 tool resolutions.
+_MISE_LOCK_PLATFORM = {"amd64": "linux-x64", "arm64": "linux-arm64"}
+
+# LLVM's spelling — a FOURTH name for the same axis, and the one the image's
+# clang-p2996 build is configured by (`-DLLVM_TARGETS_TO_BUILD`).
+#
+# This exists because #703's arm64 `p2996-prep` failed on `=X86` pinned as a
+# literal: LLVM built a clang with no aarch64 backend, the runtimes stage
+# configured USING that clang, and every compile probe failed 52 minutes in.
+# It is #698's defect class — an architecture pinned as a literal that survived
+# the dual-arch split — reached through a vocabulary no existing gate knew.
+# `find_violations` cannot see it: its pattern is a platform TRIPLE.
+#
+# Keyed by docker's arch name because that is what BuildKit hands the Dockerfile
+# as `TARGETARCH`, so the mapping is stated in the two spellings that actually
+# meet at the call site. `tests/test_image_arch.py` binds the Dockerfile's own
+# `case` arms to this table, which is why it is public.
+LLVM_TARGETS = {"amd64": "X86", "arm64": "AArch64"}
+
+# The image's system-wide mise config. Its `[settings]` decide what the IMAGE
+# resolves, which is a different question from what CI publishes — #698 is
+# precisely the two answers disagreeing.
+IMAGE_MISE_CONFIG = ".devcontainer/mise-system.toml"
+
+_LOCKFILE_PLATFORMS_RE = re.compile(
+    r"^\s*lockfile_platforms\s*=\s*\[(?P<body>[^\]]*)\]", re.MULTILINE
+)
+
+# Every FILE that can pin the image's architecture. `mise-system.toml` decides
+# what the BUILD resolves; `devcontainer.json`'s `containerEnv` decides what
+# every process in the RUNNING container resolves — a distinction #698's first
+# fix missed, leaving the pin alive at runtime while the build was cleaned up.
+IMAGE_ARCH_CONFIGS = (
+    ".devcontainer/mise-system.toml",
+    ".devcontainer/devcontainer.json",
+)
+
+# Every KEY that pins it, because one axis has three spellings here.
+# `arch` is mise's setting. `MISE_ARCH` is that SAME setting's environment
+# spelling — probed 2026-08-10, both arms: `MISE_ARCH=x86_64 mise settings get
+# arch` prints `x86_64`, and unset it errors "Setting [arch] is not set".
+# `CONDA_SUBDIR` is rattler's equivalent for the conda backend.
+#
+# Enumerated because the first version of this gate knew only `arch` — the one
+# spelling that had already been fixed — so it was armed against the single
+# regression least likely to recur while two live pins sat past its reach.
+_ARCH_PIN_KEYS = ("arch", "MISE_ARCH", "CONDA_SUBDIR")
+
+# Anchored at line start so a COMMENTED pin (the honest record of why the line
+# went away) does not re-trip the gate that removed it. `[:=]` covers TOML's
+# `key = "v"` and JSON's `"key": "v"` in one pattern.
+_ARCH_PIN_RES = tuple(
+    re.compile(
+        rf"^\s*[\"']?{key}[\"']?\s*[:=]\s*[\"'](?P<value>[^\"']+)[\"']",
+        re.MULTILINE,
+    )
+    for key in _ARCH_PIN_KEYS
+)
+
+
+@dataclass(frozen=True)
+class PublishTarget:
+    """One architecture of the published image, fully resolved for CI.
+
+    ``tag_suffix`` is what turns the moving tag into a per-architecture one
+    (``:<sha>`` → ``:<sha>-arm64``). Every matrix leg must push a DISTINCT tag:
+    they run concurrently against one registry, so two legs sharing a tag do not
+    merge, they overwrite — and the loser's smoke result silently describes an
+    image nobody can pull any more.
+    """
+
+    platform: str
+    arch: str
+    runner: str
+    tag_suffix: str
+
+
+def _publish_target(arch: str) -> PublishTarget:
+    """Resolve one architecture, or raise naming what is unwired.
+
+    Raises ``ValueError`` rather than defaulting a missing runner label to
+    something plausible: an empty ``runs-on`` queues the job against no runner
+    at all, so it hangs to the job timeout and reads as GitHub capacity rather
+    than as this table being incomplete.
+    """
+    level = _MICROARCH_LEVEL.get(arch)
+    runner = _RUNNER_LABELS.get(arch)
+    if level is None or runner is None:
+        missing = "microarchitecture level" if level is None else "runner label"
+        msg = (
+            f"architecture {arch!r} is declared in PUBLISHED_ARCHES but has no "
+            f"{missing} — publishing it would emit an unbuildable matrix entry"
+        )
+        raise ValueError(msg)
+    return PublishTarget(
+        platform=f"linux/{arch}/{level}",
+        arch=arch,
+        runner=runner,
+        tag_suffix=arch,
+    )
+
+
+def published_targets() -> tuple[PublishTarget, ...]:
+    """Every architecture the image publishes, in matrix order."""
+    return tuple(_publish_target(arch) for arch in PUBLISHED_ARCHES)
+
+
+def publish_matrix_json() -> str:
+    """The publish matrix as one line of JSON, for a workflow ``fromJSON``.
+
+    One line because ``>> "$GITHUB_OUTPUT"`` is line-oriented — a pretty-printed
+    payload is read as a truncated first line and the matrix silently loses
+    every architecture after the first.
+    """
+    return json.dumps([asdict(target) for target in published_targets()])
+
+
+def publish_matrix_main() -> int:
+    """CLI entry: print the publish matrix for the CI job that fans out."""
+    sys.stdout.write(f"{publish_matrix_json()}\n")
+    return 0
+
+
+def ships_gcc_latest(platform: str) -> bool:
+    """Does an image built for ``platform`` carry the kayari gcc-latest deb?
+
+    Asked of the platform rather than answered by a boolean the caller worked
+    out, so the asymmetry in :data:`GCC_LATEST_ARCHES` is stated once.
+    """
+    return platform_arch(platform) in GCC_LATEST_ARCHES
 
 
 def normalize_arch(token: str) -> str | None:
@@ -343,6 +516,132 @@ def find_default_drift(repo_root: Path) -> str | None:
     return None
 
 
+def find_unpublished_pin(repo_root: Path) -> str | None:
+    """A message when the repo's pin names an architecture CI does not publish.
+
+    ``DOTFILES_PLATFORM`` decides what ``mise run up`` asks the registry for,
+    and :data:`PUBLISHED_ARCHES` decides what CI puts there. Nothing else ties
+    the two together, so they can drift apart in a one-line edit — and the
+    result is a devcontainer that cannot start, reporting a manifest error
+    against a tag that genuinely exists and genuinely lists two other
+    architectures. That reads as a registry problem for as long as it takes
+    someone to compare these two declarations by hand.
+
+    Returns ``None`` when they agree, so it composes with the literal scan in
+    :func:`platform_literals_main`.
+    """
+    pinned = _read_default(repo_root, "mise.toml", _MISE_DEFAULT_RE)
+    if pinned is None:
+        # `find_default_drift` already reports a missing pin, and reporting it
+        # twice would make one edit look like two problems.
+        return None
+    published = {target.platform for target in published_targets()}
+    if pinned not in published:
+        return (
+            f"the repo pins {pinned!r} but the publish matrix ships "
+            f"{sorted(published)} — `mise run up` would ask the registry for an "
+            f"architecture no build produces"
+        )
+    return None
+
+
+def mise_lock_platforms() -> tuple[str, ...]:
+    """Mise's lock-platform name for every published architecture.
+
+    Raises ``ValueError`` naming the architecture rather than skipping it: a
+    silently-dropped platform produces a lockfile that is complete by its own
+    definition and wrong by the build's, which is the #698 failure exactly.
+    """
+    platforms: list[str] = []
+    for arch in PUBLISHED_ARCHES:
+        platform = _MISE_LOCK_PLATFORM.get(arch)
+        if platform is None:
+            msg = (
+                f"architecture {arch!r} is declared in PUBLISHED_ARCHES but has "
+                f"no mise lock-platform name — its tools would be resolved for "
+                f"another architecture"
+            )
+            raise ValueError(msg)
+        platforms.append(platform)
+    return tuple(platforms)
+
+
+def _image_mise_config(repo_root: Path) -> str | None:
+    try:
+        return (repo_root / IMAGE_MISE_CONFIG).read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+
+def find_lock_platform_drift(repo_root: Path) -> str | None:
+    """A message when the image locks fewer architectures than CI publishes.
+
+    ``lockfile_platforms`` scopes what ``mise lock`` writes, so an architecture
+    absent from it gets **no lock entries at all** — and ``mise install
+    --locked`` then resolves that architecture's tools from whatever platform is
+    present. The build survives it, because the build-time self-checks count
+    installed tools rather than executing them, so the first honest failure is a
+    binary that will not run, hours later at smoke.
+
+    ``image_lock.py`` also reads this declaration to decide which platforms to
+    regenerate, which is why a *missing* declaration is reported rather than
+    read as "all platforms": deleting it narrows the refresh silently.
+    """
+    text = _image_mise_config(repo_root)
+    if text is None:
+        return None
+    match = _LOCKFILE_PLATFORMS_RE.search(text)
+    if match is None:
+        return (
+            f"{IMAGE_MISE_CONFIG} declares no `lockfile_platforms` — "
+            f"`mise run lock-image` reads it to decide which platforms to "
+            f"regenerate, so its absence narrows the locks instead of widening "
+            f"them. Expected {list(mise_lock_platforms())}"
+        )
+    declared = {token.strip().strip("\"'") for token in match.group("body").split(",")}
+    missing = [p for p in mise_lock_platforms() if p not in declared]
+    if missing:
+        return (
+            f"{IMAGE_MISE_CONFIG} locks {sorted(declared - {''})} but the publish "
+            f"matrix ships {list(PUBLISHED_ARCHES)} — {missing} would get no lock "
+            f"entries, so those architectures resolve another platform's tools"
+        )
+    return None
+
+
+def find_pinned_image_arch(repo_root: Path) -> str | None:
+    """A message when any image config pins the architecture (#698 AC1).
+
+    Every matrix leg builds inside a container OF its target architecture, and
+    every running container IS its own architecture, so native detection already
+    *is* the answer. A literal overrides that detection with whatever was true
+    the day the line was written — and unlike a wrong ``--platform``, nothing
+    downstream contradicts it: the image is built for one architecture and
+    filled with another's binaries, which no count or stat can see.
+
+    Scans every file in :data:`IMAGE_ARCH_CONFIGS` for every key in
+    ``_ARCH_PIN_KEYS``, because build-time and runtime pin it in different files
+    under different names — and fixing one of those is indistinguishable, from
+    inside the build, from fixing both.
+    """
+    for rel_path in IMAGE_ARCH_CONFIGS:
+        try:
+            text = (repo_root / rel_path).read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for key, pattern in zip(_ARCH_PIN_KEYS, _ARCH_PIN_RES, strict=True):
+            match = pattern.search(text)
+            if match is None:
+                continue
+            return (
+                f'{rel_path} pins `{key} = "{match.group("value")}"` — that '
+                f"architecture's tools would be resolved whatever the image is "
+                f"built for or run as. Delete it: the container already IS the "
+                f"architecture, so detection cannot disagree with it"
+            )
+    return None
+
+
 #: What ``dotfiles-setup platform <field>`` can print. Shell callers (the
 #: `verify-arch` task) read these instead of re-implementing the triple→arch
 #: and triple→uname mappings in bash ([[zero-bash-logic]]).
@@ -375,10 +674,16 @@ def platform_main(field: str) -> int:
 def platform_literals_main(repo_root: Path) -> int:
     """CLI entry: report re-appearing literals and default drift; exit 1 if any."""
     failed = False
-    drift = find_default_drift(repo_root)
-    if drift is not None:
-        failed = True
-        logger.error("platform-literals FAIL: %s", drift)
+    checks = (
+        find_default_drift(repo_root),
+        find_unpublished_pin(repo_root),
+        find_lock_platform_drift(repo_root),
+        find_pinned_image_arch(repo_root),
+    )
+    for message in checks:
+        if message is not None:
+            failed = True
+            logger.error("platform-literals FAIL: %s", message)
     violations = find_violations(repo_root)
     if violations:
         failed = True

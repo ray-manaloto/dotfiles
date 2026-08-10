@@ -14,6 +14,7 @@ re-appearing at a site nobody remembered — is invisible in a green run.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -335,3 +336,284 @@ def test_platform_cli_prints_the_resolved_fact(
     result = _cli("platform", field, platform=triple)
     assert result.returncode == 0
     assert result.stdout.strip() == expected
+
+
+# ──────────────────────────────────────────────────────────────────────
+# #676 — the set of architectures the image PUBLISHES.
+#
+# The matrix cannot live in `.github/workflows/*.yml`: those files are scanned
+# by `no_platform_literals`, so a triple written there fails the gate. Declaring
+# it here and feeding it to the workflow through `fromJSON` is what that gate
+# pushes you toward, and it means "which architectures do we ship" has exactly
+# one answer in the tree.
+# ──────────────────────────────────────────────────────────────────────
+
+
+def test_published_targets_cover_every_declared_architecture() -> None:
+    """Each published architecture yields one fully-resolved build target."""
+    targets = platform_target.published_targets()
+    assert [t.arch for t in targets] == list(platform_target.PUBLISHED_ARCHES)
+    for target in targets:
+        assert target.platform.startswith("linux/")
+        assert platform_target.platform_arch(target.platform) == target.arch
+        assert target.runner
+
+
+def test_published_targets_are_natively_built_never_emulated() -> None:
+    """No two architectures may share a runner label.
+
+    Ray's ruling for #676 was a NATIVE runner matrix over one bake with two
+    platforms, because the arm64 half would otherwise compile GCC 16.2 and
+    clang-p2996 under QEMU — the ~2h build `docker-bake.hcl` already calls out.
+    Two architectures pointing at one label is that rejected topology arriving
+    by accident, and it would look like a normal green build.
+    """
+    runners = [t.runner for t in platform_target.published_targets()]
+    assert len(set(runners)) == len(runners), f"shared runner label: {runners}"
+
+
+def test_published_targets_carry_distinct_tags() -> None:
+    """AC2: a per-architecture tag exists for each, and they cannot collide."""
+    suffixes = [t.tag_suffix for t in platform_target.published_targets()]
+    assert len(set(suffixes)) == len(suffixes)
+    assert all(suffixes)
+
+
+def test_the_repo_pin_is_one_of_the_published_architectures() -> None:
+    """The devcontainer must be able to pull what CI publishes.
+
+    `DOTFILES_PLATFORM` selects what `mise run up` asks the registry for. If the
+    pin ever named an architecture the publish matrix omits, every local pull
+    would fail against a manifest that genuinely lists two other architectures —
+    a failure that reads as a registry problem, not a config one.
+    """
+    assert platform_target.find_unpublished_pin(REPO_ROOT) is None
+
+
+def test_a_pin_outside_the_publish_matrix_is_reported(tmp_path: Path) -> None:
+    """FAIL arm: the gate above is decoration unless the drift really fails.
+
+    The fixture writes the same declaration shape `mise.toml` uses, naming an
+    architecture no `PUBLISHED_ARCHES` entry ships.
+    """
+    (tmp_path / "mise.toml").write_text(
+        "[env]\n"
+        'DOTFILES_PLATFORM = "{{ env.DOTFILES_PLATFORM | '
+        "default(value='linux/riscv64/v1') }}\"\n",
+        encoding="utf-8",
+    )
+    message = platform_target.find_unpublished_pin(tmp_path)
+    assert message is not None
+    assert "riscv64" in message
+
+
+def test_a_missing_pin_is_left_to_the_drift_check(tmp_path: Path) -> None:
+    """One edit must not be reported as two problems.
+
+    A deleted pin is `find_default_drift`'s finding; reporting it here as well
+    would put two failures on screen for one cause, and the second names the
+    publish matrix — which is not what broke.
+    """
+    (tmp_path / "mise.toml").write_text("[env]\n", encoding="utf-8")
+    assert platform_target.find_unpublished_pin(tmp_path) is None
+    assert platform_target.find_default_drift(tmp_path) is not None
+
+
+def test_publish_matrix_json_is_parseable_and_complete() -> None:
+    """The exact shape `fromJSON` consumes in the workflow."""
+    entries = json.loads(platform_target.publish_matrix_json())
+    assert isinstance(entries, list)
+    assert {key for entry in entries for key in entry} == {
+        "platform",
+        "arch",
+        "runner",
+        "tag_suffix",
+    }
+    assert len(entries) == len(platform_target.PUBLISHED_ARCHES)
+
+
+def test_publish_matrix_cli_emits_one_line() -> None:
+    """`>> $GITHUB_OUTPUT` is line-oriented: a wrapped payload breaks it."""
+    proc = subprocess.run(
+        [sys.executable, "-m", "dotfiles_setup.main", "platform-matrix"],
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=REPO_ROOT,
+    )
+    assert proc.stdout.count("\n") == 1
+    assert len(json.loads(proc.stdout)) == len(platform_target.PUBLISHED_ARCHES)
+
+
+def test_published_arch_without_a_runner_label_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FAIL arm: adding an architecture without wiring its runner must not pass.
+
+    Silently omitting the label would emit a matrix entry whose `runs-on` is
+    empty — GitHub then queues the job against no runner and it hangs until the
+    job timeout, which reads as a capacity problem rather than a config one.
+
+    Declared through `PUBLISHED_ARCHES`, which is the edit a person actually
+    makes; reaching for the private resolver would test a path no caller uses.
+    """
+    monkeypatch.setattr(platform_target, "PUBLISHED_ARCHES", ("amd64", "riscv64"))
+    with pytest.raises(ValueError, match="riscv64"):
+        platform_target.published_targets()
+
+
+# --------------------------------------------------------------------------
+# The image's OWN architecture (#698) — publishing an arch is not building it
+# --------------------------------------------------------------------------
+
+
+def test_every_published_arch_has_a_mise_lock_platform() -> None:
+    """Mise spells the same axis a third way, and the locks are keyed by it.
+
+    `PUBLISHED_ARCHES` says what CI builds, docker says `amd64`/`arm64`, and
+    mise's lockfiles say `linux-x64`/`linux-arm64`. An architecture published
+    without a lock-platform name resolves its tools for somebody else's CPU.
+    """
+    platforms = platform_target.mise_lock_platforms()
+    assert len(platforms) == len(platform_target.PUBLISHED_ARCHES)
+    assert len(set(platforms)) == len(platforms)
+
+
+def test_a_published_arch_without_a_lock_platform_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FAIL arm: an unmapped architecture must not silently resolve to nothing.
+
+    Declared through `PUBLISHED_ARCHES` — the edit a person actually makes.
+    """
+    monkeypatch.setattr(platform_target, "PUBLISHED_ARCHES", ("amd64", "riscv64"))
+    with pytest.raises(ValueError, match="riscv64"):
+        platform_target.mise_lock_platforms()
+
+
+def test_the_image_config_locks_every_published_architecture() -> None:
+    """#698: the image resolved x86_64 tools while CI published two arches.
+
+    `lockfile_platforms` scopes what `mise lock` writes, so an architecture
+    missing from it gets **no lock entries at all** — and `mise install
+    --locked` then resolves that architecture's tools from somebody else's
+    platform. It survives the build (the self-checks counted tools rather than
+    running them), so nothing fails until a binary is executed.
+    """
+    assert platform_target.find_lock_platform_drift(REPO_ROOT) is None
+
+
+def test_an_uncovered_architecture_is_reported(tmp_path: Path) -> None:
+    """FAIL arm: the gate above is decoration unless a narrow list really fails."""
+    config = tmp_path / ".devcontainer" / "mise-system.toml"
+    config.parent.mkdir(parents=True)
+    config.write_text(
+        '[settings]\nlockfile_platforms = ["linux-x64"]\n', encoding="utf-8"
+    )
+
+    message = platform_target.find_lock_platform_drift(tmp_path)
+
+    assert message is not None
+    assert "linux-arm64" in message
+
+
+def test_a_deleted_lockfile_platforms_declaration_is_reported(tmp_path: Path) -> None:
+    """A missing declaration must not read as 'every architecture is covered'.
+
+    mise's own default is every platform it knows, so a reader could argue the
+    absence is harmless. It is not: the declaration is what `image_lock.py`
+    reads to decide which platforms to regenerate, so deleting it silently
+    narrows the refresh instead of widening it.
+    """
+    config = tmp_path / ".devcontainer" / "mise-system.toml"
+    config.parent.mkdir(parents=True)
+    config.write_text("[settings]\nexperimental = true\n", encoding="utf-8")
+
+    message = platform_target.find_lock_platform_drift(tmp_path)
+
+    assert message is not None
+    assert "lockfile_platforms" in message
+
+
+def test_the_image_config_does_not_pin_a_literal_architecture() -> None:
+    """#698 AC1: `arch` is derived from the build target, never a literal.
+
+    Each matrix leg builds in a container OF its target architecture, so mise's
+    own detection is already the target. A literal `arch` overrides that
+    detection with whatever was true when the line was written.
+    """
+    assert platform_target.find_pinned_image_arch(REPO_ROOT) is None
+
+
+@pytest.mark.parametrize(
+    ("rel_path", "body"),
+    [
+        # The exact line #698 was filed for.
+        (".devcontainer/mise-system.toml", '[settings]\narch = "x86_64"\n'),
+        # The SAME setting under its environment spelling. Probed 2026-08-10:
+        # `MISE_ARCH=x86_64 mise settings get arch` -> x86_64; unset -> "not
+        # set". A gate that knew only the first spelling let this survive the
+        # commit that claimed to remove the pin.
+        (".devcontainer/mise-system.toml", '[env]\nMISE_ARCH = "x86_64"\n'),
+        (".devcontainer/mise-system.toml", '[env]\nCONDA_SUBDIR = "linux-64"\n'),
+        # And the same pins in the runtime spec, which the gate did not read
+        # at all — `containerEnv` puts them in EVERY process in the container,
+        # so a runtime `mise install` resolves the pinned architecture.
+        # Written the way the real file is written — one key per line. A
+        # single-line fixture would miss, because the scan anchors at line start
+        # so that a COMMENTED pin does not re-trip the gate that removed it, and
+        # a fixture the real format cannot produce proves nothing either way.
+        (
+            ".devcontainer/devcontainer.json",
+            '{\n  "containerEnv": {\n    "MISE_ARCH": "x86_64"\n  }\n}\n',
+        ),
+        (
+            ".devcontainer/devcontainer.json",
+            '{\n  "containerEnv": {\n    "CONDA_SUBDIR": "linux-64"\n  }\n}\n',
+        ),
+    ],
+)
+def test_an_architecture_pin_is_reported_whatever_it_is_spelled(
+    tmp_path: Path, rel_path: str, body: str
+) -> None:
+    """FAIL arms: one axis, three spellings, two files — all of them pin it.
+
+    Enumerated rather than asserted (`feedback_enumerate_dont_assert_the_list`):
+    the first version of this gate knew exactly the one spelling that had
+    already been fixed, so it was armed only against the regression least
+    likely to recur.
+    """
+    config = tmp_path / rel_path
+    config.parent.mkdir(parents=True, exist_ok=True)
+    config.write_text(body, encoding="utf-8")
+
+    message = platform_target.find_pinned_image_arch(tmp_path)
+
+    assert message is not None
+    assert rel_path in message
+
+
+def test_the_pin_scan_reads_every_file_that_can_carry_one() -> None:
+    """Control arm: the real-tree PASS above is free if no file is read.
+
+    Both checks are "no violation found" shaped, which an empty file list
+    satisfies for nothing.
+    """
+    for rel_path in platform_target.IMAGE_ARCH_CONFIGS:
+        assert (REPO_ROOT / rel_path).is_file(), f"{rel_path} is not on disk"
+
+
+def test_a_commented_out_arch_pin_is_not_a_violation(tmp_path: Path) -> None:
+    """A comment explaining why the pin was removed must not re-trip the gate.
+
+    Without this the honest fix — deleting the line and saying why — fails the
+    check that motivated it, and the next author deletes the explanation.
+    """
+    config = tmp_path / ".devcontainer" / "mise-system.toml"
+    config.parent.mkdir(parents=True)
+    config.write_text(
+        '[settings]\n# arch = "x86_64" was removed by #698\nexperimental = true\n',
+        encoding="utf-8",
+    )
+
+    assert platform_target.find_pinned_image_arch(tmp_path) is None

@@ -54,6 +54,14 @@ Reading "non-empty" as "done" was the original bug: a copy that died at 90% of a
 3.5 GB home leaves a very much non-empty target, which reported
 `already-migrated` and would have sent the user into a truncated home.
 
+## Why the arch is in the NAME, not in a check
+
+The home volume carries compiled output (`~/.local/share/mise/installs`,
+`~/.cargo`, `~/.rustup`), and docker reuses a named volume on mount without a
+word — so one volume shared by two architectures interleaves their binaries and
+fails far from its cause. A name that differs per architecture makes the reuse
+impossible instead of merely detectable.
+
 ## Container identity: the id labels, not the name
 
 `@devcontainers/cli` looks an existing container up by `--id-label`, and **with

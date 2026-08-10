@@ -56,12 +56,13 @@ from dotfiles_setup.lock_refresh import (
 )
 from dotfiles_setup.platform_target import (
     expected_uname_machine,
+    mise_lock_platforms,
     platform_arch,
     resolve_platform,
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +110,26 @@ def lock_platforms(lock_text: str) -> tuple[str, ...]:
     for platforms in tool_platforms(lock_text).values():
         covered |= platforms
     return tuple(sorted(covered))
+
+
+def platforms_to_lock(
+    lock_text: str, *, required: Sequence[str] | None = None
+) -> tuple[str, ...]:
+    """What a regen must write: what the lock HAS, plus what it OWES.
+
+    :func:`lock_platforms` alone can only ever *preserve* coverage — it reads
+    the committed file, so an architecture that was just added to the publish
+    matrix has no entries yet and is therefore skipped by the very run meant to
+    create them. The regen then reports success across the platforms it already
+    had, and #698's symptom (an arm64 image resolving x86_64 tools) survives its
+    own fix.
+
+    ``required`` defaults to every architecture
+    :data:`~dotfiles_setup.platform_target.PUBLISHED_ARCHES` ships, so widening
+    the publish matrix is what widens the next regen — one declaration, not two.
+    """
+    owed = mise_lock_platforms() if required is None else tuple(required)
+    return tuple(sorted(set(lock_platforms(lock_text)) | set(owed)))
 
 
 def host_can_lock(
@@ -325,9 +346,10 @@ def image_lock_main(
         return 1
 
     if not platforms:
-        platforms = lock_platforms((repo_root / SYSTEM_LOCK).read_text())
+        platforms = platforms_to_lock((repo_root / SYSTEM_LOCK).read_text())
         logger.info(
-            "locking the %d platform(s) the committed lock carries: %s",
+            "locking %d platform(s) — what the committed lock carries plus "
+            "every published architecture: %s",
             len(platforms),
             ", ".join(platforms),
         )

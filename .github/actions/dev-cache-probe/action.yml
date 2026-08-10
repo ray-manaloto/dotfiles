@@ -1,0 +1,75 @@
+name: dev-cache-probe
+description: >-
+  Probe the third-tier `:dev-<hash>` validated-image marker for ONE
+  architecture, and report hit/miss plus the resolved cache ref.
+
+# Why this is a composite rather than a job output (#676).
+#
+# A GitHub matrix job has ONE `outputs` map, written by whichever leg finishes
+# last — there is no per-leg output. So `needs.dev-prep.outputs.hit` under a
+# two-architecture matrix reports one leg's answer to both, and the wrong half
+# of the time that means building an image whose validated marker already
+# existed, or skipping a build whose marker does not. Each leg therefore asks
+# the registry itself, and the asking lives here so the three call sites cannot
+# drift apart.
+#
+# The probe stays truthful after `build` runs: build pushes `:<sha>-<arch>`,
+# while `:dev-<hash>` is stamped only by `dev-tag`, only after smoke passes. So
+# at every call site a hit means "this exact content was already built AND
+# validated", never "we just built it".
+#
+# REQUIRES the caller to have run `actions/checkout` and `./.github/actions/
+# setup-mise` (python + uv) first, and to have exported `PLATFORM` for the leg —
+# `dev-hash` resolves it exactly as bake does.
+
+inputs:
+  image:
+    description: "Registry image name without a tag (ghcr.io/owner/name)"
+    required: true
+
+outputs:
+  hash:
+    description: "The dev content hash for this architecture"
+    value: ${{ steps.probe.outputs.hash }}
+  cache_ref:
+    description: "The fully-qualified :dev-<hash> marker ref"
+    value: ${{ steps.probe.outputs.cache_ref }}
+  hit:
+    description: "'true' when the validated marker already exists"
+    value: ${{ steps.probe.outputs.hit }}
+
+runs:
+  using: composite
+  steps:
+    - name: Compute dev hash and probe the validated marker
+      id: probe
+      shell: bash
+      env:
+        IMAGE: ${{ inputs.image }}
+      run: |
+        set -euo pipefail
+        hash=$(uv run --project python dotfiles-setup dev-hash)
+        cache_ref="${IMAGE}:dev-${hash}"
+        {
+          echo "hash=${hash}"
+          echo "cache_ref=${cache_ref}"
+        } >> "$GITHUB_OUTPUT"
+        # Discriminate a legitimate "manifest not found" MISS from an
+        # auth/network/registry failure. A blanket `|| hit=false` would turn a
+        # broken token into a silent full rebuild on every run — expensive, and
+        # it looks exactly like a cache that never warms. Capturing stderr
+        # rather than `2>/dev/null` honors `build.no-stderr-suppression`.
+        if out=$(docker manifest inspect "${cache_ref}" 2>&1); then
+          echo "hit=true" >> "$GITHUB_OUTPUT"
+          echo "Dev cache HIT for ${PLATFORM}: ${cache_ref}" >> "$GITHUB_STEP_SUMMARY"
+        else
+          rc=$?
+          if printf '%s\n' "$out" | grep -qiE 'manifest unknown|not found|no such manifest'; then
+            echo "hit=false" >> "$GITHUB_OUTPUT"
+            echo "Dev cache MISS for ${PLATFORM}: ${cache_ref}" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "FAIL: docker manifest inspect failed with non-miss error (rc=$rc):" >&2
+            printf '%s\n' "$out" >&2
+            exit "$rc"
+          fi
+        fi

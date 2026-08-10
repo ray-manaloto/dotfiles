@@ -361,7 +361,7 @@ per_path_tokens = { ".devcontainer/Dockerfile" = [
 
 [[suite]]
 name = "build.gcc-latest-reflection"
-description = "GCC-16 with P2996 reflection must be installed via precompiled .deb"
+description = "GCC-17 with P2996 reflection must be installed via precompiled .deb — and, since #698, ONLY on the architectures that have one. kayari.org publishes the gcc-latest trunk snapshot for x86_64 alone and says so as policy on its index page ('only for x86_64'), so an ungated download fails the arm64 base build outright. Both the install and its reflection smoke therefore carry a TARGETARCH branch, and each branch's skip message is bound here: deleting a branch is the realistic regression, and it would otherwise surface only as a 30-minute base build failing on a .deb that cannot exist. The `-freflection` token pins the smoke's own compile line (1x in the file; bare `-freflection` matches 5x and `/tmp/refl-gcc.cpp` 3x, so neither alone binds a site)."
 category = "build"
 check_type = "static"
 handler = "require_tokens"
@@ -369,7 +369,51 @@ paths = [".devcontainer/Dockerfile"]
 per_path_tokens = { ".devcontainer/Dockerfile" = [
     "gcc-latest.deb",
     "test -x /opt/gcc-latest/bin/g++",
-    "-freflection \\\n      /tmp/refl-gcc.cpp",
+    "-freflection \\\n        /tmp/refl-gcc.cpp",
+    "gcc-latest: SKIPPED on ",
+    "gcc-latest reflection smoke: SKIPPED on ",
+] }
+
+[[suite]]
+name = "build.image-architecture-integrity"
+description = "#698: publishing an architecture is not the same as BUILDING one. #676 shipped an arm64 image whose mise config pinned `arch = \"x86_64\"`, so 131 tool entries resolved for the wrong CPU — and the build never noticed, because every build-time self-check COUNTS or STATS (`mise ls --installed | wc -l`, `test -d`, a non-empty shims dir) and a wrong-architecture binary is present, executable by its mode bits, and counted exactly like a correct one. The only thing it cannot do is run, so `ARG ARCH_EXEC_PROBES` + its loop RUN it; the failure message is bound rather than the loop body because deleting the invocation and keeping a `test -x` is the regression that reproduces the original defect. Three declarations must stay bound together: `PUBLISHED_ARCHES` (what CI builds), `lockfile_platforms` (what the image resolves), and mise's own third spelling of the axis — hence `mise_lock_platforms`, and `find_lock_platform_drift`/`find_pinned_image_arch` wired into the `platform-literals` CLI that `no_platform_literals` already runs. `platforms_to_lock` is bound at its CALL SITE because the library function existing is not the point: `lock_platforms` alone derives from the COMMITTED lock, so a newly-published architecture has no entries and is skipped by the very regen meant to create them — the union with what the publish matrix owes is what breaks that circle. `ships_gcc_latest` is bound at the smoke's call site for the same reason: kayari publishes gcc-latest for x86_64 only (upstream policy, not a gap), so the image is deliberately NOT architecture-symmetric and a smoke that assumed symmetry would fail arm64 over an artifact that does not exist."
+category = "build"
+check_type = "static"
+handler = "require_tokens"
+paths = [
+    ".devcontainer/Dockerfile",
+    ".devcontainer/mise-system.toml",
+    "python/src/dotfiles_setup/platform_target.py",
+    "python/src/dotfiles_setup/image_lock.py",
+    "python/src/dotfiles_setup/image.py",
+    "tests/test_image_arch.py",
+    "tests/test_platform_target.py",
+    "tests/test_image_lock.py",
+]
+per_path_tokens = { ".devcontainer/Dockerfile" = [
+    "ARG ARCH_EXEC_PROBES=",
+    "INSTALLED but did not execute on ",
+], ".devcontainer/mise-system.toml" = [
+    'lockfile_platforms = ["linux-x64", "linux-arm64"]',
+], "python/src/dotfiles_setup/platform_target.py" = [
+    "def mise_lock_platforms(",
+    "def find_lock_platform_drift(",
+    "def find_pinned_image_arch(",
+    "find_lock_platform_drift(repo_root),",
+    "find_pinned_image_arch(repo_root),",
+    "def ships_gcc_latest(",
+    "GCC_LATEST_ARCHES = (",
+], "python/src/dotfiles_setup/image_lock.py" = [
+    "def platforms_to_lock(",
+    "platforms = platforms_to_lock(",
+], "python/src/dotfiles_setup/image.py" = [
+    "gcc_latest=ships_gcc_latest(platform)",
+], "tests/test_image_arch.py" = [
+    "def test_every_stage_that_reads_targetarch_also_declares_it(",
+], "tests/test_platform_target.py" = [
+    "def test_the_image_config_locks_every_published_architecture(",
+], "tests/test_image_lock.py" = [
+    "def test_a_required_platform_absent_from_the_lock_is_still_locked(",
 ] }
 
 [[suite]]
@@ -581,14 +625,14 @@ pattern = '"mise-data"'
 
 [[suite]]
 name = "ci.gha-cache-enabled"
-description = "Buildx gha cache must remain enabled in bake config"
+description = "Buildx gha cache must remain enabled in bake config, and its scope must be SUFFIXED BY ARCHITECTURE (#676) — one shared scope across a two-architecture matrix has the legs racing to overwrite each other's cache index, which shows up only as builds that never warm."
 category = "ci"
 check_type = "static"
 handler = "require_tokens"
 paths = ["docker-bake.hcl"]
 per_path_tokens = { "docker-bake.hcl" = [
-    "\"type=gha,scope=dotfiles-dev\",",
-    "\"type=gha,scope=dotfiles-dev,mode=max\",",
+    "\"type=gha,scope=dotfiles-dev-${replace(PLATFORM, \"/\", \"-\")}\",",
+    "\"type=gha,scope=dotfiles-dev-${replace(PLATFORM, \"/\", \"-\")},mode=max\",",
 ] }
 
 [[suite]]
@@ -653,14 +697,15 @@ per_path_tokens = { ".github/workflows/ci.yml" = [
 
 [[suite]]
 name = "ci.promote-job-exists"
-description = "Push-to-main must trigger the promote job (manifest-only retag of the PR image as :dev/:latest, no rebuild). Direct-push fallback dispatches workflow with force_dev_tag=true."
+description = "Push-to-main must trigger the promote job (manifest-only retag of the PR image as :dev/:latest, no rebuild). Direct-push fallback dispatches workflow with force_dev_tag=true. Since #676 promote ALSO splits the published index into the moving per-architecture tags: advancing :dev without advancing :dev-<arch> leaves a stale image behind a moving name, silently — the pin keeps resolving, just to an older image."
 category = "ci"
 check_type = "static"
 handler = "require_tokens"
 paths = [".github/workflows/ci.yml"]
 per_path_tokens = { ".github/workflows/ci.yml" = [
     "promote:",
-    "docker buildx imagetools create",
+    "--tag \"${IMAGE}:dev\" \\",
+    "--tag \"${IMAGE}:dev-${arch}\" \"${IMAGE}@${digest}\"",
     "associatedPullRequests(first:1) { nodes { number } }",
     "-f force_dev_tag=true",
 ] }
@@ -677,22 +722,57 @@ per_path_tokens = { ".github/workflows/build-publish.yml" = [
     "hash=$(uv run --project python dotfiles-setup p2996-hash)",
     "docker manifest inspect",
     "targets: p2996-cache",
-    "dev.contexts.p2996-export=docker-image://",
-    "dev.contexts.devcontainer-base=docker-image://",
+    "dev.contexts.p2996-export=${{ steps.tiers.outputs.p2996_context }}",
+    "dev.contexts.devcontainer-base=${{ steps.tiers.outputs.base_context }}",
+    "p2996_context=docker-image://${p2996_ref}@${p2996_digest}",
+    "base_context=docker-image://${base_ref}@${base_digest}",
 ] }
 
 [[suite]]
 name = "ci.dev-prep-gate-exists"
-description = "The third-tier dev-image content-hash gate (#122) must exist: a dev-prep job probes ':dev-<hash>' (via dotfiles-setup dev-hash) to skip build+smoke on an unchanged image, and a dev-tag job pushes the ':dev-<hash>' marker ONLY after smoke-test passes (validated-marker invariant — what makes the probe-skip safe). Lives in the reusable build-publish.yml (Phase B / #118)."
+description = "The third-tier dev-image content-hash gate (#122) must exist: a dev-prep job probes ':dev-<hash>' (via dotfiles-setup dev-hash) to skip build+smoke on an unchanged image, and a dev-tag job pushes the ':dev-<hash>' marker ONLY after smoke-test passes (validated-marker invariant — what makes the probe-skip safe). Lives in the reusable build-publish.yml (Phase B / #118). Since #676 the probe itself lives in the dev-cache-probe composite: a matrix job has ONE outputs map, so a per-leg hit cannot be published as a job output and each leg asks the registry directly — which is why the composite is named here too."
 category = "ci"
 check_type = "static"
 handler = "require_tokens"
-paths = [".github/workflows/build-publish.yml"]
+paths = [
+  ".github/workflows/build-publish.yml",
+  ".github/actions/dev-cache-probe/action.yml",
+]
 per_path_tokens = { ".github/workflows/build-publish.yml" = [
-    "dev-prep:",
+    "\n  dev-prep:\n",
     "hash=$(uv run --project python dotfiles-setup dev-hash)",
-    "dev-tag:",
-    "needs.smoke-test.result == 'success'",
+    "\n  dev-tag:\n",
+    "needs: [plan, build, smoke-test]\n    if: needs.smoke-test.result == 'success'",
+], ".github/actions/dev-cache-probe/action.yml" = [
+    "hash=$(uv run --project python dotfiles-setup dev-hash)",
+    "if out=$(docker manifest inspect \"${cache_ref}\" 2>&1); then",
+] }
+
+[[suite]]
+name = "ci.build-publish-matrix"
+description = "#676: the image publishes BOTH architectures from one push. The build chain must fan out over `dotfiles-setup platform-matrix` (the one declaration of what ships — it cannot live in YAML, which `no_platform_literals` scans), each leg must export PLATFORM so bake and all three content hashes agree about which architecture it is building, each leg must push only its per-architecture tag, and a manifest job must merge those into the moving tags and then assert the published index really lists every architecture. Publishing a single-architecture image under a moving tag is silent: `docker pull` on the matching host succeeds exactly as before."
+category = "ci"
+check_type = "static"
+handler = "require_tokens"
+paths = [
+  ".github/workflows/build-publish.yml",
+  "python/src/dotfiles_setup/platform_target.py",
+]
+per_path_tokens = { ".github/workflows/build-publish.yml" = [
+    "\n  plan:\n",
+    "\n  manifest:\n",
+    "matrix=$(uv run --project python dotfiles-setup platform-matrix)",
+    "target: ${{ fromJSON(needs.plan.outputs.matrix) }}",
+    "PLATFORM: ${{ matrix.target.platform }}",
+    "type=sha,prefix=,suffix=-${{ matrix.target.tag_suffix }}",
+    "docker buildx imagetools create \"${tags[@]}\" \"${sources[@]}\"",
+    "id: probe\n        if: inputs.tag_strategy == 'pr'",
+    "Assert the index lists every published architecture (AC1)",
+    "Assert each per-architecture tag resolves to its own image (AC2)",
+    "Measure this architecture's image (AC4; #674 AC3, deferred here)",
+], "python/src/dotfiles_setup/platform_target.py" = [
+    "PUBLISHED_ARCHES = (",
+    "def publish_matrix_json() -> str:",
 ] }
 
 [[suite]]

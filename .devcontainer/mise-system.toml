@@ -278,19 +278,32 @@ cargo-binstall = "latest"
 # "apt:libclang-rt-22-dev-win"    = "1:22.1.8~++20260714015917+ca7933e47d3a-1~exp1~20260714135927.17"
 
 [settings]
-arch = "x86_64"
+# NO `arch` PIN (#698). It read `arch = "x86_64"`, which made every image
+# resolve x86_64 tools regardless of what it was being built for — so #676's
+# arm64 leg produced an arm64 image holding 131 x86_64 resolutions, and the
+# build survived it because the self-checks below COUNT tools rather than run
+# them. Each matrix leg builds inside a container of its own architecture, so
+# mise's native detection already IS the build target; a literal can only
+# disagree with it. Machine-enforced by `find_pinned_image_arch`.
 experimental = true
 # Scope mise's declarative package management to apt (the only manager present
-# in the linux-x64 image) so apply/status never touch dnf/pacman/brew.
+# in the image, whatever its architecture) so apply/status never touch
+# dnf/pacman/brew.
 system_packages.managers = ["apt"]
 auto_install = true
 lockfile = true
-# Scope `mise.lock` to the image target so `mise lock` doesn't fan out to all
-# 7 platforms (native since mise v2026.4.9 — requires the pinned MISE_VERSION in
-# the Dockerfile to honor it; older mise treats it as an unknown field). The
-# committed .devcontainer/mise-system.lock is generated for linux-x64 and
-# consumed by `mise install --system --locked`. See epic #160.
-lockfile_platforms = ["linux-x64"]
+# Scope `mise.lock` to the PUBLISHED architectures so `mise lock` doesn't fan
+# out to all 7 platforms (native since mise v2026.4.9 — requires the pinned
+# MISE_VERSION in the Dockerfile to honor it; older mise treats it as an unknown
+# field). The committed .devcontainer/mise-system.lock carries an entry per tool
+# PER platform here, and is consumed by `mise install --system --locked`.
+#
+# This list must cover every arch in `platform_target.PUBLISHED_ARCHES` — an
+# architecture absent from it gets NO lock entries, and `--locked` then resolves
+# that leg's tools from whichever platform IS present (#698). Enforced by
+# `find_lock_platform_drift`; widen this BEFORE running `mise run lock-image`,
+# which derives its platform set from the committed lock. See epic #160.
+lockfile_platforms = ["linux-x64", "linux-arm64"]
 jobs = 1
 # Supply-chain hardening: ignore tool versions younger than 7 days when
 # resolving `latest`/fuzzy requests (forwards the cutoff to npm:/pipx:
@@ -347,10 +360,14 @@ HK_MISE = "1"
 # Locale (set here so all mise-activated shells inherit)
 LANG = "C.UTF-8"
 LC_ALL = "C.UTF-8"
-# Platform hints for tool backends
-MISE_ARCH = "x86_64"
-MISE_OS = "linux"
-CONDA_SUBDIR = "linux-64"
+# NO platform hints (#698). This used to pin MISE_ARCH = "x86_64", MISE_OS =
+# "linux" and CONDA_SUBDIR = "linux-64". `MISE_ARCH` is not a hint — it is the
+# ENVIRONMENT SPELLING of the `arch` setting deleted above (probed both arms:
+# `MISE_ARCH=x86_64 mise settings get arch` prints x86_64; unset it errors
+# "Setting [arch] is not set"), and `CONDA_SUBDIR` is rattler's equivalent. So
+# deleting the setting while keeping these left the pin fully alive under a
+# different name — caught by review, not by the first version of the gate.
+# A container IS its own architecture and IS linux; detection cannot disagree.
 # Network / install behavior (MISE_HTTP_TIMEOUT moved to [settings]
 # http_timeout, #160 T12.5)
 npm_config_update_notifier = "false"

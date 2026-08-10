@@ -21,7 +21,7 @@ Defines the devcontainer image and runtime lifecycle. Two layers:
 | `devcontainer.json` | Devcontainer spec (containers.dev) — lifecycle hooks, features, volumes, dynamic naming |
 | `mise-system.toml` | BASE tool tier (#160 T9) → `/usr/local/share/mise/config.toml`. `[bootstrap.packages]` declares the apt set installed by `mise bootstrap packages apply` (#160 T4); the 20 host↔image shared tools come from the repo `.config/mise/conf.d/shared.toml` COPYd to `conf.d/` and merged (#160 T5) |
 | `mise-runtime.toml` | RUNTIME tool tier (#160 T9/T10) → `config.runtime.toml`, installed in the `devcontainer-runtime` stage under `MISE_ENV=runtime` (baked ENV). The interactive OVERLAY tier lives in `home/dot_config/mise/config.toml.tmpl`, eager-installed per-user by `on-create.sh` |
-| `mise-system.lock` + `mise-runtime.lock` + `P2996-CACHE.md` | Native mise lockfiles (rattler conda sha256 + version pins, linux-x64) per tier; COPYd to `mise.lock` / `mise.runtime.lock` beside the configs, consumed by `mise install --system --locked`; base lock digest feeds the base content-hash, runtime pair feeds dev-hash. Regenerate via the CI `lock-refresh` job |
+| `mise-system.lock` + `mise-runtime.lock` + `P2996-CACHE.md` | Native mise lockfiles per tier, per tool **per published arch** (`linux-x64` + `linux-arm64` since #698, via `lockfile_platforms`). COPYd to `mise.lock` / `mise.runtime.lock`, consumed by `mise install --system --locked`; base digest feeds base-hash, runtime pair feeds dev-hash. Regenerate via `mise run lock-image`, never a hand-rolled `mise lock` (#650) |
 
 ## Devcontainer Lifecycle
 
@@ -77,22 +77,16 @@ the **arch** separates amd64 from arm64.
   `mise run ssh-port` / `mise run names` print them.
 
 ⚠️ **The name does NOT identify a container — the id labels do.** The CLI looks
-an existing container up by `--id-label`, inferring one from the **workspace
-folder** when none is given, so `up`/`dev-rebuild`/every `exec` pass
-`$DEVCONTAINER_ID_FLAGS` (`dotfiles.workspace=` + `dotfiles.arch=`). Without
-them an arm64 `up` **finds and reuses** the amd64 container and reports success.
-`mise run stop` resolves its targets via `dotfiles-setup devcontainer teardown`
-for the same reason.
-
-**Why the arch is in the NAME, not in a check:** the home volume carries
-compiled output (`~/.local/share/mise/installs`, `~/.cargo`, `~/.rustup`), and
-docker reuses a named volume on mount without a word — so a shared volume
-interleaves two architectures' binaries and fails far from its cause.
+one up by `--id-label`, inferring it from the **workspace folder** when none is
+given, so `up`/`dev-rebuild`/every `exec` pass `$DEVCONTAINER_ID_FLAGS`
+(`dotfiles.workspace=` + `dotfiles.arch=`) and `mise run stop` resolves targets
+via `dotfiles-setup devcontainer teardown`. Without them an arm64 `up` **finds
+and reuses** the amd64 container and reports success.
 
 **Migrating a pre-#677 volume:** `mise run migrate-home-volume` (dry-run;
 `-- --apply` executes). It never deletes the source, and refuses rather than
-guessing in three cases. Mechanism, refusals and the marker file:
-**`.devcontainer/TOOL-PERSISTENCE.md`**.
+guessing in three cases. That, the id-label mechanism, and why the arch is in
+the name rather than in a check: **`.devcontainer/TOOL-PERSISTENCE.md`**.
 
 The volume covers the whole user home, so `~/.cache/mise`, `~/.cache/uv`,
 `~/.bash_history`, `~/.ssh/known_hosts` and TMPDIR persist across `stop/up`.

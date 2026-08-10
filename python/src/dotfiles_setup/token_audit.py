@@ -226,11 +226,36 @@ AMBIGUITY_ALLOWED: dict[tuple[str, str, str], str] = {
     "p2996-prep / dev-prep, so no substring can discriminate them; the job "
     "identity is carried by the sibling `p2996-prep:` token",
     (
-        "ci.dev-prep-gate-exists",
+        "ci.build-publish-matrix",
         ".github/workflows/build-publish.yml",
-        "hash=$(uv run --project python dotfiles-setup dev-hash)",
-    ): "twice by design — dev-prep computes the probe hash, dev-tag recomputes "
-    "it to stamp the validated marker; both clauses are the contract",
+        "PLATFORM: ${{ matrix.target.platform }}",
+    ): "once per matrixed job by design (#676) — see the sibling entry; the "
+    "fan-out and the platform export are the same six jobs, and a job that "
+    "kept one without the other is precisely the drift worth failing on.",
+    (
+        "ci.build-publish-matrix",
+        ".github/workflows/build-publish.yml",
+        "id: probe\n        if: inputs.tag_strategy == 'pr'",
+    ): "TWICE by design — `build` and `smoke-test` each guard their dev-cache "
+    "probe against the nightly path, and the multiplicity IS the assertion. "
+    "`dev-prep` is skipped when tag_strategy != 'pr', so an unguarded probe "
+    "makes the nightly skip its build (main's content is unchanged since the "
+    "merged PR, so the marker exists), leave `:<sha>-<arch>` unwritten, and "
+    "fail in `dev-tag` — while silently defeating the nightly's whole purpose "
+    "of catching drift the content hash cannot see. Binding one site would "
+    "stop the gate noticing if the OTHER lost its guard. Found by review, "
+    "2026-08-10.",
+    (
+        "ci.build-publish-matrix",
+        ".github/workflows/build-publish.yml",
+        "target: ${{ fromJSON(needs.plan.outputs.matrix) }}",
+    ): "once per matrixed job by design (#676) — base-prep, p2996-prep, "
+    "dev-prep, build, smoke-test and dev-tag each export the leg's platform, "
+    "and the multiplicity IS the assertion: binding one site would stop the "
+    "gate noticing if any OTHER job lost its export and silently fell back to "
+    "the committed default, which is the split-brain the ticket exists to "
+    "close. Each job's identity is separately pinned by its own unique "
+    "`\\n  <job>:\\n` token.",
 }
 
 

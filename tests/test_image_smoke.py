@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -22,6 +23,7 @@ from dotfiles_setup.image import (
     _TIER3_DEFAULT_CLANG,
     IDENTITY_IMAGE_PATHS,
     AnalysisTarget,
+    ImageArch,
     _count_tools_from_mise_ls,
     _format_bytes,
     _format_duration,
@@ -129,6 +131,12 @@ def test_smoke_script_injects_p2996_ref_and_strict_match() -> None:
     assert "bloomberg/clang-p2996" in script
 
 
+# The gcc reflection binary being INVOKED, not merely named as a `-o` argument.
+# Indentation-tolerant: #698 moved this line inside a conditional, and the old
+# leading-newline match read that indent as "the RUN is gone".
+_REFL_GCC_RUN = re.compile(r"^\s*/tmp/refl-gcc \|\|", re.MULTILINE)
+
+
 def test_smoke_script_p2996_reflection_links_and_runs() -> None:
     """Gap C (#141): reflection is compiled AND the emitted binary is run."""
     script = build_smoke_script(_FAKE_P2996_SHA)
@@ -142,7 +150,7 @@ def test_smoke_script_p2996_reflection_links_and_runs() -> None:
     assert "-fsyntax-only" not in script
     assert "/opt/gcc-latest/bin/g++" in script
     assert "-o /tmp/refl-gcc" in script
-    assert "\n/tmp/refl-gcc ||" in script
+    assert _REFL_GCC_RUN.search(script)
     assert "/opt/clang-p2996/bin/clang++" in script
     assert "-o /tmp/refl-clang" in script
     assert "\n/tmp/refl-clang ||" in script
@@ -164,10 +172,10 @@ def test_smoke_script_p2996_reflection_runs_even_under_emulation() -> None:
     Unlike TSan (gap B), a clang-p2996 -stdlib=libc++ binary runs fine under
     Rosetta/QEMU, so the RUN must fire even when ``emulated=True``.
     """
-    script = build_smoke_script(_FAKE_P2996_SHA, emulated=True)
+    script = build_smoke_script(_FAKE_P2996_SHA, arch=ImageArch(emulated=True))
 
     assert "\n/tmp/refl-clang ||" in script
-    assert "\n/tmp/refl-gcc ||" in script
+    assert _REFL_GCC_RUN.search(script)
 
 
 def test_smoke_script_non_sha_ref_skips_strict_match() -> None:
@@ -498,7 +506,7 @@ def test_smoke_script_config_identity_dormant_without_hash() -> None:
 
 def test_smoke_script_tsan_runs_when_native() -> None:
     """Gap B: on a native host the TSan binary is both compiled and run."""
-    script = build_smoke_script(_FAKE_P2996_SHA, emulated=False)
+    script = build_smoke_script(_FAKE_P2996_SHA, arch=ImageArch(emulated=False))
 
     assert "TSAN_RUN_SKIP=''\n" in script
     assert "clang++ -fsanitize=thread /tmp/sanitizer.cpp -o /tmp/san-tsan" in script
@@ -507,7 +515,7 @@ def test_smoke_script_tsan_runs_when_native() -> None:
 
 def test_smoke_script_tsan_run_skipped_when_emulated() -> None:
     """Gap B: under emulation TSan is still compiled but the RUN is guarded."""
-    script = build_smoke_script(_FAKE_P2996_SHA, emulated=True)
+    script = build_smoke_script(_FAKE_P2996_SHA, arch=ImageArch(emulated=True))
 
     assert "TSAN_RUN_SKIP=1\n" in script
     # The compile still happens (proves the toolchain)...
