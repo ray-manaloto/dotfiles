@@ -53,6 +53,20 @@ _TARGETARCH_TEST_RE = re.compile(
     r'\$\{TARGETARCH\}"?\s*(?P<op>!?=)\s*"(?P<arch>[^"]+)"'
 )
 
+# The LLVM backend selection (#703). Three separate patterns because they gate
+# three separate failure modes: the flag going back to a literal, an arm going
+# missing or wrong, and the default arm learning to guess.
+_LLVM_TARGETS_FLAG_RE = re.compile(r"-DLLVM_TARGETS_TO_BUILD=(\S+)")
+_LLVM_CASE_ARM_RE = re.compile(
+    r"^\s*(?P<arch>[a-z0-9]+)\)\s*llvm_target=(?P<target>[A-Za-z0-9_]+)\s*;;",
+    re.MULTILINE,
+)
+_LLVM_DEFAULT_ARM_RE = re.compile(r"^\s*\*\)(?P<body>.*?);;", re.MULTILINE | re.DOTALL)
+
+# Any cmake `-D<OPTION>=<value>`. Used to ask whether ANY option is handed a
+# backend name, not just the one that already bit us.
+_CMAKE_FLAG_RE = re.compile(r"-D(?P<option>[A-Z0-9_]+)=(?P<value>\S+)")
+
 
 def _dockerfile() -> str:
     return DOCKERFILE.read_text(encoding="utf-8")
@@ -224,6 +238,110 @@ def test_targetarch_is_only_compared_against_docker_architecture_names() -> None
         f"TARGETARCH compared against non-docker architecture name(s): "
         f"{sorted(compared - set(platform_target.PUBLISHED_ARCHES))}. "
         f"BuildKit sets TARGETARCH to {list(platform_target.PUBLISHED_ARCHES)}"
+    )
+
+
+# --------------------------------------------------------------------------- #
+# The compiler must be built for the machine it will run on
+# --------------------------------------------------------------------------- #
+
+
+def _cmake_block() -> str:
+    """The clang-p2996 cmake configure RUN — control-armed by the caller."""
+    return next(
+        block
+        for block in _dockerfile().split("\nRUN ")[1:]
+        if "LLVM_TARGETS_TO_BUILD" in block
+    )
+
+
+def test_the_llvm_backend_is_resolved_rather_than_pinned() -> None:
+    """#703: `-DLLVM_TARGETS_TO_BUILD=X86` on an arm64 runner.
+
+    LLVM built a clang with no aarch64 backend; the runtimes stage then
+    configures USING that clang, so every compile probe fails and libunwind
+    kills the configure — 52 minutes in, with nothing before that point saying
+    a word. It is #698's defect class (an architecture pinned as a literal that
+    survived the dual-arch split) in a vocabulary no existing gate knew:
+    `no_platform_literals` matches a platform TRIPLE, and `X86` is an LLVM
+    BACKEND name.
+    """
+    values = _LLVM_TARGETS_FLAG_RE.findall(_cmake_block())
+
+    assert values, (
+        "no -DLLVM_TARGETS_TO_BUILD flag in the clang-p2996 cmake configure — "
+        "either the flag moved or this parser stopped seeing the RUN block"
+    )
+    for value in values:
+        assert "${" in value, (
+            f"-DLLVM_TARGETS_TO_BUILD={value} pins one architecture's LLVM "
+            f"backend as a literal. It must resolve from TARGETARCH — a clang "
+            f"built for the wrong backend cannot emit code for its own host"
+        )
+
+
+def test_every_published_architecture_maps_to_its_llvm_backend() -> None:
+    """The mapping must be TOTAL over what CI publishes, and correct.
+
+    Bound to `platform_target.LLVM_TARGETS` rather than to a second list here,
+    so adding an architecture to `PUBLISHED_ARCHES` fails until the Dockerfile
+    learns its backend — instead of the build discovering it an hour in.
+    """
+    arms = dict(_LLVM_CASE_ARM_RE.findall(_cmake_block()))
+
+    assert arms, "the LLVM backend `case` arms are gone — nothing selects a backend"
+    expected = {
+        arch: platform_target.LLVM_TARGETS[arch]
+        for arch in platform_target.PUBLISHED_ARCHES
+    }
+    assert arms == expected, (
+        f"the Dockerfile maps {arms} but PUBLISHED_ARCHES needs {expected}. "
+        f"BuildKit spells the arch amd64/arm64 and LLVM spells the backend "
+        f"X86/AArch64 — a wrong or missing arm builds the wrong compiler"
+    )
+
+
+def test_an_unmapped_architecture_fails_the_llvm_backend_selection() -> None:
+    """The build carries its own control arm for the empty-ARG trap.
+
+    `TARGETARCH` is automatic: undeclared, it expands to the empty string. A
+    default arm that guessed a backend would turn that into a wrong compiler
+    built successfully; a default arm that exits makes it a loud, immediate
+    failure. `test_every_stage_that_reads_targetarch_also_declares_it` gates
+    the declaration, and this gates what happens when it is lost anyway.
+    """
+    default_arm = _LLVM_DEFAULT_ARM_RE.search(_cmake_block())
+
+    assert default_arm is not None, (
+        "the LLVM backend `case` has no `*)` arm — an unmapped or EMPTY "
+        "TARGETARCH would fall through and configure cmake with no backend"
+    )
+    assert "exit 1" in default_arm.group("body"), (
+        f"the `*)` arm does not fail the build: {default_arm.group('body')!r}. "
+        f"An undeclared automatic ARG is empty, and a default that guesses "
+        f"turns that into a silently wrong compiler"
+    )
+
+
+def test_no_cmake_flag_pins_an_llvm_backend_by_name() -> None:
+    """The spelling axis, swept across the whole file rather than one flag.
+
+    `LLVM_TARGETS_TO_BUILD` is the flag that bit us, but it is not the only
+    cmake option that names a backend (`LLVM_TARGET_ARCH`,
+    `LLVM_DEFAULT_TARGET_TRIPLE`). Asking "does any -D value equal a backend
+    name" is the question rule 52 says to ask — which spellings, in which
+    files — rather than re-gating the one site already fixed.
+    """
+    backends = set(platform_target.LLVM_TARGETS.values())
+    offenders = [
+        match.group(0)
+        for match in _CMAKE_FLAG_RE.finditer(_dockerfile())
+        if match.group("value").strip('"') in backends
+    ]
+
+    assert offenders == [], (
+        f"cmake flags pin an LLVM backend by name: {offenders}. Resolve it "
+        f"from TARGETARCH via platform_target.LLVM_TARGETS instead"
     )
 
 

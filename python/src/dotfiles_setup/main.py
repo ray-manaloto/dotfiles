@@ -184,12 +184,12 @@ def _add_apt_repo_subcommand(subparsers: _SubParsers) -> None:
 
 
 def _add_platform_subcommands(subparsers: _SubParsers) -> None:
-    """Register the three commands that speak for the one platform parameter.
+    """Register the commands that speak for the one platform parameter.
 
     Split out of `_add_honesty_subcommands` when #676's `platform-matrix`
     pushed that function past ruff's PLR0915 ceiling. The grouping is real
-    rather than arithmetic: these three are the read, the fan-out and the gate
-    for a single value, and adding a fourth belongs here too.
+    rather than arithmetic: these all answer "which architecture is this, and
+    what is it called" — the read, the fan-out, the gate, and #677's names.
 
     Args:
         subparsers: The parent subparsers action to attach these to.
@@ -222,6 +222,51 @@ def _add_platform_subcommands(subparsers: _SubParsers) -> None:
         "parameter through the sites you remembered; this finds the ones you "
         "did not, and missing one yields a container running one architecture "
         "while a probe asserts another",
+    )
+    devcontainer_parser = subparsers.add_parser(
+        "devcontainer",
+        help="Resolve the architecture-scoped devcontainer resource names "
+        "(#677): container, home volume and SSH port all carry the arch, so "
+        "amd64 and arm64 can be up at once without silently sharing a home",
+    )
+    devcontainer_sub = devcontainer_parser.add_subparsers(
+        dest="devcontainer_command", help="Devcontainer name commands"
+    )
+    devcontainer_sub.add_parser(
+        "env",
+        help="Print shell exports for every localEnv substitution "
+        'devcontainer.json makes — consumed as `eval "$(… devcontainer env)"`',
+    )
+    devcontainer_name_parser = devcontainer_sub.add_parser(
+        "name", help="Print one resolved devcontainer resource name"
+    )
+    devcontainer_name_parser.add_argument(
+        "field", choices=NAME_FIELDS, help="Which name to print"
+    )
+    devcontainer_sub.add_parser(
+        "teardown",
+        help="Print the container ids `mise run stop` should remove: this "
+        "architecture's container plus any pre-#677 leftover this folder owns. "
+        "A bare per-folder filter would also kill the OTHER architecture",
+    )
+    migrate_parser = devcontainer_sub.add_parser(
+        "migrate-home",
+        help="Copy a pre-#677 home volume into this architecture's volume. "
+        "Dry-run by default; the source is never deleted",
+    )
+    migrate_parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Actually run the copy. Without it nothing is mutated — a bulk "
+        "operation whose bare invocation writes cannot be used to look",
+    )
+    migrate_parser.add_argument(
+        "--platform",
+        default=None,
+        help="The platform whose architecture built the home being copied. "
+        "Required unless $DOTFILES_PLATFORM pins one: the pre-#677 volume name "
+        "records no architecture, so an unpinned run would take it from this "
+        "HOST and could name the target for the wrong machine",
     )
 
 
@@ -519,80 +564,6 @@ def _add_honesty_subcommands(subparsers: _SubParsers) -> None:
         "--verbose",
         action="store_true",
         help="Print a line when the comparison is clean instead of staying silent",
-    )
-
-
-def _add_platform_subcommands(subparsers: _SubParsers) -> None:
-    """Register `platform`, `platform-literals` and `devcontainer` (#673, #677).
-
-    One family: they all answer "which architecture is this, and what is it
-    called". Extracted so ``_add_honesty_subcommands`` stays under ruff's
-    statement cap — the same reason ``_add_report_parsers`` exists.
-    """
-    platform_parser = subparsers.add_parser(
-        "platform",
-        help="Print one resolved platform fact (#673): the triple itself, "
-        "docker's architecture name, or the `uname -m` a container of it "
-        "reports. Resolves $DOTFILES_PLATFORM, else this host's native triple",
-    )
-    platform_parser.add_argument(
-        "field",
-        choices=PLATFORM_FIELDS,
-        help="Which fact to print",
-    )
-    subparsers.add_parser(
-        "platform-literals",
-        help="Enforce the one platform parameter (#673): reject a hard-coded "
-        "`linux/<arch>` literal anywhere outside mise.toml and "
-        "docker-bake.hcl. Careful editing threads the parameter through the "
-        "sites you remembered; this finds the ones you did not, and missing "
-        "one yields a container running one architecture while a probe "
-        "asserts another",
-    )
-    devcontainer_parser = subparsers.add_parser(
-        "devcontainer",
-        help="Resolve the architecture-scoped devcontainer resource names "
-        "(#677): container, home volume and SSH port all carry the arch, so "
-        "amd64 and arm64 can be up at once without silently sharing a home",
-    )
-    devcontainer_sub = devcontainer_parser.add_subparsers(
-        dest="devcontainer_command", help="Devcontainer name commands"
-    )
-    devcontainer_sub.add_parser(
-        "env",
-        help="Print shell exports for every localEnv substitution "
-        'devcontainer.json makes — consumed as `eval "$(… devcontainer env)"`',
-    )
-    devcontainer_name_parser = devcontainer_sub.add_parser(
-        "name", help="Print one resolved devcontainer resource name"
-    )
-    devcontainer_name_parser.add_argument(
-        "field", choices=NAME_FIELDS, help="Which name to print"
-    )
-    devcontainer_sub.add_parser(
-        "teardown",
-        help="Print the container ids `mise run stop` should remove: this "
-        "architecture's container plus any pre-#677 leftover this folder owns. "
-        "A bare per-folder filter would also kill the OTHER architecture",
-    )
-    migrate_parser = devcontainer_sub.add_parser(
-        "migrate-home",
-        help="Copy a pre-#677 home volume into this architecture's volume. "
-        "Dry-run by default; the source is never deleted",
-    )
-    migrate_parser.add_argument(
-        "--apply",
-        action="store_true",
-        help="Actually run the copy. Without it nothing is mutated — a bulk "
-        "operation whose bare invocation writes cannot be used to look",
-    )
-    migrate_parser.add_argument(
-        "--platform",
-        default=None,
-        help="The platform whose architecture built the home being copied. "
-        "Required unless $DOTFILES_PLATFORM pins one: the pre-#677 volume name "
-        "records no architecture, so an unpinned run would take it from this "
-        "HOST and could name the target for the wrong machine",
     )
 
 

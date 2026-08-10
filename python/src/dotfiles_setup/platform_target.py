@@ -63,6 +63,7 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "DEFAULT_LITERAL_SITES",
     "GCC_LATEST_ARCHES",
+    "LLVM_TARGETS",
     "PLATFORM_ENV_VAR",
     "PLATFORM_FIELDS",
     "PUBLISHED_ARCHES",
@@ -175,6 +176,22 @@ GCC_LATEST_ARCHES = ("amd64",)
 # says amd64, mise says linux-x64; treating any two as interchangeable is how
 # #698 shipped an arm64 image holding 131 x86_64 tool resolutions.
 _MISE_LOCK_PLATFORM = {"amd64": "linux-x64", "arm64": "linux-arm64"}
+
+# LLVM's spelling — a FOURTH name for the same axis, and the one the image's
+# clang-p2996 build is configured by (`-DLLVM_TARGETS_TO_BUILD`).
+#
+# This exists because #703's arm64 `p2996-prep` failed on `=X86` pinned as a
+# literal: LLVM built a clang with no aarch64 backend, the runtimes stage
+# configured USING that clang, and every compile probe failed 52 minutes in.
+# It is #698's defect class — an architecture pinned as a literal that survived
+# the dual-arch split — reached through a vocabulary no existing gate knew.
+# `find_violations` cannot see it: its pattern is a platform TRIPLE.
+#
+# Keyed by docker's arch name because that is what BuildKit hands the Dockerfile
+# as `TARGETARCH`, so the mapping is stated in the two spellings that actually
+# meet at the call site. `tests/test_image_arch.py` binds the Dockerfile's own
+# `case` arms to this table, which is why it is public.
+LLVM_TARGETS = {"amd64": "X86", "arm64": "AArch64"}
 
 # The image's system-wide mise config. Its `[settings]` decide what the IMAGE
 # resolves, which is a different question from what CI publishes — #698 is

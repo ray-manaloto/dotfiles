@@ -467,14 +467,42 @@ RUN git init . && \
 
 WORKDIR /build/clang-p2996/build
 
+# BuildKit's automatic target-architecture arg — DECLARED, never defaulted, for
+# the same reason as the graphviz gate above: an automatic ARG a stage does not
+# declare expands to the EMPTY STRING. Here that lands in the `*)` arm below and
+# fails the build loudly, which is the whole point — the alternative is a clang
+# that silently cannot emit code for the machine it was built for.
+ARG TARGETARCH
+
 # cmake and ninja come from the builder's own apt toolchain (#160 T11).
-# Build only X86 target to minimize compile time and binary size.
+# Build ONE backend — the target machine's — to minimise compile time and binary
+# size; LLVM's default is every backend it knows.
+#
+# ⚠️ This was `=X86` unconditionally until #703, and it is #698's defect class a
+# layer deeper: an architecture pinned as a literal that survived the dual-arch
+# split. On the arm64 runner it built a clang that cannot emit aarch64, and the
+# runtimes stage then configures USING that clang — so every compile probe fails
+# (`Looking for fopen in c - not found`) and `libunwind` kills the configure.
+# 52 minutes in, and nothing before that point says a word.
+#
+# It is invisible to `no_platform_literals`, whose pattern is a platform TRIPLE
+# (`linux/amd64`); `X86` is an LLVM BACKEND name. Three vocabularies now name
+# this one axis — docker's `amd64`/`arm64`, uname's `x86_64`/`aarch64`, and
+# LLVM's `X86`/`AArch64` — and a gate that knows one cannot see the others.
+# `tests/test_image_arch.py` gates this mapping against
+# `platform_target.LLVM_TARGETS`.
+#
 # ccache mount persists across builds — on SHA change, ~80% of objects
 # are reusable, cutting rebuild time significantly vs cold cache.
 # See issue #82 for further caching optimization (sccache, separate scope).
 # `../llvm` resolves to /build/clang-p2996/llvm; install goes to the separate
 # prefix /opt/clang-p2996 (the only thing exported).
 RUN --mount=type=cache,target=/root/.cache/ccache,sharing=locked \
+    case "${TARGETARCH}" in \
+      amd64) llvm_target=X86 ;; \
+      arm64) llvm_target=AArch64 ;; \
+      *) echo "ERROR: no LLVM backend mapped for TARGETARCH='${TARGETARCH}' — an empty value means this stage stopped declaring \`ARG TARGETARCH\`" >&2; exit 1 ;; \
+    esac && \
     cmake -G Ninja ../llvm \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_INSTALL_PREFIX=/opt/clang-p2996 \
@@ -482,7 +510,7 @@ RUN --mount=type=cache,target=/root/.cache/ccache,sharing=locked \
       -DCMAKE_CXX_COMPILER=g++ \
       -DLLVM_ENABLE_PROJECTS="clang;lld" \
       -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" \
-      -DLLVM_TARGETS_TO_BUILD=X86 \
+      -DLLVM_TARGETS_TO_BUILD="${llvm_target}" \
       -DLLVM_CCACHE_BUILD=ON \
       -DLLVM_ENABLE_BINDINGS=OFF \
       -DLLVM_ENABLE_TERMINFO=OFF \
