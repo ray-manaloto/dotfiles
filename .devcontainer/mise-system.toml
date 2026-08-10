@@ -360,10 +360,14 @@ HK_MISE = "1"
 # Locale (set here so all mise-activated shells inherit)
 LANG = "C.UTF-8"
 LC_ALL = "C.UTF-8"
-# Platform hints for tool backends
-MISE_ARCH = "x86_64"
-MISE_OS = "linux"
-CONDA_SUBDIR = "linux-64"
+# NO platform hints (#698). This used to pin MISE_ARCH = "x86_64", MISE_OS =
+# "linux" and CONDA_SUBDIR = "linux-64". `MISE_ARCH` is not a hint — it is the
+# ENVIRONMENT SPELLING of the `arch` setting deleted above (probed both arms:
+# `MISE_ARCH=x86_64 mise settings get arch` prints x86_64; unset it errors
+# "Setting [arch] is not set"), and `CONDA_SUBDIR` is rattler's equivalent. So
+# deleting the setting while keeping these left the pin fully alive under a
+# different name — caught by review, not by the first version of the gate.
+# A container IS its own architecture and IS linux; detection cannot disagree.
 # Network / install behavior (MISE_HTTP_TIMEOUT moved to [settings]
 # http_timeout, #160 T12.5)
 npm_config_update_notifier = "false"

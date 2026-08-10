@@ -1947,10 +1947,16 @@ def smoke_script_main(tier: int | None) -> int:
             expected_python=base_tools.get("python"),
         )
     elif tier == _SMOKE_SCRIPT_TIER3:
+        # `gcc_latest` is DERIVED, not defaulted (#698): the arm64 image omits
+        # the kayari compiler by design, so a hard-coded `True` here would fail
+        # `verify-container-latest` inside a correct arm64 container. `emulated`
+        # stays forced for the reason in the docstring — it is not derivable
+        # from inside the container, and this one is.
         script = build_tier3_script(
             expected_p2996_ref=resolve_expected_p2996_ref_at_base(),
             emulated=True,
             expected_llvm_version=resolve_expected_llvm_version_at_base(),
+            gcc_latest=ships_gcc_latest(resolve_platform()),
         )
     else:
         sys.stderr.write(

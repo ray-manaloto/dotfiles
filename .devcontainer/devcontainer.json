@@ -107,15 +107,15 @@
   ],
   "containerEnv": {
     // ─ Platform hints ────────────────────────────────────────────────
-    // Runtime visibility for user shells (e.g., when a user invokes
-    // conda directly without going through mise). Also set in
-    // .devcontainer/mise-system.toml [env] which applies during
-    // build-time `mise install --system -y` (when containerEnv has not
-    // yet been applied to the build process). Duplication is intentional
-    // — the two windows do not overlap.
-    "MISE_ARCH": "x86_64",
-    "MISE_OS": "linux",
-    "CONDA_SUBDIR": "linux-64",
+    // MISE_ARCH / MISE_OS / CONDA_SUBDIR REMOVED (#698). They were here for
+    // "runtime visibility for user shells", and the duplication with
+    // mise-system.toml [env] was deliberate. Both are now deleted: MISE_ARCH is
+    // the environment spelling of mise's `arch` SETTING, not a display hint, so
+    // in containerEnv it reached every process in the container — every runtime
+    // `mise install`, including the user overlay tier on-create.sh installs
+    // eagerly. On an arm64 container that resolved x86_64 tools, which is the
+    // exact defect #698 exists to remove, one layer further out than the build.
+    // A running container already IS its own architecture and IS linux.
 
     // ─ Container-private python venv (review finding [33], 2026-07-07) ─
     // The workspace bind mount would otherwise share python/.venv between

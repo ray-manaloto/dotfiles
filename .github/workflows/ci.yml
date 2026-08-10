@@ -508,7 +508,17 @@ jobs:
           raw=$(docker buildx imagetools inspect "${SOURCE_REF}" --raw)
           while read -r arch digest; do
             [ -n "${arch}" ] || continue
-            docker buildx imagetools create \
+            # --prefer-index=false is LOAD-BEARING, not tidiness. Its default
+            # is true and means, per the CLI's own help, "when only a single
+            # source is specified, prefer outputting an image index or manifest
+            # list instead of performing a carbon copy". The source here is one
+            # single-platform manifest, so the default would wrap it in a NEW
+            # index whose digest is necessarily different — making the equality
+            # assertion below unsatisfiable and failing `promote` on every main
+            # merge, AFTER :dev and :latest had already moved. A carbon copy is
+            # also what the tag should mean: `:dev-amd64` IS the amd64 image,
+            # not an index containing it.
+            docker buildx imagetools create --prefer-index=false \
               --tag "${IMAGE}:dev-${arch}" "${IMAGE}@${digest}"
             got=$(docker buildx imagetools inspect "${IMAGE}:dev-${arch}" --format '{{.Manifest.Digest}}')
             if [ "${got}" != "${digest}" ]; then

@@ -28,6 +28,8 @@ import re
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 from dotfiles_setup import image, platform_target
@@ -41,6 +43,15 @@ _SINGLE_ARCH_DOWNLOADS = ("GRAPHVIZ_DEB", "GCC_LATEST_DEB")
 
 _STAGE_RE = re.compile(r"^FROM\s+.*?\s+AS\s+(?P<name>\S+)", re.IGNORECASE)
 _PROBES_RE = re.compile(r'^ARG\s+ARCH_EXEC_PROBES="(?P<names>[^"]+)"', re.MULTILINE)
+
+# The OPERATOR is captured deliberately. Reading only the operand makes
+# `= "amd64"` and `!= "amd64"` indistinguishable, so a sign inversion — install
+# the x86_64-only deb on arm64, skip it on amd64 — would pass every assertion
+# here. That is the realistic regression, and it is the one a bare operand
+# check cannot see.
+_TARGETARCH_TEST_RE = re.compile(
+    r'\$\{TARGETARCH\}"?\s*(?P<op>!?=)\s*"(?P<arch>[^"]+)"'
+)
 
 
 def _dockerfile() -> str:
@@ -178,7 +189,7 @@ def test_targetarch_is_only_compared_against_docker_architecture_names() -> None
     stays green while silently doing the other thing — the same shape as the
     undeclared-ARG trap, reached by a different mistake.
     """
-    compared = set(re.findall(r'\$\{TARGETARCH\}"?\s*!?=\s*"([^"]+)"', _dockerfile()))
+    compared = {m.group("arch") for m in _TARGETARCH_TEST_RE.finditer(_dockerfile())}
 
     assert compared, "no ${TARGETARCH} comparison found — the gating is gone"
     assert compared <= set(platform_target.PUBLISHED_ARCHES), (
@@ -206,9 +217,23 @@ def test_the_dockerfile_gate_and_the_smoke_agree_on_who_ships_gcc_latest() -> No
         for block in _dockerfile().split("\nRUN ")[1:]
         if "${GCC_LATEST_DEB}" in block and "curl" in block
     )
-    gated_on = set(re.findall(r'\$\{TARGETARCH\}"?\s*!?=\s*"([^"]+)"', gcc_run))
+    tests = [
+        (m.group("op"), m.group("arch")) for m in _TARGETARCH_TEST_RE.finditer(gcc_run)
+    ]
 
-    assert gated_on == set(platform_target.GCC_LATEST_ARCHES)
+    assert tests, "the gcc-latest download is no longer gated on TARGETARCH"
+    for op, arch_name in tests:
+        # The branch installs on GCC_LATEST_ARCHES and skips elsewhere. Written
+        # as `!= "amd64"` -> skip, so an `=` here is the sign inversion that
+        # installs an x86_64-only deb on arm64 and drops it from amd64.
+        assert op == "!=", (
+            f'gcc-latest is gated `{op} "{arch_name}"`, which INVERTS the '
+            f"branch: the x86_64-only deb would install on every OTHER "
+            f"architecture and be skipped on the one that has it"
+        )
+        assert arch_name in platform_target.GCC_LATEST_ARCHES
+
+    assert {arch for _, arch in tests} == set(platform_target.GCC_LATEST_ARCHES)
 
 
 def test_the_smoke_skips_gcc_latest_where_the_image_omits_it() -> None:
@@ -245,6 +270,34 @@ def test_the_smoke_derives_gcc_latest_from_the_platform_it_is_given() -> None:
 
     assert "GCC_LATEST_PRESENT=1\n" in amd64[-1]
     assert "GCC_LATEST_PRESENT=''\n" in arm64[-1]
+
+
+@pytest.mark.parametrize(
+    ("platform", "expected"),
+    [
+        ("linux/amd64/v2", "GCC_LATEST_PRESENT=1\n"),
+        ("linux/arm64/v8", "GCC_LATEST_PRESENT=''\n"),
+    ],
+)
+def test_the_devcontainer_smoke_cli_also_derives_gcc_latest(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    platform: str,
+    expected: str,
+) -> None:
+    """The CI path and the devcontainer path must agree about the image.
+
+    `build_smoke_docker_cmd` derives this from the platform; `smoke_script_main`
+    is the OTHER caller — the one `scripts/devcontainer-smoke.sh` evaluates. Left
+    at its default it would demand gcc-latest inside an arm64 container that
+    deliberately omits it, failing `verify-container-latest` on an image that is
+    correct by design.
+    """
+    monkeypatch.setenv(platform_target.PLATFORM_ENV_VAR, platform)
+
+    assert image.smoke_script_main(3) == 0
+
+    assert expected in capsys.readouterr().out
 
 
 def test_the_stage_split_really_finds_the_image_stages() -> None:

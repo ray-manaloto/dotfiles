@@ -185,10 +185,35 @@ _LOCKFILE_PLATFORMS_RE = re.compile(
     r"^\s*lockfile_platforms\s*=\s*\[(?P<body>[^\]]*)\]", re.MULTILINE
 )
 
+# Every FILE that can pin the image's architecture. `mise-system.toml` decides
+# what the BUILD resolves; `devcontainer.json`'s `containerEnv` decides what
+# every process in the RUNNING container resolves — a distinction #698's first
+# fix missed, leaving the pin alive at runtime while the build was cleaned up.
+IMAGE_ARCH_CONFIGS = (
+    ".devcontainer/mise-system.toml",
+    ".devcontainer/devcontainer.json",
+)
+
+# Every KEY that pins it, because one axis has three spellings here.
+# `arch` is mise's setting. `MISE_ARCH` is that SAME setting's environment
+# spelling — probed 2026-08-10, both arms: `MISE_ARCH=x86_64 mise settings get
+# arch` prints `x86_64`, and unset it errors "Setting [arch] is not set".
+# `CONDA_SUBDIR` is rattler's equivalent for the conda backend.
+#
+# Enumerated because the first version of this gate knew only `arch` — the one
+# spelling that had already been fixed — so it was armed against the single
+# regression least likely to recur while two live pins sat past its reach.
+_ARCH_PIN_KEYS = ("arch", "MISE_ARCH", "CONDA_SUBDIR")
+
 # Anchored at line start so a COMMENTED pin (the honest record of why the line
-# went away) does not re-trip the gate that removed it.
-_PINNED_ARCH_RE = re.compile(
-    r"^\s*arch\s*=\s*[\"'](?P<arch>[^\"']+)[\"']", re.MULTILINE
+# went away) does not re-trip the gate that removed it. `[:=]` covers TOML's
+# `key = "v"` and JSON's `"key": "v"` in one pattern.
+_ARCH_PIN_RES = tuple(
+    re.compile(
+        rf"^\s*[\"']?{key}[\"']?\s*[:=]\s*[\"'](?P<value>[^\"']+)[\"']",
+        re.MULTILINE,
+    )
+    for key in _ARCH_PIN_KEYS
 )
 
 
@@ -568,26 +593,36 @@ def find_lock_platform_drift(repo_root: Path) -> str | None:
 
 
 def find_pinned_image_arch(repo_root: Path) -> str | None:
-    """A message when the image config pins ``arch`` to a literal (#698 AC1).
+    """A message when any image config pins the architecture (#698 AC1).
 
-    Every matrix leg builds inside a container OF its target architecture, so
-    mise's own detection already *is* the build target. A literal overrides that
-    detection with whatever was true the day the line was written — and unlike a
-    wrong ``--platform``, nothing downstream contradicts it: the image is built
-    for one architecture and filled with another's binaries.
+    Every matrix leg builds inside a container OF its target architecture, and
+    every running container IS its own architecture, so native detection already
+    *is* the answer. A literal overrides that detection with whatever was true
+    the day the line was written — and unlike a wrong ``--platform``, nothing
+    downstream contradicts it: the image is built for one architecture and
+    filled with another's binaries, which no count or stat can see.
+
+    Scans every file in :data:`IMAGE_ARCH_CONFIGS` for every key in
+    ``_ARCH_PIN_KEYS``, because build-time and runtime pin it in different files
+    under different names — and fixing one of those is indistinguishable, from
+    inside the build, from fixing both.
     """
-    text = _image_mise_config(repo_root)
-    if text is None:
-        return None
-    match = _PINNED_ARCH_RE.search(text)
-    if match is None:
-        return None
-    return (
-        f'{IMAGE_MISE_CONFIG} pins `arch = "{match.group("arch")}"` — the image '
-        f"would resolve that architecture's tools whatever it is being built for. "
-        f"Delete the line: each matrix leg builds in a container of its own "
-        f"architecture, so mise's detection is already the build target"
-    )
+    for rel_path in IMAGE_ARCH_CONFIGS:
+        try:
+            text = (repo_root / rel_path).read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for key, pattern in zip(_ARCH_PIN_KEYS, _ARCH_PIN_RES, strict=True):
+            match = pattern.search(text)
+            if match is None:
+                continue
+            return (
+                f'{rel_path} pins `{key} = "{match.group("value")}"` — that '
+                f"architecture's tools would be resolved whatever the image is "
+                f"built for or run as. Delete it: the container already IS the "
+                f"architecture, so detection cannot disagree with it"
+            )
+    return None
 
 
 #: What ``dotfiles-setup platform <field>`` can print. Shell callers (the

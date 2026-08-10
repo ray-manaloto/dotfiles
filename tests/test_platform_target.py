@@ -545,16 +545,62 @@ def test_the_image_config_does_not_pin_a_literal_architecture() -> None:
     assert platform_target.find_pinned_image_arch(REPO_ROOT) is None
 
 
-def test_a_literal_arch_pin_in_the_image_config_is_reported(tmp_path: Path) -> None:
-    """FAIL arm: restore the exact line #698 was filed for."""
-    config = tmp_path / ".devcontainer" / "mise-system.toml"
-    config.parent.mkdir(parents=True)
-    config.write_text('[settings]\narch = "x86_64"\n', encoding="utf-8")
+@pytest.mark.parametrize(
+    ("rel_path", "body"),
+    [
+        # The exact line #698 was filed for.
+        (".devcontainer/mise-system.toml", '[settings]\narch = "x86_64"\n'),
+        # The SAME setting under its environment spelling. Probed 2026-08-10:
+        # `MISE_ARCH=x86_64 mise settings get arch` -> x86_64; unset -> "not
+        # set". A gate that knew only the first spelling let this survive the
+        # commit that claimed to remove the pin.
+        (".devcontainer/mise-system.toml", '[env]\nMISE_ARCH = "x86_64"\n'),
+        (".devcontainer/mise-system.toml", '[env]\nCONDA_SUBDIR = "linux-64"\n'),
+        # And the same pins in the runtime spec, which the gate did not read
+        # at all — `containerEnv` puts them in EVERY process in the container,
+        # so a runtime `mise install` resolves the pinned architecture.
+        # Written the way the real file is written — one key per line. A
+        # single-line fixture would miss, because the scan anchors at line start
+        # so that a COMMENTED pin does not re-trip the gate that removed it, and
+        # a fixture the real format cannot produce proves nothing either way.
+        (
+            ".devcontainer/devcontainer.json",
+            '{\n  "containerEnv": {\n    "MISE_ARCH": "x86_64"\n  }\n}\n',
+        ),
+        (
+            ".devcontainer/devcontainer.json",
+            '{\n  "containerEnv": {\n    "CONDA_SUBDIR": "linux-64"\n  }\n}\n',
+        ),
+    ],
+)
+def test_an_architecture_pin_is_reported_whatever_it_is_spelled(
+    tmp_path: Path, rel_path: str, body: str
+) -> None:
+    """FAIL arms: one axis, three spellings, two files — all of them pin it.
+
+    Enumerated rather than asserted (`feedback_enumerate_dont_assert_the_list`):
+    the first version of this gate knew exactly the one spelling that had
+    already been fixed, so it was armed only against the regression least
+    likely to recur.
+    """
+    config = tmp_path / rel_path
+    config.parent.mkdir(parents=True, exist_ok=True)
+    config.write_text(body, encoding="utf-8")
 
     message = platform_target.find_pinned_image_arch(tmp_path)
 
     assert message is not None
-    assert "x86_64" in message
+    assert rel_path in message
+
+
+def test_the_pin_scan_reads_every_file_that_can_carry_one() -> None:
+    """Control arm: the real-tree PASS above is free if no file is read.
+
+    Both checks are "no violation found" shaped, which an empty file list
+    satisfies for nothing.
+    """
+    for rel_path in platform_target.IMAGE_ARCH_CONFIGS:
+        assert (REPO_ROOT / rel_path).is_file(), f"{rel_path} is not on disk"
 
 
 def test_a_commented_out_arch_pin_is_not_a_violation(tmp_path: Path) -> None:
