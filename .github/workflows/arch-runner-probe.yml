@@ -1,0 +1,52 @@
+name: arch-runner-probe
+# ============================================================
+# THROWAWAY (#676). Measures the one premise Ray's "native runner matrix"
+# ruling rests on: that this repo can actually schedule a job on a
+# GitHub-hosted arm64 runner. No workflow here has ever used an arm label,
+# so availability was an INFERENCE from the repo being public, not a
+# measurement (`probes-need-a-control-arm.md`).
+#
+# Both arms run: `amd64` is the CONTROL (a label we know schedules), `arm64`
+# is the test. A green arm64 leg reporting aarch64 proves the label resolves
+# AND that it is not silently the amd64 runner. A 5-minute ceiling turns an
+# unavailable label into a fast, readable timeout rather than a 6-hour queue.
+#
+# DELETE THIS FILE once the measurement is recorded in the PR body.
+# ============================================================
+on:
+  push:
+    branches:
+      - "feat/676-**"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+            expect: x86_64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            expect: aarch64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 5
+    steps:
+      - name: Report machine and assert it matches the label
+        env:
+          ARCH: ${{ matrix.arch }}
+          RUNNER_LABEL: ${{ matrix.runner }}
+          EXPECT: ${{ matrix.expect }}
+        run: |
+          set -euo pipefail
+          machine=$(uname -m)
+          echo "label=${RUNNER_LABEL} arch=${ARCH} uname -m=${machine}"
+          if [ "${machine}" != "${EXPECT}" ]; then
+            echo "FAIL: ${RUNNER_LABEL} reported ${machine}, expected ${EXPECT}" >&2
+            exit 1
+          fi
+          echo "OK: ${RUNNER_LABEL} is genuinely ${machine}" >> "$GITHUB_STEP_SUMMARY"
