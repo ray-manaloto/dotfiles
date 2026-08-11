@@ -164,9 +164,9 @@ checksum = "sha256:eb8a0db0aa570124f7d2a93d7c7f596e3390df5e047818d873baad32985fc
 url = "https://conda.anaconda.org/conda-forge/linux-64/lz4-c-1.10.0-h5888daf_1.conda"
 checksum = "sha256:47326f811392a5fd3055f0f773036c392d26fdb32e4d8e7a8197eed951489346"
 
-[conda-packages.linux-x64."ncurses-6.6-hdb14827_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/ncurses-6.6-hdb14827_0.conda"
-checksum = "sha256:fc89f74bbe362fb29fa3c037697a89bec140b346a2469a90f7936d1d7ea4d8a3"
+[conda-packages.linux-x64."ncurses-6.6-hdb14827_1"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/ncurses-6.6-hdb14827_1.conda"
+checksum = "sha256:5d46557214ed184381dafe835b7c94a474a1c3b307a08a250b1ea4779b44ffb3"
 
 [conda-packages.linux-x64."openssl-3.6.3-h35e630c_1"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/openssl-3.6.3-h35e630c_1.conda"
@@ -569,7 +569,7 @@ conda_deps = [
     "libgomp-16.1.0-he0feb66_1",
     "icu-78.3-h54a6638_2",
     "ca-certificates-2026.7.22-hbd8a1cb_0",
-    "ncurses-6.6-hdb14827_0",
+    "ncurses-6.6-hdb14827_1",
     "c-ares-1.34.8-h280c20c_1",
     "libev-4.33-h280c20c_3",
 ]

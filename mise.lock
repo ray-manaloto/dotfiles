@@ -48,9 +48,9 @@ checksum = "sha256:00925c8c055a2275614b4d983e1df637245e19058d79fc7dd1a93b8d9fb4b
 url = "https://conda.anaconda.org/conda-forge/noarch/font-ttf-ubuntu-0.83-h77eed37_3.conda"
 checksum = "sha256:2821ec1dc454bd8b9a31d0ed22a7ce22422c0aef163c59f49dfdf915d0f0ca14"
 
-[conda-packages.linux-arm64."fontconfig-2.18.2-hba86a56_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/fontconfig-2.18.2-hba86a56_0.conda"
-checksum = "sha256:12e49d4bcc7b57ebcb51e199921604ec6218c6a09d345449b2bc7772fe5061b7"
+[conda-packages.linux-arm64."fontconfig-2.18.3-hba86a56_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/fontconfig-2.18.3-hba86a56_0.conda"
+checksum = "sha256:0e680e617b891385de651bb1860acf61a3d0e97b8c20e703597bae8ed0868331"
 
 [conda-packages.linux-arm64.fonts-conda-ecosystem-1-0]
 url = "https://conda.anaconda.org/conda-forge/noarch/fonts-conda-ecosystem-1-0.tar.bz2"
@@ -220,9 +220,9 @@ checksum = "sha256:c5626ea672be2e59784f9be20dc8ceb7961b8ab0053651ded2dffec64e4b8
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libjxl-0.12.0-hbae46ee_1.conda"
 checksum = "sha256:476f42670da6c1ad30d0cc830a9ef995975c14075d626e261c8dd1dd0db41558"
 
-[conda-packages.linux-arm64."liblzma-5.8.3-he30d5cf_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/liblzma-5.8.3-he30d5cf_0.conda"
-checksum = "sha256:d61962b9cd54c3554361550203c64d5b65b71e3058a285b66e4b04b9769f0a5c"
+[conda-packages.linux-arm64."liblzma-5.8.3-he30d5cf_1"]
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/liblzma-5.8.3-he30d5cf_1.conda"
+checksum = "sha256:f760669fd1cea27f689f411c0d5488e26ce50e382c9b63e4ad348f959850124a"
 
 [conda-packages.linux-arm64."libogg-1.3.5-h86ecc28_1"]
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libogg-1.3.5-h86ecc28_1.conda"
@@ -464,17 +464,17 @@ checksum = "sha256:b86a819cd16f90c01d9d81892155126d01555a20dabd5f3091da59d6309af
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/xorg-libx11-1.8.13-h63a1b12_0.conda"
 checksum = "sha256:cf886160e2ff580d77f7eb8ec1a77c41c2c5b05343e329bc35f0ddf40b8d92ab"
 
-[conda-packages.linux-arm64."xorg-libxau-1.0.12-he30d5cf_1"]
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/xorg-libxau-1.0.12-he30d5cf_1.conda"
-checksum = "sha256:e9f6e931feeb2f40e1fdbafe41d3b665f1ab6cb39c5880a1fcf9f79a3f3c84a5"
+[conda-packages.linux-arm64."xorg-libxau-1.0.12-he30d5cf_2"]
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/xorg-libxau-1.0.12-he30d5cf_2.conda"
+checksum = "sha256:0822f3a8eb2a54bb41e1133f010e09d4a3242f8f12a372dfff7ad7248c5dbd29"
 
 [conda-packages.linux-arm64."xorg-libxcursor-1.2.3-h86ecc28_0"]
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/xorg-libxcursor-1.2.3-h86ecc28_0.conda"
 checksum = "sha256:c5d3692520762322a9598e7448492309f5ee9d8f3aff72d787cf06e77c42507f"
 
-[conda-packages.linux-arm64."xorg-libxdmcp-1.1.5-he30d5cf_1"]
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/xorg-libxdmcp-1.1.5-he30d5cf_1.conda"
-checksum = "sha256:128d72f36bcc8d2b4cdbec07507542e437c7d67f677b7d77b71ed9eeac7d6df1"
+[conda-packages.linux-arm64."xorg-libxdmcp-1.1.5-he30d5cf_2"]
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/xorg-libxdmcp-1.1.5-he30d5cf_2.conda"
+checksum = "sha256:681465a02be4ac256c05cd5b32ce9812da1563b75be1bfc8884d991454194df3"
 
 [conda-packages.linux-arm64."xorg-libxext-1.3.7-he30d5cf_0"]
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/xorg-libxext-1.3.7-he30d5cf_0.conda"
@@ -556,9 +556,9 @@ checksum = "sha256:00925c8c055a2275614b4d983e1df637245e19058d79fc7dd1a93b8d9fb4b
 url = "https://conda.anaconda.org/conda-forge/noarch/font-ttf-ubuntu-0.83-h77eed37_3.conda"
 checksum = "sha256:2821ec1dc454bd8b9a31d0ed22a7ce22422c0aef163c59f49dfdf915d0f0ca14"
 
-[conda-packages.linux-arm64-musl."fontconfig-2.18.2-hba86a56_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/fontconfig-2.18.2-hba86a56_0.conda"
-checksum = "sha256:12e49d4bcc7b57ebcb51e199921604ec6218c6a09d345449b2bc7772fe5061b7"
+[conda-packages.linux-arm64-musl."fontconfig-2.18.3-hba86a56_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/fontconfig-2.18.3-hba86a56_0.conda"
+checksum = "sha256:0e680e617b891385de651bb1860acf61a3d0e97b8c20e703597bae8ed0868331"
 
 [conda-packages.linux-arm64-musl.fonts-conda-ecosystem-1-0]
 url = "https://conda.anaconda.org/conda-forge/noarch/fonts-conda-ecosystem-1-0.tar.bz2"
@@ -728,9 +728,9 @@ checksum = "sha256:c5626ea672be2e59784f9be20dc8ceb7961b8ab0053651ded2dffec64e4b8
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libjxl-0.12.0-hbae46ee_1.conda"
 checksum = "sha256:476f42670da6c1ad30d0cc830a9ef995975c14075d626e261c8dd1dd0db41558"
 
-[conda-packages.linux-arm64-musl."liblzma-5.8.3-he30d5cf_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/liblzma-5.8.3-he30d5cf_0.conda"
-checksum = "sha256:d61962b9cd54c3554361550203c64d5b65b71e3058a285b66e4b04b9769f0a5c"
+[conda-packages.linux-arm64-musl."liblzma-5.8.3-he30d5cf_1"]
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/liblzma-5.8.3-he30d5cf_1.conda"
+checksum = "sha256:f760669fd1cea27f689f411c0d5488e26ce50e382c9b63e4ad348f959850124a"
 
 [conda-packages.linux-arm64-musl."libogg-1.3.5-h86ecc28_1"]
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libogg-1.3.5-h86ecc28_1.conda"
@@ -972,17 +972,17 @@ checksum = "sha256:b86a819cd16f90c01d9d81892155126d01555a20dabd5f3091da59d6309af
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/xorg-libx11-1.8.13-h63a1b12_0.conda"
 checksum = "sha256:cf886160e2ff580d77f7eb8ec1a77c41c2c5b05343e329bc35f0ddf40b8d92ab"
 
-[conda-packages.linux-arm64-musl."xorg-libxau-1.0.12-he30d5cf_1"]
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/xorg-libxau-1.0.12-he30d5cf_1.conda"
-checksum = "sha256:e9f6e931feeb2f40e1fdbafe41d3b665f1ab6cb39c5880a1fcf9f79a3f3c84a5"
+[conda-packages.linux-arm64-musl."xorg-libxau-1.0.12-he30d5cf_2"]
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/xorg-libxau-1.0.12-he30d5cf_2.conda"
+checksum = "sha256:0822f3a8eb2a54bb41e1133f010e09d4a3242f8f12a372dfff7ad7248c5dbd29"
 
 [conda-packages.linux-arm64-musl."xorg-libxcursor-1.2.3-h86ecc28_0"]
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/xorg-libxcursor-1.2.3-h86ecc28_0.conda"
 checksum = "sha256:c5d3692520762322a9598e7448492309f5ee9d8f3aff72d787cf06e77c42507f"
 
-[conda-packages.linux-arm64-musl."xorg-libxdmcp-1.1.5-he30d5cf_1"]
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/xorg-libxdmcp-1.1.5-he30d5cf_1.conda"
-checksum = "sha256:128d72f36bcc8d2b4cdbec07507542e437c7d67f677b7d77b71ed9eeac7d6df1"
+[conda-packages.linux-arm64-musl."xorg-libxdmcp-1.1.5-he30d5cf_2"]
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/xorg-libxdmcp-1.1.5-he30d5cf_2.conda"
+checksum = "sha256:681465a02be4ac256c05cd5b32ce9812da1563b75be1bfc8884d991454194df3"
 
 [conda-packages.linux-arm64-musl."xorg-libxext-1.3.7-he30d5cf_0"]
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/xorg-libxext-1.3.7-he30d5cf_0.conda"
@@ -1064,9 +1064,9 @@ checksum = "sha256:00925c8c055a2275614b4d983e1df637245e19058d79fc7dd1a93b8d9fb4b
 url = "https://conda.anaconda.org/conda-forge/noarch/font-ttf-ubuntu-0.83-h77eed37_3.conda"
 checksum = "sha256:2821ec1dc454bd8b9a31d0ed22a7ce22422c0aef163c59f49dfdf915d0f0ca14"
 
-[conda-packages.linux-x64."fontconfig-2.18.2-h27c8c51_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/fontconfig-2.18.2-h27c8c51_0.conda"
-checksum = "sha256:d77a47bc2b340b997c680241751e581672d1d0377a680eaf0b19026f013f56b7"
+[conda-packages.linux-x64."fontconfig-2.18.3-h27c8c51_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/fontconfig-2.18.3-h27c8c51_0.conda"
+checksum = "sha256:05b57e2f5aaf3adcccc80653c9795d29974f24dcf9daa40c98b254c99b726227"
 
 [conda-packages.linux-x64.fonts-conda-ecosystem-1-0]
 url = "https://conda.anaconda.org/conda-forge/noarch/fonts-conda-ecosystem-1-0.tar.bz2"
@@ -1248,9 +1248,9 @@ checksum = "sha256:bba8538e6538ed58a8479b332337b96986561f975d06cfa2039a016c2d246
 url = "https://conda.anaconda.org/conda-forge/linux-64/libjxl-0.12.0-h174a0a3_1.conda"
 checksum = "sha256:1811d6c6558fbfe89326616c207cc7584032b60bc6f4329d2a76b961e2936a15"
 
-[conda-packages.linux-x64."liblzma-5.8.3-hb03c661_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/liblzma-5.8.3-hb03c661_0.conda"
-checksum = "sha256:ec30e52a3c1bf7d0425380a189d209a52baa03f22fb66dd3eb587acaa765bd6d"
+[conda-packages.linux-x64."liblzma-5.8.3-hb03c661_1"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/liblzma-5.8.3-hb03c661_1.conda"
+checksum = "sha256:9787df8c22a59c9a70d3e5a10db9ad663485e75e9ccc3f09bd092cb7b95e0dab"
 
 [conda-packages.linux-x64."libogg-1.3.5-hd0c01bc_1"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libogg-1.3.5-hd0c01bc_1.conda"
@@ -1520,17 +1520,17 @@ checksum = "sha256:277841c43a39f738927145930ff963c5ce4c4dacf66637a3d95d802a64173
 url = "https://conda.anaconda.org/conda-forge/linux-64/xorg-libx11-1.8.13-he1eb515_0.conda"
 checksum = "sha256:516d4060139dbb4de49a4dcdc6317a9353fb39ebd47789c14e6fe52de0deee42"
 
-[conda-packages.linux-x64."xorg-libxau-1.0.12-hb03c661_1"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/xorg-libxau-1.0.12-hb03c661_1.conda"
-checksum = "sha256:6bc6ab7a90a5d8ac94c7e300cc10beb0500eeba4b99822768ca2f2ef356f731b"
+[conda-packages.linux-x64."xorg-libxau-1.0.12-hb03c661_2"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/xorg-libxau-1.0.12-hb03c661_2.conda"
+checksum = "sha256:cbf891f6cc1a859347680af1c8562bc6b033bf182a2a3bb536016932be3206de"
 
 [conda-packages.linux-x64."xorg-libxcursor-1.2.3-hb9d3cd8_0"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/xorg-libxcursor-1.2.3-hb9d3cd8_0.conda"
 checksum = "sha256:832f538ade441b1eee863c8c91af9e69b356cd3e9e1350fff4fe36cc573fc91a"
 
-[conda-packages.linux-x64."xorg-libxdmcp-1.1.5-hb03c661_1"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/xorg-libxdmcp-1.1.5-hb03c661_1.conda"
-checksum = "sha256:25d255fb2eef929d21ff660a0c687d38a6d2ccfbcbf0cc6aa738b12af6e9d142"
+[conda-packages.linux-x64."xorg-libxdmcp-1.1.5-hb03c661_2"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/xorg-libxdmcp-1.1.5-hb03c661_2.conda"
+checksum = "sha256:c50a16c05ccd7fe7dd6d6cfb539f4e9a491d50f9ed7a5c902fec638f7d0d27be"
 
 [conda-packages.linux-x64."xorg-libxext-1.3.7-hb03c661_0"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/xorg-libxext-1.3.7-hb03c661_0.conda"
@@ -1612,9 +1612,9 @@ checksum = "sha256:00925c8c055a2275614b4d983e1df637245e19058d79fc7dd1a93b8d9fb4b
 url = "https://conda.anaconda.org/conda-forge/noarch/font-ttf-ubuntu-0.83-h77eed37_3.conda"
 checksum = "sha256:2821ec1dc454bd8b9a31d0ed22a7ce22422c0aef163c59f49dfdf915d0f0ca14"
 
-[conda-packages.linux-x64-baseline."fontconfig-2.18.2-h27c8c51_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/fontconfig-2.18.2-h27c8c51_0.conda"
-checksum = "sha256:d77a47bc2b340b997c680241751e581672d1d0377a680eaf0b19026f013f56b7"
+[conda-packages.linux-x64-baseline."fontconfig-2.18.3-h27c8c51_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/fontconfig-2.18.3-h27c8c51_0.conda"
+checksum = "sha256:05b57e2f5aaf3adcccc80653c9795d29974f24dcf9daa40c98b254c99b726227"
 
 [conda-packages.linux-x64-baseline.fonts-conda-ecosystem-1-0]
 url = "https://conda.anaconda.org/conda-forge/noarch/fonts-conda-ecosystem-1-0.tar.bz2"
@@ -1796,9 +1796,9 @@ checksum = "sha256:bba8538e6538ed58a8479b332337b96986561f975d06cfa2039a016c2d246
 url = "https://conda.anaconda.org/conda-forge/linux-64/libjxl-0.12.0-h174a0a3_1.conda"
 checksum = "sha256:1811d6c6558fbfe89326616c207cc7584032b60bc6f4329d2a76b961e2936a15"
 
-[conda-packages.linux-x64-baseline."liblzma-5.8.3-hb03c661_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/liblzma-5.8.3-hb03c661_0.conda"
-checksum = "sha256:ec30e52a3c1bf7d0425380a189d209a52baa03f22fb66dd3eb587acaa765bd6d"
+[conda-packages.linux-x64-baseline."liblzma-5.8.3-hb03c661_1"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/liblzma-5.8.3-hb03c661_1.conda"
+checksum = "sha256:9787df8c22a59c9a70d3e5a10db9ad663485e75e9ccc3f09bd092cb7b95e0dab"
 
 [conda-packages.linux-x64-baseline."libogg-1.3.5-hd0c01bc_1"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libogg-1.3.5-hd0c01bc_1.conda"
@@ -2068,17 +2068,17 @@ checksum = "sha256:277841c43a39f738927145930ff963c5ce4c4dacf66637a3d95d802a64173
 url = "https://conda.anaconda.org/conda-forge/linux-64/xorg-libx11-1.8.13-he1eb515_0.conda"
 checksum = "sha256:516d4060139dbb4de49a4dcdc6317a9353fb39ebd47789c14e6fe52de0deee42"
 
-[conda-packages.linux-x64-baseline."xorg-libxau-1.0.12-hb03c661_1"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/xorg-libxau-1.0.12-hb03c661_1.conda"
-checksum = "sha256:6bc6ab7a90a5d8ac94c7e300cc10beb0500eeba4b99822768ca2f2ef356f731b"
+[conda-packages.linux-x64-baseline."xorg-libxau-1.0.12-hb03c661_2"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/xorg-libxau-1.0.12-hb03c661_2.conda"
+checksum = "sha256:cbf891f6cc1a859347680af1c8562bc6b033bf182a2a3bb536016932be3206de"
 
 [conda-packages.linux-x64-baseline."xorg-libxcursor-1.2.3-hb9d3cd8_0"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/xorg-libxcursor-1.2.3-hb9d3cd8_0.conda"
 checksum = "sha256:832f538ade441b1eee863c8c91af9e69b356cd3e9e1350fff4fe36cc573fc91a"
 
-[conda-packages.linux-x64-baseline."xorg-libxdmcp-1.1.5-hb03c661_1"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/xorg-libxdmcp-1.1.5-hb03c661_1.conda"
-checksum = "sha256:25d255fb2eef929d21ff660a0c687d38a6d2ccfbcbf0cc6aa738b12af6e9d142"
+[conda-packages.linux-x64-baseline."xorg-libxdmcp-1.1.5-hb03c661_2"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/xorg-libxdmcp-1.1.5-hb03c661_2.conda"
+checksum = "sha256:c50a16c05ccd7fe7dd6d6cfb539f4e9a491d50f9ed7a5c902fec638f7d0d27be"
 
 [conda-packages.linux-x64-baseline."xorg-libxext-1.3.7-hb03c661_0"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/xorg-libxext-1.3.7-hb03c661_0.conda"
@@ -2160,9 +2160,9 @@ checksum = "sha256:00925c8c055a2275614b4d983e1df637245e19058d79fc7dd1a93b8d9fb4b
 url = "https://conda.anaconda.org/conda-forge/noarch/font-ttf-ubuntu-0.83-h77eed37_3.conda"
 checksum = "sha256:2821ec1dc454bd8b9a31d0ed22a7ce22422c0aef163c59f49dfdf915d0f0ca14"
 
-[conda-packages.linux-x64-musl."fontconfig-2.18.2-h27c8c51_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/fontconfig-2.18.2-h27c8c51_0.conda"
-checksum = "sha256:d77a47bc2b340b997c680241751e581672d1d0377a680eaf0b19026f013f56b7"
+[conda-packages.linux-x64-musl."fontconfig-2.18.3-h27c8c51_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/fontconfig-2.18.3-h27c8c51_0.conda"
+checksum = "sha256:05b57e2f5aaf3adcccc80653c9795d29974f24dcf9daa40c98b254c99b726227"
 
 [conda-packages.linux-x64-musl.fonts-conda-ecosystem-1-0]
 url = "https://conda.anaconda.org/conda-forge/noarch/fonts-conda-ecosystem-1-0.tar.bz2"
@@ -2344,9 +2344,9 @@ checksum = "sha256:bba8538e6538ed58a8479b332337b96986561f975d06cfa2039a016c2d246
 url = "https://conda.anaconda.org/conda-forge/linux-64/libjxl-0.12.0-h174a0a3_1.conda"
 checksum = "sha256:1811d6c6558fbfe89326616c207cc7584032b60bc6f4329d2a76b961e2936a15"
 
-[conda-packages.linux-x64-musl."liblzma-5.8.3-hb03c661_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/liblzma-5.8.3-hb03c661_0.conda"
-checksum = "sha256:ec30e52a3c1bf7d0425380a189d209a52baa03f22fb66dd3eb587acaa765bd6d"
+[conda-packages.linux-x64-musl."liblzma-5.8.3-hb03c661_1"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/liblzma-5.8.3-hb03c661_1.conda"
+checksum = "sha256:9787df8c22a59c9a70d3e5a10db9ad663485e75e9ccc3f09bd092cb7b95e0dab"
 
 [conda-packages.linux-x64-musl."libogg-1.3.5-hd0c01bc_1"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libogg-1.3.5-hd0c01bc_1.conda"
@@ -2616,17 +2616,17 @@ checksum = "sha256:277841c43a39f738927145930ff963c5ce4c4dacf66637a3d95d802a64173
 url = "https://conda.anaconda.org/conda-forge/linux-64/xorg-libx11-1.8.13-he1eb515_0.conda"
 checksum = "sha256:516d4060139dbb4de49a4dcdc6317a9353fb39ebd47789c14e6fe52de0deee42"
 
-[conda-packages.linux-x64-musl."xorg-libxau-1.0.12-hb03c661_1"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/xorg-libxau-1.0.12-hb03c661_1.conda"
-checksum = "sha256:6bc6ab7a90a5d8ac94c7e300cc10beb0500eeba4b99822768ca2f2ef356f731b"
+[conda-packages.linux-x64-musl."xorg-libxau-1.0.12-hb03c661_2"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/xorg-libxau-1.0.12-hb03c661_2.conda"
+checksum = "sha256:cbf891f6cc1a859347680af1c8562bc6b033bf182a2a3bb536016932be3206de"
 
 [conda-packages.linux-x64-musl."xorg-libxcursor-1.2.3-hb9d3cd8_0"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/xorg-libxcursor-1.2.3-hb9d3cd8_0.conda"
 checksum = "sha256:832f538ade441b1eee863c8c91af9e69b356cd3e9e1350fff4fe36cc573fc91a"
 
-[conda-packages.linux-x64-musl."xorg-libxdmcp-1.1.5-hb03c661_1"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/xorg-libxdmcp-1.1.5-hb03c661_1.conda"
-checksum = "sha256:25d255fb2eef929d21ff660a0c687d38a6d2ccfbcbf0cc6aa738b12af6e9d142"
+[conda-packages.linux-x64-musl."xorg-libxdmcp-1.1.5-hb03c661_2"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/xorg-libxdmcp-1.1.5-hb03c661_2.conda"
+checksum = "sha256:c50a16c05ccd7fe7dd6d6cfb539f4e9a491d50f9ed7a5c902fec638f7d0d27be"
 
 [conda-packages.linux-x64-musl."xorg-libxext-1.3.7-hb03c661_0"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/xorg-libxext-1.3.7-hb03c661_0.conda"
@@ -2708,9 +2708,9 @@ checksum = "sha256:00925c8c055a2275614b4d983e1df637245e19058d79fc7dd1a93b8d9fb4b
 url = "https://conda.anaconda.org/conda-forge/noarch/font-ttf-ubuntu-0.83-h77eed37_3.conda"
 checksum = "sha256:2821ec1dc454bd8b9a31d0ed22a7ce22422c0aef163c59f49dfdf915d0f0ca14"
 
-[conda-packages.linux-x64-musl-baseline."fontconfig-2.18.2-h27c8c51_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/fontconfig-2.18.2-h27c8c51_0.conda"
-checksum = "sha256:d77a47bc2b340b997c680241751e581672d1d0377a680eaf0b19026f013f56b7"
+[conda-packages.linux-x64-musl-baseline."fontconfig-2.18.3-h27c8c51_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/fontconfig-2.18.3-h27c8c51_0.conda"
+checksum = "sha256:05b57e2f5aaf3adcccc80653c9795d29974f24dcf9daa40c98b254c99b726227"
 
 [conda-packages.linux-x64-musl-baseline.fonts-conda-ecosystem-1-0]
 url = "https://conda.anaconda.org/conda-forge/noarch/fonts-conda-ecosystem-1-0.tar.bz2"
@@ -2892,9 +2892,9 @@ checksum = "sha256:bba8538e6538ed58a8479b332337b96986561f975d06cfa2039a016c2d246
 url = "https://conda.anaconda.org/conda-forge/linux-64/libjxl-0.12.0-h174a0a3_1.conda"
 checksum = "sha256:1811d6c6558fbfe89326616c207cc7584032b60bc6f4329d2a76b961e2936a15"
 
-[conda-packages.linux-x64-musl-baseline."liblzma-5.8.3-hb03c661_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/liblzma-5.8.3-hb03c661_0.conda"
-checksum = "sha256:ec30e52a3c1bf7d0425380a189d209a52baa03f22fb66dd3eb587acaa765bd6d"
+[conda-packages.linux-x64-musl-baseline."liblzma-5.8.3-hb03c661_1"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/liblzma-5.8.3-hb03c661_1.conda"
+checksum = "sha256:9787df8c22a59c9a70d3e5a10db9ad663485e75e9ccc3f09bd092cb7b95e0dab"
 
 [conda-packages.linux-x64-musl-baseline."libogg-1.3.5-hd0c01bc_1"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libogg-1.3.5-hd0c01bc_1.conda"
@@ -3164,17 +3164,17 @@ checksum = "sha256:277841c43a39f738927145930ff963c5ce4c4dacf66637a3d95d802a64173
 url = "https://conda.anaconda.org/conda-forge/linux-64/xorg-libx11-1.8.13-he1eb515_0.conda"
 checksum = "sha256:516d4060139dbb4de49a4dcdc6317a9353fb39ebd47789c14e6fe52de0deee42"
 
-[conda-packages.linux-x64-musl-baseline."xorg-libxau-1.0.12-hb03c661_1"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/xorg-libxau-1.0.12-hb03c661_1.conda"
-checksum = "sha256:6bc6ab7a90a5d8ac94c7e300cc10beb0500eeba4b99822768ca2f2ef356f731b"
+[conda-packages.linux-x64-musl-baseline."xorg-libxau-1.0.12-hb03c661_2"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/xorg-libxau-1.0.12-hb03c661_2.conda"
+checksum = "sha256:cbf891f6cc1a859347680af1c8562bc6b033bf182a2a3bb536016932be3206de"
 
 [conda-packages.linux-x64-musl-baseline."xorg-libxcursor-1.2.3-hb9d3cd8_0"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/xorg-libxcursor-1.2.3-hb9d3cd8_0.conda"
 checksum = "sha256:832f538ade441b1eee863c8c91af9e69b356cd3e9e1350fff4fe36cc573fc91a"
 
-[conda-packages.linux-x64-musl-baseline."xorg-libxdmcp-1.1.5-hb03c661_1"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/xorg-libxdmcp-1.1.5-hb03c661_1.conda"
-checksum = "sha256:25d255fb2eef929d21ff660a0c687d38a6d2ccfbcbf0cc6aa738b12af6e9d142"
+[conda-packages.linux-x64-musl-baseline."xorg-libxdmcp-1.1.5-hb03c661_2"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/xorg-libxdmcp-1.1.5-hb03c661_2.conda"
+checksum = "sha256:c50a16c05ccd7fe7dd6d6cfb539f4e9a491d50f9ed7a5c902fec638f7d0d27be"
 
 [conda-packages.linux-x64-musl-baseline."xorg-libxext-1.3.7-hb03c661_0"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/xorg-libxext-1.3.7-hb03c661_0.conda"
@@ -3244,9 +3244,9 @@ checksum = "sha256:00925c8c055a2275614b4d983e1df637245e19058d79fc7dd1a93b8d9fb4b
 url = "https://conda.anaconda.org/conda-forge/noarch/font-ttf-ubuntu-0.83-h77eed37_3.conda"
 checksum = "sha256:2821ec1dc454bd8b9a31d0ed22a7ce22422c0aef163c59f49dfdf915d0f0ca14"
 
-[conda-packages.windows-x64."fontconfig-2.18.2-hd47e2ca_0"]
-url = "https://conda.anaconda.org/conda-forge/win-64/fontconfig-2.18.2-hd47e2ca_0.conda"
-checksum = "sha256:3263ba9ad9e78a927964c76e0b2b4c745d279394928f4d381272b771ec816235"
+[conda-packages.windows-x64."fontconfig-2.18.3-hd47e2ca_0"]
+url = "https://conda.anaconda.org/conda-forge/win-64/fontconfig-2.18.3-hd47e2ca_0.conda"
+checksum = "sha256:47263b05990c7ef4b52982a7ea8d2cfb74cd4bee0d72b363e20caf651d846fc8"
 
 [conda-packages.windows-x64.fonts-conda-ecosystem-1-0]
 url = "https://conda.anaconda.org/conda-forge/noarch/fonts-conda-ecosystem-1-0.tar.bz2"
@@ -3368,9 +3368,9 @@ checksum = "sha256:df78ab4c0eecb3dd9331898f96baeed8e5ca1c363346332517abeb0b614b9
 url = "https://conda.anaconda.org/conda-forge/win-64/libjxl-0.12.0-h932607e_1.conda"
 checksum = "sha256:141310ec747808be57ba9e7501fcfab75b260803233dd9ba818fb85f6080aad9"
 
-[conda-packages.windows-x64."liblzma-5.8.3-hfd05255_0"]
-url = "https://conda.anaconda.org/conda-forge/win-64/liblzma-5.8.3-hfd05255_0.conda"
-checksum = "sha256:d636d1a25234063642f9c531a7bb58d84c1c496411280a36ea000bd122f078f1"
+[conda-packages.windows-x64."liblzma-5.8.3-hfd05255_1"]
+url = "https://conda.anaconda.org/conda-forge/win-64/liblzma-5.8.3-hfd05255_1.conda"
+checksum = "sha256:d36c4a1e1f80fd08e18a407e03622ff2f34dfdd022da6488ad19603dea19e6d5"
 
 [conda-packages.windows-x64."libmpdec-4.0.0-hfd05255_1"]
 url = "https://conda.anaconda.org/conda-forge/win-64/libmpdec-4.0.0-hfd05255_1.conda"
@@ -3564,9 +3564,9 @@ checksum = "sha256:00925c8c055a2275614b4d983e1df637245e19058d79fc7dd1a93b8d9fb4b
 url = "https://conda.anaconda.org/conda-forge/noarch/font-ttf-ubuntu-0.83-h77eed37_3.conda"
 checksum = "sha256:2821ec1dc454bd8b9a31d0ed22a7ce22422c0aef163c59f49dfdf915d0f0ca14"
 
-[conda-packages.windows-x64-baseline."fontconfig-2.18.2-hd47e2ca_0"]
-url = "https://conda.anaconda.org/conda-forge/win-64/fontconfig-2.18.2-hd47e2ca_0.conda"
-checksum = "sha256:3263ba9ad9e78a927964c76e0b2b4c745d279394928f4d381272b771ec816235"
+[conda-packages.windows-x64-baseline."fontconfig-2.18.3-hd47e2ca_0"]
+url = "https://conda.anaconda.org/conda-forge/win-64/fontconfig-2.18.3-hd47e2ca_0.conda"
+checksum = "sha256:47263b05990c7ef4b52982a7ea8d2cfb74cd4bee0d72b363e20caf651d846fc8"
 
 [conda-packages.windows-x64-baseline.fonts-conda-ecosystem-1-0]
 url = "https://conda.anaconda.org/conda-forge/noarch/fonts-conda-ecosystem-1-0.tar.bz2"
@@ -3688,9 +3688,9 @@ checksum = "sha256:df78ab4c0eecb3dd9331898f96baeed8e5ca1c363346332517abeb0b614b9
 url = "https://conda.anaconda.org/conda-forge/win-64/libjxl-0.12.0-h932607e_1.conda"
 checksum = "sha256:141310ec747808be57ba9e7501fcfab75b260803233dd9ba818fb85f6080aad9"
 
-[conda-packages.windows-x64-baseline."liblzma-5.8.3-hfd05255_0"]
-url = "https://conda.anaconda.org/conda-forge/win-64/liblzma-5.8.3-hfd05255_0.conda"
-checksum = "sha256:d636d1a25234063642f9c531a7bb58d84c1c496411280a36ea000bd122f078f1"
+[conda-packages.windows-x64-baseline."liblzma-5.8.3-hfd05255_1"]
+url = "https://conda.anaconda.org/conda-forge/win-64/liblzma-5.8.3-hfd05255_1.conda"
+checksum = "sha256:d36c4a1e1f80fd08e18a407e03622ff2f34dfdd022da6488ad19603dea19e6d5"
 
 [conda-packages.windows-x64-baseline."libmpdec-4.0.0-hfd05255_1"]
 url = "https://conda.anaconda.org/conda-forge/win-64/libmpdec-4.0.0-hfd05255_1.conda"
@@ -4337,29 +4337,29 @@ conda_deps = [
     "libopenvino-auto-batch-plugin-2026.3.0-ha92a2b9_0",
     "libopenvino-arm-cpu-plugin-2026.3.0-h18f7da6_0",
     "libopenvino-2026.3.0-h18f7da6_0",
-    "liblzma-5.8.3-he30d5cf_0",
     "libharfbuzz-14.3.0-h3a99ef3_0",
     "libass-0.17.5-hac26362_0",
     "fonts-conda-ecosystem-1-0",
-    "fontconfig-2.18.2-hba86a56_0",
     "dav1d-1.2.1-h31becfc_0",
     "alsa-lib-1.2.16.1-he30d5cf_0",
     "xorg-libxrandr-1.5.5-he30d5cf_0",
     "pugixml-1.15-h6ef32b0_0",
     "libpng-1.6.58-h1abf092_0",
     "libglib-2.88.3-h96a7f82_0",
-    "libuuid-2.42.2-h1022ec0_0",
     "xorg-libxrender-0.9.12-h86ecc28_0",
     "pcre2-10.47-hf841c20_0",
     "libplacebo-7.360.1-ha018e38_1",
     "libdovi-3.4.0-hf71c8f5_0",
     "aom-3.14.1-pl5321h8fffa31_1",
+    "fontconfig-2.18.3-hba86a56_0",
+    "libuuid-2.42.2-h1022ec0_0",
     "gmp-6.3.0-h0a1ffab_2",
     "libexpat-2.8.1-hfae3067_1",
     "libfreetype-2.14.3-h8af1aa0_1",
     "libfreetype6-2.14.3-hdae7a39_1",
     "libiconv-1.18-h90929bb_2",
     "libjxl-0.12.0-hbae46ee_1",
+    "liblzma-5.8.3-he30d5cf_1",
     "libvorbis-1.3.7-h7ac5ae9_2",
     "libwebp-base-1.6.0-ha2e29f5_1",
     "libzlib-1.3.2-hdc9db2a_3",
@@ -4403,8 +4403,8 @@ conda_deps = [
     "pango-1.58.2-h8547ced_0",
     "libogg-1.3.5-h86ecc28_1",
     "pthread-stubs-0.4-he30d5cf_1003",
-    "xorg-libxau-1.0.12-he30d5cf_1",
-    "xorg-libxdmcp-1.1.5-he30d5cf_1",
+    "xorg-libxau-1.0.12-he30d5cf_2",
+    "xorg-libxdmcp-1.1.5-he30d5cf_2",
     "ca-certificates-2026.7.22-hbd8a1cb_0",
     "dbus-1.16.2-h70963c4_1",
     "libsndfile-1.2.2-h30591a0_2",
@@ -4470,29 +4470,29 @@ conda_deps = [
     "libopenvino-auto-batch-plugin-2026.3.0-ha92a2b9_0",
     "libopenvino-arm-cpu-plugin-2026.3.0-h18f7da6_0",
     "libopenvino-2026.3.0-h18f7da6_0",
-    "liblzma-5.8.3-he30d5cf_0",
     "libharfbuzz-14.3.0-h3a99ef3_0",
     "libass-0.17.5-hac26362_0",
     "fonts-conda-ecosystem-1-0",
-    "fontconfig-2.18.2-hba86a56_0",
     "dav1d-1.2.1-h31becfc_0",
     "alsa-lib-1.2.16.1-he30d5cf_0",
     "xorg-libxrandr-1.5.5-he30d5cf_0",
     "pugixml-1.15-h6ef32b0_0",
     "libpng-1.6.58-h1abf092_0",
     "libglib-2.88.3-h96a7f82_0",
-    "libuuid-2.42.2-h1022ec0_0",
     "xorg-libxrender-0.9.12-h86ecc28_0",
     "pcre2-10.47-hf841c20_0",
     "libplacebo-7.360.1-ha018e38_1",
     "libdovi-3.4.0-hf71c8f5_0",
     "aom-3.14.1-pl5321h8fffa31_1",
+    "fontconfig-2.18.3-hba86a56_0",
+    "libuuid-2.42.2-h1022ec0_0",
     "gmp-6.3.0-h0a1ffab_2",
     "libexpat-2.8.1-hfae3067_1",
     "libfreetype-2.14.3-h8af1aa0_1",
     "libfreetype6-2.14.3-hdae7a39_1",
     "libiconv-1.18-h90929bb_2",
     "libjxl-0.12.0-hbae46ee_1",
+    "liblzma-5.8.3-he30d5cf_1",
     "libvorbis-1.3.7-h7ac5ae9_2",
     "libwebp-base-1.6.0-ha2e29f5_1",
     "libzlib-1.3.2-hdc9db2a_3",
@@ -4536,8 +4536,8 @@ conda_deps = [
     "pango-1.58.2-h8547ced_0",
     "libogg-1.3.5-h86ecc28_1",
     "pthread-stubs-0.4-he30d5cf_1003",
-    "xorg-libxau-1.0.12-he30d5cf_1",
-    "xorg-libxdmcp-1.1.5-he30d5cf_1",
+    "xorg-libxau-1.0.12-he30d5cf_2",
+    "xorg-libxdmcp-1.1.5-he30d5cf_2",
     "ca-certificates-2026.7.22-hbd8a1cb_0",
     "dbus-1.16.2-h70963c4_1",
     "libsndfile-1.2.2-h30591a0_2",
@@ -4607,11 +4607,9 @@ conda_deps = [
     "libopenvino-auto-plugin-2026.3.0-h9f30d58_0",
     "libopenvino-auto-batch-plugin-2026.3.0-h9f30d58_0",
     "libopenvino-2026.3.0-hb2f3c86_0",
-    "liblzma-5.8.3-hb03c661_0",
     "libharfbuzz-14.3.0-h17a8019_0",
     "libass-0.17.5-h434b012_0",
     "fonts-conda-ecosystem-1-0",
-    "fontconfig-2.18.2-h27c8c51_0",
     "dav1d-1.2.1-hd590300_0",
     "alsa-lib-1.2.16.1-hb03c661_0",
     "xorg-libxrandr-1.5.5-hb03c661_0",
@@ -4621,18 +4619,20 @@ conda_deps = [
     "level-zero-1.29.0-hb700be7_0",
     "libpng-1.6.58-h421ea60_0",
     "libglib-2.88.3-h0d30a3d_0",
-    "libuuid-2.42.2-h5347b49_0",
     "xorg-libxrender-0.9.12-hb9d3cd8_0",
     "pcre2-10.47-haa7fec5_0",
     "libplacebo-7.360.1-hc50b9dd_1",
     "libdovi-3.4.0-ha23c83e_0",
     "aom-3.14.1-pl5321h039972f_1",
+    "fontconfig-2.18.3-h27c8c51_0",
+    "libuuid-2.42.2-h5347b49_0",
     "gmp-6.3.0-hac33072_2",
     "libexpat-2.8.1-hecca717_1",
     "libfreetype-2.14.3-ha770c72_1",
     "libfreetype6-2.14.3-h73754d4_1",
     "libiconv-1.18-h3b78370_2",
     "libjxl-0.12.0-h174a0a3_1",
+    "liblzma-5.8.3-hb03c661_1",
     "libvorbis-1.3.7-h54a6638_2",
     "libwebp-base-1.6.0-hd42ef1d_1",
     "libzlib-1.3.2-h25fd6f3_3",
@@ -4685,8 +4685,8 @@ conda_deps = [
     "intel-media-driver-26.1.6-hecca717_0",
     "intel-gmmlib-22.10.0-hb700be7_0",
     "pthread-stubs-0.4-hb03c661_1003",
-    "xorg-libxau-1.0.12-hb03c661_1",
-    "xorg-libxdmcp-1.1.5-hb03c661_1",
+    "xorg-libxau-1.0.12-hb03c661_2",
+    "xorg-libxdmcp-1.1.5-hb03c661_2",
     "ca-certificates-2026.7.22-hbd8a1cb_0",
     "dbus-1.16.2-h24cb091_1",
     "libsndfile-1.2.2-hc7d488a_2",
@@ -4750,11 +4750,9 @@ conda_deps = [
     "libopenvino-auto-plugin-2026.3.0-h9f30d58_0",
     "libopenvino-auto-batch-plugin-2026.3.0-h9f30d58_0",
     "libopenvino-2026.3.0-hb2f3c86_0",
-    "liblzma-5.8.3-hb03c661_0",
     "libharfbuzz-14.3.0-h17a8019_0",
     "libass-0.17.5-h434b012_0",
     "fonts-conda-ecosystem-1-0",
-    "fontconfig-2.18.2-h27c8c51_0",
     "dav1d-1.2.1-hd590300_0",
     "alsa-lib-1.2.16.1-hb03c661_0",
     "xorg-libxrandr-1.5.5-hb03c661_0",
@@ -4764,18 +4762,20 @@ conda_deps = [
     "level-zero-1.29.0-hb700be7_0",
     "libpng-1.6.58-h421ea60_0",
     "libglib-2.88.3-h0d30a3d_0",
-    "libuuid-2.42.2-h5347b49_0",
     "xorg-libxrender-0.9.12-hb9d3cd8_0",
     "pcre2-10.47-haa7fec5_0",
     "libplacebo-7.360.1-hc50b9dd_1",
     "libdovi-3.4.0-ha23c83e_0",
     "aom-3.14.1-pl5321h039972f_1",
+    "fontconfig-2.18.3-h27c8c51_0",
+    "libuuid-2.42.2-h5347b49_0",
     "gmp-6.3.0-hac33072_2",
     "libexpat-2.8.1-hecca717_1",
     "libfreetype-2.14.3-ha770c72_1",
     "libfreetype6-2.14.3-h73754d4_1",
     "libiconv-1.18-h3b78370_2",
     "libjxl-0.12.0-h174a0a3_1",
+    "liblzma-5.8.3-hb03c661_1",
     "libvorbis-1.3.7-h54a6638_2",
     "libwebp-base-1.6.0-hd42ef1d_1",
     "libzlib-1.3.2-h25fd6f3_3",
@@ -4828,8 +4828,8 @@ conda_deps = [
     "intel-media-driver-26.1.6-hecca717_0",
     "intel-gmmlib-22.10.0-hb700be7_0",
     "pthread-stubs-0.4-hb03c661_1003",
-    "xorg-libxau-1.0.12-hb03c661_1",
-    "xorg-libxdmcp-1.1.5-hb03c661_1",
+    "xorg-libxau-1.0.12-hb03c661_2",
+    "xorg-libxdmcp-1.1.5-hb03c661_2",
     "ca-certificates-2026.7.22-hbd8a1cb_0",
     "dbus-1.16.2-h24cb091_1",
     "libsndfile-1.2.2-hc7d488a_2",
@@ -4893,11 +4893,9 @@ conda_deps = [
     "libopenvino-auto-plugin-2026.3.0-h9f30d58_0",
     "libopenvino-auto-batch-plugin-2026.3.0-h9f30d58_0",
     "libopenvino-2026.3.0-hb2f3c86_0",
-    "liblzma-5.8.3-hb03c661_0",
     "libharfbuzz-14.3.0-h17a8019_0",
     "libass-0.17.5-h434b012_0",
     "fonts-conda-ecosystem-1-0",
-    "fontconfig-2.18.2-h27c8c51_0",
     "dav1d-1.2.1-hd590300_0",
     "alsa-lib-1.2.16.1-hb03c661_0",
     "xorg-libxrandr-1.5.5-hb03c661_0",
@@ -4907,18 +4905,20 @@ conda_deps = [
     "level-zero-1.29.0-hb700be7_0",
     "libpng-1.6.58-h421ea60_0",
     "libglib-2.88.3-h0d30a3d_0",
-    "libuuid-2.42.2-h5347b49_0",
     "xorg-libxrender-0.9.12-hb9d3cd8_0",
     "pcre2-10.47-haa7fec5_0",
     "libplacebo-7.360.1-hc50b9dd_1",
     "libdovi-3.4.0-ha23c83e_0",
     "aom-3.14.1-pl5321h039972f_1",
+    "fontconfig-2.18.3-h27c8c51_0",
+    "libuuid-2.42.2-h5347b49_0",
     "gmp-6.3.0-hac33072_2",
     "libexpat-2.8.1-hecca717_1",
     "libfreetype-2.14.3-ha770c72_1",
     "libfreetype6-2.14.3-h73754d4_1",
     "libiconv-1.18-h3b78370_2",
     "libjxl-0.12.0-h174a0a3_1",
+    "liblzma-5.8.3-hb03c661_1",
     "libvorbis-1.3.7-h54a6638_2",
     "libwebp-base-1.6.0-hd42ef1d_1",
     "libzlib-1.3.2-h25fd6f3_3",
@@ -4971,8 +4971,8 @@ conda_deps = [
     "intel-media-driver-26.1.6-hecca717_0",
     "intel-gmmlib-22.10.0-hb700be7_0",
     "pthread-stubs-0.4-hb03c661_1003",
-    "xorg-libxau-1.0.12-hb03c661_1",
-    "xorg-libxdmcp-1.1.5-hb03c661_1",
+    "xorg-libxau-1.0.12-hb03c661_2",
+    "xorg-libxdmcp-1.1.5-hb03c661_2",
     "ca-certificates-2026.7.22-hbd8a1cb_0",
     "dbus-1.16.2-h24cb091_1",
     "libsndfile-1.2.2-hc7d488a_2",
@@ -5036,11 +5036,9 @@ conda_deps = [
     "libopenvino-auto-plugin-2026.3.0-h9f30d58_0",
     "libopenvino-auto-batch-plugin-2026.3.0-h9f30d58_0",
     "libopenvino-2026.3.0-hb2f3c86_0",
-    "liblzma-5.8.3-hb03c661_0",
     "libharfbuzz-14.3.0-h17a8019_0",
     "libass-0.17.5-h434b012_0",
     "fonts-conda-ecosystem-1-0",
-    "fontconfig-2.18.2-h27c8c51_0",
     "dav1d-1.2.1-hd590300_0",
     "alsa-lib-1.2.16.1-hb03c661_0",
     "xorg-libxrandr-1.5.5-hb03c661_0",
@@ -5050,18 +5048,20 @@ conda_deps = [
     "level-zero-1.29.0-hb700be7_0",
     "libpng-1.6.58-h421ea60_0",
     "libglib-2.88.3-h0d30a3d_0",
-    "libuuid-2.42.2-h5347b49_0",
     "xorg-libxrender-0.9.12-hb9d3cd8_0",
     "pcre2-10.47-haa7fec5_0",
     "libplacebo-7.360.1-hc50b9dd_1",
     "libdovi-3.4.0-ha23c83e_0",
     "aom-3.14.1-pl5321h039972f_1",
+    "fontconfig-2.18.3-h27c8c51_0",
+    "libuuid-2.42.2-h5347b49_0",
     "gmp-6.3.0-hac33072_2",
     "libexpat-2.8.1-hecca717_1",
     "libfreetype-2.14.3-ha770c72_1",
     "libfreetype6-2.14.3-h73754d4_1",
     "libiconv-1.18-h3b78370_2",
     "libjxl-0.12.0-h174a0a3_1",
+    "liblzma-5.8.3-hb03c661_1",
     "libvorbis-1.3.7-h54a6638_2",
     "libwebp-base-1.6.0-hd42ef1d_1",
     "libzlib-1.3.2-h25fd6f3_3",
@@ -5114,8 +5114,8 @@ conda_deps = [
     "intel-media-driver-26.1.6-hecca717_0",
     "intel-gmmlib-22.10.0-hb700be7_0",
     "pthread-stubs-0.4-hb03c661_1003",
-    "xorg-libxau-1.0.12-hb03c661_1",
-    "xorg-libxdmcp-1.1.5-hb03c661_1",
+    "xorg-libxau-1.0.12-hb03c661_2",
+    "xorg-libxdmcp-1.1.5-hb03c661_2",
     "ca-certificates-2026.7.22-hbd8a1cb_0",
     "dbus-1.16.2-h24cb091_1",
     "libsndfile-1.2.2-hc7d488a_2",
@@ -5174,15 +5174,14 @@ conda_deps = [
     "libvulkan-loader-1.4.357.0-h477610d_0",
     "librsvg-2.62.3-h15cfe45_0",
     "libopus-1.6.1-h6a83c73_0",
-    "liblzma-5.8.3-hfd05255_0",
     "libharfbuzz-14.3.0-h03b5201_0",
     "fonts-conda-ecosystem-1-0",
-    "fontconfig-2.18.2-hd47e2ca_0",
     "dav1d-1.2.1-hcfcfb64_0",
     "libpng-1.6.58-h7351971_0",
     "libglib-2.88.3-h7ce1215_0",
     "pcre2-10.47-hd2b5f0e_0",
     "aom-3.14.1-pl5321h06fc181_1",
+    "fontconfig-2.18.3-hd47e2ca_0",
     "lame-4.0-h0c5f640_1",
     "mpg123-1.33.7-h365c5b5_0",
     "libexpat-2.8.1-hac47afa_1",
@@ -5190,6 +5189,7 @@ conda_deps = [
     "libfreetype6-2.14.3-hdbac1cb_1",
     "libiconv-1.18-hc1393d2_2",
     "libjxl-0.12.0-h932607e_1",
+    "liblzma-5.8.3-hfd05255_1",
     "libvorbis-1.3.7-h5112557_2",
     "libwebp-base-1.6.0-h4d5522a_1",
     "libzlib-1.3.2-hfd05255_3",
@@ -5260,15 +5260,14 @@ conda_deps = [
     "libvulkan-loader-1.4.357.0-h477610d_0",
     "librsvg-2.62.3-h15cfe45_0",
     "libopus-1.6.1-h6a83c73_0",
-    "liblzma-5.8.3-hfd05255_0",
     "libharfbuzz-14.3.0-h03b5201_0",
     "fonts-conda-ecosystem-1-0",
-    "fontconfig-2.18.2-hd47e2ca_0",
     "dav1d-1.2.1-hcfcfb64_0",
     "libpng-1.6.58-h7351971_0",
     "libglib-2.88.3-h7ce1215_0",
     "pcre2-10.47-hd2b5f0e_0",
     "aom-3.14.1-pl5321h06fc181_1",
+    "fontconfig-2.18.3-hd47e2ca_0",
     "lame-4.0-h0c5f640_1",
     "mpg123-1.33.7-h365c5b5_0",
     "libexpat-2.8.1-hac47afa_1",
@@ -5276,6 +5275,7 @@ conda_deps = [
     "libfreetype6-2.14.3-hdbac1cb_1",
     "libiconv-1.18-hc1393d2_2",
     "libjxl-0.12.0-h932607e_1",
+    "liblzma-5.8.3-hfd05255_1",
     "libvorbis-1.3.7-h5112557_2",
     "libwebp-base-1.6.0-h4d5522a_1",
     "libzlib-1.3.2-hfd05255_3",
