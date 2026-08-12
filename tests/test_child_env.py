@@ -9,6 +9,7 @@ from dotfiles_setup.child_env import (
     dropped_names,
     is_credential,
     without_env_diff,
+    without_git_context,
 )
 
 # Values are named rather than inline so no assertion below reads as a
@@ -75,7 +76,28 @@ def test_the_source_environment_is_never_modified() -> None:
     before = dict(SAMPLE)
     clean_env(SAMPLE)
     without_env_diff(SAMPLE)
+    without_git_context(SAMPLE)
     assert before == SAMPLE
+
+
+def test_without_git_context_drops_mise_blob_and_repository_routing() -> None:
+    source = {
+        **SAMPLE,
+        "GIT_DIR": "/workspace/outer/.git",
+        "GIT_WORK_TREE": "/workspace/outer",
+        "GIT_INDEX_FILE": "/workspace/outer/.git/index",
+        "GIT_COMMON_DIR": "/workspace/outer/.git",
+    }
+
+    out = without_git_context(source)
+
+    assert ENV_DIFF_NAME not in out
+    assert (
+        not {"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR"}
+        & out.keys()
+    )
+    assert out["PATH"] == "/usr/bin"
+    assert out["GITHUB_TOKEN"] == SENTINEL
 
 
 def test_dropped_names_reports_names_and_never_values() -> None:

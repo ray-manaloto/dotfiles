@@ -65,6 +65,7 @@ import sys
 from pathlib import Path as PathLib
 from typing import TYPE_CHECKING, Literal
 
+from dotfiles_setup import child_env
 from dotfiles_setup.container import verify_latest
 from dotfiles_setup.platform_target import resolve_platform
 
@@ -220,7 +221,12 @@ def _run(
     # binary (probe-observed: in-container pytest has no docker CLI).
     try:
         return subprocess.run(
-            cmd, capture_output=True, text=True, check=False, timeout=timeout
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout,
+            env=child_env.without_git_context(),
         )
     except subprocess.TimeoutExpired:
         return subprocess.CompletedProcess(
@@ -239,7 +245,12 @@ def _stream(
     cwd: Path | None = None,
 ) -> int:
     """Run a long operation streaming to the terminal (never wait blind)."""
-    return subprocess.run(cmd, check=False, env=env, cwd=cwd).returncode
+    return subprocess.run(
+        cmd,
+        check=False,
+        env=child_env.without_git_context(env),
+        cwd=cwd,
+    ).returncode
 
 
 def registry_digest(image_ref: str) -> str | None:

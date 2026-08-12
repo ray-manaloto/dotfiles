@@ -842,9 +842,9 @@ def other(flag: bool) -> str:
 def test_classifier_shaped_finds_the_three_real_classifiers() -> None:
     """The discovery predicate, measured against the shipped tree.
 
-    **3 hits across 48 modules, zero false positives** (re-measured
-    2026-08-07). The first measurement was 2 across 45, and the third hit is
-    the point: `codex_verdict.edge_for` shipped on `main` AFTER this gate was
+    **4 hits, zero false positives**. The 2026-08-07 measurement was 3 across
+    48 modules; the first measurement was 2 across 45. The third hit is the
+    point: `codex_verdict.edge_for` shipped on `main` AFTER this gate was
     written, and `unlisted` caught it the moment the two branches met — which
     is the whole reason the registry has to be forced to GROW rather than
     guarding whatever call sites its author happened to think of.
@@ -859,16 +859,29 @@ def test_classifier_shaped_finds_the_three_real_classifiers() -> None:
         for path in sorted(_repo_root().glob(classifier_tables.SCAN_GLOB))
         for fn in classifier_tables.classifier_shaped(path.read_text())
     }
-    assert found == {
+    prior_classifiers = {
         "dag_tick.py:classify",
         "branch_guard.py:classify",
         "codex_verdict.py:edge_for",
     }
+    assert found - {"session_ledger.py:status"} == prior_classifiers
     # Every hit is registered: the scan and the registry agree in both
     # directions, which is what `unlisted` asserts at the CLI level.
     assert {name.split(".")[-1] for name in classifier_tables.REGISTRY} == {
         hit.replace(".py", "") for hit in found
     }
+
+
+def test_classifier_shaped_registers_coverage_status() -> None:
+    found = classifier_tables.classifier_shaped(
+        (_repo_root() / "python/src/dotfiles_setup/session_ledger.py").read_text()
+    )
+    assert "status" in found
+    spec = classifier_tables.REGISTRY["dotfiles_setup.session_ledger:status"]
+    assert spec.axes == frozenset(
+        {"omissions", "high_severity_findings", "dispositions"}
+    )
+    assert spec.table_symbol == "_COVERAGE_STATUS_TABLE"
 
 
 def test_classifier_shaped_ignores_functions_not_returning_a_local_enum() -> None:

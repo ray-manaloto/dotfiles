@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 from typing import TYPE_CHECKING
 
 import pytest
-from dotfiles_setup import pr
+from dotfiles_setup import pr, process_env
 
 if TYPE_CHECKING:
     from dotfiles_setup.sync import SyncOptions
@@ -317,7 +317,7 @@ def test_ship_enables_auto_merge_and_returns(
     monkeypatch.setattr(pr, "_working_tree_clean", lambda _w: True)
     monkeypatch.setattr(pr, "changed_paths_vs_main", lambda _w: ["README.md"])
     monkeypatch.setattr(pr, "run_gates", lambda *_a: True)
-    monkeypatch.setattr(pr, "_stream", lambda *_a, **_k: 0)  # git push
+    monkeypatch.setattr(process_env, "run_with_fnox", lambda *_a, **_k: 0)
     monkeypatch.setattr(pr, "_open_or_update_pr", lambda *_a, **_k: 42)
     monkeypatch.setattr(pr, "_await_checks_registered", lambda _n: True)
     monkeypatch.setattr(pr, "_run", lambda *_a, **_k: _cp("abc123\n"))  # rev-parse
@@ -333,6 +333,43 @@ def test_ship_enables_auto_merge_and_returns(
     assert enabled["head"] == "abc123"
 
 
+def test_ship_bounds_fnox_to_git_push_and_keeps_local_gates_uncredentialed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The public ship flow gives fnox only to the push/pre-push boundary."""
+    local_children: list[list[str]] = []
+    fnox_children: list[tuple[str, ...]] = []
+    monkeypatch.setattr(
+        pr,
+        "_ship_preflight",
+        lambda _workspace: ("feat/x", ["README.md"]),
+    )
+    monkeypatch.setattr(
+        pr,
+        "gate_matrix",
+        lambda _paths: [pr.Gate("unit", ("mise", "run", "test"))],
+    )
+
+    def local_stream(cmd: list[str], **_kwargs: object) -> int:
+        local_children.append(cmd)
+        return 0
+
+    def fnox_child(command: tuple[str, ...] | list[str], **_kwargs: object) -> int:
+        fnox_children.append(tuple(command))
+        return 0
+
+    monkeypatch.setattr(pr, "_stream", local_stream)
+    monkeypatch.setattr(process_env, "run_with_fnox", fnox_child)
+    monkeypatch.setattr(pr, "_open_or_update_pr", lambda *_args, **_kwargs: 42)
+    monkeypatch.setattr(pr, "_await_checks_registered", lambda _number: True)
+    monkeypatch.setattr(pr, "_run", lambda *_args, **_kwargs: _cp("abc123\n"))
+    monkeypatch.setattr(pr, "enable_auto_merge", lambda *_args: True)
+
+    assert pr.ship_main(_WORKSPACE) == 0
+    assert local_children == [["mise", "run", "test"]]
+    assert fnox_children == [("git", "push", "-u", "origin", "feat/x")]
+
+
 def test_ship_fails_if_auto_merge_enable_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -340,7 +377,7 @@ def test_ship_fails_if_auto_merge_enable_fails(
     monkeypatch.setattr(pr, "_working_tree_clean", lambda _w: True)
     monkeypatch.setattr(pr, "changed_paths_vs_main", lambda _w: ["README.md"])
     monkeypatch.setattr(pr, "run_gates", lambda *_a: True)
-    monkeypatch.setattr(pr, "_stream", lambda *_a, **_k: 0)
+    monkeypatch.setattr(process_env, "run_with_fnox", lambda *_a, **_k: 0)
     monkeypatch.setattr(pr, "_open_or_update_pr", lambda *_a, **_k: 42)
     monkeypatch.setattr(pr, "_await_checks_registered", lambda _n: True)
     monkeypatch.setattr(pr, "_run", lambda *_a, **_k: _cp("abc123\n"))
