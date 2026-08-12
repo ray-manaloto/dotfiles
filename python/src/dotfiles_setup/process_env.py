@@ -23,6 +23,8 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
     from pathlib import Path
 
+GITHUB_TOKEN_NAMES = frozenset({"GH_TOKEN", "GITHUB_TOKEN"})
+
 
 def command_after_separator(command: Sequence[str]) -> tuple[str, ...]:
     """Normalize argparse ``REMAINDER`` while requiring a real command."""
@@ -31,6 +33,33 @@ def command_after_separator(command: Sequence[str]) -> tuple[str, ...]:
         msg = "a command is required after --"
         raise ValueError(msg)
     return normalized
+
+
+def fnox_command(command: Sequence[str]) -> tuple[str, ...]:
+    """Return the non-interactive fnox command for one bounded child."""
+    return ("fnox", "exec", "--non-interactive", "--", *command)
+
+
+def fnox_parent_env(base: Mapping[str, str] | None = None) -> dict[str, str]:
+    """Remove stale GitHub-token precedence before fnox resolves its child.
+
+    ``gh`` prefers ``GH_TOKEN`` over ``GITHUB_TOKEN``. A long-lived Desktop
+    process can therefore carry an old token which wins over the scoped token
+    fnox injects. Provider credentials remain available to fnox; no value is
+    inspected or logged.
+    """
+    source = os.environ if base is None else base
+    return {
+        name: value for name, value in source.items() if name not in GITHUB_TOKEN_NAMES
+    }
+
+
+def run_with_fnox(command: Sequence[str], *, cwd: Path | None = None) -> int:
+    """Run exactly one command with credentials resolved by fnox."""
+    completed = subprocess.run(
+        fnox_command(command), check=False, cwd=cwd, env=fnox_parent_env()
+    )
+    return completed.returncode
 
 
 def git_local_env_names(*, cwd: Path | None = None) -> frozenset[str]:

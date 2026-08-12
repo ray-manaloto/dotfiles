@@ -77,7 +77,7 @@ import sys
 import time
 from typing import TYPE_CHECKING
 
-from dotfiles_setup import child_env
+from dotfiles_setup import child_env, process_env
 from dotfiles_setup.sync import SyncOptions, sync_main
 
 if TYPE_CHECKING:
@@ -567,7 +567,9 @@ def ship_main(workspace: Path, *, title: str | None = None) -> int:
     if not run_gates(workspace, gate_matrix(paths)):
         return 1
 
-    push_rc = _stream(["git", "push", "-u", "origin", branch], cwd=workspace)
+    push_rc = process_env.run_with_fnox(
+        ["git", "push", "-u", "origin", branch], cwd=workspace
+    )
     if push_rc != 0:
         sys.stdout.write(f"FAIL  ship: git push rc={push_rc}\n")
         return 1

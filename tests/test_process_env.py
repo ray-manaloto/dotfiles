@@ -85,6 +85,30 @@ def test_command_after_separator_requires_a_command(raw: tuple[str, ...]) -> Non
         process_env.command_after_separator(raw)
 
 
+def test_fnox_command_is_noninteractive_and_bounded() -> None:
+    assert process_env.fnox_command(("git", "push")) == (
+        "fnox",
+        "exec",
+        "--non-interactive",
+        "--",
+        "git",
+        "push",
+    )
+
+
+def test_fnox_parent_env_removes_stale_gh_precedence_only() -> None:
+    base = {
+        "GH_TOKEN": "stale-first-precedence",
+        "GITHUB_TOKEN": "stale-second-precedence",
+        "DOPPLER_TOKEN": "provider-input",
+        "PATH": "/usr/bin",
+    }
+    cleaned = process_env.fnox_parent_env(base)
+    assert "GH_TOKEN" not in cleaned
+    assert "GITHUB_TOKEN" not in cleaned
+    assert set(cleaned) == {"DOPPLER_TOKEN", "PATH"}
+
+
 def test_git_isolated_env_uses_the_derived_git_set_and_drops_credentials() -> None:
     local = frozenset({"GIT_DIR", "GIT_FUTURE_LOCAL_STATE"})
     base = {
