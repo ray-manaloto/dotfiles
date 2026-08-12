@@ -33,6 +33,9 @@ import re
 # The compressed env delta. Its entire content is the leak, and no child reads
 # it — mise recomputes it from config.
 ENV_DIFF_NAME = "__MISE_DIFF"
+GIT_CONTEXT_NAMES = frozenset(
+    {"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR"}
+)
 
 # Names that carry a credential. Matched on the NAME, so a provider we have
 # never heard of is covered as long as it follows the usual convention.
@@ -56,6 +59,12 @@ def without_env_diff(base: dict[str, str] | None = None) -> dict[str, str]:
     """
     source = os.environ if base is None else base
     return {k: v for k, v in source.items() if k != ENV_DIFF_NAME}
+
+
+def without_git_context(base: dict[str, str] | None = None) -> dict[str, str]:
+    """Remove repository-routing variables before invoking public Git paths."""
+    source = without_env_diff(base)
+    return {k: v for k, v in source.items() if k not in GIT_CONTEXT_NAMES}
 
 
 def clean_env(

@@ -363,9 +363,12 @@ ACTION_RUNS_GIT_LOCALLY: dict[str, bool] = {
 # true positives in the tree into a false negative: the gate would go green
 # while the hazard was unchanged.
 #
-# `dotfiles-setup pr` covers `pr ship` (pr.py's argv push, line 506) and
-# `pr land`. It is the SEED only: the mise half is DERIVED from `mise.toml` by
-# :func:`mise_task_git_writers`, never listed.
+# `dotfiles-setup pr` covers `pr ship` and `pr land`. The exact
+# `session_gate` entry covers only the credential-launcher mutation sentinel,
+# whose hostile payload restores ship's historical uncredentialed push. Its
+# sibling mutation and normal gate do not carry that payload and must remain
+# outside this registry. These are SEEDS only: the mise half is DERIVED from
+# `mise.toml` by :func:`mise_task_git_writers`, never listed.
 #
 # Listing the tasks was the reviewed defect, and it reproduced ADR-0001's own
 # complaint one level up: `mise run ship` is literally
@@ -377,7 +380,18 @@ ACTION_RUNS_GIT_LOCALLY: dict[str, bool] = {
 # :func:`classification_gaps` keeps the python half honest the same way — a NEW
 # git write inside `python/` fails the check until its entrypoint is registered
 # here.
-FIRST_PARTY_GIT_WRITERS: tuple[tuple[str, ...], ...] = (("dotfiles-setup", "pr"),)
+FIRST_PARTY_GIT_WRITERS: tuple[tuple[str, ...], ...] = (
+    ("dotfiles-setup", "pr"),
+    (
+        "-m",
+        "dotfiles_setup.session_gate",
+        "--repo-root",
+        "$MISE_PROJECT_ROOT",
+        "mutation-sentinel",
+        "--prevention-id",
+        "credential-launcher",
+    ),
+)
 
 # Where mise tasks are declared. `.config/mise/conf.d/*.toml` is the fragment
 # both host and image merge (root AGENTS.md), so a task can arrive from either.
@@ -385,7 +399,8 @@ MISE_CONFIGS: tuple[str, ...] = ("mise.toml", ".config/mise/conf.d/*.toml")
 
 # Modules under `python/src/dotfiles_setup/` that invoke a git write verb, and
 # whose entrypoint is therefore registered in :data:`FIRST_PARTY_GIT_WRITERS`.
-# Today: `pr.py:506` — a `_stream` of git's push verb to `origin <branch>`.
+# Today: `pr.py` performs ship's credential-scoped push, while `session_gate.py`
+# carries the exact historical uncredentialed call as the credential mutation.
 # (Deliberately paraphrased rather than quoted: the argv literal is what
 # :data:`_ARGV_GIT_WRITE` looks for, and quoting it here would make this module
 # match its own detector. Caught by running the check against the real tree —
@@ -393,7 +408,7 @@ MISE_CONFIGS: tuple[str, ...] = ("mise.toml", ".config/mise/conf.d/*.toml")
 # is exactly the FAIL direction working.)
 # Every other module's git usage is a read (`ls-files`, `rev-parse`,
 # `merge-base`, `diff`, `status`, `ls-remote`, `pull --ff-only`).
-GIT_WRITING_MODULES: frozenset[str] = frozenset({"pr"})
+GIT_WRITING_MODULES: frozenset[str] = frozenset({"pr", "session_gate"})
 
 _PYTHON_PACKAGE_DIR = "python/src/dotfiles_setup"
 

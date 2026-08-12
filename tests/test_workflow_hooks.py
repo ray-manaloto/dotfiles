@@ -631,6 +631,17 @@ def test_mise_task_writers_are_derived_not_listed(tmp_path: Path) -> None:
     assert ("mise", "run", "lint") not in derived
 
 
+def test_session_review_writer_registration_is_only_the_credential_mutant() -> None:
+    """The historical push payload must not classify sibling gate commands."""
+    writers = workflow_hooks.mise_task_git_writers(REPO_ROOT)
+    assert ("mise", "run", "session-review-mutation-credential-launcher") in writers
+    assert ("mise", "run", "session-review-mutation-git-hook-contamination") not in (
+        writers
+    )
+    assert ("mise", "run", "session-review-focused-gate") not in writers
+    assert ("mise", "run", "session-review-gate") not in writers
+
+
 def test_new_task_alias_job_is_flagged(tmp_path: Path) -> None:
     """End-to-end for the derivation: the invented `cut-release` job fails."""
     _mise_project(
@@ -670,6 +681,7 @@ def test_derivation_matches_the_real_tree_today() -> None:
     assert workflow_hooks.mise_task_git_writers(REPO_ROOT) == (
         ("mise", "run", "automerge"),
         ("mise", "run", "land"),
+        ("mise", "run", "session-review-mutation-credential-launcher"),
         ("mise", "run", "ship"),
     )
 

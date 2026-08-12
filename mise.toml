@@ -224,6 +224,10 @@ depends = ["pre-commit", "test"]
 description = "Run Python test suite"
 run = "uv run --project python pytest tests/ -x -q"
 
+[tasks.test-hook-isolated]
+description = "Run the Python suite without credentials or hook-exported Git-local variables"
+run = "uv run --project python dotfiles-setup process git-isolated -- uv run --project python pytest tests/ -x -q"
+
 [tasks.smoke-exec]
 description = "Run the containerized real-toolchain exec tests against the local :dev image (needs Docker + `mise run sync`; tier-3 compiles under Rosetta — minutes)"
 # `-m image_exec` re-selects the tests the root pytest.ini deselects by default
@@ -308,7 +312,7 @@ ssh-keygen -R "[localhost]:${DEVCONTAINER_SSH_PORT}" 2>/dev/null || true
 # container finds and reuses it, and the arch-scoped --name never matters.
 # Both labels are required: --id-label REPLACES the inferred set, so the arch
 # label alone would let two clones collide.
-devcontainer up --workspace-folder . \
+fnox exec --non-interactive -- devcontainer up --workspace-folder . \
   --id-label "${DEVCONTAINER_WORKSPACE_LABEL}" \
   --id-label "${DEVCONTAINER_ARCH_LABEL}"
 '''
@@ -348,7 +352,7 @@ set -euo pipefail
 _dc_env="$(uv run --project python dotfiles-setup devcontainer env)"
 eval "${_dc_env}"
 ssh-keygen -R "[localhost]:${DEVCONTAINER_SSH_PORT}" 2>/dev/null || true
-devcontainer up --workspace-folder . \
+fnox exec --non-interactive -- devcontainer up --workspace-folder . \
   --id-label "${DEVCONTAINER_WORKSPACE_LABEL}" \
   --id-label "${DEVCONTAINER_ARCH_LABEL}" \
   --remove-existing-container --build-no-cache
@@ -925,17 +929,8 @@ set -euo pipefail
 # `mise run up` asked rather than restating a number.
 port="$(uv run --project python dotfiles-setup devcontainer name port)"
 echo "==> probing ssh ${USER}@localhost -p ${port}"
-out=$(ssh -o BatchMode=yes \
-          -o StrictHostKeyChecking=accept-new \
-          -o UserKnownHostsFile=/dev/null \
-          -o LogLevel=ERROR \
-          -o ConnectTimeout=10 \
-          -p "${port}" "${USER}@localhost" 'hostname && whoami')
-echo "${out}"
-echo "${out}" | grep -q "${USER}" || {
-  echo "FAIL: whoami did not return ${USER}" >&2
-  exit 1
-}
+uv run --project python dotfiles-setup docker verify-ssh-inbound \
+  --port "${port}" --user "${USER}"
 echo "OK: R1 inbound ssh ${USER}@localhost -p ${port} works"
 '''
 
@@ -1307,7 +1302,36 @@ description = "Find what this session did BY HAND that should be code (#654): tr
 #   mise run session-review                          # both lanes, to stdout
 #   mise run session-review -- --output .agent/session-review.md
 #   mise run session-review -- --narrative-only      # cheap re-check
+#   mise run session-review -- --requirements-only   # lossless evidence ledger
 run = 'uv run --project python dotfiles-setup session-review'
+
+[tasks.session-requirements]
+description = "Review up to five recent Claude and Codex sessions for requirements and promises"
+# Explicit opt-in keeps session-review's established two-lane default unchanged.
+# Unknown transcript records exit non-zero instead of reading as "no issues".
+usage = '''
+arg "<source_repo_root>" help="Exact checkout path recorded in the transcripts"
+arg "[max_sessions]" help="Maximum root sessions to review" default="5"
+arg "[max_iterations]" help="Maximum agent-team prevention passes (1-5)" default="1"
+arg "[session_id]" help="Native current session/thread id" default=""
+'''
+run = 'uv run --project python dotfiles-setup session-review --requirements-only --sessions "${usage_max_sessions?}" --max-iterations "${usage_max_iterations?}" --source-repo-root "${usage_source_repo_root?}" --session-id "${usage_session_id?}" --output .agent/session-review.md'
+
+[tasks.session-review-gate]
+description = "Trusted bounded runner for session-review mutation, gate, and GitHub receipts"
+run = 'uv run --project python python -m dotfiles_setup.session_gate'
+
+[tasks.session-review-mutation-credential-launcher]
+description = "Hostile credential-launcher mutant sentinel for session review"
+run = 'uv run --project python python -m dotfiles_setup.session_gate --repo-root "$MISE_PROJECT_ROOT" mutation-sentinel --prevention-id credential-launcher'
+
+[tasks.session-review-mutation-git-hook-contamination]
+description = "Hostile Git-hook-contamination mutant sentinel for session review"
+run = 'uv run --project python python -m dotfiles_setup.session_gate --repo-root "$MISE_PROJECT_ROOT" mutation-sentinel --prevention-id git-hook-contamination'
+
+[tasks.session-review-focused-gate]
+description = "Normal session-review prevention gate"
+run = 'uv run --project python python -m dotfiles_setup.session_gate --repo-root "$MISE_PROJECT_ROOT" prevention-check'
 
 [tasks.lint-delta]
 description = "Partition linter violations into YOURS vs THE UPGRADE'S by running the previous pinned version against the same tree (#651)"

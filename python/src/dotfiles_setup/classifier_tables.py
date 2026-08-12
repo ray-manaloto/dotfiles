@@ -261,6 +261,21 @@ REGISTRY: dict[str, ClassifierSpec] = {
             "of silently going unenumerated, which is #601's defect exactly"
         ),
     ),
+    "dotfiles_setup.session_ledger:status": ClassifierSpec(
+        module_path="python/src/dotfiles_setup/session_ledger.py",
+        function="status",
+        subject_param="self",
+        subject_type="RequirementCoverage",
+        axes=frozenset({"omissions", "high_severity_findings", "dispositions"}),
+        table_path="tests/test_session_ledger.py",
+        table_symbol="_COVERAGE_STATUS_TABLE",
+        table_excluded_classes=frozenset(),
+        reason=(
+            "#715: coverage is COMPLETE only when structural omissions are empty "
+            "and every confirmed high-severity finding has a complete prevention "
+            "disposition"
+        ),
+    ),
 }
 
 # Where :func:`classifier_shaped` looks for classifiers that OUGHT to be
@@ -941,15 +956,15 @@ def classifier_shaped(source: str) -> set[str]:
     """Function names in ``source`` that RETURN an enum defined in that module.
 
     The discovery predicate behind the ``unlisted`` kind, and the reason it is
-    a gate rather than a heuristic: measured across all 48 modules in
-    ``python/src/dotfiles_setup`` it yields **3 hits, all three real
-    classifiers, zero false positives** (re-measured 2026-08-07; it was 2
-    across 45 when the gate was written). The third arrived on its own:
+    a gate rather than a heuristic: it now yields **4 hits, all four real
+    classifiers, zero false positives** (the 2026-08-07 measurement was 3
+    across 48 modules; it was 2 across 45 when the gate was written). The
+    third arrived on its own:
     ``codex_verdict.edge_for`` shipped after this module did, and the scan
     named it the moment the two branches met — which is exactly what a gate
     that forces the map to GROW is for.
 
-    ⚠️ That third hit also retires a claim the first measurement invited: the
+    ⚠️ The third hit also retired a claim the first measurement invited: the
     original two were **both named** ``classify``, and it would have been easy
     to read the predicate as recognising that name. It does not — ``edge_for``
     is not called ``classify``, and it is found anyway, because the only thing

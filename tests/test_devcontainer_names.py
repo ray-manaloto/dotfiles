@@ -334,6 +334,73 @@ def test_every_devcontainer_invocation_in_mise_toml_is_arch_scoped() -> None:
     )
 
 
+_FNOX_DEVCONTAINER_UP = "fnox exec --non-interactive -- devcontainer up "
+
+
+def _devcontainer_up_sites(mise_text: str) -> list[tuple[str, str]]:
+    """Enumerate executable up commands from every declared mise task."""
+    tasks = tomllib.loads(mise_text)["tasks"]
+    sites: list[tuple[str, str]] = []
+    for name, task in tasks.items():
+        if not isinstance(task, dict) or not isinstance(task.get("run"), str):
+            continue
+        for line in task["run"].splitlines():
+            command = line.strip()
+            if command.startswith("#"):
+                continue
+            if re.search(r"\bdevcontainer\s+up(?:\s|$)", command):
+                sites.append((name, command))
+    return sites
+
+
+def _assert_devcontainer_up_sites_are_fnox_scoped(mise_text: str) -> None:
+    sites = _devcontainer_up_sites(mise_text)
+    assert len(sites) >= 2, f"devcontainer up enumeration went blind: {sites}"
+    unscoped = []
+    for name, command in sites:
+        if not command.startswith(_FNOX_DEVCONTAINER_UP):
+            unscoped.append(name)
+    assert not unscoped, f"unscoped devcontainer up tasks: {unscoped}"
+
+
+def _remove_fnox_scope_from_task(mise_text: str, task_name: str) -> str:
+    header = f"[tasks.{task_name}]"
+    start = mise_text.index(header)
+    end = mise_text.find("\n[tasks.", start + len(header))
+    section = mise_text[start:] if end == -1 else mise_text[start:end]
+    assert section.count(_FNOX_DEVCONTAINER_UP) == 1
+    mutated = section.replace(_FNOX_DEVCONTAINER_UP, "devcontainer up ", 1)
+    return (
+        mise_text[:start] + mutated
+        if end == -1
+        else mise_text[:start] + mutated + mise_text[end:]
+    )
+
+
+def test_every_executable_devcontainer_up_site_is_fnox_scoped() -> None:
+    repo_root = Path(__file__).resolve().parent.parent
+    _assert_devcontainer_up_sites_are_fnox_scoped(
+        (repo_root / "mise.toml").read_text(encoding="utf-8")
+    )
+
+
+@pytest.mark.parametrize(
+    ("mutated_task", "protected_task"),
+    [("up", "dev-rebuild"), ("dev-rebuild", "up")],
+)
+def test_each_public_up_route_independently_requires_fnox_scope(
+    mutated_task: str,
+    protected_task: str,
+) -> None:
+    repo_root = Path(__file__).resolve().parent.parent
+    original = (repo_root / "mise.toml").read_text(encoding="utf-8")
+    mutated = _remove_fnox_scope_from_task(original, mutated_task)
+    with pytest.raises(AssertionError, match=mutated_task):
+        _assert_devcontainer_up_sites_are_fnox_scoped(mutated)
+    sites = dict(_devcontainer_up_sites(mutated))
+    assert sites[protected_task].startswith(_FNOX_DEVCONTAINER_UP)
+
+
 def test_every_task_resolves_the_env_before_its_first_devcontainer_call() -> None:
     """The flags are useless if they are resolved after they are used.
 

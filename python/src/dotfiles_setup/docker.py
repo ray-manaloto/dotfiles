@@ -17,6 +17,7 @@ import logging
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 from dotfiles_setup.config import (
@@ -50,17 +51,50 @@ def host_state_dir(config: DotfilesConfig | None = None) -> Path:
     return DEFAULT_HOST_STATE_DIR
 
 
-def _collect_public_keys_from_agent() -> list[str]:
-    """Collect public keys currently loaded in the SSH agent."""
+def _agent_public_keys(env: dict[str, str]) -> list[str]:
+    """Collect public keys from the SSH agent selected by ``env``."""
     result = subprocess.run(
         ["ssh-add", "-L"],
         capture_output=True,
         text=True,
         check=False,
+        env=env,
     )
     if result.returncode != 0:
         return []
     return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+def _ssh_agent_environment() -> dict[str, str]:
+    """Resolve an environment with a working agent, including macOS launchd."""
+    env = os.environ.copy()
+    if _agent_public_keys(env):
+        return env
+    if sys.platform != "darwin":
+        msg = "No SSH agent public keys available"
+        raise RuntimeError(msg)
+
+    result = subprocess.run(
+        ["/bin/launchctl", "getenv", "SSH_AUTH_SOCK"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    socket_lines = result.stdout.splitlines()
+    if result.returncode != 0 or len(socket_lines) != 1:
+        msg = "No SSH agent public keys available"
+        raise RuntimeError(msg)
+    socket_path = socket_lines[0].strip()
+    if not socket_path or not Path(socket_path).is_absolute():
+        msg = "No SSH agent public keys available"
+        raise RuntimeError(msg)
+
+    launchd_env = env.copy()
+    launchd_env["SSH_AUTH_SOCK"] = socket_path
+    if not _agent_public_keys(launchd_env):
+        msg = "No SSH agent public keys available"
+        raise RuntimeError(msg)
+    return launchd_env
 
 
 def _write_host_authorized_keys(state_dir: Path, public_keys: list[str]) -> None:
@@ -85,7 +119,7 @@ def initialize_host_ssh_runtime() -> dict[str, str]:
     """
     state_dir = host_state_dir()
     state_dir.mkdir(parents=True, exist_ok=True)
-    public_keys = _collect_public_keys_from_agent()
+    public_keys = _agent_public_keys(_ssh_agent_environment())
     _write_host_authorized_keys(state_dir, public_keys)
     return {
         "state_dir": str(state_dir),
@@ -103,6 +137,38 @@ def host_authorized_keys() -> list[str]:
         for line in auth_keys_path.read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
+
+
+def verify_host_ssh_inbound(port: int, user: str) -> str:
+    """Verify R1 through the same resolved agent used to stage its public key."""
+    result = subprocess.run(
+        [
+            "ssh",
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "StrictHostKeyChecking=accept-new",
+            "-o",
+            "UserKnownHostsFile=/dev/null",
+            "-o",
+            "LogLevel=ERROR",
+            "-o",
+            "ConnectTimeout=10",
+            "-p",
+            str(port),
+            f"{user}@localhost",
+            "hostname && whoami",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=_ssh_agent_environment(),
+    )
+    lines = result.stdout.splitlines()
+    if result.returncode != 0 or not lines or lines[-1] != user:
+        msg = f"Inbound SSH verification failed on localhost:{port}"
+        raise RuntimeError(msg)
+    return result.stdout
 
 
 class DevContainerManager:
@@ -252,3 +318,8 @@ class DevContainerManager:
             result["state_dir"],
             result["authorized_keys"],
         )
+
+    def verify_ssh_inbound(self, port: int, user: str) -> None:
+        """Verify host-to-container SSH using the resolved host agent."""
+        output = verify_host_ssh_inbound(port, user)
+        logger.info("Inbound SSH succeeded on localhost:%d:\n%s", port, output)
