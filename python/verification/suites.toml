@@ -1652,9 +1652,13 @@ paths = [
     ".claude/settings.json",
 ]
 per_path_tokens = { "currency.toml" = [
+    "[tool.doppler]",
+    'mise_key = "doppler"',
+    'github = "DopplerHQ/cli"',
     "[tool.graphify]",
-    'mise_key =',
+    'mise_key = "pipx:graphifyy"',
 ], "mise.toml" = [
+    'doppler = "3.76.1"',
     "[tasks.tool-currency]",
     "kb-setup currency daily'",
     "[tasks.tool-currency-check]",
@@ -1668,6 +1672,7 @@ per_path_tokens = { "currency.toml" = [
     'tool-currency-check;',
 ] }
 tokens = [
+    "[tool.doppler]",
     "[tool.graphify]",
     "[tasks.tool-currency]",
     "kb-setup currency daily'",
