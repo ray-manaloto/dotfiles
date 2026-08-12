@@ -14,7 +14,11 @@ editorconfig-checker = "3.11.1" # provides `ec` — hk editorconfig_checker buil
 # over the whole 31.5 MB tree in 199 ms.
 "aqua:betterleaks/betterleaks" = "1.7.3"
 "npm:@devcontainers/cli" = "0.88.0"
-colima = "0.10.3"                        # Alternate Docker runtime (VZ + Rosetta); Docker Desktop is the CURRENT supported runtime — see AGENTS.md Docker Runtimes + docs/research/runs/research-20260409c-dockerdesktop-ssh/
+# Critical host-side secrets transport for devcontainer initialization. Keep it
+# deep-tracked in currency.toml: Doppler's mounted-secret behavior is part of
+# the devcontainer security boundary, not an optional interactive convenience.
+doppler = "3.76.1"
+colima = "0.10.3"                   # Alternate Docker runtime (VZ + Rosetta); Docker Desktop is the CURRENT supported runtime — see AGENTS.md Docker Runtimes + docs/research/runs/research-20260409c-dockerdesktop-ssh/
 lima = "2.2.0"
 "github:agent-sh/agnix" = "v0.47.0"
 "npm:agents-lint" = "0.5.0"

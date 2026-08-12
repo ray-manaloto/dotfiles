@@ -37,6 +37,18 @@ _AUTHORITY = re.compile(
     r"authority|approval|permission|publish|commit|push|stage|mutation|write",
     re.IGNORECASE,
 )
+_ISSUE_TRACKING_REQUEST = re.compile(
+    r"(?:create|open|add|update|file|make|persist|track)\b.{0,48}"
+    r"\b(?:github )?issues?\b|"
+    r"\b(?:github )?issues?\b.{0,48}\b(?:track|persist|miss|forget)|"
+    r"(?:do not|don't|dont) forget|\bmiss(?:ed|ing)?\b.{0,48}\bissues?\b",
+    re.IGNORECASE,
+)
+_AGENT_REVIEW_ENVELOPE = re.compile(
+    r"^The following is the Codex agent history(?: added since your last approval "
+    r"assessment| whose request action you are assessing)",
+    re.IGNORECASE,
+)
 _ATTACHMENT_TAG = re.compile(
     r"<(?P<kind>image|attachment|file)\b[^>]*\bpath=[\"'](?P<path>[^\"']+)[\"'][^>]*>",
     re.IGNORECASE,
@@ -218,6 +230,8 @@ class ReviewIteration:
     action: IterationAction
     disposition_ids: tuple[str, ...]
     unresolved_finding_ids: tuple[str, ...]
+    unreviewed_requirement_ids: tuple[str, ...] = ()
+    issue_candidate_requirement_ids: tuple[str, ...] = ()
     repo_root: str = ""
     session_id: str = ""
     selection_certification: SelectionCertification = (
@@ -438,7 +452,11 @@ class RequirementCoverage:
                 "dispositions": len(self.dispositions),
                 "lineage": len(self.lineage),
             },
-            "cutoffs": [asdict(item) for item in self.cutoffs],
+            "cutoff_count": len(self.cutoffs),
+            "cutoff_manifest_sha256": hashlib.sha256(
+                self.cutoffs_to_json().encode()
+            ).hexdigest(),
+            "cutoff_prefix_sample": [item.prefix_sha256 for item in self.cutoffs[:16]],
             "finding_ids": [item.finding_id for item in self.high_severity_findings],
             "disposition_ids": [item.finding_id for item in self.dispositions],
             "payload_sha256_sample": payload_digests[:64],
@@ -467,13 +485,32 @@ class RequirementCoverage:
         return rendered
 
     def cutoffs_to_json(self) -> str:
-        """Render the independently hashable native-prefix reconstruction map."""
+        """Render a bounded index for content-addressed cutoff segments."""
+        segments = self.cutoff_segments_to_json()
+        segment_digests = [
+            hashlib.sha256(item.encode()).hexdigest() for item in segments
+        ]
+        segment_refs = [
+            {
+                "suffix": f".{index:04d}.json",
+                "sha256": digest,
+                "cutoff_count": len(json.loads(segment)["cutoffs"]),
+            }
+            for index, (segment, digest) in enumerate(
+                zip(segments, segment_digests, strict=True), start=1
+            )
+        ]
         payload = {
             "schema_version": self.schema_version,
             "manifest_sha256": self.manifest_sha256,
             "selection_certification": self.selection_certification,
             "selected_session_id": self.selected_session_id,
-            "cutoffs": [asdict(item) for item in self.cutoffs],
+            "cutoff_count": len(self.cutoffs),
+            "segment_count": len(segments),
+            "segments": segment_refs,
+            "segment_sha256_manifest": hashlib.sha256(
+                "\n".join(segment_digests).encode()
+            ).hexdigest(),
         }
         rendered = json.dumps(
             payload, separators=(",", ":"), sort_keys=True, ensure_ascii=False
@@ -482,6 +519,60 @@ class RequirementCoverage:
             message = "cutoff artifact exceeds the hard output cap"
             raise ValueError(message)
         return rendered
+
+    def cutoff_segments_to_json(self) -> tuple[str, ...]:
+        """Render the complete cutoff map as independently bounded segments."""
+        common = {
+            "schema_version": self.schema_version,
+            "manifest_sha256": self.manifest_sha256,
+            "selection_certification": self.selection_certification,
+            "selected_session_id": self.selected_session_id,
+        }
+        chunks: list[list[dict[str, object]]] = []
+        current: list[dict[str, object]] = []
+        for cutoff in self.cutoffs:
+            entry = asdict(cutoff)
+            candidate = [*current, entry]
+            probe = json.dumps(
+                {
+                    **common,
+                    "segment_index": 999999,
+                    "segment_count": 999999,
+                    "cutoffs": candidate,
+                },
+                separators=(",", ":"),
+                sort_keys=True,
+                ensure_ascii=False,
+            )
+            if len(probe.encode()) > MAX_RENDER_BYTES:
+                if not current:
+                    message = "one cutoff entry exceeds the hard output cap"
+                    raise ValueError(message)
+                chunks.append(current)
+                current = [entry]
+            else:
+                current = candidate
+        if current or not chunks:
+            chunks.append(current)
+
+        rendered: list[str] = []
+        for index, chunk in enumerate(chunks, start=1):
+            segment = json.dumps(
+                {
+                    **common,
+                    "segment_index": index,
+                    "segment_count": len(chunks),
+                    "cutoffs": chunk,
+                },
+                separators=(",", ":"),
+                sort_keys=True,
+                ensure_ascii=False,
+            )
+            if len(segment.encode()) > MAX_RENDER_BYTES:
+                message = "cutoff segment exceeds the hard output cap"
+                raise ValueError(message)
+            rendered.append(segment)
+        return tuple(rendered)
 
 
 @dataclass
@@ -941,6 +1032,18 @@ def _codex_user_kind(
     return EventKind.USER_MESSAGE
 
 
+def _codex_message_role(role: str, evidence: EvidenceRef, acc: _Accumulator) -> bool:
+    """Accept assistant/user roles and silently discard known harness context."""
+    if role in {"developer", "system"}:
+        return False
+    if role not in {"user", "assistant"}:
+        acc.omissions.append(
+            f"{evidence.source_id}:{evidence.line}: message role {role!r}"
+        )
+        return False
+    return True
+
+
 def _codex_message(
     payload: Mapping[str, object],
     evidence: EvidenceRef,
@@ -948,10 +1051,7 @@ def _codex_message(
     direct_messages: dict[str, list[EvidenceRef]],
 ) -> None:
     role = str(payload.get("role", ""))
-    if role not in {"user", "assistant"}:
-        acc.omissions.append(
-            f"{evidence.source_id}:{evidence.line}: message role {role!r}"
-        )
+    if not _codex_message_role(role, evidence, acc):
         return
     content = payload.get("content")
     for block_kind, text in _text_blocks(content):
@@ -2140,6 +2240,21 @@ def disposition_omissions(coverage: RequirementCoverage) -> tuple[str, ...]:
     )
 
 
+def issue_candidate_requirement_ids(
+    coverage: RequirementCoverage,
+) -> tuple[str, ...]:
+    """Return unreviewed requests that explicitly require durable tracking."""
+    return tuple(
+        sorted(
+            requirement.requirement_id
+            for requirement in coverage.requirements
+            if requirement.status == ReviewStatus.UNREVIEWED
+            and _ISSUE_TRACKING_REQUEST.search(requirement.statement)
+            and not _AGENT_REVIEW_ENVELOPE.search(requirement.statement)
+        )
+    )
+
+
 def advance_iteration(
     coverage: RequirementCoverage,
     *,
@@ -2159,7 +2274,16 @@ def advance_iteration(
             if finding.finding_id not in current
         )
     )
-    if unresolved:
+    unreviewed_requirements = tuple(
+        sorted(
+            requirement.requirement_id
+            for requirement in coverage.requirements
+            if requirement.status == ReviewStatus.UNREVIEWED
+            and not _AGENT_REVIEW_ENVELOPE.search(requirement.statement)
+        )
+    )
+    issue_candidates = issue_candidate_requirement_ids(coverage)
+    if unresolved or unreviewed_requirements:
         action = IterationAction.NEEDS_AGENT_ACTION
     elif frozenset(current) - previous:
         action = IterationAction.PREVENTION_RECORDED
@@ -2176,6 +2300,8 @@ def advance_iteration(
         action,
         current,
         unresolved,
+        unreviewed_requirements,
+        issue_candidates,
         context.repo_root,
         context.session_id,
         coverage.selection_certification,

@@ -12,12 +12,19 @@
 # signal still spans every tool, not just the ones listed here (decided
 # 2026-07-24: deep fast-movers + broad fallback).
 #
-# Only graphify is deep-tracked for now. hk and uv live in
+# Doppler and graphify are deep-tracked. hk and uv live in
 # `.config/mise/conf.d/shared.toml`, which the engine's offline pin reader does
 # not merge (it parses mise.toml only); deep-tracking a conf.d-pinned tool needs
 # the engine to resolve the pin through mise (a subprocess, so deep-mode only) —
 # a clean follow-up. Until then they ride the broad sweep, which reads the merged
 # config correctly via `mise outdated`.
+
+[tool.doppler]
+mise_key = "doppler"
+binary = "doppler"
+# Doppler ships the CLI as stable GitHub releases, which is also the upstream
+# used by mise's canonical `doppler` registry key (`github:DopplerHQ/cli`).
+github = "DopplerHQ/cli"
 
 [tool.graphify]
 mise_key = "pipx:graphifyy"

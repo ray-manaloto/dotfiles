@@ -207,6 +207,52 @@ def test_root_lock_covers_host_config() -> None:
     )
 
 
+def _missing_deep_currency_pins(
+    currency_tools: object, host_tools: Mapping[str, object]
+) -> dict[str, str]:
+    """Map deep-tracked tool names to root mise keys that are absent."""
+    if not isinstance(currency_tools, dict):
+        return {}
+    return {
+        str(name): spec["mise_key"]
+        for name, spec in currency_tools.items()
+        if isinstance(spec, dict)
+        and isinstance(spec.get("mise_key"), str)
+        and spec["mise_key"] not in host_tools
+    }
+
+
+def test_deep_currency_tools_are_host_pinned() -> None:
+    """Every mise-managed critical tool must name a real root host-tool pin.
+
+    The currency engine reads root ``mise.toml`` directly. A deep-tracked entry
+    pointing at an absent or conf.d-only key would look declared while having
+    no pin for the engine to compare. This generic gate protects Doppler and any
+    future critical CLI through the real declarative boundary. The removed-pin
+    arm proves the predicate detects the failure instead of only passing on the
+    current tree.
+    """
+    currency_tools = tomllib.loads((_REPO_ROOT / "currency.toml").read_text()).get(
+        "tool", {}
+    )
+    host_tools = _root_config_tools()
+    missing = _missing_deep_currency_pins(currency_tools, host_tools)
+    assert missing == {}, (
+        f"deep currency tools must reference root mise.toml [tools] keys: {missing}"
+    )
+
+    assert isinstance(currency_tools, dict)
+    doppler = currency_tools["doppler"]
+    assert isinstance(doppler, dict)
+    doppler_key = doppler["mise_key"]
+    assert isinstance(doppler_key, str)
+    without_doppler = dict(host_tools)
+    without_doppler.pop(doppler_key)
+    assert _missing_deep_currency_pins(currency_tools, without_doppler) == {
+        "doppler": "doppler"
+    }
+
+
 def test_shared_conf_d_lock_covers_shared_fragment() -> None:
     """.config/mise/mise.lock must lock exactly shared.toml's tools.
 
