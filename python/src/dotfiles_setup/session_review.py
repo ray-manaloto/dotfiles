@@ -63,6 +63,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
 
 logger = logging.getLogger(__name__)
+_MAX_LOGGED_OMISSIONS = 20
 
 #: Classes worth proposing a skill for. ``mise`` and ``diagnostic`` commands are
 #: already canonical or already cheap; ``blocked`` never ran and ``pre_rule``
@@ -608,6 +609,7 @@ def _requirements_review(
     try:
         evidence = coverage.to_json()
         cutoffs = coverage.cutoffs_to_json()
+        cutoff_segments = coverage.cutoff_segments_to_json()
     except ValueError:
         logger.exception("bounded evidence reference artifact could not be written")
         return 1
@@ -615,8 +617,11 @@ def _requirements_review(
     evidence_path = written.with_suffix(written.suffix + ".evidence.json")
     cutoff_path = written.with_suffix(written.suffix + ".cutoffs.json")
     iteration_path = written.with_suffix(written.suffix + ".iteration.json")
-    evidence_path.write_text(evidence + "\n")
-    cutoff_path.write_text(cutoffs + "\n")
+    evidence_path.write_text(evidence)
+    for index, segment in enumerate(cutoff_segments, start=1):
+        segment_path = cutoff_path.with_name(f"{cutoff_path.name}.{index:04d}.json")
+        segment_path.write_text(segment)
+    cutoff_path.write_text(cutoffs)
     iteration = replace(
         iteration,
         artifacts=(
@@ -625,12 +630,19 @@ def _requirements_review(
             session_ledger.artifact_ref(cutoff_path, kind="cutoffs"),
         ),
     )
-    iteration_path.write_text(iteration.to_json() + "\n")
-    for omission in (
+    iteration_path.write_text(iteration.to_json())
+    omissions = (
         *coverage.omissions,
         *session_ledger.disposition_omissions(coverage),
-    ):
+    )
+    for omission in omissions[:_MAX_LOGGED_OMISSIONS]:
         logger.error("session-review incomplete: %s", omission)
+    if len(omissions) > _MAX_LOGGED_OMISSIONS:
+        logger.error(
+            "session-review incomplete: %d additional omission(s); "
+            "use the bounded report, evidence digest, and cutoff manifest",
+            len(omissions) - _MAX_LOGGED_OMISSIONS,
+        )
     logger.info(
         "session-review requirements: %d requirement(s), %d promise(s) -> %s; "
         "evidence %s; cutoffs %s; iteration %s",

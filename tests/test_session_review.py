@@ -326,7 +326,7 @@ def test_requirements_only_runs_through_the_public_library_entry_point(
         output=output,
     )
 
-    assert result == 0
+    assert result == 1
     report = output.read_text()
     assert "Session requirement and promise ledger" in report
     assert "Do not publish" in report
@@ -336,6 +336,9 @@ def test_requirements_only_runs_through_the_public_library_entry_point(
     assert output.with_suffix(".md.iteration.json").is_file()
     evidence = json.loads(output.with_suffix(".md.evidence.json").read_text())
     assert evidence["selection_certification"] == "explicit_session_id"
+    iteration = json.loads(output.with_suffix(".md.iteration.json").read_text())
+    assert iteration["action"] == "needs_agent_action"
+    assert iteration["unreviewed_requirement_ids"]
 
 
 def test_public_loop_needs_agent_action_until_prevention_is_disposed(
@@ -395,6 +398,22 @@ def test_public_loop_needs_agent_action_until_prevention_is_disposed(
         assert (
             hashlib.sha256(artifact_path.read_bytes()).hexdigest() == artifact["sha256"]
         )
+    cutoff_index_path = output.with_suffix(".md.cutoffs.json")
+    cutoff_index = json.loads(cutoff_index_path.read_text())
+    assert cutoff_index["segment_count"] == 1
+    segment_ref = cutoff_index["segments"][0]
+    segment_path = cutoff_index_path.with_name(
+        f"{cutoff_index_path.name}{segment_ref['suffix']}"
+    )
+    assert segment_path.is_file()
+    assert (
+        hashlib.sha256(segment_path.read_bytes()).hexdigest() == segment_ref["sha256"]
+    )
+    evidence = json.loads(output.with_suffix(".md.evidence.json").read_text())
+    assert (
+        evidence["cutoff_manifest_sha256"]
+        == hashlib.sha256(cutoff_index_path.read_bytes()).hexdigest()
+    )
 
 
 def test_the_narrative_lane_runs_without_touching_transcripts(tmp_path: Path) -> None:
@@ -565,7 +584,10 @@ def test_real_cli_runs_requirements_only(tmp_path: Path) -> None:
         check=False,
         timeout=120,
     )
-    assert result.returncode == 0
+    assert result.returncode == 1
+    iteration = json.loads(output.with_suffix(".md.iteration.json").read_text())
+    assert iteration["action"] == "needs_agent_action"
+    assert iteration["unreviewed_requirement_ids"]
     assert "Do not publish" in output.read_text()
 
 

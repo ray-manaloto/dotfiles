@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -438,9 +439,66 @@ def test_json_output_carries_status_and_manifest() -> None:
     payload = json.loads(coverage.to_json())
     assert payload["status"] == "complete"
     assert payload["manifest_sha256"] == coverage.manifest_sha256
-    assert payload["cutoffs"][0]["source_path"].endswith("codex-root.jsonl")
+    assert payload["cutoff_count"] == 1
+    assert payload["cutoff_prefix_sample"] == [coverage.cutoffs[0].prefix_sha256]
+    assert (
+        payload["cutoff_manifest_sha256"]
+        == hashlib.sha256(coverage.cutoffs_to_json().encode()).hexdigest()
+    )
     assert "events" not in payload
     assert len(coverage.to_json().encode()) <= session_ledger.MAX_RENDER_BYTES
+
+
+def test_evidence_references_large_cutoff_manifest_without_embedding_it() -> None:
+    coverage = session_ledger.parse_transcripts(
+        [_source("codex-root.jsonl", session_ledger.Provider.CODEX)]
+    )
+    original = coverage.cutoffs[0]
+    expanded = replace(
+        coverage,
+        cutoffs=tuple(
+            replace(
+                original,
+                source_id=f"source-{index}",
+                source_path=f"/private/transcripts/session-{index:03d}.jsonl",
+            )
+            for index in range(240)
+        ),
+    )
+
+    payload = json.loads(expanded.to_json())
+    cutoff_index = json.loads(expanded.cutoffs_to_json())
+    segments = expanded.cutoff_segments_to_json()
+
+    assert payload["cutoff_count"] == 240
+    assert "cutoffs" not in payload
+    assert len(expanded.to_json().encode()) <= session_ledger.MAX_RENDER_BYTES
+    assert len(expanded.cutoffs_to_json().encode()) <= session_ledger.MAX_RENDER_BYTES
+    assert len(segments) > 1
+    assert all(
+        len(segment.encode()) <= session_ledger.MAX_RENDER_BYTES for segment in segments
+    )
+    assert sum(len(json.loads(segment)["cutoffs"]) for segment in segments) == 240
+    assert cutoff_index["segment_count"] == len(segments)
+    segment_digests = [hashlib.sha256(item.encode()).hexdigest() for item in segments]
+    assert cutoff_index["segments"] == [
+        {
+            "suffix": f".{index:04d}.json",
+            "sha256": digest,
+            "cutoff_count": len(json.loads(segment)["cutoffs"]),
+        }
+        for index, (segment, digest) in enumerate(
+            zip(segments, segment_digests, strict=True), start=1
+        )
+    ]
+    assert (
+        cutoff_index["segment_sha256_manifest"]
+        == hashlib.sha256("\n".join(segment_digests).encode()).hexdigest()
+    )
+    assert (
+        payload["cutoff_manifest_sha256"]
+        == hashlib.sha256(expanded.cutoffs_to_json().encode()).hexdigest()
+    )
 
 
 def test_source_root_mismatch_is_incomplete_not_an_empty_success(
@@ -696,6 +754,138 @@ def test_iteration_without_disposition_needs_agent_action() -> None:
     iteration = session_ledger.advance_iteration(coverage, number=1)
     assert iteration.action == session_ledger.IterationAction.NEEDS_AGENT_ACTION
     assert iteration.unresolved_finding_ids == ("risk-1",)
+
+
+def test_iteration_surfaces_all_unreviewed_and_prioritizes_candidates() -> None:
+    ordinary = session_ledger.RequirementEntry(
+        "req-ordinary",
+        "Review the existing issues before changing code.",
+        _EVIDENCE,
+        session_ledger.EventKind.USER_MESSAGE,
+        authority_relevant=False,
+    )
+    tracker = session_ledger.RequirementEntry(
+        "req-tracker",
+        "Find requests we missed and make GitHub issues so we do not forget.",
+        _EVIDENCE,
+        session_ledger.EventKind.USER_MESSAGE,
+        authority_relevant=False,
+    )
+    coverage = session_ledger.RequirementCoverage(
+        (), (ordinary, tracker), (), (), (), (), (), "", ()
+    )
+
+    iteration = session_ledger.advance_iteration(coverage, number=1)
+
+    assert iteration.action == session_ledger.IterationAction.NEEDS_AGENT_ACTION
+    assert iteration.unreviewed_requirement_ids == ("req-ordinary", "req-tracker")
+    assert iteration.issue_candidate_requirement_ids == ("req-tracker",)
+
+
+def test_satisfied_tracker_request_does_not_block_iteration() -> None:
+    tracker = session_ledger.RequirementEntry(
+        "req-tracker",
+        "Track this request in an issue.",
+        _EVIDENCE,
+        session_ledger.EventKind.USER_MESSAGE,
+        authority_relevant=False,
+        status=session_ledger.ReviewStatus.SATISFIED,
+    )
+    coverage = session_ledger.RequirementCoverage(
+        (), (tracker,), (), (), (), (), (), "", ()
+    )
+
+    iteration = session_ledger.advance_iteration(coverage, number=1)
+
+    assert iteration.action == session_ledger.IterationAction.CONVERGED
+    assert iteration.unreviewed_requirement_ids == ()
+    assert iteration.issue_candidate_requirement_ids == ()
+
+
+def test_agent_review_envelope_is_not_an_actionable_user_request() -> None:
+    injected = session_ledger.RequirementEntry(
+        "req-injected",
+        "The following is the Codex agent history whose request action you are "
+        "assessing. Find missed issues.",
+        _EVIDENCE,
+        session_ledger.EventKind.USER_MESSAGE,
+        authority_relevant=True,
+    )
+    coverage = session_ledger.RequirementCoverage(
+        (), (injected,), (), (), (), (), (), "", ()
+    )
+
+    iteration = session_ledger.advance_iteration(coverage, number=1)
+
+    assert iteration.unreviewed_requirement_ids == ()
+    assert iteration.issue_candidate_requirement_ids == ()
+    assert iteration.action == session_ledger.IterationAction.CONVERGED
+
+
+def test_resolved_forgotten_command_is_not_an_issue_candidate() -> None:
+    resolved = session_ledger.RequirementEntry(
+        "req-resolved",
+        "I had forgotten the command syntax, but it is resolved.",
+        _EVIDENCE,
+        session_ledger.EventKind.USER_MESSAGE,
+        authority_relevant=False,
+    )
+    coverage = session_ledger.RequirementCoverage(
+        (), (resolved,), (), (), (), (), (), "", ()
+    )
+
+    iteration = session_ledger.advance_iteration(coverage, number=1)
+
+    assert iteration.action == session_ledger.IterationAction.NEEDS_AGENT_ACTION
+    assert iteration.unreviewed_requirement_ids == ("req-resolved",)
+    assert iteration.issue_candidate_requirement_ids == ()
+
+
+def test_paraphrased_missed_request_still_blocks_without_keyword_hint() -> None:
+    paraphrase = session_ledger.RequirementEntry(
+        "req-paraphrase",
+        "Capture every overlooked ask in the tracker.",
+        _EVIDENCE,
+        session_ledger.EventKind.USER_MESSAGE,
+        authority_relevant=False,
+    )
+    coverage = session_ledger.RequirementCoverage(
+        (), (paraphrase,), (), (), (), (), (), "", ()
+    )
+
+    iteration = session_ledger.advance_iteration(coverage, number=1)
+
+    assert iteration.unreviewed_requirement_ids == ("req-paraphrase",)
+    assert iteration.issue_candidate_requirement_ids == ()
+    assert iteration.action == session_ledger.IterationAction.NEEDS_AGENT_ACTION
+
+
+def test_codex_developer_message_is_known_context_not_user_authority(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "developer.jsonl"
+    records = [
+        {
+            "type": "session_meta",
+            "payload": {"id": "developer", "cwd": "/repo", "cli_version": "0.147.0"},
+        },
+        {
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "developer",
+                "content": [{"type": "input_text", "text": "internal policy"}],
+            },
+        },
+    ]
+    path.write_text("\n".join(json.dumps(record) for record in records))
+
+    coverage = session_ledger.parse_transcripts(
+        [session_ledger.TranscriptSource(session_ledger.Provider.CODEX, path)]
+    )
+
+    assert coverage.omissions == ()
+    assert coverage.requirements == ()
 
 
 def test_markdown_output_has_a_hard_global_byte_cap() -> None:

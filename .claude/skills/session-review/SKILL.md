@@ -108,6 +108,19 @@ for the report, evidence, and source-cutoff artifacts.
 For every `NEEDS_AGENT_ACTION` packet, the invoking agent MUST orchestrate the
 actual loop, bounded by the requested maximum N:
 
+Before assigning prevention work, review every `unreviewed_requirement_id` in
+the bounded evidence. Any unreviewed requirement keeps the action at
+`NEEDS_AGENT_ACTION`; the current analyzer cannot semantically mark a request
+fulfilled. Stop with the resumable packet at N until a reviewed disposition
+path exists rather than claiming convergence. The iteration packet separately lists
+`issue_candidate_requirement_ids` for requests that explicitly say to create
+or update an issue, track or persist work, avoid forgetting it, or recover a
+missed request. Resolve every candidate through live GitHub readback as one of:
+an existing issue, a newly created issue, a completed carrier, a user-rejected
+request, or a duplicate. This candidate list is a prioritization hint, never
+completion authority; a zero-hit recurring-command report cannot override the
+full pending-requirement list.
+
 1. Spawn or assign a specialized fixer to implement a hook, rule, lint/static
    check, test, or mise task that prevents the motivating defect.
 2. Assign independent QA to run a hostile mutation that reproduces the defect
