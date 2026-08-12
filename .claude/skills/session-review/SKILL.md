@@ -11,6 +11,10 @@ mise run session-review                                   # both lanes
 mise run session-review -- --output .agent/session-review.md
 mise run session-review -- --narrative-only               # cheap re-check
 mise run session-review -- --sessions 6                   # narrow the mine
+mise run session-requirements -- /absolute/source/checkout    # typed evidence, 5 sessions
+mise run session-requirements -- /absolute/source/checkout 3 5 # sessions, iterations
+mise run session-review -- --requirements-only --source-repo-root "$PWD" \
+  --session-id "$CODEX_THREAD_ID" --output .agent/session-review.md
 ```
 
 `python/src/dotfiles_setup/session_review.py` does the collecting. The report
@@ -34,6 +38,113 @@ Frequency is a proxy for cost and a poor one; the expensive thing was reasoning.
 
 The converse is why lane 1 stays on: you do not reliably remember every one-off
 you ran, and the transcript does.
+
+## Requirement coverage is explicit and bounded
+
+The two automation lanes keep their established default unchanged. When the
+question is instead "what did the user require, approve, or forbid, and what
+did the agent promise?", run `mise run session-requirements` (equivalent to
+`session-review --requirements-only --sessions 5 --source-repo-root
+/absolute/source/checkout`). The root is mandatory and must be the exact
+checkout path stored as `cwd` in the source sessions. This keeps an isolated
+worktree review from silently auditing only that new worktree. A missing,
+non-Git, or unmatched root is an `INCOMPLETE` review. It reads both Claude and
+Codex native transcripts and retains user messages, interactive questions and
+answers including free text, attachment metadata backed by hashed bytes,
+compactions, subagent lineage and authenticated inherited prefixes, tool
+call/result pairs, terminal state, and turn authority context.
+
+This lane emits **UNREVIEWED bounded evidence**, not an inferred verdict. Assistant
+prose cannot grant authority and a promise is not marked fulfilled merely
+because a later answer says it was. Unknown or malformed transcript records
+make the run `INCOMPLETE` and non-zero. Each source carries a prefix hash and
+byte cutoff so an appended transcript remains verifiable while a rewritten
+prefix invalidates the old review. An external attachment that cannot be read
+also makes coverage `INCOMPLETE`; hashing its path string is not evidence of
+its content.
+
+Pass the native current task identifier with `--session-id` (or through
+`CODEX_THREAD_ID` when the launcher supplies it). The most-recent relevant
+user/turn activity is only a bounded fallback and **cannot certify that the
+selected root is this active task**; requirements-only exits non-zero without
+an explicit identity.
+
+Transcript JSONL is parsed structurally. Never inspect rollout files with raw
+`rg`/grep: a matching compaction row can contain megabytes of inline base64
+or opaque tool output. The ledger whitelists bounded fields and represents data
+URLs, encrypted agent bodies, full tool outputs, and compaction bodies only by
+digest, byte count, and safe structural metadata.
+Attachments are accepted only from approved transcript/source roots, with
+symlinks refused and an 8 MiB cap. This is deliberately not described as
+lossless: any unknown native record, missing pair, or unsupported current shape
+makes coverage `INCOMPLETE` until a fixture and control arm establish it.
+
+Known credential-launcher/environment-scope and Git-hook/worktree-contamination
+failures are high severity even when seen once; the recurring-command threshold
+does not apply. A reviewer may confirm one only with a disposition JSON record
+that records all four prevention facts: an in-repository nonsymlink
+hook/rule/lint/static/test/task carrier plus SHA-256; typed mutation and
+normal-gate audit receipts; and an issue readback. Persisted receipts are audit
+evidence only: they **never authorize `COMPLETE`**, even when hashes and runner
+context match. Their honest status is `ATTESTED`, not proof that arbitrary JSON
+executed. Offline synthetic fixtures are test-signed controls and the
+production loader refuses them. A declaration is not evidence.
+The disposition schema names these `carrier`, `mutation_receipt`,
+`gate_receipt`, and `issue_receipt`.
+Missing or forged bytes keep coverage `INCOMPLETE`. Pass the file through `mise run session-review --
+--requirements-only --source-repo-root ROOT --dispositions FILE`.
+
+`session-requirements` accepts configurable session and iteration bounds. The
+Python CLI is a deterministic analyzer and resumable state machine; it never
+claims to perform semantic agent work or edit prevention carriers. Each pass
+emits exactly one typed action: `CONVERGED`, `PREVENTION_RECORDED`, or
+`NEEDS_AGENT_ACTION`. A missing disposition is always `NEEDS_AGENT_ACTION`,
+`INCOMPLETE`, and non-zero.
+The iteration packet is self-sufficient: it records the repository root,
+explicit session id and certification state, maximum and remaining iteration
+budget, required roles, receipt state per finding, and content-addressed paths
+for the report, evidence, and source-cutoff artifacts.
+
+For every `NEEDS_AGENT_ACTION` packet, the invoking agent MUST orchestrate the
+actual loop, bounded by the requested maximum N:
+
+1. Spawn or assign a specialized fixer to implement a hook, rule, lint/static
+   check, test, or mise task that prevents the motivating defect.
+2. Assign independent QA to run a hostile mutation that reproduces the defect
+   and prove the normal gate rejects it, then restore the control and prove the
+   gate passes.
+3. Assign an adversarial reviewer to verify the carrier would have caught its
+   own motivating defect and that an issue/receipt records the disposition.
+4. Choose a registered `prevention_id` and an exact GitHub issue API URL in a
+   `session-review.finalize.v1` spec. The registry—not caller JSON—fixes the
+   carrier contract, distinct mutation task, normal gate task, expected return
+   codes, and named mutant. The registered mutation copies all carrier targets
+   to an isolated directory, changes the target bytes, records before/after
+   SHA-256 values, and invokes the **same** registered normal gate against that
+   candidate. It emits `ARMED` only after the gate rejects the changed target;
+   no edit or an accepted mutant fails closed. Unknown IDs, extra argv/expected-status
+   fields, `--help`, same-task registrations, and repository-level endpoints
+   fail closed. Run `mise run session-review-gate --
+   --repo-root ROOT finalize --spec SPEC`. It generates an ephemeral nonce,
+   executes both bounded checks and `fnox exec -- gh api` itself, validates all
+   facts in memory, and emits only a temporary result. The nonce and completion
+   authority are never persisted.
+5. Resume only from that same-process temporary result. Every later review is
+   `INCOMPLETE` until `finalize` is rerun. Stop after current finalize success
+   or N passes with the resumable non-zero packet.
+
+The agent-team protocol is the semantic self-improvement loop. The Python state
+machine is its fail-closed evidence and resumption boundary. A report without
+the verified disposition cannot become `COMPLETE` merely because the same
+cutoff was parsed twice.
+
+Use only the durable invocation chain shown above: skill -> mise task ->
+`uv run --project python` -> the Python library. Do not replace it with
+`python3` or bare `mise exec -- python`. The broader #715 research-runner
+requirement follows the same boundary: an external last30days engine needs a
+project CLI/library seam that verifies the selected interpreter's CA bundle and
+launches the pinned engine. That runner is outside this ledger lane and must not
+be half-implemented here.
 
 ## The gate: name the cost, or it is not a candidate
 

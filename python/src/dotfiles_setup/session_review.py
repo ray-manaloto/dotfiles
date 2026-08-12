@@ -49,17 +49,18 @@ which files you point it at.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from collections import Counter, defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import TYPE_CHECKING
 
-from dotfiles_setup import command_audit
+from dotfiles_setup import command_audit, session_ledger
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
-    from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,7 @@ CANDIDATE_KINDS = frozenset({"one_off", "bypass"})
 #: A shape seen fewer times than this is noise — #266 records that the raw
 #: one-off list is known-noisy, and this module inherits that caveat.
 MIN_OCCURRENCES = 3
+MAX_REVIEW_ITERATIONS = 5
 
 #: Shell CONSTRUCTS, not commands. `command_audit`'s grouping keys off the first
 #: two words, which is right for a guard audit (it asks what BINARY ran) and
@@ -183,6 +185,12 @@ class LaneChoice:
 
     transcript_only: bool = False
     narrative_only: bool = False
+    requirements_only: bool = False
+    source_repo_root: Path | None = None
+    dispositions: Path | None = None
+    session_id: str | None = None
+    receipt_run_id: str = ""
+    max_iterations: int = 1
 
 
 #: Defaults as module-level singletons, so the entry point can declare them
@@ -467,12 +475,27 @@ def session_review_main(
     enough that guessing wrong loses the finding.
     """
     transcript_only, narrative_only = lanes.transcript_only, lanes.narrative_only
-    if transcript_only and narrative_only:
+    selected_only = sum(
+        (transcript_only, narrative_only, lanes.requirements_only), start=0
+    )
+    if sessions < 1:
+        logger.error("--sessions must be at least 1")
+    elif not 1 <= lanes.max_iterations <= MAX_REVIEW_ITERATIONS:
+        logger.error("--max-iterations must be between 1 and 5")
+    elif selected_only > 1:
         logger.error(
-            "--transcript-only and --narrative-only are mutually exclusive; the "
-            "default runs both lanes, which is what an end-of-session review wants"
+            "--transcript-only, --narrative-only, and --requirements-only are "
+            "mutually exclusive; the default keeps the two automation lanes"
         )
+    if (
+        sessions < 1
+        or not 1 <= lanes.max_iterations <= MAX_REVIEW_ITERATIONS
+        or selected_only > 1
+    ):
         return 2
+
+    if lanes.requirements_only:
+        return _requirements_review(repo_root, lanes, sessions, output)
 
     shapes: list[ShapeCandidate] = []
     hits: list[NarrativeHit] = []
@@ -511,3 +534,113 @@ def session_review_main(
         written,
     )
     return 0
+
+
+def _requirements_review(
+    repo_root: Path,
+    lanes: LaneChoice,
+    sessions: int,
+    output: Path | None,
+) -> int:
+    """Collect bounded native evidence and fail closed on every omission."""
+    if lanes.source_repo_root is None:
+        logger.error(
+            "--requirements-only requires --source-repo-root so transcript cwd "
+            "selection is explicit"
+        )
+        return 2
+    dispositions: tuple[session_ledger.PreventionDisposition, ...] = ()
+    if lanes.dispositions is not None:
+        try:
+            dispositions = session_ledger.load_dispositions(
+                lanes.dispositions,
+                repo_root=lanes.source_repo_root,
+                run_id=lanes.receipt_run_id,
+            )
+        except OSError, TypeError, ValueError, json.JSONDecodeError:
+            logger.exception("invalid prevention dispositions")
+            return 2
+    coverage = session_ledger.build_requirement_coverage(
+        lanes.source_repo_root,
+        dispositions=dispositions,
+        selection=session_ledger.CoverageSelection(
+            limit=sessions,
+            session_id=lanes.session_id,
+            require_active_identity=True,
+        ),
+    )
+    prior_dispositions: tuple[str, ...] = ()
+    iteration = session_ledger.advance_iteration(
+        coverage,
+        number=1,
+        context=session_ledger.IterationContext(
+            lanes.max_iterations,
+            str(lanes.source_repo_root.resolve()),
+            lanes.session_id or "",
+        ),
+        previous_disposition_ids=prior_dispositions,
+    )
+    for number in range(2, lanes.max_iterations + 1):
+        if iteration.action != session_ledger.IterationAction.PREVENTION_RECORDED:
+            break
+        prior_dispositions = iteration.disposition_ids
+        coverage = session_ledger.build_requirement_coverage(
+            lanes.source_repo_root,
+            dispositions=dispositions,
+            selection=session_ledger.CoverageSelection(
+                limit=sessions,
+                session_id=lanes.session_id,
+                require_active_identity=True,
+            ),
+        )
+        iteration = session_ledger.advance_iteration(
+            coverage,
+            number=number,
+            context=session_ledger.IterationContext(
+                lanes.max_iterations,
+                str(lanes.source_repo_root.resolve()),
+                lanes.session_id or "",
+            ),
+            previous_disposition_ids=prior_dispositions,
+        )
+    report = session_ledger.render_coverage(coverage)
+    destination = output or Path(".agent/session-review.md")
+    try:
+        evidence = coverage.to_json()
+        cutoffs = coverage.cutoffs_to_json()
+    except ValueError:
+        logger.exception("bounded evidence reference artifact could not be written")
+        return 1
+    written = command_audit.write_report(report, repo_root, destination)
+    evidence_path = written.with_suffix(written.suffix + ".evidence.json")
+    cutoff_path = written.with_suffix(written.suffix + ".cutoffs.json")
+    iteration_path = written.with_suffix(written.suffix + ".iteration.json")
+    evidence_path.write_text(evidence + "\n")
+    cutoff_path.write_text(cutoffs + "\n")
+    iteration = replace(
+        iteration,
+        artifacts=(
+            session_ledger.artifact_ref(written, kind="report"),
+            session_ledger.artifact_ref(evidence_path, kind="evidence"),
+            session_ledger.artifact_ref(cutoff_path, kind="cutoffs"),
+        ),
+    )
+    iteration_path.write_text(iteration.to_json() + "\n")
+    for omission in (
+        *coverage.omissions,
+        *session_ledger.disposition_omissions(coverage),
+    ):
+        logger.error("session-review incomplete: %s", omission)
+    logger.info(
+        "session-review requirements: %d requirement(s), %d promise(s) -> %s; "
+        "evidence %s; cutoffs %s; iteration %s",
+        len(coverage.requirements),
+        len(coverage.promises),
+        written,
+        evidence_path,
+        cutoff_path,
+        iteration_path,
+    )
+    converged = iteration.action == session_ledger.IterationAction.CONVERGED
+    complete = coverage.status == session_ledger.CoverageStatus.COMPLETE
+    return 0 if complete and converged else 1

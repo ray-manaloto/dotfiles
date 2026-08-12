@@ -93,6 +93,7 @@ from dotfiles_setup.platform_target import (
     resolve_platform,
 )
 from dotfiles_setup.pr import automerge_main, land_main, ship_main
+from dotfiles_setup.process_env import command_after_separator, run_git_isolated
 from dotfiles_setup.reap import (
     DEFAULT_GRACE_S,
     DEFAULT_MIN_AGE_S,
@@ -270,6 +271,38 @@ def _add_platform_subcommands(subparsers: _SubParsers) -> None:
     )
 
 
+def _add_session_evidence_arguments(review_parser: argparse.ArgumentParser) -> None:
+    """Register the lossless evidence lane without bloating command wiring."""
+    review_parser.add_argument(
+        "--source-repo-root",
+        type=Path,
+        help=(
+            "Required with --requirements-only: exact recorded transcript cwd to audit"
+        ),
+    )
+    review_parser.add_argument(
+        "--dispositions",
+        type=Path,
+        help="Reviewed JSON prevention receipts for confirmed findings",
+    )
+    review_parser.add_argument(
+        "--session-id",
+        default=os.environ.get("CODEX_THREAD_ID", ""),
+        help="Native current session/thread id; CODEX_THREAD_ID is the fallback",
+    )
+    review_parser.add_argument(
+        "--receipt-run-id",
+        default=os.environ.get("SESSION_REVIEW_RUN_ID", ""),
+        help="Trusted gate runner invocation id for prevention receipts",
+    )
+    review_parser.add_argument(
+        "--max-iterations",
+        type=int,
+        default=1,
+        help="Bound resumable agent-team prevention passes to 1-5",
+    )
+
+
 def _add_honesty_subcommands(subparsers: _SubParsers) -> None:
     """Register the gates that keep a claim and its reality in step.
 
@@ -397,12 +430,19 @@ def _add_honesty_subcommands(subparsers: _SubParsers) -> None:
         action="store_true",
         help="Lane 2 only. Misses the one-offs an agent forgot it ran",
     )
+    review_lane.add_argument(
+        "--requirements-only",
+        action="store_true",
+        help="Lossless Claude/Codex requirement, form, attachment, authority, "
+        "compaction, lineage, and promise evidence; exits 1 if parsing is incomplete",
+    )
     review_parser.add_argument(
         "--sessions",
         type=int,
         default=DEFAULT_SESSION_LIMIT,
         help="Transcript window, in SESSIONS (not files)",
     )
+    _add_session_evidence_arguments(review_parser)
     review_parser.add_argument(
         "--output",
         type=Path,
@@ -963,6 +1003,25 @@ def _add_pr_subcommands(
     automerge_parser.add_argument(
         "number", type=int, help="Bot-opened PR number to arm auto-merge on"
     )
+    _add_process_subcommands(subparsers)
+
+
+def _add_process_subcommands(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    """Register explicit child-process environment boundaries."""
+    process_parser = subparsers.add_parser(
+        "process",
+        help="Run a child without inherited repository-local Git state",
+    )
+    process_sub = process_parser.add_subparsers(
+        dest="process_command", help="Process environment boundary"
+    )
+    git_parser = process_sub.add_parser(
+        "git-isolated",
+        help="Run tests without credentials or hook-exported Git-local variables",
+    )
+    git_parser.add_argument("child_command", nargs=argparse.REMAINDER)
 
 
 def _add_hook_subcommands(
@@ -1527,6 +1586,19 @@ def handle_pr(args: argparse.Namespace, project_root: Path) -> None:
         sys.exit(automerge_main(project_root, args.number))
 
 
+def handle_process(args: argparse.Namespace, project_root: Path) -> None:
+    """Run a command through a Git-isolated child-process boundary."""
+    try:
+        command = command_after_separator(args.child_command)
+    except ValueError as exc:
+        sys.stderr.write(f"process: {exc}\n")
+        sys.exit(2)
+    if args.process_command == "git-isolated":
+        sys.exit(run_git_isolated(command, cwd=project_root))
+    logger.error("process: pick git-isolated")
+    sys.exit(2)
+
+
 def handle_hook(args: argparse.Namespace, project_root: Path) -> None:
     """Dispatch a Claude Code hook subcommand (wired in .claude/settings.json).
 
@@ -1908,6 +1980,7 @@ def _build_command_handlers(
         "ai-setup": _ai_setup,
         "docker": lambda: handle_docker(args, project_root, config=config),
         "pr": lambda: handle_pr(args, project_root),
+        "process": lambda: handle_process(args, project_root),
         "command-audit": lambda: sys.exit(
             command_audit_main(project_root, limit=args.limit, output=args.output)
         ),
@@ -2002,6 +2075,12 @@ def _build_command_handlers(
                 lanes=LaneChoice(
                     transcript_only=args.transcript_only,
                     narrative_only=args.narrative_only,
+                    requirements_only=args.requirements_only,
+                    source_repo_root=args.source_repo_root,
+                    dispositions=args.dispositions,
+                    session_id=args.session_id or None,
+                    receipt_run_id=args.receipt_run_id,
+                    max_iterations=args.max_iterations,
                 ),
                 sessions=args.sessions,
                 output=args.output,

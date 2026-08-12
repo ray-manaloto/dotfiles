@@ -16,7 +16,10 @@ rather than resolved.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -259,6 +262,134 @@ def test_asking_for_both_exclusive_lanes_is_refused_not_resolved(
     )
 
 
+def test_requirements_only_is_exclusive_with_the_automation_lanes(
+    tmp_path: Path,
+) -> None:
+    assert (
+        session_review.session_review_main(
+            tmp_path,
+            lanes=session_review.LaneChoice(
+                transcript_only=True,
+                requirements_only=True,
+            ),
+        )
+        == 2
+    )
+
+
+def test_session_limit_must_be_positive(tmp_path: Path) -> None:
+    assert session_review.session_review_main(tmp_path, sessions=0) == 2
+
+
+@pytest.mark.parametrize("iterations", [0, 6])
+def test_iteration_limit_is_bounded(tmp_path: Path, iterations: int) -> None:
+    assert (
+        session_review.session_review_main(
+            tmp_path,
+            lanes=session_review.LaneChoice(max_iterations=iterations),
+        )
+        == 2
+    )
+
+
+def test_requirements_only_runs_through_the_public_library_entry_point(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "repo"
+    project.mkdir()
+    (project / ".git").mkdir()
+    sessions = tmp_path / "codex" / "sessions" / "2026" / "08" / "10"
+    sessions.mkdir(parents=True)
+    fixture = REPO_ROOT / "tests" / "fixtures" / "session_review" / "codex-root.jsonl"
+    text = fixture.read_text().replace('"cwd":"/repo"', f'"cwd":"{project}"')
+    (sessions / "root.jsonl").write_text(text)
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex"))
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "empty-claude"))
+    output = project / "requirements.md"
+
+    result = session_review.session_review_main(
+        project,
+        lanes=session_review.LaneChoice(
+            requirements_only=True,
+            source_repo_root=project,
+            session_id="root-session",
+        ),
+        sessions=5,
+        output=output,
+    )
+
+    assert result == 0
+    report = output.read_text()
+    assert "Session requirement and promise ledger" in report
+    assert "Do not publish" in report
+    assert "fixture-payload" not in report
+    assert output.with_suffix(".md.evidence.json").is_file()
+    assert output.with_suffix(".md.cutoffs.json").is_file()
+    assert output.with_suffix(".md.iteration.json").is_file()
+    evidence = json.loads(output.with_suffix(".md.evidence.json").read_text())
+    assert evidence["selection_certification"] == "explicit_session_id"
+
+
+def test_public_loop_needs_agent_action_until_prevention_is_disposed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = tmp_path / "repo"
+    project.mkdir()
+    (project / ".git").mkdir()
+    sessions = tmp_path / "codex" / "sessions"
+    sessions.mkdir(parents=True)
+    rows = [
+        {"type": "session_meta", "payload": {"id": "risk", "cwd": str(project)}},
+        {
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "id": "risk-message",
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "output_text",
+                        "text": "The fnox credential launcher was missing.",
+                    }
+                ],
+            },
+        },
+    ]
+    (sessions / "risk.jsonl").write_text("\n".join(json.dumps(row) for row in rows))
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex"))
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "empty-claude"))
+    output = project / "review.md"
+    lanes = session_review.LaneChoice(
+        requirements_only=True,
+        source_repo_root=project,
+        max_iterations=5,
+    )
+    assert session_review.session_review_main(project, lanes=lanes, output=output) == 1
+    packet = json.loads(output.with_suffix(".md.iteration.json").read_text())
+    assert packet["action"] == "needs_agent_action"
+    assert packet["number"] == 1
+    assert packet["repo_root"] == str(project)
+    assert packet["max_iterations"] == 5
+    assert packet["remaining_iterations"] == 4
+    assert packet["required_roles"] == [
+        "specialized_fixer",
+        "independent_qa",
+        "adversarial_reviewer",
+    ]
+    assert {item["kind"] for item in packet["artifacts"]} == {
+        "report",
+        "evidence",
+        "cutoffs",
+    }
+    for artifact in packet["artifacts"]:
+        artifact_path = Path(artifact["path"])
+        assert artifact_path.is_file()
+        assert (
+            hashlib.sha256(artifact_path.read_bytes()).hexdigest() == artifact["sha256"]
+        )
+
+
 def test_the_narrative_lane_runs_without_touching_transcripts(tmp_path: Path) -> None:
     agent = tmp_path / ".agent"
     agent.mkdir()
@@ -285,3 +416,184 @@ def test_the_mise_task_calls_the_cli() -> None:
     mise_toml = (REPO_ROOT / "mise.toml").read_text()
     assert "[tasks.session-review]" in mise_toml
     assert "dotfiles-setup session-review" in mise_toml
+    assert "[tasks.session-requirements]" in mise_toml
+    assert 'arg "[max_sessions]"' in mise_toml
+    assert '--sessions "${usage_max_sessions?}"' in mise_toml
+    assert 'arg "<source_repo_root>"' in mise_toml
+    assert "--source-repo-root" in mise_toml
+    assert "uv run --project python dotfiles-setup session-review" in mise_toml
+
+
+def test_skill_requires_agent_team_receipts_before_complete() -> None:
+    skill = (
+        REPO_ROOT / ".claude" / "skills" / "session-review" / "SKILL.md"
+    ).read_text()
+    for token in (
+        "specialized fixer",
+        "independent QA",
+        "adversarial reviewer",
+        "mutation_receipt",
+        "gate_receipt",
+        "issue_receipt",
+        "cannot become `COMPLETE`",
+    ):
+        assert token in skill
+
+
+def test_callable_codex_skill_is_byte_identical_and_normally_gated() -> None:
+    claude = REPO_ROOT / ".claude" / "skills" / "session-review" / "SKILL.md"
+    codex = REPO_ROOT / ".agents" / "skills" / "session-review" / "SKILL.md"
+    assert codex.is_file()
+    assert codex.read_bytes() == claude.read_bytes()
+    hk = (REPO_ROOT / "hk.pkl").read_text()
+    assert "session_review_skill_parity" in hk
+    assert "cmp -s .claude/skills/session-review/SKILL.md" in hk
+
+
+def test_mise_requirement_task_exposes_required_root_and_configurable_limit() -> None:
+    result = subprocess.run(
+        ["mise", "tasks", "info", "--json", "session-requirements"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
+    )
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    arguments = payload["usage_spec"]["cmd"]["args"]
+    assert arguments[0]["name"] == "source_repo_root"
+    assert arguments[0]["required"]
+    assert arguments[1]["name"] == "max_sessions"
+    assert arguments[1]["default"] == ["5"]
+    assert arguments[3]["name"] == "session_id"
+    assert "uv run --project python" in payload["run"][0]
+
+
+def test_real_cli_runs_requirements_only(tmp_path: Path) -> None:
+    sessions = tmp_path / "codex" / "sessions" / "2026" / "08" / "10"
+    sessions.mkdir(parents=True)
+    fixture = REPO_ROOT / "tests" / "fixtures" / "session_review" / "codex-root.jsonl"
+    (sessions / "root.jsonl").write_text(
+        fixture.read_text().replace('"cwd":"/repo"', f'"cwd":"{REPO_ROOT}"')
+    )
+    output = tmp_path / "requirements.md"
+    env = os.environ.copy()
+    env["CODEX_HOME"] = str(tmp_path / "codex")
+    env["CLAUDE_CONFIG_DIR"] = str(tmp_path / "empty-claude")
+    env.pop("CODEX_THREAD_ID", None)
+    result = subprocess.run(
+        [
+            "uv",
+            "run",
+            "--project",
+            str(REPO_ROOT / "python"),
+            "dotfiles-setup",
+            "session-review",
+            "--requirements-only",
+            "--source-repo-root",
+            str(REPO_ROOT),
+            "--session-id",
+            "root-session",
+            "--output",
+            str(output),
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
+    )
+    assert result.returncode == 0
+    assert "Do not publish" in output.read_text()
+
+
+def test_requirements_cli_cannot_certify_active_session_from_recency(
+    tmp_path: Path,
+) -> None:
+    sessions = tmp_path / "codex" / "sessions" / "2026" / "08" / "10"
+    sessions.mkdir(parents=True)
+    fixture = REPO_ROOT / "tests" / "fixtures" / "session_review" / "codex-root.jsonl"
+    (sessions / "root.jsonl").write_text(
+        fixture.read_text().replace('"cwd":"/repo"', f'"cwd":"{REPO_ROOT}"')
+    )
+    env = os.environ.copy()
+    env["CODEX_HOME"] = str(tmp_path / "codex")
+    env["CLAUDE_CONFIG_DIR"] = str(tmp_path / "empty-claude")
+    env.pop("CODEX_THREAD_ID", None)
+    result = subprocess.run(
+        [
+            "uv",
+            "run",
+            "--project",
+            str(REPO_ROOT / "python"),
+            "dotfiles-setup",
+            "session-review",
+            "--requirements-only",
+            "--source-repo-root",
+            str(REPO_ROOT),
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
+    )
+    assert result.returncode == 1
+    assert "active session identity is unverified" in result.stderr
+
+
+def test_requirements_cli_requires_an_explicit_source_root() -> None:
+    result = subprocess.run(
+        [
+            "uv",
+            "run",
+            "--project",
+            str(REPO_ROOT / "python"),
+            "dotfiles-setup",
+            "session-review",
+            "--requirements-only",
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
+    )
+    assert result.returncode == 2
+    assert "requires --source-repo-root" in result.stderr
+
+
+def test_requirements_cli_fails_closed_when_recorded_cwd_does_not_match(
+    tmp_path: Path,
+) -> None:
+    unmatched = tmp_path / "unmatched"
+    (unmatched / ".git").mkdir(parents=True)
+    env = {
+        **os.environ,
+        "CODEX_HOME": str(tmp_path / "empty-codex"),
+        "CLAUDE_CONFIG_DIR": str(tmp_path / "empty-claude"),
+    }
+    result = subprocess.run(
+        [
+            "uv",
+            "run",
+            "--project",
+            str(REPO_ROOT / "python"),
+            "dotfiles-setup",
+            "session-review",
+            "--requirements-only",
+            "--source-repo-root",
+            str(unmatched),
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
+    )
+    assert result.returncode == 1
+    assert "no transcripts matched recorded cwd" in result.stderr
