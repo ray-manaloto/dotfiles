@@ -270,6 +270,38 @@ def _add_platform_subcommands(subparsers: _SubParsers) -> None:
     )
 
 
+def _add_session_evidence_arguments(review_parser: argparse.ArgumentParser) -> None:
+    """Register the lossless evidence lane without bloating command wiring."""
+    review_parser.add_argument(
+        "--source-repo-root",
+        type=Path,
+        help=(
+            "Required with --requirements-only: exact recorded transcript cwd to audit"
+        ),
+    )
+    review_parser.add_argument(
+        "--dispositions",
+        type=Path,
+        help="Reviewed JSON prevention receipts for confirmed findings",
+    )
+    review_parser.add_argument(
+        "--session-id",
+        default=os.environ.get("CODEX_THREAD_ID", ""),
+        help="Native current session/thread id; CODEX_THREAD_ID is the fallback",
+    )
+    review_parser.add_argument(
+        "--receipt-run-id",
+        default=os.environ.get("SESSION_REVIEW_RUN_ID", ""),
+        help="Trusted gate runner invocation id for prevention receipts",
+    )
+    review_parser.add_argument(
+        "--max-iterations",
+        type=int,
+        default=1,
+        help="Bound resumable agent-team prevention passes to 1-5",
+    )
+
+
 def _add_honesty_subcommands(subparsers: _SubParsers) -> None:
     """Register the gates that keep a claim and its reality in step.
 
@@ -397,12 +429,19 @@ def _add_honesty_subcommands(subparsers: _SubParsers) -> None:
         action="store_true",
         help="Lane 2 only. Misses the one-offs an agent forgot it ran",
     )
+    review_lane.add_argument(
+        "--requirements-only",
+        action="store_true",
+        help="Lossless Claude/Codex requirement, form, attachment, authority, "
+        "compaction, lineage, and promise evidence; exits 1 if parsing is incomplete",
+    )
     review_parser.add_argument(
         "--sessions",
         type=int,
         default=DEFAULT_SESSION_LIMIT,
         help="Transcript window, in SESSIONS (not files)",
     )
+    _add_session_evidence_arguments(review_parser)
     review_parser.add_argument(
         "--output",
         type=Path,
@@ -2002,6 +2041,12 @@ def _build_command_handlers(
                 lanes=LaneChoice(
                     transcript_only=args.transcript_only,
                     narrative_only=args.narrative_only,
+                    requirements_only=args.requirements_only,
+                    source_repo_root=args.source_repo_root,
+                    dispositions=args.dispositions,
+                    session_id=args.session_id or None,
+                    receipt_run_id=args.receipt_run_id,
+                    max_iterations=args.max_iterations,
                 ),
                 sessions=args.sessions,
                 output=args.output,

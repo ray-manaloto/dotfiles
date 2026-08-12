@@ -77,6 +77,7 @@ import sys
 import time
 from typing import TYPE_CHECKING
 
+from dotfiles_setup import child_env
 from dotfiles_setup.sync import SyncOptions, sync_main
 
 if TYPE_CHECKING:
@@ -218,7 +219,13 @@ def _run(
     # Degrade a hung probe to a failed probe (never an uncaught crash).
     try:
         return subprocess.run(
-            cmd, capture_output=True, text=True, check=False, timeout=timeout, cwd=cwd
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout,
+            cwd=cwd,
+            env=child_env.without_git_context(),
         )
     except subprocess.TimeoutExpired:
         return subprocess.CompletedProcess(
@@ -232,7 +239,9 @@ def _run(
 
 def _stream(cmd: list[str], *, cwd: Path | None = None) -> int:
     """Run a long operation streaming to the terminal (never wait blind)."""
-    return subprocess.run(cmd, check=False, cwd=cwd).returncode
+    return subprocess.run(
+        cmd, check=False, cwd=cwd, env=child_env.without_git_context()
+    ).returncode
 
 
 def _matches_any(path: str, patterns: tuple[str, ...]) -> bool:

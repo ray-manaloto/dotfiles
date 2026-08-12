@@ -1307,7 +1307,36 @@ description = "Find what this session did BY HAND that should be code (#654): tr
 #   mise run session-review                          # both lanes, to stdout
 #   mise run session-review -- --output .agent/session-review.md
 #   mise run session-review -- --narrative-only      # cheap re-check
+#   mise run session-review -- --requirements-only   # lossless evidence ledger
 run = 'uv run --project python dotfiles-setup session-review'
+
+[tasks.session-requirements]
+description = "Review up to five recent Claude and Codex sessions for requirements and promises"
+# Explicit opt-in keeps session-review's established two-lane default unchanged.
+# Unknown transcript records exit non-zero instead of reading as "no issues".
+usage = '''
+arg "<source_repo_root>" help="Exact checkout path recorded in the transcripts"
+arg "[max_sessions]" help="Maximum root sessions to review" default="5"
+arg "[max_iterations]" help="Maximum agent-team prevention passes (1-5)" default="1"
+arg "[session_id]" help="Native current session/thread id" default=""
+'''
+run = 'uv run --project python dotfiles-setup session-review --requirements-only --sessions "${usage_max_sessions?}" --max-iterations "${usage_max_iterations?}" --source-repo-root "${usage_source_repo_root?}" --session-id "${usage_session_id?}" --output .agent/session-review.md'
+
+[tasks.session-review-gate]
+description = "Trusted bounded runner for session-review mutation, gate, and GitHub receipts"
+run = 'uv run --project python python -m dotfiles_setup.session_gate'
+
+[tasks.session-review-mutation-credential-launcher]
+description = "Hostile credential-launcher mutant sentinel for session review"
+run = 'uv run --project python python -m dotfiles_setup.session_gate --repo-root "$MISE_PROJECT_ROOT" mutation-sentinel --prevention-id credential-launcher'
+
+[tasks.session-review-mutation-git-hook-contamination]
+description = "Hostile Git-hook-contamination mutant sentinel for session review"
+run = 'uv run --project python python -m dotfiles_setup.session_gate --repo-root "$MISE_PROJECT_ROOT" mutation-sentinel --prevention-id git-hook-contamination'
+
+[tasks.session-review-focused-gate]
+description = "Normal session-review prevention gate"
+run = 'uv run --project python python -m dotfiles_setup.session_gate --repo-root "$MISE_PROJECT_ROOT" prevention-check'
 
 [tasks.lint-delta]
 description = "Partition linter violations into YOURS vs THE UPGRADE'S by running the previous pinned version against the same tree (#651)"

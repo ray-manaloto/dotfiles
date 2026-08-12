@@ -621,6 +621,13 @@ local allSteps = new Mapping<String, Config.Step> {
       "test -f .claude/skills/mcp2cli/SKILL.md && test -f .claude/skills/mintlify/SKILL.md"
   }
 
+  // The Codex-callable and Claude skill surfaces are one contract. A stale
+  // copy is worse than absence because the harness appears to accept it.
+  ["session_review_skill_parity"] {
+    check =
+      "test -f .agents/skills/session-review/SKILL.md && cmp -s .claude/skills/session-review/SKILL.md .agents/skills/session-review/SKILL.md"
+  }
+
   // --- CLAUDE.md must be a thin `@AGENTS.md` import stub.
   //     Every tracked CLAUDE.md (excluding `.claude/**`) consists
   //     solely of: one `@AGENTS.md` import + optional blank lines +
