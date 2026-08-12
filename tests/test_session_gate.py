@@ -314,3 +314,15 @@ def test_normal_prevention_gate_accepts_real_tree_and_rejects_mutant(
         target.read_text().replace(registration.required_token, "removed", 1)
     )
     assert session_gate.prevention_check(candidate) == 1
+
+
+def test_git_hook_prevention_targets_the_post_hook_child_boundary() -> None:
+    """The registry must mutate the layer Git cannot re-poison afterwards."""
+    registration = session_gate.PREVENTIONS["git-hook-contamination"]
+    assert registration.carrier == "python/src/dotfiles_setup/process_env.py"
+    assert registration.target == registration.carrier
+    assert registration.required_count == 1
+    root = Path(__file__).parent.parent
+    assert (root / registration.target).read_text().count(
+        registration.required_token
+    ) == registration.required_count

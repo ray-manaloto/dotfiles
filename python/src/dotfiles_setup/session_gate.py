@@ -73,13 +73,13 @@ PREVENTIONS = {
         2,
     ),
     "git-hook-contamination": PreventionRegistration(
-        "python/src/dotfiles_setup/pr.py",
+        "python/src/dotfiles_setup/process_env.py",
         "session-review-mutation-git-hook-contamination",
         "session-review-focused-gate",
         "git-hook-contamination",
-        "python/src/dotfiles_setup/pr.py",
-        "child_env.without_git_context",
-        2,
+        "python/src/dotfiles_setup/process_env.py",
+        "env=git_isolated_env()",
+        1,
     ),
 }
 

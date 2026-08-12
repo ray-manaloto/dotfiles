@@ -224,6 +224,10 @@ depends = ["pre-commit", "test"]
 description = "Run Python test suite"
 run = "uv run --project python pytest tests/ -x -q"
 
+[tasks.test-hook-isolated]
+description = "Run the Python suite without credentials or hook-exported Git-local variables"
+run = "uv run --project python dotfiles-setup process git-isolated -- uv run --project python pytest tests/ -x -q"
+
 [tasks.smoke-exec]
 description = "Run the containerized real-toolchain exec tests against the local :dev image (needs Docker + `mise run sync`; tier-3 compiles under Rosetta — minutes)"
 # `-m image_exec` re-selects the tests the root pytest.ini deselects by default

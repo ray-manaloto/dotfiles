@@ -734,7 +734,7 @@ hooks {
       }
       ["test"] {
         exclusive = true
-        check = "uv run --project python pytest tests/ -x -q"
+        check = "mise run test-hook-isolated"
       }
     }
   }
