@@ -8,14 +8,12 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 from dotfiles_setup import container
-
-if TYPE_CHECKING:
-    import pytest
 
 _WORKSPACE = Path("/workspaces-host/dotfiles")
 
@@ -73,8 +71,20 @@ def _names(checks: list[container.Check]) -> dict[str, container.Check]:
     return {c.name: c for c in checks}
 
 
-def test_all_green_when_fresh(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(
+    ("platform", "arch_label"),
+    [
+        ("linux/amd64/v2", "label=dotfiles.arch=amd64"),
+        ("linux/arm64/v8", "label=dotfiles.arch=arm64"),
+    ],
+)
+def test_all_green_when_fresh(
+    monkeypatch: pytest.MonkeyPatch,
+    platform: str,
+    arch_label: str,
+) -> None:
     """A running, bind-mounted container with green smoke passes all checks."""
+    monkeypatch.setenv("DOTFILES_PLATFORM", platform)
     runner = _FakeDocker()
     monkeypatch.setattr(container, "_run", runner)
     checks = container.verify_latest(_WORKSPACE)
@@ -85,7 +95,7 @@ def test_all_green_when_fresh(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     assert runner.docker_ps_command is not None
     assert "label=dotfiles.workspace=" in " ".join(runner.docker_ps_command)
-    assert "label=dotfiles.arch=amd64" in runner.docker_ps_command
+    assert arch_label in runner.docker_ps_command
     assert runner.smoke_command is not None
     assert runner.smoke_command == [
         "docker",
