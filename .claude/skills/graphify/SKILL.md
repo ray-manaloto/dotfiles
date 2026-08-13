@@ -521,6 +521,7 @@ wrote = to_json(G, communities, 'graphify-out/graph.json', community_labels=labe
 if not wrote:
     print('ERROR: refused to shrink graphify-out/graph.json (existing graph has more nodes; #479).')
     print('If this shrink is intentional (you deleted files), re-run a full build with --force.')
+    raise SystemExit(1)
 print('Report updated with community labels')
 "
 ```
