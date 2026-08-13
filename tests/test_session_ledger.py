@@ -14,7 +14,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
-from dotfiles_setup import session_ledger
+from dotfiles_setup import codec, session_ledger
+from dotfiles_setup.session_store import RunReceipt
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -688,6 +689,459 @@ def test_codex_cli_user_root_is_authoritative() -> None:
     }
 
     assert session_ledger.codex_root_kind(meta) == session_ledger.RootKind.INTERACTIVE
+
+
+def _latest_cache_receipt(repo: Path) -> RunReceipt:
+    runs = repo / ".agent" / "state" / "session-review" / "runs"
+    latest = codec.decode((runs / "latest.json").read_bytes(), dict[str, str])
+    return codec.decode(
+        (runs / f"{latest['run_sha256']}.json").read_bytes(), RunReceipt
+    )
+
+
+def _coverage_oracle_fields(
+    coverage: session_ledger.RequirementCoverage,
+) -> tuple[object, ...]:
+    return (
+        coverage.events,
+        coverage.requirements,
+        coverage.promises,
+        coverage.lineage,
+        coverage.cutoffs,
+        coverage.omissions,
+        coverage.import_registry,
+    )
+
+
+def _assert_cache_repair_paths(
+    repo: Path,
+    transcript: Path,
+    context: tuple[
+        session_ledger.TranscriptBases,
+        session_ledger.CoverageSelection,
+        session_ledger.RequirementCoverage,
+        bytes,
+    ],
+) -> None:
+    bases, selection, oracle, source_bytes = context
+    cache = repo / ".agent" / "state" / "session-review"
+    module_digest = hashlib.sha256(
+        Path(session_ledger.__file__).read_bytes()
+    ).hexdigest()
+    manifests = list((cache / "manifests").glob("*.json"))
+    objects = [path for path in (cache / "objects").rglob("*") if path.is_file()]
+    assert all(module_digest.encode() in path.read_bytes() for path in manifests)
+    leaked_paths = (
+        str(transcript.resolve()).encode(),
+        str(transcript.parent.resolve()).encode(),
+    )
+    assert all(
+        leaked not in path.read_bytes()
+        for path in [*manifests, *objects]
+        for leaked in leaked_paths
+    )
+    pointer = json.loads(next((cache / "pointers").glob("*.json")).read_text())
+    manifest = json.loads(
+        (cache / "manifests" / f"{pointer['manifest_sha256']}.json").read_text()
+    )
+    fact_digest = manifest["source"]["fact_sha256"]
+    (cache / "objects" / fact_digest[:2] / fact_digest[2:]).write_bytes(b"corrupt")
+    recovered = session_ledger.build_requirement_coverage(
+        repo, bases=bases, selection=selection
+    )
+    assert _coverage_oracle_fields(recovered) == _coverage_oracle_fields(oracle)
+    assert _latest_cache_receipt(repo).stats.corrupt_entries == 1
+    rewritten_bytes = source_bytes.replace(b'"name": "shell"', b'"name": "other"')
+    transcript.write_bytes(rewritten_bytes)
+    rewritten_oracle = session_ledger.parse_transcripts(
+        [session_ledger.TranscriptSource(session_ledger.Provider.CODEX, transcript)],
+        recorded_cwd=str(repo),
+    )
+    rewritten = session_ledger.build_requirement_coverage(
+        repo, bases=bases, selection=selection
+    )
+    assert _coverage_oracle_fields(rewritten) == _coverage_oracle_fields(
+        rewritten_oracle
+    )
+    assert _latest_cache_receipt(repo).stats.rebuilt_sources == 1
+    rebuilt = session_ledger.build_requirement_coverage(
+        repo, bases=bases, selection=replace(selection, rebuild_cache=True)
+    )
+    assert _coverage_oracle_fields(rebuilt) == _coverage_oracle_fields(rewritten_oracle)
+    assert _latest_cache_receipt(repo).stats.decoded_bytes == len(rewritten_bytes)
+
+
+def test_build_coverage_cache_is_incremental_global_and_path_private(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    codex = tmp_path / "codex"
+    codex.mkdir()
+    transcript = codex / "active.jsonl"
+    prefix_rows = [
+        {
+            "type": "session_meta",
+            "payload": {
+                "id": "active",
+                "cwd": str(repo),
+                "source": "cli",
+                "originator": "codex-tui",
+            },
+        },
+        {
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "id": "request",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "Keep both gates."}],
+            },
+        },
+        {
+            "type": "event_msg",
+            "payload": {"type": "user_message", "message": "Keep both gates."},
+        },
+        {
+            "type": "response_item",
+            "payload": {
+                "type": "function_call",
+                "call_id": "call-1",
+                "name": "shell",
+                "arguments": "{}",
+            },
+        },
+        {
+            "type": "response_item",
+            "payload": {
+                "type": "function_call",
+                "call_id": "form-1",
+                "turn_id": "turn-1",
+                "name": "request_user_input",
+                "arguments": json.dumps(
+                    {
+                        "questions": [
+                            {"id": "gate", "header": "Gate", "question": "Both?"}
+                        ]
+                    }
+                ),
+            },
+        },
+        {
+            "type": "event_msg",
+            "payload": {"type": "task_started", "turn_id": "turn-1"},
+        },
+    ]
+    prefix = ("\n".join(json.dumps(row) for row in prefix_rows) + "\n").encode()
+    transcript.write_bytes(prefix)
+    bases = session_ledger.TranscriptBases(codex, tmp_path / "claude")
+    selection = session_ledger.CoverageSelection(codex_session_id="active")
+
+    cold = session_ledger.build_requirement_coverage(
+        repo, bases=bases, selection=selection
+    )
+    direct = session_ledger.parse_transcripts(
+        [session_ledger.TranscriptSource(session_ledger.Provider.CODEX, transcript)],
+        recorded_cwd=str(repo),
+    )
+    assert _coverage_oracle_fields(cold) == _coverage_oracle_fields(direct)
+    cold_receipt = _latest_cache_receipt(repo)
+    assert cold_receipt.stats.decoded_bytes == len(prefix)
+    assert cold_receipt.stats.rebuilt_sources == 1
+
+    unchanged = session_ledger.build_requirement_coverage(
+        repo, bases=bases, selection=selection
+    )
+    assert _coverage_oracle_fields(unchanged) == _coverage_oracle_fields(direct)
+    assert _latest_cache_receipt(repo).stats.decoded_bytes == 0
+
+    disposition = session_ledger.SemanticDisposition(
+        cold.requirements[0].requirement_id,
+        session_ledger.ReviewStatus.SATISFIED,
+        "The focused control proves both gates.",
+        ("test:both-gates",),
+    )
+    finalized = session_ledger.build_requirement_coverage(
+        repo,
+        bases=bases,
+        selection=selection,
+        semantic_dispositions=(disposition,),
+    )
+    assert finalized.requirements[0].status == session_ledger.ReviewStatus.SATISFIED
+    assert _latest_cache_receipt(repo).stats.decoded_bytes == 0
+
+    suffix_rows = [
+        {
+            "type": "response_item",
+            "payload": {
+                "type": "function_call_output",
+                "call_id": "call-1",
+                "output": "{}",
+            },
+        },
+        {
+            "type": "response_item",
+            "payload": {
+                "type": "function_call_output",
+                "call_id": "form-1",
+                "turn_id": "turn-1",
+                "output": json.dumps({"answers": {"gate": {"answers": ["Yes"]}}}),
+            },
+        },
+        {
+            "type": "event_msg",
+            "payload": {"type": "task_complete", "turn_id": "turn-1"},
+        },
+    ]
+    suffix = ("\n".join(json.dumps(row) for row in suffix_rows) + "\n").encode()
+    transcript.write_bytes(prefix + suffix)
+    appended = session_ledger.build_requirement_coverage(
+        repo, bases=bases, selection=selection
+    )
+    append_oracle = session_ledger.parse_transcripts(
+        [session_ledger.TranscriptSource(session_ledger.Provider.CODEX, transcript)],
+        recorded_cwd=str(repo),
+    )
+    assert _coverage_oracle_fields(appended) == _coverage_oracle_fields(append_oracle)
+    append_receipt = _latest_cache_receipt(repo)
+    assert append_receipt.stats.decoded_bytes == len(suffix)
+    assert append_receipt.stats.appended_sources == 1
+
+    _assert_cache_repair_paths(
+        repo,
+        transcript,
+        (bases, selection, append_oracle, prefix + suffix),
+    )
+
+
+@pytest.mark.parametrize("order", ["direct-first", "response-first"])
+def test_cached_late_codex_user_twins_match_the_cold_oracle(
+    tmp_path: Path, order: str
+) -> None:
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    codex = tmp_path / "codex"
+    codex.mkdir()
+    transcript = codex / "active.jsonl"
+    meta = {
+        "type": "session_meta",
+        "payload": {
+            "id": "active",
+            "cwd": str(repo),
+            "source": "cli",
+            "originator": "codex-tui",
+        },
+    }
+    direct = {
+        "type": "event_msg",
+        "payload": {"type": "user_message", "message": "Preserve this."},
+    }
+    response = {
+        "type": "response_item",
+        "payload": {
+            "type": "message",
+            "id": "request",
+            "role": "user",
+            "content": [{"type": "input_text", "text": "Preserve this."}],
+        },
+    }
+    first, second = (
+        (direct, response) if order == "direct-first" else (response, direct)
+    )
+    transcript.write_text("\n".join(json.dumps(row) for row in (meta, first)) + "\n")
+    bases = session_ledger.TranscriptBases(codex, tmp_path / "claude")
+    selection = session_ledger.CoverageSelection(codex_session_id="active")
+    session_ledger.build_requirement_coverage(repo, bases=bases, selection=selection)
+    with transcript.open("a") as stream:
+        stream.write(json.dumps(second) + "\n")
+
+    cached = session_ledger.build_requirement_coverage(
+        repo, bases=bases, selection=selection
+    )
+    oracle = session_ledger.parse_transcripts(
+        [session_ledger.TranscriptSource(session_ledger.Provider.CODEX, transcript)],
+        recorded_cwd=str(repo),
+    )
+
+    assert _coverage_oracle_fields(cached) == _coverage_oracle_fields(oracle)
+    assert len(cached.requirements) == 1
+    assert _latest_cache_receipt(repo).stats.appended_sources == 1
+
+
+def test_cached_cross_source_lineage_and_compaction_match_cold_oracle(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    codex = tmp_path / "codex"
+    codex.mkdir()
+    root = codex / "root.jsonl"
+    child = codex / "child.jsonl"
+    root.write_text(
+        (FIXTURES / "codex-root.jsonl")
+        .read_text()
+        .replace('"cwd":"/repo"', f'"cwd":"{repo}"')
+    )
+    child.write_text(
+        (FIXTURES / "codex-child.jsonl")
+        .read_text()
+        .replace('"cwd":"/repo"', f'"cwd":"{repo}"')
+    )
+    bases = session_ledger.TranscriptBases(codex, tmp_path / "claude")
+    selection = session_ledger.CoverageSelection(codex_session_id="root-session")
+    session_ledger.build_requirement_coverage(repo, bases=bases, selection=selection)
+
+    cached = session_ledger.build_requirement_coverage(
+        repo, bases=bases, selection=selection
+    )
+    sources = session_ledger.discover_sources(
+        repo, limit=5, bases=bases, codex_session_id="root-session"
+    )
+    oracle = session_ledger.parse_transcripts(sources, recorded_cwd=str(repo))
+
+    assert _coverage_oracle_fields(cached) == _coverage_oracle_fields(oracle)
+    assert any(item.parent_id for item in cached.lineage)
+    assert any(
+        item.kind == session_ledger.EventKind.COMPACTION for item in cached.events
+    )
+    receipt = _latest_cache_receipt(repo)
+    assert receipt.stats.decoded_bytes == 0
+    assert receipt.stats.reused_sources == len(sources)
+
+
+def test_attachment_change_plus_transcript_append_forces_cold_oracle(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    codex = tmp_path / "codex"
+    codex.mkdir()
+    attachment = codex / "evidence.txt"
+    attachment.write_text("before")
+    transcript = codex / "active.jsonl"
+    attachment_tag = f'<attachment path="{attachment}" />'
+    rows = [
+        {
+            "type": "session_meta",
+            "payload": {
+                "id": "active",
+                "cwd": str(repo),
+                "source": "cli",
+                "originator": "codex-tui",
+            },
+        },
+        {
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "id": "attachment-request",
+                "role": "user",
+                "content": [{"type": "input_text", "text": attachment_tag}],
+            },
+        },
+        {
+            "type": "event_msg",
+            "payload": {"type": "user_message", "message": attachment_tag},
+        },
+    ]
+    transcript.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
+    bases = session_ledger.TranscriptBases(codex, tmp_path / "claude")
+    selection = session_ledger.CoverageSelection(codex_session_id="active")
+    session_ledger.build_requirement_coverage(repo, bases=bases, selection=selection)
+
+    attachment.write_text("after")
+    appended = {
+        "type": "response_item",
+        "payload": {
+            "type": "message",
+            "id": "later",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "Later response."}],
+        },
+    }
+    with transcript.open("a") as stream:
+        stream.write(json.dumps(appended) + "\n")
+
+    cached = session_ledger.build_requirement_coverage(
+        repo, bases=bases, selection=selection
+    )
+    oracle = session_ledger.parse_transcripts(
+        [session_ledger.TranscriptSource(session_ledger.Provider.CODEX, transcript)],
+        recorded_cwd=str(repo),
+    )
+
+    assert _coverage_oracle_fields(cached) == _coverage_oracle_fields(oracle)
+    attachment_events = [
+        event
+        for event in cached.events
+        if event.kind == session_ledger.EventKind.ATTACHMENT
+    ]
+    assert attachment_events[0].attachment is not None
+    assert (
+        attachment_events[0].attachment.payload_sha256
+        == hashlib.sha256(b"after").hexdigest()
+    )
+    receipt = _latest_cache_receipt(repo)
+    assert receipt.stats.rebuilt_sources == 1
+    assert receipt.stats.appended_sources == 0
+    assert receipt.stats.decoded_bytes == len(transcript.read_bytes())
+
+
+def test_valid_non_newline_tail_is_not_committed_before_later_append(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    codex = tmp_path / "codex"
+    codex.mkdir()
+    transcript = codex / "active.jsonl"
+    meta = json.dumps(
+        {
+            "type": "session_meta",
+            "payload": {
+                "id": "active",
+                "cwd": str(repo),
+                "source": "cli",
+                "originator": "codex-tui",
+            },
+        }
+    )
+    unterminated = json.dumps(
+        {
+            "type": "event_msg",
+            "payload": {"type": "user_message", "message": "First request."},
+        }
+    )
+    transcript.write_text(f"{meta}\n{unterminated}")
+    bases = session_ledger.TranscriptBases(codex, tmp_path / "claude")
+    selection = session_ledger.CoverageSelection(codex_session_id="active")
+    first = session_ledger.build_requirement_coverage(
+        repo, bases=bases, selection=selection
+    )
+    assert any("incomplete JSONL record" in item for item in first.omissions)
+
+    later = json.dumps(
+        {
+            "type": "event_msg",
+            "payload": {"type": "user_message", "message": "Second request."},
+        }
+    )
+    with transcript.open("a") as stream:
+        stream.write(f"\n{later}\n")
+    cached = session_ledger.build_requirement_coverage(
+        repo, bases=bases, selection=selection
+    )
+    oracle = session_ledger.parse_transcripts(
+        [session_ledger.TranscriptSource(session_ledger.Provider.CODEX, transcript)],
+        recorded_cwd=str(repo),
+    )
+
+    assert _coverage_oracle_fields(cached) == _coverage_oracle_fields(oracle)
+    assert [item.statement for item in cached.requirements] == [
+        "First request.",
+        "Second request.",
+    ]
+    assert not any("malformed JSON" in item for item in cached.omissions)
 
 
 def test_codex_selector_never_filters_independent_claude_roots(tmp_path: Path) -> None:

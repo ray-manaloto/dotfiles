@@ -310,6 +310,11 @@ def _add_session_evidence_arguments(review_parser: argparse.ArgumentParser) -> N
         default=1,
         help="Bound resumable agent-team prevention passes to 1-5",
     )
+    review_parser.add_argument(
+        "--rebuild-cache",
+        action="store_true",
+        help="Ignore incremental session facts and rebuild every selected source",
+    )
 
 
 def _add_honesty_subcommands(subparsers: _SubParsers) -> None:
@@ -2121,6 +2126,7 @@ def _build_command_handlers(
                     codex_session_id=args.codex_session_id,
                     receipt_run_id=args.receipt_run_id,
                     max_iterations=args.max_iterations,
+                    rebuild_cache=args.rebuild_cache,
                 ),
                 sessions=args.sessions,
                 output=args.output,

@@ -37,6 +37,10 @@ class CacheAction(StrEnum):
     INCOMPLETE = "incomplete"
 
 
+class AppendRebuildError(RuntimeError):
+    """Signal that serialized facts cannot safely continue this suffix."""
+
+
 @dataclass(frozen=True)
 class CacheStats:
     """Observable work performed by one review run."""
@@ -93,6 +97,7 @@ class StoredFacts:
     complete: bool = True
     incomplete_tail_bytes: int = 0
     reason: str = ""
+    source: SourceState | None = None
 
 
 @dataclass(frozen=True)
@@ -391,6 +396,7 @@ class SessionStore:
                     decision.facts,
                     CacheStats(reused_sources=1),
                     decision.action,
+                    source=decision.source,
                 )
             data = snapshot.data[: snapshot.complete_prefix_bytes]
             if not data:
@@ -401,16 +407,30 @@ class SessionStore:
                     complete=False,
                     incomplete_tail_bytes=tail_bytes,
                     reason="source ends with an incomplete JSONL record",
+                    source=decision.source,
                 )
             if decision.action == CacheAction.APPEND and decision.facts is not None:
                 suffix = data[decision.suffix_offset :]
                 if suffix:
-                    facts = append_parser(decision.facts, suffix)
-                    stats = CacheStats(
-                        appended_sources=1,
-                        decoded_bytes=len(suffix),
-                        corrupt_entries=corrupt,
-                    )
+                    try:
+                        facts = append_parser(decision.facts, suffix)
+                    except AppendRebuildError:
+                        facts = cold_parser(data)
+                        decision = CacheDecision(
+                            CacheAction.REBUILD,
+                            reason="incremental parser requested rebuild",
+                        )
+                        stats = CacheStats(
+                            rebuilt_sources=1,
+                            decoded_bytes=len(data),
+                            corrupt_entries=corrupt,
+                        )
+                    else:
+                        stats = CacheStats(
+                            appended_sources=1,
+                            decoded_bytes=len(suffix),
+                            corrupt_entries=corrupt,
+                        )
                 else:
                     facts = decision.facts
                     stats = CacheStats(reused_sources=1, corrupt_entries=corrupt)
@@ -421,7 +441,7 @@ class SessionStore:
                     decoded_bytes=len(data),
                     corrupt_entries=corrupt,
                 )
-            self.publish_source(provider, path, facts, source_bytes=data)
+            source = self.publish_source(provider, path, facts, source_bytes=data)
             return StoredFacts(
                 facts,
                 stats,
@@ -431,4 +451,5 @@ class SessionStore:
                 reason=(
                     "source ends with an incomplete JSONL record" if tail_bytes else ""
                 ),
+                source=source,
             )
