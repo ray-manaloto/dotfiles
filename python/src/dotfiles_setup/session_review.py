@@ -189,6 +189,7 @@ class LaneChoice:
     requirements_only: bool = False
     source_repo_root: Path | None = None
     dispositions: Path | None = None
+    semantic_dispositions: Path | None = None
     session_id: str | None = None
     codex_session_id: str | None = None
     receipt_run_id: str = ""
@@ -546,6 +547,30 @@ def session_review_main(
     return 0
 
 
+def _load_review_dispositions(
+    lanes: LaneChoice, source_repo_root: Path
+) -> tuple[
+    tuple[session_ledger.PreventionDisposition, ...],
+    tuple[session_ledger.SemanticDisposition, ...],
+]:
+    """Load the two independent reviewed-decision inputs."""
+    prevention = (
+        session_ledger.load_dispositions(
+            lanes.dispositions,
+            repo_root=source_repo_root,
+            run_id=lanes.receipt_run_id,
+        )
+        if lanes.dispositions is not None
+        else ()
+    )
+    semantic = (
+        session_ledger.load_semantic_dispositions(lanes.semantic_dispositions)
+        if lanes.semantic_dispositions is not None
+        else ()
+    )
+    return prevention, semantic
+
+
 def _requirements_review(
     repo_root: Path,
     lanes: LaneChoice,
@@ -562,20 +587,17 @@ def _requirements_review(
         return 2
     source_repo_root = lanes.source_repo_root or repo_root
     codex_session_id = lanes.codex_session_id or lanes.session_id
-    dispositions: tuple[session_ledger.PreventionDisposition, ...] = ()
-    if lanes.dispositions is not None:
-        try:
-            dispositions = session_ledger.load_dispositions(
-                lanes.dispositions,
-                repo_root=source_repo_root,
-                run_id=lanes.receipt_run_id,
-            )
-        except OSError, TypeError, ValueError, json.JSONDecodeError:
-            logger.exception("invalid prevention dispositions")
-            return 2
+    try:
+        dispositions, semantic_dispositions = _load_review_dispositions(
+            lanes, source_repo_root
+        )
+    except OSError, TypeError, ValueError, json.JSONDecodeError:
+        logger.exception("invalid session-review dispositions")
+        return 2
     coverage = session_ledger.build_requirement_coverage(
         source_repo_root,
         dispositions=dispositions,
+        semantic_dispositions=semantic_dispositions,
         selection=session_ledger.CoverageSelection(
             limit=sessions,
             codex_session_id=codex_session_id,
@@ -600,6 +622,7 @@ def _requirements_review(
         coverage = session_ledger.build_requirement_coverage(
             source_repo_root,
             dispositions=dispositions,
+            semantic_dispositions=semantic_dispositions,
             selection=session_ledger.CoverageSelection(
                 limit=sessions,
                 codex_session_id=codex_session_id,

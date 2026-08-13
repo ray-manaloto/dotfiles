@@ -8,7 +8,7 @@ import json
 import sys
 from dataclasses import replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NoReturn, cast
 
 import pytest
 
@@ -199,6 +199,11 @@ def test_exact_missed_dependency_request_is_atomized_and_typed() -> None:
     assert sdk.requirement_id != ownership.requirement_id
     assert sdk.atom_index == 9
     assert sdk.parent_statement_sha256 == ownership.parent_statement_sha256
+    promise_atom = next(
+        item for item in coverage.requirements if "promise" in item.statement.lower()
+    )
+    assert "mise" not in promise_atom.prerequisites
+    assert not sdk.external_effect
 
 
 def test_semantic_disposition_needs_evidence_beyond_an_issue_carrier() -> None:
@@ -474,6 +479,50 @@ def test_missing_form_result_is_incomplete(tmp_path: Path) -> None:
     assert any("missing form result call-1" in item for item in coverage.omissions)
 
 
+@pytest.mark.parametrize("provider", list(session_ledger.Provider))
+def test_orphan_form_result_never_confers_authority(
+    tmp_path: Path, provider: session_ledger.Provider
+) -> None:
+    if provider == session_ledger.Provider.CODEX:
+        rows = [
+            {"type": "session_meta", "payload": {"id": "orphan", "cwd": "/repo"}},
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "function_call_output",
+                    "call_id": "missing-call",
+                    "output": json.dumps(
+                        {"answers": {"scope": {"answers": ["Publish it"]}}}
+                    ),
+                },
+            },
+        ]
+    else:
+        rows = [
+            {
+                "type": "user",
+                "sessionId": "orphan",
+                "toolUseResult": {"answers": {"scope": {"answers": ["Publish it"]}}},
+                "message": {
+                    "content": [{"type": "tool_result", "tool_use_id": "missing-call"}]
+                },
+            }
+        ]
+    path = tmp_path / f"{provider}-orphan.jsonl"
+    path.write_text("\n".join(json.dumps(row) for row in rows))
+
+    coverage = session_ledger.parse_transcripts(
+        [session_ledger.TranscriptSource(provider, path)]
+    )
+
+    assert coverage.status == session_ledger.CoverageStatus.INCOMPLETE
+    assert coverage.requirements == ()
+    assert not any(
+        event.kind == session_ledger.EventKind.FORM_ANSWER for event in coverage.events
+    )
+    assert any("orphan form result missing-call" in item for item in coverage.omissions)
+
+
 @pytest.mark.parametrize("mutation", ["turn", "ids", "duplicate"])
 def test_form_pairing_rejects_identity_mutations(tmp_path: Path, mutation: str) -> None:
     call = {
@@ -643,6 +692,102 @@ def test_codex_selector_never_filters_independent_claude_roots(tmp_path: Path) -
     )
     assert claude_census.discovered == 1
     assert claude_census.selected == 1
+
+
+def test_stale_explicit_codex_selector_is_incomplete_even_with_claude(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    codex_base = tmp_path / "codex"
+    codex_base.mkdir()
+    (codex_base / "different.jsonl").write_text(
+        json.dumps(
+            {
+                "type": "session_meta",
+                "payload": {"id": "different-session", "cwd": str(repo)},
+            }
+        )
+        + "\n"
+    )
+    claude_base = tmp_path / "claude-projects"
+    claude_project = session_ledger.command_audit.project_dir(claude_base, repo)
+    claude_project.mkdir(parents=True)
+    (claude_project / "claude.jsonl").write_text(
+        json.dumps(
+            {
+                "type": "user",
+                "sessionId": "claude-root",
+                "message": {"content": "Claude-only requirement"},
+            }
+        )
+        + "\n"
+    )
+
+    coverage = session_ledger.build_requirement_coverage(
+        repo,
+        bases=session_ledger.TranscriptBases(codex_base, claude_base),
+        selection=session_ledger.CoverageSelection(
+            codex_session_id="stale-explicit-id",
+            require_active_identity=True,
+        ),
+    )
+
+    codex_census = next(
+        row
+        for row in coverage.provider_census
+        if row.provider == session_ledger.Provider.CODEX
+    )
+    assert codex_census.selected == 0
+    assert coverage.status == session_ledger.CoverageStatus.INCOMPLETE
+    assert any(
+        "explicit Codex session stale-explicit-id selected no native root" in item
+        for item in coverage.omissions
+    )
+
+
+def test_provider_census_distinguishes_unreadable_from_malformed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    codex_base = tmp_path / "codex"
+    codex_base.mkdir()
+    unreadable = codex_base / "unreadable.jsonl"
+    unreadable.write_text("{}\n")
+    malformed = codex_base / "malformed.jsonl"
+    malformed.write_text("not-json\n")
+    read_meta = session_ledger.first_session_meta
+
+    def guarded_meta(path: Path) -> dict[str, object] | None:
+        if path == unreadable:
+            message = "hostile unreadable control"
+            raise PermissionError(message)
+        return read_meta(path)
+
+    monkeypatch.setattr(session_ledger, "first_session_meta", guarded_meta)
+    coverage = session_ledger.build_requirement_coverage(
+        repo,
+        bases=session_ledger.TranscriptBases(codex_base, tmp_path / "claude"),
+        selection=session_ledger.CoverageSelection(codex_session_id="missing"),
+    )
+    codex_census = next(
+        row
+        for row in coverage.provider_census
+        if row.provider == session_ledger.Provider.CODEX
+    )
+    assert codex_census.unreadable == 1
+    assert codex_census.malformed == 1
+
+
+def test_first_session_meta_preserves_unreadable_oserror_category() -> None:
+    class UnreadablePath:
+        def open(self, _mode: str) -> NoReturn:
+            message = "hostile unreadable control"
+            raise PermissionError(message)
+
+    with pytest.raises(PermissionError, match="hostile unreadable control"):
+        session_ledger.first_session_meta(cast("Path", UnreadablePath()))
 
 
 def test_claude_structural_events_are_retained_without_granting_authority(

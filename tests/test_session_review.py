@@ -27,7 +27,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
-from dotfiles_setup import session_review
+from dotfiles_setup import session_ledger, session_review
 from dotfiles_setup.command_audit import BashCommand
 
 REPO_ROOT = Path(__file__).parent.parent
@@ -339,6 +339,74 @@ def test_requirements_only_runs_through_the_public_library_entry_point(
     iteration = json.loads(output.with_suffix(".md.iteration.json").read_text())
     assert iteration["action"] == "needs_agent_action"
     assert iteration["unreviewed_requirement_ids"]
+
+
+def test_semantic_dispositions_cli_input_can_close_validated_claims(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = tmp_path / "repo"
+    (project / ".git").mkdir(parents=True)
+    sessions = tmp_path / "codex" / "sessions"
+    sessions.mkdir(parents=True)
+    transcript = sessions / "root.jsonl"
+    rows = [
+        {"type": "session_meta", "payload": {"id": "active", "cwd": str(project)}},
+        {
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "id": "request",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "Keep this local."}],
+            },
+        },
+        {
+            "type": "event_msg",
+            "payload": {
+                "type": "user_message",
+                "message": "Keep this local.",
+            },
+        },
+    ]
+    transcript.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
+    initial = session_ledger.parse_transcripts(
+        [session_ledger.TranscriptSource(session_ledger.Provider.CODEX, transcript)]
+    )
+    semantic = tmp_path / "semantic-dispositions.json"
+    semantic.write_text(
+        json.dumps(
+            [
+                {
+                    "claim_id": initial.requirements[0].requirement_id,
+                    "status": "satisfied",
+                    "rationale": "The bounded control verifies local-only behavior.",
+                    "receipt_refs": ["test:test_local_only_control"],
+                }
+            ]
+        )
+    )
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex"))
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "empty-claude"))
+    output = project / "requirements.md"
+
+    result = session_review.session_review_main(
+        project,
+        lanes=session_review.LaneChoice(
+            requirements_only=True,
+            source_repo_root=project,
+            codex_session_id="active",
+            semantic_dispositions=semantic,
+        ),
+        sessions=5,
+        output=output,
+    )
+
+    assert result == 0
+    evidence = json.loads(output.with_suffix(".md.evidence.json").read_text())
+    assert evidence["semantic_disposition_count"] == 1
+    report = output.read_text()
+    assert "satisfied" in report
+    assert "test:test_local_only_control" in report
 
 
 def test_public_loop_needs_agent_action_until_prevention_is_disposed(

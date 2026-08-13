@@ -715,7 +715,9 @@ class _Accumulator:
     form_calls: dict[str, tuple[EvidenceRef, str, frozenset[str]]] = field(
         default_factory=dict
     )
-    form_results: dict[str, tuple[str, frozenset[str]]] = field(default_factory=dict)
+    form_results: dict[
+        str, tuple[str, frozenset[str], EvidenceRef, tuple[tuple[str, str], ...]]
+    ] = field(default_factory=dict)
     seen_attachment_sha256: set[str] = field(default_factory=set)
     seen_finding_categories: set[str] = field(default_factory=set)
     tool_calls: dict[str, tuple[EvidenceRef, str]] = field(default_factory=dict)
@@ -777,16 +779,14 @@ def _json_object(raw: bytes) -> dict[str, object] | None:
     return value if isinstance(value, dict) else None
 
 
-def _first_session_meta(path: Path) -> dict[str, object] | None:
-    try:
-        with path.open("rb") as stream:
-            for raw in stream:
-                obj = _json_object(raw)
-                if obj is not None and obj.get("type") == "session_meta":
-                    payload = obj.get("payload")
-                    return payload if isinstance(payload, dict) else None
-    except OSError:
-        return None
+def first_session_meta(path: Path) -> dict[str, object] | None:
+    """Return the first Codex session metadata, preserving filesystem errors."""
+    with path.open("rb") as stream:
+        for raw in stream:
+            obj = _json_object(raw)
+            if obj is not None and obj.get("type") == "session_meta":
+                payload = obj.get("payload")
+                return payload if isinstance(payload, dict) else None
     return None
 
 
@@ -861,7 +861,10 @@ def discover_codex_transcripts(
         return []
     rows: list[tuple[Path, dict[str, object], str]] = []
     for path in base.glob("**/*.jsonl"):
-        meta = _first_session_meta(path)
+        try:
+            meta = first_session_meta(path)
+        except OSError:
+            continue
         if meta is None or str(meta.get("cwd", "")) != str(repo_root):
             continue
         rows.append((path, meta, _codex_activity_timestamp(path)))
@@ -942,7 +945,7 @@ def provider_census(
         if provider == Provider.CODEX:
             for path in discovered_paths:
                 try:
-                    meta = _first_session_meta(path)
+                    meta = first_session_meta(path)
                 except OSError:
                     unreadable += 1
                     continue
@@ -1148,11 +1151,15 @@ def _add_event(acc: _Accumulator, event: CanonicalEvent) -> None:
                     prerequisites=tuple(
                         token
                         for token in ("Graphify", "uv", "mise")
-                        if token.lower() in statement.lower()
+                        if re.search(
+                            rf"(?<!\w){re.escape(token)}(?!\w)",
+                            statement,
+                            re.IGNORECASE,
+                        )
                     ),
                     external_effect=bool(
-                        re.search(
-                            r"\b(?:publish|push|create|update|delete|ship|land)\b",
+                        re.match(
+                            r"^\s*(?:please\s+)?(?:publish|push|create|update|delete|ship|land)\b",
                             statement,
                             re.IGNORECASE,
                         )
@@ -1435,7 +1442,7 @@ def _form_questions(
 
 def _form_answers(
     payload: Mapping[str, object], evidence: EvidenceRef, acc: _Accumulator
-) -> frozenset[str] | None:
+) -> tuple[frozenset[str], tuple[tuple[str, str], ...]] | None:
     output = payload.get("output")
     try:
         parsed = json.loads(output) if isinstance(output, str) else output
@@ -1445,6 +1452,7 @@ def _form_answers(
     if not isinstance(answers, dict):
         return None
     answer_ids: set[str] = set()
+    answer_rows: list[tuple[str, str]] = []
     for question_id, value in answers.items():
         answer_ids.add(str(question_id))
         answer_values = value.get("answers") if isinstance(value, dict) else None
@@ -1456,18 +1464,8 @@ def _form_answers(
         for answer in answer_values:
             if not isinstance(answer, str):
                 continue
-            metadata = (("question_id", str(question_id)),)
-            _add_event(
-                acc,
-                CanonicalEvent(
-                    EventKind.FORM_ANSWER,
-                    "user",
-                    _safe_text(answer),
-                    evidence,
-                    metadata,
-                ),
-            )
-    return frozenset(answer_ids)
+            answer_rows.append((str(question_id), _safe_text(answer)))
+    return frozenset(answer_ids), tuple(answer_rows)
 
 
 def _codex_form_call(
@@ -1529,8 +1527,8 @@ def _codex_form_result(
     payload: Mapping[str, object], evidence: EvidenceRef, acc: _Accumulator
 ) -> None:
     _codex_tool_event(payload, evidence, acc, result=True)
-    answer_ids = _form_answers(payload, evidence, acc)
-    if answer_ids is None:
+    parsed = _form_answers(payload, evidence, acc)
+    if parsed is None:
         return
     call_id = str(payload.get("call_id", ""))
     if not call_id or call_id in acc.form_results:
@@ -1538,7 +1536,8 @@ def _codex_form_result(
             f"{evidence.source_id}:{evidence.line}: duplicate or empty form result id"
         )
     else:
-        acc.form_results[call_id] = (_turn_id(payload), answer_ids)
+        answer_ids, answers = parsed
+        acc.form_results[call_id] = (_turn_id(payload), answer_ids, evidence, answers)
 
 
 def _codex_agent_message(
@@ -2105,7 +2104,7 @@ def _claude_message_event(
     result = _claude_form_result(obj)
     if result is not None:
         synthetic = {"output": json.dumps({"answers": result["answers"]})}
-        answer_ids = _form_answers(synthetic, evidence, acc)
+        parsed_answers = _form_answers(synthetic, evidence, acc)
         call_id = ""
         if isinstance(content, list):
             call_id = next(
@@ -2116,13 +2115,14 @@ def _claude_message_event(
                 ),
                 "",
             )
-        if not call_id or answer_ids is None or call_id in acc.form_results:
+        if not call_id or parsed_answers is None or call_id in acc.form_results:
             acc.omissions.append(
                 f"{evidence.source_id}:{evidence.line}: "
                 "malformed or duplicate Claude form result"
             )
         else:
-            acc.form_results[call_id] = ("", answer_ids)
+            answer_ids, answers = parsed_answers
+            acc.form_results[call_id] = ("", answer_ids, evidence, answers)
     if isinstance(message, dict) and message.get("stop_reason"):
         metadata = _metadata_pairs(message, ("stop_reason", "stop_sequence"))
         _add_event(
@@ -2399,11 +2399,29 @@ def parse_transcripts(
             acc.omissions.append(
                 f"{evidence.source_id}:{evidence.line}: missing form result {call_id}"
             )
-        elif result != (turn_id, question_ids):
+        elif result[:2] != (turn_id, question_ids):
             acc.omissions.append(
                 f"{evidence.source_id}:{evidence.line}: form result identity mismatch "
                 f"{call_id}"
             )
+        else:
+            _, _, result_evidence, answers = result
+            for question_id, answer in answers:
+                _add_event(
+                    acc,
+                    CanonicalEvent(
+                        EventKind.FORM_ANSWER,
+                        "user",
+                        answer,
+                        result_evidence,
+                        (("question_id", question_id),),
+                    ),
+                )
+    for call_id in sorted(acc.form_results.keys() - acc.form_calls.keys()):
+        result = acc.form_results[call_id]
+        acc.omissions.append(
+            f"{result[2].source_id}:{result[2].line}: orphan form result {call_id}"
+        )
     for call_id, call in sorted(acc.tool_calls.items()):
         evidence, turn_id = call
         result_turn = acc.tool_results.get(call_id)
@@ -2417,9 +2435,37 @@ def parse_transcripts(
                 f"{call_id}"
             )
     coverage = RequirementCoverage(
-        tuple(acc.events),
-        tuple(acc.requirements),
-        tuple(acc.promises),
+        tuple(
+            sorted(
+                acc.events,
+                key=lambda item: (
+                    item.evidence.provider,
+                    item.evidence.source_id,
+                    item.evidence.line,
+                ),
+            )
+        ),
+        tuple(
+            sorted(
+                acc.requirements,
+                key=lambda item: (
+                    item.evidence.provider,
+                    item.evidence.source_id,
+                    item.evidence.line,
+                    item.atom_index,
+                ),
+            )
+        ),
+        tuple(
+            sorted(
+                acc.promises,
+                key=lambda item: (
+                    item.evidence.provider,
+                    item.evidence.source_id,
+                    item.evidence.line,
+                ),
+            )
+        ),
         tuple(acc.high_severity_findings),
         tuple(dispositions),
         tuple(acc.lineage),
@@ -2545,6 +2591,14 @@ def build_requirement_coverage(
         sources,
         bases=bases,
     )
+    codex_selected = next(
+        (row.selected for row in census if row.provider == Provider.CODEX), 0
+    )
+    selection_omissions = (
+        (f"explicit Codex session {codex_session_id} selected no native root",)
+        if codex_session_id and codex_selected == 0
+        else ()
+    )
     if not sources:
         return RequirementCoverage(
             (),
@@ -2555,7 +2609,10 @@ def build_requirement_coverage(
             (),
             (),
             str(repo_root),
-            (f"no transcripts matched recorded cwd {repo_root}",),
+            (
+                f"no transcripts matched recorded cwd {repo_root}",
+                *selection_omissions,
+            ),
             certification,
             codex_session_id or "",
             provider_census=census,
@@ -2571,6 +2628,7 @@ def build_requirement_coverage(
         selection_certification=certification,
         selected_session_id=codex_session_id or "",
         provider_census=census,
+        omissions=(*coverage.omissions, *selection_omissions),
     )
     if selection.require_active_identity and not codex_session_id:
         return replace(
@@ -2965,11 +3023,12 @@ def render_coverage(coverage: RequirementCoverage) -> str:
     ]
     if coverage.requirements:
         out += [
-            "| id | kind | provenance | status | target | statement |",
-            "|---|---|---|---|---|---|",
+            "| id | kind | provenance | status | receipts | target | statement |",
+            "|---|---|---|---|---|---|---|",
             *(
                 f"| `{item.requirement_id}` | {item.kind} | "
                 f"{item.authority_provenance} | {item.status} | "
+                f"{_table_text(', '.join(item.receipt_refs))} | "
                 f"{_table_text(item.target)} | "
                 f"{_table_text(item.statement)} |"
                 for item in coverage.requirements
@@ -2980,10 +3039,11 @@ def render_coverage(coverage: RequirementCoverage) -> str:
     out += ["", "## Promises", ""]
     if coverage.promises:
         out += [
-            "| id | status | statement |",
-            "|---|---|---|",
+            "| id | status | receipts | statement |",
+            "|---|---|---|---|",
             *(
                 f"| `{item.promise_id}` | {item.status} | "
+                f"{_table_text(', '.join(item.receipt_refs))} | "
                 f"{_table_text(item.statement)} |"
                 for item in coverage.promises
             ),

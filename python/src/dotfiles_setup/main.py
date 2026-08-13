@@ -287,6 +287,14 @@ def _add_session_evidence_arguments(review_parser: argparse.ArgumentParser) -> N
         help="Reviewed JSON prevention receipts for confirmed findings",
     )
     review_parser.add_argument(
+        "--semantic-dispositions",
+        type=Path,
+        help=(
+            "Reviewed JSON decisions for requirement and promise claim IDs; "
+            "each terminal decision needs rationale and a typed verification receipt"
+        ),
+    )
+    review_parser.add_argument(
         "--codex-session-id",
         default=os.environ.get("CODEX_THREAD_ID", "").strip() or None,
         help="Native Codex thread id; defaults only from a nonempty CODEX_THREAD_ID",
@@ -2109,6 +2117,7 @@ def _build_command_handlers(
                     requirements_only=args.requirements_only,
                     source_repo_root=args.source_repo_root,
                     dispositions=args.dispositions,
+                    semantic_dispositions=args.semantic_dispositions,
                     codex_session_id=args.codex_session_id,
                     receipt_run_id=args.receipt_run_id,
                     max_iterations=args.max_iterations,

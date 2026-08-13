@@ -15,6 +15,9 @@ mise run session-requirements -- /absolute/source/checkout    # typed evidence, 
 mise run session-requirements -- /absolute/source/checkout 3 5 # sessions, iterations
 mise run session-review -- --requirements-only --source-repo-root "$PWD" \
   --codex-session-id "$CODEX_THREAD_ID" --output .agent/session-review.md
+mise run session-review -- --requirements-only --source-repo-root "$PWD" \
+  --codex-session-id "$CODEX_THREAD_ID" \
+  --semantic-dispositions .agent/session-review-dispositions.json
 ```
 
 `python/src/dotfiles_setup/session_review.py` does the collecting. The report
@@ -70,7 +73,9 @@ discovered, selected, rejected, archived, imported, malformed, and unreadable
 sources. The most-recent relevant
 user/turn activity is only a bounded fallback and **cannot certify that the
 selected root is this active task**; requirements-only exits non-zero without
-an explicit identity.
+an explicit identity. A nonexistent or stale explicit Codex identity records
+Codex `selected=0` and remains `INCOMPLETE`; Claude evidence cannot satisfy the
+missing requested provider selection.
 
 Transcript JSONL is parsed structurally. Never inspect rollout files with raw
 `rg`/grep: a matching compaction row can contain megabytes of inline base64
@@ -96,6 +101,10 @@ The disposition schema names these `carrier`, `mutation_receipt`,
 `gate_receipt`, and `issue_receipt`.
 Missing or forged bytes keep coverage `INCOMPLETE`. Pass the file through `mise run session-review --
 --requirements-only --source-repo-root ROOT --dispositions FILE`.
+Pass reviewed requirement/promise decisions separately with
+`--semantic-dispositions FILE`; each row names a stable `claim_id`, terminal
+`status`, nonempty `rationale`, and typed `receipt_refs` including verification
+such as `test:...`, `commit:...`, `artifact:...`, or `user:...`.
 
 `session-requirements` accepts configurable session and iteration bounds. The
 Python CLI is a deterministic analyzer and resumable state machine; it never
