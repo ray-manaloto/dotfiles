@@ -346,6 +346,24 @@ def test_requirements_only_runs_through_the_public_library_entry_point(
     iteration = json.loads(output.with_suffix(".md.iteration.json").read_text())
     assert iteration["action"] == "needs_agent_action"
     assert iteration["unreviewed_requirement_ids"]
+    claims_path = output.with_suffix(".md.claims.json")
+    claims_index = json.loads(claims_path.read_text())
+    claim_rows = [
+        row
+        for segment in claims_index["segments"]
+        for row in json.loads(
+            claims_path.with_name(f"{claims_path.name}{segment['suffix']}").read_text()
+        )["claims"]
+    ]
+    paired = next(row for row in claim_rows if row["context_kind"] == "paired_question")
+    assert paired["bounded_context"].startswith(
+        "question id=publication_authority text="
+    )
+    assert (
+        paired["context_sha256"]
+        == hashlib.sha256(paired["bounded_context"].encode()).hexdigest()
+    )
+    assert paired["candidate_receipt_refs"] == []
 
 
 def test_semantic_dispositions_cli_input_can_close_validated_claims(

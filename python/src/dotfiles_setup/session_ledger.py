@@ -128,6 +128,16 @@ class RequirementKind(StrEnum):
     GRAPHIFY_SDK = "graphify_sdk"
 
 
+class ClaimContextKind(StrEnum):
+    """Safe structural context attached to a claim packet."""
+
+    NONE = "none"
+    PAIRED_QUESTION = "paired_question"
+    URL_FRAGMENT = "url_fragment"
+    PATH_FRAGMENT = "path_fragment"
+    COMMAND_FRAGMENT = "command_fragment"
+
+
 class RootKind(StrEnum):
     """Native transcript role used by selection and authority checks."""
 
@@ -259,6 +269,9 @@ class RequirementEntry:
     receipt_refs: tuple[str, ...] = ()
     parent_statement_sha256: str = ""
     atom_index: int = 0
+    linked_question_id: str = ""
+    linked_question_text: str = ""
+    linked_question_sha256: str = ""
 
 
 @dataclass(frozen=True)
@@ -343,6 +356,10 @@ class ClaimSegmentEntry:
     evidence_ref: str
     bounded_statement: str
     statement_sha256: str
+    context_kind: ClaimContextKind = ClaimContextKind.NONE
+    bounded_context: str = ""
+    context_sha256: str = ""
+    candidate_receipt_refs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -587,6 +604,97 @@ def _bounded_statement(statement: str, limit: int = 1024) -> str:
             return prefix.decode() + suffix
         except UnicodeDecodeError:
             prefix = prefix[:-1]
+
+
+def _safe_context_text(text: str, limit: int = 512) -> str:
+    """Bound context after replacing payloads and private absolute paths."""
+    sanitized = _safe_text(text)
+    sanitized = re.sub(
+        r"(?<![\w:])(?:/[\w.@+~ -]+){2,}",
+        lambda match: (
+            "[absolute-path "
+            f"sha256={hashlib.sha256(match.group(0).encode()).hexdigest()}]"
+        ),
+        sanitized,
+    )
+    return _bounded_statement(sanitized, limit)
+
+
+def _safe_question_id(question_id: str) -> str:
+    if re.fullmatch(r"[A-Za-z0-9_.-]{1,80}", question_id):
+        return question_id
+    digest = hashlib.sha256(question_id.encode()).hexdigest()
+    return f"question-{digest[:20]}"
+
+
+def _fragment_context(
+    statement: str,
+) -> tuple[ClaimContextKind, str, str, tuple[str, ...]]:
+    """Describe a fragment structurally without retaining its sensitive value."""
+    stripped = statement.strip()
+    digest = hashlib.sha256(stripped.encode()).hexdigest()
+    if re.fullmatch(r"(?:https?|file)://\S+", stripped, re.IGNORECASE):
+        scheme = urlparse(stripped).scheme.lower()
+        context = f"url scheme={scheme} sha256={digest}"
+        return (
+            ClaimContextKind.URL_FRAGMENT,
+            context,
+            hashlib.sha256(context.encode()).hexdigest(),
+            (f"candidate:artifact:url-{digest[:20]}",),
+        )
+    if Path(stripped).is_absolute():
+        suffix = Path(stripped).suffix.lower()
+        context = f"absolute path suffix={suffix or 'none'} sha256={digest}"
+        return (
+            ClaimContextKind.PATH_FRAGMENT,
+            context,
+            hashlib.sha256(context.encode()).hexdigest(),
+            (f"candidate:artifact:path-{digest[:20]}",),
+        )
+    command = stripped.removeprefix("$ ").split(maxsplit=1)[0] if stripped else ""
+    known_commands = {"gh", "git", "mise", "uv"}
+    if (
+        command
+        and re.fullmatch(r"[A-Za-z0-9_.+-]+", command)
+        and (stripped.startswith("$ ") or command in known_commands)
+    ):
+        safe_command = command if command in known_commands else "other"
+        context = f"command executable={safe_command} sha256={digest}"
+        return (
+            ClaimContextKind.COMMAND_FRAGMENT,
+            context,
+            hashlib.sha256(context.encode()).hexdigest(),
+            (f"candidate:test:command-{digest[:20]}",),
+        )
+    return ClaimContextKind.NONE, "", "", ()
+
+
+def _requirement_context(
+    item: RequirementEntry,
+) -> tuple[ClaimContextKind, str, str, tuple[str, ...]]:
+    fragment_kind, fragment, fragment_sha256, candidates = _fragment_context(
+        item.statement
+    )
+    if item.linked_question_text:
+        context = (
+            f"question id={item.linked_question_id} text={item.linked_question_text}"
+        )
+        bounded_context = _bounded_statement(context, 768)
+        return (
+            ClaimContextKind.PAIRED_QUESTION,
+            bounded_context,
+            hashlib.sha256(bounded_context.encode()).hexdigest(),
+            candidates,
+        )
+    return fragment_kind, fragment, fragment_sha256, candidates
+
+
+def _bounded_claim_statement(statement: str) -> str:
+    kind, _, _, _ = _fragment_context(statement)
+    if kind != ClaimContextKind.NONE:
+        digest = hashlib.sha256(statement.strip().encode()).hexdigest()
+        return f"[{kind} sha256={digest}]"
+    return _safe_context_text(statement, 1024)
 
 
 def _evidence_ref_text(evidence: EvidenceRef) -> str:
@@ -900,32 +1008,48 @@ class RequirementCoverage:
 
     def claim_entries(self) -> tuple[ClaimSegmentEntry, ...]:
         """Return every requirement and promise in stable claim-ID order."""
-        requirements = (
-            ClaimSegmentEntry(
+
+        def requirement_entry(item: RequirementEntry) -> ClaimSegmentEntry:
+            context_kind, context, context_sha256, candidates = _requirement_context(
+                item
+            )
+            return ClaimSegmentEntry(
                 item.requirement_id,
                 "requirement",
                 str(item.authority_provenance),
                 item.status,
                 item.evidence,
                 _evidence_ref_text(item.evidence),
-                _bounded_statement(item.statement),
+                _bounded_claim_statement(item.statement),
                 hashlib.sha256(item.statement.encode()).hexdigest(),
+                context_kind,
+                context,
+                context_sha256,
+                candidates,
             )
-            for item in self.requirements
-        )
-        promises = (
-            ClaimSegmentEntry(
+
+        requirements = (requirement_entry(item) for item in self.requirements)
+
+        def promise_entry(item: PromiseEntry) -> ClaimSegmentEntry:
+            context_kind, context, context_sha256, candidates = _fragment_context(
+                item.statement
+            )
+            return ClaimSegmentEntry(
                 item.promise_id,
                 "promise",
                 AuthorityProvenance.NON_AUTHORITATIVE,
                 item.status,
                 item.evidence,
                 _evidence_ref_text(item.evidence),
-                _bounded_statement(item.statement),
+                _bounded_claim_statement(item.statement),
                 hashlib.sha256(item.statement.encode()).hexdigest(),
+                context_kind,
+                context,
+                context_sha256,
+                candidates,
             )
-            for item in self.promises
-        )
+
+        promises = (promise_entry(item) for item in self.promises)
         return tuple(sorted((*requirements, *promises), key=lambda item: item.claim_id))
 
     def claim_segments_to_json(self) -> tuple[str, ...]:
@@ -1095,7 +1219,7 @@ class _Accumulator:
     cutoffs: list[SourceCutoff] = field(default_factory=list)
     omissions: list[str] = field(default_factory=list)
     seen_event_ids: set[str] = field(default_factory=set)
-    form_calls: dict[str, tuple[EvidenceRef, str, frozenset[str]]] = field(
+    form_calls: dict[str, tuple[EvidenceRef, str, tuple[tuple[str, str], ...]]] = field(
         default_factory=dict
     )
     form_results: dict[
@@ -1549,6 +1673,7 @@ def _add_event(acc: _Accumulator, event: CanonicalEvent) -> None:
             atomize_requirement_text(event.text), start=1
         ):
             kind = requirement_kind(statement)
+            metadata = dict(event.metadata)
             acc.requirements.append(
                 RequirementEntry(
                     _stable_claim_id("req", event.evidence, f"{index}\0{statement}"),
@@ -1583,6 +1708,21 @@ def _add_event(acc: _Accumulator, event: CanonicalEvent) -> None:
                     ),
                     parent_statement_sha256=parent_digest,
                     atom_index=index,
+                    linked_question_id=(
+                        metadata.get("question_id", "")
+                        if event.kind == EventKind.FORM_ANSWER
+                        else ""
+                    ),
+                    linked_question_text=(
+                        metadata.get("question_text", "")
+                        if event.kind == EventKind.FORM_ANSWER
+                        else ""
+                    ),
+                    linked_question_sha256=(
+                        metadata.get("question_sha256", "")
+                        if event.kind == EventKind.FORM_ANSWER
+                        else ""
+                    ),
                 )
             )
     if event.kind == EventKind.ASSISTANT_MESSAGE and _PROMISE.search(event.text):
@@ -1851,7 +1991,7 @@ def _codex_message(
 
 def _form_questions(
     payload: Mapping[str, object], evidence: EvidenceRef, acc: _Accumulator
-) -> frozenset[str]:
+) -> tuple[tuple[str, str], ...]:
     arguments = payload.get("arguments")
     try:
         parsed = json.loads(arguments) if isinstance(arguments, str) else arguments
@@ -1861,8 +2001,9 @@ def _form_questions(
         acc.omissions.append(
             f"{evidence.source_id}:{evidence.line}: malformed form call"
         )
-        return frozenset()
-    question_ids: set[str] = set()
+        return ()
+    questions: dict[str, str] = {}
+    valid = True
     for question in parsed["questions"]:
         if not isinstance(question, dict):
             acc.omissions.append(
@@ -1873,11 +2014,13 @@ def _form_questions(
         question_id = str(question.get("id", "")) or (
             f"question-{hashlib.sha256(text.encode()).hexdigest()[:20]}" if text else ""
         )
-        if not question_id or question_id in question_ids:
+        if not question_id or question_id in questions:
             acc.omissions.append(
                 f"{evidence.source_id}:{evidence.line}: duplicate or empty question id"
             )
-        question_ids.add(question_id)
+            valid = False
+            continue
+        questions[question_id] = _safe_context_text(text)
         metadata = (("id", question_id), *_metadata_pairs(question, ("header",)))
         _add_event(
             acc,
@@ -1885,7 +2028,7 @@ def _form_questions(
                 EventKind.FORM_QUESTION, "assistant", text, evidence, metadata
             ),
         )
-    return frozenset(question_ids)
+    return tuple(sorted(questions.items())) if valid else ()
 
 
 def _form_answers(
@@ -1930,13 +2073,13 @@ def _codex_form_call(
     form_schema_status: str,
 ) -> None:
     call_id = str(payload.get("call_id", ""))
-    question_ids = _form_questions(payload, evidence, acc)
+    questions = _form_questions(payload, evidence, acc)
     if not call_id or call_id in acc.form_calls:
         acc.omissions.append(
             f"{evidence.source_id}:{evidence.line}: duplicate or empty form call id"
         )
     else:
-        acc.form_calls[call_id] = (evidence, _turn_id(payload), question_ids)
+        acc.form_calls[call_id] = (evidence, _turn_id(payload), questions)
     if form_schema_status == "needs-probe":
         acc.omissions.append(
             f"{evidence.source_id}:{evidence.line}: "
@@ -3184,7 +3327,8 @@ def _merge_source_fact(acc: _Accumulator, state: _SourceFacts) -> None:
 def _finalize_relationships(acc: _Accumulator) -> None:
     """Resolve forms and tools after every source fact has been merged."""
     for call_id, call in sorted(acc.form_calls.items()):
-        evidence, turn_id, question_ids = call
+        evidence, turn_id, questions = call
+        question_ids = frozenset(question_id for question_id, _ in questions)
         result = acc.form_results.get(call_id)
         if result is None:
             acc.omissions.append(
@@ -3197,7 +3341,9 @@ def _finalize_relationships(acc: _Accumulator) -> None:
             )
         else:
             _, _, result_evidence, answers = result
+            question_text = dict(questions)
             for question_id, answer in answers:
+                linked_text = question_text[question_id]
                 _add_event(
                     acc,
                     CanonicalEvent(
@@ -3205,7 +3351,14 @@ def _finalize_relationships(acc: _Accumulator) -> None:
                         "user",
                         answer,
                         result_evidence,
-                        (("question_id", question_id),),
+                        (
+                            ("question_id", _safe_question_id(question_id)),
+                            ("question_text", linked_text),
+                            (
+                                "question_sha256",
+                                hashlib.sha256(linked_text.encode()).hexdigest(),
+                            ),
+                        ),
                     ),
                 )
     for call_id in sorted(acc.form_results.keys() - acc.form_calls.keys()):
@@ -4120,7 +4273,7 @@ def render_coverage(coverage: RequirementCoverage) -> str:
                 f"{item.authority_provenance} | {item.status} | "
                 f"{_table_text(', '.join(item.receipt_refs))} | "
                 f"{_table_text(item.target)} | "
-                f"{_table_text(item.statement)} |"
+                f"{_table_text(_bounded_claim_statement(item.statement))} |"
                 for item in coverage.requirements
             ),
         ]
@@ -4134,7 +4287,7 @@ def render_coverage(coverage: RequirementCoverage) -> str:
             *(
                 f"| `{item.promise_id}` | {item.status} | "
                 f"{_table_text(', '.join(item.receipt_refs))} | "
-                f"{_table_text(item.statement)} |"
+                f"{_table_text(_bounded_claim_statement(item.statement))} |"
                 for item in coverage.promises
             ),
         ]

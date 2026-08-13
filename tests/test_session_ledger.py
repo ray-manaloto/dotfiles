@@ -336,6 +336,40 @@ def test_direct_invalid_open_disposition_cannot_change_claim_status() -> None:
     assert applied.requirements[0].status == session_ledger.ReviewStatus.UNREVIEWED
 
 
+@pytest.mark.parametrize(
+    "status",
+    [
+        session_ledger.ReviewStatus.OPEN,
+        session_ledger.ReviewStatus.SATISFIED,
+        session_ledger.ReviewStatus.WITHDRAWN,
+        session_ledger.ReviewStatus.CONTRADICTED,
+    ],
+)
+def test_candidate_receipt_refs_never_satisfy_dispositions(
+    status: session_ledger.ReviewStatus,
+) -> None:
+    candidate = "candidate:artifact:path-deadbeef"
+    disposition = session_ledger.SemanticDisposition(
+        "req-1", status, "A candidate is not a proof receipt.", (candidate,)
+    )
+    requirement = session_ledger.RequirementEntry(
+        "req-1",
+        "/private/review/receipt.json",
+        _EVIDENCE,
+        session_ledger.EventKind.USER_MESSAGE,
+        authority_relevant=False,
+    )
+    coverage = session_ledger.RequirementCoverage(
+        (), (requirement,), (), (), (), (), (), "", ()
+    )
+
+    assert not disposition.persistable
+    assert not disposition.complete
+    applied = session_ledger.apply_semantic_dispositions(coverage, (disposition,))
+    assert applied.requirements[0].status == session_ledger.ReviewStatus.UNREVIEWED
+    assert applied.requirements[0].receipt_refs == ()
+
+
 def test_provider_qualified_ids_do_not_collide_and_claude_string_is_authority(
     tmp_path: Path,
 ) -> None:
@@ -1789,6 +1823,20 @@ def test_claude_legacy_form_pairs_question_text_with_string_answer(
     )
     assert answer.text == "Validate both architectures"
     assert dict(answer.metadata)["question_id"] == dict(prompt.metadata)["id"]
+    requirement = coverage.requirements[0]
+    claim = coverage.claim_entries()[0]
+    assert requirement.linked_question_id == dict(prompt.metadata)["id"]
+    assert requirement.linked_question_text == question
+    assert (
+        requirement.linked_question_sha256
+        == hashlib.sha256(question.encode()).hexdigest()
+    )
+    assert claim.context_kind == session_ledger.ClaimContextKind.PAIRED_QUESTION
+    assert question in claim.bounded_context
+    assert (
+        claim.context_sha256
+        == hashlib.sha256(claim.bounded_context.encode()).hexdigest()
+    )
 
 
 def test_attachment_symlink_and_oversize_payload_fail_closed(tmp_path: Path) -> None:
@@ -2662,7 +2710,9 @@ def test_claude_date_change_is_non_authoritative_structural_diagnostic(
     assert event.actor == "harness"
 
 
-@pytest.mark.parametrize("mutation", ["none", "wrong-call", "wrong-turn"])
+@pytest.mark.parametrize(
+    "mutation", ["none", "wrong-call", "wrong-turn", "duplicate-question"]
+)
 def test_native_root_custom_form_carrier_requires_exact_call_and_turn_pairing(
     tmp_path: Path, mutation: str
 ) -> None:
@@ -2679,7 +2729,16 @@ def test_native_root_custom_form_carrier_requires_exact_call_and_turn_pairing(
                 "type": "custom_tool_call",
                 "name": "request_user_input",
                 "call_id": call_id,
-                "arguments": {"questions": [{"id": "scope", "question": "Scope?"}]},
+                "arguments": {
+                    "questions": [
+                        {"id": "scope", "question": "Scope?"},
+                        *(
+                            [{"id": "scope", "question": "Ambiguous scope?"}]
+                            if mutation == "duplicate-question"
+                            else []
+                        ),
+                    ]
+                },
             },
         },
         *(
@@ -2711,6 +2770,146 @@ def test_native_root_custom_form_carrier_requires_exact_call_and_turn_pairing(
         assert not any(
             "form result identity mismatch" in item for item in coverage.omissions
         )
+        requirement = coverage.requirements[0]
+        claim = coverage.claim_entries()[0]
+        assert requirement.linked_question_id == "scope"
+        assert requirement.linked_question_text == "Scope?"
+        assert claim.context_kind == session_ledger.ClaimContextKind.PAIRED_QUESTION
+        assert claim.bounded_context == "question id=scope text=Scope?"
     else:
         assert answers == []
+        assert coverage.requirements == ()
         assert coverage.status == session_ledger.CoverageStatus.INCOMPLETE
+
+
+def test_paired_question_context_is_private_bounded_and_not_claim_identity(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "paired-context.jsonl"
+    private_path = "/private/Users/example/review-plan.json"
+    data_url = "data:text/plain;base64,c2VjcmV0"
+    question_id = "/private/unsafe/question-id"
+
+    def parse(question: str) -> session_ledger.RequirementCoverage:
+        rows = [
+            {
+                "type": "session_meta",
+                "payload": {"id": "paired", "cwd": "/repo", "source": "vscode"},
+            },
+            {"type": "turn_context", "payload": {"turn_id": "turn-1"}},
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "custom_tool_call",
+                    "name": "request_user_input",
+                    "call_id": "call-form",
+                    "arguments": {
+                        "questions": [{"id": question_id, "question": question}]
+                    },
+                },
+            },
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "custom_tool_call_output",
+                    "call_id": "call-form",
+                    "output": {
+                        "answers": {question_id: {"answers": ["Keep the review open"]}}
+                    },
+                },
+            },
+        ]
+        path.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
+        return session_ledger.parse_transcripts(
+            [session_ledger.TranscriptSource(session_ledger.Provider.CODEX, path)]
+        )
+
+    first = parse(f"Review {private_path} {data_url} " + "x" * 2_000)
+    second = parse("Use a different bounded prompt")
+    first_requirement = first.requirements[0]
+    second_requirement = second.requirements[0]
+    first_claim = first.claim_entries()[0]
+    second_claim = second.claim_entries()[0]
+
+    assert first_requirement.requirement_id == second_requirement.requirement_id
+    assert first_claim.claim_id == second_claim.claim_id
+    assert first_claim.bounded_context != second_claim.bounded_context
+    assert first_requirement.linked_question_id.startswith("question-")
+    assert len(first_claim.bounded_context.encode()) <= 768
+    packet = first.claims_to_json() + "".join(first.claim_segments_to_json())
+    assert private_path not in packet
+    assert data_url not in packet
+    assert question_id not in packet
+    assert "[absolute-path sha256=" in first_claim.bounded_context
+    assert "[data-url bytes=" in first_claim.bounded_context
+    assert (
+        first_claim.context_sha256
+        == hashlib.sha256(first_claim.bounded_context.encode()).hexdigest()
+    )
+
+
+@pytest.mark.parametrize(
+    ("statement", "kind", "candidate_prefix"),
+    [
+        (
+            "https://example.invalid/private?token=opaque-url-sentinel",
+            session_ledger.ClaimContextKind.URL_FRAGMENT,
+            "candidate:artifact:url-",
+        ),
+        (
+            "/private/Users/example/opaque-path-sentinel.json",
+            session_ledger.ClaimContextKind.PATH_FRAGMENT,
+            "candidate:artifact:path-",
+        ),
+        (
+            "$ git status --short opaque-command-sentinel",
+            session_ledger.ClaimContextKind.COMMAND_FRAGMENT,
+            "candidate:test:command-",
+        ),
+    ],
+)
+def test_fragment_claim_context_is_structural_redacted_and_digest_bound(
+    statement: str,
+    kind: session_ledger.ClaimContextKind,
+    candidate_prefix: str,
+) -> None:
+    requirement = session_ledger.RequirementEntry(
+        "req-fragment",
+        statement,
+        _EVIDENCE,
+        session_ledger.EventKind.USER_MESSAGE,
+        authority_relevant=False,
+    )
+    coverage = session_ledger.RequirementCoverage(
+        (), (requirement,), (), (), (), (), (), "", ()
+    )
+    claim = coverage.claim_entries()[0]
+    public_packet = (
+        coverage.claims_to_json()
+        + "".join(coverage.claim_segments_to_json())
+        + session_ledger.render_coverage(coverage)
+    )
+
+    assert claim.context_kind == kind
+    assert (
+        claim.context_sha256
+        == hashlib.sha256(claim.bounded_context.encode()).hexdigest()
+    )
+    assert claim.candidate_receipt_refs[0].startswith(candidate_prefix)
+    assert statement not in claim.bounded_statement
+    assert statement not in public_packet
+    assert claim.statement_sha256 == hashlib.sha256(statement.encode()).hexdigest()
+
+
+def test_promise_fragment_gets_the_same_safe_candidate_context() -> None:
+    statement = "https://example.invalid/opaque-promise-fragment"
+    promise = session_ledger.PromiseEntry("promise-fragment", statement, _EVIDENCE)
+    coverage = session_ledger.RequirementCoverage(
+        (), (), (promise,), (), (), (), (), "", ()
+    )
+
+    claim = coverage.claim_entries()[0]
+
+    assert claim.context_kind == session_ledger.ClaimContextKind.URL_FRAGMENT
+    assert claim.candidate_receipt_refs[0].startswith("candidate:artifact:url-")
+    assert statement not in coverage.claims_to_json()
