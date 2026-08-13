@@ -716,9 +716,9 @@ def test_stale_explicit_codex_selector_is_incomplete_even_with_claude(
     (claude_project / "claude.jsonl").write_text(
         json.dumps(
             {
-                "type": "user",
+                "type": "assistant",
                 "sessionId": "claude-root",
-                "message": {"content": "Claude-only requirement"},
+                "message": {"content": "Clean Claude transcript."},
             }
         )
         + "\n"
@@ -740,10 +740,18 @@ def test_stale_explicit_codex_selector_is_incomplete_even_with_claude(
     )
     assert codex_census.selected == 0
     assert coverage.status == session_ledger.CoverageStatus.INCOMPLETE
+    assert coverage.selection_certification == (
+        session_ledger.SelectionCertification.EXPLICIT_SESSION_ID_UNRESOLVED
+    )
     assert any(
         "explicit Codex session stale-explicit-id selected no native root" in item
         for item in coverage.omissions
     )
+    iteration = session_ledger.advance_iteration(coverage, number=1)
+    assert iteration.action == session_ledger.IterationAction.NEEDS_AGENT_ACTION
+    packet = json.loads(iteration.to_json())
+    assert packet["action"] == "needs_agent_action"
+    assert packet["selection_certification"] == "explicit_session_id_unresolved"
 
 
 def test_provider_census_distinguishes_unreadable_from_malformed(

@@ -385,8 +385,23 @@ def test_semantic_dispositions_cli_input_can_close_validated_claims(
             ]
         )
     )
+    claude_config = tmp_path / "claude"
+    claude_project = session_review.command_audit.project_dir(
+        claude_config / "projects", project
+    )
+    claude_project.mkdir(parents=True)
+    (claude_project / "clean.jsonl").write_text(
+        json.dumps(
+            {
+                "type": "assistant",
+                "sessionId": "clean-claude",
+                "message": {"content": "Clean Claude transcript."},
+            }
+        )
+        + "\n"
+    )
     monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex"))
-    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "empty-claude"))
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(claude_config))
     output = project / "requirements.md"
 
     result = session_review.session_review_main(

@@ -75,7 +75,9 @@ user/turn activity is only a bounded fallback and **cannot certify that the
 selected root is this active task**; requirements-only exits non-zero without
 an explicit identity. A nonexistent or stale explicit Codex identity records
 Codex `selected=0` and remains `INCOMPLETE`; Claude evidence cannot satisfy the
-missing requested provider selection.
+missing requested provider selection. Its certification is
+`EXPLICIT_SESSION_ID_UNRESOLVED`, and the final iteration packet remains
+`NEEDS_AGENT_ACTION` rather than converging on the other provider alone.
 
 Transcript JSONL is parsed structurally. Never inspect rollout files with raw
 `rg`/grep: a matching compaction row can contain megabytes of inline base64

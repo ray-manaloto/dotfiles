@@ -154,6 +154,7 @@ class SelectionCertification(StrEnum):
 
     NOT_REQUESTED = "not_requested"
     EXPLICIT_SESSION_ID = "explicit_session_id"
+    EXPLICIT_SESSION_ID_UNRESOLVED = "explicit_session_id_unresolved"
     UNCERTIFIED_ACTIVITY_FALLBACK = "uncertified_activity_fallback"
 
 
@@ -2599,6 +2600,8 @@ def build_requirement_coverage(
         if codex_session_id and codex_selected == 0
         else ()
     )
+    if selection_omissions:
+        certification = SelectionCertification.EXPLICIT_SESSION_ID_UNRESOLVED
     if not sources:
         return RequirementCoverage(
             (),
@@ -2904,7 +2907,16 @@ def advance_iteration(
             if promise.status == ReviewStatus.UNREVIEWED
         )
     )
-    if unresolved or unreviewed_requirements or unreviewed_promises:
+    expected_provider_missing = any(
+        row.expected and row.selected == 0 for row in coverage.provider_census
+    )
+    if (
+        coverage.status == CoverageStatus.INCOMPLETE
+        or expected_provider_missing
+        or unresolved
+        or unreviewed_requirements
+        or unreviewed_promises
+    ):
         action = IterationAction.NEEDS_AGENT_ACTION
     elif frozenset(current) - previous:
         action = IterationAction.PREVENTION_RECORDED
