@@ -3849,132 +3849,132 @@ url = "https://conda.anaconda.org/conda-forge/win-64/zstd-1.5.7-h534d264_6.conda
 checksum = "sha256:368d8628424966fd8f9c8018326a9c779e06913dd39e646cf331226acc90e5b2"
 
 [[tools.antigravity-cli]]
-version = "1.1.11"
+version = "1.1.12"
 backend = "aqua:google-antigravity/antigravity-cli"
 
 [tools.antigravity-cli."platforms.linux-arm64"]
-checksum = "sha256:f3a03713e3e3cc84477e115d3fd9de1c232386b09384ba8690df6fc0cb0abbf3"
-url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.1.11/agy_cli_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/504498874"
+checksum = "sha256:dbfcc9bb91716d68410d99027892d34cf412dae1d23b82e191549a8629ddab38"
+url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.1.12/agy_cli_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/509437165"
 
 [tools.antigravity-cli."platforms.linux-arm64-musl"]
-checksum = "sha256:f3a03713e3e3cc84477e115d3fd9de1c232386b09384ba8690df6fc0cb0abbf3"
-url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.1.11/agy_cli_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/504498874"
+checksum = "sha256:dbfcc9bb91716d68410d99027892d34cf412dae1d23b82e191549a8629ddab38"
+url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.1.12/agy_cli_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/509437165"
 
 [tools.antigravity-cli."platforms.linux-x64"]
-checksum = "sha256:caef1dd4c99c57dee1d1dec2b6c67726df535ea49ec71eabadd36daff8223d19"
-url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.1.11/agy_cli_linux_x64.tar.gz"
-url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/504498965"
+checksum = "sha256:c778ae4fd11e5dc2dbddfd7108ee1974ae60fd531afb246be41c6e4bb49c81ca"
+url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.1.12/agy_cli_linux_x64.tar.gz"
+url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/509437201"
 
 [tools.antigravity-cli."platforms.linux-x64-baseline"]
-checksum = "sha256:caef1dd4c99c57dee1d1dec2b6c67726df535ea49ec71eabadd36daff8223d19"
-url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.1.11/agy_cli_linux_x64.tar.gz"
-url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/504498965"
+checksum = "sha256:c778ae4fd11e5dc2dbddfd7108ee1974ae60fd531afb246be41c6e4bb49c81ca"
+url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.1.12/agy_cli_linux_x64.tar.gz"
+url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/509437201"
 
 [tools.antigravity-cli."platforms.linux-x64-musl"]
-checksum = "sha256:caef1dd4c99c57dee1d1dec2b6c67726df535ea49ec71eabadd36daff8223d19"
-url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.1.11/agy_cli_linux_x64.tar.gz"
-url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/504498965"
+checksum = "sha256:c778ae4fd11e5dc2dbddfd7108ee1974ae60fd531afb246be41c6e4bb49c81ca"
+url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.1.12/agy_cli_linux_x64.tar.gz"
+url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/509437201"
 
 [tools.antigravity-cli."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:caef1dd4c99c57dee1d1dec2b6c67726df535ea49ec71eabadd36daff8223d19"
-url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.1.11/agy_cli_linux_x64.tar.gz"
-url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/504498965"
+checksum = "sha256:c778ae4fd11e5dc2dbddfd7108ee1974ae60fd531afb246be41c6e4bb49c81ca"
+url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.1.12/agy_cli_linux_x64.tar.gz"
+url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/509437201"
 
 [tools.antigravity-cli."platforms.macos-arm64"]
-checksum = "sha256:97cb909d30dbb2bf232d3d10e5dbc8bc008f0e7030400b515a182e490bdd6f08"
-url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.1.11/agy_cli_mac_arm64.tar.gz"
-url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/504499040"
+checksum = "sha256:7b70bdf27727a68d58c1bebfd3fd2e87d1172dc32eab9827d52fd62ad64f286b"
+url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.1.12/agy_cli_mac_arm64.tar.gz"
+url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/509437228"
 
 [tools.antigravity-cli."platforms.macos-x64"]
-checksum = "sha256:a63a189a59a0bd1aeb70236aca0754278f418a4ae6d8ef99c8e3616bfa7a3e73"
-url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.1.11/agy_cli_mac_x64.tar.gz"
-url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/504499142"
+checksum = "sha256:82f5ccc62ae77e202c33cd0347b564ffe645b7cdb2a35c45bb6eb34d516e8832"
+url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.1.12/agy_cli_mac_x64.tar.gz"
+url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/509437252"
 
 [tools.antigravity-cli."platforms.macos-x64-baseline"]
-checksum = "sha256:a63a189a59a0bd1aeb70236aca0754278f418a4ae6d8ef99c8e3616bfa7a3e73"
-url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.1.11/agy_cli_mac_x64.tar.gz"
-url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/504499142"
+checksum = "sha256:82f5ccc62ae77e202c33cd0347b564ffe645b7cdb2a35c45bb6eb34d516e8832"
+url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.1.12/agy_cli_mac_x64.tar.gz"
+url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/509437252"
 
 [tools.antigravity-cli."platforms.windows-x64"]
-checksum = "sha256:d03b782e4ec278fb7b8d2d12621f8cbd976ce96ff9bfcbd7bdaf2c15c9368709"
-url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.1.11/agy_cli_windows_x64.zip"
-url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/504499581"
+checksum = "sha256:270d71910675d614499a0f7f165f275aff0a03c00b0f92cc9ed09f352c58de85"
+url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.1.12/agy_cli_windows_x64.zip"
+url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/509437340"
 
 [tools.antigravity-cli."platforms.windows-x64-baseline"]
-checksum = "sha256:d03b782e4ec278fb7b8d2d12621f8cbd976ce96ff9bfcbd7bdaf2c15c9368709"
-url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.1.11/agy_cli_windows_x64.zip"
-url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/504499581"
+checksum = "sha256:270d71910675d614499a0f7f165f275aff0a03c00b0f92cc9ed09f352c58de85"
+url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.1.12/agy_cli_windows_x64.zip"
+url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/509437340"
 
 [[tools."aqua:betterleaks/betterleaks"]]
-version = "1.7.3"
+version = "1.7.4"
 backend = "aqua:betterleaks/betterleaks"
 
 [tools."aqua:betterleaks/betterleaks"."platforms.linux-arm64"]
-checksum = "sha256:0541cd2980964a6fb8ea768e8b9507c91a3c06229193462f33a3ecd9cb146b99"
-url = "https://github.com/betterleaks/betterleaks/releases/download/v1.7.3/betterleaks_1.7.3_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/betterleaks/betterleaks/releases/assets/496917586"
+checksum = "sha256:038d8379935fb6699e12c2c95d0d4901a1ef420cbc553b7c4d4710570d03024e"
+url = "https://github.com/betterleaks/betterleaks/releases/download/v1.7.4/betterleaks_1.7.4_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/betterleaks/betterleaks/releases/assets/508893143"
 provenance = "cosign"
 
 [tools."aqua:betterleaks/betterleaks"."platforms.linux-arm64-musl"]
-checksum = "sha256:0541cd2980964a6fb8ea768e8b9507c91a3c06229193462f33a3ecd9cb146b99"
-url = "https://github.com/betterleaks/betterleaks/releases/download/v1.7.3/betterleaks_1.7.3_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/betterleaks/betterleaks/releases/assets/496917586"
+checksum = "sha256:038d8379935fb6699e12c2c95d0d4901a1ef420cbc553b7c4d4710570d03024e"
+url = "https://github.com/betterleaks/betterleaks/releases/download/v1.7.4/betterleaks_1.7.4_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/betterleaks/betterleaks/releases/assets/508893143"
 provenance = "cosign"
 
 [tools."aqua:betterleaks/betterleaks"."platforms.linux-x64"]
-checksum = "sha256:9d2ed6fc387bc1c3f95557d5539077b1ce422f0db5ec38db5f14a141ad2947bf"
-url = "https://github.com/betterleaks/betterleaks/releases/download/v1.7.3/betterleaks_1.7.3_linux_x64.tar.gz"
-url_api = "https://api.github.com/repos/betterleaks/betterleaks/releases/assets/496917600"
+checksum = "sha256:9ed7739a39a26a2217f38726bff8a8f4fe079d3b21272caa7959823ccc444d96"
+url = "https://github.com/betterleaks/betterleaks/releases/download/v1.7.4/betterleaks_1.7.4_linux_x64.tar.gz"
+url_api = "https://api.github.com/repos/betterleaks/betterleaks/releases/assets/508893151"
 provenance = "cosign"
 
 [tools."aqua:betterleaks/betterleaks"."platforms.linux-x64-baseline"]
-checksum = "sha256:9d2ed6fc387bc1c3f95557d5539077b1ce422f0db5ec38db5f14a141ad2947bf"
-url = "https://github.com/betterleaks/betterleaks/releases/download/v1.7.3/betterleaks_1.7.3_linux_x64.tar.gz"
-url_api = "https://api.github.com/repos/betterleaks/betterleaks/releases/assets/496917600"
+checksum = "sha256:9ed7739a39a26a2217f38726bff8a8f4fe079d3b21272caa7959823ccc444d96"
+url = "https://github.com/betterleaks/betterleaks/releases/download/v1.7.4/betterleaks_1.7.4_linux_x64.tar.gz"
+url_api = "https://api.github.com/repos/betterleaks/betterleaks/releases/assets/508893151"
 provenance = "cosign"
 
 [tools."aqua:betterleaks/betterleaks"."platforms.linux-x64-musl"]
-checksum = "sha256:9d2ed6fc387bc1c3f95557d5539077b1ce422f0db5ec38db5f14a141ad2947bf"
-url = "https://github.com/betterleaks/betterleaks/releases/download/v1.7.3/betterleaks_1.7.3_linux_x64.tar.gz"
-url_api = "https://api.github.com/repos/betterleaks/betterleaks/releases/assets/496917600"
+checksum = "sha256:9ed7739a39a26a2217f38726bff8a8f4fe079d3b21272caa7959823ccc444d96"
+url = "https://github.com/betterleaks/betterleaks/releases/download/v1.7.4/betterleaks_1.7.4_linux_x64.tar.gz"
+url_api = "https://api.github.com/repos/betterleaks/betterleaks/releases/assets/508893151"
 provenance = "cosign"
 
 [tools."aqua:betterleaks/betterleaks"."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:9d2ed6fc387bc1c3f95557d5539077b1ce422f0db5ec38db5f14a141ad2947bf"
-url = "https://github.com/betterleaks/betterleaks/releases/download/v1.7.3/betterleaks_1.7.3_linux_x64.tar.gz"
-url_api = "https://api.github.com/repos/betterleaks/betterleaks/releases/assets/496917600"
+checksum = "sha256:9ed7739a39a26a2217f38726bff8a8f4fe079d3b21272caa7959823ccc444d96"
+url = "https://github.com/betterleaks/betterleaks/releases/download/v1.7.4/betterleaks_1.7.4_linux_x64.tar.gz"
+url_api = "https://api.github.com/repos/betterleaks/betterleaks/releases/assets/508893151"
 provenance = "cosign"
 
 [tools."aqua:betterleaks/betterleaks"."platforms.macos-arm64"]
-checksum = "sha256:068449bf665a07d17389a38ddee749be7d5484254e9262018e138e94b43f10c0"
-url = "https://github.com/betterleaks/betterleaks/releases/download/v1.7.3/betterleaks_1.7.3_darwin_arm64.tar.gz"
-url_api = "https://api.github.com/repos/betterleaks/betterleaks/releases/assets/496917587"
+checksum = "sha256:9d68ab4a009a26f3f35131f321ddff11e53aaa5608a1633308836a802fe2f732"
+url = "https://github.com/betterleaks/betterleaks/releases/download/v1.7.4/betterleaks_1.7.4_darwin_arm64.tar.gz"
+url_api = "https://api.github.com/repos/betterleaks/betterleaks/releases/assets/508893148"
 provenance = "cosign"
 
 [tools."aqua:betterleaks/betterleaks"."platforms.macos-x64"]
-checksum = "sha256:2216363235feb5ad3696f6745c40a78156adce0c05dfb06a5eeca6d25e4aeed2"
-url = "https://github.com/betterleaks/betterleaks/releases/download/v1.7.3/betterleaks_1.7.3_darwin_x64.tar.gz"
-url_api = "https://api.github.com/repos/betterleaks/betterleaks/releases/assets/496917598"
+checksum = "sha256:36afd22f9cfc90c1de83a9fd4a6181e3d9a7ca473783bcfed826998a64029e11"
+url = "https://github.com/betterleaks/betterleaks/releases/download/v1.7.4/betterleaks_1.7.4_darwin_x64.tar.gz"
+url_api = "https://api.github.com/repos/betterleaks/betterleaks/releases/assets/508893142"
 provenance = "cosign"
 
 [tools."aqua:betterleaks/betterleaks"."platforms.macos-x64-baseline"]
-checksum = "sha256:2216363235feb5ad3696f6745c40a78156adce0c05dfb06a5eeca6d25e4aeed2"
-url = "https://github.com/betterleaks/betterleaks/releases/download/v1.7.3/betterleaks_1.7.3_darwin_x64.tar.gz"
-url_api = "https://api.github.com/repos/betterleaks/betterleaks/releases/assets/496917598"
+checksum = "sha256:36afd22f9cfc90c1de83a9fd4a6181e3d9a7ca473783bcfed826998a64029e11"
+url = "https://github.com/betterleaks/betterleaks/releases/download/v1.7.4/betterleaks_1.7.4_darwin_x64.tar.gz"
+url_api = "https://api.github.com/repos/betterleaks/betterleaks/releases/assets/508893142"
 provenance = "cosign"
 
 [tools."aqua:betterleaks/betterleaks"."platforms.windows-x64"]
-checksum = "sha256:076497e033d034669416fd926af6fb171ce750112c4c68ed0c708c238d42938a"
-url = "https://github.com/betterleaks/betterleaks/releases/download/v1.7.3/betterleaks_1.7.3_windows_x64.zip"
-url_api = "https://api.github.com/repos/betterleaks/betterleaks/releases/assets/496917589"
+checksum = "sha256:085cc79a0cdf1dc86bcf087b2bfbd337dd996fd55bfc3f9e63f9f5144437e2b2"
+url = "https://github.com/betterleaks/betterleaks/releases/download/v1.7.4/betterleaks_1.7.4_windows_x64.zip"
+url_api = "https://api.github.com/repos/betterleaks/betterleaks/releases/assets/508893178"
 provenance = "cosign"
 
 [tools."aqua:betterleaks/betterleaks"."platforms.windows-x64-baseline"]
-checksum = "sha256:076497e033d034669416fd926af6fb171ce750112c4c68ed0c708c238d42938a"
-url = "https://github.com/betterleaks/betterleaks/releases/download/v1.7.3/betterleaks_1.7.3_windows_x64.zip"
-url_api = "https://api.github.com/repos/betterleaks/betterleaks/releases/assets/496917589"
+checksum = "sha256:085cc79a0cdf1dc86bcf087b2bfbd337dd996fd55bfc3f9e63f9f5144437e2b2"
+url = "https://github.com/betterleaks/betterleaks/releases/download/v1.7.4/betterleaks_1.7.4_windows_x64.zip"
+url_api = "https://api.github.com/repos/betterleaks/betterleaks/releases/assets/508893178"
 provenance = "cosign"
 
 [[tools."aqua:jackchuka/mdschema"]]
@@ -4091,38 +4091,38 @@ url = "https://github.com/rtk-ai/rtk/releases/download/v0.45.0/rtk-x86_64-pc-win
 url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/504971578"
 
 [[tools.aws-cli]]
-version = "2.36.19"
+version = "2.36.23"
 backend = "aqua:aws/aws-cli"
 
 [tools.aws-cli."platforms.linux-arm64"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.36.19.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.36.23.zip"
 
 [tools.aws-cli."platforms.linux-arm64-musl"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.36.19.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.36.23.zip"
 
 [tools.aws-cli."platforms.linux-x64"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.36.19.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.36.23.zip"
 
 [tools.aws-cli."platforms.linux-x64-baseline"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.36.19.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.36.23.zip"
 
 [tools.aws-cli."platforms.linux-x64-musl"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.36.19.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.36.23.zip"
 
 [tools.aws-cli."platforms.linux-x64-musl-baseline"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.36.19.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.36.23.zip"
 
 [tools.aws-cli."platforms.macos-arm64"]
-url = "https://awscli.amazonaws.com/AWSCLIV2-2.36.19.pkg"
+url = "https://awscli.amazonaws.com/AWSCLIV2-2.36.23.pkg"
 
 [tools.aws-cli."platforms.macos-x64"]
-url = "https://awscli.amazonaws.com/AWSCLIV2-2.36.19.pkg"
+url = "https://awscli.amazonaws.com/AWSCLIV2-2.36.23.pkg"
 
 [tools.aws-cli."platforms.macos-x64-baseline"]
-url = "https://awscli.amazonaws.com/AWSCLIV2-2.36.19.pkg"
+url = "https://awscli.amazonaws.com/AWSCLIV2-2.36.23.pkg"
 
 [[tools.azure-cli]]
-version = "2.89.0"
+version = "2.89.1"
 backend = "pipx:azure-cli"
 
 [tools.azure-cli.options]
@@ -5373,63 +5373,75 @@ url = "https://download.docker.com/win/static/stable/x86_64/docker-29.7.2.zip"
 url = "https://download.docker.com/win/static/stable/x86_64/docker-29.7.2.zip"
 
 [[tools.doppler]]
-version = "3.76.1"
+version = "3.76.4"
 backend = "github:DopplerHQ/cli"
 
 [tools.doppler."platforms.linux-arm64"]
-checksum = "sha256:dda599a4cfb9069100ab97592cc08fa8d807b3cd992e3e14c0d1467dea1bab84"
-url = "https://github.com/DopplerHQ/cli/releases/download/3.76.1/doppler_3.76.1_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/484827575"
+checksum = "sha256:87c80d4e44dfd7b25012c8545b69203ed166a58e5b3d7b43bb7de90f5651efea"
+url = "https://github.com/DopplerHQ/cli/releases/download/3.76.4/doppler_3.76.4_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/513541329"
+provenance = "github-attestations"
 
 [tools.doppler."platforms.linux-arm64-musl"]
-checksum = "sha256:dda599a4cfb9069100ab97592cc08fa8d807b3cd992e3e14c0d1467dea1bab84"
-url = "https://github.com/DopplerHQ/cli/releases/download/3.76.1/doppler_3.76.1_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/484827575"
+checksum = "sha256:87c80d4e44dfd7b25012c8545b69203ed166a58e5b3d7b43bb7de90f5651efea"
+url = "https://github.com/DopplerHQ/cli/releases/download/3.76.4/doppler_3.76.4_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/513541329"
+provenance = "github-attestations"
 
 [tools.doppler."platforms.linux-x64"]
-checksum = "sha256:e35230bd21fdbd7e41ddcb24672ec61cecefdb22de244d0216ea6b59853f63f2"
-url = "https://github.com/DopplerHQ/cli/releases/download/3.76.1/doppler_3.76.1_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/484827552"
+checksum = "sha256:6a3640467f1365028b8bd41679384dad1ab72a40cb0b027d371e7e39e4a29d9b"
+url = "https://github.com/DopplerHQ/cli/releases/download/3.76.4/doppler_3.76.4_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/513541314"
+provenance = "github-attestations"
+provenance_verified = true
 
 [tools.doppler."platforms.linux-x64-baseline"]
-checksum = "sha256:e35230bd21fdbd7e41ddcb24672ec61cecefdb22de244d0216ea6b59853f63f2"
-url = "https://github.com/DopplerHQ/cli/releases/download/3.76.1/doppler_3.76.1_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/484827552"
+checksum = "sha256:6a3640467f1365028b8bd41679384dad1ab72a40cb0b027d371e7e39e4a29d9b"
+url = "https://github.com/DopplerHQ/cli/releases/download/3.76.4/doppler_3.76.4_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/513541314"
+provenance = "github-attestations"
 
 [tools.doppler."platforms.linux-x64-musl"]
-checksum = "sha256:e35230bd21fdbd7e41ddcb24672ec61cecefdb22de244d0216ea6b59853f63f2"
-url = "https://github.com/DopplerHQ/cli/releases/download/3.76.1/doppler_3.76.1_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/484827552"
+checksum = "sha256:6a3640467f1365028b8bd41679384dad1ab72a40cb0b027d371e7e39e4a29d9b"
+url = "https://github.com/DopplerHQ/cli/releases/download/3.76.4/doppler_3.76.4_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/513541314"
+provenance = "github-attestations"
 
 [tools.doppler."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:e35230bd21fdbd7e41ddcb24672ec61cecefdb22de244d0216ea6b59853f63f2"
-url = "https://github.com/DopplerHQ/cli/releases/download/3.76.1/doppler_3.76.1_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/484827552"
+checksum = "sha256:6a3640467f1365028b8bd41679384dad1ab72a40cb0b027d371e7e39e4a29d9b"
+url = "https://github.com/DopplerHQ/cli/releases/download/3.76.4/doppler_3.76.4_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/513541314"
+provenance = "github-attestations"
 
 [tools.doppler."platforms.macos-arm64"]
-checksum = "sha256:bab723d5eeb0378ec21a6c315df851a355cee1b02f12cd93890dc37c1631129e"
-url = "https://github.com/DopplerHQ/cli/releases/download/3.76.1/doppler_3.76.1_macOS_arm64.tar.gz"
-url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/484827543"
+checksum = "sha256:3a7e42461bae88a7e26ed8cc12a20f0834d477c64d0a9b3416aa49743f0492c2"
+url = "https://github.com/DopplerHQ/cli/releases/download/3.76.4/doppler_3.76.4_macOS_arm64.tar.gz"
+url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/513541349"
+provenance = "github-attestations"
 
 [tools.doppler."platforms.macos-x64"]
-checksum = "sha256:72bc2a5fe35a7d493366ba19c1153be267eb1e677dd0fcf460ed95d2b4dbc05b"
-url = "https://github.com/DopplerHQ/cli/releases/download/3.76.1/doppler_3.76.1_macOS_amd64.tar.gz"
-url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/484827580"
+checksum = "sha256:b1ada08828442d6cc21636329ec66b2b20252dd22bfb19ff2d887b003750b6cf"
+url = "https://github.com/DopplerHQ/cli/releases/download/3.76.4/doppler_3.76.4_macOS_amd64.tar.gz"
+url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/513541348"
+provenance = "github-attestations"
 
 [tools.doppler."platforms.macos-x64-baseline"]
-checksum = "sha256:72bc2a5fe35a7d493366ba19c1153be267eb1e677dd0fcf460ed95d2b4dbc05b"
-url = "https://github.com/DopplerHQ/cli/releases/download/3.76.1/doppler_3.76.1_macOS_amd64.tar.gz"
-url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/484827580"
+checksum = "sha256:b1ada08828442d6cc21636329ec66b2b20252dd22bfb19ff2d887b003750b6cf"
+url = "https://github.com/DopplerHQ/cli/releases/download/3.76.4/doppler_3.76.4_macOS_amd64.tar.gz"
+url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/513541348"
+provenance = "github-attestations"
 
 [tools.doppler."platforms.windows-x64"]
-checksum = "sha256:525da8c8dedc4b7b3e5429297500cf3e559a3a82eb28a8c72d416716f777be2c"
-url = "https://github.com/DopplerHQ/cli/releases/download/3.76.1/doppler_3.76.1_windows_amd64.zip"
-url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/484827568"
+checksum = "sha256:97547f016a682550ea2f037c645b555b10b4346df916e1d8596aefa5ade79f33"
+url = "https://github.com/DopplerHQ/cli/releases/download/3.76.4/doppler_3.76.4_windows_amd64.zip"
+url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/513541325"
+provenance = "github-attestations"
 
 [tools.doppler."platforms.windows-x64-baseline"]
-checksum = "sha256:525da8c8dedc4b7b3e5429297500cf3e559a3a82eb28a8c72d416716f777be2c"
-url = "https://github.com/DopplerHQ/cli/releases/download/3.76.1/doppler_3.76.1_windows_amd64.zip"
-url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/484827568"
+checksum = "sha256:97547f016a682550ea2f037c645b555b10b4346df916e1d8596aefa5ade79f33"
+url = "https://github.com/DopplerHQ/cli/releases/download/3.76.4/doppler_3.76.4_windows_amd64.zip"
+url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/513541325"
+provenance = "github-attestations"
 
 [[tools.editorconfig-checker]]
 version = "3.11.1"
@@ -5491,62 +5503,62 @@ url = "https://github.com/editorconfig-checker/editorconfig-checker/releases/dow
 url_api = "https://api.github.com/repos/editorconfig-checker/editorconfig-checker/releases/assets/506306105"
 
 [[tools."github:agent-sh/agnix"]]
-version = "0.47.0"
+version = "0.48.0"
 backend = "github:agent-sh/agnix"
 
 [tools."github:agent-sh/agnix"."platforms.linux-arm64"]
-checksum = "sha256:ec837a96bedf4e4c65c2b2dd37549b0d8e11a46efeb4fbe61a8eee2d237e31e5"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.47.0/agnix-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/506835503"
+checksum = "sha256:c8ddfa48d6bc3d35ef0625a7292c9be1d7a0a7f2fbced769fac284a5fdf005f5"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.48.0/agnix-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/507458355"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.linux-arm64-musl"]
-checksum = "sha256:ec837a96bedf4e4c65c2b2dd37549b0d8e11a46efeb4fbe61a8eee2d237e31e5"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.47.0/agnix-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/506835503"
+checksum = "sha256:c8ddfa48d6bc3d35ef0625a7292c9be1d7a0a7f2fbced769fac284a5fdf005f5"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.48.0/agnix-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/507458355"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.linux-x64"]
-checksum = "sha256:d02045e2374d2a096fb5877316c3ec1bccae25327ac1e021ddcf1c15f81391af"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.47.0/agnix-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/506835506"
+checksum = "sha256:da8a0fd2389f2fa442721ca1ecf447bc0de64bf629014f11336eaccbfe8aa2e8"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.48.0/agnix-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/507458358"
 provenance = "github-attestations"
 provenance_verified = true
 
 [tools."github:agent-sh/agnix"."platforms.linux-x64-baseline"]
-checksum = "sha256:d02045e2374d2a096fb5877316c3ec1bccae25327ac1e021ddcf1c15f81391af"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.47.0/agnix-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/506835506"
+checksum = "sha256:da8a0fd2389f2fa442721ca1ecf447bc0de64bf629014f11336eaccbfe8aa2e8"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.48.0/agnix-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/507458358"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.linux-x64-musl"]
-checksum = "sha256:a6ee7f5c5624fe31b93ac592807d0540e1099ed8f021babea4c3d2e78e920b95"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.47.0/agnix-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/506835504"
+checksum = "sha256:de6e4ced31e8cee2065dd37f8df3647eef6fcebe475540b9f05c9098cc06164c"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.48.0/agnix-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/507458366"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:a6ee7f5c5624fe31b93ac592807d0540e1099ed8f021babea4c3d2e78e920b95"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.47.0/agnix-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/506835504"
+checksum = "sha256:de6e4ced31e8cee2065dd37f8df3647eef6fcebe475540b9f05c9098cc06164c"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.48.0/agnix-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/507458366"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.macos-arm64"]
-checksum = "sha256:827b8f4add99d2bd318e516315c0090c6a697ab3c7c3196df414001907a18fa8"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.47.0/agnix-aarch64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/506835501"
+checksum = "sha256:d7cc221ffcd040373abb7c3ae82c74c8ef5922a5c9f7aec1236a7f1aeb1f164c"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.48.0/agnix-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/507458368"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.windows-x64"]
-checksum = "sha256:811b546106eb05f04469a805231600c77d73457e718ac7364ddb4d97ce554c82"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.47.0/agnix-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/506835496"
+checksum = "sha256:ed68a8588217d53af5678682a41f3365d5745c5e913a4c013cb013c4e1e598f8"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.48.0/agnix-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/507458349"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.windows-x64-baseline"]
-checksum = "sha256:811b546106eb05f04469a805231600c77d73457e718ac7364ddb4d97ce554c82"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.47.0/agnix-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/506835496"
+checksum = "sha256:ed68a8588217d53af5678682a41f3365d5745c5e913a4c013cb013c4e1e598f8"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.48.0/agnix-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/507458349"
 provenance = "github-attestations"
 
 [[tools."github:ast-grep/ast-grep"]]
@@ -5745,7 +5757,7 @@ version = "0.88.0"
 backend = "npm:@devcontainers/cli"
 
 [[tools."npm:agent-browser"]]
-version = "0.33.2"
+version = "0.34.0"
 backend = "npm:agent-browser"
 
 [[tools."npm:agents-lint"]]
@@ -5753,11 +5765,11 @@ version = "0.5.0"
 backend = "npm:agents-lint"
 
 [[tools."npm:claude-code-lint"]]
-version = "0.7.1"
+version = "0.8.0"
 backend = "npm:claude-code-lint"
 
 [[tools."npm:ctx7"]]
-version = "0.5.7"
+version = "0.5.8"
 backend = "npm:ctx7"
 
 [[tools."npm:markdownlint-cli2"]]
@@ -5765,7 +5777,7 @@ version = "0.23.2"
 backend = "npm:markdownlint-cli2"
 
 [[tools."npm:oh-my-claude-sisyphus"]]
-version = "4.15.8"
+version = "4.15.10"
 backend = "npm:oh-my-claude-sisyphus"
 
 [[tools."npm:portless"]]
@@ -5773,7 +5785,7 @@ version = "0.15.5"
 backend = "npm:portless"
 
 [[tools."npm:renovate"]]
-version = "44.14.12"
+version = "44.29.4"
 backend = "npm:renovate"
 
 [[tools."npm:skills"]]
@@ -5781,63 +5793,63 @@ version = "1.5.22"
 backend = "npm:skills"
 
 [[tools.opencode]]
-version = "1.18.15"
+version = "1.18.18"
 backend = "aqua:anomalyco/opencode"
 
 [tools.opencode."platforms.linux-arm64"]
-checksum = "sha256:500611819ff88916b185649990505a9be76ad13ca5bb4b9323e5abdd39b1c6fb"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.18.15/opencode-linux-arm64.tar.gz"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/504765741"
+checksum = "sha256:dcb1b5ec5687b43f87749560021f9203f3809e0ce5ae44ff9be8ae17083fe4ba"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.18.18/opencode-linux-arm64.tar.gz"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/512198871"
 
 [tools.opencode."platforms.linux-arm64-musl"]
-checksum = "sha256:134d46c15c184ed9d5fce7c93423b4040dcdc8547f23fc425e6a7b51e166e18a"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.18.15/opencode-linux-arm64-musl.tar.gz"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/504765653"
+checksum = "sha256:38a7504dab35007c70d2cdf89870b4be63faa60667318a90338798d34f53eab1"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.18.18/opencode-linux-arm64-musl.tar.gz"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/512198930"
 
 [tools.opencode."platforms.linux-x64"]
-checksum = "sha256:d842e0e8c622c672a481b7dc6f0329009b64db96b2ba6041e56f4f93f0293b1c"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.18.15/opencode-linux-x64.tar.gz"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/504765645"
+checksum = "sha256:0cddc222418b8553669905a8980c0cda7088f00da24d83d6ac76b01c9fdb2aaf"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.18.18/opencode-linux-x64.tar.gz"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/512198862"
 
 [tools.opencode."platforms.linux-x64-baseline"]
-checksum = "sha256:d842e0e8c622c672a481b7dc6f0329009b64db96b2ba6041e56f4f93f0293b1c"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.18.15/opencode-linux-x64.tar.gz"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/504765645"
+checksum = "sha256:0cddc222418b8553669905a8980c0cda7088f00da24d83d6ac76b01c9fdb2aaf"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.18.18/opencode-linux-x64.tar.gz"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/512198862"
 
 [tools.opencode."platforms.linux-x64-musl"]
-checksum = "sha256:229db770e17f4e493bff8e516b2f191f4ea3430b35f5e6f458c94f4ce7edc01f"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.18.15/opencode-linux-x64-musl.tar.gz"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/504765636"
+checksum = "sha256:60279c62d2182aa4279cea4d5a84d23437f8074042cbbed4a2bfa70e5acbd193"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.18.18/opencode-linux-x64-musl.tar.gz"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/512198876"
 
 [tools.opencode."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:229db770e17f4e493bff8e516b2f191f4ea3430b35f5e6f458c94f4ce7edc01f"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.18.15/opencode-linux-x64-musl.tar.gz"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/504765636"
+checksum = "sha256:60279c62d2182aa4279cea4d5a84d23437f8074042cbbed4a2bfa70e5acbd193"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.18.18/opencode-linux-x64-musl.tar.gz"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/512198876"
 
 [tools.opencode."platforms.macos-arm64"]
-checksum = "sha256:bd60b57cb9fe0494a5352c807424d36d6d7853cf6dbddb97065c7ccd3c5d391c"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.18.15/opencode-darwin-arm64.zip"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/504765572"
+checksum = "sha256:7d668bf26496fec8686d4e51ebb1ac2bd2e393f0c1620aa696c4c242a9e5806a"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.18.18/opencode-darwin-arm64.zip"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/512198799"
 
 [tools.opencode."platforms.macos-x64"]
-checksum = "sha256:e97e8185e7b7942f6e14f51b8727dbe023b54772e075bc16fead813680455d17"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.18.15/opencode-darwin-x64.zip"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/504765570"
+checksum = "sha256:9581bd7683a7528456179fb11e3377d9ef568e10a935611a2c6722e349454d83"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.18.18/opencode-darwin-x64.zip"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/512198795"
 
 [tools.opencode."platforms.macos-x64-baseline"]
-checksum = "sha256:e97e8185e7b7942f6e14f51b8727dbe023b54772e075bc16fead813680455d17"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.18.15/opencode-darwin-x64.zip"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/504765570"
+checksum = "sha256:9581bd7683a7528456179fb11e3377d9ef568e10a935611a2c6722e349454d83"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.18.18/opencode-darwin-x64.zip"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/512198795"
 
 [tools.opencode."platforms.windows-x64"]
-checksum = "sha256:a80785874978ccbb93b7bfe4345f5aed41696f5ae76c109cd6dbbb934dbe795d"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.18.15/opencode-windows-x64.zip"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/504769917"
+checksum = "sha256:c6d265376fdb93164013671b0cf402410184f73c34fc15d82d40a16a745b15f4"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.18.18/opencode-windows-x64.zip"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/512201969"
 
 [tools.opencode."platforms.windows-x64-baseline"]
-checksum = "sha256:a80785874978ccbb93b7bfe4345f5aed41696f5ae76c109cd6dbbb934dbe795d"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.18.15/opencode-windows-x64.zip"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/504769917"
+checksum = "sha256:c6d265376fdb93164013671b0cf402410184f73c34fc15d82d40a16a745b15f4"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.18.18/opencode-windows-x64.zip"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/512201969"
 
 [[tools."pipx:deepagents-cli"]]
 version = "0.2.2"
@@ -5848,73 +5860,73 @@ version = "3.3.1"
 backend = "pipx:mcp2cli"
 
 [[tools.rumdl]]
-version = "v0.2.52"
+version = "v0.2.55"
 backend = "aqua:rvben/rumdl"
 
 [tools.rumdl."platforms.linux-arm64"]
-checksum = "sha256:4bd607c1ddda3319bc4c4a5c4937dc0b4004e8342d3fedabc4b2fff8d7b81ad8"
-url = "https://github.com/rvben/rumdl/releases/download/v0.2.52/rumdl-v0.2.52-aarch64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/503021476"
+checksum = "sha256:baed03dac3bf50565f4e1e461fb8162fcff58742034c6d643a1977d9025dfdb6"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.55/rumdl-v0.2.55-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/512169605"
 provenance = "github-attestations"
 
 [tools.rumdl."platforms.linux-arm64-musl"]
-checksum = "sha256:4bd607c1ddda3319bc4c4a5c4937dc0b4004e8342d3fedabc4b2fff8d7b81ad8"
-url = "https://github.com/rvben/rumdl/releases/download/v0.2.52/rumdl-v0.2.52-aarch64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/503021476"
+checksum = "sha256:baed03dac3bf50565f4e1e461fb8162fcff58742034c6d643a1977d9025dfdb6"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.55/rumdl-v0.2.55-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/512169605"
 provenance = "github-attestations"
 
 [tools.rumdl."platforms.linux-x64"]
-checksum = "sha256:47dd0a01e901cc479e30f72dd8ce18da4499f5b202032f73f43f9fbafafa4986"
-url = "https://github.com/rvben/rumdl/releases/download/v0.2.52/rumdl-v0.2.52-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/503021484"
+checksum = "sha256:09c8f72cb57f1ff646d68b5ec2ef6a7b296e6d9f945093db2698c260e81d9f90"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.55/rumdl-v0.2.55-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/512169600"
 provenance = "github-attestations"
 
 [tools.rumdl."platforms.linux-x64-baseline"]
-checksum = "sha256:47dd0a01e901cc479e30f72dd8ce18da4499f5b202032f73f43f9fbafafa4986"
-url = "https://github.com/rvben/rumdl/releases/download/v0.2.52/rumdl-v0.2.52-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/503021484"
+checksum = "sha256:09c8f72cb57f1ff646d68b5ec2ef6a7b296e6d9f945093db2698c260e81d9f90"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.55/rumdl-v0.2.55-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/512169600"
 provenance = "github-attestations"
 
 [tools.rumdl."platforms.linux-x64-musl"]
-checksum = "sha256:47dd0a01e901cc479e30f72dd8ce18da4499f5b202032f73f43f9fbafafa4986"
-url = "https://github.com/rvben/rumdl/releases/download/v0.2.52/rumdl-v0.2.52-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/503021484"
+checksum = "sha256:09c8f72cb57f1ff646d68b5ec2ef6a7b296e6d9f945093db2698c260e81d9f90"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.55/rumdl-v0.2.55-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/512169600"
 provenance = "github-attestations"
 
 [tools.rumdl."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:47dd0a01e901cc479e30f72dd8ce18da4499f5b202032f73f43f9fbafafa4986"
-url = "https://github.com/rvben/rumdl/releases/download/v0.2.52/rumdl-v0.2.52-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/503021484"
+checksum = "sha256:09c8f72cb57f1ff646d68b5ec2ef6a7b296e6d9f945093db2698c260e81d9f90"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.55/rumdl-v0.2.55-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/512169600"
 provenance = "github-attestations"
 
 [tools.rumdl."platforms.macos-arm64"]
-checksum = "sha256:a6baf795f04fc4c6bf7dbb5362b8413df6295a94b32cd3e0c15d1c0b6b68b8ec"
-url = "https://github.com/rvben/rumdl/releases/download/v0.2.52/rumdl-v0.2.52-aarch64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/503021481"
+checksum = "sha256:98dd5620e7eb8ba8fd77830fe1f313530ae2a6368ae867149f7de13dbebde6e3"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.55/rumdl-v0.2.55-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/512169607"
 provenance = "github-attestations"
 
 [tools.rumdl."platforms.macos-x64"]
-checksum = "sha256:d2f9681f86d2e6776524c5ead52d4c3e0be3ce4cde47ce005a81815a2f9f95d3"
-url = "https://github.com/rvben/rumdl/releases/download/v0.2.52/rumdl-v0.2.52-x86_64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/503021480"
+checksum = "sha256:8dadf1b9aeda17f8a41ab4fcdd2a7f7dfb6eda8981ddce3ebf61b72e3d1d3f89"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.55/rumdl-v0.2.55-x86_64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/512169601"
 provenance = "github-attestations"
 
 [tools.rumdl."platforms.macos-x64-baseline"]
-checksum = "sha256:d2f9681f86d2e6776524c5ead52d4c3e0be3ce4cde47ce005a81815a2f9f95d3"
-url = "https://github.com/rvben/rumdl/releases/download/v0.2.52/rumdl-v0.2.52-x86_64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/503021480"
+checksum = "sha256:8dadf1b9aeda17f8a41ab4fcdd2a7f7dfb6eda8981ddce3ebf61b72e3d1d3f89"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.55/rumdl-v0.2.55-x86_64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/512169601"
 provenance = "github-attestations"
 
 [tools.rumdl."platforms.windows-x64"]
-checksum = "sha256:38ba01206380e450129303b9a7b626f41049f9152f7eb0103245854c8c49c80e"
-url = "https://github.com/rvben/rumdl/releases/download/v0.2.52/rumdl-v0.2.52-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/503021485"
+checksum = "sha256:47c04176f960e2d196b1e465564869363469ec00714c2970e1f441deff7f679d"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.55/rumdl-v0.2.55-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/512169608"
 provenance = "github-attestations"
 
 [tools.rumdl."platforms.windows-x64-baseline"]
-checksum = "sha256:38ba01206380e450129303b9a7b626f41049f9152f7eb0103245854c8c49c80e"
-url = "https://github.com/rvben/rumdl/releases/download/v0.2.52/rumdl-v0.2.52-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/503021485"
+checksum = "sha256:47c04176f960e2d196b1e465564869363469ec00714c2970e1f441deff7f679d"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.55/rumdl-v0.2.55-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/512169608"
 provenance = "github-attestations"
 
 [[tools.zizmor]]
