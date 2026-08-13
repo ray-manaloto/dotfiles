@@ -287,9 +287,9 @@ def _add_session_evidence_arguments(review_parser: argparse.ArgumentParser) -> N
         help="Reviewed JSON prevention receipts for confirmed findings",
     )
     review_parser.add_argument(
-        "--session-id",
-        default=os.environ.get("CODEX_THREAD_ID", ""),
-        help="Native current session/thread id; CODEX_THREAD_ID is the fallback",
+        "--codex-session-id",
+        default=os.environ.get("CODEX_THREAD_ID", "").strip() or None,
+        help="Native Codex thread id; defaults only from a nonempty CODEX_THREAD_ID",
     )
     review_parser.add_argument(
         "--receipt-run-id",
@@ -2109,7 +2109,7 @@ def _build_command_handlers(
                     requirements_only=args.requirements_only,
                     source_repo_root=args.source_repo_root,
                     dispositions=args.dispositions,
-                    session_id=args.session_id or None,
+                    codex_session_id=args.codex_session_id,
                     receipt_run_id=args.receipt_run_id,
                     max_iterations=args.max_iterations,
                 ),

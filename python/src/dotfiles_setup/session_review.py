@@ -190,6 +190,7 @@ class LaneChoice:
     source_repo_root: Path | None = None
     dispositions: Path | None = None
     session_id: str | None = None
+    codex_session_id: str | None = None
     receipt_run_id: str = ""
     max_iterations: int = 1
 
@@ -500,16 +501,16 @@ def session_review_main(
 
     shapes: list[ShapeCandidate] = []
     hits: list[NarrativeHit] = []
-    lanes: list[str] = []
+    lane_names: list[str] = []
     scanned = 0
     if not narrative_only:
-        lanes.append("transcript")
+        lane_names.append("transcript")
         base = command_audit.transcripts_base()
         paths = command_audit.project_transcripts(base, repo_root, limit=sessions)
         scanned = len(paths)
         shapes = shape_candidates(command_audit.iter_bash_commands(paths))
     if not transcript_only:
-        lanes.append("narrative")
+        lane_names.append("narrative")
         hits = scan_narrative(
             repo_root,
             narrative.patterns,
@@ -522,8 +523,16 @@ def session_review_main(
         hits,
         transcripts_scanned=scanned,
         tail_lines=narrative.tail_lines if not transcript_only else None,
-        lanes=tuple(lanes),
+        lanes=tuple(lane_names),
     )
+    if not transcript_only and not narrative_only:
+        return _requirements_review(
+            repo_root,
+            lanes,
+            sessions,
+            output,
+            automation_report=report,
+        )
     if output is None:
         logger.info("%s", report)
         return 0
@@ -542,31 +551,34 @@ def _requirements_review(
     lanes: LaneChoice,
     sessions: int,
     output: Path | None,
+    automation_report: str = "",
 ) -> int:
     """Collect bounded native evidence and fail closed on every omission."""
-    if lanes.source_repo_root is None:
+    if lanes.requirements_only and lanes.source_repo_root is None:
         logger.error(
             "--requirements-only requires --source-repo-root so transcript cwd "
             "selection is explicit"
         )
         return 2
+    source_repo_root = lanes.source_repo_root or repo_root
+    codex_session_id = lanes.codex_session_id or lanes.session_id
     dispositions: tuple[session_ledger.PreventionDisposition, ...] = ()
     if lanes.dispositions is not None:
         try:
             dispositions = session_ledger.load_dispositions(
                 lanes.dispositions,
-                repo_root=lanes.source_repo_root,
+                repo_root=source_repo_root,
                 run_id=lanes.receipt_run_id,
             )
         except OSError, TypeError, ValueError, json.JSONDecodeError:
             logger.exception("invalid prevention dispositions")
             return 2
     coverage = session_ledger.build_requirement_coverage(
-        lanes.source_repo_root,
+        source_repo_root,
         dispositions=dispositions,
         selection=session_ledger.CoverageSelection(
             limit=sessions,
-            session_id=lanes.session_id,
+            codex_session_id=codex_session_id,
             require_active_identity=True,
         ),
     )
@@ -576,8 +588,8 @@ def _requirements_review(
         number=1,
         context=session_ledger.IterationContext(
             lanes.max_iterations,
-            str(lanes.source_repo_root.resolve()),
-            lanes.session_id or "",
+            str(source_repo_root.resolve()),
+            codex_session_id or "",
         ),
         previous_disposition_ids=prior_dispositions,
     )
@@ -586,11 +598,11 @@ def _requirements_review(
             break
         prior_dispositions = iteration.disposition_ids
         coverage = session_ledger.build_requirement_coverage(
-            lanes.source_repo_root,
+            source_repo_root,
             dispositions=dispositions,
             selection=session_ledger.CoverageSelection(
                 limit=sessions,
-                session_id=lanes.session_id,
+                codex_session_id=codex_session_id,
                 require_active_identity=True,
             ),
         )
@@ -599,12 +611,17 @@ def _requirements_review(
             number=number,
             context=session_ledger.IterationContext(
                 lanes.max_iterations,
-                str(lanes.source_repo_root.resolve()),
-                lanes.session_id or "",
+                str(source_repo_root.resolve()),
+                codex_session_id or "",
             ),
             previous_disposition_ids=prior_dispositions,
         )
-    report = session_ledger.render_coverage(coverage)
+    requirements_report = session_ledger.render_coverage(coverage)
+    report = (
+        f"{automation_report.rstrip()}\n\n{requirements_report}"
+        if automation_report
+        else requirements_report
+    )
     destination = output or Path(".agent/session-review.md")
     try:
         evidence = coverage.to_json()

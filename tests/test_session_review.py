@@ -514,7 +514,11 @@ def test_mise_requirement_task_exposes_required_root_and_configurable_limit(
     assert arguments[0]["required"]
     assert arguments[1]["name"] == "max_sessions"
     assert arguments[1]["default"] == ["5"]
-    assert arguments[3]["name"] == "session_id"
+    assert [item["name"] for item in arguments] == [
+        "source_repo_root",
+        "max_sessions",
+        "max_iterations",
+    ]
     assert "uv run --project python" in payload["run"][0]
 
     ignored = subprocess.run(
@@ -572,7 +576,7 @@ def test_real_cli_runs_requirements_only(tmp_path: Path) -> None:
             "--requirements-only",
             "--source-repo-root",
             str(REPO_ROOT),
-            "--session-id",
+            "--codex-session-id",
             "root-session",
             "--output",
             str(output),
@@ -589,6 +593,65 @@ def test_real_cli_runs_requirements_only(tmp_path: Path) -> None:
     assert iteration["action"] == "needs_agent_action"
     assert iteration["unreviewed_requirement_ids"]
     assert "Do not publish" in output.read_text()
+
+
+def test_default_cli_includes_automation_and_dual_provider_requirements(
+    tmp_path: Path,
+) -> None:
+    codex_sessions = tmp_path / "codex" / "sessions" / "2026" / "08" / "12"
+    codex_sessions.mkdir(parents=True)
+    fixture_root = REPO_ROOT / "tests" / "fixtures" / "session_review"
+    (codex_sessions / "root.jsonl").write_text(
+        (fixture_root / "codex-root.jsonl")
+        .read_text()
+        .replace('"cwd":"/repo"', f'"cwd":"{REPO_ROOT}"')
+    )
+    claude_projects = tmp_path / "claude" / "projects"
+    claude_project = claude_projects / session_review.command_audit.encode_cwd(
+        REPO_ROOT
+    )
+    claude_project.mkdir(parents=True)
+    (claude_project / "claude-root.jsonl").write_bytes(
+        (fixture_root / "claude-root.jsonl").read_bytes()
+    )
+    output = REPO_ROOT / ".agent" / "test-default-session-review.md"
+    output.parent.mkdir(exist_ok=True)
+    env = {
+        **os.environ,
+        "CODEX_HOME": str(tmp_path / "codex"),
+        "CODEX_THREAD_ID": "root-session",
+        "CLAUDE_CONFIG_DIR": str(tmp_path / "claude"),
+    }
+    try:
+        result = subprocess.run(
+            [
+                "uv",
+                "run",
+                "--project",
+                str(REPO_ROOT / "python"),
+                "dotfiles-setup",
+                "session-review",
+                "--output",
+                str(output),
+            ],
+            cwd=REPO_ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=120,
+        )
+        assert result.returncode == 1, result.stderr
+        assert output.is_file(), result.stderr
+        report = output.read_text()
+        assert "what was done by hand that should be code" in report
+        assert "Session requirement and promise ledger" in report
+        assert "Do not publish" in report
+        assert "Only free tools" in report
+        assert "Provider census" in report
+    finally:
+        for path in output.parent.glob(f"{output.name}*"):
+            path.unlink()
 
 
 def test_requirements_cli_cannot_certify_active_session_from_recency(
@@ -625,6 +688,42 @@ def test_requirements_cli_cannot_certify_active_session_from_recency(
     )
     assert result.returncode == 1
     assert "active session identity is unverified" in result.stderr
+
+
+def test_codex_session_id_uses_nonempty_environment_fallback() -> None:
+    env = os.environ.copy()
+    env["CODEX_THREAD_ID"] = "codex-active"
+    result = subprocess.run(
+        [
+            "uv",
+            "run",
+            "--project",
+            str(REPO_ROOT / "python"),
+            "python",
+            "-c",
+            (
+                "from dotfiles_setup.main import setup_parser; "
+                "print(setup_parser().parse_args(['session-review']).codex_session_id)"
+            ),
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
+    )
+    assert result.returncode == 0
+    assert result.stdout.strip() == "codex-active"
+
+
+def test_mise_never_forwards_an_empty_codex_session_id() -> None:
+    task = (REPO_ROOT / "mise.toml").read_text()
+    start = task.index("[tasks.session-requirements]")
+    end = task.index("[tasks.session-review-gate]", start)
+    section = task[start:end]
+    assert "--session-id" not in section
+    assert '"${usage_session_id?}"' not in section
 
 
 def test_requirements_cli_requires_an_explicit_source_root() -> None:

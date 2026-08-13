@@ -1288,8 +1288,9 @@ stderr_path = "~/Library/Logs/dotfiles-dag-project.err.log"
 environment = { PATH = "/Users/rmanaloto/.local/share/mise/shims:/Users/rmanaloto/.local/bin:/opt/homebrew/bin:/usr/bin:/bin" }
 
 [tasks.session-review]
-description = "Find what this session did BY HAND that should be code (#654): transcript mine + narrative pass over the notepad/handoffs"
-# Thin caller; see session_review.py. Two DISJOINT lanes, both on by default —
+description = "Review Claude and Codex requirements plus manual-work candidates (#654/#715)"
+# Thin caller; see session_review.py. The default runs requirement coverage plus
+# the two automation-candidate lanes —
 # lane 1 ranks recurring command shapes by session spread, lane 2 surfaces the
 # reasoning sinks that leave no repeated command (#650 was ~15 turns with no
 # repeated one-liner, so lane 1 alone would have missed the best candidate).
@@ -1297,23 +1298,22 @@ description = "Find what this session did BY HAND that should be code (#654): tr
 # verdict: that one asks "should this be a GUARD REDIRECT", this one asks
 # "should this be a SKILL".
 #
-#   mise run session-review                          # both lanes, to stdout
+#   mise run session-review                          # all three lanes
 #   mise run session-review -- --output .agent/session-review.md
 #   mise run session-review -- --narrative-only      # cheap re-check
 #   mise run session-review -- --requirements-only   # lossless evidence ledger
 run = 'uv run --project python dotfiles-setup session-review'
 
 [tasks.session-requirements]
-description = "Review up to five recent Claude and Codex sessions for requirements and promises"
-# Explicit opt-in keeps session-review's established two-lane default unchanged.
+description = "Review bounded Claude roots and the active Codex root for requirements and promises"
+# Requirements-only remains a focused seam; default session-review includes it.
 # Unknown transcript records exit non-zero instead of reading as "no issues".
 usage = '''
 arg "<source_repo_root>" help="Exact checkout path recorded in the transcripts"
 arg "[max_sessions]" help="Maximum root sessions to review" default="5"
 arg "[max_iterations]" help="Maximum agent-team prevention passes (1-5)" default="1"
-arg "[session_id]" help="Native current session/thread id" default=""
 '''
-run = 'uv run --project python dotfiles-setup session-review --requirements-only --sessions "${usage_max_sessions?}" --max-iterations "${usage_max_iterations?}" --source-repo-root "${usage_source_repo_root?}" --session-id "${usage_session_id?}" --output .agent/session-review.md'
+run = 'uv run --project python dotfiles-setup session-review --requirements-only --sessions "${usage_max_sessions?}" --max-iterations "${usage_max_iterations?}" --source-repo-root "${usage_source_repo_root?}" --output .agent/session-review.md'
 
 [tasks.session-review-gate]
 description = "Trusted bounded runner for session-review mutation, gate, and GitHub receipts"

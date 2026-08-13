@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
 DEFAULT_REQUIREMENT_SESSION_LIMIT = 5
+MIN_ATOMIZED_BULLETS = 2
 MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024
 MAX_RENDER_BYTES = 64 * 1024
 _PROMISE = re.compile(
@@ -89,6 +90,9 @@ class EventKind(StrEnum):
     TOOL_CALL = "tool_call"
     TOOL_RESULT = "tool_result"
     TERMINAL_STATE = "terminal_state"
+    CONTINUATION_SUMMARY = "continuation_summary"
+    WARNING = "warning"
+    DIAGNOSTIC = "diagnostic"
 
 
 class ReviewStatus(StrEnum):
@@ -99,6 +103,35 @@ class ReviewStatus(StrEnum):
     SATISFIED = "satisfied"
     WITHDRAWN = "withdrawn"
     CONTRADICTED = "contradicted"
+
+
+class AuthorityProvenance(StrEnum):
+    """Why a claim may (or may not) carry end-user authority."""
+
+    NATIVE_ROOT_USER = "native_root_user"
+    PAIRED_FORM_ANSWER = "paired_form_answer"
+    IMPORTED_HISTORY = "imported_history"
+    NON_AUTHORITATIVE = "non_authoritative"
+
+
+class RequirementKind(StrEnum):
+    """Stable semantic class for one atomized user action item."""
+
+    ACTION = "action"
+    DEPENDENCY_OWNERSHIP = "dependency_ownership"
+    GRAPHIFY_SDK = "graphify_sdk"
+
+
+class RootKind(StrEnum):
+    """Native transcript role used by selection and authority checks."""
+
+    INTERACTIVE = "interactive"
+    EXEC_WORKER = "exec_worker"
+    GUARDIAN = "guardian"
+    SUBAGENT = "subagent"
+    PLUGIN_TASK = "plugin_task"
+    IMPORTED = "imported"
+    UNKNOWN = "unknown"
 
 
 class CoverageStatus(StrEnum):
@@ -167,6 +200,16 @@ class RequirementEntry:
     source_kind: EventKind
     authority_relevant: bool
     status: ReviewStatus = ReviewStatus.UNREVIEWED
+    authority_provenance: AuthorityProvenance = AuthorityProvenance.NATIVE_ROOT_USER
+    kind: RequirementKind = RequirementKind.ACTION
+    target: str = ""
+    timing: str = ""
+    scope: str = ""
+    prerequisites: tuple[str, ...] = ()
+    external_effect: bool = False
+    receipt_refs: tuple[str, ...] = ()
+    parent_statement_sha256: str = ""
+    atom_index: int = 0
 
 
 @dataclass(frozen=True)
@@ -177,6 +220,63 @@ class PromiseEntry:
     statement: str
     evidence: EvidenceRef
     status: ReviewStatus = ReviewStatus.UNREVIEWED
+    receipt_refs: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class SemanticDisposition:
+    """Human-reviewed semantic closure for one requirement or promise."""
+
+    claim_id: str
+    status: ReviewStatus
+    rationale: str
+    receipt_refs: tuple[str, ...]
+
+    @property
+    def complete(self) -> bool:
+        """A carrier alone is not semantic proof."""
+        return (
+            self.status
+            in {
+                ReviewStatus.SATISFIED,
+                ReviewStatus.WITHDRAWN,
+                ReviewStatus.CONTRADICTED,
+            }
+            and bool(self.rationale.strip())
+            and bool(self.receipt_refs)
+            and all(item.strip() for item in self.receipt_refs)
+            and any(
+                item.startswith(("test:", "commit:", "artifact:", "user:"))
+                for item in self.receipt_refs
+            )
+        )
+
+
+@dataclass(frozen=True)
+class ProviderCensus:
+    """Bounded discovery accounting for one transcript provider."""
+
+    provider: Provider
+    expected: bool
+    available: bool
+    discovered: int
+    selected: int
+    rejected: int
+    archived: int = 0
+    imported: int = 0
+    malformed: int = 0
+    unreadable: int = 0
+
+
+@dataclass(frozen=True)
+class ImportRegistryEntry:
+    """Digest identity for imported history retained without duplicate authority."""
+
+    provider: Provider
+    source_id: str
+    native_id: str
+    root_kind: RootKind
+    content_sha256: str
 
 
 @dataclass(frozen=True)
@@ -246,6 +346,7 @@ class ReviewIteration:
         "adversarial_reviewer",
     )
     receipt_state: tuple[FindingReceiptState, ...] = ()
+    unreviewed_promise_ids: tuple[str, ...] = ()
 
     def to_json(self) -> str:
         """Return a deterministic packet an external agent team can resume."""
@@ -312,6 +413,7 @@ class SessionLineage:
     inherited_prefix_sha256: str = ""
     inherited_event_count: int = 0
     history_base_ordinal: str = ""
+    root_kind: RootKind = RootKind.UNKNOWN
 
 
 @dataclass(frozen=True)
@@ -356,10 +458,22 @@ class CoverageSelection:
 
     limit: int = DEFAULT_REQUIREMENT_SESSION_LIMIT
     session_id: str | None = None
+    codex_session_id: str | None = None
     require_active_identity: bool = False
 
 
 DEFAULT_COVERAGE_SELECTION = CoverageSelection()
+
+
+@dataclass(frozen=True)
+class TranscriptBases:
+    """Optional provider roots injected at the filesystem boundary."""
+
+    codex: Path | None = None
+    claude: Path | None = None
+
+
+DEFAULT_TRANSCRIPT_BASES = TranscriptBases()
 _UNCERTIFIED_ACTIVITY = (
     "active session identity is unverified; latest activity is only a fallback"
 )
@@ -383,6 +497,9 @@ class RequirementCoverage:
     )
     selected_session_id: str = ""
     schema_version: int = 1
+    semantic_dispositions: tuple[SemanticDisposition, ...] = ()
+    provider_census: tuple[ProviderCensus, ...] = ()
+    import_registry: tuple[ImportRegistryEntry, ...] = ()
 
     @property
     def status(self) -> CoverageStatus:
@@ -451,7 +568,17 @@ class RequirementCoverage:
                 "high_severity_findings": len(self.high_severity_findings),
                 "dispositions": len(self.dispositions),
                 "lineage": len(self.lineage),
+                "imports": len(self.import_registry),
             },
+            "provider_census": [asdict(item) for item in self.provider_census],
+            "import_registry_sha256": hashlib.sha256(
+                json.dumps(
+                    [asdict(item) for item in self.import_registry],
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ).encode()
+            ).hexdigest(),
+            "semantic_disposition_count": len(self.semantic_dispositions),
             "cutoff_count": len(self.cutoffs),
             "cutoff_manifest_sha256": hashlib.sha256(
                 self.cutoffs_to_json().encode()
@@ -594,6 +721,8 @@ class _Accumulator:
     tool_calls: dict[str, tuple[EvidenceRef, str]] = field(default_factory=dict)
     tool_results: dict[str, str] = field(default_factory=dict)
     approved_attachment_roots: tuple[Path, ...] = ()
+    source_authority: dict[str, AuthorityProvenance] = field(default_factory=dict)
+    import_registry: list[ImportRegistryEntry] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -663,6 +792,32 @@ def _first_session_meta(path: Path) -> dict[str, object] | None:
 
 def _is_codex_root(meta: Mapping[str, object]) -> bool:
     return meta.get("thread_source") != "subagent" and not meta.get("parent_thread_id")
+
+
+def codex_root_kind(meta: Mapping[str, object]) -> RootKind:
+    """Classify a native Codex transcript without granting authority by shape."""
+    raw_source = meta.get("source", meta.get("thread_source", ""))
+    encoded = json.dumps(raw_source, sort_keys=True).lower()
+    result = RootKind.UNKNOWN
+    if meta.get("parent_thread_id") or "subagent" in encoded:
+        result = RootKind.SUBAGENT
+    elif "guardian" in encoded or "review" in encoded:
+        result = RootKind.GUARDIAN
+    elif "exec" in encoded:
+        result = RootKind.EXEC_WORKER
+    elif "plugin" in encoded:
+        result = RootKind.PLUGIN_TASK
+    elif "import" in encoded:
+        result = RootKind.IMPORTED
+    elif (
+        raw_source is None
+        or raw_source == ""
+        or any(
+            token in encoded for token in ("user", "interactive", "vscode", "desktop")
+        )
+    ):
+        result = RootKind.INTERACTIVE
+    return result
 
 
 def _codex_activity_timestamp(path: Path) -> str:
@@ -737,24 +892,79 @@ def discover_sources(
     repo_root: Path,
     *,
     limit: int = DEFAULT_REQUIREMENT_SESSION_LIMIT,
-    codex_base: Path | None = None,
-    claude_base: Path | None = None,
-    session_id: str | None = None,
+    bases: TranscriptBases = DEFAULT_TRANSCRIPT_BASES,
+    codex_session_id: str | None = None,
 ) -> list[TranscriptSource]:
     """Discover both native transcript providers for the same repository."""
     codex = discover_codex_transcripts(
-        repo_root, base=codex_base, limit=limit, session_id=session_id
+        repo_root, base=bases.codex, limit=limit, session_id=codex_session_id
     )
     claude_root = (
-        claude_base if claude_base is not None else command_audit.transcripts_base()
+        bases.claude if bases.claude is not None else command_audit.transcripts_base()
     )
     claude = command_audit.project_transcripts(claude_root, repo_root, limit=limit)
-    if session_id:
-        claude = [path for path in claude if session_id in path.name]
     return [
         *(TranscriptSource(Provider.CODEX, path) for path in codex),
         *(TranscriptSource(Provider.CLAUDE, path) for path in claude),
     ]
+
+
+def provider_census(
+    repo_root: Path,
+    selected: Iterable[TranscriptSource],
+    *,
+    bases: TranscriptBases = DEFAULT_TRANSCRIPT_BASES,
+) -> tuple[ProviderCensus, ...]:
+    """Account for both provider fleets independently of their selectors."""
+    codex_root = bases.codex if bases.codex is not None else codex_sessions_base()
+    claude_root = (
+        bases.claude if bases.claude is not None else command_audit.transcripts_base()
+    )
+    selected_rows = tuple(selected)
+    codex_paths = tuple(codex_root.glob("**/*.jsonl")) if codex_root.is_dir() else ()
+    claude_project = command_audit.project_dir(claude_root, repo_root)
+    claude_paths = (
+        tuple(claude_project.glob("**/*.jsonl")) if claude_project.is_dir() else ()
+    )
+    codex_archive = codex_root.parent / "archived_sessions"
+    archived_codex = (
+        sum(1 for _ in codex_archive.glob("*.jsonl")) if codex_archive.is_dir() else 0
+    )
+    rows: list[ProviderCensus] = []
+    for provider, available, discovered_paths in (
+        (Provider.CODEX, codex_root.is_dir(), codex_paths),
+        (Provider.CLAUDE, claude_project.is_dir(), claude_paths),
+    ):
+        selected_count = sum(item.provider == provider for item in selected_rows)
+        imported = 0
+        malformed = 0
+        unreadable = 0
+        if provider == Provider.CODEX:
+            for path in discovered_paths:
+                try:
+                    meta = _first_session_meta(path)
+                except OSError:
+                    unreadable += 1
+                    continue
+                if meta is None:
+                    malformed += 1
+                elif codex_root_kind(meta) == RootKind.IMPORTED:
+                    imported += 1
+        rows.append(
+            ProviderCensus(
+                provider=provider,
+                expected=True,
+                available=available,
+                discovered=len(discovered_paths),
+                selected=selected_count,
+                rejected=max(0, len(discovered_paths) - selected_count),
+                archived=archived_codex if provider == Provider.CODEX else 0,
+                imported=imported,
+                malformed=malformed,
+                unreadable=unreadable,
+            )
+        )
+    return tuple(rows)
 
 
 def _source_id(
@@ -806,6 +1016,63 @@ def _stable_claim_id(prefix: str, evidence: EvidenceRef, text: str) -> str:
     return f"{prefix}-{hashlib.sha256(raw).hexdigest()[:20]}"
 
 
+def requirement_kind(statement: str) -> RequirementKind:
+    """Classify one atomized request by its durable semantic concern."""
+    lowered = statement.lower()
+    if (
+        ("dependency" in lowered or "pyproject.toml" in lowered)
+        and ("pyproject.toml" in lowered or "mise" in lowered)
+        and any(
+            token in lowered
+            for token in ("owner", "declare", "declaration", "duplicate")
+        )
+    ):
+        return RequirementKind.DEPENDENCY_OWNERSHIP
+    if "graphify" in lowered and ("sdk" in lowered or "public api" in lowered):
+        return RequirementKind.GRAPHIFY_SDK
+    return RequirementKind.ACTION
+
+
+def atomize_requirement_text(text: str) -> tuple[str, ...]:
+    """Split a plan-sized request into independently dispositionable actions.
+
+    Markdown bullets are the user's explicit action boundaries. Short prose is
+    retained byte-for-byte so ordinary requests are not rewritten by a
+    heuristic sentence splitter.
+    """
+    bullets = tuple(
+        match.group(1).strip()
+        for line in text.splitlines()
+        if (match := re.match(r"^\s*-\s+(.+?)\s*$", line)) and match.group(1).strip()
+    )
+    return bullets if len(bullets) >= MIN_ATOMIZED_BULLETS else (text,)
+
+
+def _requirement_target(statement: str, kind: RequirementKind) -> str:
+    if kind == RequirementKind.DEPENDENCY_OWNERSHIP:
+        return "python dependency ownership"
+    if kind == RequirementKind.GRAPHIFY_SDK:
+        return "Graphify SDK boundary"
+    match = re.search(r"`([^`]+)`", statement)
+    return match.group(1) if match else ""
+
+
+def authority_provenance(event: CanonicalEvent) -> AuthorityProvenance:
+    """Return the explicit or native authority source for one event."""
+    metadata = dict(event.metadata)
+    explicit = metadata.get("authority_provenance")
+    if explicit:
+        try:
+            return AuthorityProvenance(explicit)
+        except ValueError:
+            return AuthorityProvenance.NON_AUTHORITATIVE
+    if event.kind == EventKind.FORM_ANSWER:
+        return AuthorityProvenance.PAIRED_FORM_ANSWER
+    if event.kind == EventKind.USER_MESSAGE:
+        return AuthorityProvenance.NATIVE_ROOT_USER
+    return AuthorityProvenance.NON_AUTHORITATIVE
+
+
 def _digest_metadata(label: str, value: object) -> tuple[tuple[str, str], ...]:
     raw = (
         value.encode()
@@ -837,21 +1104,63 @@ def _add_event(acc: _Accumulator, event: CanonicalEvent) -> None:
             return
         if digest:
             acc.seen_attachment_sha256.add(digest)
-    key = f"{event.kind}:{event.evidence.event_id}:{event.text}"
+    key = (
+        f"{event.evidence.provider}:{event.evidence.source_id}:"
+        f"{event.kind}:{event.evidence.event_id}:{event.text}"
+    )
     if key in acc.seen_event_ids:
         return
     acc.seen_event_ids.add(key)
     acc.events.append(event)
-    if event.kind in {EventKind.USER_MESSAGE, EventKind.FORM_ANSWER}:
-        acc.requirements.append(
-            RequirementEntry(
-                _stable_claim_id("req", event.evidence, event.text),
-                event.text,
-                event.evidence,
-                event.kind,
-                bool(_AUTHORITY.search(event.text + " " + str(event.metadata))),
+    provenance = acc.source_authority.get(
+        event.evidence.source_id, authority_provenance(event)
+    )
+    if (
+        event.kind == EventKind.FORM_ANSWER
+        and provenance == AuthorityProvenance.NATIVE_ROOT_USER
+    ):
+        provenance = AuthorityProvenance.PAIRED_FORM_ANSWER
+    if event.kind in {EventKind.USER_MESSAGE, EventKind.FORM_ANSWER} and provenance in {
+        AuthorityProvenance.NATIVE_ROOT_USER,
+        AuthorityProvenance.PAIRED_FORM_ANSWER,
+    }:
+        parent_digest = hashlib.sha256(event.text.encode()).hexdigest()
+        for index, statement in enumerate(
+            atomize_requirement_text(event.text), start=1
+        ):
+            kind = requirement_kind(statement)
+            acc.requirements.append(
+                RequirementEntry(
+                    _stable_claim_id("req", event.evidence, f"{index}\0{statement}"),
+                    statement,
+                    event.evidence,
+                    event.kind,
+                    bool(_AUTHORITY.search(statement + " " + str(event.metadata))),
+                    authority_provenance=provenance,
+                    kind=kind,
+                    target=_requirement_target(statement, kind),
+                    timing=(
+                        "before implementation" if "before" in statement.lower() else ""
+                    ),
+                    scope=(
+                        "repository" if "repository" in statement.lower() else "session"
+                    ),
+                    prerequisites=tuple(
+                        token
+                        for token in ("Graphify", "uv", "mise")
+                        if token.lower() in statement.lower()
+                    ),
+                    external_effect=bool(
+                        re.search(
+                            r"\b(?:publish|push|create|update|delete|ship|land)\b",
+                            statement,
+                            re.IGNORECASE,
+                        )
+                    ),
+                    parent_statement_sha256=parent_digest,
+                    atom_index=index,
+                )
             )
-        )
     if event.kind == EventKind.ASSISTANT_MESSAGE and _PROMISE.search(event.text):
         acc.promises.append(
             PromiseEntry(
@@ -892,6 +1201,9 @@ def _add_high_severity_finding(acc: _Accumulator, event: CanonicalEvent) -> None
 
 
 def _text_blocks(content: object) -> Iterable[tuple[str, str]]:
+    if isinstance(content, str):
+        yield "text", content
+        return
     if not isinstance(content, list):
         return
     for block in content:
@@ -1310,6 +1622,7 @@ def _codex_lineage(payload: Mapping[str, object], source_id: str) -> SessionLine
         str(payload.get("agent_path", spawn.get("agent_path", ""))),
         str(payload.get("agent_role", spawn.get("agent_role", ""))),
         history_base_ordinal=str(payload.get("subagent_history_start_ordinal", "")),
+        root_kind=codex_root_kind(payload),
     )
 
 
@@ -1679,8 +1992,7 @@ def _claude_content(
             }
             _codex_tool_event(synthetic, evidence, acc, result=False)
             if block.get("name") == "AskUserQuestion":
-                question = {"arguments": json.dumps(block.get("input", {}))}
-                _form_questions(question, evidence, acc)
+                _codex_form_call(synthetic, evidence, acc, "confirmed")
         elif block.get("type") == "tool_result":
             synthetic = {
                 "call_id": block.get("tool_use_id", ""),
@@ -1699,6 +2011,130 @@ def _claude_content(
                     attachment=meta,
                 ),
             )
+
+
+def _claude_non_message_event(
+    record_type: str,
+    obj: Mapping[str, object],
+    evidence: EvidenceRef,
+    acc: _Accumulator,
+) -> bool:
+    """Retain one known Claude structural record; return whether handled."""
+    if record_type == "attachment":
+        attachment = obj.get("attachment")
+        if isinstance(attachment, dict):
+            meta = _attachment(attachment, evidence, acc)
+            event = CanonicalEvent(
+                EventKind.ATTACHMENT,
+                "harness",
+                meta.name,
+                evidence,
+                attachment=meta,
+            )
+        else:
+            event = CanonicalEvent(
+                EventKind.OPAQUE_PAYLOAD,
+                "harness",
+                "Claude structural attachment",
+                evidence,
+                _digest_metadata("attachment", attachment),
+            )
+        _add_event(acc, event)
+        return True
+    if record_type in {"summary", "last-prompt"}:
+        summary = obj.get("summary", obj.get("content", obj.get("prompt", "")))
+        _add_event(
+            acc,
+            CanonicalEvent(
+                EventKind.CONTINUATION_SUMMARY,
+                "harness",
+                _safe_text(str(summary)),
+                evidence,
+                _digest_metadata("summary", summary),
+            ),
+        )
+        return True
+    if record_type not in {"progress", "system", "queue-operation"}:
+        return False
+    raw_text = str(
+        obj.get("content", obj.get("message", obj.get("operation", record_type)))
+    )
+    lowered = raw_text.lower()
+    if "warning" in lowered or re.search(r"\btruncat(?:e|ed|ion)", lowered):
+        kind = EventKind.WARNING
+    elif any(token in lowered for token in ("cancel", "abort", "stop")):
+        kind = EventKind.TERMINAL_STATE
+    else:
+        kind = EventKind.DIAGNOSTIC
+    _add_event(
+        acc,
+        CanonicalEvent(
+            kind,
+            "harness",
+            _safe_text(raw_text),
+            evidence,
+            _digest_metadata(record_type, obj),
+        ),
+    )
+    return True
+
+
+def _claude_message_event(
+    record_type: str,
+    obj: Mapping[str, object],
+    evidence: EvidenceRef,
+    acc: _Accumulator,
+) -> None:
+    """Normalize one Claude assistant/user record and its paired form result."""
+    message = obj.get("message")
+    content = message.get("content") if isinstance(message, dict) else None
+    if record_type == "user" and obj.get("isMeta") is True:
+        for _, text in _text_blocks(content):
+            _add_event(
+                acc,
+                CanonicalEvent(
+                    EventKind.UNVERIFIABLE_USER_MESSAGE,
+                    "harness",
+                    _safe_text(text),
+                    evidence,
+                    (("authority_provenance", AuthorityProvenance.NON_AUTHORITATIVE),),
+                ),
+            )
+    else:
+        _claude_content(content, record_type=record_type, evidence=evidence, acc=acc)
+    result = _claude_form_result(obj)
+    if result is not None:
+        synthetic = {"output": json.dumps({"answers": result["answers"]})}
+        answer_ids = _form_answers(synthetic, evidence, acc)
+        call_id = ""
+        if isinstance(content, list):
+            call_id = next(
+                (
+                    str(block.get("tool_use_id", ""))
+                    for block in content
+                    if isinstance(block, dict) and block.get("type") == "tool_result"
+                ),
+                "",
+            )
+        if not call_id or answer_ids is None or call_id in acc.form_results:
+            acc.omissions.append(
+                f"{evidence.source_id}:{evidence.line}: "
+                "malformed or duplicate Claude form result"
+            )
+        else:
+            acc.form_results[call_id] = ("", answer_ids)
+    if isinstance(message, dict) and message.get("stop_reason"):
+        metadata = _metadata_pairs(message, ("stop_reason", "stop_sequence"))
+        _add_event(
+            acc,
+            CanonicalEvent(
+                EventKind.TERMINAL_STATE,
+                "harness",
+                f"Claude stop reason {message['stop_reason']}",
+                evidence,
+                metadata,
+            ),
+        )
 
 
 def _parse_claude(
@@ -1727,43 +2163,10 @@ def _parse_claude(
         record_type = str(obj.get("type", ""))
         session_id = str(obj.get("sessionId", session_id))
         evidence = _evidence(Provider.CLAUDE, source_id, line, obj, raw)
-        message = obj.get("message")
-        content = message.get("content") if isinstance(message, dict) else None
         if record_type in {"assistant", "user"}:
-            _claude_content(
-                content,
-                record_type=record_type,
-                evidence=evidence,
-                acc=acc,
-            )
-            result = _claude_form_result(obj)
-            if result is not None:
-                synthetic = {"output": json.dumps({"answers": result["answers"]})}
-                _form_answers(synthetic, evidence, acc)
-            if isinstance(message, dict) and message.get("stop_reason"):
-                metadata = _metadata_pairs(message, ("stop_reason", "stop_sequence"))
-                _add_event(
-                    acc,
-                    CanonicalEvent(
-                        EventKind.TERMINAL_STATE,
-                        "harness",
-                        f"Claude stop reason {message['stop_reason']}",
-                        evidence,
-                        metadata,
-                    ),
-                )
-        elif record_type == "attachment":
-            attachment = obj.get("attachment")
-            _add_event(
-                acc,
-                CanonicalEvent(
-                    EventKind.OPAQUE_PAYLOAD,
-                    "harness",
-                    "Claude structural attachment",
-                    evidence,
-                    _digest_metadata("attachment", attachment),
-                ),
-            )
+            _claude_message_event(record_type, obj, evidence, acc)
+        elif _claude_non_message_event(record_type, obj, evidence, acc):
+            continue
         elif record_type not in known:
             acc.omissions.append(
                 f"{source_id}:{line}: unknown Claude record {record_type!r}"
@@ -1776,6 +2179,9 @@ def _parse_claude(
             "",
             "subagent" if "subagents" in path.parts else "",
             "",
+            root_kind=(
+                RootKind.SUBAGENT if "subagents" in path.parts else RootKind.INTERACTIVE
+            ),
         )
     )
 
@@ -1822,6 +2228,47 @@ def _read_records(path: Path, source: TranscriptSource, acc: _Accumulator) -> No
             continue
         records.append((line, obj, raw))
     source_id = _source_id(source.provider, records)
+    if source.provider == Provider.CODEX:
+        raw_meta = next(
+            (
+                obj["payload"]
+                for _, obj, _ in records
+                if obj.get("type") == "session_meta"
+                and isinstance(obj.get("payload"), dict)
+            ),
+            {},
+        )
+        meta: Mapping[str, object] = raw_meta if isinstance(raw_meta, dict) else {}
+        kind = codex_root_kind(meta)
+        provenance = (
+            AuthorityProvenance.NATIVE_ROOT_USER
+            if kind == RootKind.INTERACTIVE
+            else (
+                AuthorityProvenance.IMPORTED_HISTORY
+                if kind == RootKind.IMPORTED
+                else AuthorityProvenance.NON_AUTHORITATIVE
+            )
+        )
+        acc.source_authority[source_id] = provenance
+        if kind == RootKind.IMPORTED:
+            acc.import_registry.append(
+                ImportRegistryEntry(
+                    source.provider,
+                    source_id,
+                    str(meta.get("id", meta.get("session_id", ""))),
+                    kind,
+                    hashlib.sha256(data).hexdigest(),
+                )
+            )
+    else:
+        is_sidecar = "subagents" in path.parts or any(
+            obj.get("isSidechain") is True for _, obj, _ in records
+        )
+        acc.source_authority[source_id] = (
+            AuthorityProvenance.NON_AUTHORITATIVE
+            if is_sidecar
+            else AuthorityProvenance.NATIVE_ROOT_USER
+        )
     before = len(acc.events)
     if source.provider == Provider.CODEX:
         _parse_codex(records, source_id, acc)
@@ -1926,9 +2373,11 @@ def parse_transcripts(
     *,
     recorded_cwd: str = "",
     dispositions: Iterable[PreventionDisposition] = (),
+    semantic_dispositions: Iterable[SemanticDisposition] = (),
     approved_attachment_roots: Iterable[Path] = (),
 ) -> RequirementCoverage:
     """Parse provider-qualified sources into one deterministic coverage ledger."""
+    semantic_rows = tuple(semantic_dispositions)
     source_list = sorted(sources, key=lambda item: (item.provider, str(item.path)))
     roots = tuple(
         sorted(
@@ -1967,7 +2416,7 @@ def parse_transcripts(
                 f"{evidence.source_id}:{evidence.line}: tool result turn mismatch "
                 f"{call_id}"
             )
-    return RequirementCoverage(
+    coverage = RequirementCoverage(
         tuple(acc.events),
         tuple(acc.requirements),
         tuple(acc.promises),
@@ -1977,6 +2426,67 @@ def parse_transcripts(
         tuple(acc.cutoffs),
         recorded_cwd,
         tuple(acc.omissions),
+        semantic_dispositions=semantic_rows,
+        import_registry=tuple(acc.import_registry),
+    )
+    return apply_semantic_dispositions(coverage, semantic_rows)
+
+
+def apply_semantic_dispositions(
+    coverage: RequirementCoverage,
+    dispositions: Iterable[SemanticDisposition],
+) -> RequirementCoverage:
+    """Apply reviewed dispositions by stable claim ID and fail loud on drift."""
+    rows = tuple(dispositions)
+    by_id: dict[str, SemanticDisposition] = {}
+    omissions = list(coverage.omissions)
+    for row in rows:
+        if row.claim_id in by_id:
+            omissions.append(f"duplicate semantic disposition {row.claim_id}")
+        by_id[row.claim_id] = row
+    claim_ids = {
+        *(item.requirement_id for item in coverage.requirements),
+        *(item.promise_id for item in coverage.promises),
+    }
+    omissions.extend(
+        f"semantic disposition references unknown claim {claim_id}"
+        for claim_id in sorted(by_id.keys() - claim_ids)
+    )
+
+    def requirement(item: RequirementEntry) -> RequirementEntry:
+        row = by_id.get(item.requirement_id)
+        if row is None or not row.complete:
+            return item
+        return replace(item, status=row.status, receipt_refs=row.receipt_refs)
+
+    def promise(item: PromiseEntry) -> PromiseEntry:
+        row = by_id.get(item.promise_id)
+        if row is None or not row.complete:
+            return item
+        return replace(item, status=row.status, receipt_refs=row.receipt_refs)
+
+    return replace(
+        coverage,
+        requirements=tuple(requirement(item) for item in coverage.requirements),
+        promises=tuple(promise(item) for item in coverage.promises),
+        semantic_dispositions=rows,
+        omissions=tuple(omissions),
+    )
+
+
+def semantic_disposition_omissions(coverage: RequirementCoverage) -> tuple[str, ...]:
+    """Name every actionable claim still lacking semantic closure."""
+    return tuple(
+        [
+            f"requirement {item.requirement_id} lacks semantic disposition"
+            for item in coverage.requirements
+            if item.status == ReviewStatus.UNREVIEWED
+        ]
+        + [
+            f"promise {item.promise_id} lacks semantic disposition"
+            for item in coverage.promises
+            if item.status == ReviewStatus.UNREVIEWED
+        ]
     )
 
 
@@ -1993,15 +2503,16 @@ def _validated_source_root(source_repo_root: Path) -> tuple[Path | None, str]:
 def build_requirement_coverage(
     source_repo_root: Path,
     *,
-    codex_base: Path | None = None,
-    claude_base: Path | None = None,
+    bases: TranscriptBases = DEFAULT_TRANSCRIPT_BASES,
     dispositions: Iterable[PreventionDisposition] = (),
+    semantic_dispositions: Iterable[SemanticDisposition] = (),
     selection: CoverageSelection = DEFAULT_COVERAGE_SELECTION,
 ) -> RequirementCoverage:
     """Discover transcripts whose recorded cwd is the explicitly audited root."""
+    codex_session_id = selection.codex_session_id or selection.session_id
     certification = (
         SelectionCertification.EXPLICIT_SESSION_ID
-        if selection.session_id
+        if codex_session_id
         else (
             SelectionCertification.UNCERTIFIED_ACTIVITY_FALLBACK
             if selection.require_active_identity
@@ -2021,14 +2532,18 @@ def build_requirement_coverage(
             str(source_repo_root),
             (error,),
             certification,
-            selection.session_id or "",
+            codex_session_id or "",
         )
     sources = discover_sources(
         repo_root,
         limit=selection.limit,
-        codex_base=codex_base,
-        claude_base=claude_base,
-        session_id=selection.session_id,
+        bases=bases,
+        codex_session_id=codex_session_id,
+    )
+    census = provider_census(
+        repo_root,
+        sources,
+        bases=bases,
     )
     if not sources:
         return RequirementCoverage(
@@ -2042,17 +2557,22 @@ def build_requirement_coverage(
             str(repo_root),
             (f"no transcripts matched recorded cwd {repo_root}",),
             certification,
-            selection.session_id or "",
+            codex_session_id or "",
+            provider_census=census,
         )
     coverage = parse_transcripts(
-        sources, recorded_cwd=str(repo_root), dispositions=dispositions
+        sources,
+        recorded_cwd=str(repo_root),
+        dispositions=dispositions,
+        semantic_dispositions=semantic_dispositions,
     )
     coverage = replace(
         coverage,
         selection_certification=certification,
-        selected_session_id=selection.session_id or "",
+        selected_session_id=codex_session_id or "",
+        provider_census=census,
     )
-    if selection.require_active_identity and not selection.session_id:
+    if selection.require_active_identity and not codex_session_id:
         return replace(
             coverage,
             omissions=(
@@ -2227,6 +2747,42 @@ def load_dispositions(
     return tuple(rows)
 
 
+def load_semantic_dispositions(path: Path) -> tuple[SemanticDisposition, ...]:
+    """Load typed semantic decisions; issue/carrier references alone never close."""
+    payload = json.loads(path.read_text())
+    if not isinstance(payload, list):
+        message = "semantic dispositions must be a JSON array"
+        raise TypeError(message)
+    rows: list[SemanticDisposition] = []
+    for index, item in enumerate(payload):
+        if not isinstance(item, dict):
+            message = f"semantic disposition {index} must be an object"
+            raise TypeError(message)
+        refs = item.get("receipt_refs")
+        if not isinstance(refs, list) or not all(isinstance(ref, str) for ref in refs):
+            message = f"semantic disposition {index} needs string receipt_refs"
+            raise ValueError(message)
+        try:
+            status = ReviewStatus(str(item.get("status", "")))
+        except ValueError as exc:
+            message = f"semantic disposition {index} has an invalid status"
+            raise ValueError(message) from exc
+        row = SemanticDisposition(
+            str(item.get("claim_id", "")),
+            status,
+            str(item.get("rationale", "")),
+            tuple(refs),
+        )
+        if not row.complete:
+            message = (
+                f"semantic disposition {index} lacks closure evidence; "
+                "an issue or carrier alone is not proof"
+            )
+            raise ValueError(message)
+        rows.append(row)
+    return tuple(rows)
+
+
 def disposition_omissions(coverage: RequirementCoverage) -> tuple[str, ...]:
     """Reject confirmed findings without all prevention and tracking receipts."""
     receipts = {item.finding_id: item for item in coverage.dispositions}
@@ -2283,7 +2839,14 @@ def advance_iteration(
         )
     )
     issue_candidates = issue_candidate_requirement_ids(coverage)
-    if unresolved or unreviewed_requirements:
+    unreviewed_promises = tuple(
+        sorted(
+            promise.promise_id
+            for promise in coverage.promises
+            if promise.status == ReviewStatus.UNREVIEWED
+        )
+    )
+    if unresolved or unreviewed_requirements or unreviewed_promises:
         action = IterationAction.NEEDS_AGENT_ACTION
     elif frozenset(current) - previous:
         action = IterationAction.PREVENTION_RECORDED
@@ -2318,6 +2881,7 @@ def advance_iteration(
             )
             for finding in coverage.high_severity_findings
         ),
+        unreviewed_promise_ids=unreviewed_promises,
     )
 
 
@@ -2374,16 +2938,39 @@ def render_coverage(coverage: RequirementCoverage) -> str:
         ),
         "Only explicit user evidence can grant authority.",
         "",
+        "## Provider census",
+        "",
+    ]
+    if coverage.provider_census:
+        out += [
+            (
+                "| provider | expected | available | discovered | selected | "
+                "rejected | archived | imported | malformed | unreadable |"
+            ),
+            "|---|---|---|---:|---:|---:|---:|---:|---:|---:|",
+            *(
+                f"| {item.provider} | {item.expected} | {item.available} | "
+                f"{item.discovered} | {item.selected} | {item.rejected} | "
+                f"{item.archived} | {item.imported} | {item.malformed} | "
+                f"{item.unreadable} |"
+                for item in coverage.provider_census
+            ),
+        ]
+    else:
+        out.append("_No discovery census was requested for direct parser input._")
+    out += [
+        "",
         "## Requirements",
         "",
     ]
     if coverage.requirements:
         out += [
-            "| id | source | authority-related | statement |",
-            "|---|---|---|---|",
+            "| id | kind | provenance | status | target | statement |",
+            "|---|---|---|---|---|---|",
             *(
-                f"| `{item.requirement_id}` | {item.source_kind} | "
-                f"{'yes' if item.authority_relevant else 'no'} | "
+                f"| `{item.requirement_id}` | {item.kind} | "
+                f"{item.authority_provenance} | {item.status} | "
+                f"{_table_text(item.target)} | "
                 f"{_table_text(item.statement)} |"
                 for item in coverage.requirements
             ),
@@ -2433,7 +3020,11 @@ def render_coverage(coverage: RequirementCoverage) -> str:
         ),
     ]
     out += ["", "## Omissions", ""]
-    all_omissions = (*coverage.omissions, *disposition_omissions(coverage))
+    all_omissions = (
+        *coverage.omissions,
+        *disposition_omissions(coverage),
+        *semantic_disposition_omissions(coverage),
+    )
     if all_omissions:
         out.extend(f"- {item}" for item in all_omissions)
     else:
