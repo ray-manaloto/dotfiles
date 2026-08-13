@@ -20,6 +20,9 @@ from enum import StrEnum
 from importlib.metadata import PackageNotFoundError, version
 from typing import TYPE_CHECKING
 
+from kb_setup.graph import GraphifyBuildReceipt
+
+from dotfiles_setup import codec
 from dotfiles_setup.child_env import without_env_diff
 
 if TYPE_CHECKING:
@@ -84,36 +87,96 @@ def _runtime_version() -> str:
 
 def _load_json_object(path: Path) -> tuple[dict[str, object] | None, str]:
     try:
-        payload = json.loads(path.read_bytes())
+        raw = path.read_bytes()
+    except OSError as exc:
+        return None, str(exc)
+    return _load_json_object_bytes(raw, name=path.name)
+
+
+def _load_json_object_bytes(
+    raw: bytes,
+    *,
+    name: str,
+) -> tuple[dict[str, object] | None, str]:
+    try:
+        payload = json.loads(raw)
     except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
         return None, str(exc)
     if not isinstance(payload, dict):
-        return None, f"{path.name} root must be a JSON object"
+        return None, f"{name} root must be a JSON object"
     return payload, ""
 
 
 def _receipt_matches(
-    receipt: dict[str, object], *, graph_path: Path, runtime: str
+    receipt: GraphifyBuildReceipt,
+    *,
+    graph_bytes: bytes,
+    graph_payload: dict[str, object],
+    runtime: str,
 ) -> bool:
+    nodes = graph_payload["nodes"]
+    edges = graph_payload["edges"]
+    hyperedges = graph_payload["hyperedges"]
+    if not isinstance(nodes, list):
+        return False
+    if not isinstance(edges, list):
+        return False
+    if not isinstance(hyperedges, list):
+        return False
     return (
-        receipt.get("graph_sha256")
-        == hashlib.sha256(graph_path.read_bytes()).hexdigest()
-        and receipt.get("runtime_version") == runtime
-        and receipt.get("status") == "complete"
-        and receipt.get("warnings") == []
+        receipt.schema_version == 1
+        and receipt.graph_sha256 == hashlib.sha256(graph_bytes).hexdigest()
+        and receipt.graph_bytes == len(graph_bytes)
+        and receipt.node_count == len(nodes)
+        and receipt.edge_count == len(edges)
+        and receipt.hyperedge_count == len(hyperedges)
+        and receipt.runtime_version == runtime
+        and receipt.status == "complete"
+        and receipt.warnings == ()
     )
 
 
-def _receipt_problem(graph_path: Path, runtime: str) -> HealthResult | None:
+def _receipt_problem(
+    graph_path: Path,
+    graph_bytes: bytes,
+    graph_payload: dict[str, object],
+    runtime: str,
+) -> HealthResult | None:
     receipt_path = graph_path.with_name(_BUILD_RECEIPT)
     if not receipt_path.is_file():
         return HealthResult(GraphifyStatus.STALE, runtime, "build receipt missing")
-    receipt, error = _load_json_object(receipt_path)
-    if receipt is None:
-        return HealthResult(GraphifyStatus.CORRUPT, runtime, error)
-    if not _receipt_matches(receipt, graph_path=graph_path, runtime=runtime):
+    try:
+        receipt = codec.decode(receipt_path.read_bytes(), GraphifyBuildReceipt)
+    except (OSError, ValueError, TypeError) as exc:
+        return HealthResult(GraphifyStatus.CORRUPT, runtime, str(exc))
+    if not _receipt_matches(
+        receipt,
+        graph_bytes=graph_bytes,
+        graph_payload=graph_payload,
+        runtime=runtime,
+    ):
         return HealthResult(GraphifyStatus.STALE, runtime, "build receipt mismatch")
     return None
+
+
+def _graph_schema_problem(payload: dict[str, object]) -> str:
+    """Return the first required Graphify collection schema problem, if any."""
+    for field in ("nodes", "edges", "hyperedges"):
+        if not isinstance(payload.get(field), list):
+            return f"graph field {field!r} must be an array"
+    return ""
+
+
+def _load_graph_snapshot(
+    graph_path: Path,
+) -> tuple[bytes, dict[str, object] | None, str]:
+    """Read and parse one immutable graph byte snapshot."""
+    try:
+        graph_bytes = graph_path.read_bytes()
+    except OSError as exc:
+        return b"", None, str(exc)
+    payload, error = _load_json_object_bytes(graph_bytes, name=graph_path.name)
+    return graph_bytes, payload, error
 
 
 def graphify_health(project_root: Path) -> HealthResult:
@@ -122,24 +185,19 @@ def graphify_health(project_root: Path) -> HealthResult:
     runtime = _runtime_version()
     if not graph_path.is_file():
         return HealthResult(GraphifyStatus.MISSING, runtime, str(graph_path))
-    payload, error = _load_json_object(graph_path)
+    graph_bytes, payload, error = _load_graph_snapshot(graph_path)
     if payload is None:
         return HealthResult(GraphifyStatus.CORRUPT, runtime, error)
-    for field in ("nodes", "edges", "hyperedges"):
-        if not isinstance(payload.get(field), list):
-            return HealthResult(
-                GraphifyStatus.CORRUPT,
-                runtime,
-                f"graph field {field!r} must be an array",
-            )
+    if schema_problem := _graph_schema_problem(payload):
+        return HealthResult(GraphifyStatus.CORRUPT, runtime, schema_problem)
     if runtime != "0.9.41":
         return HealthResult(GraphifyStatus.VERSION_DRIFT, runtime, "expected 0.9.41")
-    if problem := _receipt_problem(graph_path, runtime):
+    if problem := _receipt_problem(graph_path, graph_bytes, payload, runtime):
         return problem
     return HealthResult(
         GraphifyStatus.FRESH,
         runtime,
-        graph_sha256=hashlib.sha256(graph_path.read_bytes()).hexdigest(),
+        graph_sha256=hashlib.sha256(graph_bytes).hexdigest(),
     )
 
 
