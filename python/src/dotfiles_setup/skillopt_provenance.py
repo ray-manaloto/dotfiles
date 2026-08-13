@@ -27,9 +27,10 @@ REPOSITORY = "ray-manaloto/dotfiles"
 SCHEMA = "dotfiles.skillopt-present-day-replay.v1"
 MANIFEST = Path("skillopt/provenance/session-review-history.json")
 REPLAY_DIR = Path("skillopt/provenance/replays")
-REPLAY_RECEIPT = (
-    "unknown-omission-"
-    "53101bf577f7cbe3b0a63f5dbcf722994621a3ff4903ba88aae2782682008abb.json"
+REPLAY_RECEIPTS = (
+    "unknown-omission-53101bf577f7cbe3b0a63f5dbcf722994621a3ff4903ba88aae2782682008abb.json",
+    "open-disposition-e86663ab2a62b5290cabf2d22a99d30bafe6db2a21834fb590caa05a318df1cb.json",
+    "form-pairing-7ab92796945bd677956e1a245a80eb2780cfc2f3e62cf95d07b90c0bdce80591.json",
 )
 LOGGER = logging.getLogger(__name__)
 _MESSAGES = {
@@ -89,8 +90,8 @@ FIXES = (
         "d090a2e76decfbb5298ca0040e4d9ce27e872fc5",
         "6dbfc831f12cbe8ffe79fe8c051ccd34b1c4a9d7ee7079fcd3c24376d8f000fc",
         "test_persisted_disposition_never_converges_or_authorizes_complete",
-        "        or unresolved\n",
-        "",
+        "        return False\n\n    @property\n    def audit_evidence_complete",
+        "        return True\n\n    @property\n    def audit_evidence_complete",
     ),
     Fix(
         "form-pairing",
@@ -127,10 +128,13 @@ def manifest_bytes() -> bytes:
         "evidence_kind": "present_day_replay",
         "not_historical_execution": True,
         "repository": REPOSITORY,
-        "verified_replay_receipt": {
-            "path": str(REPLAY_DIR / REPLAY_RECEIPT),
-            "sha256": REPLAY_RECEIPT.removesuffix(".json").rsplit("-", 1)[1],
-        },
+        "verified_replay_receipts": [
+            {
+                "path": str(REPLAY_DIR / name),
+                "sha256": name.removesuffix(".json").rsplit("-", 1)[1],
+            }
+            for name in REPLAY_RECEIPTS
+        ],
         "fixes": [
             (
                 {
@@ -139,14 +143,12 @@ def manifest_bytes() -> bytes:
                     if key not in {"old", "new"}
                 }
                 | {
-                    "authority_status": (
-                        "verified_replay" if index == 0 else "object_provenance_only"
-                    ),
+                    "authority_status": "verified_replay",
                     "adoption_eligible": False,
                 }
             )
             | {"mutation_patch_sha256": digest((fix.old + "\0" + fix.new).encode())}
-            for index, fix in enumerate(FIXES)
+            for fix in FIXES
         ],
     }
     return (json.dumps(data, sort_keys=True, separators=(",", ":")) + "\n").encode()
@@ -268,8 +270,8 @@ def _run(checkout: Path, fix: Fix) -> dict[str, object]:
 
 
 def replay(repo: Path) -> None:
-    """Execute clean and hostile controls in disposable exact-commit archives."""
-    for fix in FIXES[:1]:
+    """Re-execute clean and hostile controls without rewriting committed receipts."""
+    for fix in FIXES:
         with tempfile.TemporaryDirectory() as directory:
             checkout = Path(directory)
             archive = subprocess.run(
@@ -295,50 +297,16 @@ def replay(repo: Path) -> None:
                     f"positive={positive['rc']} hostile={negative['rc']}"
                 )
                 raise _error(message)
-            receipt = {
-                "schema": SCHEMA,
-                "evidence_kind": "present_day_replay",
-                "not_historical_execution": True,
-                "repository": REPOSITORY,
-                "source_commit": fix.commit,
-                "source_tree": fix.tree,
-                "test_path": fix.path,
-                "test_blob_sha256": fix.blob_sha256,
-                "test_node": fix.node,
-                "mutation_patch_sha256": digest((fix.old + "\0" + fix.new).encode()),
-                "positive": positive | {"outcome": "PASSED"},
-                "hostile_mutation": negative | {"outcome": "REJECTED"},
-            }
-            raw = (
-                json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n"
-            ).encode()
-            path = repo / REPLAY_DIR / f"{fix.identity}-{digest(raw)}.json"
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(raw)
 
 
-def verify_local(repo: Path) -> None:
-    """Fail closed on transition/deletion/tamper of manifest inventory."""
-    target = repo / MANIFEST
-    if (
-        not target.is_file()
-        or target.read_bytes() != manifest_bytes()
-        or target.with_suffix(".sha256").read_text() != digest(manifest_bytes()) + "\n"
-    ):
-        raise _error(_MESSAGES["inventory"])
-    replay_root = repo / REPLAY_DIR
-    files = tuple(sorted(path.name for path in replay_root.glob("*.json")))
-    if files != (REPLAY_RECEIPT,):
-        raise _error(_MESSAGES["inventory"])
-    replay_path = replay_root / REPLAY_RECEIPT
-    raw = replay_path.read_bytes()
-    if digest(raw) != REPLAY_RECEIPT.removesuffix(".json").rsplit("-", 1)[1]:
+def _verify_receipt(replay_root: Path, name: str, fix: Fix) -> None:
+    raw = (replay_root / name).read_bytes()
+    if digest(raw) != name.removesuffix(".json").rsplit("-", 1)[1]:
         raise _error(_MESSAGES["inventory"])
     try:
         receipt = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise _error(_MESSAGES["inventory"]) from exc
-    fix = FIXES[0]
     keys = {
         "schema",
         "evidence_kind",
@@ -385,6 +353,28 @@ def verify_local(repo: Path) -> None:
     )
     if not common:
         raise _error(_MESSAGES["inventory"])
+
+
+def verify_local(repo: Path) -> None:
+    """Fail closed on transition/deletion/tamper of manifest inventory."""
+    target = repo / MANIFEST
+    if (
+        not target.is_file()
+        or target.read_bytes() != manifest_bytes()
+        or target.with_suffix(".sha256").read_text() != digest(manifest_bytes()) + "\n"
+    ):
+        raise _error(_MESSAGES["inventory"])
+    replay_root = repo / REPLAY_DIR
+    files = tuple(sorted(path.name for path in replay_root.glob("*.json")))
+    if files != tuple(sorted(REPLAY_RECEIPTS)):
+        raise _error(_MESSAGES["inventory"])
+    by_identity: dict[str, str] = {
+        name.rsplit("-", 1)[0]: name for name in REPLAY_RECEIPTS
+    }
+    if set(by_identity) != {fix.identity for fix in FIXES}:
+        raise _error(_MESSAGES["inventory"])
+    for fix in FIXES:
+        _verify_receipt(replay_root, by_identity[fix.identity], fix)
 
 
 def main(argv: list[str] | None = None) -> int:
