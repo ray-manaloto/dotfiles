@@ -108,7 +108,8 @@ locally before pushing Dockerfile changes.
   first, register last. Unsure = lane 2. `.claude/rules/research-doc-sources.md`.
 - **CI-local parity**: Every CI lint step has a local hk equivalent; every
   hk tool is in `mise.toml`. See `.claude/rules/ci-local-parity.md`.
-- **Research before fixing**: Check docs/changelogs/issues before fixing — don't guess at CI failures.
+- **Research before fixing**: Check docs, changelogs, and issues; don't guess at CI failures.
+- Follow `.claude/rules/graphify-first.md` and `.claude/rules/real-integration-evidence.md`.
 - **Bound long-running commands**: Run the lint gate via `mise run lint`
   (hk under a hard timeout; hk has none) — never wait blind or capture via
   `| tail` (masks exit codes). See `.claude/rules/long-running-command-hangs.md`.
