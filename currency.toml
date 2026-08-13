@@ -27,11 +27,11 @@ binary = "doppler"
 github = "DopplerHQ/cli"
 
 [tool.graphify]
-mise_key = "pipx:graphifyy"
+python_package = "graphifyy"
 binary = "graphify"
-# graphify installs from PyPI via mise's pipx backend, so PyPI is the installable
-# truth; GitHub carries the release notes. (v1.0.0 was tagged on GitHub while
-# PyPI's latest was 0.9.25 — tracking the tag would pin something uninstallable.)
+# Graphify is a Python runtime dependency owned only by python/pyproject.toml;
+# mise's uv dependency provider materializes that locked environment. PyPI is
+# the installable truth and GitHub carries the release notes.
 pypi = "graphifyy"
 github = "Graphify-Labs/graphify"
 extras = ["all"]

@@ -1,6 +1,11 @@
 # Project tools — for linting, validating, and developing this repo
 # These are Build Type 1 tools: run locally before commits
 
+[deps.uv]
+auto = true
+dir = "python"
+run = "uv sync --locked"
+
 [tools]
 # The tools shared with the devcontainer image live in
 # .config/mise/conf.d/shared.toml — the single exact-pinned source both this
@@ -46,21 +51,6 @@ lefthook = "2.1.10"
 "npm:agent-browser" = "0.33.2"
 "npm:portless" = "0.15.5"
 "pipx:deepagents-cli" = "0.2.2"
-# graphify: host-only knowledge-graph substrate (#310 / T1 #312). The [all]
-# extra resolves on host Python 3.14 — graphify's own PEP 508 markers auto-skip
-# the leiden/graspologic extra (needs <3.13), so clustering falls back to
-# Louvain (accepted). Host-only: root mise.toml is in the container's
-# MISE_IGNORED_CONFIG_PATHS, so this never touches the image. Do NOT run
-# `graphify claude install` (writes into root CLAUDE.md, breaks the @AGENTS.md
-# stub), `graphify hook install` (post-commit auto-rebuild, violates the
-# gated/manual-build rule), or `graphify --watch` (auto-rebuild). See T6 #316.
-# Documented table form (mise pipx backend § Tool Options → extras). Prefer it
-# over the bracket-in-name form `"pipx:graphifyy[all]"`: on 2026-07-20
-# `mise upgrade --bump pipx:graphifyy` could not update the bracket form and
-# instead appended a SECOND, bare `"pipx:graphifyy" = "0.9.22"` entry, leaving
-# the real pin stranded at 0.9.20. The table form is what the bump path can
-# rewrite in place.
-"pipx:graphifyy" = { version = "0.9.36", extras = ["all"] }
 # ffmpeg: system binary the graphify `video` extra (faster-whisper) needs to
 # extract audio before transcription — it is NOT a pip dep, so `graphifyy[all]`
 # cannot supply it. Host-only, same as graphify (root mise.toml is in the
@@ -730,6 +720,10 @@ description = "Deterministically query the project knowledge graph (host-only, #
 # gated). Errors clearly if the graph has not been built yet.
 # Pass flags through: mise run graphify-query -- "how does lint work?" --budget 3000
 run = 'uv run --project python dotfiles-setup graphify query'
+
+[tasks.graphify-health]
+description = "Fail fast when the project graph or Graphify runtime is unusable"
+run = 'uv run --project python dotfiles-setup graphify health'
 
 [tasks.bakeoff]
 description = "Run the graphify extraction bake-off (writes OUTSIDE the repo)"

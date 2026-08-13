@@ -208,22 +208,41 @@ def test_root_lock_covers_host_config() -> None:
 
 
 def _missing_deep_currency_pins(
-    currency_tools: object, host_tools: Mapping[str, object]
+    currency_tools: object,
+    host_tools: Mapping[str, object],
+    python_packages: set[str],
 ) -> dict[str, str]:
-    """Map deep-tracked tool names to root mise keys that are absent."""
+    """Map deep-tracked tools to absent mise or Python package owners."""
     if not isinstance(currency_tools, dict):
         return {}
+    missing: dict[str, str] = {}
+    for name, spec in currency_tools.items():
+        if not isinstance(spec, dict):
+            continue
+        mise_key = spec.get("mise_key")
+        python_package = spec.get("python_package")
+        if isinstance(mise_key, str) and mise_key not in host_tools:
+            missing[str(name)] = mise_key
+        elif isinstance(python_package, str) and python_package not in python_packages:
+            missing[str(name)] = python_package
+        elif not isinstance(mise_key, str) and not isinstance(python_package, str):
+            missing[str(name)] = "<owner missing>"
+    return missing
+
+
+def _python_dependency_names() -> set[str]:
+    dependencies = tomllib.loads(
+        (_REPO_ROOT / "python" / "pyproject.toml").read_text()
+    )["project"]["dependencies"]
     return {
-        str(name): spec["mise_key"]
-        for name, spec in currency_tools.items()
-        if isinstance(spec, dict)
-        and isinstance(spec.get("mise_key"), str)
-        and spec["mise_key"] not in host_tools
+        match.group(1).lower().replace("_", "-")
+        for dependency in dependencies
+        if (match := re.match(r"^([A-Za-z0-9_.-]+)", dependency)) is not None
     }
 
 
-def test_deep_currency_tools_are_host_pinned() -> None:
-    """Every mise-managed critical tool must name a real root host-tool pin.
+def test_deep_currency_tools_have_one_declared_owner() -> None:
+    """Every critical tool must name a real mise or Python owner.
 
     The currency engine reads root ``mise.toml`` directly. A deep-tracked entry
     pointing at an absent or conf.d-only key would look declared while having
@@ -236,9 +255,10 @@ def test_deep_currency_tools_are_host_pinned() -> None:
         "tool", {}
     )
     host_tools = _root_config_tools()
-    missing = _missing_deep_currency_pins(currency_tools, host_tools)
+    python_packages = _python_dependency_names()
+    missing = _missing_deep_currency_pins(currency_tools, host_tools, python_packages)
     assert missing == {}, (
-        f"deep currency tools must reference root mise.toml [tools] keys: {missing}"
+        f"deep currency tools must reference a declared owner: {missing}"
     )
 
     assert isinstance(currency_tools, dict)
@@ -248,9 +268,13 @@ def test_deep_currency_tools_are_host_pinned() -> None:
     assert isinstance(doppler_key, str)
     without_doppler = dict(host_tools)
     without_doppler.pop(doppler_key)
-    assert _missing_deep_currency_pins(currency_tools, without_doppler) == {
-        "doppler": "doppler"
-    }
+    assert _missing_deep_currency_pins(
+        currency_tools, without_doppler, python_packages
+    ) == {"doppler": "doppler"}
+    without_graphify = python_packages - {"graphifyy"}
+    assert _missing_deep_currency_pins(
+        currency_tools, host_tools, without_graphify
+    ) == {"graphify": "graphifyy"}
 
 
 def test_shared_conf_d_lock_covers_shared_fragment() -> None:

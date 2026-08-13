@@ -1656,7 +1656,7 @@ per_path_tokens = { "currency.toml" = [
     'mise_key = "doppler"',
     'github = "DopplerHQ/cli"',
     "[tool.graphify]",
-    'mise_key = "pipx:graphifyy"',
+    'python_package = "graphifyy"',
 ], "mise.toml" = [
     'doppler = "3.76.1"',
     "[tasks.tool-currency]",
