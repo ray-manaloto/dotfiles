@@ -26,12 +26,21 @@ from dotfiles_setup.graphify import (
     GraphifyError,
     GraphifyIncompleteError,
     GraphifyStatus,
+    HealthResult,
     build_query_args,
     graphify_health,
     graphify_health_main,
     graphify_main,
     query,
 )
+
+
+def _force_fresh_health(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep subprocess-focused query tests behind an explicitly fresh graph."""
+    monkeypatch.setattr(
+        "dotfiles_setup.graphify.graphify_health",
+        lambda _root: HealthResult(GraphifyStatus.FRESH, "0.9.41"),
+    )
 
 
 def test_build_query_args_defaults() -> None:
@@ -77,6 +86,7 @@ def test_query_returns_source_cited_text_on_clean_success(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """query() returns a complete answer only when stderr is empty."""
+    _force_fresh_health(monkeypatch)
     calls: list[tuple[list[str], Path]] = []
 
     def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -105,6 +115,7 @@ def test_query_rejects_success_stderr_and_retains_warning(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """A coverage-affecting success warning cannot be discarded."""
+    _force_fresh_health(monkeypatch)
 
     def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
         _ = cwd
@@ -122,17 +133,34 @@ def test_query_rejects_success_stderr_and_retains_warning(
     assert "tree-sitter-hcl" in str(exc.value)
 
 
+def test_query_rejects_whitespace_only_stderr(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Any stderr bytes are incomplete, even if stripping would hide them."""
+    _force_fresh_health(monkeypatch)
+
+    def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+        _ = cwd
+        return subprocess.CompletedProcess(args, 0, stdout="answer\n", stderr="\n")
+
+    monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
+
+    with pytest.raises(GraphifyIncompleteError, match="stderr was not empty"):
+        query(tmp_path, "q")
+
+
 def test_query_rejects_real_truncation_even_when_graphify_returns_zero(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """A rc-zero TRUNCATED response is incomplete evidence."""
+    _force_fresh_health(monkeypatch)
 
     def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
         _ = cwd
         return subprocess.CompletedProcess(
             args,
             0,
-            stdout="TRUNCATED: showing 20 of 80 nodes (60 cut)\npartial answer\n",
+            stdout="[!] TRUNCATED: showing 20 of 80 nodes (60 cut)\npartial answer\n",
             stderr="",
         )
 
@@ -143,10 +171,36 @@ def test_query_rejects_real_truncation_even_when_graphify_returns_zero(
     assert "showing 20 of 80" in str(exc.value)
 
 
+def test_query_refuses_stale_health_before_running_graphify(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A graph without a current receipt cannot yield authoritative evidence."""
+    called = False
+
+    def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+        nonlocal called
+        _ = cwd
+        called = True
+        return subprocess.CompletedProcess(args, 0, "unexpected", "")
+
+    monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
+    monkeypatch.setattr(
+        "dotfiles_setup.graphify.graphify_health",
+        lambda _root: HealthResult(
+            GraphifyStatus.STALE, "0.9.41", "build receipt missing"
+        ),
+    )
+
+    with pytest.raises(GraphifyIncompleteError, match="build receipt missing"):
+        query(tmp_path, "q")
+    assert called is False
+
+
 def test_false_zero_cut_truncation_banner_is_not_treated_as_complete(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Protocol contradictions fail closed even when the banner says zero cut."""
+    _force_fresh_health(monkeypatch)
 
     def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
         _ = cwd
@@ -167,6 +221,7 @@ def test_query_rejects_output_larger_than_agent_transport_budget(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Complete Graphify output still fails if the agent transport would cut it."""
+    _force_fresh_health(monkeypatch)
 
     def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
         _ = cwd
@@ -226,9 +281,12 @@ def test_graphify_health_cli_emits_typed_json(
 def test_query_raises_clear_error_when_graph_missing(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """A non-zero graphify exit surfaces its stderr as a GraphifyError."""
+    """Missing graph health blocks before the query subprocess starts."""
+    called = False
 
     def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+        nonlocal called
+        called = True
         _ = cwd  # unused but required by _run signature
         return subprocess.CompletedProcess(
             args,
@@ -241,13 +299,17 @@ def test_query_raises_clear_error_when_graph_missing(
 
     with pytest.raises(GraphifyError) as exc:
         query(tmp_path, "anything")
-    assert "graph file not found" in str(exc.value)
+    assert "graph health is missing" in str(exc.value)
+    assert called is False
 
 
 def test_graphify_main_prints_answer_and_returns_0(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """The CLI entry prints the answer to stdout and returns 0 on success."""
+    _force_fresh_health(monkeypatch)
 
     def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
         _ = cwd  # unused but required by _run signature
@@ -264,9 +326,12 @@ def test_graphify_main_prints_answer_and_returns_0(
 
 
 def test_graphify_main_reports_error_and_returns_1(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """The CLI entry writes the error to stderr and returns 1 on failure."""
+    _force_fresh_health(monkeypatch)
 
     def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
         _ = cwd  # unused but required by _run signature
@@ -283,9 +348,12 @@ def test_graphify_main_reports_error_and_returns_1(
 
 
 def test_graphify_main_reports_incomplete_and_returns_3(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Warnings and truncation use a distinct fail-fast incomplete status."""
+    _force_fresh_health(monkeypatch)
 
     def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
         _ = cwd

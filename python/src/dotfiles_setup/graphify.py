@@ -210,6 +210,10 @@ def query(
 
     The graph is resolved under ``<project_root>/graphify-out/graph.json``.
     """
+    health = graphify_health(project_root)
+    if not health.ok:
+        message = f"graph health is {health.status}: {health.detail}"
+        raise GraphifyIncompleteError(message)
     graph_path = project_root / _GRAPH_SUBDIR / _GRAPH_FILE
     result = _run(
         build_query_args(
@@ -224,9 +228,8 @@ def query(
     if result.returncode != 0:
         message = (result.stderr or result.stdout).strip()
         raise GraphifyError(message or "graphify query failed")
-    stderr = result.stderr.strip()
-    if stderr:
-        raise GraphifyIncompleteError(stderr)
+    if result.stderr:
+        raise GraphifyIncompleteError(result.stderr.strip() or "stderr was not empty")
     output_bytes = result.stdout.encode()
     if len(output_bytes) > _MAX_AGENT_OUTPUT_BYTES:
         message = (
@@ -236,7 +239,11 @@ def query(
         raise GraphifyIncompleteError(message)
     lines = result.stdout.splitlines()
     truncation = next(
-        (line for line in lines if line.strip().upper().startswith("TRUNCATED:")),
+        (
+            line
+            for line in lines
+            if line.strip().upper().removeprefix("[!] ").startswith("TRUNCATED:")
+        ),
         None,
     )
     if truncation is not None:
