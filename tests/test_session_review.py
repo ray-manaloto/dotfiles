@@ -431,6 +431,96 @@ def test_semantic_dispositions_cli_input_can_close_validated_claims(
     assert "test:test_local_only_control" in report
 
 
+def test_semantic_dispositions_cli_persists_open_claim_without_converging(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = tmp_path / "repo"
+    (project / ".git").mkdir(parents=True)
+    sessions = tmp_path / "codex" / "sessions"
+    sessions.mkdir(parents=True)
+    transcript = sessions / "root.jsonl"
+    request = "Keep the follow-up open."
+    transcript.write_text(
+        "\n".join(
+            json.dumps(row)
+            for row in (
+                {
+                    "type": "session_meta",
+                    "payload": {"id": "active", "cwd": str(project)},
+                },
+                {
+                    "type": "response_item",
+                    "payload": {
+                        "type": "message",
+                        "id": "request",
+                        "role": "user",
+                        "content": [{"type": "input_text", "text": request}],
+                    },
+                },
+                {
+                    "type": "event_msg",
+                    "payload": {"type": "user_message", "message": request},
+                },
+            )
+        )
+        + "\n"
+    )
+    initial = session_ledger.parse_transcripts(
+        [session_ledger.TranscriptSource(session_ledger.Provider.CODEX, transcript)]
+    )
+    semantic = tmp_path / "semantic-dispositions.json"
+    semantic.write_text(
+        json.dumps(
+            [
+                {
+                    "claim_id": initial.requirements[0].requirement_id,
+                    "status": "open",
+                    "rationale": "Issue 740 owns the remaining work.",
+                    "receipt_refs": ["issue:#740"],
+                }
+            ]
+        )
+    )
+    claude_config = tmp_path / "claude"
+    claude_project = session_review.command_audit.project_dir(
+        claude_config / "projects", project
+    )
+    claude_project.mkdir(parents=True)
+    (claude_project / "clean.jsonl").write_text(
+        json.dumps(
+            {
+                "type": "assistant",
+                "sessionId": "clean-claude",
+                "message": {"content": "Clean Claude transcript."},
+            }
+        )
+        + "\n"
+    )
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex"))
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(claude_config))
+    output = project / "requirements.md"
+
+    result = session_review.session_review_main(
+        project,
+        lanes=session_review.LaneChoice(
+            requirements_only=True,
+            source_repo_root=project,
+            codex_session_id="active",
+            semantic_dispositions=semantic,
+        ),
+        output=output,
+    )
+
+    assert result == 1
+    report = output.read_text()
+    assert "open" in report
+    assert "issue:#740" in report
+    iteration = json.loads(output.with_suffix(".md.iteration.json").read_text())
+    assert iteration["action"] == "needs_agent_action"
+    assert iteration["unreviewed_requirement_ids"] == []
+    assert iteration["open_requirement_ids"] == [initial.requirements[0].requirement_id]
+
+
 def test_public_loop_needs_agent_action_until_prevention_is_disposed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

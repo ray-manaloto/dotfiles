@@ -232,6 +232,110 @@ def test_semantic_disposition_needs_evidence_beyond_an_issue_carrier() -> None:
     assert closed.requirements[0].receipt_refs == ("issue:#715", "test:focused")
 
 
+@pytest.mark.parametrize("carrier", ["issue:#740", "artifact:review/open.json"])
+def test_open_semantic_disposition_persists_without_closing(carrier: str) -> None:
+    coverage = session_ledger.parse_transcripts(
+        [
+            _source(
+                "codex-missed-dependency-request.jsonl",
+                session_ledger.Provider.CODEX,
+            )
+        ]
+    )
+    claim = coverage.requirements[0]
+    disposition = session_ledger.SemanticDisposition(
+        claim.requirement_id,
+        session_ledger.ReviewStatus.OPEN,
+        "The remaining work is durably tracked.",
+        (carrier,),
+    )
+
+    applied = session_ledger.apply_semantic_dispositions(coverage, (disposition,))
+    iteration = session_ledger.advance_iteration(applied, number=1)
+
+    assert disposition.persistable
+    assert not disposition.complete
+    assert applied.requirements[0].status == session_ledger.ReviewStatus.OPEN
+    assert applied.requirements[0].receipt_refs == (carrier,)
+    assert iteration.action == session_ledger.IterationAction.NEEDS_AGENT_ACTION
+    assert claim.requirement_id not in iteration.unreviewed_requirement_ids
+    assert iteration.open_requirement_ids == (claim.requirement_id,)
+
+
+@pytest.mark.parametrize(
+    ("status", "rationale", "refs"),
+    [
+        ("open", "", ["issue:#740"]),
+        ("open", "tracked", []),
+        ("open", "tracked", ["test:focused"]),
+        ("open", "tracked", ["commit:abc"]),
+        ("open", "tracked", ["user:confirmed"]),
+        ("open", "tracked", ["issue:"]),
+        ("open", "tracked", ["artifact:   "]),
+        ("unreviewed", "tracked", ["issue:#740"]),
+        ("satisfied", "tracked", ["issue:#740"]),
+        ("satisfied", "tracked", ["test:"]),
+        ("withdrawn", "tracked", ["issue:#740"]),
+        ("contradicted", "tracked", ["issue:#740"]),
+    ],
+)
+def test_semantic_disposition_loader_rejects_non_persistable_states(
+    tmp_path: Path, status: str, rationale: str, refs: list[str]
+) -> None:
+    path = tmp_path / "semantic.json"
+    path.write_text(
+        json.dumps(
+            [
+                {
+                    "claim_id": "req-1",
+                    "status": status,
+                    "rationale": rationale,
+                    "receipt_refs": refs,
+                }
+            ]
+        )
+    )
+
+    with pytest.raises(ValueError, match="not persistable"):
+        session_ledger.load_semantic_dispositions(path)
+
+
+@pytest.mark.parametrize(
+    ("status", "proof"),
+    [
+        (session_ledger.ReviewStatus.SATISFIED, "test:focused"),
+        (session_ledger.ReviewStatus.WITHDRAWN, "user:withdrawn"),
+        (session_ledger.ReviewStatus.CONTRADICTED, "artifact:contradiction.json"),
+    ],
+)
+def test_terminal_semantic_dispositions_remain_persistable_only_with_proof(
+    status: session_ledger.ReviewStatus, proof: str
+) -> None:
+    disposition = session_ledger.SemanticDisposition(
+        "req-1", status, "Reviewed terminal decision.", (proof,)
+    )
+    assert disposition.complete
+    assert disposition.persistable
+
+
+def test_direct_invalid_open_disposition_cannot_change_claim_status() -> None:
+    requirement = session_ledger.RequirementEntry(
+        "req-1",
+        "Keep this open.",
+        _EVIDENCE,
+        session_ledger.EventKind.USER_MESSAGE,
+        authority_relevant=False,
+    )
+    coverage = session_ledger.RequirementCoverage(
+        (), (requirement,), (), (), (), (), (), "", ()
+    )
+    invalid = session_ledger.SemanticDisposition(
+        "req-1", session_ledger.ReviewStatus.OPEN, "Tracked.", ("test:only",)
+    )
+    applied = session_ledger.apply_semantic_dispositions(coverage, (invalid,))
+    assert applied.requirements[0].status == session_ledger.ReviewStatus.UNREVIEWED
+
+
 def test_provider_qualified_ids_do_not_collide_and_claude_string_is_authority(
     tmp_path: Path,
 ) -> None:
@@ -1907,6 +2011,37 @@ def test_satisfied_tracker_request_does_not_block_iteration() -> None:
 
     assert iteration.action == session_ledger.IterationAction.CONVERGED
     assert iteration.unreviewed_requirement_ids == ()
+    assert iteration.issue_candidate_requirement_ids == ()
+
+
+def test_open_requirement_and_promise_are_reviewed_but_block_convergence() -> None:
+    requirement = session_ledger.RequirementEntry(
+        "req-open",
+        "Track the remaining requirement.",
+        _EVIDENCE,
+        session_ledger.EventKind.USER_MESSAGE,
+        authority_relevant=False,
+        status=session_ledger.ReviewStatus.OPEN,
+        receipt_refs=("issue:#740",),
+    )
+    promise = session_ledger.PromiseEntry(
+        "promise-open",
+        "I will finish the follow-up.",
+        _EVIDENCE,
+        status=session_ledger.ReviewStatus.OPEN,
+        receipt_refs=("artifact:follow-up.json",),
+    )
+    coverage = session_ledger.RequirementCoverage(
+        (), (requirement,), (promise,), (), (), (), (), "", ()
+    )
+
+    iteration = session_ledger.advance_iteration(coverage, number=1)
+
+    assert iteration.action == session_ledger.IterationAction.NEEDS_AGENT_ACTION
+    assert iteration.unreviewed_requirement_ids == ()
+    assert iteration.unreviewed_promise_ids == ()
+    assert iteration.open_requirement_ids == ("req-open",)
+    assert iteration.open_promise_ids == ("promise-open",)
     assert iteration.issue_candidate_requirement_ids == ()
 
 
