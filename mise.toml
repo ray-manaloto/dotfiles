@@ -1327,6 +1327,10 @@ run = 'uv run --project python python -m dotfiles_setup.session_gate --repo-root
 description = "Hostile Git-hook-contamination mutant sentinel for session review"
 run = 'uv run --project python python -m dotfiles_setup.session_gate --repo-root "$MISE_PROJECT_ROOT" mutation-sentinel --prevention-id git-hook-contamination'
 
+[tasks.skillopt-provenance-check]
+description = "Verify SkillOpt GitHub objects and one present-day hostile replay"
+run = "uv run --project python python -m dotfiles_setup.skillopt_provenance"
+
 [tasks.session-review-focused-gate]
 description = "Normal session-review prevention gate"
 run = 'uv run --project python python -m dotfiles_setup.session_gate --repo-root "$MISE_PROJECT_ROOT" prevention-check'
