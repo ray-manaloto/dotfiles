@@ -36,6 +36,9 @@ class _FakeDocker:
     smoke_out: str = "=== All smoke checks passed ===\n"
     head: str = "e61b3ea0"
     branch: str = "main"
+    extra_container_ids: tuple[str, ...] = ()
+    docker_ps_command: list[str] | None = None
+    smoke_command: list[str] | None = None
 
     def __call__(
         self, cmd: list[str], **_kwargs: object
@@ -43,7 +46,11 @@ class _FakeDocker:
         if cmd[:2] == ["git", "-C"]:
             return _cp((self.head if cmd[-1] == "HEAD" else self.branch) + "\n")
         if cmd[:3] == ["docker", "ps", "-q"]:
-            return _cp((self.container_id + "\n") if self.container_id else "")
+            self.docker_ps_command = cmd
+            ids = (
+                (self.container_id,) if self.container_id else ()
+            ) + self.extra_container_ids
+            return _cp("".join(f"{container_id}\n" for container_id in ids))
         if cmd[:2] == ["docker", "inspect"]:
             if self.bind_source is None:
                 return _cp("[]")
@@ -55,7 +62,8 @@ class _FakeDocker:
                 }
             ]
             return _cp(json.dumps(payload))
-        if cmd[:2] == ["devcontainer", "exec"]:
+        if cmd[:2] == ["docker", "exec"]:
+            self.smoke_command = cmd
             return _cp(self.smoke_out, returncode=self.smoke_rc)
         msg = f"unexpected command: {cmd}"
         raise AssertionError(msg)
@@ -67,13 +75,48 @@ def _names(checks: list[container.Check]) -> dict[str, container.Check]:
 
 def test_all_green_when_fresh(monkeypatch: pytest.MonkeyPatch) -> None:
     """A running, bind-mounted container with green smoke passes all checks."""
-    monkeypatch.setattr(container, "_run", _FakeDocker())
+    runner = _FakeDocker()
+    monkeypatch.setattr(container, "_run", runner)
     checks = container.verify_latest(_WORKSPACE)
 
     assert all(c.ok for c in checks)
     assert {"container-running", "workspace-bind-mount", "smoke-tiers-1-3"} == set(
         _names(checks)
     )
+    assert runner.docker_ps_command is not None
+    assert "label=dotfiles.workspace=" in " ".join(runner.docker_ps_command)
+    assert "label=dotfiles.arch=amd64" in runner.docker_ps_command
+    assert runner.smoke_command is not None
+    assert runner.smoke_command == [
+        "docker",
+        "exec",
+        "--workdir",
+        "/workspaces/dotfiles",
+        "cafef00dbeef",
+        "scripts/devcontainer-smoke.sh",
+    ]
+
+
+def test_duplicate_exact_identity_fails_before_inspect_or_smoke(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two containers with the same workspace+arch labels are ambiguous."""
+    runner = _FakeDocker(extra_container_ids=("decafbadcafe",))
+    monkeypatch.setattr(container, "_run", runner)
+
+    checks = container.verify_latest(_WORKSPACE)
+
+    assert checks == [
+        container.Check(
+            "container-identity-unique",
+            ok=False,
+            detail=(
+                "2 running containers share this workspace+arch identity; "
+                "run `mise run down` and start one explicitly"
+            ),
+        )
+    ]
+    assert runner.smoke_command is None
 
 
 def test_no_container_short_circuits(monkeypatch: pytest.MonkeyPatch) -> None:

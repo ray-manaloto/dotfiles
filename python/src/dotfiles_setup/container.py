@@ -37,14 +37,12 @@ import subprocess
 import sys
 from typing import TYPE_CHECKING
 
+from dotfiles_setup.devcontainer_names import resolve_names
+
 if TYPE_CHECKING:
     from pathlib import Path
 
 logger = logging.getLogger(__name__)
-
-# devcontainer-cli labels every container it creates with the host workspace
-# folder; this is the join key between "a running container" and "this repo".
-_LOCAL_FOLDER_LABEL = "devcontainer.local_folder"
 
 # Smoke can take minutes (tier 2 runs pytest, tier 3 links + runs sanitizers
 # and reaches github over ssh); bound it so a hang surfaces instead of blocking.
@@ -78,11 +76,20 @@ def _host_branch(workspace: Path) -> str:
     ).stdout.strip()
 
 
-def _running_container_id(workspace: Path) -> str | None:
+def _running_container_ids(workspace: Path) -> tuple[str, ...]:
+    names = resolve_names(workspace=workspace)
     out = _run(
-        ["docker", "ps", "-q", "--filter", f"label={_LOCAL_FOLDER_LABEL}={workspace}"]
+        [
+            "docker",
+            "ps",
+            "-q",
+            "--filter",
+            f"label={names.workspace_label}",
+            "--filter",
+            f"label={names.arch_label}",
+        ]
     ).stdout.strip()
-    return out.splitlines()[0] if out else None
+    return tuple(line for line in out.splitlines() if line)
 
 
 def _bind_mount_dest(container_id: str, workspace: Path) -> str | None:
@@ -98,13 +105,14 @@ def _bind_mount_dest(container_id: str, workspace: Path) -> str | None:
     return None
 
 
-def _run_smoke(workspace: Path) -> tuple[bool, str]:
+def _run_smoke(container_id: str, workspace_dest: str) -> tuple[bool, str]:
     res = _run(
         [
-            "devcontainer",
+            "docker",
             "exec",
-            "--workspace-folder",
-            str(workspace),
+            "--workdir",
+            workspace_dest,
+            container_id,
             "scripts/devcontainer-smoke.sh",
         ],
         timeout=_SMOKE_TIMEOUT_S,
@@ -128,8 +136,8 @@ def verify_latest(workspace: Path, *, run_smoke: bool = True) -> list[Check]:
     head = _host_head(workspace)
     logger.info("verify-latest: branch=%s HEAD=%s", branch, head[:8])
 
-    container_id = _running_container_id(workspace)
-    if container_id is None:
+    container_ids = _running_container_ids(workspace)
+    if not container_ids:
         return [
             Check(
                 "container-running",
@@ -137,6 +145,19 @@ def verify_latest(workspace: Path, *, run_smoke: bool = True) -> list[Check]:
                 detail=f"no running devcontainer for {workspace} (run `mise run up`)",
             )
         ]
+    if len(container_ids) != 1:
+        return [
+            Check(
+                "container-identity-unique",
+                ok=False,
+                detail=(
+                    f"{len(container_ids)} running containers share this "
+                    "workspace+arch "
+                    "identity; run `mise run down` and start one explicitly"
+                ),
+            )
+        ]
+    container_id = container_ids[0]
 
     checks = [
         Check(
@@ -159,8 +180,8 @@ def verify_latest(workspace: Path, *, run_smoke: bool = True) -> list[Check]:
         )
     )
 
-    if run_smoke:
-        smoke_ok, smoke_detail = _run_smoke(workspace)
+    if run_smoke and dest is not None:
+        smoke_ok, smoke_detail = _run_smoke(container_id, dest)
         checks.append(
             Check(
                 "smoke-tiers-1-3",
