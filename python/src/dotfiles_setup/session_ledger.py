@@ -147,6 +147,32 @@ class CoverageStatus(StrEnum):
     INCOMPLETE = "incomplete"
 
 
+class OmissionDisposition(StrEnum):
+    """Whether an observed gap blocks parsing or is retained context."""
+
+    PARSER_BLOCKING = "parser_blocking"
+    RETAINED_MISSING = "retained_missing"
+
+
+class OmissionCategory(StrEnum):
+    """Stable, deliberately coarse omission categories."""
+
+    SOURCE = "source"
+    IDENTITY = "identity"
+    RELATIONSHIP = "relationship"
+    ATTACHMENT = "attachment"
+    SEMANTIC = "semantic"
+    UNKNOWN = "unknown"
+
+
+class OmissionAuthority(StrEnum):
+    """The subsystem authoritative for resolving an omission."""
+
+    NATIVE_TRANSCRIPT = "native_transcript"
+    PARSER = "parser"
+    REVIEWER = "reviewer"
+
+
 class IterationAction(StrEnum):
     """Next safe action for the bounded self-improvement loop."""
 
@@ -266,6 +292,31 @@ class SemanticDisposition:
                 for item in self.receipt_refs
             )
         )
+
+
+@dataclass(frozen=True)
+class OmissionCensusEntry:
+    """Typed accounting that preserves the original omission as evidence."""
+
+    omission_id: str
+    category: OmissionCategory
+    authority: OmissionAuthority
+    disposition: OmissionDisposition
+    statement: str
+
+
+@dataclass(frozen=True)
+class ClaimSegmentEntry:
+    """Bounded claim row that cannot disappear behind Markdown truncation."""
+
+    claim_id: str
+    claim_kind: str
+    provenance: str
+    status: ReviewStatus
+    evidence: EvidenceRef
+    evidence_ref: str
+    bounded_statement: str
+    statement_sha256: str
 
 
 @dataclass(frozen=True)
@@ -497,6 +548,102 @@ _UNCERTIFIED_ACTIVITY = (
 _CACHE_POLICY_FINGERPRINT = "session-ledger-global-finalization-v1"
 
 
+def _bounded_statement(statement: str, limit: int = 1024) -> str:
+    raw = statement.encode()
+    if len(raw) <= limit:
+        return statement
+    suffix = " [BOUNDED]"
+    prefix = raw[: limit - len(suffix.encode())]
+    while True:
+        try:
+            return prefix.decode() + suffix
+        except UnicodeDecodeError:
+            prefix = prefix[:-1]
+
+
+def _evidence_ref_text(evidence: EvidenceRef) -> str:
+    return (
+        f"{evidence.provider}:{evidence.source_id}:{evidence.line}:"
+        f"{evidence.event_id}:{evidence.record_sha256}"
+    )
+
+
+def _bounded_json(payload: object, label: str) -> str:
+    rendered = json.dumps(
+        payload, separators=(",", ":"), sort_keys=True, ensure_ascii=False
+    )
+    if len(rendered.encode()) > MAX_RENDER_BYTES:
+        message = f"{label} exceeds the hard output cap"
+        raise ValueError(message)
+    return rendered
+
+
+def _bounded_json_chunks(
+    rows: list[dict[str, object]],
+    *,
+    common: Mapping[str, object],
+    member: str,
+) -> list[list[dict[str, object]]]:
+    chunks: list[list[dict[str, object]]] = []
+    current: list[dict[str, object]] = []
+    for row in rows:
+        candidate = [*current, row]
+        probe = {
+            **common,
+            "segment_index": 999999,
+            "segment_count": 999999,
+            member: candidate,
+        }
+        rendered = json.dumps(
+            probe, separators=(",", ":"), sort_keys=True, ensure_ascii=False
+        )
+        if len(rendered.encode()) > MAX_RENDER_BYTES:
+            if not current:
+                message = f"one {member} entry exceeds the hard output cap"
+                raise ValueError(message)
+            chunks.append(current)
+            current = [row]
+        else:
+            current = candidate
+    if current or not chunks:
+        chunks.append(current)
+    return chunks
+
+
+def _classify_omission(statement: str) -> OmissionCensusEntry:
+    """Classify conservatively; an unrecognized statement always blocks."""
+    lowered = statement.lower()
+    category = OmissionCategory.UNKNOWN
+    authority = OmissionAuthority.PARSER
+    disposition = OmissionDisposition.PARSER_BLOCKING
+    if any(token in lowered for token in ("unreadable", "source ", "transcript")):
+        category = OmissionCategory.SOURCE
+        authority = OmissionAuthority.NATIVE_TRANSCRIPT
+        if "unreadable" in lowered or "no transcripts" in lowered:
+            disposition = OmissionDisposition.RETAINED_MISSING
+    elif any(token in lowered for token in ("identity", "session", "provenance")):
+        category = OmissionCategory.IDENTITY
+        authority = OmissionAuthority.NATIVE_TRANSCRIPT
+    elif any(
+        token in lowered
+        for token in ("form result", "tool result", "turn", "lineage", "parent")
+    ):
+        category = OmissionCategory.RELATIONSHIP
+        authority = OmissionAuthority.NATIVE_TRANSCRIPT
+    elif "attachment" in lowered:
+        category = OmissionCategory.ATTACHMENT
+        authority = OmissionAuthority.NATIVE_TRANSCRIPT
+        if "bytes unavailable" in lowered:
+            disposition = OmissionDisposition.RETAINED_MISSING
+    elif "semantic disposition" in lowered:
+        category = OmissionCategory.SEMANTIC
+        authority = OmissionAuthority.REVIEWER
+    digest = hashlib.sha256(statement.encode()).hexdigest()
+    return OmissionCensusEntry(
+        f"omission-{digest[:24]}", category, authority, disposition, statement
+    )
+
+
 @dataclass(frozen=True)
 class RequirementCoverage:
     """Typed, provenance-bearing input to a human or model review."""
@@ -570,7 +717,7 @@ class RequirementCoverage:
                 if event.attachment is not None and event.attachment.payload_sha256
             }
         )
-        omissions = [*self.omissions, *disposition_omissions(self)]
+        omissions = list(_all_omissions(self))
         payload = {
             "schema_version": self.schema_version,
             "recorded_cwd": self.recorded_cwd,
@@ -719,6 +866,196 @@ class RequirementCoverage:
             rendered.append(segment)
         return tuple(rendered)
 
+    def omission_census(self) -> tuple[OmissionCensusEntry, ...]:
+        """Return stable typed rows without replacing any original omission."""
+        return tuple(_classify_omission(item) for item in _all_omissions(self))
+
+    def claim_entries(self) -> tuple[ClaimSegmentEntry, ...]:
+        """Return every requirement and promise in stable claim-ID order."""
+        requirements = (
+            ClaimSegmentEntry(
+                item.requirement_id,
+                "requirement",
+                str(item.authority_provenance),
+                item.status,
+                item.evidence,
+                _evidence_ref_text(item.evidence),
+                _bounded_statement(item.statement),
+                hashlib.sha256(item.statement.encode()).hexdigest(),
+            )
+            for item in self.requirements
+        )
+        promises = (
+            ClaimSegmentEntry(
+                item.promise_id,
+                "promise",
+                AuthorityProvenance.NON_AUTHORITATIVE,
+                item.status,
+                item.evidence,
+                _evidence_ref_text(item.evidence),
+                _bounded_statement(item.statement),
+                hashlib.sha256(item.statement.encode()).hexdigest(),
+            )
+            for item in self.promises
+        )
+        return tuple(sorted((*requirements, *promises), key=lambda item: item.claim_id))
+
+    def claim_segments_to_json(self) -> tuple[str, ...]:
+        """Render every claim in independently bounded content-addressable chunks."""
+        common = {
+            "schema_version": self.schema_version,
+            "manifest_sha256": self.manifest_sha256,
+        }
+        chunks = _bounded_json_chunks(
+            [asdict(item) for item in self.claim_entries()],
+            common=common,
+            member="claims",
+        )
+        return tuple(
+            json.dumps(
+                {
+                    **common,
+                    "segment_index": index,
+                    "segment_count": len(chunks),
+                    "claims": chunk,
+                },
+                separators=(",", ":"),
+                sort_keys=True,
+                ensure_ascii=False,
+            )
+            for index, chunk in enumerate(chunks, start=1)
+        )
+
+    def claims_to_json(self) -> str:
+        """Render the complete claim-segment index and its iteration manifest."""
+        segments = self.claim_segments_to_json()
+        refs = [
+            {
+                "suffix": f".{index:04d}.json",
+                "sha256": hashlib.sha256(segment.encode()).hexdigest(),
+                "claim_count": len(json.loads(segment)["claims"]),
+            }
+            for index, segment in enumerate(segments, start=1)
+        ]
+        payload = {
+            "schema_version": self.schema_version,
+            "iteration_manifest_sha256": self.manifest_sha256,
+            "claim_count": len(self.claim_entries()),
+            "segment_count": len(refs),
+            "segments": refs,
+            "segment_sha256_manifest": hashlib.sha256(
+                "\n".join(str(item["sha256"]) for item in refs).encode()
+            ).hexdigest(),
+        }
+        return _bounded_json(payload, "claim index")
+
+    def semantic_disposition_draft_to_json(self) -> str:
+        """Render the index for segmented, non-closing semantic draft rows."""
+        segments = self.semantic_disposition_draft_segments_to_json()
+        refs = [
+            {
+                "suffix": f".{index:04d}.json",
+                "sha256": hashlib.sha256(segment.encode()).hexdigest(),
+                "disposition_count": len(json.loads(segment)["dispositions"]),
+            }
+            for index, segment in enumerate(segments, start=1)
+        ]
+        return _bounded_json(
+            {
+                "schema_version": self.schema_version,
+                "iteration_manifest_sha256": self.manifest_sha256,
+                "disposition_count": len(self.claim_entries()),
+                "segment_count": len(refs),
+                "segments": refs,
+                "segment_sha256_manifest": hashlib.sha256(
+                    "\n".join(str(item["sha256"]) for item in refs).encode()
+                ).hexdigest(),
+            },
+            "semantic disposition draft index",
+        )
+
+    def semantic_disposition_draft_segments_to_json(self) -> tuple[str, ...]:
+        """Draft every claim as UNREVIEWED in independently bounded segments."""
+        rows: list[dict[str, object]] = [
+            {
+                "claim_id": item.claim_id,
+                "status": ReviewStatus.UNREVIEWED,
+                "rationale": "",
+                "receipt_refs": [],
+            }
+            for item in self.claim_entries()
+        ]
+        common = {
+            "schema_version": self.schema_version,
+            "manifest_sha256": self.manifest_sha256,
+        }
+        chunks = _bounded_json_chunks(rows, common=common, member="dispositions")
+        return tuple(
+            json.dumps(
+                {
+                    **common,
+                    "segment_index": index,
+                    "segment_count": len(chunks),
+                    "dispositions": chunk,
+                },
+                separators=(",", ":"),
+                sort_keys=True,
+                ensure_ascii=False,
+            )
+            for index, chunk in enumerate(chunks, start=1)
+        )
+
+    def omission_segments_to_json(self) -> tuple[str, ...]:
+        """Render every original omission with its typed classification."""
+        common = {
+            "schema_version": self.schema_version,
+            "manifest_sha256": self.manifest_sha256,
+        }
+        chunks = _bounded_json_chunks(
+            [asdict(item) for item in self.omission_census()],
+            common=common,
+            member="omissions",
+        )
+        return tuple(
+            json.dumps(
+                {
+                    **common,
+                    "segment_index": index,
+                    "segment_count": len(chunks),
+                    "omissions": chunk,
+                },
+                separators=(",", ":"),
+                sort_keys=True,
+                ensure_ascii=False,
+            )
+            for index, chunk in enumerate(chunks, start=1)
+        )
+
+    def omissions_to_json(self) -> str:
+        """Render a content-addressed index over the complete omission census."""
+        segments = self.omission_segments_to_json()
+        refs = [
+            {
+                "suffix": f".{index:04d}.json",
+                "sha256": hashlib.sha256(segment.encode()).hexdigest(),
+                "omission_count": len(json.loads(segment)["omissions"]),
+            }
+            for index, segment in enumerate(segments, start=1)
+        ]
+        return _bounded_json(
+            {
+                "schema_version": self.schema_version,
+                "iteration_manifest_sha256": self.manifest_sha256,
+                "omission_count": len(self.omission_census()),
+                "segment_count": len(refs),
+                "segments": refs,
+                "segment_sha256_manifest": hashlib.sha256(
+                    "\n".join(str(item["sha256"]) for item in refs).encode()
+                ).hexdigest(),
+            },
+            "omission index",
+        )
+
 
 @dataclass
 class _Accumulator:
@@ -761,6 +1098,7 @@ class _CodexContinuation:
     previous_window: str = ""
     previous_number: int | None = None
     turn_states: dict[str, str] = field(default_factory=dict)
+    active_turn_id: str = ""
 
 
 @dataclass
@@ -1664,16 +2002,15 @@ def _codex_response(
     if response_type == "message":
         _codex_message(payload, evidence, acc, direct_messages)
     elif (
-        response_type == "function_call" and payload.get("name") == "request_user_input"
+        response_type in {"function_call", "custom_tool_call"}
+        and payload.get("name") == "request_user_input"
     ):
         _codex_form_call(payload, evidence, acc, form_schema_status)
         _codex_tool_event(payload, evidence, acc, result=False)
-    elif response_type == "function_call_output":
+    elif response_type in {"function_call_output", "custom_tool_call_output"}:
         _codex_form_result(payload, evidence, acc)
     elif response_type in {"function_call", "custom_tool_call"}:
         _codex_tool_event(payload, evidence, acc, result=False)
-    elif response_type == "custom_tool_call_output":
-        _codex_tool_event(payload, evidence, acc, result=True)
     elif response_type == "agent_message":
         _codex_agent_message(payload, evidence, acc)
     elif response_type == "compaction":
@@ -2052,6 +2389,21 @@ def _parse_codex(
         evidence = _evidence(Provider.CODEX, source_id, line, obj, raw)
         payload = obj.get("payload")
         values = payload if isinstance(payload, dict) else {}
+        if record_type == "turn_context":
+            state.active_turn_id = _turn_id(values)
+        elif (
+            record_type == "response_item"
+            and not _turn_id(values)
+            and state.active_turn_id
+            and acc.source_authority.get(source_id)
+            == AuthorityProvenance.NATIVE_ROOT_USER
+            and (
+                values.get("name") == "request_user_input"
+                or values.get("type")
+                in {"function_call_output", "custom_tool_call_output"}
+            )
+        ):
+            values = {**values, "turn_id": state.active_turn_id}
         if record_type == "event_msg":
             _advance_turn_state(values, source_id, line, turn_states, acc)
         result = _codex_record(
@@ -2079,6 +2431,7 @@ def _parse_codex(
         previous_window,
         previous_number,
         turn_states,
+        state.active_turn_id,
     )
 
 
@@ -2170,6 +2523,7 @@ def _claude_attachment_event(
         "agent_listing_delta",
         "command_permissions",
         "compact_file_reference",
+        "date_change",
         "deferred_tools_delta",
         "diagnostic",
         "diagnostics",
@@ -3026,6 +3380,15 @@ def semantic_disposition_omissions(coverage: RequirementCoverage) -> tuple[str, 
             for item in coverage.promises
             if item.status == ReviewStatus.UNREVIEWED
         ]
+    )
+
+
+def _all_omissions(coverage: RequirementCoverage) -> tuple[str, ...]:
+    """One deterministic census including structural and reviewed-decision gaps."""
+    return (
+        *coverage.omissions,
+        *disposition_omissions(coverage),
+        *semantic_disposition_omissions(coverage),
     )
 
 

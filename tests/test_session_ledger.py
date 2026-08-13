@@ -710,6 +710,12 @@ def _coverage_oracle_fields(
         coverage.cutoffs,
         coverage.omissions,
         coverage.import_registry,
+        coverage.claims_to_json(),
+        coverage.claim_segments_to_json(),
+        coverage.omissions_to_json(),
+        coverage.omission_segments_to_json(),
+        coverage.semantic_disposition_draft_to_json(),
+        coverage.semantic_disposition_draft_segments_to_json(),
     )
 
 
@@ -2429,3 +2435,147 @@ def test_child_without_history_base_is_incomplete(tmp_path: Path) -> None:
     )
     assert coverage.status == session_ledger.CoverageStatus.INCOMPLETE
     assert any("lacks history_base" in item for item in coverage.omissions)
+
+
+def test_omission_census_is_typed_stable_and_preserves_original_evidence() -> None:
+    coverage = session_ledger.RequirementCoverage(
+        (),
+        (),
+        (),
+        (),
+        (),
+        (),
+        (),
+        "",
+        (
+            "codex:root: attachment bytes unavailable for 'gone.txt'",
+            "future parser shape nobody classified",
+        ),
+    )
+    first = coverage.omission_census()
+    second = coverage.omission_census()
+    assert first == second
+    assert [item.statement for item in first] == list(coverage.omissions)
+    assert first[0].category == session_ledger.OmissionCategory.ATTACHMENT
+    assert first[0].disposition == session_ledger.OmissionDisposition.RETAINED_MISSING
+    assert first[1].category == session_ledger.OmissionCategory.UNKNOWN
+    assert first[1].disposition == session_ledger.OmissionDisposition.PARSER_BLOCKING
+
+
+def test_claim_and_semantic_draft_indexes_cover_every_claim_beyond_report_cap() -> None:
+    requirements = tuple(
+        session_ledger.RequirementEntry(
+            f"req-{index:04d}",
+            "preserve " + ("x" * 500),
+            _EVIDENCE,
+            session_ledger.EventKind.USER_MESSAGE,
+            authority_relevant=False,
+        )
+        for index in range(1_000)
+    )
+    coverage = session_ledger.RequirementCoverage(
+        (), requirements, (), (), (), (), (), "", ()
+    )
+    claim_index = json.loads(coverage.claims_to_json())
+    claim_segments = coverage.claim_segments_to_json()
+    draft_index = json.loads(coverage.semantic_disposition_draft_to_json())
+    draft_segments = coverage.semantic_disposition_draft_segments_to_json()
+    assert claim_index["claim_count"] == len(requirements)
+    assert draft_index["disposition_count"] == len(requirements)
+    assert len(claim_segments) > 1
+    assert len(draft_segments) > 1
+    assert all(
+        len(item.encode()) <= session_ledger.MAX_RENDER_BYTES
+        for item in (*claim_segments, *draft_segments)
+    )
+    claims = [
+        row for segment in claim_segments for row in json.loads(segment)["claims"]
+    ]
+    drafts = [
+        row for segment in draft_segments for row in json.loads(segment)["dispositions"]
+    ]
+    assert [row["claim_id"] for row in claims] == [row["claim_id"] for row in drafts]
+    assert {row["status"] for row in drafts} == {"unreviewed"}
+    assert all(row["evidence_ref"] and row["statement_sha256"] for row in claims)
+
+
+def test_claude_date_change_is_non_authoritative_structural_diagnostic(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "claude-date-change.jsonl"
+    path.write_text(
+        json.dumps(
+            {
+                "type": "attachment",
+                "sessionId": "claude-date",
+                "attachment": {"type": "date_change", "date": "2026-08-13"},
+            }
+        )
+        + "\n"
+    )
+    coverage = session_ledger.parse_transcripts(
+        [session_ledger.TranscriptSource(session_ledger.Provider.CLAUDE, path)]
+    )
+    assert coverage.omissions == ()
+    assert coverage.requirements == ()
+    event = next(
+        item
+        for item in coverage.events
+        if item.kind == session_ledger.EventKind.DIAGNOSTIC
+    )
+    assert event.text == "Claude attachment date_change"
+    assert event.actor == "harness"
+
+
+@pytest.mark.parametrize("mutation", ["none", "wrong-call", "wrong-turn"])
+def test_native_root_custom_form_carrier_requires_exact_call_and_turn_pairing(
+    tmp_path: Path, mutation: str
+) -> None:
+    call_id = "call-form"
+    rows = [
+        {
+            "type": "session_meta",
+            "payload": {"id": "native", "cwd": "/repo", "source": "vscode"},
+        },
+        {"type": "turn_context", "payload": {"turn_id": "turn-1"}},
+        {
+            "type": "response_item",
+            "payload": {
+                "type": "custom_tool_call",
+                "name": "request_user_input",
+                "call_id": call_id,
+                "arguments": {"questions": [{"id": "scope", "question": "Scope?"}]},
+            },
+        },
+        *(
+            [{"type": "turn_context", "payload": {"turn_id": "turn-2"}}]
+            if mutation == "wrong-turn"
+            else []
+        ),
+        {
+            "type": "response_item",
+            "payload": {
+                "type": "custom_tool_call_output",
+                "call_id": "other" if mutation == "wrong-call" else call_id,
+                "output": {"answers": {"scope": {"answers": ["Research only"]}}},
+            },
+        },
+    ]
+    path = tmp_path / "native-form.jsonl"
+    path.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
+    coverage = session_ledger.parse_transcripts(
+        [session_ledger.TranscriptSource(session_ledger.Provider.CODEX, path)]
+    )
+    answers = [
+        item.text
+        for item in coverage.events
+        if item.kind == session_ledger.EventKind.FORM_ANSWER
+    ]
+    if mutation == "none":
+        assert answers == ["Research only"]
+        assert not any(
+            "form result identity mismatch" in item for item in coverage.omissions
+        )
+    else:
+        assert answers == []
+        assert coverage.status == session_ledger.CoverageStatus.INCOMPLETE

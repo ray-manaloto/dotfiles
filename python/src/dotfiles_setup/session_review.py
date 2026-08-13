@@ -49,6 +49,7 @@ which files you point it at.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
@@ -649,28 +650,32 @@ def _requirements_review(
         else requirements_report
     )
     destination = output or Path(".agent/session-review.md")
+    written = command_audit.write_report(report, repo_root, destination)
+    iteration_path = written.with_suffix(written.suffix + ".iteration.json")
     try:
-        evidence = coverage.to_json()
-        cutoffs = coverage.cutoffs_to_json()
-        cutoff_segments = coverage.cutoff_segments_to_json()
+        artifact_paths = _write_coverage_artifacts(coverage, written)
     except ValueError:
         logger.exception("bounded evidence reference artifact could not be written")
         return 1
-    written = command_audit.write_report(report, repo_root, destination)
-    evidence_path = written.with_suffix(written.suffix + ".evidence.json")
-    cutoff_path = written.with_suffix(written.suffix + ".cutoffs.json")
-    iteration_path = written.with_suffix(written.suffix + ".iteration.json")
-    evidence_path.write_text(evidence)
-    for index, segment in enumerate(cutoff_segments, start=1):
-        segment_path = cutoff_path.with_name(f"{cutoff_path.name}.{index:04d}.json")
-        segment_path.write_text(segment)
-    cutoff_path.write_text(cutoffs)
+    evidence_path, cutoff_path = artifact_paths[:2]
     iteration = replace(
         iteration,
         artifacts=(
             session_ledger.artifact_ref(written, kind="report"),
-            session_ledger.artifact_ref(evidence_path, kind="evidence"),
-            session_ledger.artifact_ref(cutoff_path, kind="cutoffs"),
+            *(
+                session_ledger.artifact_ref(path, kind=kind)
+                for path, kind in zip(
+                    artifact_paths,
+                    (
+                        "evidence",
+                        "cutoffs",
+                        "claims",
+                        "omissions",
+                        "semantic_disposition_draft",
+                    ),
+                    strict=True,
+                )
+            ),
         ),
     )
     iteration_path.write_text(iteration.to_json())
@@ -699,3 +704,50 @@ def _requirements_review(
     converged = iteration.action == session_ledger.IterationAction.CONVERGED
     complete = coverage.status == session_ledger.CoverageStatus.COMPLETE
     return 0 if complete and converged else 1
+
+
+def _write_segmented_artifact(
+    path: Path, index: str, segments: tuple[str, ...]
+) -> None:
+    for number, segment in enumerate(segments, start=1):
+        segment_path = path.with_name(f"{path.name}.{number:04d}.json")
+        segment_path.write_text(segment)
+        if (
+            hashlib.sha256(segment_path.read_bytes()).hexdigest()
+            != hashlib.sha256(segment.encode()).hexdigest()
+        ):
+            message = f"segment readback failed for {path.name}"
+            raise ValueError(message)
+    path.write_text(index)
+    if path.read_text() != index:
+        message = f"index readback failed for {path.name}"
+        raise ValueError(message)
+
+
+def _write_coverage_artifacts(
+    coverage: session_ledger.RequirementCoverage, report_path: Path
+) -> tuple[Path, Path, Path, Path, Path]:
+    """Persist bounded indexes before the iteration references their digests."""
+    evidence = report_path.with_suffix(report_path.suffix + ".evidence.json")
+    cutoffs = report_path.with_suffix(report_path.suffix + ".cutoffs.json")
+    claims = report_path.with_suffix(report_path.suffix + ".claims.json")
+    omissions = report_path.with_suffix(report_path.suffix + ".omissions.json")
+    semantic = report_path.with_suffix(
+        report_path.suffix + ".semantic-dispositions.draft.json"
+    )
+    evidence.write_text(coverage.to_json())
+    _write_segmented_artifact(
+        cutoffs, coverage.cutoffs_to_json(), coverage.cutoff_segments_to_json()
+    )
+    _write_segmented_artifact(
+        claims, coverage.claims_to_json(), coverage.claim_segments_to_json()
+    )
+    _write_segmented_artifact(
+        omissions, coverage.omissions_to_json(), coverage.omission_segments_to_json()
+    )
+    _write_segmented_artifact(
+        semantic,
+        coverage.semantic_disposition_draft_to_json(),
+        coverage.semantic_disposition_draft_segments_to_json(),
+    )
+    return evidence, cutoffs, claims, omissions, semantic
