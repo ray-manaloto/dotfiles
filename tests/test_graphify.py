@@ -18,10 +18,13 @@ import subprocess
 import sys
 from pathlib import Path
 
+import msgspec
 import pytest
+from kb_setup.graph import GraphifyBuildReceipt
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
+from dotfiles_setup import codec
 from dotfiles_setup.graphify import (
     GraphifyError,
     GraphifyIncompleteError,
@@ -284,18 +287,96 @@ def test_graphify_health_accepts_exact_receipted_graph(tmp_path: Path) -> None:
     graph_dir.mkdir()
     graph_bytes = b'{"nodes": [], "edges": [], "hyperedges": []}'
     (graph_dir / "graph.json").write_bytes(graph_bytes)
-    (graph_dir / "build-receipt.json").write_text(
-        json.dumps(
-            {
-                "graph_sha256": hashlib.sha256(graph_bytes).hexdigest(),
-                "runtime_version": "0.9.41",
-                "status": "complete",
-                "warnings": [],
-            }
+    (graph_dir / "build-receipt.json").write_bytes(
+        codec.encode(
+            GraphifyBuildReceipt(
+                schema_version=1,
+                status="complete",
+                runtime_version="0.9.41",
+                graph_sha256=hashlib.sha256(graph_bytes).hexdigest(),
+                graph_bytes=len(graph_bytes),
+                node_count=0,
+                edge_count=0,
+                hyperedge_count=0,
+                input_fingerprints_sha256="a" * 64,
+                recorded_at_ns=1,
+            )
         )
     )
     result = graphify_health(tmp_path)
     assert result.status is GraphifyStatus.FRESH
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("schema_version", 999), ("graph_bytes", 1), ("node_count", 7)],
+)
+def test_graphify_health_rejects_forged_producer_receipt_fields(
+    tmp_path: Path, field: str, value: int
+) -> None:
+    graph_dir = tmp_path / "graphify-out"
+    graph_dir.mkdir()
+    graph_bytes = b'{"nodes": [], "edges": [], "hyperedges": []}'
+    (graph_dir / "graph.json").write_bytes(graph_bytes)
+    receipt = GraphifyBuildReceipt(
+        schema_version=1,
+        status="complete",
+        runtime_version="0.9.41",
+        graph_sha256=hashlib.sha256(graph_bytes).hexdigest(),
+        graph_bytes=len(graph_bytes),
+        node_count=0,
+        edge_count=0,
+        hyperedge_count=0,
+        input_fingerprints_sha256="a" * 64,
+        recorded_at_ns=1,
+    )
+    (graph_dir / "build-receipt.json").write_bytes(
+        codec.encode(msgspec.structs.replace(receipt, **{field: value}))
+    )
+
+    assert graphify_health(tmp_path).status is GraphifyStatus.STALE
+
+
+def test_graphify_health_binds_one_graph_byte_snapshot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    graph_dir = tmp_path / "graphify-out"
+    graph_dir.mkdir()
+    graph_path = graph_dir / "graph.json"
+    graph_a = b'{"nodes": [{"id":"a"}], "edges": [], "hyperedges": []}'
+    graph_b = b'{"nodes": [{"id":"b"}], "edges": [], "hyperedges": []}'
+    graph_path.write_bytes(graph_a)
+    receipt = GraphifyBuildReceipt(
+        schema_version=1,
+        status="complete",
+        runtime_version="0.9.41",
+        graph_sha256=hashlib.sha256(graph_a).hexdigest(),
+        graph_bytes=len(graph_a),
+        node_count=1,
+        edge_count=0,
+        hyperedge_count=0,
+        input_fingerprints_sha256="a" * 64,
+        recorded_at_ns=1,
+    )
+    (graph_dir / "build-receipt.json").write_bytes(codec.encode(receipt))
+    original_read_bytes = Path.read_bytes
+    graph_reads = 0
+
+    def _moving_read(path: Path) -> bytes:
+        nonlocal graph_reads
+        if path == graph_path:
+            graph_reads += 1
+            if graph_reads > 1:
+                return graph_b
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", _moving_read)
+
+    result = graphify_health(tmp_path)
+
+    assert result.status is GraphifyStatus.FRESH
+    assert result.graph_sha256 == receipt.graph_sha256
+    assert graph_reads == 1
 
 
 @pytest.mark.parametrize(

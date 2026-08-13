@@ -457,7 +457,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "graphifyy", extras = ["all"], specifier = "==0.9.41" },
-    { name = "kb-setup", git = "https://github.com/ray-manaloto/knowledge-base?rev=3be04a094173f95cd527392ef35eaceb696a13d8" },
+    { name = "kb-setup", git = "https://github.com/ray-manaloto/knowledge-base?rev=0e91752a3257f197be3cb15166065a76b7b9eae2" },
     { name = "msgspec", specifier = ">=0.21.1" },
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "pydantic-settings", specifier = ">=2.15.0" },
@@ -845,7 +845,7 @@ wheels = [
 [[package]]
 name = "kb-setup"
 version = "0.1.0"
-source = { git = "https://github.com/ray-manaloto/knowledge-base?rev=3be04a094173f95cd527392ef35eaceb696a13d8#3be04a094173f95cd527392ef35eaceb696a13d8" }
+source = { git = "https://github.com/ray-manaloto/knowledge-base?rev=0e91752a3257f197be3cb15166065a76b7b9eae2#0e91752a3257f197be3cb15166065a76b7b9eae2" }
 dependencies = [
     { name = "graphifyy", extra = ["all"] },
     { name = "msgspec" },
