@@ -22,7 +22,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import unquote, unquote_to_bytes, urlparse
 
-from dotfiles_setup import command_audit, session_gate
+from dotfiles_setup import codec, command_audit, session_gate
+from dotfiles_setup.session_store import (
+    AppendRebuildError,
+    CacheStats,
+    RunReceipt,
+    SessionStore,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
@@ -177,6 +183,15 @@ class AttachmentMetadata:
     name: str
     payload_sha256: str
     payload_bytes: int
+
+
+@dataclass(frozen=True)
+class AttachmentDependency:
+    """Approved-root-relative external file dependency."""
+
+    root_index: int
+    relative_path: str
+    payload_sha256: str
 
 
 @dataclass(frozen=True)
@@ -461,6 +476,7 @@ class CoverageSelection:
     session_id: str | None = None
     codex_session_id: str | None = None
     require_active_identity: bool = False
+    rebuild_cache: bool = False
 
 
 DEFAULT_COVERAGE_SELECTION = CoverageSelection()
@@ -478,6 +494,7 @@ DEFAULT_TRANSCRIPT_BASES = TranscriptBases()
 _UNCERTIFIED_ACTIVITY = (
     "active session identity is unverified; latest activity is only a fallback"
 )
+_CACHE_POLICY_FINGERPRINT = "session-ledger-global-finalization-v1"
 
 
 @dataclass(frozen=True)
@@ -726,12 +743,43 @@ class _Accumulator:
     approved_attachment_roots: tuple[Path, ...] = ()
     source_authority: dict[str, AuthorityProvenance] = field(default_factory=dict)
     import_registry: list[ImportRegistryEntry] = field(default_factory=list)
+    attachment_dependencies: list[AttachmentDependency] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
 class _CodexParseContext:
     direct_messages: dict[str, list[EvidenceRef]]
     form_schema_status: str
+
+
+@dataclass
+class _CodexContinuation:
+    """State needed to parse an append-only Codex suffix exactly once."""
+
+    direct_messages: dict[str, list[EvidenceRef]] = field(default_factory=dict)
+    form_schema_status: str = ""
+    previous_window: str = ""
+    previous_number: int | None = None
+    turn_states: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
+class _SourceFacts:
+    """Serializable facts for one source before cross-source finalization."""
+
+    source: TranscriptSource
+    source_id: str
+    acc: _Accumulator
+    byte_count: int
+    line_count: int
+    prefix_sha256: str
+    last_event_id: str = ""
+    final_ordinal: str = ""
+    final_timestamp: str = ""
+    codex: _CodexContinuation | None = None
+    claude_session_id: str = ""
+    claude_sidecar: bool = False
+    native_identity: bool = False
 
 
 _CODEX_EVENT_TYPES = frozenset(
@@ -1269,6 +1317,28 @@ def _attachment_bytes(payload: str, approved_roots: tuple[Path, ...]) -> bytes |
     return _local_attachment_bytes(path, approved_roots)
 
 
+def _attachment_dependency(
+    payload: str, roots: tuple[Path, ...], content: bytes | None
+) -> AttachmentDependency | None:
+    if payload.startswith("data:"):
+        return None
+    parsed = urlparse(payload)
+    path = Path(unquote(parsed.path)) if parsed.scheme == "file" else Path(payload)
+    if not path.is_absolute():
+        return None
+    resolved = path.resolve(strict=False)
+    for index, root in enumerate(roots):
+        if resolved.is_relative_to(root):
+            return AttachmentDependency(
+                index,
+                str(resolved.relative_to(root)),
+                hashlib.sha256(content).hexdigest()
+                if content is not None
+                else "unavailable",
+            )
+    return None
+
+
 def _attachment(
     block: Mapping[str, object], evidence: EvidenceRef, acc: _Accumulator
 ) -> AttachmentMetadata:
@@ -1279,6 +1349,9 @@ def _attachment(
     if Path(payload).is_absolute():
         name = Path(payload).name
     content = _attachment_bytes(payload, acc.approved_attachment_roots)
+    dependency = _attachment_dependency(payload, acc.approved_attachment_roots, content)
+    if dependency is not None and dependency not in acc.attachment_dependencies:
+        acc.attachment_dependencies.append(dependency)
     verified = content is not None
     if content is None:
         acc.omissions.append(
@@ -1912,11 +1985,46 @@ def _advance_turn_state(
             states[turn_id] = "complete"
 
 
+def _resolve_pending_codex_user_messages(
+    acc: _Accumulator,
+    source_id: str,
+    direct_messages: dict[str, list[EvidenceRef]],
+) -> None:
+    """Pair newly appended direct evidence with an earlier response-item twin."""
+    replacements: list[CanonicalEvent] = []
+    resolved_lines: set[int] = set()
+    for event in acc.events:
+        matches = direct_messages.get(event.text, [])
+        if (
+            event.kind == EventKind.UNVERIFIABLE_USER_MESSAGE
+            and event.evidence.source_id == source_id
+            and matches
+        ):
+            matches.pop(0)
+            replacements.append(replace(event, kind=EventKind.USER_MESSAGE))
+            resolved_lines.add(event.evidence.line)
+        else:
+            replacements.append(event)
+    if not resolved_lines:
+        return
+    acc.events = replacements
+    acc.omissions = [
+        omission
+        for omission in acc.omissions
+        if not any(
+            omission.startswith(f"{source_id}:{line}: ")
+            and omission.endswith("user-role message lacks direct-user provenance")
+            for line in resolved_lines
+        )
+    ]
+
+
 def _parse_codex(
     records: list[tuple[int, dict[str, object], bytes]],
     source_id: str,
     acc: _Accumulator,
-) -> None:
+    continuation: _CodexContinuation | None = None,
+) -> _CodexContinuation:
     known = {
         "session_meta",
         "turn_context",
@@ -1926,13 +2034,19 @@ def _parse_codex(
         "world_state",
         "inter_agent_communication_metadata",
     }
-    direct_messages = _direct_message_evidence(records, source_id)
+    state = continuation or _CodexContinuation()
+    direct_messages = state.direct_messages
+    for text, rows in _direct_message_evidence(records, source_id).items():
+        direct_messages.setdefault(text, []).extend(rows)
+    _resolve_pending_codex_user_messages(acc, source_id, direct_messages)
     cli_version = _codex_cli_version(records)
-    form_schema_status = "needs-probe" if "alpha" in cli_version else "confirmed"
+    form_schema_status = state.form_schema_status or (
+        "needs-probe" if "alpha" in cli_version else "confirmed"
+    )
     context = _CodexParseContext(direct_messages, form_schema_status)
-    previous_window = ""
-    previous_number: int | None = None
-    turn_states: dict[str, str] = {}
+    previous_window = state.previous_window
+    previous_number = state.previous_number
+    turn_states = state.turn_states
     for line, obj, raw in records:
         record_type = str(obj.get("type", ""))
         evidence = _evidence(Provider.CODEX, source_id, line, obj, raw)
@@ -1959,17 +2073,13 @@ def _parse_codex(
             acc.omissions.append(
                 f"{source_id}:{line}: unknown Codex record {record_type!r}"
             )
-    for turn_id, state in sorted(turn_states.items()):
-        if state != "complete":
-            acc.omissions.append(f"{source_id}: open turn {turn_id}")
-    for text, evidence_rows in direct_messages.items():
-        for evidence in evidence_rows:
-            _add_event(
-                acc,
-                CanonicalEvent(
-                    EventKind.USER_MESSAGE, "user", _safe_text(text), evidence
-                ),
-            )
+    return _CodexContinuation(
+        direct_messages,
+        form_schema_status,
+        previous_window,
+        previous_number,
+        turn_states,
+    )
 
 
 def _claude_form_result(obj: Mapping[str, object]) -> dict[str, object] | None:
@@ -2243,8 +2353,8 @@ def _parse_claude(
     records: list[tuple[int, dict[str, object], bytes]],
     source_id: str,
     acc: _Accumulator,
-    path: Path,
-) -> None:
+    session_id: str = "",
+) -> str:
     known = {
         "assistant",
         "user",
@@ -2264,7 +2374,6 @@ def _parse_claude(
         "file-history-delta",
         "pr-link",
     }
-    session_id = ""
     for line, obj, raw in records:
         record_type = str(obj.get("type", ""))
         session_id = str(obj.get("sessionId", session_id))
@@ -2277,19 +2386,7 @@ def _parse_claude(
             acc.omissions.append(
                 f"{source_id}:{line}: unknown Claude record {record_type!r}"
             )
-    acc.lineage.append(
-        SessionLineage(
-            Provider.CLAUDE,
-            source_id,
-            session_id,
-            "",
-            "subagent" if "subagents" in path.parts else "",
-            "",
-            root_kind=(
-                RootKind.SUBAGENT if "subagents" in path.parts else RootKind.INTERACTIVE
-            ),
-        )
-    )
+    return session_id
 
 
 def _has_open_turn(records: list[tuple[int, dict[str, object], bytes]]) -> bool:
@@ -2379,7 +2476,22 @@ def _read_records(path: Path, source: TranscriptSource, acc: _Accumulator) -> No
     if source.provider == Provider.CODEX:
         _parse_codex(records, source_id, acc)
     else:
-        _parse_claude(records, source_id, acc, path)
+        session_id = _parse_claude(records, source_id, acc)
+        acc.lineage.append(
+            SessionLineage(
+                Provider.CLAUDE,
+                source_id,
+                session_id,
+                "",
+                "subagent" if "subagents" in path.parts else "",
+                "",
+                root_kind=(
+                    RootKind.SUBAGENT
+                    if "subagents" in path.parts
+                    else RootKind.INTERACTIVE
+                ),
+            )
+        )
     if (
         before_stat.st_size != after_stat.st_size
         or before_stat.st_mtime_ns != after_stat.st_mtime_ns
@@ -2474,30 +2586,221 @@ def _resolve_inherited_prefix(acc: _Accumulator) -> None:
     acc.lineage = replacement_lineage
 
 
-def parse_transcripts(
-    sources: Iterable[TranscriptSource],
+def _records_from_bytes(
+    data: bytes,
+    source: TranscriptSource,
+    acc: _Accumulator,
     *,
-    recorded_cwd: str = "",
-    dispositions: Iterable[PreventionDisposition] = (),
-    semantic_dispositions: Iterable[SemanticDisposition] = (),
-    approved_attachment_roots: Iterable[Path] = (),
-) -> RequirementCoverage:
-    """Parse provider-qualified sources into one deterministic coverage ledger."""
-    semantic_rows = tuple(semantic_dispositions)
-    source_list = sorted(sources, key=lambda item: (item.provider, str(item.path)))
-    roots = tuple(
-        sorted(
-            {
-                *(path.expanduser().resolve() for path in approved_attachment_roots),
-                *(source.path.parent.resolve() for source in source_list),
-            },
-            key=str,
+    line_offset: int = 0,
+) -> list[tuple[int, dict[str, object], bytes]]:
+    """Decode complete JSONL bytes while retaining native line coordinates."""
+    records: list[tuple[int, dict[str, object], bytes]] = []
+    for relative_line, raw in enumerate(data.splitlines(keepends=True), start=1):
+        line = line_offset + relative_line
+        obj = _json_object(raw)
+        if obj is None:
+            acc.omissions.append(
+                f"{source.provider}:{source.path.name}:{line}: malformed JSON"
+            )
+            continue
+        records.append((line, obj, raw))
+    return records
+
+
+def _parse_source_facts(
+    data: bytes,
+    source: TranscriptSource,
+    roots: tuple[Path, ...],
+    prior: _SourceFacts | None = None,
+) -> _SourceFacts:
+    """Parse one cold source or append-only suffix into serializable facts."""
+    acc = (
+        prior.acc
+        if prior is not None
+        else _Accumulator(approved_attachment_roots=roots)
+    )
+    offset = prior.line_count if prior is not None else 0
+    records = _records_from_bytes(data, source, acc, line_offset=offset)
+    if prior is None:
+        source_id = _source_id(source.provider, records)
+        native_identity = ":content-" not in source_id
+    else:
+        if not prior.native_identity:
+            message = "content-derived source identity changed"
+            raise AppendRebuildError(message)
+        source_id = prior.source_id
+        native_identity = True
+    before = len(acc.events)
+    codex = prior.codex if prior is not None else None
+    claude_session_id = prior.claude_session_id if prior is not None else ""
+    claude_sidecar = prior.claude_sidecar if prior is not None else False
+    if source.provider == Provider.CODEX:
+        if prior is not None and any(
+            obj.get("type") == "session_meta" for _, obj, _ in records
+        ):
+            message = "late Codex session metadata"
+            raise AppendRebuildError(message)
+        if prior is None:
+            raw_meta = next(
+                (
+                    obj["payload"]
+                    for _, obj, _ in records
+                    if obj.get("type") == "session_meta"
+                    and isinstance(obj.get("payload"), dict)
+                ),
+                {},
+            )
+            meta: Mapping[str, object] = raw_meta if isinstance(raw_meta, dict) else {}
+            kind = codex_root_kind(meta)
+            acc.source_authority[source_id] = (
+                AuthorityProvenance.NATIVE_ROOT_USER
+                if kind == RootKind.INTERACTIVE
+                else (
+                    AuthorityProvenance.IMPORTED_HISTORY
+                    if kind == RootKind.IMPORTED
+                    else AuthorityProvenance.NON_AUTHORITATIVE
+                )
+            )
+        codex = _parse_codex(records, source_id, acc, codex)
+    else:
+        suffix_sidecar = "subagents" in source.path.parts or any(
+            obj.get("isSidechain") is True for _, obj, _ in records
+        )
+        if prior is not None and suffix_sidecar and not claude_sidecar:
+            message = "Claude authority changed in suffix"
+            raise AppendRebuildError(message)
+        claude_sidecar = claude_sidecar or suffix_sidecar
+        acc.source_authority[source_id] = (
+            AuthorityProvenance.NON_AUTHORITATIVE
+            if claude_sidecar
+            else AuthorityProvenance.NATIVE_ROOT_USER
+        )
+        claude_session_id = _parse_claude(records, source_id, acc, claude_session_id)
+        lineage = SessionLineage(
+            Provider.CLAUDE,
+            source_id,
+            claude_session_id,
+            "",
+            "subagent" if "subagents" in source.path.parts else "",
+            "",
+            root_kind=(
+                RootKind.SUBAGENT
+                if "subagents" in source.path.parts
+                else RootKind.INTERACTIVE
+            ),
+        )
+        acc.lineage = [item for item in acc.lineage if item.source_id != source_id]
+        acc.lineage.append(lineage)
+    final_obj = records[-1][1] if records else {}
+    return _SourceFacts(
+        source,
+        source_id,
+        acc,
+        (prior.byte_count if prior else 0) + len(data),
+        offset + len(data.splitlines()),
+        "" if prior is not None else hashlib.sha256(data).hexdigest(),
+        acc.events[-1].evidence.event_id
+        if len(acc.events) > before
+        else (prior.last_event_id if prior else ""),
+        str(final_obj.get("ordinal", prior.final_ordinal if prior else "")),
+        str(final_obj.get("timestamp", prior.final_timestamp if prior else "")),
+        codex,
+        claude_session_id,
+        claude_sidecar,
+        native_identity,
+    )
+
+
+def _encode_source_facts(state: _SourceFacts) -> bytes:
+    """Serialize normalized facts without leaking the native transcript path."""
+    scrubbed = replace(
+        state,
+        source=TranscriptSource(state.source.provider, Path()),
+        acc=replace(state.acc, approved_attachment_roots=()),
+    )
+    return codec.encode(scrubbed)
+
+
+def _decode_source_facts(
+    data: bytes, source: TranscriptSource, roots: tuple[Path, ...]
+) -> _SourceFacts:
+    """Restore the caller-owned source path after decoding path-free facts."""
+    state = codec.decode(data, _SourceFacts)
+    return replace(
+        state,
+        source=source,
+        acc=replace(state.acc, approved_attachment_roots=roots),
+    )
+
+
+def _merge_unique_map[K, V](
+    target: dict[K, V], source: Mapping[K, V], acc: _Accumulator, label: str
+) -> None:
+    for key, value in source.items():
+        if key in target:
+            acc.omissions.append(f"duplicate {label} {key}")
+        else:
+            target[key] = value
+
+
+def _merge_source_fact(acc: _Accumulator, state: _SourceFacts) -> None:
+    """Merge one source without making cross-source completion decisions."""
+    for event in state.acc.events:
+        _add_event(acc, event)
+    if state.codex is not None:
+        for text, evidence_rows in state.codex.direct_messages.items():
+            for evidence in evidence_rows:
+                _add_event(
+                    acc,
+                    CanonicalEvent(
+                        EventKind.USER_MESSAGE, "user", _safe_text(text), evidence
+                    ),
+                )
+    acc.omissions.extend(state.acc.omissions)
+    acc.lineage.extend(state.acc.lineage)
+    open_turn = bool(
+        state.codex
+        and any(value != "complete" for value in state.codex.turn_states.values())
+    )
+    acc.cutoffs.append(
+        SourceCutoff(
+            state.source.provider,
+            state.source_id,
+            str(state.source.path.resolve()),
+            state.byte_count,
+            state.line_count,
+            state.prefix_sha256,
+            state.last_event_id,
+            state.final_ordinal,
+            state.final_timestamp,
+            open_turn,
         )
     )
-    acc = _Accumulator(approved_attachment_roots=roots)
-    for source in source_list:
-        _read_records(source.path, source, acc)
-    _resolve_inherited_prefix(acc)
+    acc.import_registry.extend(
+        ImportRegistryEntry(
+            state.source.provider,
+            state.source_id,
+            lineage.session_id,
+            lineage.root_kind,
+            state.prefix_sha256,
+        )
+        for lineage in state.acc.lineage
+        if lineage.root_kind == RootKind.IMPORTED
+    )
+    _merge_unique_map(acc.form_calls, state.acc.form_calls, acc, "form call id")
+    _merge_unique_map(acc.form_results, state.acc.form_results, acc, "form result id")
+    _merge_unique_map(acc.tool_calls, state.acc.tool_calls, acc, "tool call id")
+    _merge_unique_map(acc.tool_results, state.acc.tool_results, acc, "tool result id")
+    if state.codex is not None:
+        acc.omissions.extend(
+            f"{state.source_id}: open turn {turn_id}"
+            for turn_id, turn_state in sorted(state.codex.turn_states.items())
+            if turn_state != "complete"
+        )
+
+
+def _finalize_relationships(acc: _Accumulator) -> None:
+    """Resolve forms and tools after every source fact has been merged."""
     for call_id, call in sorted(acc.form_calls.items()):
         evidence, turn_id, question_ids = call
         result = acc.form_results.get(call_id)
@@ -2507,8 +2810,8 @@ def parse_transcripts(
             )
         elif result[:2] != (turn_id, question_ids):
             acc.omissions.append(
-                f"{evidence.source_id}:{evidence.line}: form result identity mismatch "
-                f"{call_id}"
+                f"{evidence.source_id}:{evidence.line}: form result identity "
+                f"mismatch {call_id}"
             )
         else:
             _, _, result_evidence, answers = result
@@ -2537,9 +2840,30 @@ def parse_transcripts(
             )
         elif result_turn != turn_id:
             acc.omissions.append(
-                f"{evidence.source_id}:{evidence.line}: tool result turn mismatch "
-                f"{call_id}"
+                f"{evidence.source_id}:{evidence.line}: tool result turn "
+                f"mismatch {call_id}"
             )
+
+
+def _finalize_source_facts(
+    facts: Iterable[_SourceFacts],
+    *,
+    recorded_cwd: str,
+    dispositions: Iterable[PreventionDisposition],
+    semantic_dispositions: Iterable[SemanticDisposition],
+    extra_omissions: Iterable[str] = (),
+) -> RequirementCoverage:
+    """Merge cached source facts and always rerun every global decision."""
+    rows = tuple(facts)
+    semantic_rows = tuple(semantic_dispositions)
+    acc = _Accumulator()
+    for state in rows:
+        acc.source_authority.update(state.acc.source_authority)
+    for state in rows:
+        _merge_source_fact(acc, state)
+    acc.omissions.extend(extra_omissions)
+    _resolve_inherited_prefix(acc)
+    _finalize_relationships(acc)
     coverage = RequirementCoverage(
         tuple(
             sorted(
@@ -2582,6 +2906,69 @@ def parse_transcripts(
         import_registry=tuple(acc.import_registry),
     )
     return apply_semantic_dispositions(coverage, semantic_rows)
+
+
+def parse_transcripts(
+    sources: Iterable[TranscriptSource],
+    *,
+    recorded_cwd: str = "",
+    dispositions: Iterable[PreventionDisposition] = (),
+    semantic_dispositions: Iterable[SemanticDisposition] = (),
+    approved_attachment_roots: Iterable[Path] = (),
+) -> RequirementCoverage:
+    """Parse provider-qualified sources into one deterministic coverage ledger."""
+    source_list = sorted(sources, key=lambda item: (item.provider, str(item.path)))
+    roots = tuple(
+        sorted(
+            {
+                *(path.expanduser().resolve() for path in approved_attachment_roots),
+                *(source.path.parent.resolve() for source in source_list),
+            },
+            key=str,
+        )
+    )
+    facts: list[_SourceFacts] = []
+    omissions: list[str] = []
+    for source in source_list:
+        try:
+            before = source.path.stat()
+            data = source.path.read_bytes()
+            after = source.path.stat()
+        except OSError as exc:
+            omissions.append(f"{source.provider}:{source.path}: unreadable: {exc}")
+            continue
+        last_line = data.rsplit(b"\n", maxsplit=1)[-1]
+        complete_end = (
+            len(data)
+            if not last_line or _json_object(last_line) is not None
+            else data.rfind(b"\n") + 1
+        )
+        complete = data[:complete_end]
+        tail_bytes = len(data) - complete_end
+        if not complete:
+            omissions.append(
+                f"{source.provider}:{source.path}: source ends with an incomplete "
+                f"JSONL record ({tail_bytes} byte(s))"
+            )
+            continue
+        state = _parse_source_facts(complete, source, roots)
+        if tail_bytes:
+            state.acc.omissions.append(
+                f"{state.source_id}: source ends with an incomplete JSONL record "
+                f"({tail_bytes} byte(s))"
+            )
+        if before.st_size != after.st_size or before.st_mtime_ns != after.st_mtime_ns:
+            state.acc.omissions.append(
+                f"{state.source_id}: source changed while being read"
+            )
+        facts.append(state)
+    return _finalize_source_facts(
+        facts,
+        recorded_cwd=recorded_cwd,
+        dispositions=dispositions,
+        semantic_dispositions=semantic_dispositions,
+        extra_omissions=omissions,
+    )
 
 
 def apply_semantic_dispositions(
@@ -2650,6 +3037,171 @@ def _validated_source_root(source_repo_root: Path) -> tuple[Path | None, str]:
     if not resolved.is_dir() or not (resolved / ".git").exists():
         return None, f"source repository root is not a Git checkout: {resolved}"
     return resolved, ""
+
+
+def _add_cache_stats(left: CacheStats, right: CacheStats) -> CacheStats:
+    return CacheStats(
+        left.reused_sources + right.reused_sources,
+        left.appended_sources + right.appended_sources,
+        left.rebuilt_sources + right.rebuilt_sources,
+        left.decoded_bytes + right.decoded_bytes,
+        left.corrupt_entries + right.corrupt_entries,
+    )
+
+
+def _dependencies_match(state: _SourceFacts, roots: tuple[Path, ...]) -> bool:
+    for dependency in state.acc.attachment_dependencies:
+        if dependency.root_index >= len(roots):
+            return False
+        content = _local_attachment_bytes(
+            roots[dependency.root_index] / dependency.relative_path, roots
+        )
+        current = (
+            hashlib.sha256(content).hexdigest()
+            if content is not None
+            else "unavailable"
+        )
+        if current != dependency.payload_sha256:
+            return False
+    return True
+
+
+def _append_source_facts(
+    serialized: bytes,
+    suffix: bytes,
+    source: TranscriptSource,
+    roots: tuple[Path, ...],
+) -> bytes:
+    """Validate external facts before extending an append-only source."""
+    prior = _decode_source_facts(serialized, source, roots)
+    if not _dependencies_match(prior, roots):
+        message = "external attachment dependency changed before append"
+        raise AppendRebuildError(message)
+    return _encode_source_facts(_parse_source_facts(suffix, source, roots, prior))
+
+
+def _cached_requirement_coverage(
+    repo_root: Path,
+    sources: Iterable[TranscriptSource],
+    *,
+    dispositions: Iterable[PreventionDisposition],
+    semantic_dispositions: Iterable[SemanticDisposition],
+    rebuild_cache: bool,
+) -> tuple[RequirementCoverage, CacheStats, SessionStore]:
+    """Resolve each source through the repo-local cache, then finalize globally."""
+    source_rows = tuple(sources)
+    roots = tuple(
+        sorted({source.path.parent.resolve() for source in source_rows}, key=str)
+    )
+    policy_material = "\n".join(str(path) for path in roots)
+    policy = hashlib.sha256(
+        f"{_CACHE_POLICY_FINGERPRINT}\0{policy_material}".encode()
+    ).hexdigest()
+    cache_root = repo_root / ".agent" / "state" / "session-review"
+    parser_fingerprint = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+    states: list[_SourceFacts] = []
+    omissions: list[str] = []
+    stats = CacheStats()
+    for source in source_rows:
+        store = SessionStore(
+            cache_root,
+            parser_fingerprint=parser_fingerprint,
+            policy_fingerprint=policy,
+        )
+
+        def cold(data: bytes, selected: TranscriptSource = source) -> bytes:
+            return _encode_source_facts(_parse_source_facts(data, selected, roots))
+
+        def append(
+            serialized: bytes,
+            suffix: bytes,
+            selected: TranscriptSource = source,
+        ) -> bytes:
+            return _append_source_facts(serialized, suffix, selected, roots)
+
+        resolved = store.resolve(
+            str(source.provider),
+            source.path,
+            cold_parser=cold,
+            append_parser=append,
+            rebuild=rebuild_cache,
+        )
+        if not resolved.facts:
+            omissions.append(
+                f"{source.provider}:{source.path}: {resolved.reason} "
+                f"({resolved.incomplete_tail_bytes} byte(s))"
+            )
+            stats = _add_cache_stats(stats, resolved.stats)
+            continue
+        try:
+            state = _decode_source_facts(resolved.facts, source, roots)
+        except TypeError, ValueError, codec.UnsupportedTypeError:
+            resolved = store.resolve(
+                str(source.provider),
+                source.path,
+                cold_parser=cold,
+                append_parser=append,
+                rebuild=True,
+            )
+            try:
+                state = _decode_source_facts(resolved.facts, source, roots)
+            except TypeError, ValueError, codec.UnsupportedTypeError:
+                omissions.append(
+                    f"{source.provider}:{source.path}: cache rebuild failed"
+                )
+                stats = _add_cache_stats(stats, resolved.stats)
+                continue
+        if resolved.stats.reused_sources and not _dependencies_match(state, roots):
+            resolved = store.resolve(
+                str(source.provider),
+                source.path,
+                cold_parser=cold,
+                append_parser=append,
+                rebuild=True,
+            )
+            state = _decode_source_facts(resolved.facts, source, roots)
+        stats = _add_cache_stats(stats, resolved.stats)
+        if resolved.source is None:
+            omissions.append(
+                f"{source.provider}:{source.path}: "
+                f"{resolved.reason or 'source unavailable'}"
+            )
+            continue
+        state = replace(
+            state,
+            byte_count=resolved.source.byte_count,
+            line_count=resolved.source.line_count,
+            prefix_sha256=resolved.source.prefix_sha256,
+        )
+        states.append(state)
+        if not resolved.complete:
+            omissions.append(
+                f"{state.source_id}: {resolved.reason} "
+                f"({resolved.incomplete_tail_bytes} byte(s))"
+            )
+    aggregate_policy = hashlib.sha256(
+        codec.encode(
+            [
+                (str(state.source.provider), state.acc.attachment_dependencies)
+                for state in states
+            ]
+        )
+    ).hexdigest()
+    run_store = SessionStore(
+        cache_root,
+        parser_fingerprint=parser_fingerprint,
+        policy_fingerprint=hashlib.sha256(
+            f"{policy}\0{aggregate_policy}".encode()
+        ).hexdigest(),
+    )
+    coverage = _finalize_source_facts(
+        states,
+        recorded_cwd=str(repo_root),
+        dispositions=dispositions,
+        semantic_dispositions=semantic_dispositions,
+        extra_omissions=omissions,
+    )
+    return coverage, stats, run_store
 
 
 def build_requirement_coverage(
@@ -2725,11 +3277,12 @@ def build_requirement_coverage(
             codex_session_id or "",
             provider_census=census,
         )
-    coverage = parse_transcripts(
+    coverage, cache_stats, store = _cached_requirement_coverage(
+        repo_root,
         sources,
-        recorded_cwd=str(repo_root),
         dispositions=dispositions,
         semantic_dispositions=semantic_dispositions,
+        rebuild_cache=selection.rebuild_cache,
     )
     coverage = replace(
         coverage,
@@ -2739,13 +3292,22 @@ def build_requirement_coverage(
         omissions=(*coverage.omissions, *selection_omissions),
     )
     if selection.require_active_identity and not codex_session_id:
-        return replace(
+        coverage = replace(
             coverage,
             omissions=(
                 *coverage.omissions,
                 _UNCERTIFIED_ACTIVITY,
             ),
         )
+    store.publish_run(
+        RunReceipt(
+            store.parser_fingerprint,
+            store.policy_fingerprint,
+            coverage.manifest_sha256,
+            cache_stats,
+            coverage.status == CoverageStatus.COMPLETE,
+        )
+    )
     return coverage
 
 

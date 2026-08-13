@@ -194,6 +194,7 @@ class LaneChoice:
     codex_session_id: str | None = None
     receipt_run_id: str = ""
     max_iterations: int = 1
+    rebuild_cache: bool = False
 
 
 #: Defaults as module-level singletons, so the entry point can declare them
@@ -602,6 +603,7 @@ def _requirements_review(
             limit=sessions,
             codex_session_id=codex_session_id,
             require_active_identity=True,
+            rebuild_cache=lanes.rebuild_cache,
         ),
     )
     prior_dispositions: tuple[str, ...] = ()
@@ -627,6 +629,7 @@ def _requirements_review(
                 limit=sessions,
                 codex_session_id=codex_session_id,
                 require_active_identity=True,
+                rebuild_cache=lanes.rebuild_cache,
             ),
         )
         iteration = session_ledger.advance_iteration(

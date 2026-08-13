@@ -11,6 +11,7 @@ mise run session-review                                   # requirements + both 
 mise run session-review -- --output .agent/session-review.md
 mise run session-review -- --narrative-only               # cheap re-check
 mise run session-review -- --sessions 6                   # narrow the mine
+mise run session-review -- --rebuild-cache                # cold-oracle repair
 mise run session-requirements -- /absolute/source/checkout    # typed evidence, 5 sessions
 mise run session-requirements -- /absolute/source/checkout 3 5 # sessions, iterations
 mise run session-review -- --requirements-only --source-repo-root "$PWD" \
@@ -19,6 +20,12 @@ mise run session-review -- --requirements-only --source-repo-root "$PWD" \
   --codex-session-id "$CODEX_THREAD_ID" \
   --semantic-dispositions .agent/session-review-dispositions.json
 ```
+
+The requirement lane caches only typed, normalized pre-finalization facts under
+`.agent/state/session-review/`. Every run reapplies lineage, form/tool pairing,
+authority, omissions, and semantic dispositions globally. Use
+`--rebuild-cache` to force the cold parser; raw transcript records are never
+stored in the cache.
 
 `python/src/dotfiles_setup/session_review.py` does the collecting. The report
 is evidence plus a template; **the judgement is yours**, and the sections below

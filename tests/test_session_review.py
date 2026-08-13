@@ -29,6 +29,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 from dotfiles_setup import session_ledger, session_review
 from dotfiles_setup.command_audit import BashCommand
+from dotfiles_setup.main import setup_parser
 
 REPO_ROOT = Path(__file__).parent.parent
 
@@ -286,6 +287,12 @@ def test_requirements_only_is_exclusive_with_the_automation_lanes(
 
 def test_session_limit_must_be_positive(tmp_path: Path) -> None:
     assert session_review.session_review_main(tmp_path, sessions=0) == 2
+
+
+def test_rebuild_cache_flag_reaches_the_lane_choice() -> None:
+    args = setup_parser().parse_args(["session-review", "--rebuild-cache"])
+
+    assert args.rebuild_cache is True
 
 
 @pytest.mark.parametrize("iterations", [0, 6])
