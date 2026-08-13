@@ -481,6 +481,9 @@ def test_public_loop_needs_agent_action_until_prevention_is_disposed(
         "report",
         "evidence",
         "cutoffs",
+        "claims",
+        "omissions",
+        "semantic_disposition_draft",
     }
     for artifact in packet["artifacts"]:
         artifact_path = Path(artifact["path"])
@@ -504,6 +507,16 @@ def test_public_loop_needs_agent_action_until_prevention_is_disposed(
         evidence["cutoff_manifest_sha256"]
         == hashlib.sha256(cutoff_index_path.read_bytes()).hexdigest()
     )
+    claims_path = output.with_suffix(".md.claims.json")
+    claims = json.loads(claims_path.read_text())
+    assert claims["claim_count"] == 0
+    assert all(
+        claims_path.with_name(f"{claims_path.name}{item['suffix']}").is_file()
+        for item in claims["segments"]
+    )
+    draft_path = output.with_suffix(".md.semantic-dispositions.draft.json")
+    draft = json.loads(draft_path.read_text())
+    assert draft["disposition_count"] == claims["claim_count"]
 
 
 def test_the_narrative_lane_runs_without_touching_transcripts(tmp_path: Path) -> None:
