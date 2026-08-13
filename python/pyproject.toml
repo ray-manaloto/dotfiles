@@ -6,7 +6,7 @@ requires-python = ">=3.14"
 dependencies = [
     # Graphify is a Python runtime dependency, not a second mise/pipx tool.
     # The CLI console script and SDK therefore resolve from the same uv lock.
-    "graphifyy[all]==0.9.41",
+    "graphifyy[all]==0.9.42",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.15.0",
     # deb822 control-file parser, maintained by Debian's own
@@ -37,7 +37,7 @@ dependencies = [
     # neither repo has tags, so a SHA is the only stable pin. Renovate's git-refs
     # datasource bumps this the same way it bumps CLANG_P2996_REF. Dependency
     # direction is dotfiles → KB only; the KB never learns about its consumers.
-    "kb-setup @ git+https://github.com/ray-manaloto/knowledge-base@0e91752a3257f197be3cb15166065a76b7b9eae2",
+    "kb-setup @ git+https://github.com/ray-manaloto/knowledge-base@c70f0f81378ff55522496b57a828645fc002602e",
     "msgspec>=0.21.1",
 ]
 

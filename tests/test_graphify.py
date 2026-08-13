@@ -16,6 +16,7 @@ import hashlib
 import json
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import msgspec
@@ -38,12 +39,28 @@ from dotfiles_setup.graphify import (
 )
 
 
+def test_graphify_runtime_and_skill_stamps_match_project_pin() -> None:
+    repo = Path(__file__).parent.parent
+    project = tomllib.loads(
+        (repo / "python/pyproject.toml").read_text(encoding="utf-8")
+    )
+    dependency = next(
+        value
+        for value in project["project"]["dependencies"]
+        if value.startswith("graphifyy")
+    )
+
+    assert dependency == "graphifyy[all]==0.9.42"
+    stamp = repo / ".agents/skills/graphify/.graphify_version"
+    assert stamp.read_text(encoding="utf-8").strip() == "0.9.42"
+
+
 def _force_fresh_health(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep subprocess-focused query tests behind an explicitly fresh graph."""
     monkeypatch.setattr(
         "dotfiles_setup.graphify.graphify_health",
         lambda _root: HealthResult(
-            GraphifyStatus.FRESH, "0.9.41", graph_sha256="stable"
+            GraphifyStatus.FRESH, "0.9.42", graph_sha256="stable"
         ),
     )
 
@@ -192,7 +209,7 @@ def test_query_refuses_stale_health_before_running_graphify(
     monkeypatch.setattr(
         "dotfiles_setup.graphify.graphify_health",
         lambda _root: HealthResult(
-            GraphifyStatus.STALE, "0.9.41", "build receipt missing"
+            GraphifyStatus.STALE, "0.9.42", "build receipt missing"
         ),
     )
 
@@ -207,8 +224,8 @@ def test_query_rejects_graph_changed_during_subprocess(
     """Post-query health must bind the answer to the preflight graph digest."""
     health_results = iter(
         (
-            HealthResult(GraphifyStatus.FRESH, "0.9.41", graph_sha256="before"),
-            HealthResult(GraphifyStatus.STALE, "0.9.41", "receipt mismatch"),
+            HealthResult(GraphifyStatus.FRESH, "0.9.42", graph_sha256="before"),
+            HealthResult(GraphifyStatus.STALE, "0.9.42", "receipt mismatch"),
         )
     )
     monkeypatch.setattr(
@@ -292,7 +309,7 @@ def test_graphify_health_accepts_exact_receipted_graph(tmp_path: Path) -> None:
             GraphifyBuildReceipt(
                 schema_version=1,
                 status="complete",
-                runtime_version="0.9.41",
+                runtime_version="0.9.42",
                 graph_sha256=hashlib.sha256(graph_bytes).hexdigest(),
                 graph_bytes=len(graph_bytes),
                 node_count=0,
@@ -321,7 +338,7 @@ def test_graphify_health_rejects_forged_producer_receipt_fields(
     receipt = GraphifyBuildReceipt(
         schema_version=1,
         status="complete",
-        runtime_version="0.9.41",
+        runtime_version="0.9.42",
         graph_sha256=hashlib.sha256(graph_bytes).hexdigest(),
         graph_bytes=len(graph_bytes),
         node_count=0,
@@ -349,7 +366,7 @@ def test_graphify_health_binds_one_graph_byte_snapshot(
     receipt = GraphifyBuildReceipt(
         schema_version=1,
         status="complete",
-        runtime_version="0.9.41",
+        runtime_version="0.9.42",
         graph_sha256=hashlib.sha256(graph_a).hexdigest(),
         graph_bytes=len(graph_a),
         node_count=1,
@@ -395,13 +412,13 @@ def test_graphify_health_rejects_invalid_graph_schema(
         json.dumps(
             {
                 "graph_sha256": hashlib.sha256(graph_bytes).hexdigest(),
-                "runtime_version": "0.9.41",
+                "runtime_version": "0.9.42",
                 "status": "complete",
                 "warnings": [],
             }
         )
     )
-    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.41")
+    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.42")
 
     result = graphify_health(tmp_path)
 
