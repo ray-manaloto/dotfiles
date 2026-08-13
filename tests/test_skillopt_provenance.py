@@ -15,12 +15,15 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
 
-def _copy_replay(repo: Path) -> Path:
-    source = Path(__file__).parents[1] / subject.REPLAY_DIR / subject.REPLAY_RECEIPT
-    target = repo / subject.REPLAY_DIR / subject.REPLAY_RECEIPT
-    target.parent.mkdir(parents=True)
-    target.write_bytes(source.read_bytes())
-    return target
+def _copy_replays(repo: Path) -> tuple[Path, ...]:
+    targets = []
+    for name in subject.REPLAY_RECEIPTS:
+        source = Path(__file__).parents[1] / subject.REPLAY_DIR / name
+        target = repo / subject.REPLAY_DIR / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(source.read_bytes())
+        targets.append(target)
+    return tuple(targets)
 
 
 def _fetch() -> Callable[[Sequence[str]], bytes]:
@@ -56,7 +59,7 @@ def _fetch() -> Callable[[Sequence[str]], bytes]:
 
 def test_manifest_is_stable_and_all_live_objects_bind(tmp_path: Path) -> None:
     subject.export(tmp_path)
-    _copy_replay(tmp_path)
+    _copy_replays(tmp_path)
     first = (tmp_path / subject.MANIFEST).read_bytes()
     subject.export(tmp_path)
     assert (tmp_path / subject.MANIFEST).read_bytes() == first
@@ -64,12 +67,12 @@ def test_manifest_is_stable_and_all_live_objects_bind(tmp_path: Path) -> None:
     subject.verify_live(_fetch())
 
 
-def test_only_real_replay_is_verified_and_none_is_adoption_evidence() -> None:
+def test_all_present_day_replays_are_verified_and_none_is_adoption_evidence() -> None:
     payload = json.loads(subject.manifest_bytes())
     assert [row["authority_status"] for row in payload["fixes"]] == [
         "verified_replay",
-        "object_provenance_only",
-        "object_provenance_only",
+        "verified_replay",
+        "verified_replay",
     ]
     assert all(row["adoption_eligible"] is False for row in payload["fixes"])
     assert payload["not_historical_execution"] is True
@@ -138,12 +141,34 @@ def test_api_failure_is_bounded_without_body_or_secret(
 @pytest.mark.parametrize("mutation", ["delete", "tamper", "extra"])
 def test_replay_inventory_mutations_fail(tmp_path: Path, mutation: str) -> None:
     subject.export(tmp_path)
-    target = _copy_replay(tmp_path)
+    target = _copy_replays(tmp_path)[0]
     if mutation == "delete":
         target.unlink()
     elif mutation == "tamper":
         target.write_bytes(target.read_bytes() + b" ")
     else:
         (target.parent / "fabricated.json").write_text("{}\n")
+    with pytest.raises(subject.ProvenanceError, match="inventory"):
+        subject.verify_local(tmp_path)
+
+
+def test_non_flipping_receipt_cannot_be_coordinated_into_manifest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    subject.export(tmp_path)
+    targets = _copy_replays(tmp_path)
+    old = targets[1]
+    receipt = json.loads(old.read_text())
+    receipt["hostile_mutation"]["rc"] = 0
+    raw = (json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    name = f"open-disposition-{subject.digest(raw)}.json"
+    replacement = old.with_name(name)
+    replacement.write_bytes(raw)
+    old.unlink()
+    names = tuple(
+        name if item == old.name else item for item in subject.REPLAY_RECEIPTS
+    )
+    monkeypatch.setattr(subject, "REPLAY_RECEIPTS", names)
+    subject.export(tmp_path)
     with pytest.raises(subject.ProvenanceError, match="inventory"):
         subject.verify_local(tmp_path)
