@@ -190,6 +190,13 @@ class SelectionCertification(StrEnum):
     UNCERTIFIED_ACTIVITY_FALLBACK = "uncertified_activity_fallback"
 
 
+def _has_typed_ref(value: str, prefixes: tuple[str, ...]) -> bool:
+    return any(
+        value.startswith(prefix) and bool(value.removeprefix(prefix).strip())
+        for prefix in prefixes
+    )
+
+
 @dataclass(frozen=True)
 class EvidenceRef:
     """Stable pointer from a ledger item to one raw JSONL record."""
@@ -267,7 +274,7 @@ class PromiseEntry:
 
 @dataclass(frozen=True)
 class SemanticDisposition:
-    """Human-reviewed semantic closure for one requirement or promise."""
+    """Human-reviewed state for one requirement or promise."""
 
     claim_id: str
     status: ReviewStatus
@@ -275,20 +282,39 @@ class SemanticDisposition:
     receipt_refs: tuple[str, ...]
 
     @property
+    def persistable(self) -> bool:
+        """A reviewed OPEN state needs a durable carrier, not closure proof."""
+        common = (
+            bool(self.claim_id.strip())
+            and bool(self.rationale.strip())
+            and bool(self.receipt_refs)
+            and all(item.strip() for item in self.receipt_refs)
+        )
+        if not common:
+            return False
+        if self.status == ReviewStatus.OPEN:
+            return any(
+                _has_typed_ref(item, ("issue:", "artifact:"))
+                for item in self.receipt_refs
+            )
+        return self.complete
+
+    @property
     def complete(self) -> bool:
         """A carrier alone is not semantic proof."""
         return (
-            self.status
+            bool(self.claim_id.strip())
+            and bool(self.rationale.strip())
+            and self.status
             in {
                 ReviewStatus.SATISFIED,
                 ReviewStatus.WITHDRAWN,
                 ReviewStatus.CONTRADICTED,
             }
-            and bool(self.rationale.strip())
             and bool(self.receipt_refs)
             and all(item.strip() for item in self.receipt_refs)
             and any(
-                item.startswith(("test:", "commit:", "artifact:", "user:"))
+                _has_typed_ref(item, ("test:", "commit:", "artifact:", "user:"))
                 for item in self.receipt_refs
             )
         )
@@ -414,6 +440,8 @@ class ReviewIteration:
     )
     receipt_state: tuple[FindingReceiptState, ...] = ()
     unreviewed_promise_ids: tuple[str, ...] = ()
+    open_requirement_ids: tuple[str, ...] = ()
+    open_promise_ids: tuple[str, ...] = ()
 
     def to_json(self) -> str:
         """Return a deterministic packet an external agent team can resume."""
@@ -3348,13 +3376,13 @@ def apply_semantic_dispositions(
 
     def requirement(item: RequirementEntry) -> RequirementEntry:
         row = by_id.get(item.requirement_id)
-        if row is None or not row.complete:
+        if row is None or not row.persistable:
             return item
         return replace(item, status=row.status, receipt_refs=row.receipt_refs)
 
     def promise(item: PromiseEntry) -> PromiseEntry:
         row = by_id.get(item.promise_id)
-        if row is None or not row.complete:
+        if row is None or not row.persistable:
             return item
         return replace(item, status=row.status, receipt_refs=row.receipt_refs)
 
@@ -3864,10 +3892,11 @@ def load_semantic_dispositions(path: Path) -> tuple[SemanticDisposition, ...]:
             str(item.get("rationale", "")),
             tuple(refs),
         )
-        if not row.complete:
+        if not row.persistable:
             message = (
-                f"semantic disposition {index} lacks closure evidence; "
-                "an issue or carrier alone is not proof"
+                f"semantic disposition {index} is not persistable; OPEN needs "
+                "rationale plus an issue/artifact carrier, while terminal status "
+                "needs proof"
             )
             raise ValueError(message)
         rows.append(row)
@@ -3937,6 +3966,21 @@ def advance_iteration(
             if promise.status == ReviewStatus.UNREVIEWED
         )
     )
+    open_requirements = tuple(
+        sorted(
+            requirement.requirement_id
+            for requirement in coverage.requirements
+            if requirement.status == ReviewStatus.OPEN
+            and not _AGENT_REVIEW_ENVELOPE.search(requirement.statement)
+        )
+    )
+    open_promises = tuple(
+        sorted(
+            promise.promise_id
+            for promise in coverage.promises
+            if promise.status == ReviewStatus.OPEN
+        )
+    )
     expected_provider_missing = any(
         row.expected and row.selected == 0 for row in coverage.provider_census
     )
@@ -3946,6 +3990,8 @@ def advance_iteration(
         or unresolved
         or unreviewed_requirements
         or unreviewed_promises
+        or open_requirements
+        or open_promises
     ):
         action = IterationAction.NEEDS_AGENT_ACTION
     elif frozenset(current) - previous:
@@ -3982,6 +4028,8 @@ def advance_iteration(
             for finding in coverage.high_severity_findings
         ),
         unreviewed_promise_ids=unreviewed_promises,
+        open_requirement_ids=open_requirements,
+        open_promise_ids=open_promises,
     )
 
 
