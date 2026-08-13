@@ -67,6 +67,7 @@ class HealthResult:
     status: GraphifyStatus
     runtime_version: str
     detail: str = ""
+    graph_sha256: str = ""
 
     @property
     def ok(self) -> bool:
@@ -124,11 +125,22 @@ def graphify_health(project_root: Path) -> HealthResult:
     payload, error = _load_json_object(graph_path)
     if payload is None:
         return HealthResult(GraphifyStatus.CORRUPT, runtime, error)
+    for field in ("nodes", "edges", "hyperedges"):
+        if not isinstance(payload.get(field), list):
+            return HealthResult(
+                GraphifyStatus.CORRUPT,
+                runtime,
+                f"graph field {field!r} must be an array",
+            )
     if runtime != "0.9.41":
         return HealthResult(GraphifyStatus.VERSION_DRIFT, runtime, "expected 0.9.41")
     if problem := _receipt_problem(graph_path, runtime):
         return problem
-    return HealthResult(GraphifyStatus.FRESH, runtime)
+    return HealthResult(
+        GraphifyStatus.FRESH,
+        runtime,
+        graph_sha256=hashlib.sha256(graph_path.read_bytes()).hexdigest(),
+    )
 
 
 def graphify_health_main(project_root: Path, *, output_json: bool = False) -> int:
@@ -228,6 +240,13 @@ def query(
     if result.returncode != 0:
         message = (result.stderr or result.stdout).strip()
         raise GraphifyError(message or "graphify query failed")
+    post_health = graphify_health(project_root)
+    if not post_health.ok or post_health.graph_sha256 != health.graph_sha256:
+        message = (
+            "graph changed or became unhealthy while query was running: "
+            f"{post_health.status} {post_health.detail}"
+        )
+        raise GraphifyIncompleteError(message)
     if result.stderr:
         raise GraphifyIncompleteError(result.stderr.strip() or "stderr was not empty")
     output_bytes = result.stdout.encode()

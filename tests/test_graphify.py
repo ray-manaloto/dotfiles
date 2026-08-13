@@ -39,7 +39,9 @@ def _force_fresh_health(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep subprocess-focused query tests behind an explicitly fresh graph."""
     monkeypatch.setattr(
         "dotfiles_setup.graphify.graphify_health",
-        lambda _root: HealthResult(GraphifyStatus.FRESH, "0.9.41"),
+        lambda _root: HealthResult(
+            GraphifyStatus.FRESH, "0.9.41", graph_sha256="stable"
+        ),
     )
 
 
@@ -196,6 +198,30 @@ def test_query_refuses_stale_health_before_running_graphify(
     assert called is False
 
 
+def test_query_rejects_graph_changed_during_subprocess(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Post-query health must bind the answer to the preflight graph digest."""
+    health_results = iter(
+        (
+            HealthResult(GraphifyStatus.FRESH, "0.9.41", graph_sha256="before"),
+            HealthResult(GraphifyStatus.STALE, "0.9.41", "receipt mismatch"),
+        )
+    )
+    monkeypatch.setattr(
+        "dotfiles_setup.graphify.graphify_health", lambda _root: next(health_results)
+    )
+    monkeypatch.setattr(
+        "dotfiles_setup.graphify._run",
+        lambda args, *, cwd: subprocess.CompletedProcess(
+            args, 0, "answer", str(cwd)[:0]
+        ),
+    )
+
+    with pytest.raises(GraphifyIncompleteError, match="while query was running"):
+        query(tmp_path, "q")
+
+
 def test_false_zero_cut_truncation_banner_is_not_treated_as_complete(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -245,7 +271,9 @@ def test_graphify_health_rejects_graph_without_build_receipt(tmp_path: Path) -> 
     """An unreceipted graph cannot be called fresh merely because it parses."""
     graph_dir = tmp_path / "graphify-out"
     graph_dir.mkdir()
-    (graph_dir / "graph.json").write_text('{"nodes": [], "links": []}')
+    (graph_dir / "graph.json").write_text(
+        '{"nodes": [], "edges": [], "hyperedges": []}'
+    )
     result = graphify_health(tmp_path)
     assert result.status is GraphifyStatus.STALE
 
@@ -254,7 +282,7 @@ def test_graphify_health_accepts_exact_receipted_graph(tmp_path: Path) -> None:
     """Freshness binds the exact graph bytes and runtime version."""
     graph_dir = tmp_path / "graphify-out"
     graph_dir.mkdir()
-    graph_bytes = b'{"nodes": [], "links": []}'
+    graph_bytes = b'{"nodes": [], "edges": [], "hyperedges": []}'
     (graph_dir / "graph.json").write_bytes(graph_bytes)
     (graph_dir / "build-receipt.json").write_text(
         json.dumps(
@@ -268,6 +296,35 @@ def test_graphify_health_accepts_exact_receipted_graph(tmp_path: Path) -> None:
     )
     result = graphify_health(tmp_path)
     assert result.status is GraphifyStatus.FRESH
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [{}, {"nodes": "not-a-list", "edges": [], "hyperedges": []}],
+)
+def test_graphify_health_rejects_invalid_graph_schema(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, payload: object
+) -> None:
+    """Receipted bytes still need the Graphify graph collection fields."""
+    graph_dir = tmp_path / "graphify-out"
+    graph_dir.mkdir()
+    graph_bytes = json.dumps(payload).encode()
+    (graph_dir / "graph.json").write_bytes(graph_bytes)
+    (graph_dir / "build-receipt.json").write_text(
+        json.dumps(
+            {
+                "graph_sha256": hashlib.sha256(graph_bytes).hexdigest(),
+                "runtime_version": "0.9.41",
+                "status": "complete",
+                "warnings": [],
+            }
+        )
+    )
+    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.41")
+
+    result = graphify_health(tmp_path)
+
+    assert result.status is GraphifyStatus.CORRUPT
 
 
 def test_graphify_health_cli_emits_typed_json(
