@@ -742,6 +742,7 @@ _CODEX_EVENT_TYPES = frozenset(
         "task_started",
         "thread_settings_applied",
         "token_count",
+        "turn_aborted",
         "user_message",
     }
 )
@@ -797,8 +798,12 @@ def _is_codex_root(meta: Mapping[str, object]) -> bool:
 
 def codex_root_kind(meta: Mapping[str, object]) -> RootKind:
     """Classify a native Codex transcript without granting authority by shape."""
-    raw_source = meta.get("source", meta.get("thread_source", ""))
-    encoded = json.dumps(raw_source, sort_keys=True).lower()
+    identity = {
+        "source": meta.get("source", ""),
+        "thread_source": meta.get("thread_source", ""),
+        "originator": meta.get("originator", ""),
+    }
+    encoded = json.dumps(identity, sort_keys=True).lower()
     result = RootKind.UNKNOWN
     if meta.get("parent_thread_id") or "subagent" in encoded:
         result = RootKind.SUBAGENT
@@ -810,12 +815,9 @@ def codex_root_kind(meta: Mapping[str, object]) -> RootKind:
         result = RootKind.PLUGIN_TASK
     elif "import" in encoded:
         result = RootKind.IMPORTED
-    elif (
-        raw_source is None
-        or raw_source == ""
-        or any(
-            token in encoded for token in ("user", "interactive", "vscode", "desktop")
-        )
+    elif not any(identity.values()) or any(
+        token in encoded
+        for token in ("user", "interactive", "vscode", "desktop", "codex-tui")
     ):
         result = RootKind.INTERACTIVE
     return result
@@ -1338,10 +1340,14 @@ def _codex_user_kind(
 ) -> EventKind | None:
     matches = direct_messages.get(text, [])
     if not matches:
-        acc.omissions.append(
-            f"{evidence.source_id}:{evidence.line}: "
-            "user-role message lacks direct-user provenance"
-        )
+        if (
+            acc.source_authority.get(evidence.source_id)
+            == AuthorityProvenance.NATIVE_ROOT_USER
+        ):
+            acc.omissions.append(
+                f"{evidence.source_id}:{evidence.line}: "
+                "user-role message lacks direct-user provenance"
+            )
         return EventKind.UNVERIFIABLE_USER_MESSAGE
     matches.pop(0)
     if any(
@@ -1425,13 +1431,15 @@ def _form_questions(
             )
             continue
         text = str(question.get("question", ""))
-        question_id = str(question.get("id", ""))
+        question_id = str(question.get("id", "")) or (
+            f"question-{hashlib.sha256(text.encode()).hexdigest()[:20]}" if text else ""
+        )
         if not question_id or question_id in question_ids:
             acc.omissions.append(
                 f"{evidence.source_id}:{evidence.line}: duplicate or empty question id"
             )
         question_ids.add(question_id)
-        metadata = _metadata_pairs(question, ("id", "header"))
+        metadata = (("id", question_id), *_metadata_pairs(question, ("header",)))
         _add_event(
             acc,
             CanonicalEvent(
@@ -1455,6 +1463,13 @@ def _form_answers(
     answer_ids: set[str] = set()
     answer_rows: list[tuple[str, str]] = []
     for question_id, value in answers.items():
+        if isinstance(value, str):
+            derived_id = (
+                f"question-{hashlib.sha256(str(question_id).encode()).hexdigest()[:20]}"
+            )
+            answer_ids.add(derived_id)
+            answer_rows.append((derived_id, _safe_text(value)))
+            continue
         answer_ids.add(str(question_id))
         answer_values = value.get("answers") if isinstance(value, dict) else None
         if not isinstance(answer_values, list):
@@ -1883,10 +1898,15 @@ def _advance_turn_state(
             acc.omissions.append(f"{source_id}:{line}: duplicate or empty task start")
         else:
             states[turn_id] = "started"
-    elif event_type == "task_complete":
+    elif event_type in {
+        "task_complete",
+        "task_failed",
+        "turn_aborted",
+        "turn_complete",
+    }:
         if not turn_id or states.get(turn_id) != "started":
             acc.omissions.append(
-                f"{source_id}:{line}: task complete without unique start"
+                f"{source_id}:{line}: terminal event without unique start"
             )
         else:
             states[turn_id] = "complete"
@@ -2013,6 +2033,81 @@ def _claude_content(
             )
 
 
+def _claude_attachment_event(
+    obj: Mapping[str, object], evidence: EvidenceRef, acc: _Accumulator
+) -> None:
+    """Separate external file bytes from Claude's inline structural union."""
+    attachment = obj.get("attachment")
+    if not isinstance(attachment, dict):
+        _add_event(
+            acc,
+            CanonicalEvent(
+                EventKind.OPAQUE_PAYLOAD,
+                "harness",
+                "Claude structural attachment",
+                evidence,
+                _digest_metadata("attachment", attachment),
+            ),
+        )
+        return
+    attachment_type = str(attachment.get("type", ""))
+    warning_types = {
+        "hook_cancelled",
+        "hook_non_blocking_error",
+        "read_truncation_notice",
+    }
+    diagnostic_types = {
+        "agent_listing_delta",
+        "command_permissions",
+        "compact_file_reference",
+        "deferred_tools_delta",
+        "diagnostic",
+        "diagnostics",
+        "edited_text_file",
+        "hook_additional_context",
+        "hook_success",
+        "mcp_instructions_delta",
+        "nested_memory",
+        "output_style",
+        "queued_command",
+        "skill_listing",
+    }
+    file_like = attachment_type in {"file", "image", "document"} or (
+        attachment_type not in warning_types | diagnostic_types
+        and any(attachment.get(name) for name in ("image_url", "file_url", "path"))
+    )
+    if file_like:
+        meta = _attachment(attachment, evidence, acc)
+        _add_event(
+            acc,
+            CanonicalEvent(
+                EventKind.ATTACHMENT,
+                "harness",
+                meta.name,
+                evidence,
+                attachment=meta,
+            ),
+        )
+        return
+    if attachment_type not in warning_types | diagnostic_types:
+        acc.omissions.append(
+            f"{evidence.source_id}:{evidence.line}: "
+            f"unknown Claude attachment {attachment_type!r}"
+        )
+    _add_event(
+        acc,
+        CanonicalEvent(
+            EventKind.WARNING
+            if attachment_type in warning_types
+            else EventKind.DIAGNOSTIC,
+            "harness",
+            f"Claude attachment {attachment_type or 'unknown'}",
+            evidence,
+            _digest_metadata("attachment", attachment),
+        ),
+    )
+
+
 def _claude_non_message_event(
     record_type: str,
     obj: Mapping[str, object],
@@ -2021,25 +2116,31 @@ def _claude_non_message_event(
 ) -> bool:
     """Retain one known Claude structural record; return whether handled."""
     if record_type == "attachment":
-        attachment = obj.get("attachment")
-        if isinstance(attachment, dict):
-            meta = _attachment(attachment, evidence, acc)
-            event = CanonicalEvent(
-                EventKind.ATTACHMENT,
+        _claude_attachment_event(obj, evidence, acc)
+        return True
+    if record_type == "bridge-session":
+        _add_event(
+            acc,
+            CanonicalEvent(
+                EventKind.AUTHORITY_CONTEXT,
                 "harness",
-                meta.name,
+                "Claude bridge session",
                 evidence,
-                attachment=meta,
-            )
-        else:
-            event = CanonicalEvent(
-                EventKind.OPAQUE_PAYLOAD,
+                _digest_metadata("bridge_session", obj),
+            ),
+        )
+        return True
+    if record_type in {"agent-name", "file-history-delta", "pr-link"}:
+        _add_event(
+            acc,
+            CanonicalEvent(
+                EventKind.DIAGNOSTIC,
                 "harness",
-                "Claude structural attachment",
+                f"Claude structural record {record_type}",
                 evidence,
-                _digest_metadata("attachment", attachment),
-            )
-        _add_event(acc, event)
+                _digest_metadata(record_type, obj),
+            ),
+        )
         return True
     if record_type in {"summary", "last-prompt"}:
         summary = obj.get("summary", obj.get("content", obj.get("prompt", "")))
@@ -2158,6 +2259,10 @@ def _parse_claude(
         "mode",
         "permission-mode",
         "attachment",
+        "agent-name",
+        "bridge-session",
+        "file-history-delta",
+        "pr-link",
     }
     session_id = ""
     for line, obj, raw in records:

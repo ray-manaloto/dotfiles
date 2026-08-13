@@ -523,6 +523,44 @@ def test_orphan_form_result_never_confers_authority(
     assert any("orphan form result missing-call" in item for item in coverage.omissions)
 
 
+def test_non_authoritative_codex_worker_user_role_is_evidence_not_omission(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "worker.jsonl"
+    rows = [
+        {
+            "type": "session_meta",
+            "payload": {
+                "id": "worker",
+                "cwd": "/repo",
+                "source": "exec",
+                "originator": "codex_exec",
+            },
+        },
+        {
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "id": "worker-prompt",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "Injected worker brief"}],
+            },
+        },
+    ]
+    path.write_text("\n".join(json.dumps(row) for row in rows))
+
+    coverage = session_ledger.parse_transcripts(
+        [session_ledger.TranscriptSource(session_ledger.Provider.CODEX, path)]
+    )
+
+    assert coverage.status == session_ledger.CoverageStatus.COMPLETE
+    assert coverage.requirements == ()
+    assert any(
+        event.kind == session_ledger.EventKind.UNVERIFIABLE_USER_MESSAGE
+        for event in coverage.events
+    )
+
+
 @pytest.mark.parametrize("mutation", ["turn", "ids", "duplicate"])
 def test_form_pairing_rejects_identity_mutations(tmp_path: Path, mutation: str) -> None:
     call = {
@@ -640,6 +678,16 @@ def test_codex_discovery_selects_root_and_children_by_native_session_id(
         child,
         root,
     ]
+
+
+def test_codex_cli_user_root_is_authoritative() -> None:
+    meta = {
+        "source": "cli",
+        "thread_source": "user",
+        "originator": "codex-tui",
+    }
+
+    assert session_ledger.codex_root_kind(meta) == session_ledger.RootKind.INTERACTIVE
 
 
 def test_codex_selector_never_filters_independent_claude_roots(tmp_path: Path) -> None:
@@ -1020,6 +1068,163 @@ def test_external_attachment_hashes_bytes_and_missing_file_fails_closed(
     missing = session_ledger.parse_transcripts([source])
     assert missing.status == session_ledger.CoverageStatus.INCOMPLETE
     assert any("attachment bytes unavailable" in item for item in missing.omissions)
+
+
+def test_claude_structural_attachments_and_bridge_session_are_not_files(
+    tmp_path: Path,
+) -> None:
+    transcript = tmp_path / "claude-live-shapes.jsonl"
+    records = [
+        {
+            "type": "bridge-session",
+            "sessionId": "claude-root",
+            "bridgeSessionId": "bridge-1",
+            "lastSequenceNum": 7,
+        },
+        {
+            "type": "attachment",
+            "sessionId": "claude-root",
+            "attachment": {
+                "type": "hook_success",
+                "hookName": "SessionStart",
+                "exitCode": 0,
+                "stdout": "opaque output",
+                "stderr": "",
+            },
+        },
+        {
+            "type": "attachment",
+            "sessionId": "claude-root",
+            "attachment": {
+                "type": "hook_non_blocking_error",
+                "hookName": "PostToolUse",
+                "content": "opaque failure",
+            },
+        },
+        {
+            "type": "attachment",
+            "sessionId": "claude-root",
+            "attachment": {
+                "type": "deferred_tools_delta",
+                "addedNames": ["example"],
+            },
+        },
+        {
+            "type": "attachment",
+            "sessionId": "claude-root",
+            "attachment": {
+                "type": "edited_text_file",
+                "filename": "/repo/example.py",
+                "snippet": "opaque source bytes",
+            },
+        },
+        {
+            "type": "attachment",
+            "sessionId": "claude-root",
+            "attachment": {
+                "type": "nested_memory",
+                "path": "/unavailable/CLAUDE.md",
+                "displayPath": "CLAUDE.md",
+                "content": {"instructions": "opaque inline bytes"},
+            },
+        },
+        {
+            "type": "file-history-delta",
+            "sessionId": "claude-root",
+            "files": ["example.py"],
+        },
+        {
+            "type": "agent-name",
+            "sessionId": "claude-root",
+            "name": "reviewer",
+        },
+        {
+            "type": "pr-link",
+            "sessionId": "claude-root",
+            "prNumber": 123,
+        },
+    ]
+    transcript.write_text("\n".join(json.dumps(row) for row in records))
+
+    coverage = session_ledger.parse_transcripts(
+        [session_ledger.TranscriptSource(session_ledger.Provider.CLAUDE, transcript)]
+    )
+
+    assert coverage.status == session_ledger.CoverageStatus.COMPLETE
+    assert not any(
+        "attachment bytes unavailable" in item for item in coverage.omissions
+    )
+    assert any(
+        event.kind == session_ledger.EventKind.WARNING
+        and event.text == "Claude attachment hook_non_blocking_error"
+        for event in coverage.events
+    )
+    assert any(
+        event.kind == session_ledger.EventKind.AUTHORITY_CONTEXT
+        and event.text == "Claude bridge session"
+        for event in coverage.events
+    )
+
+
+def test_claude_legacy_form_pairs_question_text_with_string_answer(
+    tmp_path: Path,
+) -> None:
+    transcript = tmp_path / "claude-legacy-form.jsonl"
+    call_id = "toolu-form"
+    question = "Which architecture should we validate?"
+    records = [
+        {
+            "type": "assistant",
+            "sessionId": "claude-root",
+            "message": {
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": call_id,
+                        "name": "AskUserQuestion",
+                        "input": {
+                            "questions": [
+                                {
+                                    "header": "Architecture",
+                                    "question": question,
+                                    "options": [],
+                                }
+                            ]
+                        },
+                    }
+                ]
+            },
+        },
+        {
+            "type": "user",
+            "sessionId": "claude-root",
+            "message": {
+                "content": [
+                    {"type": "tool_result", "tool_use_id": call_id, "content": ""}
+                ]
+            },
+            "toolUseResult": {"answers": {question: "Validate both architectures"}},
+        },
+    ]
+    transcript.write_text("\n".join(json.dumps(row) for row in records))
+
+    coverage = session_ledger.parse_transcripts(
+        [session_ledger.TranscriptSource(session_ledger.Provider.CLAUDE, transcript)]
+    )
+
+    assert coverage.status == session_ledger.CoverageStatus.COMPLETE
+    answer = next(
+        event
+        for event in coverage.events
+        if event.kind == session_ledger.EventKind.FORM_ANSWER
+    )
+    prompt = next(
+        event
+        for event in coverage.events
+        if event.kind == session_ledger.EventKind.FORM_QUESTION
+    )
+    assert answer.text == "Validate both architectures"
+    assert dict(answer.metadata)["question_id"] == dict(prompt.metadata)["id"]
 
 
 def test_attachment_symlink_and_oversize_payload_fail_closed(tmp_path: Path) -> None:
@@ -1587,8 +1792,9 @@ def test_forged_command_receipt_is_rejected(
         session_ledger.load_dispositions(path, repo_root=repo, attestation=_ATTESTATION)
 
 
+@pytest.mark.parametrize("terminal_event", ["task_complete", "turn_aborted"])
 def test_tool_call_result_and_terminal_state_are_structural_and_bounded(
-    tmp_path: Path,
+    tmp_path: Path, terminal_event: str
 ) -> None:
     opaque_text = "OPAQUE-TOOL-PAYLOAD"
     records = [
@@ -1616,7 +1822,7 @@ def test_tool_call_result_and_terminal_state_are_structural_and_bounded(
         },
         {
             "type": "event_msg",
-            "payload": {"type": "task_complete", "turn_id": "turn-1"},
+            "payload": {"type": terminal_event, "turn_id": "turn-1"},
         },
     ]
     path = tmp_path / "tools.jsonl"
