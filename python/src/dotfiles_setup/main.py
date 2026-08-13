@@ -34,6 +34,7 @@ from dotfiles_setup.dag_tick import (
     DEFAULT_STALL_AFTER_SECONDS,
     run_tick,
 )
+from dotfiles_setup.dependency_ownership import dependency_ownership_main
 from dotfiles_setup.devcontainer_names import (
     NAME_FIELDS,
     devcontainer_env_main,
@@ -59,7 +60,7 @@ from dotfiles_setup.graph_bakeoff import (
     GOLD_CORPUS_RELPATH,
     bakeoff_main,
 )
-from dotfiles_setup.graphify import graphify_main
+from dotfiles_setup.graphify import graphify_health_main, graphify_main
 from dotfiles_setup.hk_builtins_audit import hk_builtins_audit_main
 from dotfiles_setup.hook_guard import pretooluse_main
 from dotfiles_setup.hook_selfcheck import hook_selfcheck_main
@@ -286,9 +287,17 @@ def _add_session_evidence_arguments(review_parser: argparse.ArgumentParser) -> N
         help="Reviewed JSON prevention receipts for confirmed findings",
     )
     review_parser.add_argument(
-        "--session-id",
-        default=os.environ.get("CODEX_THREAD_ID", ""),
-        help="Native current session/thread id; CODEX_THREAD_ID is the fallback",
+        "--semantic-dispositions",
+        type=Path,
+        help=(
+            "Reviewed JSON decisions for requirement and promise claim IDs; "
+            "each terminal decision needs rationale and a typed verification receipt"
+        ),
+    )
+    review_parser.add_argument(
+        "--codex-session-id",
+        default=os.environ.get("CODEX_THREAD_ID", "").strip() or None,
+        help="Native Codex thread id; defaults only from a nonempty CODEX_THREAD_ID",
     )
     review_parser.add_argument(
         "--receipt-run-id",
@@ -780,8 +789,15 @@ def _add_graphify_subcommands(
     query_parser.add_argument(
         "--budget", type=int, default=2000, help="Token budget (default: 2000)"
     )
+    health_parser = graphify_sub.add_parser(
+        "health", help="Read-only typed graph and Graphify runtime health"
+    )
+    health_parser.add_argument("--json", action="store_true", dest="output_json")
     query_parser.add_argument(
-        "--context", type=int, default=None, help="Context depth around each hit"
+        "--context",
+        action="append",
+        default=[],
+        help="Edge-context label to include (repeatable)",
     )
     query_parser.add_argument(
         "--dfs", action="store_true", help="Traverse depth-first instead of BFS"
@@ -814,6 +830,19 @@ def _add_graphify_subcommands(
         action="store_true",
         dest="no_null",
         help="Drop the null arm. Removes the noise floor, so no gap is interpretable",
+    )
+
+
+def _add_project_contract_subcommands(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    """Register small project-wide contract commands."""
+    subparsers.add_parser(
+        "sync-versions", help="Sync tool versions from config to pyproject.toml"
+    )
+    subparsers.add_parser(
+        "dependency-ownership",
+        help="Reject duplicated Python/mise package ownership and unlocked uv sync",
     )
 
 
@@ -1361,10 +1390,7 @@ def setup_parser() -> argparse.ArgumentParser:
     )
     query_parser.add_argument("tool", help="Tool name")
 
-    # sync-versions command
-    subparsers.add_parser(
-        "sync-versions", help="Sync tool versions from config to pyproject.toml"
-    )
+    _add_project_contract_subcommands(subparsers)
 
     # install command
     subparsers.add_parser("install", help="Execute toolchain installation")
@@ -1633,10 +1659,12 @@ def handle_graphify(args: argparse.Namespace, project_root: Path) -> None:
                 project_root,
                 question=args.question,
                 budget=args.budget,
-                context=args.context,
+                context=tuple(args.context),
                 dfs=args.dfs,
             )
         )
+    if getattr(args, "graphify_command", None) == "health":
+        sys.exit(graphify_health_main(project_root, output_json=args.output_json))
     if getattr(args, "graphify_command", None) == "bakeoff":
         corpus = (
             Path(args.corpus) if args.corpus else project_root / GOLD_CORPUS_RELPATH
@@ -2006,6 +2034,9 @@ def _build_command_handlers(
         ),
         "hook": lambda: handle_hook(args, project_root),
         "graphify": lambda: handle_graphify(args, project_root),
+        "dependency-ownership": lambda: sys.exit(
+            dependency_ownership_main(project_root)
+        ),
         "version": _version,
         "install": lambda: handle_install(project_root),
         "verify": lambda: handle_verify(args),
@@ -2086,7 +2117,8 @@ def _build_command_handlers(
                     requirements_only=args.requirements_only,
                     source_repo_root=args.source_repo_root,
                     dispositions=args.dispositions,
-                    session_id=args.session_id or None,
+                    semantic_dispositions=args.semantic_dispositions,
+                    codex_session_id=args.codex_session_id,
                     receipt_run_id=args.receipt_run_id,
                     max_iterations=args.max_iterations,
                 ),

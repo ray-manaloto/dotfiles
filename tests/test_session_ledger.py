@@ -8,7 +8,7 @@ import json
 import sys
 from dataclasses import replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NoReturn, cast
 
 import pytest
 
@@ -53,6 +53,58 @@ _COVERAGE_STATUS_TABLE = tuple(
         else session_ledger.CoverageStatus.COMPLETE,
     )
 )
+
+_AUTHORITY_PROVENANCE_TABLE = (
+    (session_ledger.EventKind.USER_MESSAGE, (), "native_root_user"),
+    (session_ledger.EventKind.FORM_ANSWER, (), "paired_form_answer"),
+    (
+        session_ledger.EventKind.USER_MESSAGE,
+        (("authority_provenance", "imported_history"),),
+        "imported_history",
+    ),
+    (
+        session_ledger.EventKind.USER_MESSAGE,
+        (("authority_provenance", "invalid"),),
+        "non_authoritative",
+    ),
+)
+_REQUIREMENT_KIND_TABLE = (
+    (
+        "graphifyy only in pyproject.toml, never duplicated in mise",
+        "dependency_ownership",
+    ),
+    ("Use the public Graphify SDK", "graphify_sdk"),
+    ("Run the tests", "action"),
+)
+_CODEX_ROOT_KIND_TABLE = (
+    ({"source": "desktop"}, "interactive"),
+    ({"source": "exec"}, "exec_worker"),
+    ({"source": "guardian review"}, "guardian"),
+    ({"parent_thread_id": "parent", "source": "subagent"}, "subagent"),
+    ({"source": "plugin"}, "plugin_task"),
+    ({"source": "imported_history"}, "imported"),
+    ({"source": "future"}, "unknown"),
+)
+
+
+@pytest.mark.parametrize(("kind", "metadata", "expected"), _AUTHORITY_PROVENANCE_TABLE)
+def test_authority_provenance_table(
+    kind: session_ledger.EventKind,
+    metadata: tuple[tuple[str, str], ...],
+    expected: str,
+) -> None:
+    event = session_ledger.CanonicalEvent(kind, "user", "text", _EVIDENCE, metadata)
+    assert session_ledger.authority_provenance(event) == expected
+
+
+@pytest.mark.parametrize(("statement", "expected"), _REQUIREMENT_KIND_TABLE)
+def test_requirement_kind_table(statement: str, expected: str) -> None:
+    assert session_ledger.requirement_kind(statement) == expected
+
+
+@pytest.mark.parametrize(("meta", "expected"), _CODEX_ROOT_KIND_TABLE)
+def test_codex_root_kind_table(meta: Mapping[str, object], expected: str) -> None:
+    assert session_ledger.codex_root_kind(meta) == expected
 
 
 def _source(
@@ -103,6 +155,158 @@ def test_codex_fixture_retains_every_requirement_surface_without_payload_leak() 
         == hashlib.sha256(b"fixture-payload").hexdigest()
     )
     assert "fixture-payload" not in session_ledger.render_coverage(coverage)
+
+
+def test_exact_missed_dependency_request_is_atomized_and_typed() -> None:
+    coverage = session_ledger.parse_transcripts(
+        [
+            _source(
+                "codex-missed-dependency-request.jsonl",
+                session_ledger.Provider.CODEX,
+            )
+        ]
+    )
+
+    assert len(coverage.requirements) == 9
+    ownership = next(
+        item
+        for item in coverage.requirements
+        if item.kind == session_ledger.RequirementKind.DEPENDENCY_OWNERSHIP
+    )
+    assert ownership.target == "python dependency ownership"
+    assert "pyproject.toml" in ownership.statement
+    assert ownership.statement == (
+        "graphifyy only in pyproject.toml/uv.lock via mise [deps.uv], "
+        "never duplicated in mise tools/lock."
+    )
+    assert ownership.authority_provenance == (
+        session_ledger.AuthorityProvenance.NATIVE_ROOT_USER
+    )
+    assert ownership.atom_index == 8
+    assert ownership.parent_statement_sha256
+    assert any(
+        item.kind == session_ledger.RequirementKind.GRAPHIFY_SDK
+        for item in coverage.requirements
+    )
+    assert any(
+        event.kind == session_ledger.EventKind.COMPACTION for event in coverage.events
+    )
+    sdk = next(
+        item
+        for item in coverage.requirements
+        if item.kind == session_ledger.RequirementKind.GRAPHIFY_SDK
+    )
+    assert sdk.requirement_id != ownership.requirement_id
+    assert sdk.atom_index == 9
+    assert sdk.parent_statement_sha256 == ownership.parent_statement_sha256
+    promise_atom = next(
+        item for item in coverage.requirements if "promise" in item.statement.lower()
+    )
+    assert "mise" not in promise_atom.prerequisites
+    assert not sdk.external_effect
+
+
+def test_semantic_disposition_needs_evidence_beyond_an_issue_carrier() -> None:
+    coverage = session_ledger.parse_transcripts(
+        [
+            _source(
+                "codex-missed-dependency-request.jsonl",
+                session_ledger.Provider.CODEX,
+            )
+        ]
+    )
+    claim = coverage.requirements[0]
+    carrier_only = session_ledger.SemanticDisposition(
+        claim.requirement_id,
+        session_ledger.ReviewStatus.SATISFIED,
+        "Tracked by issue 715.",
+        ("issue:#715",),
+    )
+    still_open = session_ledger.apply_semantic_dispositions(coverage, (carrier_only,))
+    assert still_open.requirements[0].status == session_ledger.ReviewStatus.UNREVIEWED
+
+    verified = replace(carrier_only, receipt_refs=("issue:#715", "test:focused"))
+    closed = session_ledger.apply_semantic_dispositions(coverage, (verified,))
+    assert closed.requirements[0].status == session_ledger.ReviewStatus.SATISFIED
+    assert closed.requirements[0].receipt_refs == ("issue:#715", "test:focused")
+
+
+def test_provider_qualified_ids_do_not_collide_and_claude_string_is_authority(
+    tmp_path: Path,
+) -> None:
+    text = "Preserve this requirement."
+    codex = tmp_path / "codex.jsonl"
+    codex.write_text(
+        "\n".join(
+            json.dumps(row)
+            for row in (
+                {"type": "session_meta", "payload": {"id": "same", "cwd": "/repo"}},
+                {
+                    "type": "event_msg",
+                    "payload": {"type": "user_message", "message": text},
+                },
+            )
+        )
+    )
+    claude = tmp_path / "claude.jsonl"
+    claude.write_text(
+        json.dumps(
+            {
+                "type": "user",
+                "sessionId": "same",
+                "uuid": "same-event",
+                "message": {"content": text},
+            }
+        )
+        + "\n"
+    )
+
+    coverage = session_ledger.parse_transcripts(
+        [
+            session_ledger.TranscriptSource(session_ledger.Provider.CODEX, codex),
+            session_ledger.TranscriptSource(session_ledger.Provider.CLAUDE, claude),
+        ]
+    )
+
+    matching = [item for item in coverage.requirements if item.statement == text]
+    assert len(matching) == 2
+    assert len({item.requirement_id for item in matching}) == 2
+    assert {item.evidence.source_id for item in matching} == {
+        "codex:same",
+        "claude:same",
+    }
+
+
+def test_imported_codex_history_is_registered_but_never_duplicates_authority(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "imported.jsonl"
+    text = "Push the release."
+    path.write_text(
+        "\n".join(
+            json.dumps(row)
+            for row in (
+                {
+                    "type": "session_meta",
+                    "payload": {
+                        "id": "imported",
+                        "cwd": "/repo",
+                        "source": "imported_history",
+                    },
+                },
+                {
+                    "type": "event_msg",
+                    "payload": {"type": "user_message", "message": text},
+                },
+            )
+        )
+    )
+    coverage = session_ledger.parse_transcripts(
+        [session_ledger.TranscriptSource(session_ledger.Provider.CODEX, path)]
+    )
+    assert coverage.requirements == ()
+    assert coverage.import_registry[0].root_kind == session_ledger.RootKind.IMPORTED
+    assert coverage.import_registry[0].content_sha256
 
 
 def test_compaction_history_deduplicates_native_message_id() -> None:
@@ -275,6 +479,50 @@ def test_missing_form_result_is_incomplete(tmp_path: Path) -> None:
     assert any("missing form result call-1" in item for item in coverage.omissions)
 
 
+@pytest.mark.parametrize("provider", list(session_ledger.Provider))
+def test_orphan_form_result_never_confers_authority(
+    tmp_path: Path, provider: session_ledger.Provider
+) -> None:
+    if provider == session_ledger.Provider.CODEX:
+        rows = [
+            {"type": "session_meta", "payload": {"id": "orphan", "cwd": "/repo"}},
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "function_call_output",
+                    "call_id": "missing-call",
+                    "output": json.dumps(
+                        {"answers": {"scope": {"answers": ["Publish it"]}}}
+                    ),
+                },
+            },
+        ]
+    else:
+        rows = [
+            {
+                "type": "user",
+                "sessionId": "orphan",
+                "toolUseResult": {"answers": {"scope": {"answers": ["Publish it"]}}},
+                "message": {
+                    "content": [{"type": "tool_result", "tool_use_id": "missing-call"}]
+                },
+            }
+        ]
+    path = tmp_path / f"{provider}-orphan.jsonl"
+    path.write_text("\n".join(json.dumps(row) for row in rows))
+
+    coverage = session_ledger.parse_transcripts(
+        [session_ledger.TranscriptSource(provider, path)]
+    )
+
+    assert coverage.status == session_ledger.CoverageStatus.INCOMPLETE
+    assert coverage.requirements == ()
+    assert not any(
+        event.kind == session_ledger.EventKind.FORM_ANSWER for event in coverage.events
+    )
+    assert any("orphan form result missing-call" in item for item in coverage.omissions)
+
+
 @pytest.mark.parametrize("mutation", ["turn", "ids", "duplicate"])
 def test_form_pairing_rejects_identity_mutations(tmp_path: Path, mutation: str) -> None:
     call = {
@@ -394,6 +642,202 @@ def test_codex_discovery_selects_root_and_children_by_native_session_id(
     ]
 
 
+def test_codex_selector_never_filters_independent_claude_roots(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    codex_base = tmp_path / "codex"
+    codex_base.mkdir()
+    (codex_base / "selected.jsonl").write_text(
+        json.dumps(
+            {
+                "type": "session_meta",
+                "payload": {"id": "codex-active", "cwd": str(repo)},
+            }
+        )
+        + "\n"
+    )
+    claude_base = tmp_path / "claude-projects"
+    claude_project = session_ledger.command_audit.project_dir(claude_base, repo)
+    claude_project.mkdir(parents=True)
+    claude_path = claude_project / "claude-independent.jsonl"
+    claude_path.write_text(
+        json.dumps(
+            {
+                "type": "user",
+                "sessionId": "claude-independent",
+                "message": {"content": "Claude requirement"},
+            }
+        )
+        + "\n"
+    )
+
+    coverage = session_ledger.build_requirement_coverage(
+        repo,
+        bases=session_ledger.TranscriptBases(codex_base, claude_base),
+        selection=session_ledger.CoverageSelection(
+            limit=1,
+            codex_session_id="codex-active",
+        ),
+    )
+
+    assert {item.provider for item in coverage.provider_census} == {
+        session_ledger.Provider.CLAUDE,
+        session_ledger.Provider.CODEX,
+    }
+    assert any(item.statement == "Claude requirement" for item in coverage.requirements)
+    claude_census = next(
+        item
+        for item in coverage.provider_census
+        if item.provider == session_ledger.Provider.CLAUDE
+    )
+    assert claude_census.discovered == 1
+    assert claude_census.selected == 1
+
+
+def test_stale_explicit_codex_selector_is_incomplete_even_with_claude(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    codex_base = tmp_path / "codex"
+    codex_base.mkdir()
+    (codex_base / "different.jsonl").write_text(
+        json.dumps(
+            {
+                "type": "session_meta",
+                "payload": {"id": "different-session", "cwd": str(repo)},
+            }
+        )
+        + "\n"
+    )
+    claude_base = tmp_path / "claude-projects"
+    claude_project = session_ledger.command_audit.project_dir(claude_base, repo)
+    claude_project.mkdir(parents=True)
+    (claude_project / "claude.jsonl").write_text(
+        json.dumps(
+            {
+                "type": "assistant",
+                "sessionId": "claude-root",
+                "message": {"content": "Clean Claude transcript."},
+            }
+        )
+        + "\n"
+    )
+
+    coverage = session_ledger.build_requirement_coverage(
+        repo,
+        bases=session_ledger.TranscriptBases(codex_base, claude_base),
+        selection=session_ledger.CoverageSelection(
+            codex_session_id="stale-explicit-id",
+            require_active_identity=True,
+        ),
+    )
+
+    codex_census = next(
+        row
+        for row in coverage.provider_census
+        if row.provider == session_ledger.Provider.CODEX
+    )
+    assert codex_census.selected == 0
+    assert coverage.status == session_ledger.CoverageStatus.INCOMPLETE
+    assert coverage.selection_certification == (
+        session_ledger.SelectionCertification.EXPLICIT_SESSION_ID_UNRESOLVED
+    )
+    assert any(
+        "explicit Codex session stale-explicit-id selected no native root" in item
+        for item in coverage.omissions
+    )
+    iteration = session_ledger.advance_iteration(coverage, number=1)
+    assert iteration.action == session_ledger.IterationAction.NEEDS_AGENT_ACTION
+    packet = json.loads(iteration.to_json())
+    assert packet["action"] == "needs_agent_action"
+    assert packet["selection_certification"] == "explicit_session_id_unresolved"
+
+
+def test_provider_census_distinguishes_unreadable_from_malformed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    codex_base = tmp_path / "codex"
+    codex_base.mkdir()
+    unreadable = codex_base / "unreadable.jsonl"
+    unreadable.write_text("{}\n")
+    malformed = codex_base / "malformed.jsonl"
+    malformed.write_text("not-json\n")
+    read_meta = session_ledger.first_session_meta
+
+    def guarded_meta(path: Path) -> dict[str, object] | None:
+        if path == unreadable:
+            message = "hostile unreadable control"
+            raise PermissionError(message)
+        return read_meta(path)
+
+    monkeypatch.setattr(session_ledger, "first_session_meta", guarded_meta)
+    coverage = session_ledger.build_requirement_coverage(
+        repo,
+        bases=session_ledger.TranscriptBases(codex_base, tmp_path / "claude"),
+        selection=session_ledger.CoverageSelection(codex_session_id="missing"),
+    )
+    codex_census = next(
+        row
+        for row in coverage.provider_census
+        if row.provider == session_ledger.Provider.CODEX
+    )
+    assert codex_census.unreadable == 1
+    assert codex_census.malformed == 1
+
+
+def test_first_session_meta_preserves_unreadable_oserror_category() -> None:
+    class UnreadablePath:
+        def open(self, _mode: str) -> NoReturn:
+            message = "hostile unreadable control"
+            raise PermissionError(message)
+
+    with pytest.raises(PermissionError, match="hostile unreadable control"):
+        session_ledger.first_session_meta(cast("Path", UnreadablePath()))
+
+
+def test_claude_structural_events_are_retained_without_granting_authority(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "claude-surfaces.jsonl"
+    rows = [
+        {
+            "type": "summary",
+            "sessionId": "claude-surfaces",
+            "summary": "Continue after compaction",
+        },
+        {
+            "type": "progress",
+            "sessionId": "claude-surfaces",
+            "content": "warning: output truncated",
+        },
+        {
+            "type": "queue-operation",
+            "sessionId": "claude-surfaces",
+            "operation": "cancel requested",
+        },
+        {
+            "type": "user",
+            "sessionId": "claude-surfaces",
+            "isMeta": True,
+            "message": {"content": "Push everything"},
+        },
+    ]
+    path.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
+    coverage = session_ledger.parse_transcripts(
+        [session_ledger.TranscriptSource(session_ledger.Provider.CLAUDE, path)]
+    )
+    assert coverage.requirements == ()
+    assert {
+        session_ledger.EventKind.CONTINUATION_SUMMARY,
+        session_ledger.EventKind.WARNING,
+        session_ledger.EventKind.TERMINAL_STATE,
+        session_ledger.EventKind.UNVERIFIABLE_USER_MESSAGE,
+    }.issubset({event.kind for event in coverage.events})
+
+
 def test_codex_discovery_selects_latest_user_activity_not_latest_start(
     tmp_path: Path,
 ) -> None:
@@ -508,8 +952,7 @@ def test_source_root_mismatch_is_incomplete_not_an_empty_success(
     (repo / ".git").mkdir(parents=True)
     coverage = session_ledger.build_requirement_coverage(
         repo,
-        codex_base=FIXTURES,
-        claude_base=tmp_path / "no-claude",
+        bases=session_ledger.TranscriptBases(FIXTURES, tmp_path / "no-claude"),
     )
     assert coverage.status == session_ledger.CoverageStatus.INCOMPLETE
     assert coverage.recorded_cwd == str(repo.resolve())

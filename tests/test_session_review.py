@@ -27,7 +27,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
-from dotfiles_setup import session_review
+from dotfiles_setup import session_ledger, session_review
 from dotfiles_setup.command_audit import BashCommand
 
 REPO_ROOT = Path(__file__).parent.parent
@@ -341,6 +341,89 @@ def test_requirements_only_runs_through_the_public_library_entry_point(
     assert iteration["unreviewed_requirement_ids"]
 
 
+def test_semantic_dispositions_cli_input_can_close_validated_claims(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = tmp_path / "repo"
+    (project / ".git").mkdir(parents=True)
+    sessions = tmp_path / "codex" / "sessions"
+    sessions.mkdir(parents=True)
+    transcript = sessions / "root.jsonl"
+    rows = [
+        {"type": "session_meta", "payload": {"id": "active", "cwd": str(project)}},
+        {
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "id": "request",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "Keep this local."}],
+            },
+        },
+        {
+            "type": "event_msg",
+            "payload": {
+                "type": "user_message",
+                "message": "Keep this local.",
+            },
+        },
+    ]
+    transcript.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
+    initial = session_ledger.parse_transcripts(
+        [session_ledger.TranscriptSource(session_ledger.Provider.CODEX, transcript)]
+    )
+    semantic = tmp_path / "semantic-dispositions.json"
+    semantic.write_text(
+        json.dumps(
+            [
+                {
+                    "claim_id": initial.requirements[0].requirement_id,
+                    "status": "satisfied",
+                    "rationale": "The bounded control verifies local-only behavior.",
+                    "receipt_refs": ["test:test_local_only_control"],
+                }
+            ]
+        )
+    )
+    claude_config = tmp_path / "claude"
+    claude_project = session_review.command_audit.project_dir(
+        claude_config / "projects", project
+    )
+    claude_project.mkdir(parents=True)
+    (claude_project / "clean.jsonl").write_text(
+        json.dumps(
+            {
+                "type": "assistant",
+                "sessionId": "clean-claude",
+                "message": {"content": "Clean Claude transcript."},
+            }
+        )
+        + "\n"
+    )
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex"))
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(claude_config))
+    output = project / "requirements.md"
+
+    result = session_review.session_review_main(
+        project,
+        lanes=session_review.LaneChoice(
+            requirements_only=True,
+            source_repo_root=project,
+            codex_session_id="active",
+            semantic_dispositions=semantic,
+        ),
+        sessions=5,
+        output=output,
+    )
+
+    assert result == 0
+    evidence = json.loads(output.with_suffix(".md.evidence.json").read_text())
+    assert evidence["semantic_disposition_count"] == 1
+    report = output.read_text()
+    assert "satisfied" in report
+    assert "test:test_local_only_control" in report
+
+
 def test_public_loop_needs_agent_action_until_prevention_is_disposed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -514,7 +597,11 @@ def test_mise_requirement_task_exposes_required_root_and_configurable_limit(
     assert arguments[0]["required"]
     assert arguments[1]["name"] == "max_sessions"
     assert arguments[1]["default"] == ["5"]
-    assert arguments[3]["name"] == "session_id"
+    assert [item["name"] for item in arguments] == [
+        "source_repo_root",
+        "max_sessions",
+        "max_iterations",
+    ]
     assert "uv run --project python" in payload["run"][0]
 
     ignored = subprocess.run(
@@ -572,7 +659,7 @@ def test_real_cli_runs_requirements_only(tmp_path: Path) -> None:
             "--requirements-only",
             "--source-repo-root",
             str(REPO_ROOT),
-            "--session-id",
+            "--codex-session-id",
             "root-session",
             "--output",
             str(output),
@@ -589,6 +676,65 @@ def test_real_cli_runs_requirements_only(tmp_path: Path) -> None:
     assert iteration["action"] == "needs_agent_action"
     assert iteration["unreviewed_requirement_ids"]
     assert "Do not publish" in output.read_text()
+
+
+def test_default_cli_includes_automation_and_dual_provider_requirements(
+    tmp_path: Path,
+) -> None:
+    codex_sessions = tmp_path / "codex" / "sessions" / "2026" / "08" / "12"
+    codex_sessions.mkdir(parents=True)
+    fixture_root = REPO_ROOT / "tests" / "fixtures" / "session_review"
+    (codex_sessions / "root.jsonl").write_text(
+        (fixture_root / "codex-root.jsonl")
+        .read_text()
+        .replace('"cwd":"/repo"', f'"cwd":"{REPO_ROOT}"')
+    )
+    claude_projects = tmp_path / "claude" / "projects"
+    claude_project = claude_projects / session_review.command_audit.encode_cwd(
+        REPO_ROOT
+    )
+    claude_project.mkdir(parents=True)
+    (claude_project / "claude-root.jsonl").write_bytes(
+        (fixture_root / "claude-root.jsonl").read_bytes()
+    )
+    output = REPO_ROOT / ".agent" / "test-default-session-review.md"
+    output.parent.mkdir(exist_ok=True)
+    env = {
+        **os.environ,
+        "CODEX_HOME": str(tmp_path / "codex"),
+        "CODEX_THREAD_ID": "root-session",
+        "CLAUDE_CONFIG_DIR": str(tmp_path / "claude"),
+    }
+    try:
+        result = subprocess.run(
+            [
+                "uv",
+                "run",
+                "--project",
+                str(REPO_ROOT / "python"),
+                "dotfiles-setup",
+                "session-review",
+                "--output",
+                str(output),
+            ],
+            cwd=REPO_ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=120,
+        )
+        assert result.returncode == 1, result.stderr
+        assert output.is_file(), result.stderr
+        report = output.read_text()
+        assert "what was done by hand that should be code" in report
+        assert "Session requirement and promise ledger" in report
+        assert "Do not publish" in report
+        assert "Only free tools" in report
+        assert "Provider census" in report
+    finally:
+        for path in output.parent.glob(f"{output.name}*"):
+            path.unlink()
 
 
 def test_requirements_cli_cannot_certify_active_session_from_recency(
@@ -625,6 +771,42 @@ def test_requirements_cli_cannot_certify_active_session_from_recency(
     )
     assert result.returncode == 1
     assert "active session identity is unverified" in result.stderr
+
+
+def test_codex_session_id_uses_nonempty_environment_fallback() -> None:
+    env = os.environ.copy()
+    env["CODEX_THREAD_ID"] = "codex-active"
+    result = subprocess.run(
+        [
+            "uv",
+            "run",
+            "--project",
+            str(REPO_ROOT / "python"),
+            "python",
+            "-c",
+            (
+                "from dotfiles_setup.main import setup_parser; "
+                "print(setup_parser().parse_args(['session-review']).codex_session_id)"
+            ),
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
+    )
+    assert result.returncode == 0
+    assert result.stdout.strip() == "codex-active"
+
+
+def test_mise_never_forwards_an_empty_codex_session_id() -> None:
+    task = (REPO_ROOT / "mise.toml").read_text()
+    start = task.index("[tasks.session-requirements]")
+    end = task.index("[tasks.session-review-gate]", start)
+    section = task[start:end]
+    assert "--session-id" not in section
+    assert '"${usage_session_id?}"' not in section
 
 
 def test_requirements_cli_requires_an_explicit_source_root() -> None:

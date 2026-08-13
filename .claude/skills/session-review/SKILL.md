@@ -1,20 +1,23 @@
 ---
 name: session-review
-description: Find what a session did BY HAND that should have become a skill, mise task or python module, via `mise run session-review`. Use at the end of a working session, during `/clear-prep` or handoff writing, when a task felt like a slog and you want to know whether it was one, or when deciding what automation to build next. Two disjoint lanes — a transcript mine for recurring command shapes and a narrative pass over the notepad and handoff for reasoning sinks that leave no repeated command. Run it before writing the handoff, while the session's own notes are still in front of you.
+description: Review Claude and Codex requirements, promises, and manual-work candidates via `mise run session-review`. Use before a handoff or major milestone so typed requirement coverage and both automation-candidate lanes remain visible.
 user-invocable: true
 ---
 
 # session-review: what should have been code
 
 ```bash
-mise run session-review                                   # both lanes
+mise run session-review                                   # requirements + both automation lanes
 mise run session-review -- --output .agent/session-review.md
 mise run session-review -- --narrative-only               # cheap re-check
 mise run session-review -- --sessions 6                   # narrow the mine
 mise run session-requirements -- /absolute/source/checkout    # typed evidence, 5 sessions
 mise run session-requirements -- /absolute/source/checkout 3 5 # sessions, iterations
 mise run session-review -- --requirements-only --source-repo-root "$PWD" \
-  --session-id "$CODEX_THREAD_ID" --output .agent/session-review.md
+  --codex-session-id "$CODEX_THREAD_ID" --output .agent/session-review.md
+mise run session-review -- --requirements-only --source-repo-root "$PWD" \
+  --codex-session-id "$CODEX_THREAD_ID" \
+  --semantic-dispositions .agent/session-review-dispositions.json
 ```
 
 `python/src/dotfiles_setup/session_review.py` does the collecting. The report
@@ -39,11 +42,10 @@ Frequency is a proxy for cost and a poor one; the expensive thing was reasoning.
 The converse is why lane 1 stays on: you do not reliably remember every one-off
 you ran, and the transcript does.
 
-## Requirement coverage is explicit and bounded
+## Requirement coverage is default and bounded
 
-The two automation lanes keep their established default unchanged. When the
-question is instead "what did the user require, approve, or forbid, and what
-did the agent promise?", run `mise run session-requirements` (equivalent to
+The default review runs requirement coverage and both automation lanes. For a
+focused requirements-only packet, run `mise run session-requirements` (equivalent to
 `session-review --requirements-only --sessions 5 --source-repo-root
 /absolute/source/checkout`). The root is mandatory and must be the exact
 checkout path stored as `cwd` in the source sessions. This keeps an isolated
@@ -63,11 +65,19 @@ prefix invalidates the old review. An external attachment that cannot be read
 also makes coverage `INCOMPLETE`; hashing its path string is not evidence of
 its content.
 
-Pass the native current task identifier with `--session-id` (or through
-`CODEX_THREAD_ID` when the launcher supplies it). The most-recent relevant
+Pass the native current Codex task identifier with `--codex-session-id`. A
+nonempty `CODEX_THREAD_ID` is the fallback; an empty value is never forwarded
+as an explicit selector. Claude roots are selected independently and are never
+filtered by a Codex ID. The provider census records expected, available,
+discovered, selected, rejected, archived, imported, malformed, and unreadable
+sources. The most-recent relevant
 user/turn activity is only a bounded fallback and **cannot certify that the
 selected root is this active task**; requirements-only exits non-zero without
-an explicit identity.
+an explicit identity. A nonexistent or stale explicit Codex identity records
+Codex `selected=0` and remains `INCOMPLETE`; Claude evidence cannot satisfy the
+missing requested provider selection. Its certification is
+`EXPLICIT_SESSION_ID_UNRESOLVED`, and the final iteration packet remains
+`NEEDS_AGENT_ACTION` rather than converging on the other provider alone.
 
 Transcript JSONL is parsed structurally. Never inspect rollout files with raw
 `rg`/grep: a matching compaction row can contain megabytes of inline base64
@@ -93,6 +103,10 @@ The disposition schema names these `carrier`, `mutation_receipt`,
 `gate_receipt`, and `issue_receipt`.
 Missing or forged bytes keep coverage `INCOMPLETE`. Pass the file through `mise run session-review --
 --requirements-only --source-repo-root ROOT --dispositions FILE`.
+Pass reviewed requirement/promise decisions separately with
+`--semantic-dispositions FILE`; each row names a stable `claim_id`, terminal
+`status`, nonempty `rationale`, and typed `receipt_refs` including verification
+such as `test:...`, `commit:...`, `artifact:...`, or `user:...`.
 
 `session-requirements` accepts configurable session and iteration bounds. The
 Python CLI is a deterministic analyzer and resumable state machine; it never

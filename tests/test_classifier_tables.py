@@ -842,7 +842,7 @@ def other(flag: bool) -> str:
 def test_classifier_shaped_finds_the_three_real_classifiers() -> None:
     """The discovery predicate, measured against the shipped tree.
 
-    **4 hits, zero false positives**. The 2026-08-07 measurement was 3 across
+    **7 hits, zero false positives**. The 2026-08-07 measurement was 3 across
     48 modules; the first measurement was 2 across 45. The third hit is the
     point: `codex_verdict.edge_for` shipped on `main` AFTER this gate was
     written, and `unlisted` caught it the moment the two branches met — which
@@ -864,7 +864,14 @@ def test_classifier_shaped_finds_the_three_real_classifiers() -> None:
         "branch_guard.py:classify",
         "codex_verdict.py:edge_for",
     }
-    assert found - {"session_ledger.py:status"} == prior_classifiers
+    session_review_classifiers = {
+        "session_ledger.py:status",
+        "session_ledger.py:authority_provenance",
+        "session_ledger.py:requirement_kind",
+        "session_ledger.py:codex_root_kind",
+    }
+    assert found - session_review_classifiers == prior_classifiers
+    assert session_review_classifiers <= found
     # Every hit is registered: the scan and the registry agree in both
     # directions, which is what `unlisted` asserts at the CLI level.
     assert {name.split(".")[-1] for name in classifier_tables.REGISTRY} == {

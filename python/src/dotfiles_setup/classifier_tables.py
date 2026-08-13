@@ -276,6 +276,45 @@ REGISTRY: dict[str, ClassifierSpec] = {
             "disposition"
         ),
     ),
+    "dotfiles_setup.session_ledger:authority_provenance": ClassifierSpec(
+        module_path="python/src/dotfiles_setup/session_ledger.py",
+        function="authority_provenance",
+        subject_param="event",
+        subject_type="CanonicalEvent",
+        axes=frozenset({"kind", "metadata"}),
+        table_path="tests/test_session_ledger.py",
+        table_symbol="_AUTHORITY_PROVENANCE_TABLE",
+        reason=(
+            "#715: authority depends on both native event kind and explicit "
+            "provenance metadata; neither may be silently pinned"
+        ),
+    ),
+    "dotfiles_setup.session_ledger:requirement_kind": ClassifierSpec(
+        module_path="python/src/dotfiles_setup/session_ledger.py",
+        function="requirement_kind",
+        subject_param=None,
+        subject_type=None,
+        axes=frozenset({"statement"}),
+        table_path="tests/test_session_ledger.py",
+        table_symbol="_REQUIREMENT_KIND_TABLE",
+        reason=(
+            "#715: dependency ownership and Graphify SDK requests must remain "
+            "separate typed action items"
+        ),
+    ),
+    "dotfiles_setup.session_ledger:codex_root_kind": ClassifierSpec(
+        module_path="python/src/dotfiles_setup/session_ledger.py",
+        function="codex_root_kind",
+        subject_param=None,
+        subject_type=None,
+        axes=frozenset({"meta"}),
+        table_path="tests/test_session_ledger.py",
+        table_symbol="_CODEX_ROOT_KIND_TABLE",
+        reason=(
+            "#715: interactive, exec, Guardian, subagent, plugin, and imported "
+            "roots carry different authority"
+        ),
+    ),
 }
 
 # Where :func:`classifier_shaped` looks for classifiers that OUGHT to be

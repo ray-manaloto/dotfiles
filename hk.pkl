@@ -438,6 +438,13 @@ local allSteps = new Mapping<String, Config.Step> {
     check = "uv lock --check --project python"
   }
 
+  // Python packages have one owner: pyproject.toml. mise [deps.uv] may
+  // materialize that lock, but a second pipx/uvx declaration is drift.
+  ["dependency_ownership"] {
+    glob = List("mise.toml", "mise.lock", "python/pyproject.toml", "python/uv.lock")
+    check = "uv run --project python dotfiles-setup dependency-ownership"
+  }
+
   // --- chezmoi template render gate (#160 T12.5, decision 19): every
   //     tracked home/**/*.tmpl must render with the source data — catches
   //     bad template syntax / undefined data at commit time instead of at
