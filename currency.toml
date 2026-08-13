@@ -28,6 +28,7 @@ github = "DopplerHQ/cli"
 
 [tool.graphify]
 python_package = "graphifyy"
+python_project_dir = "python"
 binary = "graphify"
 # Graphify is a Python runtime dependency owned only by python/pyproject.toml;
 # mise's uv dependency provider materializes that locked environment. PyPI is

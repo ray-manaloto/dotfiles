@@ -37,7 +37,7 @@ dependencies = [
     # neither repo has tags, so a SHA is the only stable pin. Renovate's git-refs
     # datasource bumps this the same way it bumps CLANG_P2996_REF. Dependency
     # direction is dotfiles → KB only; the KB never learns about its consumers.
-    "kb-setup @ git+https://github.com/ray-manaloto/knowledge-base@46a3e7d8cbde4b7c591598d54175ae654c96f584",
+    "kb-setup @ git+https://github.com/ray-manaloto/knowledge-base@3be04a094173f95cd527392ef35eaceb696a13d8",
     "msgspec>=0.21.1",
 ]
 
