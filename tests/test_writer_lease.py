@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import json
 import os
-import pwd
 import select
 import stat
 import subprocess
@@ -58,6 +57,80 @@ def _git(cwd: Path, *args: str) -> str:
         timeout=10,
     )
     return result.stdout.strip()
+
+
+def test_git_executable_is_an_explicit_absolute_project_contract() -> None:
+    """Host and container resolution must never consult ambient PATH."""
+    executable = writer_lease.git_executable()
+
+    assert executable.is_absolute()
+    assert executable in {
+        candidate.resolve(strict=False)
+        for candidate in writer_lease.trusted_git_executables()
+    }
+    assert executable.is_file()
+    assert os.access(executable, os.X_OK)
+
+
+def test_container_git_contract_is_derived_from_the_locked_package() -> None:
+    """The container path is derived from the lock, never a duplicate literal."""
+    executable = writer_lease.container_git_executable()
+
+    assert executable.parent.name == "bin"
+    assert executable.parent.parent.parent == writer_lease.CONTAINER_GIT_INSTALL_ROOT
+
+
+def test_container_git_contract_rejects_lock_drift(tmp_path: Path) -> None:
+    """A lock with no authoritative Git package fails closed."""
+    source = Path(".devcontainer/mise-system.lock").read_text(encoding="utf-8")
+    drifted = tmp_path / "mise-system.lock"
+    drifted.write_text(
+        source.replace('"conda:git"', '"retired:git"'),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        writer_lease.LeaseError,
+        match="does not declare conda:git",
+    ):
+        writer_lease.container_git_executable(drifted)
+
+
+def _write_executable(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    path.chmod(0o755)
+
+
+def test_linux_git_ignores_an_executable_usr_bin_fallback(tmp_path: Path) -> None:
+    """Linux must select only lock-derived conda Git, even if /usr/bin exists."""
+    root = tmp_path / "linux-root"
+    hostile_host_git = root / "usr" / "bin" / "git"
+    _write_executable(hostile_host_git)
+    install_root = root / writer_lease.CONTAINER_GIT_INSTALL_ROOT.relative_to("/")
+    locked_git = writer_lease.container_git_executable(install_root=install_root)
+    _write_executable(locked_git)
+
+    selected = writer_lease.git_executable(platform="linux", filesystem_root=root)
+
+    assert hostile_host_git.is_file()
+    assert os.access(hostile_host_git, os.X_OK)
+    assert selected == locked_git.resolve()
+    assert selected != hostile_host_git.resolve()
+
+
+def test_darwin_git_fails_closed_without_exact_usr_bin_path(tmp_path: Path) -> None:
+    """Darwin cannot fall back to a wrong host path or the Linux locked path."""
+    root = tmp_path / "darwin-root"
+    _write_executable(root / "bin" / "git")
+    install_root = root / writer_lease.CONTAINER_GIT_INSTALL_ROOT.relative_to("/")
+    _write_executable(writer_lease.container_git_executable(install_root=install_root))
+
+    with pytest.raises(
+        writer_lease.LeaseError,
+        match="trusted Darwin Git executable is unavailable",
+    ):
+        writer_lease.git_executable(platform="darwin", filesystem_root=root)
 
 
 def _repo_with_linked_worktree(tmp_path: Path) -> tuple[Path, Path]:
@@ -599,14 +672,12 @@ def test_codex_hook_allows_only_plain_lease_bootstrap_without_an_owner(
     tmp_path: Path,
 ) -> None:
     repo, _linked = _repo_with_linked_worktree(tmp_path)
-    mise = Path(pwd.getpwuid(os.getuid()).pw_dir) / ".local" / "bin" / "mise"
+    mise = writer_lease.mise_executable()
     allowed = _codex_pretooluse(
         repo,
         session_id="codex-successor",
         tool_name="Bash",
-        tool_input={
-            "command": f"{mise.resolve()} -C {repo.resolve()} run writer-lease-status"
-        },
+        tool_input={"command": f"{mise} -C {repo.resolve()} run writer-lease-status"},
     )
     assert allowed.returncode == 0
     assert allowed.stdout == ""
@@ -617,8 +688,7 @@ def test_codex_hook_allows_only_plain_lease_bootstrap_without_an_owner(
         tool_name="Bash",
         tool_input={
             "command": (
-                f"{mise.resolve()} -C {repo.resolve()} "
-                "run writer-lease-status; git add README.md"
+                f"{mise} -C {repo.resolve()} run writer-lease-status; git add README.md"
             )
         },
     )

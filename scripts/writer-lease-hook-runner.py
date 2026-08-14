@@ -11,9 +11,11 @@ fail-closed hook decision instead of becoming skipped hooks.
 import json
 import os
 import pathlib
+import pwd
 import stat
 import subprocess
 import sys
+from typing import NoReturn
 
 
 class RunnerError(RuntimeError):
@@ -34,7 +36,7 @@ def _deny(event: str, reason: str) -> None:
     sys.stdout.write(json.dumps(payload, separators=(",", ":"), sort_keys=True) + "\n")
 
 
-def _fail(message: str) -> None:
+def _fail(message: str) -> NoReturn:
     raise RunnerError(message)
 
 
@@ -58,8 +60,15 @@ def _load_payload(raw: bytes) -> dict:
 
 def _invoke(raw: bytes, payload: dict) -> bytes:
     root = _root(payload.get("cwd", ""))
-    python = root / "python" / ".venv" / "bin" / "python"
+    home = pathlib.Path(pwd.getpwuid(os.getuid()).pw_dir)
+    python_candidates = (
+        root / "python" / ".venv" / "bin" / "python",
+        home / ".venvs" / "dotfiles-python" / "bin" / "python",
+    )
+    python = next((path for path in python_candidates if path.is_file()), None)
     hook = root / "python" / "src" / "dotfiles_setup" / "codex_writer_lease_hook.py"
+    if python is None:
+        _fail("pinned project Python is unavailable")
     metadata = python.stat()
     if not stat.S_ISREG(metadata.st_mode) or not os.access(python, os.X_OK):
         _fail("pinned project Python is not executable")

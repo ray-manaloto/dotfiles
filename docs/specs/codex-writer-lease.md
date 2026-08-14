@@ -19,8 +19,15 @@ START ordering.
 
 ## Decision and primitives
 
-- `/usr/bin/git rev-parse --path-format=absolute --git-common-dir` supplies the
-  identity shared by the canonical checkout and registered worktrees.
+- Git is resolved once from a platform-exclusive absolute project contract:
+  Darwin selects only `/usr/bin/git`; Linux selects only the exact conda-Git
+  version bound by `.devcontainer/mise-system.lock`. Neither platform may fall
+  back to the other's candidate, and ambient `PATH` never selects the identity
+  executable. `rev-parse --path-format=absolute --git-common-dir` then supplies
+  the identity shared by the canonical checkout and registered worktrees.
+- The bootstrap and runner similarly select only explicit host/container mise
+  and project-Python locations; missing contracted executables deny instead of
+  consulting ambient `PATH`.
 - `fcntl.flock(fd, LOCK_EX | LOCK_NB)` retains one foreground exclusion lock.
 - A random holder token and loopback challenge endpoint are written into both
   lock bytes and the canonical receipt. A check must challenge that endpoint

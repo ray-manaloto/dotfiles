@@ -464,3 +464,95 @@ flowchart LR
     RELEASE --> REVIEW
     REVIEW --> LIVE["Post-commit native Codex clone replay"]
 ```
+
+## 2026-08-14 — bind identity tools across host and container
+
+- **Iteration ID:** `dotfiles-goal-20260814-010`
+- **Prior goal digest:** `sha256:81f81ed9945e7e51defe002a9d104dcf1a8a59fefa8f150954bfba9858385535`
+- **Current goal digest:** `sha256:a48581d1664abbc3f0a34660ff5d7e6bb377f34a1e5bda1a5fd396e0462e194c`
+- **Changed requirement:** Keep publication blocked until repository identity,
+  bootstrap, and runner executables are explicit and valid on both macOS and
+  the supported devcontainer without admitting ambient `PATH` selection.
+- **Reason:** The first canonical `ship` reached the real amd64 container and
+  found that `/usr/bin/git` does not exist there. Continuing exposed two
+  adjacent host-only assumptions: mise under `~/.local/bin` and the project
+  environment under `python/.venv`.
+- **Evidence:** The Git path is now derived from the one `conda:git` entry in
+  the tracked `.devcontainer/mise-system.lock`, resolved once, and checked as
+  a regular executable. A hostile lock with that authority removed fails
+  closed. Host and real supported-container writer suites both pass 27 tests;
+  the container executes the exact locked Git binary. Mise and project Python
+  use finite absolute host/container contracts and never search ambient PATH.
+- **Affected tickets:** dotfiles issue #753 and its writer-lease PR.
+- **Disposition:** `ACCEPTED_AND_ACTIVE` — focused host/container controls are
+  green; full gates and a new two-axis frozen review remain required.
+- **Topology and ownership:** `/root/dotfiles_753_writer_lease` remains sole
+  writer in the canonical checkout during the proven ship path; `/root` owns
+  reviewer dispatch after the new freeze.
+
+### Current goal
+
+> Complete dotfiles issue #753 by landing a challenge-bound Git-common-dir lease with private transactional state, lock-derived host/container Git and explicit mise/Python toolchain paths, directory-FD-anchored no-follow reclamation, non-denying typed cleanup debt, bounded synchronous completion and release lock retry, native Codex and Claude success/failure drain, real hostile and subscription-authenticated Codex replay, synchronized visual documentation, independent review, full gates, and clean remote-main landing.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    LOCK["Tracked mise-system.lock"] --> GIT["Exact absolute container Git"]
+    MAC["macOS /usr/bin/git"] --> ID["Repository identity"]
+    GIT --> ID
+    ID --> LEASE["Challenge-bound writer lease"]
+    MISE["Explicit host/container mise"] --> BOOT["Exact bootstrap"]
+    PY["Explicit project Python"] --> HOOK["Native hook runner"]
+    BOOT --> LEASE
+    HOOK --> LEASE
+    LEASE --> TEST["Host plus real amd64 controls"]
+    TEST --> REVIEW["Full gates and dual frozen review"]
+    REVIEW --> SHIP["Ship, land, restore clean main"]
+```
+
+## 2026-08-14 — make the identity executable platform-exclusive
+
+- **Iteration ID:** `dotfiles-goal-20260814-011`
+- **Prior goal digest:** `sha256:a48581d1664abbc3f0a34660ff5d7e6bb377f34a1e5bda1a5fd396e0462e194c`
+- **Current goal digest:** `sha256:9cb91c80d06dead79e355a7243a7773e95600b2de4a647cc0d0d64610b1c37d9`
+- **Changed requirement:** Select exactly one repository-identity Git per
+  platform: Darwin only `/usr/bin/git`; Linux only the conda-Git path derived
+  from the tracked image lock. Never try the other platform's candidate.
+- **Reason:** The lifecycle review accepted the frozen lease state machine, but
+  the storage review reproduced a P1: the ordered host/container candidate
+  list let Linux accept `/usr/bin/git` if present, bypassing its tracked lock
+  authority.
+- **Evidence:** Real-file hostile controls install executable host and locked
+  candidates under an isolated filesystem root. Linux selects the locked
+  candidate while the hostile `/usr/bin/git` exists; Darwin rejects a wrong
+  host path even while the Linux candidate exists. The complete writer suite
+  passes 29 tests on macOS and the supported amd64 container, whose resolved
+  executable is `/usr/local/share/mise/installs/conda-git/2.55.0/bin/git`.
+- **Affected tickets:** dotfiles issue #753 and its writer-lease PR.
+- **Disposition:** `ACCEPTED_AND_ACTIVE` — the P1 is locally green; full gates
+  and a narrow independent exact-head re-review remain required before ship.
+- **Topology and ownership:** `/root/dotfiles_753_writer_lease` is the sole
+  canonical writer; `/root` dispatches the narrow reviewer after freeze.
+
+### Current goal
+
+> Complete dotfiles issue #753 by landing a challenge-bound Git-common-dir lease with platform-exclusive identity tools (Darwin /usr/bin/git; Linux lock-derived conda Git), explicit mise/Python paths, private transactional state, directory-FD-anchored cleanup, bounded drain and release, native Codex and Claude enforcement, hostile and subscription-authenticated replay, synchronized visual documentation, independent review, full gates, and clean remote-main landing.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    OS{"Runtime platform"}
+    OS -->|"Darwin"| MAC["Only /usr/bin/git"]
+    OS -->|"Linux"| LOCK["Read tracked mise-system.lock"]
+    LOCK --> CGIT["Only locked conda Git"]
+    MAC --> ID["Resolve Git common directory"]
+    CGIT --> ID
+    ID --> LEASE["Challenge-bound writer lease"]
+    LEASE --> HOST["29 hostile host controls"]
+    LEASE --> AMD["29 real amd64 controls"]
+    HOST --> GATES["Full gates and narrow review"]
+    AMD --> GATES
+    GATES --> SHIP["Native replay, ship, land"]
+```

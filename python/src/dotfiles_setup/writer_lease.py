@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import errno
 import fcntl
+import functools
 import hashlib
 import json
 import os
@@ -24,6 +25,7 @@ import sys
 import tempfile
 import threading
 import time
+import tomllib
 import uuid
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
@@ -54,6 +56,9 @@ _CHALLENGE_TIMEOUT_SECONDS = 0.5
 _STATE_LOCK_RETRY_SECONDS = 3.0
 _STATE_LOCK_RETRY_INTERVAL_SECONDS = 0.01
 _MAX_TCP_PORT = 65535
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_CONTAINER_GIT_LOCK = _PROJECT_ROOT / ".devcontainer" / "mise-system.lock"
+CONTAINER_GIT_INSTALL_ROOT = Path("/usr/local/share/mise/installs/conda-git")
 _GENERATION_PREFIX = "gen-"
 _RECLAIM_PREFIX = ".reclaim-"
 _GENERATION_FILES = frozenset({RECEIPT_FILENAME, AUDIT_FILENAME, INFLIGHT_FILENAME})
@@ -275,10 +280,92 @@ def _validate_timestamp(value: str, *, name: str) -> None:
         raise LeaseError(message)
 
 
+def _locked_git_version(payload: object) -> str:
+    if not isinstance(payload, dict):
+        message = "container Git lock root is not a table"
+        raise LeaseError(message)
+    try:
+        entries = payload["tools"]["conda:git"]
+    except (KeyError, TypeError) as exc:
+        message = "container Git lock does not declare conda:git"
+        raise LeaseError(message) from exc
+    if not isinstance(entries, list) or len(entries) != 1:
+        message = "container Git lock must bind exactly one conda:git entry"
+        raise LeaseError(message)
+    entry = entries[0]
+    if not isinstance(entry, dict) or entry.get("backend") != "conda:git":
+        message = "container Git lock conda:git backend is invalid"
+        raise LeaseError(message)
+    version = entry.get("version")
+    if not isinstance(version, str) or not version:
+        message = "container Git lock conda:git version is invalid"
+        raise LeaseError(message)
+    return version
+
+
+@functools.cache
+def container_git_executable(
+    lock_path: Path = _CONTAINER_GIT_LOCK,
+    *,
+    install_root: Path = CONTAINER_GIT_INSTALL_ROOT,
+) -> Path:
+    """Derive the one conda-Git executable path from the committed lock."""
+    try:
+        with lock_path.open("rb") as stream:
+            payload = tomllib.load(stream)
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        message = f"container Git lock is unreadable: {exc}"
+        raise LeaseError(message) from exc
+    return install_root / _locked_git_version(payload) / "bin" / "git"
+
+
+def trusted_git_executables(
+    *,
+    platform: str = sys.platform,
+    filesystem_root: Path = Path("/"),
+    lock_path: Path = _CONTAINER_GIT_LOCK,
+) -> tuple[Path, ...]:
+    """Return the one platform-authorized Git executable contract."""
+    if platform == "darwin":
+        return (filesystem_root / "usr" / "bin" / "git",)
+    if platform.startswith("linux"):
+        install_root = filesystem_root / CONTAINER_GIT_INSTALL_ROOT.relative_to("/")
+        return (container_git_executable(lock_path, install_root=install_root),)
+    message = f"unsupported writer-lease platform: {platform}"
+    raise LeaseError(message)
+
+
+@functools.cache
+def git_executable(
+    *,
+    platform: str = sys.platform,
+    filesystem_root: Path = Path("/"),
+    lock_path: Path = _CONTAINER_GIT_LOCK,
+) -> Path:
+    """Resolve the platform's sole authorized Git executable exactly once."""
+    (candidate,) = trusted_git_executables(
+        platform=platform,
+        filesystem_root=filesystem_root,
+        lock_path=lock_path,
+    )
+    try:
+        resolved = candidate.resolve(strict=True)
+        metadata = resolved.stat()
+    except OSError as exc:
+        message = (
+            f"trusted {platform.title()} Git executable is unavailable: {candidate}"
+        )
+        raise LeaseError(message) from exc
+    if stat.S_ISREG(metadata.st_mode) and os.access(resolved, os.X_OK):
+        return resolved
+    message = f"trusted {platform.title()} Git executable is unavailable: {candidate}"
+    raise LeaseError(message)
+
+
 def _git(cwd: Path, *args: str) -> str:
     try:
         result = subprocess.run(
-            ["/usr/bin/git", *args],
+            [str(git_executable()), *args],
             cwd=cwd,
             capture_output=True,
             text=True,
@@ -1394,19 +1481,22 @@ def status(cwd: Path) -> int:
     return 0
 
 
-def _mise_executable() -> Path:
+@functools.cache
+def mise_executable() -> Path:
+    """Resolve mise once from the explicit host/container install contract."""
     home = Path(pwd.getpwuid(os.getuid()).pw_dir)
-    candidate = home / ".local" / "bin" / "mise"
-    try:
-        resolved = candidate.resolve(strict=True)
-        metadata = resolved.stat()
-    except OSError as exc:
-        message = f"pinned mise executable is unavailable: {exc}"
-        raise LeaseError(message) from exc
-    if not stat.S_ISREG(metadata.st_mode) or not os.access(resolved, os.X_OK):
-        message = "pinned mise executable is not a regular executable"
-        raise LeaseError(message)
-    return resolved
+    candidates = (home / ".local" / "bin" / "mise", Path("/usr/local/bin/mise"))
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve(strict=True)
+            metadata = resolved.stat()
+        except OSError:
+            continue
+        if stat.S_ISREG(metadata.st_mode) and os.access(resolved, os.X_OK):
+            return resolved
+    expected = ", ".join(str(path) for path in candidates)
+    message = f"no trusted mise executable is available; expected one of: {expected}"
+    raise LeaseError(message)
 
 
 def _bootstrap_options(options: list[str]) -> dict[str, str] | None:
@@ -1446,7 +1536,7 @@ def _bootstrap_command(
         return False
     try:
         arguments = shlex.split(command, posix=True)
-        mise = str(_mise_executable())
+        mise = str(mise_executable())
     except LeaseError, ValueError:
         return False
     prefix = [mise, "-C", str(identity.worktree), "run"]

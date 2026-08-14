@@ -38,6 +38,11 @@ receipt plus an unrelated flock cannot impersonate its owner. Audit facts—not
 a caller flag—derive `initial`, clean `handoff`, or stale-owner `recovery`.
 Recovery refuses while an in-flight mutation remains recorded.
 
+Repository identity uses one platform-exclusive executable: Darwin accepts
+only `/usr/bin/git`; Linux accepts only the conda-Git path derived from the
+tracked `.devcontainer/mise-system.lock`. There is no cross-platform fallback
+and no ambient `PATH` lookup.
+
 Codex and Claude `PreToolUse` register Bash/unified-exec and direct mutation
 tool IDs only for the live owning session/worktree. `PostToolUse` removes that
 exact ID, and Claude `PostToolUseFailure` drains failed tools through the same
