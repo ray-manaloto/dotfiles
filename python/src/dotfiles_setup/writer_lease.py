@@ -65,6 +65,7 @@ _RECLAIM_PREFIX = ".reclaim-"
 _AUDIT_CHUNK_PREFIX = "chunk-"
 _AUDIT_CHUNK_SUFFIX = ".json"
 _AUDIT_CHUNK_EVENT_LIMIT = 64
+_AUDIT_READ_CEILING_BYTES = 8 * 1024 * 1024
 _AUDIT_HEAD_SCHEMA = "dotfiles.writer-lease-audit-head.v1"
 _AUDIT_CHUNK_SCHEMA = "dotfiles.writer-lease-audit-chunk.v1"
 _GENERATION_FILES = frozenset({RECEIPT_FILENAME, AUDIT_FILENAME, INFLIGHT_FILENAME})
@@ -555,6 +556,21 @@ def _read_fd(fd: int) -> bytes:
         chunks.append(chunk)
 
 
+def _read_fd_exact(fd: int, expected_size: int) -> bytes:
+    """Read exactly the size already admitted by the caller, never to EOF."""
+    os.lseek(fd, 0, os.SEEK_SET)
+    chunks: list[bytes] = []
+    remaining = expected_size
+    while remaining:
+        chunk = os.read(fd, min(65536, remaining))
+        if not chunk:
+            message = "writer lease file changed while it was read"
+            raise LeaseError(message)
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    return b"".join(chunks)
+
+
 def _write_fd(fd: int, raw: bytes) -> None:
     os.ftruncate(fd, 0)
     os.lseek(fd, 0, os.SEEK_SET)
@@ -607,7 +623,12 @@ def _read_private_file(path: Path) -> bytes:
         os.close(fd)
 
 
-def _read_private_file_at(parent_fd: int, name: str) -> bytes:
+def _read_private_file_at(
+    parent_fd: int,
+    name: str,
+    *,
+    max_bytes: int | None = None,
+) -> bytes:
     flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NONBLOCK
     flags |= getattr(os, "O_NOFOLLOW", 0)
     try:
@@ -617,7 +638,18 @@ def _read_private_file_at(parent_fd: int, name: str) -> bytes:
         raise LeaseError(message) from exc
     try:
         _validate_private_regular(fd, Path(name))
-        return _read_fd(fd)
+        admitted_size = os.fstat(fd).st_size
+        if max_bytes is not None and admitted_size > max_bytes:
+            message = "writer lease sealed audit exceeds the 8 MiB read ceiling"
+            raise LeaseError(message)
+        if max_bytes is None:
+            return _read_fd(fd)
+        raw = _read_fd_exact(fd, admitted_size)
+        _validate_private_regular(fd, Path(name))
+        if os.fstat(fd).st_size != admitted_size:
+            message = "writer lease file changed while it was read"
+            raise LeaseError(message)
+        return raw
     finally:
         os.close(fd)
 
@@ -1069,9 +1101,11 @@ def _parse_audit_head(raw: bytes) -> AuditCursor | None:
 def _read_audit_chunk(
     chunks_fd: int,
     digest: str,
-) -> tuple[tuple[dict[str, Any], ...], str]:
+    *,
+    byte_budget: int,
+) -> tuple[tuple[dict[str, Any], ...], str, int]:
     name = f"{_AUDIT_CHUNK_PREFIX}{digest}{_AUDIT_CHUNK_SUFFIX}"
-    chunk_raw = _read_private_file_at(chunks_fd, name)
+    chunk_raw = _read_private_file_at(chunks_fd, name, max_bytes=byte_budget)
     if _sha256(chunk_raw) != digest:
         message = "writer lease audit chunk digest does not match its file"
         raise LeaseError(message)
@@ -1094,7 +1128,7 @@ def _read_audit_chunk(
     prior = chunk["prior_sha256"]
     if prior:
         _validate_sha256(prior, name="audit prior chunk digest")
-    return tuple(chunk["events"]), prior
+    return tuple(chunk["events"]), prior, len(chunk_raw)
 
 
 def _read_sealed_audit(
@@ -1110,9 +1144,15 @@ def _read_sealed_audit(
     reverse_chunks: list[tuple[dict[str, Any], ...]] = []
     remaining = cursor.sealed_count
     current = cursor.head_sha256
+    bytes_read = 0
     try:
         while remaining:
-            events, current = _read_audit_chunk(chunks_fd, current)
+            events, current, chunk_bytes = _read_audit_chunk(
+                chunks_fd,
+                current,
+                byte_budget=_AUDIT_READ_CEILING_BYTES - bytes_read,
+            )
+            bytes_read += chunk_bytes
             reverse_chunks.append(events)
             remaining -= len(events)
         if current:

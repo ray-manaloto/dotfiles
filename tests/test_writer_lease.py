@@ -3,10 +3,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import select
 import shlex
+import shutil
 import stat
 import subprocess
 import sys
@@ -1208,13 +1210,18 @@ def test_pinned_system_runner_uses_real_project_runtime_and_drains_posttooluse(
     project_root = Path(__file__).resolve().parents[1]
     (repo / "python").mkdir()
     (repo / "python" / ".venv").symlink_to(project_root / "python" / ".venv")
-    (repo / "python" / "src").mkdir()
-    (repo / "python" / "src" / "dotfiles_setup").symlink_to(
-        project_root / "python" / "src" / "dotfiles_setup"
+    shutil.copytree(
+        project_root / "python" / "src" / "dotfiles_setup",
+        repo / "python" / "src" / "dotfiles_setup",
+    )
+    (repo / ".devcontainer").mkdir()
+    shutil.copy2(
+        project_root / ".devcontainer" / "mise-system.lock",
+        repo / ".devcontainer" / "mise-system.lock",
     )
     runner = project_root / "scripts" / "writer-lease-hook-runner.py"
     (repo / "scripts").mkdir()
-    (repo / "scripts" / runner.name).symlink_to(runner)
+    shutil.copy2(runner, repo / "scripts" / runner.name)
     nested = repo / "nested" / "session-cwd"
     nested.mkdir(parents=True)
     (nested / ".git").mkdir()
@@ -1297,10 +1304,11 @@ def test_codex_hook_command_reaches_the_tracked_runner_from_nested_cwd() -> None
 
     arguments = shlex.split(command)
     assert arguments[:4] == ["/usr/bin/python3", "-I", "-S", "-c"]
-    assert "/usr/bin/git" not in command
-    assert "pathlib" in arguments[4]
-    assert "runpy.run_path" in arguments[4]
-    assert 'roots[-1]/"scripts/writer-lease-hook-runner.py"' in arguments[4]
+    assert len(arguments) == 5
+    assert all(
+        forbidden not in command
+        for forbidden in ("/usr/bin/git", "/bin/sh", "PATH=", " env ")
+    )
     nested = project_root / "python" / "src" / "dotfiles_setup"
     payload = {
         "cwd": str(nested),
@@ -1323,6 +1331,378 @@ def test_codex_hook_command_reaches_the_tracked_runner_from_nested_cwd() -> None
     decision = json.loads(result.stdout)["hookSpecificOutput"]
     assert decision["permissionDecision"] == "deny"
     assert "enforcement failed closed" not in decision["permissionDecisionReason"]
+
+
+def test_codex_hook_selects_inner_runner_beneath_unrelated_outer_repo(
+    tmp_path: Path,
+) -> None:
+    """An enclosing Git marker cannot hide a complete inner hook runtime."""
+    project_root = Path(__file__).resolve().parents[1]
+    outer = tmp_path / "unrelated-outer"
+    inner = outer / "dotfiles"
+    nested = inner / "nested" / "session"
+    outer.mkdir()
+    _git(outer, "init", "--initial-branch", "main")
+    inner.mkdir()
+    _git(inner, "init", "--initial-branch", "main")
+    nested.mkdir(parents=True)
+    (inner / "scripts").mkdir()
+    shutil.copy2(
+        project_root / "scripts" / "writer-lease-hook-runner.py",
+        inner / "scripts" / "writer-lease-hook-runner.py",
+    )
+    package = inner / "python" / "src" / "dotfiles_setup"
+    shutil.copytree(project_root / "python" / "src" / "dotfiles_setup", package)
+    (inner / "python" / ".venv").symlink_to(project_root / "python" / ".venv")
+    hooks = json.loads((project_root / ".codex/hooks.json").read_text(encoding="utf-8"))
+    command = hooks["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    payload = {
+        "cwd": str(nested),
+        "hook_event_name": "PreToolUse",
+        "session_id": "outer-inner-control",
+        "tool_input": {"command": "git add README.md"},
+        "tool_name": "Bash",
+        "tool_use_id": "outer-inner-tool",
+    }
+
+    result = subprocess.run(
+        ["/bin/sh", "-c", command],
+        cwd=nested,
+        input=json.dumps(payload).encode(),
+        capture_output=True,
+        check=False,
+        timeout=10,
+    )
+
+    assert result.returncode == 0
+    decision = json.loads(result.stdout)["hookSpecificOutput"]
+    assert decision["permissionDecision"] == "deny"
+    assert "enforcement failed closed" not in decision["permissionDecisionReason"]
+
+
+def test_codex_hook_blocks_ambiguous_complete_outer_runtime(
+    tmp_path: Path,
+) -> None:
+    """Untracked outer runtime names cannot redirect pre-lease execution."""
+    project_root = Path(__file__).resolve().parents[1]
+    outer = tmp_path / "unrelated-outer"
+    inner = outer / "dotfiles"
+    nested = inner / "nested" / "session"
+    outer.mkdir()
+    _git(outer, "init", "--initial-branch", "main")
+    inner.mkdir()
+    _git(inner, "init", "--initial-branch", "main")
+    nested.mkdir(parents=True)
+    (inner / "scripts").mkdir()
+    shutil.copy2(
+        project_root / "scripts" / "writer-lease-hook-runner.py",
+        inner / "scripts" / "writer-lease-hook-runner.py",
+    )
+    shutil.copytree(
+        project_root / "python" / "src" / "dotfiles_setup",
+        inner / "python" / "src" / "dotfiles_setup",
+    )
+    (inner / "python" / ".venv").symlink_to(project_root / "python" / ".venv")
+    marker = tmp_path / "outer-runner-executed"
+    outer_runner = outer / "scripts" / "writer-lease-hook-runner.py"
+    outer_runner.parent.mkdir()
+    outer_runner.write_text(
+        "from pathlib import Path\n"
+        f"Path({str(marker)!r}).write_text('redirected', encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    outer_hook = (
+        outer / "python" / "src" / "dotfiles_setup" / "codex_writer_lease_hook.py"
+    )
+    outer_hook.parent.mkdir(parents=True)
+    outer_hook.write_text("# untracked decoy\n", encoding="utf-8")
+    hooks = json.loads((project_root / ".codex/hooks.json").read_text(encoding="utf-8"))
+    command = hooks["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    payload = {
+        "cwd": str(nested),
+        "hook_event_name": "PreToolUse",
+        "session_id": "ambiguous-root-control",
+        "tool_input": {"command": "git add README.md"},
+        "tool_name": "Bash",
+        "tool_use_id": "ambiguous-root-tool",
+    }
+
+    blocked = subprocess.run(
+        ["/bin/sh", "-c", command],
+        cwd=nested,
+        input=json.dumps(payload).encode(),
+        capture_output=True,
+        check=False,
+        timeout=10,
+    )
+
+    assert blocked.returncode == 2
+    assert blocked.stdout == b""
+    assert blocked.stderr == b"Writer lease tracked runtime is ambiguous.\n"
+    assert not marker.exists()
+
+    outer_hook.unlink()
+    control = subprocess.run(
+        ["/bin/sh", "-c", command],
+        cwd=nested,
+        input=json.dumps(payload).encode(),
+        capture_output=True,
+        check=False,
+        timeout=10,
+    )
+
+    assert control.returncode == 0
+    decision = json.loads(control.stdout)["hookSpecificOutput"]
+    assert decision["permissionDecision"] == "deny"
+    assert "enforcement failed closed" not in decision["permissionDecisionReason"]
+    assert not marker.exists()
+
+
+@pytest.mark.parametrize(
+    "outer_shape", ["missing", "wrong-type", "symlink", "parent-symlink"]
+)
+def test_codex_hook_ignores_incomplete_outer_runtime_candidates(
+    tmp_path: Path,
+    outer_shape: str,
+) -> None:
+    """An enclosing marker redirects only when its complete runtime is regular."""
+    project_root = Path(__file__).resolve().parents[1]
+    outer = tmp_path / "unrelated-outer"
+    inner = outer / "dotfiles"
+    nested = inner / "nested" / "session"
+    outer.mkdir()
+    _git(outer, "init", "--initial-branch", "main")
+    inner.mkdir()
+    _git(inner, "init", "--initial-branch", "main")
+    nested.mkdir(parents=True)
+    inner_runner = inner / "scripts" / "writer-lease-hook-runner.py"
+    inner_hook = (
+        inner / "python" / "src" / "dotfiles_setup" / "codex_writer_lease_hook.py"
+    )
+    inner_runner.parent.mkdir()
+    shutil.copy2(project_root / "scripts" / inner_runner.name, inner_runner)
+    shutil.copytree(
+        project_root / "python" / "src" / "dotfiles_setup",
+        inner_hook.parent,
+    )
+    (inner / "python" / ".venv").symlink_to(project_root / "python" / ".venv")
+
+    outer_runner = outer / "scripts" / inner_runner.name
+    outer_hook = outer / inner_hook.relative_to(inner)
+    if outer_shape == "wrong-type":
+        outer_runner.mkdir(parents=True)
+        outer_hook.mkdir(parents=True)
+    elif outer_shape == "symlink":
+        outer_runner.parent.mkdir(parents=True)
+        outer_hook.parent.mkdir(parents=True)
+        outer_runner.symlink_to(inner_runner)
+        outer_hook.symlink_to(inner_hook)
+    elif outer_shape == "parent-symlink":
+        (outer / "scripts").symlink_to(inner / "scripts", target_is_directory=True)
+        (outer / "python").symlink_to(inner / "python", target_is_directory=True)
+
+    hooks = json.loads((project_root / ".codex/hooks.json").read_text(encoding="utf-8"))
+    command = hooks["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    payload = {
+        "cwd": str(nested),
+        "hook_event_name": "PreToolUse",
+        "session_id": "invalid-outer-control",
+        "tool_input": {"command": "git add README.md"},
+        "tool_name": "Bash",
+        "tool_use_id": f"invalid-outer-{outer_shape}",
+    }
+
+    result = subprocess.run(
+        ["/bin/sh", "-c", command],
+        cwd=nested,
+        input=json.dumps(payload).encode(),
+        capture_output=True,
+        check=False,
+        timeout=10,
+    )
+
+    assert result.returncode == 0
+    decision = json.loads(result.stdout)["hookSpecificOutput"]
+    assert decision["permissionDecision"] == "deny"
+    assert "enforcement failed closed" not in decision["permissionDecisionReason"]
+
+
+@pytest.mark.parametrize("redirect_shape", ["parent-symlinks", "git-symlink"])
+def test_codex_hook_symlink_components_cannot_redirect_pre_post_lifecycle(
+    tmp_path: Path,
+    holders: list[subprocess.Popen[str]],
+    redirect_shape: str,
+) -> None:
+    """Symlinked outer components cannot steal an inner holder lifecycle."""
+    project_root = Path(__file__).resolve().parents[1]
+    outer = tmp_path / "unrelated-outer"
+    inner = outer / "dotfiles"
+    nested = inner / "nested" / "session"
+    outer.mkdir()
+    _git(outer, "init", "--initial-branch", "main")
+    inner.mkdir()
+    _git(inner, "init", "--initial-branch", "main")
+    _git(inner, "config", "user.email", "writer-lease@example.invalid")
+    _git(inner, "config", "user.name", "Writer Lease Test")
+    _git(inner, "commit", "--allow-empty", "-m", "initial")
+    nested.mkdir(parents=True)
+    (inner / "scripts").mkdir()
+    shutil.copy2(
+        project_root / "scripts" / "writer-lease-hook-runner.py",
+        inner / "scripts" / "writer-lease-hook-runner.py",
+    )
+    shutil.copytree(
+        project_root / "python" / "src" / "dotfiles_setup",
+        inner / "python" / "src" / "dotfiles_setup",
+    )
+    (inner / "python" / ".venv").symlink_to(project_root / "python" / ".venv")
+    (inner / ".devcontainer").mkdir()
+    shutil.copy2(
+        project_root / ".devcontainer" / "mise-system.lock",
+        inner / ".devcontainer" / "mise-system.lock",
+    )
+    decoy_scripts = tmp_path / "decoy-scripts"
+    decoy_scripts.mkdir()
+    shutil.copy2(
+        project_root / "scripts" / "writer-lease-hook-runner.py",
+        decoy_scripts / "writer-lease-hook-runner.py",
+    )
+    decoy_python = tmp_path / "decoy-python"
+    shutil.copytree(inner / "python", decoy_python, symlinks=True)
+    (decoy_python / "src" / "dotfiles_setup" / "codex_writer_lease_hook.py").write_text(
+        'raise RuntimeError("outer parent symlink executed")\n', encoding="utf-8"
+    )
+    if redirect_shape == "parent-symlinks":
+        (outer / "scripts").symlink_to(decoy_scripts, target_is_directory=True)
+        (outer / "python").symlink_to(decoy_python, target_is_directory=True)
+    else:
+        shutil.copytree(decoy_scripts, outer / "scripts")
+        shutil.copytree(decoy_python, outer / "python", symlinks=True)
+        outer_git = tmp_path / "outer-git"
+        (outer / ".git").rename(outer_git)
+        (outer / ".git").symlink_to(outer_git, target_is_directory=True)
+    holder, _ = _start_holder(
+        inner,
+        lease=LeaseArgs(
+            task_id="inner-owner",
+            owner="/root/inner-owner",
+            handoff_sha256=_HANDOFF_A,
+            transition="initial",
+        ),
+    )
+    holders.append(holder)
+    command = json.loads(
+        (project_root / ".codex/hooks.json").read_text(encoding="utf-8")
+    )["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+
+    def run(event: str) -> subprocess.CompletedProcess[bytes]:
+        payload = {
+            "cwd": str(nested),
+            "hook_event_name": event,
+            "session_id": "inner-owner",
+            "tool_input": {"command": "git status"},
+            "tool_name": "Bash",
+            "tool_use_id": "inner-owner-tool",
+        }
+        return subprocess.run(
+            ["/bin/sh", "-c", command],
+            cwd=nested,
+            input=json.dumps(payload).encode(),
+            capture_output=True,
+            check=False,
+            timeout=10,
+        )
+
+    pre = run("PreToolUse")
+    post = run("PostToolUse")
+
+    assert pre.returncode == 0, pre.stderr
+    assert pre.stdout == b""
+    assert post.returncode == 0, post.stderr
+    assert post.stdout == b""
+    assert _status(inner)["inflight"] == []
+
+
+@pytest.mark.parametrize(
+    "runtime_shape",
+    [
+        "no-marker",
+        "missing-runner",
+        "runner-wrong-type",
+        "runner-symlink",
+        "hook-symlink",
+        "parent-symlink",
+        "git-symlink",
+    ],
+)
+def test_codex_hook_blocks_when_no_complete_runtime_candidate_exists(
+    tmp_path: Path,
+    runtime_shape: str,
+) -> None:
+    """Every sole incomplete or redirected runtime exits 2 before execution."""
+    project_root = Path(__file__).resolve().parents[1]
+    candidate = tmp_path / "candidate"
+    nested = candidate / "nested" / "session"
+    nested.mkdir(parents=True)
+    marker = tmp_path / "invalid-runner-executed"
+    decoy_scripts = tmp_path / "decoy-scripts"
+    decoy_scripts.mkdir()
+    (decoy_scripts / "writer-lease-hook-runner.py").write_text(
+        "from pathlib import Path\n"
+        f"Path({str(marker)!r}).write_text('redirected', encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    hook = (
+        candidate / "python" / "src" / "dotfiles_setup" / "codex_writer_lease_hook.py"
+    )
+    hook.parent.mkdir(parents=True)
+    hook.write_text("# inert decoy\n", encoding="utf-8")
+    if runtime_shape == "git-symlink":
+        git_target = tmp_path / "git-target"
+        git_target.mkdir()
+        (candidate / ".git").symlink_to(git_target, target_is_directory=True)
+    elif runtime_shape != "no-marker":
+        (candidate / ".git").mkdir()
+    runner = candidate / "scripts" / "writer-lease-hook-runner.py"
+    if runtime_shape == "parent-symlink":
+        runner.parent.symlink_to(decoy_scripts, target_is_directory=True)
+    elif runtime_shape == "runner-wrong-type":
+        runner.mkdir(parents=True)
+    elif runtime_shape == "runner-symlink":
+        runner.parent.mkdir()
+        runner.symlink_to(decoy_scripts / runner.name)
+    elif runtime_shape != "missing-runner":
+        runner.parent.mkdir()
+        shutil.copy2(decoy_scripts / runner.name, runner)
+    if runtime_shape == "hook-symlink":
+        hook_target = tmp_path / "hook-target.py"
+        hook_target.write_text("# redirected hook\n", encoding="utf-8")
+        hook.unlink()
+        hook.symlink_to(hook_target)
+    hooks = json.loads((project_root / ".codex/hooks.json").read_text(encoding="utf-8"))
+    command = hooks["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    payload = {
+        "cwd": str(nested),
+        "hook_event_name": "PreToolUse",
+        "session_id": "missing-runtime-control",
+        "tool_input": {"command": "git add README.md"},
+        "tool_name": "Bash",
+        "tool_use_id": "missing-runtime-tool",
+    }
+
+    result = subprocess.run(
+        ["/bin/sh", "-c", command],
+        cwd=nested,
+        input=json.dumps(payload).encode(),
+        capture_output=True,
+        check=False,
+        timeout=10,
+    )
+
+    assert result.returncode == 2
+    assert result.stdout == b""
+    assert result.stderr == b"Writer lease tracked runtime is unavailable.\n"
+    assert not marker.exists()
 
 
 def test_many_tool_pairs_keep_one_linear_generation_with_full_audit(
@@ -1348,6 +1728,7 @@ def test_many_tool_pairs_keep_one_linear_generation_with_full_audit(
     audit_bytes_published = current_audit_size()
     started_at = time.monotonic()
     pair_count = 256
+    expected_order = [(1, "acquired", "")]
     for index in range(pair_count):
         tool_id = f"scale-tool-{index:02d}"
         for event in ("PreToolUse", "PostToolUse"):
@@ -1364,6 +1745,13 @@ def test_many_tool_pairs_keep_one_linear_generation_with_full_audit(
             assert result.returncode == 0
             assert result.stdout == ""
             audit_bytes_published += current_audit_size()
+            expected_order.append(
+                (
+                    len(expected_order) + 1,
+                    "tool_started" if event == "PreToolUse" else "tool_finished",
+                    tool_id,
+                )
+            )
     elapsed = time.monotonic() - started_at
 
     generations = sorted(state.glob("gen-*"))
@@ -1390,6 +1778,21 @@ def test_many_tool_pairs_keep_one_linear_generation_with_full_audit(
         path.stat().st_size for path in state.rglob("*") if path.is_file()
     )
     assert state_bytes < 512 * 1024
+    reverse_chunks: list[list[dict[str, object]]] = []
+    chunk_digest = audit_manifest["head_sha256"]
+    while chunk_digest:
+        chunk_path = state / "audit-chunks" / f"chunk-{chunk_digest}.json"
+        chunk_raw = chunk_path.read_bytes()
+        assert hashlib.sha256(chunk_raw).hexdigest() == chunk_digest
+        chunk = json.loads(chunk_raw)
+        reverse_chunks.append(chunk["events"])
+        chunk_digest = chunk["prior_sha256"]
+    reconstructed = [
+        event for chunk in reversed(reverse_chunks) for event in chunk
+    ] + audit_manifest["tail"]
+    assert [
+        (event["seq"], event["event"], event["tool_use_id"]) for event in reconstructed
+    ] == expected_order
     # The 512 real Python process launches vary by platform. This is only a
     # stuck-process ceiling; cumulative bytes above are the amplification gate.
     assert elapsed < 180
@@ -1444,10 +1847,90 @@ def test_sealed_audit_chunk_corruption_denies_without_state_mutation(
         ),
     )
 
-    assert denied.returncode == 0
+    assert denied.returncode == 0, denied.stderr
     decision = json.loads(denied.stdout)["hookSpecificOutput"]
     assert decision["permissionDecision"] == "deny"
     assert "digest" in decision["permissionDecisionReason"].lower()
+    assert _writer_state_bytes(state) == before
+
+
+def test_sealed_audit_read_ceiling_denies_before_state_mutation(
+    tmp_path: Path, holders: list[subprocess.Popen[str]]
+) -> None:
+    """One hook reads at most 8 MiB of sealed history before denying."""
+    repo, _ = _repo_with_linked_worktree(tmp_path)
+    holder, _ = _start_holder(
+        repo,
+        lease=LeaseArgs(
+            task_id="read-ceiling-owner",
+            owner="/root/read-ceiling-owner",
+            handoff_sha256=_HANDOFF_A,
+            transition="initial",
+        ),
+    )
+    holders.append(holder)
+    for index in range(32):
+        tool_id = f"read-ceiling-tool-{index:02d}"
+        for event in ("PreToolUse", "PostToolUse"):
+            assert (
+                _raw_hook(
+                    repo,
+                    HookCall(
+                        event=event,
+                        session_id="read-ceiling-owner",
+                        tool_name="Bash",
+                        tool_use_id=tool_id,
+                        tool_input={"command": "/usr/bin/true"},
+                    ),
+                ).stdout
+                == ""
+            )
+
+    state = _common_dir(repo) / "codex-writer-lease"
+    generation = (state / "current").read_text(encoding="ascii")
+    manifest_path = state / generation / "audit.jsonl"
+    manifest = json.loads(manifest_path.read_bytes())
+    old_digest = manifest["head_sha256"]
+    old_chunk = state / "audit-chunks" / f"chunk-{old_digest}.json"
+    payload = json.loads(old_chunk.read_bytes())
+    payload["events"][0]["tool_name"] = "x" * (9 * 1024 * 1024)
+    raw = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()
+    new_digest = hashlib.sha256(raw).hexdigest()
+    new_chunk = state / "audit-chunks" / f"chunk-{new_digest}.json"
+    new_chunk.write_bytes(raw)
+    new_chunk.chmod(0o600)
+    old_chunk.unlink()
+    manifest["head_sha256"] = new_digest
+    manifest_raw = json.dumps(manifest, separators=(",", ":"), sort_keys=True).encode()
+    manifest_path.write_bytes(manifest_raw)
+    generation_path = state / generation
+    generation_digest = hashlib.sha256(
+        (generation_path / "receipt.json").read_bytes()
+        + b"\0"
+        + manifest_raw
+        + b"\0"
+        + (generation_path / "inflight.json").read_bytes()
+    ).hexdigest()
+    new_generation = f"gen-{generation_digest}"
+    generation_path.rename(state / new_generation)
+    (state / "current").write_text(new_generation, encoding="ascii")
+    before = _writer_state_bytes(state)
+
+    denied = _raw_hook(
+        repo,
+        HookCall(
+            event="PreToolUse",
+            session_id="read-ceiling-owner",
+            tool_name="Bash",
+            tool_use_id="read-ceiling-denied",
+            tool_input={"command": "git add README.md"},
+        ),
+    )
+
+    assert denied.returncode == 0, denied.stderr
+    decision = json.loads(denied.stdout)["hookSpecificOutput"]
+    assert decision["permissionDecision"] == "deny"
+    assert "8 MiB read ceiling" in decision["permissionDecisionReason"]
     assert _writer_state_bytes(state) == before
 
 
