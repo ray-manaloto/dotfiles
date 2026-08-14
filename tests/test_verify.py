@@ -18,10 +18,15 @@ has never existed in this repo.
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import pytest
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
@@ -294,3 +299,86 @@ def test_require_lines_is_wired_into_the_handler_map() -> None:
         )
     )
     assert result["status"] == "passed"
+
+
+# ---------------------------------------------------------------------------
+# skill_eval_corpus — parsed schema plus consumer control
+# ---------------------------------------------------------------------------
+
+
+def _eval_corpus() -> dict[str, Any]:
+    return {
+        "skill_name": "codex-task-orchestration",
+        "evals": [
+            {
+                "id": 18,
+                "prompt": "Recover from a thread limit without another writer.",
+                "expected_output": (
+                    "Reuse one confirmed-idle agent with bounded ownership."
+                ),
+                "files": [],
+                "expectations": [
+                    "The active writer is not reused.",
+                    "The idle agent receives explicit bounded ownership.",
+                ],
+            }
+        ],
+    }
+
+
+def test_skill_eval_corpus_parses_and_consumes_required_eval(tmp_path: Path) -> None:
+    corpus = _write(tmp_path, "evals.json", json.dumps(_eval_corpus()))
+
+    result = verify.skill_eval_corpus(
+        corpus,
+        skill_name="codex-task-orchestration",
+        required_eval_ids=[18],
+        min_expectations=2,
+    )
+
+    assert result["status"] == "passed"
+
+
+def test_skill_eval_corpus_rejects_malformed_json(tmp_path: Path) -> None:
+    corpus = _write(tmp_path, "evals.json", json.dumps(_eval_corpus())[1:])
+
+    with pytest.raises(verify.VerificationError, match="invalid JSON"):
+        verify.skill_eval_corpus(
+            corpus,
+            skill_name="codex-task-orchestration",
+            required_eval_ids=[18],
+            min_expectations=2,
+        )
+
+
+@pytest.mark.parametrize(
+    ("mutation", "reason"),
+    [
+        (lambda value: value.update(skill_name="other"), "skill_name"),
+        (lambda value: value["evals"][0].pop("expectations"), "expectations"),
+        (lambda value: value["evals"][0].update(prompt=""), "prompt"),
+        (lambda value: value["evals"][0].update(extra=True), "unexpected field extra"),
+        (lambda value: value.update(extra=True), "unexpected root field extra"),
+        (lambda value: value.update(evals=[]), "required eval id 18"),
+    ],
+)
+def test_skill_eval_corpus_rejects_wrong_shape_or_unconsumed_required_eval(
+    tmp_path: Path,
+    mutation: Callable[[dict[str, Any]], object],
+    reason: str,
+) -> None:
+    payload = _eval_corpus()
+    mutation(payload)
+    corpus = _write(tmp_path, "evals.json", json.dumps(payload))
+
+    with pytest.raises(verify.VerificationError, match=reason):
+        verify.skill_eval_corpus(
+            corpus,
+            skill_name="codex-task-orchestration",
+            required_eval_ids=[18],
+            min_expectations=2,
+        )
+
+
+def test_skill_eval_corpus_handler_is_publicly_wired() -> None:
+    assert "skill_eval_corpus" in verify.HANDLERS

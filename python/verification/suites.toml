@@ -2078,6 +2078,38 @@ tokens = [
 ]
 
 [[suite]]
+name = "workflow.codex-task-orchestration"
+description = "The Codex task orchestration skill must route only across currently callable transports. The eval corpus exercises observed failures, but synthetic decisions do not certify live transport. The structured contract binds the skill and the corresponding replay so either side cannot disappear silently."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    ".agents/skills/codex-task-orchestration/SKILL.md",
+    "docs/agents/codex-task-orchestration.md",
+    "docs/agents/goal-history.md",
+    "docs/research/runs/research-20260813-codex-session-communication/report.md",
+]
+per_path_tokens = { ".agents/skills/codex-task-orchestration/SKILL.md" = ["Inspect the current callable tool catalog", "Gate each Desktop operation independently", "canonical handoff bytes", "Read-only acknowledgment", "Relinquishment", "Start signal", "independently recomputes and echoes the digest", "When `spawn_agent` reports the agent-thread limit", "Never reuse an active writer", "Recovery-vault-first", "research report for this machine's current configured path", "Visual artifact contract", "Do not invent a remote target"], "docs/agents/codex-task-orchestration.md" = ["# Codex task orchestration planes", 'A -->|"collaboration tools"| P["Parent-controlled subagents"]', 'D --> DT["Gate list / read / send / wait separately"]', 'B -->|"yes"| F["Freeze canonical JSON bytes + SHA-256"]', 'X --> R["Predecessor relinquishes; confirms idle and no ownership"]', 'R --> G["Coordinator sends separate start signal"]'], "docs/agents/goal-history.md" = ["dotfiles-goal-20260814-004", 'F["Freeze canonical bytes + SHA-256"] --> S{"Select eligible successor"}', 'A --> R["Predecessor relinquishes; confirms idle/no ownership"]', 'R --> G["Separate coordinator start signal"]'], "docs/research/runs/research-20260813-codex-session-communication/report.md" = ["pre-freeze-inventory.json.sha256", "not found in indexed Git snapshots", "explicit targeted-restore authority", "Current local Codex releases enable subagent workflows by default", "cc4411af0b12b75daa23b82dbee63f646f31e3b354742d7961f08f3ecae81c30", "non-authoritative empirical evidence", "### Successor dispatch at a durable ticket boundary", "## GitHub repos touched", "completed/idle agent"] }
+tokens = [
+    "currently callable",
+]
+
+[[suite]]
+name = "workflow.codex-task-orchestration-evals"
+description = "Parse the orchestration eval corpus, enforce its schema, and consume every observed-failure replay required by this iteration. Synthetic eval coverage is a routing contract, never live transport certification."
+category = "workflow"
+check_type = "static"
+handler = "skill_eval_corpus"
+paths_required = true
+paths = [
+    ".agents/skills/codex-task-orchestration/evals/evals.json",
+]
+skill_name = "codex-task-orchestration"
+required_eval_ids = [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+min_expectations = 1
+
+[[suite]]
 name = "workflow.goal-history"
 description = "The append-only dotfiles goal history must remain present, structurally complete, automatically discoverable by session review, and bound to the fixed origin/main merge-base. The executable validator walks every first-parent revision sequentially and then checks working-tree bytes, so deletion, field corruption, self-recomputed goal digests, rewrites behind an unrelated commit, rewrites of a branch-appended entry, and rewrites after bootstrap all fail closed. Caller-controlled baseline overrides are ignored. A history entry records an accepted decision rather than delivery. The one-writer restart rule is a manual coordination protocol; issue #753 tracks executable collision prevention."
 category = "workflow"
@@ -2091,7 +2123,7 @@ paths = [
     "python/src/dotfiles_setup/session_review.py",
     "tests/test_session_review.py",
 ]
-per_path_tokens = { ".claude/rules/goal-history.md" = ["After an accepted goal change", "every first-parent branch revision in order", "Issue #753\ntracks the native startup/pre-mutation ownership lease"], ".claude/skills/session-review/SKILL.md" = ["validate the entire", "fixed `origin/main` merge-base", "docs/agents/goal-history.md"], "docs/agents/goal-history.md" = ["- **Iteration ID:**", "- **Prior goal digest:**", "- **Current goal digest:**", "- **Changed requirement:**", "- **Reason:**", "- **Evidence:**", "- **Affected tickets:**", "- **Disposition:**", "- **Topology and ownership:**", "```mermaid"], "python/src/dotfiles_setup/session_review.py" = ['"docs/agents/goal-history.md",', "def goal_history_errors(", '"rev-list", "--first-parent", "--reverse"', "error := _append_only_error(repo_root, history.read_bytes(), text)"], "tests/test_session_review.py" = ["def test_goal_history_is_a_default_session_review_source(", "def test_goal_history_validator_rejects_a_malformed_current_digest(", "def test_session_review_refuses_a_two_commit_history_rewrite(", "def test_session_review_refuses_rewrite_of_branch_appended_entry(", "def test_session_review_refuses_rewritten_bootstrap_commit(", "def test_session_review_refuses_a_missing_history_in_a_git_checkout("] }
+per_path_tokens = { ".claude/rules/goal-history.md" = ["After an accepted goal change", "every first-parent branch revision in order", "Issue #753\ntracks the native startup/pre-mutation ownership lease"], ".claude/skills/session-review/SKILL.md" = ["validate the entire", "fixed `origin/main` merge-base", "docs/agents/goal-history.md"], "docs/agents/goal-history.md" = ["# Dotfiles goal history", "## Entry contract", "`Prior goal digest` is the SHA-256", "Every entry includes the current goal text and a current Mermaid workflow."], "python/src/dotfiles_setup/session_review.py" = ['"docs/agents/goal-history.md",', "def goal_history_errors(", '"rev-list", "--first-parent", "--reverse"', "error := _append_only_error(repo_root, history.read_bytes(), text)"], "tests/test_session_review.py" = ["def test_goal_history_is_a_default_session_review_source(", "def test_goal_history_validator_rejects_a_malformed_current_digest(", "def test_session_review_refuses_a_two_commit_history_rewrite(", "def test_session_review_refuses_rewrite_of_branch_appended_entry(", "def test_session_review_refuses_rewritten_bootstrap_commit(", "def test_session_review_refuses_a_missing_history_in_a_git_checkout("] }
 tokens = [
     "docs/agents/goal-history.md",
 ]

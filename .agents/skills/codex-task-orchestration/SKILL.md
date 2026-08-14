@@ -13,21 +13,46 @@ work so every worker can report progress without waiting for the user.
 Honor an explicitly requested plane first. A request for subagents, internal
 workers, or a parent/child team uses collaboration tools even when Desktop task
 tools are available. A request for user-visible/sidebar tasks uses Desktop task
-tools. When the user has not selected a plane, inspect the callable tools in the
-current task and choose as follows.
+tools. Inspect the current callable tool catalog; never infer transport exposure
+from a model name or model slug. These are different planes:
 
-- When existing or explicitly requested Desktop tasks are in scope and
-  `send_message_to_thread` and `wait_threads` are available, use
-  **Desktop tasks** for durable, user-visible workers. Resolve existing task IDs
-  with `list_threads`; create a task only when the user explicitly requested a
-  new one. Record each task's `threadId` and `hostId`. A worktree-backed create
-  may return only `clientThreadId`; wait for setup to finish and resolve the
-  resulting `threadId` plus `hostId` before sending, waiting, or claiming the
-  worker is live.
+- **A — parent-controlled subagents and agent threads.** Current Codex releases
+  enable subagents, and supported clients expose their activity under the main
+  task. Use only callable collaboration tools such as `spawn_agent`,
+  `send_message`, `followup_task`, `list_agents`, and `wait_agent`. The parent
+  owns orchestration and receives each child's result.
+- **B — independent Desktop sidebar tasks.** These are durable peers, not
+  children of this task. Use `create_thread`, `list_threads`, `read_thread`,
+  `send_message_to_thread`, and `wait_threads` only when each operation's tool
+  is callable in the current task. Create a task only when the user explicitly
+  requested a new sidebar task.
+
+Gate each Desktop operation independently. Existing peers do not require
+`create_thread`: use `list_threads` only to resolve identity, `read_thread` only
+for bounded inspection, `send_message_to_thread` only for delivery, and
+`wait_threads` only for monitoring when that operation is callable. Require
+`create_thread` only when the user explicitly requested a new visible task.
+Record each peer's `threadId` and `hostId`; a worktree-backed create may return
+only `clientThreadId`, so wait for setup and resolve both real IDs before using
+the peer.
+
+When the user has not selected a plane, choose as follows.
+
+- When existing Desktop tasks are named and the operations needed to coordinate
+  them are callable, keep the **Desktop peer plane**. Missing creation capability
+  is irrelevant to existing peers and never triggers a silent plane change.
+- When the user explicitly requests a new visible task and `create_thread` is
+  callable, use **Desktop task creation** and then gate resolution, delivery,
+  inspection, and waiting separately.
 - Otherwise, when the collaboration tools are available, use **subagents**.
   Spawn one bounded worker per ownership lane and keep this task as parent.
 - When neither plane is callable, stop and ask the user to wake or message the
   tasks. A shared issue or file can retain receipts, but it is not a live bus.
+
+When the user explicitly requested existing peers but an operation they need is
+absent, name that operation and stop. Do not equate this with missing
+`create_thread`. The durable-boundary fallback in section 4 is the only
+pre-authorized exception for a requested fresh visible successor.
 
 Read
 [`docs/research/runs/research-20260813-codex-session-communication/report.md`](../../../docs/research/runs/research-20260813-codex-session-communication/report.md)
@@ -66,6 +91,17 @@ acknowledgment.
    redelivered.
 4. Use `read_thread` for bounded inspection, not repeated polling.
 
+A completed turn or wait is transport progress, not proof that the worker's goal is complete.
+Read the worker's reported outcome and verify its stated completion criteria
+before advancing the dependent lane.
+
+For a successor that needs persistent continuation, send the agreed objective
+through the peer channel and ask the peer task itself to call `create_goal`.
+Require its acknowledgment; a coordinator cannot directly mutate another
+task's goal. There is no supported hidden queue for cross-task work.
+Computer Use must not control the current Codex application. Use a callable
+native task or collaboration tool, or report that the live plane is unavailable.
+
 ### Subagents
 
 1. Use `send_message` while a worker is running.
@@ -73,7 +109,65 @@ acknowledgment.
 3. Use `wait_agent` for bounded waits and `list_agents` for a compact census.
 4. Workers send progress and blockers to the parent with `send_message`.
 
-## 4. Run the supervisor loop
+When `spawn_agent` reports the agent-thread limit and `list_agents` plus
+`followup_task` are callable, use the census to find a suitable completed or
+confirmed-idle agent. Reuse it only after stating the new bounded role,
+ownership, and inherited context.
+Active writers and active workers are ineligible. If none is suitable, report
+capacity exhaustion rather than silently changing a role or inventing a queue.
+
+## 4. Transfer a completed Wayfinder ticket
+
+Transfer only at a completed Wayfinder ticket or explicit ownership boundary,
+never for tests, reviews, transient blockers, or ordinary workflow steps.
+
+### Freeze canonical bytes
+
+Build one JSON object with exactly these string keys: `first_action`, `issue`,
+`milestone`, `ownership`, `return_channel`, and `sha`. Serialize it as UTF-8
+with keys in that lexicographic order, JSON separators `,` and `:` with no
+spaces, standard JSON string escaping, and no trailing newline. Those are the
+canonical handoff bytes. Compute lowercase SHA-256 over those exact bytes and
+send both payload and digest. A prose summary is not the handoff.
+
+### Select the successor with explicit precedence
+
+1. Use a named existing Desktop peer when its needed list/read/send/wait
+   operations are callable; `create_thread` is irrelevant.
+2. Otherwise, when the user requested a fresh visible task and `create_thread`
+   is callable, create asynchronously and resolve its real `threadId` and
+   `hostId` before delivery.
+3. Otherwise use a fresh bounded subagent when collaboration spawning is
+   callable. Report that it is parent-controlled and not sidebar-visible.
+4. If spawning fails because the agent-thread limit is reached and census plus
+   follow-up operations are callable, inspect the agents. Reuse a suitable
+   completed or confirmed-idle agent with `followup_task`, explicitly stating
+   its changed role, bounded ownership, and inherited handoff.
+   Never reuse an active writer or silently change a role.
+5. If no eligible successor exists, keep the predecessor authoritative and
+   report capacity exhaustion. Do not invent a queue or change planes silently.
+
+### Transfer write authority in three phases
+
+Apply the same protocol to Desktop, fresh-subagent, and reused-agent successors:
+
+1. **Read-only acknowledgment.** Deliver the canonical bytes and digest. The
+   successor independently recomputes and echoes the digest, acknowledges the
+   inherited fields and checkout identity, calls its own `create_goal` with the
+   exact milestone when goals are applicable, and confirms it remains
+   read-only. Creation, spawn, or acknowledgment grants no write ownership.
+2. **Relinquishment.** Independently verify the acknowledgment. Then direct the
+   predecessor to relinquish ownership and require its explicit confirmation
+   that it is idle and owns no files or repository writes.
+3. **Start signal.** Only after that confirmation, send a separate start signal
+   granting the successor the bounded ownership. Verify its start acknowledgment
+   before treating the transfer as live.
+
+This ordering permits zero writers briefly but never two. Preserve the old task
+as history after relinquishment. Task creation is identity setup, not
+communication, and it does not inherit or replace a goal automatically.
+
+## 5. Run the supervisor loop
 
 Keep at most one implementation milestone active per repository unless the
 workers prove file, generated-artifact, dependency, and runtime disjointness.
@@ -139,14 +233,34 @@ client still accepts an older documented flag. Fail before consuming the call
 budget when any required argument or output contract is absent; classify a
 parser/help exit separately from provider or model failure.
 
-## 5. Persist the handoff
+## 6. Persist the handoff
 
 Use the repository's normal issue, goal-history, or handoff document for durable
 state. Bind cross-repository handshakes to an immutable version or content hash.
 The live message plane coordinates work; the durable receipt lets a future task
 recover it.
 
-## 6. Improve this skill from real failures
+### Recovery-vault-first missing-file lookup
+
+When inherited evidence says a file existed but the checkout cannot find it,
+inspect the configured recovery vault before recreating or declaring it gone.
+Read the research report for this machine's current configured path, verified
+sidecars, selection fields, read-only Git commands, and refusal boundaries.
+Fail clearly when that configured vault is absent. A vault miss proves only
+absence from its indexed Git snapshots; encrypted-only recovery needs explicit
+targeted-restore authority.
+
+### Visual artifact contract
+
+Keep the authoritative newcomer-readable Mermaid in
+`docs/agents/codex-task-orchestration.md`. When an explicitly identified issue
+or PR is the authorized review surface, mirror the exact Mermaid block there,
+read the remote body or comment back through the native API/CLI, and compare it
+with the tracked block before claiming synchronization. Do not invent a remote target.
+If the workflow has not created or named one, ask for the target and leave the
+tracked document as the only authority.
+
+## 7. Improve this skill from real failures
 
 After a coordination failure or near miss:
 
