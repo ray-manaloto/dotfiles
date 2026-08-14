@@ -337,8 +337,17 @@ def test_the_inner_call_cannot_recurse() -> None:
     Without ``--no-container`` the inner run re-evaluates the host; on a
     misconfigured container that finds it incapable and routes again, forever.
     """
-    argv = image_lock.container_command(Path("/repo"))
+    argv = image_lock.container_command(
+        Path("/repo"),
+        id_labels=("dotfiles.workspace=deadbeef", "dotfiles.arch=amd64"),
+    )
     assert argv[:4] == ["devcontainer", "exec", "--workspace-folder", "/repo"]
+    assert argv[4:8] == [
+        "--id-label",
+        "dotfiles.workspace=deadbeef",
+        "--id-label",
+        "dotfiles.arch=amd64",
+    ]
     assert "--no-container" in argv
     assert "docker" not in argv
 
