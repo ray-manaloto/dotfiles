@@ -44,9 +44,13 @@ def _root(cwd: object) -> pathlib.Path:
     if not isinstance(cwd, str) or not cwd:
         _fail("hook cwd is missing")
     current = pathlib.Path(cwd).resolve()
-    for candidate in (current, *current.parents):
-        if (candidate / ".git").exists():
-            return candidate
+    candidates = [
+        candidate
+        for candidate in (current, *current.parents)
+        if (candidate / ".git").exists()
+    ]
+    if candidates:
+        return candidates[-1]
     _fail("hook cwd is outside a Git worktree")
     raise RunnerError
 

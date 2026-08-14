@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/usr/bin/python3 -I -S \"$(/usr/bin/git -C \"$(/bin/pwd -P)\" rev-parse --show-toplevel)/scripts/writer-lease-hook-runner.py\"",
+            "command": "/usr/bin/python3 -I -S -c 'import pathlib,runpy; p=pathlib.Path.cwd().resolve(); roots=[r for r in (p,*p.parents) if (r/\".git\").exists()]; runpy.run_path(str(roots[-1]/\"scripts/writer-lease-hook-runner.py\"),run_name=\"__main__\")'",
             "timeout": 10,
             "statusMessage": "Checking repository writer lease"
           }
@@ -20,7 +20,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/usr/bin/python3 -I -S \"$(/usr/bin/git -C \"$(/bin/pwd -P)\" rev-parse --show-toplevel)/scripts/writer-lease-hook-runner.py\"",
+            "command": "/usr/bin/python3 -I -S -c 'import pathlib,runpy; p=pathlib.Path.cwd().resolve(); roots=[r for r in (p,*p.parents) if (r/\".git\").exists()]; runpy.run_path(str(roots[-1]/\"scripts/writer-lease-hook-runner.py\"),run_name=\"__main__\")'",
             "timeout": 10,
             "statusMessage": "Draining repository writer lease mutation"
           }

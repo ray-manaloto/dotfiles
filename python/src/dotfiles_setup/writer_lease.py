@@ -44,6 +44,7 @@ STATE_LOCK_FILENAME = "state.lock"
 CURRENT_FILENAME = "current"
 RECEIPT_FILENAME = "receipt.json"
 AUDIT_FILENAME = "audit.jsonl"
+AUDIT_CHUNKS_DIRNAME = "audit-chunks"
 INFLIGHT_FILENAME = "inflight.json"
 TRANSITIONS = ("initial", "handoff", "recovery")
 MUTATION_TOOLS = frozenset({"Bash", "apply_patch", "Edit", "Write", "NotebookEdit"})
@@ -61,6 +62,11 @@ _CONTAINER_GIT_LOCK = _PROJECT_ROOT / ".devcontainer" / "mise-system.lock"
 CONTAINER_GIT_INSTALL_ROOT = Path("/usr/local/share/mise/installs/conda-git")
 _GENERATION_PREFIX = "gen-"
 _RECLAIM_PREFIX = ".reclaim-"
+_AUDIT_CHUNK_PREFIX = "chunk-"
+_AUDIT_CHUNK_SUFFIX = ".json"
+_AUDIT_CHUNK_EVENT_LIMIT = 64
+_AUDIT_HEAD_SCHEMA = "dotfiles.writer-lease-audit-head.v1"
+_AUDIT_CHUNK_SCHEMA = "dotfiles.writer-lease-audit-chunk.v1"
 _GENERATION_FILES = frozenset({RECEIPT_FILENAME, AUDIT_FILENAME, INFLIGHT_FILENAME})
 _RECEIPT_KEYS = frozenset(
     {
@@ -132,6 +138,25 @@ class StateSnapshot:
     inflight: dict[str, dict[str, str]]
     generation: str
     active_receipt_sha256: str | None
+    audit_cursor: AuditCursor | None = None
+
+
+@dataclass(frozen=True)
+class AuditCursor:
+    """Content-addressed sealed audit head plus its bounded open tail."""
+
+    head_sha256: str
+    sealed_count: int
+    tail: tuple[dict[str, Any], ...]
+
+
+@dataclass(frozen=True)
+class _GenerationState:
+    """Values published together by one immutable state generation."""
+
+    receipt: Mapping[str, object]
+    audit: tuple[dict[str, Any], ...]
+    inflight: Mapping[str, object]
 
 
 @dataclass(frozen=True)
@@ -610,6 +635,21 @@ def _write_new_private_file(path: Path, raw: bytes) -> None:
         os.close(fd)
 
 
+def _write_new_private_file_at(parent_fd: int, name: str, raw: bytes) -> None:
+    flags = os.O_RDWR | os.O_CLOEXEC | os.O_NONBLOCK | os.O_CREAT | os.O_EXCL
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(name, flags, _PRIVATE_FILE_MODE, dir_fd=parent_fd)
+    except OSError as exc:
+        message = f"unsafe writer lease path {name}: {exc}"
+        raise LeaseError(message) from exc
+    try:
+        _validate_private_regular(fd, Path(name))
+        _write_fd(fd, raw)
+    finally:
+        os.close(fd)
+
+
 def _fsync_directory(path: Path) -> None:
     fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC)
     try:
@@ -876,14 +916,228 @@ def _read_snapshot(state_dir: Path) -> StateSnapshot | None:
     if _canonical_bytes(inflight) != inflight_raw:
         message = "writer lease in-flight state is not canonical JSON"
         raise LeaseError(message)
-    audit = _parse_audit(audit_raw)
+    state_fd = _open_private_directory(state_dir)
+    try:
+        audit, audit_cursor = _decode_audit_manifest(state_fd, audit_raw)
+    finally:
+        os.close(state_fd)
     receipt_digest = _sha256(receipt_raw)
     active = _validate_history(audit, inflight, receipt_digest)
-    return StateSnapshot(receipt, receipt_digest, audit, inflight, generation, active)
+    return StateSnapshot(
+        receipt,
+        receipt_digest,
+        audit,
+        inflight,
+        generation,
+        active,
+        audit_cursor,
+    )
 
 
 def _audit_bytes(events: tuple[dict[str, Any], ...]) -> bytes:
     return b"".join(_canonical_bytes(event) + b"\n" for event in events)
+
+
+def _open_audit_chunks(state_fd: int, *, create: bool) -> int | None:
+    try:
+        return _open_private_directory_at(state_fd, AUDIT_CHUNKS_DIRNAME)
+    except LeaseError as exc:
+        if not isinstance(exc.__cause__, FileNotFoundError):
+            raise
+        if not create:
+            return None
+    try:
+        os.mkdir(AUDIT_CHUNKS_DIRNAME, _PRIVATE_DIR_MODE, dir_fd=state_fd)
+        os.fsync(state_fd)
+    except FileExistsError:
+        pass
+    except OSError as exc:
+        message = f"unsafe writer lease audit chunk directory: {exc}"
+        raise LeaseError(message) from exc
+    return _open_private_directory_at(state_fd, AUDIT_CHUNKS_DIRNAME)
+
+
+def _store_audit_chunk(
+    state_fd: int,
+    events: tuple[dict[str, Any], ...],
+    prior_sha256: str,
+) -> str:
+    payload = {
+        "events": list(events),
+        "prior_sha256": prior_sha256,
+        "schema": _AUDIT_CHUNK_SCHEMA,
+    }
+    raw = _canonical_bytes(payload)
+    digest = _sha256(raw)
+    name = f"{_AUDIT_CHUNK_PREFIX}{digest}{_AUDIT_CHUNK_SUFFIX}"
+    chunks_fd = _open_audit_chunks(state_fd, create=True)
+    if chunks_fd is None:  # pragma: no cover - create=True guarantees a descriptor
+        message = "writer lease audit chunk directory was not created"
+        raise LeaseError(message)
+    try:
+        try:
+            existing = _read_private_file_at(chunks_fd, name)
+        except LeaseError as exc:
+            if not isinstance(exc.__cause__, FileNotFoundError):
+                raise
+            _write_new_private_file_at(chunks_fd, name, raw)
+            os.fsync(chunks_fd)
+        else:
+            if existing != raw:
+                message = "writer lease audit chunk digest collision"
+                raise LeaseError(message)
+    finally:
+        os.close(chunks_fd)
+    return digest
+
+
+def _encode_audit_manifest(
+    state_fd: int,
+    audit: tuple[dict[str, Any], ...],
+    prior: StateSnapshot | None,
+) -> bytes:
+    if (
+        prior is not None
+        and prior.audit_cursor is not None
+        and len(audit) == len(prior.audit) + 1
+        and audit[:-1] == prior.audit
+    ):
+        head = prior.audit_cursor.head_sha256
+        sealed_count = prior.audit_cursor.sealed_count
+        tail = prior.audit_cursor.tail
+        if len(tail) == _AUDIT_CHUNK_EVENT_LIMIT:
+            head = _store_audit_chunk(state_fd, tail, head)
+            sealed_count += len(tail)
+            tail = ()
+        tail = (*tail, audit[-1])
+    else:
+        head = ""
+        sealed_count = 0
+        sealed_length = (
+            ((len(audit) - 1) // _AUDIT_CHUNK_EVENT_LIMIT) * (_AUDIT_CHUNK_EVENT_LIMIT)
+            if audit
+            else 0
+        )
+        for offset in range(0, sealed_length, _AUDIT_CHUNK_EVENT_LIMIT):
+            events = audit[offset : offset + _AUDIT_CHUNK_EVENT_LIMIT]
+            head = _store_audit_chunk(state_fd, events, head)
+            sealed_count += len(events)
+        tail = audit[sealed_length:]
+    return _canonical_bytes(
+        {
+            "head_sha256": head,
+            "schema": _AUDIT_HEAD_SCHEMA,
+            "sealed_count": sealed_count,
+            "tail": list(tail),
+        }
+    )
+
+
+def _parse_audit_head(raw: bytes) -> AuditCursor | None:
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict) or payload.get("schema") != _AUDIT_HEAD_SCHEMA:
+        return None
+    if set(payload) != {"head_sha256", "schema", "sealed_count", "tail"}:
+        message = "writer lease audit head has an unexpected schema"
+        raise LeaseError(message)
+    if _canonical_bytes(payload) != raw:
+        message = "writer lease audit head is not canonical JSON"
+        raise LeaseError(message)
+    head = payload["head_sha256"]
+    sealed_count = payload["sealed_count"]
+    tail_payload = payload["tail"]
+    if (
+        not isinstance(head, str)
+        or not isinstance(sealed_count, int)
+        or isinstance(sealed_count, bool)
+        or sealed_count < 0
+        or sealed_count % _AUDIT_CHUNK_EVENT_LIMIT != 0
+        or not isinstance(tail_payload, list)
+        or len(tail_payload) > _AUDIT_CHUNK_EVENT_LIMIT
+        or (sealed_count == 0) != (head == "")
+    ):
+        message = "writer lease audit head fields are invalid"
+        raise LeaseError(message)
+    if head:
+        _validate_sha256(head, name="audit chunk head digest")
+    return AuditCursor(head, sealed_count, tuple(tail_payload))
+
+
+def _read_audit_chunk(
+    chunks_fd: int,
+    digest: str,
+) -> tuple[tuple[dict[str, Any], ...], str]:
+    name = f"{_AUDIT_CHUNK_PREFIX}{digest}{_AUDIT_CHUNK_SUFFIX}"
+    chunk_raw = _read_private_file_at(chunks_fd, name)
+    if _sha256(chunk_raw) != digest:
+        message = "writer lease audit chunk digest does not match its file"
+        raise LeaseError(message)
+    try:
+        chunk = json.loads(chunk_raw)
+    except json.JSONDecodeError as exc:
+        message = "writer lease audit chunk contains malformed JSON"
+        raise LeaseError(message) from exc
+    if (
+        not isinstance(chunk, dict)
+        or set(chunk) != {"events", "prior_sha256", "schema"}
+        or chunk.get("schema") != _AUDIT_CHUNK_SCHEMA
+        or _canonical_bytes(chunk) != chunk_raw
+        or not isinstance(chunk.get("events"), list)
+        or len(chunk["events"]) != _AUDIT_CHUNK_EVENT_LIMIT
+        or not isinstance(chunk.get("prior_sha256"), str)
+    ):
+        message = "writer lease audit chunk is invalid"
+        raise LeaseError(message)
+    prior = chunk["prior_sha256"]
+    if prior:
+        _validate_sha256(prior, name="audit prior chunk digest")
+    return tuple(chunk["events"]), prior
+
+
+def _read_sealed_audit(
+    state_fd: int,
+    cursor: AuditCursor,
+) -> tuple[dict[str, Any], ...]:
+    if not cursor.sealed_count:
+        return ()
+    chunks_fd = _open_audit_chunks(state_fd, create=False)
+    if chunks_fd is None:
+        message = "writer lease audit chunk directory is missing"
+        raise LeaseError(message)
+    reverse_chunks: list[tuple[dict[str, Any], ...]] = []
+    remaining = cursor.sealed_count
+    current = cursor.head_sha256
+    try:
+        while remaining:
+            events, current = _read_audit_chunk(chunks_fd, current)
+            reverse_chunks.append(events)
+            remaining -= len(events)
+        if current:
+            message = "writer lease audit chunk chain exceeds its sealed count"
+            raise LeaseError(message)
+    finally:
+        os.close(chunks_fd)
+    return tuple(event for chunk in reversed(reverse_chunks) for event in chunk)
+
+
+def _decode_audit_manifest(
+    state_fd: int,
+    raw: bytes,
+) -> tuple[tuple[dict[str, Any], ...], AuditCursor | None]:
+    cursor = _parse_audit_head(raw)
+    if cursor is None:
+        return _parse_audit(raw), None
+    sealed = _read_sealed_audit(state_fd, cursor)
+    audit = (*sealed, *cursor.tail)
+    validated = _parse_audit(_audit_bytes(audit))
+    return validated, AuditCursor(
+        cursor.head_sha256,
+        cursor.sealed_count,
+        validated[cursor.sealed_count :],
+    )
 
 
 def _names_at(directory_fd: int) -> tuple[str, ...]:
@@ -1001,14 +1255,14 @@ def reclaim_generations_anchored(
 def _publish_generation_anchored(
     state_dir: Path,
     state_fd: int,
-    receipt: Mapping[str, object],
-    audit: tuple[dict[str, Any], ...],
-    inflight: Mapping[str, object],
+    content: _GenerationState,
+    *,
+    prior: StateSnapshot | None,
 ) -> StateSnapshot:
     superseded = _generation_directories(state_fd)
-    receipt_raw = _canonical_bytes(receipt)
-    audit_raw = _audit_bytes(audit)
-    inflight_raw = _canonical_bytes(inflight)
+    receipt_raw = _canonical_bytes(content.receipt)
+    audit_raw = _encode_audit_manifest(state_fd, content.audit, prior)
+    inflight_raw = _canonical_bytes(content.inflight)
     digest = _generation_digest(receipt_raw, audit_raw, inflight_raw)
     generation = f"{_GENERATION_PREFIX}{digest}"
     generation_dir = state_dir / generation
@@ -1059,15 +1313,16 @@ def _publish_generation(
     receipt: Mapping[str, object],
     audit: tuple[dict[str, Any], ...],
     inflight: Mapping[str, object],
+    *,
+    prior: StateSnapshot | None,
 ) -> StateSnapshot:
     state_fd = _open_private_directory(state_dir)
     try:
         return _publish_generation_anchored(
             state_dir,
             state_fd,
-            receipt,
-            audit,
-            inflight,
+            _GenerationState(receipt, audit, inflight),
+            prior=prior,
         )
     finally:
         os.close(state_fd)
@@ -1305,7 +1560,13 @@ def _publish_new_holder(
         )
         _write_fd(lease.fd, _canonical_bytes(_lock_token(receipt)))
         try:
-            return _publish_generation(lease.state_dir, receipt, audit, {})
+            return _publish_generation(
+                lease.state_dir,
+                receipt,
+                audit,
+                {},
+                prior=prior,
+            )
         except Exception:
             _write_fd(lease.fd, lease.previous_bytes)
             raise
@@ -1356,6 +1617,7 @@ def _release_when_drained(
                     current.receipt,
                     audit,
                     current.inflight,
+                    prior=current,
                 )
                 _write_fd(lease_fd, b"")
                 return
@@ -1508,7 +1770,11 @@ def _bootstrap_options(options: list[str]) -> dict[str, str] | None:
     }
     valid_length = len(options) in {6, 8}
     keys = options[::2]
-    if not valid_length or any(key not in allowed for key in keys):
+    if (
+        not valid_length
+        or len(keys) != len(set(keys))
+        or any(key not in allowed for key in keys)
+    ):
         return None
     values = dict(zip(keys, options[1::2], strict=True))
     required = {"--handoff-sha256", "--owner", "--task-id"}
@@ -1600,7 +1866,13 @@ def _begin_tool(
             "started_at": audit[-1]["at"],
             "tool_name": tool_name,
         }
-        _publish_generation(state_dir, snapshot.receipt, audit, inflight)
+        _publish_generation(
+            state_dir,
+            snapshot.receipt,
+            audit,
+            inflight,
+            prior=snapshot,
+        )
 
 
 def _finish_tool(
@@ -1643,7 +1915,13 @@ def _finish_tool(
                 tool_use_id=tool_use_id,
             ),
         )
-        _publish_generation(state_dir, snapshot.receipt, audit, inflight)
+        _publish_generation(
+            state_dir,
+            snapshot.receipt,
+            audit,
+            inflight,
+            prior=snapshot,
+        )
 
 
 def _hook_fields(payload: object) -> HookInvocation:

@@ -556,3 +556,84 @@ flowchart LR
     AMD --> GATES
     GATES --> SHIP["Native replay, ship, land"]
 ```
+
+## 2026-08-14 — harden bootstrap portability and audit scaling
+
+- **Iteration ID:** `dotfiles-goal-20260814-012`
+- **Prior goal digest:** `sha256:9cb91c80d06dead79e355a7243a7773e95600b2de4a647cc0d0d64610b1c37d9`
+- **Current goal digest:** `sha256:7ccc6ae231339e8b2aeba57b1143ba688e50ce7de95f06f4bf9f38e18f8872c5`
+- **Changed requirement:** Resolve the five bounded hardening findings retained
+  in issue #760 after the issue #753 lease landed: portable Codex bootstrap,
+  both supported mise paths in operator docs, duplicate-option denial, bounded
+  audit write amplification, and a repository-root-independent drift fixture.
+- **Reason:** The landed lease prevents competing writers, but its outer Codex
+  command can fail closed before reaching the Linux-aware resolver, and its
+  complete-audit generation rewrite has quadratic cumulative write cost during
+  long sessions. The remaining parser, documentation, and fixture findings
+  make those seams less precise than the enforced implementation.
+- **Evidence:** Canonical `main`, `origin/main`, and GitHub main were verified at
+  `9a6c7e0bccedf4bfe5c68592c86637bd1ef27a8d`. The successor acknowledged
+  canonical handoff digest
+  `5689f4e64ec47988b1ab0bcb81103faa608ca5b84465bcb0a06ab8023073d451`;
+  `/root` sent START; and the native lease recorded clean handoff receipt
+  `432e52306af73f6e437c3e592dc9bc7facec6db490f5f8c9253b95b5ddef4c47`.
+  Graphify 0.9.42 reports its graph artifact missing, so source is authority.
+- **Affected tickets:** dotfiles issue #760 and its future delivery PR.
+- **Disposition:** `ACCEPTED_AND_ACTIVE` — public seams are frozen from the
+  issue acceptance contract; RED/GREEN implementation, review, gates, remote
+  visual mirror, ship, and land remain unclaimed.
+- **Topology and ownership:** `/root/dotfiles_753_writer_lease` is repurposed as
+  the sole #760 writer in the canonical checkout on
+  `codex/issue-760-writer-lease-hardening`; `/root` coordinates. `.omc/` and
+  dirty evidence remain protected. Knowledge-base, Graphify semantic work,
+  unrelated devcontainer files, and issue #753 landed history are excluded.
+
+### Current goal
+
+> Implement, validate, ship, and land dotfiles issue #760: make the Codex hook bootstrap platform-correct on Darwin and supported Linux, document both supported mise paths, reject duplicate bootstrap flags before holder invocation, replace quadratic audit rewriting with integrity-preserving bounded write amplification proven at substantially larger scale, and make the lock-drift fixture repository-root independent; require real subprocess and supported-container evidence, synchronized Mermaid documentation, independent review, and clean remote-main landing.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    S["Accepted handoff + native lease"] --> W["Freeze public seams"]
+    W --> RED["Real hostile subprocess RED"]
+    RED --> BOOT["Portable Codex bootstrap + strict options"]
+    RED --> AUDIT["Integrity-preserving bounded audit writes"]
+    BOOT --> HOST["Real Darwin controls"]
+    AUDIT --> SCALE["Large Pre/Post sequence + full reconstruction"]
+    HOST --> AMD["Supported Linux container controls"]
+    SCALE --> DOCS["Newcomer Mermaid + operator paths"]
+    AMD --> DOCS
+    DOCS --> REVIEW["Independent review + full gates"]
+    REVIEW --> SHIP["Ship, mirror/read back visuals, land clean main"]
+```
+
+#### Implementation checkpoint
+
+- The portable tracked runner, strict duplicate-option parser, and
+  repository-root-independent drift fixture are focused GREEN.
+- The 256-pair real subprocess replay reproduced the old full-audit rewrite at
+  513 events. The replacement stores immutable private 64-event chunks plus a
+  canonical open tail of at most 64 events, reconstructs the complete chain,
+  and migrates a legacy JSONL generation on its next publication.
+- Current focused evidence reconstructs all 513 events from eight chunks,
+  retains one generation, keeps every audit file below 32 KiB and total state
+  below 512 KiB, and rejects a corrupted sealed chunk without state mutation.
+- Supported Linux execution, full gates, independent review, publication,
+  visual read-back, and remote landing remain explicitly unclaimed.
+
+#### Lifecycle review correction
+
+- The first lifecycle review BLOCKED the frozen candidate because Codex runs
+  commands from the session `cwd`; the relative tracked-runner path failed
+  from a nested repository directory.
+- Official Codex Hooks documentation confirms that commands use session `cwd`,
+  Codex may start in a subdirectory, and repo-local hooks need stable root
+  resolution. It documents no project-root environment variable.
+- A real nested-cwd RED now becomes GREEN through pinned system Python that
+  selects the outermost ancestor Git marker and executes its tracked runner.
+  The locator invokes no Git, mise, `env`, or ambient `PATH`; the runner still
+  applies exact platform Git, mise/Python, receipt, and lifecycle validation.
+- New exact host and supported-Linux nested Pre/Post/hostile evidence, full
+  gates, narrow lifecycle re-review, publication, and landing remain unclaimed.
