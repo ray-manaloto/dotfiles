@@ -6,8 +6,8 @@
      Authored content lives in python/src/dotfiles_setup/hk_builtins_audit.py
      (NOT_ADOPTED); everything else is read from `hk builtins` + the configs. -->
 
-- **hk version:** hk 1.54.1
-- **Builtins available:** 145
+- **hk version:** hk 1.55.0
+- **Builtins available:** 146
 - **Wired as builtins:** 28
 - **Steps defined in total:** 66 (38 custom, with their own check/fix commands)
 
@@ -129,7 +129,7 @@ names one now wired, fails the gate.
 | `vale` | No formal style guide; network dependency in the hook |
 | `xmllint` | No XML files in project |
 
-## Not yet considered (93)
+## Not yet considered (94)
 
 Available in this hk version, neither wired nor explicitly declined.
 Listed so the unexamined remainder is visible rather than implied — the
@@ -143,13 +143,13 @@ contextlint, cpp_lint, dclint, deadnix, deno, deno_check
 editorconfig-checker, erb, err_check, fasterer, fix_byte_order_marker, go_fumpt
 go_imports, go_lines, go_sec, go_vet, go_vuln_check, gomod_tidy
 google_java_format, harper, harper_commit_message, hclfmt, hk_test, jq
-just_format, knip, knip_strict, ktlint, luacheck, lychee
-mix_compile, mix_fmt, mix_test, nil, nix_fmt, nixf_diagnose
-nixpkgs_format, ox_lint, oxfmt, php_cs, pinact_update, pkl_format
-prettier, reek, revive, rubocop_server, ruff, ruff_format
-rumdl_format, ryl_markdown, selene, shellharden, sherif, shfmt
-sorbet, sort_package_json, sql_fluff, standard_js, standard_rb, staticcheck
-stylua, swiftlint, taplo_format, textlint, tofu, tsc
-tsserver, ty, vacuum, vp_check, vp_fmt, vp_lint
-xo, yamlfmt, yq
+just_format, kingfisher, knip, knip_strict, ktlint, luacheck
+lychee, mix_compile, mix_fmt, mix_test, nil, nix_fmt
+nixf_diagnose, nixpkgs_format, ox_lint, oxfmt, php_cs, pinact_update
+pkl_format, prettier, reek, revive, rubocop_server, ruff
+ruff_format, rumdl_format, ryl_markdown, selene, shellharden, sherif
+shfmt, sorbet, sort_package_json, sql_fluff, standard_js, standard_rb
+staticcheck, stylua, swiftlint, taplo_format, textlint, tofu
+tsc, tsserver, ty, vacuum, vp_check, vp_fmt
+vp_lint, xo, yamlfmt, yq
 ```

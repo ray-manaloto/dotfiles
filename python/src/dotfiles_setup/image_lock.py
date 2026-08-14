@@ -48,6 +48,7 @@ import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from dotfiles_setup.devcontainer_names import resolve_names
 from dotfiles_setup.lock_integrity import conda_platforms, tool_platforms
 from dotfiles_setup.lock_refresh import (
     RUNTIME_ENV,
@@ -281,18 +282,28 @@ def run_lock_passes(
     raise ImageLockError(msg)
 
 
-def container_command(repo_root: Path, extra: tuple[str, ...] = ()) -> list[str]:
+def container_command(
+    repo_root: Path,
+    extra: tuple[str, ...] = (),
+    *,
+    id_labels: tuple[str, ...] | None = None,
+) -> list[str]:
     """Re-invoke this task inside the amd64 devcontainer.
 
     ``devcontainer exec`` and not raw ``docker exec`` (``do-not.md`` #3), and
     the inner call passes ``--no-container`` so the recursion terminates. The
     workspace is bind-mounted, so the inner run's writes land on the host tree.
     """
+    labels = (
+        resolve_names(workspace=repo_root).id_labels if id_labels is None else id_labels
+    )
+    id_args = [arg for label in labels for arg in ("--id-label", label)]
     return [
         "devcontainer",
         "exec",
         "--workspace-folder",
         str(repo_root),
+        *id_args,
         "mise",
         "exec",
         "--",

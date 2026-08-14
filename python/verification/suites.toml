@@ -1658,7 +1658,7 @@ per_path_tokens = { "currency.toml" = [
     "[tool.graphify]",
     'python_package = "graphifyy"',
 ], "mise.toml" = [
-    'doppler = "3.76.1"',
+    'doppler = "3.76.4"',
     "[tasks.tool-currency]",
     "kb-setup currency daily'",
     "[tasks.tool-currency-check]",

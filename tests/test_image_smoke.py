@@ -670,7 +670,7 @@ def test_resolve_declared_tools_merges_system_and_shared() -> None:
 
     # From the shared fragment, exact-pinned.
     assert declared["python"] == "3.14.7"
-    assert declared["hk"] == "1.54.1"
+    assert declared["hk"] == "1.55.0"
     # From mise-system.toml [tools].
     assert declared["node"] == "latest"
     # A representative conda build tool still declared via mise (#222 PR-C moved

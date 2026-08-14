@@ -5418,6 +5418,7 @@ checksum = "sha256:3a7e42461bae88a7e26ed8cc12a20f0834d477c64d0a9b3416aa49743f049
 url = "https://github.com/DopplerHQ/cli/releases/download/3.76.4/doppler_3.76.4_macOS_arm64.tar.gz"
 url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/513541349"
 provenance = "github-attestations"
+provenance_verified = true
 
 [tools.doppler."platforms.macos-x64"]
 checksum = "sha256:b1ada08828442d6cc21636329ec66b2b20252dd22bfb19ff2d887b003750b6cf"
