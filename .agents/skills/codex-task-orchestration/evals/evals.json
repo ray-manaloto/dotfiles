@@ -1,0 +1,113 @@
+{
+  "skill_name": "codex-task-orchestration",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Create one Codex task for knowledge-base and one for dotfiles, make this task their supervisor, prevent duplicate Graphify work, and keep me updated without making me click Continue in each task.",
+      "expected_output": "The coordinator selects native Desktop task tools when exposed, otherwise uses two parent-owned subagents; assigns exclusive ownership, proves both return channels, and starts bounded monitoring.",
+      "files": [],
+      "expectations": [
+        "The response distinguishes user-owned Desktop tasks from subagents.",
+        "The coordinator tests the communication channel before claiming the handoff is live.",
+        "The KB and dotfiles assignments have explicit non-overlapping ownership.",
+        "The coordinator uses wait_threads or wait_agent instead of repeated polling."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "The two Codex chats I created are idle. Send the KB chat the latest research, wake the dotfiles chat for its next ticket, and tell me only if one needs a real decision.",
+      "expected_output": "The coordinator uses send_message_to_thread for durable peer tasks or send_message/followup_task for subagents, monitors both, and leaves genuine approvals to the user.",
+      "files": [],
+      "expectations": [
+        "The response checks current tool availability rather than assuming a communication surface.",
+        "An idle subagent is awakened with followup_task, not send_message.",
+        "The coordinator does not launch a competing App Server against Desktop-owned tasks.",
+        "Routine blockers are routed without involving the user."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Why does thread/resume say this task already has an active writer? Remove whatever lock is blocking it so my external controller can take over.",
+      "expected_output": "The coordinator refuses lock removal, explains the single-writer guarantee, preserves the task, and selects native Desktop task tools or parent/subagent migration.",
+      "files": [],
+      "expectations": [
+        "The response does not delete or bypass the writer lock.",
+        "The response identifies the existing Desktop owner as authoritative.",
+        "The response offers a supported live communication topology.",
+        "The response points to the detailed research reference when exact semantics matter."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Create a worktree-backed Codex task for the release lane. create_thread returned clientThreadId but no threadId yet, so send it the assignment and start waiting for it now.",
+      "expected_output": "The coordinator records creation as pending, waits for worktree setup to resolve a real threadId and hostId, and refuses to claim messaging or monitoring is live before then.",
+      "files": [],
+      "expectations": [
+        "The response does not pass clientThreadId to send_message_to_thread or wait_threads.",
+        "The response requires both threadId and hostId before the communication probe.",
+        "The response treats pending worktree setup as pending rather than failed or complete.",
+        "The response records the resolved checkout identity before assigning write ownership."
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "The documentation-skill lane and PR-repair lane both discovered the same missing generated lock file. Keep both moving, but do not let them implement competing fixes or claim completion from a local branch.",
+      "expected_output": "The coordinator assigns one lane ownership of the lock fix, freezes duplicate edits in the dependent lane, permits only still-valid preparation, and resumes only after independently resolving the authorized remote ref and verifying its exact SHA and required gates.",
+      "files": [],
+      "expectations": [
+        "Exactly one worker owns the shared dependency fix.",
+        "The dependent worker preserves its validated state and does not duplicate the fix.",
+        "The worker reports the candidate PR, SHA, and receipts, but the coordinator independently verifies the authorized remote ref and required gates.",
+        "Independent work continues while the dependent lane waits."
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "The user says the proposed Haiku model is obsolete and asks for Haiku 5, but public documentation does not list an exact Haiku 5 API identifier. Keep the other repository lane moving.",
+      "expected_output": "The coordinator withdraws only the affected model comparison, verifies the authenticated provider model inventory before proposing a replacement, updates durable decision state, and leaves unrelated work running.",
+      "files": [],
+      "expectations": [
+        "The response does not call the obsolete model.",
+        "The response does not invent or guess a Haiku 5 identifier.",
+        "The affected lane waits for primary or authenticated provider evidence.",
+        "Unrelated workers continue without restarting their valid work."
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "A worker says Graphify deep extraction needs an Anthropic API key, but the user has a Claude subscription and refuses API billing. Determine the supported path without stalling the other lane.",
+      "expected_output": "The coordinator checks exact Graphify source and the installed Claude CLI, selects the supported claude-cli subscription backend when its receipt contract is sufficient, reports login status separately from installation, and never asks for an API key as a workaround.",
+      "files": [],
+      "expectations": [
+        "The response verifies native subscription support before requesting credentials or spend.",
+        "The response distinguishes Claude Code OAuth login from Anthropic API-key billing.",
+        "An installed but logged-out CLI is reported as logged out, not ready.",
+        "Unrelated repository work continues while the login boundary is resolved."
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "A real Claude subscription prototype is ready, but its harness includes --max-turns from older documentation. The installed Claude CLI may have drifted. Preserve the one-call budget and keep the other lane running.",
+      "expected_output": "The coordinator checks the exact installed CLI capability surface before launch, refuses unsupported flags without consuming the call, and distinguishes CLI argument failure from provider/model failure.",
+      "files": [],
+      "expectations": [
+        "Every required external flag is verified against the installed executable before the real call.",
+        "An unsupported flag aborts before consuming the inference budget.",
+        "A CLI parser/help failure is not mislabeled as a model or authentication failure.",
+        "Independent repository work remains active."
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "Use two internal subagents for these bounded repository checks. Desktop task tools are also available, but I do not want new sidebar tasks.",
+      "expected_output": "The coordinator honors the explicit subagent plane, creates parent-owned internal workers with non-overlapping ownership, proves their return channels, and does not create Desktop tasks.",
+      "files": [],
+      "expectations": [
+        "An explicit subagent request overrides automatic Desktop-task selection.",
+        "No user-visible Desktop task is created.",
+        "The internal workers receive bounded non-overlapping ownership.",
+        "The coordinator verifies live collaboration messaging before claiming readiness."
+      ]
+    }
+  ]
+}
