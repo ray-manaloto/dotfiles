@@ -223,6 +223,309 @@ def test_a_literal_path_is_never_bounded(tmp_path: Path) -> None:
     assert [p.name for p in resolved] == ["notepad.md"]
 
 
+def test_goal_history_is_a_default_session_review_source(tmp_path: Path) -> None:
+    """Goal changes must enter the review corpus without caller opt-in."""
+    history = tmp_path / "docs" / "agents" / "goal-history.md"
+    history.parent.mkdir(parents=True)
+    history.write_text("# Goal history\n")
+
+    resolved = session_review.narrative_paths(tmp_path)
+
+    assert history in resolved
+
+
+def test_tracked_goal_history_exposes_the_required_iteration_contract() -> None:
+    """The durable artifact must carry every field the workflow promised."""
+    history = REPO_ROOT / "docs" / "agents" / "goal-history.md"
+    assert history.is_file()
+    text = history.read_text()
+    for field in (
+        "Iteration ID",
+        "Prior goal digest",
+        "Current goal digest",
+        "Changed requirement",
+        "Reason",
+        "Evidence",
+        "Affected tickets",
+        "Disposition",
+        "Topology and ownership",
+        "```mermaid",
+    ):
+        assert field in text
+
+
+def test_goal_history_validator_accepts_the_tracked_history() -> None:
+    history = REPO_ROOT / "docs" / "agents" / "goal-history.md"
+    assert session_review.goal_history_errors(history.read_text()) == ()
+
+
+def test_goal_history_validator_rejects_a_missing_iteration_field() -> None:
+    history = REPO_ROOT / "docs" / "agents" / "goal-history.md"
+    hostile = history.read_text().replace("- **Disposition:**", "- **Verdict:**", 1)
+
+    errors = session_review.goal_history_errors(hostile)
+
+    assert any("missing Disposition" in error for error in errors)
+
+
+def test_goal_history_validator_rejects_a_malformed_current_digest() -> None:
+    history = REPO_ROOT / "docs" / "agents" / "goal-history.md"
+    hostile = history.read_text().replace(
+        "sha256:12db9f86a5d17902e58b0cdc7330939cf2f1e025fb2a06d96c056860f6349385",
+        "sha256:not-a-digest",
+        1,
+    )
+
+    errors = session_review.goal_history_errors(hostile)
+
+    assert any("malformed Current goal digest" in error for error in errors)
+
+
+def _git_repo_with_goal_history(tmp_path: Path) -> tuple[Path, Path]:
+    repo = tmp_path / "repo"
+    history = repo / "docs" / "agents" / "goal-history.md"
+    history.parent.mkdir(parents=True)
+    history.write_bytes(
+        (REPO_ROOT / "docs" / "agents" / "goal-history.md").read_bytes()
+    )
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "user.name", "Goal History Test"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "user.email", "goal-history@test.invalid"],
+        check=True,
+    )
+    subprocess.run(["git", "-C", str(repo), "add", str(history)], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "add history"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "update-ref",
+            "refs/remotes/origin/main",
+            "HEAD",
+        ],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "switch", "-qc", "goal-history-test"], check=True
+    )
+    return repo, history
+
+
+def test_session_review_refuses_a_rewrite_of_landed_history(tmp_path: Path) -> None:
+    repo, history = _git_repo_with_goal_history(tmp_path)
+    history.write_text(history.read_text().replace("PR #750", "PR #999", 1))
+
+    assert (
+        session_review.session_review_main(
+            repo, lanes=session_review.LaneChoice(narrative_only=True)
+        )
+        == 2
+    )
+
+
+def test_session_review_refuses_a_two_commit_history_rewrite(tmp_path: Path) -> None:
+    """The authorized base, not HEAD^, catches a rewrite two commits back."""
+    repo, history = _git_repo_with_goal_history(tmp_path)
+    history.write_text(history.read_text().replace("PR #750", "PR #999", 1))
+    subprocess.run(["git", "-C", str(repo), "add", str(history)], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-qm", "rewrite history"], check=True
+    )
+    unrelated = repo / "unrelated.txt"
+    unrelated.write_text("second commit\n")
+    subprocess.run(["git", "-C", str(repo), "add", str(unrelated)], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "unrelated"], check=True)
+
+    assert (
+        session_review.session_review_main(
+            repo, lanes=session_review.LaneChoice(narrative_only=True)
+        )
+        == 2
+    )
+
+
+def _append_second_goal(history: Path) -> None:
+    goal = "Record the second accepted goal."
+    digest = hashlib.sha256(goal.encode()).hexdigest()
+    prior = "sha256:12db9f86a5d17902e58b0cdc7330939cf2f1e025fb2a06d96c056860f6349385"
+    history.write_text(
+        history.read_text()
+        + f"""
+## 2026-08-14 — second accepted goal
+
+- **Iteration ID:** `dotfiles-goal-20260814-002`
+- **Prior goal digest:** `{prior}`
+- **Current goal digest:** `sha256:{digest}`
+- **Changed requirement:** Record a second append-only iteration.
+- **Reason:** The accepted goal changed.
+- **Evidence:** issue #753 records the follow-up.
+- **Affected tickets:** dotfiles #753.
+- **Disposition:** `ACCEPTED`.
+- **Topology and ownership:** One dotfiles writer remains active.
+
+### Current goal
+
+> {goal}
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    A["Append"] --> V["Verify"]
+```
+"""
+    )
+
+
+def test_session_review_refuses_rewrite_of_branch_appended_entry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Commit B cannot rewrite the valid entry commit A appended."""
+    repo, history = _git_repo_with_goal_history(tmp_path)
+    _append_second_goal(history)
+    subprocess.run(["git", "-C", str(repo), "add", str(history)], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-qm", "append second goal"],
+        check=True,
+    )
+    history.write_text(
+        history.read_text().replace(
+            "issue #753 records the follow-up", "issue #999 replaces the evidence", 1
+        )
+    )
+    subprocess.run(["git", "-C", str(repo), "add", str(history)], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-qm", "rewrite second goal"],
+        check=True,
+    )
+    monkeypatch.setenv("DOTFILES_GOAL_HISTORY_BASE_REF", "HEAD")
+
+    assert (
+        session_review.session_review_main(
+            repo, lanes=session_review.LaneChoice(narrative_only=True)
+        )
+        == 2
+    )
+
+
+def test_session_review_refuses_rewritten_bootstrap_commit(tmp_path: Path) -> None:
+    """A bootstrap added in commit A becomes immutable before commit B."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "user.name", "Goal History Test"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "user.email", "goal-history@test.invalid"],
+        check=True,
+    )
+    seed = repo / "seed.txt"
+    seed.write_text("authorized base\n")
+    subprocess.run(["git", "-C", str(repo), "add", str(seed)], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "base"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "update-ref",
+            "refs/remotes/origin/main",
+            "HEAD",
+        ],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "switch", "-qc", "goal-history-test"], check=True
+    )
+    history = repo / "docs" / "agents" / "goal-history.md"
+    history.parent.mkdir(parents=True)
+    history.write_bytes(
+        (REPO_ROOT / "docs" / "agents" / "goal-history.md").read_bytes()
+    )
+    subprocess.run(["git", "-C", str(repo), "add", str(history)], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-qm", "bootstrap history"],
+        check=True,
+    )
+    history.write_text(history.read_text().replace("PR #750", "PR #999", 1))
+    subprocess.run(["git", "-C", str(repo), "add", str(history)], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-qm", "rewrite bootstrap"],
+        check=True,
+    )
+
+    assert (
+        session_review.session_review_main(
+            repo, lanes=session_review.LaneChoice(narrative_only=True)
+        )
+        == 2
+    )
+
+
+def test_session_review_refuses_a_rewritten_goal_with_recomputed_digest(
+    tmp_path: Path,
+) -> None:
+    repo, history = _git_repo_with_goal_history(tmp_path)
+    text = history.read_text()
+    old_goal = (
+        "Implement and land the dotfiles append-only goal-history contract. Keep "
+        "it discoverable to session review, enforce required iteration structure, "
+        "and record orchestration topology changes without duplicating knowledge-base "
+        "Graphify, SkillOpt, shared expert-bundle, or devcontainer work."
+    )
+    new_goal = "Replace the accepted goal after it landed."
+    new_digest = hashlib.sha256(new_goal.encode()).hexdigest()
+    text = text.replace(old_goal, new_goal, 1)
+    text = text.replace(
+        "12db9f86a5d17902e58b0cdc7330939cf2f1e025fb2a06d96c056860f6349385",
+        new_digest,
+        1,
+    )
+    history.write_text(text)
+
+    assert (
+        session_review.session_review_main(
+            repo, lanes=session_review.LaneChoice(narrative_only=True)
+        )
+        == 2
+    )
+
+
+def test_session_review_refuses_a_missing_history_in_a_git_checkout(
+    tmp_path: Path,
+) -> None:
+    repo, history = _git_repo_with_goal_history(tmp_path)
+    history.unlink()
+
+    assert (
+        session_review.session_review_main(
+            repo, lanes=session_review.LaneChoice(narrative_only=True)
+        )
+        == 2
+    )
+
+
+def test_narrative_review_refuses_an_invalid_goal_history(tmp_path: Path) -> None:
+    history = tmp_path / "docs" / "agents" / "goal-history.md"
+    history.parent.mkdir(parents=True)
+    history.write_text("# Goal history\n\n## 2026-08-14 — incomplete\n")
+
+    assert (
+        session_review.session_review_main(
+            tmp_path,
+            lanes=session_review.LaneChoice(narrative_only=True),
+        )
+        == 2
+    )
+
+
 # --------------------------------------------------------------------------- #
 # The report and the entry point
 # --------------------------------------------------------------------------- #

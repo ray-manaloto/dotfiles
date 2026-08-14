@@ -17,8 +17,9 @@ distinct sessions** the shape appears in. A shape run thirty times in one
 session is one task someone was grinding through; a shape that reappears across
 three sessions is a *workflow*, and only the second kind keeps costing.
 
-**Lane 2 — the narrative pass** over ``.agent/notepad.md`` and the session
-handoffs, for **reasoning sinks that leave no repeated command**. This lane is
+**Lane 2 — the narrative pass** over ``.agent/notepad.md``, the session
+handoffs, and the tracked goal history, for **reasoning sinks that leave no
+repeated command**. This lane is
 not optional. The best 2026-08-08 find (#650, regenerating the image locks) was
 ~15 turns of reading CI config, transcribing a recipe, running it on the wrong
 platform, measuring the damage, reverting and re-running in a container —
@@ -53,6 +54,7 @@ import hashlib
 import json
 import logging
 import re
+import subprocess
 from collections import Counter, defaultdict
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -115,12 +117,27 @@ MAX_SHAPE_CHARS = 40
 #: `.claude/rules/probes-need-a-control-arm.md` rule 3.
 DEFAULT_TAIL_LINES = 400
 
-#: Where a session records its own manual work. Both are gitignored, which is
-#: exactly why `--since <ref>` cannot bound them.
+#: Where a session records its own manual work and goal changes. The tracked
+#: goal history makes accepted pivots visible to the same review without
+#: relying on a caller to opt it in.
 DEFAULT_NARRATIVE_PATHS: tuple[str, ...] = (
     ".agent/notepad.md",
     ".agent/plans/session-*.md",
+    "docs/agents/goal-history.md",
 )
+GOAL_HISTORY_PATH = "docs/agents/goal-history.md"
+GOAL_HISTORY_FIELDS: tuple[str, ...] = (
+    "Iteration ID",
+    "Prior goal digest",
+    "Current goal digest",
+    "Changed requirement",
+    "Reason",
+    "Evidence",
+    "Affected tickets",
+    "Disposition",
+    "Topology and ownership",
+)
+_GOAL_HISTORY_ENTRY = re.compile(r"(?m)^## (?P<title>\d{4}-\d{2}-\d{2} — [^\n]+)\n")
 
 #: Phrases this repo's notes actually use when recording a slog, each paired
 #: with what it usually indicates. Matched case-insensitively.
@@ -311,7 +328,8 @@ def narrative_paths(
     A glob is bounded because it resolves to the handoff ARCHIVE: this repo has
     40+ ``session-*.md`` files, and reading all of them answers what the repo
     has ever done by hand rather than what this session did. A literal path is
-    never bounded — the notepad is the one file you always want.
+    never bounded — the notepad and tracked goal history are files you always
+    want. Their content is still bounded by :func:`tail_text`.
     """
     found: list[Path] = []
     for pattern in patterns:
@@ -356,6 +374,177 @@ def tail_text(text: str, tail_lines: int | None) -> tuple[str, int]:
     return "\n".join(lines[-tail_lines:]), len(lines) - tail_lines
 
 
+def _field_value(block: str, field: str, pattern: str) -> str | None:
+    match = re.search(rf"(?m)^- \*\*{re.escape(field)}:\*\* {pattern}$", block)
+    return match.group(1) if match else None
+
+
+def _goal_text(block: str, title: str) -> tuple[str, list[str]]:
+    goal_start = block.find("### Current goal\n")
+    workflow_start = block.find("### Current workflow\n")
+    if goal_start < 0 or workflow_start <= goal_start:
+        return "", [f"{title}: missing ordered current goal/workflow sections"]
+    goal_lines = (
+        block[goal_start + len("### Current goal\n") : workflow_start]
+        .strip()
+        .splitlines()
+    )
+    quoted = [line[2:] for line in goal_lines if line.startswith("> ")]
+    if not quoted or len(quoted) != len([line for line in goal_lines if line]):
+        return "", [f"{title}: current goal must be a Markdown quote"]
+    return "\n".join(quoted), []
+
+
+def _iteration_errors(
+    block: str,
+    title: str,
+    index: int,
+    prior_current_digest: str | None,
+    seen_ids: set[str],
+) -> tuple[list[str], str | None]:
+    errors = [
+        f"{title}: {kind} {field}"
+        for field in GOAL_HISTORY_FIELDS
+        if (count := block.count(f"- **{field}:**")) != 1
+        for kind in ("missing" if count == 0 else "duplicate",)
+    ]
+    iteration_id = _field_value(block, "Iteration ID", r"`([^`]+)`")
+    if iteration_id in seen_ids:
+        errors.append(f"{title}: duplicate Iteration ID value")
+    if iteration_id:
+        seen_ids.add(iteration_id)
+
+    goal_text, goal_errors = _goal_text(block, title)
+    errors.extend(goal_errors)
+    if block.count("```mermaid") != 1:
+        errors.append(f"{title}: expected exactly one Mermaid workflow")
+
+    current_digest = _field_value(
+        block, "Current goal digest", r"`sha256:([0-9a-f]{64})`"
+    )
+    if block.count("- **Current goal digest:**") == 1 and not current_digest:
+        errors.append(f"{title}: malformed Current goal digest")
+    if goal_text and current_digest:
+        computed = hashlib.sha256(goal_text.encode()).hexdigest()
+        if computed != current_digest:
+            errors.append(f"{title}: Current goal digest does not match goal text")
+
+    prior_digest = _field_value(block, "Prior goal digest", r"`([^`]+)`")
+    if block.count("- **Prior goal digest:**") == 1 and not prior_digest:
+        errors.append(f"{title}: malformed Prior goal digest")
+    expected_prior = (
+        "NONE (bootstrap)"
+        if index == 0
+        else f"sha256:{prior_current_digest or 'MISSING'}"
+    )
+    if prior_digest != expected_prior:
+        errors.append(f"{title}: Prior goal digest breaks the digest chain")
+    return errors, current_digest
+
+
+def goal_history_errors(text: str) -> tuple[str, ...]:
+    """Return structural and digest-chain defects in a goal-history document."""
+    matches = list(_GOAL_HISTORY_ENTRY.finditer(text))
+    if not matches:
+        return ("goal history has no dated iteration",)
+    errors: list[str] = []
+    seen_ids: set[str] = set()
+    prior_current_digest: str | None = None
+    for index, match in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        block_errors, prior_current_digest = _iteration_errors(
+            text[match.end() : end],
+            match.group("title"),
+            index,
+            prior_current_digest,
+            seen_ids,
+        )
+        errors.extend(block_errors)
+    return tuple(errors)
+
+
+def _git_bytes(repo_root: Path, *args: str) -> tuple[int, bytes]:
+    result = subprocess.run(
+        ["git", "-C", str(repo_root), *args],
+        check=False,
+        capture_output=True,
+    )
+    return result.returncode, result.stdout
+
+
+def _is_git_checkout(repo_root: Path) -> bool:
+    rc, answer = _git_bytes(repo_root, "rev-parse", "--is-inside-work-tree")
+    return rc == 0 and answer.strip() == b"true"
+
+
+def _authorized_goal_history_base(repo_root: Path) -> str | None:
+    rc, resolved = _git_bytes(repo_root, "merge-base", "HEAD", "origin/main")
+    return resolved.decode().strip() if rc == 0 and resolved.strip() else None
+
+
+def _history_blob(repo_root: Path, revision: str) -> bytes | None:
+    rc, blob = _git_bytes(repo_root, "show", f"{revision}:{GOAL_HISTORY_PATH}")
+    return blob if rc == 0 else None
+
+
+def _revision_blob_error(blob: bytes, revision: str, *, bootstrap: bool) -> str | None:
+    try:
+        text = blob.decode()
+    except UnicodeDecodeError:
+        return f"{revision} goal history is not UTF-8"
+    if errors := goal_history_errors(text):
+        return f"{revision} has invalid goal history: " + "; ".join(errors)
+    if bootstrap and len(list(_GOAL_HISTORY_ENTRY.finditer(text))) != 1:
+        return f"{revision} bootstrap must contain exactly one iteration"
+    return None
+
+
+def _committed_append_only_error(
+    repo_root: Path, base: str
+) -> tuple[str | None, bytes | None]:
+    previous = _history_blob(repo_root, base)
+    rc, raw_revisions = _git_bytes(
+        repo_root, "rev-list", "--first-parent", "--reverse", f"{base}..HEAD"
+    )
+    if rc != 0:
+        return "cannot enumerate first-parent history from authorized baseline", None
+    for revision in raw_revisions.decode().splitlines():
+        blob = _history_blob(repo_root, revision)
+        if previous is not None and blob is None:
+            return f"{revision} deletes the goal history", None
+        if blob is None:
+            continue
+        if error := _revision_blob_error(blob, revision, bootstrap=previous is None):
+            return error, None
+        if previous is not None and not blob.startswith(previous):
+            return f"{revision} rewrites prior goal-history bytes", None
+        previous = blob
+    return None, previous
+
+
+def _append_only_error(repo_root: Path, current: bytes, text: str) -> str | None:
+    base = _authorized_goal_history_base(repo_root)
+    if base is None:
+        return "cannot resolve the fixed origin/main goal-history baseline"
+
+    error, committed = _committed_append_only_error(repo_root, base)
+    if error:
+        return error
+    if committed is not None:
+        if not current.startswith(committed):
+            return "working goal history rewrites committed HEAD bytes"
+        return None
+
+    prior = _field_value(text, "Prior goal digest", r"`([^`]+)`")
+    is_single_bootstrap = (
+        len(list(_GOAL_HISTORY_ENTRY.finditer(text))) == 1
+        and prior == "NONE (bootstrap)"
+    )
+    if is_single_bootstrap:
+        return None
+    return "baseline lacks goal history; bootstrap requires exactly one iteration"
+
+
 def scan_narrative(
     repo_root: Path,
     patterns: Sequence[str] = DEFAULT_NARRATIVE_PATHS,
@@ -371,7 +560,8 @@ def scan_narrative(
     """
     hits: list[NarrativeHit] = []
     for path in narrative_paths(repo_root, patterns, glob_limit=glob_limit):
-        text, offset = tail_text(path.read_text(errors="replace"), tail_lines)
+        full_text = path.read_text(errors="replace")
+        text, offset = tail_text(full_text, tail_lines)
         rel = str(path.relative_to(repo_root))
         hits.extend(
             NarrativeHit(hit.path, hit.line_number + offset, hit.meaning, hit.line)
@@ -464,6 +654,43 @@ def render_report(
     return "\n".join(out)
 
 
+def _lane_configuration_error(lanes: LaneChoice, sessions: int) -> str | None:
+    selected_only = sum(
+        (lanes.transcript_only, lanes.narrative_only, lanes.requirements_only), start=0
+    )
+    if sessions < 1:
+        return "--sessions must be at least 1"
+    if not 1 <= lanes.max_iterations <= MAX_REVIEW_ITERATIONS:
+        return "--max-iterations must be between 1 and 5"
+    if selected_only > 1:
+        return (
+            "--transcript-only, --narrative-only, and --requirements-only are "
+            "mutually exclusive; the default keeps the two automation lanes"
+        )
+    return None
+
+
+def _review_preflight_error(
+    repo_root: Path, lanes: LaneChoice, sessions: int
+) -> str | None:
+    if error := _lane_configuration_error(lanes, sessions):
+        return error
+    history = repo_root / GOAL_HISTORY_PATH
+    git_checkout = _is_git_checkout(repo_root)
+    if git_checkout and not history.is_file():
+        return f"missing required {GOAL_HISTORY_PATH}"
+    if not history.is_file():
+        return None
+    text = history.read_text()
+    if errors := goal_history_errors(text):
+        return "invalid goal history: " + "; ".join(errors)
+    if git_checkout and (
+        error := _append_only_error(repo_root, history.read_bytes(), text)
+    ):
+        return "invalid goal history: " + error
+    return None
+
+
 def session_review_main(
     repo_root: Path,
     *,
@@ -480,23 +707,8 @@ def session_review_main(
     enough that guessing wrong loses the finding.
     """
     transcript_only, narrative_only = lanes.transcript_only, lanes.narrative_only
-    selected_only = sum(
-        (transcript_only, narrative_only, lanes.requirements_only), start=0
-    )
-    if sessions < 1:
-        logger.error("--sessions must be at least 1")
-    elif not 1 <= lanes.max_iterations <= MAX_REVIEW_ITERATIONS:
-        logger.error("--max-iterations must be between 1 and 5")
-    elif selected_only > 1:
-        logger.error(
-            "--transcript-only, --narrative-only, and --requirements-only are "
-            "mutually exclusive; the default keeps the two automation lanes"
-        )
-    if (
-        sessions < 1
-        or not 1 <= lanes.max_iterations <= MAX_REVIEW_ITERATIONS
-        or selected_only > 1
-    ):
+    if preflight_error := _review_preflight_error(repo_root, lanes, sessions):
+        logger.error("%s", preflight_error)
         return 2
 
     if lanes.requirements_only:
