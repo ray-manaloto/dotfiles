@@ -51,6 +51,15 @@ you ran, and the transcript does.
 
 ## Requirement coverage is default and bounded
 
+Before assigning dispositions, validate the entire
+`docs/agents/goal-history.md` structure, every first-parent revision from its
+fixed `origin/main` merge-base, and working-tree append-only bytes; then
+analyze its bounded tail. Treat it as the durable record of accepted goal
+changes: look for repeated pivots, prompt ambiguity, duplicate ownership, and
+work that no longer advances the current destination. A history entry is
+evidence of a decision, not evidence that its work landed. Apply
+`.claude/rules/goal-history.md` whenever the review accepts a goal change.
+
 The default review runs requirement coverage and both automation lanes. For a
 focused requirements-only packet, run `mise run session-requirements` (equivalent to
 `session-review --requirements-only --sessions 5 --source-repo-root
