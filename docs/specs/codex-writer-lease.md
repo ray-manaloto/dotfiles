@@ -25,9 +25,10 @@ START ordering.
   back to the other's candidate, and ambient `PATH` never selects the identity
   executable. `rev-parse --path-format=absolute --git-common-dir` then supplies
   the identity shared by the canonical checkout and registered worktrees.
-- The bootstrap and runner similarly select only explicit host/container mise
-  and project-Python locations; missing contracted executables deny instead of
-  consulting ambient `PATH`.
+- The bootstrap and runner similarly select only explicit mise paths
+  (`~/.local/bin/mise` on the Darwin host or `/usr/local/bin/mise` in the
+  supported Linux devcontainer) and project-Python locations; missing
+  contracted executables deny instead of consulting ambient `PATH`.
 - `fcntl.flock(fd, LOCK_EX | LOCK_NB)` retains one foreground exclusion lock.
 - A random holder token and loopback challenge endpoint are written into both
   lock bytes and the canonical receipt. A check must challenge that endpoint
@@ -36,17 +37,21 @@ START ordering.
 - A 0700 state directory contains 0600 regular state/lease locks and immutable
   generation directories. Every open uses `O_NOFOLLOW`; type, owner, link
   count, and mode are validated before bytes are trusted.
-- One generation contains canonical `receipt.json`, validated canonical
-  `audit.jsonl`, and canonical `inflight.json`. Their combined SHA-256 names
+- One generation contains canonical `receipt.json`, a validated canonical
+  audit-head manifest in `audit.jsonl`, and canonical `inflight.json`. Their combined SHA-256 names
   the generation. An atomic 0600 `current` pointer publishes all three as one
   transaction. After the pointer and directory are durable and the new state
   validates, superseded generations are atomically renamed and reclaimed under
   the state lock through an already-open, owned, no-follow directory descriptor.
   Relative `open`, `rename`, `unlink`, and `rmdir` operations remain anchored if
   the parent pathname is concurrently replaced by a symlink. The one retained
-  generation carries the complete audit, so storage grows linearly with history
-  rather than quadratically across copies. A cleanup failure after publication
-  is typed retained debt, never a denial of the already-committed tool state.
+  generation carries a canonical audit head with at most 64 open events. The
+  head links immutable, content-addressed 64-event chunks beneath the same
+  private state directory. Reads reconstruct and validate the complete audit;
+  writes rewrite only the bounded tail and write each sealed event once, so
+  cumulative write amplification and retained storage grow linearly. A cleanup
+  failure after publication is typed retained debt, never a denial of the
+  already-committed tool state.
   `status` uses only non-creating read opens and reports `cleanup_debt`.
 - Audit history derives the next transition. No history means `initial`; a
   validated release means `handoff`; an active receipt with no live holder
@@ -59,13 +64,16 @@ Primary references: [Git `rev-parse`](https://git-scm.com/docs/git-rev-parse),
 ## Public interface
 
 ```text
-mise run writer-lease-hold -- --task-id ID --owner OWNER \
+<MISE> run writer-lease-hold -- --task-id ID --owner OWNER \
   --handoff-sha256 SHA \
   [--expected-prior-receipt-sha256 PRIOR]
 
-mise run writer-lease-check -- --task-id ID --handoff-sha256 SHA
-mise run writer-lease-status
+<MISE> run writer-lease-check -- --task-id ID --handoff-sha256 SHA
+<MISE> run writer-lease-status
 ```
+
+`<MISE>` is the exact absolute platform path: `~/.local/bin/mise` on the
+Darwin host and `/usr/local/bin/mise` in the supported Linux devcontainer.
 
 `hold` acquires the common-directory lock, starts the holder challenge,
 publishes the atomic generation, prints its content-addressed receipt, and
@@ -88,10 +96,16 @@ digest-mismatched paths fail closed.
 Both `.codex/hooks.json` and `.claude/settings.json` use the same tracked
 runner for `PreToolUse` and `PostToolUse`; Claude also sends
 `PostToolUseFailure` through the identical finish transaction. The runner begins with pinned
-`/usr/bin/python3 -I -S`, resolves only the payload's repository root, then
-invokes the exact repository virtual-environment Python and hook script with a
-fixed argv and minimal fixed environment. Bridge failure returns a structured
-deny/stop instead of becoming an unobserved skipped hook.
+`/usr/bin/python3 -I -S`. [Official Codex hook documentation](https://developers.openai.com/codex/hooks)
+states that commands run from the session `cwd` and that Codex may start from a
+subdirectory. Codex exposes no documented project-root variable, so its pinned
+Python command walks ancestor Git markers to the outermost repository root and
+executes only the tracked runner there. This location step invokes no Git,
+mise, `env`, or ambient `PATH`. The runner independently resolves the payload's
+same repository root, then invokes the exact repository virtual-environment
+Python and hook script with a fixed argv and minimal fixed environment. Bridge
+failure returns a structured deny/stop instead of becoming an unobserved
+skipped hook.
 
 Before a lease exists, Codex allows only a content-checked bootstrap shape:
 the resolved absolute `~/.local/bin/mise`, exact `-C <worktree>`, exact task,
@@ -117,13 +131,20 @@ decides the tool call.
 ```mermaid
 flowchart TB
     T["Codex or Claude task"] --> PRE["Native PreToolUse"]
-    PRE --> OWN{"Challenge-bound live receipt matches task + worktree?"}
+    PRE --> ROOT["Pinned Python: outermost ancestor Git marker"]
+    ROOT --> RUNNER["Tracked repository hook runner"]
+    RUNNER --> OWN
+    OWN{"Challenge-bound live receipt matches task + worktree?"}
     OWN -->|"no"| DENY["Deny before mutation"]
     OWN -->|"yes"| START["Atomic generation: append tool_started + in-flight ID"]
     START --> TOOL["Bash, unified exec, apply patch, edit, or write"]
     TOOL --> POST["PostToolUse, PostToolUseFailure, or write_stdin completion"]
     POST --> RETRY["Bounded state-lock retry"]
     RETRY --> FINISH["Atomic generation: tool_finished + remove ID"]
+    START --> TAIL["Canonical open tail, at most 64 events"]
+    FINISH --> TAIL
+    TAIL -->|"seal once"| CHUNK["Immutable content-addressed 64-event chunks"]
+    CHUNK -->|"validated chain"| TAIL
     HOLD["Foreground holder"] --> LOCK["Exclusive Git-common-dir flock"]
     HOLD --> CHAL["Loopback token challenge"]
     LOCK --> OWN
@@ -192,8 +213,13 @@ Real subprocess tests, with no project-authored mock acceptance, prove:
 8. tracked dirty bytes, ignored bytes, untracked bytes, `.omc/` evidence,
    modes, and exact Git status remain unchanged across hold/handoff; and
 9. a pinned system-runner subprocess drives the real project hook runtime.
-10. thirty-two real Pre/Post tool pairs retain one generation, the full
-    canonical audit, bounded state bytes, and bounded runtime; and
+   The same configured Codex command starts from a nested repository directory,
+   reaches the outermost tracked runner for both Pre and Post, drains the owner,
+   and denies a hostile session on host and supported Linux.
+10. 256 real Pre/Post tool pairs retain one generation, reconstruct the full
+    canonical 513-event audit from eight sealed chunks plus a bounded tail,
+    keep every audit file below 32 KiB and total state below 512 KiB, and
+    finish within the explicit real-subprocess runtime ceiling; and
 11. a real failed Bash command drains through Claude `PostToolUseFailure`, then
     permits both clean handoff and audited crash recovery;
 12. a real parent-path-to-external-symlink swap cannot redirect descriptor-

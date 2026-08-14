@@ -14,9 +14,18 @@ live lease for this Git common directory:
    mutating tool before recording release and dropping the OS lock.
 
 ```text
+# Darwin host
 /Users/rmanaloto/.local/bin/mise -C <absolute-worktree> run writer-lease-status
 
 /Users/rmanaloto/.local/bin/mise -C <absolute-worktree> run writer-lease-hold -- \
+  --task-id <task-or-session-id> --owner codex:<task-or-session-id> \
+  --handoff-sha256 <digest> \
+  [--expected-prior-receipt-sha256 <receipt-digest>]
+
+# Supported Linux devcontainer
+/usr/local/bin/mise -C <absolute-worktree> run writer-lease-status
+
+/usr/local/bin/mise -C <absolute-worktree> run writer-lease-hold -- \
   --task-id <task-or-session-id> --owner codex:<task-or-session-id> \
   --handoff-sha256 <digest> \
   [--expected-prior-receipt-sha256 <receipt-digest>]
@@ -43,6 +52,13 @@ only `/usr/bin/git`; Linux accepts only the conda-Git path derived from the
 tracked `.devcontainer/mise-system.lock`. There is no cross-platform fallback
 and no ambient `PATH` lookup.
 
+Codex runs hook commands from the session working directory, which may be any
+repository subdirectory. The pinned system-Python hook command therefore walks
+ancestor Git markers to the outermost repository root and executes only its
+tracked runner. It does not invoke Git, mise, `env`, or ambient `PATH` during
+that location step. The runner then validates the payload root and applies the
+platform-exclusive Git and explicit mise/Python contracts above.
+
 Codex and Claude `PreToolUse` register Bash/unified-exec and direct mutation
 tool IDs only for the live owning session/worktree. `PostToolUse` removes that
 exact ID, and Claude `PostToolUseFailure` drains failed tools through the same
@@ -51,11 +67,14 @@ background process finishes, so a clean transfer cannot overtake a delayed
 writer.
 
 Only the current immutable generation is retained after its pointer is durable
-and validated. It carries the complete canonical audit; superseded generations
-are atomically renamed and safely reclaimed through an already-validated state
-directory descriptor. Every validation, rename, unlink, and rmdir is relative
-to that descriptor and no-follow, so swapping the state pathname to a symlink
-cannot redirect cleanup. Cleanup after publication never reverses or denies the
+and validated. Its audit head contains at most 64 open events and links private,
+immutable, content-addressed 64-event chunks; reconstruction validates the
+complete sequence. Each transition therefore rewrites a bounded tail while
+sealed history is written once. Superseded generations are atomically renamed
+and safely reclaimed through an already-validated state directory descriptor.
+Every state/chunk validation, rename, unlink, and rmdir is relative to a private
+no-follow descriptor, so swapping the state pathname to a symlink cannot
+redirect cleanup. Cleanup after publication never reverses or denies the
 committed transition: retained or malformed tombstones surface as typed
 `cleanup_debt` in status and remain preserved for investigation.
 

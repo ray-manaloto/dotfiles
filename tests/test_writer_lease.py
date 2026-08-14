@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 import select
+import shlex
 import stat
 import subprocess
 import sys
@@ -80,9 +81,15 @@ def test_container_git_contract_is_derived_from_the_locked_package() -> None:
     assert executable.parent.parent.parent == writer_lease.CONTAINER_GIT_INSTALL_ROOT
 
 
-def test_container_git_contract_rejects_lock_drift(tmp_path: Path) -> None:
+def test_container_git_contract_rejects_lock_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A lock with no authoritative Git package fails closed."""
-    source = Path(".devcontainer/mise-system.lock").read_text(encoding="utf-8")
+    project_root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(tmp_path)
+    source = (project_root / ".devcontainer/mise-system.lock").read_text(
+        encoding="utf-8"
+    )
     drifted = tmp_path / "mise-system.lock"
     drifted.write_text(
         source.replace('"conda:git"', '"retired:git"'),
@@ -682,6 +689,24 @@ def test_codex_hook_allows_only_plain_lease_bootstrap_without_an_owner(
     assert allowed.returncode == 0
     assert allowed.stdout == ""
 
+    duplicate = _codex_pretooluse(
+        repo,
+        session_id="codex-successor",
+        tool_name="Bash",
+        tool_input={
+            "command": (
+                f"{mise} -C {repo.resolve()} run writer-lease-hold -- "
+                "--task-id codex-successor --owner codex:codex-successor "
+                f"--handoff-sha256 {_HANDOFF_A} --task-id codex-successor"
+            )
+        },
+    )
+    assert duplicate.returncode == 0
+    assert (
+        json.loads(duplicate.stdout)["hookSpecificOutput"]["permissionDecision"]
+        == "deny"
+    )
+
     compound = _codex_pretooluse(
         repo,
         session_id="codex-successor",
@@ -1188,6 +1213,15 @@ def test_pinned_system_runner_uses_real_project_runtime_and_drains_posttooluse(
         project_root / "python" / "src" / "dotfiles_setup"
     )
     runner = project_root / "scripts" / "writer-lease-hook-runner.py"
+    (repo / "scripts").mkdir()
+    (repo / "scripts" / runner.name).symlink_to(runner)
+    nested = repo / "nested" / "session-cwd"
+    nested.mkdir(parents=True)
+    (nested / ".git").mkdir()
+    hooks = json.loads((project_root / ".codex/hooks.json").read_text(encoding="utf-8"))
+    pre_command = hooks["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    post_command = hooks["hooks"]["PostToolUse"][0]["hooks"][0]["command"]
+    assert pre_command == post_command
     holder, _ = _start_holder(
         repo,
         lease=LeaseArgs(
@@ -1201,11 +1235,11 @@ def test_pinned_system_runner_uses_real_project_runtime_and_drains_posttooluse(
 
     def run(call: HookCall) -> subprocess.CompletedProcess[bytes]:
         return subprocess.run(
-            ["/usr/bin/python3", "-I", "-S", str(runner)],
-            cwd=repo,
+            ["/bin/sh", "-c", pre_command],
+            cwd=nested,
             input=json.dumps(
                 {
-                    "cwd": str(repo),
+                    "cwd": str(nested),
                     "hook_event_name": call.event,
                     "session_id": call.session_id,
                     "tool_input": call.tool_input,
@@ -1225,19 +1259,22 @@ def test_pinned_system_runner_uses_real_project_runtime_and_drains_posttooluse(
         tool_use_id="runner-tool",
         tool_input={"command": "git status"},
     )
-    assert run(owner_call).stdout == b""
-    assert (
-        run(
-            HookCall(
-                event="PostToolUse",
-                session_id="runner-owner",
-                tool_name="Bash",
-                tool_use_id="runner-tool",
-                tool_input={"command": "git status"},
-            )
-        ).stdout
-        == b""
+    owner_pre = run(owner_call)
+    assert owner_pre.returncode == 0
+    assert owner_pre.stdout == b""
+    assert _status(repo)["inflight"] == ["runner-tool"]
+    owner_post = run(
+        HookCall(
+            event="PostToolUse",
+            session_id="runner-owner",
+            tool_name="Bash",
+            tool_use_id="runner-tool",
+            tool_input={"command": "git status"},
+        )
     )
+    assert owner_post.returncode == 0
+    assert owner_post.stdout == b""
+    assert _status(repo)["inflight"] == []
     hostile = run(
         HookCall(
             event="PreToolUse",
@@ -1247,8 +1284,45 @@ def test_pinned_system_runner_uses_real_project_runtime_and_drains_posttooluse(
             tool_input={"command": "git add README.md"},
         )
     )
+    assert hostile.returncode == 0
     hostile_decision = json.loads(hostile.stdout)["hookSpecificOutput"]
     assert hostile_decision["permissionDecision"] == "deny"
+
+
+def test_codex_hook_command_reaches_the_tracked_runner_from_nested_cwd() -> None:
+    """The public command locates the tracked runner without a platform Git."""
+    project_root = Path(__file__).resolve().parents[1]
+    hooks = json.loads((project_root / ".codex/hooks.json").read_text(encoding="utf-8"))
+    command = hooks["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+
+    arguments = shlex.split(command)
+    assert arguments[:4] == ["/usr/bin/python3", "-I", "-S", "-c"]
+    assert "/usr/bin/git" not in command
+    assert "pathlib" in arguments[4]
+    assert "runpy.run_path" in arguments[4]
+    assert 'roots[-1]/"scripts/writer-lease-hook-runner.py"' in arguments[4]
+    nested = project_root / "python" / "src" / "dotfiles_setup"
+    payload = {
+        "cwd": str(nested),
+        "hook_event_name": "PreToolUse",
+        "session_id": "hostile-bootstrap-control",
+        "tool_input": {"command": "git add README.md"},
+        "tool_name": "Bash",
+        "tool_use_id": "hostile-bootstrap-tool",
+    }
+    result = subprocess.run(
+        ["/bin/sh", "-c", command],
+        cwd=nested,
+        input=json.dumps(payload).encode(),
+        capture_output=True,
+        check=False,
+        timeout=10,
+    )
+
+    assert result.returncode == 0
+    decision = json.loads(result.stdout)["hookSpecificOutput"]
+    assert decision["permissionDecision"] == "deny"
+    assert "enforcement failed closed" not in decision["permissionDecisionReason"]
 
 
 def test_many_tool_pairs_keep_one_linear_generation_with_full_audit(
@@ -1265,8 +1339,15 @@ def test_many_tool_pairs_keep_one_linear_generation_with_full_audit(
         ),
     )
     holders.append(holder)
+    state = _common_dir(repo) / "codex-writer-lease"
+
+    def current_audit_size() -> int:
+        generation = (state / "current").read_text(encoding="ascii")
+        return (state / generation / "audit.jsonl").stat().st_size
+
+    audit_bytes_published = current_audit_size()
     started_at = time.monotonic()
-    pair_count = 32
+    pair_count = 256
     for index in range(pair_count):
         tool_id = f"scale-tool-{index:02d}"
         for event in ("PreToolUse", "PostToolUse"):
@@ -1282,19 +1363,92 @@ def test_many_tool_pairs_keep_one_linear_generation_with_full_audit(
             )
             assert result.returncode == 0
             assert result.stdout == ""
+            audit_bytes_published += current_audit_size()
     elapsed = time.monotonic() - started_at
 
-    state = _common_dir(repo) / "codex-writer-lease"
     generations = sorted(state.glob("gen-*"))
     assert len(generations) == 1
     assert list(state.glob(".reclaim-*")) == []
-    audit_lines = (generations[0] / "audit.jsonl").read_bytes().splitlines()
-    assert len(audit_lines) == 1 + pair_count * 2
+    audit_manifest = json.loads(
+        (generations[0] / "audit.jsonl").read_text(encoding="utf-8")
+    )
+    event_count = 1 + pair_count * 2
+    assert audit_manifest["schema"] == "dotfiles.writer-lease-audit-head.v1"
+    assert audit_manifest["sealed_count"] + len(audit_manifest["tail"]) == event_count
+    assert 1 <= len(audit_manifest["tail"]) <= 64
+    chunks = sorted((state / "audit-chunks").glob("chunk-*.json"))
+    expected_chunks = (event_count - 1) // 64
+    assert len(chunks) == expected_chunks
+    assert all(path.stat().st_size < 32 * 1024 for path in chunks)
+    assert (generations[0] / "audit.jsonl").stat().st_size < 32 * 1024
+    sealed_bytes_written = sum(path.stat().st_size for path in chunks)
+    assert (
+        audit_bytes_published + sealed_bytes_written
+        < (event_count + expected_chunks) * 32 * 1024
+    )
     state_bytes = sum(
         path.stat().st_size for path in state.rglob("*") if path.is_file()
     )
-    assert state_bytes < 128 * 1024
-    assert elapsed < 30
+    assert state_bytes < 512 * 1024
+    # The 512 real Python process launches vary by platform. This is only a
+    # stuck-process ceiling; cumulative bytes above are the amplification gate.
+    assert elapsed < 180
+
+
+def test_sealed_audit_chunk_corruption_denies_without_state_mutation(
+    tmp_path: Path, holders: list[subprocess.Popen[str]]
+) -> None:
+    repo, _ = _repo_with_linked_worktree(tmp_path)
+    holder, _ = _start_holder(
+        repo,
+        lease=LeaseArgs(
+            task_id="chunk-owner",
+            owner="/root/chunk-owner",
+            handoff_sha256=_HANDOFF_A,
+            transition="initial",
+        ),
+    )
+    holders.append(holder)
+    for index in range(32):
+        tool_id = f"chunk-tool-{index:02d}"
+        for event in ("PreToolUse", "PostToolUse"):
+            result = _raw_hook(
+                repo,
+                HookCall(
+                    event=event,
+                    session_id="chunk-owner",
+                    tool_name="Bash",
+                    tool_use_id=tool_id,
+                    tool_input={"command": "/usr/bin/true"},
+                ),
+            )
+            assert result.returncode == 0
+            assert result.stdout == ""
+
+    state = _common_dir(repo) / "codex-writer-lease"
+    chunks = list((state / "audit-chunks").glob("chunk-*.json"))
+    assert len(chunks) == 1
+    assert stat.S_IMODE((state / "audit-chunks").lstat().st_mode) == 0o700
+    assert stat.S_IMODE(chunks[0].lstat().st_mode) == 0o600
+    chunks[0].write_bytes(chunks[0].read_bytes() + b" ")
+    before = _writer_state_bytes(state)
+
+    denied = _raw_hook(
+        repo,
+        HookCall(
+            event="PreToolUse",
+            session_id="chunk-owner",
+            tool_name="Bash",
+            tool_use_id="corrupt-chunk",
+            tool_input={"command": "git add README.md"},
+        ),
+    )
+
+    assert denied.returncode == 0
+    decision = json.loads(denied.stdout)["hookSpecificOutput"]
+    assert decision["permissionDecision"] == "deny"
+    assert "digest" in decision["permissionDecisionReason"].lower()
+    assert _writer_state_bytes(state) == before
 
 
 def test_failed_claude_bash_drains_for_clean_release_and_crash_recovery(
