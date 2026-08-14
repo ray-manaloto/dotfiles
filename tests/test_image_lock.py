@@ -352,6 +352,22 @@ def test_the_inner_call_cannot_recurse() -> None:
     assert "docker" not in argv
 
 
+def test_the_inner_call_resolves_both_id_labels_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pin the production branch against frozen workspace and arch values."""
+    monkeypatch.setenv("DOTFILES_PLATFORM", "linux/amd64/v2")
+
+    argv = image_lock.container_command(Path("/repo"))
+
+    assert argv[4:8] == [
+        "--id-label",
+        "dotfiles.workspace=816fc349",
+        "--id-label",
+        "dotfiles.arch=amd64",
+    ]
+
+
 def test_platform_flags_are_passed_through_to_the_inner_call() -> None:
     argv = image_lock.container_command(Path("/repo"), ("--platform", "linux-x64"))
     assert argv[-2:] == ["--platform", "linux-x64"]
