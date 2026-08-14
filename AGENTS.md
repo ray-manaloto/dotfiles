@@ -97,19 +97,18 @@ locally before pushing Dockerfile changes.
 
 ### Policies (read before working)
 
-- **Zero-skip**: Investigate and resolve every warning, error, and lint
-  violation. Obtain explicit user approval before adding any suppression
-  (`noqa`, `type: ignore`, `continue-on-error`). See
-  `.claude/rules/zero-skip-policy.md`.
+- **Zero-skip**: Resolve every warning/error. Suppress only with explicit user
+  approval. See `.claude/rules/zero-skip-policy.md`.
 - **Zero inline suppressions**: The `no_lint_skip` hk step rejects
   `noqa`/`type: ignore`/`pylint: disable`/`nosec` in Python source.
-- **MCP has two lanes**: a 3rd-party plugin/skill that REQUIRES it → allowed,
-  no justification. Anything WE build/look up → avoid it; API or `mcp2cli`
-  first, register last. Unsure = lane 2. `.claude/rules/research-doc-sources.md`.
+- **MCP lanes**: required by a third-party plugin/skill → allowed; our work →
+  API or `mcp2cli` first. See `.claude/rules/research-doc-sources.md`.
 - **CI-local parity**: Every CI lint step has a local hk equivalent; every
   hk tool is in `mise.toml`. See `.claude/rules/ci-local-parity.md`.
 - **Research before fixing**: Check docs, changelogs, and issues; don't guess at CI failures.
 - Follow `.claude/rules/graphify-first.md` and `.claude/rules/real-integration-evidence.md`.
+- **One repository writer:** Before mutation, acquire/verify the Git-common-dir
+  lease in `.claude/rules/writer-lease.md`; branches/worktrees are not ownership.
 - **Bound long-running commands**: Run the lint gate via `mise run lint`
   (hk under a hard timeout; hk has none) — never wait blind or capture via
   `| tail` (masks exit codes). See `.claude/rules/long-running-command-hangs.md`.

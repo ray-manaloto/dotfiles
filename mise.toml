@@ -659,6 +659,18 @@ description = "Launch one Codex review lane for a node (#613): write the lane re
 #   git diff | mise run codex-lane -- --node <id>     # prompt via stdin
 run = 'uv run --project python dotfiles-setup codex-lane'
 
+[tasks.writer-lease-hold]
+description = "Hold this Git repository's one live Codex writer lease (#753)"
+run = 'uv run --project python dotfiles-setup writer-lease hold'
+
+[tasks.writer-lease-check]
+description = "Fail closed unless this task owns the live Codex writer lease (#753)"
+run = 'uv run --project python dotfiles-setup writer-lease check'
+
+[tasks.writer-lease-status]
+description = "Read the Git-common-dir Codex writer lease state (#753)"
+run = 'uv run --project python dotfiles-setup writer-lease status'
+
 [tasks.codex-lane-e2e]
 description = "The #613 end-to-end arm: real launcher -> real `codex exec` -> real reaper, asserting an edge comes out. COSTS CREDITS — deselected from `mise run test` and CI by the codex_exec marker"
 # `-m codex_exec` re-selects what the root pytest.ini deselects by default

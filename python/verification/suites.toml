@@ -1946,7 +1946,7 @@ paths = [
     "tests/test_branch_guard.py",
     ".claude/rules/do-not.md",
 ]
-per_path_tokens = { ".claude/settings.json" = ['"matcher": "Bash|AskUserQuestion|Edit|Write|NotebookEdit"'], "python/src/dotfiles_setup/hook_guard.py" = ["if branch_guard.handles(tool_name):", "return branch_guard.decide(tool_input)"], "python/src/dotfiles_setup/branch_guard.py" = ["def decide(", "def handles(", "if is_ignored(target, root):", "while not probe.is_dir():", '_FALLBACK_DEFAULTS = ("main", "master")'], "tests/test_branch_guard.py" = ["def test_denies_a_new_untracked_file_on_default_branch(", "def test_allows_same_file_on_a_feature_branch(", "def test_allows_gitignored_paths_on_default_branch(", "def test_allows_paths_outside_any_repo(", "def test_dispatch_routes_edit_to_the_branch_guard("], ".claude/rules/do-not.md" = ["Branch FIRST", "denying `Edit`/`Write`/`NotebookEdit` on a repo file"] }
+per_path_tokens = { ".claude/settings.json" = ['"matcher": "Bash|AskUserQuestion|Edit|Write|NotebookEdit"'], "python/src/dotfiles_setup/hook_guard.py" = ["if branch_guard.handles(tool_name):", "policy_reason = branch_guard.decide(tool_input)"], "python/src/dotfiles_setup/branch_guard.py" = ["def decide(", "def handles(", "if is_ignored(target, root):", "while not probe.is_dir():", '_FALLBACK_DEFAULTS = ("main", "master")'], "tests/test_branch_guard.py" = ["def test_denies_a_new_untracked_file_on_default_branch(", "def test_allows_same_file_on_a_feature_branch(", "def test_allows_gitignored_paths_on_default_branch(", "def test_allows_paths_outside_any_repo(", "def test_dispatch_routes_edit_to_the_branch_guard("], ".claude/rules/do-not.md" = ["Branch FIRST", "denying `Edit`/`Write`/`NotebookEdit` on a repo file"] }
 
 [[suite]]
 name = "workflow.classifier-axis-enforcement"
@@ -2108,6 +2108,31 @@ paths = [
 skill_name = "codex-task-orchestration"
 required_eval_ids = [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
 min_expectations = 1
+
+[[suite]]
+name = "workflow.writer-lease"
+description = "Issue #753: one challenge-bound live flock in the absolute Git common directory excludes duplicate writers. Private content-addressed generations atomically bind receipt, validated audit, and in-flight tool IDs; audit facts derive handoff versus recovery. Native Codex and Claude Pre/Post hooks use a pinned runner and drain delayed mutations before transfer. Real-process hostile tests are the acceptance boundary."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    ".agents/skills/codex-task-orchestration/SKILL.md",
+    ".claude/rules/writer-lease.md",
+    ".claude/settings.json",
+    ".codex/hooks.json",
+    "AGENTS.md",
+    "docs/agents/codex-task-orchestration.md",
+    "docs/specs/codex-writer-lease.md",
+    "mise.toml",
+    "python/src/dotfiles_setup/codex_writer_lease_hook.py",
+    "python/src/dotfiles_setup/hook_guard.py",
+    "python/src/dotfiles_setup/main.py",
+    "python/src/dotfiles_setup/writer_lease.py",
+    "scripts/writer-lease-hook-runner.py",
+    "tests/test_writer_lease.py",
+]
+per_path_tokens = { ".agents/skills/codex-task-orchestration/SKILL.md" = ["native writer-lease task", "must acquire that Git-common-dir", "`PostToolUse` hook must drain"], ".claude/rules/writer-lease.md" = ["# Repository writer lease", "content-addressed generation", "`PostToolUseFailure` drains failed tools"], ".claude/settings.json" = ['"PostToolUseFailure": ['], ".codex/hooks.json" = ['"statusMessage": "Checking repository writer lease"', '"statusMessage": "Draining repository writer lease mutation"'], "AGENTS.md" = ["**One repository writer:**", "Git-common-dir"], "docs/agents/codex-task-orchestration.md" = ['G --> WL["Successor acquires Git-common-dir writer lease"]', "`PostToolUse` hooks drain those exact IDs"], "docs/specs/codex-writer-lease.md" = ["fcntl.flock(fd, LOCK_EX | LOCK_NB)", "participant B as Successor", "--dangerously-bypass-hook-trust"], "mise.toml" = ["[tasks.writer-lease-hold]", "dotfiles-setup writer-lease check"], "python/src/dotfiles_setup/codex_writer_lease_hook.py" = ["codex_pretooluse_decision(payload)", 'event in {"PostToolUse", "PostToolUseFailure"}'], "python/src/dotfiles_setup/hook_guard.py" = ["writer_lease.pretooluse_decision("], "python/src/dotfiles_setup/main.py" = ['"writer-lease": lambda: sys.exit(writer_lease_main(args, Path.cwd()))'], "python/src/dotfiles_setup/writer_lease.py" = ["git-common-dir", 'return _challenge_holder(receipt["holder_port"], receipt["holder_token"])', "def reclaim_generations_anchored(", "_STATE_LOCK_RETRY_SECONDS = 3.0", '"PostToolUseFailure"', "def hook_decision(", "def writer_lease_main("], "scripts/writer-lease-hook-runner.py" = ["/usr/bin/python3", 'event in {"PostToolUse", "PostToolUseFailure"}', 'env={"LC_ALL": "C", "PATH": "/usr/bin:/bin"}'], "tests/test_writer_lease.py" = ["def test_reclaim_is_anchored_when_state_path_becomes_external_symlink(", "def test_malformed_reclaim_is_typed_debt_not_postcommit_denial(", "def test_completion_and_release_retry_overlapping_state_lock_many_times(", "def test_pinned_system_runner_uses_real_project_runtime_and_drains_posttooluse("] }
 
 [[suite]]
 name = "workflow.goal-history"

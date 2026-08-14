@@ -41,7 +41,7 @@ import re
 import sys
 from dataclasses import dataclass
 
-from dotfiles_setup import ask_quality, branch_guard
+from dotfiles_setup import ask_quality, branch_guard, writer_lease
 from dotfiles_setup.heredoc import HEREDOC_PATTERN, NUL_FILLER, blank_heredoc
 
 
@@ -747,8 +747,8 @@ def decide(command: str) -> str | None:
     return rule.reason if rule is not None else None
 
 
-def _read_payload() -> tuple[str, dict[str, object]]:
-    """``(tool_name, tool_input)`` from the hook stdin JSON (env-var fallback).
+def _read_payload() -> tuple[str, dict[str, object], dict[str, object]]:
+    """Tool name, tool input, and root hook payload from stdin JSON.
 
     Returns:
         The pending call's tool name (``""`` when the payload omits it, which
@@ -767,16 +767,17 @@ def _read_payload() -> tuple[str, dict[str, object]]:
         return (
             str(payload.get("tool_name", "")),
             tool_input if isinstance(tool_input, dict) else {},
+            payload,
         )
     legacy = os.environ.get("CLAUDE_TOOL_INPUT", "")
     if legacy:
         try:
             parsed = json.loads(legacy)
         except json.JSONDecodeError:
-            return "", {}
+            return "", {}, {}
         if isinstance(parsed, dict):
-            return str(parsed.get("tool_name", "")), parsed
-    return "", {}
+            return str(parsed.get("tool_name", "")), parsed, parsed
+    return "", {}, {}
 
 
 def _read_command() -> str:
@@ -784,7 +785,13 @@ def _read_command() -> str:
     return str(_read_payload()[1].get("command", ""))
 
 
-def decide_payload(tool_name: str, tool_input: dict[str, object]) -> str | None:
+def decide_payload(
+    tool_name: str,
+    tool_input: dict[str, object],
+    *,
+    session_id: str = "",
+    tool_use_id: str = "legacy-direct-mutation",
+) -> str | None:
     """Deny reason for a pending tool call, dispatched on ``tool_name``.
 
     ``AskUserQuestion`` goes to the ask-quality standard; the file-modifying
@@ -795,8 +802,15 @@ def decide_payload(tool_name: str, tool_input: dict[str, object]) -> str | None:
     if tool_name == "AskUserQuestion":
         return ask_quality.decide(tool_input)
     if branch_guard.handles(tool_name):
-        return branch_guard.decide(tool_input)
-    return decide(str(tool_input.get("command", "")))
+        policy_reason = branch_guard.decide(tool_input)
+    else:
+        policy_reason = decide(str(tool_input.get("command", "")))
+    return policy_reason or writer_lease.pretooluse_decision(
+        session_id,
+        tool_input,
+        tool_name=tool_name or "Bash",
+        tool_use_id=tool_use_id,
+    )
 
 
 def pretooluse_main() -> int:
@@ -806,8 +820,13 @@ def pretooluse_main() -> int:
     contract); a crash here would fail OPEN (hook errors do not block),
     which is the acceptable failure mode for a redirect guard.
     """
-    tool_name, tool_input = _read_payload()
-    reason = decide_payload(tool_name, tool_input)
+    tool_name, tool_input, payload = _read_payload()
+    reason = decide_payload(
+        tool_name,
+        tool_input,
+        session_id=str(payload.get("session_id", "")),
+        tool_use_id=str(payload.get("tool_use_id", "")),
+    )
     if reason is not None:
         sys.stdout.write(
             json.dumps(

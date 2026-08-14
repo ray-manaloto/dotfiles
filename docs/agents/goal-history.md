@@ -231,3 +231,328 @@ flowchart LR
     G --> V["Verify successor start and bounded ownership"]
     V --> M["Mirror tracked Mermaid to authorized PR; read back"]
 ```
+
+## 2026-08-14 — enforce repository writer ownership with a native lease
+
+- **Iteration ID:** `dotfiles-goal-20260814-005`
+- **Prior goal digest:** `sha256:16675f8af4fe99579fa867b5a82e1dbc4d4552c18b2dbd37996ba2a8d8959a26`
+- **Current goal digest:** `sha256:09a7817194767104656947976c06e0a6abda9911eec6089d07698273d3fd9944`
+- **Changed requirement:** Implement issue #753's executable startup and
+  pre-mutation ownership lease after the orchestration protocol landed in PR
+  #756. Bind ownership to the shared Git common directory, not a checkout path,
+  and prove contention, handoff, and stale recovery through real processes.
+- **Reason:** Different tasks, branches, and worktrees do not prove disjoint
+  ownership. PR #756 made the handoff ordering explicit but deliberately left
+  collision prevention to this follow-up.
+- **Evidence:** Canonical `main`, `origin/main`, and GitHub main were verified at
+  PR #756 squash `5274363a218b4deaf1bce93ae51392c182a5d047`. The successor
+  independently acknowledged canonical handoff digest
+  `db873355c4d00e15e7ce3ee210b2446260d0ded60f6af6685dd570d1f4132e19`,
+  the predecessor confirmed idle, and the coordinator sent a separate START.
+  Graphify is source-fallback because the fresh worktree has no graph artifact.
+- **Affected tickets:** dotfiles issue #753 and the future writer-lease PR.
+- **Disposition:** `ACCEPTED_AND_ACTIVE` — the Wayfinder design is frozen;
+  implementation, review, gates, PR, and landing remain unclaimed.
+- **Topology and ownership:** This task is the sole dotfiles writer in
+  `/Users/rmanaloto/dev/github/ray-manaloto/worktrees/dotfiles-issue-753-writer-lease`
+  on `codex/issue-753-writer-lease`. `/root` remains coordinator. Knowledge-base
+  work stays exclusively in its separate lane.
+
+### Current goal
+
+> Design, implement, validate, ship, and land dotfiles issue #753: a project-native startup and pre-mutation repository ownership lease that identifies the Git common directory, fails closed on a live competing writer, supports content-addressed handoff and audited stale-owner recovery, preserves .omc/ and dirty evidence, and is proven by real hostile two-writer and clean handoff controls.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    F["Freeze design and public seam"] --> T["Real subprocess RED tests"]
+    T --> I["Git-common-dir flock implementation"]
+    I --> H["Hostile two-writer and recovery replay"]
+    H --> V["Independent review and full gates"]
+    V --> P["Ship PR and mirror exact visuals"]
+    P --> L["Land; verify clean synchronized main"]
+```
+
+## 2026-08-14 — promote the Codex native hook to the enforcement boundary
+
+- **Iteration ID:** `dotfiles-goal-20260814-006`
+- **Prior goal digest:** `sha256:09a7817194767104656947976c06e0a6abda9911eec6089d07698273d3fd9944`
+- **Current goal digest:** `sha256:e1c57ba574fd51956530556620e6c4b1945a612af64c2cdd0bc5cda363ccb8f0`
+- **Changed requirement:** Replace explicit/manual Codex pre-mutation checks as
+  the acceptance boundary with the installed Codex 0.147.0 native synchronous
+  `PreToolUse` hook. It must intercept Bash and apply-patch calls for Desktop
+  tasks and fallback subagents and deny a non-owner before execution.
+- **Reason:** An advisory flock only excludes cooperating processes; prose or
+  an optional check cannot intercept a raw Codex filesystem tool. The issue
+  requires executable Desktop and fallback-subagent integration.
+- **Evidence:** `codex features list` reports stable hooks. The current official
+  Hooks reference confirms Bash/unified-exec/apply-patch coverage, synchronous
+  pre-execution denial, `Edit|Write` aliases, and parent session IDs for
+  subagents. A hostile linked-worktree control wrote its probe, and pinned
+  Codex 0.147.0 source explains that linked worktrees intentionally load hook
+  declarations from the canonical root checkout. Certification therefore runs
+  from an independent temporary clone of the committed candidate.
+- **Affected tickets:** dotfiles issue #753 and its writer-lease PR.
+- **Disposition:** `ACCEPTED_AND_ACTIVE` — native hook integration and local
+  subprocess controls are green; independent-clone Codex replay, reviews,
+  gates, ship, and land remain unclaimed.
+- **Topology and ownership:** `/root/dotfiles_753_writer_lease` remains the sole
+  dotfiles writer in the registered issue #753 worktree; `/root` coordinates.
+  The certification clone is disposable test input and never a work lane.
+
+### Current goal
+
+> Complete dotfiles issue #753 by landing a Git-common-dir flock lease with canonical receipts, native Codex and Claude pre-mutation hook enforcement, exact-digest handoff and recovery, real hostile subscription-authenticated Codex replay, synchronized visual documentation, independent review, full gates, and clean remote-main landing.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    H["Coordinator sends START + handoff digest"] --> A["Task acquires native flock lease"]
+    A --> C["Codex or Claude PreToolUse intercepts mutation"]
+    C --> Q{"Live task and worktree identity match?"}
+    Q -->|"no"| D["Deny before tool execution"]
+    Q -->|"yes"| W["Allow bounded mutation"]
+    W --> V["Real-process tests + independent-clone Codex replay"]
+    V --> R["Independent reviews + full gates"]
+    R --> P["Ship, mirror diagrams, land, verify clean main"]
+```
+
+## 2026-08-14 — harden the writer lease after hostile review
+
+- **Iteration ID:** `dotfiles-goal-20260814-007`
+- **Prior goal digest:** `sha256:e1c57ba574fd51956530556620e6c4b1945a612af64c2cdd0bc5cda363ccb8f0`
+- **Current goal digest:** `sha256:ccdb0f73970ca88baae2f85974abc81986aa83149abc1c1b336570930fa1bccd`
+- **Changed requirement:** Keep issue #753 blocked after both frozen reviews found
+  eight executable bypasses. Bind the receipt to the actual lock holder, make
+  every state path private and no-follow, publish validated state atomically,
+  pin bootstrap execution, track in-flight mutations through PostToolUse,
+  derive transfer type from audit facts, cover Claude Bash, and preserve all
+  dirty and `.omc/` evidence byte-for-byte.
+- **Reason:** A cooperative flock and startup-only check could still report a
+  false owner, follow hostile filesystem objects, publish partial state, run a
+  PATH-substituted command, or transfer while an earlier Bash tool could still
+  write. Those behaviors violate the single-writer acceptance boundary.
+- **Evidence:** The first frozen hostile replay produced seven RED cases and one
+  preservation control. The v1 lease state was retained at
+  `/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.git/codex-writer-lease-v1-preserved-007acb42`.
+  The replacement uses a live token challenge plus lock record, private regular
+  no-follow files, immutable content-addressed generations, validated canonical
+  audit, audit-derived transitions, pinned Pre/Post hook runners, and an exact
+  in-flight tool-ID ledger. Nineteen real-process controls now cover the review
+  findings; independent review, live Codex replay, full gates, ship, and land
+  remain unclaimed.
+- **Affected tickets:** dotfiles issue #753 and its writer-lease PR.
+- **Disposition:** `ACCEPTED_AND_ACTIVE` — review findings are implemented;
+  second frozen review is the next gate.
+- **Topology and ownership:** `/root/dotfiles_753_writer_lease` remains the sole
+  writer in the registered issue #753 worktree. `/root` coordinates and owns
+  reviewer dispatch after the writer freezes the exact diff.
+
+### Current goal
+
+> Complete dotfiles issue #753 by landing a challenge-bound Git-common-dir lease with private transactional content-addressed state, audit-derived transfer, native Codex and Claude Pre/PostToolUse in-flight drain, exact pinned bootstrap, real hostile and subscription-authenticated Codex replay, synchronized visual documentation, independent review, full gates, and clean remote-main landing.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    S["Pinned START + handoff digest"] --> H["Challenge-bound holder + private atomic generation"]
+    H --> PRE["Codex or Claude PreToolUse records exact tool ID"]
+    PRE --> M["Real mutation runs"]
+    M --> POST["PostToolUse or write_stdin completion drains tool ID"]
+    POST --> D{"Validated audit permits transfer?"}
+    D -->|"released"| T["Derive clean handoff"]
+    D -->|"dead holder, no in-flight tools"| R["Derive recovery"]
+    D -->|"unsafe or active"| X["Fail closed"]
+    T --> V["Hostile tests, dual review, live Codex replay"]
+    R --> V
+    V --> L["Full gates, ship, land, verify clean main"]
+```
+
+## 2026-08-14 — bound state growth and drain failed tools
+
+- **Iteration ID:** `dotfiles-goal-20260814-008`
+- **Prior goal digest:** `sha256:ccdb0f73970ca88baae2f85974abc81986aa83149abc1c1b336570930fa1bccd`
+- **Current goal digest:** `sha256:17f5b65417b9cf0d13291a0223ecdb734b1a2680aa2c625a22635673c091c65f`
+- **Changed requirement:** Keep the second freeze blocked until immutable state
+  has bounded retention, Claude failed tools drain through
+  `PostToolUseFailure`, and the branch-write plus token-uniqueness verification
+  contracts remain green after the new integration.
+- **Reason:** Retaining a complete audit in every immutable generation made
+  cumulative disk use quadratic. A failed Claude Bash call emitted a different
+  lifecycle event and could strand its in-flight ID forever. The integration
+  also changed one branch-guard call-site token and introduced duplicate
+  tokens, weakening existing verification even while focused tests passed.
+- **Evidence:** The hostile controls now run 32 real Pre/Post pairs and require
+  one retained generation, 65 canonical audit events, less than 128 KiB of
+  state, no reclaim tombstones, and under 30 seconds. A real `/bin/sh` rc=23
+  lifecycle drains via `PostToolUseFailure` and then proves both clean handoff
+  and crash recovery. `dotfiles-setup token-audit` reports no binding problems.
+- **Affected tickets:** dotfiles issue #753 and its writer-lease PR.
+- **Disposition:** `ACCEPTED_AND_ACTIVE` — implementation and focused controls
+  are green; full gates and the third frozen dual review remain unclaimed.
+- **Topology and ownership:** `/root/dotfiles_753_writer_lease` remains the sole
+  writer; `/root` owns reviewer dispatch after the new manifest freeze.
+
+### Current goal
+
+> Complete dotfiles issue #753 by landing a challenge-bound Git-common-dir lease with private transactional state, one retained content-addressed generation carrying the full canonical audit, audit-derived transfer, native Codex and Claude Pre/Post/failure in-flight drain, exact pinned bootstrap, real hostile and subscription-authenticated Codex replay, synchronized visual documentation, independent review, full gates, and clean remote-main landing.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    PRE["PreToolUse records exact tool ID"] --> RUN["Mutation runs"]
+    RUN --> OK["PostToolUse drains success"]
+    RUN --> FAIL["PostToolUseFailure drains failure"]
+    OK --> PUB["Publish one durable current generation with full audit"]
+    FAIL --> PUB
+    PUB --> GC["Atomically rename and reclaim superseded generations"]
+    GC --> XFER{"Validated audit and in-flight set permit transfer?"}
+    XFER -->|"yes"| REVIEW["Full gates and dual frozen review"]
+    XFER -->|"no"| DENY["Fail closed; preserve evidence"]
+    REVIEW --> LIVE["Post-commit native Codex clone replay"]
+    LIVE --> LAND["Ship, land, verify clean main"]
+```
+
+## 2026-08-14 — anchor cleanup and make completion race-safe
+
+- **Iteration ID:** `dotfiles-goal-20260814-009`
+- **Prior goal digest:** `sha256:17f5b65417b9cf0d13291a0223ecdb734b1a2680aa2c625a22635673c091c65f`
+- **Current goal digest:** `sha256:81f81ed9945e7e51defe002a9d104dcf1a8a59fefa8f150954bfba9858385535`
+- **Changed requirement:** Keep the third freeze blocked until generation
+  reclaim is anchored to a validated directory descriptor, cleanup failures
+  after state publication become non-denying typed debt, and completion plus
+  release tolerate bounded state-lock overlap.
+- **Reason:** Path validation followed by later path deletion retains a
+  parent-swap race. Raising from cleanup after `current` was durably switched
+  falsely denied a tool whose `tool_started` had already committed, stranding
+  its in-flight ID. Nonblocking completion could lose an ordinary concurrent
+  state transaction and create the same strand.
+- **Evidence:** Real controls rename the state directory, replace its old path
+  with a symlink to an external byte victim, and prove descriptor-relative
+  reclaim touches only the originally opened directory. A malformed reclaim
+  remains byte-identical typed debt while start and finish both return allow.
+  Twenty-four alternating success/failure completions and holder release pass
+  while independent processes repeatedly hold the real state lock.
+- **Affected tickets:** dotfiles issue #753 and its writer-lease PR.
+- **Disposition:** `ACCEPTED_AND_ACTIVE` — the construction controls are green;
+  full staged-checkout gates and the fourth frozen dual review remain unclaimed.
+- **Topology and ownership:** `/root/dotfiles_753_writer_lease` remains sole
+  writer; `/root` owns reviewer dispatch after exact manifest freeze.
+
+### Current goal
+
+> Complete dotfiles issue #753 by landing a challenge-bound Git-common-dir lease with private transactional state, directory-FD-anchored no-follow reclamation, non-denying typed cleanup debt, bounded synchronous completion and release lock retry, native Codex and Claude success/failure drain, exact pinned bootstrap, real hostile and subscription-authenticated Codex replay, synchronized visual documentation, independent review, full gates, and clean remote-main landing.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    P["Publish and validate current generation"] --> FD["Retain validated state directory fd"]
+    FD --> GC["Relative no-follow rename, unlink, rmdir"]
+    GC -->|"success"| CLEAN["One current generation"]
+    GC -->|"failure after commit"| DEBT["Typed cleanup_debt; do not deny tool"]
+    PRE["Tool start committed"] --> RUN["Mutation succeeds or fails"]
+    RUN --> RETRY["Bounded state-lock retry"]
+    RETRY --> FINISH["Exact tool ID drained"]
+    FINISH --> RELEASE["Release retries; audited handoff"]
+    CLEAN --> REVIEW["Staged full gates and dual review"]
+    DEBT --> REVIEW
+    RELEASE --> REVIEW
+    REVIEW --> LIVE["Post-commit native Codex clone replay"]
+```
+
+## 2026-08-14 — bind identity tools across host and container
+
+- **Iteration ID:** `dotfiles-goal-20260814-010`
+- **Prior goal digest:** `sha256:81f81ed9945e7e51defe002a9d104dcf1a8a59fefa8f150954bfba9858385535`
+- **Current goal digest:** `sha256:a48581d1664abbc3f0a34660ff5d7e6bb377f34a1e5bda1a5fd396e0462e194c`
+- **Changed requirement:** Keep publication blocked until repository identity,
+  bootstrap, and runner executables are explicit and valid on both macOS and
+  the supported devcontainer without admitting ambient `PATH` selection.
+- **Reason:** The first canonical `ship` reached the real amd64 container and
+  found that `/usr/bin/git` does not exist there. Continuing exposed two
+  adjacent host-only assumptions: mise under `~/.local/bin` and the project
+  environment under `python/.venv`.
+- **Evidence:** The Git path is now derived from the one `conda:git` entry in
+  the tracked `.devcontainer/mise-system.lock`, resolved once, and checked as
+  a regular executable. A hostile lock with that authority removed fails
+  closed. Host and real supported-container writer suites both pass 27 tests;
+  the container executes the exact locked Git binary. Mise and project Python
+  use finite absolute host/container contracts and never search ambient PATH.
+- **Affected tickets:** dotfiles issue #753 and its writer-lease PR.
+- **Disposition:** `ACCEPTED_AND_ACTIVE` — focused host/container controls are
+  green; full gates and a new two-axis frozen review remain required.
+- **Topology and ownership:** `/root/dotfiles_753_writer_lease` remains sole
+  writer in the canonical checkout during the proven ship path; `/root` owns
+  reviewer dispatch after the new freeze.
+
+### Current goal
+
+> Complete dotfiles issue #753 by landing a challenge-bound Git-common-dir lease with private transactional state, lock-derived host/container Git and explicit mise/Python toolchain paths, directory-FD-anchored no-follow reclamation, non-denying typed cleanup debt, bounded synchronous completion and release lock retry, native Codex and Claude success/failure drain, real hostile and subscription-authenticated Codex replay, synchronized visual documentation, independent review, full gates, and clean remote-main landing.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    LOCK["Tracked mise-system.lock"] --> GIT["Exact absolute container Git"]
+    MAC["macOS /usr/bin/git"] --> ID["Repository identity"]
+    GIT --> ID
+    ID --> LEASE["Challenge-bound writer lease"]
+    MISE["Explicit host/container mise"] --> BOOT["Exact bootstrap"]
+    PY["Explicit project Python"] --> HOOK["Native hook runner"]
+    BOOT --> LEASE
+    HOOK --> LEASE
+    LEASE --> TEST["Host plus real amd64 controls"]
+    TEST --> REVIEW["Full gates and dual frozen review"]
+    REVIEW --> SHIP["Ship, land, restore clean main"]
+```
+
+## 2026-08-14 — make the identity executable platform-exclusive
+
+- **Iteration ID:** `dotfiles-goal-20260814-011`
+- **Prior goal digest:** `sha256:a48581d1664abbc3f0a34660ff5d7e6bb377f34a1e5bda1a5fd396e0462e194c`
+- **Current goal digest:** `sha256:9cb91c80d06dead79e355a7243a7773e95600b2de4a647cc0d0d64610b1c37d9`
+- **Changed requirement:** Select exactly one repository-identity Git per
+  platform: Darwin only `/usr/bin/git`; Linux only the conda-Git path derived
+  from the tracked image lock. Never try the other platform's candidate.
+- **Reason:** The lifecycle review accepted the frozen lease state machine, but
+  the storage review reproduced a P1: the ordered host/container candidate
+  list let Linux accept `/usr/bin/git` if present, bypassing its tracked lock
+  authority.
+- **Evidence:** Real-file hostile controls install executable host and locked
+  candidates under an isolated filesystem root. Linux selects the locked
+  candidate while the hostile `/usr/bin/git` exists; Darwin rejects a wrong
+  host path even while the Linux candidate exists. The complete writer suite
+  passes 29 tests on macOS and the supported amd64 container, whose resolved
+  executable is `/usr/local/share/mise/installs/conda-git/2.55.0/bin/git`.
+- **Affected tickets:** dotfiles issue #753 and its writer-lease PR.
+- **Disposition:** `ACCEPTED_AND_ACTIVE` — the P1 is locally green; full gates
+  and a narrow independent exact-head re-review remain required before ship.
+- **Topology and ownership:** `/root/dotfiles_753_writer_lease` is the sole
+  canonical writer; `/root` dispatches the narrow reviewer after freeze.
+
+### Current goal
+
+> Complete dotfiles issue #753 by landing a challenge-bound Git-common-dir lease with platform-exclusive identity tools (Darwin /usr/bin/git; Linux lock-derived conda Git), explicit mise/Python paths, private transactional state, directory-FD-anchored cleanup, bounded drain and release, native Codex and Claude enforcement, hostile and subscription-authenticated replay, synchronized visual documentation, independent review, full gates, and clean remote-main landing.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    OS{"Runtime platform"}
+    OS -->|"Darwin"| MAC["Only /usr/bin/git"]
+    OS -->|"Linux"| LOCK["Read tracked mise-system.lock"]
+    LOCK --> CGIT["Only locked conda Git"]
+    MAC --> ID["Resolve Git common directory"]
+    CGIT --> ID
+    ID --> LEASE["Challenge-bound writer lease"]
+    LEASE --> HOST["29 hostile host controls"]
+    LEASE --> AMD["29 real amd64 controls"]
+    HOST --> GATES["Full gates and narrow review"]
+    AMD --> GATES
+    GATES --> SHIP["Native replay, ship, land"]
+```
