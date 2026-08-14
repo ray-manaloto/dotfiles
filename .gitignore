@@ -51,7 +51,8 @@ mise.*.local.toml
 .omx/
 
 # Codex CLI temporary state
-.codex/
+.codex/*
+!.codex/hooks.json
 
 # Logging
 .logging/

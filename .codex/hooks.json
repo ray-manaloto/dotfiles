@@ -1,0 +1,31 @@
+{
+  "description": "Repository writer-lease enforcement for Codex tasks and subagents (#753).",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^(Bash|Edit|Write)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/bin/python3 -I -S \"$(/usr/bin/git -C \"$(/bin/pwd -P)\" rev-parse --show-toplevel)/scripts/writer-lease-hook-runner.py\"",
+            "timeout": 10,
+            "statusMessage": "Checking repository writer lease"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "^(Bash|Edit|Write)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/bin/python3 -I -S \"$(/usr/bin/git -C \"$(/bin/pwd -P)\" rev-parse --show-toplevel)/scripts/writer-lease-hook-runner.py\"",
+            "timeout": 10,
+            "statusMessage": "Draining repository writer lease mutation"
+          }
+        ]
+      }
+    ]
+  }
+}

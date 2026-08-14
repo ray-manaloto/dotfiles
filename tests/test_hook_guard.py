@@ -147,7 +147,9 @@ def test_pretooluse_emits_deny_json(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setattr(
-        hook_guard, "_read_payload", lambda: ("Bash", {"command": "gh pr create"})
+        hook_guard,
+        "_read_payload",
+        lambda: ("Bash", {"command": "gh pr create"}, {}),
     )
     assert hook_guard.pretooluse_main() == 0
     out = capsys.readouterr().out
@@ -159,7 +161,9 @@ def test_pretooluse_silent_on_allowed(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setattr(
-        hook_guard, "_read_payload", lambda: ("Bash", {"command": "git status"})
+        hook_guard,
+        "_read_payload",
+        lambda: ("Bash", {"command": "git status"}, {}),
     )
     assert hook_guard.pretooluse_main() == 0
     assert capsys.readouterr().out == ""
