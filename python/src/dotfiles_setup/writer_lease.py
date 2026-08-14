@@ -13,6 +13,7 @@ import errno
 import fcntl
 import functools
 import hashlib
+import hmac
 import json
 import os
 import pwd
@@ -253,12 +254,24 @@ class _HolderServer:
                     raw = connection.recv(4096)
                     payload = json.loads(raw)
                     nonce = payload.get("nonce") if isinstance(payload, dict) else None
-                    if not isinstance(nonce, str) or not nonce:
+                    presented = (
+                        payload.get("holder_token")
+                        if isinstance(payload, dict)
+                        else None
+                    )
+                    if (
+                        not isinstance(nonce, str)
+                        or not nonce
+                        or not isinstance(presented, str)
+                    ):
                         continue
                     connection.sendall(
                         _canonical_bytes(
                             {
-                                "holder_token": self._holder_token,
+                                "match": hmac.compare_digest(
+                                    presented.encode("utf-8"),
+                                    self._holder_token.encode("utf-8"),
+                                ),
                                 "nonce": nonce,
                                 "schema": SCHEMA,
                             }
@@ -1480,13 +1493,15 @@ def _challenge_holder(port: int, token: str) -> bool:
         with socket.create_connection(
             ("127.0.0.1", port), timeout=_CHALLENGE_TIMEOUT_SECONDS
         ) as connection:
-            connection.sendall(_canonical_bytes({"nonce": nonce}) + b"\n")
+            connection.sendall(
+                _canonical_bytes({"holder_token": token, "nonce": nonce}) + b"\n"
+            )
             connection.settimeout(_CHALLENGE_TIMEOUT_SECONDS)
             raw = connection.recv(4096)
         payload = json.loads(raw)
     except json.JSONDecodeError, OSError:
         return False
-    return payload == {"holder_token": token, "nonce": nonce, "schema": SCHEMA}
+    return payload == {"match": True, "nonce": nonce, "schema": SCHEMA}
 
 
 def _holder_is_live(state_dir: Path, snapshot: StateSnapshot) -> bool:
@@ -1687,10 +1702,15 @@ def hold(cwd: Path, *, request: LeaseRequest) -> int:
             request,
             HolderEndpoint(holder_token, server.port),
         )
+        public_receipt = {
+            key: value
+            for key, value in snapshot.receipt.items()
+            if key not in {"holder_port", "holder_token"}
+        }
         sys.stdout.write(
             _canonical_bytes(
                 {
-                    "receipt": snapshot.receipt,
+                    "receipt": public_receipt,
                     "receipt_sha256": snapshot.receipt_sha256,
                     "status": "held",
                 }

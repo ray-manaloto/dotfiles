@@ -34,6 +34,7 @@ live lease for this Git common directory:
 On Darwin, resolve the current account's `$HOME` once and substitute its
 literal absolute value for `<absolute-home>` before invocation. Do not leave
 `$HOME`, `~`, `env`, or a `PATH` lookup in the executed bootstrap command.
+No other mise location is accepted on either platform.
 
 For a manual cooperative control, `mise run writer-lease-check -- --task-id
 <same-id> --handoff-sha256 <same-digest>` verifies the holder challenge,

@@ -113,8 +113,9 @@ fixed argv and minimal fixed environment. Bridge failure returns a structured
 deny/stop instead of becoming an unobserved skipped hook.
 
 Before a lease exists, Codex allows only a content-checked bootstrap shape:
-the current account's resolved literal `<absolute-home>/.local/bin/mise`, exact
-`-C <worktree>`, exact task,
+the current account's resolved literal `<absolute-home>/.local/bin/mise` on
+the host or `/usr/local/bin/mise` in the devcontainer, exact `-C <worktree>`,
+exact task,
 session-bound owner, ordered known flags, and valid lowercase digests. `env`,
 PATH overrides, bare `mise`, extra flags, and compound commands are denied.
 
