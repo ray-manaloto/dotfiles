@@ -36,6 +36,12 @@ Therefore the recommended order is:
 
 OpenAI's subagent documentation describes spawned agents as separate background work with isolated context and a parent-facing activity surface, not as peer sidebar tasks ([official Subagents documentation](https://learn.chatgpt.com/docs/agent-configuration/subagents)). The installed Desktop tool definition separately states that all sidebar tasks are peers even when delegated.
 
+### Post-landing evidence update (2026-08-14)
+
+The official Subagents page now makes plane A explicit: **Current local Codex releases enable subagent workflows by default**; in Desktop, each subagent thread is inspectable from activity under the main task, while the main thread collects results. It also cautions that parallel write-heavy work can increase conflicts. This supports parent-controlled subagents and inspectable agent threads. It does not establish that independent sidebar-task tools are exposed in every task, so the current callable tool catalog remains the routing authority.
+
+A reviewed screenshot from the user-supplied [Reddit post](https://www.reddit.com/r/codex/comments/1v28n91/codex_threads_can_communicate_with_each_other/) was verified locally at `/private/tmp/codex-thread-communication.png`, SHA-256 `cc4411af0b12b75daa23b82dbee63f646f31e3b354742d7961f08f3ecae81c30`. It shows separate root chats exchanging messages labeled `Sent by Codex from another chat` while coordinating exact file ownership, freeze, and handoff. This is **non-authoritative empirical evidence** that native peer messaging works when exposed. It does not prove universal exposure, automatic peer discovery, cross-task goal control, or safe concurrent writes.
+
 ## Native Desktop task tools on this installation
 
 The installed bundle `/Applications/ChatGPT.app/Contents/Resources/app.asar` has SHA-256:
@@ -139,6 +145,14 @@ No external `thread/resume`, `turn/start`, `turn/steer`, or injection was attemp
 
 During this run the parent sent a directed status probe with internal `send_message`. This research agent received it immediately and acknowledged it back before continuing. That controlled replay establishes real-time bidirectional messaging inside the current agent tree. This is distinct from Desktop's peer task tools.
 
+On 2026-08-14, the post-#755 implementation task inspected its current callable
+catalog. The collaboration plane exposed spawn, directed message, follow-up,
+census, and wait operations; the Desktop create/list/read/send/wait thread tools
+were not callable in that task. `create_goal` was callable for the current task,
+not as a cross-task mutation primitive. The correct live route for that task was
+therefore plane A. This observation is contextual and cannot be generalized from
+its `gpt-5.6` model slug to another task.
+
 ### 4. The two-repository migration is live
 
 After the controlled probe, the two independent Desktop goals were confirmed
@@ -241,6 +255,40 @@ An active goal can automatically continue an idle task, but only while the ownin
 
 Scheduled tasks can return to an existing chat and support minute-based intervals for active follow-up loops. Local project schedules require the computer awake and Desktop running ([official Scheduled tasks documentation](https://learn.chatgpt.com/docs/automations)). This can provide a periodic watchdog when no live coordinator is available, but it is slower, creates scheduled turns, and is not event-driven. There is no separate heartbeat primitive in the App Server protocol.
 
+## Recovery-vault-first missing-file lookup
+
+The current machine's configured recovery vault is
+`/Users/rmanaloto/.codex/archives/repo-recovery/20260813T195951Z`. Its path is a
+machine-local default, not a portable repository location; fail clearly when it
+is absent. Before trusting its index, verify all four sidecars:
+
+```bash
+recovery_vault=/Users/rmanaloto/.codex/archives/repo-recovery/20260813T195951Z
+(
+  cd "$recovery_vault/manifests" &&
+    shasum -a 256 -c \
+      pre-freeze-inventory.json.sha256 \
+      dirty-snapshots.json.sha256 \
+      git-bundles.json.sha256 \
+      vault-refs.json.sha256
+)
+```
+
+Use `jq` on those manifests to select a candidate by `source_path`, `branch`,
+`head`, `vault_ref`, and `snapshot_commit`. Search names without restoring:
+
+```bash
+git_vault="$recovery_vault/git-vault/preservation.git"
+git --git-dir="$git_vault" ls-tree -r --name-only <ref> |
+  rg --fixed-strings -- <fragment>
+git --git-dir="$git_vault" show <ref>:<path>
+```
+
+Inspect only the selected blob. Do not run restore drills, checkout, decrypt,
+extract, or bulk restore during lookup. A Git-vault miss means only **not found in indexed Git snapshots**.
+Encrypted-only material requires explicit targeted-restore authority; a
+coordinator cannot widen read-only lookup into a restore by inference.
+
 ## Recommended architecture
 
 ### Preferred: one user-owned coordinator plus two user-owned worker tasks
@@ -280,6 +328,34 @@ Do not keep trying to attach another app-server. Use the currently callable inte
 
 Tradeoff: this topology provides the best live communication now, but it is session-scoped and the two workers no longer appear as independent sidebar tasks. If long-lived sidebar continuity matters more, the correct fix is to expose the native Desktop task tools to the coordinator task—not to build a competing app-server writer.
 
+### Successor dispatch at a durable ticket boundary
+
+A completed Wayfinder ticket or explicit ownership transfer is the narrow point
+where a fresh worker can improve recovery. It is not a reason to create a new
+task for a test, review, transient blocker, or every workflow step.
+
+The portable protocol is authoritative in the
+[`codex-task-orchestration` skill](../../../../.agents/skills/codex-task-orchestration/SKILL.md#4-transfer-a-completed-wayfinder-ticket).
+Its canonical payload is the UTF-8, no-trailing-newline JSON object whose six
+string keys are ordered `first_action`, `issue`, `milestone`, `ownership`,
+`return_channel`, `sha`, with compact `,` and `:` separators. SHA-256 binds
+those exact bytes.
+
+The corrected transfer has three non-overlapping phases. First, the successor
+independently echoes the digest, checkout, goal, and inherited fields while
+remaining read-only. Second, the predecessor relinquishes and explicitly
+confirms it is idle and owns no writes. Third, the coordinator sends a separate
+start signal. Creation or spawn never grants ownership, and acknowledgement
+never overlaps writers.
+
+Tool availability is operation-specific. Existing Desktop peers need only the
+list/read/send/wait operations actually used; missing `create_thread` is not a
+reason to abandon them. At a fresh-successor boundary, precedence is existing
+named peer, explicitly requested new visible task when creation is callable,
+fresh bounded subagent, then a suitable completed/idle agent reused through
+`followup_task` if spawning hits the thread limit. Active writers are never
+reused. With no eligible successor, the predecessor remains authoritative.
+
 ## Risks and non-solutions
 
 - **Deleting `.lock` files:** unsafe. The lock file's existence is not ownership; the kernel lock held by Desktop is. Removing it can defeat coordination and permit concurrent rollout writers.
@@ -299,5 +375,11 @@ Tradeoff: this topology provides the best live communication now, but it is sess
 - [Official Codex SDK documentation](https://learn.chatgpt.com/docs/codex-sdk)
 - [OpenAI Codex source, pinned installed release commit](https://github.com/openai/codex/tree/be6e8eac029b183056b7e4402879f15d2c85f61b)
 - Installed Desktop bundle and generated `0.147.0-alpha.6.5` protocol schemas under `/Applications/ChatGPT.app/Contents/Resources/` and `/tmp/codex-desktop-schema-20260813/`
+- [User-supplied Reddit observation](https://www.reddit.com/r/codex/comments/1v28n91/codex_threads_can_communicate_with_each_other/) — secondary, non-authoritative, screenshot hash recorded above.
 
-No secondary articles were used.
+Official documentation, pinned source, and the installed bundle remain authority.
+The Reddit screenshot is retained only as bounded empirical corroboration.
+
+## GitHub repos touched
+
+- [openai/codex](https://github.com/openai/codex) — pinned App Server, writer-lock, goal-runtime, and installed-release source evidence.

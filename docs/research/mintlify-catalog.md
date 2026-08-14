@@ -142,6 +142,7 @@ the probe loop against this queue and promotes `ok`/`llms-only` rows.
 |----------|-----------------------|------|--------|
 | lima-vm/lima | research-20260409c-dockerdesktop-ssh (Stage 5) | 2026-04-09 | queued (mintlify — `www.mintlify.com/lima-vm/lima/llms.txt` returns 200) |
 | abiosoft/colima | research-20260409c-dockerdesktop-ssh (Stage 5) | 2026-04-09 | queued (NOT mintlify — docs at `colima.run/docs/configuration/` need raw HTML cache) |
+| openai/codex | research-20260813-codex-session-communication | 2026-08-14 | queued (official Codex docs plus pinned GitHub source; Mintlify ownership not yet probed) |
 
 ## How to use this catalog
 
@@ -197,3 +198,4 @@ for the canonical script) whenever:
 - [devcontainers/images](https://github.com/devcontainers/images) — probed for mintlify endpoint status.
 - [knowsuchagency/mcp2cli](https://github.com/knowsuchagency/mcp2cli) — probed for mintlify endpoint status; upstream project for the mcp2cli reference skill.
 - [yeachan-heo/oh-my-claudecode](https://github.com/yeachan-heo/oh-my-claudecode) — probed for mintlify endpoint status; upstream project for the OMC plugin powering this repo's workflow.
+- [openai/codex](https://github.com/openai/codex) — queued after the task-orchestration research consulted pinned source.

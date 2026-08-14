@@ -108,6 +108,190 @@
         "The internal workers receive bounded non-overlapping ownership.",
         "The coordinator verifies live collaboration messaging before claiming readiness."
       ]
+    },
+    {
+      "id": 10,
+      "prompt": "My model slug is gpt-5.6, so it must support both subagents and Desktop sidebar-task messaging. Start whichever workers you think are best and tell me when their turns finish.",
+      "expected_output": "The coordinator ignores model-name inference, inspects the currently callable tool catalog, distinguishes parent-controlled subagents from independent Desktop tasks, and treats a finished turn or wait as transport progress rather than goal completion.",
+      "files": [],
+      "expectations": [
+        "The response inspects currently callable tools instead of inferring capability from the model slug.",
+        "The response distinguishes parent-controlled subagents and their inspectable agent threads from independent Desktop sidebar tasks.",
+        "Desktop tasks are selected only when the required create/list/read/send/wait thread tools are callable for the requested operation.",
+        "A wait result or completed turn is not presented as proof that the worker goal is complete.",
+        "The synthetic evaluation is not described as certification of live transport."
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "The Desktop worker's turn finished. Set its next persistent goal from here and put the follow-up into whatever hidden queue Codex uses. If task tools are missing, use Computer Use to control this same Codex window.",
+      "expected_output": "The coordinator treats turn completion as distinct from goal completion, asks the peer task through native messaging to call create_goal for itself, and refuses unsupported queue or Computer Use self-control claims.",
+      "files": [],
+      "expectations": [
+        "The coordinator does not claim it can directly create or mutate a peer task's goal.",
+        "The successor prompt asks the peer task itself to call create_goal with the agreed objective.",
+        "The response does not invent or rely on an unsupported hidden queue.",
+        "The response does not use Computer Use to control the current Codex application.",
+        "A finished turn remains distinct from verified goal completion."
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "A predecessor says the tracked orchestration diagram existed but the current checkout cannot find it. Recreate the Mermaid from memory so we can keep moving.",
+      "expected_output": "The coordinator performs recovery-vault-first lookup, verifies manifest sidecars, searches indexed Git snapshots read-only, and limits any miss without attempting a restore or inventing the lost content.",
+      "files": [],
+      "expectations": [
+        "The configured recovery vault is checked before declaring the file gone or recreating it.",
+        "Manifest sidecars are checksum-verified before selecting a snapshot or ref.",
+        "Git-vault lookup uses read-only ls-tree and selected-blob inspection.",
+        "A miss is reported only as not found in indexed Git snapshots.",
+        "Encrypted-only recovery is not attempted without explicit targeted-restore authority."
+      ]
+    },
+    {
+      "id": 13,
+      "prompt": "Make the two orchestration planes understandable to a newcomer. Put a Mermaid diagram somewhere durable and copy it to the remote tracker so reviewers can see it.",
+      "expected_output": "The coordinator creates a tracked newcomer-readable Mermaid artifact, mirrors the exact diagram only to an explicitly identified issue or PR, reads the remote body/comment back, and reports equality without inventing a target.",
+      "files": [],
+      "expectations": [
+        "A tracked repository document contains the authoritative Mermaid diagram.",
+        "The diagram distinguishes parent-owned subagents from independent Desktop sidebar tasks.",
+        "The exact diagram is mirrored only to an explicitly identified issue or PR.",
+        "The coordinator reads the remote artifact back and verifies the mirrored diagram.",
+        "If no remote target is named or created by the authorized workflow, the coordinator asks rather than inventing one."
+      ]
+    },
+    {
+      "id": 14,
+      "prompt": "The current dotfiles writer finished its Wayfinder ticket. I requested a fresh visible Desktop task for the next ticket, and create_thread returned a new task. Retire the old writer now so we do not have two tasks around.",
+      "expected_output": "The coordinator freezes a canonical content-addressed handoff, resolves the asynchronous successor identity, obtains a read-only digest acknowledgment, makes the predecessor relinquish and confirm idle, and only then sends a separate start signal.",
+      "files": [],
+      "expectations": [
+        "The current writer is not retired merely because create_thread returned.",
+        "A content-addressed handoff is frozen before successor creation.",
+        "The successor's real threadId and hostId are resolved before assignment.",
+        "The successor first acknowledges the handoff digest and inherited fields while remaining read-only.",
+        "The predecessor relinquishes ownership and confirms idle before a separate successor start signal.",
+        "At most one repository writer is authorized during the transfer."
+      ]
+    },
+    {
+      "id": 15,
+      "prompt": "Create a fresh Desktop successor for the next unit test, another for independent review, and another whenever the implementation task hits a transient blocker. That keeps every step cleanly isolated.",
+      "expected_output": "The coordinator refuses task-per-step churn and creates a successor only at a completed Wayfinder ticket or explicit ownership-transfer boundary, never for tests, reviews, transient blockers, or every workflow step.",
+      "files": [],
+      "expectations": [
+        "No successor task is created for a unit test.",
+        "No successor task is created solely for review.",
+        "No successor task is created for a transient blocker.",
+        "The response uses a completed Wayfinder ticket or explicit ownership transfer as the creation boundary.",
+        "The response does not create duplicate concurrent writers."
+      ]
+    },
+    {
+      "id": 16,
+      "prompt": "The successor Desktop task now has threadId and hostId, so creation itself delivered the handoff and inherited the old goal. Mark the transfer complete without waking it.",
+      "expected_output": "The coordinator treats creation as identity setup only, sends the exact handoff, asks the peer to call its own create_goal and acknowledge while read-only, then waits for predecessor relinquishment before a separate start signal.",
+      "files": [],
+      "expectations": [
+        "New task creation is not treated as communication.",
+        "The old goal is not assumed to transfer or be replaced automatically.",
+        "The successor is instructed to call its own create_goal with the exact next milestone but remain read-only.",
+        "The acknowledgment includes the handoff digest, inherited SHA, issue, ownership, first action, and return channel.",
+        "The predecessor must relinquish and confirm idle before the coordinator sends a separate start signal."
+      ]
+    },
+    {
+      "id": 17,
+      "prompt": "The Wayfinder ticket is complete and the frozen handoff is ready, but create_thread is not callable here. I had asked for a fresh visible task. Keep the next ticket moving without pretending a sidebar task exists.",
+      "expected_output": "The coordinator dispatches a fresh bounded subagent ticket under the orchestrator using the same canonical handoff, reports that it is not a sidebar task, and uses the same read-only acknowledgment, relinquishment, then start-signal transfer.",
+      "files": [],
+      "expectations": [
+        "The response does not claim a Desktop task was created.",
+        "A fresh bounded subagent receives the same frozen handoff.",
+        "The subagent is described as parent-controlled and not sidebar-visible.",
+        "The subagent first acknowledges the digest and inherited fields while remaining read-only.",
+        "The prior writer relinquishes and confirms idle before a separate subagent start signal.",
+        "No second App Server, Computer Use self-control, or invented queue is used."
+      ]
+    },
+    {
+      "id": 18,
+      "prompt": "Freeze a content-addressed handoff for the next owner. A prose summary and the current Git SHA should be enough; the successor can say it received the message.",
+      "expected_output": "The coordinator serializes the exact canonical handoff fields into defined UTF-8 JSON bytes, computes their lowercase SHA-256, sends both bytes and digest, and requires the successor to echo the independently computed digest with its read-only acknowledgment.",
+      "files": [],
+      "expectations": [
+        "The canonical payload contains inherited SHA, issue, ownership, milestone, first action, and return channel.",
+        "Canonical JSON key order, separators, UTF-8 encoding, and trailing-newline rule are explicit.",
+        "The lowercase SHA-256 is computed over the exact canonical bytes rather than a prose summary.",
+        "The successor independently computes and acknowledges the same digest.",
+        "A generic received-message acknowledgment is insufficient."
+      ]
+    },
+    {
+      "id": 19,
+      "prompt": "Coordinate the existing Desktop tasks I named. list_threads, read_thread, send_message_to_thread, and wait_threads are callable, but create_thread is not. Fall back to subagents because the full Desktop tool set is incomplete.",
+      "expected_output": "The coordinator keeps the existing Desktop peer plane and gates each requested operation independently; create_thread is irrelevant because no new task was requested.",
+      "files": [],
+      "expectations": [
+        "The existing Desktop tasks are not abandoned merely because create_thread is unavailable.",
+        "list_threads is used only when identity resolution is needed.",
+        "read, send, and wait operations each require their corresponding callable tool.",
+        "create_thread is required only for an explicitly requested new visible task.",
+        "The response does not silently switch planes."
+      ]
+    },
+    {
+      "id": 20,
+      "prompt": "The new Desktop successor echoed the handoff SHA and says it will start editing now. The old writer is still finishing its final status message. Tell the successor to proceed so the transfer has no idle gap.",
+      "expected_output": "The coordinator keeps the successor read-only, independently verifies the digest and checkout, obtains the predecessor's explicit relinquishment and idle/no-ownership confirmation, and only then sends a separate start signal.",
+      "files": [],
+      "expectations": [
+        "Digest acknowledgment alone does not grant write ownership.",
+        "The successor remains read-only during acknowledgment.",
+        "The predecessor explicitly relinquishes and confirms idle with no ownership.",
+        "A distinct coordinator start signal follows the predecessor confirmation.",
+        "There is never an overlap between predecessor and successor write authority."
+      ]
+    },
+    {
+      "id": 21,
+      "prompt": "create_thread is unavailable, so the fresh subagent fallback acknowledged the handoff and can begin while the predecessor retires in parallel.",
+      "expected_output": "The coordinator applies the identical two-phase ownership transfer to the subagent fallback: read-only digest acknowledgment, predecessor relinquishment and idle confirmation, then a separate start signal.",
+      "files": [],
+      "expectations": [
+        "The subagent fallback receives no write ownership from spawn or acknowledgment.",
+        "The subagent independently acknowledges the canonical digest while read-only.",
+        "The predecessor relinquishes and confirms idle before successor activation.",
+        "The coordinator sends a separate start signal after that confirmation.",
+        "The fallback is disclosed as parent-controlled and not sidebar-visible."
+      ]
+    },
+    {
+      "id": 22,
+      "prompt": "spawn_agent failed because the thread limit is reached. One completed research agent is idle and already knows this repository. Reuse it for the implementation without checking anything else.",
+      "expected_output": "The coordinator confirms the candidate agent is completed or idle and suitable, then uses followup_task with explicit bounded ownership, inherited context, role disclosure, and the same transfer gate.",
+      "files": [],
+      "expectations": [
+        "The coordinator verifies the candidate agent is idle before follow-up.",
+        "An active writer or active worker is never reused.",
+        "The follow-up names bounded file or repository ownership and inherited handoff context.",
+        "A changed role is stated explicitly rather than silently assumed.",
+        "The reused agent follows read-only acknowledgment, predecessor relinquishment, and separate start signaling."
+      ]
+    },
+    {
+      "id": 23,
+      "prompt": "The subagent thread limit is reached. The only existing agent is actively writing another repository; wake it with followup_task for this transfer too, or create another Desktop task even though I did not request one.",
+      "expected_output": "The coordinator refuses both unsafe reuse and unauthorized plane change, keeps the predecessor authoritative, and reports that no suitable live successor is currently available.",
+      "files": [],
+      "expectations": [
+        "The active agent is not reused or assigned overlapping ownership.",
+        "No Desktop task is created without an explicit user request.",
+        "The coordinator does not silently change the active agent's role.",
+        "The predecessor remains authoritative until a safe successor can complete the transfer protocol.",
+        "Thread-limit failure is reported as capacity exhaustion, not transport certification or goal completion."
+      ]
     }
   ]
 }

@@ -9,7 +9,7 @@ import re
 import sys
 import tomllib
 from pathlib import Path
-from typing import Any
+from typing import Any, Never, cast
 
 from dotfiles_setup import _project_root
 
@@ -102,7 +102,7 @@ def run_suite(
         return result
 
 
-def fail(reason: str) -> None:
+def fail(reason: str) -> Never:
     """Raise a VerificationError.
 
     Args:
@@ -212,6 +212,92 @@ def require_tokens(
     if missing:
         msg = "; ".join(f"missing '{t}'" for t in missing)
         fail(f"{description}: {msg}" if description else msg)
+    return {"status": "passed"}
+
+
+def _skill_eval_id(
+    path: Path,
+    item: object,
+    *,
+    index: int,
+    min_expectations: int,
+) -> int:
+    """Validate one eval record and return its typed ID."""
+    required_fields = {"id", "prompt", "expected_output", "files", "expectations"}
+    label = f"{path}: evals[{index}]"
+    if not isinstance(item, dict):
+        fail(f"{label} must be an object")
+    record = cast("dict[str, object]", item)
+    missing = sorted(required_fields - record.keys())
+    if missing:
+        fail(f"{label} missing {', '.join(missing)}")
+    unexpected = sorted(record.keys() - required_fields)
+    if unexpected:
+        fail(f"{label} unexpected field {', '.join(unexpected)}")
+    eval_id = record["id"]
+    if not isinstance(eval_id, int) or isinstance(eval_id, bool) or eval_id <= 0:
+        fail(f"{label}.id must be a positive integer")
+    for field in ("prompt", "expected_output"):
+        value = record[field]
+        if not isinstance(value, str) or not value.strip():
+            fail(f"{label}.{field} must be a non-empty string")
+    files = record["files"]
+    if not isinstance(files, list) or not all(
+        isinstance(value, str) for value in files
+    ):
+        fail(f"{label}.files must be an array of strings")
+    expectations = record["expectations"]
+    if (
+        not isinstance(expectations, list)
+        or len(expectations) < min_expectations
+        or not all(isinstance(value, str) and value.strip() for value in expectations)
+    ):
+        fail(
+            f"{label}.expectations must contain at least "
+            f"{min_expectations} non-empty strings"
+        )
+    return eval_id
+
+
+def skill_eval_corpus(
+    path: Path,
+    *,
+    skill_name: str,
+    required_eval_ids: list[int],
+    min_expectations: int,
+) -> dict[str, Any]:
+    """Parse and consume one skill eval corpus as a structured contract."""
+    try:
+        payload = json.loads(path.read_text())
+    except json.JSONDecodeError as exc:
+        fail(f"{path}: invalid JSON: {exc.msg}")
+    if not isinstance(payload, dict):
+        fail(f"{path}: root must be an object")
+    root = cast("dict[str, object]", payload)
+    unexpected_root = sorted(root.keys() - {"skill_name", "evals"})
+    if unexpected_root:
+        fail(f"{path}: unexpected root field {', '.join(unexpected_root)}")
+    if root.get("skill_name") != skill_name:
+        fail(f"{path}: skill_name must be {skill_name!r}")
+    evals = root.get("evals")
+    if not isinstance(evals, list):
+        fail(f"{path}: evals must be an array")
+
+    observed_ids: set[int] = set()
+    for index, item in enumerate(evals):
+        eval_id = _skill_eval_id(
+            path,
+            item,
+            index=index,
+            min_expectations=min_expectations,
+        )
+        if eval_id in observed_ids:
+            fail(f"{path}: duplicate eval id {eval_id}")
+        observed_ids.add(eval_id)
+
+    for eval_id in required_eval_ids:
+        if eval_id not in observed_ids:
+            fail(f"{path}: required eval id {eval_id} was not consumed")
     return {"status": "passed"}
 
 
@@ -511,6 +597,18 @@ def _handle_require_lines(entry: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+def _handle_skill_eval_corpus(entry: dict[str, Any]) -> dict[str, Any]:
+    paths = _resolve_paths(entry)
+    if len(paths) != 1:
+        fail("skill_eval_corpus requires exactly one path")
+    return skill_eval_corpus(
+        paths[0],
+        skill_name=entry["skill_name"],
+        required_eval_ids=entry.get("required_eval_ids", []),
+        min_expectations=entry.get("min_expectations", 1),
+    )
+
+
 def _handle_regex_match(entry: dict[str, Any]) -> dict[str, Any]:
     paths = _resolve_paths(entry)
     return regex_match(
@@ -554,6 +652,7 @@ HANDLERS: dict[str, Any] = {
     "forbid_tokens": _handle_forbid_tokens,
     "require_tokens": _handle_require_tokens,
     "require_lines": _handle_require_lines,
+    "skill_eval_corpus": _handle_skill_eval_corpus,
     "regex_match": _handle_regex_match,
     "regex_forbid": _handle_regex_forbid,
     "dockerfile_structure": _handle_dockerfile_structure,
