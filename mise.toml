@@ -85,7 +85,7 @@ opencode = "1.18.18"
 # container's MISE_IGNORED_CONFIG_PATHS) — the Claude architect stays the chair;
 # these are executor lanes only. Auth is per-user (codex login / Google account).
 codex = "0.147.0"
-antigravity-cli = "1.1.12"
+antigravity-cli = "1.1.13"
 
 [settings]
 experimental = true
