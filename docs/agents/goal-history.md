@@ -637,3 +637,84 @@ flowchart LR
   applies exact platform Git, mise/Python, receipt, and lifecycle validation.
 - New exact host and supported-Linux nested Pre/Post/hostile evidence, full
   gates, narrow lifecycle re-review, publication, and landing remain unclaimed.
+
+## 2026-08-14 — select a complete nested hook runtime and bound audit reads
+
+- **Iteration ID:** `dotfiles-goal-20260814-013`
+- **Prior goal digest:** `sha256:7ccc6ae231339e8b2aeba57b1143ba688e50ce7de95f06f4bf9f38e18f8872c5`
+- **Current goal digest:** `sha256:a7e48b0a98d96773fb524345e4dff662a98ad6ae9b1d4e3ce5c4d71bbacc3eb3`
+- **Changed requirement:** Resolve issue #763's bounded review debt without
+  reopening #760: nested checkouts require one complete regular tracked runtime,
+  missing runtimes block explicitly, the 513-event audit is compared in exact
+  order, and one hook validates no more than 8 MiB of sealed history.
+- **Reason:** A real outer-repository/inner-dotfiles replay reproduced the
+  landed command selecting an unrelated outer marker and exiting `1` before
+  reaching the tracked runner. Official Codex Hooks documentation makes exit
+  `2` or structured output the blocking contract. The 256-pair scale replay
+  also proved complete writes but had not compared exact reconstructed order or
+  bounded cumulative sealed-history reads.
+- **Evidence:** The manual exact-source replay failed at the outer runner path.
+  The public test then went RED and GREEN with exactly one complete
+  runner-plus-entrypoint candidate, including missing, wrong-type, symlink, and
+  ambiguous-complete outer controls. Missing or ambiguous candidates exit `2`.
+  Root and component descriptors bind the executed runner and hook bytes. The real 512-hook replay
+  reconstructs all 513 `(sequence, event, tool ID)` tuples in 77.10 seconds;
+  its actual chunk chain derived 35,822,208 cumulative sealed bytes and 161,662
+  final state bytes. A valid content-addressed 9 MiB hostile chunk now crosses
+  the enforced 8 MiB ceiling and denies without changing state.
+- **Affected tickets:** dotfiles issue #763 and its future delivery PR.
+- **Disposition:** `ACCEPTED_AND_ACTIVE` — root selection, ordered reconstruction,
+  read ceiling, and portable Darwin operator text are focused GREEN. Full host
+  and supported-container gates, two independent reviews, publication, visual
+  read-back, and landing remain unclaimed.
+- **Topology and ownership:** `/root/dotfiles_753_writer_lease` is sole writer
+  in registered worktree `dotfiles-issue-763` on
+  `codex/issue-763-runner-audit`; `/root` coordinates. `.omc/`, knowledge-base,
+  Graphify semantic work, SkillOpt, and #760's landed state machine are excluded.
+
+### Current goal
+
+> Land dotfiles issue #763 by requiring exactly one complete regular runner-bearing hook runtime from nested Codex cwd, descriptor-binding the executed runner and hook bytes, explicitly blocking missing or ambiguous runtimes, proving exact 513-event audit order, enforcing an 8 MiB sealed-history read ceiling, documenting portable Darwin bootstrap paths and measured amplification, preserving #760 lease semantics, passing host/container gates and independent review, and shipping through clean synchronized main.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    CWD["Codex session cwd"] --> WALK["Walk ancestor Git markers"]
+    WALK --> FILTER{"All runtime components plain?"}
+    FILTER -->|"no candidate"| BLOCK["Exit 2 before mutation"]
+    FILTER -->|"exactly one complete"| RUNNER["Descriptor-bound tracked runner bytes"]
+    RUNNER --> LEASE["Existing #760 lease lifecycle"]
+    LEASE --> TAIL["Bounded open audit tail"]
+    TAIL --> CHUNKS["Content-addressed sealed chunks"]
+    CHUNKS --> ADMIT["Fstat against remaining budget"]
+    ADMIT --> LIMIT{"Size-exact read within 8 MiB?"}
+    LIMIT -->|"exceeded"| DENY["Deny without state mutation"]
+    LIMIT -->|"within bound"| ORDER["Compare all 513 ordered events"]
+    ORDER --> GATES["Host plus supported container gates"]
+    GATES --> REVIEW["Two independent exact-head reviews"]
+    REVIEW --> SHIP["Ship, mirror visuals, land clean main"]
+```
+
+#### Independent review corrections
+
+- The first exact-freeze lifecycle review reproduced an enclosing repository
+  whose `scripts/` and `python/` parents were symlinks. Leaf-only checks selected
+  that redirected runtime before lease enforcement. The public Pre/Post replay
+  now uses hostile redirected code and proves that parent-directory and `.git`
+  symlinks are rejected while the inner holder starts and drains normally.
+- The first storage review proved the initial ceiling counted bytes only after
+  reading a complete chunk. The reader now admits descriptor size against the
+  remaining 8 MiB budget before a size-exact read and revalidates the descriptor;
+  an oversized content-addressed chunk is denied without reading to EOF or
+  mutating state.
+- Both review verdicts were `BLOCK` on freeze manifest
+  `sha256:551072dd5473b948e14006fbb36fb793241c96cdb35f8bf10ecd538ec9775eb4`.
+  Their findings are preserved; corrected host/container gates and two fresh
+  exact-freeze reviews remain required before publication.
+- The next exact-freeze review found that a complete regular but untracked outer
+  runtime could win pathname-only selection and execute before lease enforcement.
+  The public marker replay was RED, then GREEN after ambiguous complete roots
+  began exiting `2`, every admitted component used descriptor-relative
+  `O_NOFOLLOW` plus `fstat`, and runner/hook execution consumed the already-open
+  descriptors. Fresh full gates and two exact-freeze reviews remain required.

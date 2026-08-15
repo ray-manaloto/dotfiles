@@ -26,7 +26,7 @@ START ordering.
   executable. `rev-parse --path-format=absolute --git-common-dir` then supplies
   the identity shared by the canonical checkout and registered worktrees.
 - The bootstrap and runner similarly select only explicit mise paths
-  (`~/.local/bin/mise` on the Darwin host or `/usr/local/bin/mise` in the
+  (`<absolute-home>/.local/bin/mise` on the Darwin host or `/usr/local/bin/mise` in the
   supported Linux devcontainer) and project-Python locations; missing
   contracted executables deny instead of consulting ambient `PATH`.
 - `fcntl.flock(fd, LOCK_EX | LOCK_NB)` retains one foreground exclusion lock.
@@ -72,7 +72,7 @@ Primary references: [Git `rev-parse`](https://git-scm.com/docs/git-rev-parse),
 <MISE> run writer-lease-status
 ```
 
-`<MISE>` is the exact absolute platform path: `~/.local/bin/mise` on the
+`<MISE>` is the exact absolute platform path: `<absolute-home>/.local/bin/mise` on the
 Darwin host and `/usr/local/bin/mise` in the supported Linux devcontainer.
 
 `hold` acquires the common-directory lock, starts the holder challenge,
@@ -97,18 +97,24 @@ Both `.codex/hooks.json` and `.claude/settings.json` use the same tracked
 runner for `PreToolUse` and `PostToolUse`; Claude also sends
 `PostToolUseFailure` through the identical finish transaction. The runner begins with pinned
 `/usr/bin/python3 -I -S`. [Official Codex hook documentation](https://developers.openai.com/codex/hooks)
-states that commands run from the session `cwd` and that Codex may start from a
-subdirectory. Codex exposes no documented project-root variable, so its pinned
-Python command walks ancestor Git markers to the outermost repository root and
-executes only the tracked runner there. This location step invokes no Git,
-mise, `env`, or ambient `PATH`. The runner independently resolves the payload's
-same repository root, then invokes the exact repository virtual-environment
-Python and hook script with a fixed argv and minimal fixed environment. Bridge
-failure returns a structured deny/stop instead of becoming an unobserved
-skipped hook.
+states that commands run from the session `cwd`, Codex may start from a
+subdirectory, and `PreToolUse` blocks through structured output or exit code
+`2`. Codex exposes no documented project-root variable, so its pinned Python
+command walks ancestors and requires exactly one non-symlink Git marker for
+which every component through the regular tracked runner and hook entrypoint
+opens descriptor-relative with `O_NOFOLLOW`. An unrelated incomplete outer
+repository is ignored; two complete runtimes are ambiguous and exit `2` before
+mutation. The selected root inode is bound with `fstat`, and the command executes
+the runner bytes read from the already-admitted descriptor. This location step
+invokes no Git, mise, `env`, or ambient `PATH`. The runner independently repeats
+the descriptor-relative selection for the payload root and passes its already-open
+hook entrypoint into the exact repository virtual-environment Python with a
+fixed argv and minimal fixed environment. Bridge failure returns a structured
+deny/stop instead of becoming an unobserved skipped hook.
 
 Before a lease exists, Codex allows only a content-checked bootstrap shape:
-the resolved absolute `~/.local/bin/mise`, exact `-C <worktree>`, exact task,
+the current account's resolved literal `<absolute-home>/.local/bin/mise`, exact
+`-C <worktree>`, exact task,
 session-bound owner, ordered known flags, and valid lowercase digests. `env`,
 PATH overrides, bare `mise`, extra flags, and compound commands are denied.
 
@@ -131,8 +137,8 @@ decides the tool call.
 ```mermaid
 flowchart TB
     T["Codex or Claude task"] --> PRE["Native PreToolUse"]
-    PRE --> ROOT["Pinned Python: outermost ancestor Git marker"]
-    ROOT --> RUNNER["Tracked repository hook runner"]
+    PRE --> ROOT["Pinned Python: exactly one complete runtime"]
+    ROOT --> RUNNER["Descriptor-bound tracked runner bytes"]
     RUNNER --> OWN
     OWN{"Challenge-bound live receipt matches task + worktree?"}
     OWN -->|"no"| DENY["Deny before mutation"]
@@ -144,7 +150,8 @@ flowchart TB
     START --> TAIL["Canonical open tail, at most 64 events"]
     FINISH --> TAIL
     TAIL -->|"seal once"| CHUNK["Immutable content-addressed 64-event chunks"]
-    CHUNK -->|"validated chain"| TAIL
+    CHUNK --> BUDGET["Fstat admission + size-exact read within 8 MiB"]
+    BUDGET -->|"validated chain"| TAIL
     HOLD["Foreground holder"] --> LOCK["Exclusive Git-common-dir flock"]
     HOLD --> CHAL["Loopback token challenge"]
     LOCK --> OWN
@@ -214,10 +221,15 @@ Real subprocess tests, with no project-authored mock acceptance, prove:
    modes, and exact Git status remain unchanged across hold/handoff; and
 9. a pinned system-runner subprocess drives the real project hook runtime.
    The same configured Codex command starts from a nested repository directory,
-   reaches the outermost tracked runner for both Pre and Post, drains the owner,
-   and denies a hostile session on host and supported Linux.
-10. 256 real Pre/Post tool pairs retain one generation, reconstruct the full
-    canonical 513-event audit from eight sealed chunks plus a bounded tail,
+   skips incomplete, wrong-type, leaf-symlink, parent-symlink, and Git-marker
+   symlink outer candidates, requires exactly one complete runtime, executes
+   the already-admitted runner and hook entrypoint bytes for both Pre and Post,
+   drains the owner, and denies a hostile session on host and supported Linux.
+   With no complete candidate, or with an untrusted complete outer runtime that
+   makes selection ambiguous, it exits `2`, the documented Codex blocking status.
+10. 256 real Pre/Post tool pairs retain one generation and independently compare
+    the full ordered canonical 513-event audit—sequence, event type, and exact
+    tool ID—from eight sealed chunks plus a bounded tail,
     keep every audit file below 32 KiB and total state below 512 KiB, and
     finish within the explicit real-subprocess runtime ceiling; and
 11. a real failed Bash command drains through Claude `PostToolUseFailure`, then
@@ -228,6 +240,26 @@ Real subprocess tests, with no project-authored mock acceptance, prove:
     and `tool_finished` commit without a false denial; and
 14. twenty-four alternating success/failure completions plus holder release
     survive real overlapping state-lock holders and still permit clean handoff.
+
+### Sealed-history read bound
+
+The Darwin 256-pair replay on 2026-08-14 took 77.10 seconds. Its eight immutable
+chunks occupied about 20 KiB each and final writer state occupied 161,662 bytes.
+Walking the actual chunk chain before each of the 512 hooks derived 35,822,208
+cumulative sealed-chunk bytes read. Process launch dominates this bounded test,
+but complete-history validation is intentionally cumulative. Each invocation
+therefore admits each descriptor's declared size against the remaining 8 MiB
+sealed-history budget before a size-exact bounded read, then denies before state
+mutation when exceeded or when the file changes. The ceiling preserves validation and corruption denial;
+it does not introduce a cache that could bless changed historical bytes.
+
+The review's parser-split suggestion does not reproduce a behavior defect.
+Current public corruption controls already distinguish malformed JSON, schema,
+canonical encoding, sequence, field type, event kind, timestamp, digest, and
+history-transition failures. This slice therefore leaves the parser intact;
+splitting private functions without a new public invariant would add churn but
+no enforcement evidence. The external 80% docstring threshold is likewise not
+a repository policy and adds no boilerplate here.
 
 The final acceptance arm launches real subscription-authenticated Codex from
 an independent clone: a hostile session must be denied before bytes change,
