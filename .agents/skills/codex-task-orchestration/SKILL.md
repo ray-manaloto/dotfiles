@@ -59,6 +59,19 @@ Read
 when tool availability is ambiguous, a writer-lock error occurs, a task must be
 migrated between planes, or exact version-specific semantics matter.
 
+## Resource admission
+
+**Resource admission:** Before parallel execution, assign one coordinator to
+each repository and one writer to each Git common directory. Send only shared
+CPU, memory, Docker, architecture, port, and cache requests to the host decision
+point. Wait when capacity or architecture isolation is not proved. Treat stale
+or unknown containers as handoff and land blockers. Before dispatch, write a
+read-only container census. Classify every duplicate. Block any known stale
+duplicate and block unknown ownership before dispatch. Write the takeover
+record described in
+[`docs/specs/orchestration-takeover.md`](../../../docs/specs/orchestration-takeover.md)
+before dispatch.
+
 ## 2. Establish ownership
 
 Give each worker one bounded milestone with:

@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ray-manaloto/dotfiles/docs/specs/orchestration-admission.v1.schema.json",
+  "title": "Host shared-resource admission receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "decision_rule",
+    "request_id",
+    "repository_id",
+    "git_common_dir",
+    "resource_class",
+    "architectures",
+    "capacity",
+    "safety",
+    "decision",
+    "reasons"
+  ],
+  "properties": {
+    "schema_version": {"const": "dotfiles.orchestration-admission.v1"},
+    "decision_rule": {"const": "dotfiles.shared-resource-fit.v1"},
+    "request_id": {"type": "string", "minLength": 1},
+    "repository_id": {"type": "string", "minLength": 1},
+    "git_common_dir": {"type": "string", "minLength": 1},
+    "resource_class": {
+      "enum": ["shared_cpu", "shared_memory", "shared_docker", "shared_architecture", "shared_port", "shared_cache"]
+    },
+    "architectures": {
+      "type": "array",
+      "items": {"enum": ["amd64", "arm64"]},
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "capacity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cpu_weight", "memory_mib", "docker_engines", "ports", "cache_keys"],
+      "properties": {
+        "cpu_weight": {"type": "integer", "minimum": 0},
+        "memory_mib": {"type": "integer", "minimum": 0},
+        "docker_engines": {"type": "integer", "minimum": 0},
+        "ports": {"type": "array", "items": {"type": "integer", "minimum": 1, "maximum": 65535}, "uniqueItems": true},
+        "cache_keys": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true}
+      }
+    },
+    "safety": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capacity_available",
+        "arch_scoped_sync_state",
+        "arch_scoped_lookups",
+        "arch_scoped_receipts",
+        "arch_scoped_caches",
+        "arch_scoped_ports",
+        "arch_scoped_volumes",
+        "dynamic_capacity"
+      ],
+      "properties": {
+        "capacity_available": {"type": "boolean"},
+        "arch_scoped_sync_state": {"type": "boolean"},
+        "arch_scoped_lookups": {"type": "boolean"},
+        "arch_scoped_receipts": {"type": "boolean"},
+        "arch_scoped_caches": {"type": "boolean"},
+        "arch_scoped_ports": {"type": "boolean"},
+        "arch_scoped_volumes": {"type": "boolean"},
+        "dynamic_capacity": {"type": "boolean"}
+      }
+    },
+    "decision": {"enum": ["admit", "wait"]},
+    "reasons": {"type": "array", "items": {"type": "string", "minLength": 1}}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"safety": {"properties": {"capacity_available": {"const": false}}}}},
+      "then": {"properties": {"decision": {"const": "wait"}}}
+    },
+    {
+      "if": {"properties": {"decision": {"const": "wait"}}},
+      "then": {"properties": {"reasons": {"minItems": 1}}}
+    },
+    {
+      "if": {"properties": {"safety": {"properties": {"dynamic_capacity": {"const": false}}}}},
+      "then": {"properties": {"decision": {"const": "wait"}}}
+    },
+    {
+      "if": {
+        "properties": {"architectures": {"minItems": 2}},
+        "anyOf": [
+          {"properties": {"safety": {"properties": {"arch_scoped_sync_state": {"const": false}}}}},
+          {"properties": {"safety": {"properties": {"arch_scoped_lookups": {"const": false}}}}},
+          {"properties": {"safety": {"properties": {"arch_scoped_receipts": {"const": false}}}}},
+          {"properties": {"safety": {"properties": {"arch_scoped_caches": {"const": false}}}}},
+          {"properties": {"safety": {"properties": {"arch_scoped_ports": {"const": false}}}}},
+          {"properties": {"safety": {"properties": {"arch_scoped_volumes": {"const": false}}}}}
+        ]
+      },
+      "then": {"properties": {"decision": {"const": "wait"}}}
+    },
+    {
+      "if": {
+        "allOf": [
+          {
+            "properties": {
+              "safety": {
+                "properties": {
+                  "capacity_available": {"const": true},
+                  "dynamic_capacity": {"const": true}
+                }
+              }
+            }
+          },
+          {
+            "anyOf": [
+              {"properties": {"architectures": {"maxItems": 1}}},
+              {
+                "properties": {
+                  "architectures": {"minItems": 2},
+                  "safety": {
+                    "properties": {
+                      "arch_scoped_sync_state": {"const": true},
+                      "arch_scoped_lookups": {"const": true},
+                      "arch_scoped_receipts": {"const": true},
+                      "arch_scoped_caches": {"const": true},
+                      "arch_scoped_ports": {"const": true},
+                      "arch_scoped_volumes": {"const": true}
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "then": {"properties": {"decision": {"const": "admit"}}}
+    }
+  ]
+}
