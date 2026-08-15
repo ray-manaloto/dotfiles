@@ -1,0 +1,121 @@
+{
+  "schema_version": "dotfiles.orchestration-status.v1",
+  "generated_at": "2026-08-15T00:47:51Z",
+  "active_goal": {
+    "issue": "https://github.com/ray-manaloto/dotfiles/issues/766",
+    "outcome": "Land takeover documents, schemas, and deterministic safety contracts before runtime optimization.",
+    "coordinator": "/root/dotfiles_763_and_refresh",
+    "writer": "/root/dotfiles_763_and_refresh",
+    "worktree": "/Users/rmanaloto/dev/github/ray-manaloto/worktrees/dotfiles-issue-766",
+    "branch": "codex/issue-766-orchestration-refresh",
+    "lease_receipt": "9911e89cccc19fb1af635cc62265b54574d08b30d7e5292534f5c78f0e9edacb",
+    "handoff_sha256": "a11f72d480d3a92e132cfd185585323e7e67795c8ebb55a0a4d202227093cf48"
+  },
+  "repository": {
+    "id": "ray-manaloto/dotfiles",
+    "path": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles",
+    "git_common_dir": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.git",
+    "head": "1a648f1d6b2846eebc28bed4c0c402e32c380784",
+    "protected_status_sha256": "f87e7ebd4c6fea3a4141bc1747f33060147f3310c35eb7765407aac5e8099181",
+    "protected_settings_sha256": "b2393283d44834a5fa5fe163c672659fcc95550bb1a5ad221f63bac0b0279010",
+    "skill_roots": 30,
+    "untracked_skill_roots": 27,
+    "omc_manifest_sha256": "3034c5e55495dae1b5130d2c16bf7c948171a8d824259c066ecc3b5c16264010"
+  },
+  "knowledge_base": {
+    "canonical_sha": "0c15267e82012f80ba76cdca702e76dc6789f8ac",
+    "issue": "https://github.com/ray-manaloto/knowledge-base/issues/301",
+    "coordinator": "/root/kb_remaining_coordinator",
+    "structural_complete": true,
+    "state": "incomplete",
+    "execution_authorized": false,
+    "unauthorized_reasons": [
+      "plan-authority-unset",
+      "cost-advisory-review-required",
+      "provisional-input-decisions"
+    ],
+    "provider_issue_302_authorized": false
+  },
+  "worktrees": [
+    {"path": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles", "head": "1a648f1d6b2846eebc28bed4c0c402e32c380784", "branch": "main", "state": "protected"},
+    {"path": "/Users/rmanaloto/dev/github/ray-manaloto/worktrees/dotfiles-arm64-main", "head": "95024228c188e8fbb06e537aee7eb51649a5d099", "branch": null, "state": "retained"},
+    {"path": "/Users/rmanaloto/dev/github/ray-manaloto/worktrees/dotfiles-codex-task-orchestration", "head": "3f6a662b780b7bff74d91c6c340b08b2a4b285ab", "branch": "codex/codex-task-orchestration-skill", "state": "retained"},
+    {"path": "/Users/rmanaloto/dev/github/ray-manaloto/worktrees/dotfiles-codex-task-orchestration-v2", "head": "91e4e56aba784479c45f099f1fd428a8ae8f58e1", "branch": null, "state": "retained"},
+    {"path": "/Users/rmanaloto/dev/github/ray-manaloto/worktrees/dotfiles-goal-history", "head": "610ed1aff874c33474bb68af04bdd5cff514446c", "branch": null, "state": "retained"},
+    {"path": "/Users/rmanaloto/dev/github/ray-manaloto/worktrees/dotfiles-graphify-0942", "head": "23c5b28a48d9311eb199900403cfb62c47219289", "branch": "codex/graphify-0942-dotfiles", "state": "retained"},
+    {"path": "/Users/rmanaloto/dev/github/ray-manaloto/worktrees/dotfiles-issue-753-writer-lease", "head": "4e00381bf60ebe6d342aec088747d7717d6e7f83", "branch": null, "state": "retained"},
+    {"path": "/Users/rmanaloto/dev/github/ray-manaloto/worktrees/dotfiles-issue-763", "head": "fc2af00e4e23aa9f8b69e64fce70de2c0f150398", "branch": null, "state": "landed-history"},
+    {"path": "/Users/rmanaloto/dev/github/ray-manaloto/worktrees/dotfiles-issue-766", "head": "1a648f1d6b2846eebc28bed4c0c402e32c380784", "branch": "codex/issue-766-orchestration-refresh", "state": "active"},
+    {"path": "/Users/rmanaloto/dev/github/ray-manaloto/worktrees/dotfiles-pr671", "head": "5ad351b83557fc0a687b56813a7c23d587bce35e", "branch": "codex/pr671-default-label-test", "state": "retained"}
+  ],
+  "branches": [
+    {"name": "main", "purpose": "canonical landed state", "promotion_decision": "preserve"},
+    {"name": "codex/issue-766-orchestration-refresh", "purpose": "issue 766 emergency takeover slice", "promotion_decision": "ship after gates"},
+    {"name": "codex/codex-task-orchestration-skill", "purpose": "older orchestration work", "promotion_decision": "inventory before cleanup"},
+    {"name": "codex/graphify-0942-dotfiles", "purpose": "older Graphify work", "promotion_decision": "inventory before cleanup"},
+    {"name": "codex/pr671-default-label-test", "purpose": "older PR test", "promotion_decision": "inventory before cleanup"}
+  ],
+  "clones": [
+    {
+      "path": "/private/tmp/dotfiles-issue-763-ship.G17wCv/checkout",
+      "head": "1a648f1d6b2846eebc28bed4c0c402e32c380784",
+      "purpose": "retained issue 763 ship and land evidence",
+      "cleanup_precondition": "recorded takeover disposition"
+    },
+    {
+      "path": "/private/tmp/kb-graphify-ecosystem.bmSQpv/repo",
+      "head": "dffe600a3111e4bec7c93cc17ca4ae9165d7875f",
+      "branch": "codex/graphify-ecosystem-sources",
+      "status_sha256": "099cdba994e246d0e9f009ff5e587793edc6ec8f6df60d7d020afe9a7632b031",
+      "purpose": "unique knowledge-base Graphify ecosystem WIP",
+      "cleanup_precondition": "explicit backup authority and verified recovery artifact"
+    }
+  ],
+  "containers": [],
+  "completion_gate": {
+    "phase": "checkpoint",
+    "stale_container_count": 0,
+    "unknown_container_count": 0
+  },
+  "decisions": [
+    {"question": "Q1", "decision": "Optimize both safe DAG concurrency and wall time.", "status": "accepted"},
+    {"question": "Q2", "decision": "Use automatic resource admission and deterministic delay.", "status": "accepted"},
+    {"question": "Q3", "decision": "Allow content-addressed receipt reuse, narrowed by Q8.", "status": "accepted"},
+    {"question": "Q4", "decision": "Superseded by Q6: support concurrent AMD64, ARM64, and multiple repositories.", "status": "superseded"},
+    {"question": "Q5", "decision": "Deliver human and machine takeover artifacts first.", "status": "accepted"},
+    {"question": "Q6", "decision": "Require dual-architecture and multi-repository capability.", "status": "accepted"},
+    {"question": "Q7", "decision": "Pilot pure-test-only pytest-xdist at two workers.", "status": "accepted"},
+    {"question": "Q8", "decision": "Reuse receipts only in the same ship or land invocation; never skip required checks.", "status": "accepted"},
+    {"question": "Q9", "decision": "Land takeover schemas and tests first; move deep runtime work to a successor.", "status": "accepted"},
+    {"question": "Q10", "decision": "Default to one coordinator, one writer per Git common directory, and at most two read agents.", "status": "accepted"},
+    {"question": "Q11", "decision": "Fail closed until state, lookups, receipts, caches, ports, volumes, and ledger are architecture-scoped.", "status": "accepted"},
+    {"question": "Q12", "decision": "Use one coordinator per repository and a minimal host broker only for shared resources.", "status": "accepted"},
+    {"question": "Q13", "decision": "Use dynamic live-capacity admission with deterministic waiting.", "status": "accepted"}
+  ],
+  "research": [
+    {"path": "/private/tmp/orchestration-refresh-research/sync-full-parallelism.md", "sha256": "73673eaa760efb9c37f88f5cdecbcefbaeef0cc509e38222380bbde3c0156d29"},
+    {"path": "/private/tmp/orchestration-refresh-research/orchestration-parallelism.md", "sha256": "e42277ba5a88339c4b0b5cdcd28d40a4e02c0ae05b7d4c1aea4fb1e6e3cc7d43"}
+  ],
+  "dependencies": {
+    "gh_skill": "Project preview and check are the default. Apply and exact repin are explicit. Never auto-unpin.",
+    "advise_project_approach": "Install only through the future wrapper at commit 88f1ecc7229f95f066c6e00bda3bdf901595a117.",
+    "firecrawl": "Defer provider use. Future offline scope pins CLI 1.20.0 and canonical search and scrape skills at 23a0df42fe04d1e8d0b15e1d4aefbc959e328352.",
+    "deferred_issues": [
+      "https://github.com/ray-manaloto/dotfiles/issues/764",
+      "https://github.com/ray-manaloto/dotfiles/issues/765"
+    ]
+  },
+  "next_safe_commands": [
+    "/Users/rmanaloto/.local/bin/mise -C /Users/rmanaloto/dev/github/ray-manaloto/worktrees/dotfiles-issue-766 exec -- uv run --project python pytest tests/test_orchestration_contracts.py -q",
+    "git -C /Users/rmanaloto/dev/github/ray-manaloto/worktrees/dotfiles-issue-766 status --short --branch",
+    "mise run ps in each matching checkout for a read-only container ledger"
+  ],
+  "authority_required": [
+    "Back up or delete the unique knowledge-base clone.",
+    "Authenticate to Firecrawl or make a provider request.",
+    "Enable simultaneous local AMD64 and ARM64 execution.",
+    "Adopt pytest-xdist beyond the qualified two-worker pure-test pilot.",
+    "Execute knowledge-base issue 301 or provider issue 302."
+  ],
+  "successor_issue": "https://github.com/ray-manaloto/dotfiles/issues/769"
+}

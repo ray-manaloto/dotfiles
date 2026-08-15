@@ -1,0 +1,230 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ray-manaloto/dotfiles/docs/specs/orchestration-status.v1.schema.json",
+  "title": "Repository takeover ledger",
+  "$defs": {
+    "worktree": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "head", "branch", "state"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "head": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "branch": {"type": ["string", "null"]},
+        "state": {"enum": ["active", "protected", "retained", "landed-history"]}
+      }
+    },
+    "branch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "purpose", "promotion_decision"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "purpose": {"type": "string", "minLength": 1},
+        "promotion_decision": {"type": "string", "minLength": 1}
+      }
+    },
+    "clone": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "head", "purpose", "cleanup_precondition"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "head": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "branch": {"type": "string", "minLength": 1},
+        "status_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "purpose": {"type": "string", "minLength": 1},
+        "cleanup_precondition": {"type": "string", "minLength": 1}
+      }
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["question", "decision", "status"],
+      "properties": {
+        "question": {"type": "string"},
+        "decision": {"type": "string", "minLength": 1},
+        "status": {"enum": ["accepted", "superseded"]}
+      }
+    },
+    "research": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "generated_at",
+    "active_goal",
+    "repository",
+    "knowledge_base",
+    "worktrees",
+    "branches",
+    "clones",
+    "containers",
+    "completion_gate",
+    "decisions",
+    "research",
+    "dependencies",
+    "next_safe_commands",
+    "authority_required",
+    "successor_issue"
+  ],
+  "properties": {
+    "schema_version": {"const": "dotfiles.orchestration-status.v1"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "active_goal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["issue", "outcome", "coordinator", "writer", "worktree", "branch", "lease_receipt", "handoff_sha256"],
+      "properties": {
+        "issue": {"type": "string", "minLength": 1},
+        "outcome": {"type": "string", "minLength": 1},
+        "coordinator": {"type": "string", "minLength": 1},
+        "writer": {"type": "string", "minLength": 1},
+        "worktree": {"type": "string", "minLength": 1},
+        "branch": {"type": "string", "minLength": 1},
+        "lease_receipt": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "handoff_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path", "git_common_dir", "head", "protected_status_sha256", "protected_settings_sha256", "skill_roots", "untracked_skill_roots", "omc_manifest_sha256"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "path": {"type": "string", "minLength": 1},
+        "git_common_dir": {"type": "string", "minLength": 1},
+        "head": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "protected_status_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "protected_settings_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "skill_roots": {"type": "integer", "minimum": 0},
+        "untracked_skill_roots": {"type": "integer", "minimum": 0},
+        "omc_manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "knowledge_base": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["canonical_sha", "issue", "coordinator", "structural_complete", "state", "execution_authorized", "unauthorized_reasons", "provider_issue_302_authorized"],
+      "properties": {
+        "canonical_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "issue": {"type": "string", "minLength": 1},
+        "coordinator": {"type": "string", "minLength": 1},
+        "structural_complete": {"type": "boolean"},
+        "state": {"enum": ["complete", "incomplete", "blocked"]},
+        "execution_authorized": {"type": "boolean"},
+        "unauthorized_reasons": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+        "provider_issue_302_authorized": {"type": "boolean"}
+      }
+    },
+    "worktrees": {"type": "array", "items": {"$ref": "#/$defs/worktree"}},
+    "branches": {"type": "array", "items": {"$ref": "#/$defs/branch"}},
+    "clones": {"type": "array", "items": {"$ref": "#/$defs/clone"}},
+    "containers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "state", "architecture", "workspace_labels", "bind_mount_source", "expected_identity", "owner_worktree", "classification"],
+        "properties": {
+          "id": {"type": "string"},
+          "name": {"type": "string"},
+          "state": {"type": "string"},
+          "architecture": {"enum": ["amd64", "arm64", "unknown"]},
+          "workspace_labels": {"type": "object"},
+          "bind_mount_source": {"type": ["string", "null"]},
+          "expected_identity": {"type": ["string", "null"]},
+          "owner_worktree": {"type": ["string", "null"]},
+          "classification": {"enum": ["active", "stale", "unknown"]}
+        }
+      }
+    },
+    "completion_gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["phase", "stale_container_count", "unknown_container_count"],
+      "properties": {
+        "phase": {"enum": ["active", "checkpoint", "handoff", "ship", "land"]},
+        "stale_container_count": {"type": "integer", "minimum": 0},
+        "unknown_container_count": {"type": "integer", "minimum": 0}
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "minItems": 13,
+      "maxItems": 13,
+      "prefixItems": [
+        {"allOf": [{"$ref": "#/$defs/decision"}, {"properties": {"question": {"const": "Q1"}}}]},
+        {"allOf": [{"$ref": "#/$defs/decision"}, {"properties": {"question": {"const": "Q2"}}}]},
+        {"allOf": [{"$ref": "#/$defs/decision"}, {"properties": {"question": {"const": "Q3"}}}]},
+        {"allOf": [{"$ref": "#/$defs/decision"}, {"properties": {"question": {"const": "Q4"}}}]},
+        {"allOf": [{"$ref": "#/$defs/decision"}, {"properties": {"question": {"const": "Q5"}}}]},
+        {"allOf": [{"$ref": "#/$defs/decision"}, {"properties": {"question": {"const": "Q6"}}}]},
+        {"allOf": [{"$ref": "#/$defs/decision"}, {"properties": {"question": {"const": "Q7"}}}]},
+        {"allOf": [{"$ref": "#/$defs/decision"}, {"properties": {"question": {"const": "Q8"}}}]},
+        {"allOf": [{"$ref": "#/$defs/decision"}, {"properties": {"question": {"const": "Q9"}}}]},
+        {"allOf": [{"$ref": "#/$defs/decision"}, {"properties": {"question": {"const": "Q10"}}}]},
+        {"allOf": [{"$ref": "#/$defs/decision"}, {"properties": {"question": {"const": "Q11"}}}]},
+        {"allOf": [{"$ref": "#/$defs/decision"}, {"properties": {"question": {"const": "Q12"}}}]},
+        {"allOf": [{"$ref": "#/$defs/decision"}, {"properties": {"question": {"const": "Q13"}}}]}
+      ],
+      "items": false
+    },
+    "research": {
+      "type": "array",
+      "minItems": 2,
+      "items": {"$ref": "#/$defs/research"}
+    },
+    "dependencies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gh_skill", "advise_project_approach", "firecrawl", "deferred_issues"],
+      "properties": {
+        "gh_skill": {"type": "string", "minLength": 1},
+        "advise_project_approach": {"type": "string", "minLength": 1},
+        "firecrawl": {"type": "string", "minLength": 1},
+        "deferred_issues": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^https://github.com/ray-manaloto/dotfiles/issues/[0-9]+$"},
+          "uniqueItems": true
+        }
+      }
+    },
+    "next_safe_commands": {"type": "array", "items": {"type": "string"}},
+    "authority_required": {"type": "array", "items": {"type": "string"}},
+    "successor_issue": {"type": "string", "pattern": "^https://github.com/ray-manaloto/dotfiles/issues/[0-9]+$"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"completion_gate": {"properties": {"phase": {"enum": ["handoff", "land"]}}}}},
+      "then": {
+        "properties": {
+          "containers": {
+            "not": {
+              "contains": {
+                "type": "object",
+                "required": ["classification"],
+                "properties": {"classification": {"enum": ["stale", "unknown"]}}
+              }
+            }
+          },
+          "completion_gate": {
+            "properties": {
+              "stale_container_count": {"const": 0},
+              "unknown_container_count": {"const": 0}
+            }
+          }
+        }
+      }
+    }
+  ]
+}
