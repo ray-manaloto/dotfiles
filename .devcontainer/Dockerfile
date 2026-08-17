@@ -576,7 +576,7 @@ ARG GCC_LATEST_DEB=gcc-latest_17.0.0-20260802gitc4b00249c26e.deb
 # the newly-pinned .deb and commits the fix to the Renovate branch — the pin
 # stays byte-exact without the old human-recompute friction. To repair by hand:
 # `uv run --project python dotfiles-setup gcc-sha` (or `--check` to dry-run).
-ARG GCC_LATEST_DEB_SHA256=42be4e6bcbd5d60f8f738a9d025d6d5b3e73b395d82e9558db3b057952f4905f
+ARG GCC_LATEST_DEB_SHA256=1e9d6fba9e6e6e0e36a3f5bef4d909329d1e4dc1cee60c4e8d5b85e823f7fed7
 # amd64 ONLY, permanently (#698). This is not a gap upstream may close — the
 # maintainer states the policy on the index page: "Only the C and C++ compilers
 # are included, and only for x86_64, in a single large package." Probed
