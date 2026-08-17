@@ -4091,35 +4091,35 @@ url = "https://github.com/rtk-ai/rtk/releases/download/v0.45.0/rtk-x86_64-pc-win
 url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/504971578"
 
 [[tools.aws-cli]]
-version = "2.36.23"
+version = "2.36.24"
 backend = "aqua:aws/aws-cli"
 
 [tools.aws-cli."platforms.linux-arm64"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.36.23.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.36.24.zip"
 
 [tools.aws-cli."platforms.linux-arm64-musl"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.36.23.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.36.24.zip"
 
 [tools.aws-cli."platforms.linux-x64"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.36.23.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.36.24.zip"
 
 [tools.aws-cli."platforms.linux-x64-baseline"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.36.23.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.36.24.zip"
 
 [tools.aws-cli."platforms.linux-x64-musl"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.36.23.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.36.24.zip"
 
 [tools.aws-cli."platforms.linux-x64-musl-baseline"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.36.23.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.36.24.zip"
 
 [tools.aws-cli."platforms.macos-arm64"]
-url = "https://awscli.amazonaws.com/AWSCLIV2-2.36.23.pkg"
+url = "https://awscli.amazonaws.com/AWSCLIV2-2.36.24.pkg"
 
 [tools.aws-cli."platforms.macos-x64"]
-url = "https://awscli.amazonaws.com/AWSCLIV2-2.36.23.pkg"
+url = "https://awscli.amazonaws.com/AWSCLIV2-2.36.24.pkg"
 
 [tools.aws-cli."platforms.macos-x64-baseline"]
-url = "https://awscli.amazonaws.com/AWSCLIV2-2.36.23.pkg"
+url = "https://awscli.amazonaws.com/AWSCLIV2-2.36.24.pkg"
 
 [[tools.azure-cli]]
 version = "2.89.1"
@@ -5373,75 +5373,74 @@ url = "https://download.docker.com/win/static/stable/x86_64/docker-29.7.2.zip"
 url = "https://download.docker.com/win/static/stable/x86_64/docker-29.7.2.zip"
 
 [[tools.doppler]]
-version = "3.76.4"
+version = "3.76.5"
 backend = "github:DopplerHQ/cli"
 
 [tools.doppler."platforms.linux-arm64"]
-checksum = "sha256:87c80d4e44dfd7b25012c8545b69203ed166a58e5b3d7b43bb7de90f5651efea"
-url = "https://github.com/DopplerHQ/cli/releases/download/3.76.4/doppler_3.76.4_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/513541329"
+checksum = "sha256:567f051c4c334b79a37ee44c9373671c451dd8a4945ed49288a8f3fd0b73ec89"
+url = "https://github.com/DopplerHQ/cli/releases/download/3.76.5/doppler_3.76.5_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/514702520"
 provenance = "github-attestations"
 
 [tools.doppler."platforms.linux-arm64-musl"]
-checksum = "sha256:87c80d4e44dfd7b25012c8545b69203ed166a58e5b3d7b43bb7de90f5651efea"
-url = "https://github.com/DopplerHQ/cli/releases/download/3.76.4/doppler_3.76.4_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/513541329"
+checksum = "sha256:567f051c4c334b79a37ee44c9373671c451dd8a4945ed49288a8f3fd0b73ec89"
+url = "https://github.com/DopplerHQ/cli/releases/download/3.76.5/doppler_3.76.5_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/514702520"
 provenance = "github-attestations"
 
 [tools.doppler."platforms.linux-x64"]
-checksum = "sha256:6a3640467f1365028b8bd41679384dad1ab72a40cb0b027d371e7e39e4a29d9b"
-url = "https://github.com/DopplerHQ/cli/releases/download/3.76.4/doppler_3.76.4_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/513541314"
+checksum = "sha256:1b2f412d984920d665daf233ab6c15b364df9339b5c5b5224d5e8ee4e0a70154"
+url = "https://github.com/DopplerHQ/cli/releases/download/3.76.5/doppler_3.76.5_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/514702541"
 provenance = "github-attestations"
 provenance_verified = true
 
 [tools.doppler."platforms.linux-x64-baseline"]
-checksum = "sha256:6a3640467f1365028b8bd41679384dad1ab72a40cb0b027d371e7e39e4a29d9b"
-url = "https://github.com/DopplerHQ/cli/releases/download/3.76.4/doppler_3.76.4_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/513541314"
+checksum = "sha256:1b2f412d984920d665daf233ab6c15b364df9339b5c5b5224d5e8ee4e0a70154"
+url = "https://github.com/DopplerHQ/cli/releases/download/3.76.5/doppler_3.76.5_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/514702541"
 provenance = "github-attestations"
 
 [tools.doppler."platforms.linux-x64-musl"]
-checksum = "sha256:6a3640467f1365028b8bd41679384dad1ab72a40cb0b027d371e7e39e4a29d9b"
-url = "https://github.com/DopplerHQ/cli/releases/download/3.76.4/doppler_3.76.4_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/513541314"
+checksum = "sha256:1b2f412d984920d665daf233ab6c15b364df9339b5c5b5224d5e8ee4e0a70154"
+url = "https://github.com/DopplerHQ/cli/releases/download/3.76.5/doppler_3.76.5_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/514702541"
 provenance = "github-attestations"
 
 [tools.doppler."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:6a3640467f1365028b8bd41679384dad1ab72a40cb0b027d371e7e39e4a29d9b"
-url = "https://github.com/DopplerHQ/cli/releases/download/3.76.4/doppler_3.76.4_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/513541314"
+checksum = "sha256:1b2f412d984920d665daf233ab6c15b364df9339b5c5b5224d5e8ee4e0a70154"
+url = "https://github.com/DopplerHQ/cli/releases/download/3.76.5/doppler_3.76.5_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/514702541"
 provenance = "github-attestations"
 
 [tools.doppler."platforms.macos-arm64"]
-checksum = "sha256:3a7e42461bae88a7e26ed8cc12a20f0834d477c64d0a9b3416aa49743f0492c2"
-url = "https://github.com/DopplerHQ/cli/releases/download/3.76.4/doppler_3.76.4_macOS_arm64.tar.gz"
-url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/513541349"
+checksum = "sha256:91c4bab5bbd3b630dea8c96e9c0a39cf9e59bf7772f34ab979bea66ccee9560a"
+url = "https://github.com/DopplerHQ/cli/releases/download/3.76.5/doppler_3.76.5_macOS_arm64.tar.gz"
+url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/514702542"
 provenance = "github-attestations"
-provenance_verified = true
 
 [tools.doppler."platforms.macos-x64"]
-checksum = "sha256:b1ada08828442d6cc21636329ec66b2b20252dd22bfb19ff2d887b003750b6cf"
-url = "https://github.com/DopplerHQ/cli/releases/download/3.76.4/doppler_3.76.4_macOS_amd64.tar.gz"
-url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/513541348"
+checksum = "sha256:0a3c51cefbeb0d15a4ee34925366f9019efe9cb0a330892df8bd103348a4fc81"
+url = "https://github.com/DopplerHQ/cli/releases/download/3.76.5/doppler_3.76.5_macOS_amd64.tar.gz"
+url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/514702523"
 provenance = "github-attestations"
 
 [tools.doppler."platforms.macos-x64-baseline"]
-checksum = "sha256:b1ada08828442d6cc21636329ec66b2b20252dd22bfb19ff2d887b003750b6cf"
-url = "https://github.com/DopplerHQ/cli/releases/download/3.76.4/doppler_3.76.4_macOS_amd64.tar.gz"
-url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/513541348"
+checksum = "sha256:0a3c51cefbeb0d15a4ee34925366f9019efe9cb0a330892df8bd103348a4fc81"
+url = "https://github.com/DopplerHQ/cli/releases/download/3.76.5/doppler_3.76.5_macOS_amd64.tar.gz"
+url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/514702523"
 provenance = "github-attestations"
 
 [tools.doppler."platforms.windows-x64"]
-checksum = "sha256:97547f016a682550ea2f037c645b555b10b4346df916e1d8596aefa5ade79f33"
-url = "https://github.com/DopplerHQ/cli/releases/download/3.76.4/doppler_3.76.4_windows_amd64.zip"
-url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/513541325"
+checksum = "sha256:648792a583e1a688615a9b8f3e3ff9e94bbf79a6ccf27f0b4dba59054551a3da"
+url = "https://github.com/DopplerHQ/cli/releases/download/3.76.5/doppler_3.76.5_windows_amd64.zip"
+url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/514702521"
 provenance = "github-attestations"
 
 [tools.doppler."platforms.windows-x64-baseline"]
-checksum = "sha256:97547f016a682550ea2f037c645b555b10b4346df916e1d8596aefa5ade79f33"
-url = "https://github.com/DopplerHQ/cli/releases/download/3.76.4/doppler_3.76.4_windows_amd64.zip"
-url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/513541325"
+checksum = "sha256:648792a583e1a688615a9b8f3e3ff9e94bbf79a6ccf27f0b4dba59054551a3da"
+url = "https://github.com/DopplerHQ/cli/releases/download/3.76.5/doppler_3.76.5_windows_amd64.zip"
+url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/514702521"
 provenance = "github-attestations"
 
 [[tools.editorconfig-checker]]
@@ -5504,62 +5503,62 @@ url = "https://github.com/editorconfig-checker/editorconfig-checker/releases/dow
 url_api = "https://api.github.com/repos/editorconfig-checker/editorconfig-checker/releases/assets/506306105"
 
 [[tools."github:agent-sh/agnix"]]
-version = "0.48.0"
+version = "0.49.0"
 backend = "github:agent-sh/agnix"
 
 [tools."github:agent-sh/agnix"."platforms.linux-arm64"]
-checksum = "sha256:c8ddfa48d6bc3d35ef0625a7292c9be1d7a0a7f2fbced769fac284a5fdf005f5"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.48.0/agnix-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/507458355"
+checksum = "sha256:006976eaf0bcb632e7c254e989572bc55d4e477686c7251f5d2cbcd703904ad3"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.49.0/agnix-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/515767344"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.linux-arm64-musl"]
-checksum = "sha256:c8ddfa48d6bc3d35ef0625a7292c9be1d7a0a7f2fbced769fac284a5fdf005f5"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.48.0/agnix-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/507458355"
+checksum = "sha256:006976eaf0bcb632e7c254e989572bc55d4e477686c7251f5d2cbcd703904ad3"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.49.0/agnix-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/515767344"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.linux-x64"]
-checksum = "sha256:da8a0fd2389f2fa442721ca1ecf447bc0de64bf629014f11336eaccbfe8aa2e8"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.48.0/agnix-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/507458358"
+checksum = "sha256:e3bb9e3661025d54cc5d5835c429548d2a6e0626135363c41c044822f861bcbd"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.49.0/agnix-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/515767327"
 provenance = "github-attestations"
 provenance_verified = true
 
 [tools."github:agent-sh/agnix"."platforms.linux-x64-baseline"]
-checksum = "sha256:da8a0fd2389f2fa442721ca1ecf447bc0de64bf629014f11336eaccbfe8aa2e8"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.48.0/agnix-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/507458358"
+checksum = "sha256:e3bb9e3661025d54cc5d5835c429548d2a6e0626135363c41c044822f861bcbd"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.49.0/agnix-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/515767327"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.linux-x64-musl"]
-checksum = "sha256:de6e4ced31e8cee2065dd37f8df3647eef6fcebe475540b9f05c9098cc06164c"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.48.0/agnix-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/507458366"
+checksum = "sha256:b62b7c9c597c21dddbb7453daf65211113bf603f45f1562d4a70c86077063308"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.49.0/agnix-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/515767321"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:de6e4ced31e8cee2065dd37f8df3647eef6fcebe475540b9f05c9098cc06164c"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.48.0/agnix-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/507458366"
+checksum = "sha256:b62b7c9c597c21dddbb7453daf65211113bf603f45f1562d4a70c86077063308"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.49.0/agnix-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/515767321"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.macos-arm64"]
-checksum = "sha256:d7cc221ffcd040373abb7c3ae82c74c8ef5922a5c9f7aec1236a7f1aeb1f164c"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.48.0/agnix-aarch64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/507458368"
+checksum = "sha256:d1457bf11ad0b5970913f20b8806932f48334b4e1eb5f5e00069c59aaec87185"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.49.0/agnix-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/515767319"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.windows-x64"]
-checksum = "sha256:ed68a8588217d53af5678682a41f3365d5745c5e913a4c013cb013c4e1e598f8"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.48.0/agnix-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/507458349"
+checksum = "sha256:bea81f7c13514316eff3e8012e8b18faa0023e578961414e5e74200b0026df32"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.49.0/agnix-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/515767310"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.windows-x64-baseline"]
-checksum = "sha256:ed68a8588217d53af5678682a41f3365d5745c5e913a4c013cb013c4e1e598f8"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.48.0/agnix-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/507458349"
+checksum = "sha256:bea81f7c13514316eff3e8012e8b18faa0023e578961414e5e74200b0026df32"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.49.0/agnix-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/515767310"
 provenance = "github-attestations"
 
 [[tools."github:ast-grep/ast-grep"]]
@@ -5786,7 +5785,7 @@ version = "0.15.5"
 backend = "npm:portless"
 
 [[tools."npm:renovate"]]
-version = "44.30.1"
+version = "44.32.5"
 backend = "npm:renovate"
 
 [[tools."npm:skills"]]
@@ -5857,7 +5856,7 @@ version = "0.2.2"
 backend = "pipx:deepagents-cli"
 
 [[tools."pipx:mcp2cli"]]
-version = "3.3.1"
+version = "3.4.0"
 backend = "pipx:mcp2cli"
 
 [[tools.rumdl]]
