@@ -772,9 +772,9 @@ checksum = "sha256:663444d77a42f2265f54fb8b48c5450bfff4388d9c0f8253dd7855f0d9931
 url = "https://conda.anaconda.org/conda-forge/linux-64/libnuma-2.0.18-hb03c661_4.conda"
 checksum = "sha256:db0a0fc67104196afe6732ff055b30829f984f4cf1e8efff4ea5b2bbb1640da2"
 
-[conda-packages.linux-x64."libpsl-0.23.1-hf670292_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libpsl-0.23.1-hf670292_0.conda"
-checksum = "sha256:2e6405feb59e3f40a5a4641dfa73afda158046893aa73d478e23415e18997ece"
+[conda-packages.linux-x64."libpsl-0.23.1-hd9e3e90_1"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libpsl-0.23.1-hd9e3e90_1.conda"
+checksum = "sha256:09e8effdc89bc5d021349318d32b85594f5b8d8e3ab8f90a85b81f8fe695a566"
 
 [conda-packages.linux-x64."libsqlite-3.53.3-h0c1763c_0"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libsqlite-3.53.3-h0c1763c_0.conda"
@@ -876,9 +876,9 @@ checksum = "sha256:5e6f7d161356fefd981948bea5139c5aa0436767751a6930cb1ca801ebb11
 url = "https://conda.anaconda.org/conda-forge/linux-64/perl-5.32.1-7_hd590300_perl5.conda"
 checksum = "sha256:9ec32b6936b0e37bcb0ed34f22ec3116e75b3c0964f9f50ecea5f58734ed6ce9"
 
-[conda-packages.linux-x64."pygments-2.20.0-pyhd8ed1ab_0"]
-url = "https://conda.anaconda.org/conda-forge/noarch/pygments-2.20.0-pyhd8ed1ab_0.conda"
-checksum = "sha256:cf70b2f5ad9ae472b71235e5c8a736c9316df3705746de419b59d442e8348e86"
+[conda-packages.linux-x64."pygments-2.21.0-pyhcf101f3_0"]
+url = "https://conda.anaconda.org/conda-forge/noarch/pygments-2.21.0-pyhcf101f3_0.conda"
+checksum = "sha256:f5f015ff1bc3e1b7fc08eee096b1865234189ae0b82bebdb86a5369116e42fa0"
 
 [conda-packages.linux-x64."python-3.14.6-h242f9ac_102_cp314"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/python-3.14.6-h242f9ac_102_cp314.conda"
@@ -2280,7 +2280,7 @@ conda_deps = [
     "libstdcxx-16.1.0-h934c35e_1",
     "zstd-1.5.7-hb78ec9c_7",
     "krb5-1.22.2-hbc21106_2",
-    "libpsl-0.23.1-hf670292_0",
+    "libpsl-0.23.1-hd9e3e90_1",
     "libssh2-1.11.1-h6154650_1",
     "openssl-3.6.3-h35e630c_1",
     "_openmp_mutex-4.5-20_gnu",
@@ -2463,7 +2463,7 @@ conda_deps = [
     "tinyxml2-11.0.0-h3f2d84a_0",
     "pcre-8.45-h9c3ff4c_0",
     "python_abi-3.14-8_cp314",
-    "pygments-2.20.0-pyhd8ed1ab_0",
+    "pygments-2.21.0-pyhcf101f3_0",
     "python-3.14.6-h242f9ac_102_cp314",
     "readline-8.3-h853b02a_0",
     "libuuid-2.42.2-h5347b49_0",
@@ -2764,7 +2764,7 @@ conda_deps = [
     "libstdcxx-16.1.0-h934c35e_1",
     "libgfortran-16.1.0-h69a702a_1",
     "libgfortran5-16.1.0-h79bb938_1",
-    "pygments-2.20.0-pyhd8ed1ab_0",
+    "pygments-2.21.0-pyhcf101f3_0",
     "python-3.14.6-h242f9ac_102_cp314",
     "libuuid-2.42.2-h5347b49_0",
     "libffi-3.7.0-h3435931_0",
@@ -2985,7 +2985,7 @@ conda_deps = [
     "perl-5.32.1-7_hd590300_perl5",
     "libgcc-ng-16.1.0-h69a702a_1",
     "krb5-1.22.2-hbc21106_2",
-    "libpsl-0.23.1-hf670292_0",
+    "libpsl-0.23.1-hd9e3e90_1",
     "libssh2-1.11.1-h6154650_1",
     "zstd-1.5.7-hb78ec9c_7",
     "_openmp_mutex-4.5-20_gnu",
@@ -3473,7 +3473,7 @@ conda_deps = [
     "libxml2-16-2.15.3-hca6bf5a_0",
     "lzo-2.10-h280c20c_1002",
     "krb5-1.22.2-hbc21106_2",
-    "libpsl-0.23.1-hf670292_0",
+    "libpsl-0.23.1-hd9e3e90_1",
     "libssh2-1.11.1-h6154650_1",
     "icu-78.3-py310h44b86e0_2",
     "libiconv-1.18-h3b78370_2",
