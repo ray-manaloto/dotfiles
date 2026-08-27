@@ -1788,14 +1788,14 @@ per_path_tokens = { ".github/workflows/autofix.yml" = ["GIT_CONFIG_KEY_0: init.d
 
 [[suite]]
 name = "orchestration.trigger-armed"
-description = "THE bug that opened #354. `.claude/CLAUDE.md` must carry the Fable-gated trigger line as a WHOLE LINE. Until 2026-07-24 only the mode line was present, and the fable-orchestrator plugin's own setup wizard states the mode line 'is inert without the trigger' — so the repo declared an implementation lane and never invoked it, for an unknown number of sessions, with nothing red anywhere. Uses require_lines, not require_tokens, deliberately: a substring is satisfied by a doc that merely QUOTES the trigger while narrating it, which is a state this repo has actually been in. Whitespace is normalised so re-indentation is not a failure; wording is not, so a paraphrase is."
+description = "THE bug that opened #354. `.claude/CLAUDE.md` must carry the trigger line as a WHOLE LINE. The line is deliberately UN-gated (2026-08-27), matching knowledge-base: default `/model` here is Opus 5, so the old Fable-gated wording was false in every session and the flow stayed dormant. Until 2026-07-24 only the mode line was present, and the fable-orchestrator plugin's own setup wizard states the mode line 'is inert without the trigger' — so the repo declared an implementation lane and never invoked it, for an unknown number of sessions, with nothing red anywhere. Uses require_lines, not require_tokens, deliberately: a substring is satisfied by a doc that merely QUOTES the trigger while narrating it, which is a state this repo has actually been in. Whitespace is normalised so re-indentation is not a failure; wording is not, so a paraphrase is."
 category = "orchestration"
 check_type = "static"
 handler = "require_lines"
 paths_required = true
 paths = [".claude/CLAUDE.md"]
 lines = [
-    "- When the session model is Fable, without being reminded: non-trivial implementation runs the fable-orchestrator architect-as-orchestrator flow — invoke the fable-orchestrator:orchestration skill before delegating and follow it as authoritative for routing, verification, review tiers, and advisor consults.",
+    "- Without being reminded, on ANY session model: non-trivial implementation runs the fable-orchestrator architect-as-orchestrator flow — invoke the fable-orchestrator:orchestration skill before delegating and follow it as authoritative for routing, verification, review tiers, and advisor consults.",
 ]
 
 [[suite]]

@@ -37,7 +37,7 @@ plugins = [
 # declared and never invoked. Substring matching would accept a doc that
 # merely quotes them, which is the state the repo was actually in.
 lines = [
-    "- When the session model is Fable, without being reminded: non-trivial implementation runs the fable-orchestrator architect-as-orchestrator flow — invoke the fable-orchestrator:orchestration skill before delegating and follow it as authoritative for routing, verification, review tiers, and advisor consults.",
+    "- Without being reminded, on ANY session model: non-trivial implementation runs the fable-orchestrator architect-as-orchestrator flow — invoke the fable-orchestrator:orchestration skill before delegating and follow it as authoritative for routing, verification, review tiers, and advisor consults.",
     "- fable-orchestrator: implementation lane = codex",
 ]
 

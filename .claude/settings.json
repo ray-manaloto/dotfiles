@@ -31,6 +31,11 @@
       "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base"
     ]
   },
+  "fallbackModel": [
+    "opus",
+    "sonnet"
+  ],
+  "disableClaudeAiConnectors": true,
   "hooks": {
     "PreToolUse": [
       {
@@ -143,7 +148,10 @@
     "context7@context7-marketplace": true,
     "last30days@last30days-skill": true,
     "exa@exa": true,
-    "builder-skills@builder-skills": true
+    "builder-skills@builder-skills": true,
+    "eli5@claude-community": true,
+    "ponytail@ponytail": true,
+    "i-have-adhd@i-have-adhd": true
   },
   "extraKnownMarketplaces": {
     "fable-orchestrator": {
@@ -178,8 +186,6 @@
     }
   },
   "prefersReducedMotion": true,
-  "teammateMode": "auto",
-  "disableClaudeAiConnectors": true,
-  "fallbackModel": ["opus", "sonnet"],
-  "switchModelsOnFlag": true
+  "switchModelsOnFlag": true,
+  "teammateMode": "auto"
 }
