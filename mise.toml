@@ -11,24 +11,24 @@ run = "uv sync --locked"
 # .config/mise/conf.d/shared.toml — the single exact-pinned source both this
 # host config and .devcontainer/mise-system.toml merge, so they never drift
 # (Renovate bumps that one file). See epic #160 T5. Below: host-ONLY tools.
-editorconfig-checker = "3.11.1" # provides `ec` — hk editorconfig_checker builtin (#154); host-only (image drops it in T6)
+editorconfig-checker = "3.11.2" # provides `ec` — hk editorconfig_checker builtin (#154); host-only (image drops it in T6)
 # Second secret scanner (hk `betterleaks` builtin, wired in hk.pkl). HOST-ONLY
 # on purpose: shared.toml is a base image build input, and putting a second
 # scanner in the image would cost a cold rebuild for no gain — the scanning that
 # matters happens at the commit boundary. Measured before adopting: 0 findings
 # over the whole 31.5 MB tree in 199 ms.
-"aqua:betterleaks/betterleaks" = "1.7.4"
+"aqua:betterleaks/betterleaks" = "1.8.1"
 "npm:@devcontainers/cli" = "0.88.0"
 # Critical host-side secrets transport for devcontainer initialization. Keep it
 # deep-tracked in currency.toml: Doppler's mounted-secret behavior is part of
 # the devcontainer security boundary, not an optional interactive convenience.
-doppler = "3.76.4"
+doppler = "3.76.5"
 colima = "0.10.3"                   # Alternate Docker runtime (VZ + Rosetta); Docker Desktop is the CURRENT supported runtime — see AGENTS.md Docker Runtimes + docs/research/runs/research-20260409c-dockerdesktop-ssh/
 lima = "2.2.0"
-"github:agent-sh/agnix" = "v0.48.0"
+"github:agent-sh/agnix" = "v0.52.1"
 "npm:agents-lint" = "0.5.0"
-"pipx:mcp2cli" = "3.3.1"
-"npm:renovate" = "44.30.1"
+"pipx:mcp2cli" = "3.6.0"
+"npm:renovate" = "44.48.0"
 biome = "2.5.7"
 # Markdown + Claude-docs linters. Installed now; hk.pkl integration is
 # scheduled for post-devcontainer-work review (see GH issue tracking
@@ -37,20 +37,20 @@ biome = "2.5.7"
 "npm:claude-code-lint" = "0.8.0"
 "npm:@contextlint/cli" = "1.1.1"
 "npm:markdownlint-cli2" = "0.23.2"
-"aqua:jackchuka/mdschema" = "0.15.1"
-rumdl = "v0.2.55"
+"aqua:jackchuka/mdschema" = "0.15.2"
+rumdl = "v0.2.62"
 # zizmor: GHA security scanner — backs the hk zizmor builtin (#160 T12);
 # host-only lint tool, so it lives here (not shared.toml).
 zizmor = "1.29.0"
-"npm:oh-my-claude-sisyphus" = "4.15.10"
-"github:ast-grep/ast-grep" = "0.45.1"
-lefthook = "2.1.10"
-"npm:ctx7" = "0.5.8"
-"aqua:rtk-ai/rtk" = "0.45.0"            # aqua is the registry's first backend (`mise registry rtk`); the old bare `rtk` resolved to github: and mise doctor flagged the mismatch
-"npm:skills" = "1.5.22"
-"npm:agent-browser" = "0.34.0"
-"npm:portless" = "0.15.5"
-"pipx:deepagents-cli" = "0.2.2"
+"npm:oh-my-claude-sisyphus" = "5.0.0"
+"github:ast-grep/ast-grep" = "0.45.2"
+lefthook = "2.1.11"
+"npm:ctx7" = "0.5.9"
+"aqua:rtk-ai/rtk" = "0.46.0"          # aqua is the registry's first backend (`mise registry rtk`); the old bare `rtk` resolved to github: and mise doctor flagged the mismatch
+"npm:skills" = "1.5.23"
+"npm:agent-browser" = "0.35.1"
+"npm:portless" = "0.15.6"
+"pipx:deepagents-cli" = "0.3.0"
 # ffmpeg: system binary the graphify `video` extra (faster-whisper) needs to
 # extract audio before transcription — it is NOT a pip dep, so `graphifyy[all]`
 # cannot supply it. Host-only, same as graphify (root mise.toml is in the
@@ -66,10 +66,10 @@ lefthook = "2.1.10"
 # conda:ffmpeg on platform linux-x64" and bricks lint. os-gating makes linux
 # skip the tool entirely, so no linux URL is demanded.
 "conda:ffmpeg" = { version = "8.1.2", os = ["macos"] }
-aws-cli = { version = "2.36.23", symlink_bins = "true" }
+aws-cli = { version = "2.36.33", symlink_bins = "true" }
 azure-cli = { version = "2.89.1", uvx_args = "--prerelease=allow" }
 docker-cli = "29.7.2"
-opencode = "1.18.18"
+opencode = "1.18.23"
 # bun (the npm package_manager) is a host↔image SHARED tool → declared in
 # .config/mise/conf.d/shared.toml, not here (mise-parity: a tool used by both
 # sides lives only in the shared fragment).
@@ -85,7 +85,7 @@ opencode = "1.18.18"
 # container's MISE_IGNORED_CONFIG_PATHS) — the Claude architect stays the chair;
 # these are executor lanes only. Auth is per-user (codex login / Google account).
 codex = "0.147.0"
-antigravity-cli = "1.1.13"
+antigravity-cli = "1.1.22"
 
 [settings]
 experimental = true

@@ -80,13 +80,14 @@ Version currency is delegated to `kb-setup currency check` and health to
 
 - Without being reminded, on ANY session model: non-trivial implementation runs the fable-orchestrator architect-as-orchestrator flow — invoke the fable-orchestrator:orchestration skill before delegating and follow it as authoritative for routing, verification, review tiers, and advisor consults.
 - fable-orchestrator: implementation lane = codex
+- fable-orchestrator: codex effort = xhigh
 
-The first line is the **trigger**, and it is **deliberately UN-gated**, matching
-knowledge-base. The plugin ships it Fable-gated and its setup wizard writes that
-form — but default `/model` here is **Opus 5**, so the gated line was false in every
-session and the flow stayed dormant. Two consequences: `/fable-orchestrator:setup`
-reads an un-gated trigger as a shape to upgrade away from and offers to re-gate it —
-**decline**; and invoking `/fable-orchestrator:orchestration` by hand stays valid.
+The first line is the **trigger**, **deliberately UN-gated**, matching
+knowledge-base. The plugin ships it Fable-gated — but default `/model` here is
+**Opus 5**, so the gated line was false every session and the flow stayed
+dormant. So `/fable-orchestrator:setup` reads an un-gated trigger as a shape to
+upgrade away from and offers to re-gate it — **decline**. It also writes to the
+root `CLAUDE.md`, which the stub gate rejects: config belongs in THIS file.
 `grok` CLI is NOT installed, so `codex` is the only viable fixed mode.
 
 Adopted plugins (enabled in `.claude/settings.json`): `fable-orchestrator@fable-orchestrator`

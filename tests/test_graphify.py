@@ -51,8 +51,19 @@ def test_graphify_runtime_and_skill_stamps_match_project_pin() -> None:
     )
 
     assert dependency == "graphifyy[all]==0.9.42"
+    version = dependency.removeprefix("graphifyy[all]==")
     stamp = repo / ".agents/skills/graphify/.graphify_version"
-    assert stamp.read_text(encoding="utf-8").strip() == "0.9.42"
+    assert stamp.read_text(encoding="utf-8").strip() == version
+    # graphify_health restates the pin as a literal to detect runtime drift.
+    # Bind that third copy here: without it a bump lands on the pin and the
+    # stamp while the health check keeps demanding the old version, so every
+    # session reports VERSION_DRIFT and nothing fails. Matching the whole
+    # comparison (not the bare number) means reshaping the check fails loudly
+    # rather than silently unbinding this assert.
+    health_source = (repo / "python/src/dotfiles_setup/graphify.py").read_text(
+        encoding="utf-8"
+    )
+    assert f'if runtime != "{version}":' in health_source
 
 
 def _force_fresh_health(monkeypatch: pytest.MonkeyPatch) -> None:
