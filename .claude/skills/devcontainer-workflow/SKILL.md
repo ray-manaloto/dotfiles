@@ -24,9 +24,47 @@ mise run up      # devcontainer up --workspace-folder . (CLI pinned in mise.toml
 mise run down    # alias of `mise run stop` — tears the container down
 mise run stop    # docker rm -f filtered on devcontainer.local_folder=$PWD
                  # (the devcontainer CLI has no `down` verb)
+mise run names   # this workspace+arch's container, volume and port names
+mise run ssh-port # just the derived host-side SSH port (R1)
 mise run test          # uv run --project python pytest tests/ -x -q (HOST tests)
 mise run pre-commit    # hk run pre-commit --all
 ```
+
+## Architecture — BOTH amd64 and arm64 are first-class
+
+`PUBLISHED_ARCHES = ("amd64", "arm64")` (`platform_target.py`). Neither is a
+special case, and an arm64 container is **not** a bug — a stale amd64
+assumption is. Native ARM64 on the Mac is tracked by **#678** (open;
+unblocked since #676 and #677 merged).
+
+**`DOTFILES_PLATFORM` is the one selector** (#673) — no task takes an
+`--arch` flag, and no other place chooses:
+
+```bash
+mise run up                                    # the pinned default (linux/amd64/v2)
+DOTFILES_PLATFORM=linux/arm64/v8 mise run up   # the other architecture
+DOTFILES_PLATFORM=linux/arm64/v8 mise run names  # what THAT arch owns
+```
+
+Container name, home volume and SSH port are all **arch-scoped** (#677), so
+the two coexist in one clone without colliding — the port is derived from
+workspace+arch, so nothing needs configuring. Both arches really have run
+here; arm64 home volumes exist alongside amd64 ones.
+
+Three things worth carrying:
+
+1. **The container NAME is decorative; `--id-label` is the identity.** Judging
+   "is a container up?" by name has produced wrong answers before. Ask for the
+   labels (`dotfiles.workspace`, `dotfiles.arch`), which is what
+   `resolve_names().id_labels` and every routed `devcontainer exec` use.
+   Without them an arm64 `up` finds the amd64 container.
+2. **Never mount one home volume into both arches.** It carries
+   architecture-specific compiled output; mixing them surfaces as
+   `exec format error` or a silently wrong binary. That is *why* the arch is
+   a name component rather than a runtime check.
+3. **A pre-#677 volume has no arch in its name.** `mise run
+   migrate-home-volume` copies one into this architecture's volume; which arch
+   it lands in is decided by `DOTFILES_PLATFORM`.
 
 ## Smoke checks against a running devcontainer
 

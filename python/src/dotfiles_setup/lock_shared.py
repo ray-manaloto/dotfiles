@@ -136,7 +136,7 @@ from typing import TYPE_CHECKING
 
 from dotfiles_setup.devcontainer_names import resolve_names
 from dotfiles_setup.image_lock import devcontainer_exec_prefix, host_can_lock
-from dotfiles_setup.lock_integrity import declared_tools
+from dotfiles_setup.lock_integrity import declared_tools, tool_platforms
 from dotfiles_setup.lock_integrity import main as lock_integrity_main
 
 if TYPE_CHECKING:
@@ -161,10 +161,63 @@ SHARED_FRAGMENT = ".config/mise/conf.d/shared.toml"
 #: "Respec round 2" note.
 IGNORED_CONFIG_PATHS_VAR = "MISE_IGNORED_CONFIG_PATHS"
 
+#: The two IMAGE settings the routed `mise lock` must NOT inherit.
+#:
+#: Routing solves asset resolution and creates this problem: inside the
+#: container mise reads `.devcontainer/mise-system.toml`, whose settings are
+#: tuned for building the IMAGE, not for maintaining the shared host<->image
+#: lockfile. Both are correct where they were written and wrong here, and
+#: BOTH were measured 2026-08-27 with isolating control arms:
+#:
+#: * `lockfile_platforms = ["linux-x64", "linux-arm64"]` scopes the image
+#:   locks to the published arches (#698). Applied to `.config/mise/mise.lock`
+#:   it TRUNCATES every re-locked tool 11 platforms -> 2, silently dropping the
+#:   macOS and windows entries the host itself installs from. `lock-check`
+#:   catches it after the fact; this stops it happening.
+#: * `github_attestations = false` is disabled for image builds because a
+#:   token is not reliably available in buildkit secret mounts. Applied here it
+#:   re-locks entries WITHOUT provenance, and mise then refuses to replace an
+#:   attested entry with an unattested one — surfacing as "could indicate a
+#:   supply chain attack" on a release that is in fact properly attested
+#:   (measured: pixi 0.77.1 carries one attestation per asset, same as 0.76.2).
+#:
+#: Isolation arms: full platforms alone still fails pixi (rc=1); attestations
+#: alone still truncates. Both are required, so both are pinned here.
+LOCKFILE_PLATFORMS_VAR = "MISE_LOCKFILE_PLATFORMS"
+GITHUB_ATTESTATIONS_VAR = "MISE_GITHUB_ATTESTATIONS"
+
 #: mise's own message when `mise lock <tool>` finds nothing to lock — exit
 #: code 0 either way, so this is the ONLY signal that distinguishes "ran and
 #: processed the tool" from "ran and silently did nothing" (round 2's HIGH 3).
 _NO_TOOLS_MARKER = "No tools configured to lock"
+
+
+def shared_lock_platforms(repo_root: Path) -> tuple[str, ...]:
+    """Every platform the COMMITTED shared lockfile already covers.
+
+    Derived from the artifact rather than hard-coded, for the same reason
+    `lock-image` derives its set from the committed lock: a literal list here
+    would be an eleventh place to update, and would drift silently the first
+    time mise adds a platform. The union across tools is the right shape —
+    `mise lock <tool>` rewrites one tool but writes the whole platform set it
+    was told about, so anything narrower truncates a tool that had more.
+
+    Raises rather than defaulting when the file yields nothing: an empty set
+    would pass through to `MISE_LOCKFILE_PLATFORMS=` and hand mise the
+    container's own narrow default, which is the exact bug this closes.
+    """
+    lock = repo_root / SHARED_LOCK
+    platforms: set[str] = set()
+    for covered in tool_platforms(lock.read_text(encoding="utf-8")).values():
+        platforms |= covered
+    if not platforms:
+        msg = (
+            f"{SHARED_LOCK} declares no platform entries, so the routed "
+            f"`mise lock` has no set to pin — refusing to fall back to the "
+            f"container's `lockfile_platforms`, which truncates this lockfile"
+        )
+        raise ValueError(msg)
+    return tuple(sorted(platforms))
 
 
 def _workspace_mise_toml(repo_root: Path) -> str:
@@ -184,7 +237,7 @@ def _workspace_mise_toml(repo_root: Path) -> str:
 
 
 def _lock_command(
-    repo_root: Path, tool: str, *, route: bool
+    repo_root: Path, tool: str, *, route: bool, platforms: tuple[str, ...] = ()
 ) -> tuple[list[str], dict[str, str] | None]:
     """The `mise lock <tool>` argv (+ env override) — local, or routed.
 
@@ -209,6 +262,12 @@ def _lock_command(
             *devcontainer_exec_prefix(repo_root),
             "--remote-env",
             f"{IGNORED_CONFIG_PATHS_VAR}={_workspace_mise_toml(repo_root)}",
+            # Override the two IMAGE settings the container would otherwise
+            # impose on the SHARED lockfile — see the constants' comment.
+            "--remote-env",
+            f"{LOCKFILE_PLATFORMS_VAR}={','.join(platforms)}",
+            "--remote-env",
+            f"{GITHUB_ATTESTATIONS_VAR}=true",
             "mise",
             "lock",
             tool,
@@ -216,6 +275,60 @@ def _lock_command(
         return argv, None
     env = {**os.environ, IGNORED_CONFIG_PATHS_VAR: str(repo_root / "mise.toml")}
     return ["mise", "lock", tool], env
+
+
+def _lock_each(repo_root: Path, tools: list[str], *, route: bool) -> int:
+    """Run `mise lock` once per tool, stopping at the first real failure.
+
+    Extracted from :func:`lock_shared_main` so the platform-set lookup (which
+    can fail) does not add a branch and a return to a function ruff already
+    considered at its complexity ceiling — the complaint was a design signal,
+    not noise.
+    """
+    try:
+        platforms = shared_lock_platforms(repo_root) if route else ()
+    except ValueError:
+        # `.exception` (not `.error`) so the traceback reaches the log with
+        # the message — this path means the lockfile itself is unreadable or
+        # empty, and the stack is the only thing that says which.
+        logger.exception("lock-shared: cannot derive the shared platform set")
+        return 1
+
+    for tool in tools:
+        argv, env = _lock_command(repo_root, tool, route=route, platforms=platforms)
+        result = subprocess.run(
+            argv,
+            cwd=None if route else repo_root,
+            env=env,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        output = result.stdout + result.stderr
+        for line in output.rstrip("\n").splitlines():
+            logger.info("mise lock %s: %s", tool, line)
+        if _NO_TOOLS_MARKER in output:
+            logger.error(
+                "lock-shared: `mise lock %s` reported %r and exited 0 — it "
+                "found NOTHING to lock, almost certainly because "
+                "MISE_IGNORED_CONFIG_PATHS still hid %s from the child "
+                "process. Reporting success here would be exactly the "
+                "silent no-op a coverage check cannot see (an unchanged "
+                "file has no regression to flag).",
+                tool,
+                _NO_TOOLS_MARKER,
+                SHARED_FRAGMENT,
+            )
+            return 1
+        if result.returncode != 0:
+            logger.error(
+                "lock-shared: `mise lock %s` failed (rc=%d)%s",
+                tool,
+                result.returncode,
+                " inside the devcontainer" if route else "",
+            )
+            return result.returncode
+    return 0
 
 
 def lock_shared_main(
@@ -305,38 +418,7 @@ def lock_shared_main(
         else:
             logger.info("lock-shared: routing into the devcontainer: %s", reason)
 
-    for tool in tools:
-        argv, env = _lock_command(repo_root, tool, route=route)
-        result = subprocess.run(
-            argv,
-            cwd=None if route else repo_root,
-            env=env,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        output = result.stdout + result.stderr
-        for line in output.rstrip("\n").splitlines():
-            logger.info("mise lock %s: %s", tool, line)
-        if _NO_TOOLS_MARKER in output:
-            logger.error(
-                "lock-shared: `mise lock %s` reported %r and exited 0 — it "
-                "found NOTHING to lock, almost certainly because "
-                "MISE_IGNORED_CONFIG_PATHS still hid %s from the child "
-                "process. Reporting success here would be exactly the "
-                "silent no-op a coverage check cannot see (an unchanged "
-                "file has no regression to flag).",
-                tool,
-                _NO_TOOLS_MARKER,
-                SHARED_FRAGMENT,
-            )
-            return 1
-        if result.returncode != 0:
-            logger.error(
-                "lock-shared: `mise lock %s` failed (rc=%d)%s",
-                tool,
-                result.returncode,
-                " inside the devcontainer" if route else "",
-            )
-            return result.returncode
+    locked = _lock_each(repo_root, tools, route=route)
+    if locked != 0:
+        return locked
     return lock_integrity_main(repo_root)

@@ -21,16 +21,16 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 from dotfiles_setup import lock_shared
 from dotfiles_setup.devcontainer_names import resolve_names
+from dotfiles_setup.lock_integrity import tool_platforms
 from dotfiles_setup.main import setup_parser
-
-if TYPE_CHECKING:
-    import pytest
+from dotfiles_setup.platform_target import mise_lock_platforms
 
 REPO_ROOT = Path(__file__).parent.parent
 
@@ -467,3 +467,106 @@ def test_the_mise_task_calls_the_cli_rather_than_reimplementing_the_recipe() -> 
     mise_toml = (REPO_ROOT / "mise.toml").read_text()
     assert "[tasks.lock-shared]" in mise_toml
     assert "dotfiles-setup lock-shared" in mise_toml
+
+
+def _routed_argv(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """The routed argv for one `lock-shared` run, with subprocess stubbed."""
+    monkeypatch.setattr(lock_shared, "host_can_lock", lambda: (False, "Darwin"))
+    seen: list[list[str]] = []
+    monkeypatch.setattr(
+        lock_shared.subprocess,
+        "run",
+        lambda argv, **_k: (seen.append(argv), _completed(0))[1],
+    )
+    monkeypatch.setattr(lock_shared, "lock_integrity_main", lambda _root: 0)
+    assert lock_shared.lock_shared_main(REPO_ROOT, ["uv"]) == 0
+    assert seen
+    return seen[0]
+
+
+def _remote_env(argv: list[str], var: str) -> str | None:
+    """The `--remote-env` value for one variable, or None if unset."""
+    for index, item in enumerate(argv):
+        if item == "--remote-env" and argv[index + 1].startswith(f"{var}="):
+            return argv[index + 1].removeprefix(f"{var}=")
+    return None
+
+
+def test_routed_command_pins_the_full_shared_platform_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Routing must not inherit the IMAGE's `lockfile_platforms`.
+
+    `.devcontainer/mise-system.toml` scopes the IMAGE locks to the published
+    arches (`["linux-x64", "linux-arm64"]`, #698) — correct there, and
+    catastrophic here: applied to `.config/mise/mise.lock` it truncates every
+    re-locked tool from 11 platforms to 2, dropping the macOS and windows
+    entries the host installs from. Measured 2026-08-27: bun, hk, typos, uv
+    and yq all lost the same 9 platforms in one run.
+
+    The expected value comes from the committed lockfile, not from a literal
+    list recomputed the way the code builds it — an independent source of
+    truth per tests/AGENTS.md.
+    """
+    argv = _routed_argv(monkeypatch)
+    pinned = _remote_env(argv, lock_shared.LOCKFILE_PLATFORMS_VAR)
+    assert pinned is not None, (
+        "the routed argv sets no MISE_LOCKFILE_PLATFORMS, so the container's "
+        "2-platform image setting applies and truncates the shared lockfile"
+    )
+
+    committed = (REPO_ROOT / lock_shared.SHARED_LOCK).read_text(encoding="utf-8")
+    expected = set()
+    for covered in tool_platforms(committed).values():
+        expected |= covered
+    assert set(pinned.split(",")) == expected
+
+    # The FAIL direction: whatever the set is, it must not have collapsed to
+    # the image's pair. Without this the assert above would still pass if the
+    # committed lockfile itself were ever truncated to those two.
+    assert set(pinned.split(",")) != {"linux-x64", "linux-arm64"}
+    assert len(pinned.split(",")) > len(mise_lock_platforms())
+
+
+def test_routed_command_re_enables_attestation_verification(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Routing must not inherit the IMAGE's `github_attestations = false`.
+
+    It is disabled for image builds because a token is not reliably available
+    in buildkit secret mounts. Inherited here, the re-locked entry carries no
+    provenance and mise refuses to replace an attested entry with an
+    unattested one — reported as "could indicate a supply chain attack" on a
+    release that IS properly attested. Measured against pixi 0.77.1, which
+    carries one attestation per asset exactly as 0.76.2 does.
+
+    Isolating arm (measured): pinning the full platform set alone still fails
+    pixi with rc=1, so this override is independently load-bearing and cannot
+    be folded into the platform fix.
+    """
+    argv = _routed_argv(monkeypatch)
+    assert _remote_env(argv, lock_shared.GITHUB_ATTESTATIONS_VAR) == "true"
+
+
+def test_shared_lock_platforms_refuses_an_empty_lockfile(tmp_path: Path) -> None:
+    """An empty platform set must raise, never pass through as ``VAR=``.
+
+    `MISE_LOCKFILE_PLATFORMS=` is not "no opinion" — it hands mise back the
+    container's own narrow default, which is the exact truncation this
+    closes. Failing loud is the only safe answer.
+    """
+    (tmp_path / ".config" / "mise").mkdir(parents=True)
+    (tmp_path / lock_shared.SHARED_LOCK).write_text("# no tools\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="no platform entries"):
+        lock_shared.shared_lock_platforms(tmp_path)
+
+
+def test_shared_lock_platforms_reads_the_real_committed_lockfile() -> None:
+    """Control arm for the test above: the real file yields a non-empty set.
+
+    Without this, the raise-on-empty test could pass while the reader was
+    broken for every input.
+    """
+    platforms = lock_shared.shared_lock_platforms(REPO_ROOT)
+    assert "linux-x64" in platforms
+    assert len(platforms) > len(mise_lock_platforms())
