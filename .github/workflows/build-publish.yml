@@ -225,7 +225,7 @@ jobs:
           swap-storage: true
       - name: Set up Docker Buildx
         if: steps.probe.outputs.hit != 'true'
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
       - name: Write GitHub token for build secret
         if: steps.probe.outputs.hit != 'true'
         run: echo "${{ secrets.GITHUB_TOKEN }}" > /tmp/github_token
@@ -373,7 +373,7 @@ jobs:
           swap-storage: true
       - name: Set up Docker Buildx
         if: steps.probe.outputs.hit != 'true'
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
       - name: Write GitHub token for build secret
         if: steps.probe.outputs.hit != 'true'
         run: echo "${{ secrets.GITHUB_TOKEN }}" > /tmp/github_token
@@ -469,7 +469,7 @@ jobs:
           image: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}
       - name: Set up Docker Buildx
         if: steps.probe.outputs.hit == 'true'
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
       - name: Retag validated image to the per-architecture tag (cache hit)
         if: steps.probe.outputs.hit == 'true'
         # On a hit, build + smoke-test are skipped for THIS architecture, so
@@ -585,7 +585,7 @@ jobs:
           P2996_REF: ${{ inputs.p2996_ref }}
         run: echo "CLANG_P2996_REF=${P2996_REF}" >> "$GITHUB_ENV"
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
       - name: Log in to Container Registry
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -988,7 +988,7 @@ jobs:
         with:
           install_args: "python uv"
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
       - name: Log in to Container Registry
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -1086,7 +1086,7 @@ jobs:
         with:
           install_args: "python uv"
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
       - name: Log in to Container Registry
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:

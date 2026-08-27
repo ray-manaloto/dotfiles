@@ -1658,7 +1658,10 @@ per_path_tokens = { "currency.toml" = [
     "[tool.graphify]",
     'python_package = "graphifyy"',
 ], "mise.toml" = [
-    'doppler = "3.76.4"',
+    # Structural, not version-bound: the contract asserts doppler is DECLARED
+    # here (currency.toml deep-tracks it), and a version literal made every
+    # routine bump fail a wiring contract that has no opinion about versions.
+    'doppler = "',
     "[tasks.tool-currency]",
     "kb-setup currency daily'",
     "[tasks.tool-currency-check]",
