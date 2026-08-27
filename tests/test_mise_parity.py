@@ -24,6 +24,22 @@ _REPO_ROOT = Path(__file__).parent.parent
 # HERE (with a reason) rather than letting the parity test rot.
 _INTENTIONAL_SETTINGS_DIFFS: dict[str, str] = {}
 
+# Tools that may legitimately be declared in BOTH host and image, each with the
+# reason. The shared fragment is the normal answer; these are the cases it
+# CANNOT serve. Add entries HERE (with a reason) rather than deleting the check.
+_INTENTIONAL_HOST_IMAGE_DUPES: dict[str, str] = {
+    # shared.toml merges into the SYSTEM tier, which sets minimum_release_age
+    # = "7d" (.devcontainer/mise-system.toml) and carries tools ONLY — no
+    # [settings], so no per-tool age exclusion is expressible there. An exact
+    # pin of a fresh codex therefore fail-closes at image build; that is the
+    # recorded PR #169 failure ("codex 0.142.5 at 5.7d", mise-runtime.toml).
+    # So the host pins it exactly (locked, reproducible) while the image
+    # resolves "latest" in the RUNTIME tier, which is where this repo puts
+    # fast-moving AI CLIs and which carries the age exclusion. Approved by Ray
+    # 2026-08-27; revisit if shared.toml ever gains a [settings] table.
+    "npm:@openai/codex": "host pins exactly; image resolves latest (runtime tier)",
+}
+
 
 def _tools(path: str) -> set[str]:
     return set(tomllib.loads((_REPO_ROOT / path).read_text()).get("tools", {}))
@@ -56,7 +72,7 @@ def test_no_tool_declared_in_both_host_and_image_configs() -> None:
         | _tools("home/dot_config/mise/config.toml.tmpl")
     )
     shared = _tools(".config/mise/conf.d/shared.toml")
-    duplicated = host & image
+    duplicated = (host & image) - set(_INTENTIONAL_HOST_IMAGE_DUPES)
     assert duplicated == set(), (
         f"tools declared in BOTH host and image configs (move to shared.toml): "
         f"{sorted(duplicated)}"
