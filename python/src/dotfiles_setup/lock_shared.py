@@ -50,8 +50,9 @@ mise.toml`` (the workspace root config stays ignored). Verified by hand
 inside the container wrote the musl URL to the bind-mounted host tree; left
 fully set (both paths ignored), mise reports "No tools configured to lock"
 and exits 0 — a silent no-op. See the "Respec round 2" note below for why
-clearing the WHOLE variable, tried first, was itself a defect rather than
-the fix.
+this module keeps the narrower value rather than clearing the variable
+wholesale, even though — re-measured after round 1 — the wholesale clear was
+never actually shown to be the cause of round 1's failure.
 
 **Respec 2026-08-27 (round 1):** the first version routed by re-invoking this
 CLI inside the container — ``image_lock.container_command`` generalised to
@@ -75,23 +76,28 @@ container, since there is no more recursion.
 **Respec 2026-08-27 (round 2):** a cold review of round 1 found the deeper
 cause plus two more defects, all confirmed against the running container:
 
-1. **Clearing the WHOLE var was itself wrong**, not just the CLI-re-invocation
-   layered on top of it. ``MISE_IGNORED_CONFIG_PATHS`` names TWO paths — the
-   workspace's own root ``mise.toml`` AND the shared fragment
-   (``devcontainer.json``) — and round 1's ``--remote-env
+1. **Investigated and REFUTED for the shipped command shape: does clearing
+   the WHOLE var re-admit the workspace root into an auto-install path?**
+   ``MISE_IGNORED_CONFIG_PATHS`` names TWO paths — the workspace's own root
+   ``mise.toml`` AND the shared fragment — and round 1's ``--remote-env
    MISE_IGNORED_CONFIG_PATHS=`` cleared both, re-admitting the workspace root
-   ``mise.toml`` too, which ``devcontainer.json`` ignores precisely because
-   ``auto_install = true`` in the container's user overlay would otherwise
-   resolve and install all 46 host tools. Measured, same container and tool:
-   the wholesale clear with the CLI-re-invocation layer produced 43 install
-   lines and the ``github-attestations`` death, while the wholesale clear with
-   a DIRECT ``mise lock`` produced 0 installs and rc=0 — so the re-invocation
-   layer, not the variable, caused that failure. Narrowing the value is
-   defence in depth against the auto-install path, not the fix for it. The
-   fix un-ignores ONLY the shared
-   fragment: the routed ``--remote-env`` value is
-   ``MISE_IGNORED_CONFIG_PATHS=/workspaces/<basename>/mise.toml`` — the
-   workspace root config stays ignored, the shared fragment does not.
+   ``mise.toml`` too. ``devcontainer.json``'s own comment on that variable
+   documents a theoretical mechanism for that: with ``auto_install = true``
+   set in the container's user overlay, un-ignoring the root config could
+   let mise resolve and reinstall all 46 host tools. That mechanism was
+   never actually confirmed against ``mise lock`` specifically. Re-measured
+   across three runs, same container and tool: wholesale clear + a DIRECT
+   ``mise lock`` produced 0 install lines and rc=0; the narrower per-path
+   value + a DIRECT ``mise lock`` also produced 0 install lines and rc=0;
+   only wholesale clear + the (now-removed) CLI-re-invocation wrapper
+   produced 43 install lines and the ``github-attestations`` death. So the
+   wrapper caused round 1's failure, not the variable — the first two rows
+   above are identical outcomes. This module still un-ignores ONLY the
+   shared fragment rather than clearing the variable wholesale — the routed
+   ``--remote-env`` value is
+   ``MISE_IGNORED_CONFIG_PATHS=/workspaces/<basename>/mise.toml`` — but that
+   is kept as the narrower of two options that both measured clean, not
+   because the wider one was shown to be unsafe for this command.
 2. **Validation accepted tools this task does not own.** The original
    validation reused :func:`dotfiles_setup.lock_integrity.declared_host_tools`,
    which unions the root ``mise.toml`` (33 keys) and the shared fragment (21
