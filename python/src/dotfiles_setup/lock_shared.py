@@ -28,10 +28,9 @@ coverage" check) and not a blanket macOS defect (bun/hk/pixi/yq re-locked
 identically on both hosts in the same session), which is exactly why it goes
 unnoticed until a specific tool trips it.
 
-This module is :mod:`dotfiles_setup.image_lock`'s routing pattern
-(:func:`~dotfiles_setup.image_lock.host_can_lock`,
-:func:`~dotfiles_setup.image_lock.container_command` — generalised there to
-carry a different inner subcommand and ``--remote-env`` pairs) applied to
+This module reuses :mod:`dotfiles_setup.image_lock`'s host-capability check
+(:func:`~dotfiles_setup.image_lock.host_can_lock`) and id-label resolution
+(:func:`~dotfiles_setup.image_lock.devcontainer_exec_prefix`), and
 :func:`dotfiles_setup.lock_integrity.scoped_lock_main`'s named-tools-only
 safety model, for the one lockfile neither sibling owns: ``lock``/
 ``lock-tools`` never leave this host, and ``lock-image`` only ever touches
@@ -51,6 +50,25 @@ wrote the musl URL to the bind-mounted host tree; left set, mise reports "No
 tools configured to lock" and exits 0 — a silent no-op. That is held as an
 assumption rather than a documented mise mechanism: it is upstream
 config-resolution behaviour, not something this repo's source settles.
+
+**Respec 2026-08-27 (round 1):** the first version routed by re-invoking this
+CLI inside the container — ``image_lock.container_command`` generalised to
+carry ``subcommand="lock-shared"``, i.e. ``devcontainer exec ... mise exec --
+uv run --project python dotfiles-setup lock-shared --no-container <tools>``.
+That failed a live integration check: ``mise exec --``, with
+``MISE_IGNORED_CONFIG_PATHS`` cleared, resolves mise's ENTIRE declared
+toolset before running anything — including host-only tools the image
+deliberately can't attest (``.devcontainer/mise-system.toml``'s
+``github_attestations = false`` against a host lock entry's ``provenance =
+"github-attestations"``) — so it died resolving the wrapper's own tool graph
+and never reached ``mise lock``. The fix drops the CLI-re-invocation layer
+entirely: the routed command is ``mise lock <tool>`` directly, built from
+:func:`~dotfiles_setup.image_lock.devcontainer_exec_prefix` plus
+``--remote-env``. There is nothing to resolve first, because ``mise`` itself
+is the command, not a Python re-entry point. Coverage verification
+(:func:`dotfiles_setup.lock_integrity.main`) now always runs HOST-side, after
+the container call returns — it no longer runs via recursion inside the
+container, since there is no more recursion.
 """
 
 from __future__ import annotations
@@ -59,7 +77,7 @@ import logging
 import subprocess
 from typing import TYPE_CHECKING
 
-from dotfiles_setup.image_lock import container_command, host_can_lock
+from dotfiles_setup.image_lock import devcontainer_exec_prefix, host_can_lock
 from dotfiles_setup.lock_integrity import declared_host_tools
 from dotfiles_setup.lock_integrity import main as lock_integrity_main
 
@@ -78,6 +96,27 @@ SHARED_LOCK = ".config/mise/mise.lock"
 IGNORED_CONFIG_PATHS_VAR = "MISE_IGNORED_CONFIG_PATHS"
 
 
+def _lock_command(repo_root: Path, tool: str, *, route: bool) -> list[str]:
+    """The `mise lock <tool>` argv for one tool — local, or routed into the container.
+
+    The routed form is `mise lock` itself, not a re-invocation of this CLI
+    (see the module docstring's "Respec" note for why that mattered) — built
+    from :func:`~dotfiles_setup.image_lock.devcontainer_exec_prefix` so the
+    id-label resolution lives in exactly one place, plus `--remote-env` to
+    clear `MISE_IGNORED_CONFIG_PATHS` for this one call.
+    """
+    if route:
+        return [
+            *devcontainer_exec_prefix(repo_root),
+            "--remote-env",
+            f"{IGNORED_CONFIG_PATHS_VAR}=",
+            "mise",
+            "lock",
+            tool,
+        ]
+    return ["mise", "lock", tool]
+
+
 def lock_shared_main(
     repo_root: Path,
     tools: list[str],
@@ -94,14 +133,15 @@ def lock_shared_main(
     platform it targets.
 
     Tool-name validation happens BEFORE the routing decision: a bad name
-    should fail in milliseconds, not after a devcontainer round-trip. Once
-    routed (or already on a capable host), each tool is locked exactly as
+    should fail in milliseconds, not after a devcontainer round-trip. Each
+    tool is then locked exactly as
     :func:`dotfiles_setup.lock_integrity.scoped_lock_main` locks the root
-    lock — a plain scoped `mise lock <tool>` — and coverage is verified by
-    calling :func:`dotfiles_setup.lock_integrity.main` directly rather than
-    re-implementing the regression check: the predicate lives in ONE place
-    (#648), and it already walks every lockfile this repo has, including
-    `.config/mise/mise.lock`.
+    lock — a plain scoped `mise lock <tool>` per tool, run locally or (routed)
+    via `devcontainer exec` — and coverage is verified HOST-side, after every
+    tool has been locked, by calling :func:`dotfiles_setup.lock_integrity.main`
+    directly rather than re-implementing the regression check: the predicate
+    lives in ONE place (#648), and it already walks every lockfile this repo
+    has, including `.config/mise/mise.lock`.
     """
     if not tools:
         logger.error(
@@ -126,17 +166,8 @@ def lock_shared_main(
         return 1
 
     capable, reason = host_can_lock()
-    if container is True or (container is None and not capable):
-        logger.info("lock-shared: routing into the devcontainer: %s", reason)
-        argv = container_command(
-            repo_root,
-            tuple(tools),
-            subcommand="lock-shared",
-            remote_env=(f"{IGNORED_CONFIG_PATHS_VAR}=",),
-        )
-        result = subprocess.run(argv, check=False)
-        return result.returncode
-    if not capable:
+    route = container is True or (container is None and not capable)
+    if not route and not capable:
         logger.error(
             "lock-shared: refusing to regenerate %s here: %s. Re-run without "
             "--no-container to route into the devcontainer, or run this on a "
@@ -150,14 +181,18 @@ def lock_shared_main(
             reason,
         )
         return 1
+    if route:
+        logger.info("lock-shared: routing into the devcontainer: %s", reason)
 
     for tool in tools:
-        result = subprocess.run(["mise", "lock", tool], cwd=repo_root, check=False)
+        argv = _lock_command(repo_root, tool, route=route)
+        result = subprocess.run(argv, cwd=None if route else repo_root, check=False)
         if result.returncode != 0:
             logger.error(
-                "lock-shared: `mise lock %s` failed (rc=%d)",
+                "lock-shared: `mise lock %s` failed (rc=%d)%s",
                 tool,
                 result.returncode,
+                " inside the devcontainer" if route else "",
             )
             return result.returncode
     return lock_integrity_main(repo_root)

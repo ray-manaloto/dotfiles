@@ -85,6 +85,19 @@ def test_validation_runs_before_any_subprocess_is_spawned(
 
 
 def test_an_incapable_host_routes_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The routed command is `mise lock <tool>` itself — never this CLI re-invoked.
+
+    Round 1 routed by re-invoking `dotfiles-setup lock-shared` inside the
+    container via `image_lock.container_command`'s `mise exec --` wrapper.
+    That wrapper resolves mise's ENTIRE declared toolset before running
+    anything, and died on a live integration check
+    (`.devcontainer/mise-system.toml`'s `github_attestations = false` against
+    a host lock entry's `provenance = "github-attestations"`). This pins the
+    fix: the routed argv is a direct `mise lock <tool>`, with `--remote-env`
+    clearing `MISE_IGNORED_CONFIG_PATHS` ahead of it — no `dotfiles-setup`,
+    no `mise exec --`, no `--no-container` re-entry flag, because there is no
+    more recursion to terminate.
+    """
     monkeypatch.setattr(lock_shared, "host_can_lock", lambda: (False, "Darwin"))
     seen: list[list[str]] = []
     monkeypatch.setattr(
@@ -92,15 +105,18 @@ def test_an_incapable_host_routes_by_default(monkeypatch: pytest.MonkeyPatch) ->
         "run",
         lambda argv, **_k: (seen.append(argv), _completed(0))[1],
     )
+    monkeypatch.setattr(lock_shared, "lock_integrity_main", lambda _root: 0)
     assert lock_shared.lock_shared_main(REPO_ROOT, ["uv"]) == 0
     assert seen
     argv = seen[0]
     assert argv[0] == "devcontainer"
-    assert "lock-shared" in argv
+    assert "dotfiles-setup" not in argv
+    assert "lock-shared" not in argv
     assert "image-lock" not in argv
+    assert "--no-container" not in argv
     assert "--remote-env" in argv
     assert f"{lock_shared.IGNORED_CONFIG_PATHS_VAR}=" in argv
-    assert argv[-1] == "uv"
+    assert argv[-3:] == ["mise", "lock", "uv"]
 
 
 def test_an_incapable_host_with_no_container_refuses_instead_of_guessing(
@@ -132,8 +148,48 @@ def test_container_true_routes_even_from_a_capable_host(
         "run",
         lambda argv, **_k: (seen.append(argv), _completed(0))[1],
     )
+    monkeypatch.setattr(lock_shared, "lock_integrity_main", lambda _root: 0)
     assert lock_shared.lock_shared_main(REPO_ROOT, ["uv"], container=True) == 0
     assert seen[0][0] == "devcontainer"
+
+
+def test_container_success_verifies_coverage_host_side_after_return(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Coverage is checked on THIS host after `devcontainer exec` returns.
+
+    Round 1 verified coverage via recursion — the routed call re-entered this
+    same function inside the container, where it ran the local branch's
+    `lock_integrity_main`. There is no more recursion, so this pins the
+    replacement: the outer call itself invokes `lock_integrity_main(repo_root)`
+    once the routed `mise lock` has returned successfully.
+    """
+    monkeypatch.setattr(lock_shared, "host_can_lock", lambda: (False, "Darwin"))
+    monkeypatch.setattr(lock_shared.subprocess, "run", lambda *_a, **_k: _completed(0))
+    verified: list[Path] = []
+    monkeypatch.setattr(
+        lock_shared,
+        "lock_integrity_main",
+        lambda root: (verified.append(root), 0)[1],
+    )
+    assert lock_shared.lock_shared_main(REPO_ROOT, ["uv"]) == 0
+    assert verified == [REPO_ROOT]
+
+
+def test_container_failure_short_circuits_before_verifying_coverage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed routed `mise lock` must not reach the coverage check at all."""
+    monkeypatch.setattr(lock_shared, "host_can_lock", lambda: (False, "Darwin"))
+    monkeypatch.setattr(lock_shared.subprocess, "run", lambda *_a, **_k: _completed(2))
+    verified: list[str] = []
+    monkeypatch.setattr(
+        lock_shared,
+        "lock_integrity_main",
+        lambda _root: (verified.append("checked"), 0)[1],
+    )
+    assert lock_shared.lock_shared_main(REPO_ROOT, ["uv"]) == 2
+    assert not verified, "coverage must not be asserted after a failed routed lock"
 
 
 # --------------------------------------------------------------------------- #
