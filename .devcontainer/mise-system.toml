@@ -142,7 +142,7 @@ cargo-binstall = "latest"
 [bootstrap.packages]
 "apt:build-essential" = "12.12ubuntu2.26.04.2"
 "apt:ca-certificates" = "20260601~26.04.1"
-"apt:curl" = "8.18.0-1ubuntu2.3"
+"apt:curl" = "8.18.0-1ubuntu2.4"
 "apt:gnupg" = "2.4.8-4ubuntu3"
 # graphviz is installed separately below as a pinned GitLab .deb (15.1.0),
 # NOT via apt (Ubuntu ships 14.1.2). See the graphviz RUN in
@@ -155,7 +155,7 @@ cargo-binstall = "latest"
 "apt:libbz2-dev" = "1.0.8-6build2"
 "apt:libreadline-dev" = "8.3-4"
 "apt:libsqlite3-dev" = "3.46.1-9ubuntu0.2"
-"apt:libssl-dev" = "3.5.5-1ubuntu3.3"
+"apt:libssl-dev" = "3.5.5-1ubuntu3.4"
 "apt:zlib1g-dev" = "1:1.3.dfsg+really1.3.1-1ubuntu3"
 # LLVM-22 C++ toolchain (#222 PR-C) — Ubuntu 26.04's version-suffixed apt packages
 # all depend on ONE shared libLLVM-22 runtime, replacing the 8 conda LLVM tools that
