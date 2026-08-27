@@ -172,19 +172,30 @@ def main(repo_root: Path, lockfiles: tuple[str, ...] = LOCKFILES) -> int:
     return 1
 
 
-def declared_host_tools(repo_root: Path) -> set[str]:
-    """Tool keys of the host config — root ``mise.toml`` + the shared fragment.
+def declared_tools(repo_root: Path, rel_paths: tuple[str, ...]) -> set[str]:
+    """Tool keys declared across the given mise config file(s).
 
     These are exactly the strings ``mise lock`` accepts: a key is whatever the
     config wrote, short (``biome``) or backend-qualified
-    (``aqua:jackchuka/mdschema``).
+    (``aqua:jackchuka/mdschema``). Parameterised over which file(s) to read so
+    a caller can scope validation to exactly the config it owns —
+    :func:`declared_host_tools` unions both host files for the root lock, but
+    :mod:`dotfiles_setup.lock_shared` must validate against the SHARED
+    fragment alone: the root ``mise.toml`` declares tools (e.g. ``aws-cli``,
+    an os-gated ``conda:ffmpeg``) that `lock-shared` does not own and must not
+    accept.
     """
     keys: set[str] = set()
-    for rel_path in ("mise.toml", ".config/mise/conf.d/shared.toml"):
+    for rel_path in rel_paths:
         path = repo_root / rel_path
         if path.exists():
             keys |= set(tomllib.loads(path.read_text()).get("tools", {}))
     return keys
+
+
+def declared_host_tools(repo_root: Path) -> set[str]:
+    """Tool keys of the host config — root ``mise.toml`` + the shared fragment."""
+    return declared_tools(repo_root, ("mise.toml", ".config/mise/conf.d/shared.toml"))
 
 
 def scoped_lock_main(repo_root: Path, tools: list[str]) -> int:

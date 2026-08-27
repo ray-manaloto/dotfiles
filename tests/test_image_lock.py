@@ -373,6 +373,52 @@ def test_platform_flags_are_passed_through_to_the_inner_call() -> None:
     assert argv[-2:] == ["--platform", "linux-x64"]
 
 
+def test_container_command_is_built_from_the_shared_prefix() -> None:
+    """`container_command` must reduce to `devcontainer_exec_prefix` + its tail.
+
+    Pins the factoring: `dotfiles_setup.lock_shared` reuses
+    `devcontainer_exec_prefix` directly for a DIFFERENT remote command
+    (`mise lock <tool>`, not this CLI re-invoked) after a92b8b8's
+    `container_command(subcommand=..., remote_env=...)` generalisation was
+    reverted — that generalisation's own `mise exec --` wrapper resolves
+    mise's entire declared toolset before running anything, which broke on a
+    live integration check. This asserts `image-lock`'s argv is exactly the
+    shared prefix plus its own fixed tail, with no leftover seam for a
+    subcommand or remote-env parameter.
+    """
+    labels = ("dotfiles.workspace=deadbeef", "dotfiles.arch=amd64")
+    prefix = image_lock.devcontainer_exec_prefix(Path("/repo"), id_labels=labels)
+    argv = image_lock.container_command(Path("/repo"), id_labels=labels)
+    assert argv[: len(prefix)] == prefix
+    assert argv[len(prefix) :] == [
+        "mise",
+        "exec",
+        "--",
+        "uv",
+        "run",
+        "--project",
+        "python",
+        "dotfiles-setup",
+        "image-lock",
+        "--no-container",
+    ]
+    assert "--remote-env" not in argv
+
+
+def test_devcontainer_exec_prefix_resolves_id_labels_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DOTFILES_PLATFORM", "linux/amd64/v2")
+    prefix = image_lock.devcontainer_exec_prefix(Path("/repo"))
+    assert prefix[:4] == ["devcontainer", "exec", "--workspace-folder", "/repo"]
+    assert prefix[4:8] == [
+        "--id-label",
+        "dotfiles.workspace=816fc349",
+        "--id-label",
+        "dotfiles.arch=amd64",
+    ]
+
+
 def test_an_incapable_host_routes_by_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
