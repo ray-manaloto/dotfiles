@@ -80,12 +80,15 @@ cause plus two more defects, all confirmed against the running container:
    workspace's own root ``mise.toml`` AND the shared fragment
    (``devcontainer.json``) — and round 1's ``--remote-env
    MISE_IGNORED_CONFIG_PATHS=`` cleared both, re-admitting the workspace root
-   ``mise.toml`` too. With ``auto_install = true`` set in the container's own
-   user-overlay mise config, that resolves and attempts to install all 46 host
-   tools before ``mise lock`` runs anything — which is what actually produced
-   round 1's ``github-attestations`` death (the CLI-re-invocation layer made
-   it WORSE by adding a second full-toolset resolution on top, but the root
-   variable was already wrong on its own). The fix un-ignores ONLY the shared
+   ``mise.toml`` too, which ``devcontainer.json`` ignores precisely because
+   ``auto_install = true`` in the container's user overlay would otherwise
+   resolve and install all 46 host tools. Measured, same container and tool:
+   the wholesale clear with the CLI-re-invocation layer produced 43 install
+   lines and the ``github-attestations`` death, while the wholesale clear with
+   a DIRECT ``mise lock`` produced 0 installs and rc=0 — so the re-invocation
+   layer, not the variable, caused that failure. Narrowing the value is
+   defence in depth against the auto-install path, not the fix for it. The
+   fix un-ignores ONLY the shared
    fragment: the routed ``--remote-env`` value is
    ``MISE_IGNORED_CONFIG_PATHS=/workspaces/<basename>/mise.toml`` — the
    workspace root config stays ignored, the shared fragment does not.
