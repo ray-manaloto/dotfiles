@@ -26,6 +26,8 @@ from typing import TYPE_CHECKING
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 from dotfiles_setup import lock_shared
+from dotfiles_setup.devcontainer_names import resolve_names
+from dotfiles_setup.main import setup_parser
 
 if TYPE_CHECKING:
     import pytest
@@ -33,8 +35,20 @@ if TYPE_CHECKING:
 REPO_ROOT = Path(__file__).parent.parent
 
 
-def _completed(rc: int) -> subprocess.CompletedProcess[bytes]:
-    return subprocess.CompletedProcess([], rc, b"", b"")
+def _completed(rc: int, stdout: str = "") -> subprocess.CompletedProcess[str]:
+    """A `text=True` `CompletedProcess` stand-in — real calls capture str, not bytes."""
+    return subprocess.CompletedProcess([], rc, stdout, "")
+
+
+def _workspace_mise_toml() -> str:
+    """The `/workspaces/<basename>/mise.toml` string the routed argv must carry.
+
+    Derived independently via `resolve_names` (the same PUBLIC primitive
+    `devcontainer_exec_prefix`'s id-labels use) rather than calling the
+    private helper under test, so the expectation tracks this repo's real
+    basename without hardcoding "dotfiles" and without being tautological.
+    """
+    return f"/workspaces/{resolve_names(workspace=REPO_ROOT).basename}/mise.toml"
 
 
 # --------------------------------------------------------------------------- #
@@ -62,6 +76,37 @@ def test_short_name_for_backend_qualified_key_is_rejected() -> None:
     """
     assert (
         lock_shared.lock_shared_main(REPO_ROOT, ["betterleaks"], container=False) == 1
+    )
+
+
+def test_a_root_only_tool_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Round 2's HIGH 2: a real declared tool this task still must not accept.
+
+    `aws-cli` is declared in root `mise.toml`, not the shared fragment — the
+    original validation reused `declared_host_tools` (the UNION of both host
+    files) and would have accepted it, then locked it into the WRONG file
+    (this module never touches the root `mise.lock`). Spawning is faked so a
+    regression here reads as "ran anyway" rather than a coincidental pass.
+    """
+    called: list[str] = []
+    monkeypatch.setattr(
+        lock_shared.subprocess,
+        "run",
+        lambda *_a, **_k: (called.append("ran"), _completed(0))[1],
+    )
+    assert lock_shared.lock_shared_main(REPO_ROOT, ["aws-cli"], container=False) == 1
+    assert not called, "a root-only tool must never reach a subprocess call"
+
+
+def test_an_os_gated_root_only_tool_is_rejected() -> None:
+    """A root-only, os-gated tool.
+
+    `conda:ffmpeg` (os=["macos"]) is root-only and would be a guaranteed
+    no-op if routed to linux — rejected for the same reason `aws-cli` is,
+    before routing is ever considered.
+    """
+    assert (
+        lock_shared.lock_shared_main(REPO_ROOT, ["conda:ffmpeg"], container=False) == 1
     )
 
 
@@ -94,9 +139,8 @@ def test_an_incapable_host_routes_by_default(monkeypatch: pytest.MonkeyPatch) ->
     (`.devcontainer/mise-system.toml`'s `github_attestations = false` against
     a host lock entry's `provenance = "github-attestations"`). This pins the
     fix: the routed argv is a direct `mise lock <tool>`, with `--remote-env`
-    clearing `MISE_IGNORED_CONFIG_PATHS` ahead of it — no `dotfiles-setup`,
-    no `mise exec --`, no `--no-container` re-entry flag, because there is no
-    more recursion to terminate.
+    ahead of it — no `dotfiles-setup`, no `mise exec --`, no `--no-container`
+    re-entry flag, because there is no more recursion to terminate.
     """
     monkeypatch.setattr(lock_shared, "host_can_lock", lambda: (False, "Darwin"))
     seen: list[list[str]] = []
@@ -115,8 +159,19 @@ def test_an_incapable_host_routes_by_default(monkeypatch: pytest.MonkeyPatch) ->
     assert "image-lock" not in argv
     assert "--no-container" not in argv
     assert "--remote-env" in argv
-    assert f"{lock_shared.IGNORED_CONFIG_PATHS_VAR}=" in argv
     assert argv[-3:] == ["mise", "lock", "uv"]
+
+    # Round 2's HIGH 1: the value must un-ignore ONLY the shared fragment —
+    # a wholesale clear (round 1's `MISE_IGNORED_CONFIG_PATHS=`) re-admits the
+    # workspace's own root `mise.toml`, which — with `auto_install = true` set
+    # in the container's user overlay — resolves and attempts to install all
+    # 46 host tools before `mise lock` runs anything.
+    env_value = argv[argv.index("--remote-env") + 1]
+    expected = f"{lock_shared.IGNORED_CONFIG_PATHS_VAR}={_workspace_mise_toml()}"
+    assert env_value == expected
+    assert env_value != f"{lock_shared.IGNORED_CONFIG_PATHS_VAR}=", (
+        "a wholesale clear re-admits the workspace root mise.toml too"
+    )
 
 
 def test_an_incapable_host_with_no_container_refuses_instead_of_guessing(
@@ -201,12 +256,14 @@ def test_a_capable_host_locks_each_tool_then_verifies_coverage(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(lock_shared, "host_can_lock", lambda: (True, "Linux/x86_64"))
-    calls: list[tuple[list[str], object]] = []
+    calls: list[tuple[list[str], Path | None, dict[str, str] | None]] = []
 
-    def fake_run(
-        argv: list[str], **kwargs: object
-    ) -> subprocess.CompletedProcess[bytes]:
-        calls.append((argv, kwargs.get("cwd")))
+    def fake_run(argv: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        cwd = kwargs.get("cwd")
+        env = kwargs.get("env")
+        assert cwd is None or isinstance(cwd, Path)
+        assert env is None or isinstance(env, dict)
+        calls.append((argv, cwd, env))
         return _completed(0)
 
     monkeypatch.setattr(lock_shared.subprocess, "run", fake_run)
@@ -217,8 +274,62 @@ def test_a_capable_host_locks_each_tool_then_verifies_coverage(
         lambda root: (verified.append(root), 0)[1],
     )
     assert lock_shared.lock_shared_main(REPO_ROOT, ["uv"], container=False) == 0
-    assert calls == [(["mise", "lock", "uv"], REPO_ROOT)]
+    assert len(calls) == 1
+    argv, cwd, env = calls[0]
+    assert argv == ["mise", "lock", "uv"]
+    assert cwd == REPO_ROOT
     assert verified == [REPO_ROOT]
+
+    # Round 2's HIGH 3: the local call must pin the var explicitly too,
+    # never inherit whatever `os.environ` happens to hold — run from INSIDE
+    # the devcontainer directly (which the refusal message itself
+    # recommends), the ambient value hides the shared fragment and `mise
+    # lock` silently finds nothing.
+    assert env is not None
+    assert env[lock_shared.IGNORED_CONFIG_PATHS_VAR] == str(REPO_ROOT / "mise.toml")
+
+
+def test_local_env_override_leaves_the_rest_of_os_environ_untouched(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The override must ADD to the ambient environment, not replace it."""
+    monkeypatch.setenv("SOME_UNRELATED_VAR", "kept")
+    monkeypatch.setattr(lock_shared, "host_can_lock", lambda: (True, "Linux/x86_64"))
+    seen_env: list[dict[str, str] | None] = []
+    monkeypatch.setattr(
+        lock_shared.subprocess,
+        "run",
+        lambda _argv, **k: (seen_env.append(k.get("env")), _completed(0))[1],
+    )
+    monkeypatch.setattr(lock_shared, "lock_integrity_main", lambda _root: 0)
+    assert lock_shared.lock_shared_main(REPO_ROOT, ["uv"], container=False) == 0
+    env = seen_env[0]
+    assert env is not None
+    assert env["SOME_UNRELATED_VAR"] == "kept"
+    assert env[lock_shared.IGNORED_CONFIG_PATHS_VAR] == str(REPO_ROOT / "mise.toml")
+
+
+def test_routed_command_passes_no_python_level_env_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The routed form controls the var via `--remote-env`, not `env=`.
+
+    `--remote-env` sets the value INSIDE the container's shell; a
+    python-level `env=` override on the `devcontainer` CLI process itself
+    would do nothing for the remote command and would be dead weight.
+    """
+    monkeypatch.setattr(lock_shared, "host_can_lock", lambda: (False, "Darwin"))
+    seen: list[tuple[list[str], object]] = []
+    monkeypatch.setattr(
+        lock_shared.subprocess,
+        "run",
+        lambda argv, **k: (seen.append((argv, k.get("env"))), _completed(0))[1],
+    )
+    monkeypatch.setattr(lock_shared, "lock_integrity_main", lambda _root: 0)
+    assert lock_shared.lock_shared_main(REPO_ROOT, ["uv"]) == 0
+    argv, env = seen[0]
+    assert argv[0] == "devcontainer"
+    assert env is None
 
 
 def test_a_failed_mise_lock_call_short_circuits_before_verifying_coverage(
@@ -252,8 +363,100 @@ def test_coverage_verification_is_delegated_not_reimplemented(
 
 
 # --------------------------------------------------------------------------- #
+# Round 2's HIGH 3 — rc=0 is not "written"; mise's own no-tools signal must
+# be treated as a hard failure, local or routed.
+# --------------------------------------------------------------------------- #
+
+
+#: mise's own message when a `mise lock <tool>` call finds nothing to lock —
+#: the literal string, independent of `lock_shared._NO_TOOLS_MARKER`, so this
+#: is an independent expectation rather than the test re-reading the
+#: constant the code under test defines.
+_MISE_NO_TOOLS_LINE = "No tools configured to lock"
+
+
+def test_a_local_silent_no_op_fails_even_at_rc_zero(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The exact round-2 failure mode.
+
+    Run locally inside the devcontainer, ambient `MISE_IGNORED_CONFIG_PATHS`
+    still hides the shared fragment, `mise lock` finds nothing, prints
+    mise's own no-op line, and exits 0. Coverage-held (nothing changed) must
+    not be reported as success.
+    """
+    monkeypatch.setattr(lock_shared, "host_can_lock", lambda: (True, "Linux/x86_64"))
+    monkeypatch.setattr(
+        lock_shared.subprocess,
+        "run",
+        lambda *_a, **_k: _completed(0, stdout=f"{_MISE_NO_TOOLS_LINE}\n"),
+    )
+    verified: list[str] = []
+    monkeypatch.setattr(
+        lock_shared,
+        "lock_integrity_main",
+        lambda _root: (verified.append("checked"), 0)[1],
+    )
+    assert lock_shared.lock_shared_main(REPO_ROOT, ["uv"], container=False) == 1
+    assert not verified, "a detected no-op must short-circuit before coverage too"
+
+
+def test_a_routed_silent_no_op_fails_even_at_rc_zero(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same signal, routed.
+
+    Guards against a FUTURE cause of the same no-op class, not just the
+    specific env-inheritance bug round 2 fixed.
+    """
+    monkeypatch.setattr(lock_shared, "host_can_lock", lambda: (False, "Darwin"))
+    monkeypatch.setattr(
+        lock_shared.subprocess,
+        "run",
+        lambda *_a, **_k: _completed(0, stdout=f"{_MISE_NO_TOOLS_LINE}\n"),
+    )
+    verified: list[str] = []
+    monkeypatch.setattr(
+        lock_shared,
+        "lock_integrity_main",
+        lambda _root: (verified.append("checked"), 0)[1],
+    )
+    assert lock_shared.lock_shared_main(REPO_ROOT, ["uv"]) == 1
+    assert not verified
+
+
+def test_ordinary_output_does_not_trigger_the_no_op_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Control arm: normal `mise lock` chatter must not false-positive."""
+    monkeypatch.setattr(lock_shared, "host_can_lock", lambda: (True, "Linux/x86_64"))
+    monkeypatch.setattr(
+        lock_shared.subprocess,
+        "run",
+        lambda *_a, **_k: _completed(0, stdout="uv: updating lockfile...\n"),
+    )
+    monkeypatch.setattr(lock_shared, "lock_integrity_main", lambda _root: 0)
+    assert lock_shared.lock_shared_main(REPO_ROOT, ["uv"], container=False) == 0
+
+
+# --------------------------------------------------------------------------- #
 # The wiring the fixtures cannot see
 # --------------------------------------------------------------------------- #
+
+
+def test_lock_shared_is_registered_on_the_parser() -> None:
+    """`main.setup_parser` really carries the subcommand.
+
+    Deleting the `subparsers.add_parser("lock-shared", …)` block leaves the
+    dispatch-dict entry and every `per_path_tokens` string intact, so the
+    contract could stay green while the CLI subcommand no longer exists.
+    This is the arm that fails on that deletion — argparse exits 2 on an
+    unknown choice.
+    """
+    args = setup_parser().parse_args(["lock-shared", "uv"])
+    assert args.command == "lock-shared"
+    assert args.tools == ["uv"]
+    assert args.container is None
 
 
 def test_the_mise_task_calls_the_cli_rather_than_reimplementing_the_recipe() -> None:

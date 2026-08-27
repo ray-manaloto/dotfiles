@@ -313,8 +313,10 @@ def _add_lock_subcommands(subparsers: _SubParsers) -> None:
         "at least one tool (measured 2026-08-27: uv), and the wrong one "
         "fails only on the platform it targets, silently — local gates never "
         "exercise a linux entry. Routes into the amd64 devcontainer, "
-        "clearing MISE_IGNORED_CONFIG_PATHS so it resolves the workspace's "
-        "own shared.toml instead of its baked-in system copy",
+        "un-ignoring ONLY the shared fragment half of MISE_IGNORED_CONFIG_PATHS "
+        "so it resolves the workspace's own shared.toml instead of its "
+        "baked-in system copy, while the workspace root mise.toml stays "
+        "ignored (a wholesale clear re-admits all 46 host tools)",
     )
     lock_shared_parser.add_argument(
         "tools",

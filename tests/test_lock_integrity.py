@@ -185,6 +185,23 @@ def test_declared_host_tools_spans_both_config_files() -> None:
     assert "hk" in declared, ".config/mise/conf.d/shared.toml tools missing"
 
 
+def test_declared_tools_scopes_to_exactly_the_given_files() -> None:
+    """`declared_tools` is the parameterised primitive `declared_host_tools` wraps.
+
+    A caller that owns only ONE of the two config files — `lock_shared`,
+    scoped to the shared fragment alone (#650 round 2's HIGH 2: the union
+    let a root-only tool like `aws-cli` pass validation for a task that never
+    touches the root lock) — must be able to ask for exactly that file, not
+    the union.
+    """
+    shared_only = lock_integrity.declared_tools(
+        REPO_ROOT, (".config/mise/conf.d/shared.toml",)
+    )
+    assert "hk" in shared_only
+    assert "biome" not in shared_only, "root-only tool leaked into a scoped read"
+    assert "aws-cli" not in shared_only, "root-only tool leaked into a scoped read"
+
+
 def test_cli_wires_end_to_end() -> None:
     result = subprocess.run(
         [

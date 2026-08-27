@@ -43,13 +43,15 @@ running container always resolves tools against its BAKED-IN system copy
 (``/usr/local/share/mise/conf.d/shared.toml``), never the bind-mounted host
 repo — "the container reads the baked config, never the host repo"
 isolation. Regenerating ``.config/mise/mise.lock`` needs exactly the
-opposite for one ``devcontainer exec`` call, so the routed invocation clears
-the whole variable via ``--remote-env MISE_IGNORED_CONFIG_PATHS=``. Verified
-by hand 2026-08-27: with it cleared, ``mise lock uv`` inside the container
-wrote the musl URL to the bind-mounted host tree; left set, mise reports "No
-tools configured to lock" and exits 0 — a silent no-op. That is held as an
-assumption rather than a documented mise mechanism: it is upstream
-config-resolution behaviour, not something this repo's source settles.
+opposite, for the shared fragment ONLY: the routed invocation un-ignores it
+alone via ``--remote-env MISE_IGNORED_CONFIG_PATHS=/workspaces/<basename>/
+mise.toml`` (the workspace root config stays ignored). Verified by hand
+2026-08-27: with the shared fragment un-ignored this way, ``mise lock uv``
+inside the container wrote the musl URL to the bind-mounted host tree; left
+fully set (both paths ignored), mise reports "No tools configured to lock"
+and exits 0 — a silent no-op. See the "Respec round 2" note below for why
+clearing the WHOLE variable, tried first, was itself a defect rather than
+the fix.
 
 **Respec 2026-08-27 (round 1):** the first version routed by re-invoking this
 CLI inside the container — ``image_lock.container_command`` generalised to
@@ -69,16 +71,63 @@ is the command, not a Python re-entry point. Coverage verification
 (:func:`dotfiles_setup.lock_integrity.main`) now always runs HOST-side, after
 the container call returns — it no longer runs via recursion inside the
 container, since there is no more recursion.
+
+**Respec 2026-08-27 (round 2):** a cold review of round 1 found the deeper
+cause plus two more defects, all confirmed against the running container:
+
+1. **Clearing the WHOLE var was itself wrong**, not just the CLI-re-invocation
+   layered on top of it. ``MISE_IGNORED_CONFIG_PATHS`` names TWO paths — the
+   workspace's own root ``mise.toml`` AND the shared fragment
+   (``devcontainer.json``) — and round 1's ``--remote-env
+   MISE_IGNORED_CONFIG_PATHS=`` cleared both, re-admitting the workspace root
+   ``mise.toml`` too. With ``auto_install = true`` set in the container's own
+   user-overlay mise config, that resolves and attempts to install all 46 host
+   tools before ``mise lock`` runs anything — which is what actually produced
+   round 1's ``github-attestations`` death (the CLI-re-invocation layer made
+   it WORSE by adding a second full-toolset resolution on top, but the root
+   variable was already wrong on its own). The fix un-ignores ONLY the shared
+   fragment: the routed ``--remote-env`` value is
+   ``MISE_IGNORED_CONFIG_PATHS=/workspaces/<basename>/mise.toml`` — the
+   workspace root config stays ignored, the shared fragment does not.
+2. **Validation accepted tools this task does not own.** The original
+   validation reused :func:`dotfiles_setup.lock_integrity.declared_host_tools`,
+   which unions the root ``mise.toml`` (33 keys) and the shared fragment (21
+   keys) — so a root-only tool (``aws-cli``, an os-gated ``conda:ffmpeg``, …)
+   passed validation and would have been locked into the WRONG file (this
+   module never touches the root ``mise.lock``). Fixed by validating against
+   :func:`dotfiles_setup.lock_integrity.declared_tools` scoped to
+   ``.config/mise/conf.d/shared.toml`` alone — which also closes the
+   os-gated-tool case for free, since ``conda:ffmpeg`` is not a shared-fragment
+   key at all.
+3. **The LOCAL branch (a capable host, or ``--no-container``) inherited
+   ``MISE_IGNORED_CONFIG_PATHS`` from ``os.environ`` unexamined.** Run from
+   INSIDE the devcontainer directly — which is exactly what this module's own
+   refusal message recommends ("run this on a linux host") — the ambient
+   value is the container's baked-in ignore of BOTH paths, so `mise lock`
+   finds nothing, prints "No tools configured to lock", and exits 0; an
+   unchanged file has no coverage regression, so the whole command reports
+   success having written NOTHING. Fixed two ways: the local subprocess call
+   now pins ``MISE_IGNORED_CONFIG_PATHS`` explicitly too (to THIS process's own
+   ``<repo_root>/mise.toml`` — correct whether ``repo_root`` is a bare linux
+   host's checkout or the container's own bind-mounted view, since either way
+   it is this process's real filesystem path, unlike the routed case's
+   ``/workspaces/<basename>`` translation); and, as a general backstop against
+   ANY future silent-no-op cause, every ``mise lock`` call's output is checked
+   for mise's own "No tools configured to lock" line and treated as a hard
+   failure regardless of exit code — coverage-held is not the same as
+   written.
 """
 
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 from typing import TYPE_CHECKING
 
+from dotfiles_setup.devcontainer_names import resolve_names
 from dotfiles_setup.image_lock import devcontainer_exec_prefix, host_can_lock
-from dotfiles_setup.lock_integrity import declared_host_tools
+from dotfiles_setup.lock_integrity import declared_tools
 from dotfiles_setup.lock_integrity import main as lock_integrity_main
 
 if TYPE_CHECKING:
@@ -92,29 +141,72 @@ logger = logging.getLogger(__name__)
 #: why the shared fragment gets its own lockfile at all.
 SHARED_LOCK = ".config/mise/mise.lock"
 
-#: Cleared for the routed `mise lock` call — see the module docstring.
+#: The ONE config file this task validates tool names against — never the root
+#: `mise.toml` too (round 2's HIGH 2: that union let root-only tools like
+#: `aws-cli` or an os-gated `conda:ffmpeg` pass validation and get locked into
+#: the WRONG file).
+SHARED_FRAGMENT = ".config/mise/conf.d/shared.toml"
+
+#: Pinned explicitly for every `mise lock` call, local or routed — never left
+#: to whatever `os.environ` happens to hold. See the module docstring's
+#: "Respec round 2" note.
 IGNORED_CONFIG_PATHS_VAR = "MISE_IGNORED_CONFIG_PATHS"
 
+#: mise's own message when `mise lock <tool>` finds nothing to lock — exit
+#: code 0 either way, so this is the ONLY signal that distinguishes "ran and
+#: processed the tool" from "ran and silently did nothing" (round 2's HIGH 3).
+_NO_TOOLS_MARKER = "No tools configured to lock"
 
-def _lock_command(repo_root: Path, tool: str, *, route: bool) -> list[str]:
-    """The `mise lock <tool>` argv for one tool — local, or routed into the container.
+
+def _workspace_mise_toml(repo_root: Path) -> str:
+    """The workspace's own root config, as the CONTAINER resolves it.
+
+    Only meaningful for the ROUTED case: `repo_root` there is a HOST path
+    (e.g. the macOS clone), but the devcontainer mounts the workspace at
+    `/workspaces/<basename>` (`.devcontainer/devcontainer.json`'s
+    `${localWorkspaceFolderBasename}` templating) — a different string than
+    `repo_root` names on the invoking host. Derived via
+    :func:`~dotfiles_setup.devcontainer_names.resolve_names` so the basename
+    computation is the same one `devcontainer_exec_prefix`'s id-labels use,
+    not a second guess at it.
+    """
+    basename = resolve_names(workspace=repo_root).basename
+    return f"/workspaces/{basename}/mise.toml"
+
+
+def _lock_command(
+    repo_root: Path, tool: str, *, route: bool
+) -> tuple[list[str], dict[str, str] | None]:
+    """The `mise lock <tool>` argv (+ env override) — local, or routed.
 
     The routed form is `mise lock` itself, not a re-invocation of this CLI
-    (see the module docstring's "Respec" note for why that mattered) — built
-    from :func:`~dotfiles_setup.image_lock.devcontainer_exec_prefix` so the
-    id-label resolution lives in exactly one place, plus `--remote-env` to
-    clear `MISE_IGNORED_CONFIG_PATHS` for this one call.
+    (see the module docstring's "Respec round 1" note for why that mattered)
+    — built from :func:`~dotfiles_setup.image_lock.devcontainer_exec_prefix`
+    so the id-label resolution lives in exactly one place, plus `--remote-env`
+    to un-ignore ONLY the shared fragment inside the container.
+
+    Both forms pin `MISE_IGNORED_CONFIG_PATHS` explicitly rather than
+    inheriting the ambient environment (round 2's HIGH 1 + HIGH 3): the routed
+    form via `--remote-env` (a `devcontainer exec`-native mechanism, so this
+    stays zero-bash), the local form via an `env=` override for
+    `subprocess.run` — `<repo_root>/mise.toml`, which is correct whether this
+    process is running on a bare linux host or inside the devcontainer
+    itself, since either way it is this process's own real filesystem path
+    (unlike the routed case, which needs the `/workspaces/<basename>`
+    translation because it is invoked FROM a different host).
     """
     if route:
-        return [
+        argv = [
             *devcontainer_exec_prefix(repo_root),
             "--remote-env",
-            f"{IGNORED_CONFIG_PATHS_VAR}=",
+            f"{IGNORED_CONFIG_PATHS_VAR}={_workspace_mise_toml(repo_root)}",
             "mise",
             "lock",
             tool,
         ]
-    return ["mise", "lock", tool]
+        return argv, None
+    env = {**os.environ, IGNORED_CONFIG_PATHS_VAR: str(repo_root / "mise.toml")}
+    return ["mise", "lock", tool], env
 
 
 def lock_shared_main(
@@ -133,15 +225,19 @@ def lock_shared_main(
     platform it targets.
 
     Tool-name validation happens BEFORE the routing decision: a bad name
-    should fail in milliseconds, not after a devcontainer round-trip. Each
-    tool is then locked exactly as
+    should fail in milliseconds, not after a devcontainer round-trip, and is
+    scoped to the SHARED fragment alone — never the root `mise.toml` too
+    (round 2's HIGH 2), since a root-only tool is a real declared tool this
+    task still must not accept. Each tool is then locked exactly as
     :func:`dotfiles_setup.lock_integrity.scoped_lock_main` locks the root
     lock — a plain scoped `mise lock <tool>` per tool, run locally or (routed)
-    via `devcontainer exec` — and coverage is verified HOST-side, after every
-    tool has been locked, by calling :func:`dotfiles_setup.lock_integrity.main`
-    directly rather than re-implementing the regression check: the predicate
-    lives in ONE place (#648), and it already walks every lockfile this repo
-    has, including `.config/mise/mise.lock`.
+    via `devcontainer exec` — with its output checked for mise's own
+    no-tools-found signal (round 2's HIGH 3) before coverage is verified
+    HOST-side, after every tool has been locked, by calling
+    :func:`dotfiles_setup.lock_integrity.main` directly rather than
+    re-implementing the regression check: the predicate lives in ONE place
+    (#648), and it already walks every lockfile this repo has, including
+    `.config/mise/mise.lock`.
     """
     if not tools:
         logger.error(
@@ -153,15 +249,20 @@ def lock_shared_main(
             "exits 0 having silently done nothing."
         )
         return 1
-    declared = declared_host_tools(repo_root)
+    declared = declared_tools(repo_root, (SHARED_FRAGMENT,))
     unknown = [tool for tool in tools if tool not in declared]
     if unknown:
         logger.error(
-            "lock-shared: not declared in the host config: %s. `mise lock` "
-            "exits 0 without locking anything for a name it does not "
-            "recognise, so this would look like success. Use the FULL key "
-            "as written in .config/mise/conf.d/shared.toml.",
+            "lock-shared: not declared in %s: %s. `mise lock` exits 0 "
+            "without locking anything for a name it does not recognise, so "
+            "this would look like success — and a name from the ROOT "
+            "mise.toml (aws-cli, an os-gated conda:ffmpeg, …) is a real "
+            "declared tool that just isn't one THIS task owns; locking it "
+            "here would write the WRONG lockfile. Use the FULL key as "
+            "written in %s.",
+            SHARED_FRAGMENT,
             unknown,
+            SHARED_FRAGMENT,
         )
         return 1
 
@@ -182,11 +283,45 @@ def lock_shared_main(
         )
         return 1
     if route:
-        logger.info("lock-shared: routing into the devcontainer: %s", reason)
+        # `reason` is `host_can_lock`'s CAPABILITY verdict, not a routing
+        # motive — on the `container=True` path it explains nothing about WHY
+        # we are routing (that was the caller's explicit ask), so don't imply
+        # it does.
+        if container is True:
+            logger.info(
+                "lock-shared: routing into the devcontainer (explicitly "
+                "requested; host capability: %s)",
+                reason,
+            )
+        else:
+            logger.info("lock-shared: routing into the devcontainer: %s", reason)
 
     for tool in tools:
-        argv = _lock_command(repo_root, tool, route=route)
-        result = subprocess.run(argv, cwd=None if route else repo_root, check=False)
+        argv, env = _lock_command(repo_root, tool, route=route)
+        result = subprocess.run(
+            argv,
+            cwd=None if route else repo_root,
+            env=env,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        output = result.stdout + result.stderr
+        for line in output.rstrip("\n").splitlines():
+            logger.info("mise lock %s: %s", tool, line)
+        if _NO_TOOLS_MARKER in output:
+            logger.error(
+                "lock-shared: `mise lock %s` reported %r and exited 0 — it "
+                "found NOTHING to lock, almost certainly because "
+                "MISE_IGNORED_CONFIG_PATHS still hid %s from the child "
+                "process. Reporting success here would be exactly the "
+                "silent no-op a coverage check cannot see (an unchanged "
+                "file has no regression to flag).",
+                tool,
+                _NO_TOOLS_MARKER,
+                SHARED_FRAGMENT,
+            )
+            return 1
         if result.returncode != 0:
             logger.error(
                 "lock-shared: `mise lock %s` failed (rc=%d)%s",
