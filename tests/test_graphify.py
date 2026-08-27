@@ -50,9 +50,20 @@ def test_graphify_runtime_and_skill_stamps_match_project_pin() -> None:
         if value.startswith("graphifyy")
     )
 
-    assert dependency == "graphifyy[all]==0.9.42"
+    assert dependency == "graphifyy[all]==0.9.50"
+    version = dependency.removeprefix("graphifyy[all]==")
     stamp = repo / ".agents/skills/graphify/.graphify_version"
-    assert stamp.read_text(encoding="utf-8").strip() == "0.9.42"
+    assert stamp.read_text(encoding="utf-8").strip() == version
+    # graphify_health restates the pin as a literal to detect runtime drift.
+    # Bind that third copy here: without it a bump lands on the pin and the
+    # stamp while the health check keeps demanding the old version, so every
+    # session reports VERSION_DRIFT and nothing fails. Matching the whole
+    # comparison (not the bare number) means reshaping the check fails loudly
+    # rather than silently unbinding this assert.
+    health_source = (repo / "python/src/dotfiles_setup/graphify.py").read_text(
+        encoding="utf-8"
+    )
+    assert f'if runtime != "{version}":' in health_source
 
 
 def _force_fresh_health(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -60,7 +71,7 @@ def _force_fresh_health(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "dotfiles_setup.graphify.graphify_health",
         lambda _root: HealthResult(
-            GraphifyStatus.FRESH, "0.9.42", graph_sha256="stable"
+            GraphifyStatus.FRESH, "0.9.50", graph_sha256="stable"
         ),
     )
 
@@ -209,7 +220,7 @@ def test_query_refuses_stale_health_before_running_graphify(
     monkeypatch.setattr(
         "dotfiles_setup.graphify.graphify_health",
         lambda _root: HealthResult(
-            GraphifyStatus.STALE, "0.9.42", "build receipt missing"
+            GraphifyStatus.STALE, "0.9.50", "build receipt missing"
         ),
     )
 
@@ -224,8 +235,8 @@ def test_query_rejects_graph_changed_during_subprocess(
     """Post-query health must bind the answer to the preflight graph digest."""
     health_results = iter(
         (
-            HealthResult(GraphifyStatus.FRESH, "0.9.42", graph_sha256="before"),
-            HealthResult(GraphifyStatus.STALE, "0.9.42", "receipt mismatch"),
+            HealthResult(GraphifyStatus.FRESH, "0.9.50", graph_sha256="before"),
+            HealthResult(GraphifyStatus.STALE, "0.9.50", "receipt mismatch"),
         )
     )
     monkeypatch.setattr(
@@ -309,7 +320,7 @@ def test_graphify_health_accepts_exact_receipted_graph(tmp_path: Path) -> None:
             GraphifyBuildReceipt(
                 schema_version=1,
                 status="complete",
-                runtime_version="0.9.42",
+                runtime_version="0.9.50",
                 graph_sha256=hashlib.sha256(graph_bytes).hexdigest(),
                 graph_bytes=len(graph_bytes),
                 node_count=0,
@@ -338,7 +349,7 @@ def test_graphify_health_rejects_forged_producer_receipt_fields(
     receipt = GraphifyBuildReceipt(
         schema_version=1,
         status="complete",
-        runtime_version="0.9.42",
+        runtime_version="0.9.50",
         graph_sha256=hashlib.sha256(graph_bytes).hexdigest(),
         graph_bytes=len(graph_bytes),
         node_count=0,
@@ -366,7 +377,7 @@ def test_graphify_health_binds_one_graph_byte_snapshot(
     receipt = GraphifyBuildReceipt(
         schema_version=1,
         status="complete",
-        runtime_version="0.9.42",
+        runtime_version="0.9.50",
         graph_sha256=hashlib.sha256(graph_a).hexdigest(),
         graph_bytes=len(graph_a),
         node_count=1,
@@ -412,13 +423,13 @@ def test_graphify_health_rejects_invalid_graph_schema(
         json.dumps(
             {
                 "graph_sha256": hashlib.sha256(graph_bytes).hexdigest(),
-                "runtime_version": "0.9.42",
+                "runtime_version": "0.9.50",
                 "status": "complete",
                 "warnings": [],
             }
         )
     )
-    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.42")
+    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.50")
 
     result = graphify_health(tmp_path)
 

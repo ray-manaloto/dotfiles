@@ -190,8 +190,8 @@ def graphify_health(project_root: Path) -> HealthResult:
         return HealthResult(GraphifyStatus.CORRUPT, runtime, error)
     if schema_problem := _graph_schema_problem(payload):
         return HealthResult(GraphifyStatus.CORRUPT, runtime, schema_problem)
-    if runtime != "0.9.42":
-        return HealthResult(GraphifyStatus.VERSION_DRIFT, runtime, "expected 0.9.42")
+    if runtime != "0.9.50":
+        return HealthResult(GraphifyStatus.VERSION_DRIFT, runtime, "expected 0.9.50")
     if problem := _receipt_problem(graph_path, graph_bytes, payload, runtime):
         return problem
     return HealthResult(
