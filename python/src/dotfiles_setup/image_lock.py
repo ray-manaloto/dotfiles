@@ -287,23 +287,38 @@ def container_command(
     extra: tuple[str, ...] = (),
     *,
     id_labels: tuple[str, ...] | None = None,
+    subcommand: str = "image-lock",
+    remote_env: tuple[str, ...] = (),
 ) -> list[str]:
-    """Re-invoke this task inside the amd64 devcontainer.
+    """Re-invoke a ``dotfiles-setup`` lock subcommand inside the amd64 devcontainer.
 
     ``devcontainer exec`` and not raw ``docker exec`` (``do-not.md`` #3), and
     the inner call passes ``--no-container`` so the recursion terminates. The
     workspace is bind-mounted, so the inner run's writes land on the host tree.
+
+    Generalised for :mod:`dotfiles_setup.lock_shared`, which routes into the
+    container the same way to fix a sibling defect (mise resolves a DIFFERENT
+    release asset than macOS for at least one shared tool, discovered
+    2026-08-27): ``subcommand`` picks which ``dotfiles-setup`` verb the
+    container runs, and ``remote_env`` passes ``--remote-env KEY=value`` pairs
+    through to ``devcontainer exec`` ahead of it — the routed command needed to
+    temporarily clear ``MISE_IGNORED_CONFIG_PATHS`` so the container resolves
+    the workspace's own shared-tool config instead of its baked-in system
+    copy. Both default to ``image-lock``'s original, unparameterised
+    behaviour.
     """
     labels = (
         resolve_names(workspace=repo_root).id_labels if id_labels is None else id_labels
     )
     id_args = [arg for label in labels for arg in ("--id-label", label)]
+    env_args = [arg for pair in remote_env for arg in ("--remote-env", pair)]
     return [
         "devcontainer",
         "exec",
         "--workspace-folder",
         str(repo_root),
         *id_args,
+        *env_args,
         "mise",
         "exec",
         "--",
@@ -312,7 +327,7 @@ def container_command(
         "--project",
         "python",
         "dotfiles-setup",
-        "image-lock",
+        subcommand,
         "--no-container",
         *extra,
     ]

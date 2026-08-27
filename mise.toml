@@ -1147,6 +1147,25 @@ description = "Re-lock the NAMED tool(s), scoped, then assert coverage held"
 # verifies the artifact afterwards instead of trusting the exit code.
 run = 'uv run --project python dotfiles-setup lock-tools'
 
+[tasks.lock-shared]
+description = "Re-lock the NAMED tool(s) in the SHARED host<->image lockfile (.config/mise/mise.lock) with LINUX-native asset resolution; routes into the amd64 devcontainer from macOS"
+# Thin caller; see lock_shared.py. `lock` above never leaves this host, which
+# is right for the root lock but wrong here: mise resolves a DIFFERENT
+# release asset than macOS for at least one shared tool, and the choice is
+# made by the RESOLVING host, not by the platform being locked for. Measured
+# 2026-08-27: bumping uv 0.12.4 -> 0.12.6 via `mise run lock -- uv` on this
+# macOS host wrote the gnu tarball into the linux-x64 platform entry; mise on
+# linux resolves musl for that same entry, so a linux runner would have
+# downloaded the gnu tarball, extracted it to a gnu-named directory, and then
+# looked for the binary under the musl path — `uv: not found`, cascading into
+# ~18 hk steps. Every local gate passed, because macOS exercises the macOS
+# entries. `lock-image` (below) does not cover this either: it only ever
+# touches the two `.devcontainer/*.lock` files, never `.config/mise/mise.lock`.
+#
+#   mise run lock-shared -- "uv"          # derive host capability, auto-route
+#   mise run lock-shared -- --no-container "uv"  # fail instead of routing
+run = 'uv run --project python dotfiles-setup lock-shared'
+
 [tasks.token-check]
 description = "Pre-flight a candidate contract token: does it bind exactly one site in its target file? (#652)"
 # Thin caller; see token_audit.py. Same predicate as the `token-audit` gate in

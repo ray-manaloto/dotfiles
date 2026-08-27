@@ -77,6 +77,7 @@ from dotfiles_setup.lint_delta import DEFAULT_PATHS, lint_delta_main
 from dotfiles_setup.lock_integrity import main as lock_integrity_main
 from dotfiles_setup.lock_integrity import scoped_lock_main
 from dotfiles_setup.lock_refresh import collect_system_lock, stage_system_lock_dir
+from dotfiles_setup.lock_shared import lock_shared_main
 from dotfiles_setup.memory_index import memory_index_main
 from dotfiles_setup.p2996_hash import (
     compute_repo_base_hash,
@@ -270,6 +271,73 @@ def _add_platform_subcommands(subparsers: _SubParsers) -> None:
         "Required unless $DOTFILES_PLATFORM pins one: the pre-#677 volume name "
         "records no architecture, so an unpinned run would take it from this "
         "HOST and could name the target for the wrong machine",
+    )
+
+
+def _add_lock_subcommands(subparsers: _SubParsers) -> None:
+    """Register the `lock-check` / `lock-tools` / `lock-shared` family.
+
+    Grouped because they answer the same question at three different scopes —
+    does a lockfile still cover what HEAD covers, re-lock a named tool in the
+    root lock, re-lock a named tool in the shared lock. Extracted into a
+    helper for the reason `_add_platform_subcommands` was: `_add_honesty_
+    subcommands` sits at ruff's PLR0915 statement ceiling.
+
+    Args:
+        subparsers: The parent subparsers action to attach these to.
+    """
+    subparsers.add_parser(
+        "lock-check",
+        help="Reject a lockfile that lost platform coverage vs HEAD. A bare "
+        "`mise lock` or any `mise install` on macOS re-locks the whole file "
+        "for this platform and drops the linux conda entries the amd64 image "
+        "needs (#370, jdx/mise#7700) — measured: linux-x64 628 -> 80",
+    )
+    lock_tools_parser = subparsers.add_parser(
+        "lock-tools",
+        help="Re-lock ONLY the named tools (scoped `mise lock <tool>`), then "
+        "assert coverage held. Refuses with no tool named, because the bare "
+        "whole-file form is the destructive one",
+    )
+    lock_tools_parser.add_argument(
+        "tools",
+        nargs="*",
+        help="Full backend-qualified tool keys as written in the config "
+        "(a bare short name exits 0 having silently done nothing)",
+    )
+    lock_shared_parser = subparsers.add_parser(
+        "lock-shared",
+        help="Re-lock ONLY the named tool(s) in the SHARED host<->image "
+        "lockfile (.config/mise/mise.lock), with LINUX-native asset "
+        "resolution. mise resolves a DIFFERENT release asset than macOS for "
+        "at least one tool (measured 2026-08-27: uv), and the wrong one "
+        "fails only on the platform it targets, silently — local gates never "
+        "exercise a linux entry. Routes into the amd64 devcontainer, "
+        "clearing MISE_IGNORED_CONFIG_PATHS so it resolves the workspace's "
+        "own shared.toml instead of its baked-in system copy",
+    )
+    lock_shared_parser.add_argument(
+        "tools",
+        nargs="*",
+        help="Full backend-qualified tool keys as written in "
+        ".config/mise/conf.d/shared.toml (a bare short name exits 0 having "
+        "silently done nothing)",
+    )
+    shared_container = lock_shared_parser.add_mutually_exclusive_group()
+    shared_container.add_argument(
+        "--container",
+        dest="container",
+        action="store_true",
+        default=None,
+        help="Always route into the devcontainer (default: only when this "
+        "host cannot resolve linux-native assets)",
+    )
+    shared_container.add_argument(
+        "--no-container",
+        dest="container",
+        action="store_false",
+        help="Never route; run `mise lock` directly on this host, failing "
+        "loudly if it cannot resolve linux-native assets",
     )
 
 
@@ -509,25 +577,7 @@ def _add_honesty_subcommands(subparsers: _SubParsers) -> None:
         "lost four review rounds to an axis a sibling predicate already "
         "consumed but the author's enumeration omitted",
     )
-    subparsers.add_parser(
-        "lock-check",
-        help="Reject a lockfile that lost platform coverage vs HEAD. A bare "
-        "`mise lock` or any `mise install` on macOS re-locks the whole file for "
-        "this platform and drops the linux conda entries the amd64 image needs "
-        "(#370, jdx/mise#7700) — measured: linux-x64 628 -> 80",
-    )
-    lock_tools_parser = subparsers.add_parser(
-        "lock-tools",
-        help="Re-lock ONLY the named tools (scoped `mise lock <tool>`), then "
-        "assert coverage held. Refuses with no tool named, because the bare "
-        "whole-file form is the destructive one",
-    )
-    lock_tools_parser.add_argument(
-        "tools",
-        nargs="*",
-        help="Full backend-qualified tool keys as written in the config "
-        "(a bare short name exits 0 having silently done nothing)",
-    )
+    _add_lock_subcommands(subparsers)
     doctor_parser = subparsers.add_parser(
         "doctor",
         help="Project doctor: does the declared setup in doctor.toml match "
@@ -2127,6 +2177,9 @@ def _build_command_handlers(
         ),
         "lock-check": lambda: sys.exit(lock_integrity_main(project_root)),
         "lock-tools": lambda: sys.exit(scoped_lock_main(project_root, args.tools)),
+        "lock-shared": lambda: sys.exit(
+            lock_shared_main(project_root, args.tools, container=args.container)
+        ),
         "lint-delta": lambda: sys.exit(
             lint_delta_main(
                 project_root,

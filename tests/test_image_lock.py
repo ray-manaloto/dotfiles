@@ -373,6 +373,42 @@ def test_platform_flags_are_passed_through_to_the_inner_call() -> None:
     assert argv[-2:] == ["--platform", "linux-x64"]
 
 
+def test_subcommand_and_remote_env_generalise_for_a_sibling_task() -> None:
+    """Reused for a sibling task, the defaults must stay `image-lock`.
+
+    dotfiles_setup.lock_shared reuses this exact mechanism for a different
+    lockfile, so both new params must work while `image-lock`'s own call
+    (no params) is untouched.
+    """
+    argv = image_lock.container_command(
+        Path("/repo"),
+        ("uv",),
+        id_labels=("dotfiles.workspace=deadbeef", "dotfiles.arch=amd64"),
+        subcommand="lock-shared",
+        remote_env=("MISE_IGNORED_CONFIG_PATHS=",),
+    )
+    assert "image-lock" not in argv
+    assert "lock-shared" in argv
+    assert argv[-1] == "uv"
+    assert argv.index("--remote-env") < argv.index("mise")
+    assert argv[argv.index("--remote-env") + 1] == "MISE_IGNORED_CONFIG_PATHS="
+
+
+def test_default_params_leave_image_lock_byte_identical() -> None:
+    """The generalisation must not change `image-lock`'s own argv."""
+    with_defaults = image_lock.container_command(
+        Path("/repo"), id_labels=("dotfiles.workspace=deadbeef",)
+    )
+    explicit = image_lock.container_command(
+        Path("/repo"),
+        id_labels=("dotfiles.workspace=deadbeef",),
+        subcommand="image-lock",
+        remote_env=(),
+    )
+    assert with_defaults == explicit
+    assert "--remote-env" not in with_defaults
+
+
 def test_an_incapable_host_routes_by_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
