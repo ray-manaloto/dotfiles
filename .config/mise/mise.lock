@@ -1022,9 +1022,9 @@ version = "0.12.4"
 backend = "aqua:astral-sh/uv"
 
 [tools.uv."platforms.linux-arm64"]
-checksum = "sha256:49d881b3403187e1f1789720881e77e4251ad4259d86c4844862657d2a35d13f"
-url = "https://github.com/astral-sh/uv/releases/download/0.12.4/uv-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/513521208"
+checksum = "sha256:04ed16e895b08065720e3d06cde722f0d406b63d116247d5e7776525c41f4972"
+url = "https://github.com/astral-sh/uv/releases/download/0.12.4/uv-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/513521211"
 provenance = "github-attestations"
 
 [tools.uv."platforms.linux-arm64-musl"]
@@ -1034,15 +1034,15 @@ url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/513521211"
 provenance = "github-attestations"
 
 [tools.uv."platforms.linux-x64"]
-checksum = "sha256:c8c60f47e6f88d18dbf6f33d7279fb1fbf7ae76631768152cf5578c3d65729b4"
-url = "https://github.com/astral-sh/uv/releases/download/0.12.4/uv-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/513521275"
+checksum = "sha256:7aef04898775585d636424e52053e5328f2b1779175d5cb47665ff9d7524e8e7"
+url = "https://github.com/astral-sh/uv/releases/download/0.12.4/uv-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/513521278"
 provenance = "github-attestations"
 
 [tools.uv."platforms.linux-x64-baseline"]
-checksum = "sha256:c8c60f47e6f88d18dbf6f33d7279fb1fbf7ae76631768152cf5578c3d65729b4"
-url = "https://github.com/astral-sh/uv/releases/download/0.12.4/uv-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/513521275"
+checksum = "sha256:7aef04898775585d636424e52053e5328f2b1779175d5cb47665ff9d7524e8e7"
+url = "https://github.com/astral-sh/uv/releases/download/0.12.4/uv-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/513521278"
 provenance = "github-attestations"
 
 [tools.uv."platforms.linux-x64-musl"]

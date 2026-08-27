@@ -26,13 +26,19 @@ three ways a regen goes wrong while looking fine.
 
 | You changed | Task | Artifact |
 |---|---|---|
-| a HOST tool in `mise.toml` / `shared.toml` | `mise run lock -- "<backend/name>"` | `mise.lock` |
+| a HOST-only tool in `mise.toml` | `mise run lock -- "<backend/name>"` | `mise.lock` |
+| a tool in `shared.toml` | `mise run lock-shared -- "<tool>"` | `.config/mise/mise.lock` |
 | `.devcontainer/mise-system.toml` or `mise-runtime.toml` | `mise run lock-image` | the two image locks |
-| `shared.toml` (merged into BOTH) | both, in either order | both |
+| `shared.toml` (merged into BOTH) | `lock-shared` **and** `lock-image` | both |
 
 `shared.toml` is the one that catches people: it is merged into the image
 config *and* read on the host, so a bump there leaves the image locks stale
-even after a clean `mise run lock`.
+even after a clean `mise run lock-shared`.
+
+**A shared tool is `lock-shared`'s, not `lock`'s.** `mise run lock` resolves
+on THIS host, and macOS picks a different release asset than linux for at
+least one shared tool — an entry that is wrong only on the platform no local
+gate exercises. See `.claude/skills/lock-shared/SKILL.md`.
 
 Bare `mise lock` is never the answer for either — it re-locks the whole file
 for the current platform. `.claude/rules/do-not.md` and
