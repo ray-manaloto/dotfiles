@@ -6,10 +6,11 @@ entrypoint for "make my devcontainer run the newest image ci.yml published
 and prove everything works". It handles every starting state:
 
 - **container running / stopped / absent** — detected via this workspace's
-  two #677 id labels (``dotfiles.workspace`` + ``dotfiles.arch``, ANDead);
-  ``--id-label`` REPLACES the CLI's inferred ``devcontainer.local_folder``
-  label, so that one no longer identifies anything post-#677. The action
-  matrix below converges each state onto a running, verified container.
+  two #677 id labels (``dotfiles.workspace`` + ``dotfiles.arch``, combined
+  with AND); ``--id-label`` REPLACES the CLI's inferred
+  ``devcontainer.local_folder`` label, so that one no longer identifies
+  anything post-#677. The action matrix below converges each state onto a
+  running, verified container.
 - **local tag stale vs registry** — the registry manifest digest
   (``docker buildx imagetools inspect``, no pull) is compared against the
   digest the *local tag* points at. Comparing the local **tag** matters:
@@ -386,10 +387,10 @@ def local_image_id(image_ref: str) -> str | None:
 def container_image_id(names: DevcontainerNames) -> str | None:
     """Image id of the RUNNING devcontainer for this workspace+arch (or None).
 
-    Filters on BOTH #677 id labels (workspace hash AND arch), ANDead —
-    mirrors ``devcontainer_names.teardown_container_ids``, whose docstring
-    explains why a bare workspace filter also matches the OTHER
-    architecture's container once both are up.
+    Filters on BOTH #677 id labels (workspace hash AND arch), combined with
+    a logical AND — mirrors ``devcontainer_names.teardown_container_ids``,
+    whose docstring explains why a bare workspace filter also matches the
+    OTHER architecture's container once both are up.
     """
     cid = _run(
         [

@@ -250,8 +250,8 @@ def test_container_state_filters_on_both_id_labels_not_local_folder(
 
     Post-#677 containers carry no ``devcontainer.local_folder`` label
     (``--id-label`` replaces the CLI's inferred set) — the lookup must key
-    on the two #677 id labels instead, ANDead. Control: reverting the filter
-    to the old bare-folder label fails this assertion.
+    on the two #677 id labels instead, combined with AND. Control:
+    reverting the filter to the old bare-folder label fails this assertion.
     """
     captured: list[list[str]] = []
 
