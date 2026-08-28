@@ -44,8 +44,10 @@ import tomllib
 from typing import TYPE_CHECKING
 
 from dotfiles_setup.lock_integrity import committed_text, regressions
+from dotfiles_setup.platform_target import declared_lock_platforms
 
 if TYPE_CHECKING:
+    from collections.abc import Collection
     from pathlib import Path
 
 _MISE_VERSION_RE = re.compile(r"^ARG MISE_VERSION=(\S+)$", re.MULTILINE)
@@ -165,17 +167,23 @@ def collect_system_lock(repo_root: Path, stage_dir: Path) -> None:
         ValueError: when the stage lock is missing tools from the config, or
             lost platform coverage relative to the committed lock.
     """
+    # The OS families the image config declares — the guard compares only
+    # within them, so pruning a platform the image can never satisfy is not
+    # read as damage. See `_collect_one`.
+    families = {name.split("-", 1)[0] for name in declared_lock_platforms(repo_root)}
     _collect_one(
         stage_dir / "mise.lock",
         repo_root / _SYSTEM_LOCK,
         merged_system_config_tools(repo_root),
         coverage_baseline(repo_root, _SYSTEM_LOCK),
+        families=families or None,
     )
     _collect_one(
         stage_dir / f"mise.{RUNTIME_ENV}.lock",
         repo_root / _RUNTIME_LOCK,
         runtime_config_tools(repo_root),
         coverage_baseline(repo_root, _RUNTIME_LOCK),
+        families=families or None,
     )
 
 
@@ -201,6 +209,8 @@ def _collect_one(
     dest: Path,
     config_tools: set[str],
     committed: str | None,
+    *,
+    families: Collection[str] | None = None,
 ) -> None:
     stage_text = stage_lock.read_text()
     locked_tools = set(tomllib.loads(stage_text).get("tools", {}))
@@ -218,7 +228,15 @@ def _collect_one(
     # ``committed`` is the git-tracked bytes, never the working tree — a regen
     # that already overwrote the file would otherwise be compared against its
     # own damage and certified clean.
-    lost = regressions(committed, candidate) if committed is not None else []
+    # Bounded to the OS families the image config declares: the committed image
+    # locks carry macOS entries the image can never satisfy, and dropping those
+    # is the FIX (they made every regen demand `conda:linux-perf` for
+    # `macos-x64`). Within linux the guard keeps its full #370 strength.
+    lost = (
+        regressions(committed, candidate, families=families)
+        if committed is not None
+        else []
+    )
     if lost:
         detail = "; ".join(lost)
         msg = (

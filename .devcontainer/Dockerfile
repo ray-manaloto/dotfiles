@@ -112,7 +112,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # mise.run installer already chmods the binary; the explicit chmod is a
 # belt-and-braces guard against permission drift on the cache mount.
 # renovate: datasource=github-releases depName=jdx/mise
-ARG MISE_VERSION=2026.8.5
+ARG MISE_VERSION=2026.8.14
 RUN curl https://mise.run | MISE_VERSION="v${MISE_VERSION}" sh && \
     chmod +x ${MISE_INSTALL_PATH} && \
     mise --version
@@ -568,7 +568,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # jwakely.github.io index (see renovate.json). Compatibility with the current
 # base image is empirical; if `dpkg -i` fails, build from source.
 # renovate: datasource=custom.gcc-latest depName=gcc-latest versioning=loose
-ARG GCC_LATEST_DEB=gcc-latest_17.0.0-20260719git6d5d980f76c3.deb
+ARG GCC_LATEST_DEB=gcc-latest_17.0.0-20260816git8df013222dff.deb
 # Validation D (#160 T13): kayari publishes NO checksum or signature (all
 # 404), so this locally-computed pin is the .deb's only integrity handle.
 # NOT Renovate-managed (Renovate can't compute a sha): a GCC_LATEST_DEB bump
@@ -576,7 +576,7 @@ ARG GCC_LATEST_DEB=gcc-latest_17.0.0-20260719git6d5d980f76c3.deb
 # the newly-pinned .deb and commits the fix to the Renovate branch — the pin
 # stays byte-exact without the old human-recompute friction. To repair by hand:
 # `uv run --project python dotfiles-setup gcc-sha` (or `--check` to dry-run).
-ARG GCC_LATEST_DEB_SHA256=42be4e6bcbd5d60f8f738a9d025d6d5b3e73b395d82e9558db3b057952f4905f
+ARG GCC_LATEST_DEB_SHA256=a9c2f9f7d6189ccff55ccead9ae949d29d45fa32f93268de82ce319223aaa506
 # amd64 ONLY, permanently (#698). This is not a gap upstream may close — the
 # maintainer states the policy on the index page: "Only the C and C++ compilers
 # are included, and only for x86_64, in a single large package." Probed

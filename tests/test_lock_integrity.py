@@ -218,3 +218,52 @@ def test_cli_wires_end_to_end() -> None:
         check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_families_bound_prunes_an_undeclared_os_but_keeps_linux_strength() -> None:
+    """Pruning a platform the image can never satisfy is not a regression.
+
+    The committed image locks carried macOS entries that made every
+    `lock-image` regen demand `conda:linux-perf` for `macos-x64`. Dropping
+    them is the FIX. But the #370 guard must keep full strength inside the
+    families the image does ship — otherwise this bound would quietly disable
+    the very check it is threading through.
+    """
+    committed = (
+        '[tools.uv."platforms.linux-x64"]\n'
+        '[tools.uv."platforms.linux-x64-musl"]\n'
+        '[tools.uv."platforms.macos-x64"]\n'
+    )
+    # macOS dropped, linux intact — the intended prune.
+    pruned = '[tools.uv."platforms.linux-x64"]\n[tools.uv."platforms.linux-x64-musl"]\n'
+    assert lock_integrity.regressions(committed, pruned, families={"linux"}) == []
+    # Unbounded, the same prune reads as damage — the state that blocked the
+    # collect step. Without this arm the assert above passes on a no-op guard.
+    assert lock_integrity.regressions(committed, pruned) != []
+
+    # FAIL direction: a real linux loss must still be caught WITH the bound.
+    damaged = '[tools.uv."platforms.linux-x64"]\n[tools.uv."platforms.macos-x64"]\n'
+    lost = lock_integrity.regressions(committed, damaged, families={"linux"})
+    assert lost, "a genuine linux-x64-musl loss slipped through the bound"
+    assert "linux-x64-musl" in lost[0]
+
+
+def test_only_the_image_lockfiles_get_the_family_bound() -> None:
+    """The bound is image-only — the HOST locks keep the unbounded #370 check.
+
+    The image is linux-only by `mise-system.toml`'s `lockfile_platforms`, so a
+    dropped macOS entry there is the intended prune. The host locks genuinely
+    carry macOS, and losing it there is exactly the damage this module exists
+    to catch — a bound that leaked to them would silently disable it.
+    """
+    assert {
+        ".devcontainer/mise-system.lock",
+        ".devcontainer/mise-runtime.lock",
+    } == set(lock_integrity.IMAGE_LOCKFILES)
+    for host_lock in ("mise.lock", ".config/mise/mise.lock"):
+        assert host_lock not in lock_integrity.IMAGE_LOCKFILES, (
+            f"{host_lock} is a HOST lock — bounding it would hide real macOS loss"
+        )
+    # Every bounded path must be a declared lockfile, or the bound applies to
+    # nothing and the asymmetry is decorative.
+    assert set(lock_integrity.LOCKFILES) >= set(lock_integrity.IMAGE_LOCKFILES)

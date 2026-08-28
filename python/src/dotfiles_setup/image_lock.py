@@ -56,6 +56,7 @@ from dotfiles_setup.lock_refresh import (
     stage_system_lock_dir,
 )
 from dotfiles_setup.platform_target import (
+    declared_lock_platforms,
     expected_uname_machine,
     mise_lock_platforms,
     platform_arch,
@@ -63,7 +64,7 @@ from dotfiles_setup.platform_target import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Callable, Collection, Sequence
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +115,10 @@ def lock_platforms(lock_text: str) -> tuple[str, ...]:
 
 
 def platforms_to_lock(
-    lock_text: str, *, required: Sequence[str] | None = None
+    lock_text: str,
+    *,
+    required: Sequence[str] | None = None,
+    declared: Collection[str] | None = None,
 ) -> tuple[str, ...]:
     """What a regen must write: what the lock HAS, plus what it OWES.
 
@@ -128,9 +132,31 @@ def platforms_to_lock(
     ``required`` defaults to every architecture
     :data:`~dotfiles_setup.platform_target.PUBLISHED_ARCHES` ships, so widening
     the publish matrix is what widens the next regen — one declaration, not two.
+
+    ``declared`` bounds the result to what the image config's
+    ``lockfile_platforms`` admits. Without it the union is unbounded upward: a
+    platform that got into the committed lock by accident is re-targeted by
+    every subsequent regen, and the image can never satisfy it. Measured
+    2026-08-27 — 72 macOS lines in `mise-system.lock` made `lock-image` demand
+    `conda:linux-perf` for `macos-x64` and fail all 5 passes, deterministically,
+    while `mise-system.toml` declared `["linux-x64", "linux-arm64"]` the whole
+    time. An empty/absent declaration does NOT bound anything (that case is
+    :func:`~dotfiles_setup.platform_target.find_lock_platform_drift`'s to
+    report), so a missing config cannot silently narrow the regen to nothing.
     """
     owed = mise_lock_platforms() if required is None else tuple(required)
-    return tuple(sorted(set(lock_platforms(lock_text)) | set(owed)))
+    covered = set(lock_platforms(lock_text)) | set(owed)
+    if declared:
+        # Bound by OS FAMILY, not by the literal names. The declaration spells
+        # out `linux-x64` and `linux-arm64`, but mise also writes real variant
+        # entries beneath them — `linux-x64-musl`, `linux-x64-baseline`,
+        # `linux-arm64-musl` — which the image genuinely needs. An exact-name
+        # intersection clips those too and the collect step then refuses,
+        # correctly, for lost coverage (measured: hk 6 -> 2, uv 8 -> 2).
+        # What must be excluded is a whole OS the image never runs.
+        families = {name.split("-", 1)[0] for name in declared}
+        covered = {p for p in covered if p.split("-", 1)[0] in families}
+    return tuple(sorted(covered))
 
 
 def host_can_lock(
@@ -379,10 +405,14 @@ def image_lock_main(
         return 1
 
     if not platforms:
-        platforms = platforms_to_lock((repo_root / SYSTEM_LOCK).read_text())
+        platforms = platforms_to_lock(
+            (repo_root / SYSTEM_LOCK).read_text(),
+            declared=declared_lock_platforms(repo_root),
+        )
         logger.info(
             "locking %d platform(s) — what the committed lock carries plus "
-            "every published architecture: %s",
+            "every published architecture, bounded by the image config's "
+            "lockfile_platforms: %s",
             len(platforms),
             ", ".join(platforms),
         )
