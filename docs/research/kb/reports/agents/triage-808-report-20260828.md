@@ -98,7 +98,74 @@ shallow checkout:
 **So the 6 bare `assert 2 == 1` failures are all this file, all one cause.**
 `fetch-depth: 0` fixes them.
 
-## 5–6. `test_shell_integration.py` (MIXED) and `test_skillopt_provenance.py`
+## 5. `test_shell_integration.py` — MIXED, and fully separable
+
+20 collected, 9 fail, **11 pass**. The split is **by PARAMETER** for the two
+login-shell tests and **by TEST FUNCTION** for `test_zshenv_path_injection`.
+
+Parametrize lists: `:19` `_SHELL_RC_TEMPLATES`; `:139-141` reachable (7 params);
+`:159` execution (6 params).
+
+| Group | Def | Params | Verdict |
+|---|---|---|---|
+| `test_gpg_guard_no_clobber_when_gpgconf_absent` | `:95` | ×2 templates | **PASS** — hermetic `PATH` at `:82`, needs only `bash`+`grep` |
+| `test_gpg_guard_no_clobber_when_ssh_support_disabled` | `:108` | ×2 | **PASS** |
+| `test_gpg_guard_overrides_when_ssh_support_enabled` | `:125` | ×2 | **PASS** |
+| `test_tool_reachable_in_login_shell` | `:142` | `mise`, `chezmoi`, `uv` | **PASS** |
+| " | " | `pixi` | FAIL — **TOOLCHAIN** (`shared.toml:35`) |
+| " | " | `codex` | FAIL — **TOOLCHAIN** (`mise.toml:87`, no `os =` gate; `aqua:openai/codex` ships linux assets) |
+| " | " | `claude` | FAIL — **HOST-ONLY**, absent from every mise config |
+| " | " | `gemini` | FAIL — **HOST-ONLY on a runner** (see correction below) |
+| `test_tool_execution_in_login_shell` | `:160` | `chezmoi`, `uv` | **PASS** |
+| " | " | `pixi`, `codex`, `claude`, `gemini` | FAIL, same buckets |
+| `test_zshenv_path_injection` | `:173` | — | FAIL — **HOST-ONLY**. Needs the `zsh` binary *and* a chezmoi-applied `~/.zshenv` (asserts `.local/bin` + `mise/shims` in a non-interactive zsh `$PATH`, `:180-181`). **Installing zsh does NOT make it pass.** |
+
+> ⭐ **Correction to the architect's own brief, verified independently.** The brief
+> asserted `gemini` is "NOT in any mise config". It **is** — at
+> `.devcontainer/mise-runtime.toml:63` (`npm:@google/gemini-cli`). But that is an
+> **image-only** config: a repo-root `mise install` merges only
+> `.config/mise/conf.d/*.toml`, which contains just `shared.toml`. Confirmed by
+> listing that directory. Same practical outcome, different reason — and the
+> reason matters, because someone could otherwise "fix" it by expecting the
+> widened install to supply it. The brief's grep checked `mise.toml` and
+> `shared.toml` only; it never looked at the image configs.
+
+**Parameter ids to mark HOST-ONLY:** `claude`, `gemini` on both login-shell
+tests, plus the standalone `test_zshenv_path_injection`. `pixi` and `codex`
+should need no marker once the install is widened. A module marker here discards
+11 passing tests, **including all 6 issue-#87 gpg-guard regressions**.
+
+## 6. `test_skillopt_provenance.py` — GIT-DEPTH, one test
+
+`test_manifest_is_stable_and_all_live_objects_bind` (`:60`) →
+`subject.verify_live(_fetch())` at `:64`. The injected `_fetch` runs
+`git show f"{fix.commit}:{fix.path}"` with `check=True` (`:38-42`) against the
+commits pinned in `FIXES` (`python/src/dotfiles_setup/skillopt_provenance.py:66+`).
+A shallow checkout lacks those objects → `CalledProcessError`.
+
+Control arm confirming the bucket: `export()` (`skillopt_provenance.py:157`) and
+`verify_local()` (`:358`) are git-free — the only other git call is `git archive`
+in `replay()` (`:278`), which no test invokes. That is why the file's other ~16
+tests pass. **Single-test marker**, or none once the checkout is deepened.
+
+## 4b. The bare `assert 2 == 1` count — BOTH earlier figures were wrong
+
+The architect reported **6**; the agent's tail said **3**. Control-armed count by
+the architect: **4**.
+
+`grep -c 'assert 2 == 1'` on the CI log returns **8**. The control arm:
+`grep -c 'chezmoi is not installed or not in PATH'` returns **2** for what is
+indisputably ONE test — so **pytest prints every failure twice** (traceback plus
+short summary). 8 ÷ 2 = **4 distinct tests**, all `test_session_review`, all the
+shallow-checkout cause. The authoritative line is `FAILED tests/`, which appears
+exactly **23** times, matching the reported total.
+
+Lesson worth more than the number: a raw `grep -c` over a pytest log is a
+**display-bounded** probe. Neither original figure was measured against a
+known-single-failure control.
+
+<details>
+<summary>Superseded truncation notice (kept for provenance)</summary>
 
 ⚠️ **TRUNCATED.** The agent's delivery was cut off mid-table; a follow-up was
 sent requesting the tail and the session cleared before it arrived. What is
@@ -120,6 +187,8 @@ specific open question is whether `test_zshenv_path_injection` is separable from
 the login-shell parametrized cases, and which exact parameter ids need marking
 after the install is widened.
 
+</details>
+
 ## Consequences for #808's design
 
 1. **Per-test / per-parameter marks only.** No module-level markers anywhere.
@@ -127,9 +196,11 @@ after the install is widened.
    originally estimated.
 3. **Widening `install_args` fixes 7 more** (2 bootstrap + 5 hk-audit), and may
    additionally reclaim the `codex` / `pixi` login-shell parameters.
-4. That leaves a genuinely host-only residue of roughly **4–5 tests**
-   (`claude` / `gemini` login-shell parameters, `test_zshenv_path_injection`) —
-   an order of magnitude smaller than the "23 tests" the issue implies.
+4. **The genuinely host-only residue is exactly 5 test instances**: `[claude]`
+   and `[gemini]` on each of the two login-shell tests, plus
+   `test_zshenv_path_injection`. Against the "23 tests" #808 implies, that is a
+   4.6x overstatement — and `test_zshenv_path_injection` is the only one that
+   installing a tool could never fix.
 
 > **Citation note (architect, verified line-by-line):** the agent's `file:line`
 > anchors were consistently **off by one** — it appears to have counted the
@@ -139,6 +210,12 @@ after the install is widened.
 > (`mise.toml:92`), and `test_chezmoi_version` really is absent from the CI
 > failure list. Spot-check citations before acting on any agent report — an
 > off-by-one sends the next reader spelunking.
+>
+> **The TAIL delivery was different**: asked explicitly for `file:line`, the
+> agent returned `:95`, `:108`, `:125`, `:142`, `:160`, `:173`, `:19`,
+> `:139-141`, `:159` and `:38-42` — every one exact on re-read. Only the
+> skillopt def drifted (`:59` → `:60`). Asking for the anchor explicitly
+> appears to be what produced accurate ones.
 
 ## GitHub repos touched
 
