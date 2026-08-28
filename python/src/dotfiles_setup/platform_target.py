@@ -69,6 +69,7 @@ __all__ = [
     "PUBLISHED_ARCHES",
     "PlatformLiteral",
     "PublishTarget",
+    "declared_lock_platforms",
     "expected_uname_machine",
     "find_default_drift",
     "find_lock_platform_drift",
@@ -571,6 +572,29 @@ def _image_mise_config(repo_root: Path) -> str | None:
         return (repo_root / IMAGE_MISE_CONFIG).read_text(encoding="utf-8")
     except OSError:
         return None
+
+
+def declared_lock_platforms(repo_root: Path) -> frozenset[str]:
+    """The platform set ``.devcontainer/mise-system.toml`` declares, if any.
+
+    The IMAGE is linux-only, and its ``lockfile_platforms`` says so. Anything
+    outside that list is a platform the image can never satisfy — a lock entry
+    for it is at best dead weight and at worst unresolvable, which is exactly
+    what stalled `mise run lock-image` (a committed macOS entry made every
+    regen demand `conda:linux-perf` for `macos-x64`, forever).
+
+    Returns an EMPTY set when the file or the declaration is missing, so
+    callers can tell "declared nothing" from "declared these" and fall back
+    rather than silently locking zero platforms.
+    :func:`find_lock_platform_drift` already reports the missing-declaration
+    case as a defect in its own right.
+    """
+    text = _image_mise_config(repo_root)
+    match = _LOCKFILE_PLATFORMS_RE.search(text) if text is not None else None
+    if match is None:
+        return frozenset()
+    declared = {token.strip().strip("\"'") for token in match.group("body").split(",")}
+    return frozenset(declared - {""})
 
 
 def find_lock_platform_drift(repo_root: Path) -> str | None:

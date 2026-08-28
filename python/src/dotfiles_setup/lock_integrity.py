@@ -49,7 +49,10 @@ import subprocess
 import tomllib
 from typing import TYPE_CHECKING
 
+from dotfiles_setup.platform_target import declared_lock_platforms
+
 if TYPE_CHECKING:
+    from collections.abc import Collection
     from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -62,6 +65,14 @@ LOCKFILES: tuple[str, ...] = (
     ".config/mise/mise.lock",
     ".devcontainer/mise-system.lock",
     ".devcontainer/mise-runtime.lock",
+)
+
+#: The subset of :data:`LOCKFILES` that belongs to the IMAGE, which is
+#: linux-only by `.devcontainer/mise-system.toml`'s `lockfile_platforms`.
+#: Only these are compared within the declared OS families — the host pair
+#: genuinely carries macOS and must keep the unbounded #370 check.
+IMAGE_LOCKFILES: frozenset[str] = frozenset(
+    {".devcontainer/mise-system.lock", ".devcontainer/mise-runtime.lock"}
 )
 
 # `[tools.<name>."platforms.<platform>"]` — the tool name is bare or quoted
@@ -92,14 +103,40 @@ def conda_platforms(lock_text: str) -> set[str]:
     return {m.group("platform") for m in _CONDA_PLATFORM_RE.finditer(lock_text)}
 
 
-def regressions(committed: str, candidate: str) -> list[str]:
+def _os_family(platform: str) -> str:
+    """The OS half of a mise platform name (``linux-x64-musl`` -> ``linux``)."""
+    return platform.split("-", 1)[0]
+
+
+def regressions(
+    committed: str, candidate: str, *, families: Collection[str] | None = None
+) -> list[str]:
     """Platform coverage lost between the committed and candidate lockfiles.
 
     Only tools present in BOTH are compared: a tool that was removed
     outright is a legitimate config change, not a coverage regression.
+
+    ``families`` restricts the comparison to those OS families. Without it an
+    intentional prune reads as damage: the image locks carried macOS entries
+    the image can never satisfy (they made every `lock-image` regen demand
+    `conda:linux-perf` for `macos-x64`), so dropping them is the fix, not a
+    regression. Passing the image config's declared families lets the guard
+    keep its full strength WITHIN the platforms the image actually ships,
+    which is the only place coverage can regress.
     """
     lost: list[str] = []
     before, after = tool_platforms(committed), tool_platforms(candidate)
+    before_conda = conda_platforms(committed)
+    after_conda = conda_platforms(candidate)
+    if families is not None:
+        allowed = set(families)
+
+        def _keep(platforms: set[str]) -> set[str]:
+            return {p for p in platforms if _os_family(p) in allowed}
+
+        before = {name: _keep(p) for name, p in before.items()}
+        after = {name: _keep(p) for name, p in after.items()}
+        before_conda, after_conda = _keep(before_conda), _keep(after_conda)
     for name in sorted(before.keys() & after.keys()):
         missing = before[name] - after[name]
         if missing:
@@ -107,7 +144,7 @@ def regressions(committed: str, candidate: str) -> list[str]:
                 f"tool {name}: lost platform(s) {sorted(missing)} "
                 f"({len(before[name])} -> {len(after[name])} entries)"
             )
-    conda_missing = conda_platforms(committed) - conda_platforms(candidate)
+    conda_missing = before_conda - after_conda
     if conda_missing:
         lost.append(
             f"[conda-packages]: lost platform(s) {sorted(conda_missing)} — "
@@ -133,7 +170,19 @@ def committed_text(repo_root: Path, rel_path: str) -> str | None:
 def check_lockfiles(
     repo_root: Path, lockfiles: tuple[str, ...] = LOCKFILES
 ) -> list[str]:
-    """Findings across every lockfile — empty means no coverage was lost."""
+    """Findings across every lockfile — empty means no coverage was lost.
+
+    The two IMAGE lockfiles are compared only within the OS families
+    ``.devcontainer/mise-system.toml`` declares. They are linux-only by that
+    declaration, and the macOS entries they historically accumulated are
+    unsatisfiable — dropping one as its tool is re-locked is the intended
+    prune, not a regression. The HOST lockfiles get no such bound: they really
+    do carry macOS, and losing it there is the #370 damage this module exists
+    to catch.
+    """
+    families = {
+        name.split("-", 1)[0] for name in declared_lock_platforms(repo_root)
+    } or None
     findings: list[str] = []
     for rel_path in lockfiles:
         path = repo_root / rel_path
@@ -145,9 +194,10 @@ def check_lockfiles(
             # against. Its first commit establishes the baseline.
             logger.debug("%s not tracked at HEAD — skipping", rel_path)
             continue
+        bound = families if rel_path in IMAGE_LOCKFILES else None
         findings.extend(
             f"{rel_path}: {finding}"
-            for finding in regressions(committed, path.read_text())
+            for finding in regressions(committed, path.read_text(), families=bound)
         )
     return findings
 

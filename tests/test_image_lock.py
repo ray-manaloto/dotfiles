@@ -479,3 +479,125 @@ def test_the_mise_task_calls_the_cli_rather_than_reimplementing_the_recipe() -> 
     mise_toml = (REPO_ROOT / "mise.toml").read_text()
     assert "[tasks.lock-image]" in mise_toml
     assert "dotfiles-setup image-lock" in mise_toml
+
+
+def test_platforms_to_lock_is_bounded_by_the_image_declaration() -> None:
+    """A platform the image config does not declare must not be re-targeted.
+
+    The committed `mise-system.lock` carries macOS entries (72 lines, from
+    #703 and earlier) while `mise-system.toml` declares only
+    `["linux-x64", "linux-arm64"]`. Unbounded, the union re-targets macOS on
+    every regen and `mise lock` then demands `conda:linux-perf` for
+    `macos-x64` — unresolvable, so all 5 passes fail deterministically.
+
+    Expected values come from the declaration, not recomputed the way the
+    code builds them.
+    """
+    lock_text = (
+        '[tools.bun."platforms.macos-arm64"]\n[tools.bun."platforms.linux-x64"]\n'
+    )
+    declared = ("linux-x64", "linux-arm64")
+
+    bounded = image_lock.platforms_to_lock(lock_text, declared=declared)
+    assert "macos-arm64" not in bounded
+    assert "linux-x64" in bounded
+
+    # FAIL direction: without the bound the macOS platform survives, which is
+    # the bug. Without this arm the assert above would pass on a function that
+    # simply returned `declared` and ignored the lock entirely.
+    unbounded = image_lock.platforms_to_lock(lock_text)
+    assert "macos-arm64" in unbounded
+
+
+def test_platforms_to_lock_still_owes_an_undeclared_published_arch() -> None:
+    """Bounding must not defeat #698's fix — owed platforms still get written.
+
+    `platforms_to_lock` exists so an architecture newly added to the publish
+    matrix, with no entries in the committed lock yet, is still locked. The
+    bound must clip only what the image cannot satisfy, never what it owes.
+    """
+    lock_text = '[tools.bun."platforms.linux-x64"]\n'
+    bounded = image_lock.platforms_to_lock(
+        lock_text, declared=("linux-x64", "linux-arm64")
+    )
+    assert "linux-arm64" in bounded, "an owed-but-unlocked arch was clipped away"
+
+
+def test_an_absent_declaration_does_not_narrow_the_regen_to_nothing() -> None:
+    """No declaration means no bound — never a silently empty platform set.
+
+    Reading a missing declaration as "lock nothing" would turn a deleted
+    config line into a silent no-op regen. That case is reported by
+    `find_lock_platform_drift`, not enforced here.
+    """
+    lock_text = '[tools.bun."platforms.macos-arm64"]\n'
+    for empty in ((), None):
+        result = image_lock.platforms_to_lock(lock_text, declared=empty)
+        assert "macos-arm64" in result
+        assert result
+
+
+def test_declared_lock_platforms_reads_the_real_image_config() -> None:
+    """Control arm: the real config yields the two published linux platforms.
+
+    Without it, the tests above could pass against a reader that returned an
+    empty set for every input — which would silently disable the bound.
+    """
+    declared = platform_target.declared_lock_platforms(REPO_ROOT)
+    assert declared == {"linux-x64", "linux-arm64"}
+    assert not any(p.startswith("macos") for p in declared)
+
+
+def test_the_regen_actually_passes_the_image_declaration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bind the CALL SITE, not just the function.
+
+    Measured while writing these tests: deleting `declared=...` from
+    `image_lock_main` left every `platforms_to_lock` unit test green, because
+    they call the function directly and never exercise the wiring. That is the
+    silent-no-op shape `tests/AGENTS.md` warns about — a bound that exists and
+    is never applied. This is the arm that fails on that deletion.
+    """
+    monkeypatch.setattr(image_lock, "host_can_lock", lambda *_a, **_k: (True, "linux"))
+    seen: dict[str, object] = {}
+
+    class _StopError(RuntimeError):
+        """Halt main once the call we care about has happened."""
+
+    def _spy(_lock_text: str, **kwargs: object) -> tuple[str, ...]:
+        seen.update(kwargs)
+        raise _StopError
+
+    monkeypatch.setattr(image_lock, "platforms_to_lock", _spy)
+    with pytest.raises(_StopError):
+        image_lock.image_lock_main(REPO_ROOT, container=False)
+
+    declared = seen.get("declared")
+    assert isinstance(declared, (set, frozenset, tuple, list))
+    assert declared, "image_lock_main did not pass the image config's declaration"
+    assert not any(str(p).startswith("macos") for p in declared)
+
+
+def test_the_bound_keeps_linux_variants_the_declaration_does_not_spell_out() -> None:
+    """`linux-x64-musl` is a real entry the image needs, not a stray platform.
+
+    The declaration names `linux-x64` and `linux-arm64`, but mise writes
+    variant entries beneath them. Bounding by exact name clips those, and the
+    collect step then refuses for lost coverage — measured on the first
+    attempt at this fix: hk 6 -> 2 entries, uv 8 -> 2. So the bound is by OS
+    FAMILY: it excludes an OS the image never runs, never a variant of one it
+    does.
+    """
+    lock_text = (
+        '[tools.hk."platforms.linux-x64-musl"]\n'
+        '[tools.hk."platforms.linux-x64-baseline"]\n'
+        '[tools.hk."platforms.linux-arm64-musl"]\n'
+        '[tools.hk."platforms.macos-x64"]\n'
+    )
+    bounded = image_lock.platforms_to_lock(
+        lock_text, declared=("linux-x64", "linux-arm64")
+    )
+    for variant in ("linux-x64-musl", "linux-x64-baseline", "linux-arm64-musl"):
+        assert variant in bounded, f"{variant} was clipped — coverage would be lost"
+    assert not any(p.startswith("macos") for p in bounded)
