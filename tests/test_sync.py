@@ -14,8 +14,16 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 import pytest
 from dotfiles_setup import sync
 from dotfiles_setup.container import Check
+from dotfiles_setup.devcontainer_names import resolve_names
+from dotfiles_setup.platform_target import published_targets
 
 _WORKSPACE = Path("/workspaces-host/dotfiles")
+_NAMES = resolve_names(
+    workspace=_WORKSPACE, user="u", platform="linux/amd64/v2", env={}
+)
+_NAMES_ARM64 = resolve_names(
+    workspace=_WORKSPACE, user="u", platform="linux/arm64/v8", env={}
+)
 
 
 @pytest.fixture(autouse=True)
@@ -50,6 +58,7 @@ def _status(
     local: str | None = _DIGEST_NEW,
     state: sync.ContainerState = "running",
     record: sync.SyncRecord | None = None,
+    arch: str = "amd64",
 ) -> sync.SyncStatus:
     return sync.SyncStatus(
         image_ref=_REF,
@@ -58,6 +67,7 @@ def _status(
         local_image_id="img-1",
         container_state=state,
         synced_state=record,
+        arch=arch,
     )
 
 
@@ -115,9 +125,13 @@ def test_multi_digest_local_tag_matches_any() -> None:
 # rebuild; unknown ids stay non-destructive.
 def test_outdated_container_triggers_rebuild() -> None:
     record = sync.SyncRecord(
-        registry_digest=_DIGEST_NEW, local_image_id="img-1", container_image_id="c-old"
+        registry_digest=_DIGEST_NEW,
+        local_image_id="img-1",
+        containers={"amd64": "c-old"},
     )
-    status = dataclasses.replace(_status(record=record), container_image_id="c-new")
+    status = dataclasses.replace(
+        _status(record=record, arch="amd64"), container_image_id="c-new"
+    )
     assert not status.container_current
     assert sync.decide_action(status, force=False) == "rebuild"
 
@@ -125,6 +139,37 @@ def test_outdated_container_triggers_rebuild() -> None:
 def test_unknown_container_id_is_non_destructive() -> None:
     record = sync.SyncRecord(registry_digest=_DIGEST_NEW, local_image_id="img-1")
     assert _status(record=record).container_current
+
+
+# ------------------------------------------------- per-architecture record
+
+
+def test_per_arch_record_isolates_the_other_architecture() -> None:
+    """#800: an arm64 container must not be judged against amd64's entry."""
+    record = sync.SyncRecord(
+        registry_digest=_DIGEST_NEW,
+        local_image_id="img-1",
+        containers={"amd64": "c-a"},
+    )
+    arm64 = dataclasses.replace(
+        _status(record=record, arch="arm64"), container_image_id="c-b"
+    )
+    assert not arm64.container_current
+    assert sync.decide_action(arm64, force=False) == "rebuild"
+
+    amd64 = dataclasses.replace(
+        _status(record=record, arch="amd64"), container_image_id="c-a"
+    )
+    assert amd64.container_current
+    assert sync.decide_action(amd64, force=False) == "verify-only"
+
+
+def test_empty_containers_map_with_running_container_is_not_current() -> None:
+    record = sync.SyncRecord(registry_digest=_DIGEST_NEW, local_image_id="img-1")
+    status = dataclasses.replace(
+        _status(record=record, arch="amd64"), container_image_id="c-a"
+    )
+    assert not status.container_current
 
 
 # ------------------------------------------------------------ action matrix
@@ -185,17 +230,42 @@ def test_registry_digest_unreachable(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_container_state_running(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sync, "_run", lambda *_a, **_k: _cp("running\n"))
-    assert sync.container_state(_WORKSPACE) == "running"
+    assert sync.container_state(_NAMES) == "running"
 
 
 def test_container_state_stopped(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sync, "_run", lambda *_a, **_k: _cp("exited\n"))
-    assert sync.container_state(_WORKSPACE) == "stopped"
+    assert sync.container_state(_NAMES) == "stopped"
 
 
 def test_container_state_absent(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sync, "_run", lambda *_a, **_k: _cp(""))
-    assert sync.container_state(_WORKSPACE) == "absent"
+    assert sync.container_state(_NAMES) == "absent"
+
+
+def test_container_state_filters_on_both_id_labels_not_local_folder(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#800: filter on the two id labels, not the old folder label.
+
+    Post-#677 containers carry no ``devcontainer.local_folder`` label
+    (``--id-label`` replaces the CLI's inferred set) — the lookup must key
+    on the two #677 id labels instead, ANDead. Control: reverting the filter
+    to the old bare-folder label fails this assertion.
+    """
+    captured: list[list[str]] = []
+
+    def _record(cmd: list[str], **_k: object) -> subprocess.CompletedProcess[str]:
+        captured.append(cmd)
+        return _cp("")
+
+    monkeypatch.setattr(sync, "_run", _record)
+    sync.container_state(_NAMES)
+    sync.container_image_id(_NAMES)
+    for cmd in captured:
+        assert f"label={_NAMES.workspace_label}" in cmd
+        assert f"label={_NAMES.arch_label}" in cmd
+        assert not any("devcontainer.local_folder" in arg for arg in cmd)
 
 
 # ---------------------------------------------------------- CI awareness
@@ -227,6 +297,82 @@ def test_inflight_filters_completed(monkeypatch: pytest.MonkeyPatch) -> None:
     ]
     monkeypatch.setattr(sync, "_run", lambda *_a, **_k: _cp(json.dumps(runs)))
     assert [r["databaseId"] for r in sync.inflight_ci_runs("main")] == [2, 3]
+
+
+# ------------------------------------------------------- sync record write
+
+
+def test_write_sync_record_merges_other_architectures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#800: writing this arch's converge must not drop another entry.
+
+    An entry for another architecture, still witness-current for the same
+    ``local_image_id``, must survive the merge.
+    """
+    current_names = {"names": _NAMES}
+    monkeypatch.setattr(sync, "resolve_names", lambda **_kw: current_names["names"])
+    monkeypatch.setattr(sync, "local_image_id", lambda _ref: "img-1")
+
+    monkeypatch.setattr(sync, "container_image_id", lambda _n: "c-amd64")
+    sync.write_sync_record(_WORKSPACE, _REF, _DIGEST_NEW)
+    record = sync.read_sync_record(_REF)
+    assert record is not None
+    assert record.containers == {"amd64": "c-amd64"}
+
+    current_names["names"] = _NAMES_ARM64
+    monkeypatch.setattr(sync, "container_image_id", lambda _n: "c-arm64")
+    sync.write_sync_record(_WORKSPACE, _REF, _DIGEST_NEW)
+    record = sync.read_sync_record(_REF)
+    assert record is not None
+    assert record.containers == {"amd64": "c-amd64", "arm64": "c-arm64"}
+
+
+def test_write_sync_record_starts_fresh_when_local_image_id_changed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A real tag refresh drops OTHER architectures' stale entries.
+
+    A new ``local_image_id`` means the entries describe a now-superseded
+    local image and must rebuild once rather than being trusted.
+    """
+    current_names = {"names": _NAMES}
+    monkeypatch.setattr(sync, "resolve_names", lambda **_kw: current_names["names"])
+    monkeypatch.setattr(sync, "local_image_id", lambda _ref: "img-1")
+    monkeypatch.setattr(sync, "container_image_id", lambda _n: "c-amd64")
+    sync.write_sync_record(_WORKSPACE, _REF, _DIGEST_NEW)
+
+    current_names["names"] = _NAMES_ARM64
+    monkeypatch.setattr(sync, "local_image_id", lambda _ref: "img-2")
+    monkeypatch.setattr(sync, "container_image_id", lambda _n: "c-arm64")
+    sync.write_sync_record(_WORKSPACE, _REF, _DIGEST_NEW)
+
+    record = sync.read_sync_record(_REF)
+    assert record is not None
+    assert record.local_image_id == "img-2"
+    assert record.containers == {"arm64": "c-arm64"}
+
+
+def test_refresh_local_tag_targets_every_published_platform(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#800: refresh must request every published platform.
+
+    A single-platform re-export clobbers the OTHER architecture's layers
+    under the shared local tag. The expected value is derived, not
+    hard-coded — it drifts with ``platform_target._MICROARCH_LEVEL``.
+    """
+    captured: dict[str, list[str]] = {}
+
+    def _record(cmd: list[str], **_kw: object) -> subprocess.CompletedProcess[str]:
+        captured["cmd"] = cmd
+        return subprocess.CompletedProcess(args=cmd, returncode=0)
+
+    monkeypatch.setattr(sync.subprocess, "run", _record)
+    assert sync.refresh_local_tag(_REF)
+    cmd = captured["cmd"]
+    expected = ",".join(target.platform for target in published_targets())
+    assert cmd[cmd.index("--platform") + 1] == expected
 
 
 # ------------------------------------------------------------ end-to-end
