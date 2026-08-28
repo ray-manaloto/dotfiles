@@ -32,6 +32,19 @@
 #
 # DO NOT check in mise.local.toml; it is gitignored by design.
 
+# Second architecture in the SAME clone: a sibling profile,
+# mise.arm64.local.toml (also gitignored), selected with
+# `MISE_ENV=arm64 mise run up`. A shell `DOTFILES_PLATFORM=...` does NOT beat
+# a pin in this file (mise config wins over the ambient env), and the port
+# must be blank there or both architectures collide on it:
+#
+#   [env]
+#   DOTFILES_PLATFORM = "linux/arm64/v8"
+#   DEVCONTAINER_SSH_PORT = ""
+#
+# The local :dev tag holds one platform at a time: after the other arch's
+# `up`, run `mise run sync` in an arch's env before its `verify-local`.
+
 [env]
 # DEVCONTAINER_SSH_PORT = "4444"   # leave unset to derive per workspace+arch
 # BASE_IMAGE = "ghcr.io/ray-manaloto/dotfiles-devcontainer:<sha>"

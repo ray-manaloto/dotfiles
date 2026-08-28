@@ -110,9 +110,10 @@ SSH-agent forwarding uses Docker Desktop's native magic socket at `/run/host-ser
 
 - `mise.toml [tasks.up].env` holds `BASE_IMAGE`; its **global** `[env]` holds
   `DOTFILES_PLATFORM`, the one place the target architecture is chosen (#673).
-- `mise.local.toml` (gitignored, see `mise.local.toml.example`) overrides
-  per-clone. Typical use: pin `BASE_IMAGE` to a specific SHA tag, or
-  `DOTFILES_PLATFORM` to build for the other architecture.
+- `mise.local.toml` (gitignored) overrides per-clone, e.g. pin `BASE_IMAGE` to a SHA tag.
+- **Other arch:** profile mise.arm64.local.toml + `MISE_ENV=arm64 mise run up`
+  (a shell `DOTFILES_PLATFORM=` loses to a `mise.local.toml` pin) — recipe in
+  `mise.local.toml.example`; `build.options` `--tag`s the overlay per arch (#678).
 - No `.env.devcontainer` layering; per-clone overrides via `mise.local.toml` only.
 
 **The platform is ONE parameter — do not restate it** (#673). Tasks export

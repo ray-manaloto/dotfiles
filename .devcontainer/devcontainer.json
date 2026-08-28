@@ -90,7 +90,11 @@
     // `:default` fallback: a fallback here would be a second platform
     // literal, and the whole point is that exactly one place chooses. Bring
     // the container up via `mise run up`, which supplies it.
-    "options": ["--platform=${localEnv:DOTFILES_PLATFORM}"],
+    // The --tag is per clone+arch, from the same `mise run up` env as
+    // "name" above. The CLI's own vsc-<folder-hash> tag is shared by both
+    // architectures, so without it the second arch's build orphans the
+    // first container's image (verify-arch: "No such image"; #678).
+    "options": ["--tag=vsc-dotfiles-${localEnv:DEVCONTAINER_WORKSPACE_HASH}-${localEnv:DEVCONTAINER_ARCH}", "--platform=${localEnv:DOTFILES_PLATFORM}"],
     "args": {
       "DEVCONTAINER_USER": "${localEnv:USER}",
       "BASE_IMAGE": "${localEnv:BASE_IMAGE}",
