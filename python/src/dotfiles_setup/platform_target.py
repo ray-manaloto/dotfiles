@@ -331,7 +331,13 @@ def host_arch() -> str:
 
 
 def host_platform() -> str:
-    """This host's native triple (``linux/arm64/v8`` on an M-series Mac)."""
+    """The triple of the machine this process runs on.
+
+    ``linux/arm64/v8`` on an M-series Mac — and inside a container, the
+    CONTAINER's architecture, emulated or not: an amd64 container under
+    Rosetta reports ``x86_64`` to ``uname``, which is why the in-container
+    smoke can derive "does this image ship gcc-latest" from it.
+    """
     arch = host_arch()
     return f"linux/{arch}/{_MICROARCH_LEVEL[arch]}"
 

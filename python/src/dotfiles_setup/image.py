@@ -1966,6 +1966,9 @@ def smoke_script_main(tier: int | None) -> int:
         # any DOTFILES_PLATFORM the exec passed in, so `resolve_platform()`
         # answered amd64 inside an arm64 container and demanded gcc-latest
         # (measured 2026-08-28: `MISE_ENV=arm64 mise run sync` smoke FAIL).
+        # `uname` is sound here because under emulation it reports the TARGET
+        # arch (an amd64 container on an arm64 Mac says x86_64) — the same
+        # fact that makes `emulated` underivable makes the ARCH derivable.
         script = build_tier3_script(
             expected_p2996_ref=resolve_expected_p2996_ref_at_base(),
             emulated=True,
