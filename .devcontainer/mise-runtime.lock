@@ -833,16 +833,16 @@ conda_deps = [
 ]
 
 [tools."conda:rsync"."platforms.linux-x64"]
-checksum = "sha256:0f8b7721bd3c3ccbe88c71211f89783396a1333144963f23105242e808ecd8af"
-url = "https://conda.anaconda.org/conda-forge/linux-64/rsync-3.4.4-h5440a77_0.conda"
+checksum = "sha256:d611e43d22061a5abe2d370a9ebe9d6a82084b01cb33aaa450a3c21c0ac37dd4"
+url = "https://conda.anaconda.org/conda-forge/linux-64/rsync-3.4.4-hffd6c76_1.conda"
 conda_deps = [
     "libgcc-16.2.0-ha9f2e26_4",
     "lz4-c-1.10.0-hee9eb32_2",
     "libstdcxx-16.2.0-h934c35e_4",
     "xxhash-0.8.3-hec8ed23_1",
     "libzlib-1.3.2-h25fd6f3_3",
-    "libiconv-1.18-h0cb94f2_3",
     "openssl-3.6.4-h781a0a9_0",
+    "libiconv-1.18-h0cb94f2_3",
     "zstd-1.5.7-hb78ec9c_7",
     "popt-1.19-hcfc3c73_2",
     "_openmp_mutex-4.5-20_gnu",
