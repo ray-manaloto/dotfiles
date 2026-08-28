@@ -42,6 +42,7 @@
     {"path": "/Users/rmanaloto/dev/github/ray-manaloto/worktrees/dotfiles-codex-task-orchestration-v2", "head": "91e4e56aba784479c45f099f1fd428a8ae8f58e1", "branch": null, "state": "retained"},
     {"path": "/Users/rmanaloto/dev/github/ray-manaloto/worktrees/dotfiles-goal-history", "head": "610ed1aff874c33474bb68af04bdd5cff514446c", "branch": null, "state": "retained"},
     {"path": "/Users/rmanaloto/dev/github/ray-manaloto/worktrees/dotfiles-graphify-0942", "head": "23c5b28a48d9311eb199900403cfb62c47219289", "branch": "codex/graphify-0942-dotfiles", "state": "retained"},
+    {"path": "/Users/rmanaloto/dev/github/ray-manaloto/worktrees/dotfiles-issue-753-writer-lease", "head": "4e00381bf60ebe6d342aec088747d7717d6e7f83", "branch": null, "state": "retained"},
     {"path": "/Users/rmanaloto/dev/github/ray-manaloto/worktrees/dotfiles-issue-763", "head": "fc2af00e4e23aa9f8b69e64fce70de2c0f150398", "branch": null, "state": "landed-history"},
     {"path": "/Users/rmanaloto/dev/github/ray-manaloto/worktrees/dotfiles-issue-766", "head": "1a648f1d6b2846eebc28bed4c0c402e32c380784", "branch": "codex/issue-766-orchestration-refresh", "state": "active"},
     {"path": "/Users/rmanaloto/dev/github/ray-manaloto/worktrees/dotfiles-pr671", "head": "5ad351b83557fc0a687b56813a7c23d587bce35e", "branch": "codex/pr671-default-label-test", "state": "retained"}
@@ -85,7 +86,7 @@
     {"question": "Q7", "decision": "Pilot pure-test-only pytest-xdist at two workers.", "status": "accepted"},
     {"question": "Q8", "decision": "Reuse receipts only in the same ship or land invocation; never skip required checks.", "status": "accepted"},
     {"question": "Q9", "decision": "Land takeover schemas and tests first; move deep runtime work to a successor.", "status": "accepted"},
-    {"question": "Q10", "decision": "Default to one coordinator, one live implementation lane per checkout, and at most two read agents.", "status": "accepted"},
+    {"question": "Q10", "decision": "Default to one coordinator, one writer per Git common directory, and at most two read agents.", "status": "accepted"},
     {"question": "Q11", "decision": "Fail closed until state, lookups, receipts, caches, ports, volumes, and ledger are architecture-scoped.", "status": "accepted"},
     {"question": "Q12", "decision": "Use one coordinator per repository and a minimal host broker only for shared resources.", "status": "accepted"},
     {"question": "Q13", "decision": "Use dynamic live-capacity admission with deterministic waiting.", "status": "accepted"}
