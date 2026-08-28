@@ -1007,10 +1007,26 @@ _hash="$(uv run --project python dotfiles-setup devcontainer name hash)"
 container_ids="$(uv run --project python dotfiles-setup devcontainer teardown --all-arches)"
 overlay_images="$(uv run --project python dotfiles-setup devcontainer teardown-images)"
 
+# Show the plan before executing it. This set has been wrong twice (#803: an
+# unscoped tag grep took 6 of 8 sibling clones' overlays), and the operator is
+# the last control arm — a name they do not recognise is the signal to ctrl-C.
+# Printing costs nothing and is only possible because I11 already resolved
+# both sets up front.
+echo "==> prune plan for this clone (hash ${_hash})"
+echo "    containers:"
+echo "${container_ids:-      (none)}" | sed 's/^/      /'
+echo "    overlay images:"
+echo "${overlay_images:-      (none)}" | sed 's/^/      /'
+
 # Differentiate "no match" (acceptable, idempotent) from "docker command
 # failed" (must be loud) per feedback_never_suppress_warnings. Pattern:
 # capture command output, check non-empty, then act. Daemon failures
-# propagate via set -e on the capturing subshell.
+# propagate via set -e on the capturing subshell — which now means a failed
+# lookup (e.g. the docker daemon is down) aborts prune HERE, before the
+# "stopping container" line prints, rather than after it as before this
+# change. That is correct (a failed lookup is a failed teardown, I10) but the
+# failure now surfaces one step earlier than a reader of the old script would
+# expect.
 echo "==> stopping container"
 if [ -n "${container_ids}" ]; then
   # shellcheck disable=SC2086
@@ -1023,6 +1039,9 @@ echo "==> removing named volumes (scoped to hash ${_hash})"
 all_volumes="$(docker volume ls --format '{{"{{"}}.Name{{"}}"}}')"
 hashed_volumes="$(echo "${all_volumes}" | grep -E "^${_stem}" || true)"
 if [ -n "${hashed_volumes}" ]; then
+  # Named before removed, same reason as the plan block above. These cannot
+  # join it: they are resolved after the container stage, by design (#800).
+  echo "${hashed_volumes}" | sed 's/^/      /'
   echo "${hashed_volumes}" | xargs docker volume rm
 else
   echo "    (no hashed volumes for ${_hash} — already removed)"
