@@ -32,6 +32,7 @@ from dotfiles_setup.devcontainer_names import (
     ImageRefs,
     _docker_container_images,
     _docker_image_refs,
+    _removal_args,
     _trusted_by_container,
     migration_platform_refusal,
     name_field,
@@ -832,6 +833,28 @@ def test_trusted_by_container_refuses_and_logs_an_unknown_trusted_id(
         candidates = _trusted_by_container([("sha256:unknown", True)], {})
     assert candidates == {}
     assert "sha256:unknown" in caplog.text
+
+
+def test_removal_args_refuses_and_logs_a_registry_referenced_image(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """#803 I5 + the advisor's nit: the slash refusal is LOGGED, not silent.
+
+    The C1 refusal above already warns. This is its sibling on the same
+    `docker rmi` feed, and it was mute — so a candidate the guard removed was
+    indistinguishable from a clone that owned nothing, both surfacing as
+    prune's "no overlay image resolved". Deleting the `logger.warning` leaves
+    the refusal correct and the operator blind, which is the exact shape of
+    the D1 finding this repo already paid for once.
+    """
+    base = ImageRefs(
+        tags=(),
+        digests=("ghcr.io/ray-manaloto/dotfiles-devcontainer@sha256:beef",),
+    )
+    with caplog.at_level("WARNING", logger="dotfiles_setup.devcontainer_names"):
+        assert _removal_args({"sha256:base": base}) == []
+    assert "sha256:base" in caplog.text
+    assert "ghcr.io/ray-manaloto/dotfiles-devcontainer@sha256:beef" in caplog.text
 
 
 def test_docker_container_images_reads_image_and_trust_from_one_call(

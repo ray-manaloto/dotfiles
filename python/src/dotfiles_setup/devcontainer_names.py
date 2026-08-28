@@ -873,11 +873,26 @@ def _orphaned_by_tag(
 
 
 def _removal_args(candidates: dict[str, ImageRefs]) -> list[str]:
-    """I4/I5: emit refs (not ids), slash-guarded, de-duplicated over ref strings."""
+    """I4/I5: emit refs (not ids), slash-guarded, de-duplicated over ref strings.
+
+    The slash refusal LOGS, for the same reason the C1 refusal above does: a
+    silent skip here and prune's "no overlay image resolved for this clone"
+    are indistinguishable to the operator, so a candidate the guard removed
+    looks exactly like a clone that owned nothing. Refusing is correct;
+    refusing quietly on the one path that feeds `docker rmi` is how a real
+    leak gets read as a clean prune.
+    """
     result: list[str] = []
     seen: set[str] = set()
     for image_id, refs in candidates.items():
         if _has_registry_slash(refs):
+            logger.warning(
+                "teardown-images: image %s carries a registry reference "
+                "(%s) — refusing to remove it, it is not one of this "
+                "clone's locally built overlays (#803 I5)",
+                image_id,
+                next(ref for ref in (*refs.tags, *refs.digests) if "/" in ref),
+            )
             continue
         for ref in refs.tags or (image_id,):
             if ref not in seen:
