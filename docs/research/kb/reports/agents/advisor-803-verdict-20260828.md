@@ -74,3 +74,56 @@ suite 70 → 1 failed).
 ## GitHub repos touched
 
 - [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — the repo advised on.
+
+---
+
+# Addendum — second consult, after the live four-arm probe
+
+Sent mid-flight with new evidence: the architect had reported "the
+untagged-overlay path has no live arm", then built one (real
+`docker image inspect` over all 43 local images, supplying only the
+container→trust pair) and asked two questions about the residual it exposed.
+
+**Verdict unchanged: SHIP.** The four-arm probe "retires the untagged worry
+properly (both positive and negative arms on real data — that is the control-arm
+shape the rules demand)."
+
+## Q1 — is "unreachable by construction" good enough here?
+
+> **Yes, but not for your reason.**
+
+- **"Unreachable by construction" is the WEAK leg.** It rests on `mise run up`
+  being the sole label-stamper forever, and "a future task or a hand-run
+  `docker run --label` breaks it silently."
+- **What actually carries the decision is blast radius of the REACHED case.** A
+  container carrying THIS clone's workspace label that references the untagged
+  base variant is, by definition, **this clone's own container** — so deleting
+  the image behind it deletes something only this clone was using, and a dangling
+  base variant is fully recoverable by re-pull (`mise run sync`). **The invariant
+  #803 exists to protect — never delete another clone's image — does not depend
+  on this scenario at all.** Worst case is your own clone paying a re-pull,
+  triggered only by a configuration nothing currently creates. That is time, not
+  loss, and it is self-inflicted.
+
+> State it that way in the receipt: **the construction argument is the
+> probability bound, the blast-radius argument is the safety bound.**
+
+## Q2 — what discriminator is left, given tags, digests and OCI labels are all non-discriminating?
+
+The only discriminator you control is **one you stamp yourself**: a `LABEL` on
+the overlay image at overlay-build time (the thin host-user Dockerfile / bake
+target), which the trust predicate could then require. Tags, digests and
+inherited OCI labels are all base-derived — "nothing existing discriminates, you
+measured that correctly."
+
+> **Do NOT add it now:** it protects a path whose worst case is a recoverable
+> re-pull of your own image, it only covers future builds anyway, and it widens
+> the change past the ticket. Note it in the docstring beside the accepted-gap
+> paragraph as the upgrade path if the scenario ever materializes, and ship.
+
+## Disposition
+
+Shipped as PR #809 without the label. **The upgrade path is recorded here rather
+than in the docstring** — the addendum arrived after the branch had merged. If
+the scenario ever materializes, the fix is an overlay-build-time `LABEL` plus a
+trust-predicate requirement, not a widened tag heuristic.
