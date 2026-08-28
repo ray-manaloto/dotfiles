@@ -223,8 +223,12 @@ def test_down_degrades_gracefully_when_docker_daemon_is_unreachable(
         lambda args, **_kw: calls.append(args) or _completed(args),
     )
 
-    with caplog.at_level("ERROR", logger="dotfiles_setup.docker"):
+    with (
+        caplog.at_level("ERROR", logger="dotfiles_setup.docker"),
+        pytest.raises(SystemExit) as excinfo,
+    ):
         docker.DevContainerManager(tmp_path).down()
 
+    assert excinfo.value.code == 1
     assert calls == []
     assert "could not list devcontainers" in caplog.text

@@ -283,7 +283,9 @@ class DevContainerManager:
             lookup_error = exc
         if lookup_error is not None:
             logger.error("could not list devcontainers: %s", lookup_error)
-            return
+            # A failed lookup is a failed teardown — exit non-zero so a
+            # chained `dotfiles-setup docker down && …` does not proceed.
+            raise SystemExit(1)
 
         if not container_ids:
             logger.info("No active or exited devcontainers found for this project.")
