@@ -1003,20 +1003,26 @@ _hash="$(uv run --project python dotfiles-setup devcontainer name hash)"
 # container this clone owns, across BOTH architectures, plus any pre-#677
 # leftover this folder owns. Identity, not a tag, is the source of truth for
 # both sets now (#804 M6: the workspace-label filter used to be duplicated
-# here in bash; it lives only in Python).
+# here in bash; it lives only in Python). `--container-ids` feeds
+# `teardown-images` the set just captured above instead of letting it repeat
+# the `docker ps` query itself — one capture, no TOCTOU between the two calls
+# (#803 C6). Quoted, unlike the `xargs`-bound uses below: this one crosses a
+# single `argparse` argument and must survive as one string, embedded
+# newlines and all.
 container_ids="$(uv run --project python dotfiles-setup devcontainer teardown --all-arches)"
-overlay_images="$(uv run --project python dotfiles-setup devcontainer teardown-images)"
+overlay_images="$(uv run --project python dotfiles-setup devcontainer teardown-images --container-ids "${container_ids}")"
 
-# Show the plan before executing it. This set has been wrong twice (#803: an
-# unscoped tag grep took 6 of 8 sibling clones' overlays), and the operator is
-# the last control arm — a name they do not recognise is the signal to ctrl-C.
-# Printing costs nothing and is only possible because I11 already resolved
-# both sets up front.
+# The plan below is a RECORD of the resolved set, shown before the fact
+# rather than after — not a confirmation gate. Nothing pauses between this
+# print and the removals that follow; on a warm host the window is
+# milliseconds. This set has been wrong twice already (#803: an unscoped tag
+# grep took 6 of 8 sibling clones' overlays), so printing it is still worth
+# doing, just not as a safety mechanism.
 echo "==> prune plan for this clone (hash ${_hash})"
 echo "    containers:"
-echo "${container_ids:-      (none)}" | sed 's/^/      /'
+echo "${container_ids:-(none)}" | sed 's/^/      /'
 echo "    overlay images:"
-echo "${overlay_images:-      (none)}" | sed 's/^/      /'
+echo "${overlay_images:-(none)}" | sed 's/^/      /'
 
 # Differentiate "no match" (acceptable, idempotent) from "docker command
 # failed" (must be loud) per feedback_never_suppress_warnings. Pattern:

@@ -11,6 +11,7 @@ genuinely *in* the name, not merely that two calls returned something.
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import re
 import tomllib
@@ -18,6 +19,7 @@ from pathlib import Path
 
 import pytest
 from dotfiles_setup import devcontainer_names
+from dotfiles_setup import main as dc_main
 from dotfiles_setup.devcontainer_names import (
     MIGRATION_MARKER,
     NAME_FIELDS,
@@ -499,6 +501,49 @@ def test_teardown_all_arches_widens_the_default_query(
     assert calls == [(f"label={names.workspace_label}", f"label={names.arch_label}")]
 
 
+# --------------------------------------------------------- the CLI wiring
+
+
+def test_teardown_dispatch_passes_the_all_arches_flag_through(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#803 C3: nothing else pins that the CLI flag reaches the function.
+
+    Mutating `main.py`'s dispatch from `teardown_main(all_arches=args.all_arches)`
+    to bare `teardown_main()` left the whole suite green before this test
+    existed — the mutation silently falls back to arch-scoped, exactly the
+    failure `mise run prune` would ship with.
+    """
+    seen: dict[str, object] = {}
+
+    def fake_teardown_main(*, all_arches: bool = False) -> int:
+        seen["all_arches"] = all_arches
+        return 0
+
+    monkeypatch.setattr(dc_main, "teardown_main", fake_teardown_main)
+    args = argparse.Namespace(devcontainer_command="teardown", all_arches=True)
+    assert dc_main.handle_devcontainer(args) == 0
+    assert seen == {"all_arches": True}
+
+
+def test_teardown_images_dispatch_passes_the_container_ids_through(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#803 C6's CLI half: the captured ids must reach `teardown_images_main`."""
+    seen: dict[str, object] = {}
+
+    def fake_teardown_images_main(*, container_ids: str | None = None) -> int:
+        seen["container_ids"] = container_ids
+        return 0
+
+    monkeypatch.setattr(dc_main, "teardown_images_main", fake_teardown_images_main)
+    args = argparse.Namespace(
+        devcontainer_command="teardown-images", container_ids="abc def"
+    )
+    assert dc_main.handle_devcontainer(args) == 0
+    assert seen == {"container_ids": "abc def"}
+
+
 # -------------------------------------------------------- the image refs
 
 
@@ -510,7 +555,7 @@ def test_teardown_images_untagged_overlay_yields_its_bare_id() -> None:
     names = _names()
     refs = teardown_image_refs(
         names,
-        from_containers=["sha256:untagged"],
+        containers=[("sha256:untagged", True)],
         images={"sha256:untagged": ImageRefs(tags=(), digests=())},
     )
     assert refs == ["sha256:untagged"]
@@ -529,7 +574,7 @@ def test_teardown_images_multi_tag_overlay_yields_every_tag_not_the_id() -> None
     )
     refs = teardown_image_refs(
         names,
-        from_containers=["sha256:multi"],
+        containers=[("sha256:multi", True)],
         images={"sha256:multi": ImageRefs(tags=tags, digests=())},
     )
     assert refs == list(tags)
@@ -546,7 +591,7 @@ def test_teardown_images_ignores_a_different_clones_tag() -> None:
     other = _names(workspace=OTHER_WORKSPACE)
     refs = teardown_image_refs(
         names,
-        from_containers=[],
+        containers=[],
         images={
             "sha256:foreign": ImageRefs(
                 tags=(f"vsc-dotfiles-{other.hash}-{other.arch}:latest",), digests=()
@@ -560,12 +605,12 @@ def test_teardown_images_refuses_a_slashed_tag_even_from_a_container() -> None:
     """I5, tags field: a stopped container CAN reference the shared base image directly.
 
     Measured on the maintainer's host — the guard must catch it even through
-    the `from_containers` path, not just the orphan-tag scan.
+    the `containers` path, not just the orphan-tag scan.
     """
     names = _names()
     refs = teardown_image_refs(
         names,
-        from_containers=["sha256:base"],
+        containers=[("sha256:base", True)],
         images={
             "sha256:base": ImageRefs(
                 tags=("ghcr.io/ray-manaloto/dotfiles-devcontainer:dev",), digests=()
@@ -585,7 +630,7 @@ def test_teardown_images_refuses_a_slashed_digest_with_no_tags() -> None:
     names = _names()
     refs = teardown_image_refs(
         names,
-        from_containers=["sha256:base-digest-only"],
+        containers=[("sha256:base-digest-only", True)],
         images={
             "sha256:base-digest-only": ImageRefs(
                 tags=(),
@@ -607,7 +652,7 @@ def test_teardown_images_a_slash_free_digest_does_not_refuse_a_real_overlay() ->
     tag = f"vsc-dotfiles-{names.hash}-{names.arch}:latest"
     refs = teardown_image_refs(
         names,
-        from_containers=["sha256:overlay"],
+        containers=[("sha256:overlay", True)],
         images={
             "sha256:overlay": ImageRefs(
                 tags=(tag,),
@@ -622,17 +667,161 @@ def test_teardown_images_finds_the_clis_own_orphan_tag() -> None:
     """I3's second derivable shape: the CLI's own per-folder tag.
 
     It survives when the container is already gone, found by tag scan alone
-    (no `from_containers` entry).
+    (empty `containers`).
     """
     names = _names()
     full_digest = hashlib.sha256(names.workspace.encode()).hexdigest()
     tag = f"vsc-{names.basename}-{full_digest}:latest"
     refs = teardown_image_refs(
         names,
-        from_containers=[],
+        containers=[],
         images={"sha256:orphan": ImageRefs(tags=(tag,), digests=())},
     )
     assert refs == [tag]
+
+
+def test_teardown_images_finds_the_clis_tag_for_a_non_dotfiles_basename() -> None:
+    """#803 C5: isolates shape 2 (the CLI's own per-folder tag).
+
+    The test above uses the fixture workspace `/workspaces/dotfiles`, where
+    shape 1's `vsc-dotfiles-<hash>` prefix ALSO matches shape 2's own tag —
+    `full_digest` always starts with `names.hash`, since both come from the
+    same sha256 of the same workspace string. Dropping shape 2 entirely still
+    left that test green. A non-`dotfiles` basename is the only way to prove
+    shape 2 is load-bearing: `vsc-myrepo-...` cannot coincidentally match a
+    `vsc-dotfiles-...` prefix.
+    """
+    names = _names(workspace="/x/myrepo")
+    full_digest = hashlib.sha256(names.workspace.encode()).hexdigest()
+    tag = f"vsc-{names.basename}-{full_digest}:latest"
+    refs = teardown_image_refs(
+        names,
+        containers=[],
+        images={"sha256:orphan": ImageRefs(tags=(tag,), digests=())},
+    )
+    assert refs == [tag]
+
+
+def test_teardown_images_finds_our_own_overlay_tag_via_orphan_scan() -> None:
+    """#803 C5: isolates shape 1 (our own per-arch overlay tag).
+
+    A non-`dotfiles` basename means shape 2's `vsc-myrepo-...` prefix cannot
+    coincidentally also match this tag — only shape 1 can find it.
+    """
+    names = _names(workspace="/x/myrepo")
+    tag = f"vsc-dotfiles-{names.hash}-{names.arch}:latest"
+    refs = teardown_image_refs(
+        names,
+        containers=[],
+        images={"sha256:orphan": ImageRefs(tags=(tag,), digests=())},
+    )
+    assert refs == [tag]
+
+
+def test_teardown_images_skips_an_image_id_the_resolver_never_saw() -> None:
+    """#803 C1: "unknown" must not be the permissive branch.
+
+    A container-sourced image id absent from `images` means the resolver
+    could not identify it (the container inspect and the image inspect are
+    separate docker calls and can race). Mutating the fix back to
+    `all_images.get(image_id, ImageRefs((), ()))` makes this emit
+    `["sha256:unknown"]` instead.
+    """
+    names = _names()
+    refs = teardown_image_refs(names, containers=[("sha256:unknown", True)], images={})
+    assert refs == []
+
+
+def test_teardown_images_does_not_skip_a_known_trusted_image() -> None:
+    """The control arm for C1: a real, known image must still come through."""
+    names = _names()
+    refs = teardown_image_refs(
+        names,
+        containers=[("sha256:known", True)],
+        images={"sha256:known": ImageRefs(tags=(), digests=())},
+    )
+    assert refs == ["sha256:known"]
+
+
+def test_teardown_images_refuses_an_untrusted_containers_foreign_image() -> None:
+    """#803 C2: the legacy arm's provenance is not this repo's to trust.
+
+    A container reached only through the pre-#677 folder arm carries none of
+    our labels, so "reached through a container" cannot mean "ours" the way
+    it does for a labelled one. Measured on this host: a locally-tagged,
+    unrelated image (`symphony-opensymphony:local`) sits behind exactly this
+    shape. `_has_registry_slash` does not catch it either — there is no `/`.
+    """
+    names = _names()
+    refs = teardown_image_refs(
+        names,
+        containers=[("sha256:legacy-foreign", False)],
+        images={
+            "sha256:legacy-foreign": ImageRefs(
+                tags=("symphony-opensymphony:local",), digests=()
+            )
+        },
+    )
+    assert refs == []
+
+
+def test_teardown_images_trusts_an_untrusted_containers_own_overlay() -> None:
+    """The control arm for C2: this is the entire reason the legacy arm exists.
+
+    A pre-#677 leftover container's OWN overlay must still be reachable. Its
+    image carries our own per-arch overlay tag, so the extra ownership test
+    passes it.
+    """
+    names = _names()
+    tag = f"vsc-dotfiles-{names.hash}-{names.arch}:latest"
+    refs = teardown_image_refs(
+        names,
+        containers=[("sha256:legacy-mine", False)],
+        images={"sha256:legacy-mine": ImageRefs(tags=(tag,), digests=())},
+    )
+    assert refs == [tag]
+
+
+def test_teardown_images_default_resolution_asks_for_every_architecture(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#803 C4: the only branch `mise run prune` actually runs had zero coverage.
+
+    Every test above passes `containers=` explicitly and never touches the
+    real default. Mutating the real default's `all_arches=True` to `False`
+    left the suite green before this test existed — that mutation silently
+    narrows `mise run prune`'s image set to one architecture.
+    """
+    names = _names()
+    calls: list[tuple[DevcontainerNames, dict[str, object]]] = []
+
+    def fake_teardown_container_ids(
+        _n: DevcontainerNames, **kwargs: object
+    ) -> list[str]:
+        calls.append((_n, kwargs))
+        return ["container-a"]
+
+    def fake_container_images(
+        _n: DevcontainerNames, container_ids: list[str]
+    ) -> list[tuple[str, bool]]:
+        assert container_ids == ["container-a"]
+        return [("sha256:real", True)]
+
+    def fake_image_refs() -> dict[str, ImageRefs]:
+        return {"sha256:real": ImageRefs(tags=(), digests=())}
+
+    monkeypatch.setattr(
+        devcontainer_names, "teardown_container_ids", fake_teardown_container_ids
+    )
+    monkeypatch.setattr(
+        devcontainer_names, "_docker_container_images", fake_container_images
+    )
+    monkeypatch.setattr(devcontainer_names, "_docker_image_refs", fake_image_refs)
+
+    refs = teardown_image_refs(names)
+
+    assert calls == [(names, {"all_arches": True})]
+    assert refs == ["sha256:real"]
 
 
 # ---------------------------------------------------------- the migration

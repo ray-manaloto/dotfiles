@@ -249,7 +249,8 @@ def _add_platform_subcommands(subparsers: _SubParsers) -> None:
     )
     teardown_parser = devcontainer_sub.add_parser(
         "teardown",
-        help="Print the container ids `mise run stop` should remove: this "
+        help="Print the container ids `mise run stop` (this architecture "
+        "only) or `mise run prune` (--all-arches) should remove: this "
         "architecture's container plus any pre-#677 leftover this folder owns. "
         "A bare per-folder filter would also kill the OTHER architecture",
     )
@@ -260,12 +261,20 @@ def _add_platform_subcommands(subparsers: _SubParsers) -> None:
         "label alone), not just this one — what `mise run prune` needs so "
         "`teardown-images` can still reach every overlay image (#803)",
     )
-    devcontainer_sub.add_parser(
+    teardown_images_parser = devcontainer_sub.add_parser(
         "teardown-images",
         help="Print `docker rmi` arguments (repo tags, or a bare id when "
         "untagged) for every overlay image this clone owns, across every "
         "architecture — reached through its container, or by one of two "
         "derivable orphan-tag shapes once the container is already gone (#803)",
+    )
+    teardown_images_parser.add_argument(
+        "--container-ids",
+        default=None,
+        help="Whitespace-separated container ids `mise run prune` already "
+        "captured via `teardown --all-arches` (#803 I11) — skips re-running "
+        "the `docker ps` query. Pass an empty string for 'captured, and "
+        "there were none'; omit the flag entirely to resolve fresh (#803 C6)",
     )
     migrate_parser = devcontainer_sub.add_parser(
         "migrate-home",
@@ -1631,7 +1640,7 @@ def handle_devcontainer(args: argparse.Namespace) -> int:
     if command == "teardown":
         return teardown_main(all_arches=args.all_arches)
     if command == "teardown-images":
-        return teardown_images_main()
+        return teardown_images_main(container_ids=args.container_ids)
     logger.error(
         "devcontainer: pick a subcommand — one of env, name, migrate-home, "
         "teardown, teardown-images",
