@@ -39,6 +39,7 @@ changing a port must not orphan a home directory (C10/C11/C12).
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 import shlex
@@ -75,6 +76,7 @@ __all__ = [
     "WORKSPACE_LABEL_ENV_VAR",
     "DevcontainerNames",
     "HomeVolumeMigration",
+    "ImageRefs",
     "devcontainer_env_main",
     "devcontainer_name_main",
     "migrate_home_volume_main",
@@ -86,6 +88,8 @@ __all__ = [
     "resolve_names",
     "ssh_port",
     "teardown_container_ids",
+    "teardown_image_refs",
+    "teardown_images_main",
     "teardown_main",
     "workspace_hash",
 ]
@@ -571,29 +575,47 @@ def _docker_ps_ids(*filters: str) -> list[str]:
 def teardown_container_ids(
     names: DevcontainerNames,
     *,
+    all_arches: bool = False,
     this_arch: list[str] | None = None,
     legacy: list[str] | None = None,
     legacy_labelled: list[str] | None = None,
 ) -> list[str]:
-    """Container ids ``mise run stop`` should remove, in a stable order.
+    """Container ids ``mise run stop``/``mise run prune`` should remove.
 
     Two sets, and the second is the whole reason this is not a one-line docker
-    filter. **This architecture's container**, found by our own id labels — the
-    only ones a post-#677 container is guaranteed to carry, since `--id-label`
-    replaces the inferred set. Plus **pre-#677 leftovers**: containers this
-    workspace folder owns that carry none of our labels.
+    filter. **This clone's own container(s)**, found by the workspace label —
+    the only one guaranteed to survive `--id-label` replacing the CLI's
+    inferred label set. Plus **pre-#677 leftovers**: containers this workspace
+    folder owns that carry none of our labels.
 
-    Filtering the legacy set on "lacks our workspace label" is what keeps
-    teardown arch-scoped. A bare ``devcontainer.local_folder`` filter would also
-    match the *other* architecture's container once both are up, so `stop` would
-    silently take down a container the caller never mentioned — and inside the
-    `persistence` gate, bring only one of them back.
+    ``all_arches`` decides how wide the first set is. ``stop`` passes nothing
+    (``False``): scoped to THIS architecture (workspace label AND arch label)
+    — taking down the *other* architecture's container is the regression the
+    arch-scoping below exists to prevent, and `persistence` depends on it.
+    ``prune`` passes ``True`` (#803): the workspace label alone, so every
+    architecture's container is captured — the only way
+    :func:`teardown_image_refs`'s ``containers`` default can reach every
+    overlay image, since a container already removed can no longer be
+    inspected for its ``.Image``.
 
-    The three list parameters exist so the decision is testable without a docker
-    daemon; each defaults to a real query.
+    Filtering the legacy set on "lacks our workspace label" is what keeps the
+    ``all_arches=False`` case arch-scoped. A bare ``devcontainer.local_folder``
+    filter would also match the *other* architecture's container once both
+    are up, so `stop` would silently take down a container the caller never
+    mentioned — and inside the `persistence` gate, bring only one of them
+    back.
+
+    The four keyword parameters exist so the decision is testable without a
+    docker daemon; each defaults to a real query.
     """
     mine = (
-        _docker_ps_ids(f"label={names.workspace_label}", f"label={names.arch_label}")
+        (
+            _docker_ps_ids(f"label={names.workspace_label}")
+            if all_arches
+            else _docker_ps_ids(
+                f"label={names.workspace_label}", f"label={names.arch_label}"
+            )
+        )
         if this_arch is None
         else this_arch
     )
@@ -612,10 +634,361 @@ def teardown_container_ids(
     return [cid for cid in ordered if not (cid in seen or seen.add(cid))]
 
 
-def teardown_main() -> int:
-    """CLI entry: print the container ids ``mise run stop`` should remove."""
-    for container_id in teardown_container_ids(resolve_names()):
+def teardown_main(*, all_arches: bool = False) -> int:
+    """CLI entry: print the container ids ``stop``/``prune`` should remove."""
+    for container_id in teardown_container_ids(resolve_names(), all_arches=all_arches):
         sys.stdout.write(f"{container_id}\n")
+    return 0
+
+
+#: The `@devcontainers/cli` overlay tag's fixed prefix, hardcoded in
+#: `.devcontainer/devcontainer.json:97`
+#: (``--tag=vsc-dotfiles-${...}-${...}``). It happens to equal
+#: ``f"vsc-{RESOURCE_PREFIX}"`` today, but the two are NOT the same constant —
+#: this one is baked into a JSON file nothing here renders, so it stays a
+#: separate literal rather than borrowing ``RESOURCE_PREFIX``, which governs
+#: container/volume names instead.
+_OVERLAY_TAG_PREFIX = "vsc-dotfiles"
+
+#: `docker image inspect --format '{{.Id}}\t{{json .RepoTags}}\t{{json .RepoDigests}}'`
+#: always emits exactly this many tab-separated fields per line.
+_IMAGE_INSPECT_FIELDS = 3
+
+
+@dataclass(frozen=True)
+class ImageRefs:
+    """One local image's ``docker image inspect`` identity: tags and digests."""
+
+    tags: tuple[str, ...]
+    digests: tuple[str, ...]
+
+
+def _docker_container_images(
+    names: DevcontainerNames, container_ids: list[str]
+) -> list[tuple[str, bool]]:
+    """Each of ``container_ids``' ``(.Image, trusted)``, from one docker call.
+
+    ``.Image``, never ``.ImageID`` or ``.Config.Image``. ``.ImageID`` is not a
+    field ``docker inspect`` reports for a *container* on docker 29.x — a hard
+    template error, not an empty answer. ``.Config.Image`` reports a TAG, and
+    the wrong one: both architectures' containers share the CLI's per-folder
+    tag, so reading it would collapse two overlay images into one and lose the
+    other silently. ``.Image`` is written at create time and stays correct for
+    a stopped container, which matters here — `docker ps -aq` already includes
+    exited containers. ``docker container inspect``, not bare ``docker
+    inspect``: the bare form falls back to IMAGES when no container matches,
+    so a container removed mid-flight would silently resolve as an image
+    instead of failing loudly (#803 C11).
+
+    ``trusted`` is whether the container itself carries THIS clone's own
+    ``WORKSPACE_LABEL=<hash>`` label — read via the SAME inspect call that
+    already fetches ``.Image``, so the check :func:`teardown_image_refs` needs
+    for #803 C2 costs nothing extra: a second ``docker ps --filter
+    label=...`` call to re-derive it would be exactly the duplicate query
+    #803 C6 closed. A container reached only through the legacy folder arm
+    (pre-#677, no label of ours) is not trusted, and per #803 E1 contributes
+    NOTHING through :func:`_trusted_by_container` — see that function for why.
+    The label KEY is interpolated from ``WORKSPACE_LABEL`` rather than
+    hardcoded a second time in the template (#803 E3): Go's ``index`` returns
+    the empty string on a missing map key rather than erroring, so a literal
+    left to drift out of sync with the constant would make every container
+    silently untrusted with no error to notice it by.
+
+    Returns ``[]`` without shelling out when there is nothing to ask about:
+    ``docker container inspect`` with zero ids is an argument error, not an
+    empty answer, and "no containers" must stay a quiet, exit-0 case (I10).
+    """
+    if not container_ids:
+        return []
+    proc = subprocess.run(
+        [
+            "docker",
+            "container",
+            "inspect",
+            "--format",
+            '{{.Image}}\t{{index .Config.Labels "' + WORKSPACE_LABEL + '"}}',
+            *container_ids,
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    pairs: list[tuple[str, bool]] = []
+    for line in proc.stdout.splitlines():
+        if not line.strip():
+            continue
+        image_id, label_value = line.split("\t", maxsplit=1)
+        pairs.append((image_id, label_value == names.hash))
+    return pairs
+
+
+def _docker_image_refs() -> dict[str, ImageRefs]:
+    """Every local image, keyed by its FULL ``sha256:…`` id.
+
+    One ``docker image inspect`` call over every id ``docker images -aq``
+    returns. The dict key comes from that call's OWN ``.Id`` field, never from
+    the (possibly truncated) id ``docker images -aq`` printed: a container's
+    ``.Image`` is always the full form, and comparing a truncated id against
+    it fails silently as "not found" rather than loudly as a mismatch.
+    """
+    listed = subprocess.run(
+        ["docker", "images", "-aq"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    ids = [line for line in listed.stdout.split() if line]
+    if not ids:
+        return {}
+    proc = subprocess.run(
+        [
+            "docker",
+            "image",
+            "inspect",
+            "--format",
+            "{{.Id}}\t{{json .RepoTags}}\t{{json .RepoDigests}}",
+            *ids,
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    refs: dict[str, ImageRefs] = {}
+    for line in proc.stdout.splitlines():
+        if not line.strip():
+            continue
+        fields = line.split("\t", maxsplit=2)
+        if len(fields) != _IMAGE_INSPECT_FIELDS:
+            # #803 C9: name the offending line rather than a bare unpack
+            # ValueError, which points at nothing.
+            msg = f"docker image inspect: expected 3 tab-separated fields, got {line!r}"
+            raise ValueError(msg)
+        image_id, tags_json, digests_json = fields
+        refs[image_id] = ImageRefs(
+            tags=tuple(json.loads(tags_json) or []),
+            digests=tuple(json.loads(digests_json) or []),
+        )
+    return refs
+
+
+def _is_orphan_tag(tag: str, names: DevcontainerNames) -> bool:
+    """Whether ``tag`` names an overlay of THIS clone with no container left.
+
+    Two shapes, both derived exactly rather than guessed (#803 I3):
+
+    * our own per-arch overlay tag, matched on the ``vsc-dotfiles-<hash>``
+      PREFIX so one check covers every architecture without enumerating a
+      set of arch words that grows whenever a new architecture is added
+      (``no_platform_literals`` would not catch a bare word here either —
+      its gate matches only the full ``linux/<arch>`` triple and excludes
+      ``tests/`` outright, `platform_target.py:123,133-137` — the prefix
+      match is still the right design, just for this reason instead);
+    * the ``@devcontainers/cli``'s own per-folder tag,
+      ``vsc-<basename>-<full-sha256-of-the-workspace-path>``. This is NOT the
+      truncated digest :func:`workspace_hash` returns — it is derived fresh
+      here from ``<basename>`` plus the FULL digest, never from the
+      ``vsc-dotfiles-`` prefix above, which only lines up when the folder
+      happens to be named ``dotfiles``.
+    """
+    full_digest = hashlib.sha256(names.workspace.encode()).hexdigest()
+    return tag.startswith(
+        (
+            f"{_OVERLAY_TAG_PREFIX}-{names.hash}",
+            f"vsc-{names.basename}-{full_digest}",
+        )
+    )
+
+
+def _has_registry_slash(refs: ImageRefs) -> bool:
+    """I5: refuse a candidate whose tags OR digests contain a registry `/`.
+
+    This repo's base is always a ``ghcr.io/…`` reference and this repo's
+    overlays are always bare ``vsc-…`` names — never the reverse — so a `/`
+    on either field means "not one of ours". (The broader claim, "a registry
+    reference always has a `/`", is false in general — ``busybox:stable``
+    a few lines above is one of many single-segment Docker Hub images — but
+    this guard only needs the narrower, true statement about THIS repo's
+    images.) Checked over BOTH fields, not tags alone: docker 29 synthesizes a
+    repo digest for a digest-pulled, untagged base image, so a tags-only guard
+    misses exactly the shape it exists to catch.
+    """
+    return any("/" in ref for ref in (*refs.tags, *refs.digests))
+
+
+def _trusted_by_container(
+    container_pairs: list[tuple[str, bool]],
+    all_images: dict[str, ImageRefs],
+) -> dict[str, ImageRefs]:
+    """Images reached through a container carrying OUR OWN workspace label.
+
+    An UNTRUSTED (legacy-arm) container contributes NOTHING here (#803 E1,
+    accepted gap — D2): that arm's containers have provenance this repo does
+    not control, so an untagged image referenced by one cannot be shown to be
+    ours, and admitting it on the folder label alone is precisely the C2
+    hazard. r5 tried to soften this with `trusted or
+    any(_is_orphan_tag(...))`, but that clause was DEAD CODE — it admits
+    exactly what :func:`_orphaned_by_tag` already admits over the same
+    ``all_images``, independent of any container at all, so mutating it to a
+    bare `if trusted:` left the whole suite green. The cost of the tighter
+    rule is real: a pre-#677 container whose overlay tag was later moved to a
+    rebuilt image leaves the OLD image dangling and unreachable by either
+    arm. Refusing to delete an image we cannot prove is ours is the correct
+    side of that trade; the fix if it ever bites is to remove the stale
+    container, not to widen this predicate back.
+
+    An id absent from ``all_images`` is refused outright and logged (#803
+    C1/E4) — the resolver could not identify it, and "unknown" must not be
+    the permissive branch; the two docker calls behind the real default are
+    separate processes and can race.
+    """
+    candidates: dict[str, ImageRefs] = {}
+    for image_id, trusted in container_pairs:
+        if not trusted:
+            continue
+        refs = all_images.get(image_id)
+        if refs is None:
+            logger.warning(
+                "teardown-images: container image %s not found by `docker "
+                "image inspect` — refusing to remove it rather than "
+                "emitting a bare id (#803 C1)",
+                image_id,
+            )
+            continue
+        candidates[image_id] = refs
+    return candidates
+
+
+def _orphaned_by_tag(
+    all_images: dict[str, ImageRefs],
+    already: dict[str, ImageRefs],
+    names: DevcontainerNames,
+) -> dict[str, ImageRefs]:
+    """Every remaining image matching one of our own orphan-tag shapes (I3)."""
+    return {
+        image_id: refs
+        for image_id, refs in all_images.items()
+        if image_id not in already
+        and any(_is_orphan_tag(tag, names) for tag in refs.tags)
+    }
+
+
+def _removal_args(candidates: dict[str, ImageRefs]) -> list[str]:
+    """I4/I5: emit refs (not ids), slash-guarded, de-duplicated over ref strings.
+
+    The slash refusal LOGS, for the same reason the C1 refusal above does: a
+    silent skip here and prune's "no overlay image resolved for this clone"
+    are indistinguishable to the operator, so a candidate the guard removed
+    looks exactly like a clone that owned nothing. Refusing is correct;
+    refusing quietly on the one path that feeds `docker rmi` is how a real
+    leak gets read as a clean prune.
+    """
+    result: list[str] = []
+    seen: set[str] = set()
+    for image_id, refs in candidates.items():
+        if _has_registry_slash(refs):
+            logger.warning(
+                "teardown-images: image %s carries a registry reference "
+                "(%s) — refusing to remove it, it is not one of this "
+                "clone's locally built overlays (#803 I5)",
+                image_id,
+                next(ref for ref in (*refs.tags, *refs.digests) if "/" in ref),
+            )
+            continue
+        for ref in refs.tags or (image_id,):
+            if ref not in seen:
+                seen.add(ref)
+                result.append(ref)
+    return result
+
+
+def teardown_image_refs(
+    names: DevcontainerNames,
+    *,
+    containers: list[tuple[str, bool]] | None = None,
+    images: dict[str, ImageRefs] | None = None,
+) -> list[str]:
+    """``docker rmi`` arguments for every overlay image this clone owns.
+
+    An unscoped tag grep (the pre-#803 ``mise run prune``) is neither
+    sufficient nor safe: it is blind to an overlay carrying no tag at all,
+    and — because ``vsc-dotfiles`` is not scoped to a hash — it matches every
+    OTHER clone's overlay too. This resolves images by IDENTITY instead:
+    through the container that references them (primary — this is what
+    reaches an untagged overlay at all), plus two derivable orphan-tag shapes
+    (:func:`_is_orphan_tag`) for an overlay whose container is already gone.
+
+    Returns **refs**, not bare ids: every RepoTag of a resolved image when it
+    has any, its bare id only when it has none. ``docker rmi <id>`` refuses an
+    image referenced from multiple repositories without ``-f`` — measured,
+    this clone's own amd64 overlay carries two — and ``-f`` is rejected
+    outright: it also evicts an image a *stopped* container still references,
+    which is exactly another clone's parked overlay, i.e. the cross-clone
+    destruction this ticket exists to close. Emitting every tag is what makes
+    that removal succeed without ``-f``: what is scoped is the IMAGE
+    (identity — container or orphan-tag match), not each of its tags — a
+    user can ``docker tag`` an admitted image under an unrelated name, and
+    that tag is removed along with it too (#803 E9; this is not a claim that
+    every tag on an admitted image is itself something we created). An
+    untagged image is by definition singly-referenced, so its bare id
+    needs no ``-f`` either. :func:`_has_registry_slash` is the
+    destructive-path guard on top: a stopped container CAN reference the
+    shared base image directly (measured on this host), and that must never
+    reach ``docker rmi``.
+
+    ``containers`` — ``(image_id, trusted)`` pairs, one per container this
+    clone owns; ``trusted`` is whether the container itself carried OUR
+    workspace label (see :func:`_docker_container_images`). A **trusted**
+    image is scoped in through this path outright. An **untrusted** one
+    (reached only through the pre-#677 legacy folder arm, whose provenance
+    this repo does not control — a locally-tagged image unrelated to this
+    repo can sit behind it, measured on this host) contributes NOTHING
+    through this path at all (#803 E1) — see :func:`_trusted_by_container`
+    for why "trust it if it also carries an orphan tag" was tried and found
+    to be dead code. A TAGGED image behind an untrusted container is still
+    found, independently, by :func:`_orphaned_by_tag`'s plain scan; only an
+    UNTAGGED one behind an untrusted container is unreachable, which is the
+    accepted gap.
+
+    Callers that also remove containers MUST resolve ``containers``
+    themselves and pass it explicitly, captured BEFORE removal (#803 I11):
+    the default here calls :func:`teardown_container_ids` fresh, and once
+    this clone's containers are gone that call returns ``[]`` — silently
+    degrading this whole function to the orphan-tag scan alone.
+
+    One surprise worth naming rather than treating as a defect: the sync
+    record at ``~/.local/state/dotfiles/sync-*.json`` is not invalidated by
+    this — it will name image ids that no longer exist after a prune, which is
+    harmless because sync re-derives from the running container first.
+    """
+    container_pairs = (
+        _docker_container_images(names, teardown_container_ids(names, all_arches=True))
+        if containers is None
+        else containers
+    )
+    all_images = _docker_image_refs() if images is None else images
+
+    candidates = _trusted_by_container(container_pairs, all_images)
+    candidates.update(_orphaned_by_tag(all_images, candidates, names))
+    return _removal_args(candidates)
+
+
+def teardown_images_main(*, container_ids: str | None = None) -> int:
+    """CLI entry: print `docker rmi` refs for every overlay this clone owns.
+
+    ``container_ids`` — whitespace-separated container ids ``mise run
+    prune`` already captured via ``teardown --all-arches`` (#803 C6). When
+    given (even as an empty string — "captured, and there were none"),
+    resolves images from exactly those ids instead of re-running the
+    `docker ps` query :func:`teardown_container_ids` would otherwise repeat,
+    closing the TOCTOU between the two invocations. Omit it (``None``) to
+    resolve everything fresh, e.g. for a standalone call.
+    """
+    names = resolve_names()
+    containers = None
+    if container_ids is not None:
+        containers = _docker_container_images(names, container_ids.split())
+    for ref in teardown_image_refs(names, containers=containers):
+        sys.stdout.write(f"{ref}\n")
     return 0
 
 

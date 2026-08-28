@@ -994,23 +994,46 @@ _stem="$(uv run --project python dotfiles-setup devcontainer name legacy-volume)
 _stem="${_stem%-home}"
 _hash="$(uv run --project python dotfiles-setup devcontainer name hash)"
 
+# #803 I11: resolve BOTH the container ids and the overlay image refs HERE,
+# before anything is removed. `teardown-images` reaches an image through the
+# container that references it; once the container stage below has run,
+# `docker inspect` can no longer answer that question, and this whole change
+# would silently degrade back to a hash-scoped tag grep. `--all-arches`
+# widens the container set past `mise run stop`'s single architecture — every
+# container this clone owns, across BOTH architectures, plus any pre-#677
+# leftover this folder owns. Identity, not a tag, is the source of truth for
+# both sets now (#804 M6: the workspace-label filter used to be duplicated
+# here in bash; it lives only in Python). `--container-ids` feeds
+# `teardown-images` the set just captured above instead of letting it repeat
+# the `docker ps` query itself — one capture, no TOCTOU between the two calls
+# (#803 C6). Quoted, unlike the `xargs`-bound uses below: this one crosses a
+# single `argparse` argument and must survive as one string, embedded
+# newlines and all.
+container_ids="$(uv run --project python dotfiles-setup devcontainer teardown --all-arches)"
+overlay_images="$(uv run --project python dotfiles-setup devcontainer teardown-images --container-ids "${container_ids}")"
+
+# The plan below is a RECORD of the resolved set, shown before the fact
+# rather than after — not a confirmation gate. Nothing pauses between this
+# print and the removals that follow; on a warm host the window is
+# milliseconds. This set has been wrong twice already (#803: an unscoped tag
+# grep took 6 of 8 sibling clones' overlays), so printing it is still worth
+# doing, just not as a safety mechanism.
+echo "==> prune plan for this clone (hash ${_hash})"
+echo "    containers:"
+echo "${container_ids:-(none)}" | sed 's/^/      /'
+echo "    overlay images:"
+echo "${overlay_images:-(none)}" | sed 's/^/      /'
+
 # Differentiate "no match" (acceptable, idempotent) from "docker command
 # failed" (must be loud) per feedback_never_suppress_warnings. Pattern:
 # capture command output, check non-empty, then act. Daemon failures
-# propagate via set -e on the capturing subshell.
+# propagate via set -e on the capturing subshell — which now means a failed
+# lookup (e.g. the docker daemon is down) aborts prune HERE, before the
+# "stopping container" line prints, rather than after it as before this
+# change. That is correct (a failed lookup is a failed teardown, I10) but the
+# failure now surfaces one step earlier than a reader of the old script would
+# expect.
 echo "==> stopping container"
-# Whole-clone (#800 F3): every architecture's container, PLUS pre-#677
-# leftovers that carry only the old folder label (--id-label REPLACES the
-# CLI's inferred label set, so a post-#677 container has no folder label at
-# all). sort -u guards the one case that would abort prune under set -e: the
-# same id listed twice. The label sets should never overlap, but a duplicate
-# would cost the whole volume/image/cache tail.
-container_ids="$(
-  {
-    docker ps -aq --filter "label=dotfiles.workspace=${_hash}"
-    docker ps -aq --filter "label=devcontainer.local_folder=$PWD"
-  } | sort -u
-)"
 if [ -n "${container_ids}" ]; then
   # shellcheck disable=SC2086
   docker rm -f ${container_ids}
@@ -1022,6 +1045,9 @@ echo "==> removing named volumes (scoped to hash ${_hash})"
 all_volumes="$(docker volume ls --format '{{"{{"}}.Name{{"}}"}}')"
 hashed_volumes="$(echo "${all_volumes}" | grep -E "^${_stem}" || true)"
 if [ -n "${hashed_volumes}" ]; then
+  # Named before removed, same reason as the plan block above. These cannot
+  # join it: they are resolved after the container stage, by design (#800).
+  echo "${hashed_volumes}" | sed 's/^/      /'
   echo "${hashed_volumes}" | xargs docker volume rm
 else
   echo "    (no hashed volumes for ${_hash} — already removed)"
@@ -1037,12 +1063,19 @@ if [ -n "${legacy_volumes}" ]; then
 fi
 
 echo "==> removing overlay images"
-all_images="$(docker images --format '{{"{{"}}.Repository{{"}}"}}:{{"{{"}}.Tag{{"}}"}}')"
-overlay_images="$(echo "${all_images}" | grep vsc-dotfiles || true)"
+# #803: resolved by container identity (this clone's containers, every
+# architecture) plus two derivable orphan-tag shapes for an overlay whose
+# container is already gone — never by an unscoped tag grep, which matched
+# every OTHER clone's overlay too (measured: 6 of 8 image ids on the
+# maintainer's host) and could not see an untagged overlay at all.
 if [ -n "${overlay_images}" ]; then
   echo "${overlay_images}" | xargs docker rmi
 else
-  echo "    (no vsc-dotfiles overlay images — already removed)"
+  # Not necessarily "already removed" (#803 E4): an image `docker image
+  # inspect` could not identify is refused rather than removed (C1, logged
+  # as a warning), so this empty set can also mean "nothing was resolved to
+  # remove" rather than "there was nothing to remove".
+  echo "    (no overlay image resolved for this clone)"
 fi
 
 echo "==> pruning build cache"
