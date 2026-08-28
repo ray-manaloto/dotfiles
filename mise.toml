@@ -1071,7 +1071,11 @@ echo "==> removing overlay images"
 if [ -n "${overlay_images}" ]; then
   echo "${overlay_images}" | xargs docker rmi
 else
-  echo "    (no overlay images for this clone — already removed)"
+  # Not necessarily "already removed" (#803 E4): an image `docker image
+  # inspect` could not identify is refused rather than removed (C1, logged
+  # as a warning), so this empty set can also mean "nothing was resolved to
+  # remove" rather than "there was nothing to remove".
+  echo "    (no overlay image resolved for this clone)"
 fi
 
 echo "==> pruning build cache"

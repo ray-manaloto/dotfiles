@@ -11,9 +11,9 @@ genuinely *in* the name, not merely that two calls returned something.
 
 from __future__ import annotations
 
-import argparse
 import hashlib
 import re
+import subprocess
 import tomllib
 from pathlib import Path
 
@@ -30,6 +30,9 @@ from dotfiles_setup.devcontainer_names import (
     DevcontainerNames,
     HomeVolumeMigration,
     ImageRefs,
+    _docker_container_images,
+    _docker_image_refs,
+    _trusted_by_container,
     migration_platform_refusal,
     name_field,
     names_env,
@@ -512,7 +515,9 @@ def test_teardown_dispatch_passes_the_all_arches_flag_through(
     Mutating `main.py`'s dispatch from `teardown_main(all_arches=args.all_arches)`
     to bare `teardown_main()` left the whole suite green before this test
     existed — the mutation silently falls back to arch-scoped, exactly the
-    failure `mise run prune` would ship with.
+    failure `mise run prune` would ship with. Drives the REAL parser (#803
+    E6): a hand-built `argparse.Namespace` survives a flag-dest rename that a
+    real `parse_args` call would catch.
     """
     seen: dict[str, object] = {}
 
@@ -521,7 +526,9 @@ def test_teardown_dispatch_passes_the_all_arches_flag_through(
         return 0
 
     monkeypatch.setattr(dc_main, "teardown_main", fake_teardown_main)
-    args = argparse.Namespace(devcontainer_command="teardown", all_arches=True)
+    args = dc_main.setup_parser().parse_args(
+        ["devcontainer", "teardown", "--all-arches"]
+    )
     assert dc_main.handle_devcontainer(args) == 0
     assert seen == {"all_arches": True}
 
@@ -529,7 +536,10 @@ def test_teardown_dispatch_passes_the_all_arches_flag_through(
 def test_teardown_images_dispatch_passes_the_container_ids_through(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """#803 C6's CLI half: the captured ids must reach `teardown_images_main`."""
+    """#803 C6's CLI half: the captured ids must reach `teardown_images_main`.
+
+    Drives the REAL parser (#803 E6), not a hand-built `Namespace`.
+    """
     seen: dict[str, object] = {}
 
     def fake_teardown_images_main(*, container_ids: str | None = None) -> int:
@@ -537,8 +547,8 @@ def test_teardown_images_dispatch_passes_the_container_ids_through(
         return 0
 
     monkeypatch.setattr(dc_main, "teardown_images_main", fake_teardown_images_main)
-    args = argparse.Namespace(
-        devcontainer_command="teardown-images", container_ids="abc def"
+    args = dc_main.setup_parser().parse_args(
+        ["devcontainer", "teardown-images", "--container-ids", "abc def"]
     )
     assert dc_main.handle_devcontainer(args) == 0
     assert seen == {"container_ids": "abc def"}
@@ -765,12 +775,18 @@ def test_teardown_images_refuses_an_untrusted_containers_foreign_image() -> None
     assert refs == []
 
 
-def test_teardown_images_trusts_an_untrusted_containers_own_overlay() -> None:
-    """The control arm for C2: this is the entire reason the legacy arm exists.
+def test_teardown_images_orphan_scan_finds_an_untrusted_containers_overlay() -> None:
+    """This is the entire reason the legacy arm exists — but NOT via container trust.
 
-    A pre-#677 leftover container's OWN overlay must still be reachable. Its
-    image carries our own per-arch overlay tag, so the extra ownership test
-    passes it.
+    #803 E1: this test used to be named "the control arm for C2" and claimed
+    to exercise `_trusted_by_container`'s "trust it if it also carries an
+    orphan tag" clause. It never did — `_orphaned_by_tag` independently
+    admits this same tagged image regardless of container trust (it needs no
+    container information at all), which is exactly why that clause was dead
+    code. Kept as a black-box proof that an untrusted container in the mix
+    does not somehow SUPPRESS the orphan scan from finding its own overlay;
+    :func:`test_trusted_by_container_admits_only_trusted_ids` below is the
+    test that actually pins the container-trust boundary.
     """
     names = _names()
     tag = f"vsc-dotfiles-{names.hash}-{names.arch}:latest"
@@ -780,6 +796,151 @@ def test_teardown_images_trusts_an_untrusted_containers_own_overlay() -> None:
         images={"sha256:legacy-mine": ImageRefs(tags=(tag,), digests=())},
     )
     assert refs == [tag]
+
+
+def test_trusted_by_container_admits_only_trusted_ids() -> None:
+    """#803 E1: the sharp mutation reverts the dead r5 clause.
+
+    The mutation is reverting to `trusted or any(_is_orphan_tag(...))`
+    (equivalently, admitting on tags alone) — the clause
+    `_trusted_by_container` no longer has. Testing this through
+    `teardown_image_refs` cannot discriminate it: `_orphaned_by_tag`
+    independently admits the same tagged image regardless of container
+    trust, so the end-to-end result is identical either way (that identity is
+    exactly why the r5 clause was dead code). Only a direct test of the
+    private helper can tell the two mechanisms apart.
+    """
+    all_images = {
+        "sha256:trusted": ImageRefs(tags=(), digests=()),
+        "sha256:untrusted": ImageRefs(tags=("some-tag:latest",), digests=()),
+    }
+    candidates = _trusted_by_container(
+        [("sha256:trusted", True), ("sha256:untrusted", False)], all_images
+    )
+    assert candidates == {"sha256:trusted": all_images["sha256:trusted"]}
+
+
+def test_trusted_by_container_refuses_and_logs_an_unknown_trusted_id(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """#803 C1/E4: an id absent from `all_images` is refused AND logged.
+
+    Deleting the whole `if refs is None:` branch (falling back to a
+    permissive default) leaves this silently admitting an unidentified image.
+    """
+    with caplog.at_level("WARNING", logger="dotfiles_setup.devcontainer_names"):
+        candidates = _trusted_by_container([("sha256:unknown", True)], {})
+    assert candidates == {}
+    assert "sha256:unknown" in caplog.text
+
+
+def test_docker_container_images_reads_image_and_trust_from_one_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#803 E2: direct coverage for the sole producer of the trust bit.
+
+    Mutating `label_value == names.hash` to `!=` inverts trust silently
+    (our containers become untrusted, foreign ones trusted) and passed
+    63/63 in this module before this test existed. Two contrasting rows —
+    one matching this clone's hash, one not — so an inversion, a hardcoded
+    constant, or a dropped trust field all fail the same assertion. Injects
+    the subprocess boundary the way `tests/test_docker.py` already does for
+    a sibling module.
+    """
+    names = _names()
+    calls: list[list[str]] = []
+
+    def fake_run(
+        args: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        return subprocess.CompletedProcess(
+            args,
+            0,
+            f"sha256:mine\t{names.hash}\nsha256:theirs\tsome-other-hash\n",
+            "",
+        )
+
+    monkeypatch.setattr(devcontainer_names.subprocess, "run", fake_run)
+    pairs = _docker_container_images(names, ["c-mine", "c-theirs"])
+
+    assert pairs == [("sha256:mine", True), ("sha256:theirs", False)]
+    assert calls[0][:3] == ["docker", "container", "inspect"]
+
+
+def test_docker_container_images_empty_ids_skips_the_subprocess(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """I10's control arm for the function E2 now directly tests."""
+
+    def fail(*_a: object, **_k: object) -> subprocess.CompletedProcess[str]:
+        msg = "must not shell out for zero container ids"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(devcontainer_names.subprocess, "run", fail)
+    assert _docker_container_images(_names(), []) == []
+
+
+def test_docker_image_refs_raises_on_a_malformed_inspect_line(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#803 E7: the field-count guard added for C9 had no test of its own.
+
+    Deleting the whole `if len(fields) != _IMAGE_INSPECT_FIELDS:` guard
+    leaves a bare 3-value unpack that raises a generic, line-less
+    `ValueError` instead of one naming the offending line.
+    """
+
+    def fake_run(
+        args: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        if args[1] == "images":
+            return subprocess.CompletedProcess(args, 0, "sha256:bad\n", "")
+        return subprocess.CompletedProcess(args, 0, "sha256:bad\tonly-one-field\n", "")
+
+    monkeypatch.setattr(devcontainer_names.subprocess, "run", fake_run)
+    with pytest.raises(ValueError, match="sha256:bad"):
+        _docker_image_refs()
+
+
+def test_teardown_images_main_pins_omitted_vs_empty_container_ids(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#803 E5: pins the omitted-vs-empty `container_ids` distinction.
+
+    `""` ("captured, zero containers") must not collapse into `None`
+    ("resolve fresh"). Mutating `if container_ids is not None:` to
+    `if container_ids:` treats the two the same and left the suite green —
+    `mise.toml` always passes the flag, so `""` is the common production
+    value, and the collapse reopens the very TOCTOU C6 closed.
+    """
+    calls: list[str] = []
+
+    def fake_container_images(
+        _n: DevcontainerNames, ids: list[str]
+    ) -> list[tuple[str, bool]]:
+        calls.append(f"resolved-from-ids={ids!r}")
+        return []
+
+    def fake_teardown_image_refs(
+        _n: DevcontainerNames, *, containers: list[tuple[str, bool]] | None = None
+    ) -> list[str]:
+        calls.append(f"containers={containers!r}")
+        return []
+
+    monkeypatch.setattr(
+        devcontainer_names, "_docker_container_images", fake_container_images
+    )
+    monkeypatch.setattr(
+        devcontainer_names, "teardown_image_refs", fake_teardown_image_refs
+    )
+
+    devcontainer_names.teardown_images_main(container_ids="")
+    assert calls == ["resolved-from-ids=[]", "containers=[]"]
+
+    calls.clear()
+    devcontainer_names.teardown_images_main(container_ids=None)
+    assert calls == ["containers=None"]
 
 
 def test_teardown_images_default_resolution_asks_for_every_architecture(

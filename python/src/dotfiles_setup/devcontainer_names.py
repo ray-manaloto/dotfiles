@@ -594,7 +594,7 @@ def teardown_container_ids(
     arch-scoping below exists to prevent, and `persistence` depends on it.
     ``prune`` passes ``True`` (#803): the workspace label alone, so every
     architecture's container is captured — the only way
-    :func:`teardown_image_refs`'s ``from_containers`` default can reach every
+    :func:`teardown_image_refs`'s ``containers`` default can reach every
     overlay image, since a container already removed can no longer be
     inspected for its ``.Image``.
 
@@ -681,14 +681,18 @@ def _docker_container_images(
     instead of failing loudly (#803 C11).
 
     ``trusted`` is whether the container itself carries THIS clone's own
-    ``dotfiles.workspace=<hash>`` label — read via the SAME inspect call that
+    ``WORKSPACE_LABEL=<hash>`` label — read via the SAME inspect call that
     already fetches ``.Image``, so the check :func:`teardown_image_refs` needs
     for #803 C2 costs nothing extra: a second ``docker ps --filter
     label=...`` call to re-derive it would be exactly the duplicate query
     #803 C6 closed. A container reached only through the legacy folder arm
-    (pre-#677, no label of ours) is not trusted — its image must additionally
-    pass the orphan-tag ownership test before :func:`teardown_image_refs` will
-    emit it.
+    (pre-#677, no label of ours) is not trusted, and per #803 E1 contributes
+    NOTHING through :func:`_trusted_by_container` — see that function for why.
+    The label KEY is interpolated from ``WORKSPACE_LABEL`` rather than
+    hardcoded a second time in the template (#803 E3): Go's ``index`` returns
+    the empty string on a missing map key rather than erroring, so a literal
+    left to drift out of sync with the constant would make every container
+    silently untrusted with no error to notice it by.
 
     Returns ``[]`` without shelling out when there is nothing to ask about:
     ``docker container inspect`` with zero ids is an argument error, not an
@@ -702,7 +706,7 @@ def _docker_container_images(
             "container",
             "inspect",
             "--format",
-            '{{.Image}}\t{{index .Config.Labels "dotfiles.workspace"}}',
+            '{{.Image}}\t{{index .Config.Labels "' + WORKSPACE_LABEL + '"}}',
             *container_ids,
         ],
         capture_output=True,
@@ -814,23 +818,43 @@ def _has_registry_slash(refs: ImageRefs) -> bool:
 def _trusted_by_container(
     container_pairs: list[tuple[str, bool]],
     all_images: dict[str, ImageRefs],
-    names: DevcontainerNames,
 ) -> dict[str, ImageRefs]:
-    """Images reached through a container, filtered per #803 C1 and C2.
+    """Images reached through a container carrying OUR OWN workspace label.
 
-    An id absent from ``all_images`` is refused outright (C1) — the resolver
-    could not identify it, and "unknown" must not be the permissive branch.
-    One reached only through an UNTRUSTED (legacy-arm) container must
-    additionally carry one of our own orphan-tag shapes before it counts as
-    ours (C2); a trusted one is scoped in outright, as before.
+    An UNTRUSTED (legacy-arm) container contributes NOTHING here (#803 E1,
+    accepted gap — D2): that arm's containers have provenance this repo does
+    not control, so an untagged image referenced by one cannot be shown to be
+    ours, and admitting it on the folder label alone is precisely the C2
+    hazard. r5 tried to soften this with `trusted or
+    any(_is_orphan_tag(...))`, but that clause was DEAD CODE — it admits
+    exactly what :func:`_orphaned_by_tag` already admits over the same
+    ``all_images``, independent of any container at all, so mutating it to a
+    bare `if trusted:` left the whole suite green. The cost of the tighter
+    rule is real: a pre-#677 container whose overlay tag was later moved to a
+    rebuilt image leaves the OLD image dangling and unreachable by either
+    arm. Refusing to delete an image we cannot prove is ours is the correct
+    side of that trade; the fix if it ever bites is to remove the stale
+    container, not to widen this predicate back.
+
+    An id absent from ``all_images`` is refused outright and logged (#803
+    C1/E4) — the resolver could not identify it, and "unknown" must not be
+    the permissive branch; the two docker calls behind the real default are
+    separate processes and can race.
     """
     candidates: dict[str, ImageRefs] = {}
     for image_id, trusted in container_pairs:
+        if not trusted:
+            continue
         refs = all_images.get(image_id)
         if refs is None:
+            logger.warning(
+                "teardown-images: container image %s not found by `docker "
+                "image inspect` — refusing to remove it rather than "
+                "emitting a bare id (#803 C1)",
+                image_id,
+            )
             continue
-        if trusted or any(_is_orphan_tag(tag, names) for tag in refs.tags):
-            candidates[image_id] = refs
+        candidates[image_id] = refs
     return candidates
 
 
@@ -884,10 +908,13 @@ def teardown_image_refs(
     this clone's own amd64 overlay carries two — and ``-f`` is rejected
     outright: it also evicts an image a *stopped* container still references,
     which is exactly another clone's parked overlay, i.e. the cross-clone
-    destruction this ticket exists to close. Emitting every tag cannot
-    over-delete, because every tag on a resolved image is ours by
-    construction (scoped by container identity or by the two orphan shapes);
-    an untagged image is by definition singly-referenced, so its bare id
+    destruction this ticket exists to close. Emitting every tag is what makes
+    that removal succeed without ``-f``: what is scoped is the IMAGE
+    (identity — container or orphan-tag match), not each of its tags — a
+    user can ``docker tag`` an admitted image under an unrelated name, and
+    that tag is removed along with it too (#803 E9; this is not a claim that
+    every tag on an admitted image is itself something we created). An
+    untagged image is by definition singly-referenced, so its bare id
     needs no ``-f`` either. :func:`_has_registry_slash` is the
     destructive-path guard on top: a stopped container CAN reference the
     shared base image directly (measured on this host), and that must never
@@ -896,17 +923,16 @@ def teardown_image_refs(
     ``containers`` — ``(image_id, trusted)`` pairs, one per container this
     clone owns; ``trusted`` is whether the container itself carried OUR
     workspace label (see :func:`_docker_container_images`). A **trusted**
-    image is scoped in outright — same as before #803 C2. An **untrusted**
-    one (reached only through the pre-#677 legacy folder arm, whose
-    provenance this repo does not control — a locally-tagged image unrelated
-    to this repo can sit behind it, measured on this host) must ALSO carry
-    one of the two orphan-tag shapes before it is trusted; the slash guard
-    alone is defence in depth, not sufficient proof of ownership by itself.
-    An image id absent from ``images`` entirely is refused, never defaulted
-    to an empty, guard-vacuous record (#803 C1) — "we could not identify this
-    image" is the one input the destructive-path guard exists to catch, and a
-    permissive default handed it straight through; the two docker calls
-    behind the real default are separate processes and can race.
+    image is scoped in through this path outright. An **untrusted** one
+    (reached only through the pre-#677 legacy folder arm, whose provenance
+    this repo does not control — a locally-tagged image unrelated to this
+    repo can sit behind it, measured on this host) contributes NOTHING
+    through this path at all (#803 E1) — see :func:`_trusted_by_container`
+    for why "trust it if it also carries an orphan tag" was tried and found
+    to be dead code. A TAGGED image behind an untrusted container is still
+    found, independently, by :func:`_orphaned_by_tag`'s plain scan; only an
+    UNTAGGED one behind an untrusted container is unreachable, which is the
+    accepted gap.
 
     Callers that also remove containers MUST resolve ``containers``
     themselves and pass it explicitly, captured BEFORE removal (#803 I11):
@@ -926,7 +952,7 @@ def teardown_image_refs(
     )
     all_images = _docker_image_refs() if images is None else images
 
-    candidates = _trusted_by_container(container_pairs, all_images, names)
+    candidates = _trusted_by_container(container_pairs, all_images)
     candidates.update(_orphaned_by_tag(all_images, candidates, names))
     return _removal_args(candidates)
 
