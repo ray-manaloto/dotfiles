@@ -40,6 +40,7 @@ from dotfiles_setup.devcontainer_names import (
     devcontainer_env_main,
     devcontainer_name_main,
     migrate_home_volume_main,
+    teardown_images_main,
     teardown_main,
 )
 from dotfiles_setup.doc_refs import (
@@ -246,11 +247,25 @@ def _add_platform_subcommands(subparsers: _SubParsers) -> None:
     devcontainer_name_parser.add_argument(
         "field", choices=NAME_FIELDS, help="Which name to print"
     )
-    devcontainer_sub.add_parser(
+    teardown_parser = devcontainer_sub.add_parser(
         "teardown",
         help="Print the container ids `mise run stop` should remove: this "
         "architecture's container plus any pre-#677 leftover this folder owns. "
         "A bare per-folder filter would also kill the OTHER architecture",
+    )
+    teardown_parser.add_argument(
+        "--all-arches",
+        action="store_true",
+        help="Every architecture's container for this clone (the workspace "
+        "label alone), not just this one — what `mise run prune` needs so "
+        "`teardown-images` can still reach every overlay image (#803)",
+    )
+    devcontainer_sub.add_parser(
+        "teardown-images",
+        help="Print `docker rmi` arguments (repo tags, or a bare id when "
+        "untagged) for every overlay image this clone owns, across every "
+        "architecture — reached through its container, or by one of two "
+        "derivable orphan-tag shapes once the container is already gone (#803)",
     )
     migrate_parser = devcontainer_sub.add_parser(
         "migrate-home",
@@ -1605,7 +1620,7 @@ def setup_parser() -> argparse.ArgumentParser:
 
 
 def handle_devcontainer(args: argparse.Namespace) -> int:
-    """Dispatch `dotfiles-setup devcontainer <env|name|migrate-home>` (#677)."""
+    """Dispatch `devcontainer <env|name|migrate-home|teardown[-images]>` (#677)."""
     command = getattr(args, "devcontainer_command", None)
     if command == "env":
         return devcontainer_env_main()
@@ -1614,9 +1629,12 @@ def handle_devcontainer(args: argparse.Namespace) -> int:
     if command == "migrate-home":
         return migrate_home_volume_main(apply=args.apply, platform=args.platform)
     if command == "teardown":
-        return teardown_main()
+        return teardown_main(all_arches=args.all_arches)
+    if command == "teardown-images":
+        return teardown_images_main()
     logger.error(
-        "devcontainer: pick a subcommand — one of env, name, migrate-home, teardown",
+        "devcontainer: pick a subcommand — one of env, name, migrate-home, "
+        "teardown, teardown-images",
     )
     return 2
 

@@ -17,6 +17,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
+from dotfiles_setup import devcontainer_names
 from dotfiles_setup.devcontainer_names import (
     MIGRATION_MARKER,
     NAME_FIELDS,
@@ -26,6 +27,7 @@ from dotfiles_setup.devcontainer_names import (
     SSH_PORT_SPAN,
     DevcontainerNames,
     HomeVolumeMigration,
+    ImageRefs,
     migration_platform_refusal,
     name_field,
     names_env,
@@ -33,6 +35,7 @@ from dotfiles_setup.devcontainer_names import (
     resolve_names,
     ssh_port,
     teardown_container_ids,
+    teardown_image_refs,
     workspace_hash,
 )
 
@@ -465,6 +468,171 @@ def test_teardown_leaves_the_other_architecture_alone() -> None:
 def test_teardown_is_empty_when_nothing_is_up() -> None:
     ids = teardown_container_ids(_names(), this_arch=[], legacy=[], legacy_labelled=[])
     assert ids == []
+
+
+def test_teardown_all_arches_widens_the_default_query(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#803: `prune` needs every architecture's container; `stop` needs only this one.
+
+    The three tests above pin how an already-resolved list of ids is
+    combined — this one pins that the FLAG itself changes which docker filter
+    runs, by faking the one function that shells out.
+    """
+    calls: list[tuple[str, ...]] = []
+    both = ["amd64-container", "arm64-container"]
+
+    def fake_ps_ids(*filters: str) -> list[str]:
+        calls.append(filters)
+        return both if len(filters) == 1 else both[:1]
+
+    monkeypatch.setattr(devcontainer_names, "_docker_ps_ids", fake_ps_ids)
+    names = _names()
+
+    ids = teardown_container_ids(names, all_arches=True, legacy=[], legacy_labelled=[])
+    assert ids == ["amd64-container", "arm64-container"]
+    assert calls == [(f"label={names.workspace_label}",)]
+
+    calls.clear()
+    ids = teardown_container_ids(names, legacy=[], legacy_labelled=[])
+    assert ids == ["amd64-container"]
+    assert calls == [(f"label={names.workspace_label}", f"label={names.arch_label}")]
+
+
+# -------------------------------------------------------- the image refs
+
+
+def test_teardown_images_untagged_overlay_yields_its_bare_id() -> None:
+    """I4: reached only via its container, with an empty RepoTags.
+
+    This is the shape an unscoped tag grep cannot see at all.
+    """
+    names = _names()
+    refs = teardown_image_refs(
+        names,
+        from_containers=["sha256:untagged"],
+        images={"sha256:untagged": ImageRefs(tags=(), digests=())},
+    )
+    assert refs == ["sha256:untagged"]
+
+
+def test_teardown_images_multi_tag_overlay_yields_every_tag_not_the_id() -> None:
+    """I4: `docker rmi <id>` refuses a multi-repo image without `-f`.
+
+    This ticket does not add `-f`, so every RepoTag is emitted instead of the
+    id.
+    """
+    names = _names()
+    tags = (
+        f"vsc-dotfiles-{names.hash}-{names.arch}:latest",
+        f"vsc-{names.basename}-{names.hash}deadbeef:latest",
+    )
+    refs = teardown_image_refs(
+        names,
+        from_containers=["sha256:multi"],
+        images={"sha256:multi": ImageRefs(tags=tags, digests=())},
+    )
+    assert refs == list(tags)
+    assert "sha256:multi" not in refs
+
+
+def test_teardown_images_ignores_a_different_clones_tag() -> None:
+    """The control arm for the whole ticket.
+
+    An orphaned overlay belonging to ANOTHER clone must never be scoped in,
+    however it got into `images`.
+    """
+    names = _names()
+    other = _names(workspace=OTHER_WORKSPACE)
+    refs = teardown_image_refs(
+        names,
+        from_containers=[],
+        images={
+            "sha256:foreign": ImageRefs(
+                tags=(f"vsc-dotfiles-{other.hash}-{other.arch}:latest",), digests=()
+            )
+        },
+    )
+    assert refs == []
+
+
+def test_teardown_images_refuses_a_slashed_tag_even_from_a_container() -> None:
+    """I5, tags field: a stopped container CAN reference the shared base image directly.
+
+    Measured on the maintainer's host — the guard must catch it even through
+    the `from_containers` path, not just the orphan-tag scan.
+    """
+    names = _names()
+    refs = teardown_image_refs(
+        names,
+        from_containers=["sha256:base"],
+        images={
+            "sha256:base": ImageRefs(
+                tags=("ghcr.io/ray-manaloto/dotfiles-devcontainer:dev",), digests=()
+            )
+        },
+    )
+    assert refs == []
+
+
+def test_teardown_images_refuses_a_slashed_digest_with_no_tags() -> None:
+    """I5, digests field: an untagged, digest-pulled base still carries the slash.
+
+    `docker images` can show no tag at all while RepoDigests still carries the
+    registry slash — the shape a tags-only guard would miss (measured:
+    `d57c2b5dbddb`).
+    """
+    names = _names()
+    refs = teardown_image_refs(
+        names,
+        from_containers=["sha256:base-digest-only"],
+        images={
+            "sha256:base-digest-only": ImageRefs(
+                tags=(),
+                digests=("ghcr.io/ray-manaloto/dotfiles-devcontainer@sha256:deadbeef",),
+            )
+        },
+    )
+    assert refs == []
+
+
+def test_teardown_images_a_slash_free_digest_does_not_refuse_a_real_overlay() -> None:
+    """The control arm for I5's design.
+
+    A REFUTED alternative (reject any image carrying a RepoDigest) would have
+    failed this — docker 29 synthesizes a repo digest for every locally built
+    image, tagged or not.
+    """
+    names = _names()
+    tag = f"vsc-dotfiles-{names.hash}-{names.arch}:latest"
+    refs = teardown_image_refs(
+        names,
+        from_containers=["sha256:overlay"],
+        images={
+            "sha256:overlay": ImageRefs(
+                tags=(tag,),
+                digests=(f"vsc-dotfiles-{names.hash}-{names.arch}@sha256:deadbeef",),
+            )
+        },
+    )
+    assert refs == [tag]
+
+
+def test_teardown_images_finds_the_clis_own_orphan_tag() -> None:
+    """I3's second derivable shape: the CLI's own per-folder tag.
+
+    It survives when the container is already gone, found by tag scan alone
+    (no `from_containers` entry).
+    """
+    names = _names()
+    full_digest = hashlib.sha256(names.workspace.encode()).hexdigest()
+    tag = f"vsc-{names.basename}-{full_digest}:latest"
+    refs = teardown_image_refs(
+        names,
+        from_containers=[],
+        images={"sha256:orphan": ImageRefs(tags=(tag,), digests=())},
+    )
+    assert refs == [tag]
 
 
 # ---------------------------------------------------------- the migration
