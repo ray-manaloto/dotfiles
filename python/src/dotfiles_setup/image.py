@@ -26,6 +26,7 @@ from dotfiles_setup.image_manifest import (
 )
 from dotfiles_setup.p2996_hash import _extract_bake_variable
 from dotfiles_setup.platform_target import (
+    host_platform,
     is_emulated,
     platform_arch,
     resolve_platform,
@@ -1959,12 +1960,17 @@ def smoke_script_main(tier: int | None) -> int:
         # the kayari compiler by design, so a hard-coded `True` here would fail
         # `verify-container-latest` inside a correct arm64 container. `emulated`
         # stays forced for the reason in the docstring — it is not derivable
-        # from inside the container, and this one is.
+        # from inside the container, and this one is: from `uname`, NOT from
+        # the repo pin. This runs INSIDE the target container, where the
+        # bind-mounted `mise.local.toml` pin (the host's default arch) wins over
+        # any DOTFILES_PLATFORM the exec passed in, so `resolve_platform()`
+        # answered amd64 inside an arm64 container and demanded gcc-latest
+        # (measured 2026-08-28: `MISE_ENV=arm64 mise run sync` smoke FAIL).
         script = build_tier3_script(
             expected_p2996_ref=resolve_expected_p2996_ref_at_base(),
             emulated=True,
             expected_llvm_version=resolve_expected_llvm_version_at_base(),
-            gcc_latest=ships_gcc_latest(resolve_platform()),
+            gcc_latest=ships_gcc_latest(host_platform()),
         )
     else:
         sys.stderr.write(

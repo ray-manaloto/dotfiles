@@ -26,7 +26,9 @@ from __future__ import annotations
 
 import re
 import sys
+from functools import partial
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -438,8 +440,19 @@ def test_the_devcontainer_smoke_cli_also_derives_gcc_latest(
     at its default it would demand gcc-latest inside an arm64 container that
     deliberately omits it, failing `verify-container-latest` on an image that is
     correct by design.
+
+    It derives from the machine it RUNS on (`uname`), never from the repo pin:
+    inside the container the bind-mounted `mise.local.toml` pin is the host's
+    default arch, so an arm64 container read amd64 and demanded gcc-latest
+    (measured 2026-08-28). The pin is set to the OPPOSITE platform here as the
+    control arm — a generator that consulted it would emit the wrong flag.
     """
-    monkeypatch.setenv(platform_target.PLATFORM_ENV_VAR, platform)
+    other = next(p for p in ("linux/amd64/v2", "linux/arm64/v8") if p != platform)
+    monkeypatch.setenv(platform_target.PLATFORM_ENV_VAR, other)
+    machine = "x86_64" if platform == "linux/amd64/v2" else "aarch64"
+    monkeypatch.setattr(
+        platform_target.os, "uname", partial(SimpleNamespace, machine=machine)
+    )
 
     assert image.smoke_script_main(3) == 0
 
