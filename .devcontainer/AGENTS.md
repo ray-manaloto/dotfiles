@@ -21,7 +21,7 @@ Defines the devcontainer image and runtime lifecycle. Two layers:
 | `devcontainer.json` | Devcontainer spec (containers.dev) — lifecycle hooks, features, volumes, dynamic naming |
 | `mise-system.toml` | BASE tool tier (#160 T9) → `/usr/local/share/mise/config.toml`. `[bootstrap.packages]` declares the apt set installed by `mise bootstrap packages apply` (#160 T4); the 20 host↔image shared tools come from the repo `.config/mise/conf.d/shared.toml` COPYd to `conf.d/` and merged (#160 T5) |
 | `mise-runtime.toml` | RUNTIME tool tier (#160 T9/T10) → `config.runtime.toml`, installed in the `devcontainer-runtime` stage under `MISE_ENV=runtime` (baked ENV). The interactive OVERLAY tier lives in `home/dot_config/mise/config.toml.tmpl`, eager-installed per-user by `on-create.sh` |
-| `mise-system.lock` + `mise-runtime.lock` + `P2996-CACHE.md` | Native mise lockfiles per tier, per tool **per published arch** (`linux-x64` + `linux-arm64` since #698, via `lockfile_platforms`). COPYd to `mise.lock` / `mise.runtime.lock`, consumed by `mise install --system --locked`; base digest feeds base-hash, runtime pair feeds dev-hash. Regenerate via `mise run lock-image`, never a hand-rolled `mise lock` (#650) |
+| `mise-system.lock` + `mise-runtime.lock` + `P2996-CACHE.md` | Native mise lockfiles per tier, per tool **per published arch** (`linux-x64` + `linux-arm64` since #698, via `lockfile_platforms`). COPYd to `mise.lock` / `mise.runtime.lock`, consumed by `mise install --system --locked`; base digest feeds base-hash, runtime pair feeds dev-hash. Regenerate via `mise run lock-image`, never a hand-rolled `mise lock` (#650). A `shared.toml` bump ALSO needs `mise run lock-shared` — different file, and `lock-image` never touches it (#790) |
 
 ## Devcontainer Lifecycle
 

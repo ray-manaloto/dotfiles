@@ -26,8 +26,9 @@ uv run --project python pytest tests/ -x -q  # Run tests (see python/AGENTS.md)
 mise run verify                    # Run structured verification contracts
 mise run pin-actions                         # Verify GHA actions are SHA-pinned
 mise run lint-docs                           # Validate agent documentation (agnix)
-mise run lock -- "<backend/name>"            # Re-lock ONE tool (bare form is destructive, #370)
-mise run lock-image                          # Regenerate the IMAGE locks instead (#650; routes to amd64)
+mise run lock -- "<backend/name>"            # Re-lock ONE host tool (bare form is destructive, #370)
+mise run lock-shared -- "<name>"             # shared.toml tools — resolves on linux, NOT the host (#790)
+mise run lock-image                          # Regenerate the IMAGE locks (#650; routes to amd64)
 ```
 
 The devloop is `mise run up` → work inside the container → `mise run down`.
@@ -166,7 +167,7 @@ Gated by `mise run verify-local`. Sessions touching `.devcontainer/` or `mise.to
 | `HK_MISE` | `1` | Enable mise integration for hk |
 | `CONTAINER_REGISTRY` | `ghcr.io` | Docker registry (use `CONTAINER_REGISTRY`, not `REGISTRY` — avoids HCL collision) |
 | `DEVCONTAINER_USER` | `${localEnv:USER}` (fallback: `devcontainer`) | Container user (UID 1000); passed through from host `USER` via `devcontainer.json`. Host-user migration is the current state — the legacy `vscode` value has been replaced. |
-| `DEVCONTAINER_SSH_PORT` | derived | Host-side port for R1 inbound ssh; container-internal sshd is hardcoded on `2222` by the feature. **Unset by default (#677)** — derived per workspace+architecture into 20000-29999 so two clones and two arches never collide (`mise run ssh-port`; `mise run names` for all three). Pin per-clone via `mise.local.toml`. Volume names still exclude the port (C10/C11/C12). |
+| `DEVCONTAINER_SSH_PORT` | derived | Host-side port for R1 inbound ssh (container sshd is hardcoded `2222`). **Unset by default (#677)** — derived per workspace+architecture so two clones and two arches never collide; `mise run ssh-port` / `names`. Pin per-clone via `mise.local.toml`. Detail: `.devcontainer/AGENTS.md`. |
 | `DOTFILES_PLATFORM` | pinned in `mise.toml` `[env]` | **The one platform parameter** (#673). Every `--platform` site resolves from it; unset, it falls back to the host's native triple. `no_platform_literals` rejects a literal elsewhere |
 | `DOCKER_DEFAULT_PLATFORM` | `{{ env.DOTFILES_PLATFORM }}` | Task-scoped export of the above — what docker itself reads |
 | `PLATFORM` | per-leg in CI (#676) | bake's HCL variable, overridden by the same-named env var. **All three content hashes read it too**, so a leg's build and its cache tags cannot describe different architectures |
