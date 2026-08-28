@@ -26,6 +26,4 @@ accepted decision from verified delivery. It validates the complete file and
 its authorized Git baseline before applying that semantic tail bound. Missing
 evidence stays explicit; do not backfill it with assistant narrative.
 
-The one-writer restart protocol is not an executable inter-task lock. Issue #753
-tracks the native startup/pre-mutation ownership lease. Until that lands,
-the supervisor must perform the handshake and stop one writer manually.
+The one-writer restart protocol is manual by design.

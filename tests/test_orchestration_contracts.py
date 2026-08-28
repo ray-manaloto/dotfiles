@@ -145,7 +145,6 @@ def test_handoff_and_land_require_zero_stale_and_unknown_containers() -> None:
             "writer": "test",
             "worktree": "/repo",
             "branch": "test",
-            "lease_receipt": "a" * 64,
             "handoff_sha256": "b" * 64,
         },
         "repository": {
@@ -303,7 +302,6 @@ def test_tracked_takeover_records_every_emergency_decision() -> None:
         "stale_container_count": 0,
         "unknown_container_count": 0,
     }
-    assert takeover["active_goal"]["lease_receipt"].startswith("9911e89")
     assert takeover["knowledge_base"]["execution_authorized"] is False
     assert takeover["successor_issue"].endswith("/769")
 

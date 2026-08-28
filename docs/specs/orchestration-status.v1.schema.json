@@ -83,7 +83,7 @@
     "active_goal": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["issue", "outcome", "coordinator", "writer", "worktree", "branch", "lease_receipt", "handoff_sha256"],
+      "required": ["issue", "outcome", "coordinator", "writer", "worktree", "branch", "handoff_sha256"],
       "properties": {
         "issue": {"type": "string", "minLength": 1},
         "outcome": {"type": "string", "minLength": 1},
@@ -91,7 +91,6 @@
         "writer": {"type": "string", "minLength": 1},
         "worktree": {"type": "string", "minLength": 1},
         "branch": {"type": "string", "minLength": 1},
-        "lease_receipt": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "handoff_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
       }
     },

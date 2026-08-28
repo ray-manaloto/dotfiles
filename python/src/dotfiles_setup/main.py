@@ -110,7 +110,6 @@ from dotfiles_setup.sync import SyncOptions, sync_main
 from dotfiles_setup.token_audit import preflight_main, token_audit_main
 from dotfiles_setup.verify import main as verify_main
 from dotfiles_setup.workflow_hooks import workflow_hooks_main
-from dotfiles_setup.writer_lease import TRANSITIONS, writer_lease_main
 
 if TYPE_CHECKING:
     from argparse import _SubParsersAction
@@ -1355,7 +1354,6 @@ def _add_report_parsers(subparsers: _SubParsers) -> None:
     _add_dag_tick_subcommand(subparsers)
     _add_dag_project_subcommand(subparsers)
     _add_codex_lane_subcommand(subparsers)
-    _add_writer_lease_subcommand(subparsers)
 
 
 def _add_codex_lane_subcommand(subparsers: _SubParsers) -> None:
@@ -1419,38 +1417,6 @@ def _add_codex_lane_subcommand(subparsers: _SubParsers) -> None:
         help="The jobs root to launch under (default: ~/.claude/jobs, the "
         "same tree dag-tick scans)",
     )
-
-
-def _add_writer_lease_subcommand(subparsers: _SubParsers) -> None:
-    """Register the Git-common-dir writer ownership interface (#753)."""
-    parser = subparsers.add_parser(
-        "writer-lease",
-        help="Hold, check, or inspect the one live writer lease shared by all "
-        "worktrees of this Git repository",
-    )
-    operations = parser.add_subparsers(dest="lease_operation")
-    hold_parser = operations.add_parser(
-        "hold", help="Acquire the lease and remain alive until relinquishment"
-    )
-    hold_parser.add_argument("--task-id", required=True)
-    hold_parser.add_argument("--owner", required=True)
-    hold_parser.add_argument("--handoff-sha256", required=True)
-    hold_parser.add_argument(
-        "--expected-transition",
-        choices=TRANSITIONS,
-        help=(
-            "Optional assertion; the transition is always derived from "
-            "validated audit facts"
-        ),
-    )
-    hold_parser.add_argument("--expected-prior-receipt-sha256")
-
-    check_parser = operations.add_parser(
-        "check", help="Fail closed unless this task owns the live lease"
-    )
-    check_parser.add_argument("--task-id", required=True)
-    check_parser.add_argument("--handoff-sha256", required=True)
-    operations.add_parser("status", help="Report live, stale, or absent ownership")
 
 
 def setup_parser() -> argparse.ArgumentParser:
@@ -2168,7 +2134,6 @@ def _build_command_handlers(
         "dag-tick": lambda: sys.exit(run_tick(args)),
         "dag-project": lambda: sys.exit(run_project(args)),
         "codex-lane": lambda: sys.exit(run_lane_cli(args)),
-        "writer-lease": lambda: sys.exit(writer_lease_main(args, Path.cwd())),
         "doctor": lambda: sys.exit(
             doctor_main(
                 project_root,

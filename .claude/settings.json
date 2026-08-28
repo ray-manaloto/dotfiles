@@ -39,16 +39,6 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash|Edit|Write|NotebookEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/usr/bin/python3 -I -S \"${CLAUDE_PROJECT_DIR:-.}/scripts/writer-lease-hook-runner.py\"",
-            "timeout": 10
-          }
-        ]
-      },
-      {
         "matcher": "Bash|AskUserQuestion|Edit|Write|NotebookEdit",
         "hooks": [
           {
@@ -75,30 +65,6 @@
             "type": "command",
             "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/scripts/graphify-hook-guard.sh\" read",
             "timeout": 15
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Bash|Edit|Write|NotebookEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/usr/bin/python3 -I -S \"${CLAUDE_PROJECT_DIR:-.}/scripts/writer-lease-hook-runner.py\"",
-            "timeout": 10
-          }
-        ]
-      }
-    ],
-    "PostToolUseFailure": [
-      {
-        "matcher": "Bash|Edit|Write|NotebookEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/usr/bin/python3 -I -S \"${CLAUDE_PROJECT_DIR:-.}/scripts/writer-lease-hook-runner.py\"",
-            "timeout": 10
           }
         ]
       }
