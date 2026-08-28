@@ -140,13 +140,13 @@ tokens = ["openssh-server"]
 
 [[suite]]
 name = "build.amd64-platform-wired"
-description = "R3: the devcontainer must build AND run on the platform we asked for, on BOTH of its two `--platform` sites — build.options (the Dockerfile build arg) and runArgs (the container it then starts). Binding only one is the actual regression this exists to stop: an image built amd64 and started native reads as green everywhere except the arch probe. Since #673 the value is not a literal here — both sites interpolate ${localEnv:DOTFILES_PLATFORM}, whose single default lives in mise.toml's global [env] (the `no_platform_literals` hk step rejects a literal re-appearing anywhere else, and holds that default equal to docker-bake.hcl's CI-side mirror). Deliberately NO `:default` fallback in the interpolation — a fallback would be a second place choosing the platform. Runtime arch is additionally verified by `mise run verify-arch` via docker image inspect + uname -m + arch, which derives its expectations from the same parameter and runs as part of verify-local. See AGENTS.md SSH Requirements section (R3)."
+description = "R3: the devcontainer must build AND run on the platform we asked for, on BOTH of its two `--platform` sites — build.options (the Dockerfile build arg) and runArgs (the container it then starts). Binding only one is the actual regression this exists to stop: an image built amd64 and started native reads as green everywhere except the arch probe. Since #673 the value is not a literal here — both sites interpolate ${localEnv:DOTFILES_PLATFORM}, whose single default lives in mise.toml's global [env] (the `no_platform_literals` hk step rejects a literal re-appearing anywhere else, and holds that default equal to docker-bake.hcl's CI-side mirror). Deliberately NO `:default` fallback in the interpolation — a fallback would be a second place choosing the platform. Runtime arch is additionally verified by `mise run verify-arch` via docker image inspect + uname -m + arch, which derives its expectations from the same parameter and runs as part of verify-local. See AGENTS.md SSH Requirements section (R3). The build.options token also pins the per-arch `--tag`: the CLI's own overlay tag is a function of the workspace folder alone, so without it the second architecture's build orphans the first container's image (#678)."
 category = "build"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/devcontainer.json"]
 per_path_tokens = { ".devcontainer/devcontainer.json" = [
-    "\"options\": [\"--platform=${localEnv:DOTFILES_PLATFORM}\"]",
+    "\"options\": [\"--tag=vsc-dotfiles-${localEnv:DEVCONTAINER_WORKSPACE_HASH}-${localEnv:DEVCONTAINER_ARCH}\", \"--platform=${localEnv:DOTFILES_PLATFORM}\"]",
     "\"--platform=${localEnv:DOTFILES_PLATFORM}\",",
 ] }
 

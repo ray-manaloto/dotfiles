@@ -41,10 +41,22 @@ unblocked since #676 and #677 merged).
 `--arch` flag, and no other place chooses:
 
 ```bash
-mise run up                                    # the pinned default (linux/amd64/v2)
-DOTFILES_PLATFORM=linux/arm64/v8 mise run up   # the other architecture
-DOTFILES_PLATFORM=linux/arm64/v8 mise run names  # what THAT arch owns
+mise run up                    # the pinned default (linux/amd64/v2)
+MISE_ENV=arm64 mise run up     # the other architecture (profile below)
+MISE_ENV=arm64 mise run names  # what THAT arch owns
 ```
+
+A shell `DOTFILES_PLATFORM=...` is **overridden by a `mise.local.toml` pin**
+(mise config beats the ambient env — measured 2026-08-28), so the other
+architecture lives in a sibling gitignored profile, mise.arm64.local.toml
+(the `mise.*.local.toml` ignore rule):
+`[env] DOTFILES_PLATFORM = "linux/arm64/v8"` and `DEVCONTAINER_SSH_PORT = ""`
+(blank = derive; a pinned port would collide with the first arch).
+
+One wart survives: the local `:dev` tag holds ONE platform, so right after
+the other arch's `up`, `mise run verify-local` fails at `verify-image`
+(`--pull=never`, wrong arch) until `mise run sync` in that arch's env
+re-points the tag (layers are local, so it takes seconds).
 
 Container name, home volume and SSH port are all **arch-scoped** (#677), so
 the two coexist in one clone without colliding — the port is derived from
