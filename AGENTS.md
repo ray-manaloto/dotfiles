@@ -107,8 +107,6 @@ locally before pushing Dockerfile changes.
   hk tool is in `mise.toml`. See `.claude/rules/ci-local-parity.md`.
 - **Research before fixing**: Check docs, changelogs, and issues; don't guess at CI failures.
 - Follow `.claude/rules/graphify-first.md` and `.claude/rules/real-integration-evidence.md`.
-- **One repository writer:** Before mutation, acquire/verify the Git-common-dir
-  lease in `.claude/rules/writer-lease.md`; branches/worktrees are not ownership.
 - **Bound long-running commands**: Run the lint gate via `mise run lint`
   (hk under a hard timeout; hk has none) — never wait blind or capture via
   `| tail` (masks exit codes). See `.claude/rules/long-running-command-hangs.md`.

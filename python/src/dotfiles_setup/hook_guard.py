@@ -41,7 +41,7 @@ import re
 import sys
 from dataclasses import dataclass
 
-from dotfiles_setup import ask_quality, branch_guard, writer_lease
+from dotfiles_setup import ask_quality, branch_guard
 from dotfiles_setup.heredoc import HEREDOC_PATTERN, NUL_FILLER, blank_heredoc
 
 
@@ -788,9 +788,6 @@ def _read_command() -> str:
 def decide_payload(
     tool_name: str,
     tool_input: dict[str, object],
-    *,
-    session_id: str = "",
-    tool_use_id: str = "legacy-direct-mutation",
 ) -> str | None:
     """Deny reason for a pending tool call, dispatched on ``tool_name``.
 
@@ -805,12 +802,7 @@ def decide_payload(
         policy_reason = branch_guard.decide(tool_input)
     else:
         policy_reason = decide(str(tool_input.get("command", "")))
-    return policy_reason or writer_lease.pretooluse_decision(
-        session_id,
-        tool_input,
-        tool_name=tool_name or "Bash",
-        tool_use_id=tool_use_id,
-    )
+    return policy_reason
 
 
 def pretooluse_main() -> int:
@@ -820,13 +812,8 @@ def pretooluse_main() -> int:
     contract); a crash here would fail OPEN (hook errors do not block),
     which is the acceptable failure mode for a redirect guard.
     """
-    tool_name, tool_input, payload = _read_payload()
-    reason = decide_payload(
-        tool_name,
-        tool_input,
-        session_id=str(payload.get("session_id", "")),
-        tool_use_id=str(payload.get("tool_use_id", "")),
-    )
+    tool_name, tool_input, _ = _read_payload()
+    reason = decide_payload(tool_name, tool_input)
     if reason is not None:
         sys.stdout.write(
             json.dumps(

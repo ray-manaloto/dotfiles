@@ -2130,33 +2130,8 @@ required_eval_ids = [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
 min_expectations = 1
 
 [[suite]]
-name = "workflow.writer-lease"
-description = "Issues #753/#760: one challenge-bound live flock in the absolute Git common directory excludes duplicate writers. Private content-addressed generations atomically bind receipt, a bounded audit head, and in-flight tool IDs; immutable 64-event chunks preserve and reconstruct complete history with linear write amplification. Audit facts derive handoff versus recovery. Native Codex and Claude Pre/Post hooks use a pinned runner and drain delayed mutations before transfer. Real-process hostile tests are the acceptance boundary."
-category = "workflow"
-check_type = "static"
-handler = "require_tokens"
-paths_required = true
-paths = [
-    ".agents/skills/codex-task-orchestration/SKILL.md",
-    ".claude/rules/writer-lease.md",
-    ".claude/settings.json",
-    ".codex/hooks.json",
-    "AGENTS.md",
-    "docs/agents/codex-task-orchestration.md",
-    "docs/specs/codex-writer-lease.md",
-    "mise.toml",
-    "python/src/dotfiles_setup/codex_writer_lease_hook.py",
-    "python/src/dotfiles_setup/hook_guard.py",
-    "python/src/dotfiles_setup/main.py",
-    "python/src/dotfiles_setup/writer_lease.py",
-    "scripts/writer-lease-hook-runner.py",
-    "tests/test_writer_lease.py",
-]
-per_path_tokens = { ".agents/skills/codex-task-orchestration/SKILL.md" = ["native writer-lease task", "must acquire that Git-common-dir", "`PostToolUse` hook must drain"], ".claude/rules/writer-lease.md" = ["# Repository writer lease", "immutable, content-addressed 64-event chunks", "`PostToolUseFailure` drains failed tools"], ".claude/settings.json" = ['"PostToolUseFailure": ['], ".codex/hooks.json" = ['"statusMessage": "Checking repository writer lease"', '"statusMessage": "Draining repository writer lease mutation"'], "AGENTS.md" = ["**One repository writer:**", "Git-common-dir"], "docs/agents/codex-task-orchestration.md" = ['G --> WL["Successor acquires Git-common-dir writer lease"]', "`PostToolUse` hooks drain those exact IDs"], "docs/specs/codex-writer-lease.md" = ["fcntl.flock(fd, LOCK_EX | LOCK_NB)", "Pinned Python: exactly one complete runtime", "Immutable content-addressed 64-event chunks", "--dangerously-bypass-hook-trust"], "mise.toml" = ["[tasks.writer-lease-hold]", "dotfiles-setup writer-lease check"], "python/src/dotfiles_setup/codex_writer_lease_hook.py" = ["codex_pretooluse_decision(payload)", 'event in {"PostToolUse", "PostToolUseFailure"}'], "python/src/dotfiles_setup/hook_guard.py" = ["writer_lease.pretooluse_decision("], "python/src/dotfiles_setup/main.py" = ['"writer-lease": lambda: sys.exit(writer_lease_main(args, Path.cwd()))'], "python/src/dotfiles_setup/writer_lease.py" = ["git-common-dir", 'return _challenge_holder(receipt["holder_port"], receipt["holder_token"])', "def reclaim_generations_anchored(", "_AUDIT_CHUNK_EVENT_LIMIT = 64", "_AUDIT_READ_CEILING_BYTES = 8 * 1024 * 1024", "def _read_fd_exact(", "def _decode_audit_manifest(", '"PostToolUseFailure"', "def hook_decision(", "def writer_lease_main("], "scripts/writer-lease-hook-runner.py" = ["def _open_relative(", "len(candidates) == 1", 'event in {"PostToolUse", "PostToolUseFailure"}', 'env={"LC_ALL": "C", "PATH": "/usr/bin:/bin"}'], "tests/test_writer_lease.py" = ["def test_many_tool_pairs_keep_one_linear_generation_with_full_audit(", "def test_sealed_audit_chunk_corruption_denies_without_state_mutation(", "def test_sealed_audit_read_ceiling_denies_before_state_mutation(", "def test_codex_hook_allows_only_plain_lease_bootstrap_without_an_owner(", "def test_codex_hook_command_reaches_the_tracked_runner_from_nested_cwd(", "def test_codex_hook_selects_inner_runner_beneath_unrelated_outer_repo(", "def test_codex_hook_blocks_ambiguous_complete_outer_runtime(", "def test_codex_hook_symlink_components_cannot_redirect_pre_post_lifecycle(", "def test_pinned_system_runner_uses_real_project_runtime_and_drains_posttooluse("] }
-
-[[suite]]
 name = "workflow.goal-history"
-description = "The append-only dotfiles goal history must remain present, structurally complete, automatically discoverable by session review, and bound to the fixed origin/main merge-base. The executable validator walks every first-parent revision sequentially and then checks working-tree bytes, so deletion, field corruption, self-recomputed goal digests, rewrites behind an unrelated commit, rewrites of a branch-appended entry, and rewrites after bootstrap all fail closed. Caller-controlled baseline overrides are ignored. A history entry records an accepted decision rather than delivery. The one-writer restart rule is a manual coordination protocol; issue #753 tracks executable collision prevention."
+description = "The append-only dotfiles goal history must remain present, structurally complete, automatically discoverable by session review, and bound to the fixed origin/main merge-base. The executable validator walks every first-parent revision sequentially and then checks working-tree bytes, so deletion, field corruption, self-recomputed goal digests, rewrites behind an unrelated commit, rewrites of a branch-appended entry, and rewrites after bootstrap all fail closed. Caller-controlled baseline overrides are ignored. A history entry records an accepted decision rather than delivery. The one-writer restart rule is a manual coordination protocol."
 category = "workflow"
 check_type = "static"
 handler = "require_tokens"
@@ -2168,7 +2143,7 @@ paths = [
     "python/src/dotfiles_setup/session_review.py",
     "tests/test_session_review.py",
 ]
-per_path_tokens = { ".claude/rules/goal-history.md" = ["After an accepted goal change", "every first-parent branch revision in order", "Issue #753\ntracks the native startup/pre-mutation ownership lease"], ".claude/skills/session-review/SKILL.md" = ["validate the entire", "fixed `origin/main` merge-base", "docs/agents/goal-history.md"], "docs/agents/goal-history.md" = ["# Dotfiles goal history", "## Entry contract", "`Prior goal digest` is the SHA-256", "Every entry includes the current goal text and a current Mermaid workflow."], "python/src/dotfiles_setup/session_review.py" = ['"docs/agents/goal-history.md",', "def goal_history_errors(", '"rev-list", "--first-parent", "--reverse"', "error := _append_only_error(repo_root, history.read_bytes(), text)"], "tests/test_session_review.py" = ["def test_goal_history_is_a_default_session_review_source(", "def test_goal_history_validator_rejects_a_malformed_current_digest(", "def test_session_review_refuses_a_two_commit_history_rewrite(", "def test_session_review_refuses_rewrite_of_branch_appended_entry(", "def test_session_review_refuses_rewritten_bootstrap_commit(", "def test_session_review_refuses_a_missing_history_in_a_git_checkout("] }
+per_path_tokens = { ".claude/rules/goal-history.md" = ["After an accepted goal change", "every first-parent branch revision in order", "The one-writer restart protocol is manual by design."], ".claude/skills/session-review/SKILL.md" = ["validate the entire", "fixed `origin/main` merge-base", "docs/agents/goal-history.md"], "docs/agents/goal-history.md" = ["# Dotfiles goal history", "## Entry contract", "`Prior goal digest` is the SHA-256", "Every entry includes the current goal text and a current Mermaid workflow."], "python/src/dotfiles_setup/session_review.py" = ['"docs/agents/goal-history.md",', "def goal_history_errors(", '"rev-list", "--first-parent", "--reverse"', "error := _append_only_error(repo_root, history.read_bytes(), text)"], "tests/test_session_review.py" = ["def test_goal_history_is_a_default_session_review_source(", "def test_goal_history_validator_rejects_a_malformed_current_digest(", "def test_session_review_refuses_a_two_commit_history_rewrite(", "def test_session_review_refuses_rewrite_of_branch_appended_entry(", "def test_session_review_refuses_rewritten_bootstrap_commit(", "def test_session_review_refuses_a_missing_history_in_a_git_checkout("] }
 tokens = [
     "docs/agents/goal-history.md",
 ]

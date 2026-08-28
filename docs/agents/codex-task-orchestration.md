@@ -36,8 +36,7 @@ flowchart TB
     I --> X
     X --> R["Predecessor relinquishes; confirms idle and no ownership"]
     R --> G["Coordinator sends separate start signal"]
-    G --> WL["Successor acquires Git-common-dir writer lease"]
-    WL --> L["Successor acknowledges bounded write ownership"]
+    G --> L["Successor acknowledges bounded write ownership"]
 ```
 
 ## Reading the workflow
@@ -60,19 +59,6 @@ authority. Existing peers do not need creation. A fresh subagent is the disclose
 fallback, and a suitable confirmed-idle agent may be reused after a thread-limit
 failure; active writers are ineligible. Tests, reviews, transient blockers, and
 ordinary steps stay inside the current task.
-
-When a repository exposes the native writer-lease tasks, the separate start
-signal is followed by acquisition against its Git common directory and a
-pinned absolute bootstrap command. This machine-enforced repository identity
-is stronger than branch or worktree naming; the handoff protocol still
-controls when the successor is allowed to attempt acquisition. The tracked
-Codex and Claude `PreToolUse` hooks bind Bash, unified exec, and direct mutation
-tool IDs to the live challenge-bound holder before execution. Their
-`PostToolUse` hooks drain those exact IDs, including a later `write_stdin`
-completion, before release. Validated audit facts derive handoff versus
-recovery; callers cannot relabel a crash. A manual check is diagnostic, not the
-enforcement boundary. Review changed Codex hook hashes with `/hooks` before
-treating the enforcement as active.
 
 The tracked Mermaid block above is authoritative. Mirror that exact block only
 to an explicitly identified issue or PR, read the remote artifact back, and

@@ -7,17 +7,15 @@ development containers. A long task can use several repositories and agents.
 
 ## 2. What the current goal is
 
-Issue #766 makes long work safe to resume. Each repository has one coordinator.
-Each Git common directory has one writer. A small host decision point admits
-only shared CPU, memory, Docker, architecture, port, and cache capacity.
+Issue #766 makes long work safe to resume. Each repository has one coordinator,
+and each checkout has one live implementation lane. Git prevents the same branch
+from being checked out in two worktrees. A small host decision point admits only
+shared CPU, memory, Docker, architecture, port, and cache capacity.
 
 ```mermaid
 flowchart TD
     W["Work request"] --> R["Repository coordinator"]
-    R --> C{"Repository write?"}
-    C -->|"yes"| L["One Git-common-dir writer lease"]
-    L --> H{"Shared host capacity?"}
-    C -->|"no"| H
+    R --> H{"Shared host capacity?"}
     H -->|"no"| D["Run bounded repository work"]
     H -->|"yes"| B["Host admission decision"]
     B --> A{"Capacity and isolation ready?"}
@@ -29,9 +27,10 @@ flowchart TD
 
 ## 3. What is complete
 
-The writer lease already protects each Git common directory. Container names,
-volumes, and ports are scoped by workspace and architecture. The schemas in
-this directory now define the takeover ledger and the host admission receipt.
+Git worktree branch exclusivity and the orchestration rule keep implementation
+lanes isolated. Container names, volumes, and ports are scoped by workspace and
+architecture. The schemas in this directory now define the takeover ledger and
+the host admission receipt.
 
 ## 4. What is not complete
 
@@ -65,11 +64,11 @@ reason.
 
 ## 6. What not to do
 
-Do not run two writers for one Git common directory. Before dispatch, block a
-known stale duplicate or a container with unknown ownership. Do not delete an
-unknown container. Do not run local dual architecture because names alone do
-not prove safe isolation. Do not add `pytest -n auto`. Do not use an old
-receipt as live capacity evidence.
+Keep one live implementation lane per checkout and use distinct branches for
+Git worktrees. Before dispatch, block a known stale duplicate or a container
+with unknown ownership. Do not delete an unknown container. Do not run local
+dual architecture because names alone do not prove safe isolation. Do not add
+`pytest -n auto`. Do not use an old receipt as live capacity evidence.
 
 ## 7. How to verify the result
 
@@ -84,15 +83,16 @@ zero running containers and zero ports.
 The temporary source reports may disappear. The tracked findings below are the
 durable record.
 
-- Safe read-only work may overlap. Repository writers remain exclusive per Git
-  common directory. Docker-heavy and CPU-heavy local gates remain serial.
+- Safe read-only work may overlap. Each checkout keeps one live implementation
+  lane, and Git worktrees use distinct branches. Docker-heavy and CPU-heavy
+  local gates remain serial.
 - The normal local workflow uses one architecture. Dual-local work waits until
   sync state, lookups, receipts, caches, ports, volumes, and dynamic admission
   are architecture-scoped.
 - `sync --full` may remove one duplicate setup only with a same-invocation
   content-addressed convergence receipt. It must still run every required check.
 - An xdist pilot uses an audited pure-test set, two workers, and repeated A/B
-  proof. Docker, ports, process stress, and writer-lease scale tests stay serial.
+  proof. Docker, ports, and process-stress tests stay serial.
 - Handoff and land require zero stale and zero unknown containers. Cleanup may
   act only on exact stale identities. Unknown identities are preserved.
 
@@ -103,8 +103,7 @@ Research identity:
 - `/private/tmp/orchestration-refresh-research/sync-full-parallelism.md`
   with SHA-256 `73673eaa760efb9c37f88f5cdecbcefbaeef0cc509e38222380bbde3c0156d29`.
 
-A **worktree** is another checkout that shares Git objects. A **writer lease**
-proves who may mutate one Git common directory. A **gate** is a required check.
-A **stale container** is an exact container whose expected owner is gone,
-obsolete, or duplicated. An unknown container is a blocker, not a cleanup
-candidate.
+A **worktree** is another checkout that shares Git objects. A **gate** is a
+required check. A **stale container** is an exact container whose expected owner
+is gone, obsolete, or duplicated. An unknown container is a blocker, not a
+cleanup candidate.

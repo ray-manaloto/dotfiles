@@ -173,17 +173,9 @@ Apply the same protocol to Desktop, fresh-subagent, and reused-agent successors:
    predecessor to relinquish ownership and require its explicit confirmation
    that it is idle and owns no files or repository writes.
 3. **Start signal.** Only after that confirmation, send a separate start signal
-   granting the successor the bounded ownership. When the repository exposes a
-   native writer-lease task, the successor must acquire that Git-common-dir
-   lease with the acknowledged handoff digest through the pinned absolute
-   bootstrap command. The repository's native `PreToolUse` hook must bind each
-   mutation to the live holder and its `PostToolUse` hook must drain that exact
-   tool ID before transfer; a manual check is diagnostic, not enforcement.
-   Handoff versus recovery is derived from validated audit facts, never a
-   caller label. The successor must also confirm that the repository's
-   native Codex hook hash is trusted; `/hooks` is the review surface when Codex
-   reports a new or changed project hook. Verify its start and lease acknowledgments
-   before treating the transfer as live.
+   granting the successor the bounded ownership. Ownership is a manual
+   protocol: nothing in the repository enforces it, so verify the successor's
+   start acknowledgment before treating the transfer as live.
 
 This ordering permits zero writers briefly but never two. Preserve the old task
 as history after relinquishment. Task creation is identity setup, not

@@ -718,3 +718,54 @@ flowchart LR
   began exiting `2`, every admitted component used descriptor-relative
   `O_NOFOLLOW` plus `fstat`, and runner/hook execution consumed the already-open
   descriptors. Fresh full gates and two exact-freeze reviews remain required.
+
+## 2026-08-27 — retire the repository writer lease
+
+- **Iteration ID:** `dotfiles-goal-20260827-014`
+- **Prior goal digest:** `sha256:a7e48b0a98d96773fb524345e4dff662a98ad6ae9b1d4e3ce5c4d71bbacc3eb3`
+- **Current goal digest:** `sha256:902af18f847ff9b231aa9691a63abf67efe72f877f2110ed2b552a310a6079d1`
+- **Changed requirement:** The writer lease (#753, #759, #760, #763, #791, #796)
+  is removed rather than repaired: no PreToolUse/PostToolUse lease hooks, no
+  runner, no `writer-lease` CLI or mise tasks, no `workflow.writer-lease`
+  contract, no real-process lease tests, no lease rule or spec. One-writer
+  coordination is the manual restart protocol only.
+- **Reason:** In one session the lease wedged three times (~2h): a dead
+  session's holder with leaked in-flight entries, and twice a challenge-protocol
+  change under a live holder (hooks execute working-tree code, the holder runs
+  the code it started with). A delegated Codex lane runs under its own session
+  id, so the per-session hook denied every Codex call (#796), and the harness
+  offers no session-liveness signal for recovery. Ray decided deletion over
+  repair: the guarantee it gave is covered by git refusing one branch in two
+  worktrees and by one live implementation lane per checkout.
+- **Evidence:** Commit `ecd6cc2` on `chore/retire-writer-lease` (29 files,
+  +673/−5,086). Gates outside the Codex sandbox: `mise run lint` rc=0; pytest
+  2440 passed; `mise run verify` 136/0; `lint-docs` clean; `hook selfcheck`
+  PASS; `parity` OK; `git grep` of the commit tree for lease terms outside
+  `docs/research`, `docs/receipts` and this file returns nothing. Cold read
+  (Opus, cross-family to the Codex implementer) found no dangling reference and
+  one process gap — this missing iteration.
+- **Affected tickets:** dotfiles #791 and #796 (closed by the commit); #753,
+  #759, #760, #763 superseded.
+- **Disposition:** `ACCEPTED_AND_ACTIVE` — implemented and gated on the branch;
+  PR, CI and landing remain.
+- **Topology and ownership:** The Claude session `ad30e818` is the architect and
+  sole writer in the canonical checkout on `chore/retire-writer-lease`; a
+  Codex implementation lane wrote under it (one live lane per checkout). No
+  registered worktree is a writer. `.omc/` and untracked `.agents/skills/*`
+  mirrors are excluded.
+
+### Current goal
+
+> Retire the repository writer lease entirely — its hooks, hook runner, CLI subcommand, mise tasks, verification contract, real-process tests and instruction docs — so that no session, lane or contract references or enforces it; keep one-writer coordination as the manual restart protocol backed by git worktree branch exclusivity and one live implementation lane per checkout; ship through clean synchronized main.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    DECIDE["Ray: delete, do not repair"] --> STRIP["Hand-strip settings.json hooks, guard call, .codex/hooks.json"]
+    STRIP --> LANE["Codex lane: delete module, runner, CLI, tasks, contract, tests, docs"]
+    LANE --> GATES["Architect re-runs lint, pytest, verify, lint-docs, selfcheck, parity"]
+    GATES --> COLD["Opus cold read of the commit"]
+    COLD --> APPEND["Append this iteration"]
+    APPEND --> SHIP["mise run ship, CI, land clean main"]
+```
