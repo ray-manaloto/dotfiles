@@ -847,7 +847,7 @@ description = "Converge the devcontainer onto the latest CI image + verify (dige
 # digest compare, container state matrix, in-flight ci.yml awareness,
 # buildkit tag refresh, tiered verification) lives in
 # python/src/dotfiles_setup/sync.py. Extra flags pass through:
-#   mise run sync -- --check          # dry-run staleness report (rc 1 if stale)
+#   mise run sync -- --check          # dry-run currency report (rc 1 if stale or this architecture's container is outdated)
 #   mise run sync -- --full           # verify-local chain instead of smoke gate
 #   mise run sync -- --tag pr-169     # pre-merge validation against a PR image
 #   mise run sync -- --force          # rebuild even when current
@@ -999,12 +999,23 @@ _hash="$(uv run --project python dotfiles-setup devcontainer name hash)"
 # capture command output, check non-empty, then act. Daemon failures
 # propagate via set -e on the capturing subshell.
 echo "==> stopping container"
-container_ids="$(docker ps -aq --filter "label=devcontainer.local_folder=$PWD")"
+# Whole-clone (#800 F3): every architecture's container, PLUS pre-#677
+# leftovers that carry only the old folder label (--id-label REPLACES the
+# CLI's inferred label set, so a post-#677 container has no folder label at
+# all). sort -u guards the one case that would abort prune under set -e: the
+# same id listed twice. The label sets should never overlap, but a duplicate
+# would cost the whole volume/image/cache tail.
+container_ids="$(
+  {
+    docker ps -aq --filter "label=dotfiles.workspace=${_hash}"
+    docker ps -aq --filter "label=devcontainer.local_folder=$PWD"
+  } | sort -u
+)"
 if [ -n "${container_ids}" ]; then
   # shellcheck disable=SC2086
   docker rm -f ${container_ids}
 else
-  echo "    (no container labeled for $PWD — already stopped)"
+  echo "    (no container for this clone — already stopped)"
 fi
 
 echo "==> removing named volumes (scoped to hash ${_hash})"

@@ -24,6 +24,7 @@ from dotfiles_setup.config import (
     CONTAINER_HOST_STATE_DIR,
     DotfilesConfig,
 )
+from dotfiles_setup.devcontainer_names import resolve_names, teardown_container_ids
 from dotfiles_setup.platform_target import resolve_platform
 
 logger = logging.getLogger(__name__)
@@ -261,21 +262,30 @@ class DevContainerManager:
         )
 
     def down(self) -> None:
-        """Stop and remove the local devcontainer."""
+        """Stop and remove the local devcontainer (#800 F3).
+
+        Looks up ids via ``devcontainer_names.teardown_container_ids`` — this
+        workspace+architecture's #677 id labels plus pre-#677
+        ``devcontainer.local_folder`` leftovers — the same lookup
+        ``mise run stop`` uses, rather than a bare folder-label filter.
+        Post-#677 containers carry no ``devcontainer.local_folder`` label
+        (``--id-label`` REPLACES the CLI's inferred label set), so that
+        filter alone stopped matching anything this verb was meant to find.
+        """
         logger.info("Bringing devcontainer down...")
         docker = self._get_bin("docker")
         # Ensure project_root is absolute for label matching
         abs_root = str(Path(self.project_root).resolve())
-        filter_label = f"label=devcontainer.local_folder={abs_root}"
-
-        # Identify container IDs matching this project (including exited ones)
-        result = subprocess.run(
-            [docker, "ps", "-a", "-q", "--filter", filter_label],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        container_ids = result.stdout.strip().splitlines()
+        lookup_error = None
+        try:
+            container_ids = teardown_container_ids(resolve_names(workspace=abs_root))
+        except subprocess.CalledProcessError as exc:
+            lookup_error = exc
+        if lookup_error is not None:
+            logger.error("could not list devcontainers: %s", lookup_error)
+            # A failed lookup is a failed teardown — exit non-zero so a
+            # chained `dotfiles-setup docker down && …` does not proceed.
+            raise SystemExit(1)
 
         if not container_ids:
             logger.info("No active or exited devcontainers found for this project.")

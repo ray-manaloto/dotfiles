@@ -22,7 +22,7 @@ is a thin caller of `dotfiles-setup docker sync`.
 
 ```bash
 mise run sync                     # observe → converge → smoke-verify
-mise run sync -- --check          # dry-run staleness report (rc 1 if stale)
+mise run sync -- --check          # dry-run currency report (rc 1 if stale or this architecture's container is outdated)
 mise run sync -- --full           # verify-local chain (R1/R2/R3, persistence, secrets)
 mise run sync -- --tag pr-169     # sync/validate against a PR image
 mise run sync -- --force          # rebuild even when digests match
@@ -56,7 +56,7 @@ currency + smoke tiers 1-3, incl. tier-1 image-identity base-currency);
 | `FAIL converge: dev-rebuild rc=…` | Lifecycle rebuild failed | Read the streamed devcontainer-cli output; `getaddrinfo ENOTFOUND ghcr.io` = transient DNS, retry once per `.claude/rules/persistence-gate-retry.md` |
 | `FAIL smoke-tiers-1-3 … stale base?` | Tier-1 image identity: in-image config hash / tool-set ≠ the **merge-base** config (base-currency, not branch HEAD — `resolve_expected_identity_at_base` / `resolve_declared_tools_at_base`, injected by `dotfiles-setup image smoke-script --tier 1`) | The registry base predates what's integrated on `main` — wait for CI to publish `:dev`, then rerun sync. A branch's own image-input bump does NOT trip this (merge-base baseline); PR CI validates that image |
 | `WARN rebuilding: in-container sessions will be killed` | Expected on stale+running | Workspace bind-mount and home volume persist; running shells die by design |
-| rc 1 from `--check` | Stale — a real sync would rebuild | Run `mise run sync` when ready for the rebuild |
+| rc 1 from `--check` | Stale, or this architecture's container is outdated — a real sync would rebuild | Run `mise run sync` when ready for the rebuild |
 | rc 2 from `--check` | UNKNOWN — registry unreachable, currency could not be verified | Fix ghcr auth/DNS; never treat as current |
 
 Evidence discipline: trust the printed `PASS`/`FAIL` lines and the task's
