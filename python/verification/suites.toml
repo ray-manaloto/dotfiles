@@ -2223,3 +2223,34 @@ per_path_tokens = { "python/pyproject.toml" = ['[tool.ruff.lint.flake8-tidy-impo
 tokens = [
     "def enc_hook(",
 ]
+
+[[suite]]
+name = "workflow.prune-scoping-wiring"
+description = "#803: `mise run prune`'s destructive stages must keep resolving their targets from Python identity, never from a tag grep. Asserts the whole chain — the prune task capturing BOTH the container ids (`--all-arches`) and the overlay refs (`teardown-images --container-ids`), the CLI verbs behind them, the resolver's three safety predicates, and the tests that arm each one. The motivating defect: an unscoped `grep vsc-dotfiles` matched 9 tag rows over 8 images on the maintainer's host, 6 belonging to OTHER clones, and was simultaneously blind to an untagged overlay — too broad and too narrow in one line. WHAT THIS CONTRACT CANNOT DO, stated rather than implied: `require_tokens` asserts presence, not ORDER, so it cannot pin I11 — that prune captures both sets BEFORE `docker rm -f` removes the containers. That ordering is what makes the container-identity path work at all (once the containers are gone, `docker inspect` cannot answer, and the whole change silently degrades to a hash-scoped tag grep while every gate stays green). It is carried by a comment in the task and a docstring on `teardown_image_refs`, and by nothing mechanical. A reader tempted to move the capture lines should treat that as the load-bearing edit it is."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    "mise.toml",
+    "python/src/dotfiles_setup/devcontainer_names.py",
+    "python/src/dotfiles_setup/main.py",
+    "tests/test_devcontainer_names.py",
+]
+per_path_tokens = { "mise.toml" = [
+    'container_ids="$(uv run --project python dotfiles-setup devcontainer teardown --all-arches)"',
+    'overlay_images="$(uv run --project python dotfiles-setup devcontainer teardown-images --container-ids',
+], "python/src/dotfiles_setup/devcontainer_names.py" = [
+    "def _trusted_by_container(",
+    "def _has_registry_slash(",
+    "def _is_orphan_tag(",
+    "def teardown_image_refs(",
+], "python/src/dotfiles_setup/main.py" = [
+    "return teardown_main(all_arches=args.all_arches)",
+    'if command == "teardown-images":',
+    "return teardown_images_main(container_ids=args.container_ids)",
+], "tests/test_devcontainer_names.py" = [
+    "def test_docker_container_images_reads_image_and_trust_from_one_call(",
+    "def test_trusted_by_container_refuses_and_logs_an_unknown_trusted_id(",
+    "def test_removal_args_refuses_and_logs_a_registry_referenced_image(",
+] }
