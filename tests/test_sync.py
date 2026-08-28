@@ -172,6 +172,24 @@ def test_empty_containers_map_with_running_container_is_not_current() -> None:
     assert not status.container_current
 
 
+def test_legacy_flat_id_falls_back_when_this_arch_has_no_containers_entry() -> None:
+    """#800 F10: a pre-#800 legacy record skips a spurious rebuild.
+
+    The architecture the legacy flat id names is spared; a genuinely
+    different id still rebuilds.
+    """
+    record = sync.SyncRecord(
+        registry_digest=_DIGEST_NEW,
+        local_image_id="img-1",
+        legacy_container_image_id="c-a",
+    )
+    matching = dataclasses.replace(_status(record=record), container_image_id="c-a")
+    assert matching.container_current
+
+    mismatched = dataclasses.replace(_status(record=record), container_image_id="c-b")
+    assert not mismatched.container_current
+
+
 # ------------------------------------------------------------ action matrix
 
 
@@ -192,6 +210,65 @@ def test_current_and_running_is_fast_path() -> None:
 def test_current_but_not_running_brings_up() -> None:
     assert sync.decide_action(_status(state="stopped"), force=False) == "up"
     assert sync.decide_action(_status(state="absent"), force=False) == "up"
+
+
+# #800 round 2 F1: a stopped container's overlay id must be checked, not
+# auto-blessed by "not running" — the currency check now runs BEFORE the
+# state check in decide_action.
+
+
+def test_stopped_container_with_stale_overlay_is_rebuilt_not_reused() -> None:
+    """A stopped container on a superseded base must not be `up`'d (reused)."""
+    record = sync.SyncRecord(
+        registry_digest=_DIGEST_NEW,
+        local_image_id="img-1",
+        containers={"amd64": "c-old"},
+    )
+    status = dataclasses.replace(
+        _status(state="stopped", record=record), container_image_id="c-new"
+    )
+    assert not status.container_current
+    assert sync.decide_action(status, force=False) == "rebuild"
+
+
+def test_stopped_container_matching_the_record_is_reused_via_up() -> None:
+    """A stopped container whose overlay id still matches is reused, not rebuilt."""
+    record = sync.SyncRecord(
+        registry_digest=_DIGEST_NEW,
+        local_image_id="img-1",
+        containers={"amd64": "c-same"},
+    )
+    status = dataclasses.replace(
+        _status(state="stopped", record=record), container_image_id="c-same"
+    )
+    assert status.container_current
+    assert sync.decide_action(status, force=False) == "up"
+
+
+def test_absent_container_stays_up_not_rebuild() -> None:
+    """A probe that finds nothing (container_image_id None) is non-destructive."""
+    record = sync.SyncRecord(
+        registry_digest=_DIGEST_NEW,
+        local_image_id="img-1",
+        containers={"amd64": "c-old"},
+    )
+    status = _status(state="absent", record=record)
+    assert status.container_current
+    assert sync.decide_action(status, force=False) == "up"
+
+
+# #800 round 2 F4: an unreachable registry must never trigger a destructive
+# action on currency grounds — same principle as `stale`'s network-blip guard.
+
+
+def test_registry_unreachable_stays_verify_only_despite_record_mismatch() -> None:
+    record = sync.SyncRecord(registry_digest=_DIGEST_OLD, local_image_id="img-0")
+    status = dataclasses.replace(
+        _status(registry=None, state="running", record=record),
+        container_image_id="c-x",
+    )
+    assert status.container_current
+    assert sync.decide_action(status, force=False) == "verify-only"
 
 
 # ------------------------------------------------------------- observation
@@ -262,6 +339,7 @@ def test_container_state_filters_on_both_id_labels_not_local_folder(
     monkeypatch.setattr(sync, "_run", _record)
     sync.container_state(_NAMES)
     sync.container_image_id(_NAMES)
+    assert captured
     for cmd in captured:
         assert f"label={_NAMES.workspace_label}" in cmd
         assert f"label={_NAMES.arch_label}" in cmd
@@ -353,15 +431,85 @@ def test_write_sync_record_starts_fresh_when_local_image_id_changed(
     assert record.containers == {"arm64": "c-arm64"}
 
 
-def test_refresh_local_tag_targets_every_published_platform(
+def test_write_sync_record_warns_when_container_probe_returns_none(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """#800 F7: a dropped architecture entry must not fail silently."""
+    monkeypatch.setattr(sync, "resolve_names", lambda **_kw: _NAMES)
+    monkeypatch.setattr(sync, "local_image_id", lambda _ref: "img-1")
+    monkeypatch.setattr(sync, "container_image_id", lambda _n: None)
+    with caplog.at_level("WARNING", logger="dotfiles_setup.sync"):
+        sync.write_sync_record(_WORKSPACE, _REF, _DIGEST_NEW)
+    assert any("written without a container id" in r.message for r in caplog.records)
+    record = sync.read_sync_record(_REF)
+    assert record is not None
+    assert record.containers == {}
+
+
+# ------------------------------------------------------- state file robustness
+
+
+def test_read_sync_record_non_dict_payload_reads_as_none(tmp_path: Path) -> None:
+    """#800 F8: a state file holding a bare JSON list must not raise."""
+    # Same path formula as the `_isolated_sync_state` autouse fixture above —
+    # `tmp_path` is the identical cached fixture instance for this test node.
+    (tmp_path / f"sync-{hash(_REF)}.json").write_text(json.dumps([]))
+    assert sync.read_sync_record(_REF) is None
+
+
+def test_read_sync_record_parses_legacy_flat_key(tmp_path: Path) -> None:
+    """#800 F10: a genuine pre-#800 record is read, not silently dropped.
+
+    Flat ``container_image_id`` key, no ``containers`` — the value lands in
+    ``legacy_container_image_id``.
+    """
+    (tmp_path / f"sync-{hash(_REF)}.json").write_text(
+        json.dumps(
+            {
+                "registry_digest": _DIGEST_NEW,
+                "local_image_id": "img-1",
+                "container_image_id": "c-a",
+            }
+        )
+    )
+    record = sync.read_sync_record(_REF)
+    assert record is not None
+    assert record.containers == {}
+    assert record.legacy_container_image_id == "c-a"
+
+
+def test_read_sync_record_non_string_legacy_field_degrades_to_none(
+    tmp_path: Path,
+) -> None:
+    """#800 F8/M7: a corrupt legacy id must not force a spurious rebuild.
+
+    It degrades to ``None`` like the ``containers`` guard, rather than
+    comparing unequal against a real container id.
+    """
+    (tmp_path / f"sync-{hash(_REF)}.json").write_text(
+        json.dumps(
+            {
+                "registry_digest": _DIGEST_NEW,
+                "local_image_id": "img-1",
+                "container_image_id": 42,
+            }
+        )
+    )
+    record = sync.read_sync_record(_REF)
+    assert record is not None
+    assert record.legacy_container_image_id is None
+
+
+def test_refresh_local_tag_requests_union_when_both_present(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """#800: refresh must request every published platform.
+    """#800 F2 (a): local already carries both — refresh both, published order.
 
-    A single-platform re-export clobbers the OTHER architecture's layers
-    under the shared local tag. The expected value is derived, not
-    hard-coded — it drifts with ``platform_target._MICROARCH_LEVEL``.
+    The expected values are derived, not hard-coded — they drift with
+    ``platform_target._MICROARCH_LEVEL``.
     """
+    amd64, arm64 = (t.platform for t in published_targets())
     captured: dict[str, list[str]] = {}
 
     def _record(cmd: list[str], **_kw: object) -> subprocess.CompletedProcess[str]:
@@ -369,10 +517,51 @@ def test_refresh_local_tag_targets_every_published_platform(
         return subprocess.CompletedProcess(args=cmd, returncode=0)
 
     monkeypatch.setattr(sync.subprocess, "run", _record)
+    monkeypatch.setattr(sync, "local_platforms", lambda _ref: frozenset({amd64, arm64}))
+    monkeypatch.setenv("DOTFILES_PLATFORM", amd64)
     assert sync.refresh_local_tag(_REF)
-    cmd = captured["cmd"]
-    expected = ",".join(target.platform for target in published_targets())
-    assert cmd[cmd.index("--platform") + 1] == expected
+    platforms = captured["cmd"][captured["cmd"].index("--platform") + 1]
+    assert platforms == f"{amd64},{arm64}"
+    assert "," in platforms
+
+
+def test_refresh_local_tag_absent_tag_requests_only_the_pinned_platform(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#800 F2 (b): an absent local tag must not fetch an arch nobody asked for."""
+    amd64, _arm64 = (t.platform for t in published_targets())
+    captured: dict[str, list[str]] = {}
+
+    def _record(cmd: list[str], **_kw: object) -> subprocess.CompletedProcess[str]:
+        captured["cmd"] = cmd
+        return subprocess.CompletedProcess(args=cmd, returncode=0)
+
+    monkeypatch.setattr(sync.subprocess, "run", _record)
+    monkeypatch.setattr(sync, "local_platforms", lambda _ref: frozenset())
+    monkeypatch.setenv("DOTFILES_PLATFORM", amd64)
+    assert sync.refresh_local_tag(_REF)
+    platforms = captured["cmd"][captured["cmd"].index("--platform") + 1]
+    assert platforms == amd64
+
+
+def test_refresh_local_tag_union_adds_pinned_platform_to_what_is_present(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#800 F2 (c): local carries only arm64, this host pins amd64 — union."""
+    amd64, arm64 = (t.platform for t in published_targets())
+    captured: dict[str, list[str]] = {}
+
+    def _record(cmd: list[str], **_kw: object) -> subprocess.CompletedProcess[str]:
+        captured["cmd"] = cmd
+        return subprocess.CompletedProcess(args=cmd, returncode=0)
+
+    monkeypatch.setattr(sync.subprocess, "run", _record)
+    monkeypatch.setattr(sync, "local_platforms", lambda _ref: frozenset({arm64}))
+    monkeypatch.setenv("DOTFILES_PLATFORM", amd64)
+    assert sync.refresh_local_tag(_REF)
+    platforms = captured["cmd"][captured["cmd"].index("--platform") + 1]
+    assert platforms == f"{amd64},{arm64}"
+    assert "," in platforms
 
 
 # ------------------------------------------------------------ end-to-end

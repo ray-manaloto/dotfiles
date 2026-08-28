@@ -10,7 +10,10 @@ and prove everything works". It handles every starting state:
   with AND); ``--id-label`` REPLACES the CLI's inferred
   ``devcontainer.local_folder`` label, so that one no longer identifies
   anything post-#677. The action matrix below converges each state onto a
-  running, verified container.
+  running, verified container. A STOPPED container whose overlay id no
+  longer matches the last converge's record for this architecture is
+  rebuilt rather than reused (#800 F1) — ``container_image_id`` now answers
+  for a stopped container too, not just a running one.
 - **local tag stale vs registry** — the registry manifest digest
   (``docker buildx imagetools inspect``, no pull) is compared against the
   digest the *local tag* points at. Comparing the local **tag** matters:
@@ -25,16 +28,19 @@ and prove everything works". It handles every starting state:
 
 Action matrix (``decide_action``):
 
-======  =========  ===========================================
-stale?  container  action
-======  =========  ===========================================
-yes*    any        refresh local tag (buildkit) + dev-rebuild
-no      running    verify only (digest fast-path)
-no      stopped    up (reuse container)
-no      absent     up (create container)
-======  =========  ===========================================
+======  ===============  =========  ==========================================
+stale?  overlay current  container  action
+======  ===============  =========  ==========================================
+yes*    --               any        refresh local tag (buildkit) + dev-rebuild
+no      no               any        rebuild (this arch's overlay is stale)
+no      yes              running    verify only (digest fast-path)
+no      yes              stopped    up (reuse — CLI starts, never recreates)
+no      yes              absent     up (create container)
+======  ===============  =========  ==========================================
 
-``*`` ``--force`` behaves like stale.
+``*`` ``--force`` behaves like stale. "overlay current" is
+``SyncStatus.container_current`` — no container found (absent, or the probe
+failed) counts as current, the non-destructive default.
 
 When stale, the local tag is refreshed EXPLICITLY via
 ``docker buildx build --pull`` before ``dev-rebuild`` — the overlay's
@@ -71,7 +77,7 @@ from typing import TYPE_CHECKING, Literal
 from dotfiles_setup import child_env
 from dotfiles_setup.container import verify_latest
 from dotfiles_setup.devcontainer_names import resolve_names
-from dotfiles_setup.platform_target import published_targets
+from dotfiles_setup.platform_target import published_targets, resolve_platform
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -151,7 +157,7 @@ class SyncStatus:
 
     @property
     def container_current(self) -> bool:
-        """The running container matches the last converge's record.
+        """The container's overlay image matches the last converge's record.
 
         Review finding [1]: verify-only must not bless a container left
         over from an older converge. The container runs the OVERLAY image
@@ -164,13 +170,23 @@ class SyncStatus:
         #800 extends the record to hold one overlay id PER ARCHITECTURE
         (:attr:`SyncRecord.containers`), so a host running both
         architectures from one clone doesn't ping-pong a rebuild every time
-        the other architecture syncs. Clause order matters:
-        ``container_image_id is None`` (probe failed — non-destructive)
-        MUST be checked before ``containers.get(self.arch) is None``
-        (this architecture has never converged onto this tag — that DOES
-        mean rebuild, not "unknown, so current").
+        the other architecture syncs.
+
+        #800 round 2 (F1): a STOPPED container is compared too, not
+        auto-blessed by a ``container_state != "running"`` shortcut —
+        ``container_image_id`` now answers for a stopped container as well
+        as a running one (preferring running when both exist), so a
+        container left behind on a superseded base is caught here instead
+        of silently reused by ``up``.
+
+        Clause order: ``registry_digest is None`` (offline — F4, never take
+        a destructive action on an unreachable registry) → ``container_image_id
+        is None`` (absent container, or the probe failed — non-destructive)
+        → ``record is None`` → this architecture's recorded overlay id, or
+        (#800 F10) the legacy pre-#800 flat id when this architecture has
+        never converged under the per-arch record shape.
         """
-        if self.container_state != "running":
+        if self.registry_digest is None:
             return True
         if self.container_image_id is None:
             return True
@@ -178,6 +194,8 @@ class SyncStatus:
         if record is None:
             return True
         recorded = record.containers.get(self.arch)
+        if recorded is None:
+            recorded = record.legacy_container_image_id
         if recorded is None:
             return False
         return self.container_image_id == recorded
@@ -192,11 +210,18 @@ class SyncRecord:
     stays shared across architectures, not keyed per-arch). ``containers``
     holds one overlay image id per architecture that has converged onto the
     CURRENT ``local_image_id`` (#800).
+
+    ``legacy_container_image_id`` is a READ-only migration aid (#800 F10):
+    the pre-#800 flat ``container_image_id`` key, if the on-disk record
+    still carries one. :func:`write_sync_record` never writes it — once a
+    record round-trips through this dataclass it only ever carries the new
+    per-architecture shape.
     """
 
     registry_digest: str
     local_image_id: str
     containers: dict[str, str] = dataclasses.field(default_factory=dict)
+    legacy_container_image_id: str | None = None
 
 
 def _state_file(image_ref: str) -> Path:
@@ -208,22 +233,37 @@ def read_sync_record(image_ref: str) -> SyncRecord | None:
     """The last recorded converge for ``image_ref`` (or None).
 
     A legacy record (pre-#800, flat ``container_image_id`` key, no
-    ``containers``) reads as ``containers={}`` — every architecture rebuilds
-    once after the upgrade (accepted; see #800 spec §3). A corrupt
-    ``containers`` value (present but not a JSON object) also degrades to
-    ``{}`` rather than raising: :attr:`SyncStatus.container_current` calls
-    ``.get()`` on it from inside an f-string at the top of ``sync_main``, so
-    a malformed state file must not crash the whole invocation.
+    ``containers``) reads as ``containers={}`` plus
+    :attr:`SyncRecord.legacy_container_image_id` set from that flat key
+    (#800 F10) — the architecture it names skips a spurious rebuild; every
+    OTHER architecture still rebuilds once after the upgrade, because its id
+    genuinely differs. A corrupt ``containers`` value (present but not a
+    JSON object) degrades to ``{}`` rather than raising, and a corrupt
+    legacy value (present but not a string — e.g. a stray number) degrades
+    to ``None`` the same way (#800 F8): :attr:`SyncStatus.container_current`
+    calls ``.get()`` on ``containers`` and compares against the legacy id
+    directly, so a malformed state file must not crash the whole invocation
+    or trigger a spurious rebuild.
+
+    The top-level payload itself must also be a JSON object — a state file
+    holding a bare list or string has no ``.get`` to call and reads as "no
+    record" rather than raising ``AttributeError`` uncaught.
     """
     try:
         data = json.loads(_state_file(image_ref).read_text())
+        if not isinstance(data, dict):
+            return None
         containers = data.get("containers")
         if not isinstance(containers, dict):
             containers = {}
+        legacy = data.get("container_image_id")
+        if not isinstance(legacy, str):
+            legacy = None
         return SyncRecord(
             registry_digest=data["registry_digest"],
             local_image_id=data["local_image_id"],
             containers=containers,
+            legacy_container_image_id=legacy,
         )
     except OSError, json.JSONDecodeError, KeyError:
         return None
@@ -266,6 +306,15 @@ def write_sync_record(workspace: Path, image_ref: str, registry: str) -> None:
     cid = container_image_id(names)
     if cid is not None:
         containers[names.arch] = cid
+    else:
+        # #800 F7: a probe failure or an absent container silently dropped
+        # this architecture's entry — the record still wrote, just without
+        # it, and nothing said so.
+        logger.warning(
+            "sync record for %s written without a container id for %s",
+            image_ref,
+            names.arch,
+        )
     path = _state_file(image_ref)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -385,24 +434,29 @@ def local_image_id(image_ref: str) -> str | None:
 
 
 def container_image_id(names: DevcontainerNames) -> str | None:
-    """Image id of the RUNNING devcontainer for this workspace+arch (or None).
+    """Image id of the devcontainer for this workspace+arch (or None).
 
     Filters on BOTH #677 id labels (workspace hash AND arch), combined with
     a logical AND — mirrors ``devcontainer_names.teardown_container_ids``,
     whose docstring explains why a bare workspace filter also matches the
     OTHER architecture's container once both are up.
+
+    Prefers a RUNNING match (``docker ps -q``); only when none is running
+    does it fall back to a STOPPED one (``docker ps -aq``), so a non-running
+    container's overlay id can be compared for currency too (#800 F1). The
+    order matters and is not a bare ``-aq``: ``docker ps -a`` lists
+    newest-created first, so a newer exited leftover would otherwise shadow
+    a genuinely running container and hand back the wrong id.
     """
-    cid = _run(
-        [
-            "docker",
-            "ps",
-            "-q",
-            "--filter",
-            f"label={names.workspace_label}",
-            "--filter",
-            f"label={names.arch_label}",
-        ]
-    ).stdout.strip()
+    filters = [
+        "--filter",
+        f"label={names.workspace_label}",
+        "--filter",
+        f"label={names.arch_label}",
+    ]
+    cid = _run(["docker", "ps", "-q", *filters]).stdout.strip()
+    if not cid:
+        cid = _run(["docker", "ps", "-aq", *filters]).stdout.strip()
     if not cid:
         return None
     res = _run(["docker", "inspect", cid.splitlines()[0], "--format", "{{.Image}}"])
@@ -495,6 +549,37 @@ def wait_for_run(run_id: str) -> bool:
     return conclusion == "success"
 
 
+def local_platforms(image_ref: str) -> frozenset[str]:
+    """Published platforms PRESENT under the local ``image_ref`` tag.
+
+    ``docker image inspect --platform <p> <ref>`` rc==0 means the local tag
+    already carries that manifest (probed against docker 29.7.2: each
+    ``published_targets()`` triple matches, including a microarch-level-less
+    ARM manifest against arm64's full triple; the level-less spelling of an
+    architecture does NOT match a stored microarch-level manifest, so callers
+    must probe the full triple, never :func:`platform_target.os_arch`, which
+    drops the level). An absent tag, or any probe failure, yields an empty
+    set.
+    """
+    present = set()
+    for target in published_targets():
+        res = _run(
+            [
+                "docker",
+                "image",
+                "inspect",
+                "--platform",
+                target.platform,
+                image_ref,
+                "--format",
+                "{{.Id}}",
+            ]
+        )
+        if res.returncode == 0:
+            present.add(target.platform)
+    return frozenset(present)
+
+
 def refresh_local_tag(image_ref: str) -> bool:
     """Re-anchor the local tag onto the registry's current manifest.
 
@@ -503,19 +588,27 @@ def refresh_local_tag(image_ref: str) -> bool:
     already present locally are reused, so a promote-only retag (new
     manifest pointer, same bytes) costs seconds, not a 38GB pull.
 
-    Requests EVERY published platform (#800), not just this host's own
-    ``resolve_platform()`` — a single-platform ``type=docker`` export
-    CLOBBERS the other architecture's layers under the shared ``:dev`` tag,
-    so on a host running both architectures from one clone, each arch's
-    refresh broke the other arch's ``--pull=never`` verify step (measured
-    rc=125, "does not provide the specified platform").
+    Requests the UNION of this host's own platform (``resolve_platform()``)
+    and whatever published platforms are already present under the local
+    tag (:func:`local_platforms`, #800 F2) — not every published platform
+    unconditionally. A single-platform ``type=docker`` export CLOBBERS the
+    other architecture's layers under the shared ``:dev`` tag, so on a host
+    running both architectures from one clone, refreshing only this host's
+    platform would break the other arch's ``--pull=never`` verify step
+    (measured rc=125, "does not provide the specified platform") — the union
+    keeps every platform this local tag already served, while a single-arch
+    host that has never seen the other platform never pays to fetch it.
+
+    A ``--output type=docker`` export of MORE than one platform needs the
+    containerd image store (Docker Desktop default) — see the failure detail
+    ``_converge`` reports; that requirement only bites when the union above
+    resolves to two platforms, which it does on a host running both
+    architectures.
     """
-    # ponytail: a cold refresh now pulls BOTH architectures' layers
-    # (~2x20GB) even for a single-arch user. Upgrade path if that cost
-    # matters: intersect published_targets() with the platforms already
-    # present under the local tag (`docker image ls --tree`) before
-    # building this list.
-    platforms = ",".join(target.platform for target in published_targets())
+    wanted = {resolve_platform()} | local_platforms(image_ref)
+    platforms = ",".join(
+        target.platform for target in published_targets() if target.platform in wanted
+    )
     proc = subprocess.run(
         [
             "docker",
@@ -538,13 +631,20 @@ def refresh_local_tag(image_ref: str) -> bool:
 
 
 def decide_action(status: SyncStatus, *, force: bool) -> Action:
-    """Pure decision matrix — see the module docstring table."""
+    """Pure decision matrix — see the module docstring table.
+
+    #800 F1: the currency check moves ABOVE the state check. A stopped
+    container the state check alone would send straight to ``up`` (reuse)
+    might be sitting on a superseded overlay id — currency has to be
+    decided first, or a stale stopped container gets reused and recorded
+    "current" forever.
+    """
     if force or status.stale:
+        return "rebuild"
+    if not status.container_current:
         return "rebuild"
     if status.container_state != "running":
         return "up"
-    if not status.container_current:
-        return "rebuild"
     return "verify-only"
 
 
@@ -615,7 +715,11 @@ def _converge(workspace: Path, status: SyncStatus, action: Action) -> tuple[bool
                 "(workspace bind-mount and home volume persist)\n"
             )
         if status.stale and not refresh_local_tag(status.image_ref):
-            return False, f"buildkit tag refresh failed for {status.image_ref}"
+            return False, (
+                f"buildkit tag refresh failed for {status.image_ref} "
+                "(multi-platform type=docker export needs the containerd "
+                "image store — Docker Desktop default)"
+            )
         rc = _stream(
             ["mise", "run", "dev-rebuild"],
             env=_mise_env(status.image_ref),
@@ -657,6 +761,11 @@ def sync_main(workspace: Path, options: SyncOptions | None = None) -> int:
     _report_inflight(opts.tag, wait=opts.wait)
 
     status = observe(workspace, image_ref)
+    # #800 F4: an unreachable registry makes container_current True
+    # unconditionally (never take a destructive action on currency grounds
+    # while offline) — so [CONTAINER OUTDATED] goes silent here too even
+    # when the record plainly disagrees with the running container. Correct
+    # under "staleness unknown", not evidence of currency.
     sys.stdout.write(
         f"==> {image_ref}\n"
         f"    registry: {status.registry_digest or 'UNREACHABLE'}\n"

@@ -999,12 +999,22 @@ _hash="$(uv run --project python dotfiles-setup devcontainer name hash)"
 # capture command output, check non-empty, then act. Daemon failures
 # propagate via set -e on the capturing subshell.
 echo "==> stopping container"
-container_ids="$(docker ps -aq --filter "label=devcontainer.local_folder=$PWD")"
+# Whole-clone (#800 F3): every architecture's container, PLUS pre-#677
+# leftovers that carry only the old folder label (--id-label REPLACES the
+# CLI's inferred label set, so a post-#677 container has no folder label at
+# all). sort -u de-dupes a container that happens to carry both, which
+# `docker rm -f` would otherwise choke on mid-prune under set -e.
+container_ids="$(
+  {
+    docker ps -aq --filter "label=dotfiles.workspace=${_hash}"
+    docker ps -aq --filter "label=devcontainer.local_folder=$PWD"
+  } | sort -u
+)"
 if [ -n "${container_ids}" ]; then
   # shellcheck disable=SC2086
   docker rm -f ${container_ids}
 else
-  echo "    (no container labeled for $PWD — already stopped)"
+  echo "    (no container for this clone — already stopped)"
 fi
 
 echo "==> removing named volumes (scoped to hash ${_hash})"

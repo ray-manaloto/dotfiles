@@ -149,3 +149,55 @@ def test_inbound_probe_rejects_wrong_remote_identity(
 
     with pytest.raises(RuntimeError, match="Inbound SSH verification failed"):
         docker.verify_host_ssh_inbound(28050, "rmanaloto")
+
+
+def test_down_stops_and_removes_ids_from_teardown_container_ids(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """#800 F3: down() must use the arch-scoped teardown lookup.
+
+    Post-#677 containers carry no ``devcontainer.local_folder`` label
+    (``--id-label`` replaces the CLI's inferred label set), so the old
+    bare-folder filter this verb used stopped matching anything.
+    ``resolve_names`` is stubbed out because ``teardown_container_ids`` is
+    stubbed to ignore its argument here — the real value is exercised by
+    ``devcontainer_names``'s own tests.
+    """
+    monkeypatch.setattr(docker.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(docker, "resolve_names", lambda **_kw: object())
+    monkeypatch.setattr(docker, "teardown_container_ids", lambda _names: ["c1", "c2"])
+    calls: list[list[str]] = []
+
+    def fake_run(
+        args: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        return _completed(args)
+
+    monkeypatch.setattr(docker.subprocess, "run", fake_run)
+
+    docker.DevContainerManager(tmp_path).down()
+
+    assert calls == [
+        ["/usr/bin/docker", "stop", "c1"],
+        ["/usr/bin/docker", "rm", "-f", "c1"],
+        ["/usr/bin/docker", "stop", "c2"],
+        ["/usr/bin/docker", "rm", "-f", "c2"],
+    ]
+
+
+def test_down_with_no_containers_issues_nothing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """An empty teardown list must not shell out to docker at all."""
+    monkeypatch.setattr(docker.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(docker, "resolve_names", lambda **_kw: object())
+    monkeypatch.setattr(docker, "teardown_container_ids", lambda _names: [])
+
+    def fake_run(*_a: object, **_k: object) -> subprocess.CompletedProcess[str]:
+        msg = "no subprocess should run when there is nothing to tear down"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(docker.subprocess, "run", fake_run)
+
+    docker.DevContainerManager(tmp_path).down()
