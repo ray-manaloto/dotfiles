@@ -276,7 +276,14 @@ class DevContainerManager:
         docker = self._get_bin("docker")
         # Ensure project_root is absolute for label matching
         abs_root = str(Path(self.project_root).resolve())
-        container_ids = teardown_container_ids(resolve_names(workspace=abs_root))
+        lookup_error = None
+        try:
+            container_ids = teardown_container_ids(resolve_names(workspace=abs_root))
+        except subprocess.CalledProcessError as exc:
+            lookup_error = exc
+        if lookup_error is not None:
+            logger.error("could not list devcontainers: %s", lookup_error)
+            return
 
         if not container_ids:
             logger.info("No active or exited devcontainers found for this project.")

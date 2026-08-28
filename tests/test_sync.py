@@ -320,6 +320,52 @@ def test_container_state_absent(monkeypatch: pytest.MonkeyPatch) -> None:
     assert sync.container_state(_NAMES) == "absent"
 
 
+def test_container_image_id_falls_back_to_a_stopped_container(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#800 F1: a stopped container's overlay must remain observable."""
+    calls: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(cmd)
+        if cmd[:3] == ["docker", "ps", "-q"]:
+            return _cp("")
+        if cmd[:3] == ["docker", "ps", "-aq"]:
+            return _cp("stopped-container\n")
+        if cmd[:2] == ["docker", "inspect"]:
+            return _cp("sha256:stopped-overlay\n")
+        raise AssertionError(cmd)
+
+    monkeypatch.setattr(sync, "_run", fake_run)
+
+    assert sync.container_image_id(_NAMES) == "sha256:stopped-overlay"
+    assert [cmd[:3] for cmd in calls[:2]] == [
+        ["docker", "ps", "-q"],
+        ["docker", "ps", "-aq"],
+    ]
+    assert calls[2][:3] == ["docker", "inspect", "stopped-container"]
+
+
+def test_container_image_id_prefers_running_without_stopped_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A running match wins without consulting the stopped-container list."""
+    calls: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(cmd)
+        if cmd[:3] == ["docker", "ps", "-q"]:
+            return _cp("running-container\n")
+        if cmd[:2] == ["docker", "inspect"]:
+            return _cp("sha256:running-overlay\n")
+        raise AssertionError(cmd)
+
+    monkeypatch.setattr(sync, "_run", fake_run)
+
+    assert sync.container_image_id(_NAMES) == "sha256:running-overlay"
+    assert not any(cmd[:3] == ["docker", "ps", "-aq"] for cmd in calls)
+
+
 def test_container_state_filters_on_both_id_labels_not_local_folder(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -501,6 +547,55 @@ def test_read_sync_record_non_string_legacy_field_degrades_to_none(
     assert record.legacy_container_image_id is None
 
 
+def test_local_platforms_returns_only_present_published_platforms(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#800 F2: probe every published triple and keep only successful ones."""
+    first, second = (target.platform for target in published_targets())
+    calls: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(cmd)
+        platform = cmd[cmd.index("--platform") + 1]
+        return _cp(returncode=0 if platform == first else 1)
+
+    monkeypatch.setattr(sync, "_run", fake_run)
+
+    assert sync.local_platforms(_REF) == frozenset({first})
+    assert calls == [
+        [
+            "docker",
+            "image",
+            "inspect",
+            "--platform",
+            platform,
+            _REF,
+            "--format",
+            "{{.Id}}",
+        ]
+        for platform in (first, second)
+    ]
+
+
+def test_local_platforms_returns_empty_when_no_published_platform_is_present(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Failed inspect probes mean the local tag carries no published platform."""
+    calls: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(cmd)
+        return _cp(returncode=1)
+
+    monkeypatch.setattr(sync, "_run", fake_run)
+
+    assert sync.local_platforms(_REF) == frozenset()
+    assert [cmd[cmd.index("--platform") + 1] for cmd in calls] == [
+        target.platform for target in published_targets()
+    ]
+    assert all(cmd[-2:] == ["--format", "{{.Id}}"] for cmd in calls)
+
+
 def test_refresh_local_tag_requests_union_when_both_present(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -564,6 +659,21 @@ def test_refresh_local_tag_union_adds_pinned_platform_to_what_is_present(
     assert "," in platforms
 
 
+def test_refresh_local_tag_rejects_an_unpublished_platform(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An empty published-target join must never reach buildx as --platform ''."""
+    monkeypatch.setattr(sync, "local_platforms", lambda _ref: frozenset())
+    monkeypatch.setenv("DOTFILES_PLATFORM", "linux/amd64")
+    monkeypatch.setattr(sync.subprocess, "run", lambda *_a, **_k: _cp())
+
+    with pytest.raises(
+        ValueError,
+        match="'linux/amd64' is not a published platform; refresh cannot target it",
+    ):
+        sync.refresh_local_tag(_REF)
+
+
 # ------------------------------------------------------------ end-to-end
 
 
@@ -600,6 +710,31 @@ def test_sync_stale_refreshes_tag_then_rebuilds(
     assert events == ["refresh", "mise run dev-rebuild", "record"]
 
 
+def test_converge_reports_an_unpublished_platform_without_raising(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A defensive refresh error stays inside _converge's result boundary."""
+
+    def raise_value_error(_ref: str) -> bool:
+        msg = "boom"
+        raise ValueError(msg)
+
+    monkeypatch.setattr(sync, "refresh_local_tag", raise_value_error)
+    monkeypatch.setattr(
+        sync,
+        "_stream",
+        lambda *_a, **_k: (_ for _ in ()).throw(
+            AssertionError("lifecycle must not start after a refresh error")
+        ),
+    )
+
+    converge = vars(sync)["_converge"]
+    assert converge(_WORKSPACE, _status(local=_DIGEST_OLD), "rebuild") == (
+        False,
+        "boom",
+    )
+
+
 def test_sync_check_mode_reports_without_converging(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -619,6 +754,27 @@ def test_sync_check_mode_current_rc0(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sync, "observe", lambda *_a: _status())
     monkeypatch.setattr(sync, "_report_inflight", lambda *_a, **_k: None)
     assert sync.sync_main(_WORKSPACE, sync.SyncOptions(check_only=True)) == 0
+
+
+def test_sync_check_mode_reports_an_outdated_container(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    record = sync.SyncRecord(registry_digest=_DIGEST_NEW, local_image_id="img-1")
+    status = dataclasses.replace(
+        _status(record=record), container_image_id="sha256:outdated-overlay"
+    )
+    assert not status.stale
+    assert status.container_state == "running"
+    assert not status.container_current
+    monkeypatch.setattr(sync, "observe", lambda *_a: status)
+    monkeypatch.setattr(sync, "_report_inflight", lambda *_a, **_k: None)
+
+    assert sync.sync_main(_WORKSPACE, sync.SyncOptions(check_only=True)) == 1
+    assert (
+        "check: OUTDATED — sync would rebuild this architecture's container\n"
+        in capsys.readouterr().out
+    )
 
 
 def test_sync_verify_failure_returns_1(monkeypatch: pytest.MonkeyPatch) -> None:

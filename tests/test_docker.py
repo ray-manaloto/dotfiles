@@ -201,3 +201,30 @@ def test_down_with_no_containers_issues_nothing(
     monkeypatch.setattr(docker.subprocess, "run", fake_run)
 
     docker.DevContainerManager(tmp_path).down()
+
+
+def test_down_degrades_gracefully_when_docker_daemon_is_unreachable(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The legacy down verb reports a failed lookup without stop/rm attempts."""
+    monkeypatch.setattr(docker.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(docker, "resolve_names", lambda **_kw: object())
+
+    def failed_lookup(_names: object) -> list[str]:
+        raise subprocess.CalledProcessError(1, "docker")
+
+    monkeypatch.setattr(docker, "teardown_container_ids", failed_lookup)
+    calls: list[list[str]] = []
+    monkeypatch.setattr(
+        docker.subprocess,
+        "run",
+        lambda args, **_kw: calls.append(args) or _completed(args),
+    )
+
+    with caplog.at_level("ERROR", logger="dotfiles_setup.docker"):
+        docker.DevContainerManager(tmp_path).down()
+
+    assert calls == []
+    assert "could not list devcontainers" in caplog.text

@@ -777,7 +777,8 @@ def _add_docker_subcommands(
     sync_parser.add_argument(
         "--check",
         action="store_true",
-        help="Dry-run: report staleness only (rc 1 if stale), change nothing",
+        help="Dry-run: report currency only (rc 1 if stale or this architecture's "
+        "container is outdated), change nothing",
     )
     sync_parser.add_argument(
         "--full",

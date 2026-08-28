@@ -605,10 +605,14 @@ def refresh_local_tag(image_ref: str) -> bool:
     resolves to two platforms, which it does on a host running both
     architectures.
     """
-    wanted = {resolve_platform()} | local_platforms(image_ref)
+    platform = resolve_platform()
+    wanted = {platform} | local_platforms(image_ref)
     platforms = ",".join(
         target.platform for target in published_targets() if target.platform in wanted
     )
+    if not platforms:
+        msg = f"{platform!r} is not a published platform; refresh cannot target it"
+        raise ValueError(msg)
     proc = subprocess.run(
         [
             "docker",
@@ -714,12 +718,17 @@ def _converge(workspace: Path, status: SyncStatus, action: Action) -> tuple[bool
                 "WARN  rebuilding: in-container sessions will be killed "
                 "(workspace bind-mount and home volume persist)\n"
             )
-        if status.stale and not refresh_local_tag(status.image_ref):
-            return False, (
-                f"buildkit tag refresh failed for {status.image_ref} "
-                "(multi-platform type=docker export needs the containerd "
-                "image store — Docker Desktop default)"
-            )
+        if status.stale:
+            try:
+                refreshed = refresh_local_tag(status.image_ref)
+            except ValueError as exc:
+                return False, str(exc)
+            if not refreshed:
+                return False, (
+                    f"buildkit tag refresh failed for {status.image_ref} "
+                    "(multi-platform type=docker export needs the containerd "
+                    "image store — Docker Desktop default)"
+                )
         rc = _stream(
             ["mise", "run", "dev-rebuild"],
             env=_mise_env(status.image_ref),
@@ -787,10 +796,17 @@ def sync_main(workspace: Path, options: SyncOptions | None = None) -> int:
         if status.registry_digest is None:
             sys.stdout.write("check: UNKNOWN — registry unreachable\n")
             return 2
-        sys.stdout.write(
-            f"check: {'STALE — sync would rebuild' if status.stale else 'current'}\n"
-        )
-        return 1 if status.stale else 0
+        stale = status.stale
+        outdated = not status.container_current
+        if stale:
+            sys.stdout.write("check: STALE — sync would rebuild\n")
+        elif outdated:
+            sys.stdout.write(
+                "check: OUTDATED — sync would rebuild this architecture's container\n"
+            )
+        else:
+            sys.stdout.write("check: current\n")
+        return 1 if stale or outdated else 0
 
     action = decide_action(status, force=opts.force)
     sys.stdout.write(f"==> action: {action}\n")
