@@ -22,7 +22,11 @@ import pytest
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """Skip `host_only` tests when running on a CI runner ($CI is set)."""
-    if not os.environ.get("CI"):
+    # `== "true"`, matching parity.py:223 rather than plain truthiness:
+    # a stray `CI=false` must not silently skip these — a quiet loss of
+    # coverage is the #808 failure mode itself. GitHub Actions sets
+    # `CI=true`.
+    if os.environ.get("CI") != "true":
         return
     skip = pytest.mark.skip(
         reason="host_only: needs a real developer host, not a CI runner"
