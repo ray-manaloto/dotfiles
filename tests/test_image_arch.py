@@ -407,6 +407,19 @@ def test_the_smoke_still_demands_gcc_latest_where_the_image_ships_it() -> None:
     assert "/opt/gcc-latest/bin/g++" in script
 
 
+@pytest.mark.parametrize("gcc_latest", [False, True])
+def test_the_smoke_always_demands_conda_gcc(*, gcc_latest: bool) -> None:
+    """Conda GCC fills the modern-GCC slot on every published architecture."""
+    script = image.build_tier3_script(
+        expected_p2996_ref="a" * 40, emulated=False, gcc_latest=gcc_latest
+    )
+
+    assert "mise which g++ --tool conda:gcc" in script
+    assert '"$CONDA_GXX" /tmp/sanitizer.cpp -o /tmp/conda-gcc-linked' in script
+    assert "conda-gcc-linked >/dev/null" in script
+    assert "OK: conda:gcc g++ compiles, links, runs" in script
+
+
 def test_the_smoke_derives_gcc_latest_from_the_platform_it_is_given() -> None:
     """The caller states an architecture, not a boolean it had to work out.
 
