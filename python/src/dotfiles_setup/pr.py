@@ -791,20 +791,29 @@ def _main_run_conclusion(merge_oid: str, *, expect_run: bool = True) -> bool:
     return conclusion == "success"
 
 
-def _pr_changed_paths(pr_number: int) -> list[str]:
-    """ALL changed paths of the PR, paginated.
+def _merge_commit_changed_paths(merge_oid: str) -> list[str]:
+    """ALL changed paths of the MERGE COMMIT ITSELF, paginated.
 
-    Review finding [9]: ``gh pr view --json files`` caps at 100 entries,
-    which could silently drop the surface-triggering file on a large PR.
+    A PR's own file list (``gh api pulls/{n}/files``) compares against the
+    PR's base ref, which goes stale the moment a sibling PR off the same
+    branch merges first (the auto-merge race, ``feedback_amend_after_ship_-
+    races_automerge``): GitHub then reports the PR's *cumulative* historical
+    diff, not what the eventual squash-merge commit actually changes versus
+    the new main. That false surplus made ``land`` expect a push-triggered
+    ``ci.yml`` run for paths the real merge commit never touched (observed
+    on PR #826 landing after #825: the PR file list still showed
+    ``python/**`` from #825's already-merged content). The commit-diff
+    endpoint reports the merge commit's actual diff against its first
+    parent, which is what CI's push-path filter actually evaluates.
     """
     res = _run(
         [
             "gh",
             "api",
-            f"repos/{{owner}}/{{repo}}/pulls/{pr_number}/files",
+            f"repos/{{owner}}/{{repo}}/commits/{merge_oid}",
             "--paginate",
             "--jq",
-            ".[].filename",
+            ".files[]?.filename",
         ],
         timeout=_PROBE_TIMEOUT_S,
     )
@@ -843,12 +852,13 @@ def _land_post_merge(pr_number: int) -> bool | None:
         )
         return None
     merge_oid = _merge_commit_oid(pr_number)
-    pr_paths = _pr_changed_paths(pr_number)
-    if not merge_oid or not _main_run_conclusion(
-        merge_oid, expect_run=expects_main_run(pr_paths)
-    ):
+    if not merge_oid:
+        sys.stdout.write("FAIL  land: could not resolve the merge commit\n")
         return None
-    return touches_surface(pr_paths)
+    merge_paths = _merge_commit_changed_paths(merge_oid)
+    if not _main_run_conclusion(merge_oid, expect_run=expects_main_run(merge_paths)):
+        return None
+    return touches_surface(merge_paths)
 
 
 def land_main(workspace: Path, pr_number: int, *, resume: bool = False) -> int:
