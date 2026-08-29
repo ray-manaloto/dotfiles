@@ -60,6 +60,12 @@ Design notes (deep-research verified, 2026-07-07 —
   push trigger is path-filtered, so a merge whose diff matches no push
   path legitimately produces NO main run — land passes that outcome
   instead of false-failing (#178).
+- **Path expectation is sourced from the MERGE COMMIT, not the PR**
+  (:func:`_merge_commit_changed_paths`): a PR's own file list goes stale
+  the instant a sibling PR off the same branch merges first (the
+  auto-merge race), reporting the PR's cumulative historical diff
+  instead of what the eventual squash-merge commit actually changes —
+  a false main-CI expectation on an otherwise-clean merge.
 - Gate order is cheap-first: lint → pytest → verify → conditional
   (pin-actions / lint-docs) → full sync last.
 
