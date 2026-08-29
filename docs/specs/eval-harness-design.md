@@ -185,7 +185,7 @@ while `tool-currency` → 9, so the probe discriminates):
   Measured 2026-07-24: dotfiles enables **9** plugins and ships **24** project
   skills; knowledge-base enables **2** and ships **4** — missing `astral` (in a
   repo that *is* ruff/ty/uv), `mattpocock-skills`, `hookify`, `commit-commands`,
-  `skill-creator`, and the `handoff` / `clear-prep` / `resume` / `find-docs` /
+  `skill-creator`, and the `handoff` / `session-handoff` / `resume` / `find-docs` /
   `mintlify` / `context7-cli` / `mcp2cli` / `memory-index-curation` skills. Both
   repos' docs claim the same doctrine; only one repo's config carries it — the
   defect class of this whole epic, one level up. The contract asserts a declared

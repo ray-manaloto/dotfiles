@@ -65,9 +65,11 @@ alternation of the event names already expected and found exactly those — 11. 
 
 **Two hard constraints that no design removes:**
 
-- `/clear` is a CLI command, and `clear-prep`, `handoff`, `resume` and `wayfinder` are all
-  `disable-model-invocation: true`. **Claude cannot invoke any of them.** Automation can prepare
-  everything and nudge; the keystroke stays human.
+- `/clear` is a CLI command, and `handoff`, `resume` and `wayfinder` are all
+  `disable-model-invocation: true` — **Claude cannot invoke those**. `session-handoff` is the one
+  exception (`disable-model-invocation: false` since 2026-08-29, deliberately, so it can prepare a
+  handoff on its own judgment near a context threshold) — but `/clear` itself still stays a CLI
+  command no skill can press. Automation can prepare everything and nudge; the keystroke stays human.
 - Ray's statusline is configured at **user** level (`node $HOME/.claude/hud/omc-hud.mjs`). A
   project-level `statusLine` overrides it. **Decided 2026-07-31 (Ray): overriding is fine — we are
   migrating away from the OMC HUD regardless.** So tier 2 replaces rather than wraps. Note the
@@ -102,7 +104,7 @@ Sensor → channel → actuator, because the sensor and the actuator are differe
 - **Sensor:** a project `statusLine` script (`python/`, per zero-bash-logic) that writes
   `context_window.used_percentage` to `~/.local/state/dotfiles/context-usage`.
 - **Actuator:** a `Stop` hook (once per turn) reading that file; above threshold, emits a reminder
-  to run `/clear-prep`.
+  to run `/session-handoff`.
 
 ⚠️ **Replace-vs-wrap was reopened by measurement.** Overriding the HUD was sanctioned on the
 assumption it was a dead shim. It is not. Fed representative statusline JSON on stdin it returns
@@ -142,8 +144,8 @@ the plugin.
   Both times the honest self-report would have been "no ambiguity". Keying auto-advance on *evidence*
   — a research artifact exists, an adversarial review returned findings — is a different and safer
   trigger, but it is not this plan.
-- **Merging `handoff` into `clear-prep`.** They are already deliberately different and both
-  frontmatters say so: `clear-prep` (247 lines) is same-machine `/clear` continuity; `handoff`
+- **Merging `handoff` into `session-handoff`.** They are already deliberately different and both
+  frontmatters say so: `session-handoff` (250 lines) is same-machine `/clear` continuity; `handoff`
   (83 lines) is cross-surface, tracked and pushed, with `resume` as its other half.
 - **A new rule file.** See the opening paragraph.
 

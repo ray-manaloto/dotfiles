@@ -418,8 +418,10 @@ whole spec, and stating it that plainly is what two review rounds bought.
    label-history fix is relied on. §4.2 L3.
 9. **A standing issue nobody reads is a passive sink.** Named as a real risk by review round 2; the
    scheduled trigger fixes *delivery*, not *attention*.
-10. **Nothing here makes `/clear`, `clear-prep`, `handoff`, `resume` or `wayfinder` invocable by
-    Claude.** All are `disable-model-invocation: true` and `/clear` is a CLI command. Automation
+10. **Nothing here makes `/clear`, `handoff`, `resume` or `wayfinder` invocable by
+    Claude.** All are `disable-model-invocation: true` and `/clear` is a CLI command.
+    (`session-handoff` is the deliberate exception since 2026-08-29 — see
+    `docs/specs/research-nudge-hooks.md`.) Automation
     prepares and nudges; the keystroke stays human.
 
 ## 9. Build order

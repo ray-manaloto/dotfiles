@@ -53,7 +53,7 @@ the file:line anchors the implementing session needs. Three incidents:
    its immediate effect (a fan-out grep, a file-move helper) needs no
    artifact; its outcome is visible in the caller's next action. When in
    doubt, persist.
-5. **Clear-prep audits coverage.** The `/clear-prep` skill enumerates the
+5. **Session-handoff audits coverage.** The `/session-handoff` skill enumerates the
    session's agent launches and requires each findings-bearing one to map
    **both its brief and its report** to an on-disk artifact (or an explicit
    N/A note in the handoff) before the resume prompt is printed.
@@ -72,4 +72,4 @@ which skill or workflow launched them.
   ends with its repos-touched enumeration.
 - `.claude/rules/agent-artifact-conventions.md` — `docs/research/runs/` is the
   standard home for research artifacts.
-- `.claude/skills/clear-prep/SKILL.md` — the coverage audit gate.
+- `.claude/skills/session-handoff/SKILL.md` — the coverage audit gate.

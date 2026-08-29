@@ -1,11 +1,11 @@
 ---
-name: clear-prep
-description: "Prepare for a /clear: bring all documentation up to date with this session's changes, persist recovery context (memory + handoff), and emit a copy-paste resume prompt so the next session begins the next task with zero context loss. Invoke explicitly as /clear-prep [next-task]."
-disable-model-invocation: true
+name: session-handoff
+description: "Prepare for a /clear: bring all documentation up to date with this session's changes, persist recovery context (memory + handoff), and emit a copy-paste resume prompt so the next session begins the next task with zero context loss. Invoke explicitly as /session-handoff [next-task], or on your own judgment when this session's context is getting full and a clean handoff would protect against losing work."
+disable-model-invocation: false
 argument-hint: "[one-line description of the next task, optional]"
 ---
 
-# Clear-Prep — Session Handoff Before `/clear`
+# Session-Handoff — Before `/clear`
 
 Run this **before** `/clear` to (1) make every doc reflect the latest changes,
 (2) persist recovery context that survives the clear, and (3) print a resume
@@ -172,7 +172,7 @@ Full subagent reports must already be on disk per
 final report persisted VERBATIM under `docs/research/kb/reports/agents/` at the
 moment it was received — condensed notepad summaries do NOT count (near-loss
 observed 2026-07-05: 13 reports existed only in context until a manual
-round-2 pass). At clear-prep, audit coverage: enumerate every agent launched
+round-2 pass). At session-handoff, audit coverage: enumerate every agent launched
 this session; each findings-bearing one must map **both its brief (the prompt
 handed TO it) and its report** to an artifact file (or an explicit N/A in the
 handoff). Anything missing: write it now, verbatim from context, before
@@ -196,6 +196,23 @@ Stage specific paths (never `git add .` — phantom `.agent/state/**` files;
 The handoff (`.agent/plans/`) is gitignored and memory lives outside the repo —
 neither is committed. If on `main`, branch first; open a PR only if the user
 asks.
+
+**When this run started on your own judgment rather than an explicit
+`/session-handoff` from the user** (per the description's "or on your own
+judgment when context is getting full"): before running `git commit` or any
+`gh issue edit`/`gh issue comment`, dispatch a read-only cold-review pass
+(a subagent, `model: "opus"`) over the exact staged diff and the exact issue
+comment text you're about to post. If it flags anything material — content
+that looks wrong, unrelated, or bigger than a doc-sync should be — stop and
+surface it to the user instead of committing/posting unattended. This
+review-gate is scoped to self-triggered runs only; when the user typed
+`/session-handoff` themselves, that invocation IS the consent and no extra
+gate applies. (Ray, 2026-08-29 — the auto-invocation carve-out for this
+skill's own memory writes at step 3a, and this review gate for its
+commit/issue-edit steps, are the two conditions that make automatic
+invocation safe: memory writes are the whole point of the feature and are
+covered by the same approval that enabled auto-invocation; commits and
+issue edits are outward-facing and get a review pass instead.)
 
 ## 5. Self-verify the handoff — claims must match reality
 
@@ -229,6 +246,13 @@ At most, echo the task for the human's benefit on the same line:
 ```text
 Resume <task>: read and follow .agent/plans/session-<date>.md
 ```
+
+The two blocks above show the line's shape, not literal text to print. Replace
+`<date>` with the real handoff date and, in the second form, replace `<task>`
+with the concrete one-line task name already determined in step 0; never emit
+either literal angle-bracket placeholder. If step 0 produced no single
+concrete task because the user explicitly deferred deciding, use the first
+form with no `Resume <task>:` prefix.
 
 Then a one-line reminder: *"Run `/clear`, paste that line, and the session
 resumes from the handoff."*

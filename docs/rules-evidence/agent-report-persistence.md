@@ -46,4 +46,4 @@ Existing `docs/research/runs/**` artifacts stay where they are; new ones go to
 ## GitHub repos touched
 
 - [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — the rule,
-  `docs/research/kb/`, `.claude/skills/clear-prep/SKILL.md`.
+  `docs/research/kb/`, `.claude/skills/session-handoff/SKILL.md`.
