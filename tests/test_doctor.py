@@ -228,6 +228,41 @@ def test_fnox_baseline_flags_a_missing_baseline_section() -> None:
     assert findings == ["doctor.toml has no [fnox] section to check against"]
 
 
+# --------------------------------------------------------------------------- #
+# check — fnox-exec-leak (2026-08-29c)
+# --------------------------------------------------------------------------- #
+
+
+def test_exec_leak_flags_an_exec_only_secret_present_in_the_live_environ() -> None:
+    """The CLAUDE_CODE_OAUTH_TOKEN class: env="exec", but a stale process kept it."""
+    setup = _setup(
+        fnox=_fnox(per_secret={"EXA_API_KEY": True, "CLAUDE_CODE_OAUTH_TOKEN": "exec"}),
+        environ={"CLAUDE_CODE_OAUTH_TOKEN": "sk-stale"},
+    )
+    findings = doctor.check_exec_only_not_leaked(setup)
+    assert len(findings) == 1
+    assert "CLAUDE_CODE_OAUTH_TOKEN" in findings[0]
+    assert "exec" in findings[0]
+
+
+def test_exec_leak_is_silent_when_the_exec_only_secret_is_absent() -> None:
+    """The control arm: same config, but the variable genuinely absent."""
+    setup = _setup(
+        fnox=_fnox(per_secret={"EXA_API_KEY": True, "CLAUDE_CODE_OAUTH_TOKEN": "exec"}),
+        environ={},
+    )
+    assert doctor.check_exec_only_not_leaked(setup) == []
+
+
+def test_exec_leak_ignores_a_shell_true_secret_present_in_the_environ() -> None:
+    """A `env = true` secret is SUPPOSED to be ambient — not this check's concern."""
+    setup = _setup(
+        fnox=_fnox(per_secret={"EXA_API_KEY": True}),
+        environ={"EXA_API_KEY": "sk-fine"},
+    )
+    assert doctor.check_exec_only_not_leaked(setup) == []
+
+
 @pytest.mark.parametrize(
     ("env_mode", "per_secret", "expected"),
     [
@@ -957,11 +992,13 @@ def test_every_check_function_is_actually_registered() -> None:
     # standing context every turn and nothing measured it. + `path-drift`
     # (2026-08-08, #596): whether THIS shell resolves the tools mise pins — a
     # cached activation keeps the old install dir on PATH, so gates run a stale
-    # binary while `mise which` reports the new one. Raise this ONLY
-    # alongside a new entry in CHECKS — the count is what catches a check that
-    # was defined and never registered, which the set-difference above cannot
-    # see once the function is also removed.
-    assert len(doctor.CHECKS) == 9, "every specified check must be wired"
+    # binary while `mise which` reports the new one. + `fnox-exec-leak`
+    # (2026-08-29c): an `env = "exec"` secret present in the live ambient
+    # environ anyway — a stale-process leak, not a config defect. Raise this
+    # ONLY alongside a new entry in CHECKS — the count is what catches a check
+    # that was defined and never registered, which the set-difference above
+    # cannot see once the function is also removed.
+    assert len(doctor.CHECKS) == 10, "every specified check must be wired"
 
 
 def test_the_shipped_baseline_parses_and_declares_what_the_checks_read() -> None:
