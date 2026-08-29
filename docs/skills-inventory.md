@@ -134,7 +134,7 @@ marks `disable-model-invocation: true` — a skill only a human can start.
 |---|:-:|---|---|---|
 | `grilling` | no | body | **ADOPT** | Listed above; lives in this category. |
 | `grill-me` | yes | fm | **SKIP** | Older single-purpose variant of `grilling`. |
-| `handoff` | yes | fm | **CANDIDATE** | Compact the conversation into a handoff. We have `.claude/skills/handoff/` and `/clear-prep` already; compare before adopting a second one. |
+| `handoff` | yes | fm | **CANDIDATE** | Compact the conversation into a handoff. We have `.claude/skills/handoff/` and `/session-handoff` already; compare before adopting a second one. |
 | `teach` | yes | fm | **SKIP** | Not our use case. |
 | `writing-great-skills` | yes | fm | **CANDIDATE** | Reference for authoring skills. Useful when we next write one. |
 

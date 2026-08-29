@@ -193,7 +193,7 @@ v1-v6**, and each of them independently kills a finding that cost a full round.
   version was proposed and deliberately not adopted (issue #608 §N1), and the
   asymmetry is worth stating because a sibling change in the same batch DID add
   clauses to two eager rules. Those clauses each shipped **with an enforcing
-  call site**: `agent-report-persistence.md` rule 5 rides on `clear-prep`'s
+  call site**: `agent-report-persistence.md` rule 5 rides on `session-handoff`'s
   audit step, and the `clarify-before-acting.md` edit was a factual correction
   to a matcher that `hook_selfcheck` asserts. The write-time clause audit has
   **no available enforcing site** — a machine cannot check "does this clause

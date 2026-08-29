@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: "Write a CROSS-SURFACE session handoff to a tracked path and push it, so a session on another surface (web, desktop, or CLI) can continue with zero context loss. Use when ending a session whose work must be picked up on a DIFFERENT machine/surface. For same-machine /clear continuity use /clear-prep instead. Invoke as /handoff [next-task]."
+description: "Write a CROSS-SURFACE session handoff to a tracked path and push it, so a session on another surface (web, desktop, or CLI) can continue with zero context loss. Use when ending a session whose work must be picked up on a DIFFERENT machine/surface. For same-machine /clear continuity use /session-handoff instead. Invoke as /handoff [next-task]."
 disable-model-invocation: true
 argument-hint: "[one-line description of the next task, optional]"
 ---
@@ -10,7 +10,7 @@ argument-hint: "[one-line description of the next task, optional]"
 Claude Code sessions do NOT transfer across surfaces: the web app, desktop
 app, and CLI each keep their own local history, and there is no built-in
 cross-device resume (confirmed against the official docs). The only state that
-crosses the boundary is what you **commit to the branch**. `/clear-prep` writes
+crosses the boundary is what you **commit to the branch**. `/session-handoff` writes
 its handoff to `.agent/plans/`, which is gitignored and this-clone-only — perfect
 for a same-machine `/clear`, useless for web->desktop. This skill writes the
 handoff to a **tracked** path and pushes it, so the next surface just pulls.
@@ -20,8 +20,8 @@ plan and state your guess explicitly.
 
 ## Steps
 
-### 1. Do the doc-sync + validation discipline from `/clear-prep`
-Follow `.claude/skills/clear-prep/SKILL.md` steps 1-4 (snapshot state; update
+### 1. Do the doc-sync + validation discipline from `/session-handoff`
+Follow `.claude/skills/session-handoff/SKILL.md` steps 1-4 (snapshot state; update
 every doc your changes touched; run the relevant gates — `mise run lint`,
 pytest, `dotfiles-setup verify run` — all green). Do NOT duplicate that logic
 here; this skill only changes WHERE the handoff lives and that it is pushed.
@@ -48,7 +48,7 @@ wrong detail costs the next session more than a missing one.
 Stage the handoff and the doc updates from step 1 (specific paths — never
 `git add .`; `.claude/rules/do-not.md`). Commit + push per
 `.claude/skills/git-branch-commit-push-workflow/SKILL.md` (plain git,
-`git push -u origin {branch}`). Unlike `/clear-prep`, the handoff IS committed,
+`git push -u origin {branch}`). Unlike `/session-handoff`, the handoff IS committed,
 because a tracked-but-unpushed handoff still can't cross surfaces.
 
 > **Bricked web session caveat:** if Bash/git is blocked (the Claude-web
@@ -69,7 +69,7 @@ git pull`, open Claude Code in the repo, paste that."*
 
 ## Checklist
 
-- [ ] `/clear-prep` steps 1-4 done: docs synced, relevant gates green.
+- [ ] `/session-handoff` steps 1-4 done: docs synced, relevant gates green.
 - [ ] Handoff written to `docs/handoffs/session-{date}.md` (TRACKED), self-sufficient.
 - [ ] Handoff self-verified (paths, file:line, task names, gate rcs).
 - [ ] Handoff + doc updates committed AND pushed (or API-pushed if git is bricked).
@@ -78,6 +78,6 @@ git pull`, open Claude Code in the repo, paste that."*
 ## See also
 
 - `.claude/skills/resume/SKILL.md` — the receiving side.
-- `.claude/skills/clear-prep/SKILL.md` — same-machine `/clear` handoff (`.agent/plans/`).
+- `.claude/skills/session-handoff/SKILL.md` — same-machine `/clear` handoff (`.agent/plans/`).
 - `docs/handoffs/README.md` — the protocol + the handoff template.
 - `.claude/skills/git-branch-commit-push-workflow/SKILL.md` — the commit/push path.
