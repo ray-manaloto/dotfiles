@@ -209,7 +209,9 @@ all four opt-ins intact → **0 findings**, a false pass; the deepest opt-in sit
 49, line 55 of 70**, so **14 of 49 secrets** are past the last thing the doctor checks.
 
 **Files:**
-- `doctor.toml` — `[fnox]` gains `secrets = [ …49 names… ]`.
+- `doctor.toml` — `[fnox]` gains `secrets = [ …N names, N = the current `env_true` count… ]` (49 at
+  #460's writing; **56** as of PR #811 — re-derive from `doctor.toml` at commit time, never restate
+  a fixed number here).
 - `python/src/dotfiles_setup/doctor.py` — `check_fnox_secret_set`, alongside `check_fnox_baseline`,
   reporting **both** directions: declared-but-gone, present-but-undeclared.
 - `tests/test_doctor.py` — one test per direction.
@@ -219,7 +221,8 @@ bind the failing arms (drop a declared name → finding; add an undeclared one �
 
 **Notes:** a **count floor misses a rename** — that is why it is the name set, and it is the same
 argument `check_fnox_baseline`'s own docstring already makes for the opt-in set. Names are not
-secrets, and 4 of 49 are already declared in this file. The cost accepted: every legitimate add or
+secrets, and 4 of 49 were already declared in this file at #460's writing (56 now, re-derive at
+commit time). The cost accepted: every legitimate add or
 remove needs a `doctor.toml` diff, which is the doctor's stated doctrine, not a new tax.
 
 ### R2 — apply `if_missing = "error"` to the live fnox config, and assert it ← #435, NEW (the apply half)
@@ -329,8 +332,10 @@ phase can be rehearsed until this is fixed.
 **Files:** `home/.chezmoiignore` — retire `is_personal`; `.ssh/config` and `.gnupg/**` gate on
 `.chezmoi.os` instead.
 
-**Gate:** `chezmoi --source ./home execute-template` and `chezmoi --source ./home managed` both
-`rc=0` on this Mac. FAIL arm: they are `rc=1` today, which is the control.
+**Gate:** `chezmoi --source ./home managed` is `rc=0` on this Mac. FAIL arm: it is `rc=1` today
+(`.chezmoiignore:24:10 … map has no entry for key "is_personal"`), which is the control. (#781:
+`execute-template` with no template argument reads an empty stdin and renders nothing at `rc=0`
+regardless of `is_personal` — it contributes nothing to this gate and is dropped.)
 
 **Notes:** this makes `.chezmoiignore` **data-free**, which dissolves #434's C1.
 
@@ -555,7 +560,10 @@ enforcement fallback if plugins prove insufficient.
 **Exit gate — PROVISIONAL, confirmed when this phase is deepened.** A4 applies at whatever depth a
 phase is written, so it gets a command now rather than a promise:
 
-```
+Illustrative, not runnable — `<cli>` names the unbuilt CLI this phase specs; `<`/`>` are shell
+redirection metacharacters, so this is not a fill-in-the-blank template:
+
+```text
 env -i <cli> exec --profile agent -- sh -c 'echo ${#OUT_OF_PROFILE_SECRET}'   # expect 0
 env -i <cli> exec --profile agent -- sh -c 'echo ${#IN_PROFILE_SECRET}'       # expect nonzero
 <cli> exec --profile does-not-exist -- true                                   # expect nonzero rc
@@ -608,11 +616,14 @@ unauthorized 15th target.
 Measured idempotent by construction: apply ×2 → *"all edits are applied"*, where chezmoi's
 `modify_` gives **2** blocks in 3 renders without a hand-written strip.
 
-**Exit gate — PROVISIONAL, confirmed when this phase is deepened.**
+**Exit gate — PROVISIONAL, confirmed when this phase is deepened.** Illustrative, not runnable — the
+set-equality gate is the one named in § "The gate stays set-equality" above, re-run with mise as the
+applier; `mise bootstrap dotfiles status --missing` is the real subcommand (the angle brackets below
+are prose emphasis, not a fill-in-the-blank):
 
-```
+```text
 <the set-equality gate>, re-run against the merged tree with mise as the applier   # 14 == 14
-mise <bootstrap dotfiles> status --missing                                         # rc=0, converged
+mise bootstrap dotfiles status --missing                                           # rc=0, converged
 ```
 
 **PASS** = set equality holds with mise applying, and `status --missing` is `rc=0`.

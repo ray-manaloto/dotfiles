@@ -13,7 +13,7 @@ that posture existed, what the reversal costs, and which parts still bind.**
 **Most of this rule survives the reversal, and rule 7 matters MORE.** What changed
 is one axis — where credentials live. What did not change: an environment dump is
 still unscannable and must never be committed (rule 1, gated by `no_env_dump`), a
-probe must still never print a value (rule 7, gated by `secret_value_substitution`),
+probe must still never print a value (rule 7, **partly** gated by `secret_value_substitution`),
 a non-secret must still not be marked secret (rule 3), and a clean scanner still
 means "ask what it can see" (rule 4). With 50 credentials in every child instead
 of 4, the blast radius of breaking any of those is **12.5× larger**, not smaller.
@@ -179,9 +179,9 @@ the `EXA_API_KEY` misattribution, and the measured wipe timeline — is in
    it survives review and why an unset-only control arm certifies nothing — arm it
    on a variable that IS set). Want both branches? `[ -n "$VAR" ] && echo SET ||
    echo ABSENT`. **Now machine-enforced** — `hook_guard`'s
-   `secret_value_substitution` denies `${<CREDENTIAL_NAME>:-|:=}` in a Bash
-   command; that closes the #474 gap for this shape, and this rule still carries
-   every other shape.
+   `secret_value_substitution` denies any `echo`/`printf`/`print` of a
+   credential-named variable (broader than just `:-`/`:=`, `\$\{?` optional) —
+   still allows `${(P)k}` indirect expansion; this rule carries every other shape.
 
    ⚠️ **There is no blast-radius cap any more.** Under `env = true` **all 50** are
    printable by any probe, wrapped or not; `DOPPLER_TOKEN` is itself in the
