@@ -302,7 +302,7 @@ the shell until something re-reads the config. Filed with the confirmed trigger 
 Rule 7 was written earlier the same day, after a `${(P)k}` expansion printed four
 live credentials. Hours later, an agent **holding that rule and citing it** ran:
 
-```sh
+```text
 printf "%s" "${DOPPLER_TOKEN:+PRESENT}${DOPPLER_TOKEN:-ABSENT}"
 ```
 
@@ -463,12 +463,13 @@ guide with no successor text anywhere, which is deletion, not a move. Kept here.
 - [ray-manaloto/knowledge-base](https://github.com/ray-manaloto/knowledge-base) —
   the second public repo checked by the same pickaxe.
 - [ray-manaloto/macos-development-environment](https://github.com/ray-manaloto/macos-development-environment)
-  — `src/mde/secrets/manage.py`, issue #82, and the unmerged fix branch.
+  — `src/mde/secrets/manage.py`, issue #82, and the fix in #83 (merged `716b17d`).
 
 ## The exec-only era (2026-07-27 → 2026-08-02) — moved out of the rule verbatim
 
-Ray **reversed this posture on 2026-08-02**: all 49 credentials are now `env = true`,
-available in every terminal and to every agent. The section below is the adoption
+Ray **reversed this posture on 2026-08-02**: all credentials are now `env = true`
+(49 at the reversal; 56 as of PR #811 — see `doctor.toml`), available in every
+terminal and to every agent. The section below is the adoption
 history of the exec-only mode it replaced, kept verbatim because the *mechanisms* it
 documents are still live — `bootstrap_config()` still regenerates the config, and the
 `fnox` env-mode table is still how the tool behaves.

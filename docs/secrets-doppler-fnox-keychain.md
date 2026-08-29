@@ -304,6 +304,14 @@ key name, scope, operation, timestamp, outcome.
 - add `--yes`/`--force` to a deletion without explicit authorization;
 - treat a successful write as a completed rotation.
 
+⚠️ **Documentation-only except one entry.** Replayed through `hook_guard.match()`
+(#780): only the `:-`/`:=` value-emitting substitution named at `:296-298`'s
+sibling section below is denied by `secret_value_substitution`. The four named
+verbs — `doppler secrets get`/`download`, `fnox get`, `fnox export`,
+`fnox list --values` — and `security … -w`/`-g` are **not** matched by any
+PreToolUse rule and will run if invoked. Do not infer a guard exists for this
+list; it is enforced by an agent reading it, nothing else. Tracked: #474, #503.
+
 **Human-only**: creating accounts · passwords/MFA/OAuth consent · viewing a
 provider's one-time credential · **typing the value into the hidden prompt** ·
 approving paid/production scope · confirming destructive deletion.
@@ -349,8 +357,10 @@ headers, raw env dumps, or the contents of a secret-bearing config.
 1. Confirm key name, consumer, scope, rotation expectation, and that no existing
    credential can be reused. **The config is `dev_personal`** — since the
    2026-08-03 alignment it serves the host and the devcontainer both, so there
-   is no longer a "which config" judgement call. Write to `dev` only if a clone
-   has opted out via `mise.local.toml`.
+   is no longer a "which config" judgement call. (`mise.local.toml`'s
+   `DOPPLER_CONFIG = "dev"` override only redirects mise tasks that shell out to
+   `doppler` directly — no `doppler_dotfiles_dev` fnox provider exists, so every
+   `fnox edit` declaration below always targets `dev_personal`, unconditionally.)
 2. Human creates/reveals the credential at the provider.
 3. Interactive setter — **no value argument**, so nothing enters argv or history:
 
@@ -363,8 +373,12 @@ headers, raw env dumps, or the contents of a secret-bearing config.
 5. Confirm it appears in a **names-only** listing:
 
    ```sh
-   doppler secrets --project dotfiles --config dev_personal --only-names | grep KEY_NAME
+   doppler secrets --project dotfiles --config dev_personal --json \
+     | jq -e 'has("KEY_NAME")'
    ```
+
+   An unanchored `grep KEY_NAME` also matches `OLD_KEY_NAME`, `KEY_NAME_V2`, etc. —
+   parse the name, don't substring-match it.
 
 6. Declare it in fnox (`fnox edit`) — the declaration holds the **name**, never
    the value:
@@ -389,6 +403,15 @@ headers, raw env dumps, or the contents of a secret-bearing config.
 **Never**: `doppler secrets set KEY 'value'` (argv/history) or
 `echo 'value' | doppler secrets set KEY` (plaintext through the tool call).
 
+**This procedure is non-transactional — resuming a half-finished add:** if it
+stops after step 3/4 (Doppler has the value) but before step 6/8 (fnox and
+`doctor.toml` declare it), the host is left in exactly the state R1's
+`check_fnox_secret_set` reports as "present-but-undeclared". Resume at step 5 —
+do not redo step 2/3/4, since the value is already set at the provider.
+Rollback for an add that must be abandoned: `doppler secrets delete KEY_NAME
+--project dotfiles --config dev_personal --yes` (removes the provider-side
+value; nothing downstream exists yet if you stop before step 6).
+
 ⚠️ **`mde-secret-add KEY` does steps 3-7 in one command and is the sanctioned
 mde interface — and it churns all 49 sync ciphertexts every time.** Since #83
 merged it no longer rewrites the whole config on `main` or on any current
@@ -406,8 +429,9 @@ Each step is contract-compliant (no value read or printed) and each
 #    EVERY invocation, even with an explicit -c.  Expect this one line.
 fnox config-files
 
-# 2. Is the secret DECLARED?  names only, never --values.
-fnox list | grep KEY_NAME
+# 2. Is the secret DECLARED?  names only, never --values.  Anchored — an
+#    unanchored grep also matches OLD_KEY_NAME / KEY_NAME_V2 / etc.
+fnox list | grep -qx 'KEY_NAME'
 
 # 3. Is it in the plain interactive shell?  Under env = true it must be.
 zsh -c '[[ -v KEY_NAME ]] && print present || print ABSENT'
@@ -416,7 +440,10 @@ zsh -c '[[ -v KEY_NAME ]] && print present || print ABSENT'
 fnox exec -- zsh -c '[[ -v KEY_NAME ]] && print present || print ABSENT'
 
 # 5. Is the offline age copy stale vs Doppler?  dry-run reveals no values.
-fnox sync --dry-run -p age KEY_NAME
+#    --global is not optional (see step 7's warning above) — without it this
+#    targets a fnox.toml in the current directory, not the config the
+#    declaration lives in, and "No secrets to sync" becomes unconditional.
+fnox sync --global --dry-run -p age KEY_NAME
 #   "Would sync 1 secrets … KEY_NAME (from doppler_…)"  -> a copy would change
 #   "No secrets to sync"                                -> nothing to do / unknown key
 ```
@@ -523,7 +550,7 @@ ways:
 3. Reached for `env | grep` on secret names.
 
 None of it reached a tracked file or the transcript, and the endpoint was the
-credential's legitimate vendor. It was still avoidable: **`fnox sync --dry-run
+credential's legitimate vendor. It was still avoidable: **`fnox sync --global --dry-run
 -p age` answers the staleness question without reading any value**, and
 `[[ -v ]]` answers presence. Both are in the MAY list.
 

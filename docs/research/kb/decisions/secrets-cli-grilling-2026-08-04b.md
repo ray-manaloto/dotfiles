@@ -157,8 +157,12 @@ The project-scope↔code seam needs a different mechanism than the spec assumed.
    --fallback <enc>)"` cold and warm against the current fnox path, and confirm the
    `DOPPLER_TOKEN` keychain-ACL story survives without fnox. **This decides D5, and D6 follows.**
 
-All four are safe with `FNOX_CONFIG_DIR` isolation and fake secrets. **Never print a value** —
-compare `value == name`.
+Arms 1-3 are safe with `FNOX_CONFIG_DIR` isolation and fake secrets. **Arm 4 is NOT** — it calls
+`doppler` directly (no `--project`/`--config`/`--scope`), so `FNOX_CONFIG_DIR` does not touch it and
+it resolves through the live `~/.doppler/.doppler.yaml` root scope, downloading the real
+`dotfiles`/`dev_personal` set (#785). Give arm 4 its own isolation (an explicit `--project`/
+`--config` against a throwaway Doppler config, or a `DOPPLER_CONFIG_DIR`-equivalent) before running
+it. **Never print a value** — compare `value == name`.
 
 ## 5. Probe corrections made during this session
 
