@@ -135,9 +135,24 @@ def test_gpg_guard_overrides_when_ssh_support_enabled(template_name: str) -> Non
     )
 
 
-# We parametrize with the tools we expect to be in the PATH
+# We parametrize with the tools we expect to be in the PATH.
+# `claude` and `gemini` are the only two NOT in a host-merged mise config
+# (`mise.toml` + `.config/mise/conf.d/*.toml`) — gemini is image-only, at
+# `.devcontainer/mise-runtime.toml`, which a repo-root `mise install` never
+# merges. So no runner install can supply them; every other param passes on
+# CI once the runner does a full `mise install` (#808). Marking the file
+# would discard 11 passing tests, including all six issue-#87 gpg guards.
 @pytest.mark.parametrize(
-    "tool", ["mise", "chezmoi", "uv", "pixi", "claude", "gemini", "codex"]
+    "tool",
+    [
+        "mise",
+        "chezmoi",
+        "uv",
+        "pixi",
+        pytest.param("claude", marks=pytest.mark.host_only),
+        pytest.param("gemini", marks=pytest.mark.host_only),
+        "codex",
+    ],
 )
 def test_tool_reachable_in_login_shell(tool: str) -> None:
     """Verify tools are reachable in a login shell."""
@@ -156,7 +171,17 @@ def test_tool_reachable_in_login_shell(tool: str) -> None:
     assert Path(tool_path).exists(), f"{tool} path does not exist: {tool_path}"
 
 
-@pytest.mark.parametrize("tool", ["chezmoi", "uv", "pixi", "claude", "gemini", "codex"])
+@pytest.mark.parametrize(
+    "tool",
+    [
+        "chezmoi",
+        "uv",
+        "pixi",
+        pytest.param("claude", marks=pytest.mark.host_only),
+        pytest.param("gemini", marks=pytest.mark.host_only),
+        "codex",
+    ],
+)
 def test_tool_execution_in_login_shell(tool: str) -> None:
     """Verify that tools can actually execute and resolve versions in a login shell."""
     cmd = ["bash", "-l", "-c", f"{tool} --version"]
@@ -170,6 +195,9 @@ def test_tool_execution_in_login_shell(tool: str) -> None:
     assert result.stdout.strip() != ""
 
 
+# The one test no install could ever fix: it needs `zsh` AND a
+# chezmoi-applied `~/.zshenv`, and chezmoi apply is host-only.
+@pytest.mark.host_only
 def test_zshenv_path_injection() -> None:
     """Verify that .zshenv correctly injects paths even for non-interactive shells."""
     # Simulate a zsh non-interactive shell
