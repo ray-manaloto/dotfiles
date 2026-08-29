@@ -147,11 +147,16 @@ def test_newest_handoff_orders_by_date_then_letter_without_mtime(
         "session-2026-08-29b.md",
         "session-2026-08-29c.md",
         "session-2026-08-29d.md",
+        "session-2026-08-29-e.md",
         "session-not-a-date.md",
     ):
         (plans / name).write_text(name)
 
-    assert handoff_check.newest_handoff(repo) == plans / "session-2026-08-29d.md"
+    # The unhyphenated form is what every real handoff in this repo uses
+    # (`agent-artifact-conventions.md` documents the hyphenated form; real
+    # practice never uses it) — the regex must accept both, and the
+    # hyphenated `-e` still orders after the unhyphenated `d`.
+    assert handoff_check.newest_handoff(repo) == plans / "session-2026-08-29-e.md"
 
 
 def test_main_prints_explicit_no_handoff_state(

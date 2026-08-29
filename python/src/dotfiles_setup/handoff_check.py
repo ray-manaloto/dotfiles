@@ -17,7 +17,7 @@ from pathlib import Path
 
 _MISE_TIMEOUT = 30
 _HANDOFF_RE = re.compile(
-    r"^session-(?P<date>\d{4}-\d{2}-\d{2})(?P<suffix>[A-Za-z])?\.md$"
+    r"^session-(?P<date>\d{4}-\d{2}-\d{2})(?:-?(?P<suffix>[A-Za-z]))?\.md$"
 )
 _PATH_CITATION_RE = re.compile(
     r"(?<![\w./:-])(?P<citation>[\w./-]+\.[A-Za-z]\w*:(?P<start>\d+)"
