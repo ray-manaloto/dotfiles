@@ -622,6 +622,38 @@ def check_fnox_baseline(setup: Setup) -> list[str]:
     return findings
 
 
+def check_exec_only_not_leaked(setup: Setup) -> list[str]:
+    """An ``env = "exec"`` secret must never reach the interactive shell.
+
+    2026-08-29c: ``CLAUDE_CODE_OAUTH_TOKEN`` leaked into an ambient shell
+    despite ``env = "exec"`` being correctly configured — the mechanism (fnox's
+    live hook unsetting it every prompt) was never broken; a `claude` process
+    forked from a shell that predates the carve-out just keeps whatever it
+    inherited at launch, since process environments are copied at fork, not
+    live-linked to the parent shell's later `unset`. This check can't fix
+    that (nothing running can rewrite its own inherited environment), but it
+    surfaces the recurrence immediately instead of waiting for a `/login`
+    warning. See memory ``reference_claude_code_oauth_token.md``.
+    """
+    fnox = setup.fnox
+    if not fnox.exists:
+        return []
+    findings: list[str] = []
+    for name, mode in fnox.per_secret.items():
+        if mode != "exec":
+            continue
+        if setup.environ.get(name):
+            findings.append(
+                f'{name} is declared `env = "exec"` (must never reach the '
+                f"interactive shell) but IS set in this process's environment "
+                f"— likely a shell that predates the carve-out. Fully quit "
+                f"and reopen the terminal application; a running process "
+                f"keeps whatever it inherited at fork regardless of what "
+                f"fnox's hook does afterward."
+            )
+    return findings
+
+
 def _opt_in_findings(fnox: FnoxState, wanted: set[str]) -> list[str]:
     """Drift between the shell-visible set and the sanctioned one, both ways."""
     actual = {name for name in fnox.per_secret if fnox.shell_visible(name)}
@@ -1098,6 +1130,7 @@ CHECKS: tuple[tuple[str, Callable[[Setup], list[str]]], ...] = (
     ("mcp-env-opt-in", check_mcp_env_opt_in),
     ("mcp-scope", check_mcp_scope),
     ("fnox-baseline", check_fnox_baseline),
+    ("fnox-exec-leak", check_exec_only_not_leaked),
     ("mcp-pin", check_mcp_pin),
     ("mcp-guard-coverage", check_mcp_guard_coverage),
     ("mcp-duplicate", check_mcp_duplicate),
