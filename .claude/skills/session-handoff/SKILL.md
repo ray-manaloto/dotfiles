@@ -247,6 +247,13 @@ At most, echo the task for the human's benefit on the same line:
 Resume <task>: read and follow .agent/plans/session-<date>.md
 ```
 
+The two blocks above show the line's shape, not literal text to print. Replace
+`<date>` with the real handoff date and, in the second form, replace `<task>`
+with the concrete one-line task name already determined in step 0; never emit
+either literal angle-bracket placeholder. If step 0 produced no single
+concrete task because the user explicitly deferred deciding, use the first
+form with no `Resume <task>:` prefix.
+
 Then a one-line reminder: *"Run `/clear`, paste that line, and the session
 resumes from the handoff."*
 
