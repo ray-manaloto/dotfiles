@@ -6,7 +6,7 @@ requires-python = ">=3.14"
 dependencies = [
     # Graphify is a Python runtime dependency, not a second mise/pipx tool.
     # The CLI console script and SDK therefore resolve from the same uv lock.
-    "graphifyy[all]==0.9.42",
+    "graphifyy[all]==0.9.48",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.15.0",
     # deb822 control-file parser, maintained by Debian's own
