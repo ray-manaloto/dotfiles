@@ -1,7 +1,10 @@
 # Secrets in the Shell Environment
 
-⚠️ **REVERSED 2026-08-02 by Ray, deliberately.** All 50 credentials are now
-`env = true` — available in every terminal and inherited by every child process,
+⚠️ **REVERSED 2026-08-02 by Ray, deliberately.** All credentials are now
+`env = true` (**56 sanctioned as of 2026-08-29**, with ONE deliberate carve-out:
+`CLAUDE_CODE_OAUTH_TOKEN` is `env = "exec"` — it overrides `/login` in every new
+session and silently rebills to the old org, and it does NOT authenticate the
+Anthropic SDKs; see PR #811) — available in every terminal and inherited by every child process,
 including Claude Code, its subagents and any MCP server they spawn. The stated
 requirement was *"in sync and available to all terminals and ai/llm agents"*.
 This file is no longer "keep secrets out of the shell"; it is **the record of why
@@ -26,8 +29,8 @@ hazard the host no longer avoids. Those *findings* need re-judging before
 anything is built on them; the tickets themselves are done.
 
 **The tripwire moved, it did not go away.** `doctor.toml` now pins `env = true`
-plus the **full 50-name set**, so an addition, a removal or a *rename* is still
-caught in both directions (control-armed: a rename keeping the count at 50 is
+plus the **full name set**, so an addition, a removal or a *rename* is still
+caught in both directions (control-armed: a rename keeping the count constant is
 reported both ways). That also lands what
 [#460](https://github.com/ray-manaloto/dotfiles/issues/460) measured as the fix
 for the doctor's blind zone — 14 of the then-49 secrets sat past the deepest
@@ -145,13 +148,14 @@ the `EXA_API_KEY` misattribution, and the measured wipe timeline — is in
    whenever anything is exec-only or absent. Under `env = true` that trap is gone
    and the reviewed decision moves to the other end: **adding a secret to fnox now
    puts it in every terminal and every agent by default**, so it must be added to
-   `doctor.toml`'s 50-name `env_true` set in the same reviewed diff, or the doctor
+   `doctor.toml`'s `env_true` set in the same reviewed diff, or the doctor
    reports drift on the next session and someone "fixes" it back.
 6. **Diagnose by layer, and never run `fnox get` to do it** (it prints a value).
    ⚠️ **The old first suspect is retired.** A present-under-`fnox exec` /
    absent-in-shell split used to mean `env = "exec"` working as designed; under
-   `env = true` that outcome is **unreachable**, so an absent variable is a REAL
-   failure — never dismiss it. Order the new suspects: (a) a **hung `doppler` CLI**,
+   `env = true` that outcome is **unreachable — except for the one carve-out
+   above**, so for any OTHER name an absent variable is a REAL failure — never
+   dismiss it. Order the new suspects: (a) a **hung `doppler` CLI**,
    since fnox shells out to it and any uncached doppler-primary secret resolves
    through that child; (b) a stale **`MISE_ENV_CACHE`** entry, which can serve a
    dead name in ONE directory long after the config is byte-identically restored,
