@@ -1,0 +1,152 @@
+# Copyright (c) 2026 Raymond Manaloto
+"""Tests for the scoped session handoff citation checker."""
+
+from __future__ import annotations
+
+import subprocess
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
+
+import pytest
+from dotfiles_setup import handoff_check
+from dotfiles_setup import main as cli_main
+
+_COMMAND_TIMEOUT = 30
+
+
+def _repo(tmp_path: Path) -> Path:
+    subprocess.run(
+        ["git", "init", "-q", "-b", "work"],
+        cwd=tmp_path,
+        check=True,
+        timeout=_COMMAND_TIMEOUT,
+    )
+    return tmp_path
+
+
+def _task_listing(
+    monkeypatch: pytest.MonkeyPatch,
+    repo: Path,
+    output: str,
+) -> None:
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        assert cmd == ["mise", "tasks", "ls"]
+        assert kwargs["cwd"] == repo
+        assert kwargs["timeout"] == _COMMAND_TIMEOUT
+        return subprocess.CompletedProcess(cmd, 0, output, "")
+
+    monkeypatch.setattr(handoff_check.subprocess, "run", fake_run)
+
+
+def test_check_reports_missing_paths_and_bad_line_ranges(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    docs = repo / "docs"
+    docs.mkdir()
+    (docs / "short.md").write_text("one\ntwo\n")
+
+    findings = handoff_check.check(
+        repo,
+        "Valid docs/short.md:2; missing `docs/gone.md:1`; stale docs/short.md:3-4.",
+    )
+
+    assert findings == [
+        handoff_check.Finding(
+            handoff_check.Verdict.MISSING_PATH,
+            "docs/gone.md:1",
+            "repo-relative path 'docs/gone.md' does not exist",
+        ),
+        handoff_check.Finding(
+            handoff_check.Verdict.BAD_LINE_RANGE,
+            "docs/short.md:3-4",
+            "cited lines 3-4 are outside the file's 1-2 range",
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    "listing",
+    [
+        "Name Description\nlint Run lint\nsession-state Print state\n",
+        "lint Run lint\nsession-state Print state\n",
+    ],
+)
+def test_check_accepts_headered_and_headerless_task_lists(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    listing: str,
+) -> None:
+    repo = _repo(tmp_path)
+    _task_listing(monkeypatch, repo, listing)
+
+    findings = handoff_check.check(
+        repo,
+        "Run mise run lint, skip out-of-scope mise run deps:python, then "
+        "mise run missing-task -- --check.",
+    )
+
+    assert findings == [
+        handoff_check.Finding(
+            handoff_check.Verdict.UNKNOWN_TASK,
+            "mise run missing-task",
+            "mise task 'missing-task' is not listed by mise tasks ls",
+        )
+    ]
+
+
+def test_newest_handoff_orders_by_date_then_letter_without_mtime(
+    tmp_path: Path,
+) -> None:
+    repo = _repo(tmp_path)
+    plans = repo / ".agent" / "plans"
+    plans.mkdir(parents=True)
+    for name in (
+        "session-2026-08-28-z.md",
+        "session-2026-08-29.md",
+        "session-2026-08-29-a.md",
+        "session-2026-08-29-b.md",
+        "session-not-a-date.md",
+    ):
+        (plans / name).write_text(name)
+
+    assert handoff_check.newest_handoff(repo) == plans / "session-2026-08-29-b.md"
+
+
+def test_main_prints_explicit_no_handoff_state(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo = _repo(tmp_path)
+
+    assert handoff_check.main([], repo) == 0
+    assert "no handoff found" in capsys.readouterr().out
+
+
+def test_main_checks_a_specific_handoff_and_parser_wiring(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    repo = _repo(tmp_path)
+    (repo / "notes.md").write_text("one\n")
+    handoff = repo / "handoff.md"
+    handoff.write_text("See notes.md:1 and run mise run lint.\n")
+    _task_listing(monkeypatch, repo, "lint Run lint\n")
+
+    parsed = cli_main.setup_parser().parse_args(["handoff-check", "handoff.md"])
+    assert parsed.command == "handoff-check"
+    assert parsed.path == "handoff.md"
+
+    assert handoff_check.main(["handoff.md"], repo) == 0
+    assert "OK" in capsys.readouterr().out
+
+
+def test_render_preserves_exact_citation_text() -> None:
+    finding = handoff_check.Finding(
+        handoff_check.Verdict.BAD_LINE_RANGE,
+        "python/src/foo.py:42-58",
+        "range is stale",
+    )
+    output = handoff_check.render([finding], source="handoff.md")
+    assert "`python/src/foo.py:42-58`" in output
+    assert "bad_line_range" in output

@@ -272,3 +272,7 @@ resumes from the handoff."*
 - [ ] Local handoff written under `.agent/plans/` and self-verified (paths, file:line, task names, gate rcs).
 - [ ] Relevant local gate green; doc commit made (if appropriate).
 - [ ] Resume prompt printed for the user to paste after `/clear`.
+
+## See also
+
+- `.claude/skills/session-resume/SKILL.md` — reconcile this handoff against the real repo state after `/clear`.

@@ -849,6 +849,19 @@ description = "Arm GitHub-native auto-merge on a BOT-opened PR (Renovate / refre
 #   mise run automerge -- 236
 run = 'uv run --project python dotfiles-setup pr automerge'
 
+[tasks.session-state]
+description = "Paste-ready session snapshot: branch/tree/commits/PR: mise run session-state [-- --no-pr]"
+# Thin caller; python/src/dotfiles_setup/session_state.py. mise's output
+# redaction masks digit runs (branch names, SHAs, PR numbers) — to COPY any
+# figure out of the output, run `uv run --project python dotfiles-setup
+# session-state` directly instead (feedback_mise_run_masks_digits).
+run = 'uv run --project python dotfiles-setup session-state'
+
+[tasks.handoff-check]
+description = "Verify a handoff's own citations (paths, file:line, mise task names): mise run handoff-check [-- <path>]"
+# Thin caller; python/src/dotfiles_setup/handoff_check.py.
+run = 'uv run --project python dotfiles-setup handoff-check'
+
 [tasks.sync]
 description = "Converge the devcontainer onto the latest CI image + verify (digest fast-path)"
 # Thin caller per zero-bash-logic; the orchestration (registry-vs-local-tag
