@@ -10,10 +10,6 @@ A failed ``gh`` lookup is deliberately not rendered as "no open PR".  Only a
 successful query returning an empty list earns :attr:`PrState.NONE`; command
 failure, timeout, malformed JSON, and detached HEAD are all
 :attr:`PrState.UNVERIFIABLE`.
-
-Mise can redact digit runs in task output, including branch names, SHAs, and
-PR numbers.  Use ``uv run --project python dotfiles-setup session-state`` when
-copying any figure from the snapshot.
 """
 
 from __future__ import annotations
@@ -120,7 +116,8 @@ def _current_branch(repo_root: Path) -> str | None:
 
 def _dirty_paths(repo_root: Path) -> tuple[str, ...]:
     """Return the path field from each ``git status --porcelain`` record."""
-    out = _git_output(["status", "--porcelain"], repo_root)
+    # Quoted filenames with special characters remain a documented v1 limitation.
+    out = _git_output(["status", "--porcelain", "--no-renames"], repo_root)
     return tuple(
         line[_STATUS_PREFIX_LENGTH:]
         for line in out.splitlines()
@@ -132,9 +129,7 @@ def _recent_commits(repo_root: Path, limit: int) -> tuple[Commit, ...]:
     """Return up to ``limit`` commits, with an unambiguous NUL field split."""
     if limit < 1:
         return ()
-    rc, out, _err = _git(["log", "-n", str(limit), "--format=%H%x00%s"], repo_root)
-    if rc != 0:
-        return ()
+    out = _git_output(["log", "-n", str(limit), "--format=%H%x00%s"], repo_root)
     commits: list[Commit] = []
     for line in out.splitlines():
         sha, separator, subject = line.partition("\0")
@@ -159,7 +154,9 @@ def _gh(args: list[str], repo_root: Path) -> tuple[int, str]:
         return 124, "gh lookup timed out"
     except OSError as exc:
         return 127, str(exc)
-    return proc.returncode, (proc.stdout or "") + (proc.stderr or "")
+    if proc.returncode == 0:
+        return 0, proc.stdout or ""
+    return proc.returncode, proc.stderr or proc.stdout or "no diagnostic"
 
 
 def _checks_summary(row: dict[str, object]) -> str | None:
@@ -292,5 +289,11 @@ def main(args: list[str], repo_root: Path) -> int:
     if unknown:
         sys.stderr.write(f"session-state: unknown argument(s): {', '.join(unknown)}\n")
         return 2
-    sys.stdout.write(render(gather(repo_root, with_pr="--no-pr" not in args)) + "\n")
+    try:
+        sys.stdout.write(
+            render(gather(repo_root, with_pr="--no-pr" not in args)) + "\n"
+        )
+    except RuntimeError as exc:
+        sys.stderr.write(f"session-state: {exc}\n")
+        return 1
     return 0

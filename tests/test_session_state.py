@@ -66,13 +66,13 @@ def test_gather_reads_real_git_state_without_pr(tmp_path: Path) -> None:
 
 def test_gather_reports_dirty_paths_and_honors_limit(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
-    (repo / "tracked.txt").write_text("changed\n")
+    _git(repo, "mv", "tracked.txt", "renamed.txt")
     (repo / "new.txt").write_text("new\n")
 
     snapshot = session_state.gather(repo, limit=1, with_pr=False)
 
     assert not snapshot.clean
-    assert set(snapshot.dirty_paths) == {"tracked.txt", "new.txt"}
+    assert set(snapshot.dirty_paths) == {"tracked.txt", "renamed.txt", "new.txt"}
     assert len(snapshot.commits) == 1
 
 
@@ -120,6 +120,35 @@ def test_open_pr_and_check_summary_are_structured(
     assert "2/3 passing" in rendered
 
 
+def test_successful_gh_warning_does_not_corrupt_pr_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _repo(tmp_path)
+    rows = [{"number": 42, "title": "Valid stdout", "statusCheckRollup": []}]
+    real_run = subprocess.run
+
+    def gh_with_stderr(
+        cmd: list[str], **kwargs: Unpack[_RunKwargs]
+    ) -> subprocess.CompletedProcess[str]:
+        if cmd[0] == "gh":
+            return subprocess.CompletedProcess(
+                cmd,
+                0,
+                json.dumps(rows),
+                "upgrade notice on stderr\n",
+            )
+        return real_run(cmd, **kwargs)
+
+    monkeypatch.setattr(session_state.subprocess, "run", gh_with_stderr)
+
+    assert session_state.gather(repo).pr == session_state.PullRequest(
+        session_state.PrState.OPEN,
+        number=42,
+        title="Valid stdout",
+        checks_summary="0/0 passing",
+    )
+
+
 def test_empty_check_rollup_is_known_zero_not_unknown(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -135,6 +164,52 @@ def test_empty_check_rollup_is_known_zero_not_unknown(
 
     assert snapshot.pr is not None
     assert snapshot.pr.checks_summary == "0/0 passing"
+
+
+def test_malformed_pr_rows_are_unverifiable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _repo(tmp_path)
+    monkeypatch.setattr(session_state, "_gh", lambda _args, _root: (0, '"not a list"'))
+
+    assert session_state.gather(repo).pr == session_state.PullRequest(
+        session_state.PrState.UNVERIFIABLE
+    )
+
+
+def test_non_dict_check_rollup_is_unknown_instead_of_crashing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _repo(tmp_path)
+    rows = [{"number": 42, "title": "Bad rollup", "statusCheckRollup": ["bad"]}]
+    monkeypatch.setattr(
+        session_state,
+        "_gh",
+        lambda _args, _root: (0, json.dumps(rows)),
+    )
+
+    assert session_state.gather(repo).pr == session_state.PullRequest(
+        session_state.PrState.OPEN,
+        number=42,
+        title="Bad rollup",
+        checks_summary=None,
+    )
+
+
+def test_boolean_pr_number_is_unverifiable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _repo(tmp_path)
+    rows = [{"number": True, "title": "Boolean number", "statusCheckRollup": []}]
+    monkeypatch.setattr(
+        session_state,
+        "_gh",
+        lambda _args, _root: (0, json.dumps(rows)),
+    )
+
+    assert session_state.gather(repo).pr == session_state.PullRequest(
+        session_state.PrState.UNVERIFIABLE
+    )
 
 
 def test_empty_pr_result_is_none_but_gh_timeout_is_unverifiable(
@@ -183,6 +258,17 @@ def test_session_state_main_and_top_level_parser(
     output = capsys.readouterr().out
     assert "`work/123`" in output
     assert "not requested (--no-pr)" in output
+
+
+def test_session_state_main_reports_git_log_failure_without_traceback(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _git(tmp_path, "init", "-q", "-b", "work")
+
+    assert session_state.main(["--no-pr"], tmp_path) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.startswith("session-state: git log -n 8")
 
 
 def test_pr_state_values_preserve_the_three_way_contract() -> None:

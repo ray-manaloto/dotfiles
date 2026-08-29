@@ -851,10 +851,7 @@ run = 'uv run --project python dotfiles-setup pr automerge'
 
 [tasks.session-state]
 description = "Paste-ready session snapshot: branch/tree/commits/PR: mise run session-state [-- --no-pr]"
-# Thin caller; python/src/dotfiles_setup/session_state.py. mise's output
-# redaction masks digit runs (branch names, SHAs, PR numbers) — to COPY any
-# figure out of the output, run `uv run --project python dotfiles-setup
-# session-state` directly instead (feedback_mise_run_masks_digits).
+# Thin caller; python/src/dotfiles_setup/session_state.py.
 run = 'uv run --project python dotfiles-setup session-state'
 
 [tasks.handoff-check]

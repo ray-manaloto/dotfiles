@@ -6,12 +6,15 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
-import pytest
 from dotfiles_setup import handoff_check
 from dotfiles_setup import main as cli_main
+
+if TYPE_CHECKING:
+    import pytest
 
 _COMMAND_TIMEOUT = 30
 
@@ -65,20 +68,57 @@ def test_check_reports_missing_paths_and_bad_line_ranges(tmp_path: Path) -> None
     ]
 
 
-@pytest.mark.parametrize(
-    "listing",
-    [
-        "Name Description\nlint Run lint\nsession-state Print state\n",
-        "lint Run lint\nsession-state Print state\n",
-    ],
-)
-def test_check_accepts_headered_and_headerless_task_lists(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    listing: str,
+def test_check_rejects_existing_path_outside_repo_root(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _repo(repo)
+    (tmp_path / "outside.txt").write_text("outside\n")
+
+    findings = handoff_check.check(repo, "See ../outside.txt:1")
+
+    assert [finding.verdict for finding in findings] == [
+        handoff_check.Verdict.MISSING_PATH
+    ]
+
+
+def test_check_ignores_numeric_ratios_as_path_citations(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+
+    assert handoff_check.check(repo, "load 13.5:2, ratio 2.5:1") == []
+
+
+def test_check_ignores_mise_flags_and_documented_cross_repo_tasks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     repo = _repo(tmp_path)
-    _task_listing(monkeypatch, repo, listing)
+
+    def unexpected_run(
+        *_args: object, **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        message = "mise tasks ls should not run for ignored citations"
+        raise AssertionError(message)
+
+    monkeypatch.setattr(handoff_check.subprocess, "run", unexpected_run)
+
+    assert (
+        handoff_check.check(
+            repo,
+            "mise run -C /some/path kb-currency-check and mise run kb-ship",
+        )
+        == []
+    )
+
+
+def test_check_parses_real_headerless_task_listing_shape(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = _repo(tmp_path)
+    _task_listing(
+        monkeypatch,
+        repo,
+        "lint Run lint\nsession-state Print state\n",
+    )
 
     findings = handoff_check.check(
         repo,
@@ -102,15 +142,16 @@ def test_newest_handoff_orders_by_date_then_letter_without_mtime(
     plans = repo / ".agent" / "plans"
     plans.mkdir(parents=True)
     for name in (
-        "session-2026-08-28-z.md",
+        "session-2026-08-28z.md",
         "session-2026-08-29.md",
-        "session-2026-08-29-a.md",
-        "session-2026-08-29-b.md",
+        "session-2026-08-29b.md",
+        "session-2026-08-29c.md",
+        "session-2026-08-29d.md",
         "session-not-a-date.md",
     ):
         (plans / name).write_text(name)
 
-    assert handoff_check.newest_handoff(repo) == plans / "session-2026-08-29-b.md"
+    assert handoff_check.newest_handoff(repo) == plans / "session-2026-08-29d.md"
 
 
 def test_main_prints_explicit_no_handoff_state(

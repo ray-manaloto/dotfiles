@@ -1123,7 +1123,6 @@ def _add_pr_subcommands(
         "number", type=int, help="Bot-opened PR number to arm auto-merge on"
     )
     _add_process_subcommands(subparsers)
-    _add_session_subcommands(subparsers)
 
 
 def _add_session_subcommands(
@@ -1495,10 +1494,9 @@ def setup_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("ai-setup", help="Install Claude Code and AI extensions")
 
     # query-latest command
-    query_parser = subparsers.add_parser(
+    subparsers.add_parser(
         "query-latest", help="Query latest version of a tool"
-    )
-    query_parser.add_argument("tool", help="Tool name")
+    ).add_argument("tool", help="Tool name")
 
     _add_project_contract_subcommands(subparsers)
 
@@ -1524,6 +1522,7 @@ def setup_parser() -> argparse.ArgumentParser:
     _add_graphify_subcommands(subparsers)
     _add_image_subcommands(subparsers)
     _add_pr_subcommands(subparsers)
+    _add_session_subcommands(subparsers)
 
     subparsers.add_parser(
         "p2996-hash",

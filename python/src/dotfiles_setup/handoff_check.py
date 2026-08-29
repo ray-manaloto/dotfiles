@@ -17,13 +17,15 @@ from pathlib import Path
 
 _MISE_TIMEOUT = 30
 _HANDOFF_RE = re.compile(
-    r"^session-(?P<date>\d{4}-\d{2}-\d{2})(?:-(?P<suffix>[A-Za-z]))?\.md$"
+    r"^session-(?P<date>\d{4}-\d{2}-\d{2})(?P<suffix>[A-Za-z])?\.md$"
 )
 _PATH_CITATION_RE = re.compile(
-    r"(?<![\w./:-])(?P<citation>[\w./-]+\.\w+:(?P<start>\d+)"
+    r"(?<![\w./:-])(?P<citation>[\w./-]+\.[A-Za-z]\w*:(?P<start>\d+)"
     r"(?:-(?P<end>\d+))?)(?![\w-])"
 )
-_TASK_CITATION_RE = re.compile(r"\bmise[ \t]+run[ \t]+(?P<name>[\w-]+)(?![\w:-])")
+_TASK_CITATION_RE = re.compile(
+    r"\bmise[ \t]+run[ \t]+(?P<name>[A-Za-z0-9][\w-]*)(?![\w:-])"
+)
 
 
 class Verdict(Enum):
@@ -122,16 +124,18 @@ def _mise_task_names(repo_root: Path) -> set[str]:
         fields = line.split()
         if not fields:
             continue
-        name = fields[0]
-        if name.lower() in {"name", "task"} or set(name) == {"-"}:
-            continue
-        names.add(name)
+        names.add(fields[0])
     return names
 
 
 def _task_findings(repo_root: Path, text: str) -> list[Finding]:
     """Check each independent ``mise run <name>`` match against live tasks."""
-    matches = list(_TASK_CITATION_RE.finditer(text))
+    # .claude/rules/mise-tasks-only.md reserves kb- for sibling-repo tasks.
+    matches = [
+        match
+        for match in _TASK_CITATION_RE.finditer(text)
+        if not match.group("name").startswith("kb-")
+    ]
     if not matches:
         return []
     known = _mise_task_names(repo_root)

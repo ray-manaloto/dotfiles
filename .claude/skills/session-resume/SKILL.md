@@ -47,15 +47,7 @@ Run the read-only snapshot:
 mise run session-state
 ```
 
-A failed GitHub lookup is `UNVERIFIABLE`, never `none`. To copy a branch, SHA,
-PR number, or any other figure from the output, run the direct command instead:
-
-```bash
-uv run --project python dotfiles-setup session-state
-```
-
-Mise output redaction can mask digit runs, so task output is suitable for
-reading but not for copying exact figures.
+A failed GitHub lookup is `UNVERIFIABLE`, never `none`.
 
 When the handoff makes citation-heavy claims, also run:
 
