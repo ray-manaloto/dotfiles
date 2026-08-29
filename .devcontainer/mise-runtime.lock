@@ -797,14 +797,14 @@ backend = "conda:rsync"
 channel = "conda-forge"
 
 [tools."conda:rsync"."platforms.linux-arm64"]
-checksum = "sha256:19fb70cb5c109c4ce42a0ede1f95c98ea230790a1af10b1927bc48cdf596e53d"
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/rsync-3.4.4-h3aee46b_0.conda"
+checksum = "sha256:b1158936766e245f83e7a45312a5b2c87ba6b108564b9aae5af576f6c1b71699"
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/rsync-3.4.4-h4873a97_1.conda"
 conda_deps = [
-    "libzlib-1.3.2-hdc9db2a_3",
-    "lz4-c-1.10.0-hfb11796_2",
-    "xxhash-0.8.3-hdc50dc5_1",
     "libgcc-16.2.0-h205dda4_4",
+    "xxhash-0.8.3-hdc50dc5_1",
+    "lz4-c-1.10.0-hfb11796_2",
     "libstdcxx-16.2.0-hef695bb_4",
+    "libzlib-1.3.2-hdc9db2a_3",
     "libiconv-1.18-h1ea5142_3",
     "popt-1.19-hd6fdeab_2",
     "zstd-1.5.7-h9d15635_7",
@@ -815,14 +815,14 @@ conda_deps = [
 ]
 
 [tools."conda:rsync"."platforms.linux-arm64-musl"]
-checksum = "sha256:19fb70cb5c109c4ce42a0ede1f95c98ea230790a1af10b1927bc48cdf596e53d"
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/rsync-3.4.4-h3aee46b_0.conda"
+checksum = "sha256:b1158936766e245f83e7a45312a5b2c87ba6b108564b9aae5af576f6c1b71699"
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/rsync-3.4.4-h4873a97_1.conda"
 conda_deps = [
-    "libzlib-1.3.2-hdc9db2a_3",
-    "lz4-c-1.10.0-hfb11796_2",
-    "xxhash-0.8.3-hdc50dc5_1",
     "libgcc-16.2.0-h205dda4_4",
+    "xxhash-0.8.3-hdc50dc5_1",
+    "lz4-c-1.10.0-hfb11796_2",
     "libstdcxx-16.2.0-hef695bb_4",
+    "libzlib-1.3.2-hdc9db2a_3",
     "libiconv-1.18-h1ea5142_3",
     "popt-1.19-hd6fdeab_2",
     "zstd-1.5.7-h9d15635_7",
@@ -851,16 +851,16 @@ conda_deps = [
 ]
 
 [tools."conda:rsync"."platforms.linux-x64-baseline"]
-checksum = "sha256:0f8b7721bd3c3ccbe88c71211f89783396a1333144963f23105242e808ecd8af"
-url = "https://conda.anaconda.org/conda-forge/linux-64/rsync-3.4.4-h5440a77_0.conda"
+checksum = "sha256:d611e43d22061a5abe2d370a9ebe9d6a82084b01cb33aaa450a3c21c0ac37dd4"
+url = "https://conda.anaconda.org/conda-forge/linux-64/rsync-3.4.4-hffd6c76_1.conda"
 conda_deps = [
     "libgcc-16.2.0-ha9f2e26_4",
     "lz4-c-1.10.0-hee9eb32_2",
     "libstdcxx-16.2.0-h934c35e_4",
     "xxhash-0.8.3-hec8ed23_1",
     "libzlib-1.3.2-h25fd6f3_3",
-    "libiconv-1.18-h0cb94f2_3",
     "openssl-3.6.4-h781a0a9_0",
+    "libiconv-1.18-h0cb94f2_3",
     "zstd-1.5.7-hb78ec9c_7",
     "popt-1.19-hcfc3c73_2",
     "_openmp_mutex-4.5-20_gnu",
@@ -869,16 +869,16 @@ conda_deps = [
 ]
 
 [tools."conda:rsync"."platforms.linux-x64-musl"]
-checksum = "sha256:0f8b7721bd3c3ccbe88c71211f89783396a1333144963f23105242e808ecd8af"
-url = "https://conda.anaconda.org/conda-forge/linux-64/rsync-3.4.4-h5440a77_0.conda"
+checksum = "sha256:d611e43d22061a5abe2d370a9ebe9d6a82084b01cb33aaa450a3c21c0ac37dd4"
+url = "https://conda.anaconda.org/conda-forge/linux-64/rsync-3.4.4-hffd6c76_1.conda"
 conda_deps = [
     "libgcc-16.2.0-ha9f2e26_4",
     "lz4-c-1.10.0-hee9eb32_2",
     "libstdcxx-16.2.0-h934c35e_4",
     "xxhash-0.8.3-hec8ed23_1",
     "libzlib-1.3.2-h25fd6f3_3",
-    "libiconv-1.18-h0cb94f2_3",
     "openssl-3.6.4-h781a0a9_0",
+    "libiconv-1.18-h0cb94f2_3",
     "zstd-1.5.7-hb78ec9c_7",
     "popt-1.19-hcfc3c73_2",
     "_openmp_mutex-4.5-20_gnu",
@@ -887,16 +887,16 @@ conda_deps = [
 ]
 
 [tools."conda:rsync"."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:0f8b7721bd3c3ccbe88c71211f89783396a1333144963f23105242e808ecd8af"
-url = "https://conda.anaconda.org/conda-forge/linux-64/rsync-3.4.4-h5440a77_0.conda"
+checksum = "sha256:d611e43d22061a5abe2d370a9ebe9d6a82084b01cb33aaa450a3c21c0ac37dd4"
+url = "https://conda.anaconda.org/conda-forge/linux-64/rsync-3.4.4-hffd6c76_1.conda"
 conda_deps = [
     "libgcc-16.2.0-ha9f2e26_4",
     "lz4-c-1.10.0-hee9eb32_2",
     "libstdcxx-16.2.0-h934c35e_4",
     "xxhash-0.8.3-hec8ed23_1",
     "libzlib-1.3.2-h25fd6f3_3",
-    "libiconv-1.18-h0cb94f2_3",
     "openssl-3.6.4-h781a0a9_0",
+    "libiconv-1.18-h0cb94f2_3",
     "zstd-1.5.7-hb78ec9c_7",
     "popt-1.19-hcfc3c73_2",
     "_openmp_mutex-4.5-20_gnu",
@@ -1174,10 +1174,6 @@ url_api = "https://api.github.com/repos/tursodatabase/libsql/releases/assets/229
 [[tools."npm:@google/gemini-cli"]]
 version = "0.49.0"
 backend = "npm:@google/gemini-cli"
-
-[[tools."npm:@openai/codex"]]
-version = "0.142.5"
-backend = "npm:@openai/codex"
 
 [[tools."npm:ajv-cli"]]
 version = "5.0.0"

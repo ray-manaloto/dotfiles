@@ -30,7 +30,7 @@
 # Native escape hatch, scoped to this tier so mise-system.toml (a base-hash
 # input) stays byte-identical. [settings] in an env config merges under
 # MISE_ENV=runtime (probe-verified 2026-07-06).
-minimum_release_age_excludes = ["npm:@openai/codex", "npm:@google/gemini-cli"]
+minimum_release_age_excludes = ["npm:@google/gemini-cli"]
 
 [tools]
 # Dev CLIs
@@ -59,9 +59,11 @@ bats = "latest"
 "pipx:gcovr" = "latest"
 # AI CLIs (depends=node: npm resolution needs node, provided by the base tier)
 # claude-code uses the http:claude backend (native binary, no npm)
+# codex moved to the shared host↔image fragment (mise-parity: the host's
+# executor-lane codex and this tier's #613 review-lane codex pinned the same
+# npm package under the same key — see mise.toml's comment).
 claude-code = "latest"
 "npm:@google/gemini-cli" = { version = "latest", depends = ["node"] }
-"npm:@openai/codex" = { version = "latest", depends = ["node"] }
 # Databases
 "github:tursodatabase/turso" = "latest"
 "libsql-server" = "latest"

@@ -30,6 +30,12 @@ gitleaks = "8.30.1"
 hadolint = "2.15.1"
 hk = "1.56.1"
 jq = "1.8.2"
+# The npm CLI shared by the root mise.toml's orchestrator executor lane and
+# .devcontainer/mise-runtime.toml's #613 in-container review lane (both used
+# to pin the same npm package under the same key in different tiers, which
+# mise-parity's duplicate-tool check correctly flags as drift risk). allow_builds
+# is needed because @openai/codex's postinstall builds a native module.
+"npm:@openai/codex" = { version = "0.151.0", allow_builds = ["@openai/codex"] }
 pinact = "4.1.1"
 "pipx:check-jsonschema" = "0.38.0"
 pixi = "0.77.1"
