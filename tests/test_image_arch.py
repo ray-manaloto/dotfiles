@@ -407,6 +407,26 @@ def test_the_smoke_still_demands_gcc_latest_where_the_image_ships_it() -> None:
     assert "/opt/gcc-latest/bin/g++" in script
 
 
+@pytest.mark.parametrize("gcc_latest", [False, True])
+def test_the_smoke_always_demands_conda_gxx(*, gcc_latest: bool) -> None:
+    """Conda GXX fills the modern-GCC slot on every published architecture."""
+    script = image.build_tier3_script(
+        expected_p2996_ref="a" * 40, emulated=False, gcc_latest=gcc_latest
+    )
+
+    assert "mise which g++ --tool conda:gxx" in script
+    assert '"$CONDA_GXX" /tmp/sanitizer.cpp -o /tmp/conda-gxx-linked' in script
+    assert "conda-gxx-linked >/dev/null" in script
+    assert "OK: conda:gxx g++ compiles, links, runs" in script
+
+    unconditional_start = script.index("test -x /opt/clang-p2996/bin/clang++")
+    unconditional_end = script.index(
+        'echo "=== clang-p2996 ref pin check ==="', unconditional_start
+    )
+    unconditional_span = script[unconditional_start:unconditional_end]
+    assert "GCC_LATEST_PRESENT" not in unconditional_span
+
+
 def test_the_smoke_derives_gcc_latest_from_the_platform_it_is_given() -> None:
     """The caller states an architecture, not a boolean it had to work out.
 

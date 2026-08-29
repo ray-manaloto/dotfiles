@@ -53,6 +53,10 @@ cargo-binstall = "latest"
 # matching clang-22 in one isolated env). cppcheck STAYS conda (no libLLVM — it was
 # never part of the duplication). cmake/ninja STAY conda (the p2996 stage uses them).
 "conda:cmake" = "latest"
+# #698/D31: conda-forge gxx fills arm64's modern-GCC slot because kayari
+# gcc-latest is permanently x86_64-only. amd64 gains it too because mise
+# resolves conda packages natively with no arch pin.
+"conda:gxx" = "latest"
 "conda:ninja" = "latest"
 "conda:mold" = "latest"
 "conda:bear" = "latest"

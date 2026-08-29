@@ -504,6 +504,16 @@ else
 fi
 test -x /opt/clang-p2996/bin/clang++ \
   || { echo "FAIL: clang-p2996 missing"; exit 1; }
+echo "=== conda gxx compile+link+run ==="
+CONDA_GXX=$(mise which g++ --tool conda:gxx) \
+  || { echo "FAIL: could not resolve conda:gxx g++"; exit 1; }
+test -x "$CONDA_GXX" \
+  || { echo "FAIL: conda:gxx g++ is not executable: $CONDA_GXX"; exit 1; }
+"$CONDA_GXX" /tmp/sanitizer.cpp -o /tmp/conda-gxx-linked \
+  || { echo "FAIL: conda:gxx g++ compile/link failed"; exit 1; }
+/tmp/conda-gxx-linked >/dev/null \
+  || { echo "FAIL: conda:gxx-linked binary did not run"; exit 1; }
+echo "OK: conda:gxx g++ compiles, links, runs"
 echo "=== clang-p2996 ref pin check ==="
 # The clang-p2996 build embeds its bloomberg/clang-p2996 source commit in
 # `--version`. Assert (a) it really IS a p2996 build (not conda clang on
