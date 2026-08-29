@@ -528,6 +528,13 @@ url = "https://github.com/jqlang/jq/releases/download/jq-1.8.2/jq-windows-amd64.
 url_api = "https://api.github.com/repos/jqlang/jq/releases/assets/453012788"
 provenance = "github-attestations"
 
+[[tools."npm:@openai/codex"]]
+version = "0.151.0"
+backend = "npm:@openai/codex"
+
+[tools."npm:@openai/codex".options]
+allow_builds = '["@openai/codex"]'
+
 [[tools.pinact]]
 version = "4.1.1"
 backend = "aqua:suzuki-shunsuke/pinact"

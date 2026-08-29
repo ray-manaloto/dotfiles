@@ -5056,6 +5056,13 @@ url = "https://nodejs.org/dist/v26.4.0/node-v26.4.0-darwin-x64.tar.gz"
 checksum = "sha256:eb3bdd8dec3ff2558ee10e284da7d2a3865af0cbda21f06d397b0265837c641e"
 url = "https://nodejs.org/dist/v26.4.0/node-v26.4.0-darwin-x64.tar.gz"
 
+[[tools."npm:@openai/codex"]]
+version = "0.151.0"
+backend = "npm:@openai/codex"
+
+[tools."npm:@openai/codex".options]
+allow_builds = '["@openai/codex"]'
+
 [[tools.pinact]]
 version = "4.1.1"
 backend = "aqua:suzuki-shunsuke/pinact"
