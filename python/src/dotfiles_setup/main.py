@@ -62,6 +62,7 @@ from dotfiles_setup.graph_bakeoff import (
     bakeoff_main,
 )
 from dotfiles_setup.graphify import graphify_health_main, graphify_main
+from dotfiles_setup.handoff_check import main as handoff_check_main
 from dotfiles_setup.hk_builtins_audit import hk_builtins_audit_main
 from dotfiles_setup.hook_guard import pretooluse_main
 from dotfiles_setup.hook_selfcheck import hook_selfcheck_main
@@ -107,6 +108,7 @@ from dotfiles_setup.renovate import renovate_status_main
 from dotfiles_setup.renovate_dryrun import renovate_dryrun_main
 from dotfiles_setup.renovate_validate import renovate_validate_main
 from dotfiles_setup.session_review import LaneChoice, session_review_main
+from dotfiles_setup.session_state import main as session_state_main
 from dotfiles_setup.sync import SyncOptions, sync_main
 from dotfiles_setup.token_audit import preflight_main, token_audit_main
 from dotfiles_setup.verify import main as verify_main
@@ -1123,6 +1125,31 @@ def _add_pr_subcommands(
     _add_process_subcommands(subparsers)
 
 
+def _add_session_subcommands(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    """Register the standalone session snapshot and handoff-check commands."""
+    session_state_parser = subparsers.add_parser(
+        "session-state",
+        help="Print a paste-ready branch/tree/commit/PR snapshot",
+    )
+    session_state_parser.add_argument(
+        "--no-pr",
+        action="store_true",
+        help="Skip the GitHub lookup for a fast, network-free snapshot",
+    )
+    handoff_check_parser = subparsers.add_parser(
+        "handoff-check",
+        help="Verify a session handoff's path, line, and mise task citations",
+    )
+    handoff_check_parser.add_argument(
+        "path",
+        nargs="?",
+        default=None,
+        help="Specific handoff path (default: newest .agent/plans/session-*.md)",
+    )
+
+
 def _add_process_subcommands(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
@@ -1467,10 +1494,9 @@ def setup_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("ai-setup", help="Install Claude Code and AI extensions")
 
     # query-latest command
-    query_parser = subparsers.add_parser(
+    subparsers.add_parser(
         "query-latest", help="Query latest version of a tool"
-    )
-    query_parser.add_argument("tool", help="Tool name")
+    ).add_argument("tool", help="Tool name")
 
     _add_project_contract_subcommands(subparsers)
 
@@ -1496,6 +1522,7 @@ def setup_parser() -> argparse.ArgumentParser:
     _add_graphify_subcommands(subparsers)
     _add_image_subcommands(subparsers)
     _add_pr_subcommands(subparsers)
+    _add_session_subcommands(subparsers)
 
     subparsers.add_parser(
         "p2996-hash",
@@ -2101,6 +2128,14 @@ def _build_command_handlers(
         "ai-setup": _ai_setup,
         "docker": lambda: handle_docker(args, project_root, config=config),
         "pr": lambda: handle_pr(args, project_root),
+        "session-state": lambda: sys.exit(
+            session_state_main(["--no-pr"] if args.no_pr else [], project_root)
+        ),
+        "handoff-check": lambda: sys.exit(
+            handoff_check_main(
+                [args.path] if args.path is not None else [], project_root
+            )
+        ),
         "process": lambda: handle_process(args, project_root),
         "command-audit": lambda: sys.exit(
             command_audit_main(project_root, limit=args.limit, output=args.output)
