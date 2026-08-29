@@ -62,10 +62,12 @@ behavior unchanged):
    (`agnix .`; `.agnix.toml` `severity = "Warning"` = non-blocking),
    `mise doctor --json`, `mise.lock` upload + cache. agnix uses the
    `github:agent-sh/agnix` backend (not `npm:agnix`).
-2. **contract-preflight** — Python 3.14 + uv; `dotfiles-setup verify run`
-   over `suites.toml` (+ `orchestration`/`eval`, #354), then checks out
-   knowledge-base to `.parity/` and runs `mise run parity` (hard-FAIL on a
-   missing checkout; SKIPs locally).
+2. **contract-preflight** — full `mise install` + `fetch-depth: 0`;
+   `dotfiles-setup verify run` over `suites.toml` (+ `orchestration`/`eval`,
+   #354), then checks out knowledge-base to `.parity/` and runs `mise run
+   parity` (hard-FAIL on a missing checkout; SKIPs locally), then **pytest**
+   (#808 — the only place it runs in CI, so a bot PR that never runs
+   `mise run ship` still gets tested).
 3. **base-prep** — `dotfiles-setup base-hash` → probe `:base-<hash16>`
    (`docker manifest inspect`). Hit: <30s. Miss: build the `base` bake
    target (devcontainer-base = apt + mise install + cargo), push it;
@@ -117,8 +119,9 @@ Push-to-main path (after a PR merge):
   new commit cancels the older in-flight run. **main is exempt**
   (`cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}`) so its
   `promote` retag is never interrupted mid-flight.
-- **Python 3.14 + uv via the `setup-mise` composite** for contract-preflight
-  and smoke-test (`install_args: python uv`). lint caches mise data on `mise.lock`.
+- **`setup-mise` composite**: a FULL install for contract-preflight (#808 —
+  pytest shells out to `hk`, `chezmoi`, `pixi`, `codex`), `install_args: python
+  uv` for smoke-test. lint caches mise data on `mise.lock`.
 - **build job** passes GitHub token via BuildKit **secret mount**
   (`uid=1000`) — never via `ARG` or env.
 - **`CONTAINER_REGISTRY`** env var, not `REGISTRY` (avoids HCL

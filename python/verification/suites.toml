@@ -2225,6 +2225,18 @@ tokens = [
 ]
 
 [[suite]]
+name = "workflow.pytest-in-ci-wiring"
+description = "#808: pytest must actually RUN in CI. `mise run ship` gates on pytest, but a bot-authored PR never runs ship (#369) and pytest ran nowhere in CI — so bot PRs had test coverage on NEITHER path, which is how #778 (a lockfile bot PR) turned `main` red on a test ABOUT lockfiles and merged green. ONE token, deliberately, binding ONE seam: the `Run pytest` step in contract-preflight. That is the only lever of the #808 fix whose removal is SILENT. The other three self-alarm — drop `fetch-depth: 0` and the 7 merge-base tests (session_review, lint_delta, skillopt_provenance) fail loudly; re-narrow `install_args` back to the `python uv` subset and the 7 tool-shelling tests fail loudly; delete `tests/conftest.py` and the 5 `host_only` tests run on the runner and fail loudly. Deleting the step itself turns every one of those alarms off at once while every check stays green. WHAT THIS CONTRACT CANNOT DO, stated rather than implied: `require_tokens` asserts presence, so it proves the step EXISTS, never that the install feeding it is full or that the run passes. That limit is accepted, not an oversight — the levers it does not cover carry their own alarms, above. Do NOT `strengthen` this by adding tokens for `fetch-depth`, `conftest.py` or `pytest.ini`: each would assert a string whose absence is already loud, and a decorative token manufactures exactly the feeling of coverage whose absence created #808."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [".github/workflows/ci.yml"]
+per_path_tokens = { ".github/workflows/ci.yml" = [
+    "run: uv run --project python pytest tests/ -q",
+] }
+
+[[suite]]
 name = "workflow.prune-scoping-wiring"
 description = "#803: `mise run prune`'s destructive stages must keep resolving their targets from Python identity, never from a tag grep. Asserts the whole chain — the prune task capturing BOTH the container ids (`--all-arches`) and the overlay refs (`teardown-images --container-ids`), the CLI verbs behind them, the resolver's three safety predicates, and the tests that arm each one. The motivating defect: an unscoped `grep vsc-dotfiles` matched 9 tag rows over 8 images on the maintainer's host, 6 belonging to OTHER clones, and was simultaneously blind to an untagged overlay — too broad and too narrow in one line. WHAT THIS CONTRACT CANNOT DO, stated rather than implied: `require_tokens` asserts presence, not ORDER, so it cannot pin I11 — that prune captures both sets BEFORE `docker rm -f` removes the containers. That ordering is what makes the container-identity path work at all (once the containers are gone, `docker inspect` cannot answer, and the whole change silently degrades to a hash-scoped tag grep while every gate stays green). It is carried by a comment in the task and a docstring on `teardown_image_refs`, and by nothing mechanical. A reader tempted to move the capture lines should treat that as the load-bearing edit it is."
 category = "workflow"

@@ -174,7 +174,7 @@ jobs:
   contract-preflight:
     needs: lint
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
@@ -182,6 +182,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # Full history, NOT the default shallow clone: `session_review`,
+          # `lint_delta` and `skillopt_provenance` all resolve a merge-base
+          # against `origin/main`, and `.claude/rules/goal-history.md` says
+          # review FAILS CLOSED when that baseline is unresolvable. Those
+          # tests are history-dependent, not host-hostile — deselecting them
+          # would remove the check from the only place it runs unattended.
+          fetch-depth: 0
       - name: Checkout knowledge-base (cross-repo parity)
         # `eval.cross-repo-parity` compares this repo against the sibling
         # knowledge-base repo, so the gate needs both trees. actions/checkout
@@ -195,12 +202,14 @@ jobs:
           repository: ray-manaloto/knowledge-base
           path: .parity/knowledge-base
           persist-credentials: false
-      - name: Install mise (python + uv)
-        # Subset install: only python + uv, both pinned in mise.toml.
-        # Replaces the prior actions/setup-python + astral-sh/setup-uv pair.
+      - name: Install mise
+        # FULL install, not the former `python uv` subset (#808). pytest now
+        # runs here, and 7 of its tests shell out to host-merged tools —
+        # `hk`, `chezmoi`, `pixi`, `codex`. Under the subset they failed as
+        # "not on PATH", which reads identically to "host-hostile" and is how
+        # over-marking silently deletes CI coverage. `graphify` is
+        # `os = ["macos"]` in mise.toml so linux skips it either way.
         uses: ./.github/actions/setup-mise
-        with:
-          install_args: "python uv"
       - name: Validate Dockerfile contracts
         run: |
           uv run --project python dotfiles-setup verify run \
@@ -215,6 +224,17 @@ jobs:
         env:
           KB_REPO_PATH: ${{ github.workspace }}/.parity/knowledge-base
         run: mise run parity
+      - name: Run pytest
+        # #808: `mise run ship` gates on pytest, but a BOT PR never runs ship
+        # (#369) and pytest ran nowhere in CI — so bot PRs had test coverage
+        # on neither path. That is how #778 (a lockfile bot PR) turned `main`
+        # red on a test ABOUT lockfiles and merged green.
+        #
+        # No `-m` here on purpose: pytest.ini's addopts already deselects
+        # image_exec/codex_exec, and a command-line `-m` would REPLACE it.
+        # The five genuinely host-only tests skip themselves via $CI —
+        # GitHub sets it — in tests/conftest.py.
+        run: uv run --project python pytest tests/ -q
   # ============================================================
   # Change detection: gate the Docker build chain (base-prep →
   # p2996-prep → build → smoke-test) AND `promote` on whether the
