@@ -298,15 +298,24 @@ def test_graphify_health_reports_missing_graph(tmp_path: Path) -> None:
     assert not result.ok
 
 
-def test_graphify_health_rejects_graph_without_build_receipt(tmp_path: Path) -> None:
-    """An unreceipted graph cannot be called fresh merely because it parses."""
+def test_graphify_health_accepts_graph_without_build_receipt(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """An unreceipted graph is fresh: this repo never writes a build receipt.
+
+    Only the knowledge-base's committed-corpus pipeline writes
+    ``build-receipt.json``; this repo builds its graph on demand
+    (``currency.toml``), so an absent receipt is the normal case, not a fault.
+    """
     graph_dir = tmp_path / "graphify-out"
     graph_dir.mkdir()
     (graph_dir / "graph.json").write_text(
         '{"nodes": [], "edges": [], "hyperedges": []}'
     )
+    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.42")
     result = graphify_health(tmp_path)
-    assert result.status is GraphifyStatus.STALE
+    assert result.status is GraphifyStatus.FRESH
+    assert result.ok
 
 
 def test_graphify_health_accepts_exact_receipted_graph(tmp_path: Path) -> None:

@@ -145,6 +145,10 @@ _ALLOWED_ABSENT = frozenset(
         # failed PR #359's first run. Same rationale as the vendored graphify
         # SKILL.md exclusion in DOC_PATHSPECS.
         "graphify-out/graph.json",
+        # Same rationale, and never written in this repo at all (see
+        # graphify-first.md): only the knowledge-base's committed-corpus
+        # pipeline produces a build receipt.
+        "graphify-out/build-receipt.json",
         # Documented-retired files (docs narrate the retirement).
         "install.sh",
         "mise-system-resolved.json",

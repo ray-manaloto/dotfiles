@@ -156,9 +156,29 @@ def _receipt_problem(
     graph_payload: dict[str, object],
     runtime: str,
 ) -> HealthResult | None:
+    """Validate a build receipt if one is present; an absent one is not a fault.
+
+    ``GraphifyBuildReceipt`` is written by the knowledge-base's committed-corpus
+    build pipeline (``kb_setup.graph``, see ``knowledge-base/python/src/
+    kb_setup/graph.py``). This repo deliberately does not build a committed
+    corpus — ``currency.toml`` states the graph is built on demand via plain
+    ``graphify update`` and ``graphify-out/`` is gitignored — so nothing here
+    ever writes ``build-receipt.json``, and treating its absence as ``STALE``
+    made every graph in this repository permanently unusable. Requiring
+    a receipt writer here would mean adopting the KB's committed-build design
+    only to satisfy this check, which is exactly backwards.
+
+    What the receipt actually proves — that the graph bytes on disk are the
+    ones a specific build run produced, unmodified — has no substitute this
+    repo can compute for an on-demand graph, so that guarantee is genuinely
+    lost for the common case. What is NOT lost: if a receipt *is* present
+    (e.g. carried over from a KB-style build, or written by some future
+    caller), it is still verified byte-for-byte below, so a stale or forged
+    receipt is still caught rather than silently trusted.
+    """
     receipt_path = graph_path.with_name(_BUILD_RECEIPT)
     if not receipt_path.is_file():
-        return HealthResult(GraphifyStatus.STALE, runtime, "build receipt missing")
+        return None
     try:
         receipt = codec.decode(receipt_path.read_bytes(), GraphifyBuildReceipt)
     except (OSError, ValueError, TypeError) as exc:
