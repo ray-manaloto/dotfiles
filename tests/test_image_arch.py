@@ -407,24 +407,66 @@ def test_the_smoke_still_demands_gcc_latest_where_the_image_ships_it() -> None:
     assert "/opt/gcc-latest/bin/g++" in script
 
 
-@pytest.mark.parametrize("gcc_latest", [False, True])
-def test_the_smoke_always_demands_conda_gxx(*, gcc_latest: bool) -> None:
-    """Conda GXX fills the modern-GCC slot on every published architecture."""
+def test_the_smoke_skips_conda_gxx_where_the_image_omits_it() -> None:
+    """#841 round 4: an amd64 smoke must not fail on a tool `os=`-scoped away.
+
+    CI run for PR #844 measured this exact failure: `mise which g++ --tool
+    conda:gxx` unconditionally, on the amd64 leg, right after round 1-3
+    correctly stopped installing it there — `FAIL: could not resolve
+    conda:gxx g++`. This is the SKIP arm: the compile block must not run.
+    """
     script = image.build_tier3_script(
-        expected_p2996_ref="a" * 40, emulated=False, gcc_latest=gcc_latest
+        expected_p2996_ref="a" * 40, emulated=False, conda_gxx=False
     )
 
+    assert "CONDA_GXX_PRESENT=''\n" in script
+    assert "SKIP: conda:gxx not declared for this architecture" in script
+    # The absence arm is load-bearing, not a bare skip (probes-need-a-control-arm):
+    # an image that ships conda:gxx where it is declared unshipped must still FAIL.
+    assert (
+        'echo "FAIL: conda:gxx g++ resolved where it is declared unshipped"' in script
+    )
+    assert "OK: conda:gxx g++ correctly unresolvable on this architecture" in script
+
+
+def test_the_smoke_still_demands_conda_gxx_where_the_image_ships_it() -> None:
+    """Control arm: the skip above is only safe if the check is real elsewhere.
+
+    A gate that skips on every architecture is indistinguishable from a
+    deleted gate, and this is exactly the arm that would not have been run.
+    """
+    script = image.build_tier3_script(
+        expected_p2996_ref="a" * 40, emulated=False, conda_gxx=True
+    )
+
+    assert "CONDA_GXX_PRESENT=1\n" in script
     assert "mise which g++ --tool conda:gxx" in script
     assert '"$CONDA_GXX" /tmp/sanitizer.cpp -o /tmp/conda-gxx-linked' in script
     assert "conda-gxx-linked >/dev/null" in script
     assert "OK: conda:gxx g++ compiles, links, runs" in script
 
+    # The conda:gxx block must not ALSO be conditioned on the unrelated
+    # gcc-latest gate (a different tool, gated by GCC_LATEST_PRESENT).
     unconditional_start = script.index("test -x /opt/clang-p2996/bin/clang++")
     unconditional_end = script.index(
         'echo "=== clang-p2996 ref pin check ==="', unconditional_start
     )
     unconditional_span = script[unconditional_start:unconditional_end]
     assert "GCC_LATEST_PRESENT" not in unconditional_span
+
+
+def test_the_smoke_derives_conda_gxx_from_the_platform_it_is_given() -> None:
+    """The caller states an architecture, not a boolean it had to work out.
+
+    `build_smoke_docker_cmd` derives this from its own already-computed,
+    arch-filtered `resolve_declared_tools` — the same set the tier-1 tool-set
+    diff uses — rather than re-deriving "is conda:gxx expected here" separately.
+    """
+    amd64 = image.build_smoke_docker_cmd("img", platform="linux/amd64/v2")
+    arm64 = image.build_smoke_docker_cmd("img", platform="linux/arm64/v8")
+
+    assert "CONDA_GXX_PRESENT=''\n" in amd64[-1]
+    assert "CONDA_GXX_PRESENT=1\n" in arm64[-1]
 
 
 def test_the_smoke_derives_gcc_latest_from_the_platform_it_is_given() -> None:
@@ -473,6 +515,43 @@ def test_the_devcontainer_smoke_cli_also_derives_gcc_latest(
     monkeypatch.setattr(
         platform_target.os, "uname", partial(SimpleNamespace, machine=machine)
     )
+
+    assert image.smoke_script_main(3) == 0
+
+    assert expected in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("declared", "expected"),
+    [
+        ({"conda:gxx": "16.2.0"}, "CONDA_GXX_PRESENT=1\n"),
+        ({}, "CONDA_GXX_PRESENT=''\n"),
+    ],
+)
+def test_the_devcontainer_smoke_cli_wires_conda_gxx_through_merge_base(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    declared: dict[str, str],
+    expected: str,
+) -> None:
+    """#841 round 4: tier 3's `conda_gxx` reuses the merge-base lookup tier 1 uses.
+
+    `resolve_declared_tools_at_base` is stubbed to an INDEPENDENT, fixed
+    answer rather than exercised against the real repo's live merge-base
+    (unlike `gcc_latest`, which derives from a static arch tuple and so is
+    timing-stable, `conda:gxx`'s real merge-base content moves as this
+    branch merges — it still reads the pre-#841 unscoped `"latest"` today,
+    so asserting a fixed value against the live repo would pin a transient
+    fact, not the behavior). What this pins: `smoke_script_main` reads
+    `"conda:gxx" in resolve_declared_tools_at_base(...)` and that answer
+    reaches the generated script's `CONDA_GXX_PRESENT` verbatim.
+    """
+
+    def stub_declared(repo_root: Path, *, arch: str) -> dict[str, str]:
+        del repo_root, arch
+        return declared
+
+    monkeypatch.setattr(image, "resolve_declared_tools_at_base", stub_declared)
 
     assert image.smoke_script_main(3) == 0
 

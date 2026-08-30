@@ -625,15 +625,23 @@ fi
 test -x /opt/clang-p2996/bin/clang++ \
   || { echo "FAIL: clang-p2996 missing"; exit 1; }
 echo "=== conda gxx compile+link+run ==="
-CONDA_GXX=$(mise which g++ --tool conda:gxx) \
-  || { echo "FAIL: could not resolve conda:gxx g++"; exit 1; }
-test -x "$CONDA_GXX" \
-  || { echo "FAIL: conda:gxx g++ is not executable: $CONDA_GXX"; exit 1; }
-"$CONDA_GXX" /tmp/sanitizer.cpp -o /tmp/conda-gxx-linked \
-  || { echo "FAIL: conda:gxx g++ compile/link failed"; exit 1; }
-/tmp/conda-gxx-linked >/dev/null \
-  || { echo "FAIL: conda:gxx-linked binary did not run"; exit 1; }
-echo "OK: conda:gxx g++ compiles, links, runs"
+if [ -n "$CONDA_GXX_PRESENT" ]; then
+  CONDA_GXX=$(mise which g++ --tool conda:gxx) \
+    || { echo "FAIL: could not resolve conda:gxx g++"; exit 1; }
+  test -x "$CONDA_GXX" \
+    || { echo "FAIL: conda:gxx g++ is not executable: $CONDA_GXX"; exit 1; }
+  "$CONDA_GXX" /tmp/sanitizer.cpp -o /tmp/conda-gxx-linked \
+    || { echo "FAIL: conda:gxx g++ compile/link failed"; exit 1; }
+  /tmp/conda-gxx-linked >/dev/null \
+    || { echo "FAIL: conda:gxx-linked binary did not run"; exit 1; }
+  echo "OK: conda:gxx g++ compiles, links, runs"
+else
+  echo "SKIP: conda:gxx not declared for this architecture (#841)"
+  if mise which g++ --tool conda:gxx >/dev/null 2>&1; then
+    echo "FAIL: conda:gxx g++ resolved where it is declared unshipped"; exit 1
+  fi
+  echo "OK: conda:gxx g++ correctly unresolvable on this architecture"
+fi
 echo "=== clang-p2996 ref pin check ==="
 # The clang-p2996 build embeds its bloomberg/clang-p2996 source commit in
 # `--version`. Assert (a) it really IS a p2996 build (not conda clang on
@@ -785,6 +793,7 @@ def _tier3_var_lines(
     emulated: bool,
     expected_llvm_version: str | None = None,
     gcc_latest: bool = True,
+    conda_gxx: bool = True,
 ) -> str:
     """Injected-data header lines the tier-3 substrate reads.
 
@@ -801,6 +810,13 @@ def _tier3_var_lines(
     fail the smoke over an artifact upstream never built (#698). It defaults to
     present — the direction that fails LOUDLY when a caller forgets to say,
     rather than silently dropping a real compiler check.
+    ``CONDA_GXX_PRESENT`` gates the conda-forge gxx compile+link+run check
+    (#841 round 4): that tool is now ``os=``-scoped in ``mise-system.toml``
+    (arm64 only, since amd64 already has gcc-latest for its modern-GCC slot —
+    see ``.devcontainer/Dockerfile``'s "2 and 2" comment), so unconditionally
+    demanding it fails the smoke on amd64 over a tool mise correctly never
+    installed there. Same present-by-default direction as ``gcc_latest``, for
+    the same reason: fail loud on a forgotten caller, not silently skip.
     """
     strict = "1" if _SHA_RE.match(expected_p2996_ref) else ""
     tsan_run_skip = "1" if emulated else ""
@@ -809,6 +825,7 @@ def _tier3_var_lines(
         f"P2996_REF_STRICT={shlex.quote(strict)}\n"
         f"TSAN_RUN_SKIP={shlex.quote(tsan_run_skip)}\n"
         f"GCC_LATEST_PRESENT={shlex.quote('1' if gcc_latest else '')}\n"
+        f"CONDA_GXX_PRESENT={shlex.quote('1' if conda_gxx else '')}\n"
         f"EXPECTED_LLVM_VERSION={shlex.quote(expected_llvm_version or '')}\n"
     )
 
@@ -819,6 +836,7 @@ def build_tier3_script(
     emulated: bool,
     expected_llvm_version: str | None = None,
     gcc_latest: bool = True,
+    conda_gxx: bool = True,
 ) -> str:
     """Standalone tier-3 compiler smoke script: sanitizers + reflection.
 
@@ -831,6 +849,8 @@ def build_tier3_script(
     ``expected_llvm_version`` (#294) drives the apt-suite default-clang + utility
     ``--version`` guards; unset leaves them dormant. ``gcc_latest`` states
     whether this architecture's image carries the kayari GCC-17 deb (#698).
+    ``conda_gxx`` (#841 round 4) states whether this architecture's image
+    carries the arch-scoped conda-forge gxx.
     """
     return (
         "set -euo pipefail\n"
@@ -839,6 +859,7 @@ def build_tier3_script(
             emulated=emulated,
             expected_llvm_version=expected_llvm_version,
             gcc_latest=gcc_latest,
+            conda_gxx=conda_gxx,
         )
         + _TIER3_COMPILER_BODY
     )
@@ -880,10 +901,21 @@ class ImageArch:
     caller that says nothing almost certainly means — and, for ``gcc_latest``,
     the direction that fails LOUDLY rather than silently skipping a real
     compiler check.
+
+    ``conda_gxx`` (#841 round 4) is the odd one out: unlike ``emulated`` and
+    ``gcc_latest`` — both resolvable from the platform triple ALONE (the
+    latter from a hard-coded upstream constraint, ``GCC_LATEST_ARCHES``) —
+    whether ``conda:gxx`` is expected needs the DECLARED CONFIG
+    (``resolve_declared_tools``), which :meth:`for_platform` has no way to
+    read. It therefore keeps the same present-by-default direction as
+    ``gcc_latest`` but is never set by :meth:`for_platform`; a caller with
+    config access overrides it via ``dataclasses.replace`` the same way
+    :func:`build_smoke_docker_cmd` already overrides ``emulated``.
     """
 
     emulated: bool = False
     gcc_latest: bool = True
+    conda_gxx: bool = True
 
     @classmethod
     def for_platform(cls, platform: str) -> ImageArch:
@@ -943,7 +975,11 @@ def build_smoke_script(
     ``arch`` (:class:`ImageArch`) carries the architecture-dependent facts.
     Its ``gcc_latest=False`` does not leave that check dormant the way the
     guards above do — it asserts the compiler is ABSENT, so "we do not ship it
-    here" is verified rather than merely unexamined.
+    here" is verified rather than merely unexamined. ``arch.conda_gxx``
+    (#841 round 4) carries the same semantics for the arch-scoped
+    ``conda:gxx`` compile check — a caller with config access (see
+    :func:`build_smoke_docker_cmd`) overrides it via ``dataclasses.replace``,
+    since :class:`ImageArch` itself cannot read config.
     """
     arch = ImageArch() if arch is None else arch
     header = (
@@ -954,6 +990,7 @@ def build_smoke_script(
             emulated=arch.emulated,
             expected_llvm_version=expected_llvm_version,
             gcc_latest=arch.gcc_latest,
+            conda_gxx=arch.conda_gxx,
         )
     )
     return (
@@ -1045,10 +1082,18 @@ def build_smoke_docker_cmd(
     arch = ImageArch.for_platform(platform)
     if emulated is not None:
         arch = dataclasses.replace(arch, emulated=emulated)
+    expected_tools = resolve_declared_tools(arch=platform_arch(platform))
+    # #841 round 4: conda:gxx is os=-scoped, so whether the tier-3 compile check
+    # should demand it depends on the SAME arch-filtered set already computed
+    # above for the tier-1 tool-set diff — reusing it here (rather than a second,
+    # independently-maintained answer to "is conda:gxx expected on this
+    # architecture") is exactly why ImageArch.for_platform cannot set this field
+    # itself: it has no config to read, only the platform triple.
+    arch = dataclasses.replace(arch, conda_gxx="conda:gxx" in expected_tools)
     script = build_smoke_script(
         expected_p2996_ref,
         expected_identity=expected_identity,
-        expected_tools=resolve_declared_tools(arch=platform_arch(platform)),
+        expected_tools=expected_tools,
         arch=arch,
         expected_llvm_version=resolve_expected_llvm_version(),
     )
@@ -2117,11 +2162,23 @@ def smoke_script_main(tier: int | None) -> int:
         # `uname` is sound here because under emulation it reports the TARGET
         # arch (an amd64 container on an arm64 Mac says x86_64) — the same
         # fact that makes `emulated` underivable makes the ARCH derivable.
+        #
+        # `conda_gxx` (#841 round 4) is likewise derived, not defaulted: the
+        # amd64 image no longer carries the arch-scoped conda:gxx, so a
+        # hard-coded `True` here would fail this same gate the tier-1 branch
+        # above fixes for the tool-set diff. Reuses `resolve_declared_tools_at_base`
+        # — the merge-base-aware, arch-filtered answer already computed for
+        # tier 1 — rather than re-deriving "is conda:gxx expected here" a
+        # second way.
+        base_tools_tier3 = resolve_declared_tools_at_base(
+            root, arch=platform_arch(host_platform())
+        )
         script = build_tier3_script(
             expected_p2996_ref=resolve_expected_p2996_ref_at_base(),
             emulated=True,
             expected_llvm_version=resolve_expected_llvm_version_at_base(),
             gcc_latest=ships_gcc_latest(host_platform()),
+            conda_gxx="conda:gxx" in base_tools_tier3,
         )
     else:
         sys.stderr.write(
