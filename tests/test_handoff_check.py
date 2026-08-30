@@ -245,6 +245,42 @@ def test_main_checks_a_specific_handoff_and_parser_wiring(
     assert "OK" in capsys.readouterr().out
 
 
+def test_main_reports_cited_file_read_failure_without_traceback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    repo = _repo(tmp_path)
+    cited = repo / "notes.md"
+    cited.write_text("one\n")
+    handoff = repo / "handoff.md"
+    handoff.write_text("See notes.md:1.\n")
+    original_read_text = Path.read_text
+
+    def read_text_with_failure(
+        path: Path,
+        encoding: str | None = None,
+        errors: str | None = None,
+        newline: str | None = None,
+    ) -> str:
+        if path == cited:
+            message = "permission denied"
+            raise OSError(message)
+        return original_read_text(
+            path,
+            encoding=encoding,
+            errors=errors,
+            newline=newline,
+        )
+
+    monkeypatch.setattr(Path, "read_text", read_text_with_failure)
+
+    assert handoff_check.main(["handoff.md"], repo) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "handoff-check: permission denied\n"
+
+
 def test_render_preserves_exact_citation_text() -> None:
     finding = handoff_check.Finding(
         handoff_check.Verdict.BAD_LINE_RANGE,

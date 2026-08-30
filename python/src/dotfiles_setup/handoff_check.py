@@ -194,7 +194,7 @@ def main(args: list[str], repo_root: Path) -> int:
         return 1
     try:
         findings = check(repo_root, handoff.read_text(errors="replace"))
-    except RuntimeError as exc:
+    except (RuntimeError, OSError) as exc:
         sys.stderr.write(f"handoff-check: {exc}\n")
         return 1
     sys.stdout.write(render(findings, source=source) + "\n")
