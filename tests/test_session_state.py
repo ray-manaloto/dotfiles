@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -26,9 +27,18 @@ if TYPE_CHECKING:
         errors: str
         check: bool
         timeout: int
+        env: dict[str, str]
 
 
 _GIT_TIMEOUT = 30
+_GIT_REPOSITORY_ENV_VARS = (
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_COMMON_DIR",
+)
 
 
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -62,6 +72,69 @@ def test_gather_reads_real_git_state_without_pr(tmp_path: Path) -> None:
     assert [commit.subject for commit in snapshot.commits] == ["initial subject"]
     assert len(snapshot.commits[0].sha) == 40
     assert snapshot.pr is None
+
+
+def test_gather_ignores_inherited_git_repository_redirects(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target_path = tmp_path / "target"
+    target_path.mkdir()
+    target = _repo(target_path)
+
+    decoy_path = tmp_path / "decoy"
+    decoy_path.mkdir()
+    decoy = _repo(decoy_path)
+    _git(decoy, "branch", "-m", "decoy/456")
+    (decoy / "tracked.txt").write_text("decoy\n")
+    _git(decoy, "add", "tracked.txt")
+    _git(decoy, "commit", "-q", "-m", "decoy subject")
+
+    decoy_git_dir = decoy / ".git"
+    redirects = {
+        "GIT_DIR": decoy_git_dir,
+        "GIT_WORK_TREE": decoy,
+        "GIT_INDEX_FILE": decoy_git_dir / "index",
+        "GIT_OBJECT_DIRECTORY": decoy_git_dir / "objects",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES": decoy_git_dir / "objects",
+        "GIT_COMMON_DIR": decoy_git_dir,
+    }
+    for name, value in redirects.items():
+        monkeypatch.setenv(name, str(value))
+
+    snapshot = session_state.gather(target, with_pr=False)
+
+    assert snapshot.branch == "work/123"
+    assert [commit.subject for commit in snapshot.commits] == ["initial subject"]
+
+
+def test_gh_scrubs_only_git_repository_redirects(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _repo(tmp_path)
+
+    for name in _GIT_REPOSITORY_ENV_VARS:
+        monkeypatch.setenv(name, f"decoy-{name}")
+    monkeypatch.setenv("SESSION_STATE_PRESERVED", "present")
+    expected_env = os.environ.copy()
+    for name in _GIT_REPOSITORY_ENV_VARS:
+        expected_env.pop(name)
+
+    real_run = subprocess.run
+
+    def capture_run(
+        cmd: list[str], **kwargs: Unpack[_RunKwargs]
+    ) -> subprocess.CompletedProcess[str]:
+        if cmd[0] == "gh":
+            assert kwargs["env"] == expected_env
+            return subprocess.CompletedProcess(cmd, 0, "[]", "")
+        return real_run(cmd, **kwargs)
+
+    monkeypatch.setattr(session_state.subprocess, "run", capture_run)
+
+    snapshot = session_state.gather(repo, with_pr=True)
+
+    assert snapshot.pr is not None
+    assert snapshot.pr.state is session_state.PrState.NONE
 
 
 def test_gather_reports_dirty_paths_and_honors_limit(tmp_path: Path) -> None:
@@ -237,6 +310,7 @@ def test_empty_pr_result_is_none_but_gh_timeout_is_unverifiable(
             errors=kwargs["errors"],
             check=kwargs["check"],
             timeout=kwargs["timeout"],
+            env=kwargs["env"],
         )
 
     monkeypatch.undo()
