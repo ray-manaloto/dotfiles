@@ -626,14 +626,14 @@ pattern = '"mise-data"'
 
 [[suite]]
 name = "ci.gha-cache-enabled"
-description = "Buildx gha cache must remain enabled in bake config, and its scope must be SUFFIXED BY ARCHITECTURE (#676) — one shared scope across a two-architecture matrix has the legs racing to overwrite each other's cache index, which shows up only as builds that never warm."
+description = "Buildx gha cache must remain enabled in bake config, and its scope must be SUFFIXED BY LEG IDENTITY (#676, generalized #839) — one shared scope across matrix legs has them racing to overwrite each other's cache index, which shows up only as builds that never warm."
 category = "ci"
 check_type = "static"
 handler = "require_tokens"
 paths = ["docker-bake.hcl"]
 per_path_tokens = { "docker-bake.hcl" = [
-    "\"type=gha,scope=dotfiles-dev-${replace(PLATFORM, \"/\", \"-\")}\",",
-    "\"type=gha,scope=dotfiles-dev-${replace(PLATFORM, \"/\", \"-\")},mode=max\",",
+    "\"type=gha,scope=dotfiles-dev-${LEG}\",",
+    "\"type=gha,scope=dotfiles-dev-${LEG},mode=max\",",
 ] }
 
 [[suite]]

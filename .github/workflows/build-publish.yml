@@ -537,6 +537,9 @@ jobs:
       packages: write
     env:
       PLATFORM: ${{ matrix.target.platform }}
+      # Leg identity for the `dev` target's GHA cache scope (#839) — the
+      # tag suffix is already guaranteed distinct per matrix row.
+      LEG: ${{ matrix.target.tag_suffix }}
     steps:
       - name: Free runner disk space
         # The multi-stage Dockerfile (clang-p2996 builds clang from
