@@ -420,7 +420,7 @@ def test_a_missing_pin_is_left_to_the_drift_check(tmp_path: Path) -> None:
 
 
 def test_publish_matrix_json_is_parseable_and_complete() -> None:
-    """The exact shape `fromJSON` consumes in the workflow."""
+    """The exact shape `fromJSON` consumes in the workflow — now 3 legs (#840)."""
     entries = json.loads(platform_target.publish_matrix_json())
     assert isinstance(entries, list)
     assert {key for entry in entries for key in entry} == {
@@ -428,8 +428,11 @@ def test_publish_matrix_json_is_parseable_and_complete() -> None:
         "arch",
         "runner",
         "tag_suffix",
+        "role",
+        "cache_eligible",
+        "blocking",
     }
-    assert len(entries) == len(platform_target.PUBLISHED_ARCHES)
+    assert len(entries) == len(platform_target.ci_matrix_targets())
 
 
 def test_publish_matrix_cli_emits_one_line() -> None:
@@ -442,7 +445,66 @@ def test_publish_matrix_cli_emits_one_line() -> None:
         cwd=REPO_ROOT,
     )
     assert proc.stdout.count("\n") == 1
-    assert len(json.loads(proc.stdout)) == len(platform_target.PUBLISHED_ARCHES)
+    assert len(json.loads(proc.stdout)) == len(platform_target.ci_matrix_targets())
+
+
+# ──────────────────────────────────────────────────────────────────────
+# #840: the non-blocking arm64/ubuntu-26.04-arm validation leg.
+# ──────────────────────────────────────────────────────────────────────
+
+
+def test_ci_matrix_adds_exactly_one_validation_leg() -> None:
+    """The CI matrix is the publish matrix plus one explicit extra row."""
+    ci_targets = platform_target.ci_matrix_targets()
+    assert len(ci_targets) == len(platform_target.published_targets()) + 1
+    assert ci_targets[: len(platform_target.published_targets())] == (
+        platform_target.published_targets()
+    )
+
+
+def test_validation_leg_fields() -> None:
+    """The validation leg's role/cache_eligible/blocking match the ticket."""
+    validation = [
+        t for t in platform_target.ci_matrix_targets() if t.role == "validate"
+    ]
+    assert len(validation) == 1
+    leg = validation[0]
+    assert leg.arch == "arm64"
+    assert leg.runner == "ubuntu-26.04-arm"
+    assert leg.cache_eligible is False
+    assert leg.blocking is platform_target.UBUNTU_26_04_ARM_RUNNER_BLOCKING
+    assert leg.blocking is False
+
+
+def test_publish_legs_default_to_publish_role_and_are_unaffected() -> None:
+    """#840 must not change the two existing legs' behavior at all."""
+    for target in platform_target.published_targets():
+        assert target.role == "publish"
+        assert target.cache_eligible is True
+        assert target.blocking is True
+
+
+def test_manifest_membership_is_derived_from_role() -> None:
+    """The manifest job filters `role == "publish"` — exactly the old set."""
+    publish_only = [
+        t for t in platform_target.ci_matrix_targets() if t.role == "publish"
+    ]
+    assert tuple(publish_only) == platform_target.published_targets()
+
+
+def test_validation_leg_tag_namespace_never_collides_with_arm64_publish() -> None:
+    """Same architecture, distinct tag/cache namespace — no shared marker."""
+    ci_targets = platform_target.ci_matrix_targets()
+    suffixes = [t.tag_suffix for t in ci_targets]
+    assert len(set(suffixes)) == len(suffixes)
+    arm64_publish = next(
+        t for t in ci_targets if t.role == "publish" and t.arch == "arm64"
+    )
+    arm64_validate = next(t for t in ci_targets if t.role == "validate")
+    assert arm64_publish.arch == arm64_validate.arch
+    assert arm64_publish.tag_suffix != arm64_validate.tag_suffix
+    assert not arm64_validate.tag_suffix.startswith("ubuntu")
+    assert "26.04" not in arm64_validate.tag_suffix
 
 
 def test_published_arch_without_a_runner_label_raises(

@@ -53,7 +53,7 @@ import re
 import subprocess
 import sys
 from dataclasses import asdict, dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -67,8 +67,10 @@ __all__ = [
     "PLATFORM_ENV_VAR",
     "PLATFORM_FIELDS",
     "PUBLISHED_ARCHES",
+    "UBUNTU_26_04_ARM_RUNNER_BLOCKING",
     "PlatformLiteral",
     "PublishTarget",
+    "ci_matrix_targets",
     "declared_lock_platforms",
     "expected_uname_machine",
     "find_default_drift",
@@ -159,6 +161,22 @@ PUBLISHED_ARCHES = ("amd64", "arm64")
 # probe scheduled on it and asserted `uname -m` = aarch64 (#676).
 _RUNNER_LABELS = {"amd64": "ubuntu-latest", "arm64": "ubuntu-24.04-arm"}
 
+# #840: a THIRD, non-blocking leg validating whether the `ubuntu-26.04-arm`
+# Public Preview runner can still build the same arm64 content correctly. It
+# varies the RUNNER for an arch already in `_RUNNER_LABELS`, not the
+# architecture itself, so it cannot be derived from that 1:1 map — it is a
+# second, explicit row instead (see `_validation_target`). The container's own
+# base OS is unaffected (`.devcontainer/Dockerfile`'s `ubuntu:26.04` is shared
+# by every leg); only which GHA runner builds arm64 varies here.
+_VALIDATE_ARCH = "arm64"
+_VALIDATE_RUNNER = "ubuntu-26.04-arm"
+_VALIDATE_TAG_SUFFIX = "arm64-runner2604"
+
+# A human flips this once the Public Preview runner is trusted (#840) — never
+# computed from green-run counts or GA status (no promotion-tracking
+# machinery is wanted here).
+UBUNTU_26_04_ARM_RUNNER_BLOCKING = False
+
 # The architectures whose image carries the kayari `gcc-latest` trunk snapshot.
 #
 # NOT a subset waiting to be widened: upstream states the policy on its index
@@ -244,12 +262,26 @@ class PublishTarget:
     they run concurrently against one registry, so two legs sharing a tag do not
     merge, they overwrite — and the loser's smoke result silently describes an
     image nobody can pull any more.
+
+    ``role`` distinguishes a leg the OCI index actually publishes
+    (``"publish"``) from one that only validates a candidate runner
+    (``"validate"``, #840) — an image index cannot hold two entries for the
+    same platform tuple, so the `manifest` job filters to ``role="publish"``
+    regardless of ``blocking``. ``cache_eligible`` gates whether the
+    ``dev-prep``/``smoke-test`` content-hash probe may skip real work for this
+    leg: a ``False`` leg always builds and smoke-tests for real, because its
+    content hash can collide with a same-architecture publish leg's marker.
+    ``blocking`` is a human-flipped switch (never computed) that drives
+    ``continue-on-error`` for this leg's CI jobs.
     """
 
     platform: str
     arch: str
     runner: str
     tag_suffix: str
+    role: Literal["publish", "validate"] = "publish"
+    cache_eligible: bool = True
+    blocking: bool = True
 
 
 def _publish_target(arch: str) -> PublishTarget:
@@ -278,18 +310,47 @@ def _publish_target(arch: str) -> PublishTarget:
 
 
 def published_targets() -> tuple[PublishTarget, ...]:
-    """Every architecture the image publishes, in matrix order."""
+    """Every architecture the image PUBLISHES (an OCI index entry), in order.
+
+    Deliberately excludes the #840 validation leg: `sync.py` and the manifest
+    assembly both walk this list assuming one row per platform tuple, and the
+    validation leg shares arm64's tuple on purpose. Use :func:`ci_matrix_targets`
+    for the full CI fan-out.
+    """
     return tuple(_publish_target(arch) for arch in PUBLISHED_ARCHES)
 
 
+def _validation_target() -> PublishTarget:
+    """The non-blocking arm64-on-ubuntu-26.04-arm validation leg (#840)."""
+    return PublishTarget(
+        platform=f"linux/{_VALIDATE_ARCH}/{_MICROARCH_LEVEL[_VALIDATE_ARCH]}",
+        arch=_VALIDATE_ARCH,
+        runner=_VALIDATE_RUNNER,
+        tag_suffix=_VALIDATE_TAG_SUFFIX,
+        role="validate",
+        cache_eligible=False,
+        blocking=UBUNTU_26_04_ARM_RUNNER_BLOCKING,
+    )
+
+
+def ci_matrix_targets() -> tuple[PublishTarget, ...]:
+    """Every leg CI's build matrix fans out over: publish legs + validation legs.
+
+    An explicit enumerated tuple (#840), never a computed cross-product — the
+    validation leg varies the RUNNER for an architecture already published, so
+    it cannot be derived from :data:`PUBLISHED_ARCHES` alone.
+    """
+    return (*published_targets(), _validation_target())
+
+
 def publish_matrix_json() -> str:
-    """The publish matrix as one line of JSON, for a workflow ``fromJSON``.
+    """The CI build matrix as one line of JSON, for a workflow ``fromJSON``.
 
     One line because ``>> "$GITHUB_OUTPUT"`` is line-oriented — a pretty-printed
     payload is read as a truncated first line and the matrix silently loses
     every architecture after the first.
     """
-    return json.dumps([asdict(target) for target in published_targets()])
+    return json.dumps([asdict(target) for target in ci_matrix_targets()])
 
 
 def publish_matrix_main() -> int:

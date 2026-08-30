@@ -30,6 +30,15 @@ variable "PLATFORM" {
   default = "linux/amd64/v2"
 }
 
+# Which matrix leg is building, for GHA cache-scope disambiguation (#839).
+# Defaults to the same expression the `dev` target's cache scope used before
+# this variable existed, so an unset LEG is a no-op. CI overrides it (bake
+# reads a same-named env var into the variable) with the leg's tag suffix —
+# see the `dev` target's cache-from/cache-to comment for the full rationale.
+variable "LEG" {
+  default = replace(PLATFORM, "/", "-")
+}
+
 # Whether the published targets push to the registry. Defaults false so a
 # stray local `docker buildx bake dev/base/p2996-cache` builds without
 # pushing to GHCR (those targets are CI-only — see AGENTS.md "Do not").
@@ -131,21 +140,25 @@ target "dev" {
   }
   # Tags inherited from docker-metadata-action (CI overrides with SHA/latest/PR tags)
   #
-  # The scope is SUFFIXED by the architecture (#676). It used to be the bare
-  # `dotfiles-dev` — one scope for every build — which was harmless while only
-  # one architecture was ever built, and is a correctness bug the moment two
-  # are: `type=gha` is content-addressed *within a scope*, so two matrix legs
-  # sharing one would race to overwrite each other's index and each would
-  # repeatedly evict the other's layers. Deriving the suffix from the same
-  # PLATFORM variable that selects the build keeps the two in lockstep by
-  # construction, and adds no literal for `no_platform_literals` to reject.
+  # The scope is SUFFIXED by leg identity (#676, generalized #839). It used to
+  # be the bare `dotfiles-dev` — one scope for every build — which was
+  # harmless while only one architecture was ever built, and is a correctness
+  # bug the moment two are: `type=gha` is content-addressed *within a scope*,
+  # so two matrix legs sharing one would race to overwrite each other's index
+  # and each would repeatedly evict the other's layers. #676 fixed that by
+  # keying on PLATFORM; #839 generalizes the key to LEG so two legs that
+  # SHARE a PLATFORM but differ some other way (e.g. runner) don't collide
+  # either — CI sets LEG per matrix entry from that entry's tag suffix
+  # (already guaranteed distinct — see `PublishTarget.tag_suffix`). LEG
+  # defaults to the PLATFORM-derived value so an unset LEG (any manual/local
+  # `docker buildx bake` invocation) behaves byte-identically to before.
   # Probed both arms: unset => `dotfiles-dev-linux-amd64-v2`; PLATFORM exported
   # as the arm triple => `dotfiles-dev-linux-arm64-v8`.
   cache-from = [
-    "type=gha,scope=dotfiles-dev-${replace(PLATFORM, "/", "-")}",
+    "type=gha,scope=dotfiles-dev-${LEG}",
   ]
   cache-to = [
-    "type=gha,scope=dotfiles-dev-${replace(PLATFORM, "/", "-")},mode=max",
+    "type=gha,scope=dotfiles-dev-${LEG},mode=max",
   ]
   # mode=max records the full build graph (materials, args, steps) so the
   # published provenance can answer "what exactly went into this image"
