@@ -27,6 +27,20 @@ def _cp(stdout: str = "", returncode: int = 0) -> subprocess.CompletedProcess[st
     )
 
 
+def _paths_for_oid(expected_oid: str, paths: list[str]) -> object:
+    """Fake ``_merge_commit_changed_paths`` that fails on the wrong oid.
+
+    Guards the #827 regression class: ``land`` must pass the merge commit's
+    OID, never the PR number, to this collaborator.
+    """
+
+    def fake(oid: str) -> list[str]:
+        assert oid == expected_oid, f"expected oid {expected_oid!r}, got {oid!r}"
+        return paths
+
+    return fake
+
+
 # ------------------------------------------------------- surface detection
 
 
@@ -540,7 +554,9 @@ def test_land_refuses_non_main_base(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_land_merged_validates_and_syncs(monkeypatch: pytest.MonkeyPatch) -> None:
     view = {"state": "MERGED", "baseRefName": "main"}
     monkeypatch.setattr(pr, "_run", lambda *_a, **_k: _cp(json.dumps(view)))
-    monkeypatch.setattr(pr, "_merge_commit_changed_paths", lambda _n: ["a.py"])
+    monkeypatch.setattr(
+        pr, "_merge_commit_changed_paths", _paths_for_oid("c" * 40, ["a.py"])
+    )
     monkeypatch.setattr(pr, "_merge_commit_oid", lambda _n: "c" * 40)
     monkeypatch.setattr(pr, "_main_run_conclusion", lambda _o, **_k: True)
     monkeypatch.setattr(pr, "_stream", lambda *_a, **_k: 0)
@@ -555,7 +571,9 @@ def test_land_surface_pr_validates_full_tier(
     seen: dict[str, bool] = {}
     monkeypatch.setattr(pr, "_run", lambda *_a, **_k: _cp(json.dumps(view)))
     monkeypatch.setattr(
-        pr, "_merge_commit_changed_paths", lambda _n: [".devcontainer/Dockerfile"]
+        pr,
+        "_merge_commit_changed_paths",
+        _paths_for_oid("e" * 40, [".devcontainer/Dockerfile"]),
     )
     monkeypatch.setattr(pr, "_merge_commit_oid", lambda _n: "e" * 40)
     monkeypatch.setattr(pr, "_main_run_conclusion", lambda _o, **_k: True)
@@ -574,7 +592,9 @@ def test_land_resume_is_accepted_alias(monkeypatch: pytest.MonkeyPatch) -> None:
     """Resume is accepted for compat — land is always the post-merge replay."""
     view = {"state": "MERGED", "baseRefName": "main"}
     monkeypatch.setattr(pr, "_run", lambda *_a, **_k: _cp(json.dumps(view)))
-    monkeypatch.setattr(pr, "_merge_commit_changed_paths", lambda _n: ["a.py"])
+    monkeypatch.setattr(
+        pr, "_merge_commit_changed_paths", _paths_for_oid("c" * 40, ["a.py"])
+    )
     monkeypatch.setattr(pr, "_merge_commit_oid", lambda _n: "c" * 40)
     monkeypatch.setattr(pr, "_main_run_conclusion", lambda _o, **_k: True)
     monkeypatch.setattr(pr, "_stream", lambda *_a, **_k: 0)
@@ -673,7 +693,9 @@ def test_land_passes_when_no_main_run_expected(
     view = {"state": "MERGED", "baseRefName": "main"}
     monkeypatch.setattr(pr, "_run", _land_run_dispatch(view))
     monkeypatch.setattr(
-        pr, "_merge_commit_changed_paths", lambda _n: ["mise.toml", ".agnix.toml"]
+        pr,
+        "_merge_commit_changed_paths",
+        _paths_for_oid("c" * 40, ["mise.toml", ".agnix.toml"]),
     )
     monkeypatch.setattr(pr, "_stream", lambda *_a, **_k: 0)
     monkeypatch.setattr(pr, "sync_main", lambda *_a, **_k: 0)
@@ -690,7 +712,7 @@ def test_land_fails_when_expected_main_run_absent(
     monkeypatch.setattr(
         pr,
         "_merge_commit_changed_paths",
-        lambda _n: [".config/mise/conf.d/shared.toml"],
+        _paths_for_oid("c" * 40, [".config/mise/conf.d/shared.toml"]),
     )
     monkeypatch.setattr(pr, "_stream", lambda *_a, **_k: 0)
     monkeypatch.setattr(pr, "sync_main", lambda *_a, **_k: 0)
@@ -704,7 +726,9 @@ def test_land_watches_main_run_when_one_unexpectedly_appears(
     """Grace poll: a run appearing despite no expectation is still verified."""
     view = {"state": "MERGED", "baseRefName": "main"}
     monkeypatch.setattr(pr, "_run", _land_run_dispatch(view, run_id="999"))
-    monkeypatch.setattr(pr, "_merge_commit_changed_paths", lambda _n: ["docs/x.md"])
+    monkeypatch.setattr(
+        pr, "_merge_commit_changed_paths", _paths_for_oid("c" * 40, ["docs/x.md"])
+    )
     monkeypatch.setattr(pr, "_stream", lambda *_a, **_k: 0)
     monkeypatch.setattr(pr, "sync_main", lambda *_a, **_k: 0)
     monkeypatch.setattr(pr.time, "sleep", lambda _s: None)
