@@ -34,7 +34,14 @@ import re
 # it — mise recomputes it from config.
 ENV_DIFF_NAME = "__MISE_DIFF"
 GIT_CONTEXT_NAMES = frozenset(
-    {"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR"}
+    {
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_COMMON_DIR",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    }
 )
 
 # Names that carry a credential. Matched on the NAME, so a provider we have

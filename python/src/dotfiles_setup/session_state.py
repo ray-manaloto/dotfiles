@@ -15,12 +15,13 @@ failure, timeout, malformed JSON, and detached HEAD are all
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
 from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING
+
+from dotfiles_setup import child_env
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -29,24 +30,8 @@ _GIT_TIMEOUT = 30
 _GH_TIMEOUT = 120
 _SHA_ABBREV = 7
 _STATUS_PREFIX_LENGTH = 3
-_GIT_REPOSITORY_ENV_VARS = (
-    "GIT_DIR",
-    "GIT_WORK_TREE",
-    "GIT_INDEX_FILE",
-    "GIT_OBJECT_DIRECTORY",
-    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-    "GIT_COMMON_DIR",
-)
 
 DEFAULT_COMMITS = 8
-
-
-def _child_env() -> dict[str, str]:
-    """Copy the caller environment without Git repository redirects."""
-    env = os.environ.copy()
-    for name in _GIT_REPOSITORY_ENV_VARS:
-        env.pop(name, None)
-    return env
 
 
 class PrState(Enum):
@@ -97,7 +82,7 @@ def _git(args: list[str], repo_root: Path) -> tuple[int, str, str]:
             errors="replace",
             check=False,
             timeout=_GIT_TIMEOUT,
-            env=_child_env(),
+            env=child_env.without_git_context(),
         )
     except (OSError, subprocess.SubprocessError) as exc:
         message = f"git {' '.join(args)} failed: {exc}"
@@ -167,7 +152,7 @@ def _gh(args: list[str], repo_root: Path) -> tuple[int, str]:
             errors="replace",
             check=False,
             timeout=_GH_TIMEOUT,
-            env=_child_env(),
+            env=child_env.without_git_context(),
         )
     except subprocess.TimeoutExpired:
         return 124, "gh lookup timed out"

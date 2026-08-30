@@ -116,8 +116,8 @@ def test_gh_scrubs_only_git_repository_redirects(
         monkeypatch.setenv(name, f"decoy-{name}")
     monkeypatch.setenv("SESSION_STATE_PRESERVED", "present")
     expected_env = os.environ.copy()
-    for name in _GIT_REPOSITORY_ENV_VARS:
-        expected_env.pop(name)
+    for name in (*_GIT_REPOSITORY_ENV_VARS, "__MISE_DIFF"):
+        expected_env.pop(name, None)
 
     real_run = subprocess.run
 

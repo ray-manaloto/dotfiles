@@ -21,7 +21,7 @@ _HANDOFF_RE = re.compile(
 )
 _PATH_CITATION_RE = re.compile(
     r"(?<![\w./:-])(?P<citation>(?:Makefile|Dockerfile|"
-    r"[\w./-]*/[\w./-]+|"
+    r"[\w./-]*/(?:Makefile|Dockerfile)|"
     r"[\w./-]+\.[A-Za-z]\w*):(?P<start>\d+)"
     r"(?:-(?P<end>\d+))?)(?![\w-])"
 )

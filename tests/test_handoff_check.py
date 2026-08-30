@@ -126,6 +126,28 @@ def test_check_ignores_non_allowlisted_bare_extensionless_words(
     assert handoff_check.check(repo, "see LICENSE:1") == []
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "ghcr.io/devcontainers/features/sshd:1",
+        "# syntax=docker/dockerfile:1.7",
+        "/etc/hosts:1",
+    ],
+)
+def test_check_ignores_slash_containing_non_allowlisted_citations(
+    tmp_path: Path, text: str
+) -> None:
+    """The subdirectory rule is scoped to Makefile/Dockerfile, not any bareword.
+
+    Regression pin: a broader "any extensionless word with a slash" rule
+    admitted OCI image references and the Docker syntax directive as false
+    citations (found by cold review after the ticket's own broader wording).
+    """
+    repo = _repo(tmp_path)
+
+    assert handoff_check.check(repo, text) == []
+
+
 def test_check_rejects_existing_path_outside_repo_root(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -264,6 +286,41 @@ def test_main_reports_cited_file_read_failure_without_traceback(
         newline: str | None = None,
     ) -> str:
         if path == cited:
+            message = "permission denied"
+            raise OSError(message)
+        return original_read_text(
+            path,
+            encoding=encoding,
+            errors=errors,
+            newline=newline,
+        )
+
+    monkeypatch.setattr(Path, "read_text", read_text_with_failure)
+
+    assert handoff_check.main(["handoff.md"], repo) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "handoff-check: permission denied\n"
+
+
+def test_main_reports_handoff_file_read_failure_without_traceback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The other #834 arm: the handoff file itself, not a cited file, fails."""
+    repo = _repo(tmp_path)
+    handoff = repo / "handoff.md"
+    handoff.write_text("No citations here.\n")
+    original_read_text = Path.read_text
+
+    def read_text_with_failure(
+        path: Path,
+        encoding: str | None = None,
+        errors: str | None = None,
+        newline: str | None = None,
+    ) -> str:
+        if path == handoff:
             message = "permission denied"
             raise OSError(message)
         return original_read_text(
