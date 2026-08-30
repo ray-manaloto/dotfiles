@@ -103,15 +103,13 @@ ALLOWLIST: dict[str, BashAllowance] = {
         "never observe the case it exists to count",
     ),
     "scripts/graphify-hook-guard.sh": BashAllowance(
-        36,
-        "fail-open shim — execs `graphify hook-guard search|read` via `uv run "
-        "--project python` (the repo-pinned 0.9.42, matching "
-        "graphify-query/health/update — not the user-global PATH shim) and sed "
-        "-rewrites its nudge text from the bare binary to the mise tasks "
-        "graphify-first.md requires. 30 -> 36 for that resolution + rewrite + "
-        "the shellcheck disable=SC2016 justification (a real false positive: "
-        "double-quoting would turn the literal markdown backticks into actual "
-        "command substitution).",
+        30,
+        "fail-open shim — execs `dotfiles-setup graphify hook-guard "
+        "search|read` via `uv run --project python` (the repo-pinned 0.9.42, "
+        "matching graphify-query/health/update — not the user-global PATH "
+        "shim). The nudge-text rewrite itself lives in Python "
+        "(graphify.py::rewrite_hook_nudge, unit-tested) per zero-bash-logic; "
+        "this shim stays a thin resolve-and-exec wrapper.",
     ),
     "scripts/validate-devcontainer-json.sh": BashAllowance(
         73,

@@ -36,7 +36,9 @@ from dotfiles_setup.graphify import (
     graphify_health_main,
     graphify_main,
     graphify_update_main,
+    hook_guard_main,
     query,
+    rewrite_hook_nudge,
     update,
 )
 
@@ -749,6 +751,107 @@ def test_graphify_health_rejects_runtime_stamp_graph_mismatch(
 
     assert result.status is GraphifyStatus.STALE
     assert "changed" in result.detail
+
+
+def test_rewrite_hook_nudge_rewrites_bare_query_and_update() -> None:
+    """Real graphify hook-guard output, captured 2026-08-30, gets rewritten.
+
+    graphify's own nudge copy is hardcoded (graphify/cli.py) and names the
+    bare binary — exactly what graphify-first.md forbids on this machine
+    (two graphify versions on PATH). `graphify explain`/`graphify path`
+    mentions are untouched: this repo has no mise task for them, so
+    rewriting would point at something that doesn't exist.
+    """
+    search_nudge = (
+        '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":'
+        '"MANDATORY: graphify-out/graph.json exists. You MUST run '
+        '`graphify query \\"<question>\\"` before grepping raw files. Only grep '
+        'after graphify has oriented you, or to modify/debug specific lines."}}'
+    )
+    rewritten = rewrite_hook_nudge(search_nudge)
+    assert '`mise run graphify-query -- \\"<question>\\"`' in rewritten
+    assert "`graphify query" not in rewritten
+    # Structure (everything but the rewritten substring) is untouched.
+    assert rewritten.startswith('{"hookSpecificOutput":{"hookEventName":"PreToolUse"')
+
+    read_nudge = (
+        '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":'
+        '"MANDATORY: graphify-out/graph.json exists. You MUST run graphify before '
+        'reading source files. Use: `graphify query \\"<question>\\"` (scoped '
+        'subgraph), `graphify explain \\"<concept>\\"`, or `graphify path \\"<A>\\" '
+        '\\"<B>\\"`. Only read raw files after graphify has oriented you."}}'
+    )
+    rewritten_read = rewrite_hook_nudge(read_nudge)
+    assert '`mise run graphify-query -- \\"<question>\\"`' in rewritten_read
+    assert "`graphify explain" in rewritten_read  # untouched — no task for it
+    assert "`graphify path" in rewritten_read  # untouched — no task for it
+
+    stale_nudge = (
+        '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":'
+        '"graphify-out/graph.json exists but may be STALE for this file. Prefer '
+        '`graphify query \\"<question>\\"` for orientation, and run '
+        '`graphify update` to refresh the graph."}}'
+    )
+    rewritten_stale = rewrite_hook_nudge(stale_nudge)
+    assert "`mise run graphify-update`" in rewritten_stale
+    assert "`graphify update`" not in rewritten_stale
+
+
+def test_rewrite_hook_nudge_leaves_unrelated_text_untouched() -> None:
+    """Control arm: text without the bare-binary phrases passes through."""
+    text = '{"hookSpecificOutput":{"hookEventName":"PreToolUse"}}'
+    assert rewrite_hook_nudge(text) == text
+
+
+def test_hook_guard_main_rewrites_and_prints(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+        _ = cwd
+        assert args == ["graphify", "hook-guard", "search"]
+        return subprocess.CompletedProcess(
+            args,
+            0,
+            stdout='{"additionalContext":"run `graphify query \\"q\\"` first"}\n',
+            stderr="",
+        )
+
+    monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
+
+    rc = hook_guard_main(tmp_path, "search")
+
+    assert rc == 0
+    assert "`mise run graphify-query --" in capsys.readouterr().out
+
+
+def test_hook_guard_main_fails_open_on_nonzero_rc(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+        _ = cwd, args
+        return subprocess.CompletedProcess(args, 1, stdout="", stderr="boom")
+
+    monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
+
+    assert hook_guard_main(tmp_path, "read") == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_hook_guard_main_fails_open_on_missing_binary(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+        _ = cwd, args
+        message = "graphify not found"
+        raise FileNotFoundError(message)
+
+    monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
+
+    assert hook_guard_main(tmp_path, "search") == 0
 
 
 def test_graphify_health_rejects_corrupt_runtime_stamp(

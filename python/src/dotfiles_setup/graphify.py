@@ -501,6 +501,43 @@ def graphify_update_main(project_root: Path, *, target: str = ".") -> int:
     return result.returncode
 
 
+def rewrite_hook_nudge(text: str) -> str:
+    """Rewrite graphify's own PreToolUse nudge text to this repo's mise tasks.
+
+    graphify's ``hook-guard`` subcommand hardcodes ``graphify query``/
+    ``graphify update`` in its advisory nudge copy (``graphify/cli.py`` — no
+    flag or env var changes the wording), which is a bare PATH invocation
+    that ``graphify-first.md`` forbids: two different graphify versions run
+    on this machine, and only ``mise run graphify-query``/``graphify-update``
+    are guaranteed to resolve this repo's pinned 0.9.42. Plain text
+    substitution — the JSON structure and every other field pass through
+    unchanged.
+    """
+    return text.replace("`graphify query", "`mise run graphify-query --").replace(
+        "`graphify update`", "`mise run graphify-update`"
+    )
+
+
+def hook_guard_main(project_root: Path, kind: str) -> int:
+    """CLI entry for ``dotfiles-setup graphify hook-guard <kind>``.
+
+    Execs graphify's own advisory PreToolUse nudge and rewrites its bare-
+    binary wording (see :func:`rewrite_hook_nudge`). Fails open — rc 0, no
+    output — on ANY problem (graphify missing from this environment, a
+    non-zero exit, empty output): a crashed advisory nudge must never block
+    the tool call it is attached to. ``$1``/``kind`` is ``search`` (Bash|Grep
+    matcher) or ``read`` (Read|Glob), graphify's own vocabulary.
+    """
+    try:
+        result = _run(["graphify", "hook-guard", kind], cwd=project_root)
+    except OSError:
+        return 0
+    if result.returncode != 0 or not result.stdout:
+        return 0
+    sys.stdout.write(rewrite_hook_nudge(result.stdout))
+    return 0
+
+
 def graphify_main(
     project_root: Path,
     *,
