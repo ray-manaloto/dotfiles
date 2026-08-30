@@ -1,30 +1,31 @@
 #!/usr/bin/env bash
-# scripts/graphify-hook-guard.sh — resilient wrapper around graphify's PreToolUse
-# nudge hooks (`graphify hook-guard search|read`).
+# scripts/graphify-hook-guard.sh — thin fail-open exec wrapper for the
+# graphify PreToolUse nudge. All logic (resolving graphify, execing
+# `graphify hook-guard`, rewriting its bare-binary nudge text to this
+# repo's mise tasks) is Python: dotfiles-setup graphify hook-guard ->
+# python/src/dotfiles_setup/graphify.py::hook_guard_main/rewrite_hook_nudge
+# (zero-bash-logic). This script only fails open (exit 0, no nudge) when
+# uv is missing — fresh clone / CI before bootstrap — same rationale as
+# scripts/pretooluse-guard.sh: a crashed guard must not brick every call.
 #
-# graphify's own installer embeds a user-specific ABSOLUTE path
-# (`/Users/<you>/.local/share/mise/installs/pipx-graphifyy/<ver>/bin/graphify`)
-# into .claude/settings.json — wrong for a committed, multi-clone repo, and it
-# pins a version that breaks on the next graphify bump. This wrapper resolves
-# graphify at runtime via mise (host-pinned in mise.toml) and FAILS OPEN (exit 0
-# = allow the tool call, no nudge) when graphify is absent — so a fresh clone,
-# or CI, before graphify is installed is not disrupted by a `command not found`
-# hook error. Same belt-and-braces shape as scripts/pretooluse-guard.sh.
+# `--project "$CLAUDE_PROJECT_DIR/python"` resolves this repo's pinned
+# graphify 0.9.42, NOT the user-global PATH shim (currently 0.9.53, see
+# graphify-first.md) — ANCHORED, not relative: a bare `--project python`
+# fails rc=2 off the repo root (a subagent, a worktree).
 #
-# The nudge is advisory (soft mode, no --strict): it prints a "query the graph
-# first" reminder that Claude Code surfaces as context; it never blocks a call.
+# Advisory, soft mode. Strict mode (GRAPHIFY_HOOK_STRICT/_TTL,
+# graphify/cli.py) is an env var, not a code change — set it in
+# .claude/settings.json's env block if ever needed. GRAPHIFY_BIN is NOT a
+# binary override (vendor skill doc only, never runtime code).
 #
 # $1 is the hook kind: `search` (Bash|Grep matcher) or `read` (Read|Glob).
 set -uo pipefail
 
 kind="${1:-search}"
+project_dir="${CLAUDE_PROJECT_DIR:-.}/python"
 
-# MISE FIRST. Reversed until 2026-07-23, making the claim above false: a stale
-# 0.9.23 install dir sat ahead of the shims under a 0.9.25 pin.
-if command -v mise >/dev/null 2>&1; then
-  mise exec -- graphify hook-guard "$kind" 2>/dev/null || true
-elif command -v graphify >/dev/null 2>&1; then
-  graphify hook-guard "$kind" 2>/dev/null || true
+if command -v uv >/dev/null 2>&1; then
+  uv run --project "$project_dir" dotfiles-setup graphify hook-guard "$kind" 2>/dev/null || true
 fi
-# Absent graphify (fresh clone / CI): fall through and exit 0 — allow, no nudge.
+# Absent uv (fresh clone / CI): fall through and exit 0 — allow, no nudge.
 exit 0

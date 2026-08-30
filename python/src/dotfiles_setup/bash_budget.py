@@ -103,10 +103,15 @@ ALLOWLIST: dict[str, BashAllowance] = {
         "never observe the case it exists to count",
     ),
     "scripts/graphify-hook-guard.sh": BashAllowance(
-        30,
-        "fail-open shim — execs `graphify hook-guard search|read` (the graphify "
-        "query-first PreToolUse nudge); portable + version-independent vs the "
-        "user-specific abspath graphify's installer embeds",
+        31,
+        "fail-open shim — execs `dotfiles-setup graphify hook-guard "
+        "search|read` via `uv run --project $CLAUDE_PROJECT_DIR/python` (the "
+        "repo-pinned 0.9.42, matching graphify-query/health/update — not the "
+        "user-global PATH shim). 30 -> 31: the project path must be anchored "
+        "(a relative `--project python` fails rc=2 when this hook runs off "
+        "the repo root, e.g. a subagent). The nudge-text rewrite itself "
+        "lives in Python (graphify.py::rewrite_hook_nudge, unit-tested) per "
+        "zero-bash-logic; this shim stays a thin resolve-and-exec wrapper.",
     ),
     "scripts/validate-devcontainer-json.sh": BashAllowance(
         73,

@@ -35,7 +35,11 @@ from dotfiles_setup.graphify import (
     graphify_health,
     graphify_health_main,
     graphify_main,
+    graphify_update_main,
+    hook_guard_main,
     query,
+    rewrite_hook_nudge,
+    update,
 )
 
 
@@ -298,15 +302,48 @@ def test_graphify_health_reports_missing_graph(tmp_path: Path) -> None:
     assert not result.ok
 
 
-def test_graphify_health_rejects_graph_without_build_receipt(tmp_path: Path) -> None:
-    """An unreceipted graph cannot be called fresh merely because it parses."""
+def test_graphify_health_reports_version_drift(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """VERSION_DRIFT: the CHECKING process's own runtime differs from the pin.
+
+    It says nothing about which binary BUILT the graph on disk (see
+    graphify-first.md: that binding does not exist). A well-formed graph is
+    still required here, so this isolates the version axis from the schema
+    axis.
+    """
+    graph_dir = tmp_path / "graphify-out"
+    graph_dir.mkdir()
+    graph_dir.joinpath("graph.json").write_bytes(
+        b'{"nodes": [], "links": [], "hyperedges": []}'
+    )
+    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.53")
+
+    result = graphify_health(tmp_path)
+
+    assert result.status is GraphifyStatus.VERSION_DRIFT
+    assert result.runtime_version == "0.9.53"
+    assert not result.ok
+
+
+def test_graphify_health_accepts_graph_without_build_receipt(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """An unreceipted graph is fresh: this repo never writes a build receipt.
+
+    Only the knowledge-base's committed-corpus pipeline writes
+    ``build-receipt.json``; this repo builds its graph on demand
+    (``currency.toml``), so an absent receipt is the normal case, not a fault.
+    """
     graph_dir = tmp_path / "graphify-out"
     graph_dir.mkdir()
     (graph_dir / "graph.json").write_text(
         '{"nodes": [], "edges": [], "hyperedges": []}'
     )
+    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.42")
     result = graphify_health(tmp_path)
-    assert result.status is GraphifyStatus.STALE
+    assert result.status is GraphifyStatus.FRESH
+    assert result.ok
 
 
 def test_graphify_health_accepts_exact_receipted_graph(tmp_path: Path) -> None:
@@ -436,6 +473,60 @@ def test_graphify_health_rejects_invalid_graph_schema(
     assert result.status is GraphifyStatus.CORRUPT
 
 
+def test_graphify_health_accepts_links_keyed_graph(tmp_path: Path) -> None:
+    """A links-keyed graph must be usable.
+
+    Graphify's exporter writes the edge collection under 'links', not
+    'edges' (``networkx.node_link_data(G, edges="links")`` in
+    ``graphify.export``) — the real ``graphify-out/graph.json`` this repo
+    produces has no 'edges' key at all.
+    """
+    graph_dir = tmp_path / "graphify-out"
+    graph_dir.mkdir()
+    graph_bytes = b'{"nodes": [], "links": [], "hyperedges": []}'
+    (graph_dir / "graph.json").write_bytes(graph_bytes)
+    (graph_dir / "build-receipt.json").write_bytes(
+        codec.encode(
+            GraphifyBuildReceipt(
+                schema_version=1,
+                status="complete",
+                runtime_version="0.9.42",
+                graph_sha256=hashlib.sha256(graph_bytes).hexdigest(),
+                graph_bytes=len(graph_bytes),
+                node_count=0,
+                edge_count=0,
+                hyperedge_count=0,
+                input_fingerprints_sha256="a" * 64,
+                recorded_at_ns=1,
+            )
+        )
+    )
+    result = graphify_health(tmp_path)
+    assert result.status is GraphifyStatus.FRESH
+
+
+def test_graphify_health_rejects_graph_missing_edge_collection(tmp_path: Path) -> None:
+    """A graph carrying neither 'links' nor 'edges' is still corrupt.
+
+    No receipt/runtime setup here: the schema check that this test exercises
+    runs BEFORE the version and receipt checks in ``graphify_health``, so a
+    receipt or a monkeypatched runtime is unreachable dead weight in this
+    specific test — both the FRESH-when-'links'-present and
+    FRESH-when-'edges'-present cases (which DO need a matching receipt) are
+    covered by test_graphify_health_accepts_links_keyed_graph and
+    test_graphify_health_accepts_exact_receipted_graph respectively.
+    """
+    graph_dir = tmp_path / "graphify-out"
+    graph_dir.mkdir()
+    graph_bytes = json.dumps({"nodes": [], "hyperedges": []}).encode()
+    (graph_dir / "graph.json").write_bytes(graph_bytes)
+
+    result = graphify_health(tmp_path)
+
+    assert result.status is GraphifyStatus.CORRUPT
+    assert "edges" in result.detail
+
+
 def test_graphify_health_cli_emits_typed_json(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -533,3 +624,149 @@ def test_graphify_main_reports_incomplete_and_returns_3(
     monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
     assert graphify_main(tmp_path, question="q") == 3
     assert "TRUNCATED" in capsys.readouterr().err
+
+
+def test_update_runs_graphify_update_and_returns_the_result(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """update() is a thin wrapper: run `graphify update <target>`, return it as-is.
+
+    No stamping, no post-processing. A version/byte binding was tried here
+    and removed (see `_receipt_problem`'s docstring and graphify-first.md):
+    it could only ever record the version `update()` itself always resolves,
+    so the check it fed could never fail.
+    """
+
+    def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+        _ = cwd
+        assert args == ["graphify", "update", "src/some/dir"]
+        return subprocess.CompletedProcess(args, 0, stdout="updated\n", stderr="")
+
+    monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
+
+    result = update(tmp_path, "src/some/dir")
+
+    assert result.returncode == 0
+    assert result.stdout == "updated\n"
+
+
+def test_graphify_update_main_passes_through_output_and_rc(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+        _ = cwd
+        return subprocess.CompletedProcess(
+            args, 1, stdout="partial\n", stderr="graphify: update failed\n"
+        )
+
+    monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
+
+    rc = graphify_update_main(tmp_path)
+
+    assert rc == 1
+    captured = capsys.readouterr()
+    assert "partial" in captured.out
+    assert "update failed" in captured.err
+
+
+def test_rewrite_hook_nudge_rewrites_bare_query_and_update() -> None:
+    """Real graphify hook-guard output, captured 2026-08-30, gets rewritten.
+
+    graphify's own nudge copy is hardcoded (graphify/cli.py) and names the
+    bare binary — exactly what graphify-first.md forbids on this machine
+    (two graphify versions on PATH). `graphify explain`/`graphify path`
+    mentions are untouched: this repo has no mise task for them, so
+    rewriting would point at something that doesn't exist.
+    """
+    search_nudge = (
+        '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":'
+        '"MANDATORY: graphify-out/graph.json exists. You MUST run '
+        '`graphify query \\"<question>\\"` before grepping raw files. Only grep '
+        'after graphify has oriented you, or to modify/debug specific lines."}}'
+    )
+    rewritten = rewrite_hook_nudge(search_nudge)
+    assert '`mise run graphify-query -- \\"<question>\\"`' in rewritten
+    assert "`graphify query" not in rewritten
+    # Structure (everything but the rewritten substring) is untouched.
+    assert rewritten.startswith('{"hookSpecificOutput":{"hookEventName":"PreToolUse"')
+
+    read_nudge = (
+        '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":'
+        '"MANDATORY: graphify-out/graph.json exists. You MUST run graphify before '
+        'reading source files. Use: `graphify query \\"<question>\\"` (scoped '
+        'subgraph), `graphify explain \\"<concept>\\"`, or `graphify path \\"<A>\\" '
+        '\\"<B>\\"`. Only read raw files after graphify has oriented you."}}'
+    )
+    rewritten_read = rewrite_hook_nudge(read_nudge)
+    assert '`mise run graphify-query -- \\"<question>\\"`' in rewritten_read
+    assert "`graphify explain" in rewritten_read  # untouched — no task for it
+    assert "`graphify path" in rewritten_read  # untouched — no task for it
+
+    stale_nudge = (
+        '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":'
+        '"graphify-out/graph.json exists but may be STALE for this file. Prefer '
+        '`graphify query \\"<question>\\"` for orientation, and run '
+        '`graphify update` to refresh the graph."}}'
+    )
+    rewritten_stale = rewrite_hook_nudge(stale_nudge)
+    assert "`mise run graphify-update`" in rewritten_stale
+    assert "`graphify update`" not in rewritten_stale
+
+
+def test_rewrite_hook_nudge_leaves_unrelated_text_untouched() -> None:
+    """Control arm: text without the bare-binary phrases passes through."""
+    text = '{"hookSpecificOutput":{"hookEventName":"PreToolUse"}}'
+    assert rewrite_hook_nudge(text) == text
+
+
+def test_hook_guard_main_rewrites_and_prints(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+        _ = cwd
+        assert args == ["graphify", "hook-guard", "search"]
+        return subprocess.CompletedProcess(
+            args,
+            0,
+            stdout='{"additionalContext":"run `graphify query \\"q\\"` first"}\n',
+            stderr="",
+        )
+
+    monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
+
+    rc = hook_guard_main(tmp_path, "search")
+
+    assert rc == 0
+    assert "`mise run graphify-query --" in capsys.readouterr().out
+
+
+def test_hook_guard_main_fails_open_on_nonzero_rc(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+        _ = cwd, args
+        return subprocess.CompletedProcess(args, 1, stdout="", stderr="boom")
+
+    monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
+
+    assert hook_guard_main(tmp_path, "read") == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_hook_guard_main_fails_open_on_missing_binary(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+        _ = cwd, args
+        message = "graphify not found"
+        raise FileNotFoundError(message)
+
+    monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
+
+    assert hook_guard_main(tmp_path, "search") == 0

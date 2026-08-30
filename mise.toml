@@ -733,6 +733,18 @@ run = 'uv run --project python dotfiles-setup graphify query'
 description = "Fail fast when the project graph or Graphify runtime is unusable"
 run = 'uv run --project python dotfiles-setup graphify health'
 
+[tasks.graphify-update]
+description = "Rebuild the project knowledge graph and stamp the graphify version that built it"
+# Thin caller (zero-bash-logic); logic in python/src/dotfiles_setup/graphify.py.
+# AST-only re-extraction (no LLM, no API cost). This is the ONLY sanctioned
+# way to rebuild the graph in this repo — it runs the SAME uv-venv-pinned
+# graphify `mise run graphify-query`/`graphify-health` resolve (0.9.42,
+# python/pyproject.toml), not the user-global PATH shim (see
+# graphify-first.md), and records the builder version so graphify_health can
+# catch a graph built by the wrong binary.
+# Pass a target: mise run graphify-update -- src/some/dir
+run = 'uv run --project python dotfiles-setup graphify update'
+
 [tasks.bakeoff]
 description = "Run the graphify extraction bake-off (writes OUTSIDE the repo)"
 # Thin caller (zero-bash-logic); logic in

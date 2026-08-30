@@ -36,10 +36,9 @@ Registered by `graphify install --project` (#310–#318 adoption). Host-only,
 project-scoped; `graphify-out/` is gitignored. When the user types `/graphify`,
 use `.claude/skills/graphify/SKILL.md`.
 
-- Codebase questions: run `graphify query "<question>"` first when
-  `graphify-out/graph.json` exists (`path`/`explain` for relationships/concepts) —
-  a scoped subgraph, smaller than raw grep.
-- After changing code: `graphify update .` (AST-only, no API cost).
+- Codebase questions: follow `.claude/rules/graphify-first.md`
+  (`mise run graphify-query`, never a bare `graphify` on `PATH`).
+- After changing code: `mise run graphify-update` (AST-only, no API cost).
 
 **This registration lives here, NOT in the root `CLAUDE.md`:** the
 `claude_md_import_stub` hk gate locks the root file to byte-exactly `@AGENTS.md`,

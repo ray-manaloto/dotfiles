@@ -85,14 +85,6 @@ def _runtime_version() -> str:
         return "missing"
 
 
-def _load_json_object(path: Path) -> tuple[dict[str, object] | None, str]:
-    try:
-        raw = path.read_bytes()
-    except OSError as exc:
-        return None, str(exc)
-    return _load_json_object_bytes(raw, name=path.name)
-
-
 def _load_json_object_bytes(
     raw: bytes,
     *,
@@ -107,6 +99,20 @@ def _load_json_object_bytes(
     return payload, ""
 
 
+def _edges_field(payload: dict[str, object]) -> str:
+    """Return the payload's edge-collection key.
+
+    graphify's own exporter (``graphify.export``) always calls
+    ``networkx.node_link_data(G, edges="links")``, so every graph it writes
+    carries its edge collection under ``"links"`` — never ``"edges"``.
+    graphify's own reader (``graphify.export.prune_dangling_edges``) stays
+    defensive and falls back to ``"edges"`` for a graph an older exporter may
+    have written; this mirrors that same fallback rather than hard-coding the
+    one key the current exporter happens to use.
+    """
+    return "links" if "links" in payload else "edges"
+
+
 def _receipt_matches(
     receipt: GraphifyBuildReceipt,
     *,
@@ -115,7 +121,7 @@ def _receipt_matches(
     runtime: str,
 ) -> bool:
     nodes = graph_payload["nodes"]
-    edges = graph_payload["edges"]
+    edges = graph_payload.get(_edges_field(graph_payload))
     hyperedges = graph_payload["hyperedges"]
     if not isinstance(nodes, list):
         return False
@@ -142,9 +148,45 @@ def _receipt_problem(
     graph_payload: dict[str, object],
     runtime: str,
 ) -> HealthResult | None:
+    """Validate a build receipt if one is present; an absent one is not a fault.
+
+    ``GraphifyBuildReceipt`` is written by the knowledge-base's committed-corpus
+    build pipeline (``kb_setup.graph``, see ``knowledge-base/python/src/
+    kb_setup/graph.py``). This repo deliberately does not build a committed
+    corpus — ``currency.toml`` states the graph is built on demand via plain
+    ``graphify update`` and ``graphify-out/`` is gitignored — so nothing here
+    ever writes ``build-receipt.json``, and treating its absence as ``STALE``
+    made every graph in this repository permanently unusable. Requiring
+    a receipt writer here would mean adopting the KB's committed-build design
+    only to satisfy this check, which is exactly backwards.
+
+    What the receipt actually proved and is now lost, with no replacement:
+    (1) that the graph bytes on disk are the ones a specific build run
+    produced, unmodified, and (2) that the *builder's* graphify version — not
+    just whatever version happens to be installed when health runs — is the
+    one recorded in ``mise.toml``. An earlier version of this fix tried to
+    restore (2) with a self-authored stamp written by ``update()``, but that
+    stamp could only ever record the SAME version ``update()`` itself always
+    resolves (``uv run --project python``, pinned 0.9.42) — so the check it
+    fed could never fail, and the one drift it existed to catch (a bare
+    ``graphify update`` run through the OTHER installed version) writes no
+    stamp at all, since only ``update()`` writes one. A check that can only
+    report "fine" is worse than no check: it converts an open question into
+    a false answer. Removed rather than kept as decoration; see
+    ``graphify-first.md`` for why this repo cannot detect the builder version
+    and what the procedural mitigation is instead.
+
+    What is NOT lost: if a KB-style receipt *is* present (e.g. carried over
+    from the knowledge-base's own tree), it is still verified byte-for-byte
+    below. **This branch is currently unreachable in practice**: the KB's own
+    writer (``kb_setup/graph.py``) raises on a links-keyed graph — the same
+    defect this module's ``_edges_field`` fixed here — and the KB's own
+    ``graphify-out/`` has no receipt on disk either. Kept for the day that
+    writer is fixed, not as active protection today.
+    """
     receipt_path = graph_path.with_name(_BUILD_RECEIPT)
     if not receipt_path.is_file():
-        return HealthResult(GraphifyStatus.STALE, runtime, "build receipt missing")
+        return None
     try:
         receipt = codec.decode(receipt_path.read_bytes(), GraphifyBuildReceipt)
     except (OSError, ValueError, TypeError) as exc:
@@ -161,7 +203,7 @@ def _receipt_problem(
 
 def _graph_schema_problem(payload: dict[str, object]) -> str:
     """Return the first required Graphify collection schema problem, if any."""
-    for field in ("nodes", "edges", "hyperedges"):
+    for field in ("nodes", _edges_field(payload), "hyperedges"):
         if not isinstance(payload.get(field), list):
             return f"graph field {field!r} must be an array"
     return ""
@@ -326,6 +368,77 @@ def query(
     if truncation is not None:
         raise GraphifyIncompleteError(truncation)
     return QueryResult(text=result.stdout.strip())
+
+
+def update(project_root: Path, target: str = ".") -> subprocess.CompletedProcess[str]:
+    """Rebuild the project graph via ``graphify update``.
+
+    AST-only re-extraction (no LLM, no API cost — see ``graphify --help``).
+    This is the only sanctioned rebuild path in this repo (``mise run
+    graphify-update``), resolving graphify through the same ``uv run
+    --project python`` pin as every other graphify task — but that
+    convention is procedural, not enforced: nothing here can detect whether
+    a graph was instead rebuilt by the OTHER graphify installed on this
+    machine (a bare ``graphify update .``, resolving the user-global PATH
+    pin). See ``graphify-first.md`` and ``_receipt_problem``'s docstring.
+    """
+    return _run(["graphify", "update", target], cwd=project_root)
+
+
+def graphify_update_main(project_root: Path, *, target: str = ".") -> int:
+    """CLI entry for ``dotfiles-setup graphify update``.
+
+    Prints graphify's own stdout/stderr through and returns its exit code.
+    """
+    result = update(project_root, target)
+    if result.stdout:
+        sys.stdout.write(result.stdout)
+    if result.stderr:
+        sys.stderr.write(result.stderr)
+    return result.returncode
+
+
+def rewrite_hook_nudge(text: str) -> str:
+    """Rewrite graphify's own PreToolUse nudge text to this repo's mise tasks.
+
+    graphify's ``hook-guard`` subcommand hardcodes ``graphify query``/
+    ``graphify update`` in its advisory nudge copy (``graphify/cli.py`` — no
+    flag or env var changes the wording), which is a bare PATH invocation
+    that ``graphify-first.md`` forbids: two different graphify versions run
+    on this machine, and only ``mise run graphify-query``/``graphify-update``
+    are guaranteed to resolve this repo's pinned 0.9.42. Plain text
+    substitution — the JSON structure and every other field pass through
+    unchanged.
+    """
+    return text.replace("`graphify query", "`mise run graphify-query --").replace(
+        "`graphify update`", "`mise run graphify-update`"
+    )
+
+
+def hook_guard_main(project_root: Path, kind: str) -> int:
+    """CLI entry for ``dotfiles-setup graphify hook-guard <kind>``.
+
+    Execs graphify's own advisory PreToolUse nudge and rewrites its bare-
+    binary wording (see :func:`rewrite_hook_nudge`). Always returns 0 (never
+    blocks the tool call it's attached to), and prints nothing when the
+    subprocess exits non-zero or produces no output. What this function
+    itself catches is narrower than "any problem": an ``OSError`` — the
+    binary missing, unresolvable, or unrunnable. It does NOT catch every
+    exception (e.g. a ``UnicodeDecodeError`` from malformed subprocess
+    output would still propagate). The caller,
+    ``scripts/graphify-hook-guard.sh``, wraps this call in a bash
+    ``|| true`` specifically to cover what this function does not — see
+    that script's header. ``$1``/``kind`` is ``search`` (Bash|Grep matcher)
+    or ``read`` (Read|Glob), graphify's own vocabulary.
+    """
+    try:
+        result = _run(["graphify", "hook-guard", kind], cwd=project_root)
+    except OSError:
+        return 0
+    if result.returncode != 0 or not result.stdout:
+        return 0
+    sys.stdout.write(rewrite_hook_nudge(result.stdout))
+    return 0
 
 
 def graphify_main(

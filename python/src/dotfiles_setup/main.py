@@ -61,7 +61,12 @@ from dotfiles_setup.graph_bakeoff import (
     GOLD_CORPUS_RELPATH,
     bakeoff_main,
 )
-from dotfiles_setup.graphify import graphify_health_main, graphify_main
+from dotfiles_setup.graphify import (
+    graphify_health_main,
+    graphify_main,
+    graphify_update_main,
+    hook_guard_main,
+)
 from dotfiles_setup.handoff_check import main as handoff_check_main
 from dotfiles_setup.hk_builtins_audit import hk_builtins_audit_main
 from dotfiles_setup.hook_guard import pretooluse_main
@@ -877,6 +882,18 @@ def _add_graphify_subcommands(
         "health", help="Read-only typed graph and Graphify runtime health"
     )
     health_parser.add_argument("--json", action="store_true", dest="output_json")
+    update_parser = graphify_sub.add_parser(
+        "update",
+        help="Rebuild the project graph (AST-only, no API cost) and stamp its builder",
+    )
+    update_parser.add_argument(
+        "target", nargs="?", default=".", help="Path to re-extract (default: .)"
+    )
+    hook_guard_parser = graphify_sub.add_parser(
+        "hook-guard",
+        help="Advisory PreToolUse nudge, rewritten to this repo's mise tasks",
+    )
+    hook_guard_parser.add_argument("kind", choices=["search", "read"])
     query_parser.add_argument(
         "--context",
         action="append",
@@ -1777,6 +1794,10 @@ def handle_graphify(args: argparse.Namespace, project_root: Path) -> None:
         )
     if getattr(args, "graphify_command", None) == "health":
         sys.exit(graphify_health_main(project_root, output_json=args.output_json))
+    if getattr(args, "graphify_command", None) == "update":
+        sys.exit(graphify_update_main(project_root, target=args.target))
+    if getattr(args, "graphify_command", None) == "hook-guard":
+        sys.exit(hook_guard_main(project_root, args.kind))
     if getattr(args, "graphify_command", None) == "bakeoff":
         corpus = (
             Path(args.corpus) if args.corpus else project_root / GOLD_CORPUS_RELPATH
