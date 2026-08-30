@@ -20,7 +20,9 @@ _HANDOFF_RE = re.compile(
     r"^session-(?P<date>\d{4}-\d{2}-\d{2})(?:-?(?P<suffix>[A-Za-z]))?\.md$"
 )
 _PATH_CITATION_RE = re.compile(
-    r"(?<![\w./:-])(?P<citation>[\w./-]+\.[A-Za-z]\w*:(?P<start>\d+)"
+    r"(?<![\w./:-])(?P<citation>(?:Makefile|Dockerfile|"
+    r"[\w./-]*/(?:Makefile|Dockerfile)|"
+    r"[\w./-]+\.[A-Za-z]\w*):(?P<start>\d+)"
     r"(?:-(?P<end>\d+))?)(?![\w-])"
 )
 _TASK_CITATION_RE = re.compile(
@@ -192,7 +194,7 @@ def main(args: list[str], repo_root: Path) -> int:
         return 1
     try:
         findings = check(repo_root, handoff.read_text(errors="replace"))
-    except RuntimeError as exc:
+    except (RuntimeError, OSError) as exc:
         sys.stderr.write(f"handoff-check: {exc}\n")
         return 1
     sys.stdout.write(render(findings, source=source) + "\n")

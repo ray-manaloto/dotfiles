@@ -21,6 +21,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING
 
+from dotfiles_setup import child_env
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -80,6 +82,7 @@ def _git(args: list[str], repo_root: Path) -> tuple[int, str, str]:
             errors="replace",
             check=False,
             timeout=_GIT_TIMEOUT,
+            env=child_env.without_git_context(),
         )
     except (OSError, subprocess.SubprocessError) as exc:
         message = f"git {' '.join(args)} failed: {exc}"
@@ -149,6 +152,7 @@ def _gh(args: list[str], repo_root: Path) -> tuple[int, str]:
             errors="replace",
             check=False,
             timeout=_GH_TIMEOUT,
+            env=child_env.without_git_context(),
         )
     except subprocess.TimeoutExpired:
         return 124, "gh lookup timed out"

@@ -6,15 +6,13 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 from dotfiles_setup import handoff_check
 from dotfiles_setup import main as cli_main
-
-if TYPE_CHECKING:
-    import pytest
 
 _COMMAND_TIMEOUT = 30
 
@@ -66,6 +64,88 @@ def test_check_reports_missing_paths_and_bad_line_ranges(tmp_path: Path) -> None
             "cited lines 3-4 are outside the file's 1-2 range",
         ),
     ]
+
+
+@pytest.mark.parametrize(
+    ("citation", "relative_path", "contents", "expected"),
+    [
+        ("Makefile:10", "Makefile", "line\n" * 10, []),
+        (
+            "Makefile:10",
+            "Makefile",
+            None,
+            [
+                handoff_check.Finding(
+                    handoff_check.Verdict.MISSING_PATH,
+                    "Makefile:10",
+                    "repo-relative path 'Makefile' does not exist",
+                )
+            ],
+        ),
+        (
+            ".devcontainer/Dockerfile:5-10",
+            ".devcontainer/Dockerfile",
+            "line\n" * 10,
+            [],
+        ),
+        (
+            ".devcontainer/Dockerfile:5-10",
+            ".devcontainer/Dockerfile",
+            "line\n" * 9,
+            [
+                handoff_check.Finding(
+                    handoff_check.Verdict.BAD_LINE_RANGE,
+                    ".devcontainer/Dockerfile:5-10",
+                    "cited lines 5-10 are outside the file's 1-9 range",
+                )
+            ],
+        ),
+    ],
+)
+def test_check_validates_allowlisted_extensionless_path_citations(
+    tmp_path: Path,
+    citation: str,
+    relative_path: str,
+    contents: str | None,
+    expected: list[handoff_check.Finding],
+) -> None:
+    repo = _repo(tmp_path)
+    if contents is not None:
+        path = repo / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(contents)
+
+    assert handoff_check.check(repo, f"See {citation}") == expected
+
+
+def test_check_ignores_non_allowlisted_bare_extensionless_words(
+    tmp_path: Path,
+) -> None:
+    repo = _repo(tmp_path)
+
+    assert handoff_check.check(repo, "see LICENSE:1") == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "ghcr.io/devcontainers/features/sshd:1",
+        "# syntax=docker/dockerfile:1.7",
+        "/etc/hosts:1",
+    ],
+)
+def test_check_ignores_slash_containing_non_allowlisted_citations(
+    tmp_path: Path, text: str
+) -> None:
+    """The subdirectory rule is scoped to Makefile/Dockerfile, not any bareword.
+
+    Regression pin: a broader "any extensionless word with a slash" rule
+    admitted OCI image references and the Docker syntax directive as false
+    citations (found by cold review after the ticket's own broader wording).
+    """
+    repo = _repo(tmp_path)
+
+    assert handoff_check.check(repo, text) == []
 
 
 def test_check_rejects_existing_path_outside_repo_root(tmp_path: Path) -> None:
@@ -185,6 +265,77 @@ def test_main_checks_a_specific_handoff_and_parser_wiring(
 
     assert handoff_check.main(["handoff.md"], repo) == 0
     assert "OK" in capsys.readouterr().out
+
+
+def test_main_reports_cited_file_read_failure_without_traceback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    repo = _repo(tmp_path)
+    cited = repo / "notes.md"
+    cited.write_text("one\n")
+    handoff = repo / "handoff.md"
+    handoff.write_text("See notes.md:1.\n")
+    original_read_text = Path.read_text
+
+    def read_text_with_failure(
+        path: Path,
+        encoding: str | None = None,
+        errors: str | None = None,
+        newline: str | None = None,
+    ) -> str:
+        if path == cited:
+            message = "permission denied"
+            raise OSError(message)
+        return original_read_text(
+            path,
+            encoding=encoding,
+            errors=errors,
+            newline=newline,
+        )
+
+    monkeypatch.setattr(Path, "read_text", read_text_with_failure)
+
+    assert handoff_check.main(["handoff.md"], repo) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "handoff-check: permission denied\n"
+
+
+def test_main_reports_handoff_file_read_failure_without_traceback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The other #834 arm: the handoff file itself, not a cited file, fails."""
+    repo = _repo(tmp_path)
+    handoff = repo / "handoff.md"
+    handoff.write_text("No citations here.\n")
+    original_read_text = Path.read_text
+
+    def read_text_with_failure(
+        path: Path,
+        encoding: str | None = None,
+        errors: str | None = None,
+        newline: str | None = None,
+    ) -> str:
+        if path == handoff:
+            message = "permission denied"
+            raise OSError(message)
+        return original_read_text(
+            path,
+            encoding=encoding,
+            errors=errors,
+            newline=newline,
+        )
+
+    monkeypatch.setattr(Path, "read_text", read_text_with_failure)
+
+    assert handoff_check.main(["handoff.md"], repo) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "handoff-check: permission denied\n"
 
 
 def test_render_preserves_exact_citation_text() -> None:

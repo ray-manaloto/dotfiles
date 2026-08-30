@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from dotfiles_setup.child_env import (
     ENV_DIFF_NAME,
+    GIT_CONTEXT_NAMES,
     clean_env,
     dropped_names,
     is_credential,
@@ -87,15 +88,14 @@ def test_without_git_context_drops_mise_blob_and_repository_routing() -> None:
         "GIT_WORK_TREE": "/workspace/outer",
         "GIT_INDEX_FILE": "/workspace/outer/.git/index",
         "GIT_COMMON_DIR": "/workspace/outer/.git",
+        "GIT_OBJECT_DIRECTORY": "/workspace/outer/.git/objects",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES": "/workspace/outer/.git/objects",
     }
 
     out = without_git_context(source)
 
     assert ENV_DIFF_NAME not in out
-    assert (
-        not {"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR"}
-        & out.keys()
-    )
+    assert not GIT_CONTEXT_NAMES & out.keys()
     assert out["PATH"] == "/usr/bin"
     assert out["GITHUB_TOKEN"] == SENTINEL
 
