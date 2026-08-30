@@ -28,7 +28,6 @@ from dotfiles_setup.p2996_hash import _extract_bake_variable
 from dotfiles_setup.platform_target import (
     host_platform,
     is_emulated,
-    normalize_arch,
     platform_arch,
     resolve_platform,
     ships_gcc_latest,
@@ -144,6 +143,33 @@ def _normalize_tool_os(token: str) -> str:
     return token
 
 
+def _normalize_tool_arch(token: str) -> str | None:
+    """Mirror mise's own ``normalize_arch`` (``toolset/tool_request.rs``) EXACTLY.
+
+    Exact match only — no case-folding, no trimming — unlike
+    :func:`platform_target.normalize_arch`, which strips/lowercases because
+    its job is parsing real ``docker``/``uname`` output, a genuinely more
+    lenient source. Using that lenient function here (round 1's mistake)
+    KEPT entries mise itself REJECTS — ``os = ["linux/ARM64"]`` or
+    ``os = ["linux/ arm64"]`` — the same false-negative class round 1 fixed
+    on the os half, left open on the arch half (#841 round 2).
+
+    The one place this deliberately differs from mise: mise canonicalizes
+    the ``x86_64``/``amd64``/``x64`` family to ``"x64"``; this canonicalizes
+    it to ``"amd64"`` to match the docker-normalized ``arch`` parameter every
+    caller here already holds. The *grouping* — which raw spellings are
+    equivalent, and that anything outside the two groups is unrecognised —
+    is identical; only the canonical spelling differs, and since both sides
+    of every comparison in :func:`_tool_os_supported` run through this same
+    function, that spelling never leaks into the comparison's result.
+    """
+    if token in ("x86_64", "amd64", "x64"):
+        return "amd64"
+    if token in ("aarch64", "arm64"):
+        return "arm64"
+    return None
+
+
 def _tool_os_supported(spec: str | dict[str, Any], *, arch: str) -> bool:
     """Whether a mise ``[tools]`` entry's ``os`` key admits ``arch``.
 
@@ -167,8 +193,10 @@ def _tool_os_supported(spec: str | dict[str, Any], *, arch: str) -> bool:
 
     An ``os`` value that isn't a list (e.g. the bare string ``os = "linux"``,
     which mise itself rejects as a type error) raises ``TypeError`` rather
-    than iterating its characters. What this does NOT replicate: mise's real
-    ``is_os_supported`` falls through to the BACKEND's own
+    than iterating its characters; a list containing a non-string element
+    raises the same ``TypeError`` rather than an opaque ``AttributeError``
+    from ``.partition()`` (#841 round 2). What this does NOT replicate:
+    mise's real ``is_os_supported`` falls through to the BACKEND's own
     ``is_os_supported()`` after the ``os``-list check — a backend can declare
     further platform restrictions this function has no way to see from a
     parsed TOML entry alone.
@@ -182,11 +210,14 @@ def _tool_os_supported(spec: str | dict[str, Any], *, arch: str) -> bool:
         msg = f"mise [tools] entry 'os' must be a list, got {os_list!r}"
         raise TypeError(msg)
     for entry in os_list:
+        if not isinstance(entry, str):
+            msg = f"mise [tools] entry 'os' element must be a string, got {entry!r}"
+            raise TypeError(msg)
         os_part, sep, arch_part = entry.partition("/")
         if sep:
             if _normalize_tool_os(os_part) != _LINUX:
                 continue
-            if normalize_arch(arch_part) == arch:
+            if _normalize_tool_arch(arch_part) == arch:
                 return True
         elif _normalize_tool_os(os_part) == _LINUX:
             return True

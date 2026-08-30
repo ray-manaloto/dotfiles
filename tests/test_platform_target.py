@@ -240,6 +240,25 @@ def test_planted_literal_is_caught(tmp_path: Path) -> None:
     assert platform_target.PLATFORM_ENV_VAR in violations[0].render()
 
 
+def test_planted_x64_literal_is_caught(tmp_path: Path) -> None:
+    """#841 round 2: the gate sees every spelling `normalize_arch` accepts.
+
+    `x64` is `_ARCH_ALIASES`' newest entry (mise's own spelling) — before the
+    literal pattern was derived FROM that same dict, `linux/x64` resolved to a
+    real, buildable platform via `normalize_arch` while this scan's hand-listed
+    alternation had no `x64` case and could never see it.
+    """
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    target = tmp_path / "python" / "src" / "dotfiles_setup" / "docker.py"
+    target.parent.mkdir(parents=True)
+    target.write_text('CMD = ["docker", "pull", "--platform", "linux/x64"]\n')
+    subprocess.run(["git", "-C", str(tmp_path), "add", "-A"], check=True)
+
+    violations = platform_target.find_violations(tmp_path)
+
+    assert [v.literal for v in violations] == ["linux/x64"]
+
+
 def test_untracked_literal_is_invisible_by_design(tmp_path: Path) -> None:
     """Control arm for the scan's bound: it enumerates the TRACKED tree.
 

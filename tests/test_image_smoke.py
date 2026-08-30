@@ -722,6 +722,43 @@ def test_parse_declared_tools_rejects_non_list_os() -> None:
         parse_declared_tools(_SAMPLE_MISE_TOML_BARE_STRING_OS, arch="amd64")
 
 
+_SAMPLE_MISE_TOML_CAPITALIZED_ARCH = """\
+[tools]
+"conda:gxx" = { version = "16.2.0", os = ["linux/ARM64"] }
+"""
+
+
+def test_parse_declared_tools_arch_half_is_case_sensitive_like_mise() -> None:
+    """#841 round 2: the ARCH half must reject what mise rejects too.
+
+    Round 1 only tightened the OS half's case-sensitivity and left the arch
+    half running through `platform_target.normalize_arch`, which strips and
+    lowercases for a genuinely different, more lenient job (parsing real
+    `docker`/`uname` output). Mise's own `normalize_arch` does neither, so
+    `os = ["linux/ARM64"]` is unsupported to mise — being more lenient here
+    is the same false-negative class round 1 fixed, on the other half of the
+    entry.
+    """
+    assert parse_declared_tools(_SAMPLE_MISE_TOML_CAPITALIZED_ARCH, arch="arm64") == {}
+
+
+_SAMPLE_MISE_TOML_NON_STRING_OS_ELEMENT = """\
+[tools]
+"conda:gxx" = { version = "16.2.0", os = [123] }
+"""
+
+
+def test_parse_declared_tools_rejects_non_string_os_element() -> None:
+    """A non-string element in an `os` list raises a clear `TypeError`.
+
+    Without the element check, `123.partition("/")` dies with an opaque
+    `AttributeError` (`int` has no `.partition`) instead of the same clear
+    diagnostic the non-list case already gets.
+    """
+    with pytest.raises(TypeError, match="element must be a string"):
+        parse_declared_tools(_SAMPLE_MISE_TOML_NON_STRING_OS_ELEMENT, arch="amd64")
+
+
 def test_smoke_script_injects_tool_set_assertion() -> None:
     """#143: declared tools are injected and the jq/diff assertion block present."""
     script = build_smoke_script(
