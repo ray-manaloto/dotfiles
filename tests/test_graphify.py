@@ -436,6 +436,64 @@ def test_graphify_health_rejects_invalid_graph_schema(
     assert result.status is GraphifyStatus.CORRUPT
 
 
+def test_graphify_health_accepts_links_keyed_graph(tmp_path: Path) -> None:
+    """A links-keyed graph must be usable.
+
+    Graphify's exporter writes the edge collection under 'links', not
+    'edges' (``networkx.node_link_data(G, edges="links")`` in
+    ``graphify.export``) — the real ``graphify-out/graph.json`` this repo
+    produces has no 'edges' key at all.
+    """
+    graph_dir = tmp_path / "graphify-out"
+    graph_dir.mkdir()
+    graph_bytes = b'{"nodes": [], "links": [], "hyperedges": []}'
+    (graph_dir / "graph.json").write_bytes(graph_bytes)
+    (graph_dir / "build-receipt.json").write_bytes(
+        codec.encode(
+            GraphifyBuildReceipt(
+                schema_version=1,
+                status="complete",
+                runtime_version="0.9.42",
+                graph_sha256=hashlib.sha256(graph_bytes).hexdigest(),
+                graph_bytes=len(graph_bytes),
+                node_count=0,
+                edge_count=0,
+                hyperedge_count=0,
+                input_fingerprints_sha256="a" * 64,
+                recorded_at_ns=1,
+            )
+        )
+    )
+    result = graphify_health(tmp_path)
+    assert result.status is GraphifyStatus.FRESH
+
+
+def test_graphify_health_rejects_graph_missing_edge_collection(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A graph carrying neither 'links' nor 'edges' is still corrupt."""
+    graph_dir = tmp_path / "graphify-out"
+    graph_dir.mkdir()
+    graph_bytes = json.dumps({"nodes": [], "hyperedges": []}).encode()
+    (graph_dir / "graph.json").write_bytes(graph_bytes)
+    (graph_dir / "build-receipt.json").write_text(
+        json.dumps(
+            {
+                "graph_sha256": hashlib.sha256(graph_bytes).hexdigest(),
+                "runtime_version": "0.9.42",
+                "status": "complete",
+                "warnings": [],
+            }
+        )
+    )
+    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.42")
+
+    result = graphify_health(tmp_path)
+
+    assert result.status is GraphifyStatus.CORRUPT
+    assert "edges" in result.detail
+
+
 def test_graphify_health_cli_emits_typed_json(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

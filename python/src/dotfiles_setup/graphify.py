@@ -107,6 +107,20 @@ def _load_json_object_bytes(
     return payload, ""
 
 
+def _edges_field(payload: dict[str, object]) -> str:
+    """Return the payload's edge-collection key.
+
+    graphify's own exporter (``graphify.export``) always calls
+    ``networkx.node_link_data(G, edges="links")``, so every graph it writes
+    carries its edge collection under ``"links"`` — never ``"edges"``.
+    graphify's own reader (``graphify.export.prune_dangling_edges``) stays
+    defensive and falls back to ``"edges"`` for a graph an older exporter may
+    have written; this mirrors that same fallback rather than hard-coding the
+    one key the current exporter happens to use.
+    """
+    return "links" if "links" in payload else "edges"
+
+
 def _receipt_matches(
     receipt: GraphifyBuildReceipt,
     *,
@@ -115,7 +129,7 @@ def _receipt_matches(
     runtime: str,
 ) -> bool:
     nodes = graph_payload["nodes"]
-    edges = graph_payload["edges"]
+    edges = graph_payload.get(_edges_field(graph_payload))
     hyperedges = graph_payload["hyperedges"]
     if not isinstance(nodes, list):
         return False
@@ -161,7 +175,7 @@ def _receipt_problem(
 
 def _graph_schema_problem(payload: dict[str, object]) -> str:
     """Return the first required Graphify collection schema problem, if any."""
-    for field in ("nodes", "edges", "hyperedges"):
+    for field in ("nodes", _edges_field(payload), "hyperedges"):
         if not isinstance(payload.get(field), list):
             return f"graph field {field!r} must be an array"
     return ""
