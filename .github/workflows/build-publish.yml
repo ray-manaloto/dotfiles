@@ -142,6 +142,10 @@ jobs:
       matrix:
         target: ${{ fromJSON(needs.plan.outputs.matrix) }}
     runs-on: ${{ matrix.target.runner }}
+    # #840: a leg with `blocking: false` (the arm64/ubuntu-26.04-arm
+    # validation runner) never fails a merge — its result still counts as
+    # `success` for `needs.<job>.result` in downstream jobs.
+    continue-on-error: ${{ !matrix.target.blocking }}
     # Cold base rebuild (apt + mise install + cargo crates + conda solve) runs
     # ~20-30 min; conda solve time varies, so keep generous headroom.
     timeout-minutes: 60
@@ -276,6 +280,10 @@ jobs:
       matrix:
         target: ${{ fromJSON(needs.plan.outputs.matrix) }}
     runs-on: ${{ matrix.target.runner }}
+    # #840: a leg with `blocking: false` (the arm64/ubuntu-26.04-arm
+    # validation runner) never fails a merge — its result still counts as
+    # `success` for `needs.<job>.result` in downstream jobs.
+    continue-on-error: ${{ !matrix.target.blocking }}
     # Native, never emulated: this job compiles clang-p2996 from source, and
     # under QEMU that is the multi-hour build made several times worse. The arm
     # runner label was measured, not assumed (#676).
@@ -428,6 +436,10 @@ jobs:
       matrix:
         target: ${{ fromJSON(needs.plan.outputs.matrix) }}
     runs-on: ${{ matrix.target.runner }}
+    # #840: a leg with `blocking: false` (the arm64/ubuntu-26.04-arm
+    # validation runner) never fails a merge — its result still counts as
+    # `success` for `needs.<job>.result` in downstream jobs.
+    continue-on-error: ${{ !matrix.target.blocking }}
     timeout-minutes: 45
     permissions:
       contents: read
@@ -463,7 +475,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Probe dev cache for this architecture
+        # #840: a `cache_eligible: false` leg (the arm64/ubuntu-26.04-arm
+        # validation runner) never trusts this marker — its content hash can
+        # collide with the existing arm64 leg's, which would let it silently
+        # skip its own validation by retagging that leg's already-smoked
+        # image. Skipping the step yields an empty `hit`, so every step below
+        # runs for real, same as the nightly path.
         id: probe
+        if: matrix.target.cache_eligible
         uses: ./.github/actions/dev-cache-probe
         with:
           image: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}
@@ -529,6 +548,10 @@ jobs:
       matrix:
         target: ${{ fromJSON(needs.plan.outputs.matrix) }}
     runs-on: ${{ matrix.target.runner }}
+    # #840: a leg with `blocking: false` (the arm64/ubuntu-26.04-arm
+    # validation runner) never fails a merge — its result still counts as
+    # `success` for `needs.<job>.result` in downstream jobs.
+    continue-on-error: ${{ !matrix.target.blocking }}
     # Cold dev assembly (pull p2996 cache + final COPY/overlay + bake) can run
     # longer than a warm build; keep headroom for a cold path.
     timeout-minutes: 120
@@ -792,6 +815,10 @@ jobs:
     # survive emulation — the smoke would fail for a reason that has nothing to
     # do with the image.
     runs-on: ${{ matrix.target.runner }}
+    # #840: a leg with `blocking: false` (the arm64/ubuntu-26.04-arm
+    # validation runner) never fails a merge — its result still counts as
+    # `success` for `needs.<job>.result` in downstream jobs.
+    continue-on-error: ${{ !matrix.target.blocking }}
     timeout-minutes: 45
     permissions:
       contents: read
@@ -848,7 +875,7 @@ jobs:
         # hash cannot see. A skipped step yields an empty `hit`, so everything
         # below runs.
         id: probe
-        if: inputs.tag_strategy == 'pr'
+        if: inputs.tag_strategy == 'pr' && matrix.target.cache_eligible
         uses: ./.github/actions/dev-cache-probe
         with:
           image: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}
@@ -974,6 +1001,10 @@ jobs:
     # rather than making the label and the exported platform independently
     # correct-by-inspection.
     runs-on: ${{ matrix.target.runner }}
+    # #840: a leg with `blocking: false` (the arm64/ubuntu-26.04-arm
+    # validation runner) never fails a merge — its result still counts as
+    # `success` for `needs.<job>.result` in downstream jobs.
+    continue-on-error: ${{ !matrix.target.blocking }}
     timeout-minutes: 15
     permissions:
       contents: read
@@ -1009,6 +1040,12 @@ jobs:
           P2996_REF: ${{ inputs.p2996_ref }}
         run: echo "CLANG_P2996_REF=${P2996_REF}" >> "$GITHUB_ENV"
       - name: Tag validated image as :dev-<hash>
+        # #840: never stamp the shared marker for a `cache_eligible: false`
+        # leg — its content hash is the SAME as the existing arm64 leg's
+        # (both build the same arm64 platform triple), so an unconditional stamp here would
+        # let the validation runner's build poison the marker the publish
+        # leg's own dev-prep/smoke-test probes trust.
+        if: matrix.target.cache_eligible
         env:
           IMAGE: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}
           COMMIT_SHA: ${{ github.sha }}
@@ -1088,6 +1125,19 @@ jobs:
         uses: ./.github/actions/setup-mise
         with:
           install_args: "python uv"
+      - name: Resolve the publish-only matrix (#840)
+        # An OCI index cannot hold two entries for the same platform tuple, so
+        # every step below must see ONLY `role: publish` legs — the plan
+        # matrix's validation leg (arm64/ubuntu-26.04-arm) shares arm64's
+        # platform tuple on purpose and would otherwise collide with the
+        # existing arm64 publish leg's index entry.
+        id: publish-matrix
+        env:
+          MATRIX: ${{ needs.plan.outputs.matrix }}
+        run: |
+          set -euo pipefail
+          publish_matrix=$(printf '%s' "${MATRIX}" | jq -c '[.[] | select(.role == "publish")]')
+          echo "matrix=${publish_matrix}" >> "$GITHUB_OUTPUT"
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
       - name: Log in to Container Registry
@@ -1100,7 +1150,7 @@ jobs:
         id: merge
         env:
           IMAGE: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}
-          MATRIX: ${{ needs.plan.outputs.matrix }}
+          MATRIX: ${{ steps.publish-matrix.outputs.matrix }}
           COMMIT_SHA: ${{ github.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           NIGHTLY: ${{ inputs.tag_strategy == 'nightly' }}
@@ -1154,7 +1204,7 @@ jobs:
       - name: Assert the index lists every published architecture (AC1)
         env:
           IMAGE_REF: ${{ steps.merge.outputs.image_ref }}
-          MATRIX: ${{ needs.plan.outputs.matrix }}
+          MATRIX: ${{ steps.publish-matrix.outputs.matrix }}
         run: |
           set -euo pipefail
           # `imagetools inspect --raw` returns the index document itself, so
@@ -1210,7 +1260,7 @@ jobs:
         # step cannot be run locally.
         env:
           IMAGE_REF: ${{ steps.merge.outputs.image_ref }}
-          MATRIX: ${{ needs.plan.outputs.matrix }}
+          MATRIX: ${{ steps.publish-matrix.outputs.matrix }}
         run: |
           set -euo pipefail
           # Written to a file rather than piped: a pipeline returns the LAST
