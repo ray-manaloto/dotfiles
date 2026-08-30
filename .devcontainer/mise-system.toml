@@ -38,6 +38,13 @@ cargo-binstall = "latest"
 # wired only in the HOST hk.pkl — so editorconfig-checker was dead weight in the
 # image and is removed here (#160 T6). Nothing else in the image invokes `ec`.
 # Conda packages (C++ toolchain for devcontainer)
+# #841: every conda: entry below has ZERO automated currency tracking, and no
+# renovate.json fix can add it — Renovate's native mise manager only supports
+# the core/asdf/aqua/cargo/gem/github/go/npm/pipx/spm/ubi/vfox backends
+# (docs.renovatebot.com/modules/manager/mise/ "Backends support", confirmed
+# live 2026-08-30); `conda` is not implemented upstream. Widening
+# managerFilePatterns to cover this file would still resolve nothing. Pre-
+# existing, repo-wide gap this ticket surfaces but cannot fix.
 # NOTE (#222 PR-C): the LLVM-family toolchain (llvm, llvm-tools, clang, clangxx,
 # clang-tools, clang-format, lld, lldb) was MOVED OUT of the conda backend to the
 # Ubuntu apt LLVM-22 packages declared in [bootstrap.packages] below. mise's conda
@@ -53,10 +60,12 @@ cargo-binstall = "latest"
 # matching clang-22 in one isolated env). cppcheck STAYS conda (no libLLVM — it was
 # never part of the duplication). cmake/ninja STAY conda (the p2996 stage uses them).
 "conda:cmake" = "latest"
-# #698/D31: conda-forge gxx fills arm64's modern-GCC slot because kayari
-# gcc-latest is permanently x86_64-only. amd64 gains it too because mise
-# resolves conda packages natively with no arch pin.
-"conda:gxx" = "latest"
+# #698/D31/#841: conda-forge gxx fills arm64's modern-GCC slot because kayari
+# gcc-latest is permanently x86_64-only. Pinned exact (was "latest", already
+# resolved to 16.2.0 in mise-system.lock) and scoped to linux/arm64 only —
+# amd64 does not need it (it has gcc-latest) and previously got it anyway as
+# an unintended side effect of conda resolving with no arch pin.
+"conda:gxx" = { version = "16.2.0", os = ["linux/arm64"] }
 "conda:ninja" = "latest"
 "conda:mold" = "latest"
 "conda:bear" = "latest"
