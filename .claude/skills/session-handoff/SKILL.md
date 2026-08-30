@@ -96,7 +96,10 @@ reflected in docs), find and update every affected doc. Walk these in order:
    repos to a `## GitHub repos touched` section
    (`.claude/rules/research-repo-enumeration.md`).
 4. **Issue / epic checklists** on GitHub — tick boxes, file follow-ups,
-   cross-link (`gh issue edit`, `gh issue comment`).
+   cross-link (`gh issue edit`, `gh issue comment`). **On a self-triggered
+   run**, step 4's review gate applies to these two verbs before you run
+   them here — do not mutate GitHub while still walking this list; queue the
+   edits and post them after that gate clears.
 5. **Doc-ref integrity — machine-gated; do NOT hand-roll a grep sweep.**
    Stale refs predating the session escape the diff-scoped greps above (a
    deleted file's mentions can linger for months — the `home/AGENTS.md` case,
