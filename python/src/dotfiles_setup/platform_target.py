@@ -146,7 +146,13 @@ _SCAN_EXCLUDED_PREFIXES = (
 # worse documentation, and this is the one file a reader comes to for the
 # answer. Nothing here issues a `--platform`, so the exemption costs no
 # coverage.
-_SCAN_EXCLUDED_PATHS = ("python/src/dotfiles_setup/platform_target.py",)
+# #841: mise-system.toml's own `os=["linux/arm64"]` tool-scoping syntax
+# (mise's os/arch grammar) is textually identical to but semantically
+# unrelated to a DOTFILES_PLATFORM triple — it never issues a `--platform`.
+_SCAN_EXCLUDED_PATHS = (
+    "python/src/dotfiles_setup/platform_target.py",
+    ".devcontainer/mise-system.toml",
+)
 
 
 # The architectures the published image ships as one manifest (#676), in the
