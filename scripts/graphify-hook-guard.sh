@@ -8,23 +8,24 @@
 # uv is missing — fresh clone / CI before bootstrap — same rationale as
 # scripts/pretooluse-guard.sh: a crashed guard must not brick every call.
 #
-# `uv run --project python` resolves this repo's pinned graphify 0.9.42
-# (python/pyproject.toml) — NOT the user-global PATH shim (currently
-# 0.9.53, ~/.config/mise/config.toml — see graphify-first.md).
+# `--project "$CLAUDE_PROJECT_DIR/python"` resolves this repo's pinned
+# graphify 0.9.42, NOT the user-global PATH shim (currently 0.9.53, see
+# graphify-first.md) — ANCHORED, not relative: a bare `--project python`
+# fails rc=2 off the repo root (a subagent, a worktree).
 #
-# Advisory, soft mode. graphify's strict mode (GRAPHIFY_HOOK_STRICT /
-# _TTL, graphify/cli.py) is an env-var override, not a code change — set
-# it in .claude/settings.json's env block if ever needed, don't build
-# machinery for it. GRAPHIFY_BIN is NOT a binary override (vendor skill
-# doc only, never runtime code) — `uv run` resolution stays necessary.
+# Advisory, soft mode. Strict mode (GRAPHIFY_HOOK_STRICT/_TTL,
+# graphify/cli.py) is an env var, not a code change — set it in
+# .claude/settings.json's env block if ever needed. GRAPHIFY_BIN is NOT a
+# binary override (vendor skill doc only, never runtime code).
 #
 # $1 is the hook kind: `search` (Bash|Grep matcher) or `read` (Read|Glob).
 set -uo pipefail
 
 kind="${1:-search}"
+project_dir="${CLAUDE_PROJECT_DIR:-.}/python"
 
 if command -v uv >/dev/null 2>&1; then
-  uv run --project python dotfiles-setup graphify hook-guard "$kind" 2>/dev/null || true
+  uv run --project "$project_dir" dotfiles-setup graphify hook-guard "$kind" 2>/dev/null || true
 fi
 # Absent uv (fresh clone / CI): fall through and exit 0 — allow, no nudge.
 exit 0

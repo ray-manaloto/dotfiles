@@ -9,27 +9,43 @@ Before broad source search, run `mise run graphify-health`.
   an empty or complete answer.
 - **Always the mise tasks, never a bare `graphify` on `PATH`.** Query with
   `mise run graphify-query`, rebuild with `mise run graphify-update` — never
-  `graphify query`/`graphify update` directly. Two different graphify
-  versions run on this machine: `graphify` on `PATH` resolves the
-  **user-global** pin (`~/.config/mise/config.toml`, currently 0.9.53,
-  outside this repo's review), while both mise tasks run **this repo's
-  pinned 0.9.42** (`python/pyproject.toml`) — the version `graphify_health`
-  actually checks against. A bare invocation can silently answer from, or
-  rebuild the graph with, the wrong binary; the mise tasks are the only
-  invocations guaranteed to match the health check that gates them. Never
-  run a global Graphify binary or installer as a substitute for the project
-  tasks — the generated skill is reference material, repository tasks are
-  authoritative.
-- `mise run graphify-update` also stamps which graphify version built the
-  graph, so a later health check can tell a graph built by the drifted PATH
-  binary from one built by this repo's pin — that stamp is what
-  `version drift`/`stale` are actually detecting for a graph you rebuilt
-  yourself. A present KB-style build receipt
-  (`graphify-out/build-receipt.json`) is still verified byte-for-byte when
-  one exists, but neither it nor the stamp is a fault when absent: nothing
-  in this repo writes a receipt (that's the knowledge-base's
-  committed-corpus pipeline), and the stamp only exists after a
-  `graphify-update` run.
+  `graphify query`/`graphify update` directly.
+
+## Two graphify versions, and this repo cannot tell which one built the graph
+
+**Two different graphify installs exist on this machine, and nothing keeps
+them in sync.** `graphify` on bare `PATH` resolves the **user-global** pin
+(`~/.config/mise/config.toml`, currently 0.9.53, outside this repo's
+review); `mise run graphify-query`/`graphify-update` resolve **this repo's
+pinned 0.9.42** (`python/pyproject.toml`) instead — the version
+`graphify_health`'s `version drift` check compares against.
+
+That check reads whatever graphify package is installed in the process
+*checking* health right now. It says nothing about which binary actually
+*built* the graph bytes on disk — a graph rebuilt by the drifted PATH 0.9.53
+binary (a bare `graphify update .`) is indistinguishable from one built by
+this repo's 0.9.42, because nothing records who built it. **An earlier
+version of this rule claimed a rebuild stamp closed that gap; it did not —
+the stamp could only ever record whatever `graphify-update` itself always
+resolves, so the check it fed could never fail, and the one drift it
+existed to catch wrote no stamp at all. It was removed rather than kept as
+a check that always reports "fine".**
+
+So the guarantee here is **procedural, not enforced**: always run
+`mise run graphify-query`/`graphify-update`, never the bare binary, and
+`graphify-first.md`'s `version drift`/`stale` states only ever catch the
+*checking* process itself drifting (a broken `uv` env, a bad `pyproject.toml`
+edit) — not a graph built by the wrong installed graphify. Never run a
+global Graphify binary or installer as a substitute for the project tasks —
+the generated skill is reference material, repository tasks are
+authoritative, by convention, not by verification.
+
+A present KB-style build receipt (`graphify-out/build-receipt.json`) is
+still verified byte-for-byte when one exists, but its absence is not a
+fault: nothing in this repo writes one (that's the knowledge-base's
+committed-corpus pipeline; see `_receipt_problem`'s docstring in
+`python/src/dotfiles_setup/graphify.py` for why this repo cannot build one
+of its own for an on-demand graph).
 
 For every dependency/session review, check the latest Graphify release and the
 project's critical/currency dependencies. Review release notes and source diffs,

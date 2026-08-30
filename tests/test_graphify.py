@@ -302,6 +302,30 @@ def test_graphify_health_reports_missing_graph(tmp_path: Path) -> None:
     assert not result.ok
 
 
+def test_graphify_health_reports_version_drift(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """VERSION_DRIFT: the CHECKING process's own runtime differs from the pin.
+
+    It says nothing about which binary BUILT the graph on disk (see
+    graphify-first.md: that binding does not exist). A well-formed graph is
+    still required here, so this isolates the version axis from the schema
+    axis.
+    """
+    graph_dir = tmp_path / "graphify-out"
+    graph_dir.mkdir()
+    graph_dir.joinpath("graph.json").write_bytes(
+        b'{"nodes": [], "links": [], "hyperedges": []}'
+    )
+    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.53")
+
+    result = graphify_health(tmp_path)
+
+    assert result.status is GraphifyStatus.VERSION_DRIFT
+    assert result.runtime_version == "0.9.53"
+    assert not result.ok
+
+
 def test_graphify_health_accepts_graph_without_build_receipt(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -602,68 +626,28 @@ def test_graphify_main_reports_incomplete_and_returns_3(
     assert "TRUNCATED" in capsys.readouterr().err
 
 
-def _receiptless_fresh_graph(tmp_path: Path) -> tuple[Path, bytes]:
-    """A minimal FRESH graph with no build receipt, for stamp-only tests."""
-    graph_dir = tmp_path / "graphify-out"
-    graph_dir.mkdir()
-    graph_path = graph_dir / "graph.json"
-    graph_bytes = b'{"nodes": [], "links": [], "hyperedges": []}'
-    graph_path.write_bytes(graph_bytes)
-    return graph_path, graph_bytes
-
-
-def test_update_stamps_the_builder_version_on_success(
+def test_update_runs_graphify_update_and_returns_the_result(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """A successful `graphify update` records which binary built the graph.
+    """update() is a thin wrapper: run `graphify update <target>`, return it as-is.
 
-    This is the replacement for the receipt's byte/version binding: the
-    stamped version comes from re-running `graphify --version` through the
-    SAME `_run` boundary `update()` just used to build — not from
-    ``importlib.metadata`` — so it reflects the binary that actually ran,
-    even if that differs from whatever graphify happens to be installed in
-    the checking process's own environment.
+    No stamping, no post-processing. A version/byte binding was tried here
+    and removed (see `_receipt_problem`'s docstring and graphify-first.md):
+    it could only ever record the version `update()` itself always resolves,
+    so the check it fed could never fail.
     """
-    graph_path = tmp_path / "graphify-out" / "graph.json"
 
     def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
         _ = cwd
-        if args[:2] == ["graphify", "update"]:
-            graph_path.parent.mkdir(parents=True, exist_ok=True)
-            graph_path.write_bytes(b'{"nodes": [], "links": [], "hyperedges": []}')
-            return subprocess.CompletedProcess(args, 0, stdout="updated\n", stderr="")
-        if args == ["graphify", "--version"]:
-            return subprocess.CompletedProcess(
-                args, 0, stdout="graphify 0.9.53\n", stderr=""
-            )
-        message = f"unexpected graphify invocation: {args}"
-        raise AssertionError(message)
+        assert args == ["graphify", "update", "src/some/dir"]
+        return subprocess.CompletedProcess(args, 0, stdout="updated\n", stderr="")
 
     monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
 
-    result = update(tmp_path)
+    result = update(tmp_path, "src/some/dir")
 
     assert result.returncode == 0
-    stamp = json.loads((tmp_path / "graphify-out" / "runtime-stamp.json").read_text())
-    assert stamp["runtime_version"] == "0.9.53"
-    assert stamp["graph_sha256"] == hashlib.sha256(graph_path.read_bytes()).hexdigest()
-
-
-def test_update_does_not_stamp_on_failure(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """A failed `graphify update` leaves no stamp — nothing was built."""
-
-    def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
-        _ = cwd
-        return subprocess.CompletedProcess(args, 1, stdout="", stderr="boom\n")
-
-    monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
-
-    result = update(tmp_path)
-
-    assert result.returncode == 1
-    assert not (tmp_path / "graphify-out" / "runtime-stamp.json").exists()
+    assert result.stdout == "updated\n"
 
 
 def test_graphify_update_main_passes_through_output_and_rc(
@@ -685,72 +669,6 @@ def test_graphify_update_main_passes_through_output_and_rc(
     captured = capsys.readouterr()
     assert "partial" in captured.out
     assert "update failed" in captured.err
-
-
-def test_graphify_health_accepts_matching_runtime_stamp(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """A graph stamped by the currently-installed runtime is fresh."""
-    graph_path, graph_bytes = _receiptless_fresh_graph(tmp_path)
-    (graph_path.parent / "runtime-stamp.json").write_text(
-        json.dumps(
-            {
-                "runtime_version": "0.9.42",
-                "graph_sha256": hashlib.sha256(graph_bytes).hexdigest(),
-            }
-        )
-    )
-    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.42")
-
-    result = graphify_health(tmp_path)
-
-    assert result.status is GraphifyStatus.FRESH
-
-
-def test_graphify_health_rejects_runtime_stamp_version_mismatch(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """A graph built by a different graphify than is installed now is stale.
-
-    This is the arm `_receipt_problem`'s old byte-integrity guarantee could
-    catch and ``_runtime_version()`` alone cannot: the checking process is
-    genuinely running the pinned 0.9.42 (so VERSION_DRIFT does not fire), but
-    the graph on disk was built by a drifted 0.9.53 (e.g. the user-global
-    PATH shim, see graphify-first.md) — the exact scenario HIGH-2 in the
-    2026-08-30 cold review named.
-    """
-    graph_path, graph_bytes = _receiptless_fresh_graph(tmp_path)
-    (graph_path.parent / "runtime-stamp.json").write_text(
-        json.dumps(
-            {
-                "runtime_version": "0.9.53",
-                "graph_sha256": hashlib.sha256(graph_bytes).hexdigest(),
-            }
-        )
-    )
-    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.42")
-
-    result = graphify_health(tmp_path)
-
-    assert result.status is GraphifyStatus.STALE
-    assert "0.9.53" in result.detail
-    assert "0.9.42" in result.detail
-
-
-def test_graphify_health_rejects_runtime_stamp_graph_mismatch(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """A graph mutated/replaced since the stamped build is stale."""
-    graph_path, _ = _receiptless_fresh_graph(tmp_path)
-    (graph_path.parent / "runtime-stamp.json").write_text(
-        json.dumps({"runtime_version": "0.9.42", "graph_sha256": "a" * 64})
-    )
-    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.42")
-
-    result = graphify_health(tmp_path)
-
-    assert result.status is GraphifyStatus.STALE
-    assert "changed" in result.detail
 
 
 def test_rewrite_hook_nudge_rewrites_bare_query_and_update() -> None:
@@ -852,15 +770,3 @@ def test_hook_guard_main_fails_open_on_missing_binary(
     monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
 
     assert hook_guard_main(tmp_path, "search") == 0
-
-
-def test_graphify_health_rejects_corrupt_runtime_stamp(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    graph_path, _ = _receiptless_fresh_graph(tmp_path)
-    (graph_path.parent / "runtime-stamp.json").write_text("not json")
-    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.42")
-
-    result = graphify_health(tmp_path)
-
-    assert result.status is GraphifyStatus.CORRUPT

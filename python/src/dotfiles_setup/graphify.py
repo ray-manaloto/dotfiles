@@ -32,7 +32,6 @@ _DEFAULT_BUDGET = 2000
 _GRAPH_SUBDIR = "graphify-out"
 _GRAPH_FILE = "graph.json"
 _BUILD_RECEIPT = "build-receipt.json"
-_RUNTIME_STAMP = "runtime-stamp.json"
 _MAX_AGENT_OUTPUT_BYTES = 65_536
 
 
@@ -84,14 +83,6 @@ def _runtime_version() -> str:
         return version("graphifyy")
     except PackageNotFoundError:
         return "missing"
-
-
-def _load_json_object(path: Path) -> tuple[dict[str, object] | None, str]:
-    try:
-        raw = path.read_bytes()
-    except OSError as exc:
-        return None, str(exc)
-    return _load_json_object_bytes(raw, name=path.name)
 
 
 def _load_json_object_bytes(
@@ -169,15 +160,21 @@ def _receipt_problem(
     a receipt writer here would mean adopting the KB's committed-build design
     only to satisfy this check, which is exactly backwards.
 
-    What the receipt actually proved and is now lost for the common case:
+    What the receipt actually proved and is now lost, with no replacement:
     (1) that the graph bytes on disk are the ones a specific build run
     produced, unmodified, and (2) that the *builder's* graphify version — not
     just whatever version happens to be installed when health runs — is the
-    one recorded in ``mise.toml``. Neither has a substitute this repo can
-    compute for an on-demand graph built via plain ``graphify update``.
-    ``_runtime_stamp_problem`` below restores (2) for graphs built through
-    ``mise run graphify-update``, which is the only builder this repo ships;
-    a graph built by hand still has neither guarantee.
+    one recorded in ``mise.toml``. An earlier version of this fix tried to
+    restore (2) with a self-authored stamp written by ``update()``, but that
+    stamp could only ever record the SAME version ``update()`` itself always
+    resolves (``uv run --project python``, pinned 0.9.42) — so the check it
+    fed could never fail, and the one drift it existed to catch (a bare
+    ``graphify update`` run through the OTHER installed version) writes no
+    stamp at all, since only ``update()`` writes one. A check that can only
+    report "fine" is worse than no check: it converts an open question into
+    a false answer. Removed rather than kept as decoration; see
+    ``graphify-first.md`` for why this repo cannot detect the builder version
+    and what the procedural mitigation is instead.
 
     What is NOT lost: if a KB-style receipt *is* present (e.g. carried over
     from the knowledge-base's own tree), it is still verified byte-for-byte
@@ -202,90 +199,6 @@ def _receipt_problem(
     ):
         return HealthResult(GraphifyStatus.STALE, runtime, "build receipt mismatch")
     return None
-
-
-def _runtime_stamp_path(graph_path: Path) -> Path:
-    return graph_path.with_name(_RUNTIME_STAMP)
-
-
-def _write_runtime_stamp(
-    graph_path: Path, graph_bytes: bytes, builder_version: str
-) -> None:
-    """Bind the graph bytes just written to the graphify version that wrote them.
-
-    Called only by :func:`update` right after a successful ``graphify update``,
-    with the version of the SAME binary that ran the update (see
-    :func:`_builder_version`) — not the version installed in whatever
-    environment later happens to run ``graphify_health``. This is the
-    replacement for the byte/version binding the (inapplicable-here) build
-    receipt used to provide; see ``_receipt_problem``'s docstring.
-    """
-    stamp = {
-        "runtime_version": builder_version,
-        "graph_sha256": hashlib.sha256(graph_bytes).hexdigest(),
-    }
-    _runtime_stamp_path(graph_path).write_text(json.dumps(stamp, sort_keys=True) + "\n")
-
-
-def _runtime_stamp_problem(
-    graph_path: Path,
-    graph_bytes: bytes,
-    runtime: str,
-) -> HealthResult | None:
-    """Validate a runtime stamp if one is present; an absent one is not a fault.
-
-    Only ``update()`` (``mise run graphify-update``) writes this file, so a
-    graph nobody has rebuilt through that task yet (or one this feature
-    predates) has none — absence must not resurrect the STALE-forever bug
-    ``_receipt_problem`` was fixed for. A PRESENT stamp is checked against
-    both the current graph bytes (catches a graph mutated or replaced since
-    the stamped build) and the CURRENTLY INSTALLED runtime (catches the graph
-    having been built by a different graphify binary than the one this
-    process would use to read it — the two-pin drift ``graphify-first.md``
-    documents: the PATH shim vs. this repo's ``python/pyproject.toml`` pin).
-    """
-    stamp_path = _runtime_stamp_path(graph_path)
-    if not stamp_path.is_file():
-        return None
-    payload, error = _load_json_object(stamp_path)
-    if payload is None:
-        return HealthResult(GraphifyStatus.CORRUPT, runtime, f"runtime stamp: {error}")
-    stamp_version = payload.get("runtime_version")
-    stamp_sha256 = payload.get("graph_sha256")
-    if not isinstance(stamp_version, str) or not isinstance(stamp_sha256, str):
-        return HealthResult(
-            GraphifyStatus.CORRUPT, runtime, "runtime stamp fields malformed"
-        )
-    if stamp_sha256 != hashlib.sha256(graph_bytes).hexdigest():
-        return HealthResult(
-            GraphifyStatus.STALE, runtime, "graph changed since the last stamped build"
-        )
-    if stamp_version != runtime:
-        return HealthResult(
-            GraphifyStatus.STALE,
-            runtime,
-            f"graph was built by graphify {stamp_version}, but the graphify "
-            f"running now is {runtime}; rerun `mise run graphify-update`",
-        )
-    return None
-
-
-def _binding_problem(
-    graph_path: Path,
-    graph_bytes: bytes,
-    graph_payload: dict[str, object],
-    runtime: str,
-) -> HealthResult | None:
-    """Return the first byte/builder-version binding problem, if either fires.
-
-    Two independent, each-optional bindings, checked in order: a KB-style
-    build receipt (``_receipt_problem``) and this repo's own runtime stamp
-    (``_runtime_stamp_problem``, written by ``update()``). Combined into one
-    call so ``graphify_health`` doesn't carry a return statement per binding.
-    """
-    if problem := _receipt_problem(graph_path, graph_bytes, graph_payload, runtime):
-        return problem
-    return _runtime_stamp_problem(graph_path, graph_bytes, runtime)
 
 
 def _graph_schema_problem(payload: dict[str, object]) -> str:
@@ -321,7 +234,7 @@ def graphify_health(project_root: Path) -> HealthResult:
         return HealthResult(GraphifyStatus.CORRUPT, runtime, schema_problem)
     if runtime != "0.9.42":
         return HealthResult(GraphifyStatus.VERSION_DRIFT, runtime, "expected 0.9.42")
-    if problem := _binding_problem(graph_path, graph_bytes, payload, runtime):
+    if problem := _receipt_problem(graph_path, graph_bytes, payload, runtime):
         return problem
     return HealthResult(
         GraphifyStatus.FRESH,
@@ -457,35 +370,19 @@ def query(
     return QueryResult(text=result.stdout.strip())
 
 
-def _builder_version(project_root: Path) -> str:
-    """Return the version of the ``graphify`` binary ``_run`` actually resolves.
-
-    Deliberately re-derived from the SAME subprocess resolution ``update()``
-    just used, rather than read from installed package metadata
-    (:func:`_runtime_version`) — the two can differ when the environment's
-    ``PATH`` puts a different ``graphify`` ahead of the one this process's
-    venv would use. ``graphify --version`` prints e.g. ``"graphify 0.9.42"``.
-    """
-    result = _run(["graphify", "--version"], cwd=project_root)
-    return result.stdout.strip().removeprefix("graphify ") or "unknown"
-
-
 def update(project_root: Path, target: str = ".") -> subprocess.CompletedProcess[str]:
-    """Rebuild the project graph via ``graphify update`` and stamp its builder.
+    """Rebuild the project graph via ``graphify update``.
 
     AST-only re-extraction (no LLM, no API cost — see ``graphify --help``).
-    On success, records which graphify version actually performed the build
-    against the resulting graph bytes (see ``_write_runtime_stamp``), so a
-    later ``graphify_health`` call can tell a graph the PATH's drifted
-    ``graphify`` built from one this repo's pinned version built.
+    This is the only sanctioned rebuild path in this repo (``mise run
+    graphify-update``), resolving graphify through the same ``uv run
+    --project python`` pin as every other graphify task — but that
+    convention is procedural, not enforced: nothing here can detect whether
+    a graph was instead rebuilt by the OTHER graphify installed on this
+    machine (a bare ``graphify update .``, resolving the user-global PATH
+    pin). See ``graphify-first.md`` and ``_receipt_problem``'s docstring.
     """
-    graph_path = project_root / _GRAPH_SUBDIR / _GRAPH_FILE
-    result = _run(["graphify", "update", target], cwd=project_root)
-    if result.returncode == 0 and graph_path.is_file():
-        builder_version = _builder_version(project_root)
-        graph_bytes = graph_path.read_bytes()
-        _write_runtime_stamp(graph_path, graph_bytes, builder_version)
-    return result
+    return _run(["graphify", "update", target], cwd=project_root)
 
 
 def graphify_update_main(project_root: Path, *, target: str = ".") -> int:
@@ -522,11 +419,17 @@ def hook_guard_main(project_root: Path, kind: str) -> int:
     """CLI entry for ``dotfiles-setup graphify hook-guard <kind>``.
 
     Execs graphify's own advisory PreToolUse nudge and rewrites its bare-
-    binary wording (see :func:`rewrite_hook_nudge`). Fails open — rc 0, no
-    output — on ANY problem (graphify missing from this environment, a
-    non-zero exit, empty output): a crashed advisory nudge must never block
-    the tool call it is attached to. ``$1``/``kind`` is ``search`` (Bash|Grep
-    matcher) or ``read`` (Read|Glob), graphify's own vocabulary.
+    binary wording (see :func:`rewrite_hook_nudge`). Always returns 0 (never
+    blocks the tool call it's attached to), and prints nothing when the
+    subprocess exits non-zero or produces no output. What this function
+    itself catches is narrower than "any problem": an ``OSError`` — the
+    binary missing, unresolvable, or unrunnable. It does NOT catch every
+    exception (e.g. a ``UnicodeDecodeError`` from malformed subprocess
+    output would still propagate). The caller,
+    ``scripts/graphify-hook-guard.sh``, wraps this call in a bash
+    ``|| true`` specifically to cover what this function does not — see
+    that script's header. ``$1``/``kind`` is ``search`` (Bash|Grep matcher)
+    or ``read`` (Read|Glob), graphify's own vocabulary.
     """
     try:
         result = _run(["graphify", "hook-guard", kind], cwd=project_root)
