@@ -100,10 +100,16 @@ PLATFORM_ENV_VAR = "DOTFILES_PLATFORM"
 # Docker's architecture names, keyed by every spelling a host or a platform
 # string may use for them. `uname -m` says x86_64/aarch64; docker says
 # amd64/arm64; the two are not interchangeable and conflating them is how a
-# probe ends up asserting the wrong machine.
+# probe ends up asserting the wrong machine. `x64` is mise's own spelling
+# (`docs/dev-tools/index.md` "OS/Architecture Combinations" lists `x64` /
+# `x86_64` / `amd64` as equivalent `[tools]` `os=` entries) — #841 round 2:
+# without it, a config author who follows mise's docs and writes `os =
+# ["linux/x64"]` gets silently dropped by this repo's own `os=` filter even
+# though mise installs the tool there.
 _ARCH_ALIASES = {
     "x86_64": "amd64",
     "amd64": "amd64",
+    "x64": "amd64",
     "arm64": "arm64",
     "aarch64": "arm64",
 }
@@ -122,7 +128,19 @@ DEFAULT_LITERAL_SITES = ("mise.toml", "docker-bake.hcl")
 # `linux/<arch>` with an optional microarchitecture level. Deliberately matches
 # the arch words too (`linux/amd64` without a level), because a site that drops
 # the level is exactly the split-brain this gate exists to catch.
-_LITERAL_RE = re.compile(r"linux/(?:amd64|arm64|x86_64|aarch64)(?:/v\d+)?")
+#
+# The alternation is BUILT FROM `_ARCH_ALIASES` rather than hand-listed
+# (#841 round 2) — two independently-maintained spellings of "every
+# recognised arch word" is exactly how `x64` ended up accepted by
+# `normalize_arch` while invisible to this gate: `linux/x64` resolved to a
+# real, buildable platform and no scan could ever catch it appearing as a
+# literal. Sorted longest-first purely for readability in a failed match's
+# regex dump; alternation order has no effect on which literals match.
+_LITERAL_RE = re.compile(
+    r"linux/(?:"
+    + "|".join(sorted(_ARCH_ALIASES, key=len, reverse=True))
+    + r")(?:/v\d+)?"
+)
 
 # Files scanned for a re-appearing literal. Prose and archived evidence are out
 # of scope — a research report records what was true when it was written, and
@@ -146,7 +164,13 @@ _SCAN_EXCLUDED_PREFIXES = (
 # worse documentation, and this is the one file a reader comes to for the
 # answer. Nothing here issues a `--platform`, so the exemption costs no
 # coverage.
-_SCAN_EXCLUDED_PATHS = ("python/src/dotfiles_setup/platform_target.py",)
+# #841: mise-system.toml's own `os=["linux/arm64"]` tool-scoping syntax
+# (mise's os/arch grammar) is textually identical to but semantically
+# unrelated to a DOTFILES_PLATFORM triple — it never issues a `--platform`.
+_SCAN_EXCLUDED_PATHS = (
+    "python/src/dotfiles_setup/platform_target.py",
+    ".devcontainer/mise-system.toml",
+)
 
 
 # The architectures the published image ships as one manifest (#676), in the

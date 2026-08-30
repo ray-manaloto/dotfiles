@@ -586,9 +586,14 @@ ARG GCC_LATEST_DEB_SHA256=a9c2f9f7d6189ccff55ccead9ae949d29d45fa32f93268de82ce31
 #
 # Consequence, decided by Ray 2026-08-10: arm64 ships WITHOUT gcc-latest, and
 # its modern-GCC slot goes to conda-forge gcc — which does publish linux-aarch64
-# (204 files at 16.1.0, identical coverage to linux-64). So the "exactly 3 gcc
-# compilers" invariant is ARCHITECTURE-DEPENDENT: 3 on amd64, 2 on arm64.
-# clang-p2996 is unaffected — it is built from source and is portable.
+# (204 files at 16.1.0, identical coverage to linux-64). So the "gcc compilers"
+# count is ARCHITECTURE-DEPENDENT but, as of #841, symmetric: 2 on amd64,
+# 2 on arm64 — amd64: distro gcc + gcc-latest .deb, and (as of #841) no longer
+# an UNINTENDED third, conda-forge gxx — conda:gxx is now pinned 16.2.0 and
+# os=["linux/arm64"]-scoped in mise-system.toml, so amd64 stops picking it up
+# as a side effect of conda resolving with no arch pin. arm64: distro gcc +
+# conda-forge gxx 16.2.0. clang-p2996 is unaffected — it is built from source
+# and is portable.
 ARG TARGETARCH
 # #222 PR-A (dev-hash only): the kayari .deb ships UNSTRIPPED backend
 # executables — cc1plus 518M, cc1 480M, lto1 463M, lto-dump 463M each carry

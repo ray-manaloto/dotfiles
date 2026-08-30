@@ -123,38 +123,158 @@ def _tool_requested_version(spec: str | dict[str, Any]) -> str:
     return version
 
 
-def parse_declared_tools(config_text: str) -> dict[str, str]:
-    """Parse ``[tools]`` from a mise-system.toml document.
+_LINUX = "linux"
+
+
+def _normalize_tool_os(token: str) -> str:
+    """Mirror mise's own ``normalize_os`` (``toolset/tool_request.rs``).
+
+    Aliases ONLY ``darwin``/``macos`` and ``windows``/``win`` — everything
+    else, including case, passes through unchanged. mise itself performs no
+    case-folding or trimming here, so neither does this (#841 round 2): an
+    entry spelled ``Linux`` is unsupported to mise and must stay unsupported
+    here too, rather than this check being more lenient than the tool it
+    mirrors.
+    """
+    if token in ("darwin", "macos"):
+        return "macos"
+    if token in ("windows", "win"):
+        return "windows"
+    return token
+
+
+def _normalize_tool_arch(token: str) -> str | None:
+    """Mirror mise's own ``normalize_arch`` (``toolset/tool_request.rs``) EXACTLY.
+
+    Exact match only — no case-folding, no trimming — unlike
+    :func:`platform_target.normalize_arch`, which strips/lowercases because
+    its job is parsing real ``docker``/``uname`` output, a genuinely more
+    lenient source. Using that lenient function here (round 1's mistake)
+    KEPT entries mise itself REJECTS — ``os = ["linux/ARM64"]`` or
+    ``os = ["linux/ arm64"]`` — the same false-negative class round 1 fixed
+    on the os half, left open on the arch half (#841 round 2).
+
+    The one place this deliberately differs from mise: mise canonicalizes
+    the ``x86_64``/``amd64``/``x64`` family to ``"x64"``; this canonicalizes
+    it to ``"amd64"`` to match the docker-normalized ``arch`` parameter every
+    caller here already holds. The *grouping* — which raw spellings are
+    equivalent, and that anything outside the two groups is unrecognised —
+    is identical; only the canonical spelling differs, and since both sides
+    of every comparison in :func:`_tool_os_supported` run through this same
+    function, that spelling never leaks into the comparison's result.
+    """
+    if token in ("x86_64", "amd64", "x64"):
+        return "amd64"
+    if token in ("aarch64", "arm64"):
+        return "arm64"
+    return None
+
+
+def _tool_os_supported(spec: str | dict[str, Any], *, arch: str) -> bool:
+    """Whether a mise ``[tools]`` entry's ``os`` key admits ``arch``.
+
+    Mirrors mise's own ``is_os_supported`` (``toolset/tool_request.rs``,
+    ``is_os_supported``): a bare-string entry (no table, so no ``os`` key
+    possible) always matches, and a table entry with a MISSING ``os`` key
+    always matches — but a table entry with an EMPTY ``os`` list matches
+    NOTHING, mirroring `.any()` over an empty ``Vec`` returning ``false``
+    rather than being conflated with "key absent" (#841 round 2). A present,
+    non-empty list is scanned entry by entry; an entry with a ``/`` requires
+    BOTH the os half and the (normalized) arch half to match the target, one
+    without a ``/`` matches on os alone.
+
+    The OS half is fixed to ``"linux"`` rather than threaded as a parameter:
+    every image this project builds is a Linux container, so there is no
+    second value this repo would ever compare against — the same reason
+    ``os_arch``/``platform_arch`` elsewhere in this module don't carry an OS
+    parameter either. ``arch`` must already be docker-normalized
+    (:func:`platform_target.platform_arch`), matching what every caller here
+    already holds.
+
+    An ``os`` value that isn't a list (e.g. the bare string ``os = "linux"``,
+    which mise itself rejects as a type error) raises ``TypeError`` rather
+    than iterating its characters; a list containing a non-string element
+    raises the same ``TypeError`` rather than an opaque ``AttributeError``
+    from ``.partition()`` (#841 round 2). What this does NOT replicate:
+    mise's real ``is_os_supported`` falls through to the BACKEND's own
+    ``is_os_supported()`` after the ``os``-list check — a backend can declare
+    further platform restrictions this function has no way to see from a
+    parsed TOML entry alone.
+    """
+    if isinstance(spec, str):
+        return True
+    os_list = spec.get("os")
+    if os_list is None:
+        return True
+    if not isinstance(os_list, list):
+        msg = f"mise [tools] entry 'os' must be a list, got {os_list!r}"
+        raise TypeError(msg)
+    for entry in os_list:
+        if not isinstance(entry, str):
+            msg = f"mise [tools] entry 'os' element must be a string, got {entry!r}"
+            raise TypeError(msg)
+        os_part, sep, arch_part = entry.partition("/")
+        if sep:
+            if _normalize_tool_os(os_part) != _LINUX:
+                continue
+            if _normalize_tool_arch(arch_part) == arch:
+                return True
+        elif _normalize_tool_os(os_part) == _LINUX:
+            return True
+    return False
+
+
+def parse_declared_tools(config_text: str, *, arch: str) -> dict[str, str]:
+    """Parse ``[tools]`` from a mise-system.toml document, for one architecture.
 
     Returns ``{tool_key: requested_version}``. Keys preserve the backend prefix
     verbatim (``conda:llvm``, ``npm:renovate``, bare ``python``) so they line up
     1:1 with ``mise ls --json`` keys — that is what makes the (tool, backend,
     version) comparison exact rather than name-only.
+
+    ``arch`` (required, not defaulted — see #841) is a docker-normalized
+    architecture (:func:`platform_target.platform_arch`). An entry carrying an
+    ``os`` key that excludes ``arch`` (see ``.devcontainer/mise-system.toml``'s
+    arm64-scoped ``conda:gxx`` pin for a real one) is OMITTED from the result:
+    mise itself will not install it there, so an expected set that still names
+    it fails the smoke's exact-set diff on every architecture the entry
+    correctly skips.
     """
     data = tomllib.loads(config_text)
     tools = data.get("tools", {})
-    return {key: _tool_requested_version(spec) for key, spec in tools.items()}
+    return {
+        key: _tool_requested_version(spec)
+        for key, spec in tools.items()
+        if _tool_os_supported(spec, arch=arch)
+    }
 
 
-def resolve_declared_tools() -> dict[str, str]:
+def resolve_declared_tools(*, arch: str) -> dict[str, str]:
     """Declared image tool set (base + shared fragment + runtime tier).
 
     All three files are COPYd into the image and merged by mise (#160
     T5/T9): the shared fragment supplies the 20 exact-pinned host↔image
     tools, mise-system.toml the base tier, mise-runtime.toml the runtime
     tier (loaded via MISE_ENV=runtime). The declared set is their union.
+
+    ``arch`` (required — see :func:`parse_declared_tools`) is the architecture
+    being smoked, so an ``os=``-scoped entry is only expected on the
+    architecture mise will actually install it on.
     """
     root = _project_root()
     declared = parse_declared_tools(
-        (root / ".devcontainer" / "mise-system.toml").read_text()
+        (root / ".devcontainer" / "mise-system.toml").read_text(), arch=arch
     )
     declared.update(
         parse_declared_tools(
-            (root / ".config" / "mise" / "conf.d" / "shared.toml").read_text()
+            (root / ".config" / "mise" / "conf.d" / "shared.toml").read_text(),
+            arch=arch,
         )
     )
     declared.update(
-        parse_declared_tools((root / ".devcontainer" / "mise-runtime.toml").read_text())
+        parse_declared_tools(
+            (root / ".devcontainer" / "mise-runtime.toml").read_text(), arch=arch
+        )
     )
     return declared
 
@@ -505,15 +625,23 @@ fi
 test -x /opt/clang-p2996/bin/clang++ \
   || { echo "FAIL: clang-p2996 missing"; exit 1; }
 echo "=== conda gxx compile+link+run ==="
-CONDA_GXX=$(mise which g++ --tool conda:gxx) \
-  || { echo "FAIL: could not resolve conda:gxx g++"; exit 1; }
-test -x "$CONDA_GXX" \
-  || { echo "FAIL: conda:gxx g++ is not executable: $CONDA_GXX"; exit 1; }
-"$CONDA_GXX" /tmp/sanitizer.cpp -o /tmp/conda-gxx-linked \
-  || { echo "FAIL: conda:gxx g++ compile/link failed"; exit 1; }
-/tmp/conda-gxx-linked >/dev/null \
-  || { echo "FAIL: conda:gxx-linked binary did not run"; exit 1; }
-echo "OK: conda:gxx g++ compiles, links, runs"
+if [ -n "$CONDA_GXX_PRESENT" ]; then
+  CONDA_GXX=$(mise which g++ --tool conda:gxx) \
+    || { echo "FAIL: could not resolve conda:gxx g++"; exit 1; }
+  test -x "$CONDA_GXX" \
+    || { echo "FAIL: conda:gxx g++ is not executable: $CONDA_GXX"; exit 1; }
+  "$CONDA_GXX" /tmp/sanitizer.cpp -o /tmp/conda-gxx-linked \
+    || { echo "FAIL: conda:gxx g++ compile/link failed"; exit 1; }
+  /tmp/conda-gxx-linked >/dev/null \
+    || { echo "FAIL: conda:gxx-linked binary did not run"; exit 1; }
+  echo "OK: conda:gxx g++ compiles, links, runs"
+else
+  echo "SKIP: conda:gxx not declared for this architecture (#841)"
+  if mise which g++ --tool conda:gxx >/dev/null 2>&1; then
+    echo "FAIL: conda:gxx g++ resolved where it is declared unshipped"; exit 1
+  fi
+  echo "OK: conda:gxx g++ correctly unresolvable on this architecture"
+fi
 echo "=== clang-p2996 ref pin check ==="
 # The clang-p2996 build embeds its bloomberg/clang-p2996 source commit in
 # `--version`. Assert (a) it really IS a p2996 build (not conda clang on
@@ -665,6 +793,7 @@ def _tier3_var_lines(
     emulated: bool,
     expected_llvm_version: str | None = None,
     gcc_latest: bool = True,
+    conda_gxx: bool = True,
 ) -> str:
     """Injected-data header lines the tier-3 substrate reads.
 
@@ -681,6 +810,13 @@ def _tier3_var_lines(
     fail the smoke over an artifact upstream never built (#698). It defaults to
     present — the direction that fails LOUDLY when a caller forgets to say,
     rather than silently dropping a real compiler check.
+    ``CONDA_GXX_PRESENT`` gates the conda-forge gxx compile+link+run check
+    (#841 round 4): that tool is now ``os=``-scoped in ``mise-system.toml``
+    (arm64 only, since amd64 already has gcc-latest for its modern-GCC slot —
+    see ``.devcontainer/Dockerfile``'s "2 and 2" comment), so unconditionally
+    demanding it fails the smoke on amd64 over a tool mise correctly never
+    installed there. Same present-by-default direction as ``gcc_latest``, for
+    the same reason: fail loud on a forgotten caller, not silently skip.
     """
     strict = "1" if _SHA_RE.match(expected_p2996_ref) else ""
     tsan_run_skip = "1" if emulated else ""
@@ -689,6 +825,7 @@ def _tier3_var_lines(
         f"P2996_REF_STRICT={shlex.quote(strict)}\n"
         f"TSAN_RUN_SKIP={shlex.quote(tsan_run_skip)}\n"
         f"GCC_LATEST_PRESENT={shlex.quote('1' if gcc_latest else '')}\n"
+        f"CONDA_GXX_PRESENT={shlex.quote('1' if conda_gxx else '')}\n"
         f"EXPECTED_LLVM_VERSION={shlex.quote(expected_llvm_version or '')}\n"
     )
 
@@ -699,6 +836,7 @@ def build_tier3_script(
     emulated: bool,
     expected_llvm_version: str | None = None,
     gcc_latest: bool = True,
+    conda_gxx: bool = True,
 ) -> str:
     """Standalone tier-3 compiler smoke script: sanitizers + reflection.
 
@@ -711,6 +849,8 @@ def build_tier3_script(
     ``expected_llvm_version`` (#294) drives the apt-suite default-clang + utility
     ``--version`` guards; unset leaves them dormant. ``gcc_latest`` states
     whether this architecture's image carries the kayari GCC-17 deb (#698).
+    ``conda_gxx`` (#841 round 4) states whether this architecture's image
+    carries the arch-scoped conda-forge gxx.
     """
     return (
         "set -euo pipefail\n"
@@ -719,6 +859,7 @@ def build_tier3_script(
             emulated=emulated,
             expected_llvm_version=expected_llvm_version,
             gcc_latest=gcc_latest,
+            conda_gxx=conda_gxx,
         )
         + _TIER3_COMPILER_BODY
     )
@@ -760,10 +901,21 @@ class ImageArch:
     caller that says nothing almost certainly means — and, for ``gcc_latest``,
     the direction that fails LOUDLY rather than silently skipping a real
     compiler check.
+
+    ``conda_gxx`` (#841 round 4) is the odd one out: unlike ``emulated`` and
+    ``gcc_latest`` — both resolvable from the platform triple ALONE (the
+    latter from a hard-coded upstream constraint, ``GCC_LATEST_ARCHES``) —
+    whether ``conda:gxx`` is expected needs the DECLARED CONFIG
+    (``resolve_declared_tools``), which :meth:`for_platform` has no way to
+    read. It therefore keeps the same present-by-default direction as
+    ``gcc_latest`` but is never set by :meth:`for_platform`; a caller with
+    config access overrides it via ``dataclasses.replace`` the same way
+    :func:`build_smoke_docker_cmd` already overrides ``emulated``.
     """
 
     emulated: bool = False
     gcc_latest: bool = True
+    conda_gxx: bool = True
 
     @classmethod
     def for_platform(cls, platform: str) -> ImageArch:
@@ -823,7 +975,11 @@ def build_smoke_script(
     ``arch`` (:class:`ImageArch`) carries the architecture-dependent facts.
     Its ``gcc_latest=False`` does not leave that check dormant the way the
     guards above do — it asserts the compiler is ABSENT, so "we do not ship it
-    here" is verified rather than merely unexamined.
+    here" is verified rather than merely unexamined. ``arch.conda_gxx``
+    (#841 round 4) carries the same semantics for the arch-scoped
+    ``conda:gxx`` compile check — a caller with config access (see
+    :func:`build_smoke_docker_cmd`) overrides it via ``dataclasses.replace``,
+    since :class:`ImageArch` itself cannot read config.
     """
     arch = ImageArch() if arch is None else arch
     header = (
@@ -834,6 +990,7 @@ def build_smoke_script(
             emulated=arch.emulated,
             expected_llvm_version=expected_llvm_version,
             gcc_latest=arch.gcc_latest,
+            conda_gxx=arch.conda_gxx,
         )
     )
     return (
@@ -925,10 +1082,18 @@ def build_smoke_docker_cmd(
     arch = ImageArch.for_platform(platform)
     if emulated is not None:
         arch = dataclasses.replace(arch, emulated=emulated)
+    expected_tools = resolve_declared_tools(arch=platform_arch(platform))
+    # #841 round 4: conda:gxx is os=-scoped, so whether the tier-3 compile check
+    # should demand it depends on the SAME arch-filtered set already computed
+    # above for the tier-1 tool-set diff — reusing it here (rather than a second,
+    # independently-maintained answer to "is conda:gxx expected on this
+    # architecture") is exactly why ImageArch.for_platform cannot set this field
+    # itself: it has no config to read, only the platform triple.
+    arch = dataclasses.replace(arch, conda_gxx="conda:gxx" in expected_tools)
     script = build_smoke_script(
         expected_p2996_ref,
         expected_identity=expected_identity,
-        expected_tools=resolve_declared_tools(),
+        expected_tools=expected_tools,
         arch=arch,
         expected_llvm_version=resolve_expected_llvm_version(),
     )
@@ -1865,7 +2030,7 @@ def identity_expected_hash(repo_root: Path, rel_path: str) -> str:
     return hashlib.sha256(base_currency_blob(repo_root, rel_path)).hexdigest()
 
 
-def resolve_declared_tools_at_base(repo_root: Path) -> dict[str, str]:
+def resolve_declared_tools_at_base(repo_root: Path, *, arch: str) -> dict[str, str]:
     """Declared image tools as the CURRENT local base was built from them.
 
     Merge-base-aware sibling of :func:`resolve_declared_tools` (which reads
@@ -1875,6 +2040,14 @@ def resolve_declared_tools_at_base(repo_root: Path) -> dict[str, str]:
     tier-1 tool-set (injected by :func:`build_tier1_script` / ``smoke-script
     --tier 1``) compares installed tools against this merge-base declaration;
     branch tool bumps are validated by the PR CI build+smoke.
+
+    ``arch`` (required — see :func:`parse_declared_tools`) is the architecture
+    of the container being smoked. Callers running INSIDE that container
+    should derive it from ``uname`` (:func:`platform_target.host_platform`),
+    not from :func:`platform_target.resolve_platform` — the bind-mounted
+    ``mise.local.toml`` pin can win over an exec'd env var and report the
+    wrong architecture from in-container (see ``smoke_script_main``'s
+    ``gcc_latest`` derivation, same precedent).
     """
     declared: dict[str, str] = {}
     for rel_path in (
@@ -1883,7 +2056,9 @@ def resolve_declared_tools_at_base(repo_root: Path) -> dict[str, str]:
         ".devcontainer/mise-runtime.toml",
     ):
         declared.update(
-            parse_declared_tools(base_currency_blob(repo_root, rel_path).decode())
+            parse_declared_tools(
+                base_currency_blob(repo_root, rel_path).decode(), arch=arch
+            )
         )
     return declared
 
@@ -1959,7 +2134,15 @@ def smoke_script_main(tier: int | None) -> int:
         # (#140 Gap A base-currency), never a second resolution — a branch that
         # bumps python is validated by its own CI-built base, not against a
         # local base that predates the bump.
-        base_tools = resolve_declared_tools_at_base(root)
+        #
+        # `arch` comes from `uname` (`host_platform()`), NOT `resolve_platform()`
+        # — same reason as tier 3's `gcc_latest` below: the bind-mounted
+        # `mise.local.toml` pin can win over an exec'd env var in-container, so
+        # the repo pin can disagree with the container's real architecture
+        # (#841).
+        base_tools = resolve_declared_tools_at_base(
+            root, arch=platform_arch(host_platform())
+        )
         script = build_tier1_script(
             expected_identity=resolve_expected_identity_at_base(),
             expected_tools=base_tools,
@@ -1979,11 +2162,23 @@ def smoke_script_main(tier: int | None) -> int:
         # `uname` is sound here because under emulation it reports the TARGET
         # arch (an amd64 container on an arm64 Mac says x86_64) — the same
         # fact that makes `emulated` underivable makes the ARCH derivable.
+        #
+        # `conda_gxx` (#841 round 4) is likewise derived, not defaulted: the
+        # amd64 image no longer carries the arch-scoped conda:gxx, so a
+        # hard-coded `True` here would fail this same gate the tier-1 branch
+        # above fixes for the tool-set diff. Reuses `resolve_declared_tools_at_base`
+        # — the merge-base-aware, arch-filtered answer already computed for
+        # tier 1 — rather than re-deriving "is conda:gxx expected here" a
+        # second way.
+        base_tools_tier3 = resolve_declared_tools_at_base(
+            root, arch=platform_arch(host_platform())
+        )
         script = build_tier3_script(
             expected_p2996_ref=resolve_expected_p2996_ref_at_base(),
             emulated=True,
             expected_llvm_version=resolve_expected_llvm_version_at_base(),
             gcc_latest=ships_gcc_latest(host_platform()),
+            conda_gxx="conda:gxx" in base_tools_tier3,
         )
     else:
         sys.stderr.write(

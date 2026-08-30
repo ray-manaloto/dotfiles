@@ -608,7 +608,7 @@ experimental = true
 
 def test_parse_declared_tools_handles_both_value_forms() -> None:
     """Bare string and table ({version,...}) [tools] entries both parse."""
-    declared = parse_declared_tools(_SAMPLE_MISE_TOML)
+    declared = parse_declared_tools(_SAMPLE_MISE_TOML, arch="amd64")
 
     assert declared == {
         "python": "latest",
@@ -616,6 +616,147 @@ def test_parse_declared_tools_handles_both_value_forms() -> None:
         "npm:@google/gemini-cli": "latest",
         "pinned": "1.2.3",
     }
+
+
+# A mise-system.toml with one arch-scoped entry, mirroring the real
+# `"conda:gxx" = { version = "16.2.0", os = ["linux/arm64"] }` pin (#841).
+_SAMPLE_MISE_TOML_ARCH_SCOPED = """\
+[tools]
+python = "latest"
+"conda:gxx" = { version = "16.2.0", os = ["linux/arm64"] }
+"""
+
+
+def test_parse_declared_tools_omits_os_scoped_entry_on_other_arch() -> None:
+    """#841: an `os = ["linux/arm64"]` entry is dropped from an amd64 target.
+
+    Without the fix, `parse_declared_tools` ignores the `os` key entirely and
+    the amd64 target's expected set still names `conda:gxx` — a tool mise
+    correctly never installs there — which is exactly the false-failure #841
+    fixes.
+    """
+    declared = parse_declared_tools(_SAMPLE_MISE_TOML_ARCH_SCOPED, arch="amd64")
+
+    assert declared == {"python": "latest"}
+    assert "conda:gxx" not in declared
+
+
+def test_parse_declared_tools_keeps_os_scoped_entry_on_matching_arch() -> None:
+    """#841: the SAME entry is kept on the arch its `os` list names.
+
+    Pinning only the omission direction (the test above) would still pass on
+    unfixed code that dropped every `os`-scoped entry unconditionally — this
+    is the other arm.
+    """
+    declared = parse_declared_tools(_SAMPLE_MISE_TOML_ARCH_SCOPED, arch="arm64")
+
+    assert declared == {"python": "latest", "conda:gxx": "16.2.0"}
+
+
+# --- #841 round 2: match mise's is_os_supported semantics exactly ----------
+
+_SAMPLE_MISE_TOML_X64_SCOPED = """\
+[tools]
+"conda:gxx" = { version = "16.2.0", os = ["linux/x64"] }
+"""
+
+
+def test_parse_declared_tools_x64_is_an_amd64_alias() -> None:
+    """Mise docs list `x64` alongside `x86_64`/`amd64` as equivalent os= spellings.
+
+    Without the alias, `normalize_arch("x64")` returns `None` and the entry is
+    dropped on EVERY architecture — a false-negative mise itself does not have.
+    """
+    assert parse_declared_tools(_SAMPLE_MISE_TOML_X64_SCOPED, arch="amd64") == {
+        "conda:gxx": "16.2.0"
+    }
+    assert parse_declared_tools(_SAMPLE_MISE_TOML_X64_SCOPED, arch="arm64") == {}
+
+
+_SAMPLE_MISE_TOML_CAPITALIZED_OS = """\
+[tools]
+"conda:gxx" = { version = "16.2.0", os = ["Linux/arm64"] }
+"""
+
+
+def test_parse_declared_tools_os_entry_is_case_sensitive_like_mise() -> None:
+    """Mise's `normalize_os` does not lowercase — `Linux` != `linux` there either.
+
+    Being more lenient than mise (accepting a capitalized entry mise itself
+    would reject) is its own divergence, even though it can only ever produce
+    a false FAIL, never a false pass.
+    """
+    assert parse_declared_tools(_SAMPLE_MISE_TOML_CAPITALIZED_OS, arch="arm64") == {}
+
+
+_SAMPLE_MISE_TOML_EMPTY_OS_LIST = """\
+[tools]
+"conda:gxx" = { version = "16.2.0", os = [] }
+"""
+
+
+def test_parse_declared_tools_empty_os_list_matches_nothing() -> None:
+    """An empty `os = []` is NOT the same as a missing `os` key.
+
+    mise's own check is `.any()` over the list, which is `false` on an empty
+    `Vec` — so an empty list means "supported nowhere", not "supported
+    everywhere" the way an absent key does.
+    """
+    assert parse_declared_tools(_SAMPLE_MISE_TOML_EMPTY_OS_LIST, arch="amd64") == {}
+    assert parse_declared_tools(_SAMPLE_MISE_TOML_EMPTY_OS_LIST, arch="arm64") == {}
+
+
+_SAMPLE_MISE_TOML_BARE_STRING_OS = """\
+[tools]
+"conda:gxx" = { version = "16.2.0", os = "linux" }
+"""
+
+
+def test_parse_declared_tools_rejects_non_list_os() -> None:
+    """A bare-string `os` (mise itself rejects this as a type error) raises loud.
+
+    Without the type check this would silently iterate the string's
+    characters instead of failing — a wrong answer with no error.
+    """
+    with pytest.raises(TypeError, match="must be a list"):
+        parse_declared_tools(_SAMPLE_MISE_TOML_BARE_STRING_OS, arch="amd64")
+
+
+_SAMPLE_MISE_TOML_CAPITALIZED_ARCH = """\
+[tools]
+"conda:gxx" = { version = "16.2.0", os = ["linux/ARM64"] }
+"""
+
+
+def test_parse_declared_tools_arch_half_is_case_sensitive_like_mise() -> None:
+    """#841 round 2: the ARCH half must reject what mise rejects too.
+
+    Round 1 only tightened the OS half's case-sensitivity and left the arch
+    half running through `platform_target.normalize_arch`, which strips and
+    lowercases for a genuinely different, more lenient job (parsing real
+    `docker`/`uname` output). Mise's own `normalize_arch` does neither, so
+    `os = ["linux/ARM64"]` is unsupported to mise — being more lenient here
+    is the same false-negative class round 1 fixed, on the other half of the
+    entry.
+    """
+    assert parse_declared_tools(_SAMPLE_MISE_TOML_CAPITALIZED_ARCH, arch="arm64") == {}
+
+
+_SAMPLE_MISE_TOML_NON_STRING_OS_ELEMENT = """\
+[tools]
+"conda:gxx" = { version = "16.2.0", os = [123] }
+"""
+
+
+def test_parse_declared_tools_rejects_non_string_os_element() -> None:
+    """A non-string element in an `os` list raises a clear `TypeError`.
+
+    Without the element check, `123.partition("/")` dies with an opaque
+    `AttributeError` (`int` has no `.partition`) instead of the same clear
+    diagnostic the non-list case already gets.
+    """
+    with pytest.raises(TypeError, match="element must be a string"):
+        parse_declared_tools(_SAMPLE_MISE_TOML_NON_STRING_OS_ELEMENT, arch="amd64")
 
 
 def test_smoke_script_injects_tool_set_assertion() -> None:
@@ -666,7 +807,7 @@ def test_resolve_declared_tools_merges_system_and_shared() -> None:
 
     mise-system.toml [tools] MERGED with the shared conf.d fragment (#160 T5).
     """
-    declared = resolve_declared_tools()
+    declared = resolve_declared_tools(arch="amd64")
 
     # From the shared fragment, exact-pinned.
     assert declared["python"] == "3.14.7"
@@ -678,6 +819,16 @@ def test_resolve_declared_tools_merges_system_and_shared() -> None:
     # LLVM-22 packages in [bootstrap.packages], so they are no longer mise tools).
     assert "conda:cmake" in declared
     assert all(isinstance(v, str) for v in declared.values())
+
+
+def test_resolve_declared_tools_honors_real_os_scoped_pin() -> None:
+    """#841, real corpus: `conda:gxx` (`os = ["linux/arm64"]`) is arch-scoped.
+
+    Exercises the actual `.devcontainer/mise-system.toml` pin end to end,
+    not just the synthetic fixture above.
+    """
+    assert "conda:gxx" not in resolve_declared_tools(arch="amd64")
+    assert "conda:gxx" in resolve_declared_tools(arch="arm64")
 
 
 # ------------------------------------------ #223: shared tier-1 core (identity)
@@ -1302,7 +1453,7 @@ def test_resolve_declared_tools_at_base_uses_merge_base(tmp_path: Path) -> None:
         '[tools]\njq = "1.8.2"\n'
     )
     _git(repo, "commit", "-am", "bump jq")
-    declared = resolve_declared_tools_at_base(repo)
+    declared = resolve_declared_tools_at_base(repo, arch="amd64")
     assert declared["jq"] == "1.8.1"  # merge-base, not the branch's 1.8.2
     assert declared["python"] == "3.14.6"
     assert declared["fd"] == "10.4.2"
@@ -1310,7 +1461,7 @@ def test_resolve_declared_tools_at_base_uses_merge_base(tmp_path: Path) -> None:
 
 def test_resolve_declared_tools_at_base_on_main_is_worktree(tmp_path: Path) -> None:
     repo = _tool_config_fixture_repo(tmp_path)
-    declared = resolve_declared_tools_at_base(repo)
+    declared = resolve_declared_tools_at_base(repo, arch="amd64")
     assert declared["jq"] == "1.8.1"
 
 
