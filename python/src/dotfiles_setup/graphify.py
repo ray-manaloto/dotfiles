@@ -32,6 +32,7 @@ _DEFAULT_BUDGET = 2000
 _GRAPH_SUBDIR = "graphify-out"
 _GRAPH_FILE = "graph.json"
 _BUILD_RECEIPT = "build-receipt.json"
+_RUNTIME_STAMP = "runtime-stamp.json"
 _MAX_AGENT_OUTPUT_BYTES = 65_536
 
 
@@ -168,13 +169,23 @@ def _receipt_problem(
     a receipt writer here would mean adopting the KB's committed-build design
     only to satisfy this check, which is exactly backwards.
 
-    What the receipt actually proves — that the graph bytes on disk are the
-    ones a specific build run produced, unmodified — has no substitute this
-    repo can compute for an on-demand graph, so that guarantee is genuinely
-    lost for the common case. What is NOT lost: if a receipt *is* present
-    (e.g. carried over from a KB-style build, or written by some future
-    caller), it is still verified byte-for-byte below, so a stale or forged
-    receipt is still caught rather than silently trusted.
+    What the receipt actually proved and is now lost for the common case:
+    (1) that the graph bytes on disk are the ones a specific build run
+    produced, unmodified, and (2) that the *builder's* graphify version — not
+    just whatever version happens to be installed when health runs — is the
+    one recorded in ``mise.toml``. Neither has a substitute this repo can
+    compute for an on-demand graph built via plain ``graphify update``.
+    ``_runtime_stamp_problem`` below restores (2) for graphs built through
+    ``mise run graphify-update``, which is the only builder this repo ships;
+    a graph built by hand still has neither guarantee.
+
+    What is NOT lost: if a KB-style receipt *is* present (e.g. carried over
+    from the knowledge-base's own tree), it is still verified byte-for-byte
+    below. **This branch is currently unreachable in practice**: the KB's own
+    writer (``kb_setup/graph.py``) raises on a links-keyed graph — the same
+    defect this module's ``_edges_field`` fixed here — and the KB's own
+    ``graphify-out/`` has no receipt on disk either. Kept for the day that
+    writer is fixed, not as active protection today.
     """
     receipt_path = graph_path.with_name(_BUILD_RECEIPT)
     if not receipt_path.is_file():
@@ -191,6 +202,90 @@ def _receipt_problem(
     ):
         return HealthResult(GraphifyStatus.STALE, runtime, "build receipt mismatch")
     return None
+
+
+def _runtime_stamp_path(graph_path: Path) -> Path:
+    return graph_path.with_name(_RUNTIME_STAMP)
+
+
+def _write_runtime_stamp(
+    graph_path: Path, graph_bytes: bytes, builder_version: str
+) -> None:
+    """Bind the graph bytes just written to the graphify version that wrote them.
+
+    Called only by :func:`update` right after a successful ``graphify update``,
+    with the version of the SAME binary that ran the update (see
+    :func:`_builder_version`) — not the version installed in whatever
+    environment later happens to run ``graphify_health``. This is the
+    replacement for the byte/version binding the (inapplicable-here) build
+    receipt used to provide; see ``_receipt_problem``'s docstring.
+    """
+    stamp = {
+        "runtime_version": builder_version,
+        "graph_sha256": hashlib.sha256(graph_bytes).hexdigest(),
+    }
+    _runtime_stamp_path(graph_path).write_text(json.dumps(stamp, sort_keys=True) + "\n")
+
+
+def _runtime_stamp_problem(
+    graph_path: Path,
+    graph_bytes: bytes,
+    runtime: str,
+) -> HealthResult | None:
+    """Validate a runtime stamp if one is present; an absent one is not a fault.
+
+    Only ``update()`` (``mise run graphify-update``) writes this file, so a
+    graph nobody has rebuilt through that task yet (or one this feature
+    predates) has none — absence must not resurrect the STALE-forever bug
+    ``_receipt_problem`` was fixed for. A PRESENT stamp is checked against
+    both the current graph bytes (catches a graph mutated or replaced since
+    the stamped build) and the CURRENTLY INSTALLED runtime (catches the graph
+    having been built by a different graphify binary than the one this
+    process would use to read it — the two-pin drift ``graphify-first.md``
+    documents: the PATH shim vs. this repo's ``python/pyproject.toml`` pin).
+    """
+    stamp_path = _runtime_stamp_path(graph_path)
+    if not stamp_path.is_file():
+        return None
+    payload, error = _load_json_object(stamp_path)
+    if payload is None:
+        return HealthResult(GraphifyStatus.CORRUPT, runtime, f"runtime stamp: {error}")
+    stamp_version = payload.get("runtime_version")
+    stamp_sha256 = payload.get("graph_sha256")
+    if not isinstance(stamp_version, str) or not isinstance(stamp_sha256, str):
+        return HealthResult(
+            GraphifyStatus.CORRUPT, runtime, "runtime stamp fields malformed"
+        )
+    if stamp_sha256 != hashlib.sha256(graph_bytes).hexdigest():
+        return HealthResult(
+            GraphifyStatus.STALE, runtime, "graph changed since the last stamped build"
+        )
+    if stamp_version != runtime:
+        return HealthResult(
+            GraphifyStatus.STALE,
+            runtime,
+            f"graph was built by graphify {stamp_version}, but the graphify "
+            f"running now is {runtime}; rerun `mise run graphify-update`",
+        )
+    return None
+
+
+def _binding_problem(
+    graph_path: Path,
+    graph_bytes: bytes,
+    graph_payload: dict[str, object],
+    runtime: str,
+) -> HealthResult | None:
+    """Return the first byte/builder-version binding problem, if either fires.
+
+    Two independent, each-optional bindings, checked in order: a KB-style
+    build receipt (``_receipt_problem``) and this repo's own runtime stamp
+    (``_runtime_stamp_problem``, written by ``update()``). Combined into one
+    call so ``graphify_health`` doesn't carry a return statement per binding.
+    """
+    if problem := _receipt_problem(graph_path, graph_bytes, graph_payload, runtime):
+        return problem
+    return _runtime_stamp_problem(graph_path, graph_bytes, runtime)
 
 
 def _graph_schema_problem(payload: dict[str, object]) -> str:
@@ -226,7 +321,7 @@ def graphify_health(project_root: Path) -> HealthResult:
         return HealthResult(GraphifyStatus.CORRUPT, runtime, schema_problem)
     if runtime != "0.9.42":
         return HealthResult(GraphifyStatus.VERSION_DRIFT, runtime, "expected 0.9.42")
-    if problem := _receipt_problem(graph_path, graph_bytes, payload, runtime):
+    if problem := _binding_problem(graph_path, graph_bytes, payload, runtime):
         return problem
     return HealthResult(
         GraphifyStatus.FRESH,
@@ -360,6 +455,50 @@ def query(
     if truncation is not None:
         raise GraphifyIncompleteError(truncation)
     return QueryResult(text=result.stdout.strip())
+
+
+def _builder_version(project_root: Path) -> str:
+    """Return the version of the ``graphify`` binary ``_run`` actually resolves.
+
+    Deliberately re-derived from the SAME subprocess resolution ``update()``
+    just used, rather than read from installed package metadata
+    (:func:`_runtime_version`) — the two can differ when the environment's
+    ``PATH`` puts a different ``graphify`` ahead of the one this process's
+    venv would use. ``graphify --version`` prints e.g. ``"graphify 0.9.42"``.
+    """
+    result = _run(["graphify", "--version"], cwd=project_root)
+    return result.stdout.strip().removeprefix("graphify ") or "unknown"
+
+
+def update(project_root: Path, target: str = ".") -> subprocess.CompletedProcess[str]:
+    """Rebuild the project graph via ``graphify update`` and stamp its builder.
+
+    AST-only re-extraction (no LLM, no API cost — see ``graphify --help``).
+    On success, records which graphify version actually performed the build
+    against the resulting graph bytes (see ``_write_runtime_stamp``), so a
+    later ``graphify_health`` call can tell a graph the PATH's drifted
+    ``graphify`` built from one this repo's pinned version built.
+    """
+    graph_path = project_root / _GRAPH_SUBDIR / _GRAPH_FILE
+    result = _run(["graphify", "update", target], cwd=project_root)
+    if result.returncode == 0 and graph_path.is_file():
+        builder_version = _builder_version(project_root)
+        graph_bytes = graph_path.read_bytes()
+        _write_runtime_stamp(graph_path, graph_bytes, builder_version)
+    return result
+
+
+def graphify_update_main(project_root: Path, *, target: str = ".") -> int:
+    """CLI entry for ``dotfiles-setup graphify update``.
+
+    Prints graphify's own stdout/stderr through and returns its exit code.
+    """
+    result = update(project_root, target)
+    if result.stdout:
+        sys.stdout.write(result.stdout)
+    if result.stderr:
+        sys.stderr.write(result.stderr)
+    return result.returncode
 
 
 def graphify_main(

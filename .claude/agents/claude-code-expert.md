@@ -281,9 +281,11 @@ overturns it, and say in your report that you did.
 
 ## Local hazards that break probes on this host
 
-- **Orient with graphify before grepping repo source.** `graphify query "<question>"`
-  returns a scoped subgraph. It does not cover the offline docs or the binary — those
-  are grepped directly. Treat a graph answer as one route, never as the second.
+- **Orient with graphify before grepping repo source.**
+  `mise run graphify-query -- "<question>"` (never a bare `graphify` on
+  `PATH` — see `graphify-first.md`) returns a scoped subgraph. It does not
+  cover the offline docs or the binary — those are grepped directly. Treat a
+  graph answer as one route, never as the second.
 - **Never print a credential value.** All 50 secrets are in every shell by design.
   `${VAR:-x}` and `${VAR:=x}` **emit the value** when set, so `${VAR:+SET}${VAR:-ABSENT}`
   prints the secret. Use `[ -n "$VAR" ]`. Your stdout lands in the transcript.

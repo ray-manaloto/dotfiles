@@ -119,10 +119,12 @@ An agent told "verify X" confirms X. So:
 
 ## Local hazards that break audits on this host
 
-- **Orient with graphify before grepping source.** `graphify query "<question>"`
-  returns a scoped subgraph when `graphify-out/graph.json` exists; read raw files
-  after that, or to check specific lines. The graph itself can be stale — treat a
-  graph answer as one route, never as the second one.
+- **Orient with graphify before grepping source.**
+  `mise run graphify-query -- "<question>"` (never a bare `graphify` on
+  `PATH` — see `graphify-first.md`) returns a scoped subgraph when
+  `graphify-out/graph.json` exists; read raw files after that, or to check
+  specific lines. The graph itself can be stale — treat a graph answer as
+  one route, never as the second one.
 - **Harness questions are answered offline.** Anything of the form "does Claude
   Code do X" lives in the knowledge-base repo's `agent-harness-docs` tree under
   `docs/claude-code` — grep it before reaching for the web. Cite as

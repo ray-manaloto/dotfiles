@@ -38,7 +38,7 @@ use `.claude/skills/graphify/SKILL.md`.
 
 - Codebase questions: follow `.claude/rules/graphify-first.md`
   (`mise run graphify-query`, never a bare `graphify` on `PATH`).
-- After changing code: `graphify update .` (AST-only, no API cost).
+- After changing code: `mise run graphify-update` (AST-only, no API cost).
 
 **This registration lives here, NOT in the root `CLAUDE.md`:** the
 `claude_md_import_stub` hk gate locks the root file to byte-exactly `@AGENTS.md`,
