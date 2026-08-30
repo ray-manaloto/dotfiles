@@ -11,7 +11,8 @@ containers on macOS ARM hosts. Two build types:
 Registry: `ghcr.io/ray-manaloto/dotfiles-devcontainer`. CI: `ci.yml` (thin
 caller) → lint → contract-preflight → `changes` → reusable `build-publish.yml`
 (plan → base-prep → p2996-prep → dev-prep → build → smoke-test → dev-tag →
-manifest; the middle six fan out per architecture, #676) → `ci-gate`;
+manifest; the middle six fan out per leg — arch + a non-blocking
+runner-validation leg, #676/#736) → `ci-gate`;
 `promote` retags on main; benchmark + Trivy async in `image-analysis.yml`.
 
 ## Quick Start
