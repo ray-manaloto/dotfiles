@@ -6,15 +6,13 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 from dotfiles_setup import handoff_check
 from dotfiles_setup import main as cli_main
-
-if TYPE_CHECKING:
-    import pytest
 
 _COMMAND_TIMEOUT = 30
 
@@ -66,6 +64,66 @@ def test_check_reports_missing_paths_and_bad_line_ranges(tmp_path: Path) -> None
             "cited lines 3-4 are outside the file's 1-2 range",
         ),
     ]
+
+
+@pytest.mark.parametrize(
+    ("citation", "relative_path", "contents", "expected"),
+    [
+        ("Makefile:10", "Makefile", "line\n" * 10, []),
+        (
+            "Makefile:10",
+            "Makefile",
+            None,
+            [
+                handoff_check.Finding(
+                    handoff_check.Verdict.MISSING_PATH,
+                    "Makefile:10",
+                    "repo-relative path 'Makefile' does not exist",
+                )
+            ],
+        ),
+        (
+            ".devcontainer/Dockerfile:5-10",
+            ".devcontainer/Dockerfile",
+            "line\n" * 10,
+            [],
+        ),
+        (
+            ".devcontainer/Dockerfile:5-10",
+            ".devcontainer/Dockerfile",
+            "line\n" * 9,
+            [
+                handoff_check.Finding(
+                    handoff_check.Verdict.BAD_LINE_RANGE,
+                    ".devcontainer/Dockerfile:5-10",
+                    "cited lines 5-10 are outside the file's 1-9 range",
+                )
+            ],
+        ),
+    ],
+)
+def test_check_validates_allowlisted_extensionless_path_citations(
+    tmp_path: Path,
+    citation: str,
+    relative_path: str,
+    contents: str | None,
+    expected: list[handoff_check.Finding],
+) -> None:
+    repo = _repo(tmp_path)
+    if contents is not None:
+        path = repo / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(contents)
+
+    assert handoff_check.check(repo, f"See {citation}") == expected
+
+
+def test_check_ignores_non_allowlisted_bare_extensionless_words(
+    tmp_path: Path,
+) -> None:
+    repo = _repo(tmp_path)
+
+    assert handoff_check.check(repo, "see LICENSE:1") == []
 
 
 def test_check_rejects_existing_path_outside_repo_root(tmp_path: Path) -> None:

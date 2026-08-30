@@ -20,7 +20,9 @@ _HANDOFF_RE = re.compile(
     r"^session-(?P<date>\d{4}-\d{2}-\d{2})(?:-?(?P<suffix>[A-Za-z]))?\.md$"
 )
 _PATH_CITATION_RE = re.compile(
-    r"(?<![\w./:-])(?P<citation>[\w./-]+\.[A-Za-z]\w*:(?P<start>\d+)"
+    r"(?<![\w./:-])(?P<citation>(?:Makefile|Dockerfile|"
+    r"[\w./-]*/[\w./-]+|"
+    r"[\w./-]+\.[A-Za-z]\w*):(?P<start>\d+)"
     r"(?:-(?P<end>\d+))?)(?![\w-])"
 )
 _TASK_CITATION_RE = re.compile(
