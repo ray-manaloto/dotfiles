@@ -608,7 +608,7 @@ experimental = true
 
 def test_parse_declared_tools_handles_both_value_forms() -> None:
     """Bare string and table ({version,...}) [tools] entries both parse."""
-    declared = parse_declared_tools(_SAMPLE_MISE_TOML)
+    declared = parse_declared_tools(_SAMPLE_MISE_TOML, arch="amd64")
 
     assert declared == {
         "python": "latest",
@@ -616,6 +616,41 @@ def test_parse_declared_tools_handles_both_value_forms() -> None:
         "npm:@google/gemini-cli": "latest",
         "pinned": "1.2.3",
     }
+
+
+# A mise-system.toml with one arch-scoped entry, mirroring the real
+# `"conda:gxx" = { version = "16.2.0", os = ["linux/arm64"] }` pin (#841).
+_SAMPLE_MISE_TOML_ARCH_SCOPED = """\
+[tools]
+python = "latest"
+"conda:gxx" = { version = "16.2.0", os = ["linux/arm64"] }
+"""
+
+
+def test_parse_declared_tools_omits_os_scoped_entry_on_other_arch() -> None:
+    """#841: an `os = ["linux/arm64"]` entry is dropped from an amd64 target.
+
+    Without the fix, `parse_declared_tools` ignores the `os` key entirely and
+    the amd64 target's expected set still names `conda:gxx` — a tool mise
+    correctly never installs there — which is exactly the false-failure #841
+    fixes.
+    """
+    declared = parse_declared_tools(_SAMPLE_MISE_TOML_ARCH_SCOPED, arch="amd64")
+
+    assert declared == {"python": "latest"}
+    assert "conda:gxx" not in declared
+
+
+def test_parse_declared_tools_keeps_os_scoped_entry_on_matching_arch() -> None:
+    """#841: the SAME entry is kept on the arch its `os` list names.
+
+    Pinning only the omission direction (the test above) would still pass on
+    unfixed code that dropped every `os`-scoped entry unconditionally — this
+    is the other arm.
+    """
+    declared = parse_declared_tools(_SAMPLE_MISE_TOML_ARCH_SCOPED, arch="arm64")
+
+    assert declared == {"python": "latest", "conda:gxx": "16.2.0"}
 
 
 def test_smoke_script_injects_tool_set_assertion() -> None:
@@ -666,7 +701,7 @@ def test_resolve_declared_tools_merges_system_and_shared() -> None:
 
     mise-system.toml [tools] MERGED with the shared conf.d fragment (#160 T5).
     """
-    declared = resolve_declared_tools()
+    declared = resolve_declared_tools(arch="amd64")
 
     # From the shared fragment, exact-pinned.
     assert declared["python"] == "3.14.7"
@@ -678,6 +713,16 @@ def test_resolve_declared_tools_merges_system_and_shared() -> None:
     # LLVM-22 packages in [bootstrap.packages], so they are no longer mise tools).
     assert "conda:cmake" in declared
     assert all(isinstance(v, str) for v in declared.values())
+
+
+def test_resolve_declared_tools_honors_real_os_scoped_pin() -> None:
+    """#841, real corpus: `conda:gxx` (`os = ["linux/arm64"]`) is arch-scoped.
+
+    Exercises the actual `.devcontainer/mise-system.toml` pin end to end,
+    not just the synthetic fixture above.
+    """
+    assert "conda:gxx" not in resolve_declared_tools(arch="amd64")
+    assert "conda:gxx" in resolve_declared_tools(arch="arm64")
 
 
 # ------------------------------------------ #223: shared tier-1 core (identity)
@@ -1302,7 +1347,7 @@ def test_resolve_declared_tools_at_base_uses_merge_base(tmp_path: Path) -> None:
         '[tools]\njq = "1.8.2"\n'
     )
     _git(repo, "commit", "-am", "bump jq")
-    declared = resolve_declared_tools_at_base(repo)
+    declared = resolve_declared_tools_at_base(repo, arch="amd64")
     assert declared["jq"] == "1.8.1"  # merge-base, not the branch's 1.8.2
     assert declared["python"] == "3.14.6"
     assert declared["fd"] == "10.4.2"
@@ -1310,7 +1355,7 @@ def test_resolve_declared_tools_at_base_uses_merge_base(tmp_path: Path) -> None:
 
 def test_resolve_declared_tools_at_base_on_main_is_worktree(tmp_path: Path) -> None:
     repo = _tool_config_fixture_repo(tmp_path)
-    declared = resolve_declared_tools_at_base(repo)
+    declared = resolve_declared_tools_at_base(repo, arch="amd64")
     assert declared["jq"] == "1.8.1"
 
 

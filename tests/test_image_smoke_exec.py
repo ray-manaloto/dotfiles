@@ -40,6 +40,7 @@ from dotfiles_setup.image import (
     resolve_expected_identity_at_base,
     resolve_expected_p2996_ref_at_base,
 )
+from dotfiles_setup.platform_target import platform_arch, resolve_platform
 
 pytestmark = pytest.mark.image_exec
 
@@ -126,9 +127,15 @@ def test_tier1_core_passes_against_dev(dev_image: str) -> None:
     A red here means the local ``:dev`` drifted from the branch source — which is
     exactly the stale-base condition the gate exists to catch.
     """
+    # `_DEV_IMAGE` is the amd64 image (DOTFILES_PLATFORM pin), run under Rosetta
+    # on this arm64 Mac host — so the expected set must be resolved for amd64,
+    # not the host's own `uname` (#841; that derivation is for code running
+    # INSIDE the container, e.g. ``smoke_script_main``, not this host-side test).
     script = build_tier1_script(
         expected_identity=resolve_expected_identity_at_base(),
-        expected_tools=resolve_declared_tools_at_base(_project_root()),
+        expected_tools=resolve_declared_tools_at_base(
+            _project_root(), arch=platform_arch(resolve_platform())
+        ),
     )
 
     result = _run_in_image(dev_image, script, timeout=_TIER1_TIMEOUT_S)
@@ -145,7 +152,11 @@ def test_tier1_toolset_block_fails_on_declared_not_installed(dev_image: str) -> 
     block: an injected declared-but-absent tool must surface as a ``<`` diff and
     exit 1 — proving the block runs its set-diff, not merely that it's present.
     """
-    tampered_tools = dict(resolve_declared_tools_at_base(_project_root()))
+    tampered_tools = dict(
+        resolve_declared_tools_at_base(
+            _project_root(), arch=platform_arch(resolve_platform())
+        )
+    )
     tampered_tools["zzz-not-a-real-tool"] = "9.9.9"
     script = build_tier1_script(
         expected_identity=resolve_expected_identity_at_base(),

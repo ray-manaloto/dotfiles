@@ -28,6 +28,7 @@ from dotfiles_setup.p2996_hash import _extract_bake_variable
 from dotfiles_setup.platform_target import (
     host_platform,
     is_emulated,
+    normalize_arch,
     platform_arch,
     resolve_platform,
     ships_gcc_latest,
@@ -123,38 +124,92 @@ def _tool_requested_version(spec: str | dict[str, Any]) -> str:
     return version
 
 
-def parse_declared_tools(config_text: str) -> dict[str, str]:
-    """Parse ``[tools]`` from a mise-system.toml document.
+def _tool_os_supported(spec: str | dict[str, Any], *, arch: str) -> bool:
+    """Whether a mise ``[tools]`` entry's ``os`` key admits ``arch``.
+
+    Mirrors mise's own ``is_os_supported`` (``toolset/tool_request.rs``,
+    ``is_os_supported``): a bare-string entry (no table, so no ``os`` key
+    possible) always matches, and a table entry with no ``os`` key always
+    matches. A present ``os`` list is scanned entry by entry; an entry with a
+    ``/`` requires BOTH the os half and the (normalized) arch half to match
+    the target, one without a ``/`` matches on os alone.
+
+    The OS half is fixed to ``"linux"`` rather than threaded as a parameter:
+    every image this project builds is a Linux container, so there is no
+    second value this repo would ever compare against — the same reason
+    ``os_arch``/``platform_arch`` elsewhere in this module don't carry an OS
+    parameter either. ``arch`` must already be docker-normalized
+    (:func:`platform_target.platform_arch`), matching what every caller here
+    already holds.
+    """
+    if isinstance(spec, str):
+        return True
+    os_list = spec.get("os")
+    if not os_list:
+        return True
+    for entry in os_list:
+        os_part, sep, arch_part = entry.partition("/")
+        if sep:
+            if os_part.strip().lower() != "linux":
+                continue
+            if normalize_arch(arch_part) == arch:
+                return True
+        elif os_part.strip().lower() == "linux":
+            return True
+    return False
+
+
+def parse_declared_tools(config_text: str, *, arch: str) -> dict[str, str]:
+    """Parse ``[tools]`` from a mise-system.toml document, for one architecture.
 
     Returns ``{tool_key: requested_version}``. Keys preserve the backend prefix
     verbatim (``conda:llvm``, ``npm:renovate``, bare ``python``) so they line up
     1:1 with ``mise ls --json`` keys — that is what makes the (tool, backend,
     version) comparison exact rather than name-only.
+
+    ``arch`` (required, not defaulted — see #841) is a docker-normalized
+    architecture (:func:`platform_target.platform_arch`). An entry carrying an
+    ``os`` key that excludes ``arch`` (see ``.devcontainer/mise-system.toml``'s
+    arm64-scoped ``conda:gxx`` pin for a real one) is OMITTED from the result:
+    mise itself will not install it there, so an expected set that still names
+    it fails the smoke's exact-set diff on every architecture the entry
+    correctly skips.
     """
     data = tomllib.loads(config_text)
     tools = data.get("tools", {})
-    return {key: _tool_requested_version(spec) for key, spec in tools.items()}
+    return {
+        key: _tool_requested_version(spec)
+        for key, spec in tools.items()
+        if _tool_os_supported(spec, arch=arch)
+    }
 
 
-def resolve_declared_tools() -> dict[str, str]:
+def resolve_declared_tools(*, arch: str) -> dict[str, str]:
     """Declared image tool set (base + shared fragment + runtime tier).
 
     All three files are COPYd into the image and merged by mise (#160
     T5/T9): the shared fragment supplies the 20 exact-pinned host↔image
     tools, mise-system.toml the base tier, mise-runtime.toml the runtime
     tier (loaded via MISE_ENV=runtime). The declared set is their union.
+
+    ``arch`` (required — see :func:`parse_declared_tools`) is the architecture
+    being smoked, so an ``os=``-scoped entry is only expected on the
+    architecture mise will actually install it on.
     """
     root = _project_root()
     declared = parse_declared_tools(
-        (root / ".devcontainer" / "mise-system.toml").read_text()
+        (root / ".devcontainer" / "mise-system.toml").read_text(), arch=arch
     )
     declared.update(
         parse_declared_tools(
-            (root / ".config" / "mise" / "conf.d" / "shared.toml").read_text()
+            (root / ".config" / "mise" / "conf.d" / "shared.toml").read_text(),
+            arch=arch,
         )
     )
     declared.update(
-        parse_declared_tools((root / ".devcontainer" / "mise-runtime.toml").read_text())
+        parse_declared_tools(
+            (root / ".devcontainer" / "mise-runtime.toml").read_text(), arch=arch
+        )
     )
     return declared
 
@@ -928,7 +983,7 @@ def build_smoke_docker_cmd(
     script = build_smoke_script(
         expected_p2996_ref,
         expected_identity=expected_identity,
-        expected_tools=resolve_declared_tools(),
+        expected_tools=resolve_declared_tools(arch=platform_arch(platform)),
         arch=arch,
         expected_llvm_version=resolve_expected_llvm_version(),
     )
@@ -1865,7 +1920,7 @@ def identity_expected_hash(repo_root: Path, rel_path: str) -> str:
     return hashlib.sha256(base_currency_blob(repo_root, rel_path)).hexdigest()
 
 
-def resolve_declared_tools_at_base(repo_root: Path) -> dict[str, str]:
+def resolve_declared_tools_at_base(repo_root: Path, *, arch: str) -> dict[str, str]:
     """Declared image tools as the CURRENT local base was built from them.
 
     Merge-base-aware sibling of :func:`resolve_declared_tools` (which reads
@@ -1875,6 +1930,14 @@ def resolve_declared_tools_at_base(repo_root: Path) -> dict[str, str]:
     tier-1 tool-set (injected by :func:`build_tier1_script` / ``smoke-script
     --tier 1``) compares installed tools against this merge-base declaration;
     branch tool bumps are validated by the PR CI build+smoke.
+
+    ``arch`` (required — see :func:`parse_declared_tools`) is the architecture
+    of the container being smoked. Callers running INSIDE that container
+    should derive it from ``uname`` (:func:`platform_target.host_platform`),
+    not from :func:`platform_target.resolve_platform` — the bind-mounted
+    ``mise.local.toml`` pin can win over an exec'd env var and report the
+    wrong architecture from in-container (see ``smoke_script_main``'s
+    ``gcc_latest`` derivation, same precedent).
     """
     declared: dict[str, str] = {}
     for rel_path in (
@@ -1883,7 +1946,9 @@ def resolve_declared_tools_at_base(repo_root: Path) -> dict[str, str]:
         ".devcontainer/mise-runtime.toml",
     ):
         declared.update(
-            parse_declared_tools(base_currency_blob(repo_root, rel_path).decode())
+            parse_declared_tools(
+                base_currency_blob(repo_root, rel_path).decode(), arch=arch
+            )
         )
     return declared
 
@@ -1959,7 +2024,15 @@ def smoke_script_main(tier: int | None) -> int:
         # (#140 Gap A base-currency), never a second resolution — a branch that
         # bumps python is validated by its own CI-built base, not against a
         # local base that predates the bump.
-        base_tools = resolve_declared_tools_at_base(root)
+        #
+        # `arch` comes from `uname` (`host_platform()`), NOT `resolve_platform()`
+        # — same reason as tier 3's `gcc_latest` below: the bind-mounted
+        # `mise.local.toml` pin can win over an exec'd env var in-container, so
+        # the repo pin can disagree with the container's real architecture
+        # (#841).
+        base_tools = resolve_declared_tools_at_base(
+            root, arch=platform_arch(host_platform())
+        )
         script = build_tier1_script(
             expected_identity=resolve_expected_identity_at_base(),
             expected_tools=base_tools,
