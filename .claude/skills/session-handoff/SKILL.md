@@ -229,33 +229,33 @@ more than missing ones. Before printing the resume prompt, verify:
 
 ## 6. Emit the resume prompt — keep it MINIMAL
 
-All context lives in memory (auto-loaded) + the handoff (step 3b). The resume
-prompt is therefore a **one-line pointer**, nothing more. Do NOT inline the
-task plan, issue summaries, gotchas, preload lists, or gate commands — those
-are all in the handoff; duplicating them in the prompt is the failure mode
-this skill exists to prevent.
+All context lives in memory (auto-loaded) + the handoff (step 3b).
+`/session-resume` finds the newest handoff and reconciles it against live
+repo/PR state, so the resume prompt is a **one-line invocation**, nothing more.
+Do NOT inline the task plan, issue summaries, gotchas, preload lists, or gate
+commands — those are all in the handoff; duplicating them in the prompt is the
+failure mode this skill exists to prevent.
 
 Print exactly this (single line, no extra sections):
 
 ```text
-Read and follow .agent/plans/session-<date>.md
+Run /session-resume
 ```
 
 At most, echo the task for the human's benefit on the same line:
 
 ```text
-Resume <task>: read and follow .agent/plans/session-<date>.md
+Resume <task>: run /session-resume
 ```
 
 The two blocks above show the line's shape, not literal text to print. Replace
-`<date>` with the real handoff date and, in the second form, replace `<task>`
-with the concrete one-line task name already determined in step 0; never emit
-either literal angle-bracket placeholder. If step 0 produced no single
-concrete task because the user explicitly deferred deciding, use the first
-form with no `Resume <task>:` prefix.
+`<task>` in the second form with the concrete one-line task name already
+determined in step 0; never emit the literal angle-bracket placeholder. If
+step 0 produced no single concrete task because the user explicitly deferred
+deciding, use the first form with no `Resume <task>:` prefix.
 
-Then a one-line reminder: *"Run `/clear`, paste that line, and the session
-resumes from the handoff."*
+Then a one-line reminder: *"Run `/clear`, paste that line, and
+`/session-resume` reconciles the handoff with live state before work resumes."*
 
 ## Checklist (all true before you're done)
 
@@ -275,4 +275,4 @@ resumes from the handoff."*
 
 ## See also
 
-- `.claude/skills/session-resume/SKILL.md` — reconcile this handoff against the real repo state after `/clear`.
+- `.claude/skills/session-resume/SKILL.md` — invoked by the resume prompt to read the newest handoff and reconcile it against live repo/PR state after `/clear`.
