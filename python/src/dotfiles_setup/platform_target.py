@@ -100,10 +100,16 @@ PLATFORM_ENV_VAR = "DOTFILES_PLATFORM"
 # Docker's architecture names, keyed by every spelling a host or a platform
 # string may use for them. `uname -m` says x86_64/aarch64; docker says
 # amd64/arm64; the two are not interchangeable and conflating them is how a
-# probe ends up asserting the wrong machine.
+# probe ends up asserting the wrong machine. `x64` is mise's own spelling
+# (`docs/dev-tools/index.md` "OS/Architecture Combinations" lists `x64` /
+# `x86_64` / `amd64` as equivalent `[tools]` `os=` entries) — #841 round 2:
+# without it, a config author who follows mise's docs and writes `os =
+# ["linux/x64"]` gets silently dropped by this repo's own `os=` filter even
+# though mise installs the tool there.
 _ARCH_ALIASES = {
     "x86_64": "amd64",
     "amd64": "amd64",
+    "x64": "amd64",
     "arm64": "arm64",
     "aarch64": "arm64",
 }

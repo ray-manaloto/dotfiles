@@ -66,6 +66,7 @@ def _pin_host(monkeypatch: pytest.MonkeyPatch, machine: str) -> None:
         ("x86_64", "amd64"),
         ("amd64", "amd64"),
         ("AMD64", "amd64"),
+        ("x64", "amd64"),  # mise's own spelling (#841 round 2)
         ("  arm64 ", "arm64"),
         ("aarch64", "arm64"),
         ("riscv64", None),

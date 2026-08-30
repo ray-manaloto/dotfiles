@@ -653,6 +653,75 @@ def test_parse_declared_tools_keeps_os_scoped_entry_on_matching_arch() -> None:
     assert declared == {"python": "latest", "conda:gxx": "16.2.0"}
 
 
+# --- #841 round 2: match mise's is_os_supported semantics exactly ----------
+
+_SAMPLE_MISE_TOML_X64_SCOPED = """\
+[tools]
+"conda:gxx" = { version = "16.2.0", os = ["linux/x64"] }
+"""
+
+
+def test_parse_declared_tools_x64_is_an_amd64_alias() -> None:
+    """Mise docs list `x64` alongside `x86_64`/`amd64` as equivalent os= spellings.
+
+    Without the alias, `normalize_arch("x64")` returns `None` and the entry is
+    dropped on EVERY architecture — a false-negative mise itself does not have.
+    """
+    assert parse_declared_tools(_SAMPLE_MISE_TOML_X64_SCOPED, arch="amd64") == {
+        "conda:gxx": "16.2.0"
+    }
+    assert parse_declared_tools(_SAMPLE_MISE_TOML_X64_SCOPED, arch="arm64") == {}
+
+
+_SAMPLE_MISE_TOML_CAPITALIZED_OS = """\
+[tools]
+"conda:gxx" = { version = "16.2.0", os = ["Linux/arm64"] }
+"""
+
+
+def test_parse_declared_tools_os_entry_is_case_sensitive_like_mise() -> None:
+    """Mise's `normalize_os` does not lowercase — `Linux` != `linux` there either.
+
+    Being more lenient than mise (accepting a capitalized entry mise itself
+    would reject) is its own divergence, even though it can only ever produce
+    a false FAIL, never a false pass.
+    """
+    assert parse_declared_tools(_SAMPLE_MISE_TOML_CAPITALIZED_OS, arch="arm64") == {}
+
+
+_SAMPLE_MISE_TOML_EMPTY_OS_LIST = """\
+[tools]
+"conda:gxx" = { version = "16.2.0", os = [] }
+"""
+
+
+def test_parse_declared_tools_empty_os_list_matches_nothing() -> None:
+    """An empty `os = []` is NOT the same as a missing `os` key.
+
+    mise's own check is `.any()` over the list, which is `false` on an empty
+    `Vec` — so an empty list means "supported nowhere", not "supported
+    everywhere" the way an absent key does.
+    """
+    assert parse_declared_tools(_SAMPLE_MISE_TOML_EMPTY_OS_LIST, arch="amd64") == {}
+    assert parse_declared_tools(_SAMPLE_MISE_TOML_EMPTY_OS_LIST, arch="arm64") == {}
+
+
+_SAMPLE_MISE_TOML_BARE_STRING_OS = """\
+[tools]
+"conda:gxx" = { version = "16.2.0", os = "linux" }
+"""
+
+
+def test_parse_declared_tools_rejects_non_list_os() -> None:
+    """A bare-string `os` (mise itself rejects this as a type error) raises loud.
+
+    Without the type check this would silently iterate the string's
+    characters instead of failing — a wrong answer with no error.
+    """
+    with pytest.raises(TypeError, match="must be a list"):
+        parse_declared_tools(_SAMPLE_MISE_TOML_BARE_STRING_OS, arch="amd64")
+
+
 def test_smoke_script_injects_tool_set_assertion() -> None:
     """#143: declared tools are injected and the jq/diff assertion block present."""
     script = build_smoke_script(

@@ -124,15 +124,38 @@ def _tool_requested_version(spec: str | dict[str, Any]) -> str:
     return version
 
 
+_LINUX = "linux"
+
+
+def _normalize_tool_os(token: str) -> str:
+    """Mirror mise's own ``normalize_os`` (``toolset/tool_request.rs``).
+
+    Aliases ONLY ``darwin``/``macos`` and ``windows``/``win`` — everything
+    else, including case, passes through unchanged. mise itself performs no
+    case-folding or trimming here, so neither does this (#841 round 2): an
+    entry spelled ``Linux`` is unsupported to mise and must stay unsupported
+    here too, rather than this check being more lenient than the tool it
+    mirrors.
+    """
+    if token in ("darwin", "macos"):
+        return "macos"
+    if token in ("windows", "win"):
+        return "windows"
+    return token
+
+
 def _tool_os_supported(spec: str | dict[str, Any], *, arch: str) -> bool:
     """Whether a mise ``[tools]`` entry's ``os`` key admits ``arch``.
 
     Mirrors mise's own ``is_os_supported`` (``toolset/tool_request.rs``,
     ``is_os_supported``): a bare-string entry (no table, so no ``os`` key
-    possible) always matches, and a table entry with no ``os`` key always
-    matches. A present ``os`` list is scanned entry by entry; an entry with a
-    ``/`` requires BOTH the os half and the (normalized) arch half to match
-    the target, one without a ``/`` matches on os alone.
+    possible) always matches, and a table entry with a MISSING ``os`` key
+    always matches — but a table entry with an EMPTY ``os`` list matches
+    NOTHING, mirroring `.any()` over an empty ``Vec`` returning ``false``
+    rather than being conflated with "key absent" (#841 round 2). A present,
+    non-empty list is scanned entry by entry; an entry with a ``/`` requires
+    BOTH the os half and the (normalized) arch half to match the target, one
+    without a ``/`` matches on os alone.
 
     The OS half is fixed to ``"linux"`` rather than threaded as a parameter:
     every image this project builds is a Linux container, so there is no
@@ -141,20 +164,31 @@ def _tool_os_supported(spec: str | dict[str, Any], *, arch: str) -> bool:
     parameter either. ``arch`` must already be docker-normalized
     (:func:`platform_target.platform_arch`), matching what every caller here
     already holds.
+
+    An ``os`` value that isn't a list (e.g. the bare string ``os = "linux"``,
+    which mise itself rejects as a type error) raises ``TypeError`` rather
+    than iterating its characters. What this does NOT replicate: mise's real
+    ``is_os_supported`` falls through to the BACKEND's own
+    ``is_os_supported()`` after the ``os``-list check — a backend can declare
+    further platform restrictions this function has no way to see from a
+    parsed TOML entry alone.
     """
     if isinstance(spec, str):
         return True
     os_list = spec.get("os")
-    if not os_list:
+    if os_list is None:
         return True
+    if not isinstance(os_list, list):
+        msg = f"mise [tools] entry 'os' must be a list, got {os_list!r}"
+        raise TypeError(msg)
     for entry in os_list:
         os_part, sep, arch_part = entry.partition("/")
         if sep:
-            if os_part.strip().lower() != "linux":
+            if _normalize_tool_os(os_part) != _LINUX:
                 continue
             if normalize_arch(arch_part) == arch:
                 return True
-        elif os_part.strip().lower() == "linux":
+        elif _normalize_tool_os(os_part) == _LINUX:
             return True
     return False
 

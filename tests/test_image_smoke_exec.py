@@ -40,7 +40,7 @@ from dotfiles_setup.image import (
     resolve_expected_identity_at_base,
     resolve_expected_p2996_ref_at_base,
 )
-from dotfiles_setup.platform_target import platform_arch, resolve_platform
+from dotfiles_setup.platform_target import expected_uname_machine, normalize_arch
 
 pytestmark = pytest.mark.image_exec
 
@@ -107,7 +107,11 @@ def _run_in_image(
 
     ``bash -l`` sources the image's mise activation so jq / clang++ / mise
     resolve exactly as they do under ``scripts/devcontainer-smoke.sh``; the
-    script arrives on stdin (``-i``), so no host mount is needed.
+    script arrives on stdin (``-i``), so no host mount is needed. No
+    ``--platform`` is passed anywhere in this module — ``docker run`` therefore
+    executes ``image``'s own native architecture, which is why
+    :func:`_image_arch` (not the repo's ``DOTFILES_PLATFORM`` pin) is the
+    correct source for the expected declared-tool set below (#841 round 2).
     """
     return subprocess.run(
         ["docker", "run", "--rm", "-i", image, "bash", "-l"],
@@ -119,6 +123,57 @@ def _run_in_image(
     )
 
 
+def _image_arch(image: str) -> str:
+    """Docker-normalized architecture of the LOCAL ``image``, not the repo pin.
+
+    #841 round 2: this module's ``_run_in_image`` passes no ``--platform``, so
+    ``docker run`` executes whatever architecture ``image`` actually is —
+    which is the host's native arch when ``mise run sync`` pulled a multi-arch
+    manifest list, and need not match ``DOTFILES_PLATFORM``. Resolving the
+    expected declared-tool set from the repo pin instead was a false-negative
+    inertly waiting to happen: it agreed with the real image only by
+    coincidence (the merge-base tool set has no ``os=``-scoped entry yet), and
+    would silently diverge — false FAIL on a real ``os=``-scoped merge-base
+    pin — the moment one lands, since amd64 and arm64 stopped being
+    interchangeable at that point. Reading the architecture off the image
+    itself makes the two unable to disagree.
+    """
+    result = subprocess.run(
+        ["docker", "image", "inspect", image, "--format", "{{.Architecture}}"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=True,
+    )
+    raw = result.stdout.strip()
+    arch = normalize_arch(raw)
+    if arch is None:
+        msg = f"docker image inspect {image!r} reported unrecognised arch {raw!r}"
+        raise ValueError(msg)
+    return arch
+
+
+def test_image_arch_matches_in_container_uname(dev_image: str) -> None:
+    """Control arm for :func:`_image_arch`: cross-check it against a SECOND route.
+
+    ``docker image inspect``'s ``.Architecture`` and the container's own
+    ``uname -m`` are read through entirely different code paths (image
+    metadata vs. a process actually running inside it). If they ever
+    disagreed, every test below would silently resolve the wrong expected
+    tool set instead of failing loud — this is what makes that impossible.
+    """
+    result = subprocess.run(
+        ["docker", "run", "--rm", dev_image, "uname", "-m"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=True,
+    )
+    uname_machine = result.stdout.strip()
+
+    assert uname_machine == expected_uname_machine(f"linux/{_image_arch(dev_image)}")
+
+
 def test_tier1_core_passes_against_dev(dev_image: str) -> None:
     """The merge-base tier-1 core runs GREEN against the current ``:dev``.
 
@@ -127,14 +182,10 @@ def test_tier1_core_passes_against_dev(dev_image: str) -> None:
     A red here means the local ``:dev`` drifted from the branch source — which is
     exactly the stale-base condition the gate exists to catch.
     """
-    # `_DEV_IMAGE` is the amd64 image (DOTFILES_PLATFORM pin), run under Rosetta
-    # on this arm64 Mac host — so the expected set must be resolved for amd64,
-    # not the host's own `uname` (#841; that derivation is for code running
-    # INSIDE the container, e.g. ``smoke_script_main``, not this host-side test).
     script = build_tier1_script(
         expected_identity=resolve_expected_identity_at_base(),
         expected_tools=resolve_declared_tools_at_base(
-            _project_root(), arch=platform_arch(resolve_platform())
+            _project_root(), arch=_image_arch(dev_image)
         ),
     )
 
@@ -153,9 +204,7 @@ def test_tier1_toolset_block_fails_on_declared_not_installed(dev_image: str) -> 
     exit 1 — proving the block runs its set-diff, not merely that it's present.
     """
     tampered_tools = dict(
-        resolve_declared_tools_at_base(
-            _project_root(), arch=platform_arch(resolve_platform())
-        )
+        resolve_declared_tools_at_base(_project_root(), arch=_image_arch(dev_image))
     )
     tampered_tools["zzz-not-a-real-tool"] = "9.9.9"
     script = build_tier1_script(
