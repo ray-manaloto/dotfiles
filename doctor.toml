@@ -174,15 +174,21 @@ required_skill_files = [
 stub_file = ".agents/skills/graphify/SKILL.md"
 stub_marker = "DELIBERATE STUB"
 
-# `.codex/*` is fully gitignored (dies on a fresh clone), and a
-# codex-platform `graphify install` also appends the line-budgeted root
-# AGENTS.md — do-not.md #8 already forbids running it here. This asserts
-# the forbidden install never landed, even though `.codex/` itself is
-# untracked and no hk `git diff` would otherwise ever see it.
-forbidden_paths = [".codex/skills/graphify"]
+# `.codex/skills/graphify` is now ADOPTED and tracked (2026-08-31, reversing
+# a ban this section carried until then). The ban guarded against a
+# codex-platform `graphify install` appending the line-budgeted root
+# AGENTS.md (do-not.md #8) — true of graphify's OWN installer, never true of
+# this repo's `dotfiles-setup graphify skill-install` / `mise run
+# graphify-skill-install -- codex`, which only ever copies
+# SKILL.md + references/ + a version stamp and never touches AGENTS.md
+# (`graphify_skill.py`, verified: it never calls graphify's
+# `_agents_install`). The path the ban forbade is now exactly the path this
+# repo's installer produces and commits, so `forbidden_paths` is gone. The
+# REAL hazard below is unaffected — it still fires unconditionally, vendor
+# install or not.
 
-# A codex-platform `graphify install` ALSO appends this literal line to the
-# root AGENTS.md (do-not.md #8) — unlike `.codex/skills/graphify`, AGENTS.md
+# A codex-platform `graphify install` (the VENDOR installer, never ours)
+# appends this literal line to the root AGENTS.md (do-not.md #8) — AGENTS.md
 # IS tracked, so a landed append shows up in `git diff` too, but this check
 # still needs to say so at session start, not only at the next commit.
 forbidden_agents_md_marker = "use the installed graphify skill"

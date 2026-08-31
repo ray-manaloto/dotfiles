@@ -50,8 +50,15 @@ mise.*.local.toml
 .agent/command-audit.md
 .omx/
 
-# Codex CLI temporary state
+# Codex CLI runtime state (config.toml, hooks.json, agents/) — the skill
+# surface is deliberately tracked (2026-08-31): `.codex/skills/` is repo-owned
+# installer output (`mise run graphify-skill-install -- codex`), never
+# graphify's own vendor installer, so the do-not.md #8 AGENTS.md-append hazard
+# does not apply to it. See hk.pkl's `graphify_skill_surface` step and
+# doctor.toml's `[graphify]` section for what still guards the real hazard.
 .codex/*
+!.codex/skills/
+!.codex/skills/**
 
 # Logging
 .logging/

@@ -1092,12 +1092,12 @@ def check_graphify_skill_surface(setup: Setup) -> list[str]:
     """The graphify skill surface stays in its reviewed, DELIBERATE shape.
 
     The commit-time twin is hk's ``graphify_skill_surface`` step, which
-    asserts the identical four facts. Both exist because hk only ever runs
+    asserts the identical facts. Both exist because hk only ever runs
     at commit time, while this runs every SessionStart — a session that
     never commits would otherwise carry a broken surface silently for its
     whole duration.
 
-    Four assertions, all read straight off the working tree rather than the
+    Assertions, all read straight off the working tree rather than the
     baseline's usual host-external state, because that is exactly what this
     surface *is*:
 
@@ -1107,17 +1107,21 @@ def check_graphify_skill_surface(setup: Setup) -> list[str]:
       either the deliberate-stub note was deleted by accident, or the file was
       silently replaced by real ``graphify agents install`` output (update
       ``doctor.toml`` in that case, rather than restoring the marker);
-    * none of ``forbidden_paths`` may exist — ``.codex/skills/graphify`` in
-      particular, because ``do-not.md`` #8 forbids installing it here (a
-      codex-platform install also appends the line-budgeted root
-      ``AGENTS.md``) and ``.codex/`` is fully gitignored, so no other check in
-      this repo would ever notice it landed;
     * ``forbidden_agents_md_marker`` must not appear in the root
       ``AGENTS.md`` — that literal line is what a codex-platform
-      ``graphify install`` appends there, so its presence means the banned
-      vendor installer ran (unlike the ``.codex`` path above, ``AGENTS.md``
-      IS tracked, so `git diff` would also show it, but only at the next
-      commit — this still needs to say so every session).
+      ``graphify install`` (the VENDOR installer) appends there, so its
+      presence means the banned vendor installer ran. ``AGENTS.md`` IS
+      tracked, so `git diff` would also show it, but only at the next
+      commit — this still needs to say so every session.
+
+    ``.codex/skills/graphify`` itself was a ``forbidden_paths`` entry until
+    2026-08-31: that guarded against the vendor installer's AGENTS.md append,
+    which this repo's OWN installer (``dotfiles-setup graphify
+    skill-install`` / ``mise run graphify-skill-install -- codex``)
+    structurally cannot cause — it only ever copies SKILL.md + references/ +
+    a version stamp (see ``graphify_skill.py``). That path is now adopted and
+    tracked, so the ban is gone; the real hazard is still caught by the
+    ``forbidden_agents_md_marker`` check above.
     """
     baseline = _str_keys(setup.baseline.get("graphify"))
     findings: list[str] = [
@@ -1138,13 +1142,6 @@ def check_graphify_skill_surface(setup: Setup) -> list[str]:
                 f"(restore it), or the file is now real installer output "
                 f"(update {BASELINE_FILE} to match)"
             )
-    findings.extend(
-        f"{rel} exists, but do-not.md #8 forbids installing it here — a "
-        f"codex-platform `graphify install` also appends the line-budgeted "
-        f"root AGENTS.md. Remove it."
-        for rel in _str_list(baseline.get("forbidden_paths"))
-        if (setup.repo_root / rel).exists()
-    )
     agents_md_marker = baseline.get("forbidden_agents_md_marker")
     if isinstance(agents_md_marker, str):
         agents_md_path = setup.repo_root / "AGENTS.md"

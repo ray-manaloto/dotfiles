@@ -43,34 +43,35 @@ package actually declares.
 ```bash
 mise run graphify-skill-install -- claude   # refresh .claude/skills/graphify/
 mise run graphify-skill-install -- agents   # would write .agents/skills/graphify/ — see below first
-mise run graphify-skill-install -- codex    # would write .codex/skills/graphify/ — see below first
+mise run graphify-skill-install -- codex    # refresh .codex/skills/graphify/ — adopted, tracked
 ```
 
 ## Non-obvious failure modes
 
-- **Running it for `agents` or `codex` OVERWRITES this repo's deliberate
-  decisions, not just a file.** `.agents/skills/graphify/SKILL.md` is a
-  hand-authored redirect stub (marked `DELIBERATE STUB` inside the file) —
-  not a failed install — because the vendor's generic bundle would tell any
-  agent reading it to invoke a global `graphify` binary directly, which is
+- **Running it for `agents` OVERWRITES this repo's deliberate decision, not
+  just a file.** `.agents/skills/graphify/SKILL.md` is a hand-authored
+  redirect stub (marked `DELIBERATE STUB` inside the file) — not a failed
+  install — because the vendor's generic bundle would tell any agent
+  reading it to invoke a global `graphify` binary directly, which is
   exactly what `.claude/rules/graphify-first.md` and the repo's mise tasks
   exist to prevent. Claude Code has a PreToolUse hook enforcing the
   redirect regardless of `SKILL.md` content; no such hook exists for other
   agents reading `.agents/skills/`, so the stub IS the enforcement there.
-  `.codex/skills/graphify/` must NOT be installed: `.codex/*` is fully
-  gitignored (dies on a fresh clone) so it can never be the durable
-  mechanism, and codex already has a tracked path to the same guidance via
-  the root `AGENTS.md`, which explicitly names
-  `.claude/rules/graphify-first.md`. `hk`'s `graphify_skill_surface` step
-  and `doctor.toml`'s `[graphify]` `forbidden_paths` both actively FAIL if
-  `.codex/skills/graphify` exists at all — the copy itself will succeed
-  (it has no opinion), but your next commit or session will immediately
-  report the drift those checks exist to catch. Running it against
-  `agents` will similarly not fail by itself, but silently discards the
-  `DELIBERATE STUB` marker the doctor/hk checks look for, so treat that
-  platform as off-limits too unless you are deliberately revising the
-  reviewed C2/C3 decision — in which case update `doctor.toml`'s
-  `[graphify]` section in the same change.
+  Running it against `agents` will not fail by itself, but silently
+  discards the `DELIBERATE STUB` marker the doctor/hk checks look for, so
+  treat that platform as off-limits unless you are deliberately revising
+  the reviewed decision — in which case update `doctor.toml`'s `[graphify]`
+  section in the same change.
+- **`.codex/skills/graphify/` is adopted and tracked (2026-08-31), unlike
+  `agents`.** It was banned until then on the same "durable mechanism"
+  reasoning above — `.codex/*` used to be fully gitignored, so a
+  `.codex/skills/graphify/` write would die on a fresh clone. `.gitignore`
+  now carries a surgical `!.codex/skills/**` negation (verify with `git
+  check-ignore -v` on a skills file and a runtime file if you touch that
+  pattern), so the install this task produces IS the durable mechanism —
+  running it for `codex` is the normal, sanctioned refresh path, same as
+  `claude`. `.codex/config.toml`, `.codex/hooks.json` and `.codex/agents/`
+  stay ignored; only `.codex/skills/` is tracked.
 - **A destination that already differs from the packaged source is backed
   up to `SKILL.md.bak`, not silently overwritten** — but the `.bak` file is
   untracked noise if you don't mean to keep it. Check `git status` after

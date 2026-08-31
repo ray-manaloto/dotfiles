@@ -640,21 +640,24 @@ local allSteps = new Mapping<String, Config.Step> {
   //     bundle. `.agents/skills/graphify/SKILL.md` is a DELIBERATE
   //     hand-authored redirect stub, not `graphify agents install` output —
   //     the marker line inside it says so, so a "fix" cannot silently
-  //     overwrite it unnoticed. `.codex/skills/graphify/` must never exist:
-  //     `.codex/*` is fully gitignored (dies on a fresh clone) AND a
-  //     codex-platform install (vendor OR the repo-owned
+  //     overwrite it unnoticed. `.codex/skills/graphify/` is now ADOPTED and
+  //     tracked (2026-08-31, reversing the ban this step carried until then):
+  //     the path ban guarded against a codex-platform `graphify install`
+  //     appending the line-budgeted root AGENTS.md (do-not.md #8) — true of
+  //     graphify's OWN installer, never true of this repo's
   //     `dotfiles-setup graphify skill-install` / `mise run
-  //     graphify-skill-install -- codex`) has no tracked place to live, so
-  //     this repo has not yet decided to adopt it as a platform — that
-  //     decision is still open, tracked separately from this gate. This
-  //     ALSO still bans the vendor installer's own residue unconditionally:
-  //     `graphify codex install` appends the line-budgeted root AGENTS.md
-  //     (do-not.md #8) and always leaves this literal marker line behind.
-  //     See doctor.toml's `[graphify]` section for the same three
-  //     assertions, checked every session — the two gates must agree. ---
+  //     graphify-skill-install -- codex`, which only ever copies
+  //     SKILL.md + references/ + a version stamp (`graphify_skill.py`,
+  //     verified: it never calls graphify's `_agents_install`). The path the
+  //     ban forbade is now exactly the path this repo's installer produces
+  //     and commits, so the ban is gone. The REAL hazard — the vendor
+  //     installer's AGENTS.md append — still has its own clause below and
+  //     still fires unconditionally, vendor install or not. See
+  //     doctor.toml's `[graphify]` section for the same assertions, checked
+  //     every session — the two gates must agree. ---
   ["graphify_skill_surface"] {
     check =
-      "test -f .claude/skills/graphify/SKILL.md && grep -q 'DELIBERATE STUB' .agents/skills/graphify/SKILL.md && ! grep -q 'use the installed graphify skill' AGENTS.md && test ! -e .codex/skills/graphify"
+      "test -f .claude/skills/graphify/SKILL.md && grep -q 'DELIBERATE STUB' .agents/skills/graphify/SKILL.md && ! grep -q 'use the installed graphify skill' AGENTS.md"
   }
 
   // --- CLAUDE.md must be a thin `@AGENTS.md` import stub.
