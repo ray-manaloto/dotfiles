@@ -745,6 +745,17 @@ description = "Rebuild the project knowledge graph and stamp the graphify versio
 # Pass a target: mise run graphify-update -- src/some/dir
 run = 'uv run --project python dotfiles-setup graphify update'
 
+[tasks.graphify-skill-install]
+description = "Install/refresh one platform's graphify skill surface into this repo (never $HOME/AGENTS.md)"
+# Thin caller (zero-bash-logic); logic in
+# python/src/dotfiles_setup/graphify_skill.py. The repo-owned replacement for
+# the banned `graphify install`/`graphify <platform> install` (do-not.md #8):
+# copies the packaged SKILL.md + references/ + a .graphify_version stamp for
+# ONE platform, scoped to a project dir (default: this repo) — never touches
+# ~/.claude, never appends AGENTS.md/CLAUDE.md, never patches hooks.json.
+# Pass the platform: mise run graphify-skill-install -- claude
+run = 'uv run --project python dotfiles-setup graphify skill-install'
+
 [tasks.graphify-affected]
 description = "Blast radius: reverse-traverse the graph for what breaks if <node> changes"
 # Thin caller (zero-bash-logic); logic in

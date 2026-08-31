@@ -640,14 +640,19 @@ local allSteps = new Mapping<String, Config.Step> {
   //     bundle. `.agents/skills/graphify/SKILL.md` is a DELIBERATE
   //     hand-authored redirect stub, not `graphify agents install` output —
   //     the marker line inside it says so, so a "fix" cannot silently
-  //     overwrite it unnoticed. `.codex/skills/graphify/` must never exist:
-  //     `.codex/*` is fully gitignored (dies on a fresh clone) AND a
-  //     codex-platform install also appends the line-budgeted root
-  //     AGENTS.md (do-not.md #8) — see doctor.toml's `[graphify]` section
-  //     for the same three assertions, checked every session. ---
+  //     overwrite it unnoticed. `.codex/skills/graphify/` is NOT installed by
+  //     default (`.codex/*` is gitignored, dies on a fresh clone), but the
+  //     repo-owned `dotfiles-setup graphify skill-install` installer
+  //     (mise run graphify-skill-install) makes codex an explicit, operator-
+  //     chosen platform — so this no longer bans its existence outright.
+  //     What it still bans, unconditionally, is graphify's OWN installer
+  //     having run: `graphify codex install` also appends the line-budgeted
+  //     root AGENTS.md (do-not.md #8), and that append always leaves this
+  //     literal marker line behind. See doctor.toml's `[graphify]` section
+  //     for the sibling session-start check. ---
   ["graphify_skill_surface"] {
     check =
-      "test -f .claude/skills/graphify/SKILL.md && grep -q 'DELIBERATE STUB' .agents/skills/graphify/SKILL.md && test ! -e .codex/skills/graphify"
+      "test -f .claude/skills/graphify/SKILL.md && grep -q 'DELIBERATE STUB' .agents/skills/graphify/SKILL.md && ! grep -q 'use the installed graphify skill' AGENTS.md"
   }
 
   // --- CLAUDE.md must be a thin `@AGENTS.md` import stub.

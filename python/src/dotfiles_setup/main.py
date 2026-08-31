@@ -69,6 +69,7 @@ from dotfiles_setup.graphify import (
     hook_guard_main,
     prs_main,
 )
+from dotfiles_setup.graphify_skill import graphify_skill_install_main
 from dotfiles_setup.handoff_check import main as handoff_check_main
 from dotfiles_setup.hk_builtins_audit import hk_builtins_audit_main
 from dotfiles_setup.hook_guard import pretooluse_main
@@ -966,6 +967,26 @@ def _add_graphify_subcommands(
         dest="no_null",
         help="Drop the null arm. Removes the noise floor, so no gap is interpretable",
     )
+    skill_install_parser = graphify_sub.add_parser(
+        "skill-install",
+        help=(
+            "Copy graphify's packaged SKILL.md (+ references) for one platform "
+            "into a project dir — never touches $HOME, AGENTS.md/CLAUDE.md, or "
+            "hooks.json (do-not.md #8 forbids `graphify install` here)"
+        ),
+    )
+    skill_install_parser.add_argument(
+        "platform",
+        help=(
+            "A platform graphify's own installer knows about (e.g. claude, "
+            "agents, codex) — see `graphify.install._PLATFORM_CONFIG`"
+        ),
+    )
+    skill_install_parser.add_argument(
+        "--project-dir",
+        default=None,
+        help="Target project directory (default: this repo's root)",
+    )
 
 
 def _add_project_contract_subcommands(
@@ -1861,6 +1882,14 @@ def handle_graphify(args: argparse.Namespace, project_root: Path) -> None:
                 repeats=args.repeats,
                 run_id=args.run_id,
                 no_null=args.no_null,
+            )
+        )
+    if getattr(args, "graphify_command", None) == "skill-install":
+        sys.exit(
+            graphify_skill_install_main(
+                project_root,
+                platform=args.platform,
+                project_dir=Path(args.project_dir) if args.project_dir else None,
             )
         )
 

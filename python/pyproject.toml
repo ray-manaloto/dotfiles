@@ -95,6 +95,13 @@ ignore = [
 # entry points — it is what every other caller is redirected to (#675). Without
 # this allowance the ban would make the module it exists to protect unwritable.
 "src/dotfiles_setup/codec.py" = ["TID251"]
+# SLF001 (private member access): `graphify_skill.py` deliberately reads
+# graphify's own `_PLATFORM_CONFIG` (private by the vendor's naming) as the
+# repo-owned installer's placement table — the whole point is that it CANNOT
+# drift from what the installed graphify version's own installer would do.
+# The install *functions* it wraps are never called; only this one data table
+# is read. See do-not.md #8 for why a repo-owned installer exists at all.
+"src/dotfiles_setup/graphify_skill.py" = ["SLF001"]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 # Every msgspec entry point that accepts a conversion hook (#675 AC4).
