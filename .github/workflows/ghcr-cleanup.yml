@@ -57,7 +57,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Install mise (python + uv)
-        uses: ./.github/actions/setup-mise
+        uses: $/.github/actions/setup-mise
         with:
           install_args: "python uv"
       - name: Fetch package versions

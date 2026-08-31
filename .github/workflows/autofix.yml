@@ -54,7 +54,7 @@ jobs:
         # `mise x --`, auto-installing missing tools at runtime; hk 1.49
         # scopes HK_MISE to hook generation, so tools must be installed
         # up front (#160 T12 follow-up, PR #169).
-        uses: ./.github/actions/setup-mise
+        uses: $/.github/actions/setup-mise
       - name: Configure git identity for hk
         run: |
           git config --global user.name "github-actions[bot]"

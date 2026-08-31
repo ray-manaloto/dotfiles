@@ -98,7 +98,7 @@ jobs:
         # forwards to jdx/mise-action, whose default `cache: true` keys on
         # {platform}-{install_args_hash}-{file_hash} — granular per-platform
         # AND per-install-args cache hygiene, preserved across all jobs.
-        uses: ./.github/actions/setup-mise
+        uses: $/.github/actions/setup-mise
       - name: Configure git identity for hk
         run: |
           git config --global user.name "github-actions[bot]"
@@ -209,7 +209,7 @@ jobs:
         # "not on PATH", which reads identically to "host-hostile" and is how
         # over-marking silently deletes CI coverage. `graphify` is
         # `os = ["macos"]` in mise.toml so linux skips it either way.
-        uses: ./.github/actions/setup-mise
+        uses: $/.github/actions/setup-mise
       - name: Validate Dockerfile contracts
         run: |
           uv run --project python dotfiles-setup verify run \
@@ -330,7 +330,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-    uses: ./.github/workflows/build-publish.yml
+    uses: $/.github/workflows/build-publish.yml
     with:
       tag_strategy: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.force_dev_tag)) && 'nightly' || 'pr' }}
       publish: true

@@ -18,7 +18,7 @@ editorconfig-checker = "3.11.2" # provides `ec` — hk editorconfig_checker buil
 # matters happens at the commit boundary. Measured before adopting: 0 findings
 # over the whole 31.5 MB tree in 199 ms.
 "aqua:betterleaks/betterleaks" = "1.8.1"
-"npm:@devcontainers/cli" = "0.88.0"
+"npm:@devcontainers/cli" = "0.89.0"
 # Critical host-side secrets transport for devcontainer initialization. Keep it
 # deep-tracked in currency.toml: Doppler's mounted-secret behavior is part of
 # the devcontainer security boundary, not an optional interactive convenience.
@@ -27,8 +27,8 @@ colima = "0.10.3"                   # Alternate Docker runtime (VZ + Rosetta); D
 lima = "2.2.0"
 "github:agent-sh/agnix" = "v0.52.1"
 "npm:agents-lint" = "0.5.0"
-"pipx:mcp2cli" = "3.6.0"
-"npm:renovate" = "44.48.0"
+"pipx:mcp2cli" = "3.7.0"
+"npm:renovate" = "44.52.1"
 biome = "2.5.7"
 # Markdown + Claude-docs linters. Installed now; hk.pkl integration is
 # scheduled for post-devcontainer-work review (see GH issue tracking
@@ -41,14 +41,14 @@ biome = "2.5.7"
 rumdl = "v0.2.62"
 # zizmor: GHA security scanner — backs the hk zizmor builtin (#160 T12);
 # host-only lint tool, so it lives here (not shared.toml).
-zizmor = "1.29.0"
-"npm:oh-my-claude-sisyphus" = "5.0.0"
-"github:ast-grep/ast-grep" = "0.45.2"
-lefthook = "2.1.11"
+zizmor = "1.30.0"
+"npm:oh-my-claude-sisyphus" = "5.1.0"
+"github:ast-grep/ast-grep" = "0.45.3"
+lefthook = "2.1.12"
 "npm:ctx7" = "0.5.9"
 "aqua:rtk-ai/rtk" = "0.46.0"          # aqua is the registry's first backend (`mise registry rtk`); the old bare `rtk` resolved to github: and mise doctor flagged the mismatch
 "npm:skills" = "1.5.23"
-"npm:agent-browser" = "0.35.1"
+"npm:agent-browser" = "0.35.2"
 "npm:portless" = "0.15.6"
 "pipx:deepagents-cli" = "0.3.0"
 # ffmpeg: system binary the graphify `video` extra (faster-whisper) needs to
@@ -66,10 +66,10 @@ lefthook = "2.1.11"
 # conda:ffmpeg on platform linux-x64" and bricks lint. os-gating makes linux
 # skip the tool entirely, so no linux URL is demanded.
 "conda:ffmpeg" = { version = "8.1.2", os = ["macos"] }
-aws-cli = { version = "2.36.33", symlink_bins = "true" }
+aws-cli = { version = "2.36.34", symlink_bins = "true" }
 azure-cli = { version = "2.89.1", uvx_args = "--prerelease=allow" }
 docker-cli = "29.7.2"
-opencode = "1.18.23"
+opencode = "1.18.25"
 # bun (the npm package_manager) is a host↔image SHARED tool → declared in
 # .config/mise/conf.d/shared.toml, not here (mise-parity: a tool used by both
 # sides lives only in the shared fragment).
