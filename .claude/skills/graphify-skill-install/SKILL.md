@@ -57,21 +57,20 @@ mise run graphify-skill-install -- codex    # would write .codex/skills/graphify
   exist to prevent. Claude Code has a PreToolUse hook enforcing the
   redirect regardless of `SKILL.md` content; no such hook exists for other
   agents reading `.agents/skills/`, so the stub IS the enforcement there.
-  `.codex/skills/graphify/` is **not installed by default**: `.codex/*` is
-  fully gitignored (dies on a fresh clone) so it can never be the durable
+  `.codex/skills/graphify/` must NOT be installed: `.codex/*` is fully
+  gitignored (dies on a fresh clone) so it can never be the durable
   mechanism, and codex already has a tracked path to the same guidance via
   the root `AGENTS.md`, which explicitly names
-  `.claude/rules/graphify-first.md`. Installing it anyway is a deliberate,
-  operator-invoked choice this tool supports — `hk`'s
-  `graphify_skill_surface` step does not ban the path's existence, only the
-  one thing that must never happen regardless: root `AGENTS.md` carrying
-  graphify's own auto-registration marker line (proof that the BANNED
-  vendor installer, not this tool, wrote it). Running the task against
+  `.claude/rules/graphify-first.md`. `hk`'s `graphify_skill_surface` step
+  and `doctor.toml`'s `[graphify]` `forbidden_paths` both actively FAIL if
+  `.codex/skills/graphify` exists at all — the copy itself will succeed
+  (it has no opinion), but your next commit or session will immediately
+  report the drift those checks exist to catch. Running it against
   `agents` will similarly not fail by itself, but silently discards the
-  `DELIBERATE STUB` marker the doctor check looks for, so treat that
+  `DELIBERATE STUB` marker the doctor/hk checks look for, so treat that
   platform as off-limits too unless you are deliberately revising the
-  reviewed decision — in which case update `doctor.toml`'s `[graphify]`
-  section in the same change.
+  reviewed C2/C3 decision — in which case update `doctor.toml`'s
+  `[graphify]` section in the same change.
 - **A destination that already differs from the packaged source is backed
   up to `SKILL.md.bak`, not silently overwritten** — but the `.bak` file is
   untracked noise if you don't mean to keep it. Check `git status` after
