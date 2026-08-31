@@ -159,6 +159,28 @@ scope_servers = []
 # listing, or a new one was enabled — both worth a look.
 max_chars = 34000
 
+[graphify]
+# The graphify skill surface's REVIEWED, deliberate shape (issue: see the
+# `graphify_skill_surface` hk step for the commit-time twin of this check).
+# `.claude/skills/graphify/SKILL.md` is the full installed Claude Code
+# bundle. `.agents/skills/graphify/SKILL.md` is a DELIBERATE hand-authored
+# redirect stub carrying the `stub_marker` below — NOT `graphify agents
+# install` output — so this check discriminates "the note was lost" from
+# "the file was silently overwritten by a real install".
+required_skill_files = [
+    ".claude/skills/graphify/SKILL.md",
+    ".agents/skills/graphify/SKILL.md",
+]
+stub_file = ".agents/skills/graphify/SKILL.md"
+stub_marker = "DELIBERATE STUB"
+
+# `.codex/*` is fully gitignored (dies on a fresh clone), and a
+# codex-platform `graphify install` also appends the line-budgeted root
+# AGENTS.md — do-not.md #8 already forbids running it here. This asserts
+# the forbidden install never landed, even though `.codex/` itself is
+# untracked and no hk `git diff` would otherwise ever see it.
+forbidden_paths = [".codex/skills/graphify"]
+
 [path_drift]
 # Tools whose staleness weakens a GATE rather than merely annoying someone
 # (#596). Every mise tool on PATH is compared — the list is not the scope, it

@@ -972,6 +972,82 @@ def test_health_reports_a_missing_claude_binary(
     ]
 
 
+# --------------------------------------------------------------------------- #
+# check 11 — graphify-skill-surface
+# --------------------------------------------------------------------------- #
+
+_GRAPHIFY_BASELINE: dict[str, object] = {
+    "required_skill_files": [
+        ".claude/skills/graphify/SKILL.md",
+        ".agents/skills/graphify/SKILL.md",
+    ],
+    "stub_file": ".agents/skills/graphify/SKILL.md",
+    "stub_marker": "DELIBERATE STUB",
+    "forbidden_paths": [".codex/skills/graphify"],
+}
+
+
+def _write_healthy_graphify_surface(repo_root: Path) -> None:
+    claude_skill = repo_root / ".claude" / "skills" / "graphify" / "SKILL.md"
+    claude_skill.parent.mkdir(parents=True)
+    claude_skill.write_text("full installed bundle")
+    agents_skill = repo_root / ".agents" / "skills" / "graphify" / "SKILL.md"
+    agents_skill.parent.mkdir(parents=True)
+    agents_skill.write_text("<!-- DELIBERATE STUB: hand-authored redirect -->")
+
+
+def test_graphify_skill_surface_flags_a_missing_required_file(tmp_path: Path) -> None:
+    (tmp_path / ".agents" / "skills" / "graphify").mkdir(parents=True)
+    (tmp_path / ".agents" / "skills" / "graphify" / "SKILL.md").write_text(
+        "DELIBERATE STUB"
+    )
+    setup = _setup(repo_root=tmp_path, baseline={"graphify": _GRAPHIFY_BASELINE})
+    findings = doctor.check_graphify_skill_surface(setup)
+    assert len(findings) == 1
+    assert ".claude/skills/graphify/SKILL.md" in findings[0]
+
+
+def test_graphify_skill_surface_is_silent_on_the_reviewed_shape(
+    tmp_path: Path,
+) -> None:
+    _write_healthy_graphify_surface(tmp_path)
+    setup = _setup(repo_root=tmp_path, baseline={"graphify": _GRAPHIFY_BASELINE})
+    assert doctor.check_graphify_skill_surface(setup) == []
+
+
+def test_graphify_skill_surface_flags_a_stub_that_lost_its_marker(
+    tmp_path: Path,
+) -> None:
+    _write_healthy_graphify_surface(tmp_path)
+    (tmp_path / ".agents" / "skills" / "graphify" / "SKILL.md").write_text(
+        "no marker here"
+    )
+    setup = _setup(repo_root=tmp_path, baseline={"graphify": _GRAPHIFY_BASELINE})
+    findings = doctor.check_graphify_skill_surface(setup)
+    assert len(findings) == 1
+    assert "DELIBERATE STUB" in findings[0]
+
+
+def test_graphify_skill_surface_flags_a_forbidden_codex_install(
+    tmp_path: Path,
+) -> None:
+    _write_healthy_graphify_surface(tmp_path)
+    (tmp_path / ".codex" / "skills" / "graphify").mkdir(parents=True)
+    setup = _setup(repo_root=tmp_path, baseline={"graphify": _GRAPHIFY_BASELINE})
+    findings = doctor.check_graphify_skill_surface(setup)
+    assert len(findings) == 1
+    assert ".codex/skills/graphify" in findings[0]
+    assert "do-not.md #8" in findings[0]
+
+
+def test_graphify_skill_surface_is_silent_without_a_baseline_section(
+    tmp_path: Path,
+) -> None:
+    """An absent `[graphify]` section covers nothing — the same seam #535 named."""
+    setup = _setup(repo_root=tmp_path, baseline={})
+    assert doctor.check_graphify_skill_surface(setup) == []
+
+
 def test_every_check_function_is_actually_registered() -> None:
     """Binds the CALL SITE, not the definition.
 
@@ -997,8 +1073,11 @@ def test_every_check_function_is_actually_registered() -> None:
     # environ anyway — a stale-process leak, not a config defect. Raise this
     # ONLY alongside a new entry in CHECKS — the count is what catches a check
     # that was defined and never registered, which the set-difference above
-    # cannot see once the function is also removed.
-    assert len(doctor.CHECKS) == 10, "every specified check must be wired"
+    # cannot see once the function is also removed. + `graphify-skill-surface`
+    # (2026-08-31): the graphify skill surface's reviewed, DELIBERATE shape —
+    # the deliberate-stub marker, and the forbidden `.codex/skills/graphify`
+    # install — the commit-time twin of hk's `graphify_skill_surface` step.
+    assert len(doctor.CHECKS) == 11, "every specified check must be wired"
 
 
 def test_the_shipped_baseline_parses_and_declares_what_the_checks_read() -> None:

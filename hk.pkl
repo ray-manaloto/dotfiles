@@ -635,6 +635,21 @@ local allSteps = new Mapping<String, Config.Step> {
       "test -f .agents/skills/session-review/SKILL.md && cmp -s .claude/skills/session-review/SKILL.md .agents/skills/session-review/SKILL.md"
   }
 
+  // --- Graphify skill surface must stay in its reviewed, DELIBERATE shape.
+  //     `.claude/skills/graphify/SKILL.md` is the full installed Claude Code
+  //     bundle. `.agents/skills/graphify/SKILL.md` is a DELIBERATE
+  //     hand-authored redirect stub, not `graphify agents install` output —
+  //     the marker line inside it says so, so a "fix" cannot silently
+  //     overwrite it unnoticed. `.codex/skills/graphify/` must never exist:
+  //     `.codex/*` is fully gitignored (dies on a fresh clone) AND a
+  //     codex-platform install also appends the line-budgeted root
+  //     AGENTS.md (do-not.md #8) — see doctor.toml's `[graphify]` section
+  //     for the same three assertions, checked every session. ---
+  ["graphify_skill_surface"] {
+    check =
+      "test -f .claude/skills/graphify/SKILL.md && grep -q 'DELIBERATE STUB' .agents/skills/graphify/SKILL.md && test ! -e .codex/skills/graphify"
+  }
+
   // --- CLAUDE.md must be a thin `@AGENTS.md` import stub.
   //     Every tracked CLAUDE.md (excluding `.claude/**`) consists
   //     solely of: one `@AGENTS.md` import + optional blank lines +

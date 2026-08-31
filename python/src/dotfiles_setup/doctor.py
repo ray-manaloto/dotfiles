@@ -1088,6 +1088,59 @@ def check_listing_budget(setup: Setup) -> list[str]:
     return findings
 
 
+def check_graphify_skill_surface(setup: Setup) -> list[str]:
+    """The graphify skill surface stays in its reviewed, DELIBERATE shape.
+
+    The commit-time twin is hk's ``graphify_skill_surface`` step, which asserts
+    the identical three facts. Both exist because hk only ever runs at commit
+    time, while this runs every SessionStart — a session that never commits
+    would otherwise carry a broken surface silently for its whole duration.
+
+    Three assertions, all read straight off the working tree rather than the
+    baseline's usual host-external state, because that is exactly what this
+    surface *is*:
+
+    * every ``required_skill_files`` entry must exist — losing one is a
+      regression for whichever platform reads it;
+    * the ``stub_file`` must still carry ``stub_marker`` — its absence means
+      either the deliberate-stub note was deleted by accident, or the file was
+      silently replaced by real ``graphify agents install`` output (update
+      ``doctor.toml`` in that case, rather than restoring the marker);
+    * none of ``forbidden_paths`` may exist — ``.codex/skills/graphify`` in
+      particular, because ``do-not.md`` #8 forbids installing it here (a
+      codex-platform install also appends the line-budgeted root
+      ``AGENTS.md``) and ``.codex/`` is fully gitignored, so no other check in
+      this repo would ever notice it landed.
+    """
+    baseline = _str_keys(setup.baseline.get("graphify"))
+    findings: list[str] = [
+        f"{rel} is missing — the graphify skill surface for that platform is gone"
+        for rel in _str_list(baseline.get("required_skill_files"))
+        if not (setup.repo_root / rel).is_file()
+    ]
+    stub_file = baseline.get("stub_file")
+    stub_marker = baseline.get("stub_marker")
+    if isinstance(stub_file, str) and isinstance(stub_marker, str):
+        stub_path = setup.repo_root / stub_file
+        if stub_path.is_file() and stub_marker not in stub_path.read_text(
+            encoding="utf-8"
+        ):
+            findings.append(
+                f"{stub_file} no longer carries the {stub_marker!r} marker — "
+                f"either the deliberate-stub note was removed by accident "
+                f"(restore it), or the file is now real installer output "
+                f"(update {BASELINE_FILE} to match)"
+            )
+    findings.extend(
+        f"{rel} exists, but do-not.md #8 forbids installing it here — a "
+        f"codex-platform `graphify install` also appends the line-budgeted "
+        f"root AGENTS.md. Remove it."
+        for rel in _str_list(baseline.get("forbidden_paths"))
+        if (setup.repo_root / rel).exists()
+    )
+    return findings
+
+
 def check_path_drift(setup: Setup) -> list[str]:
     """Does THIS shell resolve the tools mise currently pins? (#596).
 
@@ -1137,6 +1190,7 @@ CHECKS: tuple[tuple[str, Callable[[Setup], list[str]]], ...] = (
     ("pin-currency-wired", check_pin_currency_wired),
     ("listing-budget", check_listing_budget),
     ("path-drift", check_path_drift),
+    ("graphify-skill-surface", check_graphify_skill_surface),
 )
 
 #: Only run with ``--live``: each entry spawns subprocesses.
