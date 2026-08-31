@@ -18,24 +18,6 @@ a non-secret must still not be marked secret (rule 3), and a clean scanner still
 means "ask what it can see" (rule 4). With 50 credentials in every child instead
 of 4, the blast radius of breaking any of those is **12.5× larger**, not smaller.
 
-**What the reversal costs, stated plainly rather than argued away:** the exposure
-[#470](https://github.com/ray-manaloto/dotfiles/issues/470) documents is now
-accepted, not mitigated; `__MISE_DIFF` again carries all 50 in a form no scanner
-reads; and the confinement work in
-[#432](https://github.com/ray-manaloto/dotfiles/issues/432) (SCOPED-READ) and
-[#441](https://github.com/ray-manaloto/dotfiles/issues/441) (agent profile) —
-both **closed COMPLETED**, 07-31 and 08-02 — reached conclusions scoped to a
-hazard the host no longer avoids. Those *findings* need re-judging before
-anything is built on them; the tickets themselves are done.
-
-**The tripwire moved, it did not go away.** `doctor.toml` now pins `env = true`
-plus the **full name set**, so an addition, a removal or a *rename* is still
-caught in both directions (control-armed: a rename keeping the count constant is
-reported both ways). That also lands what
-[#460](https://github.com/ray-manaloto/dotfiles/issues/460) measured as the fix
-for the doctor's blind zone — 14 of the then-49 secrets sat past the deepest
-thing the baseline checked.
-
 ⚠️ **A keychain credential can hang a background process forever — and that hang
 is NOT a locked keychain.** `security show-keychain-info` **prompts
 unconditionally**, so its hang proves nothing; believing it cost ~2 hours on
@@ -55,81 +37,15 @@ hangs every **uncached** Doppler read, on every shell prompt. That is why
 `AGE_PRIVATE_KEY` would not declare until the `doppler-cli` entry was gone — two
 attempts auto-rolled-back and the declaration was wrongly blamed.
 
-## What happened originally, and why no scanner caught it
-
-`fnox activate` exported 49 credentials into the login shell. mise records the
-environment delta in **`__MISE_DIFF`** (zlib + base64) so it can undo it on
-directory exit, and every child process inherits that variable. Nothing reached a
-public remote, but the blob sat in every child, and one `env > notes.md` in a
-tracked directory would have published all of it.
-
-**No secret scanner can read it** — measured on the same content in two forms:
-gitleaks 8.30.1 went **2 leaks → 0**, betterleaks 1.7.1 **1 → 0**. The control
-arm fires on the plaintext, so the zero is a real negative. Compression destroys
-the patterns both scanners match on. That gap is the one thing justifying custom
-code here at all (see [[use-tool-builtins]]), and it covers only the decode.
-
-Full incident, measurements and control arms:
-`docs/rules-evidence/secrets-out-of-the-shell-env.md`.
-
-## The mechanism, and the generator that keeps eating it
-
-fnox's `env` setting has three values: `true` (default — shell, `exec` and `get`),
-`"exec"` (not the shell), `false` (`get` only). Per-secret `env` **overrides the
-global**, which is why flipping the global alone changes nothing.
-
-⚠️ **The config is GENERATED** — *"Managed by `mde-py secrets bootstrap-config`. Do
-not edit by hand."* `bootstrap_config()` used to rebuild it re-emitting only `provider`
-+ `value`, dropping the global `env`, every per-secret override and every `sync` block
-**by construction**, on the documented `mde-secret-add` / `update` / `remove` path.
-✅ **FIXED 2026-08-03** — `macos-development-environment#82` CLOSED, #83 merged as
-`716b17d`: declarations are added and removed by invoking `fnox` itself, so there is no
-template left to drop a field from. fnox was never at fault. What SURVIVES the fix: every
-add/remove still churns all 49 `sync` ciphertexts, and one stale local branch still
-carries the pre-fix code — so the durable layer is still the doctor check, not a hand edit.
-
-The exec-only era's full adoption history — the mode table, the four opt-in reasons,
-the `EXA_API_KEY` misattribution, and the measured wipe timeline — is in
-`docs/rules-evidence/secrets-out-of-the-shell-env.md`.
-
-## The gates that now exist in this repo
-
-1. **`no_env_dump`** (`hk.pkl` → `dotfiles-setup env-blob-scan`) rejects a
-   committed environment dump: a `__MISE_DIFF` assignment, **any** base64 run
-   that decompresses to text naming two or more secret-bearing variables, or a
-   literal credential value. Deliberately **glob-less** — a dump can land in any
-   tracked file, and the directories most likely to receive one
-   (`docs/research/kb/`, `docs/research/runs/`) are both tracked *and*
-   allowlisted in `.gitleaks.toml`, so gitleaks is looking away from exactly
-   the wrong place. Only `docs/research/mintlify-cache/` is exempt (vendor docs
-   with documented example keys).
-2. **`betterleaks`** (`hk.pkl`, host-only) now really runs.
-   `docs/hk-builtins-audit.md` listed it as a "second scanner alongside
-   gitleaks" since that audit was written and it was never wired — 0 occurrences
-   in any `.pkl`, against a control of 1 for `Builtins.gitleaks`. A doc
-   asserting a security scanner runs when it does not is worse than not claiming
-   it. It sits in the project config rather than `hk-common.pkl`'s shared
-   `security` group because that group is spread into `hk-image.pkl`, which
-   would require pinning the tool in the shared mise fragment — a base image
-   build input, and a cold rebuild for no gain at the commit boundary.
-3. **`mise run doctor`** (#418, SessionStart hook) checks rules 1, 3 and 5 below
-   against this host every session: every `${VAR}` an MCP config interpolates
-   must actually be set in the process that spawns the server, and fnox's env
-   mode + opt-in set must match the reviewed baseline in `doctor.toml`. It is a
-   hook and not an hk step because it reads `~/.config/fnox`, which CI has not
-   got. Rule 5 was doc-only until it existed.
-4. **`without_env_diff()`** (`child_env.py`) strips `__MISE_DIFF` from spawned
-   children — really wired, at `graphify.py` and `graph_bakeoff.py`. ⚠️ Its
-   sibling **`clean_env()` has ZERO production call sites** (control arm: the
-   same grep finds both `without_env_diff` ones), yet this file claimed it as a
-   gate — the defect it convicts betterleaks of, two entries above. Leave it
-   unused: wiring it would strip `GITHUB_TOKEN` from tools that need it.
-
 ## Rules
 
 1. **Never write an environment dump into a tracked file.** Not `env`, not
    `printenv`, not `export -p`, not a debug log that includes them. If you need
-   one for diagnosis, write it to the scratchpad and delete it.
+   one for diagnosis, write it to the scratchpad and delete it. ⚠️ **No secret
+   scanner can read one**: mise packs the whole delta into `__MISE_DIFF` (zlib +
+   base64), and compression destroys the patterns scanners match on — measured
+   gitleaks 2 → 0, betterleaks 1 → 0 on the same content in two forms. That gap
+   is why `no_env_dump` exists and why it is deliberately glob-less.
 2. ⚠️ **REVERSED — secrets now live in the shell by decision.** This rule used to
    read *"a secret belongs to a process, not to a shell — reach for `fnox exec --`
    rather than exporting."* That is no longer the posture (2026-08-02). The

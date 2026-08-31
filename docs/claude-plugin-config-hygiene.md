@@ -174,3 +174,79 @@ message and measuring the artifact instead. See
 - [ray-manaloto/macos-development-environment](https://github.com/ray-manaloto/macos-development-environment) — `.claude/settings.json`; the source of most stale entries, being retired into this repo.
 - [mvanhorn/last30days-skill](https://github.com/mvanhorn/last30days-skill) — installed project-scoped during this work.
 - [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) — installed project-scoped; source of the residual warning.
+
+## Moved from `.claude/CLAUDE.md` (2026-08-31, eager-context trim)
+
+The sections below were reference inventories carried in every session's
+standing context. `.claude/CLAUDE.md` keeps the operative constraints and
+points here.
+
+## Agent skills
+
+Config for the `mattpocock-skills` engineering flow.
+
+**These files are hand-placed, and stay that way.** `/setup-matt-pocock-skills` generates the same
+config but writes it to the root `CLAUDE.md` and `docs/agents/*.md` — paths our gates reject (the
+stub check, and agnix's `**/agents/*.md` frontmatter rule). Reach for the files below instead; they
+are its output, already adapted.
+
+### Issue tracker
+
+GitHub Issues on `ray-manaloto/dotfiles`, via `gh`. See `docs/issue-tracker.md`.
+**`gh pr create`/`merge` are guard-denied. One verb per PR provenance: `mise run ship`
+(your branch), `mise run automerge -- <PR#>` (bot PR, #369), `mise run land -- <PR#>`
+(post-merge).**
+
+### Triage labels
+
+The five canonical roles, adopted verbatim (no remapping). See `docs/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` (glossary) + `docs/adr/`. See `docs/domain.md`.
+**Our ADRs are `.claude/rules/*.md`** — each carries its own "Why this rule exists"; `docs/adr/`
+holds only domain-shaped decisions.
+## graphify — knowledge-graph substrate
+
+Registered by `graphify install --project` (#310–#318 adoption). Host-only,
+project-scoped; `graphify-out/` is gitignored. When the user types `/graphify`,
+use `.claude/skills/graphify/SKILL.md`.
+
+- Codebase questions: follow `.claude/rules/graphify-first.md`
+  (`mise run graphify-query`, never a bare `graphify` on `PATH`).
+- After changing code: `mise run graphify-update` (AST-only, no API cost).
+
+**This registration lives here, NOT in the root `CLAUDE.md`:** the
+`claude_md_import_stub` hk gate locks the root file to byte-exactly `@AGENTS.md`,
+so graphify's default write there (which happened and was reverted) fails
+`mise run lint`. `.claude/CLAUDE.md` is the repo's designated home for exactly
+this kind of Claude-specific content (it is stub-exempt). Re-running
+`graphify install` will re-append to the root `CLAUDE.md`; revert that hunk.
+
+## Project doctor — declared setup vs reality on this host (#418)
+
+`SessionStart hook → mise run doctor → dotfiles_setup.doctor`, baseline
+**`doctor.toml`** (sibling of `currency.toml` / `parity.toml`). Silent when
+healthy; always exits 0, so it cannot disrupt a session. `-- --verbose` for a PASS
+line per check, `-- --live` adds the MCP spawn + `claude mcp list` probes,
+`-- --strict` exits 1.
+
+It lives here, not in `AGENTS.md`, because everything it reads is Claude Code's own
+setup plus `~/.config/fnox`. **No hk step, no CI job** — a runner has none of that
+state, so the hook is the only place it runs, which is why `hook_selfcheck` gates
+the wiring in `ship`/`land`.
+
+Two invariants worth knowing before editing it:
+
+- **MCP registrations come from FOUR places** — `.mcp.json`, each enabled plugin,
+  and `~/.claude.json`'s user-global *and* per-project blocks. A same-name
+  user-global entry **shadows** a project one silently; that is how a broken
+  `mde-mcp-filesystem` wrapper took this repo's filesystem server down. Checks that
+  say "fix this repo's declaration" run only on what the repo declares
+  (`Server.repo_owned`); "your setup is broken" checks run on everything.
+- **Changing your setup means changing `doctor.toml` in a reviewed diff.** Adding
+  to `[fnox].env_true` widens a credential's blast radius; adding to
+  `[mcp.mutating_tools]` declares something needs a permission decision.
+
+Version currency is delegated to `kb-setup currency check` and health to
+`claude mcp list` — neither is re-implemented.

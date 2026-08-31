@@ -149,11 +149,6 @@ AMBIGUITY_ALLOWED: dict[tuple[str, str, str], str] = {
         "SKILL.md",
     ): "prose: a load class the rule discusses in several places",
     (
-        "workflow.command-audit-wiring",
-        ".claude/rules/mise-tasks-only.md",
-        "SessionEnd`",
-    ): "prose: the hook event, named where it is chosen and where it is justified",
-    (
         "workflow.memory-index-wiring",
         ".claude/skills/memory-index-curation/SKILL.md",
         "mise run memory-index`",

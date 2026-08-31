@@ -54,81 +54,35 @@ judgement call at the call site.
 
 ## Enforcement layers (deep-research verified, 2026-07-07)
 
-1. **PreToolUse hook (hard deny)** — `.claude/settings.json` wires every Bash
-   call through `dotfiles-setup hook pretooluse` (`hook_guard.py`): a match is
-   DENIED with the redirect reason fed back (JSON `permissionDecision: "deny"`;
-   deterministic, applies even in bypassPermissions mode). Rules tested in
-   `tests/test_hook_guard.py`.
-2. **ship/land `hook-selfcheck` gate** — `mise run ship` / `land` run
-   `dotfiles-setup hook selfcheck` (`hook_selfcheck.py`) as an always-run gate
-   driving the WIRED guard end-to-end: settings.json wiring + the five-tool matcher,
-   **every hook command anchored to `$CLAUDE_PROJECT_DIR`**, the real wrapper
-   denying from **both** the project root and a foreign cwd (#343), and `bash
-   -n` on the scripts. A hook regression fails a PR like lint/pytest.
-3. **This rule + skills** — `pr-workflow` and `devcontainer-sync` name the
-   canonical tasks; markdown alone is "relying on the LLM", never the only layer.
-4. **Self-learning loop (`mise run command-audit`)** — `command_audit.py` scans
-   this project's recent Claude Code transcript JSONL (native capture — no
-   logging hook) and flags mutating one-off Bash commands the guard does NOT yet
-   cover, so the layers above get refined over time. The *inverse* of Claude
-   Code's `fewer-permission-prompts` skill (same transcript mine, opposite
-   verdict). Review the report, then add a `mise run` task (+ a `_RULES`
-   redirect for a known-bad shape) for the top culprits. A rule-matching command
-   is only an alarm (`bypass`) when it ran AFTER its rule's `since` AND actually
-   executed — see "Reading the report". Ongoing: a **`SessionEnd` hook** runs it
-   per session (`--output .agent/command-audit.md`). `SessionEnd` and not `Stop`
-   — it fires once at termination and *cannot block*, while `Stop` fires every
-   turn and can block, and a transcript scan belongs on neither. **Local-only by
-   nature** (it reads `~/.claude` transcripts), so it is a hook and never a GHA
-   job — a CI runner has no transcripts. Report kept out of git by `.gitignore`.
-5. **Contracts** — `workflow.mise-tasks-enforcement`, `.hook-selfcheck-wiring`
-   and `.command-audit-wiring` in suites.toml assert the whole chain exists
-   (settings.json → wrapper → CLI → module → tests), so nothing drifts out.
+Five layers, earliest first: the **PreToolUse hook** (hard deny, deterministic,
+applies even in bypassPermissions mode); the **ship/land `hook-selfcheck` gate**
+driving the wired guard end-to-end, so a hook regression fails a PR like
+lint/pytest; **this rule + the `pr-workflow`/`devcontainer-sync` skills**
+(markdown alone is "relying on the LLM", never the only layer); the
+**self-learning loop `mise run command-audit`**, run per session by a
+**`SessionEnd`** hook, which mines transcripts for one-off commands the guard
+does not yet cover; and **contracts** in suites.toml asserting the whole chain
+exists. Full inventory: `docs/rules-evidence/mise-tasks-only.md`.
 
-The hook fails OPEN on its own errors (a crashed guard must not brick every Bash
-call — the wrapper exits 0 when the Python>=3.14 interpreter is absent, e.g. a
-cold web session) but **records every one** (#343). Hard bans that must never
-fail open belong in settings.json permission deny rules, not the hook.
+⚠️ **The hook fails OPEN on its own errors** and records every one (#343) — so a
+green session is not proof the guard ran. Hard bans that must never fail open
+belong in settings.json permission deny rules, not the hook. Still fail-open BY
+DESIGN: `$(…)`, `sh -c`/`eval`, base64, aliases. **After ANY deny, re-check that
+the intended side effects actually happened** — a deny cancels the entire
+compound command.
 
 We deliberately do NOT re-inject a per-turn "use mise tasks" reminder: a hard
-gate has zero decay, while reminders decay and cost instruction budget. The
-improvement path is layer 4 mining transcripts, not more hooks.
+gate has zero decay, while reminders decay and cost instruction budget.
 
 ## Reading the command-audit report
 
 Only **`bypass`** is an alarm: a command that matched a rule ALREADY LIVE
-(`timestamp > rule.since`) and that really executed. The others are not:
+(`timestamp > rule.since`) and that really executed. `blocked` never ran (audit
+those for false positives), `pre_rule` predates its rule, `one_off` is noisy.
 
-- **`blocked`** — the guard denied it; it never ran. Audit these for FALSE
-  POSITIVES (#265), not for evasion of the matcher.
-- **`pre_rule`** — it predates the rule that matches it. **Trust only as far as
-  `since` is right** — see "`since` dates COVERAGE" below.
-- **`one_off`** — refine-loop candidates, known-noisy (#266). Discount for now.
-
-Both axes are load-bearing: a denial and a bypass look identical until you pair
-the attempt to its result, because the transcript records the `tool_use` block
-whether or not the command ran.
-
-⚠️ **Do not read "nothing has evaded the matcher" as "nothing has evaded the
-guard".** #343 found **125** commands that bypassed it entirely by never reaching
-it — a relative hook path made the guard absent off-root, and a non-zero non-2
-`PreToolUse` exit is a non-blocking error that lets the call proceed. Fail-opens
-are now recorded (`~/.local/state/dotfiles/guard-fail-open.log`).
-
-## Masking, and what stays fail-open by design
-
-Rules match AFTER `hook_guard._inert_masked` neuters every separator that is
-DATA (quoted spans, heredoc bodies), so a quoted mention of a denied literal no
-longer denies (#265).
-
-Still fail-open BY DESIGN (a redirect guard, not a sandbox): `$(…)`,
-`sh -c`/`eval`, base64, aliases. If a deny looks wrong: write the script with the
-Write tool and run `python3 <file>` — and after ANY deny, re-check that the
-intended side effects actually happened.
-
-Full case history — the 3,615-command measurement, the #343 fail-open, the #265
-quoting defect and the #308 back-dating: `docs/rules-evidence/mise-tasks-only.md`.
-
+⚠️ **"Nothing has evaded the matcher" is not "nothing has evaded the guard".**
+#343 found **125** commands that bypassed it by never reaching it. Both defect
+stories and the 3,615-command measurement: `docs/rules-evidence/mise-tasks-only.md`.
 ## Extending
 
 New redirect = new `_RULES` entry in `hook_guard.py` + a test + a row in the
