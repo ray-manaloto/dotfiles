@@ -81,8 +81,14 @@ mise run graphify-skill-install -- codex    # would write .codex/skills/graphify
   installer does not replicate). Asking for `gemini` raises `KeyError`,
   same as any other typo.
 - **This only ever writes inside the `project_dir` you pass — default is
-  this repo's root.** Point `--project-dir` elsewhere only when you
-  genuinely mean a different tree; there is no confirmation prompt.
+  this repo's root — and that is a CHECKED invariant, not a convention.**
+  `resolve_placement` resolves the joined destination and refuses (raising
+  `UnsafePlacementError`, never a silent write or a silent skip) if it lands
+  outside `project_dir` — guarding against an absolute or `..`-laden
+  `skill_dst` in graphify's own placement table, since `project_dir /
+  cfg["skill_dst"]` alone is a plain path join, not containment. Point
+  `--project-dir` elsewhere only when you genuinely mean a different tree;
+  there is no confirmation prompt.
 
 ## See also
 

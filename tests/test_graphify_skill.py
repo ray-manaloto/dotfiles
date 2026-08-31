@@ -141,6 +141,79 @@ def test_resolve_placement_raises_on_an_unknown_platform(tmp_path: Path) -> None
         graphify_skill.resolve_placement("not-a-real-platform", project_dir=tmp_path)
 
 
+def _with_malicious_skill_dst(
+    monkeypatch: pytest.MonkeyPatch, fake_package: Path, skill_dst: Path
+) -> None:
+    """Point the `codex` platform's `skill_dst` at an adversarial value."""
+    cfg = {
+        "codex": {
+            "skill_file": "skill-codex.md",
+            "skill_dst": skill_dst,
+        },
+    }
+    fake = types.SimpleNamespace(
+        __file__=str(fake_package / "install.py"), _PLATFORM_CONFIG=cfg
+    )
+    monkeypatch.setattr(graphify_skill, "_graphify_install", fake)
+
+
+def test_resolve_placement_refuses_an_absolute_skill_dst(
+    monkeypatch: pytest.MonkeyPatch, fake_package: Path, tmp_path: Path
+) -> None:
+    """`project_dir / <absolute>` REPLACES project_dir outright under `/`."""
+    project_dir = tmp_path / "project"
+    escape_target = tmp_path / "etc-evil" / "SKILL.md"
+    _with_malicious_skill_dst(monkeypatch, fake_package, escape_target)
+
+    with pytest.raises(graphify_skill.UnsafePlacementError):
+        graphify_skill.resolve_placement("codex", project_dir=project_dir)
+
+
+def test_resolve_placement_refuses_a_dotdot_laden_skill_dst(
+    monkeypatch: pytest.MonkeyPatch, fake_package: Path, tmp_path: Path
+) -> None:
+    """`..` segments are never collapsed by `/` — must be caught on resolve."""
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    escaping_relative = Path("..") / ".." / "escaped" / "SKILL.md"
+    _with_malicious_skill_dst(monkeypatch, fake_package, escaping_relative)
+
+    with pytest.raises(graphify_skill.UnsafePlacementError):
+        graphify_skill.resolve_placement("codex", project_dir=project_dir)
+
+    # Control arm: nothing was written anywhere, including the escape target.
+    assert not (tmp_path / "escaped").exists()
+
+
+def test_install_skill_refuses_an_absolute_skill_dst(
+    monkeypatch: pytest.MonkeyPatch, fake_package: Path, tmp_path: Path
+) -> None:
+    """The same containment check must gate the writing entry point too."""
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    escape_target = tmp_path / "etc-evil" / "SKILL.md"
+    _with_malicious_skill_dst(monkeypatch, fake_package, escape_target)
+
+    with pytest.raises(graphify_skill.UnsafePlacementError):
+        graphify_skill.install_skill("codex", project_dir=project_dir)
+
+    assert not escape_target.exists()
+    assert not escape_target.parent.exists()
+
+
+@pytest.mark.usefixtures("patched_graphify")
+def test_resolve_placement_still_installs_normally_into_a_scratch_target(
+    tmp_path: Path,
+) -> None:
+    """Containment must not false-positive on the ordinary, well-behaved case."""
+    project_dir = tmp_path / "scratch-target"
+    project_dir.mkdir()
+    placement = graphify_skill.resolve_placement("codex", project_dir=project_dir)
+    assert placement.skill_dst == (
+        project_dir / ".codex" / "skills" / "graphify" / "SKILL.md"
+    )
+
+
 # --------------------------------------------------------------------------- #
 # install_skill
 # --------------------------------------------------------------------------- #
@@ -227,6 +300,30 @@ def test_install_skill_does_not_back_up_an_identical_existing_file(
 
 
 @pytest.mark.usefixtures("patched_graphify")
+def test_install_skill_replaces_a_hand_edited_references_sidecar_without_backup(
+    tmp_path: Path,
+) -> None:
+    """references/ replacement is DELIBERATELY asymmetric with SKILL.md's.
+
+    No diff-check, no `.bak` — it mirrors graphify's own
+    `_install_skill_references`, which does the same unconditional
+    rmtree+copytree. See the `install_skill` docstring for why.
+    """
+    project_dir = tmp_path / "project"
+    refs_dir = project_dir / ".claude" / "skills" / "graphify" / "references"
+    refs_dir.mkdir(parents=True)
+    (refs_dir / "one.md").write_text("a hand-edited local copy", encoding="utf-8")
+    (refs_dir / "stale.md").write_text("an orphan file", encoding="utf-8")
+
+    graphify_skill.install_skill("claude", project_dir=project_dir)
+
+    assert (refs_dir / "one.md").read_text(encoding="utf-8") == "reference one"
+    assert not (refs_dir / "stale.md").exists()
+    assert not (refs_dir / "one.md.bak").exists()
+    assert not list(refs_dir.parent.glob("*.bak"))
+
+
+@pytest.mark.usefixtures("patched_graphify")
 def test_install_skill_raises_on_an_unknown_platform(tmp_path: Path) -> None:
     with pytest.raises(KeyError):
         graphify_skill.install_skill("not-a-real-platform", project_dir=tmp_path)
@@ -291,3 +388,25 @@ def test_main_reports_a_missing_graphify_import(
     rc = graphify_skill.graphify_skill_install_main(tmp_path, platform="claude")
     assert rc == 1
     assert "graphify" in capsys.readouterr().err
+
+
+def test_main_refuses_a_malicious_skill_dst_instead_of_writing_outside_target(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_package: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    escape_target = tmp_path / "etc-evil" / "SKILL.md"
+    _with_malicious_skill_dst(monkeypatch, fake_package, escape_target)
+
+    rc = graphify_skill.graphify_skill_install_main(
+        tmp_path, platform="codex", project_dir=project_dir
+    )
+
+    assert rc == 1
+    assert not escape_target.exists()
+    err = capsys.readouterr().err
+    assert "codex" in err
+    assert "outside project_dir" in err

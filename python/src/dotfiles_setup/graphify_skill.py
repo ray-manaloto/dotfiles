@@ -58,6 +58,19 @@ _MISSING_GRAPHIFY_MESSAGE = (
 _DIST_NAME = "graphifyy"
 
 
+class UnsafePlacementError(ValueError):
+    """A platform's declared ``skill_dst`` resolves outside ``project_dir``.
+
+    Python's ``Path.__truediv__`` replaces the left operand outright when
+    the right operand is absolute, and never collapses ``..`` segments —
+    so ``project_dir / cfg["skill_dst"]`` alone is not containment, only a
+    string join that happens to look like one for well-behaved input. This
+    is raised instead of silently writing (or silently skipping) whenever
+    the joined-then-resolved destination is not `project_dir` itself or
+    beneath it.
+    """
+
+
 @dataclass(frozen=True)
 class SkillPlacement:
     """Where one platform's packaged graphify skill (+ references) belong."""
@@ -126,8 +139,12 @@ def resolve_placement(platform: str, *, project_dir: Path) -> SkillPlacement:
     project-scoped branch there — including the ones special-cased ahead of
     the generic ``_PLATFORM_CONFIG`` lookup (``opencode``, ``hermes``,
     ``devin``, ``amp``, ``agents``, ``antigravity``) — resolves to
-    ``project_dir / cfg["skill_dst"]``, the same expression used here. Only
-    ``gemini`` (no ``_PLATFORM_CONFIG`` entry) is not representable this way.
+    ``project_dir / cfg["skill_dst"]`` — the same join used here, but then
+    resolved and checked for containment (see ``UnsafePlacementError``
+    below): an absolute or ``..``-laden ``skill_dst`` would otherwise walk
+    the join outside ``project_dir``, since ``Path.__truediv__`` neither
+    rejects an absolute right operand nor collapses ``..``. Only ``gemini``
+    (no ``_PLATFORM_CONFIG`` entry) is not representable this way.
 
     Args:
         platform: A key of graphify's ``_PLATFORM_CONFIG`` (see
@@ -140,6 +157,11 @@ def resolve_placement(platform: str, *, project_dir: Path) -> SkillPlacement:
     Raises:
         KeyError: ``platform`` is not one ``_PLATFORM_CONFIG`` declares —
             deliberately, rather than silently resolving to nothing.
+        UnsafePlacementError: the resolved destination escapes
+            ``project_dir`` — an absolute ``skill_dst`` (which replaces
+            ``project_dir`` outright under ``/``) or one laden with enough
+            ``..`` segments to walk back out of it. Never silently written,
+            never silently skipped.
     """
     cfg = _platform_config()[platform]
     root = _package_root()
@@ -147,9 +169,18 @@ def resolve_placement(platform: str, *, project_dir: Path) -> SkillPlacement:
     refs_src = (
         (root / "skills" / str(refs_bundle) / "references") if refs_bundle else None
     )
+    project_root = project_dir.resolve()
+    skill_dst = (project_dir / cfg["skill_dst"]).resolve()
+    if skill_dst != project_root and not skill_dst.is_relative_to(project_root):
+        message = (
+            f"platform {platform!r} declares skill_dst {cfg['skill_dst']!r}, "
+            f"which resolves to {skill_dst} — outside project_dir "
+            f"{project_root}. Refusing to write."
+        )
+        raise UnsafePlacementError(message)
     return SkillPlacement(
         platform=platform,
-        skill_dst=project_dir / cfg["skill_dst"],
+        skill_dst=skill_dst,
         skill_src=root / cfg["skill_file"],
         refs_src=refs_src if refs_src is not None and refs_src.is_dir() else None,
     )
@@ -168,8 +199,11 @@ def install_skill(platform: str, *, project_dir: Path) -> Path:
     Project-scoped ONLY: writes exactly three things under
     ``skill_dst.parent`` — ``SKILL.md``, an optional ``references/`` sidecar,
     and ``.graphify_version`` — and touches nothing outside that directory.
-    That confinement is the whole reason this function can exist where
-    ``graphify install`` cannot (do-not.md #8): no ``~/.claude`` write, no
+    ``resolve_placement`` enforces this: it raises ``UnsafePlacementError``
+    rather than returning a placement outside ``project_dir``, so this is a
+    checked invariant, not merely a convention this function happens to
+    follow. That confinement is the whole reason this function can exist
+    where ``graphify install`` cannot (do-not.md #8): no ``~/.claude`` write, no
     ``AGENTS.md``/``CLAUDE.md`` append, no ``.codex/hooks.json`` patch.
 
     A destination that already differs from the packaged source is backed up
@@ -178,6 +212,15 @@ def install_skill(platform: str, *, project_dir: Path) -> Path:
     with no warning). SKILL.md itself is written last via a temp-file +
     atomic rename, so an interrupted install never leaves a half-written
     SKILL.md in place.
+
+    The ``references/`` sidecar deliberately gets NO diff-check or backup —
+    it is unconditionally ``rmtree``'d and recopied on every install. This
+    mirrors graphify's own ``_install_skill_references``, which does the
+    same unconditional replace: the SKILL.md ``.bak`` exists because a real
+    incident showed users hand-edit that one file, and no such incident (or
+    hand-editing workflow) exists for the packaged references/ bundle, which
+    this repo treats as read-only vendor content. If that assumption ever
+    stops holding, add the same diff-check/backup treatment here.
     """
     placement = resolve_placement(platform, project_dir=project_dir)
     if not placement.skill_src.is_file():
@@ -228,7 +271,7 @@ def graphify_skill_install_main(
             f"knows about. Known: {', '.join(known_platforms())}\n"
         )
         return 1
-    except (ModuleNotFoundError, FileNotFoundError) as exc:
+    except (ModuleNotFoundError, FileNotFoundError, UnsafePlacementError) as exc:
         sys.stderr.write(f"error: {exc}\n")
         return 1
     sys.stdout.write(f"graphify skill installed -> {dst}\n")
