@@ -29,7 +29,7 @@ lima = "2.2.0"
 "npm:agents-lint" = "0.5.0"
 "pipx:mcp2cli" = "3.7.0"
 "npm:renovate" = "44.52.1"
-biome = "2.5.7"
+biome = "2.5.11"
 # Markdown + Claude-docs linters. Installed now; hk.pkl integration is
 # scheduled for post-devcontainer-work review (see GH issue tracking
 # follow-up). md_size_budget (below in hk.pkl) provides the immediate,
@@ -65,7 +65,7 @@ lefthook = "2.1.12"
 # jdx/mise#7700). Without the gate, --locked fails "No lockfile URL found for
 # conda:ffmpeg on platform linux-x64" and bricks lint. os-gating makes linux
 # skip the tool entirely, so no linux URL is demanded.
-"conda:ffmpeg" = { version = "8.1.2", os = ["macos"] }
+"conda:ffmpeg" = { version = "9.0.1", os = ["macos"] }
 aws-cli = { version = "2.36.34", symlink_bins = "true" }
 azure-cli = { version = "2.89.1", uvx_args = "--prerelease=allow" }
 docker-cli = "29.7.2"
