@@ -9,9 +9,9 @@
 # scripts/pretooluse-guard.sh: a crashed guard must not brick every call.
 #
 # `--project "$CLAUDE_PROJECT_DIR/python"` resolves this repo's pinned
-# graphify 0.9.42, NOT the user-global PATH shim (currently 0.9.53, see
-# graphify-first.md) — ANCHORED, not relative: a bare `--project python`
-# fails rc=2 off the repo root (a subagent, a worktree).
+# graphify, NOT the user-global PATH shim (aligned 2026-08-31, not kept in
+# sync — see graphify-first.md) — ANCHORED, not relative: a bare
+# `--project python` fails rc=2 off the repo root (a subagent, a worktree).
 #
 # Advisory, soft mode. Strict mode (GRAPHIFY_HOOK_STRICT/_TTL,
 # graphify/cli.py) is an env var, not a code change — set it in
