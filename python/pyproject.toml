@@ -6,7 +6,7 @@ requires-python = ">=3.14"
 dependencies = [
     # Graphify is a Python runtime dependency, not a second mise/pipx tool.
     # The CLI console script and SDK therefore resolve from the same uv lock.
-    "graphifyy[all]==0.9.42",
+    "graphifyy[all]==0.9.53",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.15.0",
     # deb822 control-file parser, maintained by Debian's own
@@ -47,6 +47,14 @@ dotfiles-setup = "dotfiles_setup.main:main"
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
+
+# The SHA-pinned kb-setup dependency above (line 40) itself pins
+# graphifyy[all]==0.9.42. Without this override, `uv lock` refuses to
+# resolve: "your project's requirements are unsatisfiable." The override
+# lets THIS project run graphifyy 0.9.53 while kb-setup keeps its own
+# (unmodified, out-of-bounds) declaration — no cross-repo change needed.
+[tool.uv]
+override-dependencies = ["graphifyy[all]==0.9.53"]
 
 [tool.ruff]
 line-length = 88
