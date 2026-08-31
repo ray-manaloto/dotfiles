@@ -23,9 +23,9 @@ editorconfig-checker = "3.11.2" # provides `ec` — hk editorconfig_checker buil
 # deep-tracked in currency.toml: Doppler's mounted-secret behavior is part of
 # the devcontainer security boundary, not an optional interactive convenience.
 doppler = "3.76.5"
-colima = "0.10.3"                   # Alternate Docker runtime (VZ + Rosetta); Docker Desktop is the CURRENT supported runtime — see AGENTS.md Docker Runtimes + docs/research/runs/research-20260409c-dockerdesktop-ssh/
+colima = "0.10.3"                  # Alternate Docker runtime (VZ + Rosetta); Docker Desktop is the CURRENT supported runtime — see AGENTS.md Docker Runtimes + docs/research/runs/research-20260409c-dockerdesktop-ssh/
 lima = "2.2.0"
-"github:agent-sh/agnix" = "v0.52.1"
+"github:agent-sh/agnix" = "0.52.1"
 "npm:agents-lint" = "0.5.0"
 "pipx:mcp2cli" = "3.7.0"
 "npm:renovate" = "44.52.1"
@@ -38,7 +38,7 @@ biome = "2.5.11"
 "npm:@contextlint/cli" = "1.1.1"
 "npm:markdownlint-cli2" = "0.23.2"
 "aqua:jackchuka/mdschema" = "0.15.2"
-rumdl = "v0.2.62"
+rumdl = "0.2.62"
 # zizmor: GHA security scanner — backs the hk zizmor builtin (#160 T12);
 # host-only lint tool, so it lives here (not shared.toml).
 zizmor = "1.30.0"
