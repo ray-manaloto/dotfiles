@@ -62,10 +62,12 @@ from dotfiles_setup.graph_bakeoff import (
     bakeoff_main,
 )
 from dotfiles_setup.graphify import (
+    affected_main,
     graphify_health_main,
     graphify_main,
     graphify_update_main,
     hook_guard_main,
+    prs_main,
 )
 from dotfiles_setup.handoff_check import main as handoff_check_main
 from dotfiles_setup.hk_builtins_audit import hk_builtins_audit_main
@@ -902,6 +904,38 @@ def _add_graphify_subcommands(
     )
     query_parser.add_argument(
         "--dfs", action="store_true", help="Traverse depth-first instead of BFS"
+    )
+    affected_parser = graphify_sub.add_parser(
+        "affected",
+        help="Reverse traversal: what breaks if <node> changes? (blast radius)",
+    )
+    affected_parser.add_argument("node", help="Symbol, file, or label to trace from")
+    affected_parser.add_argument(
+        "--depth", type=int, default=2, help="Reverse traversal depth (default: 2)"
+    )
+    affected_parser.add_argument(
+        "--relation",
+        action="append",
+        default=[],
+        dest="relations",
+        help="Edge relation to traverse in reverse (repeatable)",
+    )
+    prs_parser = graphify_sub.add_parser(
+        "prs",
+        help="PR dashboard; with a PR number, its graph-impact deep dive",
+    )
+    prs_parser.add_argument(
+        "pr_number",
+        nargs="?",
+        type=int,
+        default=None,
+        help="PR number for the graph-impact deep dive (omit for the bare dashboard)",
+    )
+    prs_parser.add_argument(
+        "--repo", default=None, help="owner/repo (default: current repo)"
+    )
+    prs_parser.add_argument(
+        "--base", default=None, help="Base branch (default: auto-detected)"
     )
     bakeoff_parser = graphify_sub.add_parser(
         "bakeoff",
@@ -1798,6 +1832,24 @@ def handle_graphify(args: argparse.Namespace, project_root: Path) -> None:
         sys.exit(graphify_update_main(project_root, target=args.target))
     if getattr(args, "graphify_command", None) == "hook-guard":
         sys.exit(hook_guard_main(project_root, args.kind))
+    if getattr(args, "graphify_command", None) == "affected":
+        sys.exit(
+            affected_main(
+                project_root,
+                args.node,
+                depth=args.depth,
+                relations=tuple(args.relations),
+            )
+        )
+    if getattr(args, "graphify_command", None) == "prs":
+        sys.exit(
+            prs_main(
+                project_root,
+                args.pr_number,
+                repo=args.repo,
+                base=args.base,
+            )
+        )
     if getattr(args, "graphify_command", None) == "bakeoff":
         corpus = (
             Path(args.corpus) if args.corpus else project_root / GOLD_CORPUS_RELPATH

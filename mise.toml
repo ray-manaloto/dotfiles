@@ -745,6 +745,27 @@ description = "Rebuild the project knowledge graph and stamp the graphify versio
 # Pass a target: mise run graphify-update -- src/some/dir
 run = 'uv run --project python dotfiles-setup graphify update'
 
+[tasks.graphify-affected]
+description = "Blast radius: reverse-traverse the graph for what breaks if <node> changes"
+# Thin caller (zero-bash-logic); logic in
+# python/src/dotfiles_setup/graphify.py. Same deterministic BFS/DFS substrate
+# as graphify-query, run in reverse (calls/imports/references/inherits) —
+# no LLM, source-cited, ~free. Health-gated: a missing/stale/corrupt/drifted
+# graph errors clearly instead of running (graphify-first.md).
+# Pass flags through: mise run graphify-affected -- "some_function" --depth 3
+run = 'uv run --project python dotfiles-setup graphify affected'
+
+[tasks.graphify-prs]
+description = "PR dashboard; with a PR number, its graph-impact deep dive"
+# Thin caller (zero-bash-logic); logic in
+# python/src/dotfiles_setup/graphify.py. Needs an authenticated `gh` and
+# makes NETWORK calls (gh pr list / gh pr diff) — never call from a gate or
+# hook. The bare dashboard is cheap; passing a PR number triggers the
+# expensive graph-impact computation (concurrent gh pr diff calls) —
+# deliberate, see graphify's own cmd_prs comment.
+# Pass flags through: mise run graphify-prs -- 822 --base main
+run = 'uv run --project python dotfiles-setup graphify prs'
+
 [tasks.bakeoff]
 description = "Run the graphify extraction bake-off (writes OUTSIDE the repo)"
 # Thin caller (zero-bash-logic); logic in
