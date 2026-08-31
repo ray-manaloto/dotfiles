@@ -157,11 +157,16 @@ def resolve_placement(platform: str, *, project_dir: Path) -> SkillPlacement:
     Raises:
         KeyError: ``platform`` is not one ``_PLATFORM_CONFIG`` declares —
             deliberately, rather than silently resolving to nothing.
-        UnsafePlacementError: the resolved destination escapes
-            ``project_dir`` — an absolute ``skill_dst`` (which replaces
-            ``project_dir`` outright under ``/``) or one laden with enough
-            ``..`` segments to walk back out of it. Never silently written,
-            never silently skipped.
+        UnsafePlacementError: ``skill_dst``'s *parent directory* — every
+            write in :func:`install_skill` targets ``skill_dst.parent``,
+            never ``skill_dst`` itself as a directory — does not resolve
+            inside ``project_dir``. Covers an absolute ``skill_dst`` (which
+            replaces ``project_dir`` outright under ``/``), one laden with
+            enough ``..`` segments to walk back out, AND a ``skill_dst`` of
+            ``""``/``"."`` (which resolves to ``project_dir`` itself, so its
+            *parent* is one directory ABOVE ``project_dir`` — checking
+            ``skill_dst`` alone would let this one through). Never silently
+            written, never silently skipped.
     """
     cfg = _platform_config()[platform]
     root = _package_root()
@@ -171,11 +176,19 @@ def resolve_placement(platform: str, *, project_dir: Path) -> SkillPlacement:
     )
     project_root = project_dir.resolve()
     skill_dst = (project_dir / cfg["skill_dst"]).resolve()
-    if skill_dst != project_root and not skill_dst.is_relative_to(project_root):
+    # Every write in install_skill() targets skill_dst.parent (mkdir,
+    # copytree, the .graphify_version stamp, the temp-file + rename for
+    # SKILL.md itself) — so the parent, not skill_dst, is what must be
+    # contained. A skill_dst of "" or "." resolves to project_root itself,
+    # whose parent sits ONE DIRECTORY ABOVE project_root; checking skill_dst
+    # alone (an `== project_root` exemption) would wave that case through
+    # and let every write land outside project_dir.
+    if not skill_dst.parent.is_relative_to(project_root):
         message = (
             f"platform {platform!r} declares skill_dst {cfg['skill_dst']!r}, "
-            f"which resolves to {skill_dst} — outside project_dir "
-            f"{project_root}. Refusing to write."
+            f"which resolves to {skill_dst} — its parent directory "
+            f"{skill_dst.parent} is outside project_dir {project_root}. "
+            f"Refusing to write."
         )
         raise UnsafePlacementError(message)
     return SkillPlacement(

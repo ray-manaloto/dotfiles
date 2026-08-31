@@ -82,13 +82,18 @@ mise run graphify-skill-install -- codex    # would write .codex/skills/graphify
   same as any other typo.
 - **This only ever writes inside the `project_dir` you pass — default is
   this repo's root — and that is a CHECKED invariant, not a convention.**
-  `resolve_placement` resolves the joined destination and refuses (raising
-  `UnsafePlacementError`, never a silent write or a silent skip) if it lands
-  outside `project_dir` — guarding against an absolute or `..`-laden
-  `skill_dst` in graphify's own placement table, since `project_dir /
-  cfg["skill_dst"]` alone is a plain path join, not containment. Point
-  `--project-dir` elsewhere only when you genuinely mean a different tree;
-  there is no confirmation prompt.
+  Every write (`mkdir`, the `references/` copy, the `.graphify_version`
+  stamp, the temp-file + rename for `SKILL.md` itself) targets
+  `skill_dst.parent`, so `resolve_placement` validates THAT — not
+  `skill_dst` on its own — and refuses (raising `UnsafePlacementError`,
+  never a silent write or a silent skip) if it lands outside `project_dir`.
+  This guards against an absolute or `..`-laden `skill_dst` in graphify's
+  own placement table (since `project_dir / cfg["skill_dst"]` alone is a
+  plain path join, not containment) AND against a `skill_dst` of `""` or
+  `"."`, which resolves to `project_dir` itself — so its *parent* sits one
+  directory above `project_dir`, a case checking `skill_dst` alone would
+  have missed. Point `--project-dir` elsewhere only when you genuinely mean
+  a different tree; there is no confirmation prompt.
 
 ## See also
 

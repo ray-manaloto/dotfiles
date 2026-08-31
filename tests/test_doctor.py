@@ -984,6 +984,7 @@ _GRAPHIFY_BASELINE: dict[str, object] = {
     "stub_file": ".agents/skills/graphify/SKILL.md",
     "stub_marker": "DELIBERATE STUB",
     "forbidden_paths": [".codex/skills/graphify"],
+    "forbidden_agents_md_marker": "use the installed graphify skill",
 }
 
 
@@ -994,6 +995,7 @@ def _write_healthy_graphify_surface(repo_root: Path) -> None:
     agents_skill = repo_root / ".agents" / "skills" / "graphify" / "SKILL.md"
     agents_skill.parent.mkdir(parents=True)
     agents_skill.write_text("<!-- DELIBERATE STUB: hand-authored redirect -->")
+    (repo_root / "AGENTS.md").write_text("ordinary project instructions\n")
 
 
 def test_graphify_skill_surface_flags_a_missing_required_file(tmp_path: Path) -> None:
@@ -1037,6 +1039,21 @@ def test_graphify_skill_surface_flags_a_forbidden_codex_install(
     findings = doctor.check_graphify_skill_surface(setup)
     assert len(findings) == 1
     assert ".codex/skills/graphify" in findings[0]
+    assert "do-not.md #8" in findings[0]
+
+
+def test_graphify_skill_surface_flags_a_landed_vendor_install_marker(
+    tmp_path: Path,
+) -> None:
+    """The `.codex` path check misses AGENTS.md residue — this is its twin."""
+    _write_healthy_graphify_surface(tmp_path)
+    (tmp_path / "AGENTS.md").write_text(
+        "When the user types `/graphify`, use the installed graphify skill instead.\n"
+    )
+    setup = _setup(repo_root=tmp_path, baseline={"graphify": _GRAPHIFY_BASELINE})
+    findings = doctor.check_graphify_skill_surface(setup)
+    assert len(findings) == 1
+    assert "AGENTS.md" in findings[0]
     assert "do-not.md #8" in findings[0]
 
 

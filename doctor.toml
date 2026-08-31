@@ -181,6 +181,12 @@ stub_marker = "DELIBERATE STUB"
 # untracked and no hk `git diff` would otherwise ever see it.
 forbidden_paths = [".codex/skills/graphify"]
 
+# A codex-platform `graphify install` ALSO appends this literal line to the
+# root AGENTS.md (do-not.md #8) — unlike `.codex/skills/graphify`, AGENTS.md
+# IS tracked, so a landed append shows up in `git diff` too, but this check
+# still needs to say so at session start, not only at the next commit.
+forbidden_agents_md_marker = "use the installed graphify skill"
+
 [path_drift]
 # Tools whose staleness weakens a GATE rather than merely annoying someone
 # (#596). Every mise tool on PATH is compared — the list is not the scope, it

@@ -1091,12 +1091,13 @@ def check_listing_budget(setup: Setup) -> list[str]:
 def check_graphify_skill_surface(setup: Setup) -> list[str]:
     """The graphify skill surface stays in its reviewed, DELIBERATE shape.
 
-    The commit-time twin is hk's ``graphify_skill_surface`` step, which asserts
-    the identical three facts. Both exist because hk only ever runs at commit
-    time, while this runs every SessionStart — a session that never commits
-    would otherwise carry a broken surface silently for its whole duration.
+    The commit-time twin is hk's ``graphify_skill_surface`` step, which
+    asserts the identical four facts. Both exist because hk only ever runs
+    at commit time, while this runs every SessionStart — a session that
+    never commits would otherwise carry a broken surface silently for its
+    whole duration.
 
-    Three assertions, all read straight off the working tree rather than the
+    Four assertions, all read straight off the working tree rather than the
     baseline's usual host-external state, because that is exactly what this
     surface *is*:
 
@@ -1110,7 +1111,13 @@ def check_graphify_skill_surface(setup: Setup) -> list[str]:
       particular, because ``do-not.md`` #8 forbids installing it here (a
       codex-platform install also appends the line-budgeted root
       ``AGENTS.md``) and ``.codex/`` is fully gitignored, so no other check in
-      this repo would ever notice it landed.
+      this repo would ever notice it landed;
+    * ``forbidden_agents_md_marker`` must not appear in the root
+      ``AGENTS.md`` — that literal line is what a codex-platform
+      ``graphify install`` appends there, so its presence means the banned
+      vendor installer ran (unlike the ``.codex`` path above, ``AGENTS.md``
+      IS tracked, so `git diff` would also show it, but only at the next
+      commit — this still needs to say so every session).
     """
     baseline = _str_keys(setup.baseline.get("graphify"))
     findings: list[str] = [
@@ -1138,6 +1145,17 @@ def check_graphify_skill_surface(setup: Setup) -> list[str]:
         for rel in _str_list(baseline.get("forbidden_paths"))
         if (setup.repo_root / rel).exists()
     )
+    agents_md_marker = baseline.get("forbidden_agents_md_marker")
+    if isinstance(agents_md_marker, str):
+        agents_md_path = setup.repo_root / "AGENTS.md"
+        if agents_md_path.is_file() and agents_md_marker in agents_md_path.read_text(
+            encoding="utf-8"
+        ):
+            findings.append(
+                f"AGENTS.md contains {agents_md_marker!r} — do-not.md #8 "
+                f"forbids running a codex-platform `graphify install` here, "
+                f"and that append is exactly what it leaves behind. Revert it."
+            )
     return findings
 
 

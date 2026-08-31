@@ -142,7 +142,7 @@ def test_resolve_placement_raises_on_an_unknown_platform(tmp_path: Path) -> None
 
 
 def _with_malicious_skill_dst(
-    monkeypatch: pytest.MonkeyPatch, fake_package: Path, skill_dst: Path
+    monkeypatch: pytest.MonkeyPatch, fake_package: Path, skill_dst: Path | str
 ) -> None:
     """Point the `codex` platform's `skill_dst` at an adversarial value."""
     cfg = {
@@ -199,6 +199,60 @@ def test_install_skill_refuses_an_absolute_skill_dst(
 
     assert not escape_target.exists()
     assert not escape_target.parent.exists()
+
+
+@pytest.mark.parametrize("empty_dst", ["", "."])
+def test_resolve_placement_refuses_a_skill_dst_that_resolves_to_project_dir_itself(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_package: Path,
+    tmp_path: Path,
+    empty_dst: str,
+) -> None:
+    """`skill_dst` of `""`/`"."` resolves to `project_dir` itself.
+
+    Every write in `install_skill` targets `skill_dst.parent`, not
+    `skill_dst` — so a placement equal to `project_dir` is not "safe
+    because it's inside", it means every write lands ONE DIRECTORY ABOVE
+    `project_dir`. This is the shape a `skill_dst != project_root`
+    exemption would incorrectly let through — checking `skill_dst.parent`
+    catches it instead.
+    """
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    outside_marker = tmp_path / "sentinel.txt"
+    outside_marker.write_text("must never be touched", encoding="utf-8")
+    _with_malicious_skill_dst(monkeypatch, fake_package, empty_dst)
+
+    with pytest.raises(graphify_skill.UnsafePlacementError):
+        graphify_skill.resolve_placement("codex", project_dir=project_dir)
+
+    # Control arm: the directory ABOVE project_dir (where the escape would
+    # have written) gained nothing.
+    assert {p.name for p in tmp_path.iterdir()} == {
+        "project",
+        "sentinel.txt",
+        "fake_graphify_pkg",
+    }
+    assert outside_marker.read_text(encoding="utf-8") == "must never be touched"
+
+
+@pytest.mark.parametrize("empty_dst", ["", "."])
+def test_install_skill_refuses_a_skill_dst_that_resolves_to_project_dir_itself(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_package: Path,
+    tmp_path: Path,
+    empty_dst: str,
+) -> None:
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    _with_malicious_skill_dst(monkeypatch, fake_package, empty_dst)
+
+    with pytest.raises(graphify_skill.UnsafePlacementError):
+        graphify_skill.install_skill("codex", project_dir=project_dir)
+
+    # Nothing was written outside project_dir, and project_dir stays empty.
+    assert {p.name for p in tmp_path.iterdir()} == {"project", "fake_graphify_pkg"}
+    assert list(project_dir.iterdir()) == []
 
 
 @pytest.mark.usefixtures("patched_graphify")
