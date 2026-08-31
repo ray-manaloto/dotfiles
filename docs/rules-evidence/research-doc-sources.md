@@ -139,6 +139,24 @@ registrations.
    whatever the loading mechanism is, "it will fail" is not a reliable
    description of it, and this evidence does not claim to explain it.
 
+## Why the KB offline harness docs are step 00 (2026-08-02)
+
+*(Moved out of the rule 2026-08-31.)*
+
+Step 00 was in the chain **nowhere** until 2026-08-02. Control-armed:
+`agent-harness-docs` returned **0** hits across `.claude/rules/`,
+`.claude/skills/` and `AGENTS.md`, against `mintlify-cache` → 2 files — so the
+probe discriminates, and the absence was real.
+
+The measured cost: a session shipped a PreToolUse gate and **reported "unproven
+— I don't know if the harness fires PreToolUse for `AskUserQuestion`, or whether
+a mid-session `settings.json` edit is picked up"**. Both answers were sitting on
+this disk. `$CC/hooks.md:1394` names `AskUserQuestion` in the PreToolUse matcher
+list; `$CC/settings.md:177` states hooks reload **without a restart**.
+
+An unanswered question is expensive; an unanswered question whose answer you
+already have locally is pure loss.
+
 ## GitHub repos touched
 
 - [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — the rule,

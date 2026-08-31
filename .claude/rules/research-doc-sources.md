@@ -26,18 +26,10 @@ worked.
     Anything of the form *"does Claude Code do X"* is a **step-00 question**,
     and reaching the web for it is a step you already had cheaper.
 
-    ⚠️ **Why this is step 00 and not a footnote.** It was in this chain
-    **nowhere** until 2026-08-02 (control-armed: `agent-harness-docs` → **0**
-    hits across `.claude/rules/`, `.claude/skills/` and `AGENTS.md`, against
-    `mintlify-cache` → 2 files, so the probe discriminates). The measured cost:
-    a session shipped a PreToolUse gate and **reported "unproven — I don't know
-    if the harness fires PreToolUse for `AskUserQuestion`, or whether a
-    mid-session `settings.json` edit is picked up"**. Both were sitting on this
-    disk. `$CC/hooks.md:1394` **names
-    `AskUserQuestion`** in the PreToolUse matcher list; `$CC/settings.md:177`
-    states hooks reload **without a restart**. An
-    unanswered question is expensive; an unanswered question whose answer you
-    already have locally is pure loss.
+    ⚠️ **An unanswered question whose answer is already on this disk is pure
+    loss** — a session once shipped a PreToolUse gate reporting two harness
+    facts as "unproven" while both sat in `$CC/`. Why this is step 00:
+    `docs/rules-evidence/research-doc-sources.md`.
 
     Step 0 below is a *different* corpus — mintlify docs for third-party
     libraries. Neither substitutes for the other.
@@ -102,19 +94,14 @@ scope limit: `docs/rules-evidence/research-doc-sources.md`.
 
 ## MCP: two lanes. Which lane you are in decides the answer
 
-⚠️ **This rule used to justify itself with a cost that is no longer real.** It
-claimed a registered server "injects **every** one of its tool schemas into the
-system prompt of **every** conversation, forever". **Measured 2026-07-30 and
-false in this harness:** Claude Code presents MCP tools **deferred — names
-only** — and loads a schema on demand via `ToolSearch`. Across the 3 servers this
-repo registers: **25,925 B of schemas vs 778 B of names, a 33× difference**
-(~6.5k vs ~195 tokens at 4 B/token; both arms read from the same `tools/list`).
-So the standing tax is ~195 tokens for 25 tools, not ~6.5k. Do not cite the old
-sentence, and do not refuse a registration on its strength. Method, per-server
-table and the caveats: `docs/rules-evidence/research-doc-sources.md`.
+⚠️ **The old "every schema in every conversation, forever" cost is FALSE here**
+(measured 2026-07-30): Claude Code presents MCP tools **deferred — names only**,
+loading a schema on demand via `ToolSearch` — a **33×** difference. Do not cite
+that sentence, and never refuse a registration on its strength. Method and
+per-server table: `docs/rules-evidence/research-doc-sources.md`.
 
-The residual cost is real but small, and it is the same either way. What actually
-differs between the lanes is whether you control the alternative.
+The residual cost is small and the same either way. What actually differs
+between the lanes is whether you control the alternative.
 
 **Lane 1 — a third-party plugin or skill requires MCP: ALLOWED, no
 justification needed.** Enabling a plugin that bundles an MCP server, or a tool
@@ -133,12 +120,10 @@ order:
 4. native registration — **last resort**, and say in the commit body why 1–3
    could not do it.
 
-The asymmetry is deliberate, but **the reason is simplicity, not context spend**
-(that argument was 33× overstated — see above). In lane 1 registration buys a
-capability we cannot build; in lane 2 it buys something a `curl` already does,
-while adding a spawned process, a version to pin, an auth path and a failure mode
-to the setup the doctor has to police. When a lookup is one-off, `mcp2cli` wins
-outright and there is nothing to weigh.
+The asymmetry is deliberate, but **the reason is simplicity, not context spend.**
+In lane 1 registration buys a capability we cannot build; in lane 2 it buys
+something a `curl` already does, while adding a spawned process, a version to
+pin, an auth path and a failure mode for the doctor to police.
 
 **If you are unsure which lane you are in, you are in lane 2.** Lane 1 is
 specifically "an external plugin/skill I did not write requires it"; everything

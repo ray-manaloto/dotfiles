@@ -5,75 +5,36 @@ Claude-only configuration. The root `CLAUDE.md` is byte-exactly `@AGENTS.md`
 is Claude-specific and doesn't fit there lives here. `.claude/**` is exempt from
 the stub and pair checks precisely so this file can exist.
 
-## Agent skills
+## Agent skills, trackers and domain docs
 
-Config for the `mattpocock-skills` engineering flow.
+The `mattpocock-skills` config here is **hand-placed and stays that way** —
+`/setup-matt-pocock-skills` writes to paths our gates reject. Issue tracker:
+GitHub Issues via `gh` (`docs/issue-tracker.md`); triage labels:
+`docs/triage-labels.md`; domain: `CONTEXT.md` + `docs/domain.md`. **Our ADRs are
+`.claude/rules/*.md`**; `docs/adr/` holds only domain-shaped decisions.
 
-**These files are hand-placed, and stay that way.** `/setup-matt-pocock-skills` generates the same
-config but writes it to the root `CLAUDE.md` and `docs/agents/*.md` — paths our gates reject (the
-stub check, and agnix's `**/agents/*.md` frontmatter rule). Reach for the files below instead; they
-are its output, already adapted.
+**`gh pr create`/`merge` are guard-denied. One verb per PR provenance:**
+`mise run ship` (your branch), `mise run automerge -- <PR#>` (bot PR, #369),
+`mise run land -- <PR#>` (post-merge).
 
-### Issue tracker
+## graphify + project doctor
 
-GitHub Issues on `ray-manaloto/dotfiles`, via `gh`. See `docs/issue-tracker.md`.
-**`gh pr create`/`merge` are guard-denied. One verb per PR provenance: `mise run ship`
-(your branch), `mise run automerge -- <PR#>` (bot PR, #369), `mise run land -- <PR#>`
-(post-merge).**
+graphify is registered project-scoped and host-only; query with
+`mise run graphify-query`, refresh with `mise run graphify-update` — never a
+bare `graphify` on `PATH` (`.claude/rules/graphify-first.md`). The doctor runs
+from the SessionStart hook against `doctor.toml`, is silent when healthy, and
+always exits 0.
 
-### Triage labels
+⚠️ Two traps that bite: **MCP registrations come from FOUR places** — `.mcp.json`,
+each enabled plugin, and `~/.claude.json`'s user-global *and* per-project blocks
+— and a same-name user-global entry **shadows** a project one silently. And
+**changing your setup means changing `doctor.toml` in a reviewed diff**: adding
+to `[fnox].env_true` widens a credential's blast radius.
 
-The five canonical roles, adopted verbatim (no remapping). See `docs/triage-labels.md`.
-
-### Domain docs
-
-Single-context: `CONTEXT.md` (glossary) + `docs/adr/`. See `docs/domain.md`.
-**Our ADRs are `.claude/rules/*.md`** — each carries its own "Why this rule exists"; `docs/adr/`
-holds only domain-shaped decisions.
-## graphify — knowledge-graph substrate
-
-Registered by `graphify install --project` (#310–#318 adoption). Host-only,
-project-scoped; `graphify-out/` is gitignored. When the user types `/graphify`,
-use `.claude/skills/graphify/SKILL.md`.
-
-- Codebase questions: follow `.claude/rules/graphify-first.md`
-  (`mise run graphify-query`, never a bare `graphify` on `PATH`).
-- After changing code: `mise run graphify-update` (AST-only, no API cost).
-
-**This registration lives here, NOT in the root `CLAUDE.md`:** the
-`claude_md_import_stub` hk gate locks the root file to byte-exactly `@AGENTS.md`,
-so graphify's default write there (which happened and was reverted) fails
-`mise run lint`. `.claude/CLAUDE.md` is the repo's designated home for exactly
-this kind of Claude-specific content (it is stub-exempt). Re-running
-`graphify install` will re-append to the root `CLAUDE.md`; revert that hunk.
-
-## Project doctor — declared setup vs reality on this host (#418)
-
-`SessionStart hook → mise run doctor → dotfiles_setup.doctor`, baseline
-**`doctor.toml`** (sibling of `currency.toml` / `parity.toml`). Silent when
-healthy; always exits 0, so it cannot disrupt a session. `-- --verbose` for a PASS
-line per check, `-- --live` adds the MCP spawn + `claude mcp list` probes,
-`-- --strict` exits 1.
-
-It lives here, not in `AGENTS.md`, because everything it reads is Claude Code's own
-setup plus `~/.config/fnox`. **No hk step, no CI job** — a runner has none of that
-state, so the hook is the only place it runs, which is why `hook_selfcheck` gates
-the wiring in `ship`/`land`.
-
-Two invariants worth knowing before editing it:
-
-- **MCP registrations come from FOUR places** — `.mcp.json`, each enabled plugin,
-  and `~/.claude.json`'s user-global *and* per-project blocks. A same-name
-  user-global entry **shadows** a project one silently; that is how a broken
-  `mde-mcp-filesystem` wrapper took this repo's filesystem server down. Checks that
-  say "fix this repo's declaration" run only on what the repo declares
-  (`Server.repo_owned`); "your setup is broken" checks run on everything.
-- **Changing your setup means changing `doctor.toml` in a reviewed diff.** Adding
-  to `[fnox].env_true` widens a credential's blast radius; adding to
-  `[mcp.mutating_tools]` declares something needs a permission decision.
-
-Version currency is delegated to `kb-setup currency check` and health to
-`claude mcp list` — neither is re-implemented.
+⚠️ **Both registrations live HERE, never in the root `CLAUDE.md`** — the
+`claude_md_import_stub` gate locks that file to byte-exactly `@AGENTS.md`, and
+re-running `graphify install` or the fable setup wizard re-appends there; revert
+that hunk. Full detail: `docs/claude-plugin-config-hygiene.md`.
 
 ## Cross-vendor orchestration (Fable-5 architect + executor lanes)
 

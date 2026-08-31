@@ -111,6 +111,57 @@ It recurred along a second axis. Only `ship` arms auto-merge and a bot PR never
 runs it; `land` refuses an OPEN PR; `gh pr merge` redirected to `land`. #138,
 #236 and #386 sat green and unmergeable. `automerge` is the missing verb.
 
+## The five enforcement layers, in full
+
+Moved out of the rule 2026-08-31; the rule keeps the one-line summary and the
+fail-open caveat, which are the parts that change a decision at the call site.
+
+1. **PreToolUse hook (hard deny)** — `.claude/settings.json` wires every Bash
+   call through `dotfiles-setup hook pretooluse` (`hook_guard.py`): a match is
+   DENIED with the redirect reason fed back (JSON `permissionDecision: "deny"`;
+   deterministic, applies even in bypassPermissions mode). Rules tested in
+   `tests/test_hook_guard.py`.
+2. **ship/land `hook-selfcheck` gate** — `mise run ship` / `land` run
+   `dotfiles-setup hook selfcheck` (`hook_selfcheck.py`) as an always-run gate
+   driving the WIRED guard end-to-end: settings.json wiring + the five-tool
+   matcher, **every hook command anchored to `$CLAUDE_PROJECT_DIR`**, the real
+   wrapper denying from **both** the project root and a foreign cwd (#343), and
+   `bash -n` on the scripts. A hook regression fails a PR like lint/pytest.
+3. **The rule + skills** — `pr-workflow` and `devcontainer-sync` name the
+   canonical tasks; markdown alone is "relying on the LLM", never the only layer.
+4. **Self-learning loop (`mise run command-audit`)** — `command_audit.py` scans
+   this project's recent Claude Code transcript JSONL (native capture — no
+   logging hook) and flags mutating one-off Bash commands the guard does NOT yet
+   cover, so the layers above get refined over time. The *inverse* of Claude
+   Code's `fewer-permission-prompts` skill (same transcript mine, opposite
+   verdict). Review the report, then add a `mise run` task (+ a `_RULES`
+   redirect for a known-bad shape) for the top culprits. Ongoing: a **`SessionEnd`
+   hook** runs it per session (`--output .agent/command-audit.md`). `SessionEnd`
+   and not `Stop` — it fires once at termination and *cannot block*, while `Stop`
+   fires every turn and can block, and a transcript scan belongs on neither.
+   **Local-only by nature** (it reads `~/.claude` transcripts), so it is a hook
+   and never a GHA job — a CI runner has no transcripts. Report kept out of git
+   by `.gitignore`.
+5. **Contracts** — `workflow.mise-tasks-enforcement`, `.hook-selfcheck-wiring`
+   and `.command-audit-wiring` in suites.toml assert the whole chain exists
+   (settings.json → wrapper → CLI → module → tests), so nothing drifts out.
+
+The hook fails OPEN on its own errors (a crashed guard must not brick every Bash
+call — the wrapper exits 0 when the Python>=3.14 interpreter is absent, e.g. a
+cold web session) but **records every one** (#343). Hard bans that must never
+fail open belong in settings.json permission deny rules, not the hook.
+
+## Masking, and what stays fail-open by design
+
+Rules match AFTER `hook_guard._inert_masked` neuters every separator that is
+DATA (quoted spans, heredoc bodies), so a quoted mention of a denied literal no
+longer denies (#265).
+
+Still fail-open BY DESIGN (a redirect guard, not a sandbox): `$(…)`,
+`sh -c`/`eval`, base64, aliases. If a deny looks wrong: write the script with the
+Write tool and run `python3 <file>` — and after ANY deny, re-check that the
+intended side effects actually happened.
+
 ## GitHub repos touched
 
 - [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — the guard,
