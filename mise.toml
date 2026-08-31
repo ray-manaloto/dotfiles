@@ -66,7 +66,7 @@ lefthook = "2.1.12"
 # conda:ffmpeg on platform linux-x64" and bricks lint. os-gating makes linux
 # skip the tool entirely, so no linux URL is demanded.
 "conda:ffmpeg" = { version = "9.0.1", os = ["macos"] }
-aws-cli = { version = "2.36.34", symlink_bins = "true" }
+aws-cli = { version = "2.36.35", symlink_bins = "true" }
 azure-cli = { version = "2.89.1", uvx_args = "--prerelease=allow" }
 docker-cli = "29.7.2"
 opencode = "1.18.25"

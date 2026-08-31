@@ -5007,35 +5007,36 @@ url = "https://github.com/rtk-ai/rtk/releases/download/v0.46.0/rtk-x86_64-pc-win
 url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/531218979"
 
 [[tools.aws-cli]]
-version = "2.36.34"
+version = "2.36.35"
 backend = "aqua:aws/aws-cli"
 
 [tools.aws-cli."platforms.linux-arm64"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.36.34.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.36.35.zip"
 
 [tools.aws-cli."platforms.linux-arm64-musl"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.36.34.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.36.35.zip"
 
 [tools.aws-cli."platforms.linux-x64"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.36.34.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.36.35.zip"
 
 [tools.aws-cli."platforms.linux-x64-baseline"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.36.34.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.36.35.zip"
 
 [tools.aws-cli."platforms.linux-x64-musl"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.36.34.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.36.35.zip"
 
 [tools.aws-cli."platforms.linux-x64-musl-baseline"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.36.34.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.36.35.zip"
 
 [tools.aws-cli."platforms.macos-arm64"]
-url = "https://awscli.amazonaws.com/AWSCLIV2-2.36.34.pkg"
+checksum = "blake3:540d47a72535a28052c5931da2e0e1b0a825fe0446ee03f8b6be1403e8ffeb82"
+url = "https://awscli.amazonaws.com/AWSCLIV2-2.36.35.pkg"
 
 [tools.aws-cli."platforms.macos-x64"]
-url = "https://awscli.amazonaws.com/AWSCLIV2-2.36.34.pkg"
+url = "https://awscli.amazonaws.com/AWSCLIV2-2.36.35.pkg"
 
 [tools.aws-cli."platforms.macos-x64-baseline"]
-url = "https://awscli.amazonaws.com/AWSCLIV2-2.36.34.pkg"
+url = "https://awscli.amazonaws.com/AWSCLIV2-2.36.35.pkg"
 
 [[tools.azure-cli]]
 version = "2.89.1"
@@ -6596,7 +6597,7 @@ url = "https://github.com/editorconfig-checker/editorconfig-checker/releases/dow
 url_api = "https://api.github.com/repos/editorconfig-checker/editorconfig-checker/releases/assets/529790777"
 
 [[tools."github:agent-sh/agnix"]]
-version = "v0.52.1"
+version = "0.52.1"
 backend = "github:agent-sh/agnix"
 
 [tools."github:agent-sh/agnix"."platforms.linux-arm64"]
@@ -6616,7 +6617,6 @@ checksum = "sha256:46486fef7baa22d8ecbce3620dd5fee44055c237329a86c17c5d55333d3b3
 url = "https://github.com/agent-sh/agnix/releases/download/v0.52.1/agnix-x86_64-unknown-linux-gnu.tar.gz"
 url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/532200867"
 provenance = "github-attestations"
-provenance_verified = true
 
 [tools."github:agent-sh/agnix"."platforms.linux-x64-baseline"]
 checksum = "sha256:46486fef7baa22d8ecbce3620dd5fee44055c237329a86c17c5d55333d3b3ecd"
@@ -6966,7 +6966,7 @@ version = "3.7.0"
 backend = "pipx:mcp2cli"
 
 [[tools.rumdl]]
-version = "v0.2.62"
+version = "0.2.62"
 backend = "aqua:rvben/rumdl"
 
 [tools.rumdl."platforms.linux-arm64"]
