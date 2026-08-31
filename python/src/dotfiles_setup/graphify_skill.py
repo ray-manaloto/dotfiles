@@ -66,8 +66,15 @@ class UnsafePlacementError(ValueError):
     so ``project_dir / cfg["skill_dst"]`` alone is not containment, only a
     string join that happens to look like one for well-behaved input. This
     is raised instead of silently writing (or silently skipping) whenever
-    the joined-then-resolved destination is not `project_dir` itself or
-    beneath it.
+    the destination's PARENT — the directory every write in
+    :func:`install_skill` actually targets — does not resolve strictly
+    beneath ``project_dir``.
+
+    Note the parent, not the destination: a ``skill_dst`` of ``""`` or
+    ``"."`` resolves to ``project_dir`` itself, whose parent is one
+    directory ABOVE the target. That case raises, and an earlier revision
+    of this guard exempted it — which is how the ``references/`` bundle
+    could be written outside the target with no error.
     """
 
 
