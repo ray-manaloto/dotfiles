@@ -97,3 +97,7 @@ graphify-out/
 /progress.md
 /.planning/
 /.active_plan
+# The attestation is a SHA of the working-tree plan bytes, which change on every
+# plan edit -- tracking it would guarantee a mismatch for anyone else. The
+# sibling `.mode` file IS tracked: it is a reviewed project setting.
+/.plan-attestation
