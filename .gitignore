@@ -85,3 +85,15 @@ graphify-out/
 # repo is cwd, within seconds of deletion. Retiring it is a user-config change
 # this repo does not make unasked.
 .agent/
+
+# planning-with-files (project-scoped plugin, #848). Its docs call these
+# "working memory, not a tracked deliverable", and it hardcodes the project
+# root -- so they are ignored rather than relocated. This is a deliberate
+# exception to agent-artifact-conventions.md rule 1 ("No ad-hoc directories"),
+# which routes agent working files to .agent/: the plugin cannot be pointed
+# there without patching it, and a patched plugin silently reverts on update.
+/task_plan.md
+/findings.md
+/progress.md
+/.planning/
+/.active_plan
