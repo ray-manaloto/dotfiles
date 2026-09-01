@@ -2725,18 +2725,18 @@ conda_deps = [
     "libgcc-ng-16.2.0-he9431aa_4",
     "bzip2-1.0.8-h4777abc_10",
     "ld_impl_linux-aarch64-2.46.1-default_h1979696_102",
-    "libexpat-2.8.1-hfae3067_1",
-    "libffi-3.7.0-hdaad0be_1",
-    "liblzma-5.8.3-he30d5cf_1",
-    "libzlib-1.3.2-hdc9db2a_3",
-    "ncurses-6.6-h2b6f883_1",
-    "readline-8.3-ha7194a6_1",
     "libmpdec-4.0.0-he30d5cf_2",
     "libsqlite-3.53.4-h399dd60_1",
     "openssl-3.6.4-he6ad1d5_0",
     "tk-8.6.13-noxft_hf03c496_4",
     "tzdata-2026c-h151e31d_0",
     "zstd-1.5.7-h9d15635_7",
+    "libexpat-2.8.1-hfae3067_1",
+    "libffi-3.7.0-hdaad0be_1",
+    "liblzma-5.8.3-he30d5cf_1",
+    "libzlib-1.3.2-hdc9db2a_3",
+    "ncurses-6.6-h2b6f883_1",
+    "readline-8.3-ha7194a6_1",
     "_openmp_mutex-4.5-20_gnu",
     "libgomp-16.2.0-h8acb6b2_4",
     "icu-78.3-py311h3512406_2",
@@ -2760,18 +2760,18 @@ conda_deps = [
     "libgcc-ng-16.2.0-he9431aa_4",
     "bzip2-1.0.8-h4777abc_10",
     "ld_impl_linux-aarch64-2.46.1-default_h1979696_102",
-    "libexpat-2.8.1-hfae3067_1",
-    "libffi-3.7.0-hdaad0be_1",
-    "liblzma-5.8.3-he30d5cf_1",
-    "libzlib-1.3.2-hdc9db2a_3",
-    "ncurses-6.6-h2b6f883_1",
-    "readline-8.3-ha7194a6_1",
     "libmpdec-4.0.0-he30d5cf_2",
     "libsqlite-3.53.4-h399dd60_1",
     "openssl-3.6.4-he6ad1d5_0",
     "tk-8.6.13-noxft_hf03c496_4",
     "tzdata-2026c-h151e31d_0",
     "zstd-1.5.7-h9d15635_7",
+    "libexpat-2.8.1-hfae3067_1",
+    "libffi-3.7.0-hdaad0be_1",
+    "liblzma-5.8.3-he30d5cf_1",
+    "libzlib-1.3.2-hdc9db2a_3",
+    "ncurses-6.6-h2b6f883_1",
+    "readline-8.3-ha7194a6_1",
     "_openmp_mutex-4.5-20_gnu",
     "libgomp-16.2.0-h8acb6b2_4",
     "icu-78.3-py311h3512406_2",
@@ -2793,12 +2793,6 @@ conda_deps = [
     "libgcc-16.2.0-ha9f2e26_4",
     "libstdcxx-ng-16.2.0-hdf11a46_4",
     "libgcc-ng-16.2.0-h69a702a_4",
-    "libexpat-2.8.1-hecca717_1",
-    "libffi-3.7.0-h81df57d_1",
-    "liblzma-5.8.3-hb03c661_1",
-    "libzlib-1.3.2-h25fd6f3_3",
-    "ncurses-6.6-hdb14827_1",
-    "readline-8.3-hd6e31c0_1",
     "bzip2-1.0.8-hda65f42_10",
     "ld_impl_linux-64-2.46.1-default_hbd61a6d_102",
     "libmpdec-4.0.0-hb03c661_2",
@@ -2807,6 +2801,12 @@ conda_deps = [
     "tk-8.6.13-noxft_h1df4ec4_4",
     "tzdata-2026c-h151e31d_0",
     "zstd-1.5.7-hb78ec9c_7",
+    "libexpat-2.8.1-hecca717_1",
+    "libffi-3.7.0-h81df57d_1",
+    "liblzma-5.8.3-hb03c661_1",
+    "libzlib-1.3.2-h25fd6f3_3",
+    "ncurses-6.6-hdb14827_1",
+    "readline-8.3-hd6e31c0_1",
     "_openmp_mutex-4.5-20_gnu",
     "libgomp-16.2.0-he0feb66_4",
     "icu-78.3-py310h44b86e0_2",
@@ -2828,12 +2828,6 @@ conda_deps = [
     "libgcc-16.2.0-ha9f2e26_4",
     "libstdcxx-ng-16.2.0-hdf11a46_4",
     "libgcc-ng-16.2.0-h69a702a_4",
-    "libexpat-2.8.1-hecca717_1",
-    "libffi-3.7.0-h81df57d_1",
-    "liblzma-5.8.3-hb03c661_1",
-    "libzlib-1.3.2-h25fd6f3_3",
-    "ncurses-6.6-hdb14827_1",
-    "readline-8.3-hd6e31c0_1",
     "bzip2-1.0.8-hda65f42_10",
     "ld_impl_linux-64-2.46.1-default_hbd61a6d_102",
     "libmpdec-4.0.0-hb03c661_2",
@@ -2842,6 +2836,12 @@ conda_deps = [
     "tk-8.6.13-noxft_h1df4ec4_4",
     "tzdata-2026c-h151e31d_0",
     "zstd-1.5.7-hb78ec9c_7",
+    "libexpat-2.8.1-hecca717_1",
+    "libffi-3.7.0-h81df57d_1",
+    "liblzma-5.8.3-hb03c661_1",
+    "libzlib-1.3.2-h25fd6f3_3",
+    "ncurses-6.6-hdb14827_1",
+    "readline-8.3-hd6e31c0_1",
     "_openmp_mutex-4.5-20_gnu",
     "libgomp-16.2.0-he0feb66_4",
     "icu-78.3-py310h44b86e0_2",
@@ -2863,12 +2863,6 @@ conda_deps = [
     "libgcc-16.2.0-ha9f2e26_4",
     "libstdcxx-ng-16.2.0-hdf11a46_4",
     "libgcc-ng-16.2.0-h69a702a_4",
-    "libexpat-2.8.1-hecca717_1",
-    "libffi-3.7.0-h81df57d_1",
-    "liblzma-5.8.3-hb03c661_1",
-    "libzlib-1.3.2-h25fd6f3_3",
-    "ncurses-6.6-hdb14827_1",
-    "readline-8.3-hd6e31c0_1",
     "bzip2-1.0.8-hda65f42_10",
     "ld_impl_linux-64-2.46.1-default_hbd61a6d_102",
     "libmpdec-4.0.0-hb03c661_2",
@@ -2877,6 +2871,12 @@ conda_deps = [
     "tk-8.6.13-noxft_h1df4ec4_4",
     "tzdata-2026c-h151e31d_0",
     "zstd-1.5.7-hb78ec9c_7",
+    "libexpat-2.8.1-hecca717_1",
+    "libffi-3.7.0-h81df57d_1",
+    "liblzma-5.8.3-hb03c661_1",
+    "libzlib-1.3.2-h25fd6f3_3",
+    "ncurses-6.6-hdb14827_1",
+    "readline-8.3-hd6e31c0_1",
     "_openmp_mutex-4.5-20_gnu",
     "libgomp-16.2.0-he0feb66_4",
     "icu-78.3-py310h44b86e0_2",
@@ -2898,12 +2898,6 @@ conda_deps = [
     "libgcc-16.2.0-ha9f2e26_4",
     "libstdcxx-ng-16.2.0-hdf11a46_4",
     "libgcc-ng-16.2.0-h69a702a_4",
-    "libexpat-2.8.1-hecca717_1",
-    "libffi-3.7.0-h81df57d_1",
-    "liblzma-5.8.3-hb03c661_1",
-    "libzlib-1.3.2-h25fd6f3_3",
-    "ncurses-6.6-hdb14827_1",
-    "readline-8.3-hd6e31c0_1",
     "bzip2-1.0.8-hda65f42_10",
     "ld_impl_linux-64-2.46.1-default_hbd61a6d_102",
     "libmpdec-4.0.0-hb03c661_2",
@@ -2912,6 +2906,12 @@ conda_deps = [
     "tk-8.6.13-noxft_h1df4ec4_4",
     "tzdata-2026c-h151e31d_0",
     "zstd-1.5.7-hb78ec9c_7",
+    "libexpat-2.8.1-hecca717_1",
+    "libffi-3.7.0-h81df57d_1",
+    "liblzma-5.8.3-hb03c661_1",
+    "libzlib-1.3.2-h25fd6f3_3",
+    "ncurses-6.6-hdb14827_1",
+    "readline-8.3-hd6e31c0_1",
     "_openmp_mutex-4.5-20_gnu",
     "libgomp-16.2.0-he0feb66_4",
     "icu-78.3-py310h44b86e0_2",
@@ -5047,7 +5047,7 @@ checksum = "sha256:eb3bdd8dec3ff2558ee10e284da7d2a3865af0cbda21f06d397b0265837c6
 url = "https://nodejs.org/dist/v26.4.0/node-v26.4.0-darwin-x64.tar.gz"
 
 [[tools."npm:@openai/codex"]]
-version = "0.151.0"
+version = "0.152.0"
 backend = "npm:@openai/codex"
 
 [tools."npm:@openai/codex".options]
@@ -5512,38 +5512,38 @@ url = "https://github.com/crate-ci/typos/releases/download/v1.50.0/typos-v1.50.0
 url_api = "https://api.github.com/repos/crate-ci/typos/releases/assets/534125001"
 
 [[tools.uv]]
-version = "0.12.7"
+version = "0.12.8"
 backend = "aqua:astral-sh/uv"
 
 [tools.uv."platforms.linux-arm64"]
-checksum = "sha256:66393193038dd7eb108abd7a218d9cec04ac70ab98242b0720fa94de19223b7c"
-url = "https://github.com/astral-sh/uv/releases/download/0.12.7/uv-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/532935189"
+checksum = "sha256:ba8661f4fd207c8e94814191598e619b355ac10d5014e851e21eb800f9ef2b00"
+url = "https://github.com/astral-sh/uv/releases/download/0.12.8/uv-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/538591961"
 
 [tools.uv."platforms.linux-arm64-musl"]
-checksum = "sha256:6dcf60e3c085de88ace3671b949ca99f0652be561ff5627f0d21394140f041db"
-url = "https://github.com/astral-sh/uv/releases/download/0.12.7/uv-aarch64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/532935192"
+checksum = "sha256:975917badc8370163989e5bbe5a7c69bf922d19f8e57cb2652531bbffc935f84"
+url = "https://github.com/astral-sh/uv/releases/download/0.12.8/uv-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/538591964"
 
 [tools.uv."platforms.linux-x64"]
-checksum = "sha256:788f18abea7c5f55d6216e4f5613fd89d4d59b631efeec117b2b07fe72f1da21"
-url = "https://github.com/astral-sh/uv/releases/download/0.12.7/uv-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/532935280"
+checksum = "sha256:2e2b37e9811e17675a9e70bed5e1a58fc8c0388be63d751d72cc735188c149ff"
+url = "https://github.com/astral-sh/uv/releases/download/0.12.8/uv-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/538592029"
 
 [tools.uv."platforms.linux-x64-baseline"]
-checksum = "sha256:788f18abea7c5f55d6216e4f5613fd89d4d59b631efeec117b2b07fe72f1da21"
-url = "https://github.com/astral-sh/uv/releases/download/0.12.7/uv-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/532935280"
+checksum = "sha256:2e2b37e9811e17675a9e70bed5e1a58fc8c0388be63d751d72cc735188c149ff"
+url = "https://github.com/astral-sh/uv/releases/download/0.12.8/uv-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/538592029"
 
 [tools.uv."platforms.linux-x64-musl"]
-checksum = "sha256:3d64d44ed67da7908dc7f5c4d64ebb44bad326fa17f8a0a52fc9a7793017bbe1"
-url = "https://github.com/astral-sh/uv/releases/download/0.12.7/uv-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/532935287"
+checksum = "sha256:6ca4597639c97e921fb915e113061ce8e4a14ead9e42a1ead521dbb0a6763795"
+url = "https://github.com/astral-sh/uv/releases/download/0.12.8/uv-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/538592032"
 
 [tools.uv."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:3d64d44ed67da7908dc7f5c4d64ebb44bad326fa17f8a0a52fc9a7793017bbe1"
-url = "https://github.com/astral-sh/uv/releases/download/0.12.7/uv-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/532935287"
+checksum = "sha256:6ca4597639c97e921fb915e113061ce8e4a14ead9e42a1ead521dbb0a6763795"
+url = "https://github.com/astral-sh/uv/releases/download/0.12.8/uv-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/538592032"
 
 [[tools.yamlfmt]]
 version = "0.21.0"

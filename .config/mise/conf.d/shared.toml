@@ -35,7 +35,7 @@ jq = "1.8.2"
 # to pin the same npm package under the same key in different tiers, which
 # mise-parity's duplicate-tool check correctly flags as drift risk). allow_builds
 # is needed because @openai/codex's postinstall builds a native module.
-"npm:@openai/codex" = { version = "0.151.0", allow_builds = ["@openai/codex"] }
+"npm:@openai/codex" = { version = "0.152.0", allow_builds = ["@openai/codex"] }
 pinact = "4.1.1"
 "pipx:check-jsonschema" = "0.38.0"
 pixi = "0.78.0"
@@ -45,7 +45,7 @@ shellcheck = "0.11.0"
 shfmt = "3.14.0"
 taplo = "0.10.0"
 typos = "1.50.0"
-uv = "0.12.7"
+uv = "0.12.8"
 yamlfmt = "0.21.0"
 yamllint = "1.38.0"
 yq = "4.53.6"
