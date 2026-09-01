@@ -813,7 +813,7 @@ handler = "require_tokens"
 paths = [".github/workflows/refresh.yml"]
 per_path_tokens = { ".github/workflows/refresh.yml" = [
     "lock-refresh:",
-    "uses: ./.github/actions/lock-refresh",
+    "uses: $/.github/actions/lock-refresh",
     "\n            .devcontainer/mise-system.lock\n",
     "\n            .devcontainer/devcontainer-lock.json\n",
 ] }

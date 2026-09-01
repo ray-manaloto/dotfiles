@@ -167,7 +167,7 @@ def _receipt_problem(
     one recorded in ``mise.toml``. An earlier version of this fix tried to
     restore (2) with a self-authored stamp written by ``update()``, but that
     stamp could only ever record the SAME version ``update()`` itself always
-    resolves (``uv run --project python``, pinned 0.9.42) — so the check it
+    resolves (``uv run --project python``, pinned 0.9.53) — so the check it
     fed could never fail, and the one drift it existed to catch (a bare
     ``graphify update`` run through the OTHER installed version) writes no
     stamp at all, since only ``update()`` writes one. A check that can only
@@ -232,8 +232,8 @@ def graphify_health(project_root: Path) -> HealthResult:
         return HealthResult(GraphifyStatus.CORRUPT, runtime, error)
     if schema_problem := _graph_schema_problem(payload):
         return HealthResult(GraphifyStatus.CORRUPT, runtime, schema_problem)
-    if runtime != "0.9.42":
-        return HealthResult(GraphifyStatus.VERSION_DRIFT, runtime, "expected 0.9.42")
+    if runtime != "0.9.53":
+        return HealthResult(GraphifyStatus.VERSION_DRIFT, runtime, "expected 0.9.53")
     if problem := _receipt_problem(graph_path, graph_bytes, payload, runtime):
         return problem
     return HealthResult(
@@ -370,6 +370,169 @@ def query(
     return QueryResult(text=result.stdout.strip())
 
 
+def build_affected_args(
+    node: str,
+    *,
+    graph_path: Path,
+    depth: int = 2,
+    relations: tuple[str, ...] = (),
+) -> list[str]:
+    """Construct the ``graphify affected`` argv.
+
+    Mirrors graphify's documented CLI::
+
+        graphify affected "X" [--relation R] [--depth N] [--graph path]
+
+    ``--depth`` and ``--graph`` are always passed (explicit and
+    deterministic); ``--relation`` only when the caller narrows the default
+    relation set.
+    """
+    args = ["graphify", "affected", node]
+    for relation in relations:
+        args += ["--relation", relation]
+    args += ["--depth", str(depth), "--graph", str(graph_path)]
+    return args
+
+
+def affected(
+    project_root: Path,
+    node: str,
+    *,
+    depth: int = 2,
+    relations: tuple[str, ...] = (),
+) -> QueryResult:
+    """Reverse-traverse the project graph for blast radius.
+
+    What breaks if ``node`` changes? Health-gated exactly like :func:`query`
+    — a missing/stale/corrupt/drifted graph raises before any subprocess
+    runs, per ``.claude/rules/graphify-first.md``'s fall-back-to-source
+    rule; never reimplement that check here.
+
+    An unmatched ``node`` is NOT an error: graphify's own ``affected``
+    handler returns ``"No unique node match for <node>"`` on stdout at rc 0
+    (``graphify/affected.py:format_affected``) — a clear message, never a
+    traceback and never a silent empty success.
+    """
+    health = graphify_health(project_root)
+    if not health.ok:
+        message = f"graph health is {health.status}: {health.detail}"
+        raise GraphifyIncompleteError(message)
+    graph_path = project_root / _GRAPH_SUBDIR / _GRAPH_FILE
+    result = _run(
+        build_affected_args(
+            node, graph_path=graph_path, depth=depth, relations=relations
+        ),
+        cwd=project_root,
+    )
+    if result.returncode != 0:
+        message = (result.stderr or result.stdout).strip()
+        raise GraphifyError(message or "graphify affected failed")
+    return QueryResult(text=result.stdout.strip())
+
+
+def affected_main(
+    project_root: Path,
+    node: str,
+    *,
+    depth: int = 2,
+    relations: tuple[str, ...] = (),
+) -> int:
+    """CLI entry for ``dotfiles-setup graphify affected``.
+
+    Prints the reverse-traversal text to stdout (rc 0), or a clear error to
+    stderr (rc 1 graphify failure, rc 3 graph unavailable).
+    """
+    try:
+        result = affected(project_root, node, depth=depth, relations=relations)
+    except GraphifyIncompleteError as exc:
+        sys.stderr.write(f"graphify: incomplete: {exc}\n")
+        return 3
+    except GraphifyError as exc:
+        sys.stderr.write(f"graphify: {exc}\n")
+        return 1
+    sys.stdout.write(result.text + "\n")
+    return 0
+
+
+def build_prs_args(
+    pr_number: int | None = None,
+    *,
+    repo: str | None = None,
+    base: str | None = None,
+) -> list[str]:
+    """Construct the ``graphify prs`` argv.
+
+    Mirrors graphify's own arg parsing (``graphify/prs.py:cmd_prs``): a bare
+    PR number is a positional digit, ``--repo``/``--base`` are optional.
+    Deliberately never adds ``--triage``/``--conflicts`` — this repo's seam
+    only exposes the two documented entry points (bare dashboard, and the
+    single-PR deep dive), so graph impact is triggered only by passing
+    ``pr_number`` and the cheap path stays cheap by construction (C4).
+    """
+    args = ["graphify", "prs"]
+    if repo is not None:
+        args += ["--repo", repo]
+    if base is not None:
+        args += ["--base", base]
+    if pr_number is not None:
+        args.append(str(pr_number))
+    return args
+
+
+def prs(
+    project_root: Path,
+    pr_number: int | None = None,
+    *,
+    repo: str | None = None,
+    base: str | None = None,
+) -> QueryResult:
+    """PR dashboard, or its graph-impact deep dive when ``pr_number`` is given.
+
+    No graph-health gate here: the dashboard needs no graph at all, and the
+    impact path checks the graph file's own existence internally
+    (``graphify/prs.py:cmd_prs`` — ``needs_impact = graph_path.exists() and
+    (pr_number is not None or do_triage or do_conflicts)``) and degrades to
+    no impact rather than failing when the graph is missing. Impact
+    computation itself is expensive (concurrent ``gh pr diff`` calls) —
+    graphify's own comment says so — which is exactly why it fires only when
+    ``pr_number`` is passed, never on the bare dashboard.
+
+    Requires an authenticated ``gh`` (``prs.py:_gh()`` shells out to it) and
+    makes network calls (``gh pr list``/``gh pr diff``) — never call this
+    from a gate or a hook. A missing/unauthenticated ``gh`` surfaces inside
+    graphify's own ``cmd_prs`` as ``RuntimeError("gh CLI not found or not
+    authenticated. Run: gh auth login")``, which it already catches, prints
+    to stderr, and exits 1 on — never a traceback. That becomes a
+    :class:`GraphifyError` here, one clean layer up.
+    """
+    result = _run(build_prs_args(pr_number, repo=repo, base=base), cwd=project_root)
+    if result.returncode != 0:
+        message = (result.stderr or result.stdout).strip()
+        raise GraphifyError(message or "graphify prs failed")
+    return QueryResult(text=result.stdout.strip())
+
+
+def prs_main(
+    project_root: Path,
+    pr_number: int | None = None,
+    *,
+    repo: str | None = None,
+    base: str | None = None,
+) -> int:
+    """CLI entry for ``dotfiles-setup graphify prs``.
+
+    Prints the dashboard (or impact deep dive) to stdout (rc 0), or a clear
+    error to stderr (rc 1) — e.g. ``gh`` missing or unauthenticated.
+    """
+    try:
+        result = prs(project_root, pr_number, repo=repo, base=base)
+    except GraphifyError as exc:
+        sys.stderr.write(f"graphify: {exc}\n")
+        return 1
+    sys.stdout.write(result.text + "\n")
+    return 0
+
+
 def update(project_root: Path, target: str = ".") -> subprocess.CompletedProcess[str]:
     """Rebuild the project graph via ``graphify update``.
 
@@ -406,7 +569,7 @@ def rewrite_hook_nudge(text: str) -> str:
     flag or env var changes the wording), which is a bare PATH invocation
     that ``graphify-first.md`` forbids: two different graphify versions run
     on this machine, and only ``mise run graphify-query``/``graphify-update``
-    are guaranteed to resolve this repo's pinned 0.9.42. Plain text
+    are guaranteed to resolve this repo's pinned 0.9.53. Plain text
     substitution — the JSON structure and every other field pass through
     unchanged.
     """

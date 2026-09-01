@@ -176,8 +176,13 @@ def test_lock_refresh_is_reached_only_through_composite_expansion() -> None:
     contains no `git` command of its own. It reaches
     `peter-evans/create-pull-request` as
 
-        refresh.yml -> ./.github/actions/open-refresh-pr
+        refresh.yml -> $/.github/actions/open-refresh-pr
                     -> peter-evans/create-pull-request
+
+    (`$/` is GitHub's self-repository `uses:` syntax; zizmor 1.30.0's
+    `self-repository` audit rewrote this and every other in-repo reference in
+    the tree from `./` to `$/` on 2026-08-31 — see `action_id`/`_expand_local`
+    in `workflow_hooks.py`, which treat the two prefixes identically.)
 
     so a check that read only the job's own steps would answer "does not write
     to git" for the single most important case in the repo. The `uses:` list
@@ -198,7 +203,7 @@ def test_lock_refresh_is_reached_only_through_composite_expansion() -> None:
         if isinstance(step, dict)
     ]
     assert "peter-evans/create-pull-request" not in own_uses
-    assert "./.github/actions/open-refresh-pr" in own_uses
+    assert "$/.github/actions/open-refresh-pr" in own_uses
 
     job = _real_job(workflow, "lock-refresh")
     assert workflow_hooks.git_write_subcommands(job.run_text) == set()
@@ -822,6 +827,34 @@ def test_composite_expansion_recurses_past_one_hop(tmp_path: Path) -> None:
     )
     job = workflow_hooks.parse_jobs(
         tmp_path / workflow_hooks.WORKFLOW_DIR / "nested.yml", "nested.yml", tmp_path
+    )[0]
+    assert workflow_hooks.committing_actions(job) == {"peter-evans/create-pull-request"}
+
+
+def test_self_repository_syntax_expands_like_dot_slash(tmp_path: Path) -> None:
+    """`$/` self-repository `uses:` syntax must expand like `./`.
+
+    It references the same in-tree action, just resolved without depending
+    on runtime filesystem state. zizmor 1.30.0's `self-repository` audit
+    rewrote every in-repo reference in this tree from `./` to `$/`
+    (2026-08-31); before `_expand_local`/`action_id` learned the prefix, a
+    `$/`-referenced vendor write was silently invisible to this classifier.
+    """
+    _write_workflow(
+        tmp_path,
+        "dollar.yml",
+        "name: synthetic\non: workflow_dispatch\njobs:\n  j:\n"
+        "    runs-on: ubuntu-latest\n    steps:\n"
+        "      - uses: $/.github/actions/outer\n",
+    )
+    _composite(
+        tmp_path,
+        "outer",
+        "name: o\nruns:\n  using: composite\n  steps:\n"
+        "    - uses: peter-evans/create-pull-request@v8\n",
+    )
+    job = workflow_hooks.parse_jobs(
+        tmp_path / workflow_hooks.WORKFLOW_DIR / "dollar.yml", "dollar.yml", tmp_path
     )[0]
     assert workflow_hooks.committing_actions(job) == {"peter-evans/create-pull-request"}
 

@@ -159,6 +159,40 @@ scope_servers = []
 # listing, or a new one was enabled — both worth a look.
 max_chars = 34000
 
+[graphify]
+# The graphify skill surface's REVIEWED, deliberate shape (issue: see the
+# `graphify_skill_surface` hk step for the commit-time twin of this check).
+# `.claude/skills/graphify/SKILL.md` is the full installed Claude Code
+# bundle. `.agents/skills/graphify/SKILL.md` is a DELIBERATE hand-authored
+# redirect stub carrying the `stub_marker` below — NOT `graphify agents
+# install` output — so this check discriminates "the note was lost" from
+# "the file was silently overwritten by a real install".
+required_skill_files = [
+    ".claude/skills/graphify/SKILL.md",
+    ".agents/skills/graphify/SKILL.md",
+]
+stub_file = ".agents/skills/graphify/SKILL.md"
+stub_marker = "DELIBERATE STUB"
+
+# `.codex/skills/graphify` is now ADOPTED and tracked (2026-08-31, reversing
+# a ban this section carried until then). The ban guarded against a
+# codex-platform `graphify install` appending the line-budgeted root
+# AGENTS.md (do-not.md #8) — true of graphify's OWN installer, never true of
+# this repo's `dotfiles-setup graphify skill-install` / `mise run
+# graphify-skill-install -- codex`, which only ever copies
+# SKILL.md + references/ + a version stamp and never touches AGENTS.md
+# (`graphify_skill.py`, verified: it never calls graphify's
+# `_agents_install`). The path the ban forbade is now exactly the path this
+# repo's installer produces and commits, so `forbidden_paths` is gone. The
+# REAL hazard below is unaffected — it still fires unconditionally, vendor
+# install or not.
+
+# A codex-platform `graphify install` (the VENDOR installer, never ours)
+# appends this literal line to the root AGENTS.md (do-not.md #8) — AGENTS.md
+# IS tracked, so a landed append shows up in `git diff` too, but this check
+# still needs to say so at session start, not only at the next commit.
+forbidden_agents_md_marker = "use the installed graphify skill"
+
 [path_drift]
 # Tools whose staleness weakens a GATE rather than merely annoying someone
 # (#596). Every mise tool on PATH is compared — the list is not the scope, it

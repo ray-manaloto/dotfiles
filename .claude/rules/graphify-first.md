@@ -11,20 +11,22 @@ Before broad source search, run `mise run graphify-health`.
   `mise run graphify-query`, rebuild with `mise run graphify-update` — never
   `graphify query`/`graphify update` directly.
 
-## Two graphify versions, and this repo cannot tell which one built the graph
+## Nothing records WHICH graphify built the graph
 
-**Two different graphify installs exist on this machine, and nothing keeps
-them in sync.** `graphify` on bare `PATH` resolves the **user-global** pin
-(`~/.config/mise/config.toml`, currently 0.9.53, outside this repo's
-review); `mise run graphify-query`/`graphify-update` resolve **this repo's
-pinned 0.9.42** (`python/pyproject.toml`) instead — the version
-`graphify_health`'s `version drift` check compares against.
+**The two installs are aligned as of 2026-08-31 — both 0.9.53.** `graphify`
+on bare `PATH` resolves the **user-global** pin
+(`~/.config/mise/config.toml`, outside this repo's review);
+`mise run graphify-query`/`graphify-update` resolve **this repo's pinned
+version** (`python/pyproject.toml`), which is what `graphify_health`'s
+`version drift` check compares against. They agree today, but nothing keeps
+them in sync, so treat the alignment as a fact with a date on it, not an
+invariant.
 
-That check reads whatever graphify package is installed in the process
+The check reads whatever graphify package is installed in the process
 *checking* health right now. It says nothing about which binary actually
-*built* the graph bytes on disk — a graph rebuilt by the drifted PATH 0.9.53
-binary (a bare `graphify update .`) is indistinguishable from one built by
-this repo's 0.9.42, because nothing records who built it. **An earlier
+*built* the graph bytes on disk — a graph rebuilt by a drifted PATH binary
+(a bare `graphify update .`) is indistinguishable from one built by the
+repo's pin, because nothing records who built it. **An earlier
 version of this rule claimed a rebuild stamp closed that gap; it did not —
 the stamp could only ever record whatever `graphify-update` itself always
 resolves, so the check it fed could never fail, and the one drift it

@@ -148,16 +148,25 @@ def _expand_local(
     bad-bound probe (`.claude/rules/probes-need-a-control-arm.md`): the answer
     is "not at this depth", not "not present".
 
-    Only ``./``-prefixed uses are followed — a third-party action's source is
-    not in this tree, so its behaviour has to be recognised by name in the
-    predicate. ``seen`` makes a cyclic or diamond include terminate.
+    Only ``./``- and ``$/``-prefixed uses are followed — a third-party
+    action's source is not in this tree, so its behaviour has to be recognised
+    by name in the predicate. ``$/`` is GitHub's "self-repository" syntax
+    (introduced July 2026): it resolves to this same repository at the
+    running commit, exactly like ``./`` for the purpose of THIS module — the
+    action's body still lives at the same path in this checkout, it is just
+    referenced without depending on runtime filesystem state. zizmor
+    1.30.0's ``self-repository`` audit rewrote every in-repo reference in this
+    tree from ``./`` to ``$/`` (2026-08-31 deps-currency pass); both prefixes
+    are 2 characters, so the same ``uses[2:]`` strip resolves either one to
+    the same relative path. ``seen`` makes a cyclic or diamond include
+    terminate.
 
     An action whose ``runs.using`` is NOT ``composite`` (``node20``, ``docker``)
     has no readable steps. It is recorded in ``opaque`` rather than silently
-    contributing nothing, because a ``./`` reference also gets no
+    contributing nothing, because a ``./``/``$/`` reference also gets no
     :func:`action_id`, so it would otherwise be the module's only silent False.
     """
-    if not uses.startswith("./") or uses in seen:
+    if not uses.startswith(("./", "$/")) or uses in seen:
         return "", []
     seen.add(uses)
     action_dir = root / uses[2:]
@@ -726,13 +735,16 @@ def action_id(uses: str) -> str:
     """Normalise a ``uses:`` value to a case-folded ``owner/repo`` lookup key.
 
     ``github/codeql-action/upload-sarif@<sha> # v4`` -> ``github/codeql-action``.
-    A local ``./`` composite or a reusable ``./.github/workflows/*.yml`` returns
-    ``""``: composites are already INLINED by :func:`_expand_local`, and a
-    reusable workflow's jobs are checked in their own file (job ``env`` does not
-    cross ``workflow_call``). ``docker://`` likewise has no action to classify.
+    A local ``./``/``$/`` composite or a reusable ``./.github/workflows/*.yml``/
+    ``$/.github/workflows/*.yml`` returns ``""``: composites are already
+    INLINED by :func:`_expand_local`, and a reusable workflow's jobs are
+    checked in their own file (job ``env`` does not cross ``workflow_call``).
+    ``$/`` is GitHub's self-repository syntax — same in-tree target as ``./``,
+    just resolved without depending on runtime filesystem state (see
+    :func:`_expand_local`). ``docker://`` likewise has no action to classify.
     """
     reference = uses.split("@", 1)[0].strip().strip("'\"").lower()
-    if reference.startswith(("./", ".github/", "docker://")):
+    if reference.startswith(("./", "$/", ".github/", "docker://")):
         return ""
     return "/".join([part for part in reference.split("/") if part][:2])
 

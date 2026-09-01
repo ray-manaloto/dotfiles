@@ -6,7 +6,7 @@ requires-python = ">=3.14"
 dependencies = [
     # Graphify is a Python runtime dependency, not a second mise/pipx tool.
     # The CLI console script and SDK therefore resolve from the same uv lock.
-    "graphifyy[all]==0.9.42",
+    "graphifyy[all]==0.9.53",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.15.0",
     # deb822 control-file parser, maintained by Debian's own
@@ -48,6 +48,14 @@ dotfiles-setup = "dotfiles_setup.main:main"
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
+# The SHA-pinned kb-setup dependency above (line 40) itself pins
+# graphifyy[all]==0.9.42. Without this override, `uv lock` refuses to
+# resolve: "your project's requirements are unsatisfiable." The override
+# lets THIS project run graphifyy 0.9.53 while kb-setup keeps its own
+# (unmodified, out-of-bounds) declaration — no cross-repo change needed.
+[tool.uv]
+override-dependencies = ["graphifyy[all]==0.9.53"]
+
 [tool.ruff]
 line-length = 88
 target-version = "py314"
@@ -87,6 +95,13 @@ ignore = [
 # entry points — it is what every other caller is redirected to (#675). Without
 # this allowance the ban would make the module it exists to protect unwritable.
 "src/dotfiles_setup/codec.py" = ["TID251"]
+# SLF001 (private member access): `graphify_skill.py` deliberately reads
+# graphify's own `_PLATFORM_CONFIG` (private by the vendor's naming) as the
+# repo-owned installer's placement table — the whole point is that it CANNOT
+# drift from what the installed graphify version's own installer would do.
+# The install *functions* it wraps are never called; only this one data table
+# is read. See do-not.md #8 for why a repo-owned installer exists at all.
+"src/dotfiles_setup/graphify_skill.py" = ["SLF001"]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 # Every msgspec entry point that accepts a conversion hook (#675 AC4).

@@ -1,0 +1,20 @@
+# Path-specific error suppressions.
+#
+# actionlint 1.7.12 does not yet parse GitHub's `$/...` self-repository `uses:`
+# syntax (introduced July 2026, https://docs.github.com/en/actions/reference/
+# workflows-and-actions/workflow-syntax#referencing-an-action-in-the-same-repository-
+# as-the-workflow) and misreads it as a remote `{owner}/{repo}@{ref}` reference
+# missing its ref. Upstream tracks this as a real gap, not a local misuse:
+# rhysd/actionlint#711 (open); the maintainer is reported inactive in
+# rhysd/actionlint#719. zizmor 1.30.0's `self-repository` audit (its own
+# `--fix=safe`) rewrote every in-repo `./...` action/workflow reference to
+# `$/...` across this tree (2026-08-31 deps-currency pass) — GitHub itself
+# accepts and recommends the syntax, only actionlint's parser is behind.
+paths:
+  .github/workflows/**/*.{yml,yaml}:
+    ignore:
+      - 'specifying action "\$/.+" in invalid format because ref is missing'
+      - 'reusable workflow call "\$/.+" at "uses" is not following the format'
+  .github/actions/**/action.yml:
+    ignore:
+      - 'specifying action "\$/.+" in invalid format because ref is missing'

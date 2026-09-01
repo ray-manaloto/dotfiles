@@ -50,8 +50,15 @@ mise.*.local.toml
 .agent/command-audit.md
 .omx/
 
-# Codex CLI temporary state
+# Codex CLI runtime state (config.toml, hooks.json, agents/) — the skill
+# surface is deliberately tracked (2026-08-31): `.codex/skills/` is repo-owned
+# installer output (`mise run graphify-skill-install -- codex`), never
+# graphify's own vendor installer, so the do-not.md #8 AGENTS.md-append hazard
+# does not apply to it. See hk.pkl's `graphify_skill_surface` step and
+# doctor.toml's `[graphify]` section for what still guards the real hazard.
 .codex/*
+!.codex/skills/
+!.codex/skills/**
 
 # Logging
 .logging/
@@ -73,18 +80,23 @@ graphify-out/
 .parity/
 
 # --- Agent working state -----------------------------------------------------
-# `.agent/` replaces `.agent/` (2026-07-25): that tree was named for the
+# `.agent/` replaces `.omc/` (2026-07-25): that tree was named for the
 # oh-my-claudecode plugin, which is not enabled here. Ignored via THIS file, not
 # `.git/info/exclude` — the old per-clone exclusion did not survive a fresh
 # clone, which is exactly why the artifacts we DID want tracked had to be
 # force-added with `git add -f`. Durable artifacts now live in `docs/`.
 .agent/
-# `.agent/` stays ignored even though nothing here writes it any more: the
-# statusline HUD in the USER-level ~/.claude/settings.json
-# (`node $HOME/.claude/hud/omc-hud.mjs`) recreates `.agent/state/` in whichever
-# repo is cwd, within seconds of deletion. Retiring it is a user-config change
-# this repo does not make unasked.
-.agent/
+# `.omc/` DELIBERATELY has no rule here (retired 2026-08-31). The line that
+# used to ignore it was destroyed by 6e152ec's rename — it became a duplicate
+# `.agent/`, and the comment above it became the self-contradictory "`.agent/`
+# replaces `.agent/`" — so the directory dirtied `git status` for 37 days.
+# Its contents are recorded in the parent commit; the reason both this repo and
+# knowledge-base gave for the rule ("the HUD recreates it within seconds") no
+# longer holds: `~/.claude/hud/omc-hud.mjs` is gone, `statusLine` is
+# `statusline.sh` with no `.omc` reference, and oh-my-claudecode is absent from
+# enabledPlugins in all three settings files. Leaving it unignored is the
+# control arm (probes-need-a-control-arm.md): if `.omc/` comes back, the dirty
+# tree tells us what writes it. Re-add a rule only with that answer in hand.
 
 # planning-with-files (project-scoped plugin, #848). Its docs call these
 # "working memory, not a tracked deliverable", and it hardcodes the project

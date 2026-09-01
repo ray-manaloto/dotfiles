@@ -1,6 +1,6 @@
 name: Refresh lockfiles
 # Daily lock-refresh (#160 T8). Regenerates the three committed lockfiles
-# via the ./.github/actions/lock-refresh composite and opens an
+# via the $/.github/actions/lock-refresh composite and opens an
 # auto-merging PR when anything drifted:
 #
 #   - mise.lock (repo root)                  — host/CI tools
@@ -97,13 +97,13 @@ jobs:
         # Full install: the composite needs mise itself (root lock), uv +
         # python (lock-stage/lock-collect), and @devcontainers/cli
         # (devcontainer upgrade) — all pinned in mise.toml/shared.toml.
-        uses: ./.github/actions/setup-mise
+        uses: $/.github/actions/setup-mise
       - name: Regenerate lockfiles
-        uses: ./.github/actions/lock-refresh
+        uses: $/.github/actions/lock-refresh
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Open PR if any lock drifted
-        uses: ./.github/actions/open-refresh-pr
+        uses: $/.github/actions/open-refresh-pr
         with:
           token: ${{ steps.app-token.outputs.token }}
           commit-message: "chore: refresh lockfiles (mise.lock, mise-system.lock, mise-runtime.lock, devcontainer-lock.json)"
@@ -164,7 +164,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Install mise (all tools)
-        uses: ./.github/actions/setup-mise
+        uses: $/.github/actions/setup-mise
       - name: Render tool-currency report
         run: mise run tool-currency > /tmp/tool-currency.md
       - name: Upsert the standing report issue

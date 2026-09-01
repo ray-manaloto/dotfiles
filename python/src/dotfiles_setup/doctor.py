@@ -1088,6 +1088,74 @@ def check_listing_budget(setup: Setup) -> list[str]:
     return findings
 
 
+def check_graphify_skill_surface(setup: Setup) -> list[str]:
+    """The graphify skill surface stays in its reviewed, DELIBERATE shape.
+
+    The commit-time twin is hk's ``graphify_skill_surface`` step, which
+    asserts the identical facts. Both exist because hk only ever runs
+    at commit time, while this runs every SessionStart — a session that
+    never commits would otherwise carry a broken surface silently for its
+    whole duration.
+
+    Assertions, all read straight off the working tree rather than the
+    baseline's usual host-external state, because that is exactly what this
+    surface *is*:
+
+    * every ``required_skill_files`` entry must exist — losing one is a
+      regression for whichever platform reads it;
+    * the ``stub_file`` must still carry ``stub_marker`` — its absence means
+      either the deliberate-stub note was deleted by accident, or the file was
+      silently replaced by real ``graphify agents install`` output (update
+      ``doctor.toml`` in that case, rather than restoring the marker);
+    * ``forbidden_agents_md_marker`` must not appear in the root
+      ``AGENTS.md`` — that literal line is what a codex-platform
+      ``graphify install`` (the VENDOR installer) appends there, so its
+      presence means the banned vendor installer ran. ``AGENTS.md`` IS
+      tracked, so `git diff` would also show it, but only at the next
+      commit — this still needs to say so every session.
+
+    ``.codex/skills/graphify`` itself was a ``forbidden_paths`` entry until
+    2026-08-31: that guarded against the vendor installer's AGENTS.md append,
+    which this repo's OWN installer (``dotfiles-setup graphify
+    skill-install`` / ``mise run graphify-skill-install -- codex``)
+    structurally cannot cause — it only ever copies SKILL.md + references/ +
+    a version stamp (see ``graphify_skill.py``). That path is now adopted and
+    tracked, so the ban is gone; the real hazard is still caught by the
+    ``forbidden_agents_md_marker`` check above.
+    """
+    baseline = _str_keys(setup.baseline.get("graphify"))
+    findings: list[str] = [
+        f"{rel} is missing — the graphify skill surface for that platform is gone"
+        for rel in _str_list(baseline.get("required_skill_files"))
+        if not (setup.repo_root / rel).is_file()
+    ]
+    stub_file = baseline.get("stub_file")
+    stub_marker = baseline.get("stub_marker")
+    if isinstance(stub_file, str) and isinstance(stub_marker, str):
+        stub_path = setup.repo_root / stub_file
+        if stub_path.is_file() and stub_marker not in stub_path.read_text(
+            encoding="utf-8"
+        ):
+            findings.append(
+                f"{stub_file} no longer carries the {stub_marker!r} marker — "
+                f"either the deliberate-stub note was removed by accident "
+                f"(restore it), or the file is now real installer output "
+                f"(update {BASELINE_FILE} to match)"
+            )
+    agents_md_marker = baseline.get("forbidden_agents_md_marker")
+    if isinstance(agents_md_marker, str):
+        agents_md_path = setup.repo_root / "AGENTS.md"
+        if agents_md_path.is_file() and agents_md_marker in agents_md_path.read_text(
+            encoding="utf-8"
+        ):
+            findings.append(
+                f"AGENTS.md contains {agents_md_marker!r} — do-not.md #8 "
+                f"forbids running a codex-platform `graphify install` here, "
+                f"and that append is exactly what it leaves behind. Revert it."
+            )
+    return findings
+
+
 def check_path_drift(setup: Setup) -> list[str]:
     """Does THIS shell resolve the tools mise currently pins? (#596).
 
@@ -1137,6 +1205,7 @@ CHECKS: tuple[tuple[str, Callable[[Setup], list[str]]], ...] = (
     ("pin-currency-wired", check_pin_currency_wired),
     ("listing-budget", check_listing_budget),
     ("path-drift", check_path_drift),
+    ("graphify-skill-surface", check_graphify_skill_surface),
 )
 
 #: Only run with ``--live``: each entry spawns subprocesses.

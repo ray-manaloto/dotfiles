@@ -31,12 +31,18 @@ from dotfiles_setup.graphify import (
     GraphifyIncompleteError,
     GraphifyStatus,
     HealthResult,
+    affected,
+    affected_main,
+    build_affected_args,
+    build_prs_args,
     build_query_args,
     graphify_health,
     graphify_health_main,
     graphify_main,
     graphify_update_main,
     hook_guard_main,
+    prs,
+    prs_main,
     query,
     rewrite_hook_nudge,
     update,
@@ -54,7 +60,7 @@ def test_graphify_runtime_and_skill_stamps_match_project_pin() -> None:
         if value.startswith("graphifyy")
     )
 
-    assert dependency == "graphifyy[all]==0.9.42"
+    assert dependency == "graphifyy[all]==0.9.53"
     version = dependency.removeprefix("graphifyy[all]==")
     stamp = repo / ".agents/skills/graphify/.graphify_version"
     assert stamp.read_text(encoding="utf-8").strip() == version
@@ -75,7 +81,7 @@ def _force_fresh_health(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "dotfiles_setup.graphify.graphify_health",
         lambda _root: HealthResult(
-            GraphifyStatus.FRESH, "0.9.42", graph_sha256="stable"
+            GraphifyStatus.FRESH, "0.9.53", graph_sha256="stable"
         ),
     )
 
@@ -224,7 +230,7 @@ def test_query_refuses_stale_health_before_running_graphify(
     monkeypatch.setattr(
         "dotfiles_setup.graphify.graphify_health",
         lambda _root: HealthResult(
-            GraphifyStatus.STALE, "0.9.42", "build receipt missing"
+            GraphifyStatus.STALE, "0.9.53", "build receipt missing"
         ),
     )
 
@@ -239,8 +245,8 @@ def test_query_rejects_graph_changed_during_subprocess(
     """Post-query health must bind the answer to the preflight graph digest."""
     health_results = iter(
         (
-            HealthResult(GraphifyStatus.FRESH, "0.9.42", graph_sha256="before"),
-            HealthResult(GraphifyStatus.STALE, "0.9.42", "receipt mismatch"),
+            HealthResult(GraphifyStatus.FRESH, "0.9.53", graph_sha256="before"),
+            HealthResult(GraphifyStatus.STALE, "0.9.53", "receipt mismatch"),
         )
     )
     monkeypatch.setattr(
@@ -317,12 +323,12 @@ def test_graphify_health_reports_version_drift(
     graph_dir.joinpath("graph.json").write_bytes(
         b'{"nodes": [], "links": [], "hyperedges": []}'
     )
-    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.53")
+    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.42")
 
     result = graphify_health(tmp_path)
 
     assert result.status is GraphifyStatus.VERSION_DRIFT
-    assert result.runtime_version == "0.9.53"
+    assert result.runtime_version == "0.9.42"
     assert not result.ok
 
 
@@ -340,7 +346,7 @@ def test_graphify_health_accepts_graph_without_build_receipt(
     (graph_dir / "graph.json").write_text(
         '{"nodes": [], "edges": [], "hyperedges": []}'
     )
-    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.42")
+    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.53")
     result = graphify_health(tmp_path)
     assert result.status is GraphifyStatus.FRESH
     assert result.ok
@@ -357,7 +363,7 @@ def test_graphify_health_accepts_exact_receipted_graph(tmp_path: Path) -> None:
             GraphifyBuildReceipt(
                 schema_version=1,
                 status="complete",
-                runtime_version="0.9.42",
+                runtime_version="0.9.53",
                 graph_sha256=hashlib.sha256(graph_bytes).hexdigest(),
                 graph_bytes=len(graph_bytes),
                 node_count=0,
@@ -386,7 +392,7 @@ def test_graphify_health_rejects_forged_producer_receipt_fields(
     receipt = GraphifyBuildReceipt(
         schema_version=1,
         status="complete",
-        runtime_version="0.9.42",
+        runtime_version="0.9.53",
         graph_sha256=hashlib.sha256(graph_bytes).hexdigest(),
         graph_bytes=len(graph_bytes),
         node_count=0,
@@ -414,7 +420,7 @@ def test_graphify_health_binds_one_graph_byte_snapshot(
     receipt = GraphifyBuildReceipt(
         schema_version=1,
         status="complete",
-        runtime_version="0.9.42",
+        runtime_version="0.9.53",
         graph_sha256=hashlib.sha256(graph_a).hexdigest(),
         graph_bytes=len(graph_a),
         node_count=1,
@@ -460,13 +466,13 @@ def test_graphify_health_rejects_invalid_graph_schema(
         json.dumps(
             {
                 "graph_sha256": hashlib.sha256(graph_bytes).hexdigest(),
-                "runtime_version": "0.9.42",
+                "runtime_version": "0.9.53",
                 "status": "complete",
                 "warnings": [],
             }
         )
     )
-    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.42")
+    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.53")
 
     result = graphify_health(tmp_path)
 
@@ -490,7 +496,7 @@ def test_graphify_health_accepts_links_keyed_graph(tmp_path: Path) -> None:
             GraphifyBuildReceipt(
                 schema_version=1,
                 status="complete",
-                runtime_version="0.9.42",
+                runtime_version="0.9.53",
                 graph_sha256=hashlib.sha256(graph_bytes).hexdigest(),
                 graph_bytes=len(graph_bytes),
                 node_count=0,
@@ -770,3 +776,294 @@ def test_hook_guard_main_fails_open_on_missing_binary(
     monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
 
     assert hook_guard_main(tmp_path, "search") == 0
+
+
+def test_build_affected_args_defaults() -> None:
+    """Defaults: node, no --relation, explicit --depth and --graph."""
+    args = build_affected_args(
+        "some_function", graph_path=Path("/repo/graphify-out/graph.json")
+    )
+    assert args == [
+        "graphify",
+        "affected",
+        "some_function",
+        "--depth",
+        "2",
+        "--graph",
+        "/repo/graphify-out/graph.json",
+    ]
+
+
+def test_build_affected_args_preserves_repeatable_relations() -> None:
+    args = build_affected_args(
+        "some_function",
+        graph_path=Path("/repo/graphify-out/graph.json"),
+        depth=3,
+        relations=("calls", "imports"),
+    )
+    assert args == [
+        "graphify",
+        "affected",
+        "some_function",
+        "--relation",
+        "calls",
+        "--relation",
+        "imports",
+        "--depth",
+        "3",
+        "--graph",
+        "/repo/graphify-out/graph.json",
+    ]
+
+
+def test_affected_returns_text_on_clean_success(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _force_fresh_health(monkeypatch)
+    calls: list[tuple[list[str], Path]] = []
+
+    def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+        calls.append((args, cwd))
+        return subprocess.CompletedProcess(
+            args,
+            0,
+            stdout="Affected nodes for some_function()\n- caller()\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
+
+    result = affected(tmp_path, "some_function")
+
+    assert result.text == "Affected nodes for some_function()\n- caller()"
+    sent_args, sent_cwd = calls[0]
+    assert sent_args[:3] == ["graphify", "affected", "some_function"]
+    assert sent_cwd == tmp_path
+
+
+def test_affected_returns_no_match_message_as_success_not_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """An unmatched node is graphify's own clear rc-0 message, not an error.
+
+    Control arm for the "graph unavailable/no match" requirement: a bogus
+    node must never raise a traceback or silently succeed with empty text —
+    graphify's own `affected` handler already returns this exact message at
+    rc 0 (verified live: `graphify affected "totally_bogus_symbol_xyz123"`).
+    """
+    _force_fresh_health(monkeypatch)
+
+    def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+        _ = cwd, args
+        return subprocess.CompletedProcess(
+            args, 0, stdout="No unique node match for bogus_symbol\n", stderr=""
+        )
+
+    monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
+
+    result = affected(tmp_path, "bogus_symbol")
+
+    assert result.text == "No unique node match for bogus_symbol"
+
+
+def test_affected_refuses_unhealthy_graph_before_running_graphify(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Reuses graphify_health — never reimplements the missing/stale check."""
+    called = False
+
+    def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+        nonlocal called
+        called = True
+        _ = args, cwd
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
+    monkeypatch.setattr(
+        "dotfiles_setup.graphify.graphify_health",
+        lambda _root: HealthResult(GraphifyStatus.MISSING, "0.9.53", "no graph"),
+    )
+
+    with pytest.raises(GraphifyIncompleteError) as exc:
+        affected(tmp_path, "anything")
+    assert "graph health is missing" in str(exc.value)
+    assert called is False
+
+
+def test_affected_raises_on_nonzero_returncode(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _force_fresh_health(monkeypatch)
+
+    def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+        _ = cwd, args
+        return subprocess.CompletedProcess(
+            args, 1, stdout="", stderr="error: graph file must be a .json file\n"
+        )
+
+    monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
+
+    with pytest.raises(GraphifyError) as exc:
+        affected(tmp_path, "anything")
+    assert "must be a .json file" in str(exc.value)
+
+
+def test_affected_main_prints_text_and_returns_0(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _force_fresh_health(monkeypatch)
+
+    def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+        _ = cwd, args
+        return subprocess.CompletedProcess(
+            args, 0, stdout="Affected nodes\n", stderr=""
+        )
+
+    monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
+
+    rc = affected_main(tmp_path, "anything")
+
+    assert rc == 0
+    assert "Affected nodes" in capsys.readouterr().out
+
+
+def test_affected_main_reports_incomplete_and_returns_3(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(
+        "dotfiles_setup.graphify.graphify_health",
+        lambda _root: HealthResult(GraphifyStatus.MISSING, "0.9.53", "no graph"),
+    )
+
+    rc = affected_main(tmp_path, "anything")
+
+    assert rc == 3
+    assert "graph health is missing" in capsys.readouterr().err
+
+
+def test_affected_main_reports_error_and_returns_1(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _force_fresh_health(monkeypatch)
+
+    def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+        _ = cwd, args
+        return subprocess.CompletedProcess(args, 1, stdout="", stderr="boom\n")
+
+    monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
+
+    rc = affected_main(tmp_path, "anything")
+
+    assert rc == 1
+    assert "boom" in capsys.readouterr().err
+
+
+def test_build_prs_args_bare_dashboard() -> None:
+    """No PR number: cheap dashboard, never adds --triage/--conflicts."""
+    assert build_prs_args() == ["graphify", "prs"]
+
+
+def test_build_prs_args_with_pr_number_triggers_impact() -> None:
+    assert build_prs_args(822) == ["graphify", "prs", "822"]
+
+
+def test_build_prs_args_repo_and_base() -> None:
+    assert build_prs_args(822, repo="ray-manaloto/dotfiles", base="main") == [
+        "graphify",
+        "prs",
+        "--repo",
+        "ray-manaloto/dotfiles",
+        "--base",
+        "main",
+        "822",
+    ]
+
+
+def test_prs_returns_dashboard_text_with_no_health_gate(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """prs() never calls graphify_health — the dashboard needs no graph (C5)."""
+    health_called = False
+
+    def fake_health(_root: Path) -> HealthResult:
+        nonlocal health_called
+        health_called = True
+        return HealthResult(GraphifyStatus.MISSING, "0.9.53", "no graph")
+
+    monkeypatch.setattr("dotfiles_setup.graphify.graphify_health", fake_health)
+
+    def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+        _ = cwd, args
+        return subprocess.CompletedProcess(
+            args, 0, stdout="graphify prs · 3 PRs\n", stderr=""
+        )
+
+    monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
+
+    result = prs(tmp_path)
+
+    assert "3 PRs" in result.text
+    assert health_called is False
+
+
+def test_prs_raises_graphify_error_on_gh_auth_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Control arm for C3: an unauthenticated gh surfaces as a clear error.
+
+    graphify's own `cmd_prs` catches `gh`'s RuntimeError, prints it, and
+    exits 1 (never a traceback) — mirrored here via a fake nonzero rc.
+    """
+
+    def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+        _ = cwd, args
+        return subprocess.CompletedProcess(
+            args,
+            1,
+            stdout="",
+            stderr="  Error: gh CLI not found or not authenticated. Run: gh login\n",
+        )
+
+    monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
+
+    with pytest.raises(GraphifyError) as exc:
+        prs(tmp_path)
+    assert "gh login" in str(exc.value)
+
+
+def test_prs_main_prints_dashboard_and_returns_0(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+        _ = cwd, args
+        return subprocess.CompletedProcess(
+            args, 0, stdout="graphify prs · 3 PRs\n", stderr=""
+        )
+
+    monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
+
+    rc = prs_main(tmp_path)
+
+    assert rc == 0
+    assert "3 PRs" in capsys.readouterr().out
+
+
+def test_prs_main_reports_error_and_returns_1(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+        _ = cwd, args
+        return subprocess.CompletedProcess(
+            args, 1, stdout="", stderr="gh CLI not found or not authenticated\n"
+        )
+
+    monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
+
+    rc = prs_main(tmp_path, 822)
+
+    assert rc == 1
+    assert "not authenticated" in capsys.readouterr().err

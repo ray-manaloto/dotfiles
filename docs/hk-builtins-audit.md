@@ -6,10 +6,10 @@
      Authored content lives in python/src/dotfiles_setup/hk_builtins_audit.py
      (NOT_ADOPTED); everything else is read from `hk builtins` + the configs. -->
 
-- **hk version:** hk 1.56.1
-- **Builtins available:** 148
+- **hk version:** hk 1.57.0
+- **Builtins available:** 152
 - **Wired as builtins:** 28
-- **Steps defined in total:** 66 (38 custom, with their own check/fix commands)
+- **Steps defined in total:** 67 (39 custom, with their own check/fix commands)
 
 A *wired builtin* is referenced as `Builtins.<name>`. A *custom step* is a
 `["name"] { … }` block carrying its own commands — it may share a
@@ -50,7 +50,7 @@ as builtins in use.
 | `yamllint` | hk.pkl |
 | `zizmor` | hk.pkl |
 
-## Custom steps (38)
+## Custom steps (39)
 
 Not builtins. Each carries its own `check`/`fix`, so `hk builtins` has no
 opinion about them, and neither does this table beyond recording them.
@@ -74,6 +74,7 @@ opinion about them, and neither does this table beyond recording them.
 | `editorconfig-checker` | hk.pkl |
 | `fix` | hk.pkl |
 | `ghcr_publish_prereqs` | hk.pkl |
+| `graphify_skill_surface` | hk.pkl |
 | `hk_audit` | hk.pkl |
 | `hk_version_parity` | hk.pkl |
 | `md_size_budget` | hk.pkl |
@@ -129,7 +130,7 @@ names one now wired, fails the gate.
 | `vale` | No formal style guide; network dependency in the hook |
 | `xmllint` | No XML files in project |
 
-## Not yet considered (96)
+## Not yet considered (100)
 
 Available in this hk version, neither wired nor explicitly declined.
 Listed so the unexamined remainder is visible rather than implied — the
@@ -140,16 +141,17 @@ alejandra, aqua_update_checksum, asciidoctor, astro, brakeman, buf_format
 buf_lint, buildifier_format, buildifier_lint, bundle_audit, cargo_check, cargo_clippy
 cargo_deny, cargo_fmt, check_byte_order_marker, clang_format, cmake_format, cocogitto_commit_msg
 contextlint, cpp_lint, dclint, deadnix, deno, deno_check
-editorconfig-checker, erb, err_check, fasterer, fix_byte_order_marker, go_fumpt
-go_imports, go_lines, go_sec, go_vet, go_vuln_check, gomod_tidy
-google_java_format, harper, harper_commit_message, hclfmt, hk_test, jq
-just_format, kingfisher, knip, knip_strict, ktlint, luacheck
-lychee, mix_compile, mix_fmt, mix_test, nil, nix_fmt
-nixf_diagnose, nixpkgs_format, ox_lint, oxfmt, php_cs, pinact_update
-pinact_update_v3, pinact_v3, pkl_format, prettier, reek, revive
-rubocop_server, ruff, ruff_format, rumdl_format, ryl_markdown, selene
-shellharden, sherif, shfmt, sorbet, sort_package_json, sql_fluff
-standard_js, standard_rb, staticcheck, stylua, swiftlint, taplo_format
-textlint, tofu, tsc, tsserver, ty, vacuum
-vp_check, vp_fmt, vp_lint, xo, yamlfmt, yq
+editorconfig-checker, erb, err_check, fasterer, fix_byte_order_marker, gitleaks_staged
+go_fix, go_fumpt, go_imports, go_lines, go_sec, go_vet
+go_vuln_check, golangci_lint_fmt, gomod_tidy, google_java_format, harper, harper_commit_message
+hclfmt, hk_test, jq, just_format, kingfisher, knip
+knip_strict, ktlint, ls_lint, luacheck, lychee, mix_compile
+mix_fmt, mix_test, nil, nix_fmt, nixf_diagnose, nixpkgs_format
+ox_lint, oxfmt, php_cs, pinact_update, pinact_update_v3, pinact_v3
+pkl_format, prettier, reek, revive, rubocop_server, ruff
+ruff_format, rumdl_format, ryl_markdown, selene, shellharden, sherif
+shfmt, sorbet, sort_package_json, sql_fluff, standard_js, standard_rb
+staticcheck, stylua, swiftlint, taplo_format, textlint, tofu
+tsc, tsserver, ty, vacuum, vp_check, vp_fmt
+vp_lint, xo, yamlfmt, yq
 ```

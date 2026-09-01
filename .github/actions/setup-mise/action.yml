@@ -4,7 +4,7 @@ description: >-
   step (not actions/checkout): a *local* composite action is resolved from
   $GITHUB_WORKSPACE, which is empty until checkout runs, so the bootstrap
   checkout must stay in the calling job. Callers therefore run
-  `actions/checkout` first, then `uses: ./.github/actions/setup-mise`.
+  `actions/checkout` first, then `uses: $/.github/actions/setup-mise`.
 
 inputs:
   install_args:

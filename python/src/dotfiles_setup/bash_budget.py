@@ -106,7 +106,7 @@ ALLOWLIST: dict[str, BashAllowance] = {
         31,
         "fail-open shim — execs `dotfiles-setup graphify hook-guard "
         "search|read` via `uv run --project $CLAUDE_PROJECT_DIR/python` (the "
-        "repo-pinned 0.9.42, matching graphify-query/health/update — not the "
+        "repo-pinned 0.9.53, matching graphify-query/health/update — not the "
         "user-global PATH shim). 30 -> 31: the project path must be anchored "
         "(a relative `--project python` fails rc=2 when this hook runs off "
         "the repo root, e.g. a subagent). The nudge-text rewrite itself "

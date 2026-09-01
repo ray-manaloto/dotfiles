@@ -1,14 +1,14 @@
-amends "package://github.com/jdx/hk/releases/download/v1.56.1/hk@1.56.1#/Config.pkl"
+amends "package://github.com/jdx/hk/releases/download/v1.57.0/hk@1.57.0#/Config.pkl"
 
 // #154: builtin linters MUST be assigned from Builtins (`= Builtins.name`), not
 // declared as a bare `["name"] {}` block — a bare block is a fresh empty Step
 // (check=null) that hk silently skips (never ran locally or in CI). Extend a
 // builtin with overrides via `["name"] = (Builtins.name) { glob = ... }`.
 // See feedback_hk_builtins_need_assignment.
-import "package://github.com/jdx/hk/releases/download/v1.56.1/hk@1.56.1#/Builtins.pkl"
+import "package://github.com/jdx/hk/releases/download/v1.57.0/hk@1.57.0#/Builtins.pkl"
 // Named Config import for the Mapping<String, Config.Step> type annotation on
 // allSteps (the `amends` clause does not bind a module name).
-import "package://github.com/jdx/hk/releases/download/v1.56.1/hk@1.56.1#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v1.57.0/hk@1.57.0#/Config.pkl"
 
 import "hk-common.pkl" as common
 
@@ -633,6 +633,31 @@ local allSteps = new Mapping<String, Config.Step> {
   ["session_review_skill_parity"] {
     check =
       "test -f .agents/skills/session-review/SKILL.md && cmp -s .claude/skills/session-review/SKILL.md .agents/skills/session-review/SKILL.md"
+  }
+
+  // --- Graphify skill surface must stay in its reviewed, DELIBERATE shape.
+  //     `.claude/skills/graphify/SKILL.md` is the full installed Claude Code
+  //     bundle. `.agents/skills/graphify/SKILL.md` is a DELIBERATE
+  //     hand-authored redirect stub, not `graphify agents install` output —
+  //     the marker line inside it says so, so a "fix" cannot silently
+  //     overwrite it unnoticed. `.codex/skills/graphify/` is now ADOPTED and
+  //     tracked (2026-08-31, reversing the ban this step carried until then):
+  //     the path ban guarded against a codex-platform `graphify install`
+  //     appending the line-budgeted root AGENTS.md (do-not.md #8) — true of
+  //     graphify's OWN installer, never true of this repo's
+  //     `dotfiles-setup graphify skill-install` / `mise run
+  //     graphify-skill-install -- codex`, which only ever copies
+  //     SKILL.md + references/ + a version stamp (`graphify_skill.py`,
+  //     verified: it never calls graphify's `_agents_install`). The path the
+  //     ban forbade is now exactly the path this repo's installer produces
+  //     and commits, so the ban is gone. The REAL hazard — the vendor
+  //     installer's AGENTS.md append — still has its own clause below and
+  //     still fires unconditionally, vendor install or not. See
+  //     doctor.toml's `[graphify]` section for the same assertions, checked
+  //     every session — the two gates must agree. ---
+  ["graphify_skill_surface"] {
+    check =
+      "test -f .claude/skills/graphify/SKILL.md && grep -q 'DELIBERATE STUB' .agents/skills/graphify/SKILL.md && ! grep -q 'use the installed graphify skill' AGENTS.md"
   }
 
   // --- CLAUDE.md must be a thin `@AGENTS.md` import stub.

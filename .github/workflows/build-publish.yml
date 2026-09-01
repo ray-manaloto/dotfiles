@@ -108,7 +108,7 @@ jobs:
           ref: ${{ inputs.ref }}
           persist-credentials: false
       - name: Install mise (python + uv)
-        uses: ./.github/actions/setup-mise
+        uses: $/.github/actions/setup-mise
         with:
           install_args: "python uv"
       - name: Resolve the publish matrix
@@ -171,7 +171,7 @@ jobs:
           ref: ${{ inputs.ref }}
           persist-credentials: false
       - name: Install mise (python + uv)
-        uses: ./.github/actions/setup-mise
+        uses: $/.github/actions/setup-mise
         with:
           install_args: "python uv"
       - name: Compute base cache hash
@@ -307,7 +307,7 @@ jobs:
           ref: ${{ inputs.ref }}
           persist-credentials: false
       - name: Install mise (python + uv)
-        uses: ./.github/actions/setup-mise
+        uses: $/.github/actions/setup-mise
         with:
           install_args: "python uv"
       - name: Resolve p2996 ref override
@@ -457,7 +457,7 @@ jobs:
           ref: ${{ inputs.ref }}
           persist-credentials: false
       - name: Install mise (python + uv)
-        uses: ./.github/actions/setup-mise
+        uses: $/.github/actions/setup-mise
         with:
           install_args: "python uv"
       - name: Resolve p2996 ref override
@@ -483,7 +483,7 @@ jobs:
         # runs for real, same as the nightly path.
         id: probe
         if: matrix.target.cache_eligible
-        uses: ./.github/actions/dev-cache-probe
+        uses: $/.github/actions/dev-cache-probe
         with:
           image: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}
       - name: Set up Docker Buildx
@@ -599,7 +599,7 @@ jobs:
           ref: ${{ inputs.ref }}
           persist-credentials: false
       - name: Install mise (python + uv)
-        uses: ./.github/actions/setup-mise
+        uses: $/.github/actions/setup-mise
         with:
           install_args: "python uv"
       - name: Resolve p2996 ref override
@@ -848,7 +848,7 @@ jobs:
           docker-images: false
           swap-storage: true
       - name: Install mise (python + uv)
-        uses: ./.github/actions/setup-mise
+        uses: $/.github/actions/setup-mise
         with:
           install_args: "python uv"
       - name: Log in to Container Registry
@@ -876,7 +876,7 @@ jobs:
         # below runs.
         id: probe
         if: inputs.tag_strategy == 'pr' && matrix.target.cache_eligible
-        uses: ./.github/actions/dev-cache-probe
+        uses: $/.github/actions/dev-cache-probe
         with:
           image: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}
       - name: Derive image tag
@@ -1018,7 +1018,7 @@ jobs:
           ref: ${{ inputs.ref }}
           persist-credentials: false
       - name: Install mise (python + uv)
-        uses: ./.github/actions/setup-mise
+        uses: $/.github/actions/setup-mise
         with:
           install_args: "python uv"
       - name: Set up Docker Buildx
@@ -1122,7 +1122,7 @@ jobs:
           ref: ${{ inputs.ref }}
           persist-credentials: false
       - name: Install mise (python + uv)
-        uses: ./.github/actions/setup-mise
+        uses: $/.github/actions/setup-mise
         with:
           install_args: "python uv"
       - name: Resolve the publish-only matrix (#840)

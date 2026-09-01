@@ -18,7 +18,7 @@ description: >-
 # at every call site a hit means "this exact content was already built AND
 # validated", never "we just built it".
 #
-# REQUIRES the caller to have run `actions/checkout` and `./.github/actions/
+# REQUIRES the caller to have run `actions/checkout` and `$/.github/actions/
 # setup-mise` (python + uv) first, and to have exported `PLATFORM` for the leg —
 # `dev-hash` resolves it exactly as bake does.
 
