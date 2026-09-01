@@ -120,8 +120,20 @@ def build_payload(file_path: str, repo_root: Path) -> dict[str, object] | None:
     }
 
 
-def _marker(repo_root: Path, session_id: str) -> Path:
-    return repo_root / STATE_DIR / f"{session_id}.seen"
+def _key(session_id: str, agent_id: str) -> str:
+    """The dedup key: a session, narrowed by agent when there is one.
+
+    Keyed on session alone, the first agent to touch a mise config consumed the
+    reminder for every sibling subagent in the same session — confirmed by
+    replay in a cold review (agent A got 1,240 bytes, agent B zero). Tool hooks
+    fire inside subagents and carry a distinct `agent_id`, and a subagent does
+    not see another agent's tool results, so the reminder has to be per agent.
+    """
+    return f"{session_id}--{agent_id}" if agent_id else session_id
+
+
+def _marker(repo_root: Path, key: str) -> Path:
+    return repo_root / STATE_DIR / f"{key}.seen"
 
 
 def _prune(state_dir: Path) -> None:
@@ -138,7 +150,7 @@ def _prune(state_dir: Path) -> None:
             continue
 
 
-def already_seen(repo_root: Path, session_id: str) -> bool:
+def already_seen(repo_root: Path, session_id: str, agent_id: str = "") -> bool:
     """Whether this session was already told, recording it when it was not.
 
     The reminder is worth reading once per session; the tenth identical copy is
@@ -157,7 +169,7 @@ def already_seen(repo_root: Path, session_id: str) -> bool:
     """
     if not session_id:
         return False
-    marker = _marker(repo_root, session_id)
+    marker = _marker(repo_root, _key(session_id, agent_id))
     if marker.exists():
         return True
     try:
@@ -181,12 +193,13 @@ def mise_config_context_main(repo_root: Path) -> int:
         event = json.loads(raw) if raw.strip() else {}
         file_path = str((event.get("tool_input") or {}).get("file_path", ""))
         session_id = str(event.get("session_id", ""))
+        agent_id = str(event.get("agent_id", ""))
     except ValueError, OSError:
         return 0
     payload = build_payload(file_path, repo_root)
     if payload is None:
         return 0
-    if already_seen(repo_root, session_id):
+    if already_seen(repo_root, session_id, agent_id):
         return 0
     sys.stdout.write(json.dumps(payload))
     return 0

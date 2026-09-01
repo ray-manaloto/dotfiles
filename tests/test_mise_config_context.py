@@ -274,3 +274,59 @@ def test_stale_markers_are_pruned(tmp_path: Path) -> None:
 
     assert not stale.exists(), "a marker past the age floor should be swept"
     assert fresh.exists(), "a fresh marker must survive"
+
+
+def test_each_agent_in_one_session_is_told_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Subagents share a session_id but do not share tool results.
+
+    Keyed on session alone, the first agent consumed the reminder for every
+    sibling — confirmed by replay in a cold review.
+    """
+    (tmp_path / "mise.toml").write_text("")
+    for agent in ("A", "B"):
+        event = {
+            "session_id": "S1",
+            "agent_id": agent,
+            "tool_input": {"file_path": str(tmp_path / "mise.toml")},
+        }
+        monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(event)))
+        assert mise_config_context_main(tmp_path) == 0
+        assert capsys.readouterr().out, f"agent {agent} should be told once"
+    # ...and still only once each.
+    event = {
+        "session_id": "S1",
+        "agent_id": "A",
+        "tool_input": {"file_path": str(tmp_path / "mise.toml")},
+    }
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(event)))
+    assert mise_config_context_main(tmp_path) == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_settings_wires_this_hook_without_depending_on_a_mise_task() -> None:
+    """The live integration, asserted — deleting it left every test green.
+
+    It must NOT invoke `mise run`: the task is defined in mise.toml, one of the
+    files this hook guards, so a wholesale Write replacing that file would
+    delete the task before PostToolUse could run it.
+    """
+    repo = Path(__file__).resolve().parent.parent
+    settings = json.loads((repo / ".claude" / "settings.json").read_text())
+    entries = settings.get("hooks", {}).get("PostToolUse", [])
+    assert entries, "PostToolUse hook is not wired at all"
+    commands = [
+        h.get("command", "")
+        for entry in entries
+        for h in entry.get("hooks", [])
+        if "mise-config-context" in h.get("command", "")
+    ]
+    assert commands, "no PostToolUse hook invokes mise-config-context"
+    for command in commands:
+        assert "mise run" not in command, "hook must not depend on a mise.toml task"
+        assert "dotfiles-setup mise-config-context" in command
+    matchers = [e.get("matcher", "") for e in entries]
+    assert any("Write" in m and "Edit" in m for m in matchers)
+    timeouts = [h.get("timeout") for e in entries for h in e.get("hooks", [])]
+    assert all(t for t in timeouts), "an untimed hook can hang every write"

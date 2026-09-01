@@ -38,7 +38,7 @@ drift would show up as a guard that denies a script the commit gate accepts.
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from dotfiles_setup import bash_budget, branch_guard
 
@@ -49,12 +49,12 @@ TOOLS = frozenset({"Edit", "Write", "NotebookEdit"})
 #: Extensions that are a shell script by name.
 SHELL_SUFFIXES = frozenset({".sh", ".bash", ".zsh", ".ksh"})
 
-#: Interpreters that make a shebang line a shell script. ``env`` is included
-#: because ``#!/usr/bin/env bash`` is the form this repo's own scripts use.
-SHELL_INTERPRETERS = ("sh", "bash", "zsh", "ksh", "dash")
+#: Interpreter BASENAMES that make a shebang a shell script. Matched as a
+#: whole token — `notbash` is not `bash`.
+SHELL_INTERPRETERS = frozenset({"sh", "bash", "zsh", "ksh", "dash", "ash"})
 
 #: Vendored trees the zero-bash-logic policy does not govern.
-EXEMPT_PREFIXES = ("plugins/",)
+EXEMPT_PREFIXES = ("plugins/",)  # compared case-folded
 
 _REASON = (
     "Refusing to create a new shell script: {rel}\n"
@@ -86,6 +86,16 @@ def repo_root() -> Path:
     return Path(__file__).resolve().parent.parent.parent.parent
 
 
+def _allowlisted(rel: str) -> bool:
+    """Allowlist membership, case-folded.
+
+    This host's filesystem is case-insensitive, so `SCRIPTS/PRETOOLUSE-GUARD.SH`
+    is the tracked allowlisted wrapper; a case-sensitive compare denied it.
+    """
+    folded = rel.casefold()
+    return any(listed.casefold() == folded for listed in bash_budget.ALLOWLIST)
+
+
 def _relative(target: Path, root: Path) -> str | None:
     """``target`` as a repo-relative posix path, or None when outside."""
     try:
@@ -95,17 +105,38 @@ def _relative(target: Path, root: Path) -> str | None:
 
 
 def has_shell_shebang(content: str) -> bool:
-    """Whether ``content`` opens with a shell shebang.
+    r"""Whether ``content``'s FIRST line is a shell shebang.
 
-    Only the first line is considered: a ``#!`` further down is a comment, and
-    treating it as a shebang would deny python files that quote one.
+    Only the first line counts: a ``#!`` further down is a comment, and treating
+    it as a shebang would deny a python file that documents one.
+
+    The interpreter is compared as a whole TOKEN, not by suffix. A cold review
+    caught `endswith` here: ``"notbash".endswith("bash")`` is true, so
+    ``#!/usr/bin/env notbash`` was denied as bash. Splitting on whitespace also
+    fixes the tab form (``#!/bin/bash\t-e``), which the old space-only check
+    missed while the kernel runs it happily.
+
+    Case-folded because this host's filesystem is case-insensitive and
+    ``#!/BIN/BASH`` executes.
     """
-    first = content.lstrip("﻿").split("\n", 1)[0].strip()
+    first = content.lstrip("\ufeff").split("\n", 1)[0].strip().casefold()
     if not first.startswith("#!"):
         return False
-    return any(
-        first.endswith(interp) or f"{interp} " in first for interp in SHELL_INTERPRETERS
-    )
+    tokens = first[2:].replace("\t", " ").split()
+    if not tokens:
+        return False
+    interpreter = PurePosixPath(tokens[0]).name
+    if interpreter == "env":
+        # `#!/usr/bin/env -S python -c ...` — the interpreter is the first
+        # token that is not a flag or an assignment.
+        for token in tokens[1:]:
+            if token.startswith("-") or "=" in token:
+                continue
+            interpreter = PurePosixPath(token).name
+            break
+        else:
+            return False
+    return interpreter in SHELL_INTERPRETERS
 
 
 def _written_content(tool_input: dict[str, object]) -> str:
@@ -118,32 +149,54 @@ def _written_content(tool_input: dict[str, object]) -> str:
 
 
 def is_shell_script(target: Path, tool_input: dict[str, object]) -> bool:
-    """By suffix, or by shebang for an extensionless script."""
-    if target.suffix.lower() in SHELL_SUFFIXES:
+    """By suffix, or by a first-line shell shebang whatever the suffix.
+
+    The suffix is not the file type. A cold review showed the earlier version
+    returned False for ANY non-shell suffix without reading the content, so
+    ``scripts/deploy.txt`` holding ``#!/bin/bash`` passed this guard AND the
+    commit-time budget, whose scope is `*.sh`.
+    """
+    if target.suffix.casefold() in SHELL_SUFFIXES:
         return True
-    if target.suffix:
-        return False
     return has_shell_shebang(_written_content(tool_input))
 
 
-def decide(tool_input: dict[str, object]) -> str | None:
-    """A deny reason for a new unsanctioned shell script, else None.
+def _exempt(rel: str, target: Path) -> bool:
+    """Whether this path is out of scope, for any of the settled reasons.
 
-    Fails OPEN on anything it cannot resolve. A guard that blocks a write
-    because it could not find the repo root is worse than one that misses a
-    script — the commit-time budget is still behind it.
+    Split out of :func:`decide` so each exemption reads as one line and the
+    decision itself stays a single expression.
+    """
+    if rel.casefold().startswith(EXEMPT_PREFIXES):
+        return True
+    if _allowlisted(rel):
+        return True
+    try:
+        # Only NEW files are refused: the contract is to stop new bash, not to
+        # freeze what exists. A cold review found the earlier version denying
+        # `home/dot_local/bin/executable_claude`, a tracked wrapper that cannot
+        # enter the allowlist because the commit gate would call the entry
+        # stale — a guard whose escape hatch cannot be used is an outage.
+        if target.exists():
+            return True
+    except OSError:
+        return True
+    return branch_guard.is_ignored(target, repo_root())
+
+
+def decide(tool_input: dict[str, object]) -> str | None:
+    """A deny reason for a NEW unsanctioned shell script, else None.
+
+    Fails OPEN on anything it cannot resolve. Blocking a write because the
+    guard could not answer is worse than missing a script; the commit-time
+    budget is still behind it.
     """
     raw = tool_input.get("file_path")
     if not isinstance(raw, str) or not raw:
         return None
     target = Path(raw)
-    root = repo_root()
-    rel = _relative(target, root)
-    if rel is None or rel.startswith(EXEMPT_PREFIXES):
-        return None
-    if rel in bash_budget.ALLOWLIST:
-        return None
-    if branch_guard.is_ignored(target, root):
+    rel = _relative(target, repo_root())
+    if rel is None or _exempt(rel, target):
         return None
     if not is_shell_script(target, tool_input):
         return None

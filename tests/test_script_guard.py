@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from dotfiles_setup import bash_budget, script_guard
+from dotfiles_setup import bash_budget, branch_guard, hook_guard, script_guard
 
 
 def _write(root: Path, rel: str, content: str = "") -> dict[str, object]:
@@ -154,3 +154,88 @@ def test_edit_tool_content_key_is_read(repo: Path) -> None:
     }
     (repo / "scripts").mkdir(parents=True, exist_ok=True)
     assert script_guard.decide(payload) is not None
+
+
+# --- regressions from the cold review of e949f5c
+#
+# Every test above calls `script_guard.decide` directly, so reverting the one
+# dispatch line in hook_guard.py left the whole suite green while the guard was
+# unreachable. These drive the real dispatch and the real settings wiring.
+
+
+def test_the_dispatch_actually_reaches_this_guard() -> None:
+    """Reverting the hook_guard dispatch must fail a test, not pass silently."""
+    root = script_guard.repo_root()
+    payload: dict[str, object] = {
+        "file_path": str(root / "scripts" / "definitely-new-probe.sh"),
+        "content": "#!/bin/bash\n",
+    }
+    assert hook_guard.decide_payload("Write", payload) is not None
+
+
+def test_the_dispatch_still_reaches_the_branch_guard(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Chaining must not shadow the guard it was chained behind."""
+    calls: list[str] = []
+
+    def _spy(_tool_input: dict[str, object]) -> str | None:
+        calls.append("branch")
+        return None
+
+    monkeypatch.setattr(branch_guard, "decide", _spy)
+    neutral: dict[str, object] = {"file_path": str(tmp_path / "x.py")}
+    hook_guard.decide_payload("Write", neutral)
+    assert calls == ["branch"]
+
+
+def test_an_existing_file_is_never_denied() -> None:
+    """The contract is to stop NEW bash, not to freeze what exists.
+
+    `home/dot_local/bin/executable_claude` is a tracked bash wrapper that cannot
+    enter the allowlist — the commit gate would call the entry stale — so
+    denying it would be an outage with no escape hatch.
+    """
+    root = script_guard.repo_root()
+    existing = root / "home" / "dot_local" / "bin" / "executable_claude"
+    if not existing.exists():  # pragma: no cover - control arm
+        pytest.skip("fixture file absent; this probe would prove nothing")
+    payload: dict[str, object] = {
+        "file_path": str(existing),
+        "content": "#!/usr/bin/env bash\n",
+    }
+    assert script_guard.decide(payload) is None
+
+
+def test_a_new_script_with_a_non_shell_suffix_is_denied(repo: Path) -> None:
+    """`scripts/deploy.txt` holding bash passed BOTH layers before this."""
+    assert script_guard.decide(_write(repo, "scripts/deploy.txt", "#!/bin/bash\n"))
+
+
+@pytest.mark.parametrize(
+    "shebang",
+    ["#!/BIN/BASH", "#!/bin/bash\t-e", "#!/usr/bin/env  bash", "#!/bin/ash"],
+)
+def test_shell_shebang_variants_that_really_execute(shebang: str) -> None:
+    """Case and tab forms run fine on this host; the guard must see them."""
+    assert script_guard.has_shell_shebang(f"{shebang}\nbody\n")
+
+
+@pytest.mark.parametrize(
+    "shebang",
+    ["#!/usr/bin/env notbash", "#!/usr/bin/env -S python -c bash", "#!/usr/bin/env"],
+)
+def test_non_shell_shebangs_are_not_denied(shebang: str) -> None:
+    """`"notbash".endswith("bash")` is why the token is parsed, not suffixed."""
+    assert not script_guard.has_shell_shebang(f"{shebang}\nbody\n")
+
+
+def test_an_allowlisted_script_survives_a_case_variant_path() -> None:
+    """This host's filesystem is case-insensitive; the allowlist compare was not."""
+    root = script_guard.repo_root()
+    listed = next(iter(bash_budget.ALLOWLIST))
+    payload: dict[str, object] = {
+        "file_path": str(root / listed.upper()),
+        "content": "#!/bin/bash\n",
+    }
+    assert script_guard.decide(payload) is None
