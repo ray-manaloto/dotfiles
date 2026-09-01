@@ -25,6 +25,20 @@ for diagnosis and the GNU-`timeout` convention exit code 124 is returned.
 Default ceiling is 600s, overridable via `--timeout` or the
 `DOTFILES_LINT_TIMEOUT` env var. See
 `.claude/rules/long-running-command-hangs.md`.
+
+The default log path is scoped per workspace *and* per process (#895): two
+concurrent runs — two clones on this host, or two windows on one clone —
+each get their own `hk-lint-<workspace hash>-<pid>.log`, and a stable
+`hk-lint-<workspace hash>.log` symlink (repointed via a single atomic
+`os.replace`, never an explicit unlink-then-relink) always names the most
+recent run for that workspace, for `long-running-command-hangs.md` rule 2 to
+read by a predictable name. This is safe **in-container** for a different
+reason than on the Mac host: `HOME` there is the per-workspace home volume
+(see `devcontainer_names.py`), so `workspace_hash` — which hashes the
+*container* workspace path, identical across clones — is not what
+discriminates; the already-scoped `HOME` is. A future change sharing one
+home volume across clones would silently reopen the collision this scoping
+closes on the host.
 """
 
 from __future__ import annotations
@@ -33,7 +47,10 @@ import logging
 import os
 import signal
 import subprocess
+import time
 from pathlib import Path
+
+from dotfiles_setup.devcontainer_names import workspace_hash
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +62,82 @@ LOG_TAIL_LINES = 40
 # Read-only gate (no --stash: check never fixes, so it has nothing to stash).
 # Matches CI's `hk run check --all` so local == CI. Fix path is `mise run fmt`.
 HK_COMMAND = ("hk", "run", "check", "--all")
-DEFAULT_LOG_FILE = Path.home() / ".local" / "state" / "dotfiles" / "hk-lint.log"
+LOG_DIR = Path.home() / ".local" / "state" / "dotfiles"
+# An age floor of hours, not seconds: `mise run lint` bounds at 700s
+# (mise.toml [tasks.lint]), but a direct `dotfiles-setup lint` is bounded
+# only by the in-process 600s default, raisable without limit via
+# `--timeout`/`DOTFILES_LINT_TIMEOUT` — so this floor must clear any
+# plausible run, not just the 700s mise ceiling.
+_PRUNE_MAX_AGE_SECONDS = 24 * 60 * 60
+
+
+def _default_project_root() -> Path:
+    """The repo root, by the same convention `main.py` uses for `project_root`.
+
+    Only a fallback for a caller that doesn't thread its own `project_root`
+    through (`main.py`'s CLI entry point always does).
+    """
+    return Path(__file__).resolve().parent.parent.parent.parent
+
+
+def _per_run_log_path(project_root: Path) -> Path:
+    """This run's dedicated log path: `hk-lint-<workspace hash>-<pid>.log`."""
+    return LOG_DIR / f"hk-lint-{workspace_hash(project_root)}-{os.getpid()}.log"
+
+
+def _stable_log_path(project_root: Path) -> Path:
+    """The predictable per-workspace symlink `rule 2` reads by name."""
+    return LOG_DIR / f"hk-lint-{workspace_hash(project_root)}.log"
+
+
+def _update_stable_symlink(project_root: Path, per_run_log: Path) -> None:
+    """Atomically repoint the stable symlink at `per_run_log`.
+
+    A single `os.replace(tmp, stable)` both creates the link on first run and
+    repoints it on every later one — it replaces a regular file, repoints an
+    existing symlink, and never follows (so never clobbers) the old target.
+    There is deliberately no separate "migrate a pre-existing regular file"
+    branch: `Path.exists()` follows symlinks (so a dangling stable link would
+    misreport `False`), and any check-then-unlink is its own TOCTOU — `replace`
+    alone closes both. Never fails the run: caught broadly, since a directory
+    at the stable path, a read-only state dir, or a filesystem without symlink
+    support each raise a different `OSError` subtype.
+    """
+    stable = _stable_log_path(project_root)
+    tmp = stable.with_name(f"{stable.name}.tmp-{os.getpid()}")
+    try:
+        tmp.unlink(missing_ok=True)  # a run that died mid-replace leaves one
+        tmp.symlink_to(per_run_log)
+        tmp.replace(stable)
+    except OSError:
+        logger.warning("Could not update stable lint-log symlink %s", stable)
+
+
+def _prune_old_logs(project_root: Path, current_log: Path) -> None:
+    """Delete this workspace's stale per-run logs; never touch the symlink.
+
+    Scoped to `hk-lint-<this workspace hash>-*.log` — the stable symlink's
+    name is a prefix of that pattern (`hk-lint-<hash>.log`), so a broader glob
+    would sweep other workspaces' files and reach the symlink itself. Ages
+    entries with `lstat` (never through the symlink) so a repointed link's mtime
+    is never mistaken for a stale run's.
+    """
+    try:
+        candidates = list(LOG_DIR.glob(f"hk-lint-{workspace_hash(project_root)}-*.log"))
+    except OSError:
+        logger.warning("Could not scan %s for stale lint logs", LOG_DIR)
+        return
+    now = time.time()
+    for candidate in candidates:
+        if candidate == current_log or candidate.is_symlink():
+            continue
+        try:
+            age = now - candidate.lstat().st_mtime
+            if age < _PRUNE_MAX_AGE_SECONDS:
+                continue
+            candidate.unlink()
+        except OSError:
+            logger.warning("Could not prune stale lint log %s", candidate)
 
 
 def resolve_timeout(cli_timeout: int | None = None) -> int:
@@ -101,22 +193,44 @@ def run_guarded(
     timeout: int,
     *,
     command: tuple[str, ...] = HK_COMMAND,
-    log_file: Path = DEFAULT_LOG_FILE,
+    log_file: Path | None = None,
+    project_root: Path | None = None,
 ) -> int:
     """Run `command` under `timeout` seconds; kill the group on expiry.
 
     Returns the command's exit code, or `TIMEOUT_EXIT_CODE` on timeout.
     Points `HK_LOG_FILE` at a dedicated per-run file (truncated up front)
     so the on-timeout tail reflects only this run.
+
+    An explicitly-passed `log_file` is used **verbatim** — no derivation, no
+    stable symlink, no pruning — so a caller-supplied path behaves exactly as
+    before. Only the default (`log_file=None`) case derives a per-workspace,
+    per-process path under `LOG_DIR` and maintains the `hk-lint-<hash>.log`
+    stable symlink; that derivation hashes `project_root` (defaulting to this
+    repo's root) rather than the current working directory, so it agrees
+    whether invoked as `mise run lint` (always run from the repo root) or as
+    `uv run --project python dotfiles-setup lint` from `python/`.
     """
+    resolved_root: Path | None = None
+    if log_file is None:
+        if project_root is None:
+            project_root = _default_project_root()
+        resolved_root = project_root
+        log_file = _per_run_log_path(resolved_root)
+
     log_file.parent.mkdir(parents=True, exist_ok=True)
     log_file.write_text("")  # truncate so the tail is this run only
+    if resolved_root is not None:
+        _update_stable_symlink(resolved_root, log_file)
+        _prune_old_logs(resolved_root, log_file)
     env = {
         **os.environ,
         "HK_LOG_FILE": str(log_file),
         "HK_LOG_FILE_LEVEL": "debug",
     }
-    logger.info("Running %s (timeout %ds)", " ".join(command), timeout)
+    logger.info(
+        "Running %s (timeout %ds); log %s", " ".join(command), timeout, log_file
+    )
     proc = subprocess.Popen(command, start_new_session=True, env=env)
     try:
         return proc.wait(timeout=timeout)

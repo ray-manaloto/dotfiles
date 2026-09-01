@@ -51,10 +51,10 @@ the ruff wedge's two published red herrings:
    `gh run watch`) — those run on GitHub's infrastructure and nothing local
    reaps them. The hazard is specifically local, long, Mac-side work.
 
-   For `mise run lint` the log is **`~/.local/state/dotfiles/hk-lint.log`**
-   (the per-run `HK_LOG_FILE` the wrapper sets). Read THAT one —
-   `~/.local/state/hk/hk.log` is a *different*, usually stale file, and
-   reading it made a live hang look idle. mise →
+   For `mise run lint` the log is the symlink
+   **`~/.local/state/dotfiles/hk-lint-<hash>.log`** (per-workspace). Read
+   THAT one — `~/.local/state/hk/hk.log` is a *different*, usually stale
+   file, and reading it made a live hang look idle. mise →
    `~/.local/state/mise/mise.log`. Use a count-diff monitor loop, not a
    fixed sleep.
 
