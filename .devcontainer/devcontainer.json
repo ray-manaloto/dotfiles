@@ -60,11 +60,17 @@
 // ===============================================================
 // (S1) SECRETS injection via Doppler:
 //
-// `initializeCommand` (host-side) runs `doppler secrets download`
-// to write a KEY=VALUE env file to the staging area
-// (~/.local/state/dotfiles/doppler.env). `runArgs --env-file`
-// injects all secrets as container env vars at creation time.
-// No doppler CLI needed inside the container.
+// `initializeCommand` (host-side) runs `dotfiles-setup docker
+// initialize-host`, which downloads the KEY=VALUE env file to
+// ~/.local/state/dotfiles/doppler-<hash>-<arch>.env. `runArgs
+// --env-file` injects all secrets as container env vars at creation
+// time. No doppler CLI needed inside the container.
+//
+// #893: the filename carries this workspace's hash and architecture.
+// It used to be a bare `doppler.env`, shared by every clone and both
+// arches on the host, written with an unlocked `>`-truncate — so two
+// concurrent `up`s could hand a container the OTHER clone's secrets,
+// silently. The write is now atomic (temp + rename) as well.
 //
 // Doppler project/config defaults come from mise.toml [tasks.up].env
 // (DOPPLER_PROJECT=dotfiles, DOPPLER_CONFIG=dev_personal). Override
@@ -104,7 +110,10 @@
     "--name",
     "${localEnv:DEVCONTAINER_NAME}",
     "--env-file",
-    "${localEnv:HOME}/.local/state/dotfiles/doppler.env",
+    // #893: RESOLVED, never composed here — the path carries this
+    // workspace's hash and arch, so two concurrent `up`s cannot share it.
+    // Supplied by `mise run up` via `dotfiles-setup devcontainer env`.
+    "${localEnv:DEVCONTAINER_ENV_FILE}",
     "--platform=${localEnv:DOTFILES_PLATFORM}",
   ],
   "remoteUser": "${localEnv:USER}",
@@ -218,7 +227,12 @@
   "forwardPorts": [2222],
   "updateRemoteUserUID": false,
   "init": true,
-  "initializeCommand": "mkdir -p ~/.local/state/dotfiles && doppler secrets download --format docker --no-file --project \"${DOPPLER_PROJECT:-dotfiles}\" --config \"${DOPPLER_CONFIG:-dev_personal}\" > ~/.local/state/dotfiles/doppler.env && [ -s ~/.local/state/dotfiles/doppler.env ] && uv run --project python dotfiles-setup docker initialize-host",
+  // #893: the Doppler download moved INTO `docker initialize-host`. It was an
+  // unlocked `>`-truncate to one host-wide path, so it needed a per-workspace
+  // path AND an atomic write — more logic than belongs in a JSON string
+  // (zero-bash-logic). The old `&& [ -s … ] &&` guard is now a
+  // SecretsDownloadError, so an empty download still fails the bring-up.
+  "initializeCommand": "uv run --project python dotfiles-setup docker initialize-host",
   "onCreateCommand": "bash /workspaces/${localWorkspaceFolderBasename}/.devcontainer/scripts/on-create.sh /workspaces/${localWorkspaceFolderBasename}",
   "postCreateCommand": "sudo chown ${localEnv:USER}:${localEnv:USER} /run/host-services/ssh-auth.sock && install -d -m 700 ~/.ssh && install -m 600 /tmp/dotfiles-host-state/authorized_keys ~/.ssh/authorized_keys && ssh-keyscan -t rsa,ecdsa,ed25519 github.com >> ~/.ssh/known_hosts && [ -s ~/.ssh/known_hosts ] && chmod 600 ~/.ssh/known_hosts && scripts/devcontainer-smoke.sh",
   // Re-chown the Docker Desktop magic SSH socket on EVERY container

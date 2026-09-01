@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 import pytest
 from dotfiles_setup import sync
 from dotfiles_setup.container import Check
-from dotfiles_setup.devcontainer_names import resolve_names
+from dotfiles_setup.devcontainer_names import DevcontainerNames, resolve_names
 from dotfiles_setup.platform_target import published_targets
 
 _WORKSPACE = Path("/workspaces-host/dotfiles")
@@ -23,6 +23,13 @@ _NAMES = resolve_names(
 )
 _NAMES_ARM64 = resolve_names(
     workspace=_WORKSPACE, user="u", platform="linux/arm64/v8", env={}
+)
+#: #894: a SECOND clone on the same host, same architecture. Every pre-existing
+#: fixture varied only the arch, so no test could observe the cross-workspace
+#: collision — the missing axis in the tests mirrors the missing axis in the key.
+_WORKSPACE_B = Path("/workspaces-host/dotfiles-second-clone")
+_NAMES_CLONE_B = resolve_names(
+    workspace=_WORKSPACE_B, user="u", platform="linux/amd64/v2", env={}
 )
 
 
@@ -58,8 +65,14 @@ def _status(
     local: str | None = _DIGEST_NEW,
     state: sync.ContainerState = "running",
     record: sync.SyncRecord | None = None,
-    arch: str = "amd64",
+    names: DevcontainerNames = _NAMES,
 ) -> sync.SyncStatus:
+    """One observed world state.
+
+    ``names`` carries the workspace hash AND the architecture together,
+    because #894 made them a pair: a status keyed by one without the other
+    cannot describe a real container.
+    """
     return sync.SyncStatus(
         image_ref=_REF,
         registry_digest=registry,
@@ -67,7 +80,8 @@ def _status(
         local_image_id="img-1",
         container_state=state,
         synced_state=record,
-        arch=arch,
+        arch=names.arch,
+        workspace_hash=names.hash,
     )
 
 
@@ -127,11 +141,9 @@ def test_outdated_container_triggers_rebuild() -> None:
     record = sync.SyncRecord(
         registry_digest=_DIGEST_NEW,
         local_image_id="img-1",
-        containers={"amd64": "c-old"},
+        containers={sync.container_key(_NAMES.hash, "amd64"): "c-old"},
     )
-    status = dataclasses.replace(
-        _status(record=record, arch="amd64"), container_image_id="c-new"
-    )
+    status = dataclasses.replace(_status(record=record), container_image_id="c-new")
     assert not status.container_current
     assert sync.decide_action(status, force=False) == "rebuild"
 
@@ -149,34 +161,32 @@ def test_per_arch_record_isolates_the_other_architecture() -> None:
     record = sync.SyncRecord(
         registry_digest=_DIGEST_NEW,
         local_image_id="img-1",
-        containers={"amd64": "c-a"},
+        containers={sync.container_key(_NAMES.hash, "amd64"): "c-a"},
     )
     arm64 = dataclasses.replace(
-        _status(record=record, arch="arm64"), container_image_id="c-b"
+        _status(record=record, names=_NAMES_ARM64), container_image_id="c-b"
     )
     assert not arm64.container_current
     assert sync.decide_action(arm64, force=False) == "rebuild"
 
-    amd64 = dataclasses.replace(
-        _status(record=record, arch="amd64"), container_image_id="c-a"
-    )
+    amd64 = dataclasses.replace(_status(record=record), container_image_id="c-a")
     assert amd64.container_current
     assert sync.decide_action(amd64, force=False) == "verify-only"
 
 
 def test_empty_containers_map_with_running_container_is_not_current() -> None:
     record = sync.SyncRecord(registry_digest=_DIGEST_NEW, local_image_id="img-1")
-    status = dataclasses.replace(
-        _status(record=record, arch="amd64"), container_image_id="c-a"
-    )
+    status = dataclasses.replace(_status(record=record), container_image_id="c-a")
     assert not status.container_current
 
 
-def test_legacy_flat_id_falls_back_when_this_arch_has_no_containers_entry() -> None:
-    """#800 F10: a pre-#800 legacy record skips a spurious rebuild.
+def test_legacy_flat_id_is_no_longer_consulted() -> None:
+    """#894 INVERTS #800 F10: an unscoped id must never bless a container.
 
-    The architecture the legacy flat id names is spared; a genuinely
-    different id still rebuilds.
+    The pre-#800 flat ``container_image_id`` names no workspace, so on a host
+    with several clones it may have been written by any of them. Trusting it
+    is the very cross-clone confusion the composite key exists to stop, so a
+    legacy-only record now reads as "no entry" and costs one rebuild.
     """
     record = sync.SyncRecord(
         registry_digest=_DIGEST_NEW,
@@ -184,10 +194,69 @@ def test_legacy_flat_id_falls_back_when_this_arch_has_no_containers_entry() -> N
         legacy_container_image_id="c-a",
     )
     matching = dataclasses.replace(_status(record=record), container_image_id="c-a")
-    assert matching.container_current
+    assert not matching.container_current
 
     mismatched = dataclasses.replace(_status(record=record), container_image_id="c-b")
     assert not mismatched.container_current
+
+
+def test_bare_arch_key_is_no_longer_consulted() -> None:
+    """#894: a record written under the pre-#894 arch-only key is orphaned.
+
+    Same reasoning as the legacy flat id — an ``{"amd64": ...}`` entry does
+    not say which clone wrote it. One rebuild, never a wrong blessing.
+    """
+    record = sync.SyncRecord(
+        registry_digest=_DIGEST_NEW,
+        local_image_id="img-1",
+        containers={"amd64": "c-a"},
+    )
+    status = dataclasses.replace(_status(record=record), container_image_id="c-a")
+    assert not status.container_current
+
+
+def test_two_clones_same_arch_do_not_clobber_each_others_entries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#894 REGRESSION ARM: the harm is a LOST WRITE, not a wrong blessing.
+
+    The state file is shared by every clone on the host. Under the arch-only
+    key, clone A and clone B both wrote ``containers["amd64"]``, so the second
+    converge silently ERASED the first — clone A then read no entry for itself
+    and rebuilt, forever ping-ponging with B.
+
+    Reading the wrong entry was never the dangerous half: an id mismatch is
+    fail-safe (rebuild). The dangerous half is that A's state disappears. So
+    this arm drives the real ``write_sync_record`` path twice from two
+    workspaces and asserts BOTH entries survive — a read-side fixture with a
+    hand-written key cannot exhibit the defect at all, because it never lets
+    the second write happen.
+    """
+    current_names = {"names": _NAMES}
+    monkeypatch.setattr(sync, "resolve_names", lambda **_kw: current_names["names"])
+    monkeypatch.setattr(sync, "local_image_id", lambda _ref: "img-1")
+
+    monkeypatch.setattr(sync, "container_image_id", lambda _n: "c-clone-a")
+    sync.write_sync_record(_WORKSPACE, _REF, _DIGEST_NEW)
+
+    # Same architecture, different clone — the pre-#894 collision.
+    current_names["names"] = _NAMES_CLONE_B
+    monkeypatch.setattr(sync, "container_image_id", lambda _n: "c-clone-b")
+    sync.write_sync_record(_WORKSPACE_B, _REF, _DIGEST_NEW)
+
+    record = sync.read_sync_record(_REF)
+    assert record is not None
+    assert record.containers == {
+        sync.container_key(_NAMES.hash, "amd64"): "c-clone-a",
+        sync.container_key(_NAMES_CLONE_B.hash, "amd64"): "c-clone-b",
+    }
+
+    # And each clone still recognises its OWN container as current.
+    for names, cid in ((_NAMES, "c-clone-a"), (_NAMES_CLONE_B, "c-clone-b")):
+        status = dataclasses.replace(
+            _status(record=record, names=names), container_image_id=cid
+        )
+        assert status.container_current
 
 
 # ------------------------------------------------------------ action matrix
@@ -222,7 +291,7 @@ def test_stopped_container_with_stale_overlay_is_rebuilt_not_reused() -> None:
     record = sync.SyncRecord(
         registry_digest=_DIGEST_NEW,
         local_image_id="img-1",
-        containers={"amd64": "c-old"},
+        containers={sync.container_key(_NAMES.hash, "amd64"): "c-old"},
     )
     status = dataclasses.replace(
         _status(state="stopped", record=record), container_image_id="c-new"
@@ -236,7 +305,7 @@ def test_stopped_container_matching_the_record_is_reused_via_up() -> None:
     record = sync.SyncRecord(
         registry_digest=_DIGEST_NEW,
         local_image_id="img-1",
-        containers={"amd64": "c-same"},
+        containers={sync.container_key(_NAMES.hash, "amd64"): "c-same"},
     )
     status = dataclasses.replace(
         _status(state="stopped", record=record), container_image_id="c-same"
@@ -250,7 +319,7 @@ def test_absent_container_stays_up_not_rebuild() -> None:
     record = sync.SyncRecord(
         registry_digest=_DIGEST_NEW,
         local_image_id="img-1",
-        containers={"amd64": "c-old"},
+        containers={sync.container_key(_NAMES.hash, "amd64"): "c-old"},
     )
     status = _status(state="absent", record=record)
     assert status.container_current
@@ -442,14 +511,17 @@ def test_write_sync_record_merges_other_architectures(
     sync.write_sync_record(_WORKSPACE, _REF, _DIGEST_NEW)
     record = sync.read_sync_record(_REF)
     assert record is not None
-    assert record.containers == {"amd64": "c-amd64"}
+    assert record.containers == {sync.container_key(_NAMES.hash, "amd64"): "c-amd64"}
 
     current_names["names"] = _NAMES_ARM64
     monkeypatch.setattr(sync, "container_image_id", lambda _n: "c-arm64")
     sync.write_sync_record(_WORKSPACE, _REF, _DIGEST_NEW)
     record = sync.read_sync_record(_REF)
     assert record is not None
-    assert record.containers == {"amd64": "c-amd64", "arm64": "c-arm64"}
+    assert record.containers == {
+        sync.container_key(_NAMES.hash, "amd64"): "c-amd64",
+        sync.container_key(_NAMES_ARM64.hash, "arm64"): "c-arm64",
+    }
 
 
 def test_write_sync_record_starts_fresh_when_local_image_id_changed(
@@ -474,7 +546,9 @@ def test_write_sync_record_starts_fresh_when_local_image_id_changed(
     record = sync.read_sync_record(_REF)
     assert record is not None
     assert record.local_image_id == "img-2"
-    assert record.containers == {"arm64": "c-arm64"}
+    assert record.containers == {
+        sync.container_key(_NAMES_ARM64.hash, "arm64"): "c-arm64"
+    }
 
 
 def test_write_sync_record_warns_when_container_probe_returns_none(

@@ -127,6 +127,7 @@ class SyncStatus:
     container_image_id: str | None = None
     synced_state: SyncRecord | None = None
     arch: str = ""
+    workspace_hash: str = ""
 
     @property
     def stale(self) -> bool:
@@ -170,7 +171,17 @@ class SyncStatus:
         #800 extends the record to hold one overlay id PER ARCHITECTURE
         (:attr:`SyncRecord.containers`), so a host running both
         architectures from one clone doesn't ping-pong a rebuild every time
-        the other architecture syncs.
+        the other architecture syncs. #894 keys those entries by workspace
+        AND architecture (:func:`container_key`) — the arch-only key made
+        every clone on the host share one entry per arch.
+
+        #894 also drops the two UNSCOPED read fallbacks (the bare-``arch``
+        key and ``legacy_container_image_id``). Neither records which
+        workspace wrote it, so consulting one reproduces the very defect
+        the composite key fixes. A record written under an older shape
+        therefore reads as "no entry" and costs this workspace exactly one
+        rebuild — the fail-safe direction: an unnecessary rebuild, never a
+        wrong image.
 
         #800 round 2 (F1): a STOPPED container is compared too, not
         auto-blessed by a ``container_state != "running"`` shortcut —
@@ -193,9 +204,7 @@ class SyncStatus:
         record = self.synced_state
         if record is None:
             return True
-        recorded = record.containers.get(self.arch)
-        if recorded is None:
-            recorded = record.legacy_container_image_id
+        recorded = record.containers.get(container_key(self.workspace_hash, self.arch))
         if recorded is None:
             return False
         return self.container_image_id == recorded
@@ -211,8 +220,11 @@ class SyncRecord:
     holds one overlay image id per architecture that has converged onto the
     CURRENT ``local_image_id`` (#800).
 
-    ``legacy_container_image_id`` is a READ-only migration aid (#800 F10):
-    the pre-#800 flat ``container_image_id`` key, if the on-disk record
+    ``legacy_container_image_id`` is parsed but **no longer consulted**
+    (#894): it is the pre-#800 flat ``container_image_id`` key, which names
+    no workspace, so trusting it lets one clone bless another clone's
+    overlay. It stays on the dataclass as a faithful record of what the
+    file holds, if the on-disk record
     still carries one. :func:`write_sync_record` never writes it — once a
     record round-trips through this dataclass it only ever carries the new
     per-architecture shape.
@@ -222,6 +234,26 @@ class SyncRecord:
     local_image_id: str
     containers: dict[str, str] = dataclasses.field(default_factory=dict)
     legacy_container_image_id: str | None = None
+
+
+def container_key(workspace_hash: str, arch: str) -> str:
+    """The ``containers`` key one workspace+architecture pair owns.
+
+    #894: this key was ``arch`` alone. ``_state_file`` names the record after
+    the image ref only, so every clone on the host shares one file — and an
+    arch-only key meant clone A's overlay id and clone B's overlay id both
+    landed on ``containers["amd64"]``. Whichever clone converged last for an
+    architecture was the only one whose state survived.
+
+    The workspace dimension was not overlooked so much as never considered:
+    :func:`write_sync_record`'s docstring reasons carefully about preserving
+    every OTHER architecture's entry, and never about another workspace's.
+
+    ``registry_digest`` and ``local_image_id`` stay un-keyed on purpose — the
+    local image really is one host-wide object. Only ``containers`` is
+    per-workspace, so the fix keys the entry rather than splitting the file.
+    """
+    return f"{workspace_hash}:{arch}"
 
 
 def _state_file(image_ref: str) -> Path:
@@ -305,7 +337,7 @@ def write_sync_record(workspace: Path, image_ref: str, registry: str) -> None:
         containers = {}
     cid = container_image_id(names)
     if cid is not None:
-        containers[names.arch] = cid
+        containers[container_key(names.hash, names.arch)] = cid
     else:
         # #800 F7: a probe failure or an absent container silently dropped
         # this architecture's entry — the record still wrote, just without
@@ -317,7 +349,7 @@ def write_sync_record(workspace: Path, image_ref: str, registry: str) -> None:
         )
     path = _state_file(image_ref)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
+    payload = (
         json.dumps(
             {
                 "registry_digest": registry,
@@ -327,6 +359,18 @@ def write_sync_record(workspace: Path, image_ref: str, registry: str) -> None:
         )
         + "\n"
     )
+    # #894: the state file is shared by every clone on this host, so a plain
+    # write_text lets a concurrent converge read a half-written file. Write to
+    # a sibling temp file and rename — rename is atomic within a directory, so
+    # a reader sees either the old record or the new one, never a torn one. A
+    # lost update (two writers, last wins) is still possible and is fail-safe:
+    # the losing clone reads no entry for its key and rebuilds once.
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    try:
+        tmp.write_text(payload)
+        tmp.replace(path)
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def _run(
@@ -664,6 +708,7 @@ def observe(workspace: Path, image_ref: str) -> SyncStatus:
         container_image_id=container_image_id(names),
         synced_state=read_sync_record(image_ref),
         arch=names.arch,
+        workspace_hash=names.hash,
     )
 
 

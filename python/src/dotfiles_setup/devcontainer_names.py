@@ -48,6 +48,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from dotfiles_setup.config import host_state_dir
 from dotfiles_setup.platform_target import (
     PLATFORM_ENV_VAR,
     platform_arch,
@@ -60,6 +61,7 @@ __all__ = [
     "ARCH_ENV_VAR",
     "ARCH_LABEL",
     "ARCH_LABEL_ENV_VAR",
+    "ENV_FILE_ENV_VAR",
     "HOME_VOLUME_ENV_VAR",
     "ID_FLAGS_ENV_VAR",
     "LEGACY_FOLDER_LABEL",
@@ -79,6 +81,7 @@ __all__ = [
     "ImageRefs",
     "devcontainer_env_main",
     "devcontainer_name_main",
+    "doppler_env_filename",
     "migrate_home_volume_main",
     "migration_platform_refusal",
     "name_field",
@@ -105,6 +108,7 @@ SSH_PORT_ENV_VAR = "DEVCONTAINER_SSH_PORT"
 WORKSPACE_LABEL_ENV_VAR = "DEVCONTAINER_WORKSPACE_LABEL"
 ARCH_LABEL_ENV_VAR = "DEVCONTAINER_ARCH_LABEL"
 ID_FLAGS_ENV_VAR = "DEVCONTAINER_ID_FLAGS"
+ENV_FILE_ENV_VAR = "DEVCONTAINER_ENV_FILE"
 
 #: The derived-port window. It opens above the well-known/registered churn and
 #: closes below 49152, where macOS starts handing out ephemeral ports to
@@ -300,6 +304,21 @@ def resolve_names(
         hash=workspace_hash(resolved_workspace),
         ssh_port=ssh_port(resolved_workspace, arch, override=override),
     )
+
+
+def doppler_env_filename(names: DevcontainerNames) -> str:
+    """This workspace+architecture's secrets env FILE name (#893).
+
+    The name lives here with the other resource names; the directory it sits
+    in belongs to :func:`dotfiles_setup.config.host_state_dir`, so the two are
+    joined at the call sites rather than one module reaching into the other.
+
+    Before #893 the file was a bare ``doppler.env`` under a host-wide state
+    directory, so every clone and both architectures shared one path — and
+    ``DOPPLER_PROJECT``/``DOPPLER_CONFIG`` are per-clone overrides, so a
+    concurrent bring-up could hand a container another clone's secrets.
+    """
+    return f"doppler-{names.hash}-{names.arch}.env"
 
 
 def names_env(names: DevcontainerNames) -> dict[str, str]:
@@ -1092,7 +1111,10 @@ def devcontainer_env_main() -> int:
     every one of them is derived here rather than in the task body — the whole
     point of [[zero-bash-logic]] is that this decision has exactly one home.
     """
-    for key, value in names_env(resolve_names()).items():
+    names = resolve_names()
+    env = dict(names_env(names))
+    env[ENV_FILE_ENV_VAR] = str(host_state_dir() / doppler_env_filename(names))
+    for key, value in env.items():
         sys.stdout.write(f"export {key}={shlex.quote(value)}\n")
     return 0
 

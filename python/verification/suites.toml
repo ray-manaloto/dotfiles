@@ -569,15 +569,18 @@ per_path_tokens = { "docker-bake.hcl" = ["target   = \"devcontainer-runtime\""] 
 
 [[suite]]
 name = "build.doppler-secrets-wired"
-description = "S1 SECRETS: Doppler secrets injected via --env-file in runArgs. initializeCommand downloads secrets to staging area; runArgs passes the env file to docker run. DO NOT DROP — see .devcontainer/AGENTS.md § Secrets Injection (Doppler)."
+description = "S1 SECRETS: Doppler secrets injected via --env-file in runArgs. initializeCommand calls `docker initialize-host`, which downloads secrets to a per-workspace staging file (#893); runArgs passes that resolved path to docker run. DO NOT DROP — see .devcontainer/AGENTS.md § Secrets Injection (Doppler)."
 category = "build"
 check_type = "static"
 handler = "require_tokens"
 paths = [".devcontainer/devcontainer.json"]
 per_path_tokens = { ".devcontainer/devcontainer.json" = [
     "\"--env-file\",",
-    "dotfiles/doppler.env\",",
-    "&& doppler secrets download --format docker",
+    # #893: the env file is a RESOLVED per-workspace path, not a literal.
+    # Binding the localEnv reference keeps the contract on the wiring rather
+    # than on a filename that is now derived.
+    "\"${localEnv:DEVCONTAINER_ENV_FILE}\",",
+    "\"initializeCommand\": \"uv run --project python dotfiles-setup docker initialize-host\",",
 ] }
 
 # =============================================================================

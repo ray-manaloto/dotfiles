@@ -999,7 +999,11 @@ description = "S1: doppler env file exists and contains secrets"
 env = { DOPPLER_PROJECT = "dotfiles", DOPPLER_CONFIG = "{{ env.DOPPLER_CONFIG | default(value='dev_personal') }}" }
 run = '''
 set -euo pipefail
-envfile="${HOME}/.local/state/dotfiles/doppler.env"
+# #893: the path carries this workspace's hash+arch, so it is RESOLVED
+# (like every other devcontainer name), never composed here.
+_dc_env="$(uv run --project python dotfiles-setup devcontainer env)"
+eval "${_dc_env}"
+envfile="${DEVCONTAINER_ENV_FILE}"
 if [ ! -f "${envfile}" ]; then
   echo "FAIL: ${envfile} does not exist (run 'mise run up' to generate)" >&2
   exit 1

@@ -127,6 +127,8 @@ _ALLOWED_ABSENT = frozenset(
         "mise.local.toml",
         "mise.*.local.toml",
         "doppler.env",
+        # #893: now per-workspace — doppler-<hash>-<arch>.env
+        "doppler-*.env",
         ".mcp.json",
         # External repo file cited by name (octopus orchestrator).
         "orchestrate.sh",

@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 import pytest
 from dotfiles_setup import docker
+from dotfiles_setup.devcontainer_names import DevcontainerNames, resolve_names
 
 
 def _completed(
@@ -232,3 +233,103 @@ def test_down_degrades_gracefully_when_docker_daemon_is_unreachable(
     assert excinfo.value.code == 1
     assert calls == []
     assert "could not list devcontainers" in caplog.text
+
+
+# --------------------------------------------------- #893 scoped secrets file
+
+
+def _names(workspace: str, platform: str = "linux/amd64/v2") -> DevcontainerNames:
+    return resolve_names(workspace=Path(workspace), user="u", platform=platform, env={})
+
+
+def test_env_file_differs_per_workspace_and_per_arch(tmp_path: Path) -> None:
+    """#893: the secrets path must carry BOTH scoping dimensions.
+
+    Control arm for the uniqueness claim: one sample cannot show a path is
+    unique, so this resolves three — two clones and two arches — and requires
+    all three to differ. Before #893 all three were `doppler.env`.
+    """
+    a_amd = docker.doppler_env_file(_names("/ws/clone-a"), tmp_path)
+    b_amd = docker.doppler_env_file(_names("/ws/clone-b"), tmp_path)
+    a_arm = docker.doppler_env_file(_names("/ws/clone-a", "linux/arm64/v8"), tmp_path)
+
+    assert len({a_amd, b_amd, a_arm}) == 3
+    assert a_amd.parent == tmp_path
+    assert a_amd.name.startswith("doppler-")
+    assert a_amd.name.endswith(".env")
+
+
+def test_secrets_download_writes_atomically_and_leaves_no_temp(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The env file appears whole, and the temp file never survives."""
+    monkeypatch.setattr(
+        docker.subprocess,
+        "run",
+        lambda args, **_kw: _completed(args, stdout="A=1\nB=2\n"),
+    )
+    names = _names("/ws/clone-a")
+    path = docker.download_doppler_env(names, tmp_path, env={})
+
+    assert path.read_text() == "A=1\nB=2\n"
+    assert list(tmp_path.glob("*.tmp")) == []
+
+
+def test_two_clones_get_separate_secrets_files(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """#893 REGRESSION ARM: the cross-clone overwrite, driven end to end.
+
+    Clone A's project resolves to secrets `A=1`; clone B's to `B=2`. Before
+    #893 both wrote `doppler.env`, so B's download replaced A's file and A's
+    container was started from B's secrets — silently, since `--env-file`
+    reads whatever is there.
+
+    Two workspaces are load-bearing here: with one clone the old code and the
+    new code are indistinguishable.
+    """
+    secrets = {"proj-a": "A=1\n", "proj-b": "B=2\n"}
+
+    def fake_run(args: list[str], **_kw: object) -> subprocess.CompletedProcess[str]:
+        project = args[args.index("--project") + 1]
+        return _completed(args, stdout=secrets[project])
+
+    monkeypatch.setattr(docker.subprocess, "run", fake_run)
+
+    a = docker.download_doppler_env(
+        _names("/ws/clone-a"), tmp_path, env={"DOPPLER_PROJECT": "proj-a"}
+    )
+    b = docker.download_doppler_env(
+        _names("/ws/clone-b"), tmp_path, env={"DOPPLER_PROJECT": "proj-b"}
+    )
+
+    assert a != b
+    assert a.read_text() == "A=1\n"
+    assert b.read_text() == "B=2\n"
+
+
+def test_empty_download_fails_the_bring_up(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The old `&& [ -s … ] &&` guard survives as an explicit error.
+
+    An empty env file reaching `--env-file` is a container with no secrets
+    and no complaint, which is why the shell chain guarded it.
+    """
+    monkeypatch.setattr(
+        docker.subprocess, "run", lambda args, **_kw: _completed(args, stdout="   \n")
+    )
+    with pytest.raises(docker.SecretsDownloadError):
+        docker.download_doppler_env(_names("/ws/clone-a"), tmp_path, env={})
+
+
+def test_failed_download_fails_the_bring_up(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        docker.subprocess,
+        "run",
+        lambda args, **_kw: _completed(args, returncode=1),
+    )
+    with pytest.raises(docker.SecretsDownloadError):
+        docker.download_doppler_env(_names("/ws/clone-a"), tmp_path, env={})
