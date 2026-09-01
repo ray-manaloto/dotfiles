@@ -36,10 +36,10 @@ runs:
         # MISE_VERSION). Unpinned, mise-action installs the latest release, so a
         # mise release (e.g. 2026.7.12's aube default) can change install
         # behavior mid-day and break CI with no repo change. Bump in lockstep.
-        version: "2026.8.14"
+        version: "2026.9.0"
         install_args: "bun"
     - name: Install tools
       uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
       with:
-        version: "2026.8.14"
+        version: "2026.9.0"
         install_args: ${{ inputs.install_args }}
