@@ -38,7 +38,9 @@ reason than on the Mac host: `HOME` there is the per-workspace home volume
 *container* workspace path, identical across clones — is not what
 discriminates; the already-scoped `HOME` is. A future change sharing one
 home volume across clones would silently reopen the collision this scoping
-closes on the host.
+closes on the host. The pre-#895 single fixed path is best-effort deleted
+once it is seen, so it cannot linger as a frozen decoy at the name older
+docs and memory still remember.
 """
 
 from __future__ import annotations
@@ -113,23 +115,23 @@ def _update_stable_symlink(project_root: Path, per_run_log: Path) -> None:
         logger.warning("Could not update stable lint-log symlink %s", stable)
 
 
-def _prune_old_logs(project_root: Path, current_log: Path) -> None:
-    """Delete this workspace's stale per-run logs; never touch the symlink.
+def _prune_stale(
+    candidates: list[Path], current_log: Path, *, skip_symlinks: bool
+) -> None:
+    """Delete entries in `candidates` older than the prune floor.
 
-    Scoped to `hk-lint-<this workspace hash>-*.log` — the stable symlink's
-    name is a prefix of that pattern (`hk-lint-<hash>.log`), so a broader glob
-    would sweep other workspaces' files and reach the symlink itself. Ages
-    entries with `lstat` (never through the symlink) so a repointed link's mtime
-    is never mistaken for a stale run's.
+    `current_log` (this run's own file) is always spared. `skip_symlinks`
+    is `True` for the per-run glob — the stable symlink can be reached
+    through a name collision path even though this glob is not supposed to
+    match it (see `_prune_old_logs`) — and `False` for the tmp-link glob,
+    whose entries are ALWAYS symlinks and are exactly what that sweep exists
+    to remove.
     """
-    try:
-        candidates = list(LOG_DIR.glob(f"hk-lint-{workspace_hash(project_root)}-*.log"))
-    except OSError:
-        logger.warning("Could not scan %s for stale lint logs", LOG_DIR)
-        return
     now = time.time()
     for candidate in candidates:
-        if candidate == current_log or candidate.is_symlink():
+        if candidate == current_log:
+            continue
+        if skip_symlinks and candidate.is_symlink():
             continue
         try:
             age = now - candidate.lstat().st_mtime
@@ -138,6 +140,50 @@ def _prune_old_logs(project_root: Path, current_log: Path) -> None:
             candidate.unlink()
         except OSError:
             logger.warning("Could not prune stale lint log %s", candidate)
+
+
+def _prune_old_logs(project_root: Path, current_log: Path) -> None:
+    """Delete this workspace's stale per-run logs and orphaned tmp links.
+
+    Scoped to `hk-lint-<this workspace hash>-*.log` — `hk-lint-<hash>` (no
+    trailing `-`) is the COMMON prefix with the stable symlink's name
+    (`hk-lint-<hash>.log`), but that glob does not match the symlink itself
+    (it has no `-<pid>` before `.log`); a broader glob would both sweep other
+    workspaces' files and reach the symlink. Ages entries with `lstat` (never
+    through a symlink) so a repointed link's mtime is never mistaken for a
+    stale run's. Also sweeps `hk-lint-<hash>.log.tmp-<pid>` — a run killed
+    between `symlink_to` and `replace` in `_update_stable_symlink` leaves one
+    of these behind, and only a later run reusing the SAME pid would ever
+    clear it otherwise.
+    """
+    hash_ = workspace_hash(project_root)
+    try:
+        per_run = list(LOG_DIR.glob(f"hk-lint-{hash_}-*.log"))
+        tmp_links = list(LOG_DIR.glob(f"hk-lint-{hash_}.log.tmp-*"))
+    except OSError:
+        logger.warning("Could not scan %s for stale lint logs", LOG_DIR)
+        return
+    _prune_stale(per_run, current_log, skip_symlinks=True)
+    _prune_stale(tmp_links, current_log, skip_symlinks=False)
+
+
+def _remove_legacy_log_file() -> None:
+    """Best-effort delete of the pre-#895 single fixed log path.
+
+    A workspace/pid-scoped file that no longer exists fails LOUD at the
+    remembered name — good, that is discoverable. A pre-#895 run instead
+    left a regular file at the bare `hk-lint.log` name, which `_prune_old_logs`
+    can never reach (its glob requires `-<pid>.log`), so without this it lies
+    SILENTLY: a plausible, substantial, permanently-frozen body sits at
+    exactly the name every persisted doc, receipt, and memory entry in this
+    repo still tells an agent to read.
+    """
+    legacy = LOG_DIR / "hk-lint.log"
+    try:
+        if legacy.is_file() and not legacy.is_symlink():
+            legacy.unlink()
+    except OSError:
+        logger.warning("Could not remove legacy lint log %s", legacy)
 
 
 def resolve_timeout(cli_timeout: int | None = None) -> int:
@@ -221,6 +267,7 @@ def run_guarded(
     log_file.parent.mkdir(parents=True, exist_ok=True)
     log_file.write_text("")  # truncate so the tail is this run only
     if resolved_root is not None:
+        _remove_legacy_log_file()
         _update_stable_symlink(resolved_root, log_file)
         _prune_old_logs(resolved_root, log_file)
     env = {

@@ -33,8 +33,8 @@ the ruff wedge's two published red herrings:
    debug log. **EXCEPTION — Mac-side container ops: background-and-idle gets
    them REAPED.** `mise run ship`/`land`, `verify-local`, `sync`, and image
    pulls are killed if the turn goes idle waiting on them, so "background it"
-   is precisely wrong here (measured both ways — a foreground 10-min bound
-   also killed a `ship` at rc=143). What works is **in-turn polling** —
+   is precisely wrong here (a foreground bound also killed a `ship`, rc=143).
+   What works is **in-turn polling** —
    background the command, then keep the turn engaged reading its log:
 
    ```bash
@@ -52,11 +52,11 @@ the ruff wedge's two published red herrings:
    reaps them. The hazard is specifically local, long, Mac-side work.
 
    For `mise run lint` the log is the symlink
-   **`~/.local/state/dotfiles/hk-lint-<hash>.log`** (per-workspace). Read
-   THAT one — `~/.local/state/hk/hk.log` is a *different*, usually stale
-   file, and reading it made a live hang look idle. mise →
-   `~/.local/state/mise/mise.log`. Use a count-diff monitor loop, not a
-   fixed sleep.
+   **`~/.local/state/dotfiles/hk-lint-<hash>.log`** — names only the MOST
+   RECENT run; with two runs live, read the exact path each logs at start.
+   `~/.local/state/hk/hk.log` is different, usually stale — reading it made a
+   live hang look idle. mise → `~/.local/state/mise/mise.log`. Count-diff
+   monitor, not a fixed sleep.
 
 3. **Preserve real exit codes — never `cmd 2>&1 | tail -N` to capture.**
    *Machine-enforced since 2026-07-21* — the PreToolUse guard denies a

@@ -64,7 +64,14 @@ different run's log body next to a correct `rc`. `lint.py` now scopes the
 default log by workspace hash (`workspace_hash` from `devcontainer_names.py`)
 *and* pid: a per-run `hk-lint-<hash>-<pid>.log`, plus the stable
 `hk-lint-<hash>.log` symlink the table names, repointed atomically via a
-single `Path.replace` so two runs never observe or destroy each other's file.
+single `Path.replace`. **The guarantee that grants is narrower than "two runs
+never observe or destroy each other's file" reads:** true of the per-run
+files, which are never shared, but the stable link names only the MOST
+RECENT run for a workspace — two concurrent same-workspace runs (two windows
+on one clone) still contend for that one name, and it can flip under a
+reader mid-loop. That is an accepted limit of the ratified scheme, not a
+defect; each run also logs its own exact per-run path at start, which is the
+unambiguous handle when two runs are live for one workspace.
 An explicitly-passed `log_file` (every test in `test_lint.py` predating #895)
 is exempt — used verbatim, no derivation, no symlink.
 

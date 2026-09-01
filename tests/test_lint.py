@@ -102,13 +102,29 @@ def test_run_guarded_truncates_log_each_run(tmp_path: Path) -> None:
 # ──────────────────────────────────────────────────────────────────────
 
 
-def test_run_guarded_explicit_log_file_is_used_verbatim(tmp_path: Path) -> None:
-    """An explicit `log_file` gets no derivation, symlink, or prune side effect."""
+def test_run_guarded_explicit_log_file_is_used_verbatim(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An explicit `log_file` gets no derivation, symlink, or prune side effect.
+
+    Strengthened per #895 respec F1: the pre-change signature already
+    honoured an explicit `log_file` verbatim, so a bare truncation check
+    can't fail on revert. Pointing `LOG_DIR` at a directory this run never
+    touches (it never derives anything) is what actually fails if derivation
+    ever becomes unconditional.
+    """
+    log_dir = tmp_path / "state"
+    monkeypatch.setattr(lint_module, "LOG_DIR", log_dir)
     log_file = tmp_path / "custom.log"
+
     rc = run_guarded(30, command=("true",), log_file=log_file)
+
     assert rc == 0
     # The explicit path is the ONLY thing this run touched in tmp_path.
     assert list(tmp_path.iterdir()) == [log_file]
+    # LOG_DIR itself was never created — no stable symlink, no legacy-file
+    # check, no prune scan.
+    assert not log_dir.exists()
 
 
 def test_run_guarded_default_scopes_by_workspace(
@@ -176,3 +192,169 @@ def test_run_guarded_replaces_pre_existing_regular_file_at_stable_path(
 
     assert rc == 0
     assert stable.is_symlink()
+
+
+def test_run_guarded_removes_legacy_fixed_log_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The pre-#895 single fixed `hk-lint.log` is removed, not left as a decoy.
+
+    #895 respec F2: a survivor of the old code would otherwise be permanently
+    frozen (the new prune glob requires `-<pid>.log` and can never match the
+    bare legacy name), lying silently at the exact path every persisted doc
+    still tells an agent to read.
+    """
+    monkeypatch.setattr(lint_module, "LOG_DIR", tmp_path)
+    project_root = tmp_path / "ws"
+    project_root.mkdir()
+    legacy = tmp_path / "hk-lint.log"
+    legacy.write_text("frozen body from before #895\n")
+
+    rc = run_guarded(30, command=("true",), project_root=project_root)
+
+    assert rc == 0
+    assert not legacy.exists()
+
+
+# ──────────────────────────────────────────────────────────────────────
+# _prune_old_logs (#895 respec F1/F5) — the only file-deleting code here
+# ──────────────────────────────────────────────────────────────────────
+
+
+def test_prune_old_logs_deletes_log_older_than_floor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A stale per-run log for THIS workspace is deleted.
+
+    Mutation arm: comment out `candidate.unlink()` in `_prune_stale` (leave
+    the age check in place) — this test then fails because `stale` survives.
+    """
+    monkeypatch.setattr(lint_module, "LOG_DIR", tmp_path)
+    project_root = tmp_path / "ws"
+    project_root.mkdir()
+    h = workspace_hash(project_root)
+    current = tmp_path / f"hk-lint-{h}-{os.getpid()}.log"
+    current.write_text("current run")
+    stale = tmp_path / f"hk-lint-{h}-999999.log"
+    stale.write_text("stale run")
+    old = time.time() - lint_module._PRUNE_MAX_AGE_SECONDS - 3600
+    os.utime(stale, (old, old))
+
+    lint_module._prune_old_logs(project_root, current)
+
+    assert not stale.exists()
+    assert current.exists()
+
+
+def test_prune_old_logs_spares_a_fresh_concurrent_sibling(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A fresh per-run log from a second, still-live run is NOT deleted.
+
+    This is the concurrency property #895 exists to protect: without the
+    age floor, this run's own prune pass would delete a sibling run's LIVE
+    log. Mutation arm: delete the `if age < _PRUNE_MAX_AGE_SECONDS: continue`
+    guard in `_prune_stale` (unlink unconditionally) — this test then fails
+    because `live_sibling` is gone.
+    """
+    monkeypatch.setattr(lint_module, "LOG_DIR", tmp_path)
+    project_root = tmp_path / "ws"
+    project_root.mkdir()
+    h = workspace_hash(project_root)
+    current = tmp_path / f"hk-lint-{h}-{os.getpid()}.log"
+    current.write_text("current run")
+    live_sibling = tmp_path / f"hk-lint-{h}-424242.log"
+    live_sibling.write_text("a second run, started moments ago")  # mtime = now
+
+    lint_module._prune_old_logs(project_root, current)
+
+    assert live_sibling.exists()
+
+
+def test_prune_old_logs_spares_a_symlink_even_with_an_old_target_mtime(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A symlink matching the per-run name shape is never pruned by age.
+
+    Covers the real stable symlink defensively: it never matches the
+    `hk-lint-<hash>-*.log` glob by name (`_prune_old_logs`'s docstring), so
+    this plants a symlink that WOULD match, to isolate the `is_symlink()`
+    guard from the naming exclusion. Mutation arm: delete the
+    `if skip_symlinks and candidate.is_symlink(): continue` line in
+    `_prune_stale` — with the guard gone, the age check alone no longer
+    protects it (its own `lstat` mtime, set old below via
+    `follow_symlinks=False`, is what the age check reads), so this test then
+    fails because the symlink is gone.
+    """
+    monkeypatch.setattr(lint_module, "LOG_DIR", tmp_path)
+    project_root = tmp_path / "ws"
+    project_root.mkdir()
+    h = workspace_hash(project_root)
+    current = tmp_path / f"hk-lint-{h}-{os.getpid()}.log"
+    current.write_text("current run")
+    old_target = tmp_path / "old-target.log"
+    old_target.write_text("old")
+    stray_symlink = tmp_path / f"hk-lint-{h}-777777.log"
+    stray_symlink.symlink_to(old_target)
+    old = time.time() - lint_module._PRUNE_MAX_AGE_SECONDS - 3600
+    os.utime(stray_symlink, (old, old), follow_symlinks=False)
+
+    lint_module._prune_old_logs(project_root, current)
+
+    assert stray_symlink.is_symlink()
+    assert old_target.exists()  # replace/unlink on the link must not follow it
+
+
+def test_prune_old_logs_spares_another_workspaces_log(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A stale per-run log that belongs to a DIFFERENT workspace is untouched.
+
+    Mutation arm: widen the glob in `_prune_old_logs` from
+    `hk-lint-{hash}-*.log` to `hk-lint-*.log` — this test then fails because
+    `other_workspace_log` is gone.
+    """
+    monkeypatch.setattr(lint_module, "LOG_DIR", tmp_path)
+    ws1 = tmp_path / "ws1"
+    ws1.mkdir()
+    ws2 = tmp_path / "ws2"
+    ws2.mkdir()
+    current = tmp_path / f"hk-lint-{workspace_hash(ws1)}-{os.getpid()}.log"
+    current.write_text("current run")
+    other_workspace_log = tmp_path / f"hk-lint-{workspace_hash(ws2)}-13579.log"
+    other_workspace_log.write_text("a different clone's stale run")
+    old = time.time() - lint_module._PRUNE_MAX_AGE_SECONDS - 3600
+    os.utime(other_workspace_log, (old, old))
+
+    lint_module._prune_old_logs(ws1, current)
+
+    assert other_workspace_log.exists()
+
+
+def test_prune_old_logs_removes_a_stale_orphaned_tmp_symlink(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A `.tmp-<pid>` symlink left by a run killed mid-replace is swept.
+
+    #895 respec F5: `_update_stable_symlink`'s temp link is only ever cleared
+    by a LATER run reusing the same pid; this sweep is the general case.
+    Mutation arm: drop the `tmp_links` glob/sweep from `_prune_old_logs`
+    (call `_prune_stale` only on `per_run`) — this test then fails because
+    `orphan` survives.
+    """
+    monkeypatch.setattr(lint_module, "LOG_DIR", tmp_path)
+    project_root = tmp_path / "ws"
+    project_root.mkdir()
+    h = workspace_hash(project_root)
+    current = tmp_path / f"hk-lint-{h}-{os.getpid()}.log"
+    current.write_text("current run")
+    target = tmp_path / f"hk-lint-{h}-000001.log"
+    target.write_text("orphaned run's real log")
+    orphan = tmp_path / f"hk-lint-{h}.log.tmp-000001"
+    orphan.symlink_to(target)
+    old = time.time() - lint_module._PRUNE_MAX_AGE_SECONDS - 3600
+    os.utime(orphan, (old, old), follow_symlinks=False)
+
+    lint_module._prune_old_logs(project_root, current)
+
+    assert not orphan.exists()
