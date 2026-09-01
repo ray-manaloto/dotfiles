@@ -30,7 +30,7 @@ Both numbers reproduce — but **only via `.Codex/`**, and two of the four
 exported mirrors score **zero on all three markers while being unambiguously
 corrupted**:
 
-```
+```console
 $ for f in .codex/agents/{adversarial-critic,claude-code-expert,staleness-auditor,dockerfile-reviewer}.toml; do ...
 .codex/agents/adversarial-critic.toml  -> markers=2  (Codex Code=0  .Codex/=2  Codex mcp add=0)
 .codex/agents/claude-code-expert.toml  -> markers=5  (Codex Code=0  .Codex/=5  Codex mcp add=0)
@@ -41,7 +41,7 @@ $ for f in .codex/agents/{adversarial-critic,claude-code-expert,staleness-audito
 `staleness-auditor.toml` is corrupted — `grep -ci claude` returns **0**, and it
 carries the substitution damage in a shape the markers do not cover:
 
-```
+```text
 124:- **Harness questions are answered offline.** Anything of the form "does Codex
 126:  `docs/Codex` — grep it before reaching for the web.
 ```
@@ -52,7 +52,7 @@ carries the substitution damage in a shape the markers do not cover:
 `staleness-auditor.toml` verbatim, with only `name`/`model_reasoning_effort`
 adjusted so the other three checks pass:
 
-```
+```text
 violations: []
 exit code: 0
 claude occurrences (any case): 0
@@ -80,7 +80,7 @@ and asserts `rc == 0` — a passing arm only.
 
 **Replay (mutation, restored):** replacing the whole body with `return 0`:
 
-```
+```text
 tests/test_codex_agent_parity.py  -> 18 passed
 tests/ (full suite)               -> 2577 passed, 11 deselected
 ```
@@ -90,6 +90,13 @@ tests/ (full suite)               -> 2577 passed, 11 deselected
 A regression that makes the CLI (and therefore the hk step) always green is
 invisible to the suite. `find_violations` itself is well covered — this is
 specifically the seam between it and hk.
+
+**Scoped to `c293c4d`; fixed in the respec-round-2 commit.** The follow-up
+commit on this branch (`fix(agents): make the codex lane gate assert a signal
+we own (#884)`, `1031de9` at review time, `e8a681a` after the hk-1.57.0
+rebase) added failing-direction tests that call `codex_agent_parity_main` on
+violating trees, including
+`test_the_entry_point_returns_nonzero_on_a_violation`. Not a current defect.
 
 ### P2 — The `.toml` half the gate polices has no demonstrated consumer in the documented flow
 
@@ -109,7 +116,7 @@ pinned CLI (`codex-cli 0.151.0`) has **no `--agent` flag** — only `-p/--profil
 <CONFIG_PROFILE_V2>`, which names a config profile, not an agent definition.
 And a repo-wide search finds no consumer:
 
-```
+```console
 $ git grep -n "\.codex/agents" -- . | grep -v ^docs/research
 .gitignore:58,70,71,72          # ignore rules
 hk-common.pkl:68,72,74,82       # the exclude comment
@@ -142,7 +149,7 @@ from the CLI help or the repo, and neither the commit nor the gate says so.
 
 Replay — a zero-byte `.md` passes:
 
-```
+```text
 0  EMPTY .md (0 bytes)   -> PASS (rc=0)
 ```
 
@@ -162,7 +169,7 @@ half is gated:
 | "Never substitute your own reasoning for a failed codex call" | `codex-adversarial-critic.md:211`, `codex-advisor.md:143`, `codex-claude-code-expert.md:234`, `codex-staleness-auditor.md:196` | nothing |
 | frontmatter `name` == filename stem | all four | nothing |
 
-```
+```console
 $ grep -rn "gpt-5.6-sol\|model: haiku\|Never substitute your own reasoning" \
     hk.pkl hk-common.pkl python/verification/suites.toml
 (no output)
@@ -206,7 +213,7 @@ All four descriptions were shortened. None was near the 1,536-char silent
 truncation cap that `python/verification/suites.toml:2008` records as a pinned
 defect:
 
-```
+```text
 codex-adversarial-critic.md    before=633 after=360
 codex-advisor.md               before=566 after=351
 codex-claude-code-expert.md    before=672 after=375
@@ -231,7 +238,7 @@ section was moved to the new "Protocol" block and left two blank lines before
 `## Gather what codex cannot reach FIRST` (line 106). No markdown-lint step
 sees this file, so nothing will report it:
 
-```
+```console
 $ hk check --all --plan --json -g '.claude/agents/codex-advisor.md'
 steps that see this file: trailing_whitespace, newlines, mixed_line_ending,
 fix_smart_quotes, detect_private_key, check_added_large_files,
@@ -285,7 +292,7 @@ measurably correct, so the claim is not load-bearing. Labelled **unverified**.
 
 ### Area 4 — the `.toml` rewrites are clean of Claude-Code-only mechanics
 
-```
+```console
 $ for f in .codex/agents/codex-*.toml; do grep -c 'SendMessage' … ; done
 codex-adversarial-critic.toml   SendMessage=0 branch_guard=0 Edit-tool=0 codex-exec=0
 codex-advisor.toml              SendMessage=0 branch_guard=0 Edit-tool=0 codex-exec=0
@@ -316,7 +323,7 @@ they need it is a scope question I cannot settle cold — flagging, not claiming
 
 ### Area 6 — `docs/hk-builtins-audit.md` is a faithful regeneration
 
-```
+```console
 $ cp docs/hk-builtins-audit.md <backup>
 $ mise run hk-audit
 [hk-audit] $ uv run --project python dotfiles-setup hk-builtins-audit
@@ -357,7 +364,7 @@ the `check`, `fix` and `pre-commit` hooks (`hk.pkl:713,725,731`).
 
 Everything mutated was restored. Final state:
 
-```
+```console
 $ git status --porcelain --untracked-files=no
 (empty)
 ```

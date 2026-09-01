@@ -8,7 +8,7 @@ base rebuild in flight). All commands run against `ray-manaloto/dotfiles`.
 **Q1 — lint failure.** `gh run view 33454209573 --log-failed` (job `lint` /
 `Run hk checks`, run 33454209573):
 
-```
+```text
 hk ERROR To fix, run: zizmor --no-progress --fix ...
 Caused by:
    0: uv run --project python dotfiles-setup hk-builtins-audit --check
@@ -70,7 +70,7 @@ Recommend closing #822 after #885 merges rather than fixing lint on it.
 divergence, `OK parity: ... hold`). The real failure is in
 `uv run --project python pytest tests/ -q`:
 
-```
+```text
 FAILED tests/test_lock_coverage.py::test_root_lock_covers_host_config
 AssertionError: stale mise.lock entries for removed tools: ['node']
 1 failed, 2552 passed, 6 skipped, 11 deselected in 43.50s
