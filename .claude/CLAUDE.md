@@ -48,6 +48,7 @@ knowledge-base. The plugin ships it Fable-gated — but default `/model` here is
 dormant. So `/fable-orchestrator:setup` reads an un-gated trigger as a shape to
 upgrade away from and offers to re-gate it — **decline**. It also writes to the
 root `CLAUDE.md`, which the stub gate rejects: config belongs in THIS file.
+
 ### There is no `grok` here — codex lanes only, stop asking
 
 `grok` is NOT installed (control-armed 2026-09-01: `command -v grok` absent while
