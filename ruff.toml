@@ -30,10 +30,3 @@ extend = "python/pyproject.toml"
 # The plugins are standalone CLI helper scripts where print IS the user
 # interface, so T201 (print) is expected rather than a defect.
 "plugins/**/*.py" = ["T201"]
-# SLF001 (#895 respec F1): `test_lint.py` calls `lint._prune_old_logs`
-# directly. It is the only file-deleting code in `lint.py`, with two
-# independent guards (age floor, symlink skip) that must each be
-# mutation-tested on its own — going through the public `run_guarded` cannot
-# plant a stale SIBLING per-run file, because two in-process calls share one
-# pid and therefore one per-run path.
-"tests/test_lint.py" = ["SLF001"]
