@@ -8,6 +8,7 @@ via dependency injection rather than reading os.environ directly.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from pydantic import Field
@@ -40,6 +41,34 @@ class ContainerConfig(BaseSettings):
 # Bind-mounted from the host at ``~/.local/state/dotfiles`` so the
 # container's R1 sshd can read the staged authorized_keys file.
 CONTAINER_HOST_STATE_DIR = Path("/tmp/dotfiles-host-state")
+
+DEFAULT_HOST_STATE_DIR = Path.home() / ".local" / "state" / "dotfiles"
+
+
+def host_state_dir(config: DotfilesConfig | None = None) -> Path:
+    """Resolve the devcontainer runtime state directory.
+
+    Lives here rather than in :mod:`dotfiles_setup.docker` (#893) because
+    :mod:`dotfiles_setup.devcontainer_names` needs it to compose the secrets
+    env-file path, and ``docker`` already imports ``devcontainer_names`` — so
+    keeping it there forced a function-level import to dodge the cycle.
+    ``config`` is a leaf module, which makes it the honest home for a path
+    every layer resolves.
+
+    Args:
+        config: Optional config; defaults to env-var lookup for backward compat.
+    """
+    if config is not None and config.container.host_state_dir is not None:
+        return config.container.host_state_dir
+    raw_dir = os.environ.get("DOTFILES_HOST_STATE_DIR")
+    if raw_dir:
+        return Path(raw_dir)
+    is_devcontainer = (config is not None and config.devcontainer) or os.environ.get(
+        "DEVCONTAINER"
+    ) == "true"
+    if is_devcontainer:
+        return CONTAINER_HOST_STATE_DIR
+    return DEFAULT_HOST_STATE_DIR
 
 
 class DotfilesConfig(BaseSettings):

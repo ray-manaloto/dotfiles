@@ -21,35 +21,136 @@ import sys
 from pathlib import Path
 
 from dotfiles_setup.config import (
-    CONTAINER_HOST_STATE_DIR,
     DotfilesConfig,
+    host_state_dir,
 )
-from dotfiles_setup.devcontainer_names import resolve_names, teardown_container_ids
+from dotfiles_setup.devcontainer_names import (
+    DevcontainerNames,
+    doppler_env_filename,
+    resolve_names,
+    teardown_container_ids,
+)
 from dotfiles_setup.platform_target import resolve_platform
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_HOST_STATE_DIR = Path.home() / ".local" / "state" / "dotfiles"
 HOST_AUTHORIZED_KEYS_FILE = "authorized_keys"
 
+#: Doppler defaults, matching the values ``initializeCommand`` used inline
+#: before #893 moved the download here. A clone overrides either through
+#: ``mise.local.toml`` — which is exactly why the output path must be scoped.
+DEFAULT_DOPPLER_PROJECT = "dotfiles"
+DEFAULT_DOPPLER_CONFIG = "dev_personal"
 
-def host_state_dir(config: DotfilesConfig | None = None) -> Path:
-    """Resolve the devcontainer runtime state directory.
+#: How long the secrets download may take before it is treated as a failure.
+_DOPPLER_TIMEOUT_S = 120.0
 
-    Args:
-        config: Optional config; defaults to env-var lookup for backward compat.
+
+class SecretsDownloadError(RuntimeError):
+    """The Doppler download did not produce a usable env file.
+
+    The message is built here rather than at the raise sites so the two
+    failure modes read the same way in a bring-up log, and so a caller never
+    has to compose one.
     """
-    if config is not None and config.container.host_state_dir is not None:
-        return config.container.host_state_dir
-    raw_dir = os.environ.get("DOTFILES_HOST_STATE_DIR")
-    if raw_dir:
-        return Path(raw_dir)
-    is_devcontainer = (config is not None and config.devcontainer) or os.environ.get(
-        "DEVCONTAINER"
-    ) == "true"
-    if is_devcontainer:
-        return CONTAINER_HOST_STATE_DIR
-    return DEFAULT_HOST_STATE_DIR
+
+    def __init__(self, project: str, config: str, reason: str) -> None:
+        """Build the message from the project, config, and failure reason."""
+        super().__init__(
+            f"doppler secrets download for {project}/{config} failed: {reason}"
+        )
+
+
+def doppler_env_file(names: DevcontainerNames, state_dir: Path) -> Path:
+    """This workspace+architecture's secrets env file (#893).
+
+    Before #893 every clone wrote ``<state_dir>/doppler.env`` — one literal
+    path under ``$HOME``, with no workspace or architecture in it. Two
+    concurrent ``mise run up`` runs therefore raced between the write and
+    ``runArgs --env-file`` reading it, and ``DOPPLER_PROJECT`` /
+    ``DOPPLER_CONFIG`` are documented PER-CLONE overrides — so the loser
+    started with the winner's secrets, silently and with no error.
+
+    Scoping by architecture as well as workspace is deliberate even though a
+    clone's Doppler project does not vary by arch: bringing both
+    architectures of ONE workspace up concurrently is a supported flow
+    (#677), and giving each its own path makes that race structurally
+    impossible rather than merely atomic. It also matches how the home
+    volume is already named.
+    """
+    return state_dir / doppler_env_filename(names)
+
+
+def stage_host_secrets() -> Path:
+    """Write this workspace's secrets env file, and return its path.
+
+    #893 moved the Doppler download out of the ``initializeCommand`` shell
+    chain in ``devcontainer.json``. It was an unlocked ``>``-truncate to one
+    host-wide path, so it needed both a per-workspace path and an atomic
+    write — more logic than belongs in a JSON string
+    (``.claude/rules/zero-bash-logic.md``).
+
+    Raises :class:`SecretsDownloadError` if the secrets are unusable, which
+    fails the bring-up exactly as the old ``&& [ -s ... ] &&`` guard did.
+    """
+    state_dir = host_state_dir()
+    state_dir.mkdir(parents=True, exist_ok=True)
+    return download_doppler_env(resolve_names(), state_dir)
+
+
+def download_doppler_env(
+    names: DevcontainerNames, state_dir: Path, env: dict[str, str] | None = None
+) -> Path:
+    """Write this workspace's secrets env file atomically, and return it.
+
+    Raises :class:`SecretsDownloadError` when the download fails or produces
+    an empty file. Before #893 the ``initializeCommand`` shell chain guarded
+    this with ``&& [ -s ... ] &&``, so an empty download aborted the bring-up;
+    that guard is reproduced here rather than dropped — an empty env file
+    reaching ``--env-file`` is a container with no secrets and no complaint.
+    """
+    source = os.environ if env is None else env
+    project = source.get("DOPPLER_PROJECT") or DEFAULT_DOPPLER_PROJECT
+    config = source.get("DOPPLER_CONFIG") or DEFAULT_DOPPLER_CONFIG
+    result = subprocess.run(
+        [
+            "doppler",
+            "secrets",
+            "download",
+            "--format",
+            "docker",
+            "--no-file",
+            "--project",
+            project,
+            "--config",
+            config,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=_DOPPLER_TIMEOUT_S,
+    )
+    if result.returncode != 0:
+        raise SecretsDownloadError(
+            project, config, f"rc={result.returncode}: {result.stderr.strip()}"
+        )
+    if not result.stdout.strip():
+        raise SecretsDownloadError(project, config, "it returned no secrets")
+
+    path = doppler_env_file(names, state_dir)
+    # Write-then-rename: the state directory is shared by every clone, and a
+    # reader must see a whole file or the previous one, never a partial write.
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    try:
+        # Born 0o600: create-then-chmod leaves a umask-mode window where
+        # another local reader could open the secrets before chmod runs.
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as handle:
+            handle.write(result.stdout)
+        tmp.replace(path)
+    finally:
+        tmp.unlink(missing_ok=True)
+    return path
 
 
 def _agent_public_keys(env: dict[str, str]) -> list[str]:
@@ -117,6 +218,11 @@ def initialize_host_ssh_runtime() -> dict[str, str]:
     ``devcontainer.json``; no host-side proxy is required. The only
     remaining host-side preparation is delivering the user's public keys
     for sshd's ``authorized_keys`` check.
+
+    Secrets staging is deliberately NOT here — see
+    :func:`stage_host_secrets`. The two are independent, and folding them
+    together would make every SSH test stub a Doppler call it does not care
+    about.
     """
     state_dir = host_state_dir()
     state_dir.mkdir(parents=True, exist_ok=True)
@@ -321,12 +427,14 @@ class DevContainerManager:
         )
 
     def initialize_host(self) -> None:
-        """Stage host-side authorized_keys for R1 inbound SSH."""
+        """Stage host-side authorized_keys and the scoped secrets env file."""
         result = initialize_host_ssh_runtime()
+        env_file = stage_host_secrets()
         logger.info(
-            "Prepared devcontainer host SSH runtime at %s (keys: %s)",
+            "Prepared devcontainer host runtime at %s (keys: %s, env file: %s)",
             result["state_dir"],
             result["authorized_keys"],
+            env_file,
         )
 
     def verify_ssh_inbound(self, port: int, user: str) -> None:
