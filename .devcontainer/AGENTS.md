@@ -17,7 +17,7 @@ Defines the devcontainer image and runtime lifecycle. Two layers:
 | File | Purpose |
 |------|---------|
 | `Dockerfile` | Multi-stage base image (mise bootstrap, cargo/rustup cookbook paths, build-time self-checks); known cosmetic warnings documented in comment block |
-| `Dockerfile.host-user` | Thin overlay that adds the host UID/GID (low-priority Phase 2 work) |
+| `Dockerfile.host-user` | Thin overlay adding the host UID/GID; sets `USER`/`LOGNAME`/`HOME` ENV (`HOME=/home/${DEVCONTAINER_USER}` = the home-volume mount target) |
 | `devcontainer.json` | Devcontainer spec (containers.dev) — lifecycle hooks, features, volumes, dynamic naming |
 | `mise-system.toml` | BASE tool tier (#160 T9) → `/usr/local/share/mise/config.toml`. `[bootstrap.packages]` declares the apt set installed by `mise bootstrap packages apply` (#160 T4); the 20 host↔image shared tools come from the repo `.config/mise/conf.d/shared.toml` COPYd to `conf.d/` and merged (#160 T5) |
 | `mise-runtime.toml` | RUNTIME tool tier (#160 T9/T10) → `config.runtime.toml`, installed in the `devcontainer-runtime` stage under `MISE_ENV=runtime` (baked ENV). The interactive OVERLAY tier lives in `home/dot_config/mise/config.toml.tmpl`, eager-installed per-user by `on-create.sh` |
@@ -28,9 +28,10 @@ Defines the devcontainer image and runtime lifecycle. Two layers:
 The devcontainer uses **declarative lifecycle hooks** (containers.dev
 spec), not a bootstrap shell wrapper:
 
-- `initializeCommand` (host): pre-creates `~/.local/state/dotfiles`,
-  downloads Doppler secrets to `doppler.env` (KEY=VALUE for
-  `--env-file`), then runs `dotfiles-setup docker initialize-host`.
+- `initializeCommand` (host): runs `dotfiles-setup docker
+  initialize-host`, which stages `authorized_keys` AND downloads the
+  Doppler secrets (KEY=VALUE for `--env-file`). #893 moved the
+  download out of the shell chain into python.
 - `onCreateCommand` (in container, once): `chezmoi init --apply`
   against `/workspaces/${localWorkspaceFolderBasename}`, chowns
   named-volume mountpoints to `${USER}:${USER}`.
@@ -42,10 +43,15 @@ spec), not a bootstrap shell wrapper:
 
 ## Secrets Injection (Doppler)
 
-`initializeCommand` (host-side) runs `doppler secrets download
---format docker` → `~/.local/state/dotfiles/doppler.env` →
-`runArgs --env-file` → container env vars. No doppler CLI, fnox, or
-service token needed inside the container.
+`initializeCommand` (host-side) runs `dotfiles-setup docker
+initialize-host` → `~/.local/state/dotfiles/doppler-HASH-ARCH.env` →
+`runArgs --env-file` (via `${localEnv:DEVCONTAINER_ENV_FILE}`) →
+container env vars. No doppler CLI, fnox, or service token needed
+inside the container.
+
+⚠️ **Filename carries this workspace's hash+arch; write is
+temp-then-rename (#893).** A shared `doppler.env` let two concurrent
+`up`s hand a container the other clone's secrets.
 
 Doppler project/config defaults (`dotfiles`/`dev_personal`) come from
 `mise.toml [tasks.up].env` (`:251`, `:277`, `:771`), templated
@@ -84,19 +90,15 @@ via `dotfiles-setup devcontainer teardown`. Without them an arm64 `up` **finds
 and reuses** the amd64 container and reports success.
 
 **Migrating a pre-#677 volume:** `mise run migrate-home-volume` (dry-run;
-`-- --apply` executes). It never deletes the source, and refuses rather than
-guessing in three cases. That, the id-label mechanism, and why the arch is in
-the name rather than in a check: **`.devcontainer/TOOL-PERSISTENCE.md`**.
+`-- --apply` executes) — never deletes the source, refuses rather than guessing.
+That, the id-label mechanism, and why the arch is a name not a check:
+**`.devcontainer/TOOL-PERSISTENCE.md`**.
 
 The volume covers the whole user home, so `~/.cache/mise`, `~/.cache/uv`,
-`~/.bash_history`, `~/.ssh/known_hosts` and TMPDIR persist across `stop/up`.
-The v5 per-directory volumes it replaced are orphans; `mise run prune` cleans
-them.
-
-**TMPDIR persistence:** `Dockerfile.host-user` sets
-`ENV TMPDIR=/home/${USER}/.local/tmp` on the home volume.
-`on-create.sh` sweeps files older than 30 days (atime) and prunes
-empty directories per container create to bound growth.
+`~/.bash_history`, `~/.ssh/known_hosts` and TMPDIR
+(`ENV TMPDIR=/home/${USER}/.local/tmp`, swept >30d by `on-create.sh`) persist
+across `stop/up`. The v5 per-directory volumes it replaced are orphans;
+`mise run prune` cleans them.
 
 **Reset-on-recreate:** `onCreateCommand` runs `chezmoi init --apply
 --force` on every container creation; chezmoi-managed files (`.bashrc`,
@@ -104,7 +106,6 @@ empty directories per container create to bound growth.
 re-rendered from `home/`. The home volume protects unmanaged state
 (caches, history, TMPDIR) — to change managed files, edit `home/`.
 
-SSH-agent forwarding uses Docker Desktop's native magic socket at `/run/host-services/ssh-auth.sock`. No host-side proxy. See `docs/research/runs/research-20260409c-dockerdesktop-ssh/`.
 
 ## Override Model
 
