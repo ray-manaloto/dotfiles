@@ -1837,6 +1837,20 @@ paths = [".claude/CLAUDE.md"]
 lines = ["- fable-orchestrator: implementation lane = codex"]
 
 [[suite]]
+name = "orchestration.codex-only-lanes"
+description = "There is no `grok` CLI on this Mac, so every fable-orchestrator lane must resolve to codex or to Claude. The fact was already stated before 2026-09-01 — but only as a trailing sentence about the *implementation lane mode*, and `orchestration.mode-line-declared` above pins only that one line. A session followed it for implementation and still proposed `grok-reviewer` for the cold pass, because the plugin skill's review-tier table names grok as the cross-family reviewer for a codex diff and nothing here overrode it for the OTHER lanes. So this binds the lanes the mode line does not reach: the directive heading, the implementation row, and the cold-review row that answers the question the skill's fallback chain leaves open (with grok gone Claude IS the third family, so an Opus cold pass on a codex diff is the full gate, not a degraded one). require_lines, not require_tokens, for the same reason as the two contracts above: a substring is satisfied by a doc that merely QUOTES the routing while narrating it. Whitespace is normalised so re-indentation is not a failure; wording is not, so a paraphrase is — and a paraphrase of a routing table IS a routing change."
+category = "orchestration"
+check_type = "static"
+handler = "require_lines"
+paths_required = true
+paths = [".claude/CLAUDE.md"]
+lines = [
+    "### There is no `grok` here — codex lanes only, stop asking",
+    "| Implementation | `fable-orchestrator:codex-implementer`, effort `xhigh` |",
+    "| Cold review of a codex diff | an Opus subagent, diff-only (`Agent`, `model: \"opus\"`) |",
+]
+
+[[suite]]
 name = "orchestration.plugins-enabled"
 description = "The two orchestration plugins must be ENABLED — value `true`, not merely present as a key. That distinction is the whole contract: `\"fable-orchestrator@fable-orchestrator\": false` satisfies any check that asks whether the plugin is listed, while the lane it declares cannot run. The trigger and mode lines above describe a flow that routes through these plugins, so with them off the docs describe a flow that is not available. Bound per_path (#299) so no rule doc's incidental mention of a plugin name can satisfy the contract for settings.json."
 category = "orchestration"

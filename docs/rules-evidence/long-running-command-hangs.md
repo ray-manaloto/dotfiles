@@ -48,12 +48,32 @@ outright.
 
 | Path | Written by | Use it? |
 |---|---|---|
-| `~/.local/state/dotfiles/hk-lint.log` | the per-run `HK_LOG_FILE` `lint.py` sets (`DEFAULT_LOG_FILE`) | **yes** |
+| `~/.local/state/dotfiles/hk-lint-<workspace hash>.log` | stable symlink `lint.py` maintains, pointed at the current run's `hk-lint-<hash>-<pid>.log` | **yes** |
 | `~/.local/state/hk/hk.log` | *other* hk entrypoints, e.g. the pre-push hook | no — typically stale |
 | `~/.local/state/mise/mise.log` | mise (`MISE_LOG_FILE`, debug level in `mise.toml [env]`) | for mise |
 
 Reading the wrong one made a **live hang look idle**. Use a count-diff monitor
 loop against the right file, not a fixed sleep.
+
+⚠️ **#895 — the single fixed path was a cross-clone/cross-window collision.**
+Before #895, every clone and every terminal window on this Mac shared one
+literal `~/.local/state/dotfiles/hk-lint.log` (`DEFAULT_LOG_FILE`), truncated
+at the start of every run — so two concurrent lint runs interleaved and
+truncated the same file, and an agent following the table above could read a
+different run's log body next to a correct `rc`. `lint.py` now scopes the
+default log by workspace hash (`workspace_hash` from `devcontainer_names.py`)
+*and* pid: a per-run `hk-lint-<hash>-<pid>.log`, plus the stable
+`hk-lint-<hash>.log` symlink the table names, repointed atomically via a
+single `Path.replace`. **The guarantee that grants is narrower than "two runs
+never observe or destroy each other's file" reads:** true of the per-run
+files, which are never shared, but the stable link names only the MOST
+RECENT run for a workspace — two concurrent same-workspace runs (two windows
+on one clone) still contend for that one name, and it can flip under a
+reader mid-loop. That is an accepted limit of the ratified scheme, not a
+defect; each run also logs its own exact per-run path at start, which is the
+unambiguous handle when two runs are live for one workspace.
+An explicitly-passed `log_file` (every test in `test_lint.py` predating #895)
+is exempt — used verbatim, no derivation, no symlink.
 
 ## The ruff wedge (#268) — and its two published red herrings
 

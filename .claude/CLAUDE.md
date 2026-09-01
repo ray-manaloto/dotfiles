@@ -48,7 +48,29 @@ knowledge-base. The plugin ships it Fable-gated — but default `/model` here is
 dormant. So `/fable-orchestrator:setup` reads an un-gated trigger as a shape to
 upgrade away from and offers to re-gate it — **decline**. It also writes to the
 root `CLAUDE.md`, which the stub gate rejects: config belongs in THIS file.
-`grok` CLI is NOT installed, so `codex` is the only viable fixed mode.
+
+### There is no `grok` here — codex lanes only, stop asking
+
+`grok` is NOT installed (control-armed 2026-09-01: `command -v grok` absent while
+`codex` resolves). So every fable-orchestrator lane resolves to codex or to
+Claude, never grok. Do not propose, dispatch, or "fall back to"
+`grok-implementer`, `grok-reviewer` or `grok-researcher`, and do not ask which
+lane to use — the answer is fixed:
+
+| Lane | Use |
+|---|---|
+| Implementation | `fable-orchestrator:codex-implementer`, effort `xhigh` |
+| Cold review of a codex diff | an Opus subagent, diff-only (`Agent`, `model: "opus"`) |
+| Advisory / critique / audit / harness | `codex-advisor`, `codex-adversarial-critic`, `codex-staleness-auditor`, `codex-claude-code-expert` |
+| Premise verification | `fable-orchestrator:premise-verifier` (Claude, read-only) |
+| Research | a read-only `Explore`/`Agent` lane |
+
+⚠️ **`codex-adversarial-critic` is NOT the cold-review lens for a codex diff** —
+same model family as the implementer, so it inherits its blind spots. The
+orchestration skill requires a family the implementer isn't; with grok gone,
+Claude IS that third family, so an Opus cold pass on a codex diff is the full
+gate, not a degraded one. The "degraded, announce it" caveat applies only to
+Claude-authored diffs, where Opus would be same-family.
 
 ⚠️ **Until Claude tokens reset (from 2026-08-31), advisor consults route to the
 `codex-advisor` subagent, not `fable-orchestrator:fable-advisor`** — its reasoning

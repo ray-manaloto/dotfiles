@@ -2230,7 +2230,12 @@ def _build_command_handlers(
         sys.stdout.write(refresh_p2996_ref(project_root).as_json() + "\n")
 
     def _lint() -> None:
-        sys.exit(run_guarded(resolve_timeout(getattr(args, "timeout", None))))
+        sys.exit(
+            run_guarded(
+                resolve_timeout(getattr(args, "timeout", None)),
+                project_root=project_root,
+            )
+        )
 
     return {
         "validate": _validate,
