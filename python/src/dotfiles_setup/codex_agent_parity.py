@@ -7,38 +7,50 @@ The four lanes added by #884 ship as a pair per agent: a Claude-side wrapper at
 — the ``.md`` addresses a Claude Code subagent that shells out, the ``.toml``
 addresses the codex role that does the reasoning — so byte-equality is the wrong
 check. What must hold is the wiring: both halves exist, they agree on identity,
-the codex half asks for the effort the lane exists to buy, and neither has been
-overwritten with corrupted content.
+each asks for the model and effort the lane exists to buy, the ``.md`` still
+forbids the failure that would look like success, and neither has been
+overwritten by the exporter.
 
-Three failure modes, each measured rather than assumed:
+**Who consumes these files.** The Codex Desktop app reads and WRITES
+``.codex/agents/`` — it produced the four non-``codex-``-prefixed mirrors there
+in a single batch (identical ``18:52:09`` mtime). The ``codex exec`` CLI path the
+``.md`` wrappers actually invoke does NOT read this directory; it is given the
+prompt on stdin. So the tomls have a real consumer, and a real overwrite hazard,
+even though nothing in the shell-out path loads them.
 
-1. **Corruption.** The Codex desktop app EXPORTS mirrors into ``.codex/agents/``
-   with a blind ``claude`` -> ``Codex`` substitution. Measured 2026-08-31 on the
-   exported mirrors: ``claude-code-expert.toml`` scored 5 and
-   ``adversarial-critic.toml`` 2 on :data:`CORRUPTION_MARKERS`, while all seven
-   hand-authored knowledge-base tomls scored 0 (control arm: the same probe
-   found 6 correct ``Claude``/``.claude/`` references inside one of them, so it
-   was capable of matching text there). The exported mirrors stay gitignored;
-   this gate exists so that if that exporter ever reaches a TRACKED
-   ``codex-*.toml``, the gate is loud rather than the corruption silent.
+## Why the check is a SENTINEL, not a corruption sniff
 
-   Note what is NOT claimed: that the exporter enumerates ``.claude/agents/*.md``
-   one-for-one. That mechanism was refuted — ``.claude/skills/`` holds 31
-   directories against ``.agents/skills/``'s 3, and ``.agents/skills/`` holds
-   ``codex-task-orchestration``, which has no ``.claude/skills/`` source. The
-   exporter mirrors a SELECTED subset. So the risk is real but unproven, and the
-   response is one cheap loud check, not machinery.
+The first version of this gate looked for the exporter's output strings
+(``Codex Code``, ``.Codex/``, ``Codex mcp add``). That is
+``probes-need-a-control-arm.md`` rule 9 — binding a check to text you do not
+own — and it was already a no-op on live evidence. Measured 2026-08-31 across
+the four exported mirrors (occurrence counts, not line counts):
 
-2. **A half went missing.** A ``.md`` with no ``.toml`` counterpart (or the
-   reverse) is worse than absence, because the surviving half still loads and
-   the harness appears to accept it — the same reasoning as the
-   ``session_review_skill_parity`` hk step this one follows.
+===================  ===========  ==================  =========  ==========
+marker               adversarial  claude-code-expert  staleness  dockerfile
+===================  ===========  ==================  =========  ==========
+``Codex Code``                 0                   0          0           0
+``.Codex/``                    2                   6          0           0
+``Codex mcp add``              0                   0          0           0
+===================  ===========  ==================  =========  ==========
 
-3. **Identity or effort drift.** A ``name`` that disagrees with its filename
-   stem, or a ``model_reasoning_effort`` that is not ``"xhigh"``. Without the
-   effort declaration codex resolves it from ``~/.codex/config.toml`` — a file
-   this repo neither owns nor watches — and silently runs at ``medium``, which
-   is the exact downgrade these lanes were created to close.
+Two of the three could never fire, and ``staleness-auditor.toml`` is
+unambiguously corrupted (``"does Codex Code do X"``, ``docs/Codex``) while
+scoring **zero on all three**. The reason is sharper than "the phrasing drifted":
+that file DOES contain ``Codex Code``, split across a line wrap — flattening
+whitespace finds it, the raw scan does not. **Any multi-word content marker is
+defeatable by reflow**, which is a second, permanent reason not to rely on one.
+
+A positive test is no better: the obvious "a hand-authored file mentions
+``claude``" rule fails too, because ``claude-code-expert.toml`` is an exported
+mirror carrying 29 case-insensitive ``claude`` hits.
+
+So the primary check is :data:`SENTINEL` — a line THIS repo writes into every
+hand-authored toml. Its failure mode is "our file was replaced", which is the
+thing we actually care about, and it holds no matter what the exporter emits on
+any given day. The negative markers are kept as a secondary signal, broadened
+with the two shapes measured above and matched against whitespace-flattened
+text so a line wrap cannot hide them.
 
 The logic lives here rather than in an inline-bash hk step, per
 ``.claude/rules/zero-bash-logic.md``; the ``codex_agent_parity`` hk step and the
@@ -49,6 +61,7 @@ The logic lives here rather than in an inline-bash hk step, per
 from __future__ import annotations
 
 import logging
+import re
 import tomllib
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -69,14 +82,46 @@ STEM_PREFIX = "codex-"
 
 REQUIRED_EFFORT = "xhigh"
 
-# The signature of the exporter's blind `claude` -> `Codex` substitution. These
-# are strings that CANNOT occur in correct prose: the product is "Claude Code",
-# the directory is ".claude/", and the command is "claude mcp add".
+# THE PRIMARY CHECK. A token this repo owns and writes into every hand-authored
+# toml. An exporter overwrite destroys it whatever strings that export contains.
+# It must never be added to anything the exporter produces, or the gate stops
+# discriminating — `tests/test_codex_agent_parity.py` pins its absence from the
+# four exported mirrors for exactly that reason.
+SENTINEL = "dotfiles-hand-authored-codex-lane"
+
+# Secondary signal only. Matched against WHITESPACE-FLATTENED text, because the
+# live corrupted mirror hides `Codex Code` behind a line wrap.
 CORRUPTION_MARKERS: tuple[str, ...] = (
     "Codex Code",
     ".Codex/",
     "Codex mcp add",
+    "does Codex",
+    "docs/Codex",
 )
+
+# What the `.md` wrapper must still say. Each is a string THIS repo authored, so
+# none of them can drift out from under us the way an exporter's output can.
+#
+# The two flags are load-bearing together: omit either and codex resolves it from
+# `~/.codex/config.toml`, a file this repo neither owns nor watches, silently
+# running the lane at `medium` on whatever model that file names.
+MD_REQUIRED_MARKERS: tuple[tuple[str, str], ...] = (
+    ("--model gpt-5.6-sol", "the explicit model pin in the codex invocation"),
+    (
+        f'model_reasoning_effort="{REQUIRED_EFFORT}"',
+        "the explicit effort pin in the codex invocation",
+    ),
+    (
+        "Never substitute your own reasoning for a failed codex call",
+        (
+            "the prohibition on backfilling a failed codex call with in-model "
+            "reasoning — the failure that looks exactly like success"
+        ),
+    ),
+)
+
+_FRONTMATTER_RE = re.compile(r"\A---\n(?P<fm>.*?)\n---\n", re.DOTALL)
+_WHITESPACE_RE = re.compile(r"\s+")
 
 
 @dataclass(frozen=True)
@@ -88,6 +133,25 @@ class ParityViolation:
     detail: str
 
 
+def flatten(text: str) -> str:
+    """Collapse every whitespace run to one space.
+
+    A multi-word marker is invisible to a raw scan once the text is reflowed:
+    the live corrupted mirror carries ``Codex Code`` split across a line break.
+    """
+    return _WHITESPACE_RE.sub(" ", text)
+
+
+def _read(path: Path) -> str:
+    """Read a file as text, never raising on undecodable bytes.
+
+    A non-UTF-8 toml is itself evidence something overwrote the file, so it must
+    surface as a named violation rather than an unhandled ``UnicodeDecodeError``
+    reported as an unexplained command failure.
+    """
+    return path.read_text(encoding="utf-8", errors="replace")
+
+
 def _stems(directory: Path, suffix: str) -> set[str]:
     """Stems of in-scope agent files in ``directory``, or empty if it is absent."""
     if not directory.is_dir():
@@ -97,6 +161,19 @@ def _stems(directory: Path, suffix: str) -> set[str]:
         for p in directory.iterdir()
         if p.is_file() and p.name.startswith(STEM_PREFIX) and p.name.endswith(suffix)
     }
+
+
+def _frontmatter(text: str) -> dict[str, str]:
+    """Parse the leading YAML frontmatter block into a flat key -> value map."""
+    match = _FRONTMATTER_RE.match(text)
+    if not match:
+        return {}
+    out: dict[str, str] = {}
+    for line in match.group("fm").splitlines():
+        key, sep, value = line.partition(":")
+        if sep and not key.startswith((" ", "\t", "#")):
+            out[key.strip()] = value.strip()
+    return out
 
 
 def _pairing_violations(repo_root: Path) -> Iterator[ParityViolation]:
@@ -131,22 +208,34 @@ def _pairing_violations(repo_root: Path) -> Iterator[ParityViolation]:
 
 
 def _toml_violations(repo_root: Path) -> Iterator[ParityViolation]:
-    """Yield corruption, identity and effort violations for each codex toml."""
+    """Yield sentinel, corruption, identity and effort violations per codex toml."""
     directory = repo_root / CODEX_AGENT_DIR
     for stem in sorted(_stems(directory, ".toml")):
         path = directory / f"{stem}.toml"
         rel = f"{CODEX_AGENT_DIR}/{stem}.toml"
-        raw = path.read_text(encoding="utf-8")
+        raw = _read(path)
+        flat = flatten(raw)
 
-        found = [m for m in CORRUPTION_MARKERS if m in raw]
+        if SENTINEL not in raw:
+            yield ParityViolation(
+                kind="sentinel-missing",
+                path=rel,
+                detail=(
+                    f"the {SENTINEL!r} line is gone — this repo no longer owns "
+                    "these bytes. The Codex Desktop app writes this directory; "
+                    "restore the file from git rather than editing it in place"
+                ),
+            )
+
+        found = [m for m in CORRUPTION_MARKERS if m in flat]
         if found:
             yield ParityViolation(
                 kind="corrupted",
                 path=rel,
                 detail=(
-                    f"contains the Codex-exporter substitution signature "
-                    f"{found!r} — a tracked hand-authored file has been "
-                    "overwritten by the exporter; restore it from git"
+                    f"carries the Codex-exporter product-name substitution "
+                    f"{found!r} (matched on whitespace-flattened text, because a "
+                    "line wrap hides a two-word marker); restore it from git"
                 ),
             )
 
@@ -178,11 +267,62 @@ def _toml_violations(repo_root: Path) -> Iterator[ParityViolation]:
             )
 
 
+def _md_violations(repo_root: Path) -> Iterator[ParityViolation]:
+    """Yield identity, model-pin and prohibition violations per claude wrapper."""
+    directory = repo_root / CLAUDE_AGENT_DIR
+    for stem in sorted(_stems(directory, ".md")):
+        path = directory / f"{stem}.md"
+        rel = f"{CLAUDE_AGENT_DIR}/{stem}.md"
+        raw = _read(path)
+        flat = flatten(raw)
+        front = _frontmatter(raw)
+
+        if not front:
+            yield ParityViolation(
+                kind="md-no-frontmatter",
+                path=rel,
+                detail="no leading `---` YAML frontmatter block",
+            )
+            continue
+
+        if front.get("name") != stem:
+            yield ParityViolation(
+                kind="md-name-mismatch",
+                path=rel,
+                detail=(
+                    f"frontmatter name is {front.get('name')!r}, expected the "
+                    f"filename stem {stem!r}"
+                ),
+            )
+
+        # The VALUE is a tuning decision and deliberately unchecked; its absence
+        # is not, because an unpinned wrapper runs on the session default, which
+        # is the Opus spend these lanes exist to avoid.
+        if "model" not in front:
+            yield ParityViolation(
+                kind="md-no-model",
+                path=rel,
+                detail=(
+                    "no `model:` frontmatter line — the wrapper would run its "
+                    "clerical turns on the session default"
+                ),
+            )
+
+        for marker, why in MD_REQUIRED_MARKERS:
+            if flatten(marker) not in flat:
+                yield ParityViolation(
+                    kind="md-missing-marker",
+                    path=rel,
+                    detail=f"does not carry {marker!r} — {why}",
+                )
+
+
 def find_violations(repo_root: Path) -> list[ParityViolation]:
     """Every parity violation across the hand-authored codex agent lanes."""
     return [
         *_pairing_violations(repo_root),
         *_toml_violations(repo_root),
+        *_md_violations(repo_root),
     ]
 
 
@@ -196,8 +336,9 @@ def codex_agent_parity_main(repo_root: Path) -> int:
 
     paired = len(_stems(repo_root / CODEX_AGENT_DIR, ".toml"))
     logger.info(
-        "codex-agent-parity OK: %d hand-authored lane(s) paired, named "
-        "consistently, at %s effort, and free of the exporter signature",
+        "codex-agent-parity OK: %d hand-authored lane(s) paired, sentinel "
+        "intact, named consistently, pinned to %s effort, and carrying the "
+        "no-substitute prohibition",
         paired,
         REQUIRED_EFFORT,
     )

@@ -104,7 +104,6 @@ Never `--full-auto`, never `--dangerously-bypass-approvals-and-sandbox`, never a
 writable sandbox. You advise; you do not change anything, and codex must not be
 given permission to.
 
-
 ## Gather what codex cannot reach FIRST
 
 codex reads the repo itself inside its read-only sandbox, so give it paths

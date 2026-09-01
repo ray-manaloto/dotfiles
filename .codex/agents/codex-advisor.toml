@@ -1,3 +1,13 @@
+# dotfiles-hand-authored-codex-lane (#884)
+#
+# This file is TRACKED and written by hand. The Codex Desktop app also EXPORTS
+# mirrors into this same directory (it wrote the four non-`codex-` prefixed
+# tomls here in one 18:52:09 batch), and its export is a blind product-name
+# substitution over a Claude agent body. If that exporter ever overwrites this
+# file, this line disappears — and `mise run codex-agent-parity` fails loudly.
+# Do NOT remove it, and do NOT add it to anything the exporter produces: it is
+# the gate's only signal that this repo, rather than the exporter, owns these
+# bytes.
 name = "codex-advisor"
 description = "Second-opinion advisor at a commitment boundary — architecture, a migration, an API or gate design, a routing choice, or a problem that resisted two attempts. Returns a verdict and the risk that decides it; advises only. Runs on codex (gpt-5.6-sol), not Claude — use instead of fable-orchestrator:fable-advisor while Claude tokens are constrained."
 model_reasoning_effort = "xhigh"
