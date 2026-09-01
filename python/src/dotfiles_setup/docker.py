@@ -142,8 +142,11 @@ def download_doppler_env(
     # reader must see a whole file or the previous one, never a partial write.
     tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
     try:
-        tmp.write_text(result.stdout)
-        tmp.chmod(0o600)
+        # Born 0o600: create-then-chmod leaves a umask-mode window where
+        # another local reader could open the secrets before chmod runs.
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as handle:
+            handle.write(result.stdout)
         tmp.replace(path)
     finally:
         tmp.unlink(missing_ok=True)

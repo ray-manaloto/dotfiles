@@ -229,12 +229,15 @@ fail_open() {
 `FAIL_OPEN_LOG` (line 600) + `fail_open_summary()` (lines 606-630), consumed
 by the session-end command-audit report.
 
-**Atomic?** The write is `printf ... >>"$LOG"` — **append**, not truncate
-(the opposite pattern from Finding 1 and Finding 2). A single `printf` of one
-short tab-separated line is well under `PIPE_BUF`, so POSIX guarantees the
-kernel `write()` for an `O_APPEND` fd is atomic — concurrent appends from
-different sessions interleave AT THE LINE LEVEL, not the byte level; no
-line can be spliced from two writers.
+**Atomic?** The write is `printf ... >>"$LOG"`: **append**, not truncate
+(the opposite pattern from Finding 1 and Finding 2). For a regular file,
+`O_APPEND` guarantees the seek-to-end and the write happen as one step, so
+concurrent appenders never overwrite each other's offsets. That is the whole
+regular-file guarantee: the `PIPE_BUF` atomicity bound applies to pipes and
+FIFOs only, so POSIX does not promise that one short `printf` lands as a
+single non-interleaved `write()` here. Byte-level interleaving of concurrent
+lines is unlikely in practice but not ruled out, which is exactly the case
+the reader's defensive line validation (below) absorbs.
 
 **Is the shared path itself a bug?** No — and this is explicitly documented,
 not accidental: `command_audit.py:598-599`: *"Per-user state, not per-repo:

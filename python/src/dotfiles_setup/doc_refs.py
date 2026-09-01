@@ -22,6 +22,7 @@ Trailing `:line` / `:line-range` suffixes are stripped before resolution
 
 from __future__ import annotations
 
+import fnmatch
 import re
 import subprocess
 import tomllib
@@ -236,6 +237,13 @@ def _is_path_candidate(span: str, top_level: frozenset[str]) -> bool:
 
 def _is_allowlisted(ref: str) -> bool:
     if ref in _ALLOWED_ABSENT:
+        return True
+    # Entries carrying a `*` are globs: they exist for generated per-clone
+    # names (`doppler-<hash>-<arch>.env`, `mise.*.local.toml`) that exact
+    # matching can never anticipate.
+    if any(
+        "*" in entry and fnmatch.fnmatchcase(ref, entry) for entry in _ALLOWED_ABSENT
+    ):
         return True
     return any(ref.startswith(prefix) for prefix in _ALLOWED_PREFIXES)
 

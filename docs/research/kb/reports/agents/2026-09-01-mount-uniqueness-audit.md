@@ -429,10 +429,13 @@ three carry the **same mtime, Apr 9 2026**, alongside `host-ssh-proxy.log`
 
 Verified — not assumed from mtime alone, per the brief's instruction:
 
-- **No current code references any of the three filenames.**
-  `grep -rln "ssh-agent-port|ssh-agent-proxy|ssh-agent.target|host-ssh-proxy"`
-  across every `.py`/`.json`/`.toml`/`.md` in the repo returns **zero
-  matches**.
+- **No runtime code references any of the three filenames.**
+  `grep -rlnE "ssh-agent-port|ssh-agent-proxy|ssh-agent.target|host-ssh-proxy"`
+  across every `.py`/`.json`/`.toml` in the repo returns **zero matches**.
+  `.md` files are deliberately outside the claim: this audit and the
+  historical research docs narrating the deleted mechanism necessarily
+  contain the names, and a document match is not a runtime reader or
+  writer.
 - **`ps -p 81264`** (the PID recorded in `ssh-agent-proxy.pid`) returns no
   matching process — the process is not running.
 - **Git history confirms the mechanism was deliberately deleted**, not
