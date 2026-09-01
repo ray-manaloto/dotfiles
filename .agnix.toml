@@ -7,6 +7,16 @@ exclude = [
     ".agent/**",
     ".omg/**",
     ".logging/**",
+    # Agent lane worktrees: a whole second copy of the repo, checked out by
+    # `isolation: "worktree"` subagents. agnix walks the FILESYSTEM, not git,
+    # so `.git/info/exclude` hides these from `git status` and from hk's own
+    # file list but NOT from agnix — which then validates the nested copy and
+    # re-reports every finding the excludes above already dismiss at the root
+    # (the patterns are root-anchored, so `.agent/**` does not match
+    # `.claude/worktrees/*/.agent/**`). Measured 2026-09-01: one live lane
+    # worktree produced 443 findings inside it and 0 outside, turning
+    # `mise run lint-docs` red while the repo itself was clean.
+    ".claude/worktrees/**",
     "plugins/**",
     "missions/**",
     # Deep-research artifacts: prose reports whose per-run `agents/` subdir
