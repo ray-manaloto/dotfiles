@@ -1237,6 +1237,16 @@ description = "Validate agent documentation"
 # --strict: warnings-as-errors (#250) — parity with ci.yml + the hk agnix step.
 run = "agnix . --strict"
 
+[tasks.mise-config-context]
+description = "PostToolUse hook body: emit the native-first context when a mise config file was just edited"
+# Thin caller; see python/src/dotfiles_setup/mise_config_context.py. Wired from
+# .claude/settings.json as a PostToolUse hook on Edit|Write|NotebookEdit. It
+# reads the hook payload on stdin and writes JSON to stdout; mise's own task
+# banner goes to STDERR (probed), so stdout stays a clean JSON channel.
+# No shell wrapper: hook -> mise task -> python library, per zero-bash-logic.
+run = 'uv run --project python dotfiles-setup mise-config-context'
+quiet = true
+
 [tasks.lock]
 description = "Re-lock the NAMED tool(s), scoped, then assert coverage held"
 # Thin caller; see lock_integrity.py. The task no longer runs a bare

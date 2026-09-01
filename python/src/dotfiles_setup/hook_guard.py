@@ -41,7 +41,7 @@ import re
 import sys
 from dataclasses import dataclass
 
-from dotfiles_setup import ask_quality, branch_guard
+from dotfiles_setup import ask_quality, branch_guard, script_guard
 from dotfiles_setup.heredoc import HEREDOC_PATTERN, NUL_FILLER, blank_heredoc
 
 
@@ -799,7 +799,12 @@ def decide_payload(
     if tool_name == "AskUserQuestion":
         return ask_quality.decide(tool_input)
     if branch_guard.handles(tool_name):
-        policy_reason = branch_guard.decide(tool_input)
+        # Branch first: writing on the default branch is the more fundamental
+        # violation, and its reason names the fix (branch, then re-run). The
+        # script guard is the second opinion on the same write.
+        policy_reason = branch_guard.decide(tool_input) or script_guard.decide(
+            tool_input
+        )
     else:
         policy_reason = decide(str(tool_input.get("command", "")))
     return policy_reason
