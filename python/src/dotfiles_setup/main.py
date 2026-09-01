@@ -23,6 +23,7 @@ from dotfiles_setup.autofix import autofix_apply_main
 from dotfiles_setup.bash_budget import bash_budget_main
 from dotfiles_setup.bootstrap_packages import gap_report_failures
 from dotfiles_setup.classifier_tables import classifier_axes_main
+from dotfiles_setup.codex_agent_parity import codex_agent_parity_main
 from dotfiles_setup.codex_lane import run_lane_cli
 from dotfiles_setup.command_audit import DEFAULT_SESSION_LIMIT, command_audit_main
 from dotfiles_setup.config import DotfilesConfig
@@ -594,6 +595,14 @@ def _add_honesty_subcommands(subparsers: _SubParsers) -> None:
         help="Enforce zero-bash-logic: every scripts/*.sh + "
         ".devcontainer/scripts/*.sh must be allowlisted and within its "
         "per-file line budget (new/grown scripts fail — move logic to python/)",
+    )
+    subparsers.add_parser(
+        "codex-agent-parity",
+        help="Assert the hand-authored codex-backed agent lanes stay wired: "
+        "every .claude/agents/codex-*.md has a .codex/agents/codex-*.toml "
+        "counterpart and vice versa, each toml's name matches its filename "
+        "stem, each declares model_reasoning_effort=xhigh, and none carries "
+        "the Codex-exporter claude->Codex substitution signature",
     )
     subparsers.add_parser(
         "renovate-validate",
@@ -2274,6 +2283,7 @@ def _build_command_handlers(
             apt_pins_main(project_root, json_output=args.json)
         ),
         "bash-budget": lambda: sys.exit(bash_budget_main(project_root)),
+        "codex-agent-parity": lambda: sys.exit(codex_agent_parity_main(project_root)),
         "renovate-validate": lambda: sys.exit(renovate_validate_main(project_root)),
         "image-lock": lambda: sys.exit(
             image_lock_main(

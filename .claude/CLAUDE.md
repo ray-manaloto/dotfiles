@@ -50,6 +50,13 @@ upgrade away from and offers to re-gate it — **decline**. It also writes to th
 root `CLAUDE.md`, which the stub gate rejects: config belongs in THIS file.
 `grok` CLI is NOT installed, so `codex` is the only viable fixed mode.
 
+⚠️ **Until Claude tokens reset (from 2026-08-31), advisor consults route to the
+`codex-advisor` subagent, not `fable-orchestrator:fable-advisor`** — its reasoning
+runs on `gpt-5.6-sol` at `xhigh` via the `codex` CLI, so a consult costs no Claude
+tokens. Same for `codex-adversarial-critic`, `codex-staleness-auditor` and
+`codex-claude-code-expert` in place of their Claude-backed originals (#884). The
+originals are intact and are the ones to use once tokens reset.
+
 Adopted plugins (enabled in `.claude/settings.json`): `fable-orchestrator@fable-orchestrator`
 (Fable-5 architect + `codex` implementer lane, GPT-5.6 Sol) and
 `antigravity@antigravity-for-claude-code` (Google Antigravity/Gemini 3.x via `agy`). CLIs pinned

@@ -60,6 +60,24 @@ mise.*.local.toml
 !.codex/skills/
 !.codex/skills/**
 
+# ...except the four HAND-AUTHORED codex-backed agent lanes (#884), which are
+# tracked. Git does not descend into an ignored directory, so a bare
+# `!.codex/agents/codex-*.toml` cannot work: un-ignore the directory, re-ignore
+# its contents, then re-include only the hand-authored files.
+#
+# The four EXPORTED mirrors (`adversarial-critic.toml`, `claude-code-expert.toml`,
+# `dockerfile-reviewer.toml`, `staleness-auditor.toml`) stay ignored ON PURPOSE —
+# do not "fix" the asymmetry. They are Codex-app export output, regenerated
+# wholesale, and the exporter corrupts them with a blind `claude`->`Codex`
+# substitution: measured 2026-08-31, `grep -c 'Codex Code\|\.Codex/\|Codex mcp add'`
+# scored 5 on `claude-code-expert.toml` and 2 on `adversarial-critic.toml`, versus
+# 0 on all seven hand-authored knowledge-base tomls (control arm: the same probe
+# found 6 correct `Claude`/`.claude/` references inside `kb-codex-advisor.toml`,
+# so it could match text there).
+!.codex/agents/
+.codex/agents/*
+!.codex/agents/codex-*.toml
+
 # Logging
 .logging/
 
