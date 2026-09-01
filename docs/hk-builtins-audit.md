@@ -64,6 +64,7 @@ opinion about them, and neither does this table beyond recording them.
 | `classifier_axes` | hk.pkl |
 | `claude_agents_md_pairs` | hk.pkl |
 | `claude_md_import_stub` | hk.pkl |
+| `codex_agent_parity` | hk.pkl |
 | `commit-msg` | hk.pkl |
 | `contract_token_uniqueness` | hk.pkl |
 | `dependency_ownership` | hk.pkl |

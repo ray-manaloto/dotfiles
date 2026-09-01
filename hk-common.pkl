@@ -62,7 +62,31 @@ excludePaths: List<String> = List(
   // exists to satisfy — this file is NOT excluded, and doing so cost one
   // lint round. The word lives in the spec; that is where to look.)
   "docs/specs/**",
-  ".codex/**",
+  // `.codex/` was a blanket `.codex/**` until #884. It is Codex CLI runtime
+  // state, gitignored and therefore invisible to the `{{files}}` builtins
+  // either way — until the four HAND-AUTHORED codex-backed agent lanes at
+  // `.codex/agents/codex-*.toml` became TRACKED, at which point the blanket
+  // entry made every builtin blind to four authored files.
+  //
+  // Measured 2026-08-31, both arms: with the blanket entry, a planted
+  // misspelling in `.codex/agents/codex-advisor.toml` passed `mise run lint` at
+  // rc=0 while `typos` on the same file returned rc=2. ⚠️ A `!`-negation does
+  // NOT fix that — hk's `exclude` does not honour one: `"!.codex/agents/codex-*.toml"`
+  // alongside the blanket entry still returned rc=0 with the same planted word.
+  // (Do not spell that word in this file: it is not excluded, so naming it
+  // re-triggers the very check these entries exist to restore, and that
+  // contaminated the first run of this measurement — the gate went red on the
+  // COMMENT while the toml still sailed through.)
+  //
+  // So the exclusion is enumerated instead. The exported agent mirrors under
+  // `.codex/agents/` are deliberately NOT listed: they are gitignored and
+  // untracked, hence already invisible, and any pattern broad enough to name
+  // them would also swallow the tracked four. `.codex/skills/` is listed ahead
+  // of PR #885, which tracks it — it is graphify installer output, excluded for
+  // the same reason agnix exempts `.claude/skills/graphify/**`.
+  ".codex/config.toml",
+  ".codex/hooks.json",
+  ".codex/skills/**",
   ".agent/**",
   ".omg/**",
   ".omx/**",

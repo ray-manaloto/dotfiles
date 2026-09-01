@@ -1222,6 +1222,12 @@ run = "uv run --project python dotfiles-setup eval"
 description = "Regenerate docs/hk-builtins-audit.md from `hk builtins` + the hk configs"
 run = "uv run --project python dotfiles-setup hk-builtins-audit"
 
+[tasks.codex-agent-parity]
+description = "Assert the hand-authored codex agent lanes stay paired + at xhigh"
+# Thin caller; see python/src/dotfiles_setup/codex_agent_parity.py. Also wired as
+# the `codex_agent_parity` hk step, so `mise run lint` covers it.
+run = "uv run --project python dotfiles-setup codex-agent-parity"
+
 [tasks.lint-docs]
 description = "Validate agent documentation"
 # --strict: warnings-as-errors (#250) — parity with ci.yml + the hk agnix step.

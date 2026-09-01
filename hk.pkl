@@ -628,6 +628,17 @@ local allSteps = new Mapping<String, Config.Step> {
       "test -f .claude/skills/mcp2cli/SKILL.md && test -f .claude/skills/mintlify/SKILL.md"
   }
 
+  // The two halves of a hand-authored codex-backed agent lane (#884) are one
+  // contract, for the same reason as `session_review_skill_parity` below: a
+  // surviving half still loads, so the harness appears to accept it. The halves
+  // deliberately DIFFER in body — the `.md` addresses a Claude wrapper that
+  // shells out, the `.toml` addresses the codex role that reasons — so this
+  // checks the wiring (pairing, name, effort) and the exporter's corruption
+  // signature, NOT byte-equality. Logic lives in python per zero-bash-logic.
+  ["codex_agent_parity"] {
+    check = "uv run --project python dotfiles-setup codex-agent-parity"
+  }
+
   // The Codex-callable and Claude skill surfaces are one contract. A stale
   // copy is worse than absence because the harness appears to accept it.
   ["session_review_skill_parity"] {

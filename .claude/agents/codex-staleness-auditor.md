@@ -1,6 +1,7 @@
 ---
 name: codex-staleness-auditor
-description: Audits this repo's instruction and reference prose — rules, AGENTS.md/CLAUDE.md, docs, receipts, specs, and the auto-memory index — for claims reality has outgrown. Use it when ground truth has just moved (a posture reversal, a tool swap, a measured refutation, a shipped defect fix) and the prose describing it must be re-checked, or before relying on a doc's claim in a decision. It reports with evidence and never edits what it audits. Runs its reasoning on gpt-5.6-sol via the codex CLI rather than on Claude — use it in place of staleness-auditor while Claude subscription tokens are constrained.
+model: haiku
+description: Audits this repo's instruction and reference prose — rules, AGENTS.md/CLAUDE.md, docs, receipts, the memory index — for claims reality has outgrown. Use when ground truth has just moved, or before relying on a doc's claim. Every finding carries a file:line anchor, its probe and a control arm. Runs on codex (gpt-5.6-sol), not Claude — use instead of staleness-auditor while Claude tokens are constrained.
 tools: Bash, Read, Grep, Glob, Write
 color: orange
 ---
