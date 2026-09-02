@@ -1,3 +1,4 @@
+#:schema ./schemas/typos.json
 # typos config (#154). The mintlify catalog validation log records real sha256
 # checksums; one (`ba41c3748e298012`) begins with "ba", which typos misreads as
 # a misspelling of "by"/"be". Allowlist the exact hash identifier so genuine

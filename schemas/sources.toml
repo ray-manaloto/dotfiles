@@ -1,0 +1,29 @@
+# Vendored-schema provenance (#160, ITEM 11). Read by
+# `dotfiles_setup.schema_vendor` — both the offline drift check (wired into
+# `mise run verify`) and the network-using `schema-vendor refresh` command
+# that `refresh.yml`'s `schema-refresh` job runs in CI. Never hand-edit the
+# `version`/`source` fields; run `mise run schema-vendor-refresh` and let it
+# rewrite this file alongside the vendored JSON.
+#
+# `pin_source` names where `schema_vendor.current_pin()` reads the tool's
+# CURRENT version from — informational here, the resolver itself is code.
+[[schema]]
+tool = "mise"
+file = "schemas/mise.json"
+version = "2026.9.0"
+source = "https://raw.githubusercontent.com/jdx/mise/v2026.9.0/schema/mise.json"
+pin_source = ".github/actions/setup-mise/action.yml"
+
+[[schema]]
+tool = "ruff"
+file = "schemas/ruff.json"
+version = "0.16.5"
+source = "https://raw.githubusercontent.com/astral-sh/ruff/0.16.5/ruff.schema.json"
+pin_source = "python/uv.lock"
+
+[[schema]]
+tool = "typos"
+file = "schemas/typos.json"
+version = "1.50.1"
+source = "https://raw.githubusercontent.com/crate-ci/typos/v1.50.1/config.schema.json"
+pin_source = ".config/mise/conf.d/shared.toml"

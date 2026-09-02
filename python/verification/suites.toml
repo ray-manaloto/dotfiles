@@ -795,7 +795,7 @@ per_path_tokens = { ".github/workflows/build-publish.yml" = [
 
 [[suite]]
 name = "ci.refresh-uses-app-token"
-description = "Phase C (#119): refresh.yml's lock-refresh job must mint a GitHub App token (actions/create-github-app-token) for the PR push so downstream pull_request CI fires on its own (GITHUB_TOKEN-created PRs don't), open the PR via open-refresh-pr, and enable auto-merge. Bound to lock-refresh-specific call sites, not the generic App-token/secret tokens — #887 added a second job (image-lock-pr) that legitimately mints its own App token from the same secrets, so the generic tokens now match 2x each and no longer bind this job alone. The mint ACTION itself is bound by a multi-line token anchored on this job's adjacent '#119' comment through the action name, so swapping actions/create-github-app-token for another action while keeping its inputs fails; the pinned SHA is deliberately NOT in the token (pinact owns SHA-pin enforcement, and a Renovate SHA bump must not fail this contract)."
+description = "Phase C (#119): refresh.yml's lock-refresh job must mint a GitHub App token (actions/create-github-app-token) for the PR push so downstream pull_request CI fires on its own (GITHUB_TOKEN-created PRs don't), open the PR via open-refresh-pr, and enable auto-merge. Bound to lock-refresh-specific call sites, not the generic App-token/secret tokens — #887 added image-lock-pr (contents-only mint, pushes onto an existing PR) and ITEM 11 (#160) added schema-refresh (a third job that, like lock-refresh, opens its OWN auto-merging PR), so the open-a-PR-shaped generic tokens (the permissions block, open-refresh-pr, auto-merge) now match 2x each across the two PR-opening jobs and are recorded in AMBIGUITY_ALLOWED rather than bound here. The mint ACTION itself is bound by a multi-line token anchored on this job's adjacent '#119' comment through the action name, so swapping actions/create-github-app-token for another action while keeping its inputs fails; the pinned SHA is deliberately NOT in the token (pinact owns SHA-pin enforcement, and a Renovate SHA bump must not fail this contract)."
 category = "ci"
 check_type = "static"
 handler = "require_tokens"
@@ -2405,3 +2405,23 @@ per_path_tokens = { "mise.toml" = [
     "def test_trusted_by_container_refuses_and_logs_an_unknown_trusted_id(",
     "def test_removal_args_refuses_and_logs_a_registry_referenced_image(",
 ] }
+
+[[suite]]
+name = "config.schema-vendor-drift"
+description = "ITEM 11: the vendored config schemas (`schemas/mise.json`, `schemas/ruff.json`, `schemas/typos.json`) must stay in step with the tool versions this repo actually pins. `mise.toml`/`ruff.toml`/`typos.toml` each carry a first-line `#:schema` directive pointing at the vendored copy rather than a remote URL, because taplo does not cache schemas between runs — a remote directive would make `mise run lint` a per-run network dependency and a red gate whenever the schema host is unreachable. This suite runs `dotfiles_setup.schema_vendor.check_drift`, which compares `schemas/sources.toml`'s recorded version for each tool against the CURRENT pin read from `.config/mise/conf.d/shared.toml` (typos), `python/uv.lock` (ruff — unpinned in pyproject.toml, so the lockfile is the only local record of the resolved version) and `.github/actions/setup-mise/action.yml` (mise). No network call: two local facts compared. On drift, `mise run schema-vendor-refresh` re-downloads the schema at the new pin and rewrites both the JSON and its `sources.toml` row. WHAT THIS CONTRACT CANNOT DO: it cannot prove the vendored JSON is itself valid JSON Schema, or that taplo actually reads it — that is `mise run lint`'s job (taplo runs on every commit); this suite only proves the recorded version has not gone stale."
+category = "config"
+check_type = "static"
+handler = "schema_drift"
+paths_required = true
+paths = [
+    "schemas/sources.toml",
+    "schemas/mise.json",
+    "schemas/ruff.json",
+    "schemas/typos.json",
+    "mise.toml",
+    "ruff.toml",
+    "typos.toml",
+    ".config/mise/conf.d/shared.toml",
+    "python/uv.lock",
+    ".github/actions/setup-mise/action.yml",
+]

@@ -150,10 +150,20 @@ _SCANNED_SUFFIXES = (".py", ".toml", ".hcl", ".json", ".sh", ".yml", ".yaml")
 # Tests legitimately name concrete platforms: a fixture asserting that another
 # architecture bumps a content hash cannot express itself through the resolver
 # it is testing without becoming tautological (`tests/AGENTS.md`).
+#
+# `schemas/` (ITEM 11) is vendored third-party JSON Schema — e.g.
+# `schemas/mise.json`'s own `os_filter_item.examples` names `"linux/x64"` as
+# an EXAMPLE of mise's `os`/`arch` filter grammar, textually identical to but
+# semantically unrelated to a DOTFILES_PLATFORM triple (same reasoning as the
+# `.devcontainer/mise-system.toml` entry in `_SCAN_EXCLUDED_PATHS` below).
+# `schema_vendor.py` never issues a `--platform`, so excluding its vendored
+# output costs no coverage; refreshing a schema must not require editing this
+# scanner every time upstream adds another example.
 _SCAN_EXCLUDED_PREFIXES = (
     "docs/",
     "missions/",
     "plugins/",
+    "schemas/",
     "tests/",
 )
 

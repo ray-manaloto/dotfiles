@@ -1,3 +1,4 @@
+#:schema ./schemas/mise.json
 # Project tools — for linting, validating, and developing this repo
 # These are Build Type 1 tools: run locally before commits
 
@@ -1330,6 +1331,14 @@ run = "uv run --project python dotfiles-setup p2996-hash"
 [tasks.p2996-refresh]
 description = "Bump CLANG_P2996_REF in docker-bake.hcl to the latest bloomberg/clang-p2996 p2996-branch HEAD (writes only on change; the scheduled refresh.yml workflow's p2996-refresh job does this in CI)"
 run = "uv run --project python dotfiles-setup p2996-refresh"
+
+[tasks.schema-vendor-check]
+description = "OFFLINE: fail if a vendored schema (schemas/*.json) no longer matches the tool's current pin (ITEM 11; also runs as the config.schema-vendor-drift suite via `mise run verify`)"
+run = "uv run --project python dotfiles-setup schema-vendor check"
+
+[tasks.schema-vendor-refresh]
+description = "Re-download every vendored schema (schemas/mise.json, schemas/ruff.json, schemas/typos.json) at its current pin, rewriting schemas/sources.toml on change; network-using — refresh.yml's schema-refresh job runs this in CI, never the lint gate"
+run = "uv run --project python dotfiles-setup schema-vendor refresh"
 
 [tasks.cc]
 description = "Launch Claude Code rooted in THIS repo with a VERIFIED environment (tmux, --add-dir knowledge-base, auto mode)"

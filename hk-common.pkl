@@ -95,6 +95,16 @@ excludePaths: List<String> = List(
   ".mise/**",
   "graphify-out/**",
   "**/__pycache__/**",
+  // ITEM 11: vendored third-party JSON Schema files, byte-identical to
+  // upstream at their pinned tag (`schemas/sources.toml` records the source
+  // URL + version; `mise run schema-vendor-refresh` is the only thing that
+  // should touch their bytes). `typos` false-positives on one of ruff's own
+  // three-letter lint-rule-category codes (flake8-copyright) as a misspelling
+  // of a longer word — a real upstream code, not a typo. `schemas/sources.toml`
+  // itself is our own authored TOML and stays covered.
+  "schemas/mise.json",
+  "schemas/ruff.json",
+  "schemas/typos.json",
 )
 
 // File hygiene builtins — whitespace, line endings, encoding fixes.

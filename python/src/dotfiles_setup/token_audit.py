@@ -251,6 +251,39 @@ AMBIGUITY_ALLOWED: dict[tuple[str, str, str], str] = {
     "the committed default, which is the split-brain the ticket exists to "
     "close. Each job's identity is separately pinned by its own unique "
     "`\\n  <job>:\\n` token.",
+    (
+        "ci.refresh-uses-app-token",
+        ".github/workflows/refresh.yml",
+        (
+            "app-id: ${{ secrets.REFRESH_APP_ID }}\n          private-key: "
+            "${{ secrets.REFRESH_APP_PRIVATE_KEY }}\n          "
+            "permission-contents: write\n          "
+            "permission-pull-requests: write"
+        ),
+    ): "ITEM 11 added schema-refresh as a THIRD job that opens its "
+    "own auto-merging PR, so it legitimately mints an App token with the "
+    "same contents+pull-requests write permissions as lock-refresh. "
+    "image-lock-pr (#887) mints contents-only (it pushes onto an existing "
+    "PR rather than opening one), so this token still discriminates the "
+    "'opens a PR' shape from the 'pushes to a PR' shape — it just no "
+    "longer discriminates WHICH job does the former. lock-refresh's own "
+    "mint site stays uniquely bound by the adjacent '#119' comment token "
+    "above.",
+    (
+        "ci.refresh-uses-app-token",
+        ".github/workflows/refresh.yml",
+        "uses: $/.github/actions/open-refresh-pr",
+    ): "same reasoning as the permissions-block entry above: schema-refresh "
+    "(ITEM 11) is a second job that opens its own PR via the shared "
+    "open-refresh-pr composite. Each job's step is separately pinned by "
+    "its own unique preceding `- name:` line.",
+    (
+        "ci.refresh-uses-app-token",
+        ".github/workflows/refresh.yml",
+        "auto-merge:",
+    ): "same reasoning: both lock-refresh and schema-refresh (ITEM 11) "
+    "enable auto-merge on the PR they open — the multiplicity IS the "
+    "assertion that neither job silently reverted to a manual-merge PR.",
 }
 
 

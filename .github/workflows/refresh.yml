@@ -452,3 +452,78 @@ jobs:
             exit 0
           fi
           exit 1
+
+  # ============================================================
+  # Vendored config-schema refresh (ITEM 11): re-download schemas/mise.json,
+  # schemas/ruff.json and schemas/typos.json at each tool's CURRENT pin and
+  # PR the result when the pin moved. Same shape as lock-refresh above —
+  # scheduled, App-token push, open-refresh-pr — because the offline
+  # config.schema-vendor-drift suite (mise run verify) can only DETECT
+  # drift; it makes no network call by design (taplo does not cache
+  # schemas between runs, so a lint-time fetch would be a per-run network
+  # dependency). This job does the one network-using step, in CI, never on
+  # the lint path.
+  # ============================================================
+  schema-refresh:
+    # Never on pull_request — same reasoning as lock-refresh (#887 INV-7).
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    concurrency:
+      group: schema-refresh
+      cancel-in-progress: false
+    env:
+      # See lock-refresh's identical comment above: `mise install`/`uv run`
+      # fires hk's git hooks on the runner without this.
+      HK_SKIP_HOOKS: pre-commit,pre-push
+    steps:
+      - name: Mint GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.REFRESH_APP_ID }}
+          private-key: ${{ secrets.REFRESH_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install mise (python + uv)
+        uses: $/.github/actions/setup-mise
+        with:
+          install_args: "python uv"
+      - name: Refresh vendored schemas
+        run: mise run schema-vendor-refresh
+      - name: Open PR if any schema drifted
+        uses: $/.github/actions/open-refresh-pr
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          commit-message: "chore: refresh vendored config schemas"
+          title: "chore: refresh vendored config schemas"
+          body: |
+            Automated re-download of the vendored `#:schema` targets (#160,
+            ITEM 11) whose recorded version in `schemas/sources.toml` no
+            longer matches the tool's current pin:
+
+            - `schemas/mise.json` (`.github/actions/setup-mise/action.yml`)
+            - `schemas/ruff.json` (`python/uv.lock`)
+            - `schemas/typos.json` (`.config/mise/conf.d/shared.toml`)
+
+            These are vendored rather than referenced by a remote URL because
+            taplo does not cache schemas between runs — a remote `#:schema`
+            would make `mise run lint` a per-run network dependency. This PR
+            auto-merges (squash) once ci-gate passes.
+
+            Trigger: ${{ github.event_name }}.
+          branch: chore/schema-refresh
+          paths: |
+            schemas/mise.json
+            schemas/ruff.json
+            schemas/typos.json
+            schemas/sources.toml
+          labels: dependencies
+          summary-heading: Schema refresh
+          auto-merge: "true"
