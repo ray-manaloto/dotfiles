@@ -424,11 +424,16 @@ jobs:
         # No actor-based loop guard (see the job's `if:` comment) means two
         # runs of this job can overlap; without a race guard, a push onto a
         # branch that moved since checkout is rejected non-fast-forward and
-        # red-Xes the PR. `git ls-remote` (not a local `origin/<branch>`
-        # tracking ref, which checkout does not necessarily set up) compares
-        # the CURRENT remote head against what this run checked out; on a
-        # mismatch this exits 0 — a clean no-op, never a force-push — and a
-        # newer `synchronize` run redoes the work.
+        # red-Xes the PR. The race check must be ATOMIC: a separate
+        # ls-remote-then-push compare leaves a window where another writer
+        # pushes between the two commands and the loser still red-Xes.
+        # `--force-with-lease=<ref>:<expected>` closes it: the ref update is a
+        # compare-and-swap against BASE_SHA, enforced at update time, not at
+        # observe time. HEAD descends from BASE_SHA, so an accepted push is
+        # always a plain fast-forward; the lease can never rewrite history.
+        # On rejection, re-observe the remote head: if the branch moved, exit
+        # 0 (a clean no-op, a newer `synchronize` run redoes the work); any
+        # other push error stays a real failure.
         if: steps.drift-check.outcome == 'failure' && steps.confine-check.outputs.changed == 'true'
         env:
           APP_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -436,9 +441,14 @@ jobs:
           BASE_SHA: ${{ steps.base-sha.outputs.sha }}
         run: |
           set -euo pipefail
-          remote_sha=$(git ls-remote origin "refs/heads/${HEAD_REF}" | cut -f1)
-          if [ "$remote_sha" != "$BASE_SHA" ]; then
-            echo "the PR branch moved since checkout (remote=$remote_sha, checked-out=$BASE_SHA) — a newer run will redo this regen; skipping push, not force-pushing."
+          if git push --force-with-lease="refs/heads/${HEAD_REF}:${BASE_SHA}" \
+              "https://x-access-token:${APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+              "HEAD:${HEAD_REF}"; then
             exit 0
           fi
-          git push "https://x-access-token:${APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:${HEAD_REF}"
+          remote_sha=$(git ls-remote origin "refs/heads/${HEAD_REF}" | cut -f1)
+          if [ "$remote_sha" != "$BASE_SHA" ]; then
+            echo "the PR branch moved since checkout (remote=$remote_sha, checked-out=$BASE_SHA); a newer run will redo this regen. Skipping as a clean no-op."
+            exit 0
+          fi
+          exit 1

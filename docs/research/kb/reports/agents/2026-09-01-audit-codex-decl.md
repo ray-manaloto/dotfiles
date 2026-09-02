@@ -26,10 +26,17 @@ $ mise which codex
 ```
 ✅ CONFIRMED: single declaration exists in shared.toml with matching version.
 
+> **Post-audit note (2026-09-02):** Renovate has since bumped the shared pin to
+> `0.152.1` (`.config/mise/conf.d/shared.toml:38`). The probe transcripts in
+> this report record `0.152.0` as captured live on 2026-09-01 and are kept
+> verbatim rather than fabricated for the new pin. The consolidation
+> conclusion (a single declaration in shared.toml that the host resolves
+> from) is unaffected by the patch bump.
+
 **Probe 3 — Mechanism: How mise merges conf.d on the host**
 
 From `.config/mise/conf.d/shared.toml:7-8`:
-```
+```toml
 #   - host: auto-loaded as <repo>/.config/mise/conf.d/shared.toml (mise merges
 #     <project>/.config/mise/conf.d/*.toml alphabetically)
 ```
@@ -37,7 +44,7 @@ From `.config/mise/conf.d/shared.toml:7-8`:
 Control arm: verify mise actually reads conf.d on the host. Check `mise config dump` to see both the root config and the merged conf.d:
 
 ```bash
-$ mise config dump | grep -A2 "\"npm:@openai/codex\""
+mise config dump | grep -A2 "\"npm:@openai/codex\""
 ```
 Let me test this directly.
 
@@ -72,17 +79,21 @@ mise.local.toml: not present
 **Probe 1 — Check if it's in MISE_IGNORED_CONFIG_PATHS on the host:**
 ```bash
 $ grep -n "MISE_IGNORED_CONFIG_PATHS" mise.toml
-```
 57:# container's MISE_IGNORED_CONFIG_PATHS). conda backend (pixi) — the first
 85:# MISE_IGNORED_CONFIG_PATHS) — the Claude architect stays the chair; these are
+```
 
 **Proof from source:** `python/src/dotfiles_setup/p2996_hash.py` defines:
 - `BaseHashInputs` (lines 71-98): includes `mise_lock_digest`, `mise_system_config_digest`, `shared_config_digest`
 - `P2996HashInputs` (lines 101-127): covers compiler rebuild cache
+- `DevHashInputs` (lines 130-185): the top-tier `:dev-<hash>` inputs, carrying `runtime_config_digest` and `runtime_lock_digest`, i.e. the BYTES of `mise-runtime.toml` and `mise-runtime.lock` (COPYd by the devcontainer-runtime stage outside the base sentinels, per its own docstring).
 
-**No `DevHashInputs` or `RuntimeHashInputs` dataclass exists** — there is no separate content hash for runtime-tier files. The dev image is built from base + p2996 cache hits only.
+> **Correction (2026-09-02):** an earlier revision of this report claimed no
+> `DevHashInputs` dataclass exists and that `mise-runtime.toml` is not a
+> content-hash input. Both claims were wrong; the dataclass and its runtime
+> digests are cited above.
 
-✅ CONFIRMED: `mise-runtime.toml` is **NOT** a content-hash input. It is never read on the host and only affects the image runtime stage, via Dockerfile `COPY` at line 666.
+✅ CONFIRMED (narrowed): `mise-runtime.toml` IS a content-hash input (dev tier), but it is never read as a mise config on the host. The image-only conclusion rests solely on that: the file affects the image runtime stage via Dockerfile `COPY` at line 666, and no host-side mise config path loads it.
 
 **Proof from Dockerfile:** `.devcontainer/Dockerfile:666`:
 ```dockerfile
@@ -227,9 +238,9 @@ Result: 0 matches. **No rules mention codex or runtime.toml specifics.**
 - `mise ls | grep npm:@openai/codex` → proves shared.toml source on host (2026-09-01, live)
 - `.devcontainer/Dockerfile:666` → confirms runtime.toml COPY location (read)
 - `.devcontainer/mise-runtime.toml` grep for codex → confirms tool moved (read)
-- `python/src/dotfiles_setup/p2996_hash.py` → confirms no runtime hash inputs (read)
+- `python/src/dotfiles_setup/p2996_hash.py` → confirms `DevHashInputs` carries `runtime_config_digest` + `runtime_lock_digest` (read; corrected 2026-09-02, see the Q2 correction above)
 
-No file has moved or changed since audit start.
+No file had moved or changed since audit start (2026-09-01). Post-audit, shared.toml's codex pin moved to `0.152.1`; see the post-audit note under Q1 Probe 2.
 
 ---
 
