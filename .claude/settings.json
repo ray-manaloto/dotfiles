@@ -75,7 +75,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --project \"${CLAUDE_PROJECT_DIR:-.}/python\" dotfiles-setup mise-config-context || true",
+            "command": "uv run --project \"${CLAUDE_PROJECT_DIR:-.}/python\" dotfiles-setup mise-config-context",
             "timeout": 20
           }
         ]
