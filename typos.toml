@@ -37,3 +37,32 @@ gae = "gae"
 # measurement to dodge the word would make it uncheckable against ruff's own
 # output.
 CPY001 = "CPY001"
+
+# ITEM 11: ruff's OWN vendored JSON Schema (schemas/ruff.json, byte-identical
+# to upstream at its pinned tag) lists the bare rule-category code `CPY`
+# (flake8-copyright) next to `CPY001` above — not a misspelling of
+# "COPY"/"CPU". `default.extend-identifiers` is PROJECT-WIDE and was rejected
+# for this token (4f1d527's revert): `CPY` IS a plausible typo for "COPY"
+# anywhere else in the repo (a Dockerfile, a script), so a project-wide
+# allowlist would silence a real one. Scoped instead to a `[type]` block
+# bound by `extend-glob`, and two things about that scoping are NOT what they
+# look like at a glance — say so here rather than implying precision this
+# doesn't have:
+#   - `extend-words`, not `extend-identifiers`. At the `default` level
+#     `extend-identifiers` left `CPY` uncaught (rc=2) in schemas/ruff.json;
+#     `extend-words` is what actually silences it (rc=0). Measured, not
+#     assumed.
+#   - `extend-glob` matches the BASENAME, not the path. There is no way to
+#     scope this to the path `schemas/ruff.json` — `ruff.json` matches ANY
+#     file named `ruff.json` anywhere in the repo, and `schemas/**/*.json` /
+#     `**/schemas/*.json` do NOT bind at all (measured with
+#     `check-file = false`). Narrower than a project-wide allowlist, which
+#     was the objection, but not path-exact.
+# Only bare `CPY` needed allowlisting — `CPY0`/`CPY00` (both present in
+# schemas/ruff.json) were NOT among the three measured errors; add them only
+# if a future measurement says otherwise.
+[type.vendored-ruff-schema]
+extend-glob = ["ruff.json"]
+
+[type.vendored-ruff-schema.extend-words]
+CPY = "CPY"
