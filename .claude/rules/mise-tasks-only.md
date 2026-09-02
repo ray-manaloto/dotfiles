@@ -28,6 +28,8 @@ library, zero-bash-logic) in the same change.
 | `chezmoi apply/update` on the Mac host | nothing — devcontainer-only |
 | `git commit --no-verify` / `-n` / `-nm`, `git push --no-verify` | nothing — fix what the hook reports. pre-commit is what runs `no_commit_to_branch`; pre-push runs the suite. Git skips a hook BEFORE it exists as a process, so no hook can catch its own suppression and this guard is the only layer (#400). `git push -n` is `--dry-run` and stays allowed |
 | `echo`/`printf` of a credential variable (`"$DOPPLER_TOKEN"`, `"${API_KEY:-none}"`) | nothing — print a FLAG, never a value: `[ -n "$VAR" ] && echo SET \|\| echo ABSENT`. **`:-` and `:=` emit the VALUE** for a set variable, so `${VAR:+SET}${VAR:-ABSENT}` prints the secret — that is how a live Doppler token reached a transcript (2026-08-02). Handing a credential to a consumer stays allowed; stdout is the transcript |
+| `sh $CLAUDE_PLUGIN_ROOT/scripts/attest-plan.sh` (or `/plan-attest`) | **nothing an agent may run** — attestation is a HUMAN boundary and `permissions.deny` blocks every model route. The operator uses `! mise run plan-attest` (shell mode is not a tool call). `-- --show` reads; the bare form WRITES |
+| hand-editing `schemas/*.json` or its `version` in `schemas/sources.toml` | `mise run schema-vendor-refresh` — re-downloads at the pinned tag and rewrites both; `mise run schema-vendor-check` is the offline drift check `verify` runs |
 | `HK_SKIP_HOOKS=` / `HK_SKIP_STEPS=` as a local command prefix | nothing — they exist for CI jobs that commit or push (ADR-0001, gated by `workflow_hk_skip_hooks`); locally they only turn the gate off |
 
 Diagnostic/read-only commands (`docker ps`, `gh pr view`, `git status`,
