@@ -90,6 +90,7 @@ from dotfiles_setup.lock_integrity import scoped_lock_main
 from dotfiles_setup.lock_refresh import collect_system_lock, stage_system_lock_dir
 from dotfiles_setup.lock_shared import lock_shared_main
 from dotfiles_setup.memory_index import memory_index_main
+from dotfiles_setup.mise_config_context import mise_config_context_main
 from dotfiles_setup.p2996_hash import (
     compute_repo_base_hash,
     compute_repo_dev_hash,
@@ -237,6 +238,14 @@ def _add_platform_subcommands(subparsers: _SubParsers) -> None:
         "parameter through the sites you remembered; this finds the ones you "
         "did not, and missing one yields a container running one architecture "
         "while a probe asserts another",
+    )
+    subparsers.add_parser(
+        "mise-config-context",
+        help="PostToolUse hook: when the just-edited file is one of this "
+        "repo's mise config files, emit `hookSpecificOutput.additionalContext` "
+        "naming the native-first requirement and where mise's own docs are on "
+        "disk. Silent for every other path. A hook rather than a scoped rule "
+        "because a `Write` that replaces mise.toml never reads it first",
     )
     devcontainer_parser = subparsers.add_parser(
         "devcontainer",
@@ -2308,6 +2317,7 @@ def _build_command_handlers(
         ),
         "platform": lambda: sys.exit(platform_main(args.field)),
         "platform-literals": lambda: sys.exit(platform_literals_main(project_root)),
+        "mise-config-context": lambda: sys.exit(mise_config_context_main(project_root)),
         "devcontainer": lambda: sys.exit(handle_devcontainer(args)),
         "platform-matrix": lambda: sys.exit(publish_matrix_main()),
         "classifier-axes": lambda: sys.exit(classifier_axes_main(project_root)),
