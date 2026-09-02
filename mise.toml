@@ -28,7 +28,7 @@ lima = "2.2.0"
 "github:agent-sh/agnix" = "0.52.1"
 "npm:agents-lint" = "0.5.0"
 "pipx:mcp2cli" = "3.7.0"
-"npm:renovate" = "44.56.3"
+"npm:renovate" = "44.57.1"
 biome = "2.5.11"
 # Markdown + Claude-docs linters. Installed now; hk.pkl integration is
 # scheduled for post-devcontainer-work review (see GH issue tracking
@@ -38,7 +38,7 @@ biome = "2.5.11"
 "npm:@contextlint/cli" = "1.1.1"
 "npm:markdownlint-cli2" = "0.23.2"
 "aqua:jackchuka/mdschema" = "0.15.2"
-rumdl = "0.2.62"
+rumdl = "v0.2.63"
 # zizmor: GHA security scanner — backs the hk zizmor builtin (#160 T12);
 # host-only lint tool, so it lives here (not shared.toml).
 zizmor = "1.30.0"
@@ -46,7 +46,7 @@ zizmor = "1.30.0"
 "github:ast-grep/ast-grep" = "0.45.3"
 lefthook = "2.1.12"
 "npm:ctx7" = "0.5.9"
-"aqua:rtk-ai/rtk" = "0.46.0"          # aqua is the registry's first backend (`mise registry rtk`); the old bare `rtk` resolved to github: and mise doctor flagged the mismatch
+"aqua:rtk-ai/rtk" = "0.47.0"          # aqua is the registry's first backend (`mise registry rtk`); the old bare `rtk` resolved to github: and mise doctor flagged the mismatch
 "npm:skills" = "1.5.23"
 "npm:agent-browser" = "0.36.0"
 "npm:portless" = "0.15.6"
