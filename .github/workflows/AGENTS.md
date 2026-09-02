@@ -14,8 +14,8 @@ post-failure reporting.
 |------|---------|
 | `ci.yml` | Thin caller (Phase B, #118): lint → contract-preflight → `changes` (path-gate) → `build-publish` (gated on `changes.build` + push-to-main exemption); OR lint → promote (push to main) |
 | `build-publish.yml` | Reusable (`on: workflow_call`) build chain: plan → base-prep → p2996-prep → dev-prep → build → smoke-test → dev-tag → manifest (dev-prep/dev-tag = 3rd content-hash tier, #122; plan/manifest = dual-architecture publish, #676). Inputs `{tag_strategy, publish, target, ref, p2996_ref, platform*}` (#120); outputs `{image_ref, digest}` = the multi-arch INDEX. |
-| `image-analysis.yml` | Async (`workflow_run` on CI success): benchmark metrics + Trivy CVE scan, off the PR critical path. Analyzes `:pr-NNN` resolved from the head sha via `commits/<sha>/pulls` (#231); a PR run with no resolvable PR **fails loud** (non-gating). Resolver: `image resolve-analysis-ref` |
-| `refresh.yml` | Daily cron (00:00), `lock-refresh` job (#160 T8): regenerates all four lockfiles (pinned image mise, linux-x64), PRs via `open-refresh-pr` (App token #119), **auto-merges**. `CLANG_P2996_REF`: Renovate git-refs. |
+| `image-analysis.yml` | Async (`workflow_run` on CI success): benchmark metrics + Trivy CVE scan. Analyzes `:pr-NNN` resolved from the head sha via `commits/<sha>/pulls` (#231); a PR run with no resolvable PR **fails loud** (non-gating). Resolver: `image resolve-analysis-ref` |
+| `refresh.yml` | Daily cron (00:00), `lock-refresh` job (#160 T8): regenerates all four lockfiles (pinned image mise, linux-x64), PRs via `open-refresh-pr` (App token #119), **auto-merges**. `CLANG_P2996_REF`: Renovate git-refs. `image-lock-pr`: image-lock regen on Renovate PRs (#887). |
 | `ghcr-cleanup.yml` | Weekly hash-family retention plan (#160 T12.5); dry-run ALWAYS — delete only via dispatch `delete=true` after plan review. Planner: `dotfiles_setup.ghcr_cleanup` |
 | `gcc-sha-repair.yml` | `push: renovate/**` + Dockerfile change → `dotfiles-setup gcc-sha` recomputes `GCC_LATEST_DEB_SHA256` (kayari has no checksum) + commits via App token → greens the gcc bump (#249). |
 

@@ -34,11 +34,16 @@ name: Refresh lockfiles
 #     at 02:00 (staggered) so a same-day lock PR — once merged — is what
 #     the nightly rebuild publishes. GHA honors the sibling `timezone:`.
 #   - workflow_dispatch — manual trigger via `gh workflow run refresh.yml`.
+#   - pull_request — feeds ONLY the `image-lock-pr` job below (#887); the two
+#     `schedule`/`workflow_dispatch` jobs below are gated `if:` to stay off
+#     pull_request entirely, so their cron/dispatch behaviour is unchanged.
 on:
   schedule:
     - cron: "0 0 * * *"
       timezone: "America/Chicago"
   workflow_dispatch:
+  pull_request:
+    branches: [main]
 permissions:
   contents: write
   pull-requests: write
@@ -55,6 +60,9 @@ env:
 
 jobs:
   lock-refresh:
+    # Never on pull_request — this job's cron/dispatch behaviour is otherwise
+    # byte-for-byte unchanged (#887 INV-7).
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -153,6 +161,12 @@ jobs:
   # a workflow can produce the signal, not the judgment.
   # ============================================================
   tool-currency:
+    # Never on pull_request — this job mutates a standing issue with
+    # `issues: write` (`gh issue create`/`edit`/`close`); an ungated
+    # `pull_request` trigger would let every PR in the repo rewrite or close
+    # it. Cron/dispatch behaviour is otherwise byte-for-byte unchanged
+    # (#887 INV-7).
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -216,3 +230,160 @@ jobs:
           name: tool-currency-report
           path: /tmp/tool-currency.md
           if-no-files-found: ignore
+
+  # ============================================================
+  # PR-reactive image-lock regeneration (#887). Renovate rewrites an exact
+  # pin in `.config/mise/conf.d/shared.toml` and correctly regenerates both
+  # HOST locks (mise.lock, .config/mise/mise.lock), but can never regenerate
+  # the two IMAGE locks — that recipe lives only in the `lock-refresh` job
+  # above, which runs on `main` via cron/dispatch and therefore never sees an
+  # unmerged PR's bump. The bump then sits permanently blocked by
+  # `tests/test_lock_coverage.py::test_system_lock_versions_match_pins` in
+  # contract-preflight: a deadlock, not a missed step, because the only job
+  # that can fix the lock only ever runs on a branch that already has it.
+  #
+  # Scope is deliberately narrow: ONLY the two image locks, via
+  # `mise run lock-image -- --no-container` (the runner already IS
+  # linux-x64, so no devcontainer routing). Host locks stay Renovate's, and
+  # the composite's root `mise lock` step is NOT run here — it is currently
+  # producing a defective artifact for an unrelated reason (#821) that this
+  # job must not inject into every bot PR.
+  # ============================================================
+  image-lock-pr:
+    # Same-repo Renovate PRs only. Forks: `secrets.*` are unavailable to
+    # `pull_request` runs from a fork, so the App-token mint below would fail
+    # and red-X every fork PR. Dependabot: Dependabot-triggered runs read the
+    # Dependabot secret store, not Actions secrets, so the same mint would
+    # fail there too — this repo has an active `.github/dependabot.yml`.
+    # `github.event.pull_request.user.login` (the PR's stable author) drives
+    # the Renovate-authorship check; `github.actor` (the actor of THIS event)
+    # drives the separate loop guard below — on the `synchronize` this job's
+    # own push causes, `github.actor` becomes the App's bot while the PR's
+    # author stays `renovate[bot]`, so these must be two different fields.
+    if: >-
+      github.event_name == 'pull_request' &&
+      startsWith(github.event.pull_request.head.ref, 'renovate/') &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login == 'renovate[bot]' &&
+      github.actor != 'dotfiles-refresh-bot-org[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    concurrency:
+      group: image-lock-pr-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    env:
+      # This job commits and pushes onto the PR branch; without this, mise's
+      # postinstall (`hk install --mise`) wires the pre-commit/pre-push git
+      # hooks on the runner and both fail here (no `gh auth`, no `claude` on
+      # PATH) — ADR-0001, `workflow_hk_skip_hooks` enforces it on any new job.
+      HK_SKIP_HOOKS: pre-commit,pre-push
+    steps:
+      - name: Mint GitHub App token
+        # An App-token push re-triggers the PR's own `pull_request` checks
+        # (ci.yml has no `paths:` filter); a plain `secrets.GITHUB_TOKEN`
+        # push does not (GitHub's recursion guard) — #887 INV-9.
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.REFRESH_APP_ID }}
+          private-key: ${{ secrets.REFRESH_APP_PRIVATE_KEY }}
+          permission-contents: write
+      - name: Checkout PR branch
+        # persist-credentials: false — the App token is used ONLY in the push
+        # step below (via a tokenized remote), never persisted to .git/config
+        # (zizmor artipacked). Default GITHUB_TOKEN suffices to check out a
+        # same-repo branch read-only. Matches gcc-sha-repair.yml's precedent.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          persist-credentials: false
+      - name: Install mise (python + uv)
+        uses: $/.github/actions/setup-mise
+        with:
+          install_args: "python uv"
+      - name: Check image-lock drift (five node IDs only, never the whole file)
+        # tests/test_lock_coverage.py holds 13 tests across five lockfiles;
+        # eight are outside this job's domain, including one that is
+        # currently red for an unrelated reason (#821, stale root mise.lock
+        # entries) this job must not touch. Never `-k` — a substring matcher
+        # would silently absorb a future same-named test. This is the
+        # primary loop terminator: once a fix commit lands, this passes and
+        # the job below exits 0 on the next `synchronize`, no push.
+        id: drift-check
+        continue-on-error: true
+        run: |
+          uv run --project python pytest \
+            tests/test_lock_coverage.py::test_system_lock_versions_match_pins \
+            tests/test_lock_coverage.py::test_runtime_lock_versions_match_pins \
+            tests/test_lock_coverage.py::test_system_lock_covers_merged_config \
+            tests/test_lock_coverage.py::test_runtime_lock_covers_runtime_config \
+            tests/test_lock_coverage.py::test_image_locks_carry_no_provenance -q
+      - name: Regenerate image locks
+        if: steps.drift-check.outcome == 'failure'
+        env:
+          # mise run lock-image inherits env and injects no token itself;
+          # anonymous, its convergence loop is EXPECTED to exhaust GitHub's
+          # rate limit and raise "did not converge in 5 pass(es)".
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MISE_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: mise run lock-image -- --no-container
+      - name: Re-check image-lock drift after regeneration
+        # Second terminator (#887 INV-2): this must now PASS unconditionally
+        # — a failure here fails the job and skips every step below, so
+        # nothing is ever pushed on top of a regen that didn't fix it. This
+        # job is not a required status check (main only requires `ci-gate`),
+        # so this re-check is the ONLY guard on what gets committed.
+        if: steps.drift-check.outcome == 'failure'
+        run: |
+          uv run --project python pytest \
+            tests/test_lock_coverage.py::test_system_lock_versions_match_pins \
+            tests/test_lock_coverage.py::test_runtime_lock_versions_match_pins \
+            tests/test_lock_coverage.py::test_system_lock_covers_merged_config \
+            tests/test_lock_coverage.py::test_runtime_lock_covers_runtime_config \
+            tests/test_lock_coverage.py::test_image_locks_carry_no_provenance -q
+      - name: Confirm the diff is confined to the two image locks
+        if: steps.drift-check.outcome == 'failure'
+        run: |
+          set -euo pipefail
+          unexpected=$(git status --porcelain \
+            | awk '{print $2}' \
+            | grep -vE '^\.devcontainer/mise-(system|runtime)\.lock$' || true)
+          if [ -n "$unexpected" ]; then
+            echo "regeneration touched files outside the image locks:" >&2
+            echo "$unexpected" >&2
+            exit 1
+          fi
+      - name: Configure git identity
+        # `dotfiles-refresh-bot-org[bot]`, deliberately NOT `github-actions[bot]`:
+        # this repo's renovate.json inherits `github>jdx/renovate-config`,
+        # whose preset already puts `github-actions[bot]`'s address in
+        # `gitIgnoredAuthors`. A commit under that identity would make
+        # Renovate's `isBranchModified` false and let it rebase this commit
+        # away on the branch's next sync — silently defeating the one thing
+        # this job depends on to survive (`shouldReuseExistingBranch` refusing
+        # to rebase a MODIFIED branch). This App's own bot identity is not in
+        # that ignore list, and its numeric id is measured, not guessed:
+        # `gh api 'users/dotfiles-refresh-bot-org[bot]'` -> id 298071151.
+        if: steps.drift-check.outcome == 'failure'
+        run: |
+          git config --global user.name "dotfiles-refresh-bot-org[bot]"
+          git config --global user.email "298071151+dotfiles-refresh-bot-org[bot]@users.noreply.github.com"
+      - name: Commit the regenerated image locks
+        if: steps.drift-check.outcome == 'failure'
+        run: |
+          git add .devcontainer/mise-system.lock .devcontainer/mise-runtime.lock
+          git commit -m "chore: regenerate image locks for this PR's pin bump (#887)"
+      - name: Push to the PR branch
+        # Pushed via a tokenized remote URL (App token in env, never
+        # persisted — see checkout above), and the untrusted PR-controlled
+        # branch name is passed through env too, not interpolated directly
+        # into the script (actionlint script-injection). Same shape as
+        # gcc-sha-repair.yml's commit+push step.
+        if: steps.drift-check.outcome == 'failure'
+        env:
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          git push "https://x-access-token:${APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:${HEAD_REF}"

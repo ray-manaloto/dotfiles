@@ -795,16 +795,33 @@ per_path_tokens = { ".github/workflows/build-publish.yml" = [
 
 [[suite]]
 name = "ci.refresh-uses-app-token"
-description = "Phase C (#119): refresh.yml must mint a GitHub App token (actions/create-github-app-token) for the PR push so downstream pull_request CI fires on its own (GITHUB_TOKEN-created PRs don't), and the lock-refresh job must enable auto-merge. App ID/private-key come from REFRESH_APP_ID / REFRESH_APP_PRIVATE_KEY secrets."
+description = "Phase C (#119): refresh.yml's lock-refresh job must mint a GitHub App token (actions/create-github-app-token) for the PR push so downstream pull_request CI fires on its own (GITHUB_TOKEN-created PRs don't), open the PR via open-refresh-pr, and enable auto-merge. Bound to lock-refresh-specific call sites, not the generic App-token/secret tokens — #887 added a second job (image-lock-pr) that legitimately mints its own App token from the same secrets, so the generic tokens now match 2x each and no longer bind this job alone."
 category = "ci"
 check_type = "static"
 handler = "require_tokens"
 paths = [".github/workflows/refresh.yml"]
 per_path_tokens = { ".github/workflows/refresh.yml" = [
-    "uses: actions/create-github-app-token@",
-    "app-id: ${{ secrets.REFRESH_APP_ID }}",
-    "REFRESH_APP_PRIVATE_KEY",
+    "uses: $/.github/actions/lock-refresh",
+    "uses: $/.github/actions/open-refresh-pr",
+    "permission-pull-requests: write",
     "auto-merge:",
+] }
+
+[[suite]]
+name = "ci.image-lock-pr-wired"
+description = "#887: refresh.yml's image-lock-pr job must exist, fire only on same-repo Renovate pull_request events (never the pre-existing lock-refresh/tool-currency jobs, which must stay gated off pull_request), scope its drift check to the five image-lock node IDs rather than the whole test file, never run the composite's root `mise lock` step, skip hk's git hooks on the commit/push job, and commit under the App's own bot identity (not github-actions[bot], which the inherited Renovate preset already ignores — INV-8/INV-10)."
+category = "ci"
+check_type = "static"
+handler = "require_tokens"
+paths = [".github/workflows/refresh.yml"]
+per_path_tokens = { ".github/workflows/refresh.yml" = [
+    "image-lock-pr:",
+    "lock-refresh:\n    # Never on pull_request",
+    "tool-currency:\n    # Never on pull_request",
+    "id: drift-check\n        continue-on-error: true\n        run: |\n          uv run --project python pytest \\\n            tests/test_lock_coverage.py::test_system_lock_versions_match_pins",
+    "run: mise run lock-image -- --no-container",
+    "enforces it on any new job.\n      HK_SKIP_HOOKS: pre-commit,pre-push",
+    "git config --global user.name \"dotfiles-refresh-bot-org[bot]\"",
 ] }
 
 [[suite]]
