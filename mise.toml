@@ -28,7 +28,7 @@ lima = "2.2.0"
 "github:agent-sh/agnix" = "0.52.1"
 "npm:agents-lint" = "0.5.0"
 "pipx:mcp2cli" = "3.7.0"
-"npm:renovate" = "44.56.0"
+"npm:renovate" = "44.56.3"
 biome = "2.5.11"
 # Markdown + Claude-docs linters. Installed now; hk.pkl integration is
 # scheduled for post-devcontainer-work review (see GH issue tracking
@@ -66,10 +66,10 @@ lefthook = "2.1.12"
 # conda:ffmpeg on platform linux-x64" and bricks lint. os-gating makes linux
 # skip the tool entirely, so no linux URL is demanded.
 "conda:ffmpeg" = { version = "9.0.1", os = ["macos"] }
-aws-cli = { version = "2.36.36", symlink_bins = "true" }
+aws-cli = { version = "2.36.37", symlink_bins = "true" }
 azure-cli = { version = "2.90.0", uvx_args = "--prerelease=allow" }
 docker-cli = "29.7.2"
-opencode = "1.18.25"
+opencode = "1.18.26"
 # bun (the npm package_manager) is a host↔image SHARED tool → declared in
 # .config/mise/conf.d/shared.toml, not here (mise-parity: a tool used by both
 # sides lives only in the shared fragment).
@@ -93,7 +93,7 @@ opencode = "1.18.25"
 # `.config/mise/conf.d/shared.toml` (mise-parity: the two per-tier npm
 # declarations pinned the SAME tool under the same key, which the parity
 # test correctly flags as drift risk).
-antigravity-cli = "1.1.23"
+antigravity-cli = "1.1.24"
 
 [settings]
 experimental = true
