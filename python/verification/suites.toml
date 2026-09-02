@@ -795,16 +795,37 @@ per_path_tokens = { ".github/workflows/build-publish.yml" = [
 
 [[suite]]
 name = "ci.refresh-uses-app-token"
-description = "Phase C (#119): refresh.yml must mint a GitHub App token (actions/create-github-app-token) for the PR push so downstream pull_request CI fires on its own (GITHUB_TOKEN-created PRs don't), and the lock-refresh job must enable auto-merge. App ID/private-key come from REFRESH_APP_ID / REFRESH_APP_PRIVATE_KEY secrets."
+description = "Phase C (#119): refresh.yml's lock-refresh job must mint a GitHub App token (actions/create-github-app-token) for the PR push so downstream pull_request CI fires on its own (GITHUB_TOKEN-created PRs don't), open the PR via open-refresh-pr, and enable auto-merge. Bound to lock-refresh-specific call sites, not the generic App-token/secret tokens — #887 added a second job (image-lock-pr) that legitimately mints its own App token from the same secrets, so the generic tokens now match 2x each and no longer bind this job alone. The mint ACTION itself is bound by a multi-line token anchored on this job's adjacent '#119' comment through the action name, so swapping actions/create-github-app-token for another action while keeping its inputs fails; the pinned SHA is deliberately NOT in the token (pinact owns SHA-pin enforcement, and a Renovate SHA bump must not fail this contract)."
 category = "ci"
 check_type = "static"
 handler = "require_tokens"
 paths = [".github/workflows/refresh.yml"]
 per_path_tokens = { ".github/workflows/refresh.yml" = [
-    "uses: actions/create-github-app-token@",
-    "app-id: ${{ secrets.REFRESH_APP_ID }}",
-    "REFRESH_APP_PRIVATE_KEY",
+    "# (verified live, #119).\n        id: app-token\n        uses: actions/create-github-app-token@",
+    "app-id: ${{ secrets.REFRESH_APP_ID }}\n          private-key: ${{ secrets.REFRESH_APP_PRIVATE_KEY }}\n          permission-contents: write\n          permission-pull-requests: write",
+    "uses: $/.github/actions/open-refresh-pr",
     "auto-merge:",
+] }
+
+[[suite]]
+name = "ci.image-lock-pr-wired"
+description = "#887: refresh.yml's image-lock-pr job must exist and fire ONLY on a same-repo Renovate-authored pull_request (the full if: predicate, all four clauses, is pinned as one block so no clause can be silently dropped); the two pre-existing jobs (lock-refresh, tool-currency) must stay gated off pull_request; the drift check must run all FIVE image-lock node IDs (not a subset, not the whole file); the actual regen call site must be the narrow `--no-container` form; the job must skip hk's git hooks; and the commit identity must be derived from the App token's own outputs (app-slug + a resolved numeric bot id), never a hardcoded name — bound as PROVENANCE, not just the final email template: the job's own mint of actions/create-github-app-token (anchored on its adjacent '#887 INV-9' comment; the SHA is pinact's gate), the `gh api /users/<slug>[bot]` id lookup, and the env wiring that reads both values from step OUTPUTS are each pinned, so hardcoding BOT_ID/APP_SLUG or deleting the lookup fails. NOT asserted here: that the composite's root `mise lock` step is absent from this job — `forbid_tokens`/`regex_forbid` operate at file granularity, and this same file's lock-refresh job legitimately contains `uses: $/.github/actions/lock-refresh` (which runs that step), so a file-wide forbid of that token would fail the passing job it belongs to. No job-scoped negative check is expressible with this schema; that invariant rests on review, not a gate."
+category = "ci"
+check_type = "static"
+handler = "require_tokens"
+paths = [".github/workflows/refresh.yml"]
+per_path_tokens = { ".github/workflows/refresh.yml" = [
+    "image-lock-pr:",
+    "if: >-\n      github.event_name == 'pull_request' &&\n      startsWith(github.event.pull_request.head.ref, 'renovate/') &&\n      github.event.pull_request.head.repo.full_name == github.repository &&\n      github.event.pull_request.user.login == 'renovate[bot]'",
+    "lock-refresh:\n    # Never on pull_request",
+    "tool-currency:\n    # Never on pull_request",
+    "id: drift-check\n        continue-on-error: true\n        run: |\n          uv run --project python pytest \\\n            tests/test_lock_coverage.py::test_system_lock_versions_match_pins \\\n            tests/test_lock_coverage.py::test_runtime_lock_versions_match_pins \\\n            tests/test_lock_coverage.py::test_system_lock_covers_merged_config \\\n            tests/test_lock_coverage.py::test_runtime_lock_covers_runtime_config \\\n            tests/test_lock_coverage.py::test_image_locks_carry_no_provenance -q",
+    "run: mise run lock-image -- --no-container",
+    "enforces it on any new job.\n      HK_SKIP_HOOKS: pre-commit,pre-push",
+    "#887 INV-9.\n        id: app-token\n        uses: actions/create-github-app-token@",
+    "run: echo \"id=$(gh api \"/users/${APP_SLUG}[bot]\" --jq .id)\" >> \"$GITHUB_OUTPUT\"",
+    "APP_SLUG: ${{ steps.app-token.outputs.app-slug }}\n          BOT_ID: ${{ steps.bot-id.outputs.id }}",
+    "git config user.email \"${BOT_ID}+${APP_SLUG}[bot]@users.noreply.github.com\"",
 ] }
 
 [[suite]]

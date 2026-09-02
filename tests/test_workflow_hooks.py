@@ -57,8 +57,9 @@ REPO_ROOT = Path(__file__).parent.parent
 
 # The ground truth, sourced independently of this module's code:
 #
-# - `gcc-sha-repair.yml`/repair and `refresh.yml`/lock-refresh are the two jobs
-#   ADR-0001's Decision names as committing or pushing.
+# - `gcc-sha-repair.yml`/repair, `refresh.yml`/lock-refresh and
+#   `refresh.yml`/image-lock-pr (#887) commit and push a `git` command
+#   directly onto a branch.
 # - `refresh.yml`/tool-currency runs only `gh issue create/edit/close` — the
 #   GitHub REST API, which never touches the index or a remote.
 # - `autofix.yml`/autofix reaches `autofix-ci/action`, whose own `action.yml`
@@ -68,6 +69,7 @@ REPO_ROOT = Path(__file__).parent.parent
 REAL_CASES: tuple[tuple[str, str, bool], ...] = (
     (".github/workflows/gcc-sha-repair.yml", "repair", True),
     (".github/workflows/refresh.yml", "lock-refresh", True),
+    (".github/workflows/refresh.yml", "image-lock-pr", True),
     (".github/workflows/refresh.yml", "tool-currency", False),
     (".github/workflows/autofix.yml", "autofix", False),
 )
@@ -77,7 +79,8 @@ REAL_CASES: tuple[tuple[str, str, bool], ...] = (
 # `parse_jobs` and pinned as an exact set. A floor (`>= len(REAL_CASES)`) would
 # let a parser silently drop most of these and still pass — the bad-bound shape
 # `.claude/rules/probes-need-a-control-arm.md` names. Adding or losing a job is
-# a deliberate, reviewable diff to this list. (#676 added `plan` + `manifest`.)
+# a deliberate, reviewable diff to this list. (#676 added `plan` + `manifest`;
+# #887 added `image-lock-pr`.)
 EXPECTED_JOBS: frozenset[tuple[str, str]] = frozenset(
     {
         (".github/workflows/autofix.yml", "autofix"),
@@ -99,6 +102,7 @@ EXPECTED_JOBS: frozenset[tuple[str, str]] = frozenset(
         (".github/workflows/gcc-sha-repair.yml", "repair"),
         (".github/workflows/ghcr-cleanup.yml", "cleanup"),
         (".github/workflows/image-analysis.yml", "analyze"),
+        (".github/workflows/refresh.yml", "image-lock-pr"),
         (".github/workflows/refresh.yml", "lock-refresh"),
         (".github/workflows/refresh.yml", "tool-currency"),
     }
