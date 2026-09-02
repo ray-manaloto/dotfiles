@@ -255,17 +255,22 @@ jobs:
     # and red-X every fork PR. Dependabot: Dependabot-triggered runs read the
     # Dependabot secret store, not Actions secrets, so the same mint would
     # fail there too — this repo has an active `.github/dependabot.yml`.
-    # `github.event.pull_request.user.login` (the PR's stable author) drives
-    # the Renovate-authorship check; `github.actor` (the actor of THIS event)
-    # drives the separate loop guard below — on the `synchronize` this job's
-    # own push causes, `github.actor` becomes the App's bot while the PR's
-    # author stays `renovate[bot]`, so these must be two different fields.
+    #
+    # Deliberately NO actor-based loop guard. `gcc-sha-repair.yml` mints from
+    # the SAME REFRESH_APP_ID/REFRESH_APP_PRIVATE_KEY and pushes to
+    # `renovate/**` too, so it can push as the same bot; `renovate.json`
+    # extends `group:all`, so a PR touching both a dated gcc `.deb` and a
+    # `shared.toml` pin is the default shape, not an edge case. A guard on
+    # `github.actor` would then skip this job on the very `synchronize` that
+    # OTHER job's push causes, restoring the #887 deadlock on the commonest
+    # PR shape. The drift check below is genuinely idempotent — after our own
+    # push, the next `synchronize` finds no drift and exits 0 in ~1 minute —
+    # so that IS the terminator; no belt-and-braces guard is needed or safe.
     if: >-
       github.event_name == 'pull_request' &&
       startsWith(github.event.pull_request.head.ref, 'renovate/') &&
       github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.user.login == 'renovate[bot]' &&
-      github.actor != 'dotfiles-refresh-bot-org[bot]'
+      github.event.pull_request.user.login == 'renovate[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -290,6 +295,17 @@ jobs:
           app-id: ${{ secrets.REFRESH_APP_ID }}
           private-key: ${{ secrets.REFRESH_APP_PRIVATE_KEY }}
           permission-contents: write
+      - name: Resolve the App's bot user id
+        # actions/create-github-app-token's own README documents the correct
+        # committer address as `<numeric-user-id>+<app-slug>[bot]@…` — the
+        # id is NOT derivable from the token/app-slug alone, hence this extra
+        # lookup. Deriving both pieces (never hardcoding the slug or the id)
+        # means this survives an App rename without a code change.
+        id: bot-id
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+        run: echo "id=$(gh api "/users/${APP_SLUG}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
       - name: Checkout PR branch
         # persist-credentials: false — the App token is used ONLY in the push
         # step below (via a tokenized remote), never persisted to .git/config
@@ -299,6 +315,12 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.ref }}
           persist-credentials: false
+      - name: Record the checked-out branch head
+        # With no actor-based loop guard, two runs of this job CAN overlap on
+        # a busy PR (e.g. a Renovate resync racing this job's own push). This
+        # is the baseline the push step compares against before pushing.
+        id: base-sha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Install mise (python + uv)
         uses: $/.github/actions/setup-mise
         with:
@@ -344,34 +366,51 @@ jobs:
             tests/test_lock_coverage.py::test_runtime_lock_covers_runtime_config \
             tests/test_lock_coverage.py::test_image_locks_carry_no_provenance -q
       - name: Confirm the diff is confined to the two image locks
+        # Two guards in one step: (1) `continue-on-error: true` on the drift
+        # check converts ANY non-pass outcome (a real failure, but also a
+        # pytest collection error, a renamed node ID, a network flake) into
+        # "outcome == failure" — without this, a regen that (correctly)
+        # changed nothing would hit `git commit` with nothing staged and
+        # red-X on a misleading message. (2) pathspec-exclude the two
+        # allowed files rather than parsing `git status --porcelain` output —
+        # `awk '{print $2}'` yields the OLD path on a rename and splits
+        # wrong on any path containing a space; this asks git directly instead.
+        id: confine-check
         if: steps.drift-check.outcome == 'failure'
         run: |
           set -euo pipefail
-          unexpected=$(git status --porcelain \
-            | awk '{print $2}' \
-            | grep -vE '^\.devcontainer/mise-(system|runtime)\.lock$' || true)
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "drift-check failed but regeneration produced no changes — likely a flake in the check itself, not real drift. Nothing to commit."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          unexpected=$(git status --porcelain -- . ':!.devcontainer/mise-system.lock' ':!.devcontainer/mise-runtime.lock')
           if [ -n "$unexpected" ]; then
             echo "regeneration touched files outside the image locks:" >&2
             echo "$unexpected" >&2
             exit 1
           fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
       - name: Configure git identity
-        # `dotfiles-refresh-bot-org[bot]`, deliberately NOT `github-actions[bot]`:
+        # The App's own bot identity, deliberately NOT `github-actions[bot]`:
         # this repo's renovate.json inherits `github>jdx/renovate-config`,
         # whose preset already puts `github-actions[bot]`'s address in
         # `gitIgnoredAuthors`. A commit under that identity would make
         # Renovate's `isBranchModified` false and let it rebase this commit
         # away on the branch's next sync — silently defeating the one thing
         # this job depends on to survive (`shouldReuseExistingBranch` refusing
-        # to rebase a MODIFIED branch). This App's own bot identity is not in
-        # that ignore list, and its numeric id is measured, not guessed:
-        # `gh api 'users/dotfiles-refresh-bot-org[bot]'` -> id 298071151.
-        if: steps.drift-check.outcome == 'failure'
+        # to rebase a MODIFIED branch). Both the slug and the numeric id are
+        # derived (never hardcoded) per actions/create-github-app-token's own
+        # documented committer-identity recipe.
+        if: steps.drift-check.outcome == 'failure' && steps.confine-check.outputs.changed == 'true'
+        env:
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          BOT_ID: ${{ steps.bot-id.outputs.id }}
         run: |
-          git config --global user.name "dotfiles-refresh-bot-org[bot]"
-          git config --global user.email "298071151+dotfiles-refresh-bot-org[bot]@users.noreply.github.com"
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${BOT_ID}+${APP_SLUG}[bot]@users.noreply.github.com"
       - name: Commit the regenerated image locks
-        if: steps.drift-check.outcome == 'failure'
+        if: steps.drift-check.outcome == 'failure' && steps.confine-check.outputs.changed == 'true'
         run: |
           git add .devcontainer/mise-system.lock .devcontainer/mise-runtime.lock
           git commit -m "chore: regenerate image locks for this PR's pin bump (#887)"
@@ -381,9 +420,25 @@ jobs:
         # branch name is passed through env too, not interpolated directly
         # into the script (actionlint script-injection). Same shape as
         # gcc-sha-repair.yml's commit+push step.
-        if: steps.drift-check.outcome == 'failure'
+        #
+        # No actor-based loop guard (see the job's `if:` comment) means two
+        # runs of this job can overlap; without a race guard, a push onto a
+        # branch that moved since checkout is rejected non-fast-forward and
+        # red-Xes the PR. `git ls-remote` (not a local `origin/<branch>`
+        # tracking ref, which checkout does not necessarily set up) compares
+        # the CURRENT remote head against what this run checked out; on a
+        # mismatch this exits 0 — a clean no-op, never a force-push — and a
+        # newer `synchronize` run redoes the work.
+        if: steps.drift-check.outcome == 'failure' && steps.confine-check.outputs.changed == 'true'
         env:
           APP_TOKEN: ${{ steps.app-token.outputs.token }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          BASE_SHA: ${{ steps.base-sha.outputs.sha }}
         run: |
+          set -euo pipefail
+          remote_sha=$(git ls-remote origin "refs/heads/${HEAD_REF}" | cut -f1)
+          if [ "$remote_sha" != "$BASE_SHA" ]; then
+            echo "the PR branch moved since checkout (remote=$remote_sha, checked-out=$BASE_SHA) — a newer run will redo this regen; skipping push, not force-pushing."
+            exit 0
+          fi
           git push "https://x-access-token:${APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:${HEAD_REF}"

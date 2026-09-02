@@ -801,27 +801,27 @@ check_type = "static"
 handler = "require_tokens"
 paths = [".github/workflows/refresh.yml"]
 per_path_tokens = { ".github/workflows/refresh.yml" = [
-    "uses: $/.github/actions/lock-refresh",
+    "app-id: ${{ secrets.REFRESH_APP_ID }}\n          private-key: ${{ secrets.REFRESH_APP_PRIVATE_KEY }}\n          permission-contents: write\n          permission-pull-requests: write",
     "uses: $/.github/actions/open-refresh-pr",
-    "permission-pull-requests: write",
     "auto-merge:",
 ] }
 
 [[suite]]
 name = "ci.image-lock-pr-wired"
-description = "#887: refresh.yml's image-lock-pr job must exist, fire only on same-repo Renovate pull_request events (never the pre-existing lock-refresh/tool-currency jobs, which must stay gated off pull_request), scope its drift check to the five image-lock node IDs rather than the whole test file, never run the composite's root `mise lock` step, skip hk's git hooks on the commit/push job, and commit under the App's own bot identity (not github-actions[bot], which the inherited Renovate preset already ignores — INV-8/INV-10)."
+description = "#887: refresh.yml's image-lock-pr job must exist and fire ONLY on a same-repo Renovate-authored pull_request (the full if: predicate, all four clauses, is pinned as one block so no clause can be silently dropped); the two pre-existing jobs (lock-refresh, tool-currency) must stay gated off pull_request; the drift check must run all FIVE image-lock node IDs (not a subset, not the whole file); the actual regen call site must be the narrow `--no-container` form; the job must skip hk's git hooks; and the commit identity must be derived from the App token's own outputs (app-slug + a resolved numeric bot id), never a hardcoded name. NOT asserted here: that the composite's root `mise lock` step is absent from this job — `forbid_tokens`/`regex_forbid` operate at file granularity, and this same file's lock-refresh job legitimately contains `uses: $/.github/actions/lock-refresh` (which runs that step), so a file-wide forbid of that token would fail the passing job it belongs to. No job-scoped negative check is expressible with this schema; that invariant rests on review, not a gate."
 category = "ci"
 check_type = "static"
 handler = "require_tokens"
 paths = [".github/workflows/refresh.yml"]
 per_path_tokens = { ".github/workflows/refresh.yml" = [
     "image-lock-pr:",
+    "if: >-\n      github.event_name == 'pull_request' &&\n      startsWith(github.event.pull_request.head.ref, 'renovate/') &&\n      github.event.pull_request.head.repo.full_name == github.repository &&\n      github.event.pull_request.user.login == 'renovate[bot]'",
     "lock-refresh:\n    # Never on pull_request",
     "tool-currency:\n    # Never on pull_request",
-    "id: drift-check\n        continue-on-error: true\n        run: |\n          uv run --project python pytest \\\n            tests/test_lock_coverage.py::test_system_lock_versions_match_pins",
+    "id: drift-check\n        continue-on-error: true\n        run: |\n          uv run --project python pytest \\\n            tests/test_lock_coverage.py::test_system_lock_versions_match_pins \\\n            tests/test_lock_coverage.py::test_runtime_lock_versions_match_pins \\\n            tests/test_lock_coverage.py::test_system_lock_covers_merged_config \\\n            tests/test_lock_coverage.py::test_runtime_lock_covers_runtime_config \\\n            tests/test_lock_coverage.py::test_image_locks_carry_no_provenance -q",
     "run: mise run lock-image -- --no-container",
     "enforces it on any new job.\n      HK_SKIP_HOOKS: pre-commit,pre-push",
-    "git config --global user.name \"dotfiles-refresh-bot-org[bot]\"",
+    "git config user.email \"${BOT_ID}+${APP_SLUG}[bot]@users.noreply.github.com\"",
 ] }
 
 [[suite]]
