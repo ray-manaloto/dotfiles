@@ -165,7 +165,8 @@ def _exempt(rel: str, target: Path) -> bool:
     """Whether this path is out of scope, for any of the settled reasons.
 
     Split out of :func:`decide` so each exemption reads as one line and the
-    decision itself stays a single expression.
+    decision itself stays a short chain of guards. Consulted only for a
+    candidate shell script: the last check shells out to git.
     """
     if rel.casefold().startswith(EXEMPT_PREFIXES):
         return True
@@ -196,9 +197,14 @@ def decide(tool_input: dict[str, object]) -> str | None:
         return None
     target = Path(raw)
     rel = _relative(target, repo_root())
-    if rel is None or _exempt(rel, target):
+    if rel is None:
         return None
+    # Classify BEFORE exempting: `_exempt` ends in a git probe
+    # (`branch_guard.is_ignored`), and an ordinary new `.py` or `.md` file
+    # should not pay for one just to be waved through.
     if not is_shell_script(target, tool_input):
+        return None
+    if _exempt(rel, target):
         return None
     return _REASON.format(rel=rel)
 

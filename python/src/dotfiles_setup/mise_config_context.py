@@ -112,10 +112,15 @@ def build_payload(file_path: str, repo_root: Path) -> dict[str, object] | None:
     """The hook's JSON response, or None when the path is not in scope."""
     if not matches(file_path, repo_root):
         return None
+    # The path is rendered as a JSON string literal, not spliced in raw:
+    # fnmatch's `*` matches a newline, so a matching filename can carry
+    # newline-separated instruction text. Escaped, it stays one line of data.
     return {
         "hookSpecificOutput": {
             "hookEventName": "PostToolUse",
-            "additionalContext": CONTEXT.format(path=file_path, docs=MISE_DOCS),
+            "additionalContext": CONTEXT.format(
+                path=json.dumps(file_path), docs=MISE_DOCS
+            ),
         }
     }
 
@@ -190,12 +195,20 @@ def mise_config_context_main(repo_root: Path) -> int:
     """
     try:
         raw = sys.stdin.read()
-        event = json.loads(raw) if raw.strip() else {}
-        file_path = str((event.get("tool_input") or {}).get("file_path", ""))
-        session_id = str(event.get("session_id", ""))
-        agent_id = str(event.get("agent_id", ""))
+        decoded = json.loads(raw) if raw.strip() else {}
     except ValueError, OSError:
         return 0
+    # Valid JSON is not necessarily the expected shape: `[]`, `null` and
+    # `{"tool_input": []}` all decode cleanly, and an attribute error here
+    # would break the fail-open contract. Anything non-mapping is treated as
+    # empty, which falls through to a silent exit 0.
+    event = decoded if isinstance(decoded, dict) else {}
+    tool_input = event.get("tool_input")
+    if not isinstance(tool_input, dict):
+        tool_input = {}
+    file_path = str(tool_input.get("file_path", ""))
+    session_id = str(event.get("session_id", ""))
+    agent_id = str(event.get("agent_id", ""))
     payload = build_payload(file_path, repo_root)
     if payload is None:
         return 0

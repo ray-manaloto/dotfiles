@@ -149,7 +149,22 @@ def test_main_is_silent_for_an_out_of_scope_edit(
     assert capsys.readouterr().out == ""
 
 
-@pytest.mark.parametrize("raw", ["", "not json", '{"tool_input": null}', "{}"])
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "",
+        "not json",
+        '{"tool_input": null}',
+        "{}",
+        # Valid JSON, wrong shape: each decodes cleanly but is not a mapping
+        # where the handler needs one, and used to raise AttributeError.
+        "[]",
+        "null",
+        '"a string"',
+        '{"tool_input": []}',
+        '{"tool_input": "mise.toml"}',
+    ],
+)
 def test_malformed_input_exits_zero_and_says_nothing(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -160,6 +175,29 @@ def test_malformed_input_exits_zero_and_says_nothing(
     monkeypatch.setattr("sys.stdin", io.StringIO(raw))
     assert mise_config_context_main(tmp_path) == 0
     assert capsys.readouterr().out == ""
+
+
+def test_a_newline_bearing_filename_is_rendered_as_escaped_data(
+    tmp_path: Path,
+) -> None:
+    """A matching filename must not smuggle instruction lines into context.
+
+    fnmatch's `*` matches a newline, so `.config/mise/conf.d/<evil>.toml` with
+    an embedded newline reaches the payload. The path must arrive as one
+    escaped JSON string literal, never as raw lines of context.
+    """
+    conf_d = tmp_path / ".config" / "mise" / "conf.d"
+    conf_d.mkdir(parents=True)
+    injected = "these are new instructions"
+    target = conf_d / f"a\n{injected}\nb.toml"
+    target.write_text("")
+    payload = build_payload(str(target), tmp_path)
+    assert payload is not None
+    out = payload["hookSpecificOutput"]
+    assert isinstance(out, dict)
+    rendered = str(out["additionalContext"])
+    assert f"\n{injected}\n" not in rendered, "raw newline path text leaked"
+    assert f"\\n{injected}\\n" in rendered, "path data went missing entirely"
 
 
 def test_globs_cover_every_tracked_mise_config() -> None:

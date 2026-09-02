@@ -163,8 +163,16 @@ def test_edit_tool_content_key_is_read(repo: Path) -> None:
 # unreachable. These drive the real dispatch and the real settings wiring.
 
 
-def test_the_dispatch_actually_reaches_this_guard() -> None:
-    """Reverting the hook_guard dispatch must fail a test, not pass silently."""
+def test_the_dispatch_actually_reaches_this_guard(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reverting the hook_guard dispatch must fail a test, not pass silently.
+
+    `branch_guard.decide` is pinned to None first: it runs ahead of this guard
+    in the chain, and a reason from it would satisfy the assertion even with
+    the script_guard dispatch removed.
+    """
+    monkeypatch.setattr(branch_guard, "decide", lambda _tool_input: None)
     root = script_guard.repo_root()
     payload: dict[str, object] = {
         "file_path": str(root / "scripts" / "definitely-new-probe.sh"),
