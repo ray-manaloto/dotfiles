@@ -48,12 +48,19 @@ cat > .agent/kb/raw/codex-operator-prompt.md <<'EOF'
 <the ONE task to run, the repo path, and what to report>
 EOF
 
-cat .agent/kb/raw/codex-operator-prompt.md | codex exec \
+cat .agent/kb/raw/codex-operator-prompt.md | PLANNING_DISABLED=1 codex exec \
   --ephemeral --sandbox danger-full-access \
   --model gpt-5.6-sol \
   -c model_reasoning_effort="xhigh" \
   -o .agent/kb/raw/codex-operator-result.md -
 ```
+
+**`PLANNING_DISABLED=1` is load-bearing too.** Without it the lane inherits this
+session's planning-with-files hooks, is handed the coordinator's `task_plan.md`,
+and can write it back. The flag is the plugin's own per-invocation opt-out and
+silences the whole chain at `hooks/claude-hook.sh:10`. Measured on 3.14.0:
+unset -> 1100 bytes of injected plan context, set -> 0, both rc=0. A lane that
+genuinely needs plan context gets its OWN slug and `PLAN_ID`, never this one's.
 
 **Both flags are load-bearing.** Without `-c model_reasoning_effort`, codex
 resolves effort from `~/.codex/config.toml` — a file this repo neither owns nor

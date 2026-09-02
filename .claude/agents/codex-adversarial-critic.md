@@ -83,12 +83,19 @@ cat > .agent/kb/raw/codex-adversarial-critic-prompt.md <<'EOF'
 the repo paths holding the real record; and the report format below>
 EOF
 
-cat .agent/kb/raw/codex-adversarial-critic-prompt.md | codex exec \
+cat .agent/kb/raw/codex-adversarial-critic-prompt.md | PLANNING_DISABLED=1 codex exec \
   --ephemeral --sandbox read-only \
   --model gpt-5.6-sol \
   -c model_reasoning_effort="xhigh" \
   -o .agent/kb/raw/codex-adversarial-critic-verdict.md -
 ```
+
+**`PLANNING_DISABLED=1` is load-bearing too.** Without it the lane inherits this
+session's planning-with-files hooks, is handed the coordinator's `task_plan.md`,
+and can write it back. The flag is the plugin's own per-invocation opt-out and
+silences the whole chain at `hooks/claude-hook.sh:10`. Measured on 3.14.0:
+unset -> 1100 bytes of injected plan context, set -> 0, both rc=0. A lane that
+genuinely needs plan context gets its OWN slug and `PLAN_ID`, never this one's.
 
 **Both flags are load-bearing; neither is redundant.** Without
 `-c model_reasoning_effort`, codex resolves the effort from

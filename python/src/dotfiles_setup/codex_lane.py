@@ -70,6 +70,7 @@ from __future__ import annotations
 
 import fcntl
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -116,6 +117,23 @@ CODEX_BIN = "codex"
 # An INVARIANT, not a knob — inlined into the argv rather than exposed as a
 # parameter no caller ever overrode.
 READ_ONLY_SANDBOX = "read-only"
+
+# The planning-with-files hooks fire in any process that inherits this session's
+# environment, so an un-scrubbed `codex exec` is handed the coordinator's plan
+# and can write `task_plan.md` back. `PLANNING_DISABLED=1` is the plugin's own
+# per-invocation opt-out and it silences the whole hook chain at its first
+# guarded line — `hooks/claude-hook.sh:10` for the dispatcher, and
+# `scripts/inject-plan.sh:77` for direct calls. Measured on plugin 3.14.0
+# against an attested root plan: unset -> 1100 bytes of injected plan context,
+# set -> 0 bytes, both rc=0.
+#
+# ⚠️ It lives HERE, on the spawn, rather than in a lane's brief. A flag a brief
+# must remember is the `.claude/rules/agent-report-persistence.md` §1b failure —
+# "a rule nothing pushes into the prompt is not a layer" — and this lane's whole
+# job is to read code and return a verdict, so plan context is never something
+# it legitimately needs. A lane that genuinely needs one gets its OWN slug and
+# `PLAN_ID`, never the coordinator's.
+LANE_ENV_OVERRIDES = {"PLANNING_DISABLED": "1"}
 
 # Recorded when the LAUNCHER failed before `codex` returned a code of its own —
 # sysexits.h EX_SOFTWARE. The value matters less than the fact that something
@@ -418,6 +436,12 @@ def run_codex(argv: Sequence[str], *, prompt: str, cwd: Path) -> int:
     appears to have failed. `codex` is pinned host-only in `mise.toml`, so under
     ``mise run codex-lane`` the shim is present and under launchd it may not be.
 
+    The child's environment is the launcher's plus
+    :data:`LANE_ENV_OVERRIDES` — it is not inherited unmodified. A lane that
+    inherits this session's environment also inherits its planning hooks, which
+    would hand a read-only review lane the coordinator's plan and let it write
+    that plan back. See the constant for the measurement.
+
     Args:
         argv: The invocation from :func:`build_codex_argv`.
         prompt: The review prompt, written to stdin.
@@ -442,6 +466,7 @@ def run_codex(argv: Sequence[str], *, prompt: str, cwd: Path) -> int:
         cwd=cwd,
         text=True,
         check=False,
+        env={**os.environ, **LANE_ENV_OVERRIDES},
     )
     return completed.returncode
 

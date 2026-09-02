@@ -1381,6 +1381,49 @@ tokens = [
 ]
 
 [[suite]]
+name = "workflow.codex-lane-planning-isolation"
+description = "D2/D3 of the pwf refactor: a codex lane must never inherit the coordinator's planning-with-files state. The hooks fire in any process that inherits the session environment, so an un-scrubbed `codex exec` is handed `task_plan.md` and can write it back — which is the observed #1 pain (lane returns landing in the wrong file) with the coordinator's own plan as the target. Two layers, deliberately unequal. The MECHANICAL one is `codex_lane.LANE_ENV_OVERRIDES` merged into the spawn's `env=`, asserted here at the CALL SITE and not just at the constant, because the defect class is wiring rather than logic: `subprocess.run` without `env=` leaves a constant-reading test perfectly green (#895's lesson). The PROSE one is the `PLANNING_DISABLED=1` prefix on the hand-dispatched invocation in each `.claude/agents/codex-*.md`, which is the fallback shape agent-report-persistence.md 1b calls out as weak — it is here only because a Claude delegate inherits the session's hooks and cannot be scrubbed from the parent. The file-role contract itself (task_plan.md = coordinator ONLY; findings.md and progress.md = anyone) lives in that same rule so it rides every ad-hoc brief. Measured on plugin 3.14.0 against an attested root plan, both arms rc=0: PLANNING_DISABLED unset -> 1100 bytes of injected plan context, set -> 0 bytes; the guard is `hooks/claude-hook.sh:10` for the dispatcher and `scripts/inject-plan.sh:77` for direct calls. The tests are named here rather than assumed: the positive one spawns a REAL child and asks it what it inherited (mutation-proven — removing `env=` fails it; replacing the merge with a bare dict, which would strip PATH and break every live lane, fails its second assertion), and the control arm proves that same probe reports the unset state, so its pass is not a probe that can only pass. Upstream context: the two defects that make plan attachment untrustworthy in the first place are OthmanAdi/planning-with-files#237 (a valid-shape PLAN_ID naming no directory silently attests and injects a DIFFERENT plan at rc=0) and #238 (a slug with no .mode bypasses the root .mode, so mandatory attestation becomes an agent-chosen flag)."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    "python/src/dotfiles_setup/codex_lane.py",
+    "tests/test_codex_lane.py",
+    ".claude/rules/agent-report-persistence.md",
+    ".claude/agents/codex-advisor.md",
+    ".claude/agents/codex-operator.md",
+    ".claude/agents/codex-adversarial-critic.md",
+    ".claude/agents/codex-claude-code-expert.md",
+    ".claude/agents/codex-staleness-auditor.md",
+]
+per_path_tokens = { "python/src/dotfiles_setup/codex_lane.py" = [
+    'LANE_ENV_OVERRIDES = {"PLANNING_DISABLED": "1"}',
+    "env={**os.environ, **LANE_ENV_OVERRIDES},",
+], "tests/test_codex_lane.py" = [
+    "def test_the_spawned_lane_really_has_the_planning_hooks_disabled(",
+    "def test_the_planning_disabled_arm_is_armed(",
+], ".claude/rules/agent-report-persistence.md" = [
+    "| Phases, checkboxes, current phase, distilled decisions | `task_plan.md` | **coordinator ONLY** |",
+    "codex_lane.LANE_ENV_OVERRIDES",
+], ".claude/agents/codex-advisor.md" = [
+    "PLANNING_DISABLED=1 codex exec",
+], ".claude/agents/codex-operator.md" = [
+    "PLANNING_DISABLED=1 codex exec",
+], ".claude/agents/codex-adversarial-critic.md" = [
+    "PLANNING_DISABLED=1 codex exec",
+], ".claude/agents/codex-claude-code-expert.md" = [
+    "PLANNING_DISABLED=1 codex exec",
+], ".claude/agents/codex-staleness-auditor.md" = [
+    "PLANNING_DISABLED=1 codex exec",
+] }
+tokens = [
+    "env={**os.environ, **LANE_ENV_OVERRIDES},",
+    "def test_the_planning_disabled_arm_is_armed(",
+    "PLANNING_DISABLED=1 codex exec",
+]
+
+[[suite]]
 name = "workflow.codex-agent-lane-parity"
 description = "#884: the `codex_agent_parity` hk step must stay wired to the python gate end-to-end, and that gate must keep asserting a signal THIS REPO OWNS. The four hand-authored codex-backed lanes ship as a two-surface pair (`.claude/agents/codex-*.md` wrapper + `.codex/agents/codex-*.toml` codex role) whose bodies deliberately DIFFER, so byte-equality is the wrong check; what must hold is the wiring. ⚠️ **The detection strategy is a SENTINEL, not a corruption sniff, and that distinction is this contract's point.** The first version grepped for the Codex Desktop app exporter's output strings (`Codex Code`, `.Codex/`, `Codex mcp add`) — binding a check to text we do not own, which `probes-need-a-control-arm.md` rule 9 refuses. It was ALREADY a no-op on live evidence: measured 2026-08-31 across the four exported mirrors, `Codex Code` scored 0/0/0/0 and `Codex mcp add` 0/0/0/0, so two of three markers could never fire, while the exported `staleness-auditor.toml` is unambiguously corrupted (it says does-Codex-Code-do-X and docs/Codex) and scored ZERO on all three — the gate returned rc=0 on a live on-disk instance of its own target. The reason is sharper than drift: that file DOES contain the two-word marker, split across a line wrap, so ANY multi-word content marker is defeatable by reflow whoever owns the words. A positive test is no better — the obvious hand-authored-files-mention-claude rule fails because the exported `claude-code-expert.toml` carries 29 case-insensitive `claude` hits. So `SENTINEL` is a line this repo writes into every hand-authored toml: an exporter overwrite destroys it regardless of what that export contains, and its failure mode is our-file-was-replaced rather than we-guessed-the-corruption-wording-right-this-time. The markers survive as a secondary signal, broadened with the two measured shapes and matched against whitespace-FLATTENED text via `flatten()` so a wrap cannot hide them. The sentinel's own load-bearingness is pinned by `test_the_sentinel_is_absent_from_every_exported_mirror`, so a later tidy-up that makes it something the exporter also emits fails immediately instead of silently neutering the gate. ⚠️ **The PRODUCTION entry point is bound separately from the logic**: `find_violations` was thoroughly covered while `codex_agent_parity_main` — the seam the hk step actually runs — was not, and stubbing it to return 0 left all 2577 tests green; `test_the_entry_point_returns_nonzero_on_a_violation` closes that, and the same mutation now fails 4 arms. The gate also reads the `.md` half (frontmatter name, a `model:` pin present but its VALUE deliberately unchecked as a tuning decision, both codex flags, and the no-substitute prohibition), because a lane missing either flag silently inherits model and effort from `~/.codex/config.toml`, a file this repo neither owns nor watches. Asserts the chain: hk.pkl shells out to `dotfiles-setup codex-agent-parity`, main.py registers and dispatches the subcommand, the module carries the sentinel constant plus the entry point, the flattener and the md checker, mise.toml exposes the task, the tests bind the sentinel-absence pin and the entry-point arm, and a shipped toml really carries the sentinel."
 category = "workflow"

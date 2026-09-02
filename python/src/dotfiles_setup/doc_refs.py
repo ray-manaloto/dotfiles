@@ -124,6 +124,15 @@ _ALLOWED_ABSENT = frozenset(
         "config.local.toml",
         "fnox.toml",
         "fnox.local.toml",
+        # planning-with-files runtime plan files. The plugin creates them per
+        # task and `.gitignore:125-133` keeps them out of the repo, so they
+        # resolve on a working box and vanish in a fresh checkout — exactly
+        # the local/CI split this list exists to make reviewable. Cited by
+        # bare name in the file-role contract
+        # (`.claude/rules/agent-report-persistence.md` 1c).
+        "task_plan.md",
+        "progress.md",
+        "findings.md",
         # Gitignored but real per-clone files.
         "mise.local.toml",
         "mise.*.local.toml",
