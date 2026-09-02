@@ -39,15 +39,16 @@ import logging
 import re
 import subprocess
 import sys
+import tempfile
 import tomllib
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from dotfiles_setup import _project_root
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -247,6 +248,68 @@ def _render_sources_toml(entries: list[SchemaEntry]) -> str:
     return header + "\n" + "\n".join(blocks)
 
 
+#: The hk hygiene builtins (``hk-common.pkl`` ``hygiene`` group) that can
+#: rewrite a vendored JSON file, as their ``hk util`` subcommand names. The
+#: vendored bytes are put through these BEFORE being hashed, so the file on
+#: disk is already a fixed point of the lint gate.
+#:
+#: Why this exists: ruff's and typos' upstream schemas ship with NO trailing
+#: newline (measured — ruff 0.16.5 ends ``}\n}``, while mise's ends ``\n}\n``).
+#: Writing those bytes verbatim and hashing them made ``end-of-file-fixer``
+#: and the ``sha256`` integrity check mutually exclusive: fixing the newline
+#: broke `check_drift`, and leaving it broke `mise run lint`. Normalising
+#: first makes both gates agree, and keeps `check_drift` running over EVERY
+#: vendored file rather than exempting these two from the lint gate.
+#: Each entry is the ``hk util`` subcommand plus the args that make it WRITE.
+#: The vocabulary is NOT uniform, and assuming it is costs a silent rc=2:
+#: three fixers write only under ``--fix``, while ``fix-smart-quotes`` writes
+#: BY DEFAULT and takes ``--check`` to do the opposite. Verified against each
+#: subcommand's own ``--help``, not inferred from a sibling.
+_HK_HYGIENE_FIXERS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("trailing-whitespace", ("--fix",)),
+    ("end-of-file-fixer", ("--fix",)),
+    ("mixed-line-ending", ("--fix",)),
+    ("fix-smart-quotes", ()),
+)
+
+
+def _hygiene_normalize(data: bytes, root: Path) -> bytes:
+    """Return `data` as hk's hygiene builtins would leave it on disk.
+
+    Runs the real fixers (:data:`_HK_HYGIENE_FIXERS`) over a scratch copy
+    rather than reimplementing their rules in Python, so this cannot drift
+    from what ``mise run lint`` enforces (`use-tool-builtins.md`). The file
+    is written, fixed in place, and read back.
+
+    Raises:
+        RuntimeError: when an ``hk util`` fixer exits non-zero for a reason
+            other than "I fixed something" (rc 1), which would otherwise let
+            an unnormalised file through and re-break the lint gate.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        scratch = Path(tmp) / "schema.json"
+        scratch.write_bytes(data)
+        for fixer, write_args in _HK_HYGIENE_FIXERS:
+            proc = subprocess.run(
+                ["hk", "util", fixer, *write_args, str(scratch)],
+                capture_output=True,
+                check=False,
+                cwd=root,
+            )
+            # hk's fixers exit 1 when they CHANGED the file, which is the
+            # expected outcome here, not a failure. Anything else (missing
+            # binary, bad flag) must be loud — a silently skipped fixer
+            # reintroduces exactly the deadlock this function removes.
+            if proc.returncode not in (0, 1):
+                stderr = proc.stderr.decode(errors="replace").strip()
+                msg = (
+                    f"hk util {fixer} failed (rc={proc.returncode}) "
+                    f"normalizing a vendored schema: {stderr}"
+                )
+                raise RuntimeError(msg)
+        return scratch.read_bytes()
+
+
 def _curl_fetch(url: str) -> bytes:
     """Fetch `url` with curl and return the raw body.
 
@@ -280,7 +343,11 @@ def refresh(
     """Re-download every vendored schema at its current pin.
 
     Rewrites a vendored JSON file (and its ``sources.toml`` row) only when
-    the pin moved or the fetched bytes differ from what's on disk. Returns
+    the pin moved or the fetched bytes differ from what's on disk. Fetched
+    bytes are put through :func:`_hygiene_normalize` FIRST, so the recorded
+    ``sha256`` describes the file as the lint gate leaves it — comparison,
+    write and hash all use the same normalized form, which keeps the
+    "nothing drifted" fast path honest. Returns
     the list of tools that changed. Network-using — CI (`schema-refresh`
     job) only, never the lint gate. `fetcher` is a test seam: a callable
     `(url) -> bytes`, defaulting to :func:`_curl_fetch`.
@@ -302,7 +369,7 @@ def refresh(
             new_entries.append(entry)
             continue
         url = _source_url(entry.tool, pin)
-        fetched = fetch(url)
+        fetched = _hygiene_normalize(fetch(url), project_root)
         schema_path = project_root / entry.file
         existing = schema_path.read_bytes() if schema_path.exists() else None
         if pin != entry.version or fetched != existing:

@@ -27,7 +27,11 @@ if TYPE_CHECKING:
 #: records for them in `sources.toml` — kept as one constant so a test that
 #: wants a MISMATCH only has to write different bytes to the file, not also
 #: remember to edit the recorded hash.
-_SCHEMA_BYTES = b'{"type": "object"}'
+# Trailing newline on purpose: a vendored file on disk is always
+# hygiene-normalized (`_hygiene_normalize`), so a fixture WITHOUT one would
+# model a state `refresh` can never produce and would make the "nothing
+# drifted" fast path look broken.
+_SCHEMA_BYTES = b'{"type": "object"}\n'
 _SCHEMA_SHA256 = hashlib.sha256(_SCHEMA_BYTES).hexdigest()
 
 
@@ -339,7 +343,10 @@ def test_refresh_rewrites_the_schema_and_sources_toml_on_drift(
     stale = sources.read_text().replace('version = "0.16.5"', 'version = "0.16.4"', 1)
     sources.write_text(stale)
 
+    # Deliberately NOT newline-terminated — this is the ruff/typos upstream
+    # shape, and the point is that what lands on disk IS.
     new_ruff_bytes = b'{"type": "object", "new": true}'
+    normalized_ruff = new_ruff_bytes + b"\n"
 
     def fetcher(url: str) -> bytes:
         if "ruff" in url:
@@ -349,10 +356,13 @@ def test_refresh_rewrites_the_schema_and_sources_toml_on_drift(
     changed = refresh(tmp_path, fetcher=fetcher)
     assert changed == ["ruff"]
     rewritten = (tmp_path / "schemas/ruff.json").read_bytes()
-    assert rewritten == new_ruff_bytes
+    assert rewritten == normalized_ruff
     reloaded = {e.tool: e for e in load_sources(tmp_path)}
     assert reloaded["ruff"].version == "0.16.5"
-    assert reloaded["ruff"].sha256 == hashlib.sha256(new_ruff_bytes).hexdigest()
+    # The recorded hash describes the file as it LANDS, not as it was fetched
+    # — otherwise `check_drift` and hk's end-of-file-fixer are mutually
+    # exclusive on this file (the ITEM 11 deadlock).
+    assert reloaded["ruff"].sha256 == hashlib.sha256(normalized_ruff).hexdigest()
     # The two undrifted entries are untouched.
     assert reloaded["mise"].version == "2026.9.0"
     assert reloaded["typos"].version == "1.50.1"
@@ -374,3 +384,37 @@ def test_refresh_leaves_an_unresolvable_tool_vendored_and_uncounted(
 
     changed = refresh(tmp_path, fetcher=fetcher)
     assert "not-a-tool" not in changed
+
+
+def test_refresh_lands_hygiene_clean_bytes_so_lint_and_check_drift_agree(
+    tmp_path: Path,
+) -> None:
+    """A newline-less upstream schema must not deadlock lint against check_drift.
+
+    Regression arm for the ITEM 11 defect: ruff's and typos' upstream schemas
+    ship without a trailing newline. Writing those bytes verbatim made hk's
+    `end-of-file-fixer` and the recorded sha256 unsatisfiable together —
+    fixing the newline broke `check_drift`, leaving it broke `mise run lint`.
+    """
+    _seed_repo(tmp_path, ruff_version="0.16.5")
+    sources = tmp_path / "schemas/sources.toml"
+    sources.write_text(
+        sources.read_text().replace('version = "0.16.5"', 'version = "0.16.4"', 1)
+    )
+    ragged = b'{"type": "object", "ragged": true}   \n\n\n'
+
+    def fetcher(url: str) -> bytes:
+        return ragged if "ruff" in url else _SCHEMA_BYTES
+
+    assert refresh(tmp_path, fetcher=fetcher) == ["ruff"]
+
+    landed = (tmp_path / "schemas/ruff.json").read_bytes()
+    # hk's hygiene builtins would leave this file alone: exactly one trailing
+    # newline, no trailing whitespace before it.
+    assert landed.endswith(b"}\n")
+    assert not landed.endswith(b"\n\n")
+    assert b" \n" not in landed
+    # ...and check_drift is satisfied by those same bytes, so both gates pass
+    # on one file. This is the assertion that fails if the normalize step is
+    # removed from `refresh`.
+    assert check_drift(tmp_path) == []

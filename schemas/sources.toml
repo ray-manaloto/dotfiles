@@ -16,10 +16,10 @@
 [[schema]]
 tool = "mise"
 file = "schemas/mise.json"
-version = "2026.9.0"
-source = "https://raw.githubusercontent.com/jdx/mise/v2026.9.0/schema/mise.json"
+version = "2026.9.1"
+source = "https://raw.githubusercontent.com/jdx/mise/v2026.9.1/schema/mise.json"
 pin_source = ".github/actions/setup-mise/action.yml"
-sha256 = "6fbcf4514e2ccce5af527b108b11651b42a84bee37125bdbb8cebfea57928b43"
+sha256 = "5142ef8a14e714679dab28ddea35b097f635d8a2d1be0ae27e88ca5475b4f815"
 
 [[schema]]
 tool = "ruff"
