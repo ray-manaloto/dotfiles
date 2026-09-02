@@ -392,7 +392,7 @@ def test_the_real_repo_passes() -> None:
     assert cap.find_violations(REPO_ROOT) == []
 
 
-def test_the_four_shipped_lanes_are_all_present() -> None:
+def test_the_shipped_lanes_are_all_present() -> None:
     shipped = {
         p.stem
         for p in (REPO_ROOT / cap.CODEX_AGENT_DIR).iterdir()
@@ -403,6 +403,7 @@ def test_the_four_shipped_lanes_are_all_present() -> None:
         "codex-adversarial-critic",
         "codex-staleness-auditor",
         "codex-claude-code-expert",
+        "codex-operator",
     }
 
 
