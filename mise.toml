@@ -28,7 +28,7 @@ lima = "2.2.0"
 "github:agent-sh/agnix" = "0.52.1"
 "npm:agents-lint" = "0.5.0"
 "pipx:mcp2cli" = "3.7.0"
-"npm:renovate" = "44.59.1"
+"npm:renovate" = "44.59.2"
 biome = "2.5.11"
 # Markdown + Claude-docs linters. Installed now; hk.pkl integration is
 # scheduled for post-devcontainer-work review (see GH issue tracking
@@ -69,7 +69,7 @@ lefthook = "2.1.12"
 aws-cli = { version = "2.36.38", symlink_bins = "true" }
 azure-cli = { version = "2.90.0", uvx_args = "--prerelease=allow" }
 docker-cli = "29.7.2"
-opencode = "1.18.26"
+opencode = "1.18.27"
 # bun (the npm package_manager) is a host↔image SHARED tool → declared in
 # .config/mise/conf.d/shared.toml, not here (mise-parity: a tool used by both
 # sides lives only in the shared fragment).
