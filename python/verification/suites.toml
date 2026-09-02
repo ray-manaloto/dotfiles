@@ -2408,7 +2408,7 @@ per_path_tokens = { "mise.toml" = [
 
 [[suite]]
 name = "config.schema-vendor-drift"
-description = "ITEM 11: the vendored config schemas (`schemas/mise.json`, `schemas/ruff.json`, `schemas/typos.json`) must stay in step with the tool versions this repo actually pins. `mise.toml`/`ruff.toml`/`typos.toml` each carry a first-line `#:schema` directive pointing at the vendored copy rather than a remote URL, because taplo does not cache schemas between runs — a remote directive would make `mise run lint` a per-run network dependency and a red gate whenever the schema host is unreachable. This suite runs `dotfiles_setup.schema_vendor.check_drift`, which compares `schemas/sources.toml`'s recorded version for each tool against the CURRENT pin read from `.config/mise/conf.d/shared.toml` (typos), `python/uv.lock` (ruff — unpinned in pyproject.toml, so the lockfile is the only local record of the resolved version) and `.github/actions/setup-mise/action.yml` (mise). No network call: two local facts compared. On drift, `mise run schema-vendor-refresh` re-downloads the schema at the new pin and rewrites both the JSON and its `sources.toml` row. WHAT THIS CONTRACT CANNOT DO: it cannot prove the vendored JSON is itself valid JSON Schema, or that taplo actually reads it — that is `mise run lint`'s job (taplo runs on every commit); this suite only proves the recorded version has not gone stale."
+description = "ITEM 11: the vendored config schemas (`schemas/mise.json`, `schemas/ruff.json`, `schemas/typos.json`) must stay in step with the tool versions this repo actually pins, AND their bytes must match what `sources.toml` recorded. `mise.toml`/`ruff.toml`/`typos.toml` each carry a first-line `#:schema` directive pointing at the vendored copy rather than a remote URL, because taplo does not cache schemas between runs — a remote directive would make `mise run lint` a per-run network dependency and a red gate whenever the schema host is unreachable. This suite runs `dotfiles_setup.schema_vendor.check_drift`, which checks two independent things per entry: the recorded `version` against the CURRENT pin read from `.config/mise/conf.d/shared.toml` (typos), `python/uv.lock` (ruff — unpinned in pyproject.toml, so the lockfile is the only local record of the resolved version) and `.github/actions/setup-mise/action.yml` (mise); and the recorded `sha256` against the vendored file's actual bytes on disk — the version check alone cannot see a vendored file gutted, corrupted, or swapped for an unrelated (even validly-parsing) document while the version string stayed put. No network call: only local facts compared. On drift, `mise run schema-vendor-refresh` re-downloads the schema at the new pin and rewrites the JSON, its `sha256`, and the rest of its `sources.toml` row. WHAT THIS CONTRACT CANNOT DO: it cannot prove the vendored JSON is itself valid JSON Schema, or that taplo actually reads it — that is `mise run lint`'s job (taplo runs on every commit); nor does it bind the `#:schema` directives themselves — see `config.schema-vendor-directives-bound` for that."
 category = "config"
 check_type = "static"
 handler = "schema_drift"
@@ -2425,3 +2425,19 @@ paths = [
     "python/uv.lock",
     ".github/actions/setup-mise/action.yml",
 ]
+
+[[suite]]
+name = "config.schema-vendor-directives-bound"
+description = "ITEM 11: `config.schema-vendor-drift` lists `mise.toml`/`ruff.toml`/`typos.toml` in its `paths`, but its `schema_drift` handler never reads that field (`verify.py`'s `_handle_schema_drift` only reads `entry[\"name\"]`) — so that listing reads as coverage of the `#:schema` directives while being purely decorative. Deleting a directive leaves every gate green while the feature (offline schema validation via taplo) silently stops applying to that file. This suite binds the three directive lines directly via `require_lines`/`per_path_lines`, so removing one fails here even though `config.schema-vendor-drift` cannot see it."
+category = "config"
+check_type = "static"
+handler = "require_lines"
+paths_required = true
+paths = ["mise.toml", "ruff.toml", "typos.toml"]
+per_path_lines = { "mise.toml" = [
+    "#:schema ./schemas/mise.json",
+], "ruff.toml" = [
+    "#:schema ./schemas/ruff.json",
+], "typos.toml" = [
+    "#:schema ./schemas/typos.json",
+] }

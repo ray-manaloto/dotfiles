@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from typing import TYPE_CHECKING
 
 import pytest
@@ -21,6 +22,13 @@ from dotfiles_setup.schema_vendor import (
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+#: The bytes every seeded schema file gets, and the sha256 `_seed_repo`
+#: records for them in `sources.toml` — kept as one constant so a test that
+#: wants a MISMATCH only has to write different bytes to the file, not also
+#: remember to edit the recorded hash.
+_SCHEMA_BYTES = b'{"type": "object"}'
+_SCHEMA_SHA256 = hashlib.sha256(_SCHEMA_BYTES).hexdigest()
 
 
 def _seed_repo(
@@ -62,6 +70,7 @@ def _seed_repo(
         f'version = "{mise_version}"\n'
         'source = "https://example.invalid/mise.json"\n'
         'pin_source = ".github/actions/setup-mise/action.yml"\n'
+        f'sha256 = "{_SCHEMA_SHA256}"\n'
         "\n"
         "[[schema]]\n"
         'tool = "ruff"\n'
@@ -69,6 +78,7 @@ def _seed_repo(
         f'version = "{ruff_version}"\n'
         'source = "https://example.invalid/ruff.json"\n'
         'pin_source = "python/uv.lock"\n'
+        f'sha256 = "{_SCHEMA_SHA256}"\n'
         "\n"
         "[[schema]]\n"
         'tool = "typos"\n'
@@ -76,9 +86,10 @@ def _seed_repo(
         f'version = "{typos_version}"\n'
         'source = "https://example.invalid/typos.json"\n'
         'pin_source = ".config/mise/conf.d/shared.toml"\n'
+        f'sha256 = "{_SCHEMA_SHA256}"\n'
     )
     for tool in ("mise", "ruff", "typos"):
-        (tmp_path / f"schemas/{tool}.json").write_text('{"type": "object"}')
+        (tmp_path / f"schemas/{tool}.json").write_bytes(_SCHEMA_BYTES)
     return tmp_path
 
 
@@ -87,58 +98,91 @@ def _seed_repo(
 # ──────────────────────────────────────────────────────────────────────
 
 
-def test_read_shared_toml_pin_reads_bare_string(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_read_shared_toml_pin_reads_bare_string(tmp_path: Path) -> None:
     _seed_repo(tmp_path, typos_version="1.50.1")
-    monkeypatch.setattr(schema_vendor, "_project_root", lambda: tmp_path)
-    assert _read_shared_toml_pin("typos") == "1.50.1"
+    assert _read_shared_toml_pin("typos", tmp_path) == "1.50.1"
 
 
-def test_read_shared_toml_pin_absent_tool_returns_none(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_read_shared_toml_pin_absent_tool_returns_none(tmp_path: Path) -> None:
     _seed_repo(tmp_path)
-    monkeypatch.setattr(schema_vendor, "_project_root", lambda: tmp_path)
-    assert _read_shared_toml_pin("no-such-tool") is None
+    assert _read_shared_toml_pin("no-such-tool", tmp_path) is None
 
 
-def test_read_uv_lock_pin_finds_the_named_package(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_read_uv_lock_pin_finds_the_named_package(tmp_path: Path) -> None:
     _seed_repo(tmp_path, ruff_version="0.16.5")
-    monkeypatch.setattr(schema_vendor, "_project_root", lambda: tmp_path)
-    assert _read_uv_lock_pin("ruff") == "0.16.5"
-    assert _read_uv_lock_pin("other-pkg") == "9.9.9"
-    assert _read_uv_lock_pin("not-in-lock") is None
+    assert _read_uv_lock_pin("ruff", tmp_path) == "0.16.5"
+    assert _read_uv_lock_pin("other-pkg", tmp_path) == "9.9.9"
+    assert _read_uv_lock_pin("not-in-lock", tmp_path) is None
 
 
-def test_read_setup_mise_pin_matches_the_quoted_version_key(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_read_setup_mise_pin_matches_the_quoted_version_key(tmp_path: Path) -> None:
     _seed_repo(tmp_path, mise_version="2026.9.0")
-    monkeypatch.setattr(schema_vendor, "_project_root", lambda: tmp_path)
-    assert _read_setup_mise_pin() == "2026.9.0"
+    assert _read_setup_mise_pin(tmp_path) == "2026.9.0"
 
 
-def test_read_setup_mise_pin_none_when_key_absent(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_read_setup_mise_pin_none_when_key_absent(tmp_path: Path) -> None:
     action_dir = tmp_path / ".github/actions/setup-mise"
     action_dir.mkdir(parents=True)
     (action_dir / "action.yml").write_text("runs:\n  using: composite\n")
-    monkeypatch.setattr(schema_vendor, "_project_root", lambda: tmp_path)
-    assert _read_setup_mise_pin() is None
+    assert _read_setup_mise_pin(tmp_path) is None
 
 
-def test_current_pin_dispatches_by_tool(
+def test_read_setup_mise_pin_matches_the_first_of_two_version_keys(
+    tmp_path: Path,
+) -> None:
+    """The real action.yml has TWO `jdx/mise-action` steps (warm + cold path).
+
+    Both pin the same version today, so the first-match regex is correct by
+    agreement, not because the file only has one `version:` key — this test
+    pins that shape so a future divergence between the two steps is caught
+    here rather than only discovered by reading the comment.
+    """
+    action_dir = tmp_path / ".github/actions/setup-mise"
+    action_dir.mkdir(parents=True)
+    (action_dir / "action.yml").write_text(
+        "runs:\n"
+        "  using: composite\n"
+        "  steps:\n"
+        "    - uses: jdx/mise-action@deadbeef\n"
+        "      with:\n"
+        '        version: "2026.9.0"\n'
+        "    - uses: jdx/mise-action@deadbeef\n"
+        "      with:\n"
+        '        version: "2026.9.0"\n'
+    )
+    assert _read_setup_mise_pin(tmp_path) == "2026.9.0"
+
+
+def test_current_pin_dispatches_by_tool(tmp_path: Path) -> None:
+    _seed_repo(tmp_path)
+    assert current_pin("typos", tmp_path) == "1.50.1"
+    assert current_pin("ruff", tmp_path) == "0.16.5"
+    assert current_pin("mise", tmp_path) == "2026.9.0"
+
+
+def test_current_pin_ignores_the_live_repo_when_root_is_passed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _seed_repo(tmp_path)
-    monkeypatch.setattr(schema_vendor, "_project_root", lambda: tmp_path)
-    assert current_pin("typos") == "1.50.1"
-    assert current_pin("ruff") == "0.16.5"
-    assert current_pin("mise") == "2026.9.0"
+    """A caller passing `root` must get THAT tree's pin, never the live repo's.
+
+    Regression test for the bug found in cold review: `current_pin` used to
+    build every pin-resolver path from `_project_root()` regardless of the
+    `root` argument, so a fully self-consistent temp tree seeded at 9.9.9 was
+    silently compared against the real repo's pins. Poison `_project_root` to
+    explode if anything still falls through to it.
+    """
+    _seed_repo(
+        tmp_path, typos_version="9.9.9", ruff_version="9.9.9", mise_version="9.9.9"
+    )
+
+    def _boom() -> Path:
+        msg = "current_pin fell through to _project_root() despite an explicit root"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(schema_vendor, "_project_root", _boom)
+    assert current_pin("typos", tmp_path) == "9.9.9"
+    assert current_pin("ruff", tmp_path) == "9.9.9"
+    assert current_pin("mise", tmp_path) == "9.9.9"
 
 
 def test_current_pin_unknown_tool_returns_none() -> None:
@@ -155,11 +199,48 @@ def test_load_sources_parses_every_row(tmp_path: Path) -> None:
     entries = load_sources(tmp_path)
     assert {e.tool for e in entries} == {"mise", "ruff", "typos"}
     assert all(isinstance(e, SchemaEntry) for e in entries)
+    assert all(e.sha256 == _SCHEMA_SHA256 for e in entries)
 
 
-def test_check_drift_clean_when_versions_match(tmp_path: Path) -> None:
+def test_check_drift_clean_when_versions_and_bytes_match(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     _seed_repo(tmp_path)
+
+    def _boom() -> Path:
+        msg = "check_drift fell through to _project_root() despite an explicit root"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(schema_vendor, "_project_root", _boom)
     assert check_drift(tmp_path) == []
+
+
+def test_check_drift_is_not_a_stub_that_always_passes(tmp_path: Path) -> None:
+    """Control arm: a `check_drift` gutted to always pass must fail this test.
+
+    Corrupt one vendored file's bytes (a validly-shaped but wrong JSON
+    document) while leaving `sources.toml`'s recorded version untouched, and
+    require a finding — this is exactly the reviewer-armed case (`{}` swapped
+    in for `schemas/ruff.json`) that a version-only check cannot see.
+    """
+    _seed_repo(tmp_path)
+    (tmp_path / "schemas/ruff.json").write_bytes(b"{}")
+    findings = check_drift(tmp_path)
+    assert any("ruff" in f and "sha256" in f for f in findings)
+
+
+def test_check_drift_reports_non_json_vendored_bytes(tmp_path: Path) -> None:
+    """A second shape of the same reviewer-armed attack.
+
+    Replace the vendored file with non-JSON entirely. `check_drift` never
+    parses the file as JSON (that's taplo's job at lint time) — it only
+    hashes bytes — so this must be caught by the same sha256 mismatch as the
+    `{}` case, not by any JSON-validity check this module does not perform.
+    """
+    _seed_repo(tmp_path)
+    (tmp_path / "schemas/mise.json").write_text("not even json")
+    findings = check_drift(tmp_path)
+    assert any("mise" in f and "sha256" in f for f in findings)
 
 
 def test_check_drift_reports_a_stale_vendored_version(tmp_path: Path) -> None:
@@ -227,14 +308,21 @@ def test_source_url_raises_for_an_unknown_tool() -> None:
 # ──────────────────────────────────────────────────────────────────────
 
 
-def test_refresh_is_a_noop_when_nothing_drifted(tmp_path: Path) -> None:
+def test_refresh_is_a_noop_when_nothing_drifted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     _seed_repo(tmp_path)
     calls: list[str] = []
 
     def fetcher(url: str) -> bytes:
         calls.append(url)
-        return b'{"type": "object"}'
+        return _SCHEMA_BYTES
 
+    def _boom() -> Path:
+        msg = "refresh fell through to _project_root() despite an explicit root"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(schema_vendor, "_project_root", _boom)
     changed = refresh(tmp_path, fetcher=fetcher)
     assert changed == []
     # Every entry's pin matches its recorded version, but bytes are still
@@ -251,20 +339,25 @@ def test_refresh_rewrites_the_schema_and_sources_toml_on_drift(
     stale = sources.read_text().replace('version = "0.16.5"', 'version = "0.16.4"', 1)
     sources.write_text(stale)
 
+    new_ruff_bytes = b'{"type": "object", "new": true}'
+
     def fetcher(url: str) -> bytes:
         if "ruff" in url:
-            return b'{"type": "object", "new": true}'
-        return b'{"type": "object"}'
+            return new_ruff_bytes
+        return _SCHEMA_BYTES
 
     changed = refresh(tmp_path, fetcher=fetcher)
     assert changed == ["ruff"]
-    rewritten = (tmp_path / "schemas/ruff.json").read_text()
-    assert rewritten == '{"type": "object", "new": true}'
+    rewritten = (tmp_path / "schemas/ruff.json").read_bytes()
+    assert rewritten == new_ruff_bytes
     reloaded = {e.tool: e for e in load_sources(tmp_path)}
     assert reloaded["ruff"].version == "0.16.5"
+    assert reloaded["ruff"].sha256 == hashlib.sha256(new_ruff_bytes).hexdigest()
     # The two undrifted entries are untouched.
     assert reloaded["mise"].version == "2026.9.0"
     assert reloaded["typos"].version == "1.50.1"
+    # And check_drift agrees the tree is clean again afterwards.
+    assert check_drift(tmp_path) == []
 
 
 def test_refresh_leaves_an_unresolvable_tool_vendored_and_uncounted(
@@ -277,7 +370,7 @@ def test_refresh_leaves_an_unresolvable_tool_vendored_and_uncounted(
 
     def fetcher(url: str) -> bytes:
         del url
-        return b'{"type": "object"}'
+        return _SCHEMA_BYTES
 
     changed = refresh(tmp_path, fetcher=fetcher)
     assert "not-a-tool" not in changed

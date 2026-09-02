@@ -37,3 +37,15 @@ gae = "gae"
 # measurement to dodge the word would make it uncheckable against ruff's own
 # output.
 CPY001 = "CPY001"
+
+# `CPY`, `CPY0`, `CPY00` are the bare/subcategory prefixes of the same ruff
+# rule category (flake8-copyright) — ruff's OWN vendored JSON Schema
+# (`schemas/ruff.json`, ITEM 11) lists all four (these three plus `CPY001`
+# above) side by side, byte-identical to upstream at its pinned tag. Not a
+# misspelling of "COPY"/"CPU". Allowlisting the tokens here (rather than
+# excluding the vendored file from typos entirely, as an earlier version of
+# this fix did) keeps genuine typos elsewhere in that file — and in any
+# future vendored schema — still caught.
+CPY = "CPY"
+CPY0 = "CPY0"
+CPY00 = "CPY00"

@@ -34,6 +34,7 @@ the code). Two entry points:
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 import subprocess
@@ -57,9 +58,9 @@ SOURCES_PATH = "schemas/sources.toml"
 _FETCH_TIMEOUT_S = 30.0
 
 
-def _read_shared_toml_pin(tool: str) -> str | None:
+def _read_shared_toml_pin(tool: str, root: Path) -> str | None:
     """Read a tool's version from the shared host<->image mise fragment."""
-    path = _project_root() / ".config/mise/conf.d/shared.toml"
+    path = root / ".config/mise/conf.d/shared.toml"
     data = tomllib.loads(path.read_text(encoding="utf-8"))
     value = data.get("tools", {}).get(tool)
     if isinstance(value, dict):
@@ -68,14 +69,14 @@ def _read_shared_toml_pin(tool: str) -> str | None:
     return value if isinstance(value, str) else None
 
 
-def _read_uv_lock_pin(package: str) -> str | None:
+def _read_uv_lock_pin(package: str, root: Path) -> str | None:
     """Read a package's resolved version out of the committed uv lockfile.
 
     ``ruff`` itself is an unpinned dependency in ``python/pyproject.toml``
     (``uv lock --upgrade-package ruff`` resolves latest on demand); the lock
     file is the only local record of the version actually in use.
     """
-    path = _project_root() / "python/uv.lock"
+    path = root / "python/uv.lock"
     data = tomllib.loads(path.read_text(encoding="utf-8"))
     for entry in data.get("package", []):
         if entry.get("name") == package:
@@ -86,15 +87,17 @@ def _read_uv_lock_pin(package: str) -> str | None:
 
 #: Matches `version: "2026.9.0"` inside the pinned-`mise-action` step of
 #: setup-mise/action.yml. Narrow (a quoted `version:` key) rather than a
-#: bare digit scan, so an unrelated `version:` elsewhere in the file (there
-#: is exactly one today) would be caught by the module's own tests, not
-#: silently matched.
+#: bare digit scan. The file carries TWO `jdx/mise-action` steps (a warm-path
+#: and a cold-path call) that both pin the same version today, so the
+#: first-match regex is correct by agreement, not because there is only one
+#: `version:` key — a future divergence between the two steps would need
+#: this regex anchored to a specific step, not just a comment fix.
 _SETUP_MISE_VERSION_RE = re.compile(r'^\s*version:\s*"([^"]+)"\s*$', re.MULTILINE)
 
 
-def _read_setup_mise_pin() -> str | None:
+def _read_setup_mise_pin(root: Path) -> str | None:
     """Read the mise version pinned for CI/the image (``jdx/mise-action``)."""
-    path = _project_root() / ".github/actions/setup-mise/action.yml"
+    path = root / ".github/actions/setup-mise/action.yml"
     match = _SETUP_MISE_VERSION_RE.search(path.read_text(encoding="utf-8"))
     return match.group(1) if match else None
 
@@ -102,18 +105,22 @@ def _read_setup_mise_pin() -> str | None:
 #: One resolver per vendored tool. A tool absent here is unresolvable, and
 #: :func:`check_drift` reports that explicitly rather than treating it as
 #: clean (`.claude/rules/probes-need-a-control-arm.md` rule 4 — a lookup that
-#: cannot answer is not a "no").
+#: cannot answer is not a "no"). Each resolver takes the project root so a
+#: caller can point `current_pin` at a fixture tree instead of the live repo.
 _PIN_RESOLVERS: dict[str, Any] = {
-    "typos": lambda: _read_shared_toml_pin("typos"),
-    "ruff": lambda: _read_uv_lock_pin("ruff"),
+    "typos": lambda root: _read_shared_toml_pin("typos", root),
+    "ruff": lambda root: _read_uv_lock_pin("ruff", root),
     "mise": _read_setup_mise_pin,
 }
 
 
-def current_pin(tool: str) -> str | None:
+def current_pin(tool: str, root: Path | None = None) -> str | None:
     """Return the tool's current pinned version, or ``None`` if unresolvable."""
     resolver = _PIN_RESOLVERS.get(tool)
-    return resolver() if resolver is not None else None
+    if resolver is None:
+        return None
+    project_root = root if root is not None else _project_root()
+    return resolver(project_root)
 
 
 @dataclass(frozen=True)
@@ -125,6 +132,7 @@ class SchemaEntry:
     version: str
     source: str
     pin_source: str
+    sha256: str
 
 
 def load_sources(root: Path | None = None) -> list[SchemaEntry]:
@@ -139,21 +147,40 @@ def load_sources(root: Path | None = None) -> list[SchemaEntry]:
             version=row["version"],
             source=row["source"],
             pin_source=row["pin_source"],
+            sha256=row["sha256"],
         )
         for row in data.get("schema", [])
     ]
 
 
+def _file_sha256(path: Path) -> str | None:
+    """Hash a vendored schema's bytes, or ``None`` if it does not exist.
+
+    Purely local — the whole offline-drift design rests on this needing no
+    network call, unlike opening the file at all as JSON, which would.
+    """
+    if not path.exists():
+        return None
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def check_drift(root: Path | None = None) -> list[str]:
     """Return one human-readable finding per drifted or unresolvable entry.
 
-    Empty list means every vendored schema's recorded version matches the
-    tool's current pin. Makes NO network call — every fact compared is
-    already on disk.
+    Checks TWO independent things per entry: the recorded ``version``
+    against the tool's current pin, and the recorded ``sha256`` against the
+    vendored file's actual bytes on disk. The version check alone cannot see
+    a vendored file that was truncated, corrupted, or replaced with an
+    unrelated (even validly-parsing) JSON document while ``sources.toml``
+    kept its old, now-untrue, version string — the hash is what actually
+    verifies the bytes taplo will load. Empty list means every vendored
+    schema is both version-current and byte-identical to what was recorded.
+    Makes NO network call — every fact compared is already on disk.
     """
     findings: list[str] = []
-    for entry in load_sources(root):
-        pin = current_pin(entry.tool)
+    project_root = root if root is not None else _project_root()
+    for entry in load_sources(project_root):
+        pin = current_pin(entry.tool, project_root)
         if pin is None:
             findings.append(
                 f"{entry.tool}: could not resolve the current pin from "
@@ -165,6 +192,14 @@ def check_drift(root: Path | None = None) -> list[str]:
                 f"{entry.tool}: {entry.file} is vendored at {entry.version}, "
                 f"but the current pin ({entry.pin_source}) is {pin} — run "
                 f"`mise run schema-vendor-refresh`"
+            )
+        actual_sha = _file_sha256(project_root / entry.file)
+        if actual_sha != entry.sha256:
+            findings.append(
+                f"{entry.tool}: {entry.file} bytes do not match the recorded "
+                f"sha256 in schemas/sources.toml (expected {entry.sha256}, "
+                f"got {actual_sha!r}) — the vendored file was edited or "
+                f"corrupted outside `mise run schema-vendor-refresh`"
             )
     return findings
 
@@ -184,15 +219,20 @@ def _source_url(tool: str, version: str) -> str:
 def _render_sources_toml(entries: list[SchemaEntry]) -> str:
     """Re-render ``schemas/sources.toml`` in its authored shape."""
     header = (
-        "# Vendored-schema provenance (#160, ITEM 11). Read by\n"
+        "# Vendored-schema provenance (ITEM 11). Read by\n"
         "# `dotfiles_setup.schema_vendor` — both the offline drift check (wired into\n"
         "# `mise run verify`) and the network-using `schema-vendor refresh` command\n"
         "# that `refresh.yml`'s `schema-refresh` job runs in CI. Never hand-edit the\n"
-        "# `version`/`source` fields; run `mise run schema-vendor-refresh` and let it\n"
-        "# rewrite this file alongside the vendored JSON.\n"
+        "# `version`/`source`/`sha256` fields; run\n"
+        "# `mise run schema-vendor-refresh` and let it rewrite this file alongside\n"
+        "# the vendored JSON.\n"
         "#\n"
         "# `pin_source` names where `schema_vendor.current_pin()` reads the tool's\n"
         "# CURRENT version from — informational here, the resolver itself is code.\n"
+        "# `sha256` is the vendored file's own hash, verified offline by\n"
+        "# `check_drift` — it is what actually proves the bytes on disk are what was\n"
+        "# fetched, since the version string alone cannot detect a hand-edited or\n"
+        "# corrupted file.\n"
     )
     blocks = [
         "[[schema]]\n"
@@ -201,6 +241,7 @@ def _render_sources_toml(entries: list[SchemaEntry]) -> str:
         f'version = "{e.version}"\n'
         f'source = "{e.source}"\n'
         f'pin_source = "{e.pin_source}"\n'
+        f'sha256 = "{e.sha256}"\n'
         for e in entries
     ]
     return header + "\n" + "\n".join(blocks)
@@ -250,7 +291,7 @@ def refresh(
     changed: list[str] = []
     new_entries: list[SchemaEntry] = []
     for entry in entries:
-        pin = current_pin(entry.tool)
+        pin = current_pin(entry.tool, project_root)
         if pin is None:
             logger.error(
                 "schema_vendor refresh: cannot resolve current pin for %s "
@@ -273,6 +314,7 @@ def refresh(
                     version=pin,
                     source=url,
                     pin_source=entry.pin_source,
+                    sha256=hashlib.sha256(fetched).hexdigest(),
                 )
             )
             changed.append(entry.tool)
