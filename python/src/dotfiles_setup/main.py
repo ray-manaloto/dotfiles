@@ -99,6 +99,7 @@ from dotfiles_setup.p2996_hash import (
 from dotfiles_setup.p2996_refresh import refresh as refresh_p2996_ref
 from dotfiles_setup.parity import run as parity_run
 from dotfiles_setup.path_drift import AMBIENT_PATH_ENV, path_drift_main
+from dotfiles_setup.plan_attest import plan_attest_main
 from dotfiles_setup.platform_target import (
     PLATFORM_FIELDS,
     platform_literals_main,
@@ -1228,6 +1229,18 @@ def _add_session_subcommands(
         action="store_true",
         help="Skip the GitHub lookup for a fast, network-free snapshot",
     )
+    plan_attest_parser = subparsers.add_parser(
+        "plan-attest",
+        help="Attest the planning-with-files plan (OPERATOR ONLY: run it as "
+        "`! mise run plan-attest`; settings.json denies the model every "
+        "other route)",
+    )
+    plan_attest_parser.add_argument(
+        "args",
+        nargs="*",
+        help="Passed straight through to the plugin's attest-plan.sh "
+        "(e.g. --show, --clear); deliberately not enumerated here",
+    )
     handoff_check_parser = subparsers.add_parser(
         "handoff-check",
         help="Verify a session handoff's path, line, and mise task citations",
@@ -2256,6 +2269,7 @@ def _build_command_handlers(
         "session-state": lambda: sys.exit(
             session_state_main(["--no-pr"] if args.no_pr else [], project_root)
         ),
+        "plan-attest": lambda: sys.exit(plan_attest_main(args.args)),
         "handoff-check": lambda: sys.exit(
             handoff_check_main(
                 [args.path] if args.path is not None else [], project_root

@@ -17,6 +17,10 @@ GitHub Issues via `gh` (`docs/issue-tracker.md`); triage labels:
 `mise run ship` (your branch), `mise run automerge -- <PR#>` (bot PR, #369),
 `mise run land -- <PR#>` (post-merge).
 
+**Attestation is OPERATOR-ONLY; all model routes denied**, `/plan-attest` too —
+use `! mise run plan-attest` (`-- --show` reads, bare WRITES). Why:
+`python/src/dotfiles_setup/plan_attest.py`.
+
 ## graphify + project doctor
 
 graphify is registered project-scoped and host-only; query with

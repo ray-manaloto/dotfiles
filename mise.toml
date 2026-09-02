@@ -898,6 +898,11 @@ description = "Paste-ready session snapshot: branch/tree/commits/PR: mise run se
 # Thin caller; python/src/dotfiles_setup/session_state.py.
 run = 'uv run --project python dotfiles-setup session-state'
 
+[tasks.plan-attest]
+description = "OPERATOR ONLY: attest the planning-with-files plan. Run it as `! mise run plan-attest` — settings.json denies the model every other route, INCLUDING this task. Bare form WRITES; `-- --show` is read-only."
+# Thin caller; python/src/dotfiles_setup/plan_attest.py.
+run = 'uv run --project python dotfiles-setup plan-attest'
+
 [tasks.handoff-check]
 description = "Verify a handoff's own citations (paths, file:line, mise task names): mise run handoff-check [-- <path>]"
 # Thin caller; python/src/dotfiles_setup/handoff_check.py.
