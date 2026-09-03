@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 from dotfiles_setup.lock_refresh import (
+    _EXTRAS_RE,
     merged_system_config,
     merged_system_config_tools,
     runtime_config_tools,
@@ -30,7 +31,6 @@ from dotfiles_setup.lock_refresh import (
 
 _REPO_ROOT = Path(__file__).parent.parent
 _FEATURE_KEY_RE = re.compile(r'"(ghcr\.io/[^"]+/features/[^"]+)"\s*:')
-_EXTRAS_RE = re.compile(r"\[.*\]$")
 # A fully-specified pin (X.Y.Z, optional suffix). ONLY these are version-checked
 # against the lock: "latest", partial ("1.52"), and range ("^1.2") pins resolve
 # to a version mise picks and legitimately drifts between refreshes — asserting

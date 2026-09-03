@@ -57,6 +57,7 @@ logger = logging.getLogger(__name__)
 
 _MISE_VERSION_RE = re.compile(r"^ARG MISE_VERSION=(\S+)$", re.MULTILINE)
 _EXTRAS_RE = re.compile(r"\[.*\]$")
+_TOOL_ARRAY_HEADER_RE = re.compile(r"^\[\[tools\..+\]\][ \t]*$", re.MULTILINE)
 _SYSTEM_TOML = ".devcontainer/mise-system.toml"
 _SYSTEM_LOCK = ".devcontainer/mise-system.lock"
 _RUNTIME_TOML = ".devcontainer/mise-runtime.toml"
@@ -80,12 +81,95 @@ def top_level_config_tools(config_path: Path) -> set[str]:
     return {_EXTRAS_RE.sub("", tool) for tool in config.get("tools", {})}
 
 
+def _tool_name_from_array_header(header: str) -> str:
+    """Decode one generated ``[[tools.X]]`` header with TOML's own parser."""
+    tools = tomllib.loads(header).get("tools", {})
+    if not isinstance(tools, dict) or len(tools) != 1:
+        msg = f"unexpected mise.lock tool header: {header}"
+        raise ValueError(msg)
+    name, entries = next(iter(tools.items()))
+    if not isinstance(entries, list):
+        msg = f"mise.lock tool header is not an array table: {header}"
+        raise TypeError(msg)
+    return name
+
+
+def _prune_unknown_lock_tools(
+    lock_path: Path, configured_tools: Collection[str]
+) -> None:
+    """Remove generated tool blocks absent from the normalized config set.
+
+    A tool block starts at its ``[[tools.X]]`` array-table and extends to the
+    next such header. Child tables (platforms, options, provenance) therefore
+    leave with their owner. The write is skipped when the normalized sets
+    already match so a clean refresh does not rewrite identical lock bytes.
+
+    Raises:
+        ValueError: when the lock schema cannot be reconciled exactly.
+    """
+    configured = {_EXTRAS_RE.sub("", tool) for tool in configured_tools}
+    lock_text = lock_path.read_text()
+    parsed_tools = tomllib.loads(lock_text).get("tools", {})
+    if not isinstance(parsed_tools, dict):
+        msg = f"{lock_path} has no TOML [tools] mapping"
+        raise TypeError(msg)
+
+    locked = {_EXTRAS_RE.sub("", tool) for tool in parsed_tools}
+    stale = {
+        tool for tool in parsed_tools if _EXTRAS_RE.sub("", tool) not in configured
+    }
+    if not stale:
+        if locked != configured:
+            msg = (
+                f"{lock_path} tool set does not match top-level config: "
+                f"missing={sorted(configured - locked)}"
+            )
+            raise ValueError(msg)
+        return
+
+    headers = list(_TOOL_ARRAY_HEADER_RE.finditer(lock_text))
+    block_names = [_tool_name_from_array_header(match.group()) for match in headers]
+    unlocated = stale - set(block_names)
+    if unlocated:
+        msg = (
+            f"{lock_path} contains stale tools without generated array-table "
+            f"blocks: {sorted(unlocated)}"
+        )
+        raise ValueError(msg)
+
+    kept: list[str] = []
+    cursor = 0
+    for index, (header, name) in enumerate(zip(headers, block_names, strict=True)):
+        if name not in stale:
+            continue
+        kept.append(lock_text[cursor : header.start()])
+        cursor = (
+            headers[index + 1].start() if index + 1 < len(headers) else len(lock_text)
+        )
+    kept.append(lock_text[cursor:])
+    pruned = "".join(kept)
+
+    remaining_tools = tomllib.loads(pruned).get("tools", {})
+    if not isinstance(remaining_tools, dict):
+        msg = f"{lock_path} lost its TOML [tools] mapping during pruning"
+        raise TypeError(msg)
+    remaining = {_EXTRAS_RE.sub("", tool) for tool in remaining_tools}
+    if remaining != configured:
+        msg = (
+            f"{lock_path} prune did not produce the top-level config tool set: "
+            f"missing={sorted(configured - remaining)}, "
+            f"stale={sorted(remaining - configured)}"
+        )
+        raise ValueError(msg)
+    lock_path.write_text(pruned)
+
+
 def lock_top_level_config_tools(
     config_path: Path,
     *,
     run: Callable[..., subprocess.CompletedProcess[bytes]] = subprocess.run,
 ) -> int:
-    """Run ``mise lock`` with exactly the config's top-level tool names.
+    """Lock exactly the config's top-level tools and prune stale lock entries.
 
     Refusing an empty set is load-bearing: an argv with no names becomes the
     bare ``mise lock`` form, which also locks task-scoped tools and recreates
@@ -104,7 +188,14 @@ def lock_top_level_config_tools(
         cwd=config_path.parent,
         check=False,
     )
-    return result.returncode
+    if result.returncode != 0:
+        return result.returncode
+    try:
+        _prune_unknown_lock_tools(config_path.with_suffix(".lock"), tools)
+    except OSError, tomllib.TOMLDecodeError, TypeError, ValueError:
+        logger.exception("lock-refresh-root: failed to reconcile root lock")
+        return 1
+    return 0
 
 
 def pinned_mise_version(dockerfile: Path) -> str:
