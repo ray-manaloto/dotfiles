@@ -9,6 +9,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
+import yaml
 from dotfiles_setup.lock_refresh import (
     _merge_shared_tools,
     collect_system_lock,
@@ -174,11 +175,31 @@ def test_lock_refresh_root_is_registered_on_the_parser() -> None:
 
 def test_lock_refresh_wiring_calls_the_task_and_cli() -> None:
     repo_root = Path(__file__).parent.parent
-    mise_toml = (repo_root / "mise.toml").read_text()
+    mise_config = tomllib.loads((repo_root / "mise.toml").read_text())
     action = repo_root / ".github" / "actions" / "lock-refresh" / "action.yml"
-    assert "[tasks.lock-refresh-root]" in mise_toml
-    assert "dotfiles-setup lock-refresh-root" in mise_toml
-    assert "run: mise run lock-refresh-root" in action.read_text()
+    action_config = yaml.safe_load(action.read_text())
+
+    assert mise_config["tasks"]["lock-refresh-root"]["run"] == (
+        "uv run --project python dotfiles-setup lock-refresh-root"
+    )
+
+    root_steps = [
+        step
+        for step in action_config["runs"]["steps"]
+        if step["name"] == "Regenerate root mise.lock"
+    ]
+    assert len(root_steps) == 1
+    root_step = root_steps[0]
+    assert root_step["run"] == "mise run lock-refresh-root"
+    # `mise lock` resolves through GitHub, so the step must forward the action's
+    # token under both names or the convergence loop hits anonymous rate limits.
+    # Compared as a whole mapping via a named expression: ruff's S105 reads a
+    # literal compared against a *_TOKEN key as a hardcoded credential.
+    forwarded = "${{ inputs.github-token }}"
+    assert root_step["env"] == {
+        "GITHUB_TOKEN": forwarded,
+        "MISE_GITHUB_TOKEN": forwarded,
+    }
 
 
 def _mini_repo(tmp_path: Path) -> Path:
