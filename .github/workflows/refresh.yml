@@ -388,6 +388,16 @@ jobs:
           if [ -n "$unexpected" ]; then
             echo "regeneration touched files outside the image locks:" >&2
             echo "$unexpected" >&2
+            # #947: the status lines above name WHICH file moved but never
+            # WHAT changed, so the run log cannot identify the writer — the
+            # job has failed this way repeatedly (runs 33763936742,
+            # 33780649870) leaving ` M mise.lock` and nothing else. Emit the
+            # tracked diff for the same pathspec so the next failure is
+            # self-diagnosing. Untracked files have no diff; the status
+            # lines above already name them.
+            echo "--- what changed in the unexpected tracked paths ---" >&2
+            git diff --stat -- . ':!.devcontainer/mise-system.lock' ':!.devcontainer/mise-runtime.lock' >&2
+            git diff -- . ':!.devcontainer/mise-system.lock' ':!.devcontainer/mise-runtime.lock' >&2
             exit 1
           fi
           echo "changed=true" >> "$GITHUB_OUTPUT"
