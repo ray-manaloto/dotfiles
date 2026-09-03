@@ -1175,7 +1175,7 @@ tokens = [
 
 [[suite]]
 name = "workflow.automerge-wiring"
-description = "#369 bot-PR merge path: `mise run automerge -- <PR#>` must stay wired end-to-end — the mise task shells out to `dotfiles-setup pr automerge`, main.py dispatches it, pr.py's `automerge_main` arms through the SAME `enable_auto_merge` ship uses, the bot allowlist names both real app logins, and the guard's `gh pr merge --auto` rule redirects there. It exists because ship/land left a hole: a bot-opened PR never runs ship so nothing armed auto-merge on it, land refuses an OPEN PR, and `gh pr merge` was denied and redirected to land — a guard whose redirect target cannot perform the redirected action is not enforcement, it is an outage (#138/#236/#386 sat green and unmergeable). Second instance of the #349/#350 shape, along the PR-provenance axis instead of the target-repo one. EVERY token below is anchored PAST its renamable identifier (#394): `dotfiles-setup pr automerge'` carries the closing quote and `verb=\"automerge\")` the closing paren, because renaming the subcommand to `automergeX` leaves the bare prefix intact and a contract that survives its own regression is decoration. Tokens bind CALL SITES (the dispatch line, the arming call, the guard rule literal), not definitions — #299 proved an existence token stays green while its wiring line is deleted, since the name survives in a comment."
+description = "#369 bot-PR merge path: `mise run automerge -- <PR#>` must stay wired end-to-end — the mise task shells out to `dotfiles-setup pr automerge`, main.py dispatches it, pr.py's `automerge_main` arms through the SAME `enable_auto_merge` ship uses, the bot allowlist names every real app login (three since 2026-09-03: renovate, the refresh bot, and dependabot \u2014 while dependabot was absent, #901 sat CI-green and unmergeable), and the guard's `gh pr merge --auto` rule redirects there. It exists because ship/land left a hole: a bot-opened PR never runs ship so nothing armed auto-merge on it, land refuses an OPEN PR, and `gh pr merge` was denied and redirected to land — a guard whose redirect target cannot perform the redirected action is not enforcement, it is an outage (#138/#236/#386 sat green and unmergeable). Second instance of the #349/#350 shape, along the PR-provenance axis instead of the target-repo one. EVERY token below is anchored PAST its renamable identifier (#394): `dotfiles-setup pr automerge'` carries the closing quote and `verb=\"automerge\")` the closing paren, because renaming the subcommand to `automergeX` leaves the bare prefix intact and a contract that survives its own regression is decoration. Tokens bind CALL SITES (the dispatch line, the arming call, the guard rule literal), not definitions — #299 proved an existence token stays green while its wiring line is deleted, since the name survives in a comment."
 category = "workflow"
 check_type = "static"
 handler = "require_tokens"
@@ -1210,7 +1210,7 @@ per_path_tokens = { "mise.toml" = [
 ], "tests/test_pr.py" = [
     "def test_automerge_refuses_and_never_arms(",
     "def test_automerge_never_asks_github_about_branch_freshness(",
-    "def test_automerge_authors_are_the_two_real_bot_logins(",
+    "def test_automerge_authors_are_the_real_bot_logins(",
 ], "tests/test_hook_guard.py" = [
     "def test_gh_pr_merge_auto_routes_to_automerge(",
     "def test_automerge_arming_control_arm(",

@@ -48,6 +48,31 @@ Detail: `docs/rules-evidence/persistence-gate-retry.md`.
 | `FAIL: installed-tool set drifted across stop/up` | real defect | triage `mise-system.toml` ↔ runtime drift |
 | `FAIL: in-volume canary missing` | real defect | home-volume mount regression — investigate volume name / mount opts |
 | `R[123] ... not works` | real defect | the corresponding R-invariant regressed; do NOT retry without diagnosing |
+| `FAIL smoke-tiers-1-3` inside `mise run land`, while `mise run smoke` standalone is rc=0 | environmental | retry `land` once — see "The land-smoke transient" below |
+
+## The land-smoke transient (`land` only, twice in two sessions)
+
+`mise run land -- <PR#>` has twice reported `FAIL smoke-tiers-1-3` on a container
+that was perfectly healthy, and both times a plain retry passed:
+
+| Session | Signature inside the failure | Standalone `mise run smoke` | `land` retry |
+|---|---|---|---|
+| 2026-09-03 (`land -- 955`) | a Rust panic in **mise's own** `src/git.rs:193` — not a path in this repo | rc=0, tiers 1-3 OK | rc=0 |
+| 2026-09-03 (`land -- 958`) | `=== FAILURES ===` with the generic "stale base?" hint | rc=0, tiers 1-3 OK | rc=0 |
+
+**The discriminating probe is `mise run smoke` on its own.** If it returns rc=0 with
+tiers 1-3 OK, the container is a valid environment and `land`'s failure was transient —
+retry `land` once. If it fails the same way standalone, that is a real defect: triage it,
+do not retry.
+
+⚠️ **The expensive wrong move is `mise run dev-rebuild`.** `land`'s hint text says
+"stale base?", which points straight at a ~21.5GB pull that can take hours — and in both
+recorded cases the base was already current. Run the standalone probe first; it costs
+about a minute and settles it.
+
+⚠️ **The task notification cannot be trusted here.** Both failures arrived with a
+"completed (exit code 0)" summary while the log's real `rc=1` sat in the file. Read the
+`rc=` you wrote to the log, per `verify-before-advancing.md`.
 
 ## The image-store signature repairs itself, and that is not luck
 
@@ -71,6 +96,9 @@ tier-1 identity failing on a config-hash mismatch, not as a missing snapshot.
 
 - `mise run verify-local`
 - `mise run persistence`
+- `mise run land -- <PR#>` — its post-merge `sync` runs the same smoke tiers, and
+  is where the land-smoke transient above has surfaced both times
+- `mise run sync`
 - Any future task that calls `@devcontainers/cli up` mid-test (the
   feature-dependency-resolution path is what touches the network)
 

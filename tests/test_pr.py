@@ -527,14 +527,32 @@ def test_automerge_fails_when_arming_fails(monkeypatch: pytest.MonkeyPatch) -> N
     assert pr.automerge_main(_WORKSPACE, 236) == 1
 
 
-def test_automerge_authors_are_the_two_real_bot_logins() -> None:
-    """Re-derived from `gh pr list --json author`, not invented.
+def test_automerge_authors_are_the_real_bot_logins() -> None:
+    """Re-derived from `gh pr view <n> --json author`, not invented.
 
     A user login cannot contain `/`, so every entry must be an `app/…` login —
     that is what makes the allowlist unspoofable by a human account.
+
+    `app/dependabot` was added 2026-09-03: it is the repo's only Python updater
+    (.github/dependabot.yml), and while it was absent #901 was CI-green yet
+    unmergeable because `automerge` refused its author.
     """
-    assert {"app/renovate", "app/dotfiles-refresh-bot-org"} == pr.BOT_PR_AUTHORS
+    assert {
+        "app/renovate",
+        "app/dotfiles-refresh-bot-org",
+        "app/dependabot",
+    } == pr.BOT_PR_AUTHORS
     assert all(login.startswith("app/") for login in pr.BOT_PR_AUTHORS)
+
+
+def test_a_human_login_is_still_refused() -> None:
+    """The control arm: widening the set must not make it admit everyone.
+
+    A bare login has no `/`, so it can never be an `app/…` entry — this is the
+    property the allowlist rests on, and it must survive every widening.
+    """
+    assert "sortakool" not in pr.BOT_PR_AUTHORS
+    assert not any("/" not in login for login in pr.BOT_PR_AUTHORS)
 
 
 def test_land_requires_merged(monkeypatch: pytest.MonkeyPatch) -> None:

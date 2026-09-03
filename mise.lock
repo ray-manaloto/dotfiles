@@ -6966,7 +6966,7 @@ version = "3.7.0"
 backend = "pipx:mcp2cli"
 
 [[tools.rumdl]]
-version = "v0.2.63"
+version = "0.2.63"
 backend = "aqua:rvben/rumdl"
 
 [tools.rumdl."platforms.linux-arm64"]
