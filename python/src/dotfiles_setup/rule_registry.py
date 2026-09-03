@@ -93,6 +93,10 @@ class RuleRecord:
     eager_reason_heading: str | None
     malformed_detail: str | None
     inject: bool
+    #: WHOLE-file byte length (frontmatter included), `len(raw.encode())`.
+    #: 0 for a `malformed` record whose file could not be read at all — no
+    #: bytes were ever available to measure.
+    body_bytes: int
 
 
 @dataclass(frozen=True)
@@ -177,6 +181,8 @@ def _build_record(path: Path, rules_dir: Path) -> RuleRecord:
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as exc:
+        # No bytes were readable, so there is nothing to measure (C6a's
+        # body_bytes is WHOLE-file bytes, and an unread file has none).
         return RuleRecord(
             rule_id=rule_id,
             path=rel_path,
@@ -186,8 +192,10 @@ def _build_record(path: Path, rules_dir: Path) -> RuleRecord:
             eager_reason_heading=None,
             malformed_detail=str(exc),
             inject=inject,
+            body_bytes=0,
         )
 
+    body_bytes = len(text.encode())
     body, match = _strip_frontmatter(text)
 
     if match is None:
@@ -202,6 +210,7 @@ def _build_record(path: Path, rules_dir: Path) -> RuleRecord:
             eager_reason_heading=heading,
             malformed_detail=None,
             inject=inject,
+            body_bytes=body_bytes,
         )
 
     try:
@@ -216,6 +225,7 @@ def _build_record(path: Path, rules_dir: Path) -> RuleRecord:
             eager_reason_heading=None,
             malformed_detail=str(exc),
             inject=inject,
+            body_bytes=body_bytes,
         )
 
     if isinstance(front, dict) and isinstance(front.get("paths"), list):
@@ -228,6 +238,7 @@ def _build_record(path: Path, rules_dir: Path) -> RuleRecord:
             eager_reason_heading=None,
             malformed_detail=None,
             inject=inject,
+            body_bytes=body_bytes,
         )
 
     # Frontmatter parsed but has no `paths` list (C4): eager, not malformed.
@@ -241,6 +252,7 @@ def _build_record(path: Path, rules_dir: Path) -> RuleRecord:
         eager_reason_heading=heading,
         malformed_detail=None,
         inject=inject,
+        body_bytes=body_bytes,
     )
 
 

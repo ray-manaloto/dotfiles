@@ -22,7 +22,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 from dotfiles_setup import instructions_report as report
 from dotfiles_setup import rule_registry as registry
-from kb_setup.md_budget import has_paths_frontmatter
+
+# W3: kept at MODULE level so a knowledge-base API change surfaces as a loud
+# ImportError, never a silently-skipped test. A red run of the tests below
+# may therefore be KB-side, not dotfiles-side — check `kb_setup`'s pinned SHA
+# first (python/pyproject.toml) before assuming this module regressed.
+from kb_setup.md_budget import classify, has_paths_frontmatter, tracked_files
 
 REPO_ROOT = Path(__file__).parent.parent
 REAL_RULES_DIR = REPO_ROOT / ".claude" / "rules"
@@ -248,6 +253,26 @@ def test_three_classifiers_agree_on_the_real_corpus() -> None:
     synthetic divergence as expected behaviour here would mean the correct
     upstream fix (reconciling all three) breaks this suite, which is the
     exact trap #917 hit.
+
+    W1: the three shapes where this registry and `has_paths_frontmatter`
+    diverge are (a) `paths:` holding a string, (b) `paths:` holding a dict,
+    and (c) unparsable YAML that merely CONTAINS a `paths:` line —
+    `has_paths_frontmatter` answers True for all three (it never parses
+    YAML), while this registry answers "eager" for (a)/(b) and "malformed"
+    for (c). None of those three fixtures is exercised here: every one of
+    them IS the bug-as-contract this spec rejects (`test_diverges_from_*`
+    above already proves the swallow fix via a DIFFERENT divergence — this
+    registry vs. `scoped_rules_on_disk` — so the registry side of the
+    guarantee is not resting on this test alone). The reconciliation of all
+    three classifiers is tracked by **issue #951**; this test is the
+    tripwire that forces someone to open it, not a substitute for it.
+
+    W2: also asserts the ENUMERATION axis, not just the predicate. The real
+    `md_size_budget` hk gate does not walk `rglob` — it reaches its corpus
+    via `tracked_files()` (`git ls-files`) -> `classify()` ->
+    `DEFAULT_EXCLUDED_PREFIXES`, so an untracked rule or one under a
+    symlinked subdirectory is invisible to the gate even though it is
+    visible to this registry's `rglob` traversal.
     """
     reg = registry.build_registry(REAL_RULES_DIR)
     registry_scoped = {r.path for r in reg.records if r.load_class == "scoped"}
@@ -266,6 +291,19 @@ def test_three_classifiers_agree_on_the_real_corpus() -> None:
         ".claude/rules/md-size-budgets.md",
     }
     assert not any(r.load_class == "malformed" for r in reg.records)
+
+    # W2 — the enumeration axis: the gate's own tracked_files -> classify
+    # corpus must agree with this registry's rglob corpus for rule files.
+    rglob_corpus = {
+        str(p.relative_to(REAL_RULES_DIR.parent.parent))
+        for p in REAL_RULES_DIR.rglob("*.md", recurse_symlinks=True)
+    }
+    gate_corpus = {
+        f
+        for f in tracked_files(REAL_RULES_DIR.parent.parent)
+        if classify(f) in ("rule_unscoped", "rule_scoped")
+    }
+    assert rglob_corpus == gate_corpus
 
 
 # --------------------------------------------------------------------------
@@ -419,6 +457,41 @@ def test_inject_false_for_non_seeded_rule(tmp_path: Path) -> None:
     record = reg.by_id("not-in-inject-set")
     assert record is not None
     assert record.inject is False
+
+
+# --------------------------------------------------------------------------
+# C6a — body_bytes: whole-file bytes, frontmatter included
+# --------------------------------------------------------------------------
+
+
+def test_body_bytes_is_whole_file_including_frontmatter(tmp_path: Path) -> None:
+    rules_dir = tmp_path / ".claude" / "rules"
+    _write_rule(rules_dir, "scoped-a", paths=["hk.pkl"])
+    raw = (rules_dir / "scoped-a.md").read_bytes()
+    reg = registry.build_registry(rules_dir)
+    record = reg.by_id("scoped-a")
+    assert record is not None
+    assert record.body_bytes == len(raw)
+    # Sanity: the frontmatter block itself must be counted, i.e. this is
+    # strictly larger than the body-only text would measure.
+    assert record.body_bytes > len(b"scoped rule body.\n")
+
+
+def test_body_bytes_is_zero_for_unreadable_file(tmp_path: Path) -> None:
+    if os.geteuid() == 0:
+        pytest.skip("running as root: file mode has no read-permission effect")
+    rules_dir = tmp_path / ".claude" / "rules"
+    rules_dir.mkdir(parents=True)
+    target = rules_dir / "unreadable.md"
+    target.write_text("---\npaths:\n  - hk.pkl\n---\n\nbody\n", encoding="utf-8")
+    target.chmod(0o000)
+    try:
+        reg = registry.build_registry(rules_dir)
+    finally:
+        target.chmod(0o644)
+    record = reg.by_id("unreadable")
+    assert record is not None
+    assert record.body_bytes == 0
 
 
 # --------------------------------------------------------------------------
