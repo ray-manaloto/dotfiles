@@ -3,16 +3,22 @@
 
 Covers the three-way `load_class` partition (scoped / eager / malformed),
 C2's real-repo agreement with `instructions_report.scoped_rules_on_disk`
-(both a synthetic-corpus check and the two swallow-divergence control arms),
-C2b's real-corpus three-way tripwire against
-`kb_setup.md_budget.has_paths_frontmatter`, C5's heading-anchored eager-reason
-extraction (incl. its fence and setext hazards), C6's inject set, and C1's
-traversal/path-spelling parity.
+(a synthetic-corpus check, the two swallow-divergence control arms, and a
+documented BOM-handling divergence), C2b's real-corpus three-way tripwire
+against `kb_setup.md_budget.has_paths_frontmatter` (four divergent
+frontmatter shapes) and its enumeration axis (git-aware, so the normal
+authoring workflow does not turn it red), C5's heading-anchored
+eager-reason extraction (incl. its fence and frontmatter-YAML-comment
+hazards, and the never-empty-string interface pin), C6's inject set, C6a's
+`body_bytes` (disk-accurate, incl. a CRLF regression), the T3
+`KNOWN_UNDETECTED_EAGER_REASONS` debt list, `by_id`'s collision detection,
+`by_load_class`, and C1's traversal/path-spelling parity.
 """
 
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -50,6 +56,31 @@ def _write_rule(
         globs = "\n".join(f'  - "{g}"' for g in paths)
         body = f"---\npaths:\n{globs}\n---\n\n# {name}\n\nscoped rule body.\n"
     (rules_dir / f"{name}.md").write_text(body, encoding="utf-8")
+
+
+def _git_untracked_or_ignored(root: Path, subdir: str) -> set[str]:
+    """T2 helper for the W2 enumeration test.
+
+    Repo-relative paths `git status --porcelain --ignored` reports as
+    untracked (`??`) or ignored (`!!`) under `subdir`. Lets the enumeration
+    assertion tolerate the normal authoring workflow — a newly written,
+    not-yet-staged rule file — instead of reading it as a classifier
+    disagreement.
+    """
+    result = subprocess.run(
+        ["git", "-C", str(root), "status", "--porcelain", "--ignored", "--", subdir],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    paths: set[str] = set()
+    for line in result.stdout.splitlines():
+        if len(line) < 4:
+            continue
+        code, rel = line[:2], line[3:]
+        if code in ("??", "!!"):
+            paths.add(rel)
+    return paths
 
 
 # --------------------------------------------------------------------------
@@ -121,6 +152,77 @@ def test_eof_terminated_frontmatter_still_scoped(tmp_path: Path) -> None:
     assert record.globs == ("hk.pkl",)
 
 
+def test_paths_null_is_eager_not_malformed(tmp_path: Path) -> None:
+    """C3/C4: a fourth divergent shape — `paths:` with a YAML null value.
+
+    A `paths:` key followed by nothing (an empty value) parses to
+    `None`, so `isinstance(None, list)` is False and this is EAGER, not
+    malformed — the most likely real-world typo of the four W1 shapes,
+    since deleting the last glob from a scoped rule leaves exactly this.
+    """
+    rules_dir = tmp_path / ".claude" / "rules"
+    rules_dir.mkdir(parents=True)
+    (rules_dir / "null-paths.md").write_text(
+        "---\npaths:\n---\n\nbody\n", encoding="utf-8"
+    )
+    reg = registry.build_registry(rules_dir)
+    record = reg.by_id("null-paths")
+    assert record is not None
+    assert record.load_class == "eager"
+    assert record.globs == ()
+    assert record.malformed_detail is None
+
+
+def test_empty_paths_list_is_scoped_but_distinguishable_by_empty_globs(
+    tmp_path: Path,
+) -> None:
+    """C2: `paths: []` stays `scoped`, distinguishable via `globs == ()`.
+
+    Syntactically this IS a scoped rule (isinstance-of-list, matching
+    `scoped_rules_on_disk`'s predicate exactly per C1/C4) — but a scoped
+    rule with zero globs can never match a written path, almost certainly
+    an authoring mistake. It is NOT reclassified to a new `load_class`
+    (that would break predicate parity with `scoped_rules_on_disk`, C1's
+    core invariant): it is already distinguishable, because `load_class ==
+    "scoped" and globs == ()` can ONLY happen for a `paths: []` rule —
+    every other reachable path to `globs == ()` has a DIFFERENT
+    `load_class` (eager or malformed).
+    """
+    rules_dir = tmp_path / ".claude" / "rules"
+    rules_dir.mkdir(parents=True)
+    (rules_dir / "empty-paths.md").write_text(
+        "---\npaths: []\n---\n\nbody\n", encoding="utf-8"
+    )
+    reg = registry.build_registry(rules_dir)
+    record = reg.by_id("empty-paths")
+    assert record is not None
+    assert record.load_class == "scoped"
+    assert record.globs == ()
+    # The distinguishing check a downstream consumer would use:
+    assert record.load_class == "scoped"
+    assert not record.globs
+
+
+def test_non_string_glob_item_is_malformed(tmp_path: Path) -> None:
+    """C4: a non-string `paths:` item is `malformed`, not silently accepted.
+
+    A list item that is not a string breaks the `tuple[str, ...]` contract
+    (and a dict item makes the record unhashable), so it is recorded as
+    `malformed` rather than coerced or silently let through.
+    """
+    rules_dir = tmp_path / ".claude" / "rules"
+    rules_dir.mkdir(parents=True)
+    (rules_dir / "bad-glob-item.md").write_text(
+        "---\npaths:\n  - 42\n  - a: b\n---\n\nbody\n", encoding="utf-8"
+    )
+    reg = registry.build_registry(rules_dir)
+    record = reg.by_id("bad-glob-item")
+    assert record is not None
+    assert record.load_class == "malformed"
+    assert record.malformed_detail
+    assert record.globs == ()
+
+
 def test_load_class_partition_is_exhaustive_and_exclusive(tmp_path: Path) -> None:
     rules_dir = tmp_path / ".claude" / "rules"
     _write_rule(rules_dir, "scoped-a", paths=["hk.pkl"])
@@ -173,18 +275,84 @@ def test_unreadable_file_is_malformed_with_detail(tmp_path: Path) -> None:
     assert record.malformed_detail
 
 
+def test_invalid_utf8_is_malformed_not_a_crash(tmp_path: Path) -> None:
+    """B2: undecodable UTF-8 becomes a malformed record, never a crash.
+
+    `UnicodeDecodeError` is a `ValueError`, not an `OSError` — a bare
+    `except OSError` around the read would miss it and let one bad byte
+    crash the whole registry build, falsifying the module docstring's
+    promise that an unreadable/undecodable file becomes a malformed record
+    rather than taking down every other record with it. This is INHERITED
+    from `scoped_rules_on_disk` (which crashes identically); fixed HERE
+    only — that file is READ-only per the spec.
+    """
+    rules_dir = tmp_path / ".claude" / "rules"
+    rules_dir.mkdir(parents=True)
+    target = rules_dir / "bad-utf8.md"
+    target.write_bytes(b"---\npaths:\n  - hk.pkl\n---\n\n\xff\xfe not valid utf-8\n")
+    good = rules_dir / "good.md"
+    good.write_text("---\npaths:\n  - hk.pkl\n---\n\nbody\n", encoding="utf-8")
+
+    reg = registry.build_registry(rules_dir)  # must not raise
+
+    bad_record = reg.by_id("bad-utf8")
+    assert bad_record is not None
+    assert bad_record.load_class == "malformed"
+    assert bad_record.malformed_detail
+    # The file WAS opened and read; only decoding failed, so the on-disk
+    # byte count is still knowable — not the "unreadable" 0.
+    assert bad_record.body_bytes == target.stat().st_size
+
+    good_record = reg.by_id("good")
+    assert good_record is not None
+    assert good_record.load_class == "scoped"
+
+
+def test_utf8_bom_does_not_hide_a_scoped_rule(tmp_path: Path) -> None:
+    r"""C1: a BOM'd file must still be detected as scoped.
+
+    A UTF-8 BOM makes `\A---\n` fail to match under plain `utf-8`
+    decoding, silently turning a scoped rule into an indistinguishable
+    "eager" record. This registry reads with `utf-8-sig` (BOM-aware) and
+    so stays correct; `scoped_rules_on_disk` stays BOM-blind by contrast —
+    see `test_scoped_agreement_against_real_repo`'s docstring for why that
+    is a deliberate, documented divergence rather than a C1 violation.
+    """
+    rules_dir = tmp_path / ".claude" / "rules"
+    rules_dir.mkdir(parents=True)
+    raw = "---\npaths:\n  - hk.pkl\n---\n\nbody\n".encode("utf-8-sig")
+    assert raw.startswith(b"\xef\xbb\xbf")
+    (rules_dir / "bom-rule.md").write_bytes(raw)
+
+    reg = registry.build_registry(rules_dir)
+    record = reg.by_id("bom-rule")
+    assert record is not None
+    assert record.load_class == "scoped"
+    assert record.globs == ("hk.pkl",)
+
+
 # --------------------------------------------------------------------------
 # C2 — the registry-vs-scoped_rules_on_disk agreement is ASSERTED
 # --------------------------------------------------------------------------
 
 
 def test_scoped_agreement_against_real_repo() -> None:
-    """C2 first bullet: set-equality against the live function, not a hardcoded list.
+    """C2 first bullet: set-equality against the live function.
 
-    This is strictly stronger than pinning filenames — it survives a rule
-    being added or scoped without a test edit, and it is what closes the
-    class #917 hit: two parsers of the same frontmatter silently disagreeing
-    on path spelling.
+    Strictly stronger than pinning a hardcoded filename list — it survives
+    a rule being added or scoped without a test edit, and it is what
+    closes the class #917 hit: two parsers of the same frontmatter
+    silently disagreeing on path spelling.
+
+    C1 note: this registry reads with `utf-8-sig` (BOM-aware, see
+    `test_utf8_bom_does_not_hide_a_scoped_rule`) while `scoped_rules_on_disk`
+    stays BOM-blind (plain `utf-8`) — a deliberate divergence, this
+    registry being the more correct of the two on that one shape. It does
+    not break THIS test because the real corpus has no BOM'd file today.
+    An agreement oracle like this one structurally cannot catch that class
+    of bug at all: both parsers share the byte-identical `_FRONTMATTER_RE`,
+    so a case where they are BOTH wrong the same way would still "agree".
+    Parity is not correctness — it is a floor, not a ceiling.
     """
     reg = registry.build_registry(REAL_RULES_DIR)
     registry_scoped = {r.path for r in reg.records if r.load_class == "scoped"}
@@ -254,25 +422,43 @@ def test_three_classifiers_agree_on_the_real_corpus() -> None:
     upstream fix (reconciling all three) breaks this suite, which is the
     exact trap #917 hit.
 
-    W1: the three shapes where this registry and `has_paths_frontmatter`
+    W1: the FOUR shapes where this registry and `has_paths_frontmatter`
     diverge are (a) `paths:` holding a string, (b) `paths:` holding a dict,
-    and (c) unparsable YAML that merely CONTAINS a `paths:` line —
-    `has_paths_frontmatter` answers True for all three (it never parses
-    YAML), while this registry answers "eager" for (a)/(b) and "malformed"
-    for (c). None of those three fixtures is exercised here: every one of
-    them IS the bug-as-contract this spec rejects (`test_diverges_from_*`
-    above already proves the swallow fix via a DIFFERENT divergence — this
-    registry vs. `scoped_rules_on_disk` — so the registry side of the
-    guarantee is not resting on this test alone). The reconciliation of all
-    three classifiers is tracked by **issue #951**; this test is the
-    tripwire that forces someone to open it, not a substitute for it.
+    (c) `paths:` holding a YAML null (see
+    `test_paths_null_is_eager_not_malformed`), and (d) unparsable YAML
+    that merely CONTAINS a `paths:` line — `has_paths_frontmatter` answers
+    True for all four (it never parses YAML), while this registry answers
+    "eager" for (a)/(b)/(c) and "malformed" for (d). None of those four
+    fixtures is exercised HERE, in this real-corpus tripwire test: each one
+    IS the bug-as-contract this spec rejects, and each is already proven
+    individually elsewhere in this file against `scoped_rules_on_disk` and
+    this registry directly (`test_diverges_from_*`,
+    `test_paths_null_is_eager_not_malformed`) — so the registry side of
+    every divergence is independently proven; only the THIRD classifier's
+    agreement/disagreement on these four synthetic shapes is deliberately
+    left unexercised here. The reconciliation of all three classifiers is
+    tracked by **issue #951**; this test is the tripwire that forces
+    someone to open it, not a substitute for it.
 
     W2: also asserts the ENUMERATION axis, not just the predicate. The real
     `md_size_budget` hk gate does not walk `rglob` — it reaches its corpus
     via `tracked_files()` (`git ls-files`) -> `classify()` ->
     `DEFAULT_EXCLUDED_PREFIXES`, so an untracked rule or one under a
     symlinked subdirectory is invisible to the gate even though it is
-    visible to this registry's `rglob` traversal.
+    visible to this registry's `rglob` traversal. The assertion below
+    tolerates the normal authoring workflow: writing a NEW, not-yet-staged
+    `.claude/rules/*.md` file must not turn this test red (control-armed:
+    `touch`ing one and reverting proved exactly that failure mode before
+    this was fixed) — the real invariant is that `rglob_corpus -
+    gate_corpus` is EXACTLY the set `git status` reports as untracked or
+    ignored under `.claude/rules/`, not that the two corpora are always
+    identical.
+
+    If THIS test fails and the failing files are not accounted for by an
+    untracked/ignored file in `git status`, that is a real classifier
+    disagreement — the corpus moved under us, or the gate's own
+    enumeration diverged from this registry's for a tracked file. That is
+    a finding to report, not a reason to adjust this test.
     """
     reg = registry.build_registry(REAL_RULES_DIR)
     registry_scoped = {r.path for r in reg.records if r.load_class == "scoped"}
@@ -293,17 +479,23 @@ def test_three_classifiers_agree_on_the_real_corpus() -> None:
     assert not any(r.load_class == "malformed" for r in reg.records)
 
     # W2 — the enumeration axis: the gate's own tracked_files -> classify
-    # corpus must agree with this registry's rglob corpus for rule files.
+    # corpus must agree with this registry's rglob corpus for rule files,
+    # MODULO whatever git itself reports as untracked or ignored (T2: the
+    # normal authoring workflow — writing a new, not-yet-staged rule file —
+    # must not turn this test red).
+    root = REAL_RULES_DIR.parent.parent
     rglob_corpus = {
-        str(p.relative_to(REAL_RULES_DIR.parent.parent))
+        str(p.relative_to(root))
         for p in REAL_RULES_DIR.rglob("*.md", recurse_symlinks=True)
     }
     gate_corpus = {
         f
-        for f in tracked_files(REAL_RULES_DIR.parent.parent)
+        for f in tracked_files(root)
         if classify(f) in ("rule_unscoped", "rule_scoped")
     }
-    assert rglob_corpus == gate_corpus
+    untracked_or_ignored = _git_untracked_or_ignored(root, ".claude/rules")
+    assert rglob_corpus - gate_corpus == untracked_or_ignored
+    assert gate_corpus <= rglob_corpus
 
 
 # --------------------------------------------------------------------------
@@ -391,24 +583,93 @@ def test_fenced_heading_lookalike_is_not_treated_as_heading(tmp_path: Path) -> N
     assert "this looks like a heading" in record.eager_reason
 
 
-def test_setext_frontmatter_boundary_is_not_a_phantom_heading(tmp_path: Path) -> None:
-    """C5 setext hazard: the closing `---` of frontmatter must not be read as an H2."""
+def test_frontmatter_yaml_comment_is_not_mistaken_for_a_heading(
+    tmp_path: Path,
+) -> None:
+    """T1 correction: guards a YAML-comment hazard, not a setext one.
+
+    `_strip_frontmatter` exists because the parser is ATX-only with NO
+    setext detection anywhere in this module — it was never at risk of
+    reading the closing `---` as a setext H2 underline. The real hazard it
+    guards against is a `#`-prefixed YAML COMMENT inside the frontmatter
+    block being misread as an ATX heading if the frontmatter were scanned
+    along with the body.
+
+    This fixture reaches the EAGER branch (frontmatter parses but has no
+    `paths:` list) so `_find_eager_reason` actually runs. Its frontmatter
+    contains a `# eager ...` comment line that WOULD register as a
+    (wrongly) qualifying heading if `_strip_frontmatter` were replaced
+    with a no-op — mutation-proven: this test fails under that mutation,
+    where the prior `test_setext_frontmatter_boundary_is_not_a_phantom_heading`
+    (a scoped-rule fixture) did not, because a scoped record never calls
+    `_find_eager_reason` at all — `eager_reason is None` was true by
+    construction for every scoped record, forever, regardless of whether
+    stripping worked.
+    """
     rules_dir = tmp_path / ".claude" / "rules"
     rules_dir.mkdir(parents=True)
-    (rules_dir / "scoped-with-body.md").write_text(
-        "---\npaths:\n  - hk.pkl\n---\n\n"
-        "# Scoped Rule\n\n"
+    (rules_dir / "commented-frontmatter.md").write_text(
+        "---\n"
+        "# eager - a YAML comment that looks like a qualifying heading\n"
+        "title: something\n"
+        "---\n\n"
+        "# Rule\n\n"
         "## Why this rule is eager (never `paths:`-scoped)\n\n"
-        "This text should never be reached for a scoped rule.\n",
+        "Real reason body.\n",
         encoding="utf-8",
     )
     reg = registry.build_registry(rules_dir)
-    record = reg.by_id("scoped-with-body")
+    record = reg.by_id("commented-frontmatter")
     assert record is not None
-    # Scoped rules never carry an eager reason, by construction (C4).
-    assert record.load_class == "scoped"
+    assert record.load_class == "eager"
+    assert record.eager_reason_heading == (
+        "## Why this rule is eager (never `paths:`-scoped)"
+    )
+    assert record.eager_reason == "Real reason body."
+
+
+def test_eager_reason_never_empty_string_when_heading_has_no_body(
+    tmp_path: Path,
+) -> None:
+    """B1: no body before the next heading normalises to `None`, not `""`.
+
+    A qualifying heading immediately followed by a same-level heading (no
+    body text between them) must report `eager_reason=None` — the pinned
+    interface says the field is never an empty string.
+    """
+    rules_dir = tmp_path / ".claude" / "rules"
+    rules_dir.mkdir(parents=True)
+    (rules_dir / "empty-reason.md").write_text(
+        "# Rule\n\n"
+        "## Why this rule is eager (never `paths:`-scoped)\n\n"
+        "## Next Section\n\n"
+        "Unrelated content.\n",
+        encoding="utf-8",
+    )
+    reg = registry.build_registry(rules_dir)
+    record = reg.by_id("empty-reason")
+    assert record is not None
+    assert record.eager_reason_heading == (
+        "## Why this rule is eager (never `paths:`-scoped)"
+    )
     assert record.eager_reason is None
-    assert record.eager_reason_heading is None
+
+
+def test_eager_reason_never_empty_string_when_heading_is_last_thing_in_file(
+    tmp_path: Path,
+) -> None:
+    """B1, second arm: a qualifying heading at EOF, nothing after it."""
+    rules_dir = tmp_path / ".claude" / "rules"
+    rules_dir.mkdir(parents=True)
+    (rules_dir / "trailing-heading.md").write_text(
+        "# Rule\n\n## Why this rule is eager (never `paths:`-scoped)\n",
+        encoding="utf-8",
+    )
+    reg = registry.build_registry(rules_dir)
+    record = reg.by_id("trailing-heading")
+    assert record is not None
+    assert record.eager_reason_heading is not None
+    assert record.eager_reason is None
 
 
 def test_real_corpus_eager_reason_qualifying_headings() -> None:
@@ -426,14 +687,39 @@ def test_real_corpus_eager_reason_qualifying_headings() -> None:
 
 
 def test_real_corpus_known_non_qualifying_eager_rules() -> None:
-    """C5: known-and-accepted non-detections — no blockquote/prose rescue."""
+    """C5: known-and-accepted non-detections — no blockquote/prose rescue.
+
+    Rule ids are derived from `KNOWN_UNDETECTED_EAGER_REASONS` (T3) rather
+    than a second hardcoded list, so the two constants cannot drift apart.
+    """
     reg = registry.build_registry(REAL_RULES_DIR)
-    for rule_id in ("ai-cli-invocation", "clarify-before-acting"):
-        record = reg.by_id(rule_id)
+    known_paths = {
+        entry.rsplit(":", 1)[0] for entry in registry.KNOWN_UNDETECTED_EAGER_REASONS
+    }
+    assert known_paths == {
+        ".claude/rules/ai-cli-invocation.md",
+        ".claude/rules/clarify-before-acting.md",
+    }
+    for path in known_paths:
+        record = reg.by_id(Path(path).stem)
         assert record is not None
+        assert record.path == path
         assert record.load_class == "eager"
         assert record.eager_reason is None
         assert record.eager_reason_heading is None
+
+
+def test_known_undetected_eager_reasons_cites_a_real_line() -> None:
+    """T3: each pinned `file:line` must cite a REAL line naming eagerness.
+
+    A stale citation (the line moved under an unrelated edit) is itself a
+    finding, not something to relax.
+    """
+    for entry in registry.KNOWN_UNDETECTED_EAGER_REASONS:
+        rel_path, lineno = entry.rsplit(":", 1)
+        lines = (REPO_ROOT / rel_path).read_text(encoding="utf-8").splitlines()
+        cited_line = lines[int(lineno) - 1]
+        assert "eager" in cited_line.lower()
 
 
 # --------------------------------------------------------------------------
@@ -475,6 +761,29 @@ def test_body_bytes_is_whole_file_including_frontmatter(tmp_path: Path) -> None:
     # Sanity: the frontmatter block itself must be counted, i.e. this is
     # strictly larger than the body-only text would measure.
     assert record.body_bytes > len(b"scoped rule body.\n")
+
+
+def test_body_bytes_counts_crlf_bytes_correctly(tmp_path: Path) -> None:
+    r"""C5: CRLF line endings must not be undercounted.
+
+    `read_text`'s universal-newline translation collapses `\r\n` to `\n`
+    before `len(text.encode())` would ever see it, undercounting a CRLF
+    file by one byte per line. `body_bytes` must report the real on-disk
+    size (`stat().st_size`), not the post-translation size.
+    """
+    rules_dir = tmp_path / ".claude" / "rules"
+    rules_dir.mkdir(parents=True)
+    target = rules_dir / "crlf-rule.md"
+    raw = b"---\r\npaths:\r\n  - hk.pkl\r\n---\r\n\r\nbody\r\n"
+    target.write_bytes(raw)
+    reg = registry.build_registry(rules_dir)
+    record = reg.by_id("crlf-rule")
+    assert record is not None
+    assert record.load_class == "scoped"
+    assert record.body_bytes == len(raw)
+    # The bug this guards: measuring the DECODED (LF-only) text instead of
+    # the disk bytes would report a strictly smaller number here.
+    assert record.body_bytes > len(raw.replace(b"\r\n", b"\n"))
 
 
 def test_body_bytes_is_zero_for_unreadable_file(tmp_path: Path) -> None:
@@ -530,6 +839,33 @@ def test_records_sorted_by_path(tmp_path: Path) -> None:
     reg = registry.build_registry(rules_dir)
     paths = [r.path for r in reg.records]
     assert paths == sorted(paths)
+
+
+def test_by_id_raises_on_cross_subdir_collision(tmp_path: Path) -> None:
+    """D1: same-stem files in different subdirs must not silently collide.
+
+    `by_id` must not silently answer about whichever one sorts first.
+    """
+    rules_dir = tmp_path / ".claude" / "rules"
+    _write_rule(rules_dir / "team-a", "shared-rule", paths=["hk.pkl"])
+    _write_rule(rules_dir / "team-b", "shared-rule", paths=["mise.toml"])
+    reg = registry.build_registry(rules_dir)
+    with pytest.raises(ValueError, match="ambiguous"):
+        reg.by_id("shared-rule")
+
+
+def test_by_load_class_partitions_records(tmp_path: Path) -> None:
+    """D3: `by_load_class` had zero callers and zero tests before this."""
+    rules_dir = tmp_path / ".claude" / "rules"
+    _write_rule(rules_dir, "scoped-a", paths=["hk.pkl"])
+    _write_rule(rules_dir, "eager-a", paths=None)
+    (rules_dir / "malformed-a.md").write_text(
+        "---\npaths: [unterminated\n---\n\nbody\n", encoding="utf-8"
+    )
+    reg = registry.build_registry(rules_dir)
+    assert {r.rule_id for r in reg.by_load_class("scoped")} == {"scoped-a"}
+    assert {r.rule_id for r in reg.by_load_class("eager")} == {"eager-a"}
+    assert {r.rule_id for r in reg.by_load_class("malformed")} == {"malformed-a"}
 
 
 def test_rule_id_matches_declared_rules_stem_spelling() -> None:

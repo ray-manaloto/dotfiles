@@ -13,10 +13,11 @@ That gate runs a THIRD, independent load-class classifier
 (`kb_setup.md_budget.has_paths_frontmatter`, in the knowledge-base repo)
 which already disagrees with both this registry and
 `instructions_report.scoped_rules_on_disk` on some frontmatter shapes (a
-`paths:` string, or unparsable YAML that merely contains a `paths:` line).
-Reconciling the three is a separate ticket. `tests/test_rule_registry.py`
-carries a live tripwire asserting all three currently agree on the real
-corpus, rather than silently letting that agreement rot.
+`paths:` string, a `paths:` dict, a `paths:` null, or unparsable YAML that
+merely contains a `paths:` line). Reconciling the three is tracked by
+**issue #951**, not this ticket. `tests/test_rule_registry.py` carries a
+live tripwire asserting all three currently agree on the real corpus,
+rather than silently letting that agreement rot.
 
 Traversal and path spelling are pinned to match
 `instructions_report.scoped_rules_on_disk` exactly (C1) — that function is a
@@ -26,9 +27,10 @@ bugs that coexisted precisely because nothing asserted the two sides agreed.
 class here.
 
 Unlike `scoped_rules_on_disk`, this module never silently drops a rule it
-cannot parse or read: malformed frontmatter and an unreadable file both
-become `load_class == "malformed"` records (C3), carrying the parser's
-error message.
+cannot parse or read: malformed frontmatter, an unreadable file, and a file
+whose bytes cannot be decoded as UTF-8 (even with a BOM) all become
+`load_class == "malformed"` records (C3), carrying the parser's error
+message.
 """
 
 from __future__ import annotations
@@ -41,6 +43,13 @@ import yaml
 
 if TYPE_CHECKING:
     from pathlib import Path
+    from typing import Literal
+
+    #: The three-way partition. A string-typed annotation (via `from
+    #: __future__ import annotations`) so this alias, TYPE_CHECKING-only,
+    #: costs nothing at runtime — `ty` reads it, `ty check` catches a typo
+    #: as an error rather than an always-empty `by_load_class()` result (D3).
+    LoadClass = Literal["scoped", "eager", "malformed"]
 
 #: Matches `instructions_report._FRONTMATTER_RE` exactly (C1): a leading
 #: frontmatter block, tolerating an EOF-terminated block with no trailing
@@ -49,23 +58,29 @@ if TYPE_CHECKING:
 _FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n---\n?", re.DOTALL)
 
 #: ATX heading line, e.g. "## Why this rule is eager (...)". Matched only
-#: OUTSIDE fenced code blocks (C5's fence hazard) and only after the
-#: frontmatter block has been stripped (C5's setext hazard: an unstripped
-#: closing `---` reads as a phantom H2 underline).
+#: OUTSIDE fenced code blocks (a `#`-prefixed bash comment inside a fence
+#: must never be mistaken for a heading) and only after the frontmatter
+#: block has been stripped — the parser is ATX-only with NO setext
+#: detection anywhere in this module, so the real reason to strip
+#: frontmatter first is that a `#`-prefixed YAML COMMENT inside the
+#: frontmatter block would otherwise be misread as an ATX heading, not any
+#: risk from the closing `---` (there is no setext reader to fool).
 _ATX_HEADING_RE = re.compile(r"^(#{1,6})\s+(.*\S)\s*$")
 
-#: Same fence-detection shape as `doc_refs._doc_lines` (C5): a fenced code
-#: block toggles on any line whose stripped form starts with ``` — nested
-#: fence depth is not tracked because markdown fences don't nest.
-_FENCE_RE = re.compile(r"^\s*```")
+#: Same fence-detection shape as `doc_refs._doc_lines`: a fenced code block
+#: toggles on any line whose stripped form opens a backtick OR tilde fence
+#: (CommonMark supports both; nested fence depth is not tracked because
+#: markdown fences don't nest, and an unbalanced fence swallowing the rest
+#: of the file is real CommonMark behaviour, not a bug to guard against).
+_FENCE_RE = re.compile(r"^\s*(```|~~~)")
 
-#: C5 — a heading qualifies as an eager-reason anchor iff its lowercased,
+#: A heading qualifies as an eager-reason anchor iff its lowercased,
 #: backtick-stripped text contains one of these substrings. Deliberately
 #: excludes "why this rule exists" (12 rules in the corpus carry it) —
 #: that heading justifies the rule's CONTENT, not its load class.
 _EAGER_HEADING_MARKERS = ("eager", "paths:-scoped")
 
-#: C6 — the inject set lives here, not in frontmatter. Seeded with the two
+#: The inject set lives here, not in frontmatter. Seeded with the two
 #: currently-scoped rules (repo-relative POSIX paths, matching
 #: `RuleRecord.path`'s spelling) as the pilot. #916 decision 1 pins
 #: `paths:` as the only frontmatter key; do not add a second one to carry
@@ -77,25 +92,57 @@ INJECT_PATHS: frozenset[str] = frozenset(
     }
 )
 
+#: Rules whose eager rationale IS stated in the corpus but NOT in a form
+#: `_find_eager_reason`'s heading-anchored matcher can see (C5 forbids a
+#: blockquote/prose detector, by operator decision) — so their records
+#: report `eager_reason=None` even though a human reading the file would
+#: not call them unjustified. Recorded here, keyed by `"<path>:<line>"`,
+#: so a future #927 gate can suppress a false "unjustified eager rule"
+#: finding for exactly these two instead of either filing a false
+#: accusation or silently building the prose detector the operator ruled
+#: out. Reconciling the prose into a real heading is #929-#932's debt, not
+#: this ticket's.
+KNOWN_UNDETECTED_EAGER_REASONS: frozenset[str] = frozenset(
+    {
+        # "> **EAGER on purpose** — ..." — a leading blockquote.
+        ".claude/rules/ai-cli-invocation.md:3",
+        # "...and it is why this rule stays eager..." — inline prose.
+        ".claude/rules/clarify-before-acting.md:92",
+    }
+)
+
 
 @dataclass(frozen=True)
 class RuleRecord:
     """One `.claude/rules/*.md` file's parsed identity.
 
     Field names are pinned — later tickets (#927/#928/#929-#932) read them.
+
+    `globs == () and load_class == "scoped"` is a real, reachable
+    combination: a `paths: []` frontmatter block is syntactically a scoped
+    rule (isinstance-of-list, matching `scoped_rules_on_disk`'s predicate
+    exactly, per C1/C4), but a scoped rule with zero globs can never match
+    a written path — almost certainly an authoring mistake. It is already
+    distinguishable from every OTHER `globs == ()` case (eager, malformed)
+    by `load_class` alone: a consumer that wants to flag this footgun
+    checks `load_class == "scoped" and not globs`.
     """
 
     rule_id: str
     path: str
-    load_class: str
+    load_class: LoadClass
     globs: tuple[str, ...]
     eager_reason: str | None
     eager_reason_heading: str | None
     malformed_detail: str | None
     inject: bool
-    #: WHOLE-file byte length (frontmatter included), `len(raw.encode())`.
-    #: 0 for a `malformed` record whose file could not be read at all — no
-    #: bytes were ever available to measure.
+    #: WHOLE-file byte length as it sits ON DISK (frontmatter included),
+    #: `path.stat().st_size` — NOT `len(decoded_text.encode())`, which
+    #: would undercount a CRLF-terminated file by one byte per line once
+    #: `read_text`'s universal-newline translation has already collapsed
+    #: `\r\n` to `\n`. `0` only when the file could not be opened at all
+    #: (the `OSError` arm — no bytes were ever read); a file that opened
+    #: but failed to DECODE as UTF-8 still reports its real on-disk size.
     body_bytes: int
 
 
@@ -106,13 +153,24 @@ class RuleRegistry:
     records: tuple[RuleRecord, ...]
 
     def by_id(self, rule_id: str) -> RuleRecord | None:
-        """Return the record whose `rule_id` matches, or None."""
-        for record in self.records:
-            if record.rule_id == rule_id:
-                return record
-        return None
+        """Return the record whose `rule_id` matches, or None.
 
-    def by_load_class(self, load_class: str) -> tuple[RuleRecord, ...]:
+        Raises `ValueError` on more than one match — e.g. two same-stem
+        files in different nested subdirectories, a documented sharing
+        mechanism (C1) — rather than silently answering about whichever
+        one happens to sort first (D1). Callers that need every match
+        should filter `.records` directly.
+        """
+        matches = [r for r in self.records if r.rule_id == rule_id]
+        if len(matches) > 1:
+            msg = (
+                f"rule_id {rule_id!r} is ambiguous across nested "
+                f"subdirectories: {[m.path for m in matches]!r}"
+            )
+            raise ValueError(msg)
+        return matches[0] if matches else None
+
+    def by_load_class(self, load_class: LoadClass) -> tuple[RuleRecord, ...]:
         """Return every record with the given `load_class`."""
         return tuple(r for r in self.records if r.load_class == load_class)
 
@@ -120,8 +178,9 @@ class RuleRegistry:
 def _strip_frontmatter(text: str) -> tuple[str, re.Match[str] | None]:
     """Return (body-only text, the frontmatter match or None).
 
-    The body starts at the frontmatter match's end so the closing `---`
-    never masquerades as a setext H2 underline (C5).
+    The body starts at the frontmatter match's end so a `#`-prefixed YAML
+    comment inside the frontmatter block is never scanned as an ATX
+    heading by `_find_eager_reason` (see `_ATX_HEADING_RE`'s docstring).
     """
     match = _FRONTMATTER_RE.match(text)
     if match is None:
@@ -140,8 +199,10 @@ def _find_eager_reason(body: str) -> tuple[str | None, str | None]:
 
     Returns (heading_line, section_body_text) for the FIRST qualifying
     heading found, or (None, None) if none qualifies. Fenced code blocks are
-    tracked and never scanned for headings (C5) — `doc_refs._doc_lines` is
-    the shape mirrored here.
+    tracked and never scanned for headings — `doc_refs._doc_lines` is the
+    shape mirrored here. `section_body_text` is normalised to `None` rather
+    than `""` when the qualifying heading has no body before the next
+    heading (or EOF) — the pinned interface never returns an empty string.
     """
     lines = body.splitlines()
     in_fence = False
@@ -165,11 +226,67 @@ def _find_eager_reason(body: str) -> tuple[str | None, str | None]:
         if heading_idx is not None and len(heading_match.group(1)) <= heading_level:
             # A heading of the same or higher level ends the section.
             section = "\n".join(lines[heading_idx + 1 : idx]).strip("\n")
-            return heading_line, section
+            return heading_line, section or None
     if heading_idx is not None:
         section = "\n".join(lines[heading_idx + 1 :]).strip("\n")
-        return heading_line, section
+        return heading_line, section or None
     return None, None
+
+
+def _disk_size(path: Path) -> int:
+    """Bytes on disk, or 0 if even `stat` fails."""
+    try:
+        return path.stat().st_size
+    except OSError:
+        return 0
+
+
+def _malformed(
+    rule_id: str, rel_path: str, detail: str, *, inject: bool, body_bytes: int
+) -> RuleRecord:
+    return RuleRecord(
+        rule_id=rule_id,
+        path=rel_path,
+        load_class="malformed",
+        globs=(),
+        eager_reason=None,
+        eager_reason_heading=None,
+        malformed_detail=detail,
+        inject=inject,
+        body_bytes=body_bytes,
+    )
+
+
+class _UnreadableSourceError(Exception):
+    """Raised by `_read_source` — carries what a `malformed` record needs."""
+
+    def __init__(self, detail: str, body_bytes: int) -> None:
+        super().__init__(detail)
+        self.detail = detail
+        self.body_bytes = body_bytes
+
+
+def _read_source(path: Path) -> tuple[str, int]:
+    r"""Return (decoded text, on-disk byte count), or raise `_UnreadableSourceError`.
+
+    `utf-8-sig` strips a leading UTF-8 BOM if present and behaves exactly
+    like `utf-8` otherwise — without it, a BOM'd file's `\A---\n` never
+    matches and a genuinely scoped rule silently reports `eager`. This
+    deliberately diverges from `scoped_rules_on_disk`, which stays
+    BOM-blind (plain `utf-8`); the real corpus has no BOM'd file, so the
+    two still agree there, but this registry is the more correct of the
+    two on this one shape (see the C2 test's docstring).
+    """
+    try:
+        text = path.read_text(encoding="utf-8-sig")
+    except OSError as exc:
+        # No bytes were readable at all — nothing to measure.
+        raise _UnreadableSourceError(str(exc), 0) from exc
+    except UnicodeDecodeError as exc:
+        # The file WAS opened and read; only decoding failed, so the
+        # on-disk byte count is still knowable.
+        raise _UnreadableSourceError(str(exc), _disk_size(path)) from exc
+    return text, _disk_size(path)
 
 
 def _build_record(path: Path, rules_dir: Path) -> RuleRecord:
@@ -179,77 +296,55 @@ def _build_record(path: Path, rules_dir: Path) -> RuleRecord:
     inject = rel_path in INJECT_PATHS
 
     try:
-        text = path.read_text(encoding="utf-8")
-    except OSError as exc:
-        # No bytes were readable, so there is nothing to measure (C6a's
-        # body_bytes is WHOLE-file bytes, and an unread file has none).
-        return RuleRecord(
-            rule_id=rule_id,
-            path=rel_path,
-            load_class="malformed",
-            globs=(),
-            eager_reason=None,
-            eager_reason_heading=None,
-            malformed_detail=str(exc),
-            inject=inject,
-            body_bytes=0,
+        text, body_bytes = _read_source(path)
+    except _UnreadableSourceError as exc:
+        return _malformed(
+            rule_id, rel_path, exc.detail, inject=inject, body_bytes=exc.body_bytes
         )
 
-    body_bytes = len(text.encode())
     body, match = _strip_frontmatter(text)
+
+    load_class: LoadClass = "eager"
+    globs: tuple[str, ...] = ()
+    eager_reason_heading: str | None = None
+    eager_reason: str | None = None
 
     if match is None:
         # No frontmatter at all — well-formed eager rule (C3), not malformed.
-        heading, reason = _find_eager_reason(body)
-        return RuleRecord(
-            rule_id=rule_id,
-            path=rel_path,
-            load_class="eager",
-            globs=(),
-            eager_reason=reason,
-            eager_reason_heading=heading,
-            malformed_detail=None,
-            inject=inject,
-            body_bytes=body_bytes,
-        )
+        eager_reason_heading, eager_reason = _find_eager_reason(body)
+    else:
+        try:
+            front = yaml.safe_load(match.group(1))
+        except yaml.YAMLError as exc:
+            return _malformed(
+                rule_id, rel_path, str(exc), inject=inject, body_bytes=body_bytes
+            )
 
-    try:
-        front = yaml.safe_load(match.group(1))
-    except yaml.YAMLError as exc:
-        return RuleRecord(
-            rule_id=rule_id,
-            path=rel_path,
-            load_class="malformed",
-            globs=(),
-            eager_reason=None,
-            eager_reason_heading=None,
-            malformed_detail=str(exc),
-            inject=inject,
-            body_bytes=body_bytes,
-        )
+        if isinstance(front, dict) and isinstance(front.get("paths"), list):
+            raw_globs = front["paths"]
+            if not all(isinstance(g, str) for g in raw_globs):
+                return _malformed(
+                    rule_id,
+                    rel_path,
+                    f"paths: list contains a non-string item: {raw_globs!r}",
+                    inject=inject,
+                    body_bytes=body_bytes,
+                )
+            load_class = "scoped"
+            globs = tuple(raw_globs)
+        else:
+            # Frontmatter parsed but has no `paths` list (C4) — including a
+            # `paths:` key holding a string, a dict, or a YAML null: eager,
+            # not malformed.
+            eager_reason_heading, eager_reason = _find_eager_reason(body)
 
-    if isinstance(front, dict) and isinstance(front.get("paths"), list):
-        return RuleRecord(
-            rule_id=rule_id,
-            path=rel_path,
-            load_class="scoped",
-            globs=tuple(front["paths"]),
-            eager_reason=None,
-            eager_reason_heading=None,
-            malformed_detail=None,
-            inject=inject,
-            body_bytes=body_bytes,
-        )
-
-    # Frontmatter parsed but has no `paths` list (C4): eager, not malformed.
-    heading, reason = _find_eager_reason(body)
     return RuleRecord(
         rule_id=rule_id,
         path=rel_path,
-        load_class="eager",
-        globs=(),
-        eager_reason=reason,
-        eager_reason_heading=heading,
+        load_class=load_class,
+        globs=globs,
+        eager_reason=eager_reason,
+        eager_reason_heading=eager_reason_heading,
         malformed_detail=None,
         inject=inject,
         body_bytes=body_bytes,
