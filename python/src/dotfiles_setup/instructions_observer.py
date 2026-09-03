@@ -37,6 +37,7 @@ import json
 import logging
 import os
 import sys
+import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -122,16 +123,28 @@ def session_filename(session_id: object) -> str:
 
 
 def _normalize_path(value: object, project_root: Path) -> str | None:
-    """Repo-relative when under ``project_root``; absolute otherwise (C5)."""
+    """Repo-relative when under ``project_root``; absolute otherwise (C5).
+
+    R7: normalizes LEXICALLY (``os.path.normpath``), never via
+    ``Path.resolve()``. ``resolve()`` follows a symlink out of the repo —
+    e.g. a nested ``.claude/rules/`` tree shared in via a symlink, a
+    documented pattern — so a file that genuinely loaded from inside the
+    repo would resolve to an absolute path elsewhere on disk and could
+    never compare equal to ``scoped_rules_on_disk``'s unresolved
+    repo-relative listing. Lexical normalization also drops the two
+    filesystem stats ``resolve()`` costs per path, on a hot path that pays
+    for every one of the ~37 eligible files per session (C1).
+    """
     if not isinstance(value, str) or not value:
         return None
     candidate = Path(value)
     if not candidate.is_absolute():
         return value
+    normalized = os.path.normpath(str(candidate))
+    root = os.path.normpath(str(project_root))
     try:
-        resolved_root = project_root.resolve()
-        return str(candidate.resolve().relative_to(resolved_root))
-    except OSError, ValueError:
+        return str(Path(normalized).relative_to(root))
+    except ValueError:
         return value
 
 
@@ -166,12 +179,32 @@ def build_record(payload: dict, *, project_root: Path, now: str) -> dict:
 
 
 def _log_error(project_root: Path, message: str) -> None:
-    """Best-effort append to the sibling error log — itself wrapped (C2)."""
+    """Best-effort append to the sibling error log — itself wrapped (C2).
+
+    R4: the error channel must not share a fate with what it reports on.
+    Try the primary sibling log first — colocated with the records for the
+    common case — and on ANY failure there (read-only tree, full disk,
+    permission denied — the exact conditions this function exists to
+    survive) fall back to the OS temp dir, which does not depend on
+    ``project_root`` being writable at all. Both attempts are best-effort;
+    a failure of the fallback too is swallowed exactly like every other
+    path on this hot path (C2) — there is nowhere left to report it.
+    """
+    line = f"{datetime.now(UTC).isoformat()} {message}\n"
     try:
         directory = project_root / _RECORDS_DIRNAME
         directory.mkdir(parents=True, exist_ok=True)
-        line = f"{datetime.now(UTC).isoformat()} {message}\n"
         with Path(directory / _ERROR_LOG_NAME).open("a", encoding="utf-8") as fh:
+            fh.write(line)
+    except OSError:
+        pass
+    else:
+        return
+    try:
+        fallback = (
+            Path(tempfile.gettempdir()) / "dotfiles-instructions-observer-errors.log"
+        )
+        with fallback.open("a", encoding="utf-8") as fh:
             fh.write(line)
     except OSError:
         pass
@@ -186,6 +219,9 @@ def _write_record(record: dict, session_id: object, project_root: Path) -> None:
     a corrupt JSONL line. Opens with ``O_WRONLY|O_CREAT|O_APPEND`` and issues
     exactly one ``os.write`` on that descriptor; no lock file (that
     reintroduces cost and a failure mode on the hot path).
+
+    Every path that DROPS a record — containment miss, oversize, a short
+    write — logs why (R4); none returns silently.
     """
     directory = (project_root / _RECORDS_DIRNAME).resolve()
     directory.mkdir(parents=True, exist_ok=True)
@@ -193,13 +229,30 @@ def _write_record(record: dict, session_id: object, project_root: Path) -> None:
     if not target.is_relative_to(directory):
         # Cannot happen given the C3 sanitizer, but the containment check is
         # asserted rather than trusted — see probes-need-a-control-arm.md.
+        _log_error(project_root, f"write_record: containment check failed for {target}")
         return
     blob = (json.dumps(record, sort_keys=True) + "\n").encode("utf-8")
     if len(blob) > _MAX_RECORD_BYTES:
+        _log_error(
+            project_root,
+            f"write_record: record of {len(blob)} bytes exceeds "
+            f"_MAX_RECORD_BYTES={_MAX_RECORD_BYTES}; dropped",
+        )
         return
     fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
     try:
-        os.write(fd, blob)
+        written = os.write(fd, blob)
+        if written != len(blob):
+            # R10: checked, not looped. A second os.write() on the same
+            # descriptor is no longer atomic against a concurrent writer —
+            # it could interleave with another subagent's record, which is
+            # the exact corruption C4 exists to prevent. A short write here
+            # is logged and the partial line is left as-is rather than risk
+            # that.
+            _log_error(
+                project_root,
+                f"write_record: short os.write ({written}/{len(blob)} bytes)",
+            )
     finally:
         os.close(fd)
 

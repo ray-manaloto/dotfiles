@@ -454,6 +454,13 @@ def _add_instructions_report_subcommand(subparsers: _SubParsers) -> None:
         "one measurement a static paths: glob check structurally cannot make",
     )
     instructions_report_parser.add_argument(
+        "--project-root",
+        type=Path,
+        default=None,
+        help="Repo root to report on (default: this project's resolved root; "
+        "R6 — the module defines this flag, so the CLI must register it too)",
+    )
+    instructions_report_parser.add_argument(
         "--json",
         action="store_true",
         help="Machine-readable JSON output instead of the human-readable report",
@@ -2387,7 +2394,7 @@ def _build_command_handlers(
             instructions_report_main(
                 [
                     "--project-root",
-                    str(project_root),
+                    str(args.project_root or project_root),
                     *(["--json"] if args.json else []),
                 ]
             )
