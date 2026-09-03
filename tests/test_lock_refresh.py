@@ -113,11 +113,65 @@ def test_lock_top_level_config_tools_prunes_stale_entries(tmp_path: Path) -> Non
     assert "tools.shfmt" not in pruned
 
 
+def test_prune_keeps_a_sibling_table_wedged_between_tool_blocks(
+    tmp_path: Path,
+) -> None:
+    """A non-`tools` table between a stale block and the next tool SURVIVES.
+
+    The block boundary must be "the next header not owned by this tool", not
+    "the next `[[tools.X]]`". With the latter, a `[conda-packages...]` table
+    sitting after a stale block was swallowed with it — and the old validation
+    inspected only the `tools` key, so the loss passed and was written with
+    rc=0. Reproduced against the real function before the fix.
+
+    The fixture is shaped like the real `mise.lock` (quoted conda key, child
+    platform tables, a conda-packages section) rather than minimal: a fixture
+    with no interleaved sibling table could not exhibit the bug at all.
+    """
+    config = tmp_path / "mise.toml"
+    config.write_text('[tools]\nkept = "2.0"\n')
+    lock = tmp_path / "mise.lock"
+    lock.write_text(
+        "# @generated\n"
+        '[[tools."conda:stale"]]\nversion = "1.0"\n\n'
+        '[tools."conda:stale"."platforms.linux-x64"]\nchecksum = "sha256:aaa"\n\n'
+        "[conda-packages.linux-x64.somepkg]\n"
+        'url = "https://example.invalid/pkg"\n\n'
+        '[[tools.kept]]\nversion = "2.0"\n\n'
+        '[tools.kept."platforms.linux-x64"]\nchecksum = "sha256:bbb"\n'
+    )
+
+    def successful_run(
+        argv: list[str], *, cwd: Path, check: bool
+    ) -> subprocess.CompletedProcess[bytes]:
+        assert cwd == tmp_path
+        assert check is False
+        return subprocess.CompletedProcess(argv, 0)
+
+    assert lock_top_level_config_tools(config, run=successful_run) == 0
+    doc = tomllib.loads(lock.read_text())
+    # The stale tool and ITS child table leave…
+    assert sorted(doc["tools"]) == ["kept"]
+    # …while the unrelated sibling table and the kept tool's child both stay.
+    assert doc["conda-packages"]["linux-x64"]["somepkg"]["url"] == (
+        "https://example.invalid/pkg"
+    )
+    assert doc["tools"]["kept"][0]["platforms.linux-x64"]["checksum"] == "sha256:bbb"
+
+
 def test_lock_top_level_config_tools_keeps_extras_match(tmp_path: Path) -> None:
+    """An extras-suffixed config key matches its bare lock key and is KEPT.
+
+    The lock also carries a genuinely stale tool, so the prune path really
+    runs: without it this test passes with the feature removed entirely
+    (mutation-verified — that was a real gap in the first version).
+    """
     config = tmp_path / "mise.toml"
     config.write_text('[tools]\n"pipx:foo[all]" = "1.0.0"\n')
     lock = tmp_path / "mise.lock"
-    original = '[[tools."pipx:foo"]]\nversion = "1.0.0"\n'
+    original = (
+        '[[tools."pipx:foo"]]\nversion = "1.0.0"\n\n[[tools.gone]]\nversion = "9.9.9"\n'
+    )
     lock.write_text(original)
 
     def successful_run(
@@ -128,7 +182,11 @@ def test_lock_top_level_config_tools_keeps_extras_match(tmp_path: Path) -> None:
         return subprocess.CompletedProcess(argv, 0)
 
     assert lock_top_level_config_tools(config, run=successful_run) == 0
-    assert lock.read_text() == original
+    doc = tomllib.loads(lock.read_text())
+    # The extras-suffixed key was NOT mistaken for stale…
+    assert "pipx:foo" in doc["tools"]
+    # …and the genuinely stale one did go, proving the prune actually ran.
+    assert "gone" not in doc["tools"]
 
 
 def test_lock_top_level_config_tools_does_not_rewrite_exact_lock(
