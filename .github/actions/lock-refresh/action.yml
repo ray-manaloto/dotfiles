@@ -28,7 +28,7 @@ runs:
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
         MISE_GITHUB_TOKEN: ${{ inputs.github-token }}
-      run: mise lock
+      run: mise run lock-refresh-root
     - name: Regenerate mise-system.lock (pinned mise, linux-x64)
       shell: bash
       env:

@@ -1,33 +1,112 @@
 # Copyright (c) 2026 Raymond Manaloto
-"""Tests for `dotfiles_setup.lock_refresh`.
-
-The stage/collect helpers behind the CI lock-refresh job (#160 T8).
-"""
+"""Tests for the root filter + stage/collect lock-refresh helpers (#160 T8)."""
 
 from __future__ import annotations
 
+import subprocess
 import tomllib
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import pytest
 from dotfiles_setup.lock_refresh import (
     _merge_shared_tools,
     collect_system_lock,
     coverage_baseline,
+    lock_top_level_config_tools,
     merged_system_config_tools,
     pinned_mise_version,
     stage_system_lock_dir,
     strip_provenance,
+    top_level_config_tools,
 )
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from dotfiles_setup.main import setup_parser
 
 _SYSTEM_TOML = '[tools]\n"conda:git" = "latest"\n\n[settings]\nexperimental = true\n'
 _SHARED_TOML = '[tools]\nhk = "1.46.0"\n'
 _RUNTIME_TOML = '[tools]\nbats = "latest"\n'
 _LOCK = '[[tools."conda:git"]]\nversion = "2.0"\n\n[[tools.hk]]\nversion = "1.46.0"\n'
 _RUNTIME_LOCK = '[[tools.bats]]\nversion = "1.12.0"\n'
+
+
+def test_top_level_config_tools_excludes_task_scoped_tools(tmp_path: Path) -> None:
+    config = tmp_path / "mise.toml"
+    config.write_text(
+        '[tools]\njq = "1.8.1"\n\n[tasks.demo]\ntools.node = "24"\nrun = "true"\n'
+    )
+    assert top_level_config_tools(config) == {"jq"}
+
+
+def test_top_level_config_tools_keeps_all_tools_without_task_tools(
+    tmp_path: Path,
+) -> None:
+    config = tmp_path / "mise.toml"
+    config.write_text(
+        '[tools]\njq = "1.8.1"\n"npm:@scope/pkg" = "2.0.0"\n\n'
+        '[tasks.demo]\nrun = "true"\n'
+    )
+    assert top_level_config_tools(config) == {"jq", "npm:@scope/pkg"}
+
+
+def test_top_level_config_tools_strips_only_extras(tmp_path: Path) -> None:
+    config = tmp_path / "mise.toml"
+    config.write_text(
+        "[tools]\n"
+        '"pipx:graphifyy[all]" = "0.9.53"\n'
+        '"aqua:owner/tool" = "1.0.0"\n'
+        '"npm:@scope/pkg" = "2.0.0"\n'
+    )
+    assert top_level_config_tools(config) == {
+        "pipx:graphifyy",
+        "aqua:owner/tool",
+        "npm:@scope/pkg",
+    }
+
+
+def test_lock_top_level_config_tools_builds_scoped_argv(tmp_path: Path) -> None:
+    config = tmp_path / "mise.toml"
+    config.write_text(
+        '[tools]\njq = "1.8.1"\n"npm:@scope/pkg" = "2.0.0"\n\n'
+        '[tasks.demo]\ntools.node = "24"\nrun = "true"\n'
+    )
+    calls: list[tuple[list[str], Path, bool]] = []
+
+    def recording_run(
+        argv: list[str], *, cwd: Path, check: bool
+    ) -> subprocess.CompletedProcess[bytes]:
+        calls.append((argv, cwd, check))
+        return subprocess.CompletedProcess(argv, 0)
+
+    assert lock_top_level_config_tools(config, run=recording_run) == 0
+    assert calls == [(["mise", "lock", "jq", "npm:@scope/pkg"], tmp_path, False)]
+
+
+def test_lock_top_level_config_tools_refuses_a_bare_fallback(tmp_path: Path) -> None:
+    config = tmp_path / "mise.toml"
+    config.write_text('[tasks.demo]\ntools.node = "24"\nrun = "true"\n')
+    calls: list[tuple[list[str], Path, bool]] = []
+
+    def recording_run(
+        argv: list[str], *, cwd: Path, check: bool
+    ) -> subprocess.CompletedProcess[bytes]:
+        calls.append((argv, cwd, check))
+        return subprocess.CompletedProcess(argv, 0)
+
+    assert lock_top_level_config_tools(config, run=recording_run) == 1
+    assert calls == []
+
+
+def test_lock_refresh_root_is_registered_on_the_parser() -> None:
+    args = setup_parser().parse_args(["lock-refresh-root"])
+    assert args.command == "lock-refresh-root"
+
+
+def test_lock_refresh_wiring_calls_the_task_and_cli() -> None:
+    repo_root = Path(__file__).parent.parent
+    mise_toml = (repo_root / "mise.toml").read_text()
+    action = repo_root / ".github" / "actions" / "lock-refresh" / "action.yml"
+    assert "[tasks.lock-refresh-root]" in mise_toml
+    assert "dotfiles-setup lock-refresh-root" in mise_toml
+    assert "run: mise run lock-refresh-root" in action.read_text()
 
 
 def _mini_repo(tmp_path: Path) -> Path:

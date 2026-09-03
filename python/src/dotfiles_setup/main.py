@@ -88,7 +88,11 @@ from dotfiles_setup.lint import (
 from dotfiles_setup.lint_delta import DEFAULT_PATHS, lint_delta_main
 from dotfiles_setup.lock_integrity import main as lock_integrity_main
 from dotfiles_setup.lock_integrity import scoped_lock_main
-from dotfiles_setup.lock_refresh import collect_system_lock, stage_system_lock_dir
+from dotfiles_setup.lock_refresh import (
+    collect_system_lock,
+    lock_top_level_config_tools,
+    stage_system_lock_dir,
+)
 from dotfiles_setup.lock_shared import lock_shared_main
 from dotfiles_setup.memory_index import memory_index_main
 from dotfiles_setup.mise_config_context import mise_config_context_main
@@ -322,17 +326,22 @@ def _add_platform_subcommands(subparsers: _SubParsers) -> None:
 
 
 def _add_lock_subcommands(subparsers: _SubParsers) -> None:
-    """Register the `lock-check` / `lock-tools` / `lock-shared` family.
+    """Register the root-refresh / check / tools / shared lock family.
 
-    Grouped because they answer the same question at three different scopes —
-    does a lockfile still cover what HEAD covers, re-lock a named tool in the
-    root lock, re-lock a named tool in the shared lock. Extracted into a
-    helper for the reason `_add_platform_subcommands` was: `_add_honesty_
-    subcommands` sits at ruff's PLR0915 statement ceiling.
+    Grouped because they answer the same question at four different scopes —
+    refresh the root lock's complete top-level tool set, check whether a
+    lockfile still covers what HEAD covers, re-lock a named tool in the root
+    lock, or re-lock a named tool in the shared lock. Extracted into a helper
+    for the reason `_add_platform_subcommands` was: `_add_honesty_subcommands`
+    sits at ruff's PLR0915 statement ceiling.
 
     Args:
         subparsers: The parent subparsers action to attach these to.
     """
+    subparsers.add_parser(
+        "lock-refresh-root",
+        help="Regenerate the root mise.lock from top-level [tools] only",
+    )
     subparsers.add_parser(
         "lock-check",
         help="Reject a lockfile that lost platform coverage vs HEAD. A bare "
@@ -2125,6 +2134,11 @@ def handle_lock_stage(args: argparse.Namespace, project_root: Path) -> None:
     sys.stdout.write(version + "\n")
 
 
+def handle_lock_refresh_root(project_root: Path) -> None:
+    """Regenerate root mise.lock without including task-scoped tools."""
+    sys.exit(lock_top_level_config_tools(project_root / "mise.toml"))
+
+
 def handle_lock_collect(args: argparse.Namespace, project_root: Path) -> None:
     """Handle lock-collect: validate + copy the stage lock back."""
     collect_system_lock(project_root, Path(args.dir))
@@ -2497,6 +2511,7 @@ def _build_command_handlers(
         ),
         "workflow-hooks": lambda: sys.exit(workflow_hooks_main(project_root)),
         "bootstrap-gap-report": lambda: handle_bootstrap_gap_report(args, project_root),
+        "lock-refresh-root": lambda: handle_lock_refresh_root(project_root),
         "lock-stage": lambda: handle_lock_stage(args, project_root),
         "lock-collect": lambda: handle_lock_collect(args, project_root),
         "sync-versions": lambda: handle_sync_versions(project_root),

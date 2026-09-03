@@ -6,7 +6,8 @@ the hosted Renovate app (it cannot run `mise lock` — admin allowlist — and
 does not know `mise-system.lock` by name):
 
 - ``mise.lock`` (repo root) — host/CI tools; regenerated in place with the
-  runner's mise (`mise lock`).
+  runner's mise through ``lock-refresh-root``, which passes every top-level
+  tool name explicitly so task-scoped tools never enter this lock.
 - ``.devcontainer/mise-system.lock`` — the image's 100+ tools. MUST be
   generated on linux-x64 with the image's pinned MISE_VERSION (macOS mise
   silently omits linux-x64 conda checksums; lock formats are not
@@ -38,8 +39,10 @@ GitHub rate limits instead of starting cold each time.
 
 from __future__ import annotations
 
+import logging
 import re
 import shutil
+import subprocess
 import tomllib
 from typing import TYPE_CHECKING
 
@@ -47,10 +50,13 @@ from dotfiles_setup.lock_integrity import committed_text, regressions
 from dotfiles_setup.platform_target import declared_lock_platforms
 
 if TYPE_CHECKING:
-    from collections.abc import Collection
+    from collections.abc import Callable, Collection
     from pathlib import Path
 
+logger = logging.getLogger(__name__)
+
 _MISE_VERSION_RE = re.compile(r"^ARG MISE_VERSION=(\S+)$", re.MULTILINE)
+_EXTRAS_RE = re.compile(r"\[.*\]$")
 _SYSTEM_TOML = ".devcontainer/mise-system.toml"
 _SYSTEM_LOCK = ".devcontainer/mise-system.lock"
 _RUNTIME_TOML = ".devcontainer/mise-runtime.toml"
@@ -60,6 +66,45 @@ _SHARED_TOML = ".config/mise/conf.d/shared.toml"
 # staged as mise.runtime.toml, locked to mise.runtime.lock. `mise lock` must
 # run with MISE_ENV=runtime to cover both tiers in one pass.
 RUNTIME_ENV = "runtime"
+
+
+def top_level_config_tools(config_path: Path) -> set[str]:
+    """Return normalized tool keys from a mise config's top-level `[tools]`.
+
+    Task-scoped ``[tasks.*].tools`` tables are deliberately outside this view:
+    the repository-root lock represents only the root config's top-level tools.
+    Bracketed pipx extras are removed because mise omits them from lock keys,
+    while backend prefixes such as ``aqua:`` and ``npm:`` remain intact.
+    """
+    config = tomllib.loads(config_path.read_text())
+    return {_EXTRAS_RE.sub("", tool) for tool in config.get("tools", {})}
+
+
+def lock_top_level_config_tools(
+    config_path: Path,
+    *,
+    run: Callable[..., subprocess.CompletedProcess[bytes]] = subprocess.run,
+) -> int:
+    """Run ``mise lock`` with exactly the config's top-level tool names.
+
+    Refusing an empty set is load-bearing: an argv with no names becomes the
+    bare ``mise lock`` form, which also locks task-scoped tools and recreates
+    the root-lock drift this entrypoint exists to prevent.
+    """
+    tools = sorted(top_level_config_tools(config_path))
+    if not tools:
+        logger.error(
+            "lock-refresh-root: %s has no top-level [tools]; refusing bare "
+            "`mise lock` because it would include task-scoped tools",
+            config_path,
+        )
+        return 1
+    result = run(
+        ["mise", "lock", *tools],
+        cwd=config_path.parent,
+        check=False,
+    )
+    return result.returncode
 
 
 def pinned_mise_version(dockerfile: Path) -> str:

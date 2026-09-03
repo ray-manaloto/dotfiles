@@ -1275,6 +1275,13 @@ description = "PostToolUse hook body: emit the native-first context when a mise 
 run = 'uv run --project python dotfiles-setup mise-config-context'
 quiet = true
 
+[tasks.lock-refresh-root]
+description = "CI: regenerate root mise.lock from top-level [tools] only"
+# Thin caller; lock_refresh.py derives the names from mise.toml so this task
+# cannot drift into a second hard-coded tool inventory. Explicit names exclude
+# task-scoped tools; a bare `mise lock` includes them and broke refresh PR #821.
+run = 'uv run --project python dotfiles-setup lock-refresh-root'
+
 [tasks.lock]
 description = "Re-lock the NAMED tool(s), scoped, then assert coverage held"
 # Thin caller; see lock_integrity.py. The task no longer runs a bare
