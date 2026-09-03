@@ -1,11 +1,14 @@
 # Copyright (c) 2026 Raymond Manaloto
 """Tests for the InstructionsLoaded report side (#917).
 
-Covers `scoped_rules_on_disk` (frontmatter parsing, incl. recursion and
-EOF-terminated frontmatter), `build_report` (the eager/fired/
-loaded_other_reason/never_fired partition and its two-bucket invariant), the
-C6 control-armed never-fired fixture, the insufficient-data gate (R2), and
-the CLI end-to-end including `--project-root` (R6).
+Covers `scoped_rules_on_disk` (frontmatter parsing, incl. recursion through
+real AND symlinked subdirs, and EOF-terminated frontmatter), `build_report`
+(the eager/fired/loaded_other_reason/never_fired partition, its two-bucket
+invariant, and S1's reason-blind "observed at all" membership test), the C6
+control-armed never-fired fixture, the never_fired-only sufficiency gate
+(S2), and the CLI end-to-end including `--project-root` (R6). The paired
+observer<->report path-spelling invariant (S4) lives in its own file,
+`test_instructions_paths_consistency.py`.
 """
 
 from __future__ import annotations
@@ -105,6 +108,26 @@ def test_scoped_rules_on_disk_handles_eof_terminated_frontmatter(
     assert result == (".claude/rules/eof-rule.md",)
 
 
+def test_scoped_rules_on_disk_recurses_into_symlinked_subdirs(tmp_path: Path) -> None:
+    """S3: `Path.rglob` defaults `recurse_symlinks=False` on Python 3.13+.
+
+    A rules subdirectory that is PHYSICALLY a symlink — the documented
+    sharing pattern the observer's R7 fix (`_normalize_path`) names as its
+    whole reason for staying lexical rather than calling `.resolve()` — was
+    silently invisible to this function even though R8 already made it
+    recurse real subdirectories. Without `recurse_symlinks=True` a
+    symlinked rule appears in NO report bucket at all.
+    """
+    real_target = tmp_path / "elsewhere"
+    real_target.mkdir()
+    _write_rule(real_target, "shared-rule", paths=["mise.toml"])
+    rules_dir = tmp_path / ".claude" / "rules"
+    rules_dir.mkdir(parents=True)
+    (rules_dir / "shared").symlink_to(real_target, target_is_directory=True)
+    result = report.scoped_rules_on_disk(rules_dir)
+    assert ".claude/rules/shared/shared-rule.md" in result
+
+
 def test_scoped_rules_on_disk_against_the_real_repo() -> None:
     """Real-repo sanity, with an R11 negative arm a stub cannot survive.
 
@@ -120,7 +143,7 @@ def test_scoped_rules_on_disk_against_the_real_repo() -> None:
 
 
 # --------------------------------------------------------------------------
-# build_report — the partition, R1's two-bucket invariant, R2's gate.
+# build_report — the partition, R1/S1's two-bucket invariant, S2's gate.
 # --------------------------------------------------------------------------
 
 
@@ -240,19 +263,45 @@ def test_build_report_r1_session_start_and_scoped_never_conflict() -> None:
     assert ".claude/rules/some-rule.md" in result.loaded_other_reason
 
 
+def test_build_report_s1_null_load_reason_removes_from_never_fired() -> None:
+    """S1: `load_reason: null` must STILL remove a rule from never_fired.
+
+    This is the observer's own shape whenever the harness omits the key —
+    `_string_or_none` writes `None`, and `tests/test_instructions_observer.py`
+    already asserts that record shape (`test_build_record_missing_fields_are_none`).
+    The old gate was `isinstance(reason, str) and file_path in scoped_set`,
+    so `never_fired` was really "scoped minus everything observed with a
+    STRING reason" — not "by ANY reason" as documented. Reproduces the exact
+    repro from round 2: a record for a scoped rule EXISTS, and the rule was
+    still reported never-fired.
+    """
+    records = [
+        {"file_path": "CLAUDE.md", "load_reason": "session_start"},
+        {"file_path": ".claude/rules/foo.md", "load_reason": None},
+    ]
+    result = report.build_report(records, scoped=(".claude/rules/foo.md",))
+    assert result.never_fired == ()
+    assert ".claude/rules/foo.md" in result.loaded_other_reason
+
+
 def test_build_report_r1_two_bucket_invariant_fuzz() -> None:
-    """R1's invariant, checked directly and generically across reasons.
+    """R1/S1's invariant, checked directly and generically across reasons.
 
     A scoped rule must never appear in more than one of fired /
-    loaded_other_reason / never_fired, across a battery of reasons.
+    loaded_other_reason / never_fired, across a battery of reasons —
+    including S1's non-string/missing shapes (`None`, a wrong-typed int),
+    which the reason-blind membership test must still remove from
+    never_fired.
     """
-    scoped = tuple(f".claude/rules/rule-{i}.md" for i in range(5))
-    reasons = [
+    scoped = tuple(f".claude/rules/rule-{i}.md" for i in range(7))
+    reasons: list[object] = [
         "session_start",
         "path_glob_match",
         "include",
         "compact",
         "nested_traversal",
+        None,
+        123,
     ]
     records = [
         {"file_path": scoped[i], "load_reason": reasons[i]} for i in range(len(scoped))
@@ -270,7 +319,13 @@ def test_build_report_r1_two_bucket_invariant_fuzz() -> None:
     assert result.never_fired == ()
 
 
-def test_build_report_sessions_observed_counts_distinct_session_ids() -> None:
+def test_build_report_sessions_observed_counts_session_start_events() -> None:
+    """S2: counts EVENTS, not distinct `session_id` values.
+
+    2 events under `s1` + 1 event under `s2` = 3, not 2 distinct ids — a
+    corpus where `session_id` is always the same (or always null, next
+    test) must still accumulate coverage one event at a time.
+    """
     records = [
         {"file_path": "a", "load_reason": "session_start", "session_id": "s1"},
         {"file_path": "b", "load_reason": "session_start", "session_id": "s1"},
@@ -278,8 +333,28 @@ def test_build_report_sessions_observed_counts_distinct_session_ids() -> None:
         {"file_path": "d", "load_reason": "path_glob_match", "session_id": "s3"},
     ]
     result = report.build_report(records, scoped=())
-    assert result.sessions_observed == 2
-    assert result.insufficient_data is False
+    assert result.sessions_observed == 3
+    assert result.never_fired_sufficient is True
+
+
+def test_build_report_sessions_observed_ignores_null_session_id() -> None:
+    """S2's probed regression: `session_id: null` must not freeze coverage at 0.
+
+    Distinct-id counting made THIS corpus — 5 real session_start events, all
+    with a null `session_id` — read as zero sessions forever, no matter how
+    many session starts it held.
+    """
+    records = [
+        {
+            "file_path": f"rule-{i}.md",
+            "load_reason": "session_start",
+            "session_id": None,
+        }
+        for i in range(5)
+    ]
+    result = report.build_report(records, scoped=())
+    assert result.sessions_observed == 5
+    assert result.never_fired_sufficient is True
 
 
 def test_build_report_zero_session_start_records_is_insufficient() -> None:
@@ -288,7 +363,35 @@ def test_build_report_zero_session_start_records_is_insufficient() -> None:
     ]
     result = report.build_report(records, scoped=())
     assert result.sessions_observed == 0
-    assert result.insufficient_data is True
+    assert result.never_fired_sufficient is False
+    assert result.never_fired_min_sessions == 3
+
+
+def test_build_report_never_fired_sufficient_boundary() -> None:
+    """The threshold is inclusive: N-1 insufficient, N sufficient."""
+    threshold = report.build_report([], scoped=()).never_fired_min_sessions
+    below = [
+        {"file_path": f"r{i}", "load_reason": "session_start"}
+        for i in range(threshold - 1)
+    ]
+    at = [
+        {"file_path": f"r{i}", "load_reason": "session_start"} for i in range(threshold)
+    ]
+    assert report.build_report(below, scoped=()).never_fired_sufficient is False
+    assert report.build_report(at, scoped=()).never_fired_sufficient is True
+
+
+def test_build_report_never_fired_still_computed_when_insufficient() -> None:
+    """The raw partition is always mathematically correct (S2).
+
+    Only the RENDERING layer withholds it. `build_report` itself never
+    hides data — a scoped rule with zero observed loads is genuinely in
+    `never_fired` regardless of how much coverage exists; whether to TRUST
+    that claim is `never_fired_sufficient`'s job, checked by the caller.
+    """
+    result = report.build_report([], scoped=(".claude/rules/some-rule.md",))
+    assert result.never_fired == (".claude/rules/some-rule.md",)
+    assert result.never_fired_sufficient is False
 
 
 def test_build_report_first_last_ts_from_records() -> None:
@@ -322,6 +425,11 @@ def test_build_report_no_records_has_no_timestamps() -> None:
 
 
 def _build_fixture(tmp_path: Path) -> Path:
+    """Fixture with `never_fired_min_sessions` session_start events.
+
+    AT the S2 threshold, so `never_fired` is trusted enough to print in the
+    tests that exercise it below.
+    """
     rules_dir = tmp_path / ".claude" / "rules"
     _write_rule(rules_dir, "fired-rule", paths=["mise.toml"])
     _write_rule(rules_dir, "dead-glob-rule", paths=["nonexistent-trigger-file.pkl"])
@@ -336,11 +444,17 @@ def _build_fixture(tmp_path: Path) -> Path:
             "globs": ["mise.toml"],
         },
     )
-    _write_record(
-        records_dir,
-        "s1",
-        {"session_id": "s1", "file_path": "CLAUDE.md", "load_reason": "session_start"},
-    )
+    threshold = report.build_report([], scoped=()).never_fired_min_sessions
+    for _ in range(threshold):
+        _write_record(
+            records_dir,
+            "s1",
+            {
+                "session_id": "s1",
+                "file_path": "CLAUDE.md",
+                "load_reason": "session_start",
+            },
+        )
     return tmp_path
 
 
@@ -351,11 +465,11 @@ def test_run_report_json_output(
     rc = report.run_report(project_root, json_output=True)
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
-    assert payload["insufficient_data"] is False
+    assert payload["never_fired_sufficient"] is True
     assert payload["eager"] == ["CLAUDE.md"]
     assert payload["fired"] == [".claude/rules/fired-rule.md"]
     assert payload["never_fired"] == [".claude/rules/dead-glob-rule.md"]
-    assert payload["sessions_observed"] == 1
+    assert payload["sessions_observed"] == payload["never_fired_min_sessions"]
 
 
 def test_run_report_human_readable_output(
@@ -368,31 +482,67 @@ def test_run_report_human_readable_output(
     assert "fired-rule.md" in out
     assert "dead-glob-rule.md" in out
     assert "never fired" in out
-    assert "sessions observed: 1" in out
 
 
-def test_run_report_no_records_yet_is_insufficient_data(
+def test_run_report_no_records_yet_never_fired_hidden_but_others_shown(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """R2: zero sessions observed -> insufficient_data, rule lists OMITTED.
+    """S2: zero session_start events -> `never_fired` withheld, not the whole report.
 
-    Previously this asserted `never_fired == [rule]` on zero records, which
-    pinned the exact defect R2 reports: the live repo, wired mid-session,
-    printed `eager: 0` and named two real scoped rules as never-fired on the
-    strength of a report that had not observed a single full session.
+    Zero records means zero session_start events, so `never_fired` is
+    withheld (`null`, S5), but `eager`/`fired`/`loaded_other_reason` are
+    ALWAYS printed as their real (here, truthfully empty) values, never
+    omitted.
+
+    Previously (R2) the WHOLE report was suppressed on this input, which
+    over-corrected: it hid three POSITIVE fields that were correct from the
+    first record onward, on the strength of the one field — `never_fired`,
+    an ABSENCE claim — that genuinely needed more coverage.
     """
     rules_dir = tmp_path / ".claude" / "rules"
     _write_rule(rules_dir, "some-rule", paths=["hk.pkl"])
     rc = report.run_report(tmp_path, json_output=True)
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
-    assert payload["insufficient_data"] is True
+    assert payload["never_fired_sufficient"] is False
     assert payload["sessions_observed"] == 0
-    for key in ("eager", "fired", "loaded_other_reason", "never_fired"):
-        assert key not in payload, f"{key} must be omitted, not printed empty"
+    assert payload["eager"] == []
+    assert payload["fired"] == []
+    assert payload["loaded_other_reason"] == []
+    assert payload["never_fired"] is None
 
 
-def test_run_report_no_records_human_readable_names_no_rules(
+def test_run_report_positive_buckets_shown_when_never_fired_insufficient(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """S2's core acceptance case.
+
+    Real records exist with zero session_start (e.g. the hook wired
+    mid-session — the exact live-repo shape both respec rounds measured) —
+    the POSITIVE buckets must still print; only `never_fired` is withheld.
+    """
+    rules_dir = tmp_path / ".claude" / "rules"
+    _write_rule(rules_dir, "mid-session-rule", paths=["hk.pkl"])
+    records_dir = tmp_path / ".agent" / "instructions-loaded"
+    _write_record(
+        records_dir,
+        "s1",
+        {
+            "session_id": "s1",
+            "file_path": ".claude/rules/mid-session-rule.md",
+            "load_reason": "include",
+        },
+    )
+    rc = report.run_report(tmp_path, json_output=True)
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["sessions_observed"] == 0
+    assert payload["never_fired_sufficient"] is False
+    assert payload["never_fired"] is None
+    assert payload["loaded_other_reason"] == [".claude/rules/mid-session-rule.md"]
+
+
+def test_run_report_no_records_human_readable_names_no_rules_but_not_insufficient(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     rules_dir = tmp_path / ".claude" / "rules"
@@ -400,8 +550,9 @@ def test_run_report_no_records_human_readable_names_no_rules(
     rc = report.run_report(tmp_path, json_output=False)
     assert rc == 0
     out = capsys.readouterr().out
-    assert "insufficient data" in out
+    assert "NOT SHOWN" in out
     assert "some-rule.md" not in out
+    assert "eager (session_start): 0" in out
 
 
 def test_run_report_counts_malformed_lines_and_errors_log(

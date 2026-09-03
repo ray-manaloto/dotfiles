@@ -465,10 +465,15 @@ def test_build_record_symlinked_subtree_normalizes_lexically(tmp_path: Path) -> 
 
     A subdirectory that is physically a symlink to somewhere outside the
     repo — a documented sharing pattern — must still normalize to its
-    repo-relative path, matching what `scoped_rules_on_disk` reports for
-    the same on-disk file. The pre-fix code called `.resolve()`, which
-    follows the symlink out and returns the absolute target path instead,
-    so the two sides could never compare equal.
+    repo-relative path. The pre-fix code called `.resolve()`, which follows
+    the symlink out and returns the absolute target path instead.
+
+    This is deliberately ONE SIDE only — it checks `build_record` against
+    the expected string, not against `scoped_rules_on_disk`'s actual
+    listing (S3 found `scoped_rules_on_disk` had its own, independent
+    symlink gap — `Path.rglob`'s `recurse_symlinks=False` default — that a
+    one-sided test on either side could not see). The paired, two-sided
+    assertion lives in `test_instructions_paths_consistency.py` (S4).
     """
     real_target = tmp_path / "elsewhere"
     real_target.mkdir()

@@ -56,6 +56,16 @@ _RULES_SUBDIR = (".claude", "rules")
 
 _FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n---\n?", re.DOTALL)
 
+#: S2 — the minimum number of observed ``session_start`` EVENTS (not
+#: distinct ``session_id`` values — a corpus with ``session_id: null`` must
+#: still be able to accumulate coverage, since #916's own hook-wiring window
+#: produced exactly that shape) before `never_fired` is trusted enough to
+#: print. Below this, an unfired scoped rule is indistinguishable from one
+#: this report simply hasn't watched long enough. `eager`/`fired`/
+#: `loaded_other_reason` are POSITIVE observations — true from a single
+#: record — and are never gated on this threshold.
+_MIN_SESSIONS_FOR_NEVER_FIRED = 3
+
 
 @dataclass(frozen=True)
 class RuleLoadReport:
@@ -67,12 +77,13 @@ class RuleLoadReport:
     never_fired: tuple[str, ...]
     by_reason: Mapping[str, int]
     sessions_observed: int
+    never_fired_min_sessions: int
+    never_fired_sufficient: bool
     records_read: int
     records_malformed: int
     first_ts: str | None
     last_ts: str | None
     errors_log_lines: int
-    insufficient_data: bool
 
 
 def _default_project_root() -> Path:
@@ -92,12 +103,23 @@ def scoped_rules_on_disk(rules_dir: Path) -> tuple[str, ...]:
     documented sharing mechanism, so a non-recursive glob would silently
     never see scoped rules filed under one.
 
+    S3: ``recurse_symlinks=True`` — a symlinked rules subdirectory is the
+    SAME documented sharing mechanism, and ``Path.rglob`` defaults to
+    ``recurse_symlinks=False`` (Python 3.13+). Without this, the observer's
+    R7 fix (which does NOT resolve through a symlink) and this function
+    disagree on a symlinked rule: the observer reports it under its
+    repo-relative symlinked path, this function never visits it at all, and
+    the rule appears in no report bucket whatsoever — invisible, with no
+    "insufficient data" signal either. `_normalize_path`'s R7 docstring
+    names this exact scenario as its reason for existing, so the two sides
+    must actually agree.
+
     Args:
         rules_dir: The `.claude/rules/` directory.
     """
     project_root = rules_dir.parent.parent
     scoped: list[str] = []
-    for path in sorted(rules_dir.rglob("*.md")):
+    for path in sorted(rules_dir.rglob("*.md", recurse_symlinks=True)):
         try:
             text = path.read_text(encoding="utf-8")
         except OSError:
@@ -157,12 +179,22 @@ def _count_errors_log_lines(records_dir: Path) -> int:
 def build_report(records: Iterable[dict], scoped: Iterable[str]) -> RuleLoadReport:
     """Partition observed records against the scoped-rules-on-disk set (C6, R1).
 
-    A rule counts as LOADED on any ``load_reason`` — not only
-    ``path_glob_match`` — so `never_fired` is computed as the scoped set
-    MINUS everything observed loading by any reason, never independently.
-    That is what makes the two-bucket invariant (never both `fired`/
-    `loaded_other_reason` AND `never_fired`) hold by construction rather than
-    by convention.
+    A rule counts as LOADED on any ``load_reason`` — including a MISSING or
+    non-string one (S1: the observer itself writes ``load_reason: null``
+    whenever the harness omits the key, via `_string_or_none`, and that
+    shape is asserted by `tests/test_instructions_observer.py`) — so
+    `never_fired` is computed as the scoped set MINUS every ``file_path``
+    that appears in ANY record for it, never independently. `fired` /
+    `loaded_other_reason` still partition on the reason string, but the
+    membership test that removes a rule from `never_fired` is reason-blind:
+    every rule that is `fired` or `loaded_other_reason` is, by construction,
+    NOT `never_fired`.
+
+    `sessions_observed` counts ``session_start`` EVENTS, not distinct
+    ``session_id`` values (S2) — a corpus where ``session_id`` is always
+    null (or absent) must still accumulate coverage; distinct-id counting
+    made that corpus permanently read as zero sessions no matter how many
+    session starts it held.
 
     `records_malformed`, `errors_log_lines` default to 0 here — they are
     properties of the FILES, not the parsed records, and `run_report` fills
@@ -175,7 +207,7 @@ def build_report(records: Iterable[dict], scoped: Iterable[str]) -> RuleLoadRepo
     fired: set[str] = set()
     loaded_other_reason: set[str] = set()
     by_reason: Counter[str] = Counter()
-    sessions_with_start: set[str] = set()
+    sessions_observed = 0
     timestamps: list[str] = []
     for record in records:
         reason = record.get("load_reason")
@@ -185,15 +217,13 @@ def build_report(records: Iterable[dict], scoped: Iterable[str]) -> RuleLoadRepo
         if isinstance(ts, str):
             timestamps.append(ts)
         if reason == "session_start":
-            session_id = record.get("session_id")
-            if isinstance(session_id, str):
-                sessions_with_start.add(session_id)
+            sessions_observed += 1
         file_path = record.get("file_path")
         if not isinstance(file_path, str):
             continue
         if reason == "session_start":
             eager.add(file_path)
-        if isinstance(reason, str) and file_path in scoped_set:
+        if file_path in scoped_set:
             if reason == "path_glob_match":
                 fired.add(file_path)
             else:
@@ -206,25 +236,26 @@ def build_report(records: Iterable[dict], scoped: Iterable[str]) -> RuleLoadRepo
         loaded_other_reason=tuple(sorted(loaded_other_reason)),
         never_fired=never_fired,
         by_reason=dict(sorted(by_reason.items())),
-        sessions_observed=len(sessions_with_start),
+        sessions_observed=sessions_observed,
+        never_fired_min_sessions=_MIN_SESSIONS_FOR_NEVER_FIRED,
+        never_fired_sufficient=sessions_observed >= _MIN_SESSIONS_FOR_NEVER_FIRED,
         records_read=len(records),
         records_malformed=0,
         first_ts=min(timestamps) if timestamps else None,
         last_ts=max(timestamps) if timestamps else None,
         errors_log_lines=0,
-        insufficient_data=len(sessions_with_start) == 0,
     )
 
 
 def run_report(project_root: Path, *, json_output: bool = False) -> int:
     """Build and render the report for one project root. Always returns 0.
 
-    R2: when zero sessions have a recorded ``session_start`` (no session has
-    been observed end-to-end since the hook was wired, or the records
-    directory is empty), the partition is not meaningful — printing it as
-    though it were would delete working rules on the strength of a hook that
-    simply hadn't run yet for that session. That state renders as
-    "insufficient data" and the rule lists are OMITTED, not printed empty.
+    S2: only `never_fired` — an ABSENCE claim — is gated on sufficient
+    ``session_start`` coverage (`_MIN_SESSIONS_FOR_NEVER_FIRED`). `eager`,
+    `fired`, and `loaded_other_reason` are POSITIVE observations, each true
+    the instant a single matching record exists, and are always printed.
+    Gating the whole report (R2's original fix) suppressed real, correct
+    output right alongside the unreliable one.
     """
     records_dir = project_root / _RECORDS_DIRNAME
     rules_dir = project_root.joinpath(*_RULES_SUBDIR)
@@ -252,11 +283,17 @@ def run_report(project_root: Path, *, json_output: bool = False) -> int:
 
 
 def _json_payload(report: RuleLoadReport) -> dict:
-    """The JSON shape — omits the rule-list fields entirely when insufficient (R2)."""
+    """The JSON shape (S5): every key is ALWAYS present — never deleted.
+
+    `never_fired` becomes ``null`` (not an omitted key, not an empty list —
+    empty would claim "checked, zero found," which is a different, false
+    claim) when `never_fired_sufficient` is False (S2); every other field,
+    including the three positive-observation buckets, is always the real
+    computed value.
+    """
     payload = asdict(report)
-    if report.insufficient_data:
-        for key in ("eager", "fired", "loaded_other_reason", "never_fired"):
-            del payload[key]
+    if not report.never_fired_sufficient:
+        payload["never_fired"] = None
     return payload
 
 
@@ -265,21 +302,13 @@ def _render(report: RuleLoadReport) -> str:
         f"records read: {report.records_read} "
         f"(malformed lines skipped: {report.records_malformed})"
     )
-    header = [
+    lines = [
         f"sessions observed: {report.sessions_observed}",
         records_line,
         f"observed range: {report.first_ts or '-'} .. {report.last_ts or '-'}",
         f"errors.log lines: {report.errors_log_lines}",
+        f"eager (session_start): {len(report.eager)}",
     ]
-    if report.insufficient_data:
-        header.append(
-            "insufficient data: 0 sessions with a recorded session_start — "
-            "no rule list is printed. A partial session (hook wired mid-run, "
-            "or a fresh records directory) cannot tell 'never fires' from "
-            "'never yet observed'."
-        )
-        return "\n".join(header) + "\n"
-    lines = [*header, f"eager (session_start): {len(report.eager)}"]
     lines.extend(f"  {path}" for path in report.eager)
     lines.append(f"fired (scoped, seen via path_glob_match): {len(report.fired)}")
     lines.extend(f"  {path}" for path in report.fired)
@@ -288,11 +317,20 @@ def _render(report: RuleLoadReport) -> str:
         f"{len(report.loaded_other_reason)}"
     )
     lines.extend(f"  {path}" for path in report.loaded_other_reason)
-    lines.append(
-        "never fired (scoped, on disk, never observed loading by any reason): "
-        f"{len(report.never_fired)}"
-    )
-    lines.extend(f"  {path}" for path in report.never_fired)
+    if report.never_fired_sufficient:
+        lines.append(
+            "never fired (scoped, on disk, never observed loading by any reason): "
+            f"{len(report.never_fired)}"
+        )
+        lines.extend(f"  {path}" for path in report.never_fired)
+    else:
+        lines.append(
+            "never fired: NOT SHOWN — insufficient coverage "
+            f"({report.sessions_observed}/{report.never_fired_min_sessions} "
+            "session_start events observed). A rule scoped with a dead glob "
+            "is indistinguishable from one this report hasn't watched long "
+            "enough yet."
+        )
     lines.append("by load_reason:")
     lines.extend(f"  {reason}: {count}" for reason, count in report.by_reason.items())
     return "\n".join(lines) + "\n"

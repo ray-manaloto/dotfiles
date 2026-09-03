@@ -200,12 +200,21 @@ def _log_error(project_root: Path, message: str) -> None:
         pass
     else:
         return
+    # S6: the fallback matches the primary writer's own hygiene — 0600 (the
+    # records file's mode) via os.open's mode argument, and O_NOFOLLOW so a
+    # symlink planted at this well-known path in a shared temp dir is
+    # refused rather than followed.
     try:
         fallback = (
             Path(tempfile.gettempdir()) / "dotfiles-instructions-observer-errors.log"
         )
-        with fallback.open("a", encoding="utf-8") as fh:
-            fh.write(line)
+        fd = os.open(
+            fallback, os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW, 0o600
+        )
+        try:
+            os.write(fd, line.encode("utf-8"))
+        finally:
+            os.close(fd)
     except OSError:
         pass
 
@@ -278,7 +287,15 @@ def observe_main(argv: list[str] | None = None) -> int:
         _write_record(record, payload.get("session_id"), project_root)
     except Exception as exc:
         _LOGGER.exception("instructions_observer: fail-open on hot path")
-        _log_error(project_root, f"{type(exc).__name__}: {exc}")
+        # S6: `_log_error` already wraps both of its own attempts in
+        # try/except OSError, but this outer wrap is the last one — nothing
+        # catches for it. C2's rule ("the error path cannot itself become a
+        # new way to fail loudly") has to hold even for a hypothetical
+        # non-OSError raised inside `_log_error` itself.
+        try:
+            _log_error(project_root, f"{type(exc).__name__}: {exc}")
+        except Exception:
+            _LOGGER.exception("instructions_observer: _log_error itself failed")
     return 0
 
 
