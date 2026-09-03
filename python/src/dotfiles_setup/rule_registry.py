@@ -65,7 +65,10 @@ _FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n---\n?", re.DOTALL)
 #: frontmatter first is that a `#`-prefixed YAML COMMENT inside the
 #: frontmatter block would otherwise be misread as an ATX heading, not any
 #: risk from the closing `---` (there is no setext reader to fool).
-_ATX_HEADING_RE = re.compile(r"^(#{1,6})\s+(.*\S)\s*$")
+#: CommonMark permits up to three leading spaces before the `#`s (A3);
+#: the regex tolerates that indent so a legitimately-indented heading is
+#: never silently invisible to `_find_eager_reason`.
+_ATX_HEADING_RE = re.compile(r"^ {0,3}(#{1,6})\s+(.*\S)\s*$")
 
 #: Same fence-detection shape as `doc_refs._doc_lines`: a fenced code block
 #: toggles on any line whose stripped form opens a backtick OR tilde fence
@@ -75,9 +78,15 @@ _ATX_HEADING_RE = re.compile(r"^(#{1,6})\s+(.*\S)\s*$")
 _FENCE_RE = re.compile(r"^\s*(```|~~~)")
 
 #: A heading qualifies as an eager-reason anchor iff its lowercased,
-#: backtick-stripped text contains one of these substrings. Deliberately
-#: excludes "why this rule exists" (12 rules in the corpus carry it) —
-#: that heading justifies the rule's CONTENT, not its load class.
+#: backtick-stripped text contains one of these substrings — a purely
+#: POSITIVE substring match (A2: this is not an exclusion list; there is
+#: no code path that excludes anything). A bare "## Why this rule exists"
+#: heading (12 rules in the corpus carry it) simply never CONTAINS either
+#: marker, so it fails to qualify on its own content, not because it was
+#: filtered out. A heading that also asserts eagerness in its own text
+#: (e.g. "## Why this rule exists (and is eager)") correctly DOES qualify
+#: — that is a heading genuinely asserting its load class, not a case to
+#: special-case away.
 _EAGER_HEADING_MARKERS = ("eager", "paths:-scoped")
 
 #: The inject set lives here, not in frontmatter. Seeded with the two
@@ -356,7 +365,20 @@ def build_registry(rules_dir: Path) -> RuleRegistry:
 
     Traversal matches `instructions_report.scoped_rules_on_disk` exactly
     (C1): `rglob("*.md", recurse_symlinks=True)`, symlinks never resolved.
+
+    Raises `NotADirectoryError` if `rules_dir` does not exist or is not a
+    directory (A1). `Path.rglob` on a missing path silently yields zero
+    matches, so a mistyped `rules_dir` would otherwise be indistinguishable
+    from a real corpus that genuinely has no rules — exactly the ambiguity
+    this module exists to eliminate for every downstream consumer. This is
+    a deliberate DIVERGENCE from `scoped_rules_on_disk`, which stays silent
+    here too (`_iter_records`'s sibling check is the pattern followed);
+    this module chooses loud because a caller passing the wrong path is a
+    caller bug, not absent data.
     """
+    if not rules_dir.is_dir():
+        msg = f"rules_dir does not exist or is not a directory: {rules_dir}"
+        raise NotADirectoryError(msg)
     records = tuple(
         sorted(
             (

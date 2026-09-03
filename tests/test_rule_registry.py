@@ -527,7 +527,10 @@ def test_eager_reason_extracted_from_qualifying_heading(tmp_path: Path) -> None:
 
 
 def test_why_this_rule_exists_heading_does_not_qualify(tmp_path: Path) -> None:
-    """C5: content-reason headings are explicitly excluded — not a false positive."""
+    """C5/A2: a bare content-reason heading simply doesn't CONTAIN a marker.
+
+    Not an exclusion list — see `_EAGER_HEADING_MARKERS`'s docstring (A2).
+    """
     rules_dir = tmp_path / ".claude" / "rules"
     rules_dir.mkdir(parents=True)
     (rules_dir / "content-reason-only.md").write_text(
@@ -540,6 +543,61 @@ def test_why_this_rule_exists_heading_does_not_qualify(tmp_path: Path) -> None:
     assert record.load_class == "eager"
     assert record.eager_reason is None
     assert record.eager_reason_heading is None
+
+
+def test_why_this_rule_exists_heading_qualifies_when_it_also_says_eager(
+    tmp_path: Path,
+) -> None:
+    """A2: the match is positive, so a heading asserting BOTH still qualifies."""
+    rules_dir = tmp_path / ".claude" / "rules"
+    rules_dir.mkdir(parents=True)
+    (rules_dir / "both.md").write_text(
+        "# Some Rule\n\n"
+        "## Why this rule exists (and is eager)\n\n"
+        "Because reasons, and also eagerness.\n",
+        encoding="utf-8",
+    )
+    reg = registry.build_registry(rules_dir)
+    record = reg.by_id("both")
+    assert record is not None
+    assert record.eager_reason_heading == "## Why this rule exists (and is eager)"
+    assert record.eager_reason == "Because reasons, and also eagerness."
+
+
+def test_indented_eager_heading_is_still_detected(tmp_path: Path) -> None:
+    """A3: CommonMark tolerates up to 3 leading spaces before ATX `#`s."""
+    rules_dir = tmp_path / ".claude" / "rules"
+    rules_dir.mkdir(parents=True)
+    (rules_dir / "indented-heading.md").write_text(
+        "# Some Rule\n\n"
+        "   ## Why this rule is eager (never `paths:`-scoped)\n\n"
+        "Indented but real.\n",
+        encoding="utf-8",
+    )
+    reg = registry.build_registry(rules_dir)
+    record = reg.by_id("indented-heading")
+    assert record is not None
+    assert record.eager_reason_heading == (
+        "## Why this rule is eager (never `paths:`-scoped)"
+    )
+    assert record.eager_reason == "Indented but real."
+
+
+def test_four_space_indented_heading_is_not_a_heading(tmp_path: Path) -> None:
+    """Control arm for A3: 4+ leading spaces is an indented CODE block, not ATX."""
+    rules_dir = tmp_path / ".claude" / "rules"
+    rules_dir.mkdir(parents=True)
+    (rules_dir / "four-space.md").write_text(
+        "# Some Rule\n\n"
+        "    ## Why this rule is eager (never `paths:`-scoped)\n\n"
+        "Should not qualify.\n",
+        encoding="utf-8",
+    )
+    reg = registry.build_registry(rules_dir)
+    record = reg.by_id("four-space")
+    assert record is not None
+    assert record.eager_reason_heading is None
+    assert record.eager_reason is None
 
 
 def test_eager_reason_section_stops_at_same_level_heading(tmp_path: Path) -> None:
@@ -672,12 +730,21 @@ def test_eager_reason_never_empty_string_when_heading_is_last_thing_in_file(
     assert record.eager_reason is None
 
 
-def test_real_corpus_eager_reason_qualifying_headings() -> None:
-    """Round-trip fixture pinned by the spec (C5).
+def test_real_corpus_known_non_qualifying_eager_rules() -> None:
+    """C5: known-and-accepted non-detections, PAIRED with the positive arm.
 
-    Named explicitly per C5's "do not assert a bare count" instruction.
+    Rule ids are derived from `KNOWN_UNDETECTED_EAGER_REASONS` (T3) rather
+    than a second hardcoded list, so the two constants cannot drift apart.
+
+    A4: a pure negative here survives a gutted extractor (an
+    `_find_eager_reason` that always returns `(None, None)` makes every
+    known-undetected rule pass trivially). Asserting the QUALIFYING set
+    (moved here from the now-removed standalone positive test) in the same
+    test closes that gap: gutting the extractor kills this test via the
+    positive arm even though the negative arm alone would not notice.
     """
     reg = registry.build_registry(REAL_RULES_DIR)
+
     qualifying = {r.path for r in reg.records if r.eager_reason_heading is not None}
     assert qualifying == {
         ".claude/rules/clean-git-state.md",
@@ -685,14 +752,6 @@ def test_real_corpus_eager_reason_qualifying_headings() -> None:
         ".claude/rules/agent-artifact-conventions.md",
     }
 
-
-def test_real_corpus_known_non_qualifying_eager_rules() -> None:
-    """C5: known-and-accepted non-detections — no blockquote/prose rescue.
-
-    Rule ids are derived from `KNOWN_UNDETECTED_EAGER_REASONS` (T3) rather
-    than a second hardcoded list, so the two constants cannot drift apart.
-    """
-    reg = registry.build_registry(REAL_RULES_DIR)
     known_paths = {
         entry.rsplit(":", 1)[0] for entry in registry.KNOWN_UNDETECTED_EAGER_REASONS
     }
@@ -830,6 +889,36 @@ def test_recurses_into_symlinked_subdirs(tmp_path: Path) -> None:
     reg = registry.build_registry(rules_dir)
     paths = {r.path for r in reg.records}
     assert ".claude/rules/shared/shared-rule.md" in paths
+
+
+# --------------------------------------------------------------------------
+# A1 — a missing/non-directory rules_dir must be LOUD, never a silent empty
+# registry indistinguishable from a real corpus with zero rules.
+# --------------------------------------------------------------------------
+
+
+def test_missing_rules_dir_raises_not_a_directory_error(tmp_path: Path) -> None:
+    missing = tmp_path / "does" / "not" / "exist"
+    with pytest.raises(NotADirectoryError):
+        registry.build_registry(missing)
+
+
+def test_file_path_as_rules_dir_raises_not_a_directory_error(tmp_path: Path) -> None:
+    """Control arm for A1: a real directory (below) must NOT raise."""
+    not_a_dir = tmp_path / "a-file.md"
+    not_a_dir.write_text("not a directory", encoding="utf-8")
+    with pytest.raises(NotADirectoryError):
+        registry.build_registry(not_a_dir)
+
+
+def test_a_real_directory_does_not_raise_not_a_directory_error(
+    tmp_path: Path,
+) -> None:
+    """Positive control arm for A1 — a genuine (even empty) dir is fine."""
+    rules_dir = tmp_path / ".claude" / "rules"
+    rules_dir.mkdir(parents=True)
+    reg = registry.build_registry(rules_dir)
+    assert reg.records == ()
 
 
 def test_records_sorted_by_path(tmp_path: Path) -> None:
