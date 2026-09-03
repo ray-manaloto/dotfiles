@@ -100,6 +100,15 @@ _SETTINGS_WIRING: tuple[tuple[str, tuple[str, ...], tuple[str, ...] | None], ...
         None,
     ),
     ("SessionEnd", ("run command-audit", _SESSION_END_REPORT), None),
+    # #917: the InstructionsLoaded observer. `None` matchers are deliberate,
+    # not an oversight — a matcher would scope the hook to particular
+    # `load_reason` values (session_start, path_glob_match, ...) and lose the
+    # baseline the never-fired report depends on: every reason is wanted.
+    (
+        "InstructionsLoaded",
+        ("python -m dotfiles_setup.instructions_observer",),
+        None,
+    ),
 )
 
 # Claude Code runs hooks "in the current directory", not the project root, and

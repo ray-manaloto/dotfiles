@@ -825,6 +825,22 @@ description = "Prove every pinned [bootstrap.packages] version still resolves (~
 # devcontainer lifecycle, so `do-not.md` #3 does not apply.
 run = 'uv run --project python dotfiles-setup apt-pins'
 
+[tasks.instructions-report]
+description = "InstructionsLoaded observer report (#917): eager / fired / never-fired rules"
+# Thin caller per zero-bash-logic; logic in
+# python/src/dotfiles_setup/instructions_report.py. Partitions the JSONL
+# records python/src/dotfiles_setup/instructions_observer.py appends (wired
+# as the InstructionsLoaded hook in .claude/settings.json) into three
+# answers a static `paths:` glob check structurally cannot give: which
+# files loaded EAGERLY at session_start, which scoped rules FIRED via
+# path_glob_match in a real session, and which scoped rules on disk have
+# NEVER been observed firing — the one failure #916's static gate cannot
+# see (a rule scoped with a dead glob is, on disk, indistinguishable from
+# one loading fine).
+#   mise run instructions-report          # human-readable
+#   mise run instructions-report -- --json
+run = 'uv run --project python dotfiles-setup instructions-report'
+
 [tasks.renovate-dryrun]
 description = "Report the updates Renovate would raise, from this working tree (no PRs)"
 # Thin caller per zero-bash-logic; the renovate invocation, its three

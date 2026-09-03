@@ -78,6 +78,7 @@ from dotfiles_setup.hook_selfcheck import hook_selfcheck_main
 from dotfiles_setup.image import ImageCommand
 from dotfiles_setup.image import main as image_main
 from dotfiles_setup.image_lock import image_lock_main
+from dotfiles_setup.instructions_report import instructions_report_main
 from dotfiles_setup.lint import (
     DEFAULT_TIMEOUT_SECONDS,
     TIMEOUT_ENV_VAR,
@@ -434,6 +435,38 @@ def _add_session_evidence_arguments(review_parser: argparse.ArgumentParser) -> N
     )
 
 
+def _add_instructions_report_subcommand(subparsers: _SubParsers) -> None:
+    """Register `instructions-report` (#917).
+
+    Extracted into its own helper for the same reason
+    `_add_schema_vendor_subcommands` was: the caller
+    (`_add_honesty_subcommands`) sits at ruff's PLR0915 statement ceiling.
+
+    Args:
+        subparsers: The parent subparsers action to attach this to.
+    """
+    instructions_report_parser = subparsers.add_parser(
+        "instructions-report",
+        help="InstructionsLoaded observer report (#917): partitions "
+        ".agent/instructions-loaded/*.jsonl into eager (session_start), "
+        "fired (scoped rules seen via path_glob_match), and never_fired "
+        "(scoped rules on disk no recorded session has ever loaded) — the "
+        "one measurement a static paths: glob check structurally cannot make",
+    )
+    instructions_report_parser.add_argument(
+        "--project-root",
+        type=Path,
+        default=None,
+        help="Repo root to report on (default: this project's resolved root; "
+        "R6 — the module defines this flag, so the CLI must register it too)",
+    )
+    instructions_report_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Machine-readable JSON output instead of the human-readable report",
+    )
+
+
 def _add_honesty_subcommands(subparsers: _SubParsers) -> None:
     """Register the gates that keep a claim and its reality in step.
 
@@ -608,6 +641,7 @@ def _add_honesty_subcommands(subparsers: _SubParsers) -> None:
         ".devcontainer/scripts/*.sh must be allowlisted and within its "
         "per-file line budget (new/grown scripts fail — move logic to python/)",
     )
+    _add_instructions_report_subcommand(subparsers)
     subparsers.add_parser(
         "codex-agent-parity",
         help="Assert the hand-authored codex-backed agent lanes stay wired: "
@@ -2356,6 +2390,15 @@ def _build_command_handlers(
             apt_pins_main(project_root, json_output=args.json)
         ),
         "bash-budget": lambda: sys.exit(bash_budget_main(project_root)),
+        "instructions-report": lambda: sys.exit(
+            instructions_report_main(
+                [
+                    "--project-root",
+                    str(args.project_root or project_root),
+                    *(["--json"] if args.json else []),
+                ]
+            )
+        ),
         "codex-agent-parity": lambda: sys.exit(codex_agent_parity_main(project_root)),
         "renovate-validate": lambda: sys.exit(renovate_validate_main(project_root)),
         "image-lock": lambda: sys.exit(

@@ -79,6 +79,13 @@ def _full_settings() -> dict:
                     f"--output {_ANCHOR}/.agent/command-audit.md",
                 )
             ],
+            "InstructionsLoaded": [
+                _hook(
+                    None,
+                    f'uv run --project "{_ANCHOR}/python" python -m '
+                    "dotfiles_setup.instructions_observer",
+                )
+            ],
         }
     }
 
@@ -196,6 +203,29 @@ def test_session_end_without_output_path_fails(tmp_path: Path) -> None:
     assert any("SessionEnd" in f and "command-audit.md" in f for f in failures)
 
 
+def test_missing_instructions_loaded_fails(tmp_path: Path) -> None:
+    """#917: the InstructionsLoaded observer hook must stay wired.
+
+    Proves C7 by deleting the wiring line, not by renaming a symbol
+    (`.claude/rules/probes-need-a-control-arm.md` rule 2).
+    """
+    settings = _full_settings()
+    del settings["hooks"]["InstructionsLoaded"]
+    failures = _wiring(tmp_path, settings)
+    assert any("InstructionsLoaded" in f for f in failures)
+
+
+def test_instructions_loaded_wrong_command_fails(tmp_path: Path) -> None:
+    settings = _full_settings()
+    settings["hooks"]["InstructionsLoaded"] = [
+        _hook(None, f"bash {_ANCHOR}/scripts/noop.sh")
+    ]
+    failures = _wiring(tmp_path, settings)
+    assert any(
+        "InstructionsLoaded" in f and "instructions_observer" in f for f in failures
+    )
+
+
 def test_unreadable_settings_fails(tmp_path: Path) -> None:
     failures = hook_selfcheck.check_settings_wiring(tmp_path / "nope.json")
     assert len(failures) == 1
@@ -217,7 +247,7 @@ def test_selfcheck_main_passes_on_real_repo() -> None:
 
 @pytest.mark.parametrize(
     "event",
-    ["PreToolUse", "SessionStart", "SessionEnd"],
+    ["PreToolUse", "SessionStart", "SessionEnd", "InstructionsLoaded"],
 )
 def test_unanchored_hook_command_fails(tmp_path: Path, event: str) -> None:
     """The FAIL direction: strip the anchor off any event and it must go red."""
