@@ -68,9 +68,11 @@
       "minimumReleaseAgeBehaviour": "timestamp-optional"
     },
     {
-      "description": "pixi: strip the upstream v prefix. prefix-dev/pixi tags releases vX.Y.Z, but mise's registry serves unprefixed versions only (zero v-prefixed pixi versions in `mise ls-remote pixi`, measured 2026-08-05) — without this rule Renovate writes pixi = \"v0.76.1\" into shared.toml, mise can never resolve it, and the all-deps PR goes red (PR #455, two consecutive failures).",
+      "description": "pixi, rumdl, agnix: strip the upstream v prefix. All three tag releases vX.Y.Z upstream while mise's registry serves UNPREFIXED versions only, so a v-prefixed pin names a version `mise ls-remote` does not list. Measured: zero v-prefixed pixi versions (2026-08-05); `mise ls-remote rumdl` -> 0.2.59..0.2.64 and `mise ls-remote github:agent-sh/agnix` -> 0.48.1..0.52.1, both bare (2026-09-03). Without this rule Renovate writes the v form back on every bump: pixi = \"v0.76.1\" into shared.toml made the all-deps PR go red twice (PR #455), and for rumdl it silently UNDOES the manual fix — 4bc2c06 set rumdl = \"0.2.62\" on 2026-08-31 and renovate's e6458ed (#906) rewrote it to \"v0.2.63\" two days later. agnix is included pre-emptively: it is bare today only because Renovate has not bumped it since 4bc2c06, which had to strip \"v0.52.1\" from it as well. Its matcher is the FULL config key, not the short name: Renovate titles its PRs `update dependency github:agent-sh/agnix to vX.Y.Z` (#670), so matchDepNames \"agnix\" would silently match nothing.",
       "matchDepNames": [
-        "pixi"
+        "pixi",
+        "rumdl",
+        "github:agent-sh/agnix"
       ],
       "extractVersion": "^v?(?<version>.+)$"
     }

@@ -190,9 +190,16 @@ _DOCS_PATTERNS = (
 _GREEN_BUCKETS = frozenset({"pass", "skipping"})
 
 # The GitHub Apps whose PRs `automerge` will arm (#369, scope locked by Ray
-# 2026-07-27). Re-derived, not assumed: `gh pr list --state all --limit 60
-# --json number,author` over this repo returns exactly two non-human logins,
-# and they own all three stuck PRs (#138, #236, #386).
+# 2026-07-27; widened to dependabot by Ray 2026-09-03). Re-derived, not
+# assumed: `gh pr list --state all --limit 60 --json number,author` over this
+# repo returned exactly two non-human logins at the time, and they owned all
+# three stuck PRs (#138, #236, #386).
+#
+# `app/dependabot` joined on 2026-09-03: it is this repo's ONLY Python updater
+# by design (.github/dependabot.yml), so while it was absent no dependabot PR
+# could ever be merged by the sanctioned verb — #901 sat CI-green and
+# unmergeable, blocked purely by this set. Measured: `gh pr view 901 --json
+# author` -> `app/dependabot`, control arm `gh pr view 947` -> `app/renovate`.
 #
 # A login ALLOWLIST, deliberately, not `author.is_bot`: is_bot would admit any
 # app that ever opens a PR here, whereas the point of the ship/automerge split
@@ -204,6 +211,7 @@ BOT_PR_AUTHORS: frozenset[str] = frozenset(
     {
         "app/renovate",
         "app/dotfiles-refresh-bot-org",
+        "app/dependabot",
     }
 )
 
