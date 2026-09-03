@@ -86,6 +86,13 @@ def _full_settings() -> dict:
                     "dotfiles_setup.instructions_observer",
                 )
             ],
+            "PostToolUse": [
+                _hook(
+                    "Edit|Write|NotebookEdit",
+                    f'uv run --project "{_ANCHOR}/python" '
+                    "dotfiles-setup mise-config-context",
+                )
+            ],
         }
     }
 
@@ -122,8 +129,12 @@ def test_partial_matcher_fails(tmp_path: Path) -> None:
         _hook("Bash", f"bash {_ANCHOR}/scripts/pretooluse-guard.sh")
     ]
     failures = _wiring(tmp_path, settings)
-    assert any("AskUserQuestion" in f for f in failures)
-    assert not any("'Bash'" in f for f in failures)
+    pretooluse_failures = [f for f in failures if "PreToolUse" in f]
+    assert any("AskUserQuestion" in f for f in pretooluse_failures)
+    # Scoped to PreToolUse's own failures so this asserts precisely what it
+    # means — PreToolUse itself is not flagged for 'Bash' — rather than the
+    # weaker "no failure string anywhere happens to contain 'Bash'".
+    assert not any("'Bash'" in f for f in pretooluse_failures)
 
 
 def test_a_substring_matcher_does_not_satisfy_a_required_token(
@@ -150,10 +161,132 @@ def test_a_substring_matcher_does_not_satisfy_a_required_token(
         )
     ]
     failures = _wiring(tmp_path, settings)
-    assert any("'Edit'" in f for f in failures)
-    # …and only that one: the four tokens actually present must not be flagged,
-    # or the test would pass for the wrong reason.
-    assert not any("'NotebookEdit'" in f or "'Write'" in f for f in failures)
+    pretooluse_failures = [f for f in failures if "PreToolUse" in f]
+    # Scoped to PreToolUse's own failures: PostToolUse independently requires
+    # 'Edit', so an unscoped positive assertion here could be satisfied by a
+    # DIFFERENT row's failure and never actually prove PreToolUse was flagged.
+    assert any("'Edit'" in f for f in pretooluse_failures)
+    # …and only that one: the four tokens actually present must not be
+    # flagged, or the test would pass for the wrong reason. This scoping only
+    # narrows what the negative assertion scans — it makes the assertion
+    # EASIER to satisfy (weaker), guarding against a future false RED, not
+    # against laundering.
+    assert not any("'NotebookEdit'" in f or "'Write'" in f for f in pretooluse_failures)
+
+
+def _full_settings_with_graphify_pretooluse() -> dict:
+    """`_full_settings()`, but PreToolUse carries its REAL multi-entry shape.
+
+    `.claude/settings.json`'s PreToolUse has three entries (the deny guard
+    plus two graphify entries); `_full_settings()`'s single entry cannot
+    exhibit F1 — a required matcher token satisfied by a DIFFERENT entry than
+    the one carrying the required command — because there is only one entry
+    to draw from.
+    """
+    settings = _full_settings()
+    settings["hooks"]["PreToolUse"] = [
+        _hook(
+            "Bash|AskUserQuestion|Edit|Write|NotebookEdit",
+            f"bash {_ANCHOR}/scripts/pretooluse-guard.sh",
+        ),
+        _hook("Bash|Grep", f"bash {_ANCHOR}/scripts/graphify-hook-guard.sh search"),
+    ]
+    return settings
+
+
+def test_multi_entry_pretooluse_passes_unmutated(tmp_path: Path) -> None:
+    """Control arm for F1: the real multi-entry shape must pass cleanly."""
+    assert _wiring(tmp_path, _full_settings_with_graphify_pretooluse()) == []
+
+
+def test_sibling_entry_matcher_does_not_satisfy_the_owning_entry(
+    tmp_path: Path,
+) -> None:
+    """F1: dropping `Bash` from the OWNING entry must fail on its own terms.
+
+    Before the fix, `check_settings_wiring` flattened every PreToolUse entry's
+    matcher into one pool before checking, so the graphify entry's `Bash|Grep`
+    silently satisfied the guard entry's dropped `Bash` requirement — every
+    mise-tasks-only Bash redirect would stop firing while lint, pytest,
+    verify, ship, land and hook-selfcheck all stayed green (#343 with a green
+    gate). Mutating the entry that actually carries the required command —
+    not blanking the whole matcher — is how the regression really looks
+    (`probes-need-a-control-arm.md` rule 2).
+    """
+    settings = _full_settings_with_graphify_pretooluse()
+    settings["hooks"]["PreToolUse"][0] = _hook(
+        "AskUserQuestion|Edit|Write|NotebookEdit",
+        f"bash {_ANCHOR}/scripts/pretooluse-guard.sh",
+    )
+    failures = _wiring(tmp_path, settings)
+    assert any("PreToolUse" in f and "'Bash'" in f for f in failures)
+
+
+def _full_settings_with_pretooluse_matcher_split_across_two_owners() -> dict:
+    """Two PreToolUse entries that BOTH carry the guard's real command.
+
+    Round 2's per-owner union pooled matcher tokens across every entry whose
+    command contained a required substring — "owners" — and this shape makes
+    BOTH entries owners, which `_full_settings_with_graphify_pretooluse`
+    could not: its graphify sibling never mentions the guard's command, so it
+    was never an owner and round 2's pooling across owners went unexercised.
+    """
+    settings = _full_settings()
+    guard_command = f"bash {_ANCHOR}/scripts/pretooluse-guard.sh"
+    settings["hooks"]["PreToolUse"] = [
+        _hook("Bash", guard_command),
+        _hook("AskUserQuestion|Edit|Write|NotebookEdit", guard_command),
+    ]
+    return settings
+
+
+def test_matcher_tokens_split_across_two_owning_entries_fails(tmp_path: Path) -> None:
+    """C1/C7: no SINGLE entry may satisfy the row by pooling with a sibling.
+
+    Both entries here carry the guard's exact command, so round 2's per-owner
+    union would combine `Bash` from one with the other four tokens from the
+    other and report fully wired. Neither entry alone carries all five
+    required matcher tokens, so this must fail — the control arm is
+    `test_synthetic_full_settings_passes`, where the SAME five tokens live on
+    ONE entry and the row passes cleanly.
+    """
+    failures = _wiring(
+        tmp_path, _full_settings_with_pretooluse_matcher_split_across_two_owners()
+    )
+    assert any("PreToolUse" in f and "AskUserQuestion" in f for f in failures)
+
+
+def test_session_start_split_across_two_entries_fails(tmp_path: Path) -> None:
+    """C1/C7 command-axis splitting: the real regression this round fixes.
+
+    Between the two entries every required substring IS present — the
+    `startup` entry carries `scripts/web-setup.sh` and `CLAUDE_CODE_REMOTE`,
+    the `resume` entry carries `run tool-currency-check` and `run doctor` —
+    so a check that pools substrings across the event (round 1) or across
+    "owning" entries (round 2) would report fully wired. Neither entry alone
+    carries all four, so on a real `startup` session the #418 project doctor
+    and the tool-currency check (wired ONLY here, per the comment above
+    `_SETTINGS_WIRING`) never run. Mutation-proven: reverting to round 2's
+    pooling makes `check_settings_wiring` report this fully wired and this
+    test goes RED (see the C8 ledger in the #919 implementation report). The
+    control arm is
+    `test_synthetic_full_settings_passes`, where the same four substrings
+    live on ONE `startup|resume` entry and the row passes cleanly.
+    """
+    settings = _full_settings()
+    settings["hooks"]["SessionStart"] = [
+        _hook(
+            "startup",
+            f'if [ "$CLAUDE_CODE_REMOTE" = "true" ]; then '
+            f"bash {_ANCHOR}/scripts/web-setup.sh; fi",
+        ),
+        _hook(
+            "resume",
+            f"mise -C {_ANCHOR} run tool-currency-check; mise -C {_ANCHOR} run doctor",
+        ),
+    ]
+    failures = _wiring(tmp_path, settings)
+    assert any("SessionStart" in f for f in failures)
 
 
 def test_wrong_command_fails(tmp_path: Path) -> None:
@@ -226,6 +359,40 @@ def test_instructions_loaded_wrong_command_fails(tmp_path: Path) -> None:
     )
 
 
+def test_missing_post_tool_use_fails(tmp_path: Path) -> None:
+    """#919: the mise-config-context write-trigger dispatcher must stay wired."""
+    settings = _full_settings()
+    del settings["hooks"]["PostToolUse"]
+    failures = _wiring(tmp_path, settings)
+    assert any("PostToolUse" in f for f in failures)
+
+
+def test_post_tool_use_wrong_command_fails(tmp_path: Path) -> None:
+    settings = _full_settings()
+    settings["hooks"]["PostToolUse"] = [
+        _hook("Edit|Write|NotebookEdit", f"bash {_ANCHOR}/scripts/noop.sh")
+    ]
+    failures = _wiring(tmp_path, settings)
+    assert any("PostToolUse" in f and "mise-config-context" in f for f in failures)
+
+
+def test_post_tool_use_dropping_one_matcher_token_fails(tmp_path: Path) -> None:
+    """A matcher missing one of the three tokens must fail — not just an empty one.
+
+    `Edit` is a substring of `NotebookEdit`, so this must be the alternation-
+    token check (`check_settings_wiring`'s `tokens` set), not `matcher in m`.
+    """
+    settings = _full_settings()
+    settings["hooks"]["PostToolUse"] = [
+        _hook(
+            "Write|NotebookEdit",
+            f'uv run --project "{_ANCHOR}/python" dotfiles-setup mise-config-context',
+        )
+    ]
+    failures = _wiring(tmp_path, settings)
+    assert any("PostToolUse" in f and "'Edit'" in f for f in failures)
+
+
 def test_unreadable_settings_fails(tmp_path: Path) -> None:
     failures = hook_selfcheck.check_settings_wiring(tmp_path / "nope.json")
     assert len(failures) == 1
@@ -247,7 +414,7 @@ def test_selfcheck_main_passes_on_real_repo() -> None:
 
 @pytest.mark.parametrize(
     "event",
-    ["PreToolUse", "SessionStart", "SessionEnd", "InstructionsLoaded"],
+    ["PreToolUse", "SessionStart", "SessionEnd", "InstructionsLoaded", "PostToolUse"],
 )
 def test_unanchored_hook_command_fails(tmp_path: Path, event: str) -> None:
     """The FAIL direction: strip the anchor off any event and it must go red."""
@@ -268,12 +435,15 @@ def test_a_newly_added_hook_must_also_be_anchored(tmp_path: Path) -> None:
     """The check reads the whole hook block, not a fixed list of known events.
 
     A hook added later is the likeliest way this defect returns, so it must be
-    covered without anyone remembering to extend a list.
+    covered without anyone remembering to extend a list. Uses `PreCompact` — a
+    real Claude Code hook event this repo does not wire — as its stand-in for
+    an unknown event; `PostToolUse` no longer qualifies since #919 added it to
+    `_SETTINGS_WIRING`.
     """
     settings = _full_settings()
-    settings["hooks"]["PostToolUse"] = [_hook("Bash", "bash scripts/something-new.sh")]
+    settings["hooks"]["PreCompact"] = [_hook("Bash", "bash scripts/something-new.sh")]
     failures = _wiring(tmp_path, settings)
-    assert any("PostToolUse" in f and "CLAUDE_PROJECT_DIR" in f for f in failures)
+    assert any("PreCompact" in f and "CLAUDE_PROJECT_DIR" in f for f in failures)
 
 
 def test_real_wrapper_denies_from_a_foreign_cwd() -> None:
