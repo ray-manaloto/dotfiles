@@ -109,6 +109,19 @@ _SETTINGS_WIRING: tuple[tuple[str, tuple[str, ...], tuple[str, ...] | None], ...
         ("python -m dotfiles_setup.instructions_observer",),
         None,
     ),
+    # #919: the mise-config-context write-trigger dispatcher. Its own unit
+    # tests certify that it COMPUTES correctly; nothing before this row
+    # certified that it stays WIRED IN — deleting the registration left lint,
+    # pytest, verify and hook-selfcheck all green while the hook silently
+    # never fired again (same class as #343 and the #917 gap this row's
+    # sibling closed). The matcher is scoped, not None: an unscoped
+    # PostToolUse would fire the dispatcher after EVERY tool call, including
+    # Bash and Read, not just the three write-shaped tools it exists for.
+    (
+        "PostToolUse",
+        ("dotfiles-setup mise-config-context",),
+        ("Edit", "Write", "NotebookEdit"),
+    ),
 )
 
 # Claude Code runs hooks "in the current directory", not the project root, and

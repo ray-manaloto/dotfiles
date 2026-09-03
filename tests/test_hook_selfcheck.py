@@ -86,6 +86,13 @@ def _full_settings() -> dict:
                     "dotfiles_setup.instructions_observer",
                 )
             ],
+            "PostToolUse": [
+                _hook(
+                    "Edit|Write|NotebookEdit",
+                    f'uv run --project "{_ANCHOR}/python" '
+                    "dotfiles-setup mise-config-context",
+                )
+            ],
         }
     }
 
@@ -226,6 +233,40 @@ def test_instructions_loaded_wrong_command_fails(tmp_path: Path) -> None:
     )
 
 
+def test_missing_post_tool_use_fails(tmp_path: Path) -> None:
+    """#919: the mise-config-context write-trigger dispatcher must stay wired."""
+    settings = _full_settings()
+    del settings["hooks"]["PostToolUse"]
+    failures = _wiring(tmp_path, settings)
+    assert any("PostToolUse" in f for f in failures)
+
+
+def test_post_tool_use_wrong_command_fails(tmp_path: Path) -> None:
+    settings = _full_settings()
+    settings["hooks"]["PostToolUse"] = [
+        _hook("Edit|Write|NotebookEdit", f"bash {_ANCHOR}/scripts/noop.sh")
+    ]
+    failures = _wiring(tmp_path, settings)
+    assert any("PostToolUse" in f and "mise-config-context" in f for f in failures)
+
+
+def test_post_tool_use_dropping_one_matcher_token_fails(tmp_path: Path) -> None:
+    """A matcher missing one of the three tokens must fail — not just an empty one.
+
+    `Edit` is a substring of `NotebookEdit`, so this must be the alternation-
+    token check (`check_settings_wiring`'s `tokens` set), not `matcher in m`.
+    """
+    settings = _full_settings()
+    settings["hooks"]["PostToolUse"] = [
+        _hook(
+            "Write|NotebookEdit",
+            f'uv run --project "{_ANCHOR}/python" dotfiles-setup mise-config-context',
+        )
+    ]
+    failures = _wiring(tmp_path, settings)
+    assert any("PostToolUse" in f and "'Edit'" in f for f in failures)
+
+
 def test_unreadable_settings_fails(tmp_path: Path) -> None:
     failures = hook_selfcheck.check_settings_wiring(tmp_path / "nope.json")
     assert len(failures) == 1
@@ -247,7 +288,7 @@ def test_selfcheck_main_passes_on_real_repo() -> None:
 
 @pytest.mark.parametrize(
     "event",
-    ["PreToolUse", "SessionStart", "SessionEnd", "InstructionsLoaded"],
+    ["PreToolUse", "SessionStart", "SessionEnd", "InstructionsLoaded", "PostToolUse"],
 )
 def test_unanchored_hook_command_fails(tmp_path: Path, event: str) -> None:
     """The FAIL direction: strip the anchor off any event and it must go red."""
@@ -268,12 +309,15 @@ def test_a_newly_added_hook_must_also_be_anchored(tmp_path: Path) -> None:
     """The check reads the whole hook block, not a fixed list of known events.
 
     A hook added later is the likeliest way this defect returns, so it must be
-    covered without anyone remembering to extend a list.
+    covered without anyone remembering to extend a list. Uses `PreCompact` — a
+    real Claude Code hook event this repo does not wire — as its stand-in for
+    an unknown event; `PostToolUse` no longer qualifies since #919 added it to
+    `_SETTINGS_WIRING`.
     """
     settings = _full_settings()
-    settings["hooks"]["PostToolUse"] = [_hook("Bash", "bash scripts/something-new.sh")]
+    settings["hooks"]["PreCompact"] = [_hook("Bash", "bash scripts/something-new.sh")]
     failures = _wiring(tmp_path, settings)
-    assert any("PostToolUse" in f and "CLAUDE_PROJECT_DIR" in f for f in failures)
+    assert any("PreCompact" in f and "CLAUDE_PROJECT_DIR" in f for f in failures)
 
 
 def test_real_wrapper_denies_from_a_foreign_cwd() -> None:
