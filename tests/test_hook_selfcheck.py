@@ -129,8 +129,13 @@ def test_partial_matcher_fails(tmp_path: Path) -> None:
         _hook("Bash", f"bash {_ANCHOR}/scripts/pretooluse-guard.sh")
     ]
     failures = _wiring(tmp_path, settings)
-    assert any("AskUserQuestion" in f for f in failures)
-    assert not any("'Bash'" in f for f in failures)
+    pretooluse_failures = [f for f in failures if "PreToolUse" in f]
+    assert any("AskUserQuestion" in f for f in pretooluse_failures)
+    # Scoped to PreToolUse's own failures — PostToolUse independently requires
+    # 'Bash' nowhere, so an unscoped check here would pass for the wrong reason
+    # (#919's addition, or any future row's, must not be able to launder this
+    # assertion).
+    assert not any("'Bash'" in f for f in pretooluse_failures)
 
 
 def test_a_substring_matcher_does_not_satisfy_a_required_token(
@@ -157,10 +162,61 @@ def test_a_substring_matcher_does_not_satisfy_a_required_token(
         )
     ]
     failures = _wiring(tmp_path, settings)
-    assert any("'Edit'" in f for f in failures)
+    pretooluse_failures = [f for f in failures if "PreToolUse" in f]
+    assert any("'Edit'" in f for f in pretooluse_failures)
     # …and only that one: the four tokens actually present must not be flagged,
-    # or the test would pass for the wrong reason.
-    assert not any("'NotebookEdit'" in f or "'Write'" in f for f in failures)
+    # or the test would pass for the wrong reason. Scoped to PreToolUse's own
+    # failures — PostToolUse independently requires 'Write' and 'NotebookEdit',
+    # so an unscoped check would pass for the wrong reason once that row exists.
+    assert not any("'NotebookEdit'" in f or "'Write'" in f for f in pretooluse_failures)
+
+
+def _full_settings_with_graphify_pretooluse() -> dict:
+    """`_full_settings()`, but PreToolUse carries its REAL multi-entry shape.
+
+    `.claude/settings.json`'s PreToolUse has three entries (the deny guard
+    plus two graphify entries); `_full_settings()`'s single entry cannot
+    exhibit F1 — a required matcher token satisfied by a DIFFERENT entry than
+    the one carrying the required command — because there is only one entry
+    to draw from.
+    """
+    settings = _full_settings()
+    settings["hooks"]["PreToolUse"] = [
+        _hook(
+            "Bash|AskUserQuestion|Edit|Write|NotebookEdit",
+            f"bash {_ANCHOR}/scripts/pretooluse-guard.sh",
+        ),
+        _hook("Bash|Grep", f"bash {_ANCHOR}/scripts/graphify-hook-guard.sh search"),
+    ]
+    return settings
+
+
+def test_multi_entry_pretooluse_passes_unmutated(tmp_path: Path) -> None:
+    """Control arm for F1: the real multi-entry shape must pass cleanly."""
+    assert _wiring(tmp_path, _full_settings_with_graphify_pretooluse()) == []
+
+
+def test_sibling_entry_matcher_does_not_satisfy_the_owning_entry(
+    tmp_path: Path,
+) -> None:
+    """F1: dropping `Bash` from the OWNING entry must fail on its own terms.
+
+    Before the fix, `check_settings_wiring` flattened every PreToolUse entry's
+    matcher into one pool before checking, so the graphify entry's `Bash|Grep`
+    silently satisfied the guard entry's dropped `Bash` requirement — every
+    mise-tasks-only Bash redirect would stop firing while lint, pytest,
+    verify, ship, land and hook-selfcheck all stayed green (#343 with a green
+    gate). Mutating the entry that actually carries the required command —
+    not blanking the whole matcher — is how the regression really looks
+    (`probes-need-a-control-arm.md` rule 2).
+    """
+    settings = _full_settings_with_graphify_pretooluse()
+    settings["hooks"]["PreToolUse"][0] = _hook(
+        "AskUserQuestion|Edit|Write|NotebookEdit",
+        f"bash {_ANCHOR}/scripts/pretooluse-guard.sh",
+    )
+    failures = _wiring(tmp_path, settings)
+    assert any("PreToolUse" in f and "'Bash'" in f for f in failures)
 
 
 def test_wrong_command_fails(tmp_path: Path) -> None:

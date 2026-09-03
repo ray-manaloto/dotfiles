@@ -7,9 +7,11 @@ never drives the actual path the harness uses: ``.claude/settings.json`` ->
 hook pretooluse``. This module closes that gap. It:
 
 - asserts ``.claude/settings.json`` wires the project hooks
-  (:data:`_SETTINGS_WIRING`): the PreToolUse deny guard (scoped to ``Bash``),
-  the SessionStart web-setup bootstrap, and the SessionEnd command-audit
-  refresh;
+  (:data:`_SETTINGS_WIRING`): the PreToolUse deny guard (scoped to ``Bash``,
+  ``AskUserQuestion``, ``Edit``, ``Write`` and ``NotebookEdit``), the
+  SessionStart web-setup bootstrap, the SessionEnd command-audit refresh, the
+  InstructionsLoaded observer, and the PostToolUse mise-config-context
+  dispatcher — five events in all;
 - drives the REAL PreToolUse wrapper end-to-end — a denied command must DENY,
   an allowed one must stay silent;
 - ``bash -n`` syntax-checks the wired hook scripts (a parse error in
@@ -109,14 +111,18 @@ _SETTINGS_WIRING: tuple[tuple[str, tuple[str, ...], tuple[str, ...] | None], ...
         ("python -m dotfiles_setup.instructions_observer",),
         None,
     ),
-    # #919: the mise-config-context write-trigger dispatcher. Its own unit
-    # tests certify that it COMPUTES correctly; nothing before this row
-    # certified that it stays WIRED IN — deleting the registration left lint,
-    # pytest, verify and hook-selfcheck all green while the hook silently
-    # never fired again (same class as #343 and the #917 gap this row's
-    # sibling closed). The matcher is scoped, not None: an unscoped
-    # PostToolUse would fire the dispatcher after EVERY tool call, including
-    # Bash and Read, not just the three write-shaped tools it exists for.
+    # #919: the mise-config-context write-trigger dispatcher.
+    # `tests/test_mise_config_context.py`'s
+    # `test_settings_wires_this_hook_without_depending_on_a_mise_task` already
+    # asserts this wiring (since PR #902) — this row's genuine delta is
+    # PRECISION, not novelty: that test's matcher check is
+    # `any("Write" in m and "Edit" in m for m in matchers)`, substring
+    # containment, and `"Edit" in "NotebookEdit"` is True — so it cannot see a
+    # matcher narrowed to `Write|NotebookEdit` (bare `Edit` dropped). This
+    # row's alternation-token check (below) can. The matcher requirement is
+    # scoped, not None: an unscoped PostToolUse would fire the dispatcher
+    # after EVERY tool call, including Bash and Read, not just the three
+    # write-shaped tools it exists for.
     (
         "PostToolUse",
         ("dotfiles-setup mise-config-context",),
@@ -189,7 +195,23 @@ def check_settings_wiring(settings_path: Path) -> list[str]:
         if not entries:
             failures.append(f"settings.json has no {event} hook wired")
             continue
-        joined = "\n".join(cmd for _, cmd in entries)
+        # PER-ENTRY, not per-event: an event can wire MULTIPLE hook entries
+        # (`.claude/settings.json`'s PreToolUse has three — the deny guard plus
+        # two graphify entries), and flattening them into one blob before
+        # checking lets a required matcher token be satisfied by a DIFFERENT
+        # entry than the one carrying the required command. Measured: narrowing
+        # the guard entry's matcher to drop `Bash` still reported fully wired,
+        # because the unrelated `graphify-hook-guard.sh search` entry's
+        # `Bash|Grep` matcher supplied the missing token — every mise-tasks-only
+        # Bash redirect would silently stop firing while ship/land/hook-selfcheck
+        # stayed green (#343 with a green gate). So scope both checks to the
+        # OWNING entries: those whose command actually carries at least one of
+        # this row's required substrings. If none owns the row, fall back to
+        # every entry — the old behaviour — so a missing command still reports
+        # missing rather than silently passing or crashing.
+        owners = [(m, cmd) for m, cmd in entries if any(t in cmd for t in required)]
+        scoped = owners or entries
+        joined = "\n".join(cmd for _, cmd in scoped)
         failures.extend(
             f"settings.json {event} hook is missing {token!r}"
             for token in required
@@ -204,7 +226,7 @@ def check_settings_wiring(settings_path: Path) -> list[str]:
         # arm that missed it narrowed the matcher to `Bash|AskUserQuestion`,
         # removing BOTH tokens at once, which is not how the real regression
         # looks (`probes-need-a-control-arm.md` rule 2 — mutate realistically).
-        tokens = {t.strip() for m, _ in entries for t in m.split("|") if t.strip()}
+        tokens = {t.strip() for m, _ in scoped for t in m.split("|") if t.strip()}
         failures.extend(
             f"settings.json {event} hook must be scoped with matcher "
             f"{matcher!r} (tool events fire on every tool otherwise)"
