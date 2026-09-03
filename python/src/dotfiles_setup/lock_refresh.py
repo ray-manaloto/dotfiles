@@ -58,6 +58,9 @@ logger = logging.getLogger(__name__)
 _MISE_VERSION_RE = re.compile(r"^ARG MISE_VERSION=(\S+)$", re.MULTILINE)
 _EXTRAS_RE = re.compile(r"\[.*\]$")
 _TOOL_ARRAY_HEADER_RE = re.compile(r"^\[\[tools\..+\]\][ \t]*$", re.MULTILINE)
+# Any top-level TOML table header, tools or not — the prune needs the FULL
+# header list to find where a tool block really ends (see _prune_unknown_lock_tools).
+_ANY_TABLE_HEADER_RE = re.compile(r"^\[\[?[^\[\]]+\]\]?[ \t]*$", re.MULTILINE)
 _SYSTEM_TOML = ".devcontainer/mise-system.toml"
 _SYSTEM_LOCK = ".devcontainer/mise-system.lock"
 _RUNTIME_TOML = ".devcontainer/mise-runtime.toml"
@@ -94,15 +97,73 @@ def _tool_name_from_array_header(header: str) -> str:
     return name
 
 
+def _header_tool_owner(header: str) -> str | None:
+    """Return the tool a ``[...]`` header belongs to, or None if it is not one.
+
+    ``[[tools.X]]`` and its child tables ``[tools.X."platforms.y"]`` both
+    answer ``X``; ``[conda-packages...]`` and any other top-level table answer
+    ``None``. Decoded with TOML's own parser so quoted keys (``"conda:git"``)
+    and dotted platform keys need no bespoke lexer.
+    """
+    try:
+        parsed = tomllib.loads(header)
+    except tomllib.TOMLDecodeError:
+        return None
+    tools = parsed.get("tools")
+    if not isinstance(tools, dict) or len(tools) != 1:
+        return None
+    return next(iter(tools))
+
+
+def _strip_tool_blocks(
+    lock_text: str,
+    headers: list[re.Match[str]],
+    block_names: list[str],
+    stale: Collection[str],
+) -> str:
+    """Return ``lock_text`` with every stale tool's block removed.
+
+    A block runs from its ``[[tools.X]]`` header to the next header that is
+    NOT owned by X. Scanning EVERY table header — not just tool ones — is what
+    keeps an interleaved ``[conda-packages...]`` table from leaving with the
+    neighbour it happens to follow.
+    """
+    all_headers = list(_ANY_TABLE_HEADER_RE.finditer(lock_text))
+    owners = [_header_tool_owner(match.group()) for match in all_headers]
+    starts = {match.start(): index for index, match in enumerate(all_headers)}
+
+    kept: list[str] = []
+    cursor = 0
+    for header, name in zip(headers, block_names, strict=True):
+        if name not in stale:
+            continue
+        kept.append(lock_text[cursor : header.start()])
+        index = starts[header.start()] + 1
+        while index < len(all_headers) and owners[index] == name:
+            index += 1
+        cursor = (
+            all_headers[index].start() if index < len(all_headers) else len(lock_text)
+        )
+    kept.append(lock_text[cursor:])
+    return "".join(kept)
+
+
 def _prune_unknown_lock_tools(
     lock_path: Path, configured_tools: Collection[str]
 ) -> None:
     """Remove generated tool blocks absent from the normalized config set.
 
-    A tool block starts at its ``[[tools.X]]`` array-table and extends to the
-    next such header. Child tables (platforms, options, provenance) therefore
-    leave with their owner. The write is skipped when the normalized sets
-    already match so a clean refresh does not rewrite identical lock bytes.
+    A tool block starts at its ``[[tools.X]]`` array-table and ends at the next
+    header that does NOT belong to X — not merely at the next ``[[tools.Y]]``.
+    That distinction is load-bearing: the real ``mise.lock`` also carries
+    ``[conda-packages...]`` tables, and slicing to the next TOOL header swallows
+    any such table that happens to sit between a stale block and the next tool.
+    Reproduced before this fix: a ``[conda-packages.linux-x64.somepkg]`` table
+    between a stale block and a kept one was deleted, and the function returned
+    normally because the old validation inspected only the ``tools`` key.
+
+    The write is skipped when the normalized sets already match, so a clean
+    refresh does not rewrite identical lock bytes.
 
     Raises:
         ValueError: when the lock schema cannot be reconciled exactly.
@@ -137,19 +198,11 @@ def _prune_unknown_lock_tools(
         )
         raise ValueError(msg)
 
-    kept: list[str] = []
-    cursor = 0
-    for index, (header, name) in enumerate(zip(headers, block_names, strict=True)):
-        if name not in stale:
-            continue
-        kept.append(lock_text[cursor : header.start()])
-        cursor = (
-            headers[index + 1].start() if index + 1 < len(headers) else len(lock_text)
-        )
-    kept.append(lock_text[cursor:])
-    pruned = "".join(kept)
+    pruned = _strip_tool_blocks(lock_text, headers, block_names, stale)
 
-    remaining_tools = tomllib.loads(pruned).get("tools", {})
+    before_doc = tomllib.loads(lock_text)
+    after_doc = tomllib.loads(pruned)
+    remaining_tools = after_doc.get("tools", {})
     if not isinstance(remaining_tools, dict):
         msg = f"{lock_path} lost its TOML [tools] mapping during pruning"
         raise TypeError(msg)
@@ -161,7 +214,24 @@ def _prune_unknown_lock_tools(
             f"stale={sorted(remaining - configured)}"
         )
         raise ValueError(msg)
-    lock_path.write_text(pruned)
+    # Everything OUTSIDE [tools] must survive byte-for-byte in meaning. The
+    # old check looked only at `tools`, so collateral loss of a sibling table
+    # passed validation and was written to disk with rc=0.
+    collateral = {key: value for key, value in before_doc.items() if key != "tools"}
+    if {key: value for key, value in after_doc.items() if key != "tools"} != collateral:
+        msg = (
+            f"{lock_path} prune altered content outside [tools] — refusing to "
+            f"write. Expected top-level keys {sorted(collateral)}, got "
+            f"{sorted(key for key in after_doc if key != 'tools')}"
+        )
+        raise ValueError(msg)
+    # Atomic replace: a truncate-then-write can leave mise.lock half-written if
+    # the process dies mid-write, and the caller only logs and returns 1 — it
+    # cannot restore what it never saved. os.replace is atomic within a
+    # filesystem, and the temp file is created beside the target to stay on one.
+    tmp = lock_path.with_name(f"{lock_path.name}.tmp")
+    tmp.write_text(pruned)
+    tmp.replace(lock_path)
 
 
 def lock_top_level_config_tools(
