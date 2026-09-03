@@ -319,30 +319,46 @@ def test_build_report_r1_two_bucket_invariant_fuzz() -> None:
     assert result.never_fired == ()
 
 
-def test_build_report_sessions_observed_counts_session_start_events() -> None:
-    """S2: counts EVENTS, not distinct `session_id` values.
+def test_build_report_sessions_observed_counts_distinct_session_ids() -> None:
+    """S2 respec: counts DISTINCT `session_id` values, not `session_start` events.
 
-    2 events under `s1` + 1 event under `s2` = 3, not 2 distinct ids — a
-    corpus where `session_id` is always the same (or always null, next
-    test) must still accumulate coverage one event at a time.
+    30 session_start records sharing ONE session_id must read as exactly 1
+    session — every eager instruction file emits its own session_start
+    record per session, so event-counting let a single session satisfy the
+    threshold on its own (the false positive #917 exists to prevent).
+    """
+    records = [
+        {"file_path": f"r{i}", "load_reason": "session_start", "session_id": "s1"}
+        for i in range(30)
+    ]
+    result = report.build_report(records, scoped=())
+    assert result.sessions_observed == 1
+    assert result.never_fired_sufficient is False
+
+
+def test_build_report_sessions_observed_distinct_ids_reach_threshold() -> None:
+    """Three distinct session_id values ARE three sessions.
+
+    A genuinely dead scoped rule is named in `never_fired` once they do.
     """
     records = [
         {"file_path": "a", "load_reason": "session_start", "session_id": "s1"},
-        {"file_path": "b", "load_reason": "session_start", "session_id": "s1"},
-        {"file_path": "c", "load_reason": "session_start", "session_id": "s2"},
-        {"file_path": "d", "load_reason": "path_glob_match", "session_id": "s3"},
+        {"file_path": "b", "load_reason": "session_start", "session_id": "s2"},
+        {"file_path": "c", "load_reason": "session_start", "session_id": "s3"},
     ]
-    result = report.build_report(records, scoped=())
+    result = report.build_report(records, scoped=(".claude/rules/dead.md",))
     assert result.sessions_observed == 3
     assert result.never_fired_sufficient is True
+    assert result.never_fired == (".claude/rules/dead.md",)
 
 
 def test_build_report_sessions_observed_ignores_null_session_id() -> None:
     """S2's probed regression: `session_id: null` must not freeze coverage at 0.
 
-    Distinct-id counting made THIS corpus — 5 real session_start events, all
-    with a null `session_id` — read as zero sessions forever, no matter how
-    many session starts it held.
+    Records with no usable `session_id` (missing, null, non-string) are
+    indistinguishable from one another and so contribute AT MOST ONE
+    pseudo-session in total — never zero, so this corpus of 5 such records
+    reads as exactly 1 session, not 5 and not 0.
     """
     records = [
         {
@@ -353,8 +369,23 @@ def test_build_report_sessions_observed_ignores_null_session_id() -> None:
         for i in range(5)
     ]
     result = report.build_report(records, scoped=())
-    assert result.sessions_observed == 5
-    assert result.never_fired_sufficient is True
+    assert result.sessions_observed == 1
+    assert result.never_fired_sufficient is False
+
+
+def test_build_report_sessions_observed_unidentified_plus_distinct_ids() -> None:
+    """Unidentified session_start records add AT MOST ONE session.
+
+    This is on top of any distinct real `session_id` values also observed.
+    """
+    records = [
+        {"file_path": "a", "load_reason": "session_start", "session_id": "s1"},
+        {"file_path": "b", "load_reason": "session_start", "session_id": "s2"},
+        {"file_path": "c", "load_reason": "session_start", "session_id": None},
+        {"file_path": "d", "load_reason": "session_start"},  # missing session_id
+    ]
+    result = report.build_report(records, scoped=())
+    assert result.sessions_observed == 3
 
 
 def test_build_report_zero_session_start_records_is_insufficient() -> None:
@@ -368,14 +399,23 @@ def test_build_report_zero_session_start_records_is_insufficient() -> None:
 
 
 def test_build_report_never_fired_sufficient_boundary() -> None:
-    """The threshold is inclusive: N-1 insufficient, N sufficient."""
+    """The threshold is inclusive: N-1 distinct sessions insufficient, N sufficient."""
     threshold = report.build_report([], scoped=()).never_fired_min_sessions
     below = [
-        {"file_path": f"r{i}", "load_reason": "session_start"}
+        {
+            "file_path": f"r{i}",
+            "load_reason": "session_start",
+            "session_id": f"s{i}",
+        }
         for i in range(threshold - 1)
     ]
     at = [
-        {"file_path": f"r{i}", "load_reason": "session_start"} for i in range(threshold)
+        {
+            "file_path": f"r{i}",
+            "load_reason": "session_start",
+            "session_id": f"s{i}",
+        }
+        for i in range(threshold)
     ]
     assert report.build_report(below, scoped=()).never_fired_sufficient is False
     assert report.build_report(at, scoped=()).never_fired_sufficient is True
@@ -425,7 +465,7 @@ def test_build_report_no_records_has_no_timestamps() -> None:
 
 
 def _build_fixture(tmp_path: Path) -> Path:
-    """Fixture with `never_fired_min_sessions` session_start events.
+    """Fixture with `never_fired_min_sessions` DISTINCT sessions.
 
     AT the S2 threshold, so `never_fired` is trusted enough to print in the
     tests that exercise it below.
@@ -445,12 +485,13 @@ def _build_fixture(tmp_path: Path) -> Path:
         },
     )
     threshold = report.build_report([], scoped=()).never_fired_min_sessions
-    for _ in range(threshold):
+    for i in range(threshold):
+        session_id = f"session-{i}"
         _write_record(
             records_dir,
-            "s1",
+            session_id,
             {
-                "session_id": "s1",
+                "session_id": session_id,
                 "file_path": "CLAUDE.md",
                 "load_reason": "session_start",
             },

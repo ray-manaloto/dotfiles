@@ -56,14 +56,23 @@ _RULES_SUBDIR = (".claude", "rules")
 
 _FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n---\n?", re.DOTALL)
 
-#: S2 — the minimum number of observed ``session_start`` EVENTS (not
-#: distinct ``session_id`` values — a corpus with ``session_id: null`` must
-#: still be able to accumulate coverage, since #916's own hook-wiring window
-#: produced exactly that shape) before `never_fired` is trusted enough to
-#: print. Below this, an unfired scoped rule is indistinguishable from one
-#: this report simply hasn't watched long enough. `eager`/`fired`/
-#: `loaded_other_reason` are POSITIVE observations — true from a single
-#: record — and are never gated on this threshold.
+#: S2 — the minimum number of observed DISTINCT SESSIONS (by
+#: ``session_id``) before `never_fired` is trusted enough to print. Below
+#: this, an unfired scoped rule is indistinguishable from one this report
+#: simply hasn't watched long enough. `eager`/`fired`/`loaded_other_reason`
+#: are POSITIVE observations — true from a single record — and are never
+#: gated on this threshold.
+#:
+#: Counting EVENTS instead of sessions was tried and found wrong: one
+#: session emits one ``session_start`` record per eager instruction file
+#: (~30 in this repo), so a single session satisfied the threshold on its
+#: own — the false positive this whole feature exists to avoid. Counting
+#: MUST therefore be by distinct ``session_id``, with one exception: a
+#: corpus with ``session_id: null`` (or missing/non-string — #916's own
+#: hook-wiring window produced exactly that shape) must still be able to
+#: accumulate SOME coverage rather than being permanently unable to reach
+#: the threshold, since those records are indistinguishable from one
+#: another and cannot be counted separately. See `build_report`.
 _MIN_SESSIONS_FOR_NEVER_FIRED = 3
 
 
@@ -190,11 +199,15 @@ def build_report(records: Iterable[dict], scoped: Iterable[str]) -> RuleLoadRepo
     every rule that is `fired` or `loaded_other_reason` is, by construction,
     NOT `never_fired`.
 
-    `sessions_observed` counts ``session_start`` EVENTS, not distinct
-    ``session_id`` values (S2) — a corpus where ``session_id`` is always
-    null (or absent) must still accumulate coverage; distinct-id counting
-    made that corpus permanently read as zero sessions no matter how many
-    session starts it held.
+    `sessions_observed` counts DISTINCT SESSIONS, not ``session_start``
+    events (S2 respec) — one session emits one ``session_start`` record per
+    eager instruction file, so counting events let a single session satisfy
+    the threshold on its own. Distinct non-null string ``session_id``
+    values among ``session_start`` records are counted individually;
+    ``session_start`` records with no usable ``session_id`` (missing, null,
+    or non-string) are indistinguishable from one another and so contribute
+    AT MOST ONE additional pseudo-session in total — never zero, so a
+    corpus where ``session_id`` is always null still accumulates coverage.
 
     `records_malformed`, `errors_log_lines` default to 0 here — they are
     properties of the FILES, not the parsed records, and `run_report` fills
@@ -207,7 +220,8 @@ def build_report(records: Iterable[dict], scoped: Iterable[str]) -> RuleLoadRepo
     fired: set[str] = set()
     loaded_other_reason: set[str] = set()
     by_reason: Counter[str] = Counter()
-    sessions_observed = 0
+    session_ids: set[str] = set()
+    has_unidentified_session = False
     timestamps: list[str] = []
     for record in records:
         reason = record.get("load_reason")
@@ -217,7 +231,11 @@ def build_report(records: Iterable[dict], scoped: Iterable[str]) -> RuleLoadRepo
         if isinstance(ts, str):
             timestamps.append(ts)
         if reason == "session_start":
-            sessions_observed += 1
+            session_id = record.get("session_id")
+            if isinstance(session_id, str):
+                session_ids.add(session_id)
+            else:
+                has_unidentified_session = True
         file_path = record.get("file_path")
         if not isinstance(file_path, str):
             continue
@@ -230,6 +248,7 @@ def build_report(records: Iterable[dict], scoped: Iterable[str]) -> RuleLoadRepo
                 loaded_other_reason.add(file_path)
     loaded_other_reason -= fired
     never_fired = tuple(sorted(scoped_set - fired - loaded_other_reason))
+    sessions_observed = len(session_ids) + (1 if has_unidentified_session else 0)
     return RuleLoadReport(
         eager=tuple(sorted(eager)),
         fired=tuple(sorted(fired)),
@@ -327,7 +346,7 @@ def _render(report: RuleLoadReport) -> str:
         lines.append(
             "never fired: NOT SHOWN — insufficient coverage "
             f"({report.sessions_observed}/{report.never_fired_min_sessions} "
-            "session_start events observed). A rule scoped with a dead glob "
+            "distinct sessions observed). A rule scoped with a dead glob "
             "is indistinguishable from one this report hasn't watched long "
             "enough yet."
         )
