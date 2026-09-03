@@ -195,44 +195,60 @@ def check_settings_wiring(settings_path: Path) -> list[str]:
         if not entries:
             failures.append(f"settings.json has no {event} hook wired")
             continue
-        # PER-ENTRY, not per-event: an event can wire MULTIPLE hook entries
-        # (`.claude/settings.json`'s PreToolUse has three — the deny guard plus
-        # two graphify entries), and flattening them into one blob before
-        # checking lets a required matcher token be satisfied by a DIFFERENT
-        # entry than the one carrying the required command. Measured: narrowing
-        # the guard entry's matcher to drop `Bash` still reported fully wired,
-        # because the unrelated `graphify-hook-guard.sh search` entry's
-        # `Bash|Grep` matcher supplied the missing token — every mise-tasks-only
-        # Bash redirect would silently stop firing while ship/land/hook-selfcheck
-        # stayed green (#343 with a green gate). So scope both checks to the
-        # OWNING entries: those whose command actually carries at least one of
-        # this row's required substrings. If none owns the row, fall back to
-        # every entry — the old behaviour — so a missing command still reports
-        # missing rather than silently passing or crashing.
-        owners = [(m, cmd) for m, cmd in entries if any(t in cmd for t in required)]
-        scoped = owners or entries
-        joined = "\n".join(cmd for _, cmd in scoped)
-        failures.extend(
-            f"settings.json {event} hook is missing {token!r}"
-            for token in required
-            if token not in joined
-        )
-        # Exact ALTERNATION-TOKEN membership, never substring containment.
-        # `matcher in m` looks equivalent and is not: "Edit" is a substring of
-        # "NotebookEdit", so a matcher that dropped bare `Edit` while keeping
-        # `NotebookEdit` satisfied the `Edit` requirement and reported fully
-        # wired — the branch_guard write gate for plain `Edit` calls would go
-        # unenforced with ship and land both green. Found by cold review; the
-        # arm that missed it narrowed the matcher to `Bash|AskUserQuestion`,
-        # removing BOTH tokens at once, which is not how the real regression
-        # looks (`probes-need-a-control-arm.md` rule 2 — mutate realistically).
-        tokens = {t.strip() for m, _ in scoped for t in m.split("|") if t.strip()}
-        failures.extend(
-            f"settings.json {event} hook must be scoped with matcher "
-            f"{matcher!r} (tool events fire on every tool otherwise)"
-            for matcher in matchers or ()
-            if matcher not in tokens
-        )
+        required_matchers = matchers or ()
+        # ONE SINGLE entry must carry every required substring AND every
+        # required matcher token — never a pool of entries. Pooling (whether
+        # across the whole event, or across "owning" entries filtered by
+        # substring) is exactly what lets one entry launder a requirement for
+        # another: a decoy entry that merely MENTIONS the real command can
+        # donate its matcher tokens to an unrelated, narrowed guard entry, and
+        # an event's required substrings can be split across two entries so
+        # that NEITHER one is ever checked against the matcher it actually
+        # needs (measured: splitting SessionStart's single entry into a
+        # startup-only web-setup.sh entry and a resume-only doctor/
+        # tool-currency-check entry passed with the #418 doctor never wired to
+        # a startup session). This deliberately rejects one shape that is not
+        # in use today — one logical hook split across two entries carrying
+        # the SAME command with complementary matchers — because a check that
+        # tolerates "some combination of entries covers it" cannot tell that
+        # shape apart from the laundering ones above, and the laundering ones
+        # are the reason this module exists (see A3 in #919's spec). If that
+        # split shape is ever wanted, merge the entries or change the row —
+        # do not reintroduce pooling.
+        #
+        # Exact ALTERNATION-TOKEN membership for matchers, never substring
+        # containment: "Edit" is a substring of "NotebookEdit", so comparing
+        # with `token in matcher_string` would let a matcher that dropped bare
+        # `Edit` while keeping `NotebookEdit` report satisfied.
+        best_entry: tuple[str, str] | None = None
+        best_matched = -1
+        for matcher, command in entries:
+            entry_tokens = {t.strip() for t in matcher.split("|") if t.strip()}
+            matched = sum(1 for token in required if token in command)
+            if matched == len(required) and all(
+                token in entry_tokens for token in required_matchers
+            ):
+                break
+            if matched > best_matched:
+                best_matched = matched
+                best_entry = (matcher, command)
+        else:
+            # No single entry satisfied both — report against the CLOSEST
+            # candidate (the one carrying the most required substrings) so
+            # the failure names what to fix, not every entry's shortfall.
+            matcher, command = best_entry or entries[0]
+            failures.extend(
+                f"settings.json {event} hook is missing {token!r}"
+                for token in required
+                if token not in command
+            )
+            entry_tokens = {t.strip() for t in matcher.split("|") if t.strip()}
+            failures.extend(
+                f"settings.json {event} hook must be scoped with matcher "
+                f"{token!r} (tool events fire on every tool otherwise)"
+                for token in required_matchers
+                if token not in entry_tokens
+            )
     failures.extend(_unanchored_hooks(settings))
     return failures
 

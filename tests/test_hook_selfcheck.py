@@ -131,10 +131,9 @@ def test_partial_matcher_fails(tmp_path: Path) -> None:
     failures = _wiring(tmp_path, settings)
     pretooluse_failures = [f for f in failures if "PreToolUse" in f]
     assert any("AskUserQuestion" in f for f in pretooluse_failures)
-    # Scoped to PreToolUse's own failures — PostToolUse independently requires
-    # 'Bash' nowhere, so an unscoped check here would pass for the wrong reason
-    # (#919's addition, or any future row's, must not be able to launder this
-    # assertion).
+    # Scoped to PreToolUse's own failures so this asserts precisely what it
+    # means — PreToolUse itself is not flagged for 'Bash' — rather than the
+    # weaker "no failure string anywhere happens to contain 'Bash'".
     assert not any("'Bash'" in f for f in pretooluse_failures)
 
 
@@ -163,11 +162,15 @@ def test_a_substring_matcher_does_not_satisfy_a_required_token(
     ]
     failures = _wiring(tmp_path, settings)
     pretooluse_failures = [f for f in failures if "PreToolUse" in f]
+    # Scoped to PreToolUse's own failures: PostToolUse independently requires
+    # 'Edit', so an unscoped positive assertion here could be satisfied by a
+    # DIFFERENT row's failure and never actually prove PreToolUse was flagged.
     assert any("'Edit'" in f for f in pretooluse_failures)
-    # …and only that one: the four tokens actually present must not be flagged,
-    # or the test would pass for the wrong reason. Scoped to PreToolUse's own
-    # failures — PostToolUse independently requires 'Write' and 'NotebookEdit',
-    # so an unscoped check would pass for the wrong reason once that row exists.
+    # …and only that one: the four tokens actually present must not be
+    # flagged, or the test would pass for the wrong reason. This scoping only
+    # narrows what the negative assertion scans — it makes the assertion
+    # EASIER to satisfy (weaker), guarding against a future false RED, not
+    # against laundering.
     assert not any("'NotebookEdit'" in f or "'Write'" in f for f in pretooluse_failures)
 
 
@@ -217,6 +220,73 @@ def test_sibling_entry_matcher_does_not_satisfy_the_owning_entry(
     )
     failures = _wiring(tmp_path, settings)
     assert any("PreToolUse" in f and "'Bash'" in f for f in failures)
+
+
+def _full_settings_with_pretooluse_matcher_split_across_two_owners() -> dict:
+    """Two PreToolUse entries that BOTH carry the guard's real command.
+
+    Round 2's per-owner union pooled matcher tokens across every entry whose
+    command contained a required substring — "owners" — and this shape makes
+    BOTH entries owners, which `_full_settings_with_graphify_pretooluse`
+    could not: its graphify sibling never mentions the guard's command, so it
+    was never an owner and round 2's pooling across owners went unexercised.
+    """
+    settings = _full_settings()
+    guard_command = f"bash {_ANCHOR}/scripts/pretooluse-guard.sh"
+    settings["hooks"]["PreToolUse"] = [
+        _hook("Bash", guard_command),
+        _hook("AskUserQuestion|Edit|Write|NotebookEdit", guard_command),
+    ]
+    return settings
+
+
+def test_matcher_tokens_split_across_two_owning_entries_fails(tmp_path: Path) -> None:
+    """C1/C7: no SINGLE entry may satisfy the row by pooling with a sibling.
+
+    Both entries here carry the guard's exact command, so round 2's per-owner
+    union would combine `Bash` from one with the other four tokens from the
+    other and report fully wired. Neither entry alone carries all five
+    required matcher tokens, so this must fail — the control arm is
+    `test_synthetic_full_settings_passes`, where the SAME five tokens live on
+    ONE entry and the row passes cleanly.
+    """
+    failures = _wiring(
+        tmp_path, _full_settings_with_pretooluse_matcher_split_across_two_owners()
+    )
+    assert any("PreToolUse" in f and "AskUserQuestion" in f for f in failures)
+
+
+def test_session_start_split_across_two_entries_fails(tmp_path: Path) -> None:
+    """C1/C7 command-axis splitting: the real regression this round fixes.
+
+    Between the two entries every required substring IS present — the
+    `startup` entry carries `scripts/web-setup.sh` and `CLAUDE_CODE_REMOTE`,
+    the `resume` entry carries `run tool-currency-check` and `run doctor` —
+    so a check that pools substrings across the event (round 1) or across
+    "owning" entries (round 2) would report fully wired. Neither entry alone
+    carries all four, so on a real `startup` session the #418 project doctor
+    and the tool-currency check (wired ONLY here, per the comment above
+    `_SETTINGS_WIRING`) never run. Mutation-proven: reverting to round 2's
+    pooling makes `check_settings_wiring` report this fully wired and this
+    test goes RED (see the C8 ledger in the #919 implementation report). The
+    control arm is
+    `test_synthetic_full_settings_passes`, where the same four substrings
+    live on ONE `startup|resume` entry and the row passes cleanly.
+    """
+    settings = _full_settings()
+    settings["hooks"]["SessionStart"] = [
+        _hook(
+            "startup",
+            f'if [ "$CLAUDE_CODE_REMOTE" = "true" ]; then '
+            f"bash {_ANCHOR}/scripts/web-setup.sh; fi",
+        ),
+        _hook(
+            "resume",
+            f"mise -C {_ANCHOR} run tool-currency-check; mise -C {_ANCHOR} run doctor",
+        ),
+    ]
+    failures = _wiring(tmp_path, settings)
+    assert any("SessionStart" in f for f in failures)
 
 
 def test_wrong_command_fails(tmp_path: Path) -> None:
