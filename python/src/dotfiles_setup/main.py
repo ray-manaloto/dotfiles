@@ -99,6 +99,7 @@ from dotfiles_setup.p2996_hash import (
 from dotfiles_setup.p2996_refresh import refresh as refresh_p2996_ref
 from dotfiles_setup.parity import run as parity_run
 from dotfiles_setup.path_drift import AMBIENT_PATH_ENV, path_drift_main
+from dotfiles_setup.plan_attest import plan_attest_main
 from dotfiles_setup.platform_target import (
     PLATFORM_FIELDS,
     platform_literals_main,
@@ -117,6 +118,8 @@ from dotfiles_setup.reap import (
 from dotfiles_setup.renovate import renovate_status_main
 from dotfiles_setup.renovate_dryrun import renovate_dryrun_main
 from dotfiles_setup.renovate_validate import renovate_validate_main
+from dotfiles_setup.schema_vendor import check_main as schema_vendor_check_main
+from dotfiles_setup.schema_vendor import refresh_main as schema_vendor_refresh_main
 from dotfiles_setup.session_review import LaneChoice, session_review_main
 from dotfiles_setup.session_state import main as session_state_main
 from dotfiles_setup.sync import SyncOptions, sync_main
@@ -1228,6 +1231,18 @@ def _add_session_subcommands(
         action="store_true",
         help="Skip the GitHub lookup for a fast, network-free snapshot",
     )
+    plan_attest_parser = subparsers.add_parser(
+        "plan-attest",
+        help="Attest the planning-with-files plan (OPERATOR ONLY: run it as "
+        "`! mise run plan-attest`; settings.json denies the model every "
+        "other route)",
+    )
+    plan_attest_parser.add_argument(
+        "args",
+        nargs="*",
+        help="Passed straight through to the plugin's attest-plan.sh "
+        "(e.g. --show, --clear); deliberately not enumerated here",
+    )
     handoff_check_parser = subparsers.add_parser(
         "handoff-check",
         help="Verify a session handoff's path, line, and mise task citations",
@@ -1280,6 +1295,36 @@ def _add_hook_subcommands(
         "selfcheck",
         help="Exercise the WIRED host-side hooks end-to-end (ship/land gate) — "
         "settings.json wiring, the real wrappers, and `bash -n` on the scripts",
+    )
+    # Nested here (rather than a sibling call in setup_parser) purely to
+    # avoid pushing setup_parser's own statement count over PLR0915's cap —
+    # schema-vendor has nothing to do with Claude Code hooks.
+    _add_schema_vendor_subcommands(subparsers)
+
+
+def _add_schema_vendor_subcommands(subparsers: _SubParsers) -> None:
+    """Register the vendored-schema (ITEM 11) check/refresh entrypoints.
+
+    Args:
+        subparsers: The parent subparsers action to attach commands to.
+    """
+    schema_vendor_parser = subparsers.add_parser(
+        "schema-vendor",
+        help="Vendored config schemas (schemas/*.json) for mise.toml/"
+        "ruff.toml/typos.toml's #:schema directives",
+    )
+    schema_vendor_sub = schema_vendor_parser.add_subparsers(
+        dest="schema_vendor_command", help="Schema-vendor actions"
+    )
+    schema_vendor_sub.add_parser(
+        "check",
+        help="OFFLINE: fail if a vendored schema's recorded version no "
+        "longer matches the tool's current pin (mise run verify)",
+    )
+    schema_vendor_sub.add_parser(
+        "refresh",
+        help="Re-download every vendored schema at its current pin "
+        "(network; CI's schema-refresh job, never the lint gate)",
     )
 
 
@@ -1848,6 +1893,18 @@ def handle_hook(args: argparse.Namespace, project_root: Path) -> None:
         sys.exit(hook_selfcheck_main(project_root))
 
 
+def handle_schema_vendor(args: argparse.Namespace) -> None:
+    """Dispatch a schema-vendor subcommand (ITEM 11: `check` or `refresh`).
+
+    Unknown/absent subcommand is a no-op, matching `handle_hook`.
+    """
+    command = getattr(args, "schema_vendor_command", None)
+    if command == "check":
+        sys.exit(schema_vendor_check_main())
+    elif command == "refresh":
+        sys.exit(schema_vendor_refresh_main())
+
+
 def handle_graphify(args: argparse.Namespace, project_root: Path) -> None:
     """Dispatch a graphify subcommand (the deterministic query read path, #313).
 
@@ -2256,6 +2313,7 @@ def _build_command_handlers(
         "session-state": lambda: sys.exit(
             session_state_main(["--no-pr"] if args.no_pr else [], project_root)
         ),
+        "plan-attest": lambda: sys.exit(plan_attest_main(args.args)),
         "handoff-check": lambda: sys.exit(
             handoff_check_main(
                 [args.path] if args.path is not None else [], project_root
@@ -2278,6 +2336,7 @@ def _build_command_handlers(
             autofix_apply_main(args.run_id, project_root)
         ),
         "hook": lambda: handle_hook(args, project_root),
+        "schema-vendor": lambda: handle_schema_vendor(args),
         "graphify": lambda: handle_graphify(args, project_root),
         "dependency-ownership": lambda: sys.exit(
             dependency_ownership_main(project_root)

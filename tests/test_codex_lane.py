@@ -27,6 +27,7 @@ from __future__ import annotations
 import ast
 import fcntl
 import json
+import subprocess
 import sys
 import threading
 from pathlib import Path
@@ -586,6 +587,73 @@ def test_a_model_override_is_passed_through_when_given(tmp_path: Path) -> None:
         "--model",
         "gpt-5.6",
     ]
+
+
+def test_the_spawned_lane_really_has_the_planning_hooks_disabled(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Asserted through the REAL spawn, not against `LANE_ENV_OVERRIDES`.
+
+    A test that reads the constant certifies the constant. The defect this
+    guards is a WIRING one — `subprocess.run` without `env=` inherits the
+    coordinator's planning hooks, so the lane is handed the plan and can write
+    `task_plan.md` back — and reverting that one keyword leaves a
+    constant-reading test green (#895's lesson: green gates certify logic, not
+    wiring). So run a child and ask the child what it inherited.
+    """
+    probe = tmp_path / "inherited.txt"
+    argv = [
+        sys.executable,
+        "-c",
+        (
+            "import os,sys;"
+            "open(sys.argv[1],'w').write("
+            "repr((os.environ.get('PLANNING_DISABLED'),"
+            "os.environ.get('PWF_LANE_CONTROL_ARM'))))"
+        ),
+        str(probe),
+    ]
+    monkeypatch.setenv("PWF_LANE_CONTROL_ARM", "inherited")
+    monkeypatch.delenv("PLANNING_DISABLED", raising=False)
+
+    assert cl.run_codex(argv, prompt="", cwd=tmp_path) == 0
+
+    disabled, control = ast.literal_eval(probe.read_text())
+    assert disabled == "1", "the lane inherited the session's planning hooks"
+    # The other arm: the override is a MERGE, not a wipe. Without this a bare
+    # `env={"PLANNING_DISABLED": "1"}` — which would strip PATH and break every
+    # real lane — passes the assertion above.
+    assert control == "inherited"
+
+
+def test_the_planning_disabled_arm_is_armed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The probe above can observe the FAILING state, so its pass means something.
+
+    Same child, spawned the way `run_codex` did before the override existed
+    (plain inheritance). It must report `None` — if it reported `"1"` here too,
+    the test above would pass no matter what `run_codex` does.
+    """
+    probe = tmp_path / "inherited.txt"
+    monkeypatch.delenv("PLANNING_DISABLED", raising=False)
+    # A BARE inherit, deliberately: this arm is the "before" that `run_codex`
+    # must not behave like, so it must NOT go through `run_codex`.
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import os,sys;open(sys.argv[1],'w').write("
+                "repr(os.environ.get('PLANNING_DISABLED')))"
+            ),
+            str(probe),
+        ],
+        check=True,
+    )
+    assert ast.literal_eval(probe.read_text()) is None
 
 
 # ------------------------------------------------------ settling the lane

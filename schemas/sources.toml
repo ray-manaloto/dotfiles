@@ -1,0 +1,38 @@
+# Vendored-schema provenance (ITEM 11). Read by
+# `dotfiles_setup.schema_vendor` — both the offline drift check (wired into
+# `mise run verify`) and the network-using `schema-vendor refresh` command
+# that `refresh.yml`'s `schema-refresh` job runs in CI. Never hand-edit the
+# `version`/`source`/`sha256` fields; run
+# `mise run schema-vendor-refresh` and let it rewrite this file alongside
+# the vendored JSON.
+#
+# `pin_source` names where `schema_vendor.current_pin()` reads the tool's
+# CURRENT version from — informational here, the resolver itself is code.
+# `sha256` is the vendored file's own hash, verified offline by
+# `check_drift` — it is what actually proves the bytes on disk are what was
+# fetched, since the version string alone cannot detect a hand-edited or
+# corrupted file.
+
+[[schema]]
+tool = "mise"
+file = "schemas/mise.json"
+version = "2026.9.1"
+source = "https://raw.githubusercontent.com/jdx/mise/v2026.9.1/schema/mise.json"
+pin_source = ".github/actions/setup-mise/action.yml"
+sha256 = "5142ef8a14e714679dab28ddea35b097f635d8a2d1be0ae27e88ca5475b4f815"
+
+[[schema]]
+tool = "ruff"
+file = "schemas/ruff.json"
+version = "0.16.5"
+source = "https://raw.githubusercontent.com/astral-sh/ruff/0.16.5/ruff.schema.json"
+pin_source = "python/uv.lock"
+sha256 = "df7b92eed9062e44ee6557f4672292e17fe6eda559b78a6a5960ace3e3b4bf13"
+
+[[schema]]
+tool = "typos"
+file = "schemas/typos.json"
+version = "1.50.1"
+source = "https://raw.githubusercontent.com/crate-ci/typos/v1.50.1/config.schema.json"
+pin_source = ".config/mise/conf.d/shared.toml"
+sha256 = "c7ba0c41d3e216c562b021a296de833c2c070d76f4ae550705d98bc2e1f6395b"

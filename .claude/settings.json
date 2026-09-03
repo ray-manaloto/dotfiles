@@ -1,4 +1,5 @@
 {
+  "$schema": "https://www.schemastore.org/claude-code-settings.json",
   "env": {
     "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "33",
     "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD": "1",
@@ -25,7 +26,18 @@
       "mcp__filesystem__write_file",
       "mcp__filesystem__edit_file",
       "mcp__filesystem__create_directory",
-      "mcp__filesystem__move_file"
+      "mcp__filesystem__move_file",
+      "Bash(*attest-plan.sh)",
+      "Bash(*attest-plan.sh *)",
+      "Bash(*attest-plan.ps1)",
+      "Bash(*attest-plan.ps1 *)",
+      "Bash(*set-active-plan.sh)",
+      "Bash(*set-active-plan.sh *)",
+      "Bash(mise run plan-attest)",
+      "Bash(mise run plan-attest *)",
+      "Bash(*mise run plan-attest *)",
+      "Bash(*dotfiles-setup plan-attest)",
+      "Bash(*dotfiles-setup plan-attest *)"
     ],
     "additionalDirectories": [
       "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base"

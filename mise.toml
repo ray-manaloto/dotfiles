@@ -1,3 +1,4 @@
+#:schema ./schemas/mise.json
 # Project tools — for linting, validating, and developing this repo
 # These are Build Type 1 tools: run locally before commits
 
@@ -898,6 +899,11 @@ description = "Paste-ready session snapshot: branch/tree/commits/PR: mise run se
 # Thin caller; python/src/dotfiles_setup/session_state.py.
 run = 'uv run --project python dotfiles-setup session-state'
 
+[tasks.plan-attest]
+description = "OPERATOR ONLY: attest the planning-with-files plan. Run it as `! mise run plan-attest` — settings.json denies the model every other route, INCLUDING this task. Bare form WRITES; `-- --show` is read-only."
+# Thin caller; python/src/dotfiles_setup/plan_attest.py.
+run = 'uv run --project python dotfiles-setup plan-attest'
+
 [tasks.handoff-check]
 description = "Verify a handoff's own citations (paths, file:line, mise task names): mise run handoff-check [-- <path>]"
 # Thin caller; python/src/dotfiles_setup/handoff_check.py.
@@ -1325,6 +1331,14 @@ run = "uv run --project python dotfiles-setup p2996-hash"
 [tasks.p2996-refresh]
 description = "Bump CLANG_P2996_REF in docker-bake.hcl to the latest bloomberg/clang-p2996 p2996-branch HEAD (writes only on change; the scheduled refresh.yml workflow's p2996-refresh job does this in CI)"
 run = "uv run --project python dotfiles-setup p2996-refresh"
+
+[tasks.schema-vendor-check]
+description = "OFFLINE: fail if a vendored schema (schemas/*.json) no longer matches the tool's current pin (ITEM 11; also runs as the config.schema-vendor-drift suite via `mise run verify`)"
+run = "uv run --project python dotfiles-setup schema-vendor check"
+
+[tasks.schema-vendor-refresh]
+description = "Re-download every vendored schema (schemas/mise.json, schemas/ruff.json, schemas/typos.json) at its current pin, rewriting schemas/sources.toml on change; network-using — refresh.yml's schema-refresh job runs this in CI, never the lint gate"
+run = "uv run --project python dotfiles-setup schema-vendor refresh"
 
 [tasks.cc]
 description = "Launch Claude Code rooted in THIS repo with a VERIFIED environment (tmux, --add-dir knowledge-base, auto mode)"

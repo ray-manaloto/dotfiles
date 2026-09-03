@@ -167,9 +167,19 @@ _SCAN_EXCLUDED_PREFIXES = (
 # #841: mise-system.toml's own `os=["linux/arm64"]` tool-scoping syntax
 # (mise's os/arch grammar) is textually identical to but semantically
 # unrelated to a DOTFILES_PLATFORM triple — it never issues a `--platform`.
+#
+# `schemas/mise.json` (ITEM 11) is vendored third-party JSON Schema, byte-
+# identical to upstream at its pinned tag: its own `os_filter_item.examples`
+# names `"linux/x64"` as an EXAMPLE of mise's `os`/`arch` filter grammar, same
+# reasoning as the `mise-system.toml` entry above. Named as the single file
+# that actually contains the literal (measured — `ruff.json`/`typos.json` do
+# not), not a `schemas/` prefix, so a future file dropped in `schemas/` does
+# not silently inherit the exemption; `schema_vendor.py` never issues a
+# `--platform`, so excluding this one vendored file costs no coverage.
 _SCAN_EXCLUDED_PATHS = (
     "python/src/dotfiles_setup/platform_target.py",
     ".devcontainer/mise-system.toml",
+    "schemas/mise.json",
 )
 
 

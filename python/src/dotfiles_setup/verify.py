@@ -11,7 +11,7 @@ import tomllib
 from pathlib import Path
 from typing import Any, Never, cast
 
-from dotfiles_setup import _project_root
+from dotfiles_setup import _project_root, schema_vendor
 
 logger = logging.getLogger(__name__)
 
@@ -648,6 +648,15 @@ def _handle_no_vscode_user(entry: dict[str, Any]) -> dict[str, Any]:
     return _handle_forbid_tokens(entry)
 
 
+def _handle_schema_drift(entry: dict[str, Any]) -> dict[str, Any]:
+    """Vendored-schema drift (ITEM 11) — offline, delegates to schema_vendor."""
+    name: str = entry["name"]
+    findings = schema_vendor.check_drift(_project_root())
+    if findings:
+        return {"name": name, "status": "failed", "reason": "; ".join(findings)}
+    return {"name": name, "status": "passed"}
+
+
 HANDLERS: dict[str, Any] = {
     "forbid_tokens": _handle_forbid_tokens,
     "require_tokens": _handle_require_tokens,
@@ -658,6 +667,7 @@ HANDLERS: dict[str, Any] = {
     "dockerfile_structure": _handle_dockerfile_structure,
     "policy_doc": policy_doc,
     "no_vscode_user": _handle_no_vscode_user,
+    "schema_drift": _handle_schema_drift,
 }
 
 

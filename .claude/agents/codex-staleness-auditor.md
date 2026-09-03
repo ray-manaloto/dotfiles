@@ -60,12 +60,19 @@ cat > .agent/kb/raw/codex-staleness-auditor-prompt.md <<'EOF'
 output you already gathered; and the report format below>
 EOF
 
-cat .agent/kb/raw/codex-staleness-auditor-prompt.md | codex exec \
+cat .agent/kb/raw/codex-staleness-auditor-prompt.md | PLANNING_DISABLED=1 codex exec \
   --ephemeral --sandbox read-only \
   --model gpt-5.6-sol \
   -c model_reasoning_effort="xhigh" \
   -o .agent/kb/raw/codex-staleness-auditor-verdict.md -
 ```
+
+**`PLANNING_DISABLED=1` is load-bearing too.** Without it the lane inherits this
+session's planning-with-files hooks, is handed the coordinator's `task_plan.md`,
+and can write it back. The flag is the plugin's own per-invocation opt-out and
+silences the whole chain at `hooks/claude-hook.sh:10`. Measured on 3.14.0:
+unset -> 1100 bytes of injected plan context, set -> 0, both rc=0. A lane that
+genuinely needs plan context gets its OWN slug and `PLAN_ID`, never this one's.
 
 codex reads and greps the repo itself inside the read-only sandbox, so give it
 paths rather than pasted file dumps — but anything needing a write, a `mise`

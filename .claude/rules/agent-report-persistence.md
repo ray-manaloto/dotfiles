@@ -42,6 +42,24 @@ the file:line anchors the implementing session needs. Three incidents:
    every delegation instead of being remembered per-brief — and add one line to any
    ad-hoc brief. Pair it with **deliver before idle**: an agent that *finished* and
    went idle without sending its report was a total loss in the same run.
+1c. **State the file-role contract in every brief that can reach a plan file.**
+   Lane returns landing in the wrong file is the #1 observed pain here, and the
+   split is finer than "returns go in `progress.md`":
+
+   | Content | File | Who writes |
+   |---|---|---|
+   | Phases, checkboxes, current phase, distilled decisions | `task_plan.md` | **coordinator ONLY** |
+   | Research, analysis, evidence, technical findings | `findings.md` | anyone |
+   | Chronological outcomes, actions, errors, test results | `progress.md` | anyone |
+
+   A delegate never writes `task_plan.md` — the coordinator distills into it.
+   ⚠️ **Codex lanes are covered mechanically instead**, and that is the stronger
+   layer: `PLANNING_DISABLED=1` is set on the spawn itself
+   (`codex_lane.LANE_ENV_OVERRIDES`, and the invocation in each
+   `.claude/agents/codex-*.md`), so those lanes never see a plan file to
+   misfile into. Prose is the fallback for Claude delegates, which inherit the
+   session's hooks and cannot be scrubbed the same way.
+
 2. **Verbatim means verbatim.** Keep the agent's tables, evidence links,
    probe output, and repos-touched enumeration intact. Annotating
    decisions inline afterwards (e.g. "DECIDED: option A") is encouraged;

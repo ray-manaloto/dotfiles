@@ -1,3 +1,4 @@
+#:schema ./schemas/ruff.json
 # Repo-root ruff config (#160 T12): extends the Python package's config so
 # tests/ and plugins/ — which live OUTSIDE python/'s directory tree — resolve
 # the same rules. Probe-verified: ruff resolves its config per-file by walking
