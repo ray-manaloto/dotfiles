@@ -4,6 +4,44 @@ Established by `/grilling`, 2026-09-02c, operator + architect. Frontier empty:
 every branch visited, nothing silently assumed. **Design record — not yet an
 implementation plan.**
 
+> **SUPERSEDED IN PART, 2026-09-02d — read this first.** `/to-spec` published
+> the implementation spec as **issue #916** (`ready-for-agent`). A
+> `codex-advisor` seam consult
+> (`docs/research/kb/reports/agents/2026-09-02-seam-advisor-rule-injector.md`)
+> **corrected four claims below**; #916 carries the corrected forms, and where
+> the two disagree **#916 wins**. The corrections, each re-verified independently
+> against the offline vendor docs:
+>
+> 1. **Decision 6 is NOT satisfiable as written and is amended in #916.** Codex
+>    is *not* incapable of path-scoped injection — it has `PostToolUse` for
+>    `apply_patch`, its matcher accepts the `Edit`/`Write` aliases, and it accepts
+>    `hookSpecificOutput.additionalContext`
+>    (`sources/agent-harness-docs/docs/codex/hooks.md:721,729,745`). What it lacks
+>    is **per-agent dedup**: no `agent_id`, and *"Subagent hooks use the parent
+>    session id"* (`codex/hooks.md:384`). So parity holds for **content**, not
+>    **mechanism**, and write-triggered rules stay eager on Codex until it exposes
+>    an agent id.
+> 2. **Decision 9's write half is ONE generalized dispatcher**, not a second
+>    handler: `mise_config_context.py` is retired and its reminder becomes a
+>    registry row. Deciding risk is fragmented state — `already_seen()`
+>    (`mise_config_context.py:158-186`) is read-and-mark and marks *before* output
+>    is written. Sharper: that handler deliberately omits `use-tool-builtins.md`'s
+>    body **because the rule is eager** (`:14-20`) — scoping that rule while a
+>    second handler exists silently empties the reminder.
+> 3. **Decision 8's key is incomplete.** `session_id--agent_id` has no rule id, so
+>    generalized, the first matching rule consumes the marker for every other rule
+>    on the same write. #916 uses `(harness, session_id, agent_id, rule_id)`.
+> 4. **Two counts/pins below are wrong**: "five handlers" is **six**;
+>    `claude --version` is **2.1.259**, not 2.1.258. The settings verb is
+>    `dotfiles-setup mise-config-context`.
+>
+> Also newly found, and in #916: **`NotebookEdit` injects nothing today** — the
+> handler reads `tool_input.file_path` while NotebookEdit's field is
+> `notebook_path` (`claude-code/permissions.md:144`); the 10,000-char cap becomes
+> reachable on co-match and **over-cap output spills to a file**, preserving bytes
+> while losing context, indistinguishable from success; and **PostToolUse wiring
+> is absent from the ship/land hook self-check**.
+
 ## Problem
 
 Two halves, and the operator's own diagnosis names the second:
