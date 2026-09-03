@@ -1381,6 +1381,29 @@ tokens = [
 ]
 
 [[suite]]
+name = "workflow.instructions-observer-wiring"
+description = "InstructionsLoaded observer wiring (#917): the hot-path observer must stay wired end-to-end — .claude/settings.json registers the InstructionsLoaded hook invoking `python -m dotfiles_setup.instructions_observer` directly (never the console script, per C1's stdlib-only hot-path budget), hook_selfcheck.py's _SETTINGS_WIRING asserts that registration on every ship/land, main.py registers and dispatches the `instructions-report` subcommand, mise.toml wraps it as a task, and both the observer and report modules plus their tests exist. Modelled on workflow.bash-logic-enforcement; per_path_tokens bind CALL SITES (the wired command string, the dispatch lambda, the settings-wiring tuple entry), never definitions alone — workflow.apt-pins-enforcement's description records why a definition-only token stayed green through a deleted wiring line."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    ".claude/settings.json",
+    "mise.toml",
+    "python/src/dotfiles_setup/main.py",
+    "python/src/dotfiles_setup/hook_selfcheck.py",
+    "python/src/dotfiles_setup/instructions_observer.py",
+    "python/src/dotfiles_setup/instructions_report.py",
+    "tests/test_instructions_observer.py",
+    "tests/test_instructions_report.py",
+]
+per_path_tokens = { ".claude/settings.json" = ["InstructionsLoaded", "python -m dotfiles_setup.instructions_observer"], "mise.toml" = ["[tasks.instructions-report]", "dotfiles-setup instructions-report"], "python/src/dotfiles_setup/main.py" = ['"instructions-report",', '"instructions-report": lambda: sys.exit('], "python/src/dotfiles_setup/hook_selfcheck.py" = ['"InstructionsLoaded",', "python -m dotfiles_setup.instructions_observer"], "python/src/dotfiles_setup/instructions_observer.py" = ["def observe_main(", "def build_record(", 'if __name__ == "__main__":'], "python/src/dotfiles_setup/instructions_report.py" = ["def build_report(", "def scoped_rules_on_disk(", "def run_report("] }
+tokens = [
+    "def observe_main(",
+    "def build_report(",
+]
+
+[[suite]]
 name = "workflow.plan-attest-operator-only"
 description = "D4: plan attestation is a HUMAN approval boundary, and on this host the plugin's own guard is decorative. `commands/plan-attest.md` sets `disable-model-invocation: true` while implementing the command as `sh ${CLAUDE_PLUGIN_ROOT}/scripts/attest-plan.sh`, so the flag stops the COMMAND and leaves the SCRIPT one plain Bash call away. It was crossed twice on 2026-09-02: once by a session self-attesting, and once by the session BUILDING this ban, which smoke-tested the new wrapper with no arguments and locked a tampered plan over the operator's hash — neither invoked the slash command. The layer is therefore a `permissions.deny` rule rather than the PreToolUse guard, because hard bans must never fail open and the guard does exactly that on its own errors (#343). Five routes are denied, each in BOTH the bare and the argument-carrying form: a trailing `*` also matches the bare command only when it is the rule's sole wildcard, and every rule here carries a leading one, so the bare form -- which is the invocation that WRITES -- would otherwise stay allowed while the ban looked complete. Denying the mise task but not the `dotfiles-setup` CLI beneath it would likewise leave the ban one `uv run` away. The cost is accepted and stated: `/plan-attest` is denied too, because `disable-model-invocation` never distinguished 'the operator directed this' from 'the agent decided the operator would have'. The operator path is `! mise run plan-attest` -- shell mode is not a tool call, so no permission rule or hook sees it, a property read from `$CC/interactive-mode.md:316-325` rather than probed, since an agent cannot type `!`. The wrapper resolves the plugin through `listing_budget.plugin_root` (highest numeric version, never mtime, never installed_plugins.json) rather than re-deriving that rule, and passes flags straight through rather than enumerating upstream's. Live arms when the rules landed, all four denied: the script bare, the script with `--show`, `mise run plan-attest -- --show`, and `uv run ... dotfiles-setup plan-attest -- --show`; control arms still allowed: `shasum -a 256 task_plan.md` and an unrelated mise task. `hook selfcheck`'s `plan-attest-deny` gates presence on every ship/land, and its own limit is stated in its docstring -- the permission engine belongs to the harness, so nothing here can drive a real deny; it proves the rules were not silently removed or half-written, not that the harness still honours them."
 category = "workflow"
