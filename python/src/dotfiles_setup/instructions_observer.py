@@ -105,20 +105,36 @@ def _project_root() -> Path:
     return Path(__file__).resolve().parent.parent.parent.parent
 
 
+def usable_session_id(value: object) -> str | None:
+    r"""Return the sanitized, usable form of ``session_id``, or ``None``.
+
+    U1 — the single shared definition of "usable session id", used by both
+    `session_filename` (this module, hot path) and `instructions_report`'s
+    session counting. Filters to the conservative `_SESSION_ID_CHARS`
+    charset, caps the length, and treats a value that reduces to nothing
+    survivable — missing, ``None``, a non-string, empty, whitespace-only, or
+    pure path-traversal characters — as unusable (``None``), rather than as
+    a distinct real session. Before this predicate was shared, the report
+    counted `""`, `" "`, `"\\t"` as three distinct real sessions even though
+    the observer had already collapsed all of them into one `unknown.jsonl`
+    file — the report and the write path disagreed on the same fact.
+    """
+    if not isinstance(value, str):
+        return None
+    cleaned = "".join(ch for ch in value if ch in _SESSION_ID_CHARS)
+    cleaned = cleaned[:_MAX_SESSION_ID_LEN]
+    return cleaned or None
+
+
 def session_filename(session_id: object) -> str:
     """Sanitize ``session_id`` into a safe ``<id>.jsonl`` filename (C3).
 
     Reduces to a conservative charset, caps the length, and falls back to a
     fixed name when the input is missing, ``None``, a non-string, or reduces
-    to nothing survivable (e.g. it was pure path-traversal characters).
+    to nothing survivable (e.g. it was pure path-traversal characters) — per
+    `usable_session_id`.
     """
-    if not isinstance(session_id, str):
-        cleaned = ""
-    else:
-        cleaned = "".join(ch for ch in session_id if ch in _SESSION_ID_CHARS)
-        cleaned = cleaned[:_MAX_SESSION_ID_LEN]
-    if not cleaned:
-        cleaned = _SESSION_ID_FALLBACK
+    cleaned = usable_session_id(session_id) or _SESSION_ID_FALLBACK
     return f"{cleaned}.jsonl"
 
 

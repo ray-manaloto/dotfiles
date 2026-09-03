@@ -388,6 +388,55 @@ def test_build_report_sessions_observed_unidentified_plus_distinct_ids() -> None
     assert result.sessions_observed == 3
 
 
+def test_build_report_sessions_observed_whitespace_ids_are_one_pseudo_session() -> None:
+    r"""U1: whitespace-only session_ids must not be counted as distinct sessions.
+
+    `""`, `" "`, `"\t"` all reduce to nothing under
+    `instructions_observer.usable_session_id` — the same predicate
+    `session_filename` uses to collapse them into ONE `unknown.jsonl` file
+    — so the report must also count them as one pseudo-session, not three.
+    """
+    records = [
+        {"file_path": f"r{i}", "load_reason": "session_start", "session_id": sid}
+        for i, sid in enumerate(("", " ", "\t"))
+    ]
+    result = report.build_report(records, scoped=(".claude/rules/dead.md",))
+    assert result.sessions_observed == 1
+    assert result.never_fired_sufficient is False
+    # `never_fired` is still computed on the dataclass (S2) — only the
+    # JSON/render layer withholds it when insufficient (`_json_payload`).
+    assert result.never_fired == (".claude/rules/dead.md",)
+
+
+def test_build_report_sessions_observed_one_real_plus_unusable_ids() -> None:
+    """U1: one real id plus assorted unusable ones is one real + one pseudo."""
+    records = [
+        {"file_path": "a", "load_reason": "session_start", "session_id": "s1"},
+        {"file_path": "b", "load_reason": "session_start", "session_id": ""},
+        {"file_path": "c", "load_reason": "session_start", "session_id": None},
+    ]
+    result = report.build_report(records, scoped=())
+    assert result.sessions_observed == 2
+    assert result.never_fired_sufficient is False
+
+
+def test_build_report_sessions_observed_three_real_ids_fires_gate() -> None:
+    """Three genuinely distinct real ids still reach the threshold.
+
+    And a dead scoped rule is named — the gate must still be reachable,
+    not just safe.
+    """
+    records = [
+        {"file_path": "a", "load_reason": "session_start", "session_id": "sess-1"},
+        {"file_path": "b", "load_reason": "session_start", "session_id": "sess-2"},
+        {"file_path": "c", "load_reason": "session_start", "session_id": "sess-3"},
+    ]
+    result = report.build_report(records, scoped=(".claude/rules/dead.md",))
+    assert result.sessions_observed == 3
+    assert result.never_fired_sufficient is True
+    assert result.never_fired == (".claude/rules/dead.md",)
+
+
 def test_build_report_zero_session_start_records_is_insufficient() -> None:
     records = [
         {"file_path": "a", "load_reason": "path_glob_match", "session_id": "s1"},

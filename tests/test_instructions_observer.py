@@ -240,6 +240,58 @@ def test_session_filename_non_string_falls_back() -> None:
     assert obs.session_filename(["a", "b"]) == "unknown.jsonl"
 
 
+def test_usable_session_id_normal_id() -> None:
+    assert obs.usable_session_id("abc123-XYZ_9") == "abc123-XYZ_9"
+
+
+def test_usable_session_id_whitespace_only_is_unusable() -> None:
+    """U1's probed regression: whitespace-only ids are not distinct sessions.
+
+    `_SESSION_ID_CHARS` excludes whitespace, so a space or a tab reduces to
+    nothing survivable — the same as an empty string, and the same fallback
+    `session_filename` already applied.
+    """
+    assert obs.usable_session_id(" ") is None
+    assert obs.usable_session_id("\t") is None
+    assert obs.usable_session_id("") is None
+    assert obs.usable_session_id(None) is None
+    assert obs.usable_session_id(12345) is None
+
+
+def test_usable_session_id_strips_traversal_and_survives() -> None:
+    assert obs.usable_session_id("../../etc/passwd") == "etcpasswd"
+
+
+def test_usable_session_id_pure_traversal_is_unusable() -> None:
+    assert obs.usable_session_id("../../..") is None
+
+
+def test_session_filename_and_usable_session_id_agree() -> None:
+    """The paired-definition assertion (U1).
+
+    Both entry points must agree on the same set of inputs, or the report
+    and the write path can drift apart again exactly as they did before
+    this predicate was shared.
+    """
+    cases: list[object] = [
+        "abc123-XYZ_9",
+        "../../etc/passwd",
+        "/etc/passwd",
+        "abc\x00def",
+        "../../..",
+        "",
+        " ",
+        "\t",
+        None,
+        12345,
+        ["a", "b"],
+    ]
+    for value in cases:
+        usable = obs.usable_session_id(value)
+        expected_filename = f"{usable}.jsonl" if usable is not None else "unknown.jsonl"
+        assert obs.session_filename(value) == expected_filename, value
+
+
 def test_session_filename_length_is_capped() -> None:
     """Truncation, proven behaviorally rather than against the exact cap.
 

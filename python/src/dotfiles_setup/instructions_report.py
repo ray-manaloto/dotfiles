@@ -43,6 +43,8 @@ from typing import TYPE_CHECKING
 
 import yaml
 
+from dotfiles_setup.instructions_observer import usable_session_id
+
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
@@ -202,12 +204,18 @@ def build_report(records: Iterable[dict], scoped: Iterable[str]) -> RuleLoadRepo
     `sessions_observed` counts DISTINCT SESSIONS, not ``session_start``
     events (S2 respec) — one session emits one ``session_start`` record per
     eager instruction file, so counting events let a single session satisfy
-    the threshold on its own. Distinct non-null string ``session_id``
-    values among ``session_start`` records are counted individually;
+    the threshold on its own. Distinct USABLE ``session_id`` values among
+    ``session_start`` records are counted individually, per
+    `instructions_observer.usable_session_id` — the SAME predicate the
+    observer's `session_filename` uses to decide which records collapse
+    into one ``unknown.jsonl`` file (U1: the report and the write path must
+    agree on what counts as usable, or the report can count as distinct
+    real sessions the very ids the observer already collapsed into one).
     ``session_start`` records with no usable ``session_id`` (missing, null,
-    or non-string) are indistinguishable from one another and so contribute
-    AT MOST ONE additional pseudo-session in total — never zero, so a
-    corpus where ``session_id`` is always null still accumulates coverage.
+    non-string, empty, whitespace-only, or pure path-traversal characters)
+    are indistinguishable from one another and so contribute AT MOST ONE
+    additional pseudo-session in total — never zero, so a corpus where
+    ``session_id`` is always unusable still accumulates coverage.
 
     `records_malformed`, `errors_log_lines` default to 0 here — they are
     properties of the FILES, not the parsed records, and `run_report` fills
@@ -231,9 +239,9 @@ def build_report(records: Iterable[dict], scoped: Iterable[str]) -> RuleLoadRepo
         if isinstance(ts, str):
             timestamps.append(ts)
         if reason == "session_start":
-            session_id = record.get("session_id")
-            if isinstance(session_id, str):
-                session_ids.add(session_id)
+            usable = usable_session_id(record.get("session_id"))
+            if usable is not None:
+                session_ids.add(usable)
             else:
                 has_unidentified_session = True
         file_path = record.get("file_path")
