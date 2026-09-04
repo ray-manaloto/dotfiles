@@ -347,8 +347,186 @@ jobs:
   # `build-publish`, which fails ci-gate — while letting non-build PRs
   # merge normally. See .github/workflows/AGENTS.md § GitHub App.
   # ============================================================
+  # ============================================================
+  # Throwaway feasibility probe: can Tart build/run a VM on a
+  # GitHub-HOSTED macOS arm64 runner? It lives HERE rather than in its own
+  # workflow because branch protection requires exactly one check --
+  # `ci-gate` -- so a job in a separate workflow can go red and still merge.
+  # That is not hypothetical: the first version of this probe was a
+  # standalone workflow, failed, and merged anyway (PR #973).
+  #
+  # DELETE THIS JOB, and its entry in tests/test_workflow_hooks.py's
+  # EXPECTED_JOBS, once the question is settled and the answer recorded.
+  # ============================================================
+  probe-tart-macos:
+    # xcode-27 is the label the operator selected (public preview, arm64,
+    # 3 CPU / 7 GB). macos-26 is the GA fallback if the label is withdrawn.
+    runs-on: xcode-27
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Runner identity
+        run: |
+          # GitHub runs this as `/bin/bash -e {0}`. `set -uo pipefail` does NOT
+          # clear that -e, so a failing command aborts the step before any
+          # diagnostic below can run -- which is exactly how this probe's own
+          # error handling became dead code on its first run. Clear it: this
+          # step inspects rc itself.
+          set +e
+          set -uo pipefail
+          uname -a; uname -m; sw_vers -productVersion; sysctl -n hw.ncpu hw.memsize
+          {
+            echo "## Runner identity"
+            echo '```'
+            echo "uname:    $(uname -a)"
+            echo "arch:     $(uname -m)"
+            echo "sw_vers:  $(sw_vers -productVersion 2>/dev/null || echo unknown)"
+            echo "cpus:     $(sysctl -n hw.ncpu 2>/dev/null || echo unknown)"
+            echo "memsize:  $(sysctl -n hw.memsize 2>/dev/null || echo unknown)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # CONTROL ARM for the whole probe: if this reports absent, every later
+      # "failed" result is explained by tart missing, NOT by nested virt.
+      - name: Install tart
+        id: install
+        run: |
+          # GitHub runs this as `/bin/bash -e {0}`. `set -uo pipefail` does NOT
+          # clear that -e, so a failing command aborts the step before any
+          # diagnostic below can run -- which is exactly how this probe's own
+          # error handling became dead code on its first run. Clear it: this
+          # step inspects rc itself.
+          set +e
+          set -uo pipefail
+          # Tap explicitly: `brew install <tap>/<formula>` can fail before the
+          # tap is added, and the failure text is what we need either way.
+          brew tap cirruslabs/cli 2>&1 | tail -5
+          brew install tart 2>&1 | tee /tmp/brew.log | tail -25
+          brew_rc="${PIPESTATUS[0]}"
+          echo "brew_rc=${brew_rc}"
+          echo "brew_rc=${brew_rc}" >> "$GITHUB_OUTPUT"
+          if command -v tart >/dev/null 2>&1; then
+            echo "tart_present=yes" >> "$GITHUB_OUTPUT"
+            echo "tart_present=yes"
+            tart --version 2>&1 | tee /tmp/tart-version.log
+          else
+            echo "tart_present=no" >> "$GITHUB_OUTPUT"
+            echo "tart_present=no — brew log tail follows"
+            tail -30 /tmp/brew.log 2>/dev/null || echo "(no brew log written)"
+          fi
+          {
+            echo "## Install"
+            echo '```'
+            echo "brew_rc=${brew_rc}"
+            echo "tart_present=$(command -v tart >/dev/null 2>&1 && echo yes || echo no)"
+            cat /tmp/tart-version.log 2>/dev/null || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          # Never fail the step: a missing tart is a RESULT the verdict reports,
+          # not an error. Failing here would skip the verdict entirely -- which
+          # is precisely what happened on the first run.
+          exit 0
+
+      # THE DECISIVE TEST. `tart create --linux` builds a tiny empty Linux VM
+      # through Apple's Virtualization.framework -- it exercises exactly the
+      # nested-virtualization capability in question WITHOUT pulling a ~25GB
+      # macOS base image. If nested virt is unavailable this is where it dies.
+      - name: Create a Linux VM via Virtualization.framework
+        id: create
+        if: steps.install.outputs.tart_present == 'yes'
+        continue-on-error: true
+        run: |
+          # GitHub runs this as `/bin/bash -e {0}`. `set -uo pipefail` does NOT
+          # clear that -e, so a failing command aborts the step before any
+          # diagnostic below can run -- which is exactly how this probe's own
+          # error handling became dead code on its first run. Clear it: this
+          # step inspects rc itself.
+          set +e
+          set -uo pipefail
+          tart create --linux --disk-size 1 probe-vm > /tmp/create.log 2>&1
+          create_rc=$?
+          echo "create_rc=${create_rc}" | tee -a "$GITHUB_OUTPUT"
+          {
+            echo "## tart create (nested virtualization)"
+            echo "rc=${create_rc}"
+            echo '```'
+            tail -40 /tmp/create.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+
+      - name: Boot the VM
+        id: boot
+        if: steps.create.outputs.create_rc == '0'
+        continue-on-error: true
+        run: |
+          # GitHub runs this as `/bin/bash -e {0}`. `set -uo pipefail` does NOT
+          # clear that -e, so a failing command aborts the step before any
+          # diagnostic below can run -- which is exactly how this probe's own
+          # error handling became dead code on its first run. Clear it: this
+          # step inspects rc itself.
+          set +e
+          set -uo pipefail
+          # An empty VM has no OS, so it will not reach a login prompt. What we
+          # are measuring is whether the HYPERVISOR accepts the launch at all:
+          # a virtualization denial fails immediately and loudly, while a
+          # working hypervisor sits waiting on an unbootable disk until we
+          # stop it. Distinguish those two, do not conflate them.
+          ( tart run --no-graphics probe-vm > /tmp/run.log 2>&1 ) &
+          run_pid=$!
+          sleep 25
+          if kill -0 "$run_pid" 2>/dev/null; then
+            boot_state=hypervisor_accepted_launch
+            kill "$run_pid" 2>/dev/null || true
+          else
+            wait "$run_pid" 2>/dev/null
+            boot_state="exited_rc=$?"
+          fi
+          echo "boot_state=${boot_state}" | tee -a "$GITHUB_OUTPUT"
+          {
+            echo "## tart run"
+            echo "state=${boot_state}"
+            echo '```'
+            tail -40 /tmp/run.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+
+      - name: Verdict
+        if: always()
+        # Step outputs go through env rather than being interpolated into the
+        # script: a `${{ }}` expansion inside `run:` is string-substituted
+        # BEFORE bash sees it, so a value containing shell metacharacters
+        # would execute. zizmor's template-injection audit flags exactly this.
+        env:
+          TART_PRESENT: ${{ steps.install.outputs.tart_present }}
+          CREATE_RC: ${{ steps.create.outputs.create_rc }}
+          BOOT_STATE: ${{ steps.boot.outputs.boot_state }}
+        run: |
+          # GitHub runs this as `/bin/bash -e {0}`. `set -uo pipefail` does NOT
+          # clear that -e, so a failing command aborts the step before any
+          # diagnostic below can run -- which is exactly how this probe's own
+          # error handling became dead code on its first run. Clear it: this
+          # step inspects rc itself.
+          set +e
+          set -uo pipefail
+          {
+            echo "## VERDICT"
+            echo "| probe | result |"
+            echo "|---|---|"
+            echo "| tart installed | ${TART_PRESENT:-not-run} |"
+            echo "| tart create rc | ${CREATE_RC:-not-run} |"
+            echo "| tart run state | ${BOOT_STATE:-not-run} |"
+            echo ""
+            echo "Read this as: tart installed=no means the probe says NOTHING"
+            echo "about nested virtualization. create rc=0 means"
+            echo "Virtualization.framework IS usable on a GitHub-hosted macOS"
+            echo "runner. A non-zero create rc is the real negative result."
+          } >> "$GITHUB_STEP_SUMMARY"
+
   ci-gate:
-    needs: [lint, contract-preflight, changes, build-publish]
+    needs: [lint, contract-preflight, changes, build-publish, probe-tart-macos]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -358,7 +536,7 @@ jobs:
       - name: Require all upstream jobs to succeed or skip
         env:
           RESULTS: >-
-            ${{ needs.lint.result }} ${{ needs.contract-preflight.result }} ${{ needs.changes.result }} ${{ needs.build-publish.result }}
+            ${{ needs.lint.result }} ${{ needs.contract-preflight.result }} ${{ needs.changes.result }} ${{ needs.build-publish.result }} ${{ needs.probe-tart-macos.result }}
         run: |
           set -euo pipefail
           rc=0
