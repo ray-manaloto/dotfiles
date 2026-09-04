@@ -1,3 +1,17 @@
+# GitHub-hosted PREVIEW runner labels that actionlint 1.7.12 does not yet know.
+# These are NOT self-hosted runners -- `self-hosted-runner.labels` is simply
+# actionlint's documented way to declare labels its built-in list lacks
+# (https://github.com/rhysd/actionlint/blob/main/docs/config.md). All three are
+# GitHub-hosted and Public preview per
+# https://docs.github.com/en/actions/reference/runners/github-hosted-runners
+# GA fallbacks if a preview label is withdrawn: ubuntu-24.04, ubuntu-24.04-arm,
+# macos-26.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04
+    - ubuntu-26.04-arm
+    - xcode-27
+
 # Path-specific error suppressions.
 #
 # actionlint 1.7.12 does not yet parse GitHub's `$/...` self-repository `uses:`
