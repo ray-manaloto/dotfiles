@@ -102,6 +102,7 @@ EXPECTED_JOBS: frozenset[tuple[str, str]] = frozenset(
         (".github/workflows/gcc-sha-repair.yml", "repair"),
         (".github/workflows/ghcr-cleanup.yml", "cleanup"),
         (".github/workflows/image-analysis.yml", "analyze"),
+        (".github/workflows/probe-tart-macos.yml", "probe"),
         (".github/workflows/refresh.yml", "image-lock-pr"),
         (".github/workflows/refresh.yml", "lock-refresh"),
         (".github/workflows/refresh.yml", "schema-refresh"),
