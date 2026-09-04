@@ -54,8 +54,18 @@ runs:
         # tools since 2026.6.13, so a broken tool fails loud here.
         # MISE_ENV=runtime covers BOTH tiers in one pass — mise writes
         # mise.lock (base) + mise.runtime.lock (runtime tier, #160 T9).
+        # --bump re-resolves the `latest`/fuzzy selectors. WITHOUT it this job
+        # only refreshes url/checksum metadata for versions already locked, so
+        # a `latest` pin never moves — measured across five refresh-bot commits
+        # (362f3ed, 0e04581, 8d75022, 600494c, 85dcacf): 22-1162 changed
+        # url/checksum lines and ZERO version advances, while this workflow's
+        # header claimed the job owns re-resolution. The image configs are
+        # almost entirely `latest` (27/28 system, 21/21 runtime), so that gap
+        # froze ~48 tools at whatever version they were first locked at.
+        # Keep in lockstep with image_lock.lock_command, which builds the same
+        # argv for the local `mise run lock-image` path.
         for _ in 1 2 3 4 5; do
-          MISE_ENV=runtime "$stage/mise-pinned" lock --platform linux-x64 -C "$stage"
+          MISE_ENV=runtime "$stage/mise-pinned" lock --bump --platform linux-x64 -C "$stage"
         done
         # lock-collect validates coverage before overwriting the
         # committed lock — a truncated regen never lands.
