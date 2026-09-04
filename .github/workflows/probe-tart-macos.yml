@@ -37,7 +37,14 @@ jobs:
     steps:
       - name: Runner identity
         run: |
+          # GitHub runs this as `/bin/bash -e {0}`. `set -uo pipefail` does NOT
+          # clear that -e, so a failing command aborts the step before any
+          # diagnostic below can run -- which is exactly how this probe's own
+          # error handling became dead code on its first run. Clear it: this
+          # step inspects rc itself.
+          set +e
           set -uo pipefail
+          uname -a; uname -m; sw_vers -productVersion; sysctl -n hw.ncpu hw.memsize
           {
             echo "## Runner identity"
             echo '```'
@@ -54,23 +61,41 @@ jobs:
       - name: Install tart
         id: install
         run: |
+          # GitHub runs this as `/bin/bash -e {0}`. `set -uo pipefail` does NOT
+          # clear that -e, so a failing command aborts the step before any
+          # diagnostic below can run -- which is exactly how this probe's own
+          # error handling became dead code on its first run. Clear it: this
+          # step inspects rc itself.
+          set +e
           set -uo pipefail
-          brew install cirruslabs/cli/tart > /tmp/brew.log 2>&1
-          echo "brew_rc=$?" | tee -a "$GITHUB_OUTPUT"
+          # Tap explicitly: `brew install <tap>/<formula>` can fail before the
+          # tap is added, and the failure text is what we need either way.
+          brew tap cirruslabs/cli 2>&1 | tail -5
+          brew install tart 2>&1 | tee /tmp/brew.log | tail -25
+          brew_rc="${PIPESTATUS[0]}"
+          echo "brew_rc=${brew_rc}"
+          echo "brew_rc=${brew_rc}" >> "$GITHUB_OUTPUT"
           if command -v tart >/dev/null 2>&1; then
-            echo "tart_present=yes" | tee -a "$GITHUB_OUTPUT"
+            echo "tart_present=yes" >> "$GITHUB_OUTPUT"
+            echo "tart_present=yes"
             tart --version 2>&1 | tee /tmp/tart-version.log
           else
-            echo "tart_present=no" | tee -a "$GITHUB_OUTPUT"
-            tail -30 /tmp/brew.log
+            echo "tart_present=no" >> "$GITHUB_OUTPUT"
+            echo "tart_present=no — brew log tail follows"
+            tail -30 /tmp/brew.log 2>/dev/null || echo "(no brew log written)"
           fi
           {
             echo "## Install"
             echo '```'
+            echo "brew_rc=${brew_rc}"
             echo "tart_present=$(command -v tart >/dev/null 2>&1 && echo yes || echo no)"
             cat /tmp/tart-version.log 2>/dev/null || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+          # Never fail the step: a missing tart is a RESULT the verdict reports,
+          # not an error. Failing here would skip the verdict entirely -- which
+          # is precisely what happened on the first run.
+          exit 0
 
       # THE DECISIVE TEST. `tart create --linux` builds a tiny empty Linux VM
       # through Apple's Virtualization.framework -- it exercises exactly the
@@ -81,6 +106,12 @@ jobs:
         if: steps.install.outputs.tart_present == 'yes'
         continue-on-error: true
         run: |
+          # GitHub runs this as `/bin/bash -e {0}`. `set -uo pipefail` does NOT
+          # clear that -e, so a failing command aborts the step before any
+          # diagnostic below can run -- which is exactly how this probe's own
+          # error handling became dead code on its first run. Clear it: this
+          # step inspects rc itself.
+          set +e
           set -uo pipefail
           tart create --linux --disk-size 1 probe-vm > /tmp/create.log 2>&1
           create_rc=$?
@@ -99,6 +130,12 @@ jobs:
         if: steps.create.outputs.create_rc == '0'
         continue-on-error: true
         run: |
+          # GitHub runs this as `/bin/bash -e {0}`. `set -uo pipefail` does NOT
+          # clear that -e, so a failing command aborts the step before any
+          # diagnostic below can run -- which is exactly how this probe's own
+          # error handling became dead code on its first run. Clear it: this
+          # step inspects rc itself.
+          set +e
           set -uo pipefail
           # An empty VM has no OS, so it will not reach a login prompt. What we
           # are measuring is whether the HYPERVISOR accepts the launch at all:
@@ -136,6 +173,12 @@ jobs:
           CREATE_RC: ${{ steps.create.outputs.create_rc }}
           BOOT_STATE: ${{ steps.boot.outputs.boot_state }}
         run: |
+          # GitHub runs this as `/bin/bash -e {0}`. `set -uo pipefail` does NOT
+          # clear that -e, so a failing command aborts the step before any
+          # diagnostic below can run -- which is exactly how this probe's own
+          # error handling became dead code on its first run. Clear it: this
+          # step inspects rc itself.
+          set +e
           set -uo pipefail
           {
             echo "## VERDICT"
