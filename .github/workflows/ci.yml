@@ -348,185 +348,120 @@ jobs:
   # merge normally. See .github/workflows/AGENTS.md § GitHub App.
   # ============================================================
   # ============================================================
-  # Throwaway feasibility probe: can Tart build/run a VM on a
-  # GitHub-HOSTED macOS arm64 runner? It lives HERE rather than in its own
-  # workflow because branch protection requires exactly one check --
-  # `ci-gate` -- so a job in a separate workflow can go red and still merge.
-  # That is not hypothetical: the first version of this probe was a
-  # standalone workflow, failed, and merged anyway (PR #973).
+  # Throwaway probe (#840 / the two-image plan, step 0): the
+  # `ubuntu-26.04-arm` validation leg has NEVER passed its smoke test --
+  # 0 successes / 3 failures across the last 25 ci.yml runs, every other
+  # stage of that same leg green -- with:
   #
-  # DELETE THIS JOB, and its entry in tests/test_workflow_hooks.py's
-  # EXPECTED_JOBS, once the question is settled and the answer recorded.
+  #     FATAL: ThreadSanitizer: encountered an incompatible memory layout
+  #     FATAL: Please rerun with lower ASLR entropy
+  #
+  # Control arm already measured: in the SAME run and on the SAME arm64
+  # image, the ubuntu-24.04-arm leg's smoke-test PASSED, so this is
+  # runner-kernel-side (26.04-arm ships 7.0.0-azure vs 24.04-arm's 6.17),
+  # not image-side. The 24.04 runner image sets vm.mmap_rnd_bits=28.
+  #
+  # UNVERIFIED, and the only reason this probe exists: what 26.04-arm's
+  # value actually is, and whether lowering it to 28 is SUFFICIENT on a
+  # 7.0 aarch64 kernel. Do not "fix" the smoke test by skipping TSan --
+  # inside docker TSan cannot self-correct, because the default seccomp
+  # profile denies personality(ADDR_NO_RANDOMIZE).
+  #
+  # The matrix runs 24.04-arm as a CONTROL LEG: it is known-good today,
+  # so if the as-is arm fails THERE too, this probe's repro is wrong and
+  # says nothing about the runner. A probe that can only report one
+  # outcome is not a probe.
+  #
+  # DELETE THIS JOB, and its EXPECTED_JOBS entry in
+  # tests/test_workflow_hooks.py, once the answer is recorded.
   # ============================================================
-  probe-tart-macos:
-    # xcode-27 is the label the operator selected (public preview, arm64,
-    # 3 CPU / 7 GB). macos-26 is the GA fallback if the label is withdrawn.
-    runs-on: xcode-27
-    timeout-minutes: 30
+  probe-aslr-tsan:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-26.04-arm, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
-      - name: Runner identity
-        run: |
-          # GitHub runs this as `/bin/bash -e {0}`. `set -uo pipefail` does NOT
-          # clear that -e, so a failing command aborts the step before any
-          # diagnostic below can run -- which is exactly how this probe's own
-          # error handling became dead code on its first run. Clear it: this
-          # step inspects rc itself.
-          set +e
-          set -uo pipefail
-          uname -a; uname -m; sw_vers -productVersion; sysctl -n hw.ncpu hw.memsize
-          {
-            echo "## Runner identity"
-            echo '```'
-            echo "uname:    $(uname -a)"
-            echo "arch:     $(uname -m)"
-            echo "sw_vers:  $(sw_vers -productVersion 2>/dev/null || echo unknown)"
-            echo "cpus:     $(sysctl -n hw.ncpu 2>/dev/null || echo unknown)"
-            echo "memsize:  $(sysctl -n hw.memsize 2>/dev/null || echo unknown)"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      # CONTROL ARM for the whole probe: if this reports absent, every later
-      # "failed" result is explained by tart missing, NOT by nested virt.
-      - name: Install tart
-        id: install
-        run: |
-          # GitHub runs this as `/bin/bash -e {0}`. `set -uo pipefail` does NOT
-          # clear that -e, so a failing command aborts the step before any
-          # diagnostic below can run -- which is exactly how this probe's own
-          # error handling became dead code on its first run. Clear it: this
-          # step inspects rc itself.
-          set +e
-          set -uo pipefail
-          # Tap explicitly: `brew install <tap>/<formula>` can fail before the
-          # tap is added, and the failure text is what we need either way.
-          brew tap cirruslabs/cli 2>&1 | tail -5
-          brew install tart 2>&1 | tee /tmp/brew.log | tail -25
-          brew_rc="${PIPESTATUS[0]}"
-          echo "brew_rc=${brew_rc}"
-          echo "brew_rc=${brew_rc}" >> "$GITHUB_OUTPUT"
-          if command -v tart >/dev/null 2>&1; then
-            echo "tart_present=yes" >> "$GITHUB_OUTPUT"
-            echo "tart_present=yes"
-            tart --version 2>&1 | tee /tmp/tart-version.log
-          else
-            echo "tart_present=no" >> "$GITHUB_OUTPUT"
-            echo "tart_present=no — brew log tail follows"
-            tail -30 /tmp/brew.log 2>/dev/null || echo "(no brew log written)"
-          fi
-          {
-            echo "## Install"
-            echo '```'
-            echo "brew_rc=${brew_rc}"
-            echo "tart_present=$(command -v tart >/dev/null 2>&1 && echo yes || echo no)"
-            cat /tmp/tart-version.log 2>/dev/null || true
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-          # Never fail the step: a missing tart is a RESULT the verdict reports,
-          # not an error. Failing here would skip the verdict entirely -- which
-          # is precisely what happened on the first run.
-          exit 0
-
-      # THE DECISIVE TEST. `tart create --linux` builds a tiny empty Linux VM
-      # through Apple's Virtualization.framework -- it exercises exactly the
-      # nested-virtualization capability in question WITHOUT pulling a ~25GB
-      # macOS base image. If nested virt is unavailable this is where it dies.
-      - name: Create a Linux VM via Virtualization.framework
-        id: create
-        if: steps.install.outputs.tart_present == 'yes'
-        continue-on-error: true
-        run: |
-          # GitHub runs this as `/bin/bash -e {0}`. `set -uo pipefail` does NOT
-          # clear that -e, so a failing command aborts the step before any
-          # diagnostic below can run -- which is exactly how this probe's own
-          # error handling became dead code on its first run. Clear it: this
-          # step inspects rc itself.
-          set +e
-          set -uo pipefail
-          tart create --linux --disk-size 1 probe-vm > /tmp/create.log 2>&1
-          create_rc=$?
-          echo "create_rc=${create_rc}" | tee -a "$GITHUB_OUTPUT"
-          {
-            echo "## tart create (nested virtualization)"
-            echo "rc=${create_rc}"
-            echo '```'
-            tail -40 /tmp/create.log
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-          exit 0
-
-      - name: Boot the VM
-        id: boot
-        if: steps.create.outputs.create_rc == '0'
-        continue-on-error: true
-        run: |
-          # GitHub runs this as `/bin/bash -e {0}`. `set -uo pipefail` does NOT
-          # clear that -e, so a failing command aborts the step before any
-          # diagnostic below can run -- which is exactly how this probe's own
-          # error handling became dead code on its first run. Clear it: this
-          # step inspects rc itself.
-          set +e
-          set -uo pipefail
-          # An empty VM has no OS, so it will not reach a login prompt. What we
-          # are measuring is whether the HYPERVISOR accepts the launch at all:
-          # a virtualization denial fails immediately and loudly, while a
-          # working hypervisor sits waiting on an unbootable disk until we
-          # stop it. Distinguish those two, do not conflate them.
-          ( tart run --no-graphics probe-vm > /tmp/run.log 2>&1 ) &
-          run_pid=$!
-          sleep 25
-          if kill -0 "$run_pid" 2>/dev/null; then
-            boot_state=hypervisor_accepted_launch
-            kill "$run_pid" 2>/dev/null || true
-          else
-            wait "$run_pid" 2>/dev/null
-            boot_state="exited_rc=$?"
-          fi
-          echo "boot_state=${boot_state}" | tee -a "$GITHUB_OUTPUT"
-          {
-            echo "## tart run"
-            echo "state=${boot_state}"
-            echo '```'
-            tail -40 /tmp/run.log
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-          exit 0
-
-      - name: Verdict
-        if: always()
-        # Step outputs go through env rather than being interpolated into the
-        # script: a `${{ }}` expansion inside `run:` is string-substituted
-        # BEFORE bash sees it, so a value containing shell metacharacters
-        # would execute. zizmor's template-injection audit flags exactly this.
+      - name: Probe ASLR entropy and TSan, before and after lowering it
         env:
-          TART_PRESENT: ${{ steps.install.outputs.tart_present }}
-          CREATE_RC: ${{ steps.create.outputs.create_rc }}
-          BOOT_STATE: ${{ steps.boot.outputs.boot_state }}
+          RUNNER_LABEL: ${{ matrix.runner }}
         run: |
-          # GitHub runs this as `/bin/bash -e {0}`. `set -uo pipefail` does NOT
-          # clear that -e, so a failing command aborts the step before any
-          # diagnostic below can run -- which is exactly how this probe's own
-          # error handling became dead code on its first run. Clear it: this
-          # step inspects rc itself.
+          # GitHub runs this as `/bin/bash -e {0}`; this step inspects its
+          # own rc, so clear the -e or a failing probe aborts before it can
+          # report anything.
           set +e
           set -uo pipefail
+
+          before="$(sysctl -n vm.mmap_rnd_bits 2>/dev/null || echo unknown)"
+          kernel="$(uname -r)"
+          echo "runner=${RUNNER_LABEL} kernel=${kernel} mmap_rnd_bits=${before}"
+
+          cat > /tmp/tsan.c <<'CSRC'
+          #include <pthread.h>
+          static int shared;
+          static void *worker(void *arg) { (void)arg; shared++; return 0; }
+          int main(void) {
+            pthread_t t; pthread_create(&t, 0, worker, 0);
+            shared++; pthread_join(t, 0); return 0;
+          }
+          CSRC
+
+          # Build once, run twice. `--rm` only; no privileged flags, because
+          # the real smoke-test does not get them either -- the probe must
+          # match the conditions we actually ship under.
+          run_tsan() {
+            docker run --rm -v /tmp/tsan.c:/tsan.c:ro ubuntu:26.04 bash -c '
+              set -e
+              apt-get update -qq >/dev/null 2>&1
+              apt-get install -y -qq --no-install-recommends clang >/dev/null 2>&1
+              clang -fsanitize=thread -o /tmp/t /tsan.c
+              /tmp/t
+            ' 2>&1
+          }
+
+          echo "--- ARM A: as-is (mmap_rnd_bits=${before}) ---"
+          out_a="$(run_tsan)"; rc_a=$?
+          echo "${out_a}" | tail -5
+          echo "as_is_rc=${rc_a}"
+
+          echo "--- lowering vm.mmap_rnd_bits to 28 on the HOST ---"
+          sudo sysctl -w vm.mmap_rnd_bits=28 2>&1 | tail -1
+          after="$(sysctl -n vm.mmap_rnd_bits 2>/dev/null || echo unknown)"
+
+          echo "--- ARM B: after lowering (mmap_rnd_bits=${after}) ---"
+          out_b="$(run_tsan)"; rc_b=$?
+          echo "${out_b}" | tail -5
+          echo "lowered_rc=${rc_b}"
+
           {
-            echo "## VERDICT"
-            echo "| probe | result |"
-            echo "|---|---|"
-            echo "| tart installed | ${TART_PRESENT:-not-run} |"
-            echo "| tart create rc | ${CREATE_RC:-not-run} |"
-            echo "| tart run state | ${BOOT_STATE:-not-run} |"
+            echo "## ${RUNNER_LABEL}"
             echo ""
-            echo "Read this as: tart installed=no means the probe says NOTHING"
-            echo "about nested virtualization. create rc=0 means"
-            echo "Virtualization.framework IS usable on a GitHub-hosted macOS"
-            echo "runner. A non-zero create rc is the real negative result."
+            echo "| fact | value |"
+            echo "|---|---|"
+            echo "| kernel | \`${kernel}\` |"
+            echo "| mmap_rnd_bits before | ${before} |"
+            echo "| mmap_rnd_bits after | ${after} |"
+            echo "| TSan rc as-is | ${rc_a} |"
+            echo "| TSan rc after lowering | ${rc_b} |"
+            echo ""
+            echo "Read this as: on the CONTROL leg (ubuntu-24.04-arm) the as-is"
+            echo "rc MUST be 0 -- if it is not, this probe's repro is wrong and"
+            echo "it says nothing about ubuntu-26.04-arm. On 26.04-arm, as-is"
+            echo "non-zero + lowered 0 means the sysctl fix works; both non-zero"
+            echo "means 28 is NOT sufficient on this kernel and the plan needs a"
+            echo "different value or a different approach."
           } >> "$GITHUB_STEP_SUMMARY"
+
+          # Always exit 0: every outcome here is a RESULT to read, not a
+          # failure. Failing would skip nothing but would make the matrix
+          # look like a broken build rather than a completed measurement.
+          exit 0
 
   ci-gate:
-    needs: [lint, contract-preflight, changes, build-publish, probe-tart-macos]
+    needs: [lint, contract-preflight, changes, build-publish, probe-aslr-tsan]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -536,7 +471,7 @@ jobs:
       - name: Require all upstream jobs to succeed or skip
         env:
           RESULTS: >-
-            ${{ needs.lint.result }} ${{ needs.contract-preflight.result }} ${{ needs.changes.result }} ${{ needs.build-publish.result }} ${{ needs.probe-tart-macos.result }}
+            ${{ needs.lint.result }} ${{ needs.contract-preflight.result }} ${{ needs.changes.result }} ${{ needs.build-publish.result }} ${{ needs.probe-aslr-tsan.result }}
         run: |
           set -euo pipefail
           rc=0
