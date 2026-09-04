@@ -347,8 +347,121 @@ jobs:
   # `build-publish`, which fails ci-gate — while letting non-build PRs
   # merge normally. See .github/workflows/AGENTS.md § GitHub App.
   # ============================================================
+  # ============================================================
+  # Throwaway probe (#840 / the two-image plan, step 0): the
+  # `ubuntu-26.04-arm` validation leg has NEVER passed its smoke test --
+  # 0 successes / 3 failures across the last 25 ci.yml runs, every other
+  # stage of that same leg green -- with:
+  #
+  #     FATAL: ThreadSanitizer: encountered an incompatible memory layout
+  #     FATAL: Please rerun with lower ASLR entropy
+  #
+  # Control arm already measured: in the SAME run and on the SAME arm64
+  # image, the ubuntu-24.04-arm leg's smoke-test PASSED, so this is
+  # runner-kernel-side (26.04-arm ships 7.0.0-azure vs 24.04-arm's 6.17),
+  # not image-side. The 24.04 runner image sets vm.mmap_rnd_bits=28.
+  #
+  # UNVERIFIED, and the only reason this probe exists: what 26.04-arm's
+  # value actually is, and whether lowering it to 28 is SUFFICIENT on a
+  # 7.0 aarch64 kernel. Do not "fix" the smoke test by skipping TSan --
+  # inside docker TSan cannot self-correct, because the default seccomp
+  # profile denies personality(ADDR_NO_RANDOMIZE).
+  #
+  # The matrix runs 24.04-arm as a CONTROL LEG: it is known-good today,
+  # so if the as-is arm fails THERE too, this probe's repro is wrong and
+  # says nothing about the runner. A probe that can only report one
+  # outcome is not a probe.
+  #
+  # DELETE THIS JOB, and its EXPECTED_JOBS entry in
+  # tests/test_workflow_hooks.py, once the answer is recorded.
+  # ============================================================
+  probe-aslr-tsan:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-26.04-arm, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Probe ASLR entropy and TSan, before and after lowering it
+        env:
+          RUNNER_LABEL: ${{ matrix.runner }}
+        run: |
+          # GitHub runs this as `/bin/bash -e {0}`; this step inspects its
+          # own rc, so clear the -e or a failing probe aborts before it can
+          # report anything.
+          set +e
+          set -uo pipefail
+
+          before="$(sysctl -n vm.mmap_rnd_bits 2>/dev/null || echo unknown)"
+          kernel="$(uname -r)"
+          echo "runner=${RUNNER_LABEL} kernel=${kernel} mmap_rnd_bits=${before}"
+
+          cat > /tmp/tsan.c <<'CSRC'
+          #include <pthread.h>
+          static int shared;
+          static void *worker(void *arg) { (void)arg; shared++; return 0; }
+          int main(void) {
+            pthread_t t; pthread_create(&t, 0, worker, 0);
+            shared++; pthread_join(t, 0); return 0;
+          }
+          CSRC
+
+          # Build once, run twice. `--rm` only; no privileged flags, because
+          # the real smoke-test does not get them either -- the probe must
+          # match the conditions we actually ship under.
+          run_tsan() {
+            docker run --rm -v /tmp/tsan.c:/tsan.c:ro ubuntu:26.04 bash -c '
+              set -e
+              apt-get update -qq >/dev/null 2>&1
+              apt-get install -y -qq --no-install-recommends clang >/dev/null 2>&1
+              clang -fsanitize=thread -o /tmp/t /tsan.c
+              /tmp/t
+            ' 2>&1
+          }
+
+          echo "--- ARM A: as-is (mmap_rnd_bits=${before}) ---"
+          out_a="$(run_tsan)"; rc_a=$?
+          echo "${out_a}" | tail -5
+          echo "as_is_rc=${rc_a}"
+
+          echo "--- lowering vm.mmap_rnd_bits to 28 on the HOST ---"
+          sudo sysctl -w vm.mmap_rnd_bits=28 2>&1 | tail -1
+          after="$(sysctl -n vm.mmap_rnd_bits 2>/dev/null || echo unknown)"
+
+          echo "--- ARM B: after lowering (mmap_rnd_bits=${after}) ---"
+          out_b="$(run_tsan)"; rc_b=$?
+          echo "${out_b}" | tail -5
+          echo "lowered_rc=${rc_b}"
+
+          {
+            echo "## ${RUNNER_LABEL}"
+            echo ""
+            echo "| fact | value |"
+            echo "|---|---|"
+            echo "| kernel | \`${kernel}\` |"
+            echo "| mmap_rnd_bits before | ${before} |"
+            echo "| mmap_rnd_bits after | ${after} |"
+            echo "| TSan rc as-is | ${rc_a} |"
+            echo "| TSan rc after lowering | ${rc_b} |"
+            echo ""
+            echo "Read this as: on the CONTROL leg (ubuntu-24.04-arm) the as-is"
+            echo "rc MUST be 0 -- if it is not, this probe's repro is wrong and"
+            echo "it says nothing about ubuntu-26.04-arm. On 26.04-arm, as-is"
+            echo "non-zero + lowered 0 means the sysctl fix works; both non-zero"
+            echo "means 28 is NOT sufficient on this kernel and the plan needs a"
+            echo "different value or a different approach."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Always exit 0: every outcome here is a RESULT to read, not a
+          # failure. Failing would skip nothing but would make the matrix
+          # look like a broken build rather than a completed measurement.
+          exit 0
+
   ci-gate:
-    needs: [lint, contract-preflight, changes, build-publish]
+    needs: [lint, contract-preflight, changes, build-publish, probe-aslr-tsan]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -358,7 +471,7 @@ jobs:
       - name: Require all upstream jobs to succeed or skip
         env:
           RESULTS: >-
-            ${{ needs.lint.result }} ${{ needs.contract-preflight.result }} ${{ needs.changes.result }} ${{ needs.build-publish.result }}
+            ${{ needs.lint.result }} ${{ needs.contract-preflight.result }} ${{ needs.changes.result }} ${{ needs.build-publish.result }} ${{ needs.probe-aslr-tsan.result }}
         run: |
           set -euo pipefail
           rc=0

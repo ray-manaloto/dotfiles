@@ -694,7 +694,7 @@ check_type = "static"
 handler = "require_tokens"
 paths = [".github/workflows/ci.yml"]
 per_path_tokens = { ".github/workflows/ci.yml" = [
-    "  ci-gate:\n    needs: [lint, contract-preflight, changes, build-publish]\n    if: always()\n",
+    "  ci-gate:\n    needs: [lint, contract-preflight, changes, build-publish, probe-aslr-tsan]\n    if: always()\n",
     "needs.build-publish.result",
     "success|skipped",
 ] }
