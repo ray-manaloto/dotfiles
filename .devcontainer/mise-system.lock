@@ -824,9 +824,9 @@ checksum = "sha256:a946b61be1af15ff08c7722e9bac0fab446d8b9896c9f0f35657dfcf887fd
 url = "https://conda.anaconda.org/conda-forge/linux-64/libclang-cpp22.1-22.1.8-default_h0acdd01_10.conda"
 checksum = "sha256:44ed5220e286dbb2886225b4ca2ea8eaac2769ac039e933440bea6ced3dadf95"
 
-[conda-packages.linux-x64."libcurl-8.21.0-ha042cf0_5"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libcurl-8.21.0-ha042cf0_5.conda"
-checksum = "sha256:0b6cc13e36cf19ae9b764740112fc591682e189c99353be9f72f3d96ccf29d79"
+[conda-packages.linux-x64."libcurl-8.22.0-ha042cf0_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libcurl-8.22.0-ha042cf0_0.conda"
+checksum = "sha256:483b7eb97f56fbb3a9cb7190d33012dfa0a5aaed99ede61465563cd97dd82504"
 
 [conda-packages.linux-x64."libedit-3.1.20250104-pl5321h373387f_1"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libedit-3.1.20250104-pl5321h373387f_1.conda"
@@ -920,9 +920,13 @@ checksum = "sha256:db0a0fc67104196afe6732ff055b30829f984f4cf1e8efff4ea5b2bbb1640
 url = "https://conda.anaconda.org/conda-forge/linux-64/libpsl-0.23.1-hd9e3e90_1.conda"
 checksum = "sha256:09e8effdc89bc5d021349318d32b85594f5b8d8e3ab8f90a85b81f8fe695a566"
 
-[conda-packages.linux-x64."libpython-3.14.7-hdc7f604_104_cp314"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libpython-3.14.7-hdc7f604_104_cp314.conda"
-checksum = "sha256:ea102c446220e9b8ad2125e38e0f4a0d9b04a7fc10193eca8d130bee507ce9e2"
+[conda-packages.linux-x64."libpython-3.12.14-h0c77377_3_cpython"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libpython-3.12.14-h0c77377_3_cpython.conda"
+checksum = "sha256:6be16a4906d83eb8e9e04375d524f339f426a847cffd294f1ceb0611988dc17a"
+
+[conda-packages.linux-x64."libpython-3.14.7-hdc7f604_106_cp314"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libpython-3.14.7-hdc7f604_106_cp314.conda"
+checksum = "sha256:5f879892bd439c3d94f4a97b06c214b9a19c4b92f74d84f0305c6ca1b2b239b2"
 
 [conda-packages.linux-x64."libsanitizer-16.2.0-h3048135_4"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libsanitizer-16.2.0-h3048135_4.conda"
@@ -964,9 +968,9 @@ checksum = "sha256:e88c45505921db29c08df3439ddb7f771bbff35f95e7d3103bf365d5d6ce2
 url = "https://conda.anaconda.org/conda-forge/linux-64/libunwind-1.8.3-h65a8314_0.conda"
 checksum = "sha256:71c8b9d5c72473752a0bb6e91b01dd209a03916cb71f36cc6a564e3a2a132d7a"
 
-[conda-packages.linux-x64."libuuid-2.42.2-h5347b49_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libuuid-2.42.2-h5347b49_0.conda"
-checksum = "sha256:9b1bdce27a7e31f7d241aeecff67a1f3101d52a2b1e33ccc2cdf2613072bf81f"
+[conda-packages.linux-x64."libuuid-2.42.3-hcfc3c73_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libuuid-2.42.3-hcfc3c73_0.conda"
+checksum = "sha256:aa58bbba56644ffd062a4a9b358782c5eb7560ccead2ab8f7c5c6ede0a7d33a6"
 
 [conda-packages.linux-x64."libuv-1.52.1-h280c20c_1"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libuv-1.52.1-h280c20c_1.conda"
@@ -1036,13 +1040,13 @@ checksum = "sha256:9ec32b6936b0e37bcb0ed34f22ec3116e75b3c0964f9f50ecea5f58734ed6
 url = "https://conda.anaconda.org/conda-forge/noarch/pygments-2.21.0-pyhcf101f3_0.conda"
 checksum = "sha256:f5f015ff1bc3e1b7fc08eee096b1865234189ae0b82bebdb86a5369116e42fa0"
 
-[conda-packages.linux-x64."python-3.12.14-h8ab3286_1_cpython"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/python-3.12.14-h8ab3286_1_cpython.conda"
-checksum = "sha256:9ea40fd91c6e563cd4e128b1062b56ecbcdbfe4d87a45823999db280dd4dc4d2"
+[conda-packages.linux-x64."python-3.12.14-h5f976f7_3_cpython"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/python-3.12.14-h5f976f7_3_cpython.conda"
+checksum = "sha256:14c579b1016da04e4c9f1c5c857272d83ec447317d8c4074a07d59de3cef70ef"
 
-[conda-packages.linux-x64."python-3.14.7-hcd007b5_104_cp314"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/python-3.14.7-hcd007b5_104_cp314.conda"
-checksum = "sha256:5aaf3af8d4f99541fef4e746ae58677acda6ce02cfa5751abc3d1cc29ea8f732"
+[conda-packages.linux-x64."python-3.14.7-hcd007b5_106_cp314"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/python-3.14.7-hcd007b5_106_cp314.conda"
+checksum = "sha256:4cd05407d6b07d00fd5b6cc78bd2f60ae5e21f777eb26ead82be2e3751c610a1"
 
 [conda-packages.linux-x64."python_abi-3.12-9_cp312"]
 url = "https://conda.anaconda.org/conda-forge/noarch/python_abi-3.12-9_cp312.conda"
@@ -2592,7 +2596,7 @@ conda_deps = [
     "ncurses-6.6-hdb14827_1",
     "rhash-1.4.6-hb03c661_2",
     "bzip2-1.0.8-hda65f42_10",
-    "libcurl-8.21.0-ha042cf0_5",
+    "libcurl-8.22.0-ha042cf0_0",
     "libgcc-16.2.0-ha9f2e26_4",
     "libstdcxx-16.2.0-h934c35e_4",
     "zstd-1.5.7-hb78ec9c_7",
@@ -2785,9 +2789,9 @@ conda_deps = [
     "tinyxml2-11.0.0-h3f2d84a_0",
     "pcre-8.45-h9c3ff4c_0",
     "pygments-2.21.0-pyhcf101f3_0",
-    "python-3.14.7-hcd007b5_104_cp314",
-    "libuuid-2.42.2-h5347b49_0",
-    "libpython-3.14.7-hdc7f604_104_cp314",
+    "python-3.14.7-hcd007b5_106_cp314",
+    "libuuid-2.42.3-hcfc3c73_0",
+    "libpython-3.14.7-hdc7f604_106_cp314",
     "libstdcxx-16.2.0-h934c35e_4",
     "libgcc-16.2.0-ha9f2e26_4",
     "libstdcxx-ng-16.2.0-hdf11a46_4",
@@ -3094,9 +3098,10 @@ conda_deps = [
     "libgfortran5-16.2.0-h6b99dfc_4",
     "libiconv-1.18-h0cb94f2_3",
     "pygments-2.21.0-pyhcf101f3_0",
-    "python-3.12.14-h8ab3286_1_cpython",
+    "python-3.12.14-h5f976f7_3_cpython",
     "libxcrypt-4.4.38-h280c20c_0",
-    "libuuid-2.42.2-h5347b49_0",
+    "libuuid-2.42.3-hcfc3c73_0",
+    "libpython-3.12.14-h0c77377_3_cpython",
     "python_abi-3.12-9_cp312",
     "six-1.17.0-pyhe01879c_1",
     "zstd-1.5.7-hb78ec9c_7",
@@ -3310,7 +3315,7 @@ conda_deps = [
     "libexpat-2.8.1-hecca717_1",
     "libzlib-1.3.2-h25fd6f3_3",
     "pcre2-10.47-h8b3dc9c_1",
-    "libcurl-8.21.0-ha042cf0_5",
+    "libcurl-8.22.0-ha042cf0_0",
     "libgcc-16.2.0-ha9f2e26_4",
     "libiconv-1.18-h0cb94f2_3",
     "openssl-3.6.4-h781a0a9_0",
@@ -3930,14 +3935,15 @@ conda_deps = [
     "libnuma-2.0.18-hb03c661_4",
     "libzlib-1.3.2-h25fd6f3_3",
     "openssl-3.6.4-h781a0a9_0",
-    "python-3.12.14-h8ab3286_1_cpython",
+    "python-3.12.14-h5f976f7_3_cpython",
     "libxcrypt-4.4.38-h280c20c_0",
-    "libuuid-2.42.2-h5347b49_0",
+    "libuuid-2.42.3-hcfc3c73_0",
+    "libpython-3.12.14-h0c77377_3_cpython",
     "python_abi-3.12-9_cp312",
     "zstd-1.5.7-hb78ec9c_7",
     "bzip2-1.0.8-hda65f42_10",
     "libarchive-3.8.9-gpl_h3152399_101",
-    "libcurl-8.21.0-ha042cf0_5",
+    "libcurl-8.22.0-ha042cf0_0",
     "libmicrohttpd-1.0.10-hc2fc477_0",
     "gnutls-3.8.13-h18acefa_0",
     "libsqlite-3.53.4-h13e7031_1",
