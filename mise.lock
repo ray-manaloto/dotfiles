@@ -428,9 +428,9 @@ checksum = "sha256:10bc0946dc950aa18b7de11617b45fd95b050a1554d958d377b6e2f8f0f59
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/svt-av1-4.2.0-h4154aff_1.conda"
 checksum = "sha256:edaeeb961821511a88a298f13608e2a6c423564eabd9ac3cab89767fc813f66d"
 
-[conda-packages.linux-arm64."tbb-2023.0.0-h57272ed_2"]
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/tbb-2023.0.0-h57272ed_2.conda"
-checksum = "sha256:7ed4e93fad3707aa1686c5be286604c63aad33c9765a0d53fab7adbd179510b3"
+[conda-packages.linux-arm64."tbb-2023.0.0-h33d95ba_3"]
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/tbb-2023.0.0-h33d95ba_3.conda"
+checksum = "sha256:1cd614249869a1d10934df95a0dbf73d2c62c9191a6699e0bc6fa515252edbdb"
 
 [conda-packages.linux-arm64."wayland-1.26.0-h637a836_2"]
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/wayland-1.26.0-h637a836_2.conda"
@@ -932,9 +932,9 @@ checksum = "sha256:10bc0946dc950aa18b7de11617b45fd95b050a1554d958d377b6e2f8f0f59
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/svt-av1-4.2.0-h4154aff_1.conda"
 checksum = "sha256:edaeeb961821511a88a298f13608e2a6c423564eabd9ac3cab89767fc813f66d"
 
-[conda-packages.linux-arm64-musl."tbb-2023.0.0-h57272ed_2"]
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/tbb-2023.0.0-h57272ed_2.conda"
-checksum = "sha256:7ed4e93fad3707aa1686c5be286604c63aad33c9765a0d53fab7adbd179510b3"
+[conda-packages.linux-arm64-musl."tbb-2023.0.0-h33d95ba_3"]
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/tbb-2023.0.0-h33d95ba_3.conda"
+checksum = "sha256:1cd614249869a1d10934df95a0dbf73d2c62c9191a6699e0bc6fa515252edbdb"
 
 [conda-packages.linux-arm64-musl."wayland-1.26.0-h637a836_2"]
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/wayland-1.26.0-h637a836_2.conda"
@@ -1472,9 +1472,9 @@ checksum = "sha256:1ff7cdc2e65d3980f977a898d07f4e2b1b6f50dbf7e2fed88b3b4221faf34
 url = "https://conda.anaconda.org/conda-forge/linux-64/svt-av1-4.2.0-hd2095e1_1.conda"
 checksum = "sha256:09c242d480632acca31f2a510c9a9f65bb8cca1e82b73d2d0261ec837fff48be"
 
-[conda-packages.linux-x64."tbb-2023.0.0-hab88423_2"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/tbb-2023.0.0-hab88423_2.conda"
-checksum = "sha256:30cb9355c2fefc20ff1a3d6566b9714d5614086a2524c07721fc344eb20515ae"
+[conda-packages.linux-x64."tbb-2023.0.0-hfd44327_3"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/tbb-2023.0.0-hfd44327_3.conda"
+checksum = "sha256:dd67bdb94a5e675abe8af925ccd02f074ba9ec216b112a962c57d1c53b11ddb7"
 
 [conda-packages.linux-x64."wayland-1.26.0-hc1c935e_2"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/wayland-1.26.0-hc1c935e_2.conda"
@@ -2016,9 +2016,9 @@ checksum = "sha256:1ff7cdc2e65d3980f977a898d07f4e2b1b6f50dbf7e2fed88b3b4221faf34
 url = "https://conda.anaconda.org/conda-forge/linux-64/svt-av1-4.2.0-hd2095e1_1.conda"
 checksum = "sha256:09c242d480632acca31f2a510c9a9f65bb8cca1e82b73d2d0261ec837fff48be"
 
-[conda-packages.linux-x64-baseline."tbb-2023.0.0-hab88423_2"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/tbb-2023.0.0-hab88423_2.conda"
-checksum = "sha256:30cb9355c2fefc20ff1a3d6566b9714d5614086a2524c07721fc344eb20515ae"
+[conda-packages.linux-x64-baseline."tbb-2023.0.0-hfd44327_3"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/tbb-2023.0.0-hfd44327_3.conda"
+checksum = "sha256:dd67bdb94a5e675abe8af925ccd02f074ba9ec216b112a962c57d1c53b11ddb7"
 
 [conda-packages.linux-x64-baseline."wayland-1.26.0-hc1c935e_2"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/wayland-1.26.0-hc1c935e_2.conda"
@@ -2560,9 +2560,9 @@ checksum = "sha256:1ff7cdc2e65d3980f977a898d07f4e2b1b6f50dbf7e2fed88b3b4221faf34
 url = "https://conda.anaconda.org/conda-forge/linux-64/svt-av1-4.2.0-hd2095e1_1.conda"
 checksum = "sha256:09c242d480632acca31f2a510c9a9f65bb8cca1e82b73d2d0261ec837fff48be"
 
-[conda-packages.linux-x64-musl."tbb-2023.0.0-hab88423_2"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/tbb-2023.0.0-hab88423_2.conda"
-checksum = "sha256:30cb9355c2fefc20ff1a3d6566b9714d5614086a2524c07721fc344eb20515ae"
+[conda-packages.linux-x64-musl."tbb-2023.0.0-hfd44327_3"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/tbb-2023.0.0-hfd44327_3.conda"
+checksum = "sha256:dd67bdb94a5e675abe8af925ccd02f074ba9ec216b112a962c57d1c53b11ddb7"
 
 [conda-packages.linux-x64-musl."wayland-1.26.0-hc1c935e_2"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/wayland-1.26.0-hc1c935e_2.conda"
@@ -3104,9 +3104,9 @@ checksum = "sha256:1ff7cdc2e65d3980f977a898d07f4e2b1b6f50dbf7e2fed88b3b4221faf34
 url = "https://conda.anaconda.org/conda-forge/linux-64/svt-av1-4.2.0-hd2095e1_1.conda"
 checksum = "sha256:09c242d480632acca31f2a510c9a9f65bb8cca1e82b73d2d0261ec837fff48be"
 
-[conda-packages.linux-x64-musl-baseline."tbb-2023.0.0-hab88423_2"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/tbb-2023.0.0-hab88423_2.conda"
-checksum = "sha256:30cb9355c2fefc20ff1a3d6566b9714d5614086a2524c07721fc344eb20515ae"
+[conda-packages.linux-x64-musl-baseline."tbb-2023.0.0-hfd44327_3"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/tbb-2023.0.0-hfd44327_3.conda"
+checksum = "sha256:dd67bdb94a5e675abe8af925ccd02f074ba9ec216b112a962c57d1c53b11ddb7"
 
 [conda-packages.linux-x64-musl-baseline."wayland-1.26.0-hc1c935e_2"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/wayland-1.26.0-hc1c935e_2.conda"
@@ -3524,9 +3524,9 @@ checksum = "sha256:962119a27ea90e229d8294dab4d21b221b630898a31cbc0c90cfb9f874e6c
 url = "https://conda.anaconda.org/conda-forge/osx-arm64/svt-av1-4.2.0-h484c67d_1.conda"
 checksum = "sha256:9122d11ed85053b1223ea0645aeac0ca583adc7482e60e3266c37e70d5242195"
 
-[conda-packages.macos-arm64."tbb-2023.0.0-he0260a5_2"]
-url = "https://conda.anaconda.org/conda-forge/osx-arm64/tbb-2023.0.0-he0260a5_2.conda"
-checksum = "sha256:6f72a2984052444b9381020fa329b83dace95f335573dc21199f1b1d1a5f5473"
+[conda-packages.macos-arm64."tbb-2023.0.0-h7283337_3"]
+url = "https://conda.anaconda.org/conda-forge/osx-arm64/tbb-2023.0.0-h7283337_3.conda"
+checksum = "sha256:01f7b2df0c2f89cc2ee1dd22e75f943da07c1d3e8c5544a0c0532c20030d5871"
 
 [conda-packages.macos-arm64."x264-1!164.3095-h57fd34a_2"]
 url = "https://conda.anaconda.org/conda-forge/osx-arm64/x264-1!164.3095-h57fd34a_2.tar.bz2"
@@ -5230,7 +5230,7 @@ conda_deps = [
     "libbrotlicommon-1.2.0-h384ecca_4",
     "libbrotlidec-1.2.0-h011f0d3_4",
     "libhwy-1.4.0-h996897a_1",
-    "tbb-2023.0.0-h57272ed_2",
+    "tbb-2023.0.0-h33d95ba_3",
     "libhwloc-2.13.0-default_ha95e27d_1000",
     "libprotobuf-7.35.1-h809b94e_3",
     "snappy-1.2.2-he774c54_1",
@@ -5362,7 +5362,7 @@ conda_deps = [
     "libbrotlicommon-1.2.0-h384ecca_4",
     "libbrotlidec-1.2.0-h011f0d3_4",
     "libhwy-1.4.0-h996897a_1",
-    "tbb-2023.0.0-h57272ed_2",
+    "tbb-2023.0.0-h33d95ba_3",
     "libhwloc-2.13.0-default_ha95e27d_1000",
     "libprotobuf-7.35.1-h809b94e_3",
     "snappy-1.2.2-he774c54_1",
@@ -5498,7 +5498,7 @@ conda_deps = [
     "libbrotlienc-1.2.0-h018ffa1_4",
     "libbrotlicommon-1.2.0-h39a168f_4",
     "libbrotlidec-1.2.0-ha411449_4",
-    "tbb-2023.0.0-hab88423_2",
+    "tbb-2023.0.0-hfd44327_3",
     "ocl-icd-2.3.4-hb03c661_1",
     "level-zero-1.33.1-h7148c6a_0",
     "libabseil-20260526.0-cxx17_h0dc7533_2",
@@ -5640,7 +5640,7 @@ conda_deps = [
     "libbrotlienc-1.2.0-h018ffa1_4",
     "libbrotlicommon-1.2.0-h39a168f_4",
     "libbrotlidec-1.2.0-ha411449_4",
-    "tbb-2023.0.0-hab88423_2",
+    "tbb-2023.0.0-hfd44327_3",
     "ocl-icd-2.3.4-hb03c661_1",
     "level-zero-1.33.1-h7148c6a_0",
     "libabseil-20260526.0-cxx17_h0dc7533_2",
@@ -5782,7 +5782,7 @@ conda_deps = [
     "libbrotlienc-1.2.0-h018ffa1_4",
     "libbrotlicommon-1.2.0-h39a168f_4",
     "libbrotlidec-1.2.0-ha411449_4",
-    "tbb-2023.0.0-hab88423_2",
+    "tbb-2023.0.0-hfd44327_3",
     "ocl-icd-2.3.4-hb03c661_1",
     "level-zero-1.33.1-h7148c6a_0",
     "libabseil-20260526.0-cxx17_h0dc7533_2",
@@ -5924,7 +5924,7 @@ conda_deps = [
     "libbrotlienc-1.2.0-h018ffa1_4",
     "libbrotlicommon-1.2.0-h39a168f_4",
     "libbrotlidec-1.2.0-ha411449_4",
-    "tbb-2023.0.0-hab88423_2",
+    "tbb-2023.0.0-hfd44327_3",
     "ocl-icd-2.3.4-hb03c661_1",
     "level-zero-1.33.1-h7148c6a_0",
     "libabseil-20260526.0-cxx17_h0dc7533_2",
@@ -6052,7 +6052,7 @@ conda_deps = [
     "libbrotlienc-1.2.0-h2ddc9cb_4",
     "libbrotlicommon-1.2.0-h1dcdb26_4",
     "libbrotlidec-1.2.0-h5295a6a_4",
-    "tbb-2023.0.0-he0260a5_2",
+    "tbb-2023.0.0-h7283337_3",
     "libhwloc-2.13.0-default_ha97f43a_1000",
     "libabseil-20260526.0-cxx17_h4c27e2a_2",
     "libprotobuf-7.35.1-h391e224_3",
