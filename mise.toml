@@ -12,7 +12,7 @@ run = "uv sync --locked"
 # .config/mise/conf.d/shared.toml — the single exact-pinned source both this
 # host config and .devcontainer/mise-system.toml merge, so they never drift
 # (Renovate bumps that one file). See epic #160 T5. Below: host-ONLY tools.
-editorconfig-checker = "3.11.2" # provides `ec` — hk editorconfig_checker builtin (#154); host-only (image drops it in T6)
+editorconfig-checker = "4.0.1" # provides `ec` — hk editorconfig_checker builtin (#154); host-only (image drops it in T6)
 # Second secret scanner (hk `betterleaks` builtin, wired in hk.pkl). HOST-ONLY
 # on purpose: shared.toml is a base image build input, and putting a second
 # scanner in the image would cost a cold rebuild for no gain — the scanning that
@@ -26,10 +26,10 @@ editorconfig-checker = "3.11.2" # provides `ec` — hk editorconfig_checker buil
 doppler = "3.76.5"
 colima = "0.10.3"                  # Alternate Docker runtime (VZ + Rosetta); Docker Desktop is the CURRENT supported runtime — see AGENTS.md Docker Runtimes + docs/research/runs/research-20260409c-dockerdesktop-ssh/
 lima = "2.2.0"
-"github:agent-sh/agnix" = "0.52.1"
+"github:agent-sh/agnix" = "0.52.2"
 "npm:agents-lint" = "0.5.0"
 "pipx:mcp2cli" = "3.7.0"
-"npm:renovate" = "44.59.2"
+"npm:renovate" = "44.65.5"
 biome = "2.5.11"
 # Markdown + Claude-docs linters. Installed now; hk.pkl integration is
 # scheduled for post-devcontainer-work review (see GH issue tracking
@@ -39,16 +39,16 @@ biome = "2.5.11"
 "npm:@contextlint/cli" = "1.1.1"
 "npm:markdownlint-cli2" = "0.23.2"
 "aqua:jackchuka/mdschema" = "0.15.2"
-rumdl = "0.2.63"
+rumdl = "0.2.67"
 # zizmor: GHA security scanner — backs the hk zizmor builtin (#160 T12);
 # host-only lint tool, so it lives here (not shared.toml).
 zizmor = "1.30.0"
-"npm:oh-my-claude-sisyphus" = "5.1.0"
+"npm:oh-my-claude-sisyphus" = "5.3.0"
 "github:ast-grep/ast-grep" = "0.45.3"
 lefthook = "2.1.12"
-"npm:ctx7" = "0.5.9"
-"aqua:rtk-ai/rtk" = "0.47.0"          # aqua is the registry's first backend (`mise registry rtk`); the old bare `rtk` resolved to github: and mise doctor flagged the mismatch
-"npm:skills" = "1.5.23"
+"npm:ctx7" = "0.5.10"
+"aqua:rtk-ai/rtk" = "0.48.0"          # aqua is the registry's first backend (`mise registry rtk`); the old bare `rtk` resolved to github: and mise doctor flagged the mismatch
+"npm:skills" = "1.5.24"
 "npm:agent-browser" = "0.36.0"
 "npm:portless" = "0.15.6"
 "pipx:deepagents-cli" = "0.3.0"
@@ -67,10 +67,10 @@ lefthook = "2.1.12"
 # conda:ffmpeg on platform linux-x64" and bricks lint. os-gating makes linux
 # skip the tool entirely, so no linux URL is demanded.
 "conda:ffmpeg" = { version = "9.0.1", os = ["macos"] }
-aws-cli = { version = "2.36.38", symlink_bins = "true" }
+aws-cli = { version = "2.36.40", symlink_bins = "true" }
 azure-cli = { version = "2.90.0", uvx_args = "--prerelease=allow" }
-docker-cli = "29.7.2"
-opencode = "1.18.27"
+docker-cli = "29.8.0"
+opencode = "1.18.29"
 # bun (the npm package_manager) is a host↔image SHARED tool → declared in
 # .config/mise/conf.d/shared.toml, not here (mise-parity: a tool used by both
 # sides lives only in the shared fragment).
@@ -94,7 +94,7 @@ opencode = "1.18.27"
 # `.config/mise/conf.d/shared.toml` (mise-parity: the two per-tier npm
 # declarations pinned the SAME tool under the same key, which the parity
 # test correctly flags as drift risk).
-antigravity-cli = "1.1.24"
+antigravity-cli = "1.1.27"
 
 [settings]
 experimental = true
