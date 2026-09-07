@@ -423,7 +423,7 @@ ARG CLANG_P2996_REPO=https://github.com/bloomberg/clang-p2996.git
 # p2996_hash.py reads it from bake, so this default was stale drift. The
 # git-refs Renovate manager rewrites BOTH files in lockstep now that they
 # hold the same SHA.
-ARG CLANG_P2996_REF=f349a2d801fbde1f2796dcc003db3d57b3f84515
+ARG CLANG_P2996_REF=9bfe1cf1dbe5017662f10c8d8bfdadd649ec78fc
 
 # Self-contained compile toolchain (#160 T11): gcc/g++ via build-essential,
 # cmake + ninja from apt (26.04 ships cmake ≥3.28, well past LLVM's 3.20
@@ -568,7 +568,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # jwakely.github.io index (see renovate.json). Compatibility with the current
 # base image is empirical; if `dpkg -i` fails, build from source.
 # renovate: datasource=custom.gcc-latest depName=gcc-latest versioning=loose
-ARG GCC_LATEST_DEB=gcc-latest_17.0.0-20260816git8df013222dff.deb
+ARG GCC_LATEST_DEB=gcc-latest_17.0.0-20260823git91291a45490d.deb
 # Validation D (#160 T13): kayari publishes NO checksum or signature (all
 # 404), so this locally-computed pin is the .deb's only integrity handle.
 # NOT Renovate-managed (Renovate can't compute a sha): a GCC_LATEST_DEB bump
