@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from dotfiles_setup.image_lock import lock_command
 from dotfiles_setup.lock_refresh import (
     _merge_shared_tools,
     collect_system_lock,
@@ -90,7 +91,9 @@ def test_lock_top_level_config_tools_builds_scoped_argv(tmp_path: Path) -> None:
         return subprocess.CompletedProcess(argv, 0)
 
     assert lock_top_level_config_tools(config, run=recording_run) == 0
-    assert calls == [(["mise", "lock", "jq", "npm:@scope/pkg"], tmp_path, False)]
+    assert calls == [
+        (["mise", "lock", "--bump", "jq", "npm:@scope/pkg"], tmp_path, False)
+    ]
 
 
 def test_lock_top_level_config_tools_prunes_stale_entries(tmp_path: Path) -> None:
@@ -224,6 +227,80 @@ def test_lock_top_level_config_tools_refuses_a_bare_fallback(tmp_path: Path) -> 
 
     assert lock_top_level_config_tools(config, run=recording_run) == 1
     assert calls == []
+
+
+def test_the_root_lock_re_resolves_fuzzy_pins(tmp_path: Path) -> None:
+    """`--bump` is what makes a fuzzy root pin actually advance.
+
+    Without it `mise lock` only refreshes url/checksum metadata for the
+    versions already locked. The root tier carries zero fuzzy selectors today,
+    so the flag is a no-op — but that is a property of the current config, not
+    an invariant, and #989 fixed exactly this silent freeze at the two image
+    call sites. Adding one `latest` pin to mise.toml or shared.toml without
+    this flag would freeze it while the daily refresh ran green (#990).
+    """
+    config = tmp_path / "mise.toml"
+    config.write_text('[tools]\njq = "1.8.1"\n')
+    (tmp_path / "mise.lock").write_text('[[tools.jq]]\nversion = "1.8.1"\n')
+    calls: list[tuple[list[str], Path, bool]] = []
+
+    def recording_run(
+        argv: list[str], *, cwd: Path, check: bool
+    ) -> subprocess.CompletedProcess[bytes]:
+        calls.append((argv, cwd, check))
+        return subprocess.CompletedProcess(argv, 0)
+
+    assert lock_top_level_config_tools(config, run=recording_run) == 0
+    assert len(calls) == 1
+    argv, _, _ = calls[0]
+    assert "--bump" in argv, f"--bump missing from the root lock argv: {argv}"
+    # Ahead of the tool names: `mise lock` takes the flag as an option, and a
+    # trailing position would be parsed as another tool name.
+    assert argv[:3] == ["mise", "lock", "--bump"]
+
+
+def test_all_three_lock_call_sites_re_resolve_fuzzy_pins(tmp_path: Path) -> None:
+    """Three separate places shell out to `mise lock`; all three need --bump.
+
+    #961 was written when there were two, and #957 added the third the same
+    day — so its own body's "at BOTH call sites" was already false when it
+    landed. Nothing but this test notices a fourth, or a flag dropped from any
+    one of them.
+    """
+    repo_root = Path(__file__).parent.parent
+
+    # Site 1 — the composite's staged lock line (image tier, in CI). Bind the
+    # ONE line that runs it, not the file: the flag is also named in a comment
+    # directly above, which must not satisfy this.
+    action = (
+        repo_root / ".github" / "actions" / "lock-refresh" / "action.yml"
+    ).read_text()
+    staged = [
+        line
+        for line in action.splitlines()
+        if 'mise-pinned" lock' in line and not line.lstrip().startswith("#")
+    ]
+    assert len(staged) == 1, f"expected one staged lock line, found {len(staged)}"
+    assert "--bump" in staged[0]
+
+    # Site 2 — the local `mise run lock-image` path.
+    assert "--bump" in lock_command(Path("/s/mise-pinned"), Path("/s"), ("linux-x64",))
+
+    # Site 3 — the root tier, reached from the composite via
+    # `mise run lock-refresh-root`.
+    config = tmp_path / "mise.toml"
+    config.write_text('[tools]\njq = "1.8.1"\n')
+    (tmp_path / "mise.lock").write_text('[[tools.jq]]\nversion = "1.8.1"\n')
+    calls: list[tuple[list[str], Path, bool]] = []
+
+    def recording_run(
+        argv: list[str], *, cwd: Path, check: bool
+    ) -> subprocess.CompletedProcess[bytes]:
+        calls.append((argv, cwd, check))
+        return subprocess.CompletedProcess(argv, 0)
+
+    assert lock_top_level_config_tools(config, run=recording_run) == 0
+    assert "--bump" in calls[0][0]
 
 
 def test_lock_refresh_root_is_registered_on_the_parser() -> None:
