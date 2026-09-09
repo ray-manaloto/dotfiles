@@ -8,35 +8,47 @@
 #     FATAL: ThreadSanitizer: encountered an incompatible memory layout
 #     FATAL: Please rerun with lower ASLR entropy
 #
-# Control arm already measured: in the SAME run and on the SAME arm64 image,
-# the `ubuntu-24.04-arm` leg's smoke-test PASSED, so the defect is
-# runner-kernel-side (26.04-arm ships a 7.0 azure kernel vs 24.04-arm's 6.17),
-# not image-side.
+# WHY v3 (this file) REPLACES v2
+# v2 measured something real, and what it measured REFUTED the premise the
+# plan rested on: run 34282558958 reproduced the FATAL on `ubuntu-26.04`
+# (x64) ONLY -- NOT on `ubuntu-26.04-arm`, the leg that is actually red. So
+# the defect is not simply "26.04 kernel + arm64", and the sysctl knob is
+# proven for amd64, not for the failing leg.
 #
-# UNVERIFIED, and the only reason this exists: what the 26.04 runners'
-# `vm.mmap_rnd_bits` actually is, and whether lowering it is SUFFICIENT on a
-# 7.0 kernel. Do not "fix" the smoke test by skipping TSan -- inside docker
-# TSan cannot self-correct, because the default seccomp profile denies
-# `personality(ADDR_NO_RANDOMIZE)`. That is what the seccomp arm isolates.
+# v2 could not settle it because of WHAT it ran, not where. Three gaps, each
+# fixed below:
 #
-# WHY v2 (this file) REPLACES THE v1 JOB THAT LIVED IN ci.yml
-# v1 measured nothing on either leg, and its control arm is what revealed it:
+#   1. It ran stock `ubuntu:26.04` plus an apt-installed C `clang` on a
+#      hand-written THREADED program. The real smoke runs the PUBLISHED
+#      devcontainer image, that image's own `clang++`, and a NON-threaded
+#      C++ program. Different toolchain, different TSan runtime, different
+#      workload: a null from that is not a null from the thing we ship.
+#   2. It classified on the exit code. TSan's default `exitcode` on a race
+#      report is 66, so v2's racy program returned 66 on a HEALTHY run --
+#      its shipped gate ("control arm 1 must be tsan 0") is written
+#      BACKWARDS, and 66 is ambiguous anyway: it covers both a race report
+#      and the ASLR abort. v3 classifies on OUTPUT TEXT and never on rc.
+#      The smoke's program is non-threaded, so there is no race report to
+#      confuse with a FATAL in the first place.
+#   3. It read the entropy knob with `[ -r /proc/sys/vm/mmap_rnd_bits ]`.
+#      That file is root-readable only, so the guard emitted `NO_SUCH_KNOB`
+#      -- "the probe could not look" published as a kernel fact. `sudo
+#      /sbin/sysctl -w vm.mmap_rnd_bits=28` had SUCCEEDED in the same run,
+#      which is how the contradiction was caught. v3 reads it with
+#      `sudo cat` and reports a failed read AS a failed read.
 #
-#   1. It installed clang with `--no-install-recommends`, which omits
-#      `libclang_rt.tsan.a`, so `clang -fsanitize=thread` died at LINK time
-#      on every leg. v1 collapsed build and run into one rc, so a toolchain
-#      failure was published in the summary table as a "TSan rc" -- a build
-#      break wearing an ASLR result's clothes. Fixed by dropping
-#      `--no-install-recommends` AND reporting BUILD_RC separately from
-#      TSAN_RC, so this class of failure can never again be read as a verdict.
-#   2. It read the entropy with `sysctl -n ... 2>/dev/null || echo unknown`.
-#      `sysctl` lives in /sbin and is not reliably on a non-root PATH here, and
-#      the `2>/dev/null` discarded the reason -- turning "the probe could not
-#      look" into a value that reads like a kernel answer. Fixed by reading
-#      /proc/sys/vm/mmap_rnd_bits, which needs no binary on PATH at all.
-#   3. It had no seccomp arm and no x64 leg, so it could not distinguish the
-#      sysctl fix from the seccomp fix, and said nothing about the runner S5
-#      flips amd64 onto.
+# ACCEPTED RISK, RECORDED SO IT IS NOT MISREAD (operator ruling, reaffirmed
+# after being shown that it collides with
+# .claude/rules/probes-need-a-control-arm.md rule 1): the matrix is 26.04
+# x64 plus 26.04 arm64 ONLY. There is NO known-good control leg. Therefore
+# **only a POSITIVE result is readable**. A null cannot distinguish "the
+# real image is fine on 26.04-arm" from "the probe broke again", which has
+# now happened twice. If v3 returns null, do NOT report that the leg is
+# healthy -- go to the stop rule below.
+#
+# STOP RULE (operator ruling): if v3 does not reproduce the FATAL, STOP
+# writing probes. Add temporary diagnostics to the REAL failing `smoke-test`
+# leg instead -- it is the only environment known to produce the defect.
 #
 # It is `workflow_dispatch` only and is deliberately NOT in `ci-gate`'s
 # `needs:` -- a measurement is not a merge gate. The proven knob lands in the
@@ -51,28 +63,68 @@ on:
         description: "vm.mmap_rnd_bits value the sysctl arm lowers to"
         required: false
         default: "28"
+      image_tag:
+        description: "Tag of the published devcontainer image to probe"
+        required: false
+        default: "dev"
 
 permissions:
   contents: read
+
+env:
+  CONTAINER_REGISTRY: ghcr.io
+  IMAGE_NAME: ray-manaloto/dotfiles-devcontainer
 
 jobs:
   probe-aslr-tsan:
     strategy:
       fail-fast: false
-      # 24.04 legs are CONTROLS: known-good today. If the default arm fails
-      # THERE too, this probe's repro is wrong and it says nothing about
-      # 26.04. A probe that can only report one outcome is not a probe.
+      # 26.04 ONLY, no 24.04 controls -- see ACCEPTED RISK in the header.
+      #
+      # Runner labels only, and no `--platform` anywhere below. The smoke does
+      # pass `--platform`, but that flag's value is a platform LITERAL and
+      # `no_platform_literals` rejects those outside mise.toml/docker-bake.hcl
+      # (#673). The gate's own reasoning applies here exactly
+      # (platform_target.py:740-745): each leg runs on a runner that IS its
+      # architecture and `:dev` is a multi-arch index, so docker's native
+      # selection already resolves the right half -- while a literal would
+      # override that with whatever was true the day it was typed. The
+      # cross-check below then MEASURES what was selected instead of asserting
+      # it, which is the stronger arm.
       matrix:
-        runner: [ubuntu-26.04, ubuntu-26.04-arm, ubuntu-24.04, ubuntu-24.04-arm]
+        runner: [ubuntu-26.04, ubuntu-26.04-arm]
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 20
+    timeout-minutes: 45
     permissions:
       contents: read
+      packages: read
     steps:
-      - name: Probe ASLR entropy and TSan across three arms
+      - name: Free disk space
+        # The dev image is ~38 GB and a stock runner has ~14 GB free; without
+        # this the pull dies with "no space left on device" and the probe
+        # reports a disk error wearing an ASLR result's clothes. Same settings
+        # as the real smoke-test job (build-publish.yml) -- `docker-images:
+        # false` because the image we are about to pull IS the subject.
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: false
+          swap-storage: true
+      - name: Log in to Container Registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.CONTAINER_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Probe ASLR entropy and TSan against the REAL image
         env:
           RUNNER_LABEL: ${{ matrix.runner }}
           TARGET_BITS: ${{ inputs.target_bits }}
+          IMAGE_REF: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag }}
         run: |
           # GitHub runs this as `/bin/bash -e {0}`; this step inspects its own
           # exit codes, so clear the -e or a failing arm aborts the step before
@@ -80,14 +132,17 @@ jobs:
           set +e
           set -uo pipefail
 
-          # /proc is authoritative and needs no binary on PATH. v1 used
-          # `sysctl -n ... 2>/dev/null || echo unknown`, which cannot tell a
-          # kernel that has no such knob from a `sysctl` it could not resolve.
+          # `sudo cat`, not `[ -r ]`: the file is root-readable only, so v2's
+          # readability guard turned "could not look" into a kernel answer.
           read_bits() {
-            if [ -r /proc/sys/vm/mmap_rnd_bits ]; then
-              cat /proc/sys/vm/mmap_rnd_bits
+            local out
+            local rc
+            out="$(sudo cat /proc/sys/vm/mmap_rnd_bits 2>&1)"
+            rc=$?
+            if [ "${rc}" -ne 0 ]; then
+              echo "READ_FAILED(rc=${rc}: ${out})"
             else
-              echo "NO_SUCH_KNOB"
+              echo "${out}"
             fi
           }
 
@@ -95,106 +150,193 @@ jobs:
           before="$(read_bits)"
           echo "runner=${RUNNER_LABEL} kernel=${kernel} mmap_rnd_bits=${before}"
 
-          cat > /tmp/tsan.c <<'CSRC'
-          #include <pthread.h>
-          static int shared;
-          static void *worker(void *arg) { (void)arg; shared++; return 0; }
-          int main(void) {
-            pthread_t t; pthread_create(&t, 0, worker, 0);
-            shared++; pthread_join(t, 0); return 0;
-          }
-          CSRC
-
-          # BUILD and RUN are reported separately and the inner script always
-          # exits 0, so the caller parses verdicts from stdout rather than
-          # inheriting one collapsed rc. Any docker flags are passed through
-          # as "$@" (an array, never an unquoted string) so shellcheck stays
-          # clean and an empty arm adds no stray argument.
+          # The smoke's source, byte-for-byte from image.py:577-578. It is
+          # written HERE on the runner and bind-mounted read-only, rather than
+          # heredoc'd inside the container command: a heredoc nested in a
+          # single-quoted `-lc` argument needs its terminator at column 0 of the
+          # inner script and its quotes escaped through two levels, and getting
+          # either wrong yields a compile error that would be published as an
+          # ASLR result. What must be identical is the SOURCE BYTES, not the
+          # mechanism that writes them.
           #
-          # No --privileged and no extra capabilities beyond the arm under
-          # test: the real smoke-test does not get them either, so a probe
-          # that used them would answer a question we do not ship.
-          probe() {
-            docker run --rm "$@" -v /tmp/tsan.c:/tsan.c:ro ubuntu:26.04 bash -c '
-              set -u
-              export DEBIAN_FRONTEND=noninteractive
-              apt-get update -qq >/dev/null 2>&1
-              # NOT --no-install-recommends: that is precisely what omitted
-              # libclang_rt.tsan.a and made v1 fail at link time.
-              apt-get install -y -qq clang >/dev/null 2>&1
-              clang -fsanitize=thread -o /tmp/t /tsan.c 2>/tmp/build.err
-              build_rc=$?
-              if [ "$build_rc" -ne 0 ]; then
-                echo "BUILD_RC=${build_rc}"
-                echo "TSAN_RC=na"
-                echo "--- build stderr ---"
-                tail -3 /tmp/build.err
-                exit 0
-              fi
-              echo "BUILD_RC=0"
-              /tmp/t > /tmp/run.out 2>&1
-              echo "TSAN_RC=$?"
-              echo "--- run output ---"
-              tail -3 /tmp/run.out
-              exit 0
-            ' 2>&1
+          # `printf '%s\n'` and not a heredoc: with `%s` the backslash in
+          # `"ok\n"` is NOT interpreted, so the C++ source keeps its escape
+          # sequence rather than an actual newline. Verified byte-for-byte
+          # against image.py's own lines before this landed.
+          printf '%s\n' \
+            '#include <iostream>' \
+            'int main() { std::cout << "ok\n"; return 0; }' \
+            > /tmp/sanitizer.cpp
+          echo "--- /tmp/sanitizer.cpp ---"
+          cat /tmp/sanitizer.cpp
+
+          docker pull "${IMAGE_REF}" || {
+            echo "PROBE_BROKEN: docker pull failed; no arm below can be read" >&2
+            exit 1
           }
 
-          verdict() { echo "$1" | grep -E "^${2}=" | head -1 | cut -d= -f2; }
+          # A control arm for the whole run: TSan's ASLR complaint is about the
+          # memory layout NATIVE code gets, so a leg that silently ended up
+          # emulating the other architecture would produce plausible-looking
+          # output about the wrong thing. Both sides are MEASURED -- the
+          # runner's own `uname -m` against the container's -- so there is no
+          # architecture name written down here to drift out of date, and the
+          # check answers the question that actually matters ("is this native?")
+          # rather than the proxy question ("does a label match?").
+          runner_machine="$(uname -m)"
+          image_machine="$(docker run --rm --entrypoint /bin/bash "${IMAGE_REF}" -lc 'uname -m')"
+          if [ "${image_machine}" != "${runner_machine}" ]; then
+            echo "PROBE_BROKEN: runner is '${runner_machine}' but the image runs as '${image_machine}'" >&2
+            echo "every arm below would measure emulated code, not this runner's" >&2
+            exit 1
+          fi
+          echo "OK: ${IMAGE_REF} runs natively as ${image_machine}"
+
+          # The smoke's EXACT commands, from image.py:582-587.
+          #
+          # Two deliberate deviations, both required and both narrow:
+          #   * the run's stdout is CAPTURED, not sent to /dev/null. The smoke
+          #     discards it; this probe classifies on that text, so discarding
+          #     it would leave nothing to read.
+          #   * build stderr is captured separately, so a toolchain failure can
+          #     never be reported as a TSan verdict (v1's defect).
+          #
+          # `--entrypoint /bin/bash` plus `-lc` is NOT cosmetic and must not be
+          # "simplified" to `bash -c`: the smoke runs a LOGIN shell
+          # (image.py:1100-1110), and this image puts clang++ on PATH via mise's
+          # `[env] _.path` rather than /etc/profile.d. A non-login shell would
+          # very likely fail to resolve clang++ and publish a PATH bug as an
+          # ASLR measurement.
+          #
+          # No --privileged and no capabilities beyond the arm under test: the
+          # real smoke-test does not get them either, so a probe that used them
+          # would answer a question we do not ship.
+          probe() {
+            docker run --rm "$@" \
+              -v /tmp/sanitizer.cpp:/tmp/sanitizer.cpp:ro \
+              --entrypoint /bin/bash \
+              "${IMAGE_REF}" -lc '
+                set -u
+                command -v clang++ || echo "NO_CLANGXX_ON_PATH"
+                clang++ -fsanitize=thread /tmp/sanitizer.cpp -o /tmp/san-tsan 2>/tmp/build.err
+                build_rc=$?
+                echo "BUILD_RC=${build_rc}"
+                if [ "${build_rc}" -ne 0 ]; then
+                  echo "--- build stderr ---"
+                  cat /tmp/build.err
+                  exit 0
+                fi
+                /tmp/san-tsan >/tmp/run.out 2>&1
+                echo "RUN_RC=$?"
+                # The exact-output test runs HERE, where the data is, and emits
+                # an unambiguous sentinel. Classifying CLEAN on a substring of
+                # the combined output instead would fire on any diagnostic that
+                # merely CONTAINS those two letters -- "Broken pipe" does
+                # (br-ok-en) -- so a genuinely broken run would report healthy,
+                # which is the one thing this probe must never do.
+                if [ "$(cat /tmp/run.out)" = "ok" ]; then
+                  echo "RUN_OUTPUT_EXACTLY_OK"
+                fi
+                echo "--- run output ---"
+                cat /tmp/run.out
+                exit 0
+              ' 2>&1
+          }
+
+          # CLASSIFY ON TEXT, NEVER ON rc (the v2 defect). The rc is printed
+          # for the record and deliberately not consulted: TSan's exit code is
+          # 66 for a race report and ambiguous across the FATAL abort alike.
+          #
+          # `case`, not `grep -q`: under `set -o pipefail` a successful
+          # `... | grep -q PAT` returns 141 (SIGPIPE kills the writer), so the
+          # check would fail precisely when it matched -- the inverse defect
+          # hk.pkl's `no_grep_q_under_pipefail` step exists to block.
+          classify() {
+            case "$1" in
+              *"NO_CLANGXX_ON_PATH"*)     echo "NO_TOOLCHAIN" ;;
+              *"BUILD_RC="[!0]*)          echo "BUILD_FAILED" ;;
+              *"FATAL: ThreadSanitizer"*) echo "FATAL_ASLR" ;;
+              *"SUMMARY: ThreadSanitizer"*) echo "TSAN_REPORT" ;;
+              *"RUN_OUTPUT_EXACTLY_OK"*)  echo "CLEAN" ;;
+              *)                          echo "UNREADABLE" ;;
+            esac
+          }
 
           echo "=== ARM 1: default seccomp, entropy as-is (${before}) ==="
           out1="$(probe)"
           echo "${out1}"
-          b1="$(verdict "${out1}" BUILD_RC)"; t1="$(verdict "${out1}" TSAN_RC)"
+          verdict1="$(classify "${out1}")"
 
           # Measured BEFORE the sysctl write, so it isolates seccomp from
           # entropy. Running it after lowering would confound the two.
           echo "=== ARM 2: seccomp=unconfined, entropy as-is (${before}) ==="
           out2="$(probe --security-opt seccomp=unconfined)"
           echo "${out2}"
-          b2="$(verdict "${out2}" BUILD_RC)"; t2="$(verdict "${out2}" TSAN_RC)"
+          verdict2="$(classify "${out2}")"
 
           echo "=== lowering vm.mmap_rnd_bits to ${TARGET_BITS} on the HOST ==="
-          sudo /sbin/sysctl -w "vm.mmap_rnd_bits=${TARGET_BITS}" 2>&1 | tail -1
+          # NOT piped into `tail`: a pipe hands $? to the last command, which is
+          # the same exit-code-masking shape `no_grep_q_under_pipefail` exists
+          # to catch. The write is CHECKED because a silent no-op would leave
+          # ARM 3 a second copy of ARM 1 while the summary still labelled it
+          # "entropy lowered" -- an arm that cannot be what it claims.
+          sysctl_out="$(sudo /sbin/sysctl -w "vm.mmap_rnd_bits=${TARGET_BITS}" 2>&1)"
+          sysctl_rc=$?
+          echo "sysctl rc=${sysctl_rc}: ${sysctl_out}"
           after="$(read_bits)"
           echo "mmap_rnd_bits now=${after}"
+          if [ "${sysctl_rc}" -ne 0 ] || [ "${after}" = "${before}" ]; then
+            entropy_changed="NO"
+          else
+            entropy_changed="YES"
+          fi
+          echo "entropy_changed=${entropy_changed}"
 
           echo "=== ARM 3: default seccomp, entropy lowered (${after}) ==="
           out3="$(probe)"
           echo "${out3}"
-          b3="$(verdict "${out3}" BUILD_RC)"; t3="$(verdict "${out3}" TSAN_RC)"
+          verdict3="$(classify "${out3}")"
+          if [ "${entropy_changed}" != "YES" ]; then
+            verdict3="${verdict3} -- ARM 3 IS A REPEAT OF ARM 1, entropy never moved"
+          fi
 
           {
-            echo "## ${RUNNER_LABEL}"
+            echo "## ${RUNNER_LABEL} (${image_machine})"
             echo ""
             echo "| fact | value |"
             echo "|---|---|"
             echo "| kernel | \`${kernel}\` |"
+            echo "| image | \`${IMAGE_REF}\` |"
             echo "| mmap_rnd_bits before | ${before} |"
             echo "| mmap_rnd_bits after | ${after} |"
+            echo "| sysctl write rc | ${sysctl_rc} |"
+            echo "| entropy actually changed | ${entropy_changed} |"
             echo ""
-            echo "| arm | build rc | tsan rc |"
-            echo "|---|---|---|"
-            echo "| 1 default, entropy as-is | ${b1} | ${t1} |"
-            echo "| 2 seccomp=unconfined, entropy as-is | ${b2} | ${t2} |"
-            echo "| 3 default, entropy ${after} | ${b3} | ${t3} |"
+            echo "| arm | verdict |"
+            echo "|---|---|"
+            echo "| 1 default, entropy as-is | ${verdict1} |"
+            echo "| 2 seccomp=unconfined, entropy as-is | ${verdict2} |"
+            echo "| 3 default, entropy ${after} | ${verdict3} |"
             echo ""
-            echo "**How to read this.** Any \`build rc\` that is not 0 means the"
-            echo "TOOLCHAIN failed and that row's \`tsan rc\` says nothing about"
-            echo "ASLR -- that is the exact failure v1 published as a result."
+            echo "**Verdicts are read from OUTPUT TEXT, never from an exit code.**"
+            echo "\`NO_TOOLCHAIN\` and \`BUILD_FAILED\` mean the toolchain never"
+            echo "produced a binary, so that arm says NOTHING about ASLR -- that"
+            echo "is the exact failure v1 published as a result. \`UNREADABLE\`"
+            echo "means the probe itself is broken: treat it as no measurement,"
+            echo "never as a clean run."
             echo ""
-            echo "On a CONTROL leg (\`ubuntu-24.04\`, \`ubuntu-24.04-arm\`) arm 1"
-            echo "MUST be build 0 / tsan 0. If it is not, the repro is wrong and"
-            echo "the 26.04 numbers are unreadable -- fix the probe, not the runner."
-            echo ""
-            echo "On a 26.04 leg: arm 1 non-zero with arm 3 zero means the sysctl"
-            echo "knob is the fix and S1 wires it into smoke-test. Arm 1 non-zero"
-            echo "with arm 2 zero means seccomp is the blocker instead. Both arm 2"
-            echo "and arm 3 non-zero means ${TARGET_BITS} is not sufficient on this"
-            echo "kernel and the plan needs a different value or approach."
+            echo "**Only a POSITIVE result is readable.** This matrix has NO"
+            echo "known-good control leg (operator ruling, accepted risk). Arm 1"
+            echo "\`FATAL_ASLR\` reproduces the defect against the real image, and"
+            echo "arms 2/3 then say which mitigation clears it. Arm 1 \`CLEAN\`"
+            echo "does NOT establish that this leg is healthy -- it cannot be"
+            echo "distinguished from a probe that broke a third time. On a null,"
+            echo "STOP writing probes and instrument the real \`smoke-test\` leg."
           } >> "$GITHUB_STEP_SUMMARY"
 
           # Always exit 0: every outcome here is a RESULT to read, not a build
           # failure. This job is not in ci-gate's needs, so a non-zero exit
           # would only make a completed measurement look like a broken build.
+          # The two `exit 1`s above are the exception and are deliberate: they
+          # fire when the probe could not be SET UP, which is not a result.
           exit 0
