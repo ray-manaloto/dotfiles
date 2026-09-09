@@ -246,7 +246,9 @@ def test_the_lock_command_re_resolves_fuzzy_pins() -> None:
     assert "--bump" in argv
 
 
-def test_the_composite_and_the_local_task_resolve_the_same_way() -> None:
+def test_the_composite_and_the_local_task_resolve_the_same_way(
+    staged_lock_line: str,
+) -> None:
     """CI's staged lock and `mise run lock-image` must not disagree.
 
     They are separate call sites — a shell line in the composite and this
@@ -254,25 +256,10 @@ def test_the_composite_and_the_local_task_resolve_the_same_way() -> None:
     drift, a locally regenerated lock resolves different versions than the one
     CI would produce, and the difference surfaces only as a confusing diff.
     """
-    action = (
-        Path(__file__).parent.parent
-        / ".github"
-        / "actions"
-        / "lock-refresh"
-        / "action.yml"
-    ).read_text()
-    # Bind the ONE line that runs the staged lock, not the file: a flag
-    # mentioned in a comment elsewhere must not satisfy this.
-    staged = [
-        line
-        for line in action.splitlines()
-        if 'mise-pinned" lock' in line and not line.lstrip().startswith("#")
-    ]
-    assert len(staged) == 1, f"expected one staged lock line, found {len(staged)}"
     argv = image_lock.lock_command(Path("/s/mise-pinned"), Path("/s"), ("linux-x64",))
     for flag in ("--bump", "--platform"):
         assert flag in argv, f"{flag} missing from lock_command"
-        assert flag in staged[0], (
+        assert flag in staged_lock_line, (
             f"{flag} missing from the composite's staged lock line"
         )
 
