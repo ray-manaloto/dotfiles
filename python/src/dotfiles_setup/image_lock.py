@@ -259,8 +259,20 @@ def install_pinned_mise(
 def lock_command(
     mise_bin: Path, stage_dir: Path, platforms: tuple[str, ...]
 ) -> list[str]:
-    """The ``mise lock`` argv for one convergence pass."""
-    argv = [str(mise_bin), "lock"]
+    """The ``mise lock`` argv for one convergence pass.
+
+    ``--bump`` is load-bearing, not cosmetic. Without it ``mise lock`` only
+    "refreshes metadata for the currently locked versions" (its own --help), so
+    a ``latest`` pin never advances — and the image configs are almost entirely
+    ``latest``: 27 of 28 tools in mise-system.toml, 21 of 21 in
+    mise-runtime.toml. Measured over five refresh-bot commits (362f3ed,
+    0e04581, 8d75022, 600494c and 85dcacf), the daily job produced 22-1162
+    changed url/checksum lines and **zero** version advances, while
+    refresh.yml's header claimed the job "owns re-RESOLUTION of `latest` pins".
+    Kept identical to the composite's own argv (action.yml) so a local
+    regeneration and CI cannot disagree about which versions they resolve.
+    """
+    argv = [str(mise_bin), "lock", "--bump"]
     for name in platforms:
         argv += ["--platform", name]
     return [*argv, "-C", str(stage_dir)]
