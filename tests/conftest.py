@@ -1,5 +1,5 @@
 # Copyright (c) 2026 Raymond Manaloto
-"""Shared pytest configuration: the `host_only` CI skip.
+"""Shared pytest configuration: the `host_only` CI skip and the staged-lock line.
 
 `host_only` marks the handful of tests asserting facts about a real
 developer host — a host-installed CLI (`claude`, `gemini`) or a
@@ -16,6 +16,7 @@ adds a marker and forgets. This cannot drift.
 """
 
 import os
+from pathlib import Path
 
 import pytest
 
@@ -34,3 +35,27 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     for item in items:
         if "host_only" in item.keywords:
             item.add_marker(skip)
+
+
+@pytest.fixture
+def staged_lock_line() -> str:
+    """The ONE non-comment line in the composite that runs the staged lock.
+
+    Binding the line rather than the file is load-bearing and mutation-proven:
+    `--bump` is also named in the comment directly above it, so a whole-file
+    substring check would still pass with the flag deleted from the command.
+    """
+    action = (
+        Path(__file__).parent.parent
+        / ".github"
+        / "actions"
+        / "lock-refresh"
+        / "action.yml"
+    ).read_text()
+    staged = [
+        line
+        for line in action.splitlines()
+        if 'mise-pinned" lock' in line and not line.lstrip().startswith("#")
+    ]
+    assert len(staged) == 1, f"expected one staged lock line, found {len(staged)}"
+    return staged[0]

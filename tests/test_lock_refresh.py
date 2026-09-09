@@ -6,6 +6,7 @@ from __future__ import annotations
 import os
 import subprocess
 import tomllib
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,48 @@ from dotfiles_setup.lock_refresh import (
     top_level_config_tools,
 )
 from dotfiles_setup.main import setup_parser
+
+
+@dataclass
+class LockRunRecorder:
+    """A `subprocess.run` double that records the `mise lock` argv.
+
+    Every test of `lock_top_level_config_tools` needs the same double —
+    capture the argv, assert the call shape, report success — and written out
+    per test it was eight identical closures.
+
+    `check is False` is asserted on every call, not only where the old
+    closures happened to check it: the caller inspects `returncode` itself,
+    so a `check=True` would raise past that handling.
+    """
+
+    expect_cwd: Path | None = None
+    calls: list[tuple[list[str], Path, bool]] = field(default_factory=list)
+
+    def __call__(
+        self, argv: list[str], *, cwd: Path, check: bool
+    ) -> subprocess.CompletedProcess[bytes]:
+        """Record one `mise lock` invocation and report success."""
+        if self.expect_cwd is not None:
+            assert cwd == self.expect_cwd, f"ran in {cwd}, expected {self.expect_cwd}"
+        assert check is False, "the caller reads returncode; check=True would raise"
+        self.calls.append((argv, cwd, check))
+        return subprocess.CompletedProcess(argv, 0)
+
+    @property
+    def argv(self) -> list[str]:
+        """The one recorded argv — loud if there was not exactly one call."""
+        assert len(self.calls) == 1, (
+            f"expected 1 `mise lock` call, got {len(self.calls)}"
+        )
+        return self.calls[0][0]
+
+
+@pytest.fixture
+def lock_run(tmp_path: Path) -> LockRunRecorder:
+    """A `run=` double for `lock_top_level_config_tools`, pinned to tmp_path."""
+    return LockRunRecorder(expect_cwd=tmp_path)
+
 
 _SYSTEM_TOML = '[tools]\n"conda:git" = "latest"\n\n[settings]\nexperimental = true\n'
 _SHARED_TOML = '[tools]\nhk = "1.46.0"\n'
@@ -72,7 +115,9 @@ def test_top_level_config_tools_strips_only_extras(tmp_path: Path) -> None:
     }
 
 
-def test_lock_top_level_config_tools_builds_scoped_argv(tmp_path: Path) -> None:
+def test_lock_top_level_config_tools_builds_scoped_argv(
+    tmp_path: Path, lock_run: LockRunRecorder
+) -> None:
     config = tmp_path / "mise.toml"
     config.write_text(
         '[tools]\njq = "1.8.1"\n"npm:@scope/pkg" = "2.0.0"\n\n'
@@ -82,34 +127,21 @@ def test_lock_top_level_config_tools_builds_scoped_argv(tmp_path: Path) -> None:
         '[[tools.jq]]\nversion = "1.8.1"\n\n'
         '[[tools."npm:@scope/pkg"]]\nversion = "2.0.0"\n'
     )
-    calls: list[tuple[list[str], Path, bool]] = []
-
-    def recording_run(
-        argv: list[str], *, cwd: Path, check: bool
-    ) -> subprocess.CompletedProcess[bytes]:
-        calls.append((argv, cwd, check))
-        return subprocess.CompletedProcess(argv, 0)
-
-    assert lock_top_level_config_tools(config, run=recording_run) == 0
-    assert calls == [
+    assert lock_top_level_config_tools(config, run=lock_run) == 0
+    assert lock_run.calls == [
         (["mise", "lock", "--bump", "jq", "npm:@scope/pkg"], tmp_path, False)
     ]
 
 
-def test_lock_top_level_config_tools_prunes_stale_entries(tmp_path: Path) -> None:
+def test_lock_top_level_config_tools_prunes_stale_entries(
+    tmp_path: Path, lock_run: LockRunRecorder
+) -> None:
     config = tmp_path / "mise.toml"
     config.write_text('[tools]\njq = "1.8.1"\n')
     lock = tmp_path / "mise.lock"
     lock.write_text(_ROOT_LOCK)
 
-    def successful_run(
-        argv: list[str], *, cwd: Path, check: bool
-    ) -> subprocess.CompletedProcess[bytes]:
-        assert cwd == tmp_path
-        assert check is False
-        return subprocess.CompletedProcess(argv, 0)
-
-    assert lock_top_level_config_tools(config, run=successful_run) == 0
+    assert lock_top_level_config_tools(config, run=lock_run) == 0
     pruned = lock.read_text()
     assert set(tomllib.loads(pruned)["tools"]) == {"jq"}
     assert 'checksum = "sha256:jq"' in pruned
@@ -118,6 +150,7 @@ def test_lock_top_level_config_tools_prunes_stale_entries(tmp_path: Path) -> Non
 
 def test_prune_keeps_a_sibling_table_wedged_between_tool_blocks(
     tmp_path: Path,
+    lock_run: LockRunRecorder,
 ) -> None:
     """A non-`tools` table between a stale block and the next tool SURVIVES.
 
@@ -144,14 +177,7 @@ def test_prune_keeps_a_sibling_table_wedged_between_tool_blocks(
         '[tools.kept."platforms.linux-x64"]\nchecksum = "sha256:bbb"\n'
     )
 
-    def successful_run(
-        argv: list[str], *, cwd: Path, check: bool
-    ) -> subprocess.CompletedProcess[bytes]:
-        assert cwd == tmp_path
-        assert check is False
-        return subprocess.CompletedProcess(argv, 0)
-
-    assert lock_top_level_config_tools(config, run=successful_run) == 0
+    assert lock_top_level_config_tools(config, run=lock_run) == 0
     doc = tomllib.loads(lock.read_text())
     # The stale tool and ITS child table leave…
     assert sorted(doc["tools"]) == ["kept"]
@@ -162,7 +188,9 @@ def test_prune_keeps_a_sibling_table_wedged_between_tool_blocks(
     assert doc["tools"]["kept"][0]["platforms.linux-x64"]["checksum"] == "sha256:bbb"
 
 
-def test_lock_top_level_config_tools_keeps_extras_match(tmp_path: Path) -> None:
+def test_lock_top_level_config_tools_keeps_extras_match(
+    tmp_path: Path, lock_run: LockRunRecorder
+) -> None:
     """An extras-suffixed config key matches its bare lock key and is KEPT.
 
     The lock also carries a genuinely stale tool, so the prune path really
@@ -177,14 +205,7 @@ def test_lock_top_level_config_tools_keeps_extras_match(tmp_path: Path) -> None:
     )
     lock.write_text(original)
 
-    def successful_run(
-        argv: list[str], *, cwd: Path, check: bool
-    ) -> subprocess.CompletedProcess[bytes]:
-        assert cwd == tmp_path
-        assert check is False
-        return subprocess.CompletedProcess(argv, 0)
-
-    assert lock_top_level_config_tools(config, run=successful_run) == 0
+    assert lock_top_level_config_tools(config, run=lock_run) == 0
     doc = tomllib.loads(lock.read_text())
     # The extras-suffixed key was NOT mistaken for stale…
     assert "pipx:foo" in doc["tools"]
@@ -194,6 +215,7 @@ def test_lock_top_level_config_tools_keeps_extras_match(tmp_path: Path) -> None:
 
 def test_lock_top_level_config_tools_does_not_rewrite_exact_lock(
     tmp_path: Path,
+    lock_run: LockRunRecorder,
 ) -> None:
     config = tmp_path / "mise.toml"
     config.write_text('[tools]\njq = "1.8.1"\nshfmt = "3.12.0"\n')
@@ -202,34 +224,23 @@ def test_lock_top_level_config_tools_does_not_rewrite_exact_lock(
     sentinel_ns = 1_600_000_000_000_000_000
     os.utime(lock, ns=(sentinel_ns, sentinel_ns))
 
-    def successful_run(
-        argv: list[str], *, cwd: Path, check: bool
-    ) -> subprocess.CompletedProcess[bytes]:
-        assert cwd == tmp_path
-        assert check is False
-        return subprocess.CompletedProcess(argv, 0)
-
-    assert lock_top_level_config_tools(config, run=successful_run) == 0
+    assert lock_top_level_config_tools(config, run=lock_run) == 0
     assert lock.read_text() == _ROOT_LOCK
     assert lock.stat().st_mtime_ns == sentinel_ns
 
 
-def test_lock_top_level_config_tools_refuses_a_bare_fallback(tmp_path: Path) -> None:
+def test_lock_top_level_config_tools_refuses_a_bare_fallback(
+    tmp_path: Path, lock_run: LockRunRecorder
+) -> None:
     config = tmp_path / "mise.toml"
     config.write_text('[tasks.demo]\ntools.node = "24"\nrun = "true"\n')
-    calls: list[tuple[list[str], Path, bool]] = []
-
-    def recording_run(
-        argv: list[str], *, cwd: Path, check: bool
-    ) -> subprocess.CompletedProcess[bytes]:
-        calls.append((argv, cwd, check))
-        return subprocess.CompletedProcess(argv, 0)
-
-    assert lock_top_level_config_tools(config, run=recording_run) == 1
-    assert calls == []
+    assert lock_top_level_config_tools(config, run=lock_run) == 1
+    assert lock_run.calls == []
 
 
-def test_the_root_lock_re_resolves_fuzzy_pins(tmp_path: Path) -> None:
+def test_the_root_lock_re_resolves_fuzzy_pins(
+    tmp_path: Path, lock_run: LockRunRecorder
+) -> None:
     """`--bump` is what makes a fuzzy root pin actually advance.
 
     Without it `mise lock` only refreshes url/checksum metadata for the
@@ -242,24 +253,17 @@ def test_the_root_lock_re_resolves_fuzzy_pins(tmp_path: Path) -> None:
     config = tmp_path / "mise.toml"
     config.write_text('[tools]\njq = "1.8.1"\n')
     (tmp_path / "mise.lock").write_text('[[tools.jq]]\nversion = "1.8.1"\n')
-    calls: list[tuple[list[str], Path, bool]] = []
-
-    def recording_run(
-        argv: list[str], *, cwd: Path, check: bool
-    ) -> subprocess.CompletedProcess[bytes]:
-        calls.append((argv, cwd, check))
-        return subprocess.CompletedProcess(argv, 0)
-
-    assert lock_top_level_config_tools(config, run=recording_run) == 0
-    assert len(calls) == 1
-    argv, _, _ = calls[0]
+    assert lock_top_level_config_tools(config, run=lock_run) == 0
+    argv = lock_run.argv
     assert "--bump" in argv, f"--bump missing from the root lock argv: {argv}"
     # Ahead of the tool names: `mise lock` takes the flag as an option, and a
     # trailing position would be parsed as another tool name.
     assert argv[:3] == ["mise", "lock", "--bump"]
 
 
-def test_all_three_lock_call_sites_re_resolve_fuzzy_pins(tmp_path: Path) -> None:
+def test_all_three_lock_call_sites_re_resolve_fuzzy_pins(
+    tmp_path: Path, lock_run: LockRunRecorder, staged_lock_line: str
+) -> None:
     """Three separate places shell out to `mise lock`; all three need --bump.
 
     #961 was written when there were two, and #957 added the third the same
@@ -267,21 +271,10 @@ def test_all_three_lock_call_sites_re_resolve_fuzzy_pins(tmp_path: Path) -> None
     landed. Nothing but this test notices a fourth, or a flag dropped from any
     one of them.
     """
-    repo_root = Path(__file__).parent.parent
-
-    # Site 1 — the composite's staged lock line (image tier, in CI). Bind the
-    # ONE line that runs it, not the file: the flag is also named in a comment
-    # directly above, which must not satisfy this.
-    action = (
-        repo_root / ".github" / "actions" / "lock-refresh" / "action.yml"
-    ).read_text()
-    staged = [
-        line
-        for line in action.splitlines()
-        if 'mise-pinned" lock' in line and not line.lstrip().startswith("#")
-    ]
-    assert len(staged) == 1, f"expected one staged lock line, found {len(staged)}"
-    assert "--bump" in staged[0]
+    # Site 1 — the composite's staged lock line (image tier, in CI). The
+    # fixture binds the ONE line that runs it, not the file: the flag is also
+    # named in a comment directly above, which must not satisfy this.
+    assert "--bump" in staged_lock_line
 
     # Site 2 — the local `mise run lock-image` path.
     assert "--bump" in lock_command(Path("/s/mise-pinned"), Path("/s"), ("linux-x64",))
@@ -291,16 +284,8 @@ def test_all_three_lock_call_sites_re_resolve_fuzzy_pins(tmp_path: Path) -> None
     config = tmp_path / "mise.toml"
     config.write_text('[tools]\njq = "1.8.1"\n')
     (tmp_path / "mise.lock").write_text('[[tools.jq]]\nversion = "1.8.1"\n')
-    calls: list[tuple[list[str], Path, bool]] = []
-
-    def recording_run(
-        argv: list[str], *, cwd: Path, check: bool
-    ) -> subprocess.CompletedProcess[bytes]:
-        calls.append((argv, cwd, check))
-        return subprocess.CompletedProcess(argv, 0)
-
-    assert lock_top_level_config_tools(config, run=recording_run) == 0
-    assert "--bump" in calls[0][0]
+    assert lock_top_level_config_tools(config, run=lock_run) == 0
+    assert "--bump" in lock_run.argv
 
 
 def test_lock_refresh_root_is_registered_on_the_parser() -> None:
