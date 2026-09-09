@@ -244,6 +244,16 @@ def lock_top_level_config_tools(
     Refusing an empty set is load-bearing: an argv with no names becomes the
     bare ``mise lock`` form, which also locks task-scoped tools and recreates
     the root-lock drift this entrypoint exists to prevent.
+
+    ``--bump`` is the third instance of the flag #989 added to the two image
+    call sites, and it is here for the same reason: without it ``mise lock``
+    only refreshes url/checksum metadata for versions already locked, so a
+    fuzzy selector never advances. It is a no-op against the root tier *today*
+    — mise.toml and shared.toml carry zero ``latest``/``~``/``^``/``.x`` pins
+    — but that is a fact about the current config, not an invariant. Adding one
+    fuzzy pin would otherwise freeze it silently, with the daily refresh
+    running green the whole time (#990). Keep in lockstep with
+    ``image_lock.lock_command`` and the composite's staged lock line.
     """
     tools = sorted(top_level_config_tools(config_path))
     if not tools:
@@ -254,7 +264,7 @@ def lock_top_level_config_tools(
         )
         return 1
     result = run(
-        ["mise", "lock", *tools],
+        ["mise", "lock", "--bump", *tools],
         cwd=config_path.parent,
         check=False,
     )
