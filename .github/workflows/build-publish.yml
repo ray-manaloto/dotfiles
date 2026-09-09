@@ -811,10 +811,11 @@ jobs:
     # descendants. `build` already carries `always()` so a skipped `dev-prep`
     # (the nightly path, which must always rebuild) does not cascade-skip it —
     # but the skip kept flowing THROUGH a successful `build` into this job,
-    # which had no `if:` at all. Measured: six consecutive nightlies skipped
-    # smoke-test, dev-tag and manifest while the run reported `success`, so
-    # `:dev` never advanced; the control arm is the PR path, where `dev-prep`
-    # runs and smoke-test runs with it. The explicit success check restores the
+    # which had no `if:` at all. Measured: EVERY nightly checked — 12 of 12
+    # scheduled runs, 2026-08-05 through 2026-09-08 — skipped smoke-test,
+    # dev-tag and manifest while the run reported `success`, so `:dev` never
+    # advanced; the control arm is the PR path, where `dev-prep` runs and
+    # smoke-test runs with it. The explicit success check restores the
     # failure gating that dropping the default `success()` would otherwise lose.
     # `plan` needs no clause of its own: a failed `plan` skips `build`, which
     # this checks. Same shape as `build`'s `if:` above.
