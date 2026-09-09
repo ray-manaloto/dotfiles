@@ -765,6 +765,19 @@ per_path_tokens = { ".github/workflows/build-publish.yml" = [
 ] }
 
 [[suite]]
+name = "ci.smoke-test-lowers-aslr-entropy-for-tsan"
+description = "#840: the smoke's tier-3 compiler check runs a ThreadSanitizer-instrumented binary, and on a 26.04 runner that aborts before `main` with `FATAL: ThreadSanitizer: encountered an incompatible memory layout but was unable to disable ASLR (perhaps sandboxing is enabled?)`. TSan cannot self-correct inside docker because the default seccomp profile denies `personality(ADDR_NO_RANDOMIZE)`. Measured against the REAL published image on `ubuntu-26.04-arm`, run 34299911048: `mmap_rnd_bits` is 33 there; arm 1 (untouched) FATALs; BOTH lowering to 28 and `seccomp=unconfined` clear it. The sysctl is the chosen fix because it leaves the container under the SAME confinement a real devcontainer gets, where unconfining seccomp would make the smoke stop testing what ships. An earlier measurement (S0, run 34282558958) reproduced the FATAL on 26.04 x64 ONLY and NOT on 26.04 arm64, which made the defect look x64-specific -- that was a false negative from probing stock `ubuntu:26.04` plus an apt `clang` instead of the real image, and is why the real-image probe was built. THREE things are asserted, not one. (1) The write exists. (2) It is conditioned on the MEASURED value, not on the runner label: the amd64 leg runs on `ubuntu-latest` (platform_target.py:196), so a label test would go silently false the day GitHub repoints that at 26.04 -- a runner change nobody noticed is this ticket's whole story -- and measuring also leaves an already-fine leg on its real default rather than blanket-lowering every leg into a check that can only pass. (3) The write is VERIFIED afterwards, so a silent no-op fails the step naming the cause instead of surfacing minutes later as an unexplained TSan FATAL. The read uses `sudo` because the knob is root-readable ONLY -- a plain read fails, and an earlier probe published that failure as the kernel fact `NO_SUCH_KNOB`."
+category = "ci"
+check_type = "static"
+handler = "require_tokens"
+paths = [".github/workflows/build-publish.yml"]
+per_path_tokens = { ".github/workflows/build-publish.yml" = [
+    "sudo sysctl -w \"vm.mmap_rnd_bits=${TSAN_MAX_MMAP_RND_BITS}\"",
+    "current=\"$(sudo cat /proc/sys/vm/mmap_rnd_bits)\"",
+    "echo \"FAIL: mmap_rnd_bits is ${after} after the write, expected ${TSAN_MAX_MMAP_RND_BITS}\" >&2",
+] }
+
+[[suite]]
 name = "ci.build-publish-matrix"
 description = "#676: the image publishes BOTH architectures from one push. The build chain must fan out over `dotfiles-setup platform-matrix` (the one declaration of what ships — it cannot live in YAML, which `no_platform_literals` scans), each leg must export PLATFORM so bake and all three content hashes agree about which architecture it is building, each leg must push only its per-architecture tag, and a manifest job must merge those into the moving tags and then assert the published index really lists every architecture. Publishing a single-architecture image under a moving tag is silent: `docker pull` on the matching host succeeds exactly as before."
 category = "ci"

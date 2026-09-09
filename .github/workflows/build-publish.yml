@@ -949,6 +949,53 @@ jobs:
           set -euo pipefail
           uv run --project python dotfiles-setup image size-report \
             --image-ref "${IMAGE_REF}" --platform "${TARGET_PLATFORM}"
+      - name: Lower ASLR entropy so ThreadSanitizer can run (#840)
+        # The smoke's tier-3 compiler check runs a TSan-instrumented binary.
+        # On a 26.04 runner that aborts before `main`:
+        #
+        #   FATAL: ThreadSanitizer: encountered an incompatible memory layout
+        #   but was unable to disable ASLR (perhaps sandboxing is enabled?).
+        #
+        # TSan cannot self-correct inside docker, because the default seccomp
+        # profile denies `personality(ADDR_NO_RANDOMIZE)`. Measured against the
+        # REAL published image on `ubuntu-26.04-arm`, run 34299911048:
+        # `mmap_rnd_bits` is 33 there, arm 1 (untouched) FATALs, and BOTH
+        # lowering to 28 and `seccomp=unconfined` clear it. The sysctl is the
+        # chosen fix because it leaves the container under the SAME confinement
+        # a real devcontainer gets -- unconfining seccomp would make the smoke
+        # stop testing what ships, and could mask a genuine seccomp defect.
+        #
+        # Conditioned on the MEASURED value, not on the runner label. A label
+        # test (`ubuntu-26.04*`) has a silent blind spot: the amd64 leg runs on
+        # `ubuntu-latest` (platform_target.py:196), so the day GitHub repoints
+        # that at 26.04 the leg would start failing while the condition stayed
+        # false -- and a runner change nobody noticed is #840's whole story.
+        # Measuring also leaves an already-fine leg on its real default, so
+        # those legs keep exercising the entropy they actually ship under.
+        #
+        # `sudo cat`, not a plain read: the knob is root-readable ONLY, which
+        # is what made an earlier probe publish "the file is unreadable" as the
+        # kernel fact NO_SUCH_KNOB. A missing knob fails the step loudly rather
+        # than skipping silently -- the smoke below would fail anyway, and it
+        # would fail somewhere far less legible.
+        if: steps.probe.outputs.hit != 'true'
+        env:
+          TSAN_MAX_MMAP_RND_BITS: "28"
+        run: |
+          set -euo pipefail
+          current="$(sudo cat /proc/sys/vm/mmap_rnd_bits)"
+          if [ "${current}" -le "${TSAN_MAX_MMAP_RND_BITS}" ]; then
+            echo "OK: mmap_rnd_bits=${current} is already <= ${TSAN_MAX_MMAP_RND_BITS}; left untouched"
+            exit 0
+          fi
+          sudo sysctl -w "vm.mmap_rnd_bits=${TSAN_MAX_MMAP_RND_BITS}"
+          after="$(sudo cat /proc/sys/vm/mmap_rnd_bits)"
+          if [ "${after}" != "${TSAN_MAX_MMAP_RND_BITS}" ]; then
+            echo "FAIL: mmap_rnd_bits is ${after} after the write, expected ${TSAN_MAX_MMAP_RND_BITS}" >&2
+            echo "the write did not take effect; the smoke's TSan check would FATAL" >&2
+            exit 1
+          fi
+          echo "OK: mmap_rnd_bits ${current} -> ${after}"
       - name: Smoke published image
         if: steps.probe.outputs.hit != 'true'
         env:
