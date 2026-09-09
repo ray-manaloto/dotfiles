@@ -228,6 +228,15 @@ jobs:
                 fi
                 /tmp/san-tsan >/tmp/run.out 2>&1
                 echo "RUN_RC=$?"
+                # The exact-output test runs HERE, where the data is, and emits
+                # an unambiguous sentinel. Classifying CLEAN on a substring of
+                # the combined output instead would fire on any diagnostic that
+                # merely CONTAINS those two letters -- "Broken pipe" does
+                # (br-ok-en) -- so a genuinely broken run would report healthy,
+                # which is the one thing this probe must never do.
+                if [ "$(cat /tmp/run.out)" = "ok" ]; then
+                  echo "RUN_OUTPUT_EXACTLY_OK"
+                fi
                 echo "--- run output ---"
                 cat /tmp/run.out
                 exit 0
@@ -248,7 +257,7 @@ jobs:
               *"BUILD_RC="[!0]*)          echo "BUILD_FAILED" ;;
               *"FATAL: ThreadSanitizer"*) echo "FATAL_ASLR" ;;
               *"SUMMARY: ThreadSanitizer"*) echo "TSAN_REPORT" ;;
-              *"--- run output ---"*ok*)  echo "CLEAN" ;;
+              *"RUN_OUTPUT_EXACTLY_OK"*)  echo "CLEAN" ;;
               *)                          echo "UNREADABLE" ;;
             esac
           }
@@ -266,14 +275,30 @@ jobs:
           verdict2="$(classify "${out2}")"
 
           echo "=== lowering vm.mmap_rnd_bits to ${TARGET_BITS} on the HOST ==="
-          sudo /sbin/sysctl -w "vm.mmap_rnd_bits=${TARGET_BITS}" 2>&1 | tail -1
+          # NOT piped into `tail`: a pipe hands $? to the last command, which is
+          # the same exit-code-masking shape `no_grep_q_under_pipefail` exists
+          # to catch. The write is CHECKED because a silent no-op would leave
+          # ARM 3 a second copy of ARM 1 while the summary still labelled it
+          # "entropy lowered" -- an arm that cannot be what it claims.
+          sysctl_out="$(sudo /sbin/sysctl -w "vm.mmap_rnd_bits=${TARGET_BITS}" 2>&1)"
+          sysctl_rc=$?
+          echo "sysctl rc=${sysctl_rc}: ${sysctl_out}"
           after="$(read_bits)"
           echo "mmap_rnd_bits now=${after}"
+          if [ "${sysctl_rc}" -ne 0 ] || [ "${after}" = "${before}" ]; then
+            entropy_changed="NO"
+          else
+            entropy_changed="YES"
+          fi
+          echo "entropy_changed=${entropy_changed}"
 
           echo "=== ARM 3: default seccomp, entropy lowered (${after}) ==="
           out3="$(probe)"
           echo "${out3}"
           verdict3="$(classify "${out3}")"
+          if [ "${entropy_changed}" != "YES" ]; then
+            verdict3="${verdict3} -- ARM 3 IS A REPEAT OF ARM 1, entropy never moved"
+          fi
 
           {
             echo "## ${RUNNER_LABEL} (${image_machine})"
@@ -284,6 +309,8 @@ jobs:
             echo "| image | \`${IMAGE_REF}\` |"
             echo "| mmap_rnd_bits before | ${before} |"
             echo "| mmap_rnd_bits after | ${after} |"
+            echo "| sysctl write rc | ${sysctl_rc} |"
+            echo "| entropy actually changed | ${entropy_changed} |"
             echo ""
             echo "| arm | verdict |"
             echo "|---|---|"
