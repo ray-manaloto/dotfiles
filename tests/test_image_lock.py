@@ -219,6 +219,7 @@ def test_every_platform_becomes_its_own_flag() -> None:
     assert argv == [
         "/s/mise-pinned",
         "lock",
+        "--bump",
         "--platform",
         "linux-x64",
         "--platform",
@@ -226,6 +227,54 @@ def test_every_platform_becomes_its_own_flag() -> None:
         "-C",
         "/s",
     ]
+
+
+def test_the_lock_command_re_resolves_fuzzy_pins() -> None:
+    """`--bump` is what makes a `latest` pin actually advance.
+
+    Without it `mise lock` only refreshes url/checksum metadata for the
+    versions already locked, so the image tiers — 27 of 28 `latest` in
+    mise-system.toml, 21 of 21 in mise-runtime.toml — stay frozen wherever
+    they were first locked. Measured across five refresh-bot commits: 22-1162
+    changed url/checksum lines, zero version advances.
+
+    Asserted separately from the argv-shape test above so that deleting the
+    flag fails a test whose NAME says what was lost, rather than one about
+    platform flags.
+    """
+    argv = image_lock.lock_command(Path("/s/mise-pinned"), Path("/s"), ("linux-x64",))
+    assert "--bump" in argv
+
+
+def test_the_composite_and_the_local_task_resolve_the_same_way() -> None:
+    """CI's staged lock and `mise run lock-image` must not disagree.
+
+    They are separate call sites — a shell line in the composite and this
+    argv builder — so nothing but this test keeps them in lockstep. If they
+    drift, a locally regenerated lock resolves different versions than the one
+    CI would produce, and the difference surfaces only as a confusing diff.
+    """
+    action = (
+        Path(__file__).parent.parent
+        / ".github"
+        / "actions"
+        / "lock-refresh"
+        / "action.yml"
+    ).read_text()
+    # Bind the ONE line that runs the staged lock, not the file: a flag
+    # mentioned in a comment elsewhere must not satisfy this.
+    staged = [
+        line
+        for line in action.splitlines()
+        if 'mise-pinned" lock' in line and not line.lstrip().startswith("#")
+    ]
+    assert len(staged) == 1, f"expected one staged lock line, found {len(staged)}"
+    argv = image_lock.lock_command(Path("/s/mise-pinned"), Path("/s"), ("linux-x64",))
+    for flag in ("--bump", "--platform"):
+        assert flag in argv, f"{flag} missing from lock_command"
+        assert flag in staged[0], (
+            f"{flag} missing from the composite's staged lock line"
+        )
 
 
 def test_a_later_pass_may_rescue_an_earlier_failure() -> None:
