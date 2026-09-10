@@ -1248,6 +1248,11 @@ run = "uv run --project python dotfiles-setup eval"
 description = "Regenerate docs/hk-builtins-audit.md from `hk builtins` + the hk configs"
 run = "uv run --project python dotfiles-setup hk-builtins-audit"
 
+[tasks.audit-aggregate]
+description = "Regenerate the deterministic modernization-audit TOML and side outputs"
+# Thin caller; aggregation logic lives in dotfiles_setup.modernization_audit.
+run = "uv run --project python dotfiles-setup audit-aggregate"
+
 [tasks.codex-agent-parity]
 description = "Assert the hand-authored codex agent lanes stay paired + at xhigh"
 # Thin caller; see python/src/dotfiles_setup/codex_agent_parity.py. Also wired as

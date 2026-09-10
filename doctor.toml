@@ -155,9 +155,12 @@ scope_servers = []
 # and every change is a reviewed diff, whereas most of these belong to
 # third-party plugins that patch-bump on their own schedule. Pinning exactly
 # would report drift for someone else's changelog, and a doctor that cries wolf
-# is one nobody reads. Crossing 34,000 means a plugin materially grew its
-# listing, or a new one was enabled — both worth a look.
-max_chars = 34000
+# is one nobody reads. Before this change: 39,164 chars / 108 entries; after:
+# 39,716 chars / 115 entries. The overage is plugin-driven; seven short project
+# roles were added while all nine existing local agent descriptions were held
+# to 320 chars. Crossing 41,305 (~4% headroom) means a plugin materially grew
+# its listing, or a new one was enabled — both worth a look.
+max_chars = 41305
 
 [graphify]
 # The graphify skill surface's REVIEWED, deliberate shape (issue: see the

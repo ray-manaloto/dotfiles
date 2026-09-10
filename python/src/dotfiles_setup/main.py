@@ -96,6 +96,7 @@ from dotfiles_setup.lock_refresh import (
 from dotfiles_setup.lock_shared import lock_shared_main
 from dotfiles_setup.memory_index import memory_index_main
 from dotfiles_setup.mise_config_context import mise_config_context_main
+from dotfiles_setup.modernization_audit import modernization_audit_main
 from dotfiles_setup.p2996_hash import (
     compute_repo_base_hash,
     compute_repo_dev_hash,
@@ -476,6 +477,55 @@ def _add_instructions_report_subcommand(subparsers: _SubParsers) -> None:
     )
 
 
+def _add_hk_builtins_audit_subcommand(subparsers: _SubParsers) -> None:
+    """Register `hk-builtins-audit` as its own function (#994).
+
+    Freed one statement of headroom in `_add_honesty_subcommands` for
+    `audit-aggregate` — the same PLR0915 statement-ceiling reason
+    `_add_instructions_report_subcommand` is its own function.
+
+    Args:
+        subparsers: The parent subparsers action to attach this to.
+    """
+    hk_audit_parser = subparsers.add_parser(
+        "hk-builtins-audit",
+        help="Regenerate docs/hk-builtins-audit.md from `hk builtins` + the hk "
+        "configs. The hand-written version drifted to claiming 15 builtins were "
+        "used that were not wired, one of them a security scanner",
+    )
+    hk_audit_parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Fail instead of writing when the committed doc is out of date",
+    )
+
+
+def _add_audit_aggregate_subcommand(subparsers: _SubParsers) -> None:
+    """Register `audit-aggregate` (#994) as its own function.
+
+    Called from inside `_add_honesty_subcommands` in place of the inline
+    registration this replaced — the same PLR0915 statement-ceiling reason
+    `_add_instructions_report_subcommand` is its own function.
+
+    Args:
+        subparsers: The parent subparsers action to attach this to.
+    """
+    audit_aggregate_parser = subparsers.add_parser(
+        "audit-aggregate",
+        help="Deterministically aggregate modernization-audit findings and verdicts",
+    )
+    audit_aggregate_parser.add_argument(
+        "--audit-dir",
+        default=".agent/kb/audit",
+        help="Audit artifact directory (default: %(default)s)",
+    )
+    audit_aggregate_parser.add_argument(
+        "--toml",
+        dest="toml_out",
+        help="Optional TOML findings output path",
+    )
+
+
 def _add_honesty_subcommands(subparsers: _SubParsers) -> None:
     """Register the gates that keep a claim and its reality in step.
 
@@ -501,17 +551,7 @@ def _add_honesty_subcommands(subparsers: _SubParsers) -> None:
         nargs="*",
         help="Repo-relative files to scan (default: every tracked file)",
     )
-    hk_audit_parser = subparsers.add_parser(
-        "hk-builtins-audit",
-        help="Regenerate docs/hk-builtins-audit.md from `hk builtins` + the hk "
-        "configs. The hand-written version drifted to claiming 15 builtins were "
-        "used that were not wired, one of them a security scanner",
-    )
-    hk_audit_parser.add_argument(
-        "--check",
-        action="store_true",
-        help="Fail instead of writing when the committed doc is out of date",
-    )
+    _add_hk_builtins_audit_subcommand(subparsers)
     delta_parser = subparsers.add_parser(
         "lint-delta",
         help="Partition linter violations into YOURS and THE UPGRADE'S (#651) "
@@ -651,6 +691,7 @@ def _add_honesty_subcommands(subparsers: _SubParsers) -> None:
         "per-file line budget (new/grown scripts fail — move logic to python/)",
     )
     _add_instructions_report_subcommand(subparsers)
+    _add_audit_aggregate_subcommand(subparsers)
     subparsers.add_parser(
         "codex-agent-parity",
         help="Assert the hand-authored codex-backed agent lanes stay wired: "
@@ -2404,6 +2445,13 @@ def _build_command_handlers(
             apt_pins_main(project_root, json_output=args.json)
         ),
         "bash-budget": lambda: sys.exit(bash_budget_main(project_root)),
+        "audit-aggregate": lambda: sys.exit(
+            modernization_audit_main(
+                project_root,
+                audit_dir=args.audit_dir,
+                toml_out=args.toml_out,
+            )
+        ),
         "instructions-report": lambda: sys.exit(
             instructions_report_main(
                 [

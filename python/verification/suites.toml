@@ -1385,6 +1385,28 @@ tokens = [
 ]
 
 [[suite]]
+name = "workflow.modernization-audit-wiring"
+description = "Modernization-audit aggregation wiring: the mise task invokes the tracked Python CLI, main.py registers and dispatches audit-aggregate with explicit audit/TOML paths, the module exposes its pure aggregate API and CLI entry point, fixture-driven tests import it, and the saved audit workflow calls the mise task rather than its former gitignored scratch script. per_path_tokens bind executable call sites so a surviving definition or comment cannot hide deleted wiring."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    "mise.toml",
+    "python/src/dotfiles_setup/main.py",
+    "python/src/dotfiles_setup/modernization_audit.py",
+    "tests/test_modernization_audit.py",
+    ".claude/workflows/modernization-audit.js",
+]
+per_path_tokens = { "mise.toml" = ['run = "uv run --project python dotfiles-setup audit-aggregate"'], "python/src/dotfiles_setup/main.py" = ['"audit-aggregate",', '"audit-aggregate": lambda'], "python/src/dotfiles_setup/modernization_audit.py" = ['def aggregate(', 'def modernization_audit_main('], "tests/test_modernization_audit.py" = ['from dotfiles_setup import modernization_audit'], ".claude/workflows/modernization-audit.js" = ["STEP 0 — deterministic aggregation, ALWAYS first: run 'mise run audit-aggregate"] }
+tokens = [
+    'dotfiles-setup audit-aggregate',
+    'def aggregate(',
+    'def modernization_audit_main(',
+    'mise run audit-aggregate',
+]
+
+[[suite]]
 name = "workflow.bash-logic-enforcement"
 description = "Zero-bash-logic policy wiring: the `bash_logic_budget` hk step must stay wired to the python enforcer end-to-end — hk.pkl shells out to `dotfiles-setup bash-budget`, main.py registers the subcommand, the bash_budget module (allowlist + per-file growth budget) + its tests exist, and the rule doc records the policy. The check LOGIC lives in python so the enforcer does not itself violate the policy it enforces; this contract asserts the whole chain so it can't drift out."
 category = "workflow"
@@ -2204,7 +2226,7 @@ paths = [
     "python/src/dotfiles_setup/doctor.py",
     "tests/test_listing_budget.py",
 ]
-per_path_tokens = { "doctor.toml" = ["[listing]", "max_chars = 34000"], "python/src/dotfiles_setup/listing_budget.py" = ["def collect_listing(", "from kb_setup.md_budget import SKILL_DESCRIPTION_MAX, skill_description", "desc = skill_description(raw)"], "python/src/dotfiles_setup/doctor.py" = ['("listing-budget", check_listing_budget),', "def check_listing_budget("], "tests/test_listing_budget.py" = ["def test_check_reports_when_the_listing_exceeds_the_ceiling("] }
+per_path_tokens = { "doctor.toml" = ["[listing]", "max_chars = 41305"], "python/src/dotfiles_setup/listing_budget.py" = ["def collect_listing(", "from kb_setup.md_budget import SKILL_DESCRIPTION_MAX, skill_description", "desc = skill_description(raw)"], "python/src/dotfiles_setup/doctor.py" = ['("listing-budget", check_listing_budget),', "def check_listing_budget("], "tests/test_listing_budget.py" = ["def test_check_reports_when_the_listing_exceeds_the_ceiling("] }
 tokens = [
     "def collect_listing(",
 ]

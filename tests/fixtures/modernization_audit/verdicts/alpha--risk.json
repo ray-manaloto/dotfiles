@@ -1,0 +1,12 @@
+{
+  "unit": "alpha",
+  "lens": "risk",
+  "verdicts": [
+    {
+      "id": "alpha-1",
+      "refuted": false,
+      "reason": "risk confirms",
+      "evidence": "risk.md:4"
+    }
+  ]
+}

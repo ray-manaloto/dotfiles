@@ -2,8 +2,9 @@
 name: codex-claude-code-expert
 model: haiku
 effort: high
-description: The authority on what Claude Code actually does on THIS machine at THIS version — subagents, hooks, settings, CLI flags, plugins, skills. Use whenever a decision turns on harness behaviour, or to re-verify a harness claim. Reports with evidence; never edits. Runs on codex (gpt-5.6-sol), not Claude — use instead of claude-code-expert while Claude tokens are constrained.
+description: Claude Code harness authority for this machine/version—subagents, hooks, settings, flags, plugins, and skills. Reports with evidence and never edits. Codex gpt-5.6-sol substitute for claude-code-expert while Claude tokens are constrained.
 tools: Bash, Read, Grep, Glob, Write
+maxTurns: 40
 color: cyan
 ---
 

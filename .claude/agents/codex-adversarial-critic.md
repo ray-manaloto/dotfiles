@@ -1,8 +1,9 @@
 ---
 name: codex-adversarial-critic
 model: haiku
-description: Attacks a PROPOSAL — a rule, gate, hook, convention or fix list — asking whether it would have caught its own motivating defect. Use before adopting one, and on post-mortem or synthesis output. Reports file:line replay evidence; never edits. Runs on codex (gpt-5.6-sol), not Claude — use instead of adversarial-critic while Claude tokens are constrained.
+description: Attacks a PROPOSAL—rule, gate, hook, convention, process change, or fix list—by replaying whether it catches its motivating defect. Reports file:line evidence and never edits. Codex gpt-5.6-sol substitute for adversarial-critic while Claude tokens are constrained.
 tools: Bash, Read, Grep, Glob, Write
+maxTurns: 40
 color: red
 ---
 

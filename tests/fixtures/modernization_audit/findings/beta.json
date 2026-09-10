@@ -1,0 +1,17 @@
+{
+  "unit": "beta",
+  "kind": "rule",
+  "findings": [
+    {
+      "id": "beta-1",
+      "disposition": "retire",
+      "confidence": 0.75,
+      "custom_thing": "legacy guard",
+      "evidence": "beta.md:5",
+      "native_alternative": "native guard",
+      "alternative_evidence": "manual.md:8",
+      "rationale": "one lens is insufficient",
+      "probe": "verify beta"
+    }
+  ]
+}

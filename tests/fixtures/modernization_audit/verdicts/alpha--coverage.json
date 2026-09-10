@@ -1,0 +1,12 @@
+{
+  "unit": "alpha",
+  "lens": "coverage",
+  "verdicts": [
+    {
+      "id": "alpha-1",
+      "refuted": true,
+      "reason": "coverage disagrees",
+      "evidence": "coverage.md:3"
+    }
+  ]
+}
