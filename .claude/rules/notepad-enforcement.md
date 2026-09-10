@@ -11,12 +11,13 @@ Its SessionStart hook re-injects the planning files on startup, resume,
 `.agent/notepad.md` remains the separate narrative corpus consumed by this
 repository's session-review tooling; it is not the active findings queue.
 
-For subagents, `.claude/settings.json` carries the rule through unscoped
-`SubagentStart` and `SubagentStop` hooks. The start hook injects incremental
-persistence before work begins; the stop hook reminds the delegate to deliver
-before idle. A stop hook speaks to the delegate, not the coordinator, so the
-parent still persists the received full report under the report-persistence
-rule.
+For subagents, `.claude/settings.json` carries the rule through an unscoped
+`SubagentStart` hook, which injects incremental persistence before work begins,
+and a `PostToolUse` hook scoped to the `Agent` tool, which reminds the
+coordinator to persist the returned report. **There is deliberately no
+`SubagentStop` hook** — it would force a model turn on every delegation and
+could displace the report with the reply it forces. See
+`agent-report-persistence.md` § "Native carriage" for the measurement.
 
 ## Rules
 

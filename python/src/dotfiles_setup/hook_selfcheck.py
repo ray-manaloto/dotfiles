@@ -153,6 +153,21 @@ _SETTINGS_WIRING: tuple[tuple[str, tuple[str, ...], tuple[str, ...] | None], ...
     ("PostToolUse", (_SUBAGENT_CONTRACT_COMMAND,), ("Agent",)),
 )
 
+#: Events that must NOT be wired at all, with the reason shown on failure.
+#: The module already returns nothing for SubagentStop, but that only makes
+#: THIS command inert there — it does not stop someone wiring a different one.
+#: The forbid is at the wiring layer because that is where the regression lands.
+_FORBIDDEN_EVENTS: tuple[tuple[str, str], ...] = (
+    (
+        "SubagentStop",
+        (
+            "it forces a model turn on EVERY delegation (measured: four "
+            "continuations on one run) and the forced reply can displace the "
+            "report the parent consumes — use the PostToolUse/Agent hook instead"
+        ),
+    ),
+)
+
 #: Events whose hook MUST stay unscoped. A `_SETTINGS_WIRING` row with `None`
 #: matchers asserts nothing about the matcher, so without this a narrowed
 #: matcher — the exact silent-exclusion failure the comment above warns about —
@@ -620,6 +635,9 @@ def check_unscoped_events(settings_path: Path) -> list[str]:
         settings = json.loads(settings_path.read_text())
     except (OSError, json.JSONDecodeError) as exc:
         return [f"could not read {settings_path}: {exc}"]
+    for event, reason in _FORBIDDEN_EVENTS:
+        if _event_entries(settings, event):
+            failures.append(f"settings.json must not wire a {event} hook: {reason}")
     for event, command_token in _UNSCOPED_EVENTS:
         for matcher, command in _event_entries(settings, event):
             if command_token not in command:

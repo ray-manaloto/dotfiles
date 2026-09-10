@@ -196,6 +196,20 @@ def test_no_response_forces_a_model_turn() -> None:
         assert response is None or "decision" not in response
 
 
+def test_wiring_a_subagent_stop_hook_fails(tmp_path: Path) -> None:
+    """The FAIL arm at the WIRING layer, where the regression actually lands.
+
+    `build_subagent_contract_output` returning None only makes THIS command
+    inert on SubagentStop; it cannot stop a different command being wired there.
+    """
+    settings = _full_settings()
+    settings["hooks"]["SubagentStop"] = [_hook(None, "echo deliver-first")]
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps(settings))
+    failures = hook_selfcheck.check_unscoped_events(path)
+    assert any("must not wire a SubagentStop" in failure for failure in failures)
+
+
 def test_subagent_stop_returns_nothing() -> None:
     """The FAIL arm of the regression this change exists to prevent."""
     assert (
