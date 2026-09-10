@@ -36,7 +36,7 @@ Do **not** use it for:
 
 ## Invocation patterns
 
-### Globally-wired shorthands (from `~/AGENTS.md`)
+### Globally-wired shorthands (from `~/CLAUDE.md`)
 
 ```bash
 mcp2cli @github <tool> [args...]      # GitHub operations

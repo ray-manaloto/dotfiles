@@ -55,9 +55,32 @@ named platform's installer actually does (a blind rewrite would claim
 Codex's own installer does something only Claude's does), `session-review`
 audits transcripts from BOTH harnesses in the same sentence (rewriting
 "Claude" there produces "Codex and Codex"), and `session-handoff` names
-`CLAUDE.md`'s relationship to `AGENTS.md`, which a blind rewrite of
-`CLAUDE.md` turns into a self-reference. `PER_FILE` carries exactly these,
+`CLAUDE.md`'s relationship to `AGENTS.md` — a concept with no Codex-side
+counterpart, since there is no general `CLAUDE.md` rule to have rewritten it
+in the first place (see RESPEC 2 below). `PER_FILE` carries exactly these,
 each commented with why the general rule is wrong for that spot.
+
+## Why there is no `CLAUDE.md` -> `AGENTS.md` rule ("RESPEC 2")
+
+A `("CLAUDE.md", "AGENTS.md")` rule was tried and measured against every
+skill it would fire on: `graphify-skill-install` (2 occurrences, both real
+third-party-tool facts needing reversion), `memory-index-curation` (3
+occurrences, same), `session-handoff` (2 occurrences, 1 reworded + 1 deleted
+outright — the concept doesn't exist on the Codex side), and `mcp2cli` (1
+occurrence, `~/CLAUDE.md`, with no established Codex-side equivalent — see
+below). All 8 needed hand intervention; none were correctly, mechanically
+converted. A rule wrong every time it fires, propped up entirely by
+exceptions, is not a rule — RULES has no `CLAUDE.md` entry, and every
+citation of it survives untouched unless a `PER_FILE` entry says otherwise.
+
+`mcp2cli`'s `~/CLAUDE.md` (Ray's personal, user-global Claude Code memory
+file, where these mcp2cli shorthand aliases happen to be documented) has no
+`PER_FILE` entry either. Codex's own docs name an analogous *mechanism* —
+`$CODEX_HOME/AGENTS.md` (default `~/.codex/AGENTS.md`) is its "global scope"
+instructions file — but on this machine that file is empty: the aliases
+this sentence describes are not actually documented there. Asserting
+`~/.codex/AGENTS.md` would be a confident wrong citation (a reader would
+find nothing); leaving `~/CLAUDE.md` untouched is an honest one.
 """
 
 from __future__ import annotations
@@ -91,12 +114,24 @@ PROTECTED: tuple[str, ...] = (
 # list — none of them has a per-platform copy, so the correct citation is the
 # single real path, unchanged, for either harness. See the module docstring
 # for the evidence (session 2026-09-10, "RESPEC 1").
+#
+# There is deliberately NO `CLAUDE.md` -> `AGENTS.md` rule (RESPEC 2). It was
+# tried and measured: of the 8 places `CLAUDE.md` appears across non-EXEMPT
+# skills, 7 needed a `PER_FILE` reversion or deletion and the 8th
+# (`mcp2cli`'s `~/CLAUDE.md`) had no safe rewrite target either — see that
+# skill's absence from `PER_FILE` below. A rule wrong 7 times out of 8,
+# propped up entirely by exceptions, is not a rule; deleting it and leaving
+# every citation of `CLAUDE.md` untouched is what the evidence supports.
 RULES: tuple[tuple[str, str], ...] = (
     (".claude/skills/", ".agents/skills/"),
     ("Claude Code", "Codex"),
     ("Claude", "Codex"),
     ("claude mcp", "Codex mcp"),
-    ("CLAUDE.md", "AGENTS.md"),
+    # A lowercase YAML frontmatter search-trigger variant (verified: exactly
+    # one file, one occurrence, `tmux-extended-keys`), folded into RULES
+    # rather than kept as a `PER_FILE` exception — a rule generalizes to the
+    # next occurrence of this case variant; an exception would not.
+    ("claude code", "Codex"),
 )
 
 # Skill name -> extra rewrites applied AFTER RULES, for genuinely
@@ -108,18 +143,23 @@ PER_FILE: dict[str, tuple[tuple[str, str], ...]] = {
     # same-machine `/clear` handoff skill.
     "adversarial-review": (("session-handoff", "clear-prep"),),
     "handoff": (("session-handoff", "clear-prep"),),
-    # The source names `CLAUDE.md`'s relationship to `AGENTS.md`. A blind
-    # CLAUDE.md->AGENTS.md rewrite turns both sentences self-referential
-    # ("the AGENTS.md is a thin @AGENTS.md stub"; "point to AGENTS.md (which
-    # imports AGENTS.md)"). Render correct prose instead.
+    # The source names `CLAUDE.md`'s relationship to `AGENTS.md`. With no
+    # general `CLAUDE.md` rule (RESPEC 2), the source's literal `CLAUDE.md`
+    # text survives RULES untouched — these two entries match that literal
+    # text directly, not a RULES-rewritten form. The first names a concept
+    # (a `CLAUDE.md` stub importing `AGENTS.md`) that has no Codex-side
+    # counterpart at all, so it is deleted rather than reworded. The second
+    # inverts the sentence: on the Codex side there is no `CLAUDE.md` layer
+    # to route through, so pointing at `AGENTS.md` directly is already
+    # correct.
     "session-handoff": (
         (
-            "(the `AGENTS.md` is a thin `@AGENTS.md` stub — edit `AGENTS.md`). Root",
+            "(the `CLAUDE.md` is a thin `@AGENTS.md` stub — edit `AGENTS.md`). Root",
             "Root",
         ),
         (
             (
-                "point to `AGENTS.md` (which imports\n  `AGENTS.md`), never reference "
+                "point to `CLAUDE.md` (which imports\n  `AGENTS.md`), never reference "
                 "`AGENTS.md` directly\n  (`feedback_refer_to_claude_md_not_agents_md`)."
             ),
             (
@@ -133,15 +173,15 @@ PER_FILE: dict[str, tuple[tuple[str, str], ...]] = {
     # This skill documents what EACH NAMED PLATFORM's installer actually
     # does (`claude`, `agents`, `codex`, `gemini` are all literal CLI
     # argument values, not citations of this doc corpus). A blind rewrite
-    # asserts things that are false about the other platform: that a bare
-    # install mutates `~/.codex` (it mutates `~/.claude`), that the pinned
-    # bundle refresh target is `.agents/skills/graphify/` (it is
+    # asserts things that are false about the other platform: that the
+    # pinned bundle refresh target is `.agents/skills/graphify/` (it is
     # `.claude/skills/graphify/` for the `claude` platform arg), and that
     # Codex — not Claude Code — has the PreToolUse redirect hook. Revert
-    # each to the source's literal, platform-accurate wording.
+    # each to the source's literal, platform-accurate wording. (Its two
+    # `CLAUDE.md` occurrences need no entry here at all — RESPEC 2 dropped
+    # the general `CLAUDE.md` rule, so that literal text now survives
+    # untouched.)
     "graphify-skill-install": (
-        ("~/.claude/AGENTS.md`), and a", "~/.claude/CLAUDE.md`), and a"),
-        ("`AGENTS.md`/`AGENTS.md` append", "`AGENTS.md`/`CLAUDE.md` append"),
         (
             "and `.agents/skills/graphify/` needs\n  refreshing to match.",
             "and `.claude/skills/graphify/` needs\n  refreshing to match.",
@@ -155,35 +195,14 @@ PER_FILE: dict[str, tuple[tuple[str, str], ...]] = {
             "exist to prevent. Claude Code has a PreToolUse hook enforcing the",
         ),
     ),
-    # Both spots cite a REAL third-party tool behavior (searching for a file
-    # literally named "CLAUDE.md", and the "@path" loader being specific to
-    # CLAUDE.md) — not a citation of this doc corpus. Revert the false
-    # "AGENTS.md-loader" / "find -name AGENTS.md" claims the blind rewrite
-    # produces.
-    "memory-index-curation": (
-        (
-            (
-                "are all scoped to AGENTS.md **by their own `find -name "
-                '"AGENTS.md"`**, and'
-            ),
-            (
-                "are all scoped to CLAUDE.md **by their own `find -name "
-                '"CLAUDE.md"`**, and'
-            ),
-        ),
-        (
-            (
-                '**Do NOT "refactor" the index to `@import`.** `@path` is a '
-                "AGENTS.md-loader\n  feature; the loader walks `AGENTS.md` (and its "
-                "`.local` variant) up from cwd,"
-            ),
-            (
-                '**Do NOT "refactor" the index to `@import`.** `@path` is a '
-                "CLAUDE.md-loader\n  feature; the loader walks `CLAUDE.md` (and its "
-                "`.local` variant) up from cwd,"
-            ),
-        ),
-    ),
+    # No `memory-index-curation` entry: its three `CLAUDE.md` occurrences
+    # (a literal filename searched for by `find -name "CLAUDE.md"`, and the
+    # `@path`-is-a-CLAUDE.md-loader claim) needed a hand reversion only
+    # because the old general `CLAUDE.md` rule rewrote them wrong. RESPEC 2
+    # dropped that rule, so the source's literal `CLAUDE.md` text — already
+    # correct, since both are real third-party-tool facts, not citations of
+    # this doc corpus — now survives untouched.
+    #
     # This skill audits transcripts from BOTH harnesses in the same
     # sentences ("reads both Claude and Codex...", "Claude roots are
     # selected independently"). A blind rewrite collapses the contrast into
@@ -203,11 +222,11 @@ PER_FILE: dict[str, tuple[tuple[str, str], ...]] = {
             "`selected=0` and remains `INCOMPLETE`; Claude evidence cannot satisfy the",
         ),
     ),
-    # A YAML frontmatter search-trigger string, lowercase by that list's own
-    # convention — RULES' case-sensitive "Claude Code" -> "Codex" rule does
-    # not match it. Capitalize "Codex" as a proper noun, matching how this
-    # doc capitalizes it everywhere else post-rewrite.
-    "tmux-extended-keys": (("claude code newline tmux", "Codex newline tmux"),),
+    # No `tmux-extended-keys` entry (RESPEC 2): its lowercase
+    # `"claude code newline tmux"` frontmatter trigger is now handled by
+    # RULES' `("claude code", "Codex")` entry, promoted from a `PER_FILE`
+    # exception because a rule generalizes to the next occurrence of this
+    # case variant and an exception would not.
 }
 
 # Skills the generator must NEVER write, and `find_drift` must NEVER report.
