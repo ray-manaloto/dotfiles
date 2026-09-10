@@ -265,7 +265,11 @@ def test_the_composite_and_the_local_task_resolve_the_same_way(
 
 
 def test_a_later_pass_may_rescue_an_earlier_failure() -> None:
-    """The loop exists because GitHub quota exhausts mid-run, not for flakiness."""
+    """A later pass rescues a TRANSIENT earlier failure: quota, a network blip.
+
+    It cannot rescue a deterministic one — an empty candidate set fails every
+    pass identically (2026-09-10; #964). This covers only the transient shape.
+    """
     recorder = _Recorder([1, 1, 0])
     image_lock.run_lock_passes(
         Path("/s/mise-pinned"), Path("/s"), ("linux-x64",), passes=5, run=recorder

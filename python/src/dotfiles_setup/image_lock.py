@@ -76,8 +76,11 @@ PINNED_MISE_DIRNAME = "mise-pinned"
 
 MISE_INSTALLER_URL = "https://mise.run"
 
-#: `mise lock` resolves through GitHub, and anonymous quota exhausts mid-run;
-#: each pass fills what the previous could not. CI uses five and converges.
+#: `mise lock` resolves through GitHub, and a TRANSIENT failure — exhausted
+#: anonymous quota, a network blip — is what a later pass fixes: each fills
+#: what the previous could not. CI uses five and converges. A DETERMINISTIC
+#: failure is not helped by any number of passes; measured 2026-09-10,
+#: `fnox@latest` had an empty candidate set and failed all five identically.
 DEFAULT_PASSES = 5
 
 #: The only host that can write a faithful image lock (gotcha 1).
@@ -288,11 +291,19 @@ def run_lock_passes(
 ) -> None:
     """Run the convergence loop; the LAST pass must succeed.
 
-    Earlier passes are allowed to fail — that is what the loop is for, since
-    exhausted GitHub quota is the expected mid-run failure. A final failure is
-    real: ``mise lock`` has hard-errored on an unresolvable tool since
-    2026.6.13, so a genuinely broken tool fails loud here rather than producing
-    a quietly short lock.
+    Earlier passes are allowed to fail — that is what the loop is for when the
+    cause is TRANSIENT (exhausted GitHub quota, a network blip). It does
+    nothing for a DETERMINISTIC one: on 2026-09-10 `fnox@latest` resolved to an
+    empty candidate set under ``minimum_release_age`` and every pass died on
+    the same line. A final failure is real: ``mise lock`` has hard-errored on
+    an unresolvable tool since 2026.6.13, so a genuinely broken tool fails loud
+    here rather than producing a quietly short lock.
+
+    The loop deliberately does NOT classify the two. The only discriminating
+    signal is mise's own stderr wording, which we do not own — binding
+    behaviour to it is the symptom-sniffing that
+    ``.claude/rules/probes-need-a-control-arm.md`` rule 9 forbids. Read the
+    error mise printed. Design discussion: #964.
     """
     argv = lock_command(mise_bin, stage_dir, platforms)
     child_env = {
@@ -309,11 +320,14 @@ def run_lock_passes(
             logger.info("mise lock converged on pass %d/%d", attempt, passes)
             return
         logger.warning(
-            "mise lock pass %d/%d exited %d — retrying (rate limits are the "
-            "expected cause)",
+            "mise lock pass %d/%d exited %d — retrying. A transient cause "
+            "(GitHub quota, a network blip) is what a later pass fixes; a "
+            "deterministic one (no candidate version resolves) fails all %d "
+            "identically. Read the error mise printed above.",
             attempt,
             passes,
             last.returncode,
+            passes,
         )
     rc = last.returncode if last is not None else -1
     msg = f"mise lock did not converge in {passes} pass(es); last rc={rc}"

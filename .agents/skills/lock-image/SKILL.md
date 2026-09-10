@@ -66,11 +66,14 @@ Bump a tool and its entries are replaced, so `lock-check` then fails with
 from the committed lock for exactly this reason — pass `--platform` only when
 you have decided to narrow it, never to reproduce what CI's workflow file does.
 
-**A short lock is the expected mid-run state, not a failure.** `mise lock`
-resolves through GitHub and anonymous quota runs out partway, which is what the
-convergence loop is for. Only the last pass has to succeed. If every pass
-fails, a tool is genuinely unresolvable — `mise lock` has hard-errored on that
-since 2026.6.13, so read the error rather than raising `--passes`.
+**A short lock is often a transient mid-run state, not a failure.** `mise lock`
+resolves through GitHub and anonymous quota can run out partway, which is what
+the convergence loop is for. Only the last pass has to succeed. But a
+DETERMINISTIC failure fails every pass identically — measured 2026-09-10,
+`fnox@latest` had an empty candidate set under `minimum_release_age` and all
+five died on the same line. If every pass fails, a tool is genuinely
+unresolvable — `mise lock` has hard-errored on that since 2026.6.13, so read
+the error rather than raising `--passes`.
 
 ## Reading the result
 

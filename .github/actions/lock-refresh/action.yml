@@ -16,8 +16,9 @@ inputs:
   github-token:
     description: >-
       Token exported as GITHUB_TOKEN/MISE_GITHUB_TOKEN so `mise lock`'s
-      GitHub-backed resolutions are not rate-limited (the convergence
-      loop exists because anonymous quota exhausts mid-run).
+      GitHub-backed resolutions are not rate-limited. Quota exhaustion is
+      one cause of a short lock and the convergence loop covers it; a tool
+      with no resolvable candidate is another, and no token fixes it (#964).
     required: true
 
 runs:
