@@ -186,3 +186,32 @@ uppercase null would have justified building a gate around an escape hatch that
 should simply be deleted. This is the same token-spelling failure recorded in
 `docs/rules-evidence/clarify-before-acting.md`, committed in the same session
 that wrote it up.
+
+## "anyone writes" was read as "anyone overwrites" (2026-09-09)
+
+The first delegation dispatched under the SubagentStart contract — the codex
+lane implementing spec A-1b — followed the file-role table correctly in spirit
+and destructively in practice: it wrote `# Progress — spec A-1b` as the ENTIRE
+contents of `progress.md`, and likewise replaced `findings.md`. The
+coordinator's entries in both were gone.
+
+Probe: after the lane committed, `grep -c` for two coordinator headings in
+`findings.md` returned **0** and **0**; the control arm, the lane's own
+`n16 scope decision` heading, returned **1**, so the file was readable and the
+absences were real. Both files are gitignored (`.gitignore:130` for
+`progress.md`), so there was no git recovery path.
+
+Nothing in the contract was violated. The table said `findings.md` and
+`progress.md` are written by "anyone", and the injected clause said to record
+research in one and chronological outcomes in the other. Neither said **append**.
+A lane starting a fresh section reasonably writes a file; the file just happened
+to be shared.
+
+What limited the damage is rule 1 working as designed: every durable claim had
+already been promoted to `docs/rules-evidence/agent-report-persistence.md`,
+which is tracked. The scratch layer lost data; the tracked layer did not. That
+asymmetry is the argument for rule 1, demonstrated rather than asserted.
+
+Fix: the `SubagentStart` payload now states append-only in its own clause, and
+that clause is a required token of `check_subagent_contract_endtoend`, so it
+cannot be dropped from the payload without the suite going red.

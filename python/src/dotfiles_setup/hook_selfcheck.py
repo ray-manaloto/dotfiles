@@ -533,6 +533,11 @@ Persistence contract for this repository:
   write-capable research lane records raw sources in `.agent/kb/raw/`, research
   and evidence in `findings.md`, and chronological actions, errors, and test
   results in `progress.md`.
+- **APPEND to `findings.md` and `progress.md`. Never overwrite or truncate
+  them.** They are SHARED with the coordinator and with every other lane, they
+  are gitignored, and there is no undo: a delegate that wrote its own heading
+  as the whole file silently destroyed the coordinator's notes. Read what is
+  there, then add your section at the end under your own heading.
 - `task_plan.md` is coordinator-only. Never write it. If your work implies a
   plan change and your definition says you may propose one, write the proposal
   to its own file under `.agent/plans/` for the coordinator to apply.
@@ -550,8 +555,9 @@ now, before acting on its content, to
 value is its immediate file effect needs no report.
 
 If the delegate returned nothing substantive, its own transcript is still on
-disk at the `agent_transcript_path` from its SubagentStop event — recover the
-report from there rather than re-running the work.
+disk under the session's `subagents/` directory in
+`~/.claude/projects/<project>/<session-id>/` — recover the report from there
+rather than re-running the work.
 """
 
 
@@ -668,6 +674,7 @@ def check_subagent_contract_endtoend(project_root: Path) -> list[str]:
         "Persist findings incrementally",
         "`.agent/kb/raw/`",
         "`task_plan.md` is coordinator-only",
+        "APPEND to `findings.md` and `progress.md`",
         "Deliver every findings-bearing final report before idle",
         "read-only",
     )

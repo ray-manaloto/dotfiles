@@ -77,8 +77,8 @@ persist a delivered report at receipt.
    | Content | File | Who writes |
    |---|---|---|
    | Phases, checkboxes, current phase, distilled decisions | `task_plan.md` | **coordinator ONLY** |
-   | Research, analysis, evidence, technical findings | `findings.md` | anyone |
-   | Chronological outcomes, actions, errors, test results | `progress.md` | anyone |
+   | Research, analysis, evidence, technical findings | `findings.md` | anyone, **append-only** |
+   | Chronological outcomes, actions, errors, test results | `progress.md` | anyone, **append-only** |
 
    **No delegate writes `task_plan.md`, and there is no exception.** A scribe
    such as `pwf-scribe` proposes a change by writing a SEPARATE file —
@@ -88,6 +88,16 @@ persist a delivered report at receipt.
    "coordinator only" stays a statement about one file, not a permission an
    agent definition can claim for itself. Codex lanes remain mechanically
    isolated with `PLANNING_DISABLED=1` in `codex_lane.LANE_ENV_OVERRIDES`.
+
+   ⚠️ **"anyone writes" means anyone APPENDS.** Both files are shared with the
+   coordinator and every other lane, both are gitignored, and neither has an
+   undo. Measured 2026-09-09: a codex lane opened its section by writing its
+   own heading as the whole file and silently destroyed the coordinator's
+   entries in both — the work survived only because the durable claims had
+   already been promoted to a tracked `docs/rules-evidence/` note, which is
+   exactly why rule 1 sends findings-bearing output somewhere tracked. The
+   `SubagentStart` contract now states append-only explicitly, and that clause
+   is a required token of the end-to-end check.
 
 4. **Verbatim means verbatim.** Preserve tables, evidence links, probes, and
    repos-touched enumeration. Add decision annotations afterwards; do not trim
