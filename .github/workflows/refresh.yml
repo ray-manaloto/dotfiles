@@ -346,8 +346,10 @@ jobs:
         if: steps.drift-check.outcome == 'failure'
         env:
           # mise run lock-image inherits env and injects no token itself;
-          # anonymous, its convergence loop is EXPECTED to exhaust GitHub's
-          # rate limit and raise "did not converge in 5 pass(es)".
+          # anonymous, its convergence loop can exhaust GitHub's rate limit
+          # and raise "did not converge in 5 pass(es)". That is ONE cause, not
+          # the only one: a tool whose candidate set is empty fails all five
+          # identically and no token helps (2026-09-10; #964).
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MISE_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: mise run lock-image -- --no-container

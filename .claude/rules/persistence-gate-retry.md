@@ -49,6 +49,7 @@ Detail: `docs/rules-evidence/persistence-gate-retry.md`.
 | `FAIL: in-volume canary missing` | real defect | home-volume mount regression — investigate volume name / mount opts |
 | `R[123] ... not works` | real defect | the corresponding R-invariant regressed; do NOT retry without diagnosing |
 | `FAIL smoke-tiers-1-3` inside `mise run land`, while `mise run smoke` standalone is rc=0 | environmental | retry `land` once — see "The land-smoke transient" below |
+| `<tool>@latest: no versions found for <tool> matching date filter` (every pass identical) | real defect | do NOT retry — the candidate set is empty (a registry/backend change against `minimum_release_age`); more passes cannot help |
 
 ## The land-smoke transient (`land` only, twice in two sessions)
 
