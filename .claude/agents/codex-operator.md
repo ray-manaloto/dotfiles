@@ -3,6 +3,7 @@ name: codex-operator
 model: haiku
 description: Runs ONE named `mise run` task that mutates git or host state — `land`, `automerge`, `sync`, `verify-local` — and reports its real exit code. Use when an operational command must run off this session's clock. Runs on codex (gpt-5.6-sol) at full access, because every narrower sandbox blocks git writes.
 tools: Bash, Read, Grep, Glob, Write
+maxTurns: 40
 color: orange
 ---
 

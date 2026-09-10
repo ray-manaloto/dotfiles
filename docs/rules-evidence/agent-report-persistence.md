@@ -47,3 +47,171 @@ Existing `docs/research/runs/**` artifacts stay where they are; new ones go to
 
 - [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — the rule,
   `docs/research/kb/`, `.claude/skills/session-handoff/SKILL.md`.
+
+## 2026-09-09 — audit refactor
+
+**Findings applied:** `rule-agent-report-persistence-1` through `-5`.
+
+**Native anchors re-read:** `hooks.md:314` (SubagentStart matchers filter agent
+types); `hooks.md:870` and `:888` (start-hook failure is non-blocking and stderr
+is visible only in the subagent transcript); `hooks.md:2304-2317`
+(`SubagentStart` `hookSpecificOutput.additionalContext`); `hooks.md:2319-2346`
+(SubagentStop context returns to the delegate; parent context requires
+PostToolUse on `Agent`); `sub-agents.md:1051-1057` (the native
+`agent_transcript_path`).
+
+**Wiring probes:** `.claude/settings.json` now has one unscoped command entry
+for each event, both running
+`python -m dotfiles_setup.hook_selfcheck subagent-contract`. The real-entry arm
+passes. Deleting `SubagentStart` or `SubagentStop` independently fails
+`check_settings_wiring`; the runtime arm observes start context, a first-stop
+reminder, and a silent recursive stop. A missing registration therefore cannot
+remain invisible to ship/land selfcheck.
+
+## The stop channel: `additionalContext`, not `decision: "block"` (2026-09-10)
+
+The first implementation returned `{"decision": "block", "reason": ...}`. It was
+live from the working tree while the A-2 codex lane ran, and the lane could not
+idle: it re-delivered its report **three times**, each opening by re-explaining
+that "this hook fires mechanically on every Stop attempt … N/A-by-design". The
+hook was working exactly as coded; the problem is that `block` renders as a hook
+*error*, so a lane that had already complied read the reminder as an objection
+and argued with it.
+
+`hooks.md:2346` documents that SubagentStop accepts
+`hookSpecificOutput.additionalContext` with `hookEventName: "SubagentStop"` for
+**non-error feedback that keeps the subagent running**, and `hooks.md:2549` says
+to use it "when the hook is working as designed and giving Claude guidance" —
+same `stop_hook_active` guard, same 8-continuation cap, but labelled `Stop hook
+feedback` with no error notification. That is precisely this hook's job, so the
+stop arm now uses it.
+
+**Both arms run (2026-09-10).** Restoring the original
+`{"decision": "block", ...}` body — the realistic regression, since it is the
+code that was actually written — turns `check_subagent_contract_endtoend` red
+with two failures (lost required output; forbidden `"decision"` channel);
+restoring `additionalContext` returns it to `[]`. The explicit forbid is
+load-bearing: `block` and `additionalContext` **both** keep the delegate
+running, so no liveness- or presence-shaped assertion can tell them apart.
+
+**Loop-guard scope, corrected.** `stop_hook_active` is true only while Claude
+Code is already continuing the delegate as a result of a stop hook
+(`hooks.md:2470`) — it guards recursion within ONE continuation chain. A new
+parent message starts a new chain, so a long-lived named agent pays the reminder
+once per message received, not once per session. The three re-deliveries above
+are consistent with that: the lane received three separate parent messages.
+
+**Motivating defect still caught:** the injected start contract requires
+incremental writes and the stop contract requires delivery before idle, so the
+2026-07-05 context-only reports and the two 2026-08-03 agents that died with
+nothing written are the exact failures the native carriage prevents.
+
+## Round 2: the stop hook is GONE, and `additionalContext` was only half a fix
+
+The section above recorded switching the `SubagentStop` arm from
+`decision: "block"` to `additionalContext`. A cold review of that commit
+(`docs/research/kb/reports/agents/cold-review-6126a4c-2026-09-09.md`, finding 1,
+HIGH) showed the reasoning was incomplete, and the measurement settles it.
+
+**Both channels continue the delegate.** `$CC/hooks.md:2346` and `:2542-2549`
+say `additionalContext` "keeps the subagent running… through the same loop
+protections as `decision: \"block\"`". The only documented difference is the
+transcript label. So the framing changed and the **forced turn did not**.
+
+**Measured on the first live delegation under the committed hook** (the
+cold-reviewer run that produced the report above): the stop reminder appears in
+**four distinct `user`-role records** of
+`subagents/agent-acold-review-6126a4c-*.jsonl`. Control arm: the SubagentStart
+contract appears in four records too (2 `attachment`, 2 `user`), so the probe is
+counting real injected payloads rather than one record four ways. Four forced
+continuations, on one delegation, for a hook registered with no matcher.
+
+Two costs the `additionalContext` version did not remove:
+
+1. every `Agent` delegation in the repo pays those turns, mechanical ones
+   included;
+2. the forced turn becomes the delegate's **new final assistant message**, so a
+   one-line "already delivered" can displace the substantive report the parent
+   consumes.
+
+**The fix is the alternative named in the same doc sentence as the trap.**
+`$CC/hooks.md:2346`: "To inject context into the parent session after a subagent
+returns, use a `PostToolUse` hook on the `Agent` tool instead." That is now the
+parent-side half; `SubagentStart` remains the delegate-side half; there is no
+`SubagentStop` hook at all, and neither remaining hook costs a turn.
+
+### The gate was armed for mechanism but not for scope or payload
+
+The same review mutation-tested the previous gate and found two GREEN arms —
+i.e. two regressions it could not see. Both are now red, and two new ones with
+them:
+
+| Mutation | Before | Now |
+|---|---|---|
+| narrow the `SubagentStart` matcher to one agent type | **GREEN, 36 passed** | RED — `check_unscoped_events` |
+| delete half the injected start contract | **GREEN, 36 passed** | RED — every clause is a required token |
+| re-add any `SubagentStop` response | n/a | RED — the `decision` forbid now covers every arm |
+| widen the `PostToolUse` matcher off `Agent` | n/a | RED — matcher required |
+
+The scope gap existed because a `_SETTINGS_WIRING` row with `None` matchers
+asserts *nothing* about the matcher; "must be unscoped" is a different claim
+from "no matcher token is required", and it needed its own check.
+
+⚠️ **Two mutations in this round produced a FALSE GREEN, and the cause was the
+mutation, not the gate.** Replacing `coordinator-only by default` globally hit
+both the payload constant *and* the required-token list — they live in one file,
+so both sides moved together and the check still matched. Reverting only
+`sys.stdin.read()` while leaving the widened `except` clause left the fail-open
+behaviour intact. **Mutate only your addition, and restore the TRUE prior form**
+(from `git show`), not an approximation of it — a fail-arm that passes certifies
+a gate you never tested.
+
+## The `task_plan.md` invariant is restored, not weakened
+
+Round 1 relaxed the contract token to "**coordinator ONLY by default**; an agent
+whose definition explicitly emits a `DELTA` may propose one". The cold review
+(finding 3) called that a self-authorizable escape hatch with no gate on who may
+claim it. Probing who actually claims it settled the question in the other
+direction: **`pwf-scribe` never writes `task_plan.md` at all.** It writes
+`.agent/plans/task_plan-delta-<stamp>.md`
+(`.claude/agents/pwf-scribe.md:19-22`) for the coordinator to apply. The
+invariant was never violated, so the weakening bought nothing and cost the
+machine-assertable claim. Token and table are back to **coordinator ONLY**, and
+the suite description matches its token again (finding 2).
+
+⚠️ **The probe that nearly hid this was a case bound.** `grep -ln "DELTA"
+.claude/agents/*.md` returned **0 files** — pwf-scribe spells it lowercase.
+Control arm: 16 agent files exist; `grep -iln "delta"` returns 3. Reporting the
+uppercase null would have justified building a gate around an escape hatch that
+should simply be deleted. This is the same token-spelling failure recorded in
+`docs/rules-evidence/clarify-before-acting.md`, committed in the same session
+that wrote it up.
+
+## "anyone writes" was read as "anyone overwrites" (2026-09-09)
+
+The first delegation dispatched under the SubagentStart contract — the codex
+lane implementing spec A-1b — followed the file-role table correctly in spirit
+and destructively in practice: it wrote `# Progress — spec A-1b` as the ENTIRE
+contents of `progress.md`, and likewise replaced `findings.md`. The
+coordinator's entries in both were gone.
+
+Probe: after the lane committed, `grep -c` for two coordinator headings in
+`findings.md` returned **0** and **0**; the control arm, the lane's own
+`n16 scope decision` heading, returned **1**, so the file was readable and the
+absences were real. Both files are gitignored (`.gitignore:130` for
+`progress.md`), so there was no git recovery path.
+
+Nothing in the contract was violated. The table said `findings.md` and
+`progress.md` are written by "anyone", and the injected clause said to record
+research in one and chronological outcomes in the other. Neither said **append**.
+A lane starting a fresh section reasonably writes a file; the file just happened
+to be shared.
+
+What limited the damage is rule 1 working as designed: every durable claim had
+already been promoted to `docs/rules-evidence/agent-report-persistence.md`,
+which is tracked. The scratch layer lost data; the tracked layer did not. That
+asymmetry is the argument for rule 1, demonstrated rather than asserted.
+
+Fix: the `SubagentStart` payload now states append-only in its own clause, and
+that clause is a required token of `check_subagent_contract_endtoend`, so it
+cannot be dropped from the payload without the suite going red.

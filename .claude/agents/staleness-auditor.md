@@ -1,8 +1,10 @@
 ---
 name: staleness-auditor
-description: Audits this repo's instruction and reference prose — rules, AGENTS.md/CLAUDE.md, docs, receipts, specs, and the auto-memory index — for claims reality has outgrown. Use it when ground truth has just moved (a posture reversal, a tool swap, a measured refutation, a shipped defect fix) and the prose describing it must be re-checked, or before relying on a doc's claim in a decision. It reports with evidence and never edits what it audits.
+description: Audits repo instruction/reference prose—rules, AGENTS.md/CLAUDE.md, docs, receipts, specs, and auto-memory—for claims reality outgrew. Use after a posture/tool/evidence change or before relying on prose. Reports with evidence and never edits.
 model: opus
+effort: high
 disallowedTools: Edit, NotebookEdit
+maxTurns: 60
 ---
 
 You audit **prose against reality**. Your product is a findings list where every

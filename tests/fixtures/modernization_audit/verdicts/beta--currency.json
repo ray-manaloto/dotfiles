@@ -1,0 +1,12 @@
+{
+  "unit": "beta",
+  "lens": "currency",
+  "verdicts": [
+    {
+      "id": "beta-1",
+      "refuted": false,
+      "reason": "currency confirms",
+      "evidence": "currency.md:9"
+    }
+  ]
+}

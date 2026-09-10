@@ -69,6 +69,10 @@ lane to use — the answer is fixed:
 | Premise verification | `fable-orchestrator:premise-verifier` (Claude, read-only) |
 | Research | a read-only `Explore`/`Agent` lane |
 
+New roster: `gate-runner`, `cold-reviewer`, `graphify-operator`, `graphify-researcher`,
+`spec-scribe`, `pwf-scribe`, `issue-filer`. Saved workflows: `/gated-implementation`,
+`/graphify-refresh`.
+
 ⚠️ **`codex-adversarial-critic` is NOT the cold-review lens for a codex diff** —
 same model family as the implementer, so it inherits its blind spots. The
 orchestration skill requires a family the implementer isn't; with grok gone,
@@ -76,12 +80,8 @@ Claude IS that third family, so an Opus cold pass on a codex diff is the full
 gate, not a degraded one. The "degraded, announce it" caveat applies only to
 Claude-authored diffs, where Opus would be same-family.
 
-⚠️ **Until Claude tokens reset (from 2026-08-31), advisor consults route to the
-`codex-advisor` subagent, not `fable-orchestrator:fable-advisor`** — its reasoning
-runs on `gpt-5.6-sol` at `xhigh` via the `codex` CLI, so a consult costs no Claude
-tokens. Same for `codex-adversarial-critic`, `codex-staleness-auditor` and
-`codex-claude-code-expert` in place of their Claude-backed originals (#884). The
-originals are intact and are the ones to use once tokens reset.
+⚠️ Temporary advisor-consult routing while Claude tokens are constrained: see
+@token-routing.md.
 
 Adopted plugins (enabled in `.claude/settings.json`): `fable-orchestrator@fable-orchestrator`
 (Fable-5 architect + `codex` implementer lane, GPT-5.6 Sol) and

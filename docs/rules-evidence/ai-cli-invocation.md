@@ -45,3 +45,64 @@ wrong forms got documented in the first place.
 _Named in the extracted text but **not** resolved during this extraction: the
 `octo@nyldn-plugins` plugin and the Codex / Gemini / OpenCode CLIs. The flag
 forms in the rule are dated — re-probe `--help` before trusting one._
+
+## 2026-09-09 — audit refactor
+
+**Findings applied:** `rule-ai-cli-invocation-1` through `-7`.
+
+**Native/current anchors re-read:** `.claude/agents/codex-operator.md:73-79`
+records the sandbox conflict and missing `--full-auto`; Claude Code
+`hooks.md:664` and `:1773` cover background/task and headless behavior. The
+newer listing controls are from the saved verbatim
+`.agent/kb/raw/claude-code-changelog-2.1.258-2.1.266.md:67-71` because the KB
+corpus predates 2.1.261.
+
+**Live Codex probe (0.152.1):** `mise exec -- codex exec --help` exited 0 and
+printed `Usage: codex exec [OPTIONS] [PROMPT]`; it says missing/`-` prompts use
+stdin and piped stdin is appended to a positional prompt. Positive arm:
+`grep -c workspace-write` = **2**. Negative arm: `grep -c -- --full-auto` =
+**0**. `-p, --profile` remains the profile flag. Running both approval modes
+exited 2 with:
+
+```text
+error: the argument '--approve-for-me' cannot be used with '--sandbox <SANDBOX_MODE>'
+```
+
+**Live companion probes:** bare `agy --version` resolved stale **1.1.12**;
+`mise exec -- agy --version` resolved pinned **1.1.24**. Pinned `agy --help`
+exited 0 and showed `--print` plus `--output-format text|json|stream-json`.
+`gemini --help` exited 0 and said it defaults interactive and uses
+`-p/--prompt` for headless mode. `opencode run --help` exited 0 and showed
+`--format json`, `-m/--model`, and `-p/--password`.
+
+**Motivating defect still caught:** the canonical block now uses only flags
+proved by the pinned CLIs, while the standing rule still requires positive and
+negative help probes before a copied invocation can silently waste a lane.
+
+## A lane invented an environment variable (2026-09-10)
+
+The A-2 draft's "Background results" section credited Claude Code 2.1.261 with
+three environment variables. Probed against the offline corpus
+(`$CC` = the knowledge-base `agent-harness-docs/docs/claude-code` tree), same
+command shape for each:
+
+| Cited as new in 2.1.261 | Corpus hits | Reality |
+|---|---|---|
+| `SLASH_COMMAND_TOOL_CHAR_BUDGET` | 2 files | Real, but an explicitly **legacy** name for the skill-listing budget (`env-vars.md:466`); nothing to do with 2.1.261 |
+| `ENABLE_TOOL_SEARCH` | 8 files | Real, but governs **MCP tool search** (`agent-sdk__tool-search.md:32`), not listing or background output |
+| `SLASH_COMMAND_TOOL_TOKEN_BUDGET` | **0 files** | **Does not exist** |
+
+**Control arms.** The two real names returning hits on the identical command is
+the positive arm — the probe can find variables of this shape. A freshly-minted
+nonce (`VARNAME_wq83mzp`, invented for this run and deliberately not reused)
+returned 0, the negative arm. All three names are also absent from the saved
+`.agent/kb/raw/claude-code-changelog-2.1.258-2.1.266.md`, whose own `2.1.261`
+string returns 1 hit — so that probe discriminates too.
+
+None of the three is about background results, which was the section's subject.
+The whole clause was removed rather than corrected.
+
+**The durable lesson:** a plausible-looking `SCREAMING_SNAKE_CASE` name is the
+cheapest thing for a lane to invent, and it survives review because it *reads*
+like the two real names beside it. Grep a variable before citing it; the cost is
+one command.

@@ -1,9 +1,10 @@
 ---
 name: codex-advisor
 model: haiku
-description: Second-opinion advisor at a commitment boundary — architecture, a migration, an API or gate design, a routing choice, or a problem that resisted two attempts. Returns a verdict and the risk that decides it; advises only. Runs on codex (gpt-5.6-sol), not Claude — use instead of fable-orchestrator:fable-advisor while Claude tokens are constrained.
+description: Second-opinion advisor at a commitment boundary—architecture, migration, API/gate design, routing, or a problem that resisted two attempts. Returns a verdict and deciding risk; advises only. Codex gpt-5.6-sol substitute for fable-orchestrator:fable-advisor while Claude tokens are constrained.
 tools: Bash, Read, Grep, Glob, Write
-color: teal
+maxTurns: 40
+color: purple
 ---
 
 # codex-advisor — a verdict at a commitment boundary, run on codex

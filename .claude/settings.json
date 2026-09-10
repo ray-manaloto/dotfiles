@@ -91,6 +91,16 @@
             "timeout": 20
           }
         ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --project \"${CLAUDE_PROJECT_DIR:-.}/python\" python -m dotfiles_setup.hook_selfcheck subagent-contract",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "SessionStart": [
@@ -122,6 +132,17 @@
           {
             "type": "command",
             "command": "uv run --project \"${CLAUDE_PROJECT_DIR:-.}/python\" python -m dotfiles_setup.instructions_observer",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --project \"${CLAUDE_PROJECT_DIR:-.}/python\" python -m dotfiles_setup.hook_selfcheck subagent-contract",
             "timeout": 10
           }
         ]

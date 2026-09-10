@@ -1,0 +1,64 @@
+# Modernization audit findings — deterministic aggregate (no LLM)
+# units=2 findings=3 retire=1 (survived 0) refactor=1 (survived 1) keep=1 unknown=0 refuted=1 unverified_contested=0
+# Survival: a retire/refactor finding survives with >=2 lens verdicts and <2 refuted; keep/unknown are not voted on.
+# malformed_verdict_files=1: beta--risk.json
+# `correction` / `correction_custom` carry synthesis-stage citation repairs from .agent/kb/audit/corrections.json.
+# The finder's own evidence/alternative_evidence strings are NEVER edited; a correction is an additional field,
+# so the defective pointer and its repair travel together in this file exactly as they do in the .md report.
+
+[[finding]]
+id = "alpha-1"
+unit = "alpha"
+kind = "module"
+disposition = "refactor"
+confidence = 0.90
+custom_thing = "custom \"thing\""
+evidence = "alpha.py:10"
+native_alternative = "native\\path"
+alternative_evidence = "docs.md:20"
+rationale = "line one\nline two"
+probe = "tool\t--check"
+correction = "corrected-native.md:42"
+correction_custom = ""
+verify_votes = 2
+refuted_votes = 1
+survived = true
+schedule = ""
+
+[[finding]]
+id = "alpha-2"
+unit = "alpha"
+kind = "module"
+disposition = "keep"
+confidence = 1.00
+custom_thing = "stable helper"
+evidence = "alpha.py:30"
+native_alternative = "none"
+alternative_evidence = "docs.md:40"
+rationale = "project-specific behavior"
+probe = ""
+correction = ""
+correction_custom = ""
+verify_votes = 0
+refuted_votes = 0
+survived = true
+schedule = ""
+
+[[finding]]
+id = "beta-1"
+unit = "beta"
+kind = "rule"
+disposition = "retire"
+confidence = 0.75
+custom_thing = "legacy guard"
+evidence = "beta.md:5"
+native_alternative = "native guard"
+alternative_evidence = "manual.md:8"
+rationale = "one lens is insufficient"
+probe = "verify beta"
+correction = ""
+correction_custom = ""
+verify_votes = 1
+refuted_votes = 0
+survived = false
+schedule = ""

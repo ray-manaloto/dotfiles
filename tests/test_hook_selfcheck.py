@@ -11,6 +11,7 @@ the gate.
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -91,6 +92,18 @@ def _full_settings() -> dict:
                     "Edit|Write|NotebookEdit",
                     f'uv run --project "{_ANCHOR}/python" '
                     "dotfiles-setup mise-config-context",
+                ),
+                _hook(
+                    "Agent",
+                    f'uv run --project "{_ANCHOR}/python" python -m '
+                    "dotfiles_setup.hook_selfcheck subagent-contract",
+                ),
+            ],
+            "SubagentStart": [
+                _hook(
+                    None,
+                    f'uv run --project "{_ANCHOR}/python" python -m '
+                    "dotfiles_setup.hook_selfcheck subagent-contract",
                 )
             ],
         }
@@ -106,6 +119,133 @@ def test_missing_event_fails(tmp_path: Path) -> None:
     del settings["hooks"]["PreToolUse"]
     failures = _wiring(tmp_path, settings)
     assert any("PreToolUse" in f for f in failures)
+
+
+def test_missing_subagent_start_registration_fails(tmp_path: Path) -> None:
+    """The control arm: deleting the start registration must fail selfcheck."""
+    settings = _full_settings()
+    del settings["hooks"]["SubagentStart"]
+    failures = _wiring(tmp_path, settings)
+    assert any("SubagentStart" in failure for failure in failures)
+
+
+def test_missing_agent_posttooluse_registration_fails(tmp_path: Path) -> None:
+    """Dropping the parent-side half must fail even though PostToolUse remains.
+
+    The mise-config-context entry still wires PostToolUse, so a check that only
+    asked "is this event present?" would stay green with the reminder gone.
+    """
+    settings = _full_settings()
+    settings["hooks"]["PostToolUse"] = [
+        entry
+        for entry in settings["hooks"]["PostToolUse"]
+        if "subagent-contract" not in entry["hooks"][0]["command"]
+    ]
+    assert settings["hooks"]["PostToolUse"], "fixture must keep the other entry"
+    failures = _wiring(tmp_path, settings)
+    assert any("PostToolUse" in failure for failure in failures)
+
+
+@pytest.mark.parametrize("matcher", ["cold-reviewer", "Explore|Task"])
+def test_narrowed_subagent_start_matcher_fails(tmp_path: Path, matcher: str) -> None:
+    """A narrowed matcher silently excludes delegates, so it must go red.
+
+    `_SETTINGS_WIRING`'s `None` asserts nothing about the matcher; without
+    `check_unscoped_events` this mutation passed every check.
+    """
+    settings = _full_settings()
+    settings["hooks"]["SubagentStart"][0]["matcher"] = matcher
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps(settings))
+    failures = hook_selfcheck.check_unscoped_events(path)
+    assert any("UNSCOPED" in failure for failure in failures)
+
+
+@pytest.mark.parametrize("matcher", ["", "*"])
+def test_match_all_spellings_are_accepted_as_unscoped(
+    tmp_path: Path, matcher: str
+) -> None:
+    """The PASS arm: both documented match-all spellings must be allowed."""
+    settings = _full_settings()
+    settings["hooks"]["SubagentStart"][0]["matcher"] = matcher
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps(settings))
+    assert hook_selfcheck.check_unscoped_events(path) == []
+
+
+def test_subagent_contract_entrypoint_passes_all_runtime_arms() -> None:
+    """Start injects every clause; PostToolUse reminds only for `Agent`.
+
+    There is deliberately no SubagentStop arm — see
+    `build_subagent_contract_output` for why re-adding one is a regression.
+    """
+    assert hook_selfcheck.check_subagent_contract_endtoend(_REPO) == []
+
+
+def test_no_response_forces_a_model_turn() -> None:
+    """No payload may use `decision`; both channels continue the delegate."""
+    # `dict` is invariant in its value type, so the literals need the
+    # annotation: `dict[str, str]` is not assignable to `dict[str, object]`.
+    payloads: tuple[dict[str, object], ...] = (
+        {"hook_event_name": "SubagentStart"},
+        {"hook_event_name": "PostToolUse", "tool_name": "Agent"},
+        {"hook_event_name": "SubagentStop", "stop_hook_active": False},
+    )
+    for payload in payloads:
+        response = hook_selfcheck.build_subagent_contract_output(payload)
+        assert response is None or "decision" not in response
+
+
+def test_wiring_a_subagent_stop_hook_fails(tmp_path: Path) -> None:
+    """The FAIL arm at the WIRING layer, where the regression actually lands.
+
+    `build_subagent_contract_output` returning None only makes THIS command
+    inert on SubagentStop; it cannot stop a different command being wired there.
+    """
+    settings = _full_settings()
+    settings["hooks"]["SubagentStop"] = [_hook(None, "echo deliver-first")]
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps(settings))
+    failures = hook_selfcheck.check_unscoped_events(path)
+    assert any("must not wire a SubagentStop" in failure for failure in failures)
+
+
+def test_subagent_stop_returns_nothing() -> None:
+    """The FAIL arm of the regression this change exists to prevent."""
+    assert (
+        hook_selfcheck.build_subagent_contract_output(
+            {"hook_event_name": "SubagentStop", "stop_hook_active": False}
+        )
+        is None
+    )
+
+
+def test_posttooluse_ignores_every_tool_but_agent() -> None:
+    """The module must not depend on its matcher to stay scoped."""
+    assert (
+        hook_selfcheck.build_subagent_contract_output(
+            {"hook_event_name": "PostToolUse", "tool_name": "Bash"}
+        )
+        is None
+    )
+
+
+def test_non_utf8_stdin_fails_open() -> None:
+    """Non-UTF-8 stdin must exit 0 silently, not raise UnicodeDecodeError."""
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "dotfiles_setup.hook_selfcheck",
+            hook_selfcheck.SUBAGENT_CONTRACT_MODE,
+        ],
+        input=b"\xff\xfe not utf-8",
+        capture_output=True,
+        cwd=_REPO,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr.decode("utf-8", "replace")
+    assert result.stdout == b""
 
 
 def test_missing_matcher_fails(tmp_path: Path) -> None:
@@ -414,7 +554,14 @@ def test_selfcheck_main_passes_on_real_repo() -> None:
 
 @pytest.mark.parametrize(
     "event",
-    ["PreToolUse", "SessionStart", "SessionEnd", "InstructionsLoaded", "PostToolUse"],
+    [
+        "PreToolUse",
+        "SessionStart",
+        "SessionEnd",
+        "InstructionsLoaded",
+        "PostToolUse",
+        "SubagentStart",
+    ],
 )
 def test_unanchored_hook_command_fails(tmp_path: Path, event: str) -> None:
     """The FAIL direction: strip the anchor off any event and it must go red."""

@@ -1,0 +1,27 @@
+{
+  "unit": "alpha",
+  "kind": "module",
+  "findings": [
+    {
+      "id": "alpha-1",
+      "disposition": "refactor",
+      "confidence": 0.9,
+      "custom_thing": "custom \"thing\"",
+      "evidence": "alpha.py:10",
+      "native_alternative": "native\\path",
+      "alternative_evidence": "docs.md:20",
+      "rationale": "line one\nline two",
+      "probe": "tool\t--check"
+    },
+    {
+      "id": "alpha-2",
+      "disposition": "keep",
+      "confidence": 1,
+      "custom_thing": "stable helper",
+      "evidence": "alpha.py:30",
+      "native_alternative": "none",
+      "alternative_evidence": "docs.md:40",
+      "rationale": "project-specific behavior"
+    }
+  ]
+}

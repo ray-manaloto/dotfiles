@@ -11,9 +11,14 @@ hook pretooluse``. This module closes that gap. It:
   ``AskUserQuestion``, ``Edit``, ``Write`` and ``NotebookEdit``), the
   SessionStart web-setup bootstrap, the SessionEnd command-audit refresh, the
   InstructionsLoaded observer, and the PostToolUse mise-config-context
-  dispatcher — five events in all;
+  dispatcher, plus the unscoped SubagentStart contract and its parent-side
+  PostToolUse/``Agent`` half — six events in all;
 - drives the REAL PreToolUse wrapper end-to-end — a denied command must DENY,
   an allowed one must stay silent;
+- drives the REAL subagent-contract module entrypoint end-to-end — start must
+  inject every clause of the file-role contract, PostToolUse must remind the
+  parent only for the ``Agent`` tool, and there must be NO SubagentStop
+  response (a turn-forcing regression);
 - ``bash -n`` syntax-checks the wired hook scripts (a parse error in
   ``web-setup.sh`` would brick a cold Claude-web session before the first Bash
   tool call).
@@ -84,6 +89,10 @@ _HOOK_SCRIPTS = (PRETOOLUSE_WRAPPER, _WEB_SETUP)
 # neither can disrupt a session; asserting them here is what keeps them from
 # quietly falling out of settings.json, which is the only place they are wired.
 _SESSION_END_REPORT = ".agent/command-audit.md"
+SUBAGENT_CONTRACT_MODE = "subagent-contract"
+_SUBAGENT_CONTRACT_COMMAND = (
+    f"python -m dotfiles_setup.hook_selfcheck {SUBAGENT_CONTRACT_MODE}"
+)
 _SETTINGS_WIRING: tuple[tuple[str, tuple[str, ...], tuple[str, ...] | None], ...] = (
     # All five matcher tools are required, not just the two the guard started
     # with. The three file-modifying ones route to `branch_guard` (#400); with
@@ -128,6 +137,43 @@ _SETTINGS_WIRING: tuple[tuple[str, tuple[str, ...], tuple[str, ...] | None], ...
         ("dotfiles-setup mise-config-context",),
         ("Edit", "Write", "NotebookEdit"),
     ),
+    # #994: matcher omission is load-bearing. SubagentStart matchers filter on
+    # agent TYPE, so any matcher would silently exclude a future built-in,
+    # custom, or plugin-scoped delegate from this contract. `None` here only
+    # means "this row asserts no matcher token"; UNSCOPED-ness is a separate
+    # assertion, in _UNSCOPED_EVENTS below, because a `None` row is satisfied
+    # by ANY matcher and so cannot see a narrowing (measured: narrowing this
+    # to a single agent type left the whole suite green).
+    #
+    # The parent-side half is a PostToolUse row scoped to `Agent`, NOT a
+    # SubagentStop hook — see build_subagent_contract_output for why re-adding
+    # one is a regression. Its matcher requirement is real: an unscoped
+    # PostToolUse would fire the reminder after every tool call.
+    ("SubagentStart", (_SUBAGENT_CONTRACT_COMMAND,), None),
+    ("PostToolUse", (_SUBAGENT_CONTRACT_COMMAND,), ("Agent",)),
+)
+
+#: Events that must NOT be wired at all, with the reason shown on failure.
+#: The module already returns nothing for SubagentStop, but that only makes
+#: THIS command inert there — it does not stop someone wiring a different one.
+#: The forbid is at the wiring layer because that is where the regression lands.
+_FORBIDDEN_EVENTS: tuple[tuple[str, str], ...] = (
+    (
+        "SubagentStop",
+        (
+            "it forces a model turn on EVERY delegation (measured: four "
+            "continuations on one run) and the forced reply can displace the "
+            "report the parent consumes — use the PostToolUse/Agent hook instead"
+        ),
+    ),
+)
+
+#: Events whose hook MUST stay unscoped. A `_SETTINGS_WIRING` row with `None`
+#: matchers asserts nothing about the matcher, so without this a narrowed
+#: matcher — the exact silent-exclusion failure the comment above warns about —
+#: passes every check.
+_UNSCOPED_EVENTS: tuple[tuple[str, str], ...] = (
+    ("SubagentStart", _SUBAGENT_CONTRACT_COMMAND),
 )
 
 # Claude Code runs hooks "in the current directory", not the project root, and
@@ -480,6 +526,217 @@ def check_guard_decisions() -> list[str]:
     return failures
 
 
+_SUBAGENT_START_CONTEXT = """\
+Persistence contract for this repository:
+
+- Persist findings incrementally as you go; never wait until the end. A
+  write-capable research lane records raw sources in `.agent/kb/raw/`, research
+  and evidence in `findings.md`, and chronological actions, errors, and test
+  results in `progress.md`.
+- **APPEND to `findings.md` and `progress.md`. Never overwrite or truncate
+  them.** They are SHARED with the coordinator and with every other lane, they
+  are gitignored, and there is no undo: a delegate that wrote its own heading
+  as the whole file silently destroyed the coordinator's notes. Read what is
+  there, then add your section at the end under your own heading.
+- `task_plan.md` is coordinator-only. Never write it. If your work implies a
+  plan change and your definition says you may propose one, write the proposal
+  to its own file under `.agent/plans/` for the coordinator to apply.
+- Deliver every findings-bearing final report before idle. The coordinator
+  persists the received report verbatim under
+  `docs/research/kb/reports/agents/`. A mechanical lane states N/A.
+- If this lane is read-only, surface that limitation immediately and return its
+  findings for the coordinator to persist; do not pretend a write occurred.
+"""
+
+_AGENT_RETURN_CONTEXT = """\
+A subagent just returned. If its report is findings-bearing, persist it VERBATIM
+now, before acting on its content, to
+`docs/research/kb/reports/agents/<agent-name>.md`. A mechanical lane whose whole
+value is its immediate file effect needs no report.
+
+If the delegate returned nothing substantive, its own transcript is still on
+disk under the session's `subagents/` directory in
+`~/.claude/projects/<project>/<session-id>/` — recover the report from there
+rather than re-running the work.
+"""
+
+
+def build_subagent_contract_output(
+    payload: dict[str, object],
+) -> dict[str, object] | None:
+    """Return the native hook response for SubagentStart or PostToolUse/Agent.
+
+    Two events, one command, and NEITHER costs a model turn.
+
+    ``SubagentStart`` injects the contract into the delegate before its first
+    prompt. ``PostToolUse`` on the ``Agent`` tool injects the persist-at-receipt
+    reminder into the PARENT after a delegate returns — which is where
+    ``agent-report-persistence.md`` rule 1 puts that duty anyway.
+
+    ⚠️ **There is deliberately no SubagentStop hook, and re-adding one is a
+    regression.** The first implementation returned ``decision: "block"`` there;
+    switching it to ``additionalContext`` was only half a fix, because BOTH
+    channels "keep the subagent running" (``$CC/hooks.md:2346``, ``:2549``) —
+    the only documented difference is the transcript label. Measured on the
+    first live delegation under that hook, the reminder fired in **four**
+    distinct ``user`` records of one subagent transcript: four forced
+    continuations, unscoped, for every delegation in the repo. Worse, the
+    forced turn becomes the delegate's new final assistant message, so a
+    one-line "already delivered" can displace the substantive report the parent
+    is waiting on. ``$CC/hooks.md:2346`` names this exact alternative: "To
+    inject context into the parent session after a subagent returns, use a
+    ``PostToolUse`` hook on the ``Agent`` tool instead."
+    """
+    event = payload.get("hook_event_name")
+    if event == "SubagentStart":
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": "SubagentStart",
+                "additionalContext": _SUBAGENT_START_CONTEXT,
+            }
+        }
+    # The settings matcher already scopes this to `Agent`, but a hook that
+    # trusted its matcher would fire on every tool the day someone widens it.
+    if event == "PostToolUse" and payload.get("tool_name") == "Agent":
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": "PostToolUse",
+                "additionalContext": _AGENT_RETURN_CONTEXT,
+            }
+        }
+    return None
+
+
+def subagent_contract_main() -> int:
+    """Read one hook payload and emit its contract response; fail open."""
+    try:
+        raw = sys.stdin.buffer.read()
+    except OSError:
+        return 0
+    try:
+        decoded = json.loads(raw.decode("utf-8"))
+    # UnicodeDecodeError is a ValueError, NOT a JSONDecodeError, so decoding
+    # inside the json call let non-UTF-8 stdin escape as a traceback with rc=1
+    # while this module's contract is to fail OPEN. Read bytes, decode here.
+    except UnicodeDecodeError, json.JSONDecodeError:
+        return 0
+    if not isinstance(decoded, dict):
+        return 0
+    response = build_subagent_contract_output(decoded)
+    if response is not None:
+        sys.stdout.write(json.dumps(response))
+    return 0
+
+
+def check_unscoped_events(settings_path: Path) -> list[str]:
+    """Assert every _UNSCOPED_EVENTS hook really carries NO matcher.
+
+    A `_SETTINGS_WIRING` row with `None` matchers asserts nothing about the
+    matcher, so narrowing one to a single agent type passed every check. That
+    is precisely the silent-exclusion failure SubagentStart's `None` exists to
+    prevent, so it needs its own arm.
+    """
+    failures: list[str] = []
+    try:
+        settings = json.loads(settings_path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        return [f"could not read {settings_path}: {exc}"]
+    for event, reason in _FORBIDDEN_EVENTS:
+        if _event_entries(settings, event):
+            failures.append(f"settings.json must not wire a {event} hook: {reason}")
+    for event, command_token in _UNSCOPED_EVENTS:
+        for matcher, command in _event_entries(settings, event):
+            if command_token not in command:
+                continue
+            # "*" and "" are the documented match-all spellings; anything else
+            # filters, and filtering is the regression.
+            if matcher not in ("", "*"):
+                failures.append(
+                    f"settings.json {event} hook must stay UNSCOPED (matcher "
+                    f"omitted, '' or '*'); found {matcher!r}, which silently "
+                    "excludes every delegate it does not name"
+                )
+    return failures
+
+
+def check_subagent_contract_endtoend(project_root: Path) -> list[str]:
+    """Drive the wired module command through start, stop, and loop-guard arms."""
+    command = [
+        sys.executable,
+        "-m",
+        "dotfiles_setup.hook_selfcheck",
+        SUBAGENT_CONTRACT_MODE,
+    ]
+    # Every clause of the injected contract is bound, not just one phrase:
+    # deleting half the payload left the suite green (cold review, mutation H).
+    start_required = (
+        '"hookEventName": "SubagentStart"',
+        "Persist findings incrementally",
+        "`.agent/kb/raw/`",
+        "`task_plan.md` is coordinator-only",
+        "APPEND to `findings.md` and `progress.md`",
+        "Deliver every findings-bearing final report before idle",
+        "read-only",
+    )
+    cases = (
+        ("start", {"hook_event_name": "SubagentStart"}, start_required, True),
+        (
+            "agent-return",
+            {"hook_event_name": "PostToolUse", "tool_name": "Agent"},
+            (
+                '"hookEventName": "PostToolUse"',
+                '"additionalContext"',
+                "persist it VERBATIM",
+            ),
+            True,
+        ),
+        # The matcher scopes this in settings, but the module must not depend
+        # on it: a widened matcher must not turn every tool call into a nag.
+        (
+            "other-tool",
+            {"hook_event_name": "PostToolUse", "tool_name": "Bash"},
+            (),
+            False,
+        ),
+        # No SubagentStop response, ever. Re-adding one re-introduces a forced
+        # continuation on every delegation (see build_subagent_contract_output).
+        (
+            "no-subagent-stop",
+            {"hook_event_name": "SubagentStop", "stop_hook_active": False},
+            (),
+            False,
+        ),
+    )
+    failures: list[str] = []
+    for name, payload, required, emits in cases:
+        result = _run(command, stdin=json.dumps(payload), cwd=project_root)
+        if result.returncode != 0:
+            failures.append(
+                f"subagent-contract {name} arm exited {result.returncode}: "
+                f"{result.stderr.strip()}"
+            )
+            continue
+        if emits and any(token not in result.stdout for token in required):
+            failures.append(
+                f"subagent-contract {name} arm lost required output: "
+                f"{result.stdout.strip()!r}"
+            )
+        # Nothing here may ever use the turn-forcing channels. `block` and
+        # `additionalContext` BOTH keep a delegate running, so no presence- or
+        # liveness-shaped assertion can separate them; only a forbid can (#994).
+        if '"decision"' in result.stdout:
+            failures.append(
+                f"subagent-contract {name} arm must never use the decision/block "
+                f"channel — it forces a model turn: {result.stdout.strip()!r}"
+            )
+        if not emits and result.stdout.strip():
+            failures.append(
+                "subagent-contract recursive-stop arm must be silent to avoid "
+                f"a retry loop: {result.stdout.strip()!r}"
+            )
+    return failures
+
+
 def check_script_syntax(project_root: Path) -> list[str]:
     """``bash -n`` every wired hook script — a parse error would brick a hook."""
     failures: list[str] = []
@@ -546,6 +803,11 @@ def hook_selfcheck_main(project_root: Path) -> int:
         ("script-syntax", lambda: check_script_syntax(project_root)),
         ("guard-decisions", check_guard_decisions),
         ("pretooluse-endtoend", lambda: check_pretooluse_endtoend(project_root)),
+        ("unscoped-events", lambda: check_unscoped_events(settings_path)),
+        (
+            "subagent-contract-endtoend",
+            lambda: check_subagent_contract_endtoend(project_root),
+        ),
         ("plan-attest-deny", lambda: check_plan_attest_deny(settings_path)),
     )
     ok = True
@@ -560,3 +822,12 @@ def hook_selfcheck_main(project_root: Path) -> int:
     if ok:
         sys.stdout.write("hook-selfcheck: OK — all wired host-side hooks pass\n")
     return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    if sys.argv[1:] == [SUBAGENT_CONTRACT_MODE]:
+        raise SystemExit(subagent_contract_main())
+    sys.stderr.write(
+        f"usage: python -m {__package__}.hook_selfcheck subagent-contract\n"
+    )
+    raise SystemExit(2)

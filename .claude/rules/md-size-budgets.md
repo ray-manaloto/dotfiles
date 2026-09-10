@@ -7,184 +7,145 @@ paths:
   - ".claude/skills/**/SKILL.md"
 ---
 
-# Markdown Size Budgets: By Load Class, and Only One Figure Is Anthropic's
+# Markdown Size Budgets: By Load Class, With Provenance
 
-Instruction-markdown budgets differ **by load class**, because the only thing
-that justifies a size limit is **when the bytes are spent**. Enforced by
-`kb-setup md-budget` (hk step `md_size_budget`) — the SHARED engine, which
-lives in the knowledge-base repo and is consumed here as a SHA-pinned `uv` git
-dependency. One implementation, both repos; dotfiles' copy was deleted
-2026-07-25 on the `kb_setup.currency` precedent.
+Instruction budgets differ by load class because cost depends on when bytes
+enter context. `kb-setup md-budget` (hk step `md_size_budget`) enforces the
+table below using the SHA-pinned implementation from the knowledge-base repo.
+This rule is itself `paths:`-scoped, so it receives the `rule_scoped` budget.
 
-This rule is `paths:`-scoped, and legitimately so: its trigger genuinely *is* a
-file — you only need it when editing `hk.pkl` or an instruction doc. That is the
-test (below), applied to itself.
+## Anthropic's current guidance and real cliffs
 
-## The one documented figure
+Claude Code's memory documentation targets project instructions below 200
+lines because larger files consume context and reduce adherence. That is a soft
+quality gradient, not this repository's enforcement source.
 
-> "**Size**: target under 200 lines per CLAUDE.md file. Longer files consume
-> more context and reduce adherence."
-> — <https://code.claude.com/docs/en/memory> § Write effective instructions
+A `CLAUDE.md` up to 4 MiB loads in full; a larger one is **skipped in full**,
+not truncated. The 200-line/25 KiB truncation is for auto-memory `MEMORY.md`,
+not `CLAUDE.md`. These are native runtime behaviors; this repo's much smaller
+budgets remain preventive backstops.
 
-It is a **soft guideline about a gradient, not a cliff**. The same page:
+Skill listing has a different, partly non-deterministic cliff:
 
-> "**CLAUDE.md files are loaded in full regardless of length**, though shorter
-> files produce better adherence."
+- `skillListingMaxDescChars` defaults to 1,536 characters across the combined
+  `description` + `when_to_use` text. It is a setting, not a hard per-file cap.
+- `skillListingBudgetFraction` defaults to 0.01 (1% of context). On overflow,
+  names remain but descriptions are dropped least-used-first, so a skill can
+  become undiscoverable without violating its file budget.
+- `skillOverrides` with `name-only` is the native way to recover listing space.
 
-**Nothing truncates a CLAUDE.md at any size.** The 200-line/25KB *hard*
-truncation applies to auto-memory `MEMORY.md` only — a file this repo does not
-commit.
+This repository deliberately sets none of those three controls. Inspect their
+actual effect with `/context`, not a guessed per-file threshold.
 
-## Why this rule exists: we enforced a real number, against the wrong vendor
+## Why this rule exists: a true number assigned to the wrong vendor
 
-The predecessor step `claude_md_size_limit` enforced **200 lines AND 12,000
-bytes** on every `CLAUDE.md`/`AGENTS.md`, captioned "max 12000 chars **per
-Claude Code memory docs**".
-
-**The number is real. The citation was wrong.** 12,000 is **Windsurf's** limit,
-not Anthropic's:
+The predecessor `claude_md_size_limit` enforced **200 lines and 12,000 bytes**
+for every `CLAUDE.md`/`AGENTS.md`, calling both Claude Code memory limits.
+Twelve thousand is instead **Windsurf's** rule:
 
 > Workspace `.devin/rules/*.md` … **Limited to 12,000 characters per file.**
 > `AGENTS.md` — Any directory in your workspace — **Processed by the same Rules
 > engine**.
 > — <https://docs.windsurf.com/windsurf/cascade/memories>
 
-`mise run lint-docs` already enforces it as **agnix AGM-003** (Category:
-`agents-md`, Tool: `windsurf`, Source type: `vendor_docs`). In Anthropic's corpus
-the figure has **0 hits** (control-armed: 5 for MEMORY.md's cap, 12 for
-`"200 lines"`) — so it was attributed to the wrong vendor, applied to the wrong
-files (`CLAUDE.md` and rules, which Windsurf never reads), and duplicated a check
-agnix already owns.
+`mise run lint-docs` enforces that vendor rule as agnix AGM-003 for the
+`AGENTS.md` files Windsurf reads. `md_size_budget` does not duplicate it or
+misapply it to Claude-only files.
 
-Provenance, from this repo's history:
+The historical failure was provenance loss:
 
-1. `1f05365` — the gate is born enforcing **200 lines only**, correctly cited.
-2. `99a8506` (#147) — `verify-before-advancing.md` describes the gate as
-   "≤200-line / **≤12000-char**". The gate had **no char check** at that commit.
-   Almost certainly copied from agnix's own AGM-003 warning — a real fact,
-   **misfiled**.
-3. `010009d` (#160 T13) — the mismatch is noticed and resolved **backwards**:
-   the code is changed to match the doc, and the message credits Anthropic.
+1. `1f05365` created a 200-line gate with the correct source.
+2. `99a8506` described an unenforced 12,000-character limit, likely copied from
+   agnix without its vendor bound.
+3. `010009d` changed code to match the prose and credited Anthropic.
 
-The lesson is not "someone invented a number" — it is that **a true fact
-travelled without its source** until nobody could tell whose rule it was. It was
-then applied to files the rule never governed, and it blocked real work (#290's
-`tests/AGENTS.md` row).
-
-### The correction that nearly wasn't made
-
-The 2026-07-15 session that wrote this rule first concluded the figure was
-**fabricated**, having grepped Anthropic's corpus with a proper control arm and
-found nothing. The probe was sound; the *report* dropped its bound. "Not in
-Anthropic's docs" became "not documented anywhere" — but the probe never
-searched Windsurf, so it could not have found it. Only `agnix --strict` failing
-surfaced the truth.
-
-**A control arm proves a probe works INSIDE its bound. It says nothing outside
-it.** That is `probes-need-a-control-arm.md` rule 3 (bound-limited searches are
-suspect by construction) — violated here *while holding the rule*, which is why
-it is recorded rather than quietly fixed.
+The initial correction also overreached: a zero-hit search in Anthropic's
+corpus became "not documented anywhere," although the probe never searched
+Windsurf. A control arm validates a probe only inside its stated bound. A true
+fact must travel with its owner before it becomes an invariant.
 
 ## The budgets
 
-| Class | Load semantics (documented) | Lines | Bytes |
+| Class | Load semantics | Lines | Bytes |
 |---|---|---|---|
-| `eager_root` — root `CLAUDE.md` + `@import` closure, `.claude/CLAUDE.md` | "loaded in full at launch" | **200** | 24,000 |
-| `rule_unscoped` — `.claude/rules/*.md` with no `paths:` | "loaded at launch with the same priority as `.claude/CLAUDE.md`" | **200** | 24,000 |
-| `nested` — subdirectory `CLAUDE.md` + closure | "included when Claude reads files in those subdirectories"; not re-injected after `/compact` | **400** | 32,000 |
-| `rule_scoped` — `.claude/rules/*.md` with `paths:` | "only load into context when Claude works with matching files" | **400** | 32,000 |
-| `skill` — `.claude/skills/**/SKILL.md` | on invocation/relevance only | **500** | 32,000 |
+| `eager_root` — root `CLAUDE.md` + `@import` closure, `.claude/CLAUDE.md` | loaded at launch | **200** | 24,000 |
+| `rule_unscoped` — rules without `paths:` | loaded at launch with project instructions | **200** | 24,000 |
+| `nested` — subdirectory `CLAUDE.md` + closure | loads on applicable file reads; reloads that way after `/compact` | **400** | 32,000 |
+| `rule_scoped` — rules with `paths:` | loads on matching file reads; reloads that way after `/compact` | **400** | 32,000 |
+| `skill` — `.claude/skills/**/SKILL.md` | invocation/relevance only; listing governed separately | **500** | 32,000 |
 
-**Every `AGENTS.md` additionally has a hard 12,000-char ceiling — owned by
-agnix AGM-003, not by this gate.** That is Windsurf's rule for the file Windsurf
-actually reads, so it is enforced by the tool that knows the vendor, and
-`md_size_budget` does not duplicate it. Both must pass; for an `AGENTS.md`, AGM-003
-binds first. When an `AGENTS.md` outgrows it, **move reference content to a
-sibling doc and link it by path** (see `tests/TEST-INDEX.md`) — do not `@import`
-it (agnix rejects Claude-only syntax in an agent-agnostic file) and do not add
-the import to the `CLAUDE.md` stub (`claude_md_import_stub` forbids it).
+The byte ceilings are self-imposed anti-gaming backstops, not Anthropic limits.
+Lines bind first. The constants live in the knowledge-base
+`kb_setup.md_budget` module; changing them requires a knowledge-base PR, never
+a local prose-only edit.
 
-Plus one **hard** limit: a `SKILL.md` `description` **> 1,536 chars is
-truncated silently**, taking the keywords Claude matches on with it — the skill
-simply stops being discovered. It is the only real cliff this repo can hit.
+Every `AGENTS.md` also has Windsurf's 12,000-character ceiling through agnix.
+When one outgrows it, move reference material to a sibling doc and link it;
+do not add Claude-only imports to an agent-agnostic file or its guarded stub.
 
-**The byte ceilings are ours**, not Anthropic's — anti-gaming backstops (a line
-cap alone admits 200 × 400-char lines), sized never to bind before the
-documented line limit. Label them as self-imposed. Do not re-attribute them
-upstream; that error is the whole reason this file exists.
+## Measure both authored bytes and received context
+
+- Run the md-budget gate for deterministic pre-commit line/byte budgets.
+- Run `/context`: **Memory files** shows which project instructions actually
+  loaded, while **Skills** reports the listing after its budget was applied.
+- Use `/doctor` for the listing estimate and largest contributors.
+- On Claude Code 2.1.261+, `/skill-doctor` shows loaded-but-unused skills and
+  their context cost. This command is documented in the saved 2.1.261
+  changelog because the offline corpus stops before that version.
+
+Interactive measurement supplements the gate: disk bytes cannot reveal a rule
+that failed to load or a skill description dropped from the listing.
 
 ## Measurement rules
 
-- **Budget the `@import` closure, not the file.** "Splitting into @path imports
-  helps organization but doesn't reduce context, since imported files load at
-  launch." A per-file cap is evadable by splitting — which the docs explicitly
-  call a non-reduction.
-- **The import directive is replaced, not added.** Counting it makes the root
-  closure 201 lines and fails a file legitimately at 200.
-- **Only `CLAUDE.md` is an entry point.** "Claude Code reads CLAUDE.md, not
-  AGENTS.md" — an `AGENTS.md` reaches context only via its stub's import, so it
-  is budgeted inside that closure, never standalone.
-- **HTML comments are free in `CLAUDE.md`** ("stripped before the content is
-  injected... without spending context tokens") — but that sentence says
-  *CLAUDE.md files*. For rules and skills it is **undocumented**, so they pay
-  full price. Never take a discount you cannot cite.
+- Budget the complete `@import` closure. Imports organize content but do not
+  reduce launch context.
+- Replace the import directive with imported content when counting; do not add
+  both.
+- Only `CLAUDE.md` is a native entry point. An `AGENTS.md` enters Claude Code
+  context through its stub import and is counted inside that closure.
+- Discount HTML comments only where native docs guarantee stripping. Rules and
+  skills pay full price because that behavior is undocumented for them.
 
-## Scoping: the trigger test (this is the load-bearing part)
+## Scoping: the trigger test
 
-Path-scoped rules "trigger when Claude **reads** files matching the pattern".
-So scoping is safe only when the rule's trigger genuinely *is* reading a file.
+Path-scoped rules load when Claude reads matching files. Scope only when the
+rule's trigger is genuinely a file read.
 
-- **File-triggered → safe to scope.** `ci-local-parity` (you read the workflow
-  before editing it). This rule.
-- **Behaviour-triggered → MUST stay eager.** `zero-skip-policy` (fires when a
-  warning is about to be dismissed), `clean-git-state` (fires when validation is
-  about to run), `do-not`, `verify-before-advancing`, `clarify-before-acting`,
-  `probes-need-a-control-arm`. No glob predicts a decision.
-- **Creation-triggered → CANNOT be scoped.** `zero-bash-logic` governs *new*
-  `.sh` files; `agent-artifact-conventions` governs *where to create* an
-  artifact. You never read the file first, so the rule would be absent exactly
-  when it is needed.
-- **Behaviour-triggered but niche → a skill, not a rule.** "For task-specific
-  instructions that don't need to be in context all the time, use skills
-  instead, which only load when you invoke them or when Claude determines
-  they're relevant." Skills load on *relevance*, which is the only mechanism
-  that tracks a behavioural trigger.
+- **File-triggered → safe to scope.** `ci-local-parity`; this rule.
+- **Behavior-triggered → keep eager.** `zero-skip-policy`, `clean-git-state`,
+  `do-not`, `verify-before-advancing`, `clarify-before-acting`, and
+  `probes-need-a-control-arm` govern decisions no glob predicts.
+- **Creation-triggered → keep eager.** `zero-bash-logic` and
+  `agent-artifact-conventions` must act before the new file exists.
+- **Behavior-triggered but niche → use a skill.** Relevance/invocation is the
+  native lazy-loading mechanism.
 
-**This was found the hard way:** `zero-skip-policy` and `clean-git-state` were
-both `paths:`-scoped until 2026-07-15 — so the rules forbidding skipped warnings
-and dirty-tree validation were silently absent from any session that didn't
-touch the listed files. Un-scoping them *raises* eager context, and that is
-correct: a judgment rule that is cheap and absent is worth less than one that is
-costly and present.
+A rule's whole `paths:` list shares a budget of **1,000 expanded patterns and
+4 MiB**; patterns without braces do not count. An expansion that would exceed
+the budget is used literally, braces included, and therefore may match
+nothing. That silent absence is the same class of defect scoping is meant to
+avoid. Keep brace expansion small and verify loading with `/context`.
 
-The lever for eager context is therefore **trimming, not scoping** — cut what
-Claude can derive from the codebase (directory layouts, dependency lists,
-architecture overviews) and keep pitfalls, rationale, and conventions that
-differ from tool defaults. That is `/doctor`'s documented heuristic.
+The 2026-07-15 failure demonstrated the trigger test: `zero-skip-policy` and
+`clean-git-state` were scoped, so both were absent when their listed files were
+untouched. The correct response was to restore eager loading and trim evidence,
+not to keep a cheap rule absent.
 
-The repo's applied form of that is **`docs/rules-evidence/<rule>.md`**: a rule's
-archaeology, provenance tables and worked-failure logs move to a tracked sibling
-it links by path, keeping the directive plus one canonical example eager. See
-`agent-artifact-conventions.md`. Measured 2026-07-28 — unscoped rules are
-**~88%** of the eager corpus, so this is where the bytes actually are. The pass
-took it **132,683 → 105,648 B (−20.4%)** across 19 of 21 eager rules;
-`clarify-before-acting` and `clean-git-state` were left alone as already at the
-directive-plus-one-example floor.
+Move archaeology and long probe logs to
+`docs/rules-evidence/<rule>.md`; keep the directive, constraints, and one worked
+failure eager. That preserves evidence without repeatedly injecting it.
 
 ## Applies to
 
 Every tracked `CLAUDE.md`, `AGENTS.md`, `.claude/rules/*.md`, and
-`.claude/skills/**/SKILL.md`. `plugins/**` is vendored and out of scope.
+`.claude/skills/**/SKILL.md`. Vendored plugin content is out of scope.
 
 ## See also
 
-- `docs/research/runs/research-20260715-md-size-limits/report.md` — the primary-source
-  audit; every figure control-armed.
-- `kb_setup.md_budget` (knowledge-base repo) — the enforcer, and its full
-  provenance. Pinned by SHA in `python/pyproject.toml`; its tests moved with
-  it, so this repo no longer carries a budget test module of its own. What is
-  asserted here is the seam, by `workflow.md-budget-enforcement` in
-  `python/verification/suites.toml`.
-- `.claude/rules/probes-need-a-control-arm.md` — why "0 hits" needed a control.
-- `.claude/rules/use-tool-builtins.md` — the parent principle: check the source
-  before inventing; here, before *enforcing*.
+- `docs/rules-evidence/md-size-budgets.md` — 2026-09-09 anchor and probe record.
+- `docs/research/runs/research-20260715-md-size-limits/report.md` — original
+  multi-vendor audit.
+- `kb_setup.md_budget` — knowledge-base-owned enforcer.
+- `.claude/rules/probes-need-a-control-arm.md` — bounded-search doctrine.
+- `.claude/rules/agent-artifact-conventions.md` — evidence extraction pattern.
