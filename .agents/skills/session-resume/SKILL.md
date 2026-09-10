@@ -13,7 +13,7 @@ claims against the repo instead of taking them on faith.
 as *"just the traps"* or *"only what's owed"*. Empty is the normal full
 reconciliation.
 
-This differs from `.Codex/skills/resume/SKILL.md`: `resume` is cross-surface
+This differs from `.agents/skills/resume/SKILL.md`: `resume` is cross-surface
 and fetches tracked `docs/handoffs/session-*.md`; this skill is same-clone,
 post-`/clear`, and reads gitignored `.agent/plans/session-*.md` files.
 
@@ -101,6 +101,6 @@ the prior handoff when completeness matters.
 
 ## See also
 
-- `.Codex/skills/session-handoff/SKILL.md` — write the same-clone handoff before `/clear`.
-- `.Codex/skills/resume/SKILL.md` — resume a tracked handoff on another surface.
-- `.Codex/rules/agent-artifact-conventions.md` — local versus tracked handoff storage.
+- `.agents/skills/session-handoff/SKILL.md` — write the same-clone handoff before `/clear`.
+- `.agents/skills/resume/SKILL.md` — resume a tracked handoff on another surface.
+- `.claude/rules/agent-artifact-conventions.md` — local versus tracked handoff storage.

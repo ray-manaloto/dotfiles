@@ -641,9 +641,13 @@ local allSteps = new Mapping<String, Config.Step> {
 
   // The Codex-callable and Claude skill surfaces are one contract. A stale
   // copy is worse than absence because the harness appears to accept it.
-  ["session_review_skill_parity"] {
-    check =
-      "test -f .agents/skills/session-review/SKILL.md && cmp -s .claude/skills/session-review/SKILL.md .agents/skills/session-review/SKILL.md"
+  // Replaces the old single-file `cmp -s` on session-review alone (which is
+  // what let the other 32 skills drift silently, #1006): the generator in
+  // `dotfiles_setup.skills_mirror` covers the WHOLE `.agents/skills/**`
+  // tree, and this step is a thin wrapper over its `--check` mode, same
+  // shape as `bash_logic_budget`.
+  ["skills_mirror_parity"] {
+    check = "uv run --project python dotfiles-setup skills-mirror --check"
   }
 
   // --- Graphify skill surface must stay in its reviewed, DELIBERATE shape.

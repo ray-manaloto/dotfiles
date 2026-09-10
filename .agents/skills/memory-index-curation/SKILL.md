@@ -7,7 +7,7 @@ user-invocable: true
 # Skill: Memory Index Curation
 
 `MEMORY.md` is the auto-memory index at
-`$CLAUDE_CONFIG_DIR/projects/<encoded-cwd>/memory/` (default `~/.Codex`).
+`$CLAUDE_CONFIG_DIR/projects/<encoded-cwd>/memory/` (default `~/.claude`).
 Only its **first 200 lines or first 25KB, whichever comes first**, load at the
 start of every conversation. Topic files it links do not load until read on
 demand. So the index is capped and must stay short — and **shortening it is the
@@ -18,7 +18,7 @@ dangerous part**.
 ```bash
 mise run memory-index                    # audit: budget + what a trim would cost
 mise run memory-index -- --refs <name>   # before DELETING a memory
-wc -c ~/.Codex/projects/<encoded-cwd>/memory/MEMORY.md   # the byte count you can trust
+wc -c ~/.claude/projects/<encoded-cwd>/memory/MEMORY.md   # the byte count you can trust
 ```
 
 ⚠️ **Read the byte count from `wc -c`, never from the `mise run` line.** mise
@@ -194,13 +194,13 @@ decision deferred until a few sessions show how the numbers actually move
 ## See also
 
 - `python/src/dotfiles_setup/memory_index.py` — the checker.
-- `.Codex/rules/mise-tasks-only.md` — why this is a mise task over a one-off.
-- `.Codex/rules/use-tool-builtins.md` — the hard gate this cleared in writing:
-  `Codex-md-improver`, `revise-Codex-md` and `Codex-automation-recommender`
-  are all scoped to AGENTS.md **by their own `find -name "AGENTS.md"`**, and
+- `.claude/rules/mise-tasks-only.md` — why this is a mise task over a one-off.
+- `.claude/rules/use-tool-builtins.md` — the hard gate this cleared in writing:
+  `claude-md-improver`, `revise-claude-md` and `claude-automation-recommender`
+  are all scoped to CLAUDE.md **by their own `find -name "CLAUDE.md"`**, and
   `/memory` is a viewer/toggle, not a curator. No existing tool fits.
-- **Do NOT "refactor" the index to `@import`.** `@path` is a AGENTS.md-loader
-  feature; the loader walks `AGENTS.md` (and its `.local` variant) up from cwd,
+- **Do NOT "refactor" the index to `@import`.** `@path` is a CLAUDE.md-loader
+  feature; the loader walks `CLAUDE.md` (and its `.local` variant) up from cwd,
   and the memory dir is not on that walk — `@foo.md` there is inert text. Even
   where it
   works the docs are explicit that it "doesn't reduce context, since imported
@@ -209,6 +209,6 @@ decision deferred until a few sessions show how the numbers actually move
 
 ## GitHub repos touched
 
-- _None._ — the checker reads `~/.Codex` locally; the memory-loader behaviour
-  above is from Anthropic's hosted docs at `code.Codex.com/docs/en/memory.md`,
+- _None._ — the checker reads `~/.claude` locally; the memory-loader behaviour
+  above is from Anthropic's hosted docs at `code.claude.com/docs/en/memory.md`,
   not a GitHub-hosted repo.

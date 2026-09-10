@@ -7,7 +7,7 @@ description: Use when the user mentions "ctx7" or "context7", needs current docs
 
 The Context7 CLI fetches up-to-date library documentation and sets up Context7 MCP for your editor. It also still carries **deprecated** skill-management commands (see the caveat below).
 
-**In this repo `ctx7` is mise-pinned — do NOT `npm install -g` or `npx` it.** The pin is `"npm:ctx7"` in `mise.toml`; `.Codex/rules/ci-local-parity.md` rule 3 bans `npx` because it bypasses mise and can resolve a different version than CI. Just call the binary:
+**In this repo `ctx7` is mise-pinned — do NOT `npm install -g` or `npx` it.** The pin is `"npm:ctx7"` in `mise.toml`; `.claude/rules/ci-local-parity.md` rule 3 bans `npx` because it bypasses mise and can resolve a different version than CI. Just call the binary:
 
 ```bash
 ctx7 library <name> [query]     # resolve a name -> Context7 library ID

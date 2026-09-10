@@ -21,7 +21,7 @@ plan and state your guess explicitly.
 ## Steps
 
 ### 1. Do the doc-sync + validation discipline from `/clear-prep`
-Follow `.Codex/skills/clear-prep/SKILL.md` steps 1-4 (snapshot state; update
+Follow `.agents/skills/clear-prep/SKILL.md` steps 1-4 (snapshot state; update
 every doc your changes touched; run the relevant gates — `mise run lint`,
 pytest, `dotfiles-setup verify run` — all green). Do NOT duplicate that logic
 here; this skill only changes WHERE the handoff lives and that it is pushed.
@@ -46,8 +46,8 @@ wrong detail costs the next session more than a missing one.
 
 ### 4. Commit + push (this is the cross-surface part)
 Stage the handoff and the doc updates from step 1 (specific paths — never
-`git add .`; `.Codex/rules/do-not.md`). Commit + push per
-`.Codex/skills/git-branch-commit-push-workflow/SKILL.md` (plain git,
+`git add .`; `.claude/rules/do-not.md`). Commit + push per
+`.agents/skills/git-branch-commit-push-workflow/SKILL.md` (plain git,
 `git push -u origin {branch}`). Unlike `/clear-prep`, the handoff IS committed,
 because a tracked-but-unpushed handoff still can't cross surfaces.
 
@@ -77,7 +77,7 @@ git pull`, open Codex in the repo, paste that."*
 
 ## See also
 
-- `.Codex/skills/resume/SKILL.md` — the receiving side.
-- `.Codex/skills/clear-prep/SKILL.md` — same-machine `/clear` handoff (`.agent/plans/`).
+- `.agents/skills/resume/SKILL.md` — the receiving side.
+- `.agents/skills/clear-prep/SKILL.md` — same-machine `/clear` handoff (`.agent/plans/`).
 - `docs/handoffs/README.md` — the protocol + the handoff template.
-- `.Codex/skills/git-branch-commit-push-workflow/SKILL.md` — the commit/push path.
+- `.agents/skills/git-branch-commit-push-workflow/SKILL.md` — the commit/push path.

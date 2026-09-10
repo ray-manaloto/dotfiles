@@ -261,8 +261,8 @@ catalog entries are not), reach it via `mcp2cli`. See
 
 ## See also
 
-- `.Codex/skills/mcp2cli/SKILL.md` — the mcp2cli skill itself.
-- `.Codex/rules/research-doc-sources.md` — the broader preference
+- `.agents/skills/mcp2cli/SKILL.md` — the mcp2cli skill itself.
+- `.claude/rules/research-doc-sources.md` — the broader preference
   chain this skill slots into (`llms.txt` is step 1).
 - `docs/research/mintlify-catalog.md` — verified per-repo status.
 - `docs/research/mintlify-catalog-validation-log.md` — full probe

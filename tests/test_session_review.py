@@ -981,13 +981,18 @@ def test_skill_requires_agent_team_receipts_before_complete() -> None:
 
 
 def test_callable_codex_skill_is_byte_identical_and_normally_gated() -> None:
+    # session-review discusses BOTH harnesses in the same sentences ("reads
+    # both Claude and Codex..."), so its generated mirror is byte-identical
+    # to the .claude source via `PER_FILE` reversions in
+    # dotfiles_setup.skills_mirror, not a special-cased identity copy — see
+    # that module's PER_FILE["session-review"] comment.
     claude = REPO_ROOT / ".claude" / "skills" / "session-review" / "SKILL.md"
     codex = REPO_ROOT / ".agents" / "skills" / "session-review" / "SKILL.md"
     assert codex.is_file()
     assert codex.read_bytes() == claude.read_bytes()
     hk = (REPO_ROOT / "hk.pkl").read_text()
-    assert "session_review_skill_parity" in hk
-    assert "cmp -s .claude/skills/session-review/SKILL.md" in hk
+    assert "skills_mirror_parity" in hk
+    assert "dotfiles-setup skills-mirror --check" in hk
 
 
 def test_mise_requirement_task_exposes_required_root_and_configurable_limit(

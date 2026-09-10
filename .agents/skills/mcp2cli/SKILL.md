@@ -12,7 +12,7 @@ is the **preferred** way to reach an MCP server for a one-off call; native
 registration is allowed when a plugin requires it (relaxed 2026-07-19).
 
 > See `feedback_no_mcp_registration.md` and
-> `.Codex/rules/research-doc-sources.md` for the full rationale.
+> `.claude/rules/research-doc-sources.md` for the full rationale.
 
 ## When to use this skill
 
@@ -30,7 +30,7 @@ Do **not** use it for:
 
 - Plain web fetches of `llms.txt` or per-page `.md` — use `curl` directly,
   it is strictly cheaper. See the preference chain in
-  `.Codex/rules/research-doc-sources.md`.
+  `.claude/rules/research-doc-sources.md`.
 - Registering MCP servers — that is precisely what this skill exists to
   avoid.
 
@@ -77,7 +77,7 @@ mcp2cli --mcp https://mintlify.com/docs/mcp \
 > ⚠️ **Do not use `mcp2cli` against per-repo mintlify URLs** like
 > `https://mintlify.com/<owner>/<repo>/mcp`. Those are GET-only
 > preview descriptors, not live MCP servers. POST returns 404. See
-> `.Codex/skills/mintlify/SKILL.md` for the real per-repo access
+> `.agents/skills/mintlify/SKILL.md` for the real per-repo access
 > path (`curl llms.txt` + `curl <page>.md`) and
 > `docs/research/mintlify-catalog-validation-log.md` for the probe
 > evidence.
@@ -157,16 +157,16 @@ or tool requires it for its features — see `feedback_no_mcp_registration.md`.
   machine after `mise install`.
 - Global shorthands live in `~/.config/mcp2cli/` (user scope).
 - The preference chain (`curl llms.txt → curl .md → mcp2cli → context7-cli
-  → raw HTML curl`) is codified in `.Codex/rules/research-doc-sources.md`.
+  → raw HTML curl`) is codified in `.claude/rules/research-doc-sources.md`.
 - `mcp2cli` is the preferred path; native `Codex mcp add` is allowed when a
   plugin requires it (the `no_mcp_registration` hk hard-ban was removed
   2026-07-19). Rationale in `feedback_no_mcp_registration.md`.
 
 ## See also
 
-- `.Codex/skills/mintlify/SKILL.md` — the mintlify URL surface and the
+- `.agents/skills/mintlify/SKILL.md` — the mintlify URL surface and the
   per-repo search tool names.
-- `.Codex/rules/research-doc-sources.md` — the full preference chain.
+- `.claude/rules/research-doc-sources.md` — the full preference chain.
 - `docs/research/mintlify-catalog.md` — list of mintlify-covered repos
   with their probed HTTP status.
 - `feedback_no_mcp_registration.md` (auto-memory) — the constraint and

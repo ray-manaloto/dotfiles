@@ -16,7 +16,7 @@ applicability: any repo managing tools via mise + hk + Renovate
 > there instead of re-deriving the outdated set.
 
 
-Operationalizes `.Codex/rules/tool-currency-and-native-first.md`: find
+Operationalizes `.claude/rules/tool-currency-and-native-first.md`: find
 out-of-date pins AND custom code a tool now does natively, in one pass.
 
 ## When to use
@@ -130,8 +130,8 @@ lockfile bug; mise #10703 fixed that in 2026.7.0 and the hold was retired
 
 ## Related
 
-- `.Codex/rules/tool-currency-and-native-first.md` — the rule this implements.
-- `.Codex/rules/use-tool-builtins.md` — prefer built-ins over inventing.
-- `.Codex/rules/research-doc-sources.md` — the cache-first doc chain step 4 walks.
+- `.claude/rules/tool-currency-and-native-first.md` — the rule this implements.
+- `.claude/rules/use-tool-builtins.md` — prefer built-ins over inventing.
+- `.claude/rules/research-doc-sources.md` — the cache-first doc chain step 4 walks.
 - Memory: `feedback_research_release_notes_native_first`,
   `feedback_content_hash_must_cover_copy_inputs`.
