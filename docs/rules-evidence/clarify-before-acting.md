@@ -12,8 +12,9 @@ the directive and the 2026-06-29 worked failure eager.
 and retains the main conversation's tool pool. `permissions.md:80-90`,
 `permission-modes.md:465-469`, `hooks.md:1773`, and the saved verbatim
 2.1.259 changelog entry at
-`.agent/kb/raw/claude-code-changelog-2.1.258-2.1.266.md:206-209` establish the
-other no-prompt modes. `settings.md:646` documents project-setting reload, and
+`.agent/kb/raw/claude-code-changelog-2.1.258-2.1.266.md:206-209` (gitignored
+and machine-local — unverifiable from a fresh clone) establish the other
+no-prompt modes. `settings.md:646` documents project-setting reload, and
 `hooks.md:1744-1745` documents that `deny` prevents the tool call.
 (Matcher semantics are `hooks.md:285-297`, not `:1542` — see the
 closing section.)

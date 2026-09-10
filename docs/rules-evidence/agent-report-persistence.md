@@ -16,7 +16,7 @@ being lost. A manual round-2 pass recovered them.
 the conclusion and drops the evidence, the exact command lines, and the file:line
 anchors the *implementing* session needs.
 
-## Why INCREMENTALLY, not at the end (2026-07-20)
+## Why INCREMENTALLY, not at the end (2026-08-03)
 
 Two agents held everything in memory, **died silently after ~40 minutes, and
 left nothing.** Re-dispatched with an explicit incremental instruction, they

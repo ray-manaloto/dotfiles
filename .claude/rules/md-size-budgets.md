@@ -55,9 +55,15 @@ misapply it to Claude-only files.
 The historical failure was provenance loss:
 
 1. `1f05365` created a 200-line gate with the correct source.
-2. `99a8506` described an unenforced 12,000-character limit, likely copied from
+2. `99a8506` (no longer resolvable in this repo) described an unenforced
+   12,000-character limit, likely copied from
    agnix without its vendor bound.
-3. `010009d` changed code to match the prose and credited Anthropic.
+3. `010009d` (also no longer resolvable) changed code to match the prose and
+   credited Anthropic.
+
+   ⚠️ Only `1f05365` still resolves (`git cat-file -t` -> commit; the other two
+   -> unresolvable, same command, so the probe discriminates). The chain is
+   preserved as narrative, not as three followable refs.
 
 The initial correction also overreached: a zero-hit search in Anthropic's
 corpus became "not documented anywhere," although the probe never searched
@@ -89,7 +95,7 @@ do not add Claude-only imports to an agent-agnostic file or its guarded stub.
 - Run `/context`: **Memory files** shows which project instructions actually
   loaded, while **Skills** reports the listing after its budget was applied.
 - Use `/doctor` for the listing estimate and largest contributors.
-- On Claude Code 2.1.261+, `/skill-doctor` shows loaded-but-unused skills and
+- On Claude Code 2.1.261+, `/skill-doctor` reportedly shows loaded-but-unused skills and
   their context cost. This command is documented in the saved 2.1.261
   changelog because the offline corpus stops before that version.
 

@@ -50,8 +50,16 @@ contract.
 
 ## Gemini and OpenCode traps
 
-Use the pinned `agy`/Antigravity path through `mise exec -- agy`. A bare `agy`
-may resolve a stale user installation before mise's pinned binary. For raw
+Use the pinned `agy`/Antigravity path through `mise exec -- agy`. A stale user
+installation can exist at `~/.local/bin/agy`, so keep the explicit `mise exec`
+form rather than relying on lookup order.
+
+⚠️ **Do not restate this as "a bare `agy` resolves the stale copy" — measured
+2026-09-10, it does not.** Bare `agy --version` -> **1.1.24** (mise's install
+dir precedes `~/.local/bin` on this PATH) while `~/.local/bin/agy --version` ->
+**1.1.12**, so the stale copy is real but is NOT what runs here. `which -a agy`
+is the arm that settles it; PATH order is a property of the machine, not of the
+tool, so assert the explicit form and let the probe speak for the order. For raw
 Gemini, `gemini "prompt"` remains interactive and can hang; `-p`/`--prompt`
 selects headless mode and piped stdin is appended to that prompt.
 
