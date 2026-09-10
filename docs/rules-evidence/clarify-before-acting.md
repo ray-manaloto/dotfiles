@@ -13,9 +13,10 @@ and retains the main conversation's tool pool. `permissions.md:80-90`,
 `permission-modes.md:465-469`, `hooks.md:1773`, and the saved verbatim
 2.1.259 changelog entry at
 `.agent/kb/raw/claude-code-changelog-2.1.258-2.1.266.md:206-209` establish the
-other no-prompt modes. `hooks.md:1542` documents regex matchers;
-`settings.md:646` documents project-setting reload; and
+other no-prompt modes. `settings.md:646` documents project-setting reload, and
 `hooks.md:1744-1745` documents that `deny` prevents the tool call.
+(Matcher semantics are `hooks.md:285-297`, not `:1542` — see the
+closing section.)
 
 **Timeout anchor re-read:** `settings-reference.md:2759-2774` documents
 `askUserQuestionTimeout` as USER-or-MANAGED, introduced in v2.1.200, with
@@ -43,15 +44,24 @@ non-interactive mode where `AskUserQuestion` is unavailable.
 - [ray-manaloto/knowledge-base](https://github.com/ray-manaloto/knowledge-base)
   — pinned Claude Code documentation corpus.
 
-## The matcher is an exact-string list, not a regex (2026-09-10)
+## The matcher is an exact-string list, not a regex (2026-09-09)
 
 The A-2 draft asserted "hook matchers are regexes" and cited
 `$CC/hooks.md:1542`. Both halves were wrong.
 
 **The citation.** `hooks.md:1542` is inside the PreToolUse section, describing
-which tool names that event matches. `grep -n "regex" hooks.md` returns **0**
-hits; the control arm `grep -c "matcher"` on the same file returns **82**, so
-the probe discriminates — the word simply is not there.
+which tool names *that event* matches. It says nothing about matcher syntax.
+
+⚠️ **The first refutation published here used a broken control arm, and the
+correction is the more useful lesson.** It ran `grep -n "regex" hooks.md` → 0
+and reported "the word simply is not there". That is a **token-spelling bound**
+— exactly the failure `probes-need-a-control-arm.md` §3 names — because the
+corpus spells it `regular expression`, which returns **5** hits in the same
+file, one of them the very row defining the regex path. The `grep -c "matcher"`
+→ 82 arm proved only that the file is readable, not that the probe could find
+the concept it was denying. **A control arm must be aimed at the thing your
+claim is about.** The conclusion below survives; the probe that was offered for
+it did not.
 
 **The claim.** The real anchor is `hooks.md:285-297`, "Matcher patterns", and it
 is conditional, not categorical:

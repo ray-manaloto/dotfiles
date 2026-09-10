@@ -62,8 +62,11 @@ readable events.
 ## Background results
 
 Do not assume streaming stdout is the durable result of a background task.
-Recover background output with Claude Code's `TaskOutput`, or have Codex write
-its final message with `-o <path>`. Nothing about listing or context pressure
+Recover background output by `Read`ing the task's output file path — the
+`TaskOutput` tool is **deprecated** in favour of exactly that
+(`$CC/agent-sdk__python.md:3022`, and the changelog entry at
+`$CC/changelog.md:3722`) — or have Codex write its final message with
+`-o <path>`. Nothing about listing or context pressure
 belongs in this file: it is a user/session concern, and no environment variable
 is a reason to invent new argv here.
 

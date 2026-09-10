@@ -115,7 +115,10 @@ KNOWN_UNDETECTED_EAGER_REASONS: frozenset[str] = frozenset(
     {
         # "> **EAGER on purpose** — ..." — a leading blockquote.
         ".claude/rules/ai-cli-invocation.md:3",
-        # "...and it is why this rule stays eager..." — inline prose.
+        # "...Judgment therefore stays in this eager rule..." — inline
+        # prose, no heading. Re-read the cited line when you move it:
+        # the test only asserts "eager" appears, so a stale quote here
+        # survives a line-number bump (cold review of 6126a4c).
         ".claude/rules/clarify-before-acting.md:100",
     }
 )

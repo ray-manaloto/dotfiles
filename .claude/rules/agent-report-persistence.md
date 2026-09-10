@@ -14,24 +14,36 @@ anchors do not.
 
 ## Native carriage
 
-`.claude/settings.json` registers unscoped `SubagentStart` and `SubagentStop`
-hooks. The start hook injects the incremental-persistence and file-role
-contract before every delegate's first prompt. With no matcher, it cannot
-accidentally filter by agent type. The stop hook returns a deliver-before-idle
-reminder once; recursive stop events pass so the hook cannot loop forever.
+`.claude/settings.json` carries this contract on two hooks, and **neither costs
+a model turn**:
 
-⚠️ **The stop reminder uses `additionalContext`, never `decision: "block"`.**
-Both keep the delegate running under the same loop protections, but `block`
-renders as a hook *error*, and a codex lane that had already delivered read
-that as an objection and re-explained its compliance three times before it
-could idle (#994). `additionalContext` is the documented channel for a hook
-"working as designed and giving Claude guidance" and shows as plain `Stop hook
-feedback` (`$CC/hooks.md:2549`; SubagentStop accepts it per `:2346`). A
-reminder that reads as an accusation costs a turn and teaches the lane to argue.
+- an **unscoped `SubagentStart`** hook injects the incremental-persistence and
+  file-role contract before every delegate's first prompt. With no matcher it
+  cannot filter by agent type, so a new built-in, custom or plugin delegate is
+  covered the day it appears.
+- a **`PostToolUse` hook scoped to the `Agent` tool** reminds the *coordinator*
+  to persist at receipt, right after a delegate returns — which is where rule 1
+  puts that duty anyway.
 
-`stop_hook_active` guards recursion within **one** continuation chain, not
-across parent messages: a long-lived named agent pays this reminder once per
-message it receives, not once per session.
+⚠️ **There is deliberately NO `SubagentStop` hook. Adding one is a regression.**
+The first attempt used `decision: "block"` there; switching it to
+`additionalContext` was only half a fix, because **both** channels "keep the
+subagent running" (`$CC/hooks.md:2346`, `:2549`) — the only documented
+difference is the transcript label. Measured on the first live delegation under
+that hook, the reminder landed in **four** distinct `user` records of one
+subagent transcript: four forced continuations, unscoped, on every delegation
+in the repo. And the forced turn becomes the delegate's new *final assistant
+message*, so a one-line "already delivered" can displace the very report the
+parent is waiting on. `$CC/hooks.md:2346` names the alternative in the same
+sentence that documents the trap: "To inject context into the parent session
+after a subagent returns, use a `PostToolUse` hook on the `Agent` tool instead."
+
+`hook_selfcheck` binds all of this: `check_unscoped_events` fails a narrowed
+`SubagentStart` matcher, the `PostToolUse` row fails a matcher widened off
+`Agent`, every clause of the injected contract is a required token, and the
+end-to-end check **forbids** the `decision` channel on every arm — because
+`block` and `additionalContext` both keep a delegate running, so nothing
+presence-shaped can tell them apart.
 
 `SubagentStart` is advisory and fails silently: its stderr appears only in the
 subagent transcript. Therefore `_SETTINGS_WIRING` in
@@ -64,14 +76,18 @@ persist a delivered report at receipt.
 
    | Content | File | Who writes |
    |---|---|---|
-   | Phases, checkboxes, current phase, distilled decisions | `task_plan.md` | **coordinator ONLY by default**; an agent whose definition explicitly emits a `DELTA` may propose one for the coordinator to apply |
+   | Phases, checkboxes, current phase, distilled decisions | `task_plan.md` | **coordinator ONLY** |
    | Research, analysis, evidence, technical findings | `findings.md` | anyone |
    | Chronological outcomes, actions, errors, test results | `progress.md` | anyone |
 
-   A delegate does not directly mutate `task_plan.md`; a designated scribe such
-   as `pwf-scribe` emits a `DELTA`, and the coordinator applies it. Codex lanes
-   remain mechanically isolated with `PLANNING_DISABLED=1` in
-   `codex_lane.LANE_ENV_OVERRIDES`.
+   **No delegate writes `task_plan.md`, and there is no exception.** A scribe
+   such as `pwf-scribe` proposes a change by writing a SEPARATE file —
+   `.agent/plans/task_plan-delta-<stamp>.md`, naming the old anchor and the
+   proposed text — which the coordinator reads and applies. Routing the
+   proposal to its own path is what keeps the invariant machine-assertable:
+   "coordinator only" stays a statement about one file, not a permission an
+   agent definition can claim for itself. Codex lanes remain mechanically
+   isolated with `PLANNING_DISABLED=1` in `codex_lane.LANE_ENV_OVERRIDES`.
 
 4. **Verbatim means verbatim.** Preserve tables, evidence links, probes, and
    repos-touched enumeration. Add decision annotations afterwards; do not trim

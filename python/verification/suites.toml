@@ -1512,7 +1512,7 @@ per_path_tokens = { "python/src/dotfiles_setup/codex_lane.py" = [
     "def test_the_spawned_lane_really_has_the_planning_hooks_disabled(",
     "def test_the_planning_disabled_arm_is_armed(",
 ], ".claude/rules/agent-report-persistence.md" = [
-    "| Phases, checkboxes, current phase, distilled decisions | `task_plan.md` | **coordinator ONLY by default**; an agent whose definition explicitly emits a `DELTA` may propose one for the coordinator to apply |",
+    "| Phases, checkboxes, current phase, distilled decisions | `task_plan.md` | **coordinator ONLY** |",
     "codex_lane.LANE_ENV_OVERRIDES",
 ], ".claude/agents/codex-advisor.md" = [
     "PLANNING_DISABLED=1 codex exec",

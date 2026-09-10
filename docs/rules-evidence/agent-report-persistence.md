@@ -105,3 +105,84 @@ are consistent with that: the lane received three separate parent messages.
 incremental writes and the stop contract requires delivery before idle, so the
 2026-07-05 context-only reports and the two 2026-08-03 agents that died with
 nothing written are the exact failures the native carriage prevents.
+
+## Round 2: the stop hook is GONE, and `additionalContext` was only half a fix
+
+The section above recorded switching the `SubagentStop` arm from
+`decision: "block"` to `additionalContext`. A cold review of that commit
+(`docs/research/kb/reports/agents/cold-review-6126a4c-2026-09-09.md`, finding 1,
+HIGH) showed the reasoning was incomplete, and the measurement settles it.
+
+**Both channels continue the delegate.** `$CC/hooks.md:2346` and `:2542-2549`
+say `additionalContext` "keeps the subagent running… through the same loop
+protections as `decision: \"block\"`". The only documented difference is the
+transcript label. So the framing changed and the **forced turn did not**.
+
+**Measured on the first live delegation under the committed hook** (the
+cold-reviewer run that produced the report above): the stop reminder appears in
+**four distinct `user`-role records** of
+`subagents/agent-acold-review-6126a4c-*.jsonl`. Control arm: the SubagentStart
+contract appears in four records too (2 `attachment`, 2 `user`), so the probe is
+counting real injected payloads rather than one record four ways. Four forced
+continuations, on one delegation, for a hook registered with no matcher.
+
+Two costs the `additionalContext` version did not remove:
+
+1. every `Agent` delegation in the repo pays those turns, mechanical ones
+   included;
+2. the forced turn becomes the delegate's **new final assistant message**, so a
+   one-line "already delivered" can displace the substantive report the parent
+   consumes.
+
+**The fix is the alternative named in the same doc sentence as the trap.**
+`$CC/hooks.md:2346`: "To inject context into the parent session after a subagent
+returns, use a `PostToolUse` hook on the `Agent` tool instead." That is now the
+parent-side half; `SubagentStart` remains the delegate-side half; there is no
+`SubagentStop` hook at all, and neither remaining hook costs a turn.
+
+### The gate was armed for mechanism but not for scope or payload
+
+The same review mutation-tested the previous gate and found two GREEN arms —
+i.e. two regressions it could not see. Both are now red, and two new ones with
+them:
+
+| Mutation | Before | Now |
+|---|---|---|
+| narrow the `SubagentStart` matcher to one agent type | **GREEN, 36 passed** | RED — `check_unscoped_events` |
+| delete half the injected start contract | **GREEN, 36 passed** | RED — every clause is a required token |
+| re-add any `SubagentStop` response | n/a | RED — the `decision` forbid now covers every arm |
+| widen the `PostToolUse` matcher off `Agent` | n/a | RED — matcher required |
+
+The scope gap existed because a `_SETTINGS_WIRING` row with `None` matchers
+asserts *nothing* about the matcher; "must be unscoped" is a different claim
+from "no matcher token is required", and it needed its own check.
+
+⚠️ **Two mutations in this round produced a FALSE GREEN, and the cause was the
+mutation, not the gate.** Replacing `coordinator-only by default` globally hit
+both the payload constant *and* the required-token list — they live in one file,
+so both sides moved together and the check still matched. Reverting only
+`sys.stdin.read()` while leaving the widened `except` clause left the fail-open
+behaviour intact. **Mutate only your addition, and restore the TRUE prior form**
+(from `git show`), not an approximation of it — a fail-arm that passes certifies
+a gate you never tested.
+
+## The `task_plan.md` invariant is restored, not weakened
+
+Round 1 relaxed the contract token to "**coordinator ONLY by default**; an agent
+whose definition explicitly emits a `DELTA` may propose one". The cold review
+(finding 3) called that a self-authorizable escape hatch with no gate on who may
+claim it. Probing who actually claims it settled the question in the other
+direction: **`pwf-scribe` never writes `task_plan.md` at all.** It writes
+`.agent/plans/task_plan-delta-<stamp>.md`
+(`.claude/agents/pwf-scribe.md:19-22`) for the coordinator to apply. The
+invariant was never violated, so the weakening bought nothing and cost the
+machine-assertable claim. Token and table are back to **coordinator ONLY**, and
+the suite description matches its token again (finding 2).
+
+⚠️ **The probe that nearly hid this was a case bound.** `grep -ln "DELTA"
+.claude/agents/*.md` returned **0 files** — pwf-scribe spells it lowercase.
+Control arm: 16 agent files exist; `grep -iln "delta"` returns 3. Reporting the
+uppercase null would have justified building a gate around an escape hatch that
+should simply be deleted. This is the same token-spelling failure recorded in
+`docs/rules-evidence/clarify-before-acting.md`, committed in the same session
+that wrote it up.
