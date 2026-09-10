@@ -137,6 +137,51 @@ def test_claude_skills_prefix_rewrites_to_the_real_mirror_location() -> None:
     assert rendered == "See `.agents/skills/other/SKILL.md`.\n"
 
 
+def test_mutating_a_mirrored_reference_file_makes_check_fail_and_name_it(
+    tmp_path: Path,
+) -> None:
+    """`references/**` is copied verbatim; a drifted copy must be caught.
+
+    Team-lead follow-up (session 2026-09-10): `context7-cli/references/*.md`
+    is mirrored today but the original generator only walked `SKILL.md`.
+    """
+    _write_skill(tmp_path, "claude", "widget", "See references.\n")
+    ref_source = tmp_path / ".claude" / "skills" / "widget" / "references" / "setup.md"
+    ref_source.parent.mkdir(parents=True, exist_ok=True)
+    ref_source.write_text("Run `tool --claude` to set up.\n", encoding="utf-8")
+
+    assert skills_mirror.find_drift(tmp_path) == ["widget"]
+    written = skills_mirror.write_mirror(tmp_path)
+    assert written == ["widget"]
+    assert skills_mirror.find_drift(tmp_path) == []
+
+    # The reference copy is verbatim: a real CLI flag survives untouched.
+    ref_dest = tmp_path / ".agents" / "skills" / "widget" / "references" / "setup.md"
+    assert ref_dest.read_text(encoding="utf-8") == ref_source.read_text(
+        encoding="utf-8"
+    )
+    assert "--claude" in ref_dest.read_text(encoding="utf-8")
+
+    # Rot: hand-edit the mirrored reference file out from under the source.
+    ref_dest.write_text("Run `tool --codex` to set up.\n", encoding="utf-8")
+    assert skills_mirror.find_drift(tmp_path) == ["widget"]
+
+
+def test_graphify_reference_files_are_never_mirrored(tmp_path: Path) -> None:
+    _write_skill(tmp_path, "claude", "graphify", "claude body\n")
+    ref_source = (
+        tmp_path / ".claude" / "skills" / "graphify" / "references" / "query.md"
+    )
+    ref_source.parent.mkdir(parents=True, exist_ok=True)
+    ref_source.write_text("graphify-only reference\n", encoding="utf-8")
+
+    assert skills_mirror.reference_paths(tmp_path) == []
+    skills_mirror.write_mirror(tmp_path)
+    assert not (
+        tmp_path / ".agents" / "skills" / "graphify" / "references" / "query.md"
+    ).exists()
+
+
 # --- real-repo guards -------------------------------------------------------
 
 
@@ -147,6 +192,29 @@ def test_real_tree_is_drift_free() -> None:
 
 def test_real_tree_regeneration_is_a_no_op() -> None:
     assert skills_mirror.write_mirror(REPO_ROOT) == []
+
+
+def test_context7_cli_references_are_covered_verbatim() -> None:
+    """The three real `context7-cli/references/*.md` files stay byte-identical.
+
+    `--claude` at `.claude/skills/context7-cli/references/setup.md` is an
+    argument to a real command; the generator must never rewrite it.
+    """
+    pairs = skills_mirror.reference_paths(REPO_ROOT)
+    names = {source.name for source, _ in pairs}
+    assert names == {"docs.md", "setup.md", "skills.md"}
+    for source, destination in pairs:
+        assert "context7-cli" in str(source)
+        assert destination.read_bytes() == source.read_bytes()
+
+
+def test_graphify_references_are_absent_from_reference_paths() -> None:
+    managed_skills = {
+        source.parent.parent.name
+        for source, _ in skills_mirror.reference_paths(REPO_ROOT)
+    }
+    assert "graphify" not in managed_skills
+    assert not (REPO_ROOT / ".agents" / "skills" / "graphify" / "references").exists()
 
 
 def test_exempt_and_codex_only_never_appear_in_mirror_paths() -> None:

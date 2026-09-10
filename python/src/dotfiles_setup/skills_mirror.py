@@ -274,32 +274,75 @@ def mirror_paths(root: Path) -> list[tuple[Path, Path]]:
     return pairs
 
 
-def find_drift(root: Path) -> list[str]:
-    """Skill names whose committed `.agents` copy differs from `render()`.
+def reference_paths(root: Path) -> list[tuple[Path, Path]]:
+    """Every managed `(source, destination)` reference-file path pair.
 
-    Sorted. Compared against the current `.claude` source; a missing
-    `.agents` counterpart counts as drift (the skill has never been
-    mirrored).
+    Walks `.claude/skills/<name>/references/**` for every non-`EXEMPT`
+    skill and mirrors each file to
+    `.agents/skills/<name>/references/**`, preserving any nested structure
+    under `references/`. Unlike `mirror_paths()`'s `SKILL.md` pairs, these
+    are copied byte-for-byte with no `RULES` applied — a reference file can
+    cite a literal CLI flag (`context7-cli/references/setup.md`'s
+    `--claude` flag, which is an argument to a real command, not a citation
+    of this doc corpus) or a path that a rewrite would silently break.
+    Covering these files without rewriting them is what stops them
+    drifting the way hand-maintained `SKILL.md` mirrors did (team-lead
+    follow-up, session 2026-09-10).
+
+    `graphify/references/**` exists only on the `.claude` side (`graphify`
+    is `EXEMPT`) — the generator must not create a mirror for it.
     """
-    drifted: list[str] = []
+    claude_dir = root / ".claude" / "skills"
+    agents_dir = root / ".agents" / "skills"
+    pairs: list[tuple[Path, Path]] = []
+    if not claude_dir.is_dir():
+        return pairs
+    for skill_dir in sorted(claude_dir.iterdir()):
+        if not skill_dir.is_dir() or skill_dir.name in EXEMPT:
+            continue
+        refs_dir = skill_dir / "references"
+        if not refs_dir.is_dir():
+            continue
+        for source in sorted(p for p in refs_dir.rglob("*") if p.is_file()):
+            relative = source.relative_to(skill_dir)
+            pairs.append((source, agents_dir / skill_dir.name / relative))
+    return pairs
+
+
+def find_drift(root: Path) -> list[str]:
+    """Skill names whose committed `.agents` copy differs from the generator.
+
+    Sorted. Covers both `SKILL.md` (compared against `render()`) and every
+    `references/**` file (compared byte-for-byte via `reference_paths()`).
+    A missing `.agents` counterpart counts as drift (the file has never
+    been mirrored).
+    """
+    drifted: set[str] = set()
     for source, destination in mirror_paths(root):
         rendered = render(source.read_text(encoding="utf-8"), source.parent.name)
         if (
             not destination.is_file()
             or destination.read_text(encoding="utf-8") != rendered
         ):
-            drifted.append(source.parent.name)
+            drifted.add(source.parent.name)
+    claude_skills_dir = root / ".claude" / "skills"
+    for source, destination in reference_paths(root):
+        skill_name = source.relative_to(claude_skills_dir).parts[0]
+        if not destination.is_file() or destination.read_bytes() != source.read_bytes():
+            drifted.add(skill_name)
     return sorted(drifted)
 
 
 def write_mirror(root: Path) -> list[str]:
-    """Write every drifted mirror file to match `render()`.
+    """Write every drifted mirror file to match the generator.
 
-    Creates parent directories as needed. Returns the sorted names actually
-    rewritten (skills already matching are left untouched, so a run with
-    nothing to do touches no mtimes).
+    Covers both `SKILL.md` (via `render()`) and every `references/**` file
+    (byte-for-byte via `reference_paths()`). Creates parent directories as
+    needed. Returns the sorted skill names actually rewritten (skills
+    already matching are left untouched, so a run with nothing to do
+    touches no mtimes).
     """
-    written: list[str] = []
+    written: set[str] = set()
     for source, destination in mirror_paths(root):
         rendered = render(source.read_text(encoding="utf-8"), source.parent.name)
         if (
@@ -309,7 +352,16 @@ def write_mirror(root: Path) -> list[str]:
             continue
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text(rendered, encoding="utf-8")
-        written.append(source.parent.name)
+        written.add(source.parent.name)
+    claude_skills_dir = root / ".claude" / "skills"
+    for source, destination in reference_paths(root):
+        skill_name = source.relative_to(claude_skills_dir).parts[0]
+        content = source.read_bytes()
+        if destination.is_file() and destination.read_bytes() == content:
+            continue
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(content)
+        written.add(skill_name)
     return sorted(written)
 
 
