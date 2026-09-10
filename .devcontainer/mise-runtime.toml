@@ -1,4 +1,4 @@
-# :schema https://mise.jdx.dev/schema/mise.json
+#:schema ../schemas/mise.json
 #
 # RUNTIME TIER (#160 T9): the locked dev tools shipped in the image but NOT
 # needed to build it. COPYd to /usr/local/share/mise/config.runtime.toml by
@@ -22,15 +22,13 @@
 # (home/dot_config/mise/config.toml.tmpl), free on "latest".
 
 [settings]
-# The AI CLIs below release faster than weekly, so the 7d
-# minimum_release_age gate (mise-system.toml [settings]) makes their locked
-# "latest" uninstallable almost always: `mise lock` resolves latest WITHOUT
-# the age cutoff, then forwards the gate to bun at install time, which
-# blocks the exact locked pin (PR #169 cold build: codex 0.142.5 at 5.7d).
-# Native escape hatch, scoped to this tier so mise-system.toml (a base-hash
-# input) stays byte-identical. [settings] in an env config merges under
-# MISE_ENV=runtime (probe-verified 2026-07-06).
-minimum_release_age_excludes = ["npm:@google/gemini-cli"]
+# No age cutoff, matching mise-system.toml, shared.toml and the host config.
+# This tier previously carried only minimum_release_age_excludes for the AI
+# CLIs, which existed solely to escape the 7d gate in mise-system.toml. With
+# no cutoff anywhere that list is a no-op, so it is removed rather than left
+# standing on a rationale that no longer holds. [settings] in an env config
+# merges under MISE_ENV=runtime (probe-verified 2026-07-06).
+minimum_release_age = "0s"
 
 [tools]
 # Dev CLIs

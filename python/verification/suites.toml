@@ -2504,11 +2504,24 @@ category = "config"
 check_type = "static"
 handler = "require_lines"
 paths_required = true
-paths = ["mise.toml", "ruff.toml", "typos.toml"]
+paths = [
+    "mise.toml",
+    "ruff.toml",
+    "typos.toml",
+    ".config/mise/conf.d/shared.toml",
+    ".devcontainer/mise-system.toml",
+    ".devcontainer/mise-runtime.toml",
+]
 per_path_lines = { "mise.toml" = [
     "#:schema ./schemas/mise.json",
 ], "ruff.toml" = [
     "#:schema ./schemas/ruff.json",
 ], "typos.toml" = [
     "#:schema ./schemas/typos.json",
+], ".config/mise/conf.d/shared.toml" = [
+    "#:schema ../../../schemas/mise.json",
+], ".devcontainer/mise-system.toml" = [
+    "#:schema ../schemas/mise.json",
+], ".devcontainer/mise-runtime.toml" = [
+    "#:schema ../schemas/mise.json",
 ] }

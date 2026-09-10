@@ -529,7 +529,7 @@ url_api = "https://api.github.com/repos/jqlang/jq/releases/assets/453012788"
 provenance = "github-attestations"
 
 [[tools."npm:@openai/codex"]]
-version = "0.152.1"
+version = "0.154.0"
 backend = "npm:@openai/codex"
 
 [tools."npm:@openai/codex".options]
