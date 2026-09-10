@@ -1,4 +1,4 @@
-# :schema https://mise.jdx.dev/schema/mise.json
+#:schema ../schemas/mise.json
 #
 # System-wide mise config for Docker devcontainer image
 # This is a DEDICATED config — not derived from chezmoi templates.
@@ -318,16 +318,22 @@ lockfile = true
 # which derives its platform set from the committed lock. See epic #160.
 lockfile_platforms = ["linux-x64", "linux-arm64"]
 jobs = 1
-# Supply-chain hardening: ignore tool versions younger than 7 days when
-# resolving `latest`/fuzzy requests (forwards the cutoff to npm:/pipx:
-# transitive deps too). Network-free, needs no GITHUB_TOKEN — complements
-# the intentional github_attestations=false / slsa=false below (disabled
-# because a token isn't reliably available in buildkit secret mounts).
-# NOTE: `mise lock` resolves `latest` WITHOUT this cutoff while bun
-# enforces it at install, so a locked latest younger than 7d fail-closes
-# (PR #169). Exempt fast-releasing tools via minimum_release_age_excludes
-# (mise-runtime.toml [settings] does this for the AI CLIs).
-minimum_release_age = "7d"
+# No age cutoff on `latest`/fuzzy resolution.
+#
+# This was "7d" (supply-chain hardening) until 2026-09-10. mise 2026.9.2-9.4
+# promoted the `packslip` backend to tier 1, and the registry shorthand now
+# selects it by default: "Only releases with Packslip manifests are available
+# through this backend" (mise docs/dev-tools/backends/packslip.md). jdx began
+# publishing those manifests around 2026-09-05, so packslip lists one or two
+# releases per tool and any multi-day cutoff hides ALL of them. The bare
+# `fnox` / `usage` names in mise-runtime.toml became unresolvable and every
+# `mise run lock-image` convergence pass hard-errored. Measured on the host
+# with MISE_MINIMUM_RELEASE_AGE=0: `fnox` 1 version, `usage` 2, control
+# `node` 865.
+#
+# The NOTE that stood here claimed `mise lock` resolves `latest` WITHOUT the
+# cutoff (PR #169). That is no longer true: the lock run is what fails.
+minimum_release_age = "0s"
 npm.package_manager = "bun"
 pipx.uvx = true
 cargo.binstall = true
