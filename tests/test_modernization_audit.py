@@ -7,14 +7,13 @@ import json
 import shutil
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import cast
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 from dotfiles_setup import modernization_audit
-
-if TYPE_CHECKING:
-    import pytest
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "modernization_audit"
 
@@ -102,3 +101,131 @@ def test_cli_resolves_relative_paths_and_prints_the_original_payload(
     assert (tmp_path / "result.toml").read_bytes() == (
         FIXTURE_ROOT / "expected.toml"
     ).read_bytes()
+
+
+def test_m9_bare_cli_defaults_toml_from_the_audit_run_stamp(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """m9 FAIL arm (the bug as reported).
+
+    A bare CLI invocation (no --toml) must still write the TOML the task's
+    own description promises, deriving the path from the audit run's
+    `args.json` stamp rather than silently skipping it at rc=0.
+    """
+    audit_dir = _audit_copy(tmp_path, "audit")
+    (audit_dir / "args.json").write_text(
+        json.dumps({"stamp": "2026-01-02"}), encoding="utf-8"
+    )
+
+    rc = modernization_audit.modernization_audit_main(tmp_path, audit_dir="audit")
+
+    assert rc == 0
+    expected = tmp_path / "docs" / "research" / "kb" / "reports"
+    expected = expected / "modernization-audit-2026-01-02.toml"
+    assert expected.read_bytes() == (FIXTURE_ROOT / "expected.toml").read_bytes()
+    capsys.readouterr()
+
+
+def test_m9_bare_cli_without_a_usable_stamp_requires_explicit_toml(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Control arm: no default path means no silent skip.
+
+    No args.json (or no stamp in it) means no default path can be derived,
+    so the CLI must fail loudly (rc=1) rather than silently skip the TOML.
+    """
+    _audit_copy(tmp_path, "audit")
+
+    rc = modernization_audit.modernization_audit_main(tmp_path, audit_dir="audit")
+
+    assert rc == 1
+    assert "pass --toml explicitly" in capsys.readouterr().err
+    assert not (tmp_path / "docs").exists()
+
+
+def test_m2_truthy_non_mapping_correction_raises(tmp_path: Path) -> None:
+    """M2 FAIL arm: a truthy non-mapping correction entry must raise loudly.
+
+    Matches the oracle's crash boundary exactly —
+    `(corrections.get(x['id']) or {}).get('native', '')` in
+    `.agent/kb/audit/aggregate.py:57` raises `AttributeError` on a truthy
+    non-dict (a str/int/list has no `.get`). Silently dropping the
+    correction at rc=0 would leave the TOML shipping the defective pointer
+    the .md report claims was corrected.
+    """
+    audit_dir = _audit_copy(tmp_path, "truthy-non-mapping-correction")
+    corrections_path = audit_dir / "corrections.json"
+    corrections = cast(
+        "dict[str, object]", json.loads(corrections_path.read_text(encoding="utf-8"))
+    )
+    corrections["alpha-1"] = "a truthy string, not a mapping"
+    corrections_path.write_text(json.dumps(corrections), encoding="utf-8")
+
+    with pytest.raises(TypeError, match="alpha-1"):
+        modernization_audit.aggregate(audit_dir, tmp_path / "out.toml")
+
+
+def test_m2_falsy_non_mapping_correction_is_silently_dropped(tmp_path: Path) -> None:
+    """Control arm: a FALSY non-mapping correction entry must not raise.
+
+    An empty string here mirrors the oracle's `or {}`, which absorbs a
+    falsy value silently — raising there would make the port LOUDER than
+    the oracle it mirrors, a divergence in the opposite direction from the
+    one this fix exists to close.
+    """
+    audit_dir = _audit_copy(tmp_path, "falsy-non-mapping-correction")
+    corrections_path = audit_dir / "corrections.json"
+    corrections = cast(
+        "dict[str, object]", json.loads(corrections_path.read_text(encoding="utf-8"))
+    )
+    corrections["alpha-1"] = ""
+    corrections_path.write_text(json.dumps(corrections), encoding="utf-8")
+
+    modernization_audit.aggregate(audit_dir, tmp_path / "out.toml")
+
+    row = _row(audit_dir, "alpha-1")
+    assert row["correction"] == ""
+
+
+def test_m3_integer_finding_id_matches_its_verdicts(tmp_path: Path) -> None:
+    """M3 FAIL arm: an integer finding id must still match its verdicts.
+
+    Reproduces the oracle's survival computation exactly —
+    `survived={'refactor': 1}, refuted=1` on a contested finding with one
+    confirming and one refuting lens, per the cold review's own arm. Before
+    the fix, `_load_verdicts` keyed its index with a `cast("str", ...)` (a
+    typing-only no-op, not a runtime coercion), so `"101"` never matched
+    `101` and the finding lost every verdict.
+    """
+    audit_dir = _audit_copy(tmp_path, "int-finding-id")
+    alpha_path = audit_dir / "findings" / "alpha.json"
+    alpha_text = alpha_path.read_text(encoding="utf-8")
+    alpha = cast("dict[str, object]", json.loads(alpha_text))
+    findings = cast("list[dict[str, object]]", alpha["findings"])
+    findings[0]["id"] = 101  # was the string "alpha-1"
+    alpha_path.write_text(json.dumps(alpha), encoding="utf-8")
+
+    for verdict_name in ("alpha--coverage.json", "alpha--risk.json"):
+        verdict_path = audit_dir / "verdicts" / verdict_name
+        verdict = cast(
+            "dict[str, object]", json.loads(verdict_path.read_text(encoding="utf-8"))
+        )
+        verdicts = cast("list[dict[str, object]]", verdict["verdicts"])
+        verdicts[0]["id"] = 101
+        verdict_path.write_text(json.dumps(verdict), encoding="utf-8")
+
+    corrections_path = audit_dir / "corrections.json"
+    corrections = cast(
+        "dict[str, object]", json.loads(corrections_path.read_text(encoding="utf-8"))
+    )
+    del corrections["alpha-1"]  # the correction key does not follow the id rename
+    corrections_path.write_text(json.dumps(corrections), encoding="utf-8")
+
+    result = modernization_audit.aggregate(audit_dir, tmp_path / "int-id.toml")
+
+    assert result.survived == {"refactor": 1}
+    assert result.refuted == 1
+    row = _row(audit_dir, "101")
+    assert row["verify_votes"] == 2
+    assert row["refuted_votes"] == 1
+    assert row["survived"] is True

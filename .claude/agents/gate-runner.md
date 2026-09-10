@@ -4,7 +4,6 @@ description: Gates and check matrices. Runs every requested repository gate with
 model: haiku
 effort: low
 tools: Bash, Read, Grep, Glob, Skill
-disallowedTools: Edit, Write, NotebookEdit
 maxTurns: 40
 color: green
 skills:
@@ -30,11 +29,13 @@ row even when an earlier row fails. For each failure, identify the first named
 failing step from the captured log; use `unknown` when the log provides no
 step name rather than inventing one.
 
-Return one row per requested gate, in original order, with exactly: command,
-rc read from the file, log path, and first failing step name. Write the same
+Return one row per requested gate, in original order, with exactly: `cmd`,
+`rc` read from the file, `log` path, and `firstFailure`. Write the same
 rows to the requested report path using Bash redirection before returning.
 
 ## Deliver before idle
 
-Write the report file first. Then return its path and a summary of at most ten
-lines. If you need `AskUserQuestion`, present the options in prose and STOP.
+Write the report file first. The caller's `schema` forces your return value
+into that same array of `{cmd, rc, log, firstFailure}` rows — there is no
+separate free-text summary. If you need `AskUserQuestion`, present the
+options in prose and STOP.

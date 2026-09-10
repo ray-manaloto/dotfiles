@@ -68,6 +68,7 @@ lane to use — the answer is fixed:
 | Advisory / critique / audit / harness | `codex-advisor`, `codex-adversarial-critic`, `codex-staleness-auditor`, `codex-claude-code-expert` |
 | Premise verification | `fable-orchestrator:premise-verifier` (Claude, read-only) |
 | Research | a read-only `Explore`/`Agent` lane |
+
 New roster: `gate-runner`, `cold-reviewer`, `graphify-operator`, `graphify-researcher`,
 `spec-scribe`, `pwf-scribe`, `issue-filer`. Saved workflows: `/gated-implementation`,
 `/graphify-refresh`.

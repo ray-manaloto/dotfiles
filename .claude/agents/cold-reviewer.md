@@ -4,7 +4,6 @@ description: Cold diff review by ref. Resolves a commit SHA or base branch witho
 model: opus
 effort: xhigh
 tools: Bash, Read, Grep, Glob, Write, Edit, Skill
-disallowedTools: NotebookEdit
 maxTurns: 60
 color: blue
 memory: local
@@ -39,5 +38,7 @@ patterns and exact locations. Do not copy the full report into memory.
 
 ## Deliver before idle
 
-Write the report file first. Then return its path and a summary of at most ten
-lines. If you need `AskUserQuestion`, present the options in prose and STOP.
+Write the report file first. The caller's `schema` forces your return value
+into `{findings, reportPath}` — one findings row per severity/claim/file/line/
+cited, plus the report path. If you need `AskUserQuestion`, present the
+options in prose and STOP.

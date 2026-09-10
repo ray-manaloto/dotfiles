@@ -87,7 +87,7 @@ def _load_verdicts(
             continue
         entries = cast("list[JsonMap]", data.get("verdicts", []))
         verdicts[unit][lens] = {
-            cast("str", entry["id"]): entry
+            str(entry["id"]): entry
             for entry in entries
             if isinstance(entry, dict) and "id" in entry
         }
@@ -107,10 +107,22 @@ def _load_corrections(audit_dir: Path) -> JsonMap:
 
 
 def _correction_value(corrections: JsonMap, finding_id: str, key: str) -> str:
-    """Read one optional correction value from the dynamic audit payload."""
+    """Read one optional correction value from the dynamic audit payload.
+
+    Mirrors the oracle's `(corrections.get(x['id']) or {}).get('native', '')`
+    exactly: a falsy entry (missing, `""`, `0`, `None`, `[]`) falls through to
+    `{}` silently, same as the oracle. A TRUTHY non-mapping entry is where the
+    oracle itself crashes (`AttributeError` — a str/int/list has no `.get`),
+    so the port raises loudly there too instead of silently dropping the
+    correction (the defect the oracle-crash comparison exists to prevent).
+    """
     correction = corrections.get(finding_id) or {}
     if not isinstance(correction, dict):
-        return ""
+        msg = (
+            f"corrections.json entry for finding {finding_id!r} is a "
+            f"{type(correction).__name__}, expected a mapping"
+        )
+        raise TypeError(msg)
     return str(correction.get(key, ""))
 
 
@@ -372,6 +384,33 @@ def aggregate(audit_dir: Path, toml_out: Path | None) -> AggregateResult:
     )
 
 
+_DEFAULT_TOML_DIR = "docs/research/kb/reports"
+
+
+def _default_toml_path(project_root: Path, audit_path: Path) -> Path | None:
+    """Derive the default TOML path from the audit run's own stamp.
+
+    Reads `<audit_path>/args.json`'s `stamp` field — the same stamp the audit
+    workflow threads through every prompt — so a bare `mise run
+    audit-aggregate` regenerates the tracked report for THIS run, matching
+    the task's documented "Regenerate the ... TOML" behaviour instead of
+    silently skipping the TOML at rc=0. Returns None when no usable stamp can
+    be found, so the caller requires `--toml` explicitly rather than guessing
+    a path.
+    """
+    args_path = audit_path / "args.json"
+    if not args_path.exists():
+        return None
+    try:
+        payload = cast("JsonMap", json.loads(args_path.read_text(encoding="utf-8")))
+    except json.JSONDecodeError:
+        return None
+    stamp = payload.get("stamp")
+    if not isinstance(stamp, str) or not stamp:
+        return None
+    return project_root / _DEFAULT_TOML_DIR / f"modernization-audit-{stamp}.toml"
+
+
 def modernization_audit_main(
     project_root: Path,
     *,
@@ -382,9 +421,19 @@ def modernization_audit_main(
     audit_path = Path(audit_dir)
     if not audit_path.is_absolute():
         audit_path = project_root / audit_path
-    output_path = Path(toml_out) if toml_out is not None else None
-    if output_path is not None and not output_path.is_absolute():
-        output_path = project_root / output_path
+    if toml_out is not None:
+        output_path = Path(toml_out)
+        if not output_path.is_absolute():
+            output_path = project_root / output_path
+    else:
+        output_path = _default_toml_path(project_root, audit_path)
+        if output_path is None:
+            sys.stderr.write(
+                "audit-aggregate: no --toml given and "
+                f"{audit_path / 'args.json'} has no usable 'stamp' — "
+                "pass --toml explicitly\n"
+            )
+            return 1
     result = aggregate(audit_path, output_path)
     sys.stdout.write(json.dumps(result.stdout_payload()) + "\n")
     return 0

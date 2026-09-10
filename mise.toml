@@ -1249,7 +1249,7 @@ description = "Regenerate docs/hk-builtins-audit.md from `hk builtins` + the hk 
 run = "uv run --project python dotfiles-setup hk-builtins-audit"
 
 [tasks.audit-aggregate]
-description = "Regenerate the deterministic modernization-audit TOML and side outputs"
+description = "Regenerate the deterministic modernization-audit TOML and side outputs. Bare run: --toml defaults from the stamp in <audit-dir>/args.json; with no usable stamp, pass --toml explicitly (rc=1 otherwise)."
 # Thin caller; aggregation logic lives in dotfiles_setup.modernization_audit.
 run = "uv run --project python dotfiles-setup audit-aggregate"
 

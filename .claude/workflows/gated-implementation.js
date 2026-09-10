@@ -98,9 +98,14 @@ const gates = await agent(`Run every command in this JSON array, in order, even 
 })
 if (gates === null) log('Gates: gate-runner returned null; gates are unknown, not passed')
 
-phase('Review')
 const ref = A.reviewRef || commit
-log(`Review: dispatching a cold review for ${ref || '<missing-ref>'}`)
+if (!ref) {
+  log('Review: skipped — no reviewRef supplied and the implementer report carried no commit')
+  return { status: 'implementer-no-commit', implementerReport, commit: '', gates, review: null, critic: null }
+}
+
+phase('Review')
+log(`Review: dispatching a cold review for ${ref}`)
 const review = await agent(`${ref}\nReview this ref cold. Resolve it yourself; the caller provides no description of intent.`, {
   label: 'cold-reviewer',
   phase: 'Review',
@@ -124,11 +129,16 @@ if (A.criticProposal) {
   log('Critique: skipped because criticProposal is empty')
 }
 
-const status = critic === null && A.criticProposal
-  ? 'critic-null'
+// Status vocabulary: complete | implementer-null | implementer-no-commit |
+// gates-null | review-null | critic-null. Ordered by phase so each is
+// reachable exactly when its own condition holds, regardless of which other
+// phases also came back null (fixes the review-before-gates ordering that
+// made 'gates-null' unreachable whenever review was also null).
+const status = gates === null
+  ? 'gates-null'
   : review === null
     ? 'review-null'
-    : gates === null
-      ? 'gates-null'
+    : critic === null && A.criticProposal
+      ? 'critic-null'
       : 'complete'
 return { status, implementerReport, commit, gates, review, critic }

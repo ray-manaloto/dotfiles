@@ -1398,7 +1398,7 @@ paths = [
     "tests/test_modernization_audit.py",
     ".claude/workflows/modernization-audit.js",
 ]
-per_path_tokens = { "mise.toml" = ['run = "uv run --project python dotfiles-setup audit-aggregate"'], "python/src/dotfiles_setup/main.py" = ['"audit-aggregate",', '"audit-aggregate": lambda'], "python/src/dotfiles_setup/modernization_audit.py" = ['def aggregate(', 'def modernization_audit_main('], "tests/test_modernization_audit.py" = ['from dotfiles_setup import modernization_audit'], ".claude/workflows/modernization-audit.js" = ["STEP 0 — deterministic aggregation, ALWAYS first: run 'mise run audit-aggregate"] }
+per_path_tokens = { "mise.toml" = ['run = "uv run --project python dotfiles-setup audit-aggregate"'], "python/src/dotfiles_setup/main.py" = ['"audit-aggregate",', '"audit-aggregate": lambda', 'modernization_audit_main('], "python/src/dotfiles_setup/modernization_audit.py" = ['result = aggregate(audit_path, output_path)'], "tests/test_modernization_audit.py" = ['from dotfiles_setup import modernization_audit'], ".claude/workflows/modernization-audit.js" = ["STEP 0 — deterministic aggregation, ALWAYS first: run 'mise run audit-aggregate"] }
 tokens = [
     'dotfiles-setup audit-aggregate',
     'def aggregate(',

@@ -4,7 +4,6 @@ description: Planning-with-files scribe for findings/progress and coordinator-ow
 model: sonnet
 effort: medium
 tools: Read, Grep, Glob, Write, Edit, Skill
-disallowedTools: NotebookEdit, Bash
 maxTurns: 40
 color: yellow
 ---

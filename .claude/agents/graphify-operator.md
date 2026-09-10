@@ -4,7 +4,6 @@ description: Graphify operator for ordered repository tasks. Runs only the hande
 model: sonnet
 effort: medium
 tools: Bash, Read, Grep, Glob, Write, Skill
-disallowedTools: Edit, NotebookEdit
 maxTurns: 60
 color: purple
 skills:
@@ -37,5 +36,7 @@ explicit stopped remainder.
 
 ## Deliver before idle
 
-Write the report file first. Then return its path and a summary of at most ten
-lines. If you need `AskUserQuestion`, present the options in prose and STOP.
+Write the report file first. The caller's `schema` forces your return value
+into that same array of `{name, rc, log, delta}` rows for every attempted
+task — there is no separate free-text summary. If you need
+`AskUserQuestion`, present the options in prose and STOP.

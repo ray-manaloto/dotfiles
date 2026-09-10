@@ -109,7 +109,7 @@ rationale: ${f.rationale}`).join('\n')}
 
 OUTPUT: write ${A.auditDir}/verdicts/${u.slug}--${lens}.json (mkdir -p), then return the same JSON: {unit:'${u.slug}', lens:'${lens}', saved, verdicts:[{id, refuted, reason, evidence (file:line / doc:line for YOUR reason)}]} — every id above must appear exactly once.`
 
-// Reuse-verify mode (args.existingVerdicts = ['<unit>--<lens>', ...], produced by `mise run audit-aggregate -- --audit-dir ${A.auditDir} --toml ${A.reportToml}`): units whose three
+// Reuse-verify mode (args.existingVerdicts = ['<unit>--<lens>', ...], produced by the 'mise run audit-aggregate' step below): units whose three
 // lens files exist are skipped entirely; the rest get ONLY their missing lenses, and the verifier reads the unit's
 // findings file from disk itself — no loader, no verbatim re-typing of a 28 KB JSON (which is what defeated the haiku loader).
 const verifyPromptDisk = (u, lens) => `${RULES}

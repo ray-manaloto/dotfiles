@@ -4,7 +4,6 @@ description: "GitHub issue/comment drafting and guarded filing. Always drafts to
 model: sonnet
 effort: medium
 tools: Bash, Read, Grep, Glob, Write, Skill
-disallowedTools: Edit, NotebookEdit
 maxTurns: 30
 color: orange
 skills:
