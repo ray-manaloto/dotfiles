@@ -11,9 +11,14 @@ hook pretooluse``. This module closes that gap. It:
   ``AskUserQuestion``, ``Edit``, ``Write`` and ``NotebookEdit``), the
   SessionStart web-setup bootstrap, the SessionEnd command-audit refresh, the
   InstructionsLoaded observer, and the PostToolUse mise-config-context
-  dispatcher — five events in all;
+  dispatcher, plus the unscoped SubagentStart/SubagentStop persistence
+  contract — seven events in all;
 - drives the REAL PreToolUse wrapper end-to-end — a denied command must DENY,
   an allowed one must stay silent;
+- drives the REAL subagent-contract module entrypoint end-to-end — start must
+  inject the file-role contract, stop must feed back once through
+  ``additionalContext`` (never the ``decision``/block error channel), and the
+  recursive-stop arm must stay silent;
 - ``bash -n`` syntax-checks the wired hook scripts (a parse error in
   ``web-setup.sh`` would brick a cold Claude-web session before the first Bash
   tool call).
@@ -84,6 +89,10 @@ _HOOK_SCRIPTS = (PRETOOLUSE_WRAPPER, _WEB_SETUP)
 # neither can disrupt a session; asserting them here is what keeps them from
 # quietly falling out of settings.json, which is the only place they are wired.
 _SESSION_END_REPORT = ".agent/command-audit.md"
+SUBAGENT_CONTRACT_MODE = "subagent-contract"
+_SUBAGENT_CONTRACT_COMMAND = (
+    f"python -m dotfiles_setup.hook_selfcheck {SUBAGENT_CONTRACT_MODE}"
+)
 _SETTINGS_WIRING: tuple[tuple[str, tuple[str, ...], tuple[str, ...] | None], ...] = (
     # All five matcher tools are required, not just the two the guard started
     # with. The three file-modifying ones route to `branch_guard` (#400); with
@@ -128,6 +137,13 @@ _SETTINGS_WIRING: tuple[tuple[str, tuple[str, ...], tuple[str, ...] | None], ...
         ("dotfiles-setup mise-config-context",),
         ("Edit", "Write", "NotebookEdit"),
     ),
+    # #994: matcher omission is load-bearing. SubagentStart/SubagentStop
+    # matchers filter on agent TYPE, so any matcher would silently exclude a
+    # future built-in, custom, or plugin-scoped delegate from this contract.
+    # The same one-entry rule enforced below prevents either command from being
+    # assembled out of complementary settings entries.
+    ("SubagentStart", (_SUBAGENT_CONTRACT_COMMAND,), None),
+    ("SubagentStop", (_SUBAGENT_CONTRACT_COMMAND,), None),
 )
 
 # Claude Code runs hooks "in the current directory", not the project root, and
@@ -480,6 +496,154 @@ def check_guard_decisions() -> list[str]:
     return failures
 
 
+_SUBAGENT_START_CONTEXT = """\
+Persistence contract for this repository:
+
+- Persist findings incrementally as you go; never wait until the end. A
+  write-capable research lane records raw sources in `.agent/kb/raw/`, research
+  and evidence in `findings.md`, and chronological actions, errors, and test
+  results in `progress.md`.
+- `task_plan.md` is coordinator-only by default. Only an agent whose definition
+  explicitly says it emits a DELTA may propose that delta for the coordinator
+  to apply.
+- Deliver every findings-bearing final report before idle. The coordinator
+  persists the received report verbatim under
+  `docs/research/kb/reports/agents/`. A mechanical lane states N/A.
+- If this lane is read-only, surface that limitation immediately and return its
+  findings for the coordinator to persist; do not pretend a write occurred.
+"""
+
+_SUBAGENT_STOP_CONTEXT = """\
+Persistence check before idle. If you have already delivered your findings in
+your final message, say so in one line and stop — this is a reminder, not an
+objection to your work, and it fires on every lane regardless of what you did.
+
+Otherwise: findings-bearing work returns the full report now, with incremental
+findings and evidence already on disk. A read-only or mechanical lane states
+that limitation, or N/A, explicitly. Do not write task_plan.md unless this
+agent definition authorizes a DELTA for the coordinator to apply.
+"""
+
+
+def build_subagent_contract_output(
+    payload: dict[str, object],
+) -> dict[str, object] | None:
+    """Return the native hook response for SubagentStart or SubagentStop.
+
+    Stop feeds back exactly once, via ``hookSpecificOutput.additionalContext``
+    rather than ``decision: "block"``. Both keep the delegate running under the
+    same loop protections, but ``block`` renders as a hook ERROR: a codex lane
+    that had already delivered read it as an objection and re-explained itself
+    three times (#994). ``additionalContext`` is the documented channel for a
+    hook "working as designed and giving Claude guidance" and shows as plain
+    ``Stop hook feedback`` (``$CC/hooks.md:2549``, SubagentStop support at
+    ``:2346``).
+
+    Claude Code sets ``stop_hook_active`` while a stop hook is already
+    continuing the delegate; the silent arm prevents an infinite retry loop
+    while preserving one deliver-before-idle turn. That flag guards recursion
+    within ONE continuation chain — a fresh parent message starts a new chain,
+    so a long-lived named agent pays this turn once per message, not once per
+    session.
+    """
+    event = payload.get("hook_event_name")
+    if event == "SubagentStart":
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": "SubagentStart",
+                "additionalContext": _SUBAGENT_START_CONTEXT,
+            }
+        }
+    if event == "SubagentStop":
+        if payload.get("stop_hook_active") is True:
+            return None
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": "SubagentStop",
+                "additionalContext": _SUBAGENT_STOP_CONTEXT,
+            }
+        }
+    return None
+
+
+def subagent_contract_main() -> int:
+    """Read one hook payload and emit its contract response; fail open."""
+    try:
+        decoded = json.loads(sys.stdin.read())
+    except OSError, json.JSONDecodeError:
+        return 0
+    if not isinstance(decoded, dict):
+        return 0
+    response = build_subagent_contract_output(decoded)
+    if response is not None:
+        sys.stdout.write(json.dumps(response))
+    return 0
+
+
+def check_subagent_contract_endtoend(project_root: Path) -> list[str]:
+    """Drive the wired module command through start, stop, and loop-guard arms."""
+    command = [
+        sys.executable,
+        "-m",
+        "dotfiles_setup.hook_selfcheck",
+        SUBAGENT_CONTRACT_MODE,
+    ]
+    cases = (
+        (
+            "start",
+            {"hook_event_name": "SubagentStart"},
+            ('"hookEventName": "SubagentStart"', "Persist findings incrementally"),
+            True,
+        ),
+        (
+            "stop",
+            {"hook_event_name": "SubagentStop", "stop_hook_active": False},
+            # Bind the non-error channel explicitly: a regression back to
+            # `decision: "block"` must go red here, not merely read differently.
+            (
+                '"hookEventName": "SubagentStop"',
+                '"additionalContext"',
+                "Persistence check before idle",
+            ),
+            True,
+        ),
+        (
+            "recursive-stop",
+            {"hook_event_name": "SubagentStop", "stop_hook_active": True},
+            (),
+            False,
+        ),
+    )
+    failures: list[str] = []
+    for name, payload, required, emits in cases:
+        result = _run(command, stdin=json.dumps(payload), cwd=project_root)
+        if result.returncode != 0:
+            failures.append(
+                f"subagent-contract {name} arm exited {result.returncode}: "
+                f"{result.stderr.strip()}"
+            )
+            continue
+        if emits and any(token not in result.stdout for token in required):
+            failures.append(
+                f"subagent-contract {name} arm lost required output: "
+                f"{result.stdout.strip()!r}"
+            )
+        # A stop arm that regresses to `decision: "block"` still "keeps the
+        # delegate running", so every presence check above would still pass.
+        # Only forbidding the error channel catches that regression (#994).
+        if name == "stop" and '"decision"' in result.stdout:
+            failures.append(
+                "subagent-contract stop arm must use additionalContext, not the "
+                f"decision/block error channel: {result.stdout.strip()!r}"
+            )
+        if not emits and result.stdout.strip():
+            failures.append(
+                "subagent-contract recursive-stop arm must be silent to avoid "
+                f"a retry loop: {result.stdout.strip()!r}"
+            )
+    return failures
+
+
 def check_script_syntax(project_root: Path) -> list[str]:
     """``bash -n`` every wired hook script — a parse error would brick a hook."""
     failures: list[str] = []
@@ -546,6 +710,10 @@ def hook_selfcheck_main(project_root: Path) -> int:
         ("script-syntax", lambda: check_script_syntax(project_root)),
         ("guard-decisions", check_guard_decisions),
         ("pretooluse-endtoend", lambda: check_pretooluse_endtoend(project_root)),
+        (
+            "subagent-contract-endtoend",
+            lambda: check_subagent_contract_endtoend(project_root),
+        ),
         ("plan-attest-deny", lambda: check_plan_attest_deny(settings_path)),
     )
     ok = True
@@ -560,3 +728,12 @@ def hook_selfcheck_main(project_root: Path) -> int:
     if ok:
         sys.stdout.write("hook-selfcheck: OK — all wired host-side hooks pass\n")
     return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    if sys.argv[1:] == [SUBAGENT_CONTRACT_MODE]:
+        raise SystemExit(subagent_contract_main())
+    sys.stderr.write(
+        f"usage: python -m {__package__}.hook_selfcheck subagent-contract\n"
+    )
+    raise SystemExit(2)

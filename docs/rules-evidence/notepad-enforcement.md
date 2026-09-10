@@ -50,3 +50,28 @@ gone unless it is still in context.
 _Named in the extracted text but **not** resolved during this extraction: the
 `oh-my-claudecode` plugin. Its disabled state was verified in an earlier session
 (2026-07-28-e), not re-probed here._
+
+## 2026-09-09 — audit refactor
+
+**Findings applied:** `rule-notepad-enforcement-1` through `-4`.
+
+**Native anchors re-read:** `sub-agents.md:33` (built-in Explore and Plan skip
+project `CLAUDE.md`); `hooks.md:2283-2346` (start/stop context targets);
+`sub-agents.md:563-598` (local/project/user memory); and `memory.md:421-462`
+(`/context`, compaction, and conditional reload).
+
+**Enabled-plugin probes:** planning-with-files 3.17.2's
+`skills/planning-with-files/SKILL.md:98-104` requires root `findings.md` after
+each discovery; `hooks/hooks.json:1-100` wires startup, resume, clear, and
+compact; `scripts/inject-plan.sh:1132-1138` says the files remain after
+compaction and must be re-read. The replacement is active before the obsolete
+`oh-my-claudecode` MCP guidance is removed. The subagent start/stop hook arms
+are covered by `test_hook_selfcheck.py`.
+
+**Roster probe:** `memory: local` is present on the three A-1 roles
+`cold-reviewer`, `graphify-researcher`, and `spec-scribe`; memory supplements,
+but does not replace, the root file or tracked report.
+
+**Motivating defect still caught:** the 2026-04-05 findings had to be re-derived
+after context loss. Same-step `findings.md` writes, compact/clear re-injection,
+and hook-carried delegate instructions preserve precisely that state.

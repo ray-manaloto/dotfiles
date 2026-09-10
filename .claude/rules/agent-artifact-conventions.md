@@ -1,103 +1,120 @@
 # Agent Artifact Conventions: Where Working Files Go
 
 Agent working artifacts live under **`.agent/`** (gitignored, machine-local).
-Anything that should survive a clone is **tracked**, and lives under `docs/` —
-never in `.agent/`. Do not create ad-hoc directories in either.
+Anything that must survive a clone is tracked under `docs/`. Do not create
+ad-hoc directories in either tree.
 
-> **Renamed from `.omc/` (2026-07-25)** — that tree was named after a plugin
-> that is not enabled. `.agent/` was control-armed before adopting, not assumed
-> (`.agent/` → 0 hits in Claude Code's docs, `CLAUDE.md` → 439). Archaeology,
-> and why the ignore lives in `.gitignore` rather than `.git/info/exclude`:
-> `docs/rules-evidence/agent-artifact-conventions.md`.
+> **Renamed from `.omc/` (2026-07-25).** That name belonged to a plugin that
+> was not enabled. `.agent/` was control-armed before adoption; archaeology is
+> in `docs/rules-evidence/agent-artifact-conventions.md`.
 
-## Local, gitignored — swept away by `git clean -xdf`
+## Two plan locations, two durability contracts
+
+- Claude Code harness plans stay at the documented default
+  `~/.claude/plans`. They survive repository cleanup and sessions.
+- `.agent/plans/` contains **our** handoffs and grilling outcomes, such as
+  `session-{date}[-letter].md`. It is swept by `git clean -xdf`.
+
+Do **not** set project `plansDirectory` to `.agent/plans`. Although the setting
+is native, doing so would move harness-owned plans into the disposable tree and
+reduce durability.
+
+## Local, gitignored — swept by `git clean -xdf`
 
 | Path | Purpose |
-|------|---------|
-| `.agent/state/` | General state (session ids, mode tracking) |
-| `.agent/state/sessions/{id}/` | Per-session state |
-| `.agent/notepad.md` | Working notepad — findings as you go |
-| `.agent/plans/` | Plans + session handoffs (`session-{date}[-letter].md`) |
-| `.agent/logs/` | Execution logs, pipeline traces |
-| `.agent/command-audit.md` | The SessionEnd one-off-command report |
-| `.agent/project-memory.json` | Cross-session project knowledge |
+|---|---|
+| `.agent/state/` | General and per-session state |
+| `.agent/notepad.md` | Session-review's narrative notepad corpus |
+| `.agent/plans/` | Our handoffs and grilling outcomes |
+| `.agent/logs/` | Execution logs and pipeline traces |
+| `.agent/command-audit.md` | SessionEnd one-off-command report |
 | `.agent/kb/raw/` | Raw fetched sources backing a report |
+| `.agent/kb/structured/` | Structured local extraction artifacts |
+| `.agent/instructions-loaded/` | InstructionsLoaded observer state |
+| `.agent/session-review/` | Session-review outputs |
+| `.agent/telemetry/` | Local telemetry artifacts |
+
+Claude Code's native local memory uses
+`.claude/agent-memory-local/<agent-name>/` for agents with `memory: local`; it
+is not `.agent/project-memory.json`. A-1 deliberately enables that scope for
+`cold-reviewer`, `graphify-researcher`, and `spec-scribe`. `memory: project`
+uses `.claude/agent-memory/<agent-name>/` and is version-controlled; `user`
+uses `~/.claude/agent-memory/<agent-name>/`.
+
+Native project/session state may also appear under `.claude/projects/`,
+including task output, tool results, transcripts, and the session's
+`subagents/` roster. Treat those as harness state, not authored report paths.
 
 ## Tracked, durable — survives a clone
 
 | Path | Purpose |
-|------|---------|
-| `docs/specs/` | Design specs and deep-dive/interview output |
-| `docs/research/runs/` | Research artifacts: `<run>/report.md` + `<run>/agents/*.md` |
-| `docs/research/kb/reports/` | Persisted verbatim agent reports |
-| `docs/handoffs/` | Cross-surface session handoffs |
-| `docs/adr/` | Domain-shaped decisions (our ADRs are `.claude/rules/*.md`) |
-| `docs/rules-evidence/` | Archaeology extracted OUT of an eager rule: one `<rule>.md` per `.claude/rules/<rule>.md` |
+|---|---|
+| `docs/specs/` | Design specs and interview output |
+| `docs/research/runs/` | Existing research-run artifacts |
+| `docs/research/kb/reports/agents/` | New verbatim findings-bearing reports |
+| `docs/handoffs/` | Cross-surface handoffs |
+| `docs/adr/` | Product/domain decisions |
+| `docs/rules-evidence/` | One evidence sibling per eager rule |
 
-**`docs/rules-evidence/` exists to buy back eager context.** Unscoped
-`.claude/rules/*.md` are ~88% of the eager corpus and scoping cannot fix that
-(`md-size-budgets.md` § "the trigger test"), so the lever is moving case
-histories, provenance tables and worked-failure logs into a tracked sibling the
-rule links by path. The rule keeps its directive, its operative constraints, and
-**one** canonical worked example; nothing leaves git, it just stops being
-re-injected every session. Name the file after the rule, one-to-one.
+**Promote anything a rule, eval, or later session will cite.** The migration
+found eager rules citing machine-local research, leaving every other clone with
+a dead link. A citation that only one machine can open is not durable evidence.
 
-**Promoting is the default for anything an eval, a rule, or a future session
-will cite** — the migration found five eager rules citing research that had
-never been tracked, so every reader outside this one machine hit a dead link.
-A citation to something only you can open is not a citation.
+## Worktrees and agent isolation
 
-## Two things that must NOT be normalised
-
-1. **Persisted agent reports stay VERBATIM** (`agent-report-persistence.md`).
-   `docs/research/runs/**` and `docs/research/kb/**` are therefore excluded
-   from every hk builtin in `hk-common.pkl`'s `excludePaths` — running a
-   typo-fixer or whitespace normaliser over archived agent output would edit
-   the record the rule exists to preserve.
-2. **Ingested corpus records what a source SAID**, including paths that have
-   since moved. Rewriting it to keep links tidy falsifies provenance. Fix the
-   pointer in the authored doc instead.
+A subagent definition may set `isolation: worktree`, creating a temporary
+worktree for that delegate. It sees the repository, plus untracked files named
+by `.worktreeinclude`; it does not inherit arbitrary machine-local artifacts.
+Place required inputs in tracked paths or explicitly include them. Never infer
+that worktree cleanup promoted a report—it only removed the isolated worktree.
 
 ## Rules
 
-1. **No ad-hoc directories.** Not `.agent/handoffs/`, `.agent/temp/`,
-   `.agent/output/`. Map your artifact to the closest path above.
-2. **A handoff is a plan** — `.agent/plans/session-{date}.md`.
-3. **Findings go to the notepad as you go**, appended with Write/Edit. See
-   `notepad-enforcement.md`. (The MCP notepad tools this once named ship with
-   the disabled `oh-my-claudecode` plugin and are absent from every session.)
-4. **Specs go in `docs/specs/`** — not in plans, not in research.
-5. **Learned skills go in `.claude/skills/<name>/SKILL.md`**, never under
-   `.agent/` — Claude Code's loader does not scan anywhere else. Frontmatter
-   `name` should match the directory name so slash-invocation and auto-loading
-   stay consistent. Same for `.claude/rules/` and `.claude/agents/`.
+1. **No ad-hoc directories.** Map each artifact to the closest declared path.
+2. **A handoff is our plan artifact:** `.agent/plans/session-{date}.md`.
+3. **Active findings use root `findings.md`** through the enabled
+   planning-with-files plugin; `.agent/notepad.md` remains the session-review
+   corpus. See `notepad-enforcement.md`.
+4. **Specs go in `docs/specs/`.** Reports go in the tracked report tree.
+5. **Skills use native loader locations.** Project skills live at
+   `.claude/skills/<name>/SKILL.md`; personal skills at
+   `~/.claude/skills/<name>/SKILL.md`; plugin skills come from enabled plugins;
+   and skills in directories supplied by `--add-dir` are also discovered.
+   Nested project skill directories are supported. Do not claim the loader
+   scans arbitrary `.agent/` paths.
+6. **Keep listing pressure visible.** Skill descriptions share a combined
+   listing budget with MCP tools. Inspect `/context` and use
+   `SLASH_COMMAND_TOOL_CHAR_BUDGET` only as a diagnostic/user setting, not a
+   project workaround. Never rely on every installed skill being listed.
+7. **Build reusable skills downward:** skill → mise task → Python library. The
+   skill contains judgment; the task is the seam; mechanics are parameterized
+   library functions. No bash logic. Author through the skill creator and
+   writing-for-agents workflows rather than copying a stale template.
+8. **Do not normalize records.** Verbatim reports and ingested source corpora
+   preserve what was observed. Fix authored pointers, not archived evidence.
 
-6. **A skill is the TOP of a three-layer stack, never the whole thing**
-   (Ray, 2026-08-08). Build downward: **skill → mise task → python library**
-   (modular modules/functions). The skill carries only what needs *judgement* —
-   when to reach for this, and the non-obvious failure modes; every mechanic
-   lives in the library, and the task is the seam. **No bash**
-   ([[zero-bash-logic]]).
-
-   **Make each layer reusable by PARAMETER, not by copy.** The skill passes
-   arguments through to the task, the task to the library function. A library
-   function that hard-codes this repo's case cannot serve the next caller — make
-   that case the parameter's *default* instead.
-
-   **Author skills with `/skill-creator:skill-creator`, and shape the prose with
-   `/writing-for-agents`.** Hand-written skills drift from the frontmatter and
-   description shape the loader and the matcher depend on — and a `description`
-   over 1,536 chars is silently truncated, taking the keywords Claude matches on
-   with it ([[md-size-budgets]]).
-
-   **The point is token economy.** Every step an agent performs by hand it will
-   perform by hand again, paying full reasoning cost each time. Worked case: the
-   image-lock recipe was re-derived from CI config across ~15 turns and produced
-   a silent 51% lock truncation on the way (#650); three sibling candidates from
-   the same session are #651–#653, and #654 is the skill that finds them.
+Native anchors re-read 2026-09-09: plan defaults at
+`$CC/settings-reference.md:2709-2721`; skill locations and discovery at
+`$CC/skills.md:111-175`, listing composition at `$CC/skills.md:337-338`, and
+listing pressure at `$CC/skills.md:1050-1058`; memory scopes at
+`$CC/sub-agents.md:563-598`; worktrees at `$CC/sub-agents.md:269-305` and
+`$CC/worktrees.md:179-189`; native state at
+`$CC/claude-directory.md:1493-1527`.
 
 ## Why this rule cannot be `paths:`-scoped
 
-It is **creation-triggered**: it governs *where to create* an artifact, so you
-never read the file first. A scoped version would be absent exactly when it is
-needed. See `md-size-budgets.md` § "Scoping: the trigger test".
+It is creation-triggered: it must govern the destination before a file exists.
+A scoped version would be absent at the decision point, so it remains eager.
+
+## Applies to
+
+All agent-generated working, planning, memory, research, and handoff artifacts
+for this repository.
+
+## See also
+
+- `.claude/rules/agent-report-persistence.md` — full-fidelity reports.
+- `.claude/rules/notepad-enforcement.md` — live findings carriage.
+- `.claude/rules/md-size-budgets.md` — eager/scoped load classes.
+- `docs/rules-evidence/agent-artifact-conventions.md` — probes and rejected
+  `plansDirectory` adoption.

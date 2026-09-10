@@ -72,3 +72,32 @@ to the largest thing it measures and will never say so.
 _Named in the extracted text but **not** resolved during this extraction: Claude
 Code's documentation corpus (the `.agent/` control arm was run in an earlier
 session) and the `oh-my-claudecode` plugin._
+
+## 2026-09-09 — audit refactor
+
+**Findings applied:** `rule-agent-artifact-conventions-1` through `-7`, with the
+ratified reversal of the audit's `plansDirectory` proposal.
+
+**Native anchors re-read:** `settings-reference.md:2709-2721`
+(`plansDirectory`, default `~/.claude/plans`); `skills.md:111-175` (project,
+personal, plugin, nested, and `--add-dir` discovery); `skills.md:337-338` and
+`:1050-1058` (combined skill text and listing pressure);
+`sub-agents.md:269-305` (worktree isolation) and `:563-598` (memory scopes);
+`worktrees.md:179-189` (`.worktreeinclude`); and
+`claude-directory.md:1493-1527` (native project/session artifacts).
+
+**Probe output:** A-1 carries `memory: local` on exactly three deliberately
+stateful judgment roles: `cold-reviewer`, `graphify-researcher`, and
+`spec-scribe`. The deleted `.agent/project-memory.json` has no native owner.
+Current `.agent/` state also contains instructions-loaded, session-review,
+telemetry, and structured KB artifacts that the old table did not declare.
+
+**Rejected native adoption:** `plansDirectory` is documented, but setting it to
+`.agent/plans` would move harness plans from the durable default
+`~/.claude/plans` into a tree this rule explicitly says `git clean -xdf`
+sweeps. The rule therefore names both locations and does not add the setting.
+
+**Motivating defect still caught:** `.omc/` was an ad-hoc name for a disabled
+plugin, and machine-local citations were dead for other clones. The refactored
+location table still rejects ad-hoc paths and requires promotion of every
+artifact a rule, evaluation, or later session will cite.

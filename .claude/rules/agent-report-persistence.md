@@ -1,93 +1,108 @@
 # Agent Report Persistence: Verbatim, At Receipt
 
-Every **findings-bearing** subagent report — research, review, audit,
-verification, or any report carrying findings, decisions, evidence tables,
-or probe output — MUST be persisted **verbatim** to disk at the moment it
-is received, not summarized into the notepad and not deferred to session
-end.
+Every findings-bearing subagent report—research, review, audit, verification,
+decisions, evidence tables, or probe output—MUST be persisted verbatim when it
+is received. Do not reduce it to a notepad summary or defer it to session end.
 
 ## Why this rule exists
 
-Session 2026-07-05: an 11-agent sweep produced 13 detailed reports that
-existed **only in the session's context window** — one `/clear` from
-being lost. A manual round-2 pass recovered them.
+On 2026-07-05, an 11-agent sweep produced 13 detailed reports that existed only
+in context. On 2026-08-03, two agents died after about 40 minutes with nothing
+written because incremental persistence was omitted from all four briefs. The
+conclusion may survive condensation; exact commands, evidence, and file:line
+anchors do not.
 
-Condensation is lossy in exactly the way that hurts later: the summary
-keeps the conclusion but drops the evidence, the exact command lines, and
-the file:line anchors the implementing session needs. Three incidents:
-`docs/rules-evidence/agent-report-persistence.md`.
+## Native carriage
+
+`.claude/settings.json` registers unscoped `SubagentStart` and `SubagentStop`
+hooks. The start hook injects the incremental-persistence and file-role
+contract before every delegate's first prompt. With no matcher, it cannot
+accidentally filter by agent type. The stop hook returns a deliver-before-idle
+reminder once; recursive stop events pass so the hook cannot loop forever.
+
+⚠️ **The stop reminder uses `additionalContext`, never `decision: "block"`.**
+Both keep the delegate running under the same loop protections, but `block`
+renders as a hook *error*, and a codex lane that had already delivered read
+that as an objection and re-explained its compliance three times before it
+could idle (#994). `additionalContext` is the documented channel for a hook
+"working as designed and giving Claude guidance" and shows as plain `Stop hook
+feedback` (`$CC/hooks.md:2549`; SubagentStop accepts it per `:2346`). A
+reminder that reads as an accusation costs a turn and teaches the lane to argue.
+
+`stop_hook_active` guards recursion within **one** continuation chain, not
+across parent messages: a long-lived named agent pays this reminder once per
+message it receives, not once per session.
+
+`SubagentStart` is advisory and fails silently: its stderr appears only in the
+subagent transcript. Therefore `_SETTINGS_WIRING` in
+`python/src/dotfiles_setup/hook_selfcheck.py` and its present/deleted
+registration tests are load-bearing. The required substrings must remain in
+one settings entry; splitting the contract across entries fails selfcheck.
+
+`SubagentStop` additional context reaches the **delegate**, not the
+coordinator. Parent-side injection would require a `PostToolUse` hook on the
+`Agent` tool, which this change does not add. The coordinator must still
+persist a delivered report at receipt.
 
 ## Rules
 
-1. **Persist at receipt, into `docs/research/kb/`.** When a findings-bearing agent's
-   final report arrives, write it verbatim to
-   `docs/research/kb/reports/agents/<agent-name>.md` in the SAME turn — before acting on
-   its content. Sources the agent fetched go to `.agent/kb/raw/<slug>.md`.
+1. **Persist at receipt, into the tracked destination.** Write a final report
+   verbatim to `docs/research/kb/reports/agents/<agent-name>.md` in the same
+   turn, before acting on it. Put fetched raw sources in
+   `.agent/kb/raw/<slug>.md`.
 
-   > **ONE path.** `docs/research/kb/` is tracked and survives a fresh clone;
-   > the old `docs/research/runs/<topic>/agents/` does not. Existing artifacts
-   > stay where they are; new ones go to `docs/research/kb/`.
+   > **ONE path.** `docs/research/kb/` is tracked and clone-durable. Existing
+   > artifacts stay where they are; new findings-bearing reports go there.
 
-1b. **Instruct agents to persist INCREMENTALLY, not at the end.** Tell a
-   research delegation to write each source as it fetches it, and to write its
-   report early and update it. Two agents that held everything in memory died
-   silently after ~40 minutes and left **nothing**. An agent that dies having
-   written 13 of 20 sources leaves 13; one planning to write at the end leaves
-   0. Durable capture must be incremental, never end-of-run.
+2. **Persist incrementally.** A research delegate writes each source as it is
+   fetched and creates its report early, updating it as work proceeds. An
+   agent that fails after 13 of 20 sources should leave 13 recoverable sources,
+   not zero. Deliver the report before going idle.
 
-   ⚠️ **A rule nothing pushes into the prompt is not a layer.** On 2026-08-03 this
-   requirement went into **none of four briefs**, two agents died and left nothing,
-   and the one survivor persisted on its own initiative. Put it in the **agent
-   definition** — `.claude/agents/staleness-auditor.md` carries it, so it rides
-   every delegation instead of being remembered per-brief — and add one line to any
-   ad-hoc brief. Pair it with **deliver before idle**: an agent that *finished* and
-   went idle without sending its report was a total loss in the same run.
-1c. **State the file-role contract in every brief that can reach a plan file.**
-   Lane returns landing in the wrong file is the #1 observed pain here, and the
-   split is finer than "returns go in `progress.md`":
+3. **Respect file roles.** The start hook supplies this table to every
+   delegate; briefs may add narrower ownership but may not weaken it.
 
    | Content | File | Who writes |
    |---|---|---|
-   | Phases, checkboxes, current phase, distilled decisions | `task_plan.md` | **coordinator ONLY** |
+   | Phases, checkboxes, current phase, distilled decisions | `task_plan.md` | **coordinator ONLY by default**; an agent whose definition explicitly emits a `DELTA` may propose one for the coordinator to apply |
    | Research, analysis, evidence, technical findings | `findings.md` | anyone |
    | Chronological outcomes, actions, errors, test results | `progress.md` | anyone |
 
-   A delegate never writes `task_plan.md` — the coordinator distills into it.
-   ⚠️ **Codex lanes are covered mechanically instead**, and that is the stronger
-   layer: `PLANNING_DISABLED=1` is set on the spawn itself
-   (`codex_lane.LANE_ENV_OVERRIDES`, and the invocation in each
-   `.claude/agents/codex-*.md`), so those lanes never see a plan file to
-   misfile into. Prose is the fallback for Claude delegates, which inherit the
-   session's hooks and cannot be scrubbed the same way.
+   A delegate does not directly mutate `task_plan.md`; a designated scribe such
+   as `pwf-scribe` emits a `DELTA`, and the coordinator applies it. Codex lanes
+   remain mechanically isolated with `PLANNING_DISABLED=1` in
+   `codex_lane.LANE_ENV_OVERRIDES`.
 
-2. **Verbatim means verbatim.** Keep the agent's tables, evidence links,
-   probe output, and repos-touched enumeration intact. Annotating
-   decisions inline afterwards (e.g. "DECIDED: option A") is encouraged;
-   trimming evidence is not.
-3. **Notepad entries are additive, not substitutes.** The notepad gets the
-   running condensed finding (per `notepad-enforcement.md`); the artifact
-   file holds the full report. Both, every time.
-4. **Mechanical agents are exempt.** A delegation whose entire value is
-   its immediate effect (a fan-out grep, a file-move helper) needs no
-   artifact; its outcome is visible in the caller's next action. When in
-   doubt, persist.
-5. **Session-handoff audits coverage.** The `/session-handoff` skill enumerates the
-   session's agent launches and requires each findings-bearing one to map
-   **both its brief and its report** to an on-disk artifact (or an explicit
-   N/A note in the handoff) before the resume prompt is printed.
+4. **Verbatim means verbatim.** Preserve tables, evidence links, probes, and
+   repos-touched enumeration. Add decision annotations afterwards; do not trim
+   the source report.
+5. **Notepad entries are additive.** `findings.md` carries the condensed,
+   active-session record; the tracked report carries full fidelity.
+6. **Mechanical agents are exempt.** A delegate whose entire value is an
+   immediately visible file effect needs no report. When in doubt, persist.
+7. **Audit the native roster at handoff.** Read the session's
+   `subagents/` roster under the native project session directory. Map every
+   findings-bearing launch to its brief and tracked report, or record an
+   explicit N/A before producing the resume prompt.
+
+Native transcripts make a missed delivery **recoverable** through
+`agent_transcript_path`, but still untracked and vulnerable to cleanup. That is
+a recovery route, not compliance and not a replacement for the tracked report.
+
+Native anchors re-read 2026-09-09: `hooks.md:314`, `:870`, `:888`,
+`:2304-2317`, and `:2319-2346`; transcript paths at
+`$CC/sub-agents.md:1051-1057`. Probe detail is in
+`docs/rules-evidence/agent-report-persistence.md`.
 
 ## Applies to
 
-All Agent-tool delegations in this repo — research sweeps, adversarial
-verification passes, code-review agents, audit agents — regardless of
-which skill or workflow launched them.
+All Agent-tool delegations in this repository, regardless of the skill or
+workflow that launched them.
 
 ## See also
 
-- `.claude/rules/notepad-enforcement.md` — the sibling rule for condensed
-  as-you-go findings; this rule covers the full-fidelity layer.
-- `.claude/rules/research-repo-enumeration.md` — every persisted report
-  ends with its repos-touched enumeration.
-- `.claude/rules/agent-artifact-conventions.md` — `docs/research/runs/` is the
-  standard home for research artifacts.
-- `.claude/skills/session-handoff/SKILL.md` — the coverage audit gate.
+- `.claude/rules/notepad-enforcement.md` — condensed as-you-go findings.
+- `.claude/rules/research-repo-enumeration.md` — report provenance.
+- `.claude/rules/agent-artifact-conventions.md` — durable locations.
+- `.claude/skills/session-handoff/SKILL.md` — coverage audit.
+- `python/src/dotfiles_setup/hook_selfcheck.py` — hook output and wiring gate.

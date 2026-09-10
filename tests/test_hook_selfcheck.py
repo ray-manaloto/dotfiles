@@ -93,6 +93,20 @@ def _full_settings() -> dict:
                     "dotfiles-setup mise-config-context",
                 )
             ],
+            "SubagentStart": [
+                _hook(
+                    None,
+                    f'uv run --project "{_ANCHOR}/python" python -m '
+                    "dotfiles_setup.hook_selfcheck subagent-contract",
+                )
+            ],
+            "SubagentStop": [
+                _hook(
+                    None,
+                    f'uv run --project "{_ANCHOR}/python" python -m '
+                    "dotfiles_setup.hook_selfcheck subagent-contract",
+                )
+            ],
         }
     }
 
@@ -106,6 +120,22 @@ def test_missing_event_fails(tmp_path: Path) -> None:
     del settings["hooks"]["PreToolUse"]
     failures = _wiring(tmp_path, settings)
     assert any("PreToolUse" in f for f in failures)
+
+
+@pytest.mark.parametrize("event", ["SubagentStart", "SubagentStop"])
+def test_missing_subagent_contract_registration_fails(
+    tmp_path: Path, event: str
+) -> None:
+    """The control arm: deleting either registration must fail the selfcheck."""
+    settings = _full_settings()
+    del settings["hooks"][event]
+    failures = _wiring(tmp_path, settings)
+    assert any(event in failure for failure in failures)
+
+
+def test_subagent_contract_entrypoint_passes_all_runtime_arms() -> None:
+    """Start injects, first stop blocks, recursive stop stays silent."""
+    assert hook_selfcheck.check_subagent_contract_endtoend(_REPO) == []
 
 
 def test_missing_matcher_fails(tmp_path: Path) -> None:
@@ -414,7 +444,15 @@ def test_selfcheck_main_passes_on_real_repo() -> None:
 
 @pytest.mark.parametrize(
     "event",
-    ["PreToolUse", "SessionStart", "SessionEnd", "InstructionsLoaded", "PostToolUse"],
+    [
+        "PreToolUse",
+        "SessionStart",
+        "SessionEnd",
+        "InstructionsLoaded",
+        "PostToolUse",
+        "SubagentStart",
+        "SubagentStop",
+    ],
 )
 def test_unanchored_hook_command_fails(tmp_path: Path, event: str) -> None:
     """The FAIL direction: strip the anchor off any event and it must go red."""
