@@ -82,10 +82,19 @@ that worktree cleanup promoted a report—it only removed the isolated worktree.
    and skills in directories supplied by `--add-dir` are also discovered.
    Nested project skill directories are supported. Do not claim the loader
    scans arbitrary `.agent/` paths.
-6. **Keep listing pressure visible.** Skill descriptions share a combined
-   listing budget with MCP tools. Inspect `/context` and use
-   `SLASH_COMMAND_TOOL_CHAR_BUDGET` only as a diagnostic/user setting, not a
-   project workaround. Never rely on every installed skill being listed.
+6. **Keep listing pressure visible.** The skill listing has its own character
+   budget — every skill NAME always appears, but descriptions are shortened,
+   and on overflow dropped least-used-first, which can strip the keywords
+   Claude matches on (`$CC/skills.md:1050-1058`). It scales at 1% of the
+   context window. Inspect `/context` (its Skills row reports the listing
+   AFTER the budget is applied) and `/doctor`; treat
+   `SLASH_COMMAND_TOOL_CHAR_BUDGET` as a diagnostic/user setting, not a project
+   workaround. Never rely on every installed skill being listed.
+
+   ⚠️ Earlier wording here claimed this budget is *shared with MCP tools*. The
+   corpus does not say that: `$CC/env-vars.md:466` scopes it to "skill metadata
+   shown to the Skill tool", and `$CC/skills.md:1050-1058` describes a
+   skill-listing budget throughout. Corrected rather than re-anchored.
 7. **Build reusable skills downward:** skill → mise task → Python library. The
    skill contains judgment; the task is the seam; mechanics are parameterized
    library functions. No bash logic. Author through the skill creator and
