@@ -181,7 +181,7 @@ while `tool-currency` → 9, so the probe discriminates):
 - `eval.skill-refs-resolve` — every `.claude/skills/<n>` named in a rule/doc exists.
 - `eval.mise-task-refs-resolve` — every `mise run <t>` named in a doc exists in
   `mise.toml` (and the inverse: a task with no doc).
-- `eval.cross-repo-parity` — the two repos' harnesses must not silently diverge.
+- `eval.cross-repo-rule-sync` — the two repos' harnesses must not silently diverge.
   Measured 2026-07-24: dotfiles enables **9** plugins and ships **24** project
   skills; knowledge-base enables **2** and ships **4** — missing `astral` (in a
   repo that *is* ruff/ty/uv), `mattpocock-skills`, `hookify`, `commit-commands`,
@@ -202,12 +202,12 @@ paraphrase of it by whitespace. → add a `require_lines` handler (exact
 normalised-whitespace line match) rather than stretching `require_tokens`.
 
 **SHIPPED as PR 1** (dotfiles#361): the `require_lines` handler plus **8**
-contracts — the 7 seeded above and `eval.cross-repo-parity`'s companion — all
+contracts — the 7 seeded above and `eval.cross-repo-rule-sync`'s companion — all
 control-armed with realistic breaks. Two more tier-0 contracts have landed
 since: `workflow.md-budget-enforcement` was rewritten when `md_budget` moved to
 `kb_setup` (dotfiles#362), `eval.tier1-runner-wiring` binds PR 2's seam
 (dotfiles#363), and `eval.tier2-fixture-wiring` binds PR 3's — including the
-`hook-selfcheck` gate, so decision 4 (the wiring gate stays) is machine-held. `parity.toml` now also gates the **`rules`** axis — all 22
+`hook-selfcheck` gate, so decision 4 (the wiring gate stays) is machine-held. `rule-sync.toml` now also gates the **`rules`** axis — all 22
 `.claude/rules/` must exist in both repos (KB#24 + dotfiles#362), matched by
 STEM, not content: each rule is adapted per repo, so byte-equality would force
 one repo to carry the other's false statements.
@@ -514,8 +514,8 @@ list. Findings from #355 land as cases in PRs 1–3.
 
 **A prerequisite PR 1 did not have, and PRs 3–6 do:** the cross-repo rules
 parity that landed alongside PR 2 (KB#24 + dotfiles#362) means both repos now
-carry all 22 `.claude/rules/`, gated by `parity.toml`'s `rules` axis. A new rule
-added to one repo without the other now fails `mise run parity` on `main`.
+carry all 22 `.claude/rules/`, gated by `rule-sync.toml`'s `rules` axis. A new rule
+added to one repo without the other now fails `mise run rule-sync` on `main`.
 
 ---
 
@@ -541,7 +541,7 @@ Recorded so the next reader can tell a corrected claim from an original one:
 | 3 | added principles 7 (probe the capability, not the dashboard) and 8 (gates report the status they saw) | a green GitHub status page masked a live PR-creation outage for ~13 min; `kb_setup.pr` swallowed the 500 |
 | 4, tier 2 | golden queries must not echo node labels; keep a paired echoing variant | a label-echoing query scored a "win" that measured lexical overlap |
 | 4, tier 4 | replaced "a Stop hook is useless here" with the blocking-vs-continuation distinction; added the `/clear`-kills-goal constraint | `/goal` is a prompt-based Stop hook and is useful precisely because it doesn't block |
-| 4, tier 0 | added `eval.cross-repo-parity` and `eval.gate-reports-status` | both are live instances of the epic's defect class, found while working |
+| 4, tier 0 | added `eval.cross-repo-rule-sync` and `eval.gate-reports-status` | both are live instances of the epic's defect class, found while working |
 | 8 | open questions → decisions | Ray resolved all of them |
 
 ### 2026-07-25 revision (during/after PR 2)
@@ -552,7 +552,7 @@ Recorded so the next reader can tell a corrected claim from an original one:
 | 4, tier 1 | added the THIRD state (`Case.precondition`) and its ordering rule | dotfiles' host-only graphify canary went `rc=-2` inside the devcontainer and killed the postCreate smoke. Skipping inside the probe would have moved the failure: the control arm drives the same path, so the case would read `UNARMED` |
 | 4, tier 1 | added "a control arm that returns SKIP is not armed" | the obvious control for the graph canary (a nonexistent graph path) SKIPs by design — it looks armed and proves nothing. The runner caught it before it shipped |
 | 7 | PR table gains a `status` column; PR 1 shipped **8** contracts, not 6 | §9's own first row already recorded two extra contracts added the same day, while §7's summary still said 6 — a stale summary inside a doc that records its own revisions |
-| 7 | noted the rules-parity prerequisite for PRs 3–6 | KB#24 + dotfiles#362 made `parity.toml` gate all 22 rules; a rule added to one repo alone now reddens `main` |
+| 7 | noted the rule-sync prerequisite for PRs 3–6 | KB#24 + dotfiles#362 made `rule-sync.toml` gate all 22 rules; a rule added to one repo alone now reddens `main` |
 | 6 | RESOLVED the deferred tier-0/tier-2 command question: `eval` = tiers 1+2, `verify run` = tier 0 | one command per ENGINE, not one overall; folding tier 0 in would run ~103 contracts twice per ship |
 | 4, tier 2 | PR 3 scope LOCKED — both repos' guards, table-level control arm, `hook_selfcheck` stays additive | the table-level arm IS a `Case` with an inverted-table control, so it inherits principle 1's enforcement instead of reimplementing it |
 | — | this spec is now TRACKED at `docs/specs/` | `.omc/` was retired 2026-07-25; the spec previously existed only in one working copy |

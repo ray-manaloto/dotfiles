@@ -57,10 +57,9 @@ records the sandbox conflict and missing `--full-auto`; Claude Code
 subagent-FRONTMATTER hooks and their `Stop`->`SubagentStop` conversion, so it
 is dropped rather than re-captioned.) The
 newer listing controls are from the saved verbatim
-`.agent/kb/raw/claude-code-changelog-2.1.258-2.1.266.md:67-71` because the KB
-corpus predates 2.1.261. ⚠️ **That path is gitignored and machine-local**, so a
-fresh clone cannot open it — treat the 2.1.261-era claims it backs as
-unverifiable off this machine until the excerpt is promoted to a tracked path.
+`docs/research/kb/raw/claude-code-changelog-2.1.258-2.1.266.md:67-71` because
+the KB corpus predates 2.1.261. The promoted excerpt is tracked so a fresh clone
+can verify those 2.1.261-era claims.
 
 **Live Codex probe (0.152.1):** `mise exec -- codex exec --help` exited 0 and
 printed `Usage: codex exec [OPTIONS] [PROMPT]`; it says missing/`-` prompts use
@@ -103,10 +102,10 @@ returned 0 — the negative arm. ⚠️ **The literal is deliberately not writte
 here.** An earlier draft published it, which is precisely what
 `probes-need-a-control-arm.md` rule 3 forbids: a control string committed to the
 corpus now MATCHES, so the next run's "absent" arm returns hits and the probe
-silently stops discriminating. Mint a new one every time. All three names are also absent from the saved
-`.agent/kb/raw/claude-code-changelog-2.1.258-2.1.266.md` (machine-local,
-gitignored), whose own `2.1.261`
-string returns 1 hit — so that probe discriminates too.
+silently stops discriminating. Mint a new one every time. All three names are
+also absent from the tracked saved source
+`docs/research/kb/raw/claude-code-changelog-2.1.258-2.1.266.md`, whose own
+`2.1.261` string returns 1 hit — so that probe discriminates too.
 
 None of the three is about background results, which was the section's subject.
 The whole clause was removed rather than corrected.

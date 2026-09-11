@@ -2123,38 +2123,43 @@ per_path_tokens = { "hk.pkl" = [
 tokens = ['def find_unresolved_skill_refs(']
 
 [[suite]]
-name = "eval.cross-repo-parity"
+name = "eval.cross-repo-rule-sync"
 description = "dotfiles and knowledge-base must not silently diverge on the doctrine they BOTH document. This is the #354 defect class one level up: a declaration made in two places and observed in neither, invisible from inside either repo because each is internally consistent. The gated set is narrow by decision (Ray, 2026-07-24) — the two orchestration plugins plus the trigger/mode lines — and everything else is printed as an advisory divergence block, because a narrow gate is only honest when the difference it declines to gate stays visible (measured at the time of writing: 7 plugins, 23 skills and 22 rules exist in dotfiles and not in knowledge-base). The gate cannot be an hk step: hk runs on a checkout of THIS repo alone, so contract-preflight checks knowledge-base out inside the workspace and points KB_REPO_PATH at it. Absence of that checkout is a hard FAIL in CI and a loud SKIP locally — a gate that goes quiet when its own wiring disappears is the inert trigger reproduced one more time."
 category = "eval"
 check_type = "static"
 handler = "require_tokens"
 paths_required = true
 paths = [
-    "parity.toml",
-    "python/src/dotfiles_setup/parity.py",
+    "rule-sync.toml",
+    "python/src/dotfiles_setup/rule_sync.py",
+    "python/src/dotfiles_setup/main.py",
     "mise.toml",
     ".github/workflows/ci.yml",
-    "tests/test_parity.py",
+    "tests/test_rule_sync.py",
 ]
-per_path_tokens = { "parity.toml" = [
+per_path_tokens = { "rule-sync.toml" = [
     "[shared]",
     'fable-orchestrator@fable-orchestrator"',
-], "python/src/dotfiles_setup/parity.py" = [
-    'def find_parity_gaps(',
+], "python/src/dotfiles_setup/rule_sync.py" = [
+    'def find_rule_sync_gaps(',
     'def divergence_report(',
     "if on is True",
+], "python/src/dotfiles_setup/main.py" = [
+    '"rule-sync",',
+    '"rule-sync": lambda',
 ], "mise.toml" = [
-    "[tasks.parity]",
-    'dotfiles-setup parity"',
+    "[tasks.rule-sync]",
+    'dotfiles-setup rule-sync"',
 ], ".github/workflows/ci.yml" = [
     "repository: ray-manaloto/knowledge-base\n",
-    "KB_REPO_PATH:",
-    "mise run parity\n",
-], "tests/test_parity.py" = [
+    "path: .rule-sync/knowledge-base",
+    'KB_REPO_PATH: ${{ github.workspace }}/.rule-sync/knowledge-base',
+    "run: mise run rule-sync",
+], "tests/test_rule_sync.py" = [
     'test_missing_sibling_repo_fails_in_ci(',
     'test_a_plugin_declared_false_counts_as_absent(',
 ] }
-tokens = ['def find_parity_gaps(']
+tokens = ['def find_rule_sync_gaps(']
 
 [[suite]]
 name = "eval.gate-reports-status"
@@ -2250,7 +2255,7 @@ paths = [
     "python/src/dotfiles_setup/doctor.py",
     "tests/test_listing_budget.py",
 ]
-per_path_tokens = { "doctor.toml" = ["[listing]", "max_chars = 41305"], "python/src/dotfiles_setup/listing_budget.py" = ["def collect_listing(", "from kb_setup.md_budget import SKILL_DESCRIPTION_MAX, skill_description", "desc = skill_description(raw)"], "python/src/dotfiles_setup/doctor.py" = ['("listing-budget", check_listing_budget),', "def check_listing_budget("], "tests/test_listing_budget.py" = ["def test_check_reports_when_the_listing_exceeds_the_ceiling("] }
+per_path_tokens = { "doctor.toml" = ["[listing]", "max_chars = 41305", "# max_description_chars = <positive integer>"], "python/src/dotfiles_setup/listing_budget.py" = ["def collect_listing(", "from kb_setup.md_budget import SKILL_DESCRIPTION_MAX, skill_description", "desc = skill_description(raw)", "entry.desc_chars > max_description_chars"], "python/src/dotfiles_setup/doctor.py" = ['("listing-budget", check_listing_budget),', "def check_listing_budget(", 'description_cap = listing_baseline.get("max_description_chars")', "over_cap(setup.listing, description_cap)"], "tests/test_listing_budget.py" = ["def test_check_reports_when_the_listing_exceeds_the_ceiling(", "def test_check_respects_description_cap_override(", "def test_invalid_description_cap_defaults_to_imported_limit("] }
 tokens = [
     "def collect_listing(",
 ]

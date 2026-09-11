@@ -5,7 +5,7 @@
 # deliberate change to the setup is a diff here, not a silent edit to a
 # generated user-level file nobody reads.
 #
-# Sibling of `currency.toml` (deep-tracked tool versions) and `parity.toml`
+# Sibling of `currency.toml` (deep-tracked tool versions) and `rule-sync.toml`
 # (the cross-repo shared set) — declarative sets, checked by a thin task.
 #
 # Every value here is a claim about state OUTSIDE this repo (`~/.config/fnox`,
@@ -161,6 +161,10 @@ scope_servers = []
 # to 320 chars. Crossing 41,305 (~4% headroom) means a plugin materially grew
 # its listing, or a new one was enabled — both worth a look.
 max_chars = 41305
+# Optional per-entry description + when_to_use cap. When omitted, the doctor
+# inherits the imported SKILL_DESCRIPTION_MAX. Any active override MUST carry
+# an adjacent written reason explaining why silent harness truncation is safe.
+# max_description_chars = <positive integer>
 
 [graphify]
 # The graphify skill surface's REVIEWED, deliberate shape (issue: see the

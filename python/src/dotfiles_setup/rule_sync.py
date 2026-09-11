@@ -1,5 +1,5 @@
 # Copyright (c) 2026 Raymond Manaloto
-"""Cross-repo parity gate (#354 tier 0, `eval.cross-repo-parity`).
+"""Cross-repo rule-sync gate (#354 tier 0, `eval.cross-repo-rule-sync`).
 
 dotfiles and knowledge-base document the same cross-vendor orchestration
 doctrine. For an unknown number of sessions only one of them carried it in
@@ -7,7 +7,7 @@ config — and neither repo could see that, because each was internally
 consistent. That is the #354 defect class raised one level: a declaration made
 in two places and observed in neither.
 
-The gated set is declared as data in ``parity.toml``: the orchestration plugins,
+The gated set is declared as data in ``rule-sync.toml``: the orchestration plugins,
 the trigger/mode lines, and — since 2026-07-25 — the ``.claude/rules/`` stems.
 Everything else the repos differ on is emitted as an advisory divergence block,
 because a narrow gate is only honest when the difference it declines to gate is
@@ -18,7 +18,7 @@ the other repo carries it turns ``main`` red for everyone. The ``rules`` axis
 was added only after knowledge-base#24 ported all 22.
 
 Two behaviours here are easy to get backwards, and both are pinned in
-``tests/test_parity.py``:
+``tests/test_rule_sync.py``:
 
 * a plugin present in ``settings.json`` with the value ``false`` is ABSENT.
   Enablement is the value, not the key — a check that asks "is it listed?"
@@ -54,12 +54,12 @@ class Shared:
     #: Rule STEMS (``.claude/rules/<stem>.md``). Presence, never content — each
     #: rule is adapted per repo, so byte-equality would force one repo to carry
     #: the other's false statements. What must not drift is which concerns are
-    #: governed. Defaulted so a ``parity.toml`` predating this axis still loads.
+    #: governed. Defaulted so a ``rule-sync.toml`` predating this axis still loads.
     rules: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
-class ParityGap:
+class RuleSyncGap:
     """One declared thing that one repo does not carry."""
 
     repo: str
@@ -72,7 +72,7 @@ def _normalise(line: str) -> str:
 
 
 def load_shared(path: Path) -> Shared:
-    """Read the declared shared set from ``parity.toml``."""
+    """Read the declared shared set from ``rule-sync.toml``."""
     data = tomllib.loads(path.read_text()).get("shared", {})
     return Shared(
         plugins=tuple(data.get("plugins", [])),
@@ -114,7 +114,7 @@ def declared_rules(repo_root: Path) -> set[str]:
 
     Scoped rules are included deliberately. ``paths:`` frontmatter changes
     *when* a rule loads, not whether the repo governs that concern, and the
-    parity question is the latter. Filtering to eager-only would let a repo
+    rule-sync question is the latter. Filtering to eager-only would let a repo
     satisfy the gate by scoping a rule into near-irrelevance.
     """
     rules = repo_root / ".claude" / "rules"
@@ -130,7 +130,7 @@ def _claude_md_lines(repo_root: Path) -> set[str]:
     return {_normalise(line) for line in doc.read_text().splitlines()}
 
 
-def find_parity_gaps(repos: dict[str, Path], shared: Shared) -> list[ParityGap]:
+def find_rule_sync_gaps(repos: dict[str, Path], shared: Shared) -> list[RuleSyncGap]:
     """Return every declared item some repo does not carry.
 
     Args:
@@ -138,25 +138,25 @@ def find_parity_gaps(repos: dict[str, Path], shared: Shared) -> list[ParityGap]:
         shared: The declared set, normally from :func:`load_shared`.
 
     Returns:
-        One :class:`ParityGap` per (repo, missing item), repo order preserved.
+        One :class:`RuleSyncGap` per (repo, missing item), repo order preserved.
     """
-    gaps: list[ParityGap] = []
+    gaps: list[RuleSyncGap] = []
     for name, root in repos.items():
         enabled = enabled_plugins(root)
         gaps.extend(
-            ParityGap(repo=name, kind="plugin", ref=plugin)
+            RuleSyncGap(repo=name, kind="plugin", ref=plugin)
             for plugin in shared.plugins
             if plugin not in enabled
         )
         present = _claude_md_lines(root)
         gaps.extend(
-            ParityGap(repo=name, kind="line", ref=line)
+            RuleSyncGap(repo=name, kind="line", ref=line)
             for line in shared.lines
             if _normalise(line) not in present
         )
         rules = declared_rules(root)
         gaps.extend(
-            ParityGap(repo=name, kind="rule", ref=rule)
+            RuleSyncGap(repo=name, kind="rule", ref=rule)
             for rule in shared.rules
             if rule not in rules
         )
@@ -210,7 +210,7 @@ def run(
     kb_path: Path | None = None,
     in_ci: bool | None = None,
 ) -> tuple[int, str]:
-    """Run the parity gate. Returns ``(exit_code, report)``.
+    """Run the rule-sync gate. Returns ``(exit_code, report)``.
 
     Args:
         repo_root: This repo's root.
@@ -228,23 +228,23 @@ def run(
         if in_ci:
             # In CI this gate's own checkout is what is missing. Skipping here
             # would make the gate inert exactly the way #354's trigger was.
-            return 1, f"FAIL parity: {detail} (CI must check it out)"
+            return 1, f"FAIL rule-sync: {detail} (CI must check it out)"
         return 0, (
-            f"SKIP parity: {detail} (set KB_REPO_PATH, or clone it beside this repo)"
+            f"SKIP rule-sync: {detail} (set KB_REPO_PATH, or clone it beside this repo)"
         )
 
     repos = {"dotfiles": repo_root, "knowledge-base": kb}
-    shared = load_shared(repo_root / "parity.toml")
-    gaps = find_parity_gaps(repos, shared)
+    shared = load_shared(repo_root / "rule-sync.toml")
+    gaps = find_rule_sync_gaps(repos, shared)
     lines = [divergence_report(repos), ""]
 
     if gaps:
-        lines.append(f"FAIL parity: {len(gaps)} declared item(s) missing")
+        lines.append(f"FAIL rule-sync: {len(gaps)} declared item(s) missing")
         lines.extend(f"  {gap.repo}: missing {gap.kind} `{gap.ref}`" for gap in gaps)
         return 1, "\n".join(lines)
 
     lines.append(
-        f"OK parity: {len(shared.plugins)} plugin(s) + {len(shared.lines)} line(s) "
+        f"OK rule-sync: {len(shared.plugins)} plugin(s) + {len(shared.lines)} line(s) "
         f"+ {len(shared.rules)} rule(s) hold in {', '.join(repos)}"
     )
     return 0, "\n".join(lines)

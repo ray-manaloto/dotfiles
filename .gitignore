@@ -96,9 +96,9 @@ graphify-out/
 .claude/skills/graphify/.graphify_version
 .claude/skills/**/.graphify_root
 
-# Cross-repo parity checkout (#354): CI clones knowledge-base inside the
+# Cross-repo rule-sync checkout (#354): CI clones knowledge-base inside the
 # workspace because actions/checkout refuses a path outside it. Never source.
-.parity/
+.rule-sync/
 
 # --- Agent working state -----------------------------------------------------
 # `.agent/` replaces `.omc/` (2026-07-25): that tree was named for the

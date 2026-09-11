@@ -189,18 +189,18 @@ jobs:
           # tests are history-dependent, not host-hostile — deselecting them
           # would remove the check from the only place it runs unattended.
           fetch-depth: 0
-      - name: Checkout knowledge-base (cross-repo parity)
-        # `eval.cross-repo-parity` compares this repo against the sibling
+      - name: Checkout knowledge-base (cross-repo rule sync)
+        # `eval.cross-repo-rule-sync` compares this repo against the sibling
         # knowledge-base repo, so the gate needs both trees. actions/checkout
         # refuses a path outside $GITHUB_WORKSPACE, so it lands inside the
         # workspace and KB_REPO_PATH points the gate at it. Public repo — no
-        # token needed. If this step is ever dropped, the parity gate FAILS in
+        # token needed. If this step is ever dropped, the rule-sync gate FAILS in
         # CI rather than skipping: a gate that goes quiet when its own wiring
         # disappears is the #354 bug one level up.
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ray-manaloto/knowledge-base
-          path: .parity/knowledge-base
+          path: .rule-sync/knowledge-base
           persist-credentials: false
       - name: Install mise
         # FULL install, not the former `python uv` subset (#808). pytest now
@@ -220,10 +220,10 @@ jobs:
           uv run --project python dotfiles-setup verify run \
             --category orchestration --category eval \
             --json
-      - name: Cross-repo parity gate
+      - name: Cross-repo rule-sync gate
         env:
-          KB_REPO_PATH: ${{ github.workspace }}/.parity/knowledge-base
-        run: mise run parity
+          KB_REPO_PATH: ${{ github.workspace }}/.rule-sync/knowledge-base
+        run: mise run rule-sync
       - name: Run pytest
         # #808: `mise run ship` gates on pytest, but a BOT PR never runs ship
         # (#369) and pytest ran nowhere in CI — so bot PRs had test coverage

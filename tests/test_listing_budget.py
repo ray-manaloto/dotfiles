@@ -168,6 +168,15 @@ def test_a_description_exactly_at_the_cap_is_not_flagged(tmp_path: Path) -> None
     assert over_cap(collect_listing(repo, tmp_path / "home", [])) == []
 
 
+def test_over_cap_uses_the_supplied_description_limit(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    _skill(repo / ".claude", "custom", "x" * 11)
+
+    (flagged,) = over_cap(collect_listing(repo, tmp_path / "home", []), 10)
+
+    assert flagged.name == "custom"
+
+
 # --------------------------------------------------------------------------- #
 # The doctor check — both arms
 # --------------------------------------------------------------------------- #
@@ -211,6 +220,26 @@ def test_check_reports_when_the_listing_exceeds_the_ceiling(tmp_path: Path) -> N
     assert "> 10" in finding
 
 
+def test_check_respects_description_cap_override(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    _skill(repo / ".claude", "custom", "x" * 11)
+    listing = collect_listing(repo, tmp_path / "home", [])
+
+    override_findings = doctor.check_listing_budget(
+        _setup(listing, {"listing": {"max_description_chars": 10}})
+    )
+    default_findings = doctor.check_listing_budget(_setup(listing, {}))
+
+    assert (
+        len(override_findings),
+        any(
+            "11-char description over the HARD 10 cap" in one
+            for one in override_findings
+        ),
+        default_findings,
+    ) == (1, True, [])
+
+
 def test_an_absent_ceiling_disables_only_the_total_not_the_cap(tmp_path: Path) -> None:
     """No `[listing]` section must not silently disable the truncation finding."""
     repo = tmp_path / "repo"
@@ -221,6 +250,28 @@ def test_an_absent_ceiling_disables_only_the_total_not_the_cap(tmp_path: Path) -
 
     assert len(findings) == 1
     assert "TRUNCATED SILENTLY" in findings[0]
+
+
+@pytest.mark.parametrize("cap", ["1536", 1536.0, None, True, 0, -1])
+def test_invalid_description_cap_defaults_to_imported_limit(
+    tmp_path: Path, cap: object
+) -> None:
+    repo = tmp_path / "repo"
+    _skill(repo / ".claude", "fat", "x" * (SKILL_DESCRIPTION_MAX + 1))
+    listing = collect_listing(repo, tmp_path / "home", [])
+
+    override_findings = doctor.check_listing_budget(
+        _setup(listing, {"listing": {"max_description_chars": 10}})
+    )
+    fallback_findings = doctor.check_listing_budget(
+        _setup(listing, {"listing": {"max_description_chars": cap}})
+    )
+
+    assert (
+        any("HARD 10 cap" in one for one in override_findings),
+        len(fallback_findings),
+        any(f"HARD {SKILL_DESCRIPTION_MAX} cap" in one for one in fallback_findings),
+    ) == (True, 1, True)
 
 
 @pytest.mark.parametrize("ceiling", ["34000", 34000.5, None])

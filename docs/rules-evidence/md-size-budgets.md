@@ -22,10 +22,9 @@ and file-triggered reload for nested instructions and scoped rules.
 drops, `/doctor`, and the post-budget Skills row. `skills.md:337-338` assigns
 the 1,536 default to combined `description` + `when_to_use`, not description
 alone. `/skill-doctor` is anchored to the saved verbatim 2.1.261 changelog at
-`.agent/kb/raw/claude-code-changelog-2.1.258-2.1.266.md:67-71` because the KB
-corpus predates that release. ⚠️ **That path is gitignored and machine-local**,
-so a fresh clone cannot open it; treat the `/skill-doctor` claim as unverifiable
-off this machine until the excerpt is promoted to a tracked path.
+`docs/research/kb/raw/claude-code-changelog-2.1.258-2.1.266.md:67-71` because
+the KB corpus predates that release. The promoted verbatim excerpt is tracked,
+so a fresh clone can verify the `/skill-doctor` claim.
 
 **Probe outputs:** `grep -R "regardless of length"` over the Claude Code doc
 tree returned **0**; the same command shape for `reduce adherence` returned

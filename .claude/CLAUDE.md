@@ -80,8 +80,7 @@ Claude IS that third family, so an Opus cold pass on a codex diff is the full
 gate, not a degraded one. The "degraded, announce it" caveat applies only to
 Claude-authored diffs, where Opus would be same-family.
 
-⚠️ Temporary advisor-consult routing while Claude tokens are constrained: see
-@token-routing.md.
+⚠️ Permanent advisor-consult routing: see @token-routing.md.
 
 Adopted plugins (enabled in `.claude/settings.json`): `fable-orchestrator@fable-orchestrator`
 (Fable-5 architect + `codex` implementer lane, GPT-5.6 Sol) and

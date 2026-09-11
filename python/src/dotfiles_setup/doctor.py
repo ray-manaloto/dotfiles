@@ -1068,14 +1068,18 @@ def check_listing_budget(setup: Setup) -> list[str]:
     Host state, so it is a doctor check and not an hk step: a CI runner has no
     ``~/.claude/plugins`` and could only ever report zero.
     """
+    listing_baseline = setup.listing_baseline()
+    description_cap = listing_baseline.get("max_description_chars")
+    if type(description_cap) is not int or description_cap <= 0:
+        description_cap = SKILL_DESCRIPTION_MAX
     findings = [
         f"{entry.kind} {entry.name!r} ({entry.source}) has a "
-        f"{entry.desc_chars}-char description over the HARD {SKILL_DESCRIPTION_MAX} "
+        f"{entry.desc_chars}-char description over the HARD {description_cap} "
         f"cap — the tail is TRUNCATED SILENTLY, taking the keywords it is matched "
         f"on with it: {entry.path}"
-        for entry in over_cap(setup.listing)
+        for entry in over_cap(setup.listing, description_cap)
     ]
-    ceiling = setup.listing_baseline().get("max_chars")
+    ceiling = listing_baseline.get("max_chars")
     if isinstance(ceiling, int):
         total = total_chars(setup.listing)
         if total > ceiling:

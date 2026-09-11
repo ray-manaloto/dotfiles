@@ -51,6 +51,7 @@ including task output, tool results, transcripts, and the session's
 |---|---|
 | `docs/specs/` | Design specs and interview output |
 | `docs/research/runs/` | Existing research-run artifacts |
+| `docs/research/kb/raw/` | Promoted raw sources cited by durable docs |
 | `docs/research/kb/reports/agents/` | New verbatim findings-bearing reports |
 | `docs/handoffs/` | Cross-surface handoffs |
 | `docs/adr/` | Product/domain decisions |

@@ -1,4 +1,4 @@
-# Cross-repo parity — the declared set both repos must carry (#354 tier 0).
+# Cross-repo rule sync — the declared set both repos must carry (#354 tier 0).
 #
 # WHY THIS FILE EXISTS. dotfiles and knowledge-base both document the same
 # cross-vendor orchestration doctrine, and for a while only one of them
@@ -8,7 +8,7 @@
 #
 # SCOPE STARTED DELIBERATELY NARROW (Ray, 2026-07-24) and has been widened
 # ONCE, on 2026-07-25, to cover `rules`. Everything still outside the gate is
-# REPORTED by `mise run parity` as an advisory divergence block and blocks
+# REPORTED by `mise run rule-sync` as an advisory divergence block and blocks
 # nothing — because a narrow gate is only honest if the difference it declines
 # to gate is still visible. At the original writing, 7 plugins, 23 skills, and
 # **22 rules** existed in dotfiles and not in knowledge-base. The rules half is
