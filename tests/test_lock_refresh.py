@@ -261,25 +261,25 @@ def test_the_root_lock_re_resolves_fuzzy_pins(
     assert argv[:3] == ["mise", "lock", "--bump"]
 
 
-def test_all_three_lock_call_sites_re_resolve_fuzzy_pins(
-    tmp_path: Path, lock_run: LockRunRecorder, staged_lock_line: str
+def test_both_lock_call_sites_re_resolve_fuzzy_pins(
+    tmp_path: Path, lock_run: LockRunRecorder
 ) -> None:
-    """Three separate places shell out to `mise lock`; all three need --bump.
+    """Two separate places shell out to `mise lock`; both need --bump.
 
-    #961 was written when there were two, and #957 added the third the same
-    day — so its own body's "at BOTH call sites" was already false when it
-    landed. Nothing but this test notices a fourth, or a flag dropped from any
-    one of them.
+    #961 was written when there were two, #957 added a third the same day (so
+    its own body's "at BOTH call sites" was already false when it landed), and
+    the producer swap took it back to two: the composite's staged lock line is
+    gone, because the composite now calls `mise run lock-image` (site 1 below)
+    instead of spelling the recipe out a second time. Nothing but this test
+    notices a third returning, or a flag dropped from either one.
+
+    That the composite delegates rather than re-inlining is asserted by
+    `test_the_composite_delegates_instead_of_re_inlining_the_recipe`.
     """
-    # Site 1 — the composite's staged lock line (image tier, in CI). The
-    # fixture binds the ONE line that runs it, not the file: the flag is also
-    # named in a comment directly above, which must not satisfy this.
-    assert "--bump" in staged_lock_line
-
-    # Site 2 — the local `mise run lock-image` path.
+    # Site 1 — the image tier, via `mise run lock-image` (CI and local alike).
     assert "--bump" in lock_command(Path("/s/mise-pinned"), Path("/s"), ("linux-x64",))
 
-    # Site 3 — the root tier, reached from the composite via
+    # Site 2 — the root tier, reached from the composite via
     # `mise run lock-refresh-root`.
     config = tmp_path / "mise.toml"
     config.write_text('[tools]\njq = "1.8.1"\n')

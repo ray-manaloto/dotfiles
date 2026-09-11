@@ -1,5 +1,5 @@
 # Copyright (c) 2026 Raymond Manaloto
-"""Shared pytest configuration: the `host_only` CI skip and the staged-lock line.
+"""Shared pytest configuration: the `host_only` CI skip and the composite's commands.
 
 `host_only` marks the handful of tests asserting facts about a real
 developer host — a host-installed CLI (`claude`, `gemini`) or a
@@ -19,6 +19,7 @@ import os
 from pathlib import Path
 
 import pytest
+import yaml
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
@@ -38,12 +39,16 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
 
 
 @pytest.fixture
-def staged_lock_line() -> str:
-    """The ONE non-comment line in the composite that runs the staged lock.
+def lock_refresh_commands() -> str:
+    """Every shell command the lock-refresh composite actually runs.
 
-    Binding the line rather than the file is load-bearing and mutation-proven:
-    `--bump` is also named in the comment directly above it, so a whole-file
-    substring check would still pass with the flag deleted from the command.
+    Parsed out of the YAML rather than grepped out of the file, so a comment
+    can never satisfy an assertion about a command. That distinction is
+    load-bearing and was mutation-proven by the fixture this replaces: the
+    composite names its flags in prose directly above the step, so a
+    whole-file substring check passes with the flag deleted from the command.
+    Joining only the `run:` values keeps that property structurally, without
+    a hand-rolled comment stripper.
     """
     action = (
         Path(__file__).parent.parent
@@ -52,10 +57,5 @@ def staged_lock_line() -> str:
         / "lock-refresh"
         / "action.yml"
     ).read_text()
-    staged = [
-        line
-        for line in action.splitlines()
-        if 'mise-pinned" lock' in line and not line.lstrip().startswith("#")
-    ]
-    assert len(staged) == 1, f"expected one staged lock line, found {len(staged)}"
-    return staged[0]
+    steps = yaml.safe_load(action)["runs"]["steps"]
+    return "\n".join(step.get("run", "") for step in steps)

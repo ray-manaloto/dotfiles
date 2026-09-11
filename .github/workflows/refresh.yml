@@ -235,9 +235,10 @@ jobs:
   # PR-reactive image-lock regeneration (#887). Renovate rewrites an exact
   # pin in `.config/mise/conf.d/shared.toml` and correctly regenerates both
   # HOST locks (mise.lock, .config/mise/mise.lock), but can never regenerate
-  # the two IMAGE locks — that recipe lives only in the `lock-refresh` job
-  # above, which runs on `main` via cron/dispatch and therefore never sees an
-  # unmerged PR's bump. The bump then sits permanently blocked by
+  # the two IMAGE locks. Both this job and the `lock-refresh` job above call
+  # the SAME producer, `mise run lock-image`; what this job adds is the
+  # TRIGGER, because lock-refresh runs on `main` via cron/dispatch and
+  # therefore never sees an unmerged PR's bump. The bump then sits permanently blocked by
   # `tests/test_lock_coverage.py::test_system_lock_versions_match_pins` in
   # contract-preflight: a deadlock, not a missed step, because the only job
   # that can fix the lock only ever runs on a branch that already has it.

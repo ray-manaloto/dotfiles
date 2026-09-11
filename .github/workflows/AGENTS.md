@@ -15,20 +15,20 @@ post-failure reporting.
 | `ci.yml` | Thin caller (Phase B, #118): lint → contract-preflight → `changes` (path-gate) → `build-publish` (gated on `changes.build` + push-to-main exemption); OR lint → promote (push to main) |
 | `build-publish.yml` | Reusable (`on: workflow_call`) build chain: plan → base-prep → p2996-prep → dev-prep → build → smoke-test → dev-tag → manifest (dev-prep/dev-tag = 3rd content-hash tier, #122; plan/manifest = dual-architecture publish, #676). Inputs `{tag_strategy, publish, target, ref, p2996_ref, platform*}` (#120); outputs `{image_ref, digest}` = the multi-arch INDEX. |
 | `image-analysis.yml` | Async (`workflow_run` on CI success): benchmark metrics + Trivy CVE scan, off the PR critical path. Analyzes `:pr-NNN` resolved from the head sha via `commits/<sha>/pulls` (#231); a PR run with no resolvable PR **fails loud** (non-gating). Resolver: `image resolve-analysis-ref` |
-| `refresh.yml` | Daily cron (00:00), `lock-refresh` job (#160 T8): regenerates all four lockfiles (pinned image mise, linux-x64), PRs via `open-refresh-pr` (App token #119), **auto-merges**. `CLANG_P2996_REF`: Renovate git-refs. `image-lock-pr` (#887). |
+| `refresh.yml` | Daily cron (00:00), `lock-refresh` job (#160 T8): regenerates all four lockfiles (image locks via `mise run lock-image`; its platform set is derived from the committed lock, never fixed at one), PRs via `open-refresh-pr` (App token #119), **auto-merges**. `CLANG_P2996_REF`: Renovate git-refs. `image-lock-pr` (#887). |
 | `ghcr-cleanup.yml` | Weekly hash-family retention plan (#160 T12.5); dry-run ALWAYS — delete only via dispatch `delete=true` after plan review. Planner: `dotfiles_setup.ghcr_cleanup` |
 | `gcc-sha-repair.yml` | `push: renovate/**` + Dockerfile change → `dotfiles-setup gcc-sha` recomputes `GCC_LATEST_DEB_SHA256` (kayari has no checksum) + commits via App token → greens the gcc bump (#249). |
 
 ## Composite actions (`.github/actions/`)
 
 Self-documented in each `action.yml`: `setup-mise` (wraps `jdx/mise-action`
-+ `install_args`), `lock-refresh` (regenerates the three lockfiles, #160
-T8), `open-refresh-pr` (App-token create-PR + optional squash
-auto-merge), and `dev-cache-probe` (#676: the `:dev-<hash>` probe, shared by
-dev-prep/build/smoke-test). **Local-composite checkout gotcha:**
-`./.github/actions/*` resolves from `$GITHUB_WORKSPACE` (empty until
++ `install_args`), `lock-refresh` (all four lockfiles, #160 T8; image locks
+delegated to `mise run lock-image`), `open-refresh-pr` (App-token create-PR +
+optional squash auto-merge), and `dev-cache-probe` (#676: the `:dev-<hash>`
+probe, shared by dev-prep/build/smoke-test). **Local-composite checkout
+gotcha:** `./.github/actions/*` resolves from `$GITHUB_WORKSPACE` (empty until
 checkout), so jobs `actions/checkout` FIRST, then the composite.
-**Composites can't read `secrets`** — the App token is minted in `refresh.yml`.
+**Composites can't read `secrets`**: the App token is minted in `refresh.yml`.
 
 ## Dual-architecture publish (#676)
 
@@ -102,8 +102,8 @@ Push-to-main path (after a PR merge):
 
 ## Invariants
 
-- **All actions SHA-pinned** via pinact. Run `mise run pin-actions`
-  locally to verify before committing workflow changes.
+- **All actions SHA-pinned** via pinact; verify with `mise run pin-actions`
+  before committing workflow changes.
 - **Build chain is path-gated.** A `changes` job (dorny/paths-filter,
   `list-files: json`) matches image/test inputs (`.devcontainer/**`,
   `docker-bake.hcl`, `hk-common.pkl`, `hk-image.pkl`, `python/**`,
@@ -112,8 +112,10 @@ Push-to-main path (after a PR merge):
   via `jq` (`!**/*.md` can't — `**/*.md` skips dot-dirs). So docs, root-mise,
   hk.pkl, home PRs run lint+contract-preflight only; schedule +
   workflow_dispatch always build. `shared.toml` is on both the push-paths
-  and this build filter — it is a Dockerfile COPY input (gap found
-  landing #178).
+  and this build filter — it is a Dockerfile COPY input (#178).
+- **A status rescue saves only ITS OWN job**, never its descendants; a skip
+  propagates down the whole `needs` closure. Gated by `workflow_skip_cascade`
+  (#982, #995).
 - **Concurrency cancels superseded runs per branch.** `ci.yml`/`autofix.yml`
   group by `${{ github.workflow }}-${{ github.head_ref || github.ref }}`; a
   new commit cancels the older in-flight run. **main is exempt**
@@ -122,42 +124,39 @@ Push-to-main path (after a PR merge):
 - **`setup-mise` composite**: a FULL install for contract-preflight (#808 —
   pytest shells out to `hk`, `chezmoi`, `pixi`, `codex`), `install_args: python
   uv` for smoke-test. lint caches mise data on `mise.lock`.
-- **build job** passes GitHub token via BuildKit **secret mount**
-  (`uid=1000`) — never via `ARG` or env.
-- **`CONTAINER_REGISTRY`** env var, not `REGISTRY` (avoids HCL
-  collision with the `REGISTRY` target in `docker-bake.hcl`).
+- **build job** passes the GitHub token via a BuildKit **secret mount**
+  (`uid=1000`), never `ARG`/env.
+- **`CONTAINER_REGISTRY`** env var, not `REGISTRY` (HCL collision with
+  `docker-bake.hcl`'s `REGISTRY` target).
 - **PR builds push** `:sha-<github.sha>-<arch>` per leg; `manifest` merges them
-  into `:pr-NNN` + `:sha-<github.sha>`, so smoke validates exactly what promote
-  retags on merge. No `cacheonly` mode.
+  into `:pr-NNN` + `:sha-<github.sha>`, so smoke validates what promote retags
+  on merge. No `cacheonly` mode.
 - **Push-to-main does NOT rebuild.** The `build-publish` caller is gated
   `if: github.event_name != 'push' || github.ref != 'refs/heads/main'`, so the
   reusable chain is skipped on main; `promote` retags the PR's `:pr-NNN`.
 - **Three-tier content-hash probe cache** (#122): `:base-`/`:p2996-`/`:dev-<hash>`,
   each `docker manifest inspect`-probed (`dotfiles-setup {base,p2996,dev}-hash`)
-  before its build. `:dev-<hash>` (= base+p2996 hashes + whole Dockerfile + dev
-  target) is tagged only AFTER smoke passes, so a PR hit skips build+smoke
-  (retag to `:sha`/`:pr-NNN`). Nightly skips the dev probe and always rebuilds
-  (catches rolling-tool drift the hash can't see).
+  before its build. `:dev-<hash>` (base+p2996 hashes + whole Dockerfile + dev
+  target) is tagged only AFTER smoke passes, so a PR hit skips build+smoke.
+  Nightly skips the dev probe and always rebuilds, catching rolling-tool
+  drift the hash cannot see.
 - **P2996 cache inputs.** Key = `CLANG_P2996_REF`, `BUILDER_IMAGE`,
   `PLATFORM`, Dockerfile p2996 section — decoupled from base-hash
   (#160 T11). See `.devcontainer/P2996-CACHE.md`.
-- **`uv run --project python`**, not `--directory` — `--directory`
-  changes cwd and breaks relative test paths.
-- **Use `--watch`, never sleep-poll** (`gh pr checks <n> --watch`); the
-  `gh run watch --exit-status` exit code is unreliable, cross-verify with
-  `--json conclusion`. Authority: `.claude/rules/gh-cli-watch.md`.
-- **No `type=gha` cache on `base`/`p2996-cache` targets** — registry tag +
+- **`uv run --project python`**, not `--directory` (changes cwd, breaks
+  relative test paths).
+- **Use `--watch`, never sleep-poll**; `gh run watch --exit-status` is
+  unreliable, cross-verify `--json conclusion`. `.claude/rules/gh-cli-watch.md`.
+- **No `type=gha` cache on `base`/`p2996-cache` targets**: registry tag +
   `Probe cache` IS the durable cache; `mode=max` gha export exceeds the 1h
-  Azure SAS TTL → `403` on cold runs. `dev` keeps gha cache.
-- **Dive + Trivy live in `image-analysis.yml` (async), not smoke-test**
-  (restructure 2026-07-07): layer efficiency + CVE scanning never extend
+  Azure SAS TTL (`403` on cold runs). `dev` keeps gha cache.
+- **Dive + Trivy live in `image-analysis.yml` (async), not smoke-test**:
+  layer efficiency + CVE scanning never extend
   the merge→pullable critical path. Trivy: `scanners: vuln` + `timeout:
   15m`, warn-only; CVE-only (#92). A failed CI run gets a normalized
-  triage artifact from ci.yml's `failure-report` job (`if: failure()`,
-  replaced the ci-failure-report.yml follower whose history was 93%
-  skipped entries).
+  triage artifact from ci.yml's `failure-report` job (`if: failure()`).
 - **`wagoodman/dive` action is broken upstream** (v0.13.1 `ARG
-  DOCKER_CLI_VERSION` empty → 404s on `docker-.tgz`). Install the release
+  DOCKER_CLI_VERSION` empty, 404s on `docker-.tgz`). Install the release
   tarball in a `run:` step; never `uses: wagoodman/dive@<sha>`.
 
 ## Cron schedules (`schedule:`)
@@ -168,7 +167,7 @@ GHA `schedule.cron` honors a sibling `timezone:` field (IANA zone), e.g.
 
 | Time | Workflow | Role |
 |------|----------|------|
-| 00:00 | `refresh.yml` | **Changes the pins.** `lock-refresh` re-resolves the three lockfiles and opens an auto-merging PR on drift — no build. |
+| 00:00 | `refresh.yml` | **Changes the pins.** `lock-refresh` re-resolves all four lockfiles and opens an auto-merging PR on drift — no build. |
 | 02:00 | `ci.yml` nightly | **Publishes on the pinned ref.** Rebuilds `:dev`/`:latest` on the *current* pins (catches base-image CVEs / floating-tool drift the pins don't move). |
 
 The 2h gap lets a 00:00 refresh PR, merged before 02:00, be what the
