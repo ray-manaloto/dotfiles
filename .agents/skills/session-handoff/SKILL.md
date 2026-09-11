@@ -140,7 +140,7 @@ reflected in docs), find and update every affected doc. Walk these in order:
   line-efficient than wrapped prose.
 - Project docs/rules/cross-refs point to `AGENTS.md` directly — there is no `CLAUDE.md` layer
   to route through on this side (`feedback_refer_to_claude_md_not_agents_md`
-  describes the Claude-side convention this inverts).
+  describes the `.claude`-side convention this inverts).
 - Follow `.claude/rules/` (zero-skip, ci-local-parity, use-tool-builtins).
 
 ## 3. Persist recovery context — two layers

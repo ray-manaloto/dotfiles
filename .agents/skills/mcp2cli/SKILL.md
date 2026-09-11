@@ -1,12 +1,12 @@
 ---
 name: mcp2cli
-description: Invoke MCP servers as one-shot CLI commands (no native registration, no schema injection into Codex's context). Use whenever a research or tool-use task wants an MCP server's capabilities without paying the per-conversation context tax of `Codex mcp add`.
+description: Invoke MCP servers as one-shot CLI commands (no native registration, no schema injection into Codex's context). Use whenever a research or tool-use task wants an MCP server's capabilities without paying the per-conversation context tax of `codex mcp add`.
 ---
 
 # mcp2cli — MCP servers as CLI, no context tax
 
 `mcp2cli` runs an MCP server as a subprocess, calls a single tool, prints
-the result, and exits. Unlike `Codex mcp add`, nothing is registered with
+the result, and exits. Unlike `codex mcp add`, nothing is registered with
 Codex, so **no tool schemas land in Codex's system prompt**. This
 is the **preferred** way to reach an MCP server for a one-off call; native
 registration is allowed when a plugin requires it (relaxed 2026-07-19).
@@ -20,7 +20,7 @@ Use `mcp2cli` when any of these are true:
 
 - You need a capability an MCP server exposes (GitHub API, Docker, a
   mintlify per-repo search, etc.) and you would otherwise be tempted to
-  `Codex mcp add` it.
+  `codex mcp add` it.
 - You want to call an MCP tool from a Bash one-liner (script, hk step,
   mise task, ad-hoc research).
 - You want fuzzy search across a doc site's mintlify-hosted content
@@ -134,7 +134,7 @@ MCP server.
 When adding a new shorthand, prefer env-var or keychain-backed auth over
 checking secrets into the repo.
 
-## Why `mcp2cli` over `Codex mcp add`
+## Why `mcp2cli` over `codex mcp add`
 
 Registered MCP servers inject every tool's JSON schema into Codex's
 system prompt for **every turn of every conversation, forever**, even
@@ -147,7 +147,7 @@ schemas never touch Codex's context, the process exits when done, and
 Codex sees only the tool's textual output (which you can further
 trim with `--jq`/`--head`).
 
-Rule of thumb: **for a one-off call, prefer `mcp2cli` over `Codex mcp
+Rule of thumb: **for a one-off call, prefer `mcp2cli` over `codex mcp
 add`** (no per-conversation schema cost). Register natively when a plugin
 or tool requires it for its features — see `feedback_no_mcp_registration.md`.
 
@@ -158,7 +158,7 @@ or tool requires it for its features — see `feedback_no_mcp_registration.md`.
 - Global shorthands live in `~/.config/mcp2cli/` (user scope).
 - The preference chain (`curl llms.txt → curl .md → mcp2cli → context7-cli
   → raw HTML curl`) is codified in `.claude/rules/research-doc-sources.md`.
-- `mcp2cli` is the preferred path; native `Codex mcp add` is allowed when a
+- `mcp2cli` is the preferred path; native `codex mcp add` is allowed when a
   plugin requires it (the `no_mcp_registration` hk hard-ban was removed
   2026-07-19). Rationale in `feedback_no_mcp_registration.md`.
 

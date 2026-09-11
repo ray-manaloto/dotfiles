@@ -93,20 +93,20 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Literals masked out before RULES run and restored after, so no rewrite can
-# ever touch a substring inside them. `oh-my-claudecode` is what makes the
-# `oh-my-Codex:sciomc` corruption UNPRODUCIBLE (not merely repaired) — no rule
-# in RULES touches lowercase "claude" at all, but a future rule addition could,
-# and the mask means it never matters. `code.claude.com` is a real external
-# domain (Anthropic's own hosted docs) cited by memory-index-curation; the old
-# mirror had corrupted it to the nonexistent `code.Codex.com`.
-PROTECTED: tuple[str, ...] = (
-    "oh-my-claudecode",
-    "code.claude.com",
-)
+# `oh-my-claudecode` (the corruption this module's docstring calls
+# `oh-my-Codex:sciomc`) and `code.claude.com` (a real external domain, cited by
+# memory-index-curation, the old mirror had corrupted to the nonexistent
+# `code.Codex.com`) were once run through a masking pass so no RULES rewrite
+# could touch them. That masking pass was DELETED (cold review F2): every rule
+# in RULES matches "Claude" (capital C), "claude mcp", or "claude code" (with a
+# space) — none of them ever matches either literal's lowercase, unspaced
+# "claude" — so the mask protected nothing; applying RULES alone to either
+# literal already leaves it unchanged. `test_render_leaves_protected_literals_
+# intact` is the real invariant now: it asserts the outcome directly, and it
+# FAILS the moment anyone adds a lowercase or case-insensitive `claude` rule,
+# which a masking pass that runs regardless of RULES' contents never could.
 
-# Ordered literal rewrites, longest source first where they overlap. Applied
-# after PROTECTED literals are masked out.
+# Ordered literal rewrites, longest source first where they overlap.
 #
 # `.claude/skills/` -> `.agents/skills/` is the ONLY path prefix rewritten:
 # it is the mirror's own real location. `.claude/rules/`, `.claude/agents/`,
@@ -126,7 +126,11 @@ RULES: tuple[tuple[str, str], ...] = (
     (".claude/skills/", ".agents/skills/"),
     ("Claude Code", "Codex"),
     ("Claude", "Codex"),
-    ("claude mcp", "Codex mcp"),
+    # Lowercase: the real binary is `codex mcp`, not `Codex mcp` (verified:
+    # `codex mcp --help` prints "Manage external MCP servers for Codex").
+    # Capitalizing the replacement was cold-review finding F5 — it emitted a
+    # command that does not exist.
+    ("claude mcp", "codex mcp"),
     # A lowercase YAML frontmatter search-trigger variant (verified: exactly
     # one file, one occurrence, `tmux-extended-keys`), folded into RULES
     # rather than kept as a `PER_FILE` exception — a rule generalizes to the
@@ -138,10 +142,17 @@ RULES: tuple[tuple[str, str], ...] = (
 # non-mechanical differences. Each entry is commented with why the general
 # RULES are wrong for that specific spot.
 PER_FILE: dict[str, tuple[tuple[str, str], ...]] = {
+    # No `adversarial-review` entry (cold-review F1): its `session-handoff`
+    # mention is not a citation of which skill a Codex reader should invoke —
+    # it names `session-handoff`'s audit step as the thing that makes a
+    # SIBLING rule (`agent-report-persistence.md` rule 5) enforced. Rewriting
+    # it to `clear-prep` asserts a false claim about `agent-report-
+    # persistence.md`, which never mentions `clear-prep`. Contrast
+    # `PER_FILE["handoff"]` below, where the name IS the skill to invoke.
+    #
     # The mirror cites `clear-prep` where the source cites `session-handoff`,
     # because `clear-prep` (CODEX_ONLY) is the Codex-side equivalent of the
     # same-machine `/clear` handoff skill.
-    "adversarial-review": (("session-handoff", "clear-prep"),),
     "handoff": (("session-handoff", "clear-prep"),),
     # The source names `CLAUDE.md`'s relationship to `AGENTS.md`. With no
     # general `CLAUDE.md` rule (RESPEC 2), the source's literal `CLAUDE.md`
@@ -166,7 +177,7 @@ PER_FILE: dict[str, tuple[tuple[str, str], ...]] = {
                 "point to `AGENTS.md` directly — there is no `CLAUDE.md` layer\n"
                 "  to route through on this side "
                 "(`feedback_refer_to_claude_md_not_agents_md`\n"
-                "  describes the Claude-side convention this inverts)."
+                "  describes the `.claude`-side convention this inverts)."
             ),
         ),
     ),
@@ -246,22 +257,22 @@ CODEX_ONLY: frozenset[str] = frozenset({"clear-prep", "codex-task-orchestration"
 def render(source_text: str, skill: str) -> str:
     """Render `source_text` as the Codex-facing mirror text for `skill`.
 
-    `source_text` is a `.claude/skills/<skill>/SKILL.md` body. Order: mask
-    PROTECTED literals -> apply RULES in order -> unmask -> apply
-    PER_FILE[skill] (each of which is expected to match exactly once; a
-    zero-count PER_FILE pattern usually means the source moved and the
-    override needs re-deriving, not widening).
+    `source_text` is a `.claude/skills/<skill>/SKILL.md` body. Order: apply
+    RULES in order, then PER_FILE[skill] (each of which is expected to match
+    exactly once; a zero-count PER_FILE pattern usually means the source
+    moved and the override needs re-deriving, not widening — enforced by
+    `find_stale_per_file()`).
+
+    `render` is a fixed point on the real skill corpus: `render(render(text,
+    skill), skill) == render(text, skill)`. A `PER_FILE` replacement that
+    reintroduces a bare `Claude`/`Claude Code`/`claude mcp`/`claude code`
+    literal (as opposed to `.claude`, which no RULES entry matches) breaks
+    this — a second render pass would rewrite what the first one just wrote.
+    `session-handoff`'s `.claude`-side wording is exactly this fix.
     """
     text = source_text
-    placeholders: dict[str, str] = {}
-    for index, literal in enumerate(PROTECTED):
-        placeholder = f"\x00PROTECTED{index}\x00"
-        placeholders[placeholder] = literal
-        text = text.replace(literal, placeholder)
     for old, new in RULES:
         text = text.replace(old, new)
-    for placeholder, literal in placeholders.items():
-        text = text.replace(placeholder, literal)
     for old, new in PER_FILE.get(skill, ()):
         text = text.replace(old, new)
     return text
@@ -331,10 +342,16 @@ def reference_paths(root: Path) -> list[tuple[Path, Path]]:
 def find_drift(root: Path) -> list[str]:
     """Skill names whose committed `.agents` copy differs from the generator.
 
-    Sorted. Covers both `SKILL.md` (compared against `render()`) and every
-    `references/**` file (compared byte-for-byte via `reference_paths()`).
-    A missing `.agents` counterpart counts as drift (the file has never
-    been mirrored).
+    Sorted. Covers `SKILL.md` (compared against `render()`), every
+    `references/**` file (compared byte-for-byte via `reference_paths()`),
+    and — since cold-review F6 — every UNMANAGED `.agents/skills/<name>/
+    SKILL.md`: a directory with no `.claude/skills/<name>` source, not
+    `EXEMPT`, and not `CODEX_ONLY`. Before this, a ghost skill dropped
+    directly into `.agents/skills/` was invisible: `mirror_paths()` only
+    walks `.claude/skills/`, so nothing ever compared it to anything and it
+    could carry stale or fabricated instructions forever. A missing
+    `.agents` counterpart for a MANAGED skill still counts as drift too (the
+    file has never been mirrored).
     """
     drifted: set[str] = set()
     for source, destination in mirror_paths(root):
@@ -349,6 +366,20 @@ def find_drift(root: Path) -> list[str]:
         skill_name = source.relative_to(claude_skills_dir).parts[0]
         if not destination.is_file() or destination.read_bytes() != source.read_bytes():
             drifted.add(skill_name)
+    managed_names = {source.parent.name for source, _ in mirror_paths(root)}
+    agents_skills_dir = root / ".agents" / "skills"
+    if agents_skills_dir.is_dir():
+        for skill_dir in sorted(agents_skills_dir.iterdir()):
+            name = skill_dir.name
+            if (
+                not skill_dir.is_dir()
+                or name in managed_names
+                or name in EXEMPT
+                or name in CODEX_ONLY
+            ):
+                continue
+            if (skill_dir / "SKILL.md").is_file():
+                drifted.add(name)
     return sorted(drifted)
 
 
@@ -384,17 +415,58 @@ def write_mirror(root: Path) -> list[str]:
     return sorted(written)
 
 
+def find_stale_per_file(root: Path) -> list[str]:
+    """Skill names whose `PER_FILE` override no longer matches its source.
+
+    Sorted. Applies `RULES` to the live `.claude/skills/<skill>/SKILL.md`
+    body (the same starting point `render()` hands to `PER_FILE`), then
+    replays that skill's `PER_FILE` rewrites one at a time in order,
+    stopping and reporting the skill the moment a pattern's count is zero.
+    A zero-count pattern usually means the source moved out from under the
+    override and the override needs re-deriving, not widening — that is
+    what `PER_FILE`'s own docstring says, but until cold-review F8 nothing
+    outside `pytest` ever checked it: `hk.pkl` has no `test` step, so a
+    silently-stale override could ship through `mise run lint` and
+    pre-commit untouched. Folding this into `find_stale_per_file` (called
+    from `skills_mirror_main`'s `--check` path) is what makes
+    `skills_mirror_parity` — the hk step wrapping `--check` — the enforcing
+    site instead of only the test suite.
+
+    A skill named in `PER_FILE` with no `.claude/skills/<skill>/SKILL.md`
+    (there are none today) is skipped, matching how `mirror_paths()`
+    already treats a missing source as absence rather than an error.
+    """
+    stale: set[str] = set()
+    claude_dir = root / ".claude" / "skills"
+    for skill, rewrites in PER_FILE.items():
+        source_path = claude_dir / skill / "SKILL.md"
+        if not source_path.is_file():
+            continue
+        text = source_path.read_text(encoding="utf-8")
+        for old, new in RULES:
+            text = text.replace(old, new)
+        for old, new in rewrites:
+            if old not in text:
+                stale.add(skill)
+                break
+            text = text.replace(old, new)
+    return sorted(stale)
+
+
 def skills_mirror_main(repo_root: Path, *, check: bool = False) -> int:
     """CLI entry for `dotfiles-setup skills-mirror`.
 
     Bare form WRITES and reports what changed; `--check` is read-only and
-    exits 1 naming every drifted skill.
+    exits 1 naming every drifted skill and every stale `PER_FILE` override.
     """
     if check:
         drifted = find_drift(repo_root)
-        if drifted:
+        stale = find_stale_per_file(repo_root)
+        if drifted or stale:
             for name in drifted:
                 logger.error("skills-mirror DRIFT: %s", name)
+            for name in stale:
+                logger.error("skills-mirror STALE PER_FILE: %s", name)
             return 1
         logger.info("skills-mirror OK: .agents/skills matches the generator")
         return 0

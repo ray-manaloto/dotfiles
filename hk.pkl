@@ -642,7 +642,7 @@ local allSteps = new Mapping<String, Config.Step> {
   // The Codex-callable and Claude skill surfaces are one contract. A stale
   // copy is worse than absence because the harness appears to accept it.
   // Replaces the old single-file `cmp -s` on session-review alone (which is
-  // what let the other 32 skills drift silently, #1006): the generator in
+  // what let the other 31 skills drift silently, #1006): the generator in
   // `dotfiles_setup.skills_mirror` covers the WHOLE `.agents/skills/**`
   // tree, and this step is a thin wrapper over its `--check` mode, same
   // shape as `bash_logic_budget`.

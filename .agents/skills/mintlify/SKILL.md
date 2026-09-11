@@ -249,9 +249,9 @@ a mintlify platform update), fetch these directly:
 > Note: the user-provided URL `https://www.mintlify.com/docs/ai/mcp.md`
 > is a 404. The working page is `model-context-protocol.md` above.
 
-## Prefer `mcp2cli` over `Codex mcp add` for mintlify servers
+## Prefer `mcp2cli` over `codex mcp add` for mintlify servers
 
-Registering an MCP server via `Codex mcp add` injects every tool's
+Registering an MCP server via `codex mcp add` injects every tool's
 schema into Codex's system prompt for every conversation forever, so
 `mcp2cli` is the preferred path here (relaxed 2026-07-19 — native
 registration is allowed when a plugin requires it, but a mintlify docs
@@ -268,4 +268,4 @@ catalog entries are not), reach it via `mcp2cli`. See
 - `docs/research/mintlify-catalog-validation-log.md` — full probe
   evidence for the findings summarized above.
 - `feedback_no_mcp_registration.md` (auto-memory) — why we don't
-  `Codex mcp add` anything.
+  `codex mcp add` anything.
