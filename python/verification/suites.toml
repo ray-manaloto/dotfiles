@@ -734,7 +734,7 @@ per_path_tokens = { ".github/workflows/build-publish.yml" = [
 
 [[suite]]
 name = "ci.dev-prep-gate-exists"
-description = "The third-tier dev-image content-hash gate (#122) must exist: a dev-prep job probes ':dev-<hash>' (via dotfiles-setup dev-hash) to skip build+smoke on an unchanged image, and a dev-tag job pushes the ':dev-<hash>' marker ONLY after smoke-test passes (validated-marker invariant — what makes the probe-skip safe). Lives in the reusable build-publish.yml (Phase B / #118). Since #676 the probe itself lives in the dev-cache-probe composite: a matrix job has ONE outputs map, so a per-leg hit cannot be published as a job output and each leg asks the registry directly — which is why the composite is named here too."
+description = "The third-tier dev-image content-hash gate (#122) must exist: a dev-prep job probes ':dev-<hash>' (via dotfiles-setup dev-hash) to skip build+smoke on an unchanged image, and a dev-tag job pushes the ':dev-<hash>' marker ONLY after smoke-test passes (validated-marker invariant — what makes the probe-skip safe). The dev-tag token is ONE CONTIGUOUS BLOCK spanning the job key, its `needs:` and its `!cancelled()` rescue, and that shape is load-bearing: `require_tokens` matches each token anywhere in the file with no order or adjacency, so two separate tokens would still both match after the identical `if:` block was relocated onto another job — leaving dev-tag rescue-free with verify green. That is the #394 stand-in failure in miniature, and it is why build-publish.yml keeps dev-tag's explanatory comment ABOVE the job key rather than between `needs:` and `if:`. Lives in the reusable build-publish.yml (Phase B / #118). Since #676 the probe itself lives in the dev-cache-probe composite: a matrix job has ONE outputs map, so a per-leg hit cannot be published as a job output and each leg asks the registry directly — which is why the composite is named here too."
 category = "ci"
 check_type = "static"
 handler = "require_tokens"
@@ -745,8 +745,7 @@ paths = [
 per_path_tokens = { ".github/workflows/build-publish.yml" = [
     "\n  dev-prep:\n",
     "hash=$(uv run --project python dotfiles-setup dev-hash)",
-    "\n  dev-tag:\n    needs: [plan, build, smoke-test]\n",
-    "    if: |\n      !cancelled()\n      && needs.smoke-test.result == 'success'",
+    "\n  dev-tag:\n    needs: [plan, build, smoke-test]\n    if: |\n      !cancelled()\n      && needs.smoke-test.result == 'success'",
 ], ".github/actions/dev-cache-probe/action.yml" = [
     "hash=$(uv run --project python dotfiles-setup dev-hash)",
     "if out=$(docker manifest inspect \"${cache_ref}\" 2>&1); then",
