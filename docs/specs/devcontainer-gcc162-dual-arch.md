@@ -758,7 +758,7 @@ directory and no bash allowlist, so anything on the reused path must be
 `validate-devcontainer-json.sh` (`hk.pkl:137,151`) must become python.
 
 ⚠️ **Carry the lesson that pattern already taught us:** cross-repo shared code
-**drifts**, which is why `mise run parity` and `parity.toml` exist (#354). The
+**drifts**, which is why `mise run rule-sync` and `rule-sync.toml` exist (#354). The
 new repo needs the same treatment from day one — a declared shared set and a
 gate — or it will diverge silently.
 

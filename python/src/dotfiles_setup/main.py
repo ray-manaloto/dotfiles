@@ -103,7 +103,6 @@ from dotfiles_setup.p2996_hash import (
     compute_repo_p2996_hash,
 )
 from dotfiles_setup.p2996_refresh import refresh as refresh_p2996_ref
-from dotfiles_setup.parity import run as parity_run
 from dotfiles_setup.path_drift import AMBIENT_PATH_ENV, path_drift_main
 from dotfiles_setup.plan_attest import plan_attest_main
 from dotfiles_setup.platform_target import (
@@ -124,6 +123,7 @@ from dotfiles_setup.reap import (
 from dotfiles_setup.renovate import renovate_status_main
 from dotfiles_setup.renovate_dryrun import renovate_dryrun_main
 from dotfiles_setup.renovate_validate import renovate_validate_main
+from dotfiles_setup.rule_sync import run as rule_sync_run
 from dotfiles_setup.schema_vendor import check_main as schema_vendor_check_main
 from dotfiles_setup.schema_vendor import refresh_main as schema_vendor_refresh_main
 from dotfiles_setup.session_review import LaneChoice, session_review_main
@@ -869,13 +869,13 @@ def _add_consistency_subcommands(subparsers: _SubParsers) -> None:
         "the agent docs resolves to something real (#160 T13 validation J; "
         "task/skill refs added by #354 PR 1)",
     )
-    parity_parser = subparsers.add_parser(
-        "parity",
-        help="Assert the declared cross-repo shared set (parity.toml) holds "
+    rule_sync_parser = subparsers.add_parser(
+        "rule-sync",
+        help="Assert the declared cross-repo shared set (rule-sync.toml) holds "
         "in both dotfiles and knowledge-base, and report every other "
         "divergence as advisory (#354 tier 0)",
     )
-    parity_parser.add_argument(
+    rule_sync_parser.add_argument(
         "--kb-path",
         type=Path,
         default=None,
@@ -2292,15 +2292,15 @@ def handle_check_doc_refs(project_root: Path) -> None:
     logger.info("check-doc-refs OK: all doc path, task, and skill references resolve")
 
 
-def handle_parity(args: argparse.Namespace, project_root: Path) -> None:
-    """Handle parity: gate the declared cross-repo set, report the rest.
+def handle_rule_sync(args: argparse.Namespace, project_root: Path) -> None:
+    """Handle rule-sync: gate the declared cross-repo set, report the rest.
 
     Writes the whole report — advisory divergence included — before exiting, so
     a failure says what diverged rather than only that something did
     (`.claude/rules/verify-before-advancing.md`, "a gate must report the status
     it saw").
     """
-    rc, report = parity_run(project_root, kb_path=args.kb_path)
+    rc, report = rule_sync_run(project_root, kb_path=args.kb_path)
     sys.stdout.write(report + "\n")
     sys.exit(rc)
 
@@ -2476,7 +2476,7 @@ def _build_command_handlers(
         "ghcr-check": lambda: handle_ghcr_check(args, project_root),
         "ghcr-cleanup": lambda: handle_ghcr_cleanup(args),
         "check-doc-refs": lambda: handle_check_doc_refs(project_root),
-        "parity": lambda: handle_parity(args, project_root),
+        "rule-sync": lambda: handle_rule_sync(args, project_root),
         "eval": lambda: handle_eval(args, project_root),
         "gcc-sha": lambda: sys.exit(gcc_sha_main(project_root, check=args.check)),
         "apt-repo": lambda: sys.exit(handle_apt_repo(args)),

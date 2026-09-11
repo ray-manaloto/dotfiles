@@ -1,5 +1,5 @@
 # Copyright (c) 2026 Raymond Manaloto
-"""Tests for the cross-repo parity gate (dotfiles_setup.parity, #354 PR 1).
+"""Tests for the cross-repo rule-sync gate (dotfiles_setup.rule_sync, #354 PR 1).
 
 The defect this gate exists for is one level up from the bugs that opened
 #354: both repos' docs claim the same orchestration doctrine, and only one
@@ -20,7 +20,7 @@ import json
 from pathlib import Path
 
 import pytest
-from dotfiles_setup import parity
+from dotfiles_setup import rule_sync
 
 _ROOT = Path(__file__).parent.parent
 
@@ -42,8 +42,8 @@ def _shared(
     plugins: tuple[str, ...] = (),
     lines: tuple[str, ...] = (),
     rules: tuple[str, ...] = (),
-) -> parity.Shared:
-    return parity.Shared(plugins=plugins, lines=lines, rules=rules)
+) -> rule_sync.Shared:
+    return rule_sync.Shared(plugins=plugins, lines=lines, rules=rules)
 
 
 def _rules(root: Path, *stems: str) -> Path:
@@ -59,12 +59,12 @@ def _rules(root: Path, *stems: str) -> Path:
 
 
 def test_the_repo_declares_a_non_empty_shared_set() -> None:
-    """An empty `parity.toml` is a gate that can only pass.
+    """An empty `rule-sync.toml` is a gate that can only pass.
 
     This is the whole failure mode of #354 reproduced inside its own fix: a
-    parity file with nothing in it runs, exits 0, and observes nothing.
+    rule-sync file with nothing in it runs, exits 0, and observes nothing.
     """
-    shared = parity.load_shared(_ROOT / "parity.toml")
+    shared = rule_sync.load_shared(_ROOT / "rule-sync.toml")
     assert shared.plugins
     assert shared.lines
 
@@ -73,10 +73,10 @@ def test_the_declared_set_matches_what_dotfiles_actually_carries() -> None:
     """The set must describe THIS repo truthfully, or it is fiction.
 
     Independent source of truth: the real `settings.json` and `.claude/CLAUDE.md`
-    on disk, not anything the parity module computes.
+    on disk, not anything the rule-sync module computes.
     """
-    shared = parity.load_shared(_ROOT / "parity.toml")
-    enabled = parity.enabled_plugins(_ROOT)
+    shared = rule_sync.load_shared(_ROOT / "rule-sync.toml")
+    enabled = rule_sync.enabled_plugins(_ROOT)
     assert set(shared.plugins) <= enabled
     text = (_ROOT / ".claude" / "CLAUDE.md").read_text()
     present = {" ".join(one.split()) for one in text.splitlines()}
@@ -85,14 +85,14 @@ def test_the_declared_set_matches_what_dotfiles_actually_carries() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Plugin parity
+# Plugin rule sync
 # ---------------------------------------------------------------------------
 
 
 def test_a_plugin_missing_from_one_repo_is_a_gap(tmp_path: Path) -> None:
     a = _repo(tmp_path / "a", plugins={_PLUGIN: True})
     b = _repo(tmp_path / "b", plugins={})
-    gaps = parity.find_parity_gaps({"a": a, "b": b}, _shared(plugins=(_PLUGIN,)))
+    gaps = rule_sync.find_rule_sync_gaps({"a": a, "b": b}, _shared(plugins=(_PLUGIN,)))
     assert [(g.repo, g.ref) for g in gaps] == [("b", _PLUGIN)]
 
 
@@ -100,7 +100,10 @@ def test_a_plugin_present_in_both_is_not_a_gap(tmp_path: Path) -> None:
     """Control arm: without it, an always-fail implementation passes above."""
     a = _repo(tmp_path / "a", plugins={_PLUGIN: True})
     b = _repo(tmp_path / "b", plugins={_PLUGIN: True})
-    assert parity.find_parity_gaps({"a": a, "b": b}, _shared(plugins=(_PLUGIN,))) == []
+    assert (
+        rule_sync.find_rule_sync_gaps({"a": a, "b": b}, _shared(plugins=(_PLUGIN,)))
+        == []
+    )
 
 
 def test_a_plugin_declared_false_counts_as_absent(tmp_path: Path) -> None:
@@ -111,7 +114,7 @@ def test_a_plugin_declared_false_counts_as_absent(tmp_path: Path) -> None:
     """
     a = _repo(tmp_path / "a", plugins={_PLUGIN: True})
     b = _repo(tmp_path / "b", plugins={_PLUGIN: False})
-    gaps = parity.find_parity_gaps({"a": a, "b": b}, _shared(plugins=(_PLUGIN,)))
+    gaps = rule_sync.find_rule_sync_gaps({"a": a, "b": b}, _shared(plugins=(_PLUGIN,)))
     assert [(g.repo, g.ref) for g in gaps] == [("b", _PLUGIN)]
 
 
@@ -120,12 +123,12 @@ def test_a_repo_with_no_settings_file_is_a_gap_not_a_pass(tmp_path: Path) -> Non
     a = _repo(tmp_path / "a", plugins={_PLUGIN: True})
     b = tmp_path / "b"
     b.mkdir()
-    gaps = parity.find_parity_gaps({"a": a, "b": b}, _shared(plugins=(_PLUGIN,)))
+    gaps = rule_sync.find_rule_sync_gaps({"a": a, "b": b}, _shared(plugins=(_PLUGIN,)))
     assert [g.repo for g in gaps] == ["b"]
 
 
 # ---------------------------------------------------------------------------
-# Line parity — the trigger itself
+# Line rule sync — the trigger itself
 # ---------------------------------------------------------------------------
 
 
@@ -133,19 +136,19 @@ def test_a_missing_trigger_line_is_a_gap(tmp_path: Path) -> None:
     """THE original bug, now visible from the other repo as well."""
     a = _repo(tmp_path / "a", plugins={}, claude_md=f"{_TRIGGER}\n")
     b = _repo(tmp_path / "b", plugins={}, claude_md="nothing here\n")
-    gaps = parity.find_parity_gaps({"a": a, "b": b}, _shared(lines=(_TRIGGER,)))
+    gaps = rule_sync.find_rule_sync_gaps({"a": a, "b": b}, _shared(lines=(_TRIGGER,)))
     assert [(g.repo, g.ref) for g in gaps] == [("b", _TRIGGER)]
 
 
 def test_a_narrated_trigger_line_is_still_a_gap(tmp_path: Path) -> None:
     """A doc that TALKS ABOUT the trigger has not armed it.
 
-    This is why parity matches whole lines rather than substrings — the repo
+    This is why rule sync matches whole lines rather than substrings — the repo
     spent an unknown number of sessions in exactly this state.
     """
     a = _repo(tmp_path / "a", plugins={}, claude_md=f"{_TRIGGER}\n")
     b = _repo(tmp_path / "b", plugins={}, claude_md=f"The mode line is `{_TRIGGER}`.\n")
-    gaps = parity.find_parity_gaps({"a": a, "b": b}, _shared(lines=(_TRIGGER,)))
+    gaps = rule_sync.find_rule_sync_gaps({"a": a, "b": b}, _shared(lines=(_TRIGGER,)))
     assert [g.repo for g in gaps] == ["b"]
 
 
@@ -153,7 +156,10 @@ def test_line_matching_tolerates_reindentation(tmp_path: Path) -> None:
     """Control arm for the above: whitespace is normalised, words are not."""
     a = _repo(tmp_path / "a", plugins={}, claude_md=f"  {_TRIGGER}  \n")
     b = _repo(tmp_path / "b", plugins={}, claude_md=f"{_TRIGGER}\n")
-    assert parity.find_parity_gaps({"a": a, "b": b}, _shared(lines=(_TRIGGER,))) == []
+    assert (
+        rule_sync.find_rule_sync_gaps({"a": a, "b": b}, _shared(lines=(_TRIGGER,)))
+        == []
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -163,7 +169,7 @@ def test_line_matching_tolerates_reindentation(tmp_path: Path) -> None:
 
 def test_missing_sibling_repo_skips_locally(tmp_path: Path) -> None:
     """A dev box without the sibling clone gets a loud SKIP, not a fake pass."""
-    rc, report = parity.run(_ROOT, kb_path=tmp_path / "nope", in_ci=False)
+    rc, report = rule_sync.run(_ROOT, kb_path=tmp_path / "nope", in_ci=False)
     assert rc == 0
     assert "SKIP" in report
 
@@ -176,7 +182,7 @@ def test_missing_sibling_repo_fails_in_ci(tmp_path: Path) -> None:
     reproduced one more level up. CI is the one place "not found" is provably
     a bug rather than a dev box's business.
     """
-    rc, report = parity.run(_ROOT, kb_path=tmp_path / "nope", in_ci=True)
+    rc, report = rule_sync.run(_ROOT, kb_path=tmp_path / "nope", in_ci=True)
     assert rc == 1
     assert "SKIP" not in report
 
@@ -185,14 +191,14 @@ def test_resolve_prefers_the_explicit_path_then_env(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("KB_REPO_PATH", str(tmp_path / "from-env"))
-    assert parity.resolve_kb_path(tmp_path / "explicit") == tmp_path / "explicit"
-    assert parity.resolve_kb_path(None) == tmp_path / "from-env"
+    assert rule_sync.resolve_kb_path(tmp_path / "explicit") == tmp_path / "explicit"
+    assert rule_sync.resolve_kb_path(None) == tmp_path / "from-env"
     monkeypatch.delenv("KB_REPO_PATH")
-    assert parity.resolve_kb_path(None) == (_ROOT.parent / "knowledge-base")
+    assert rule_sync.resolve_kb_path(None) == (_ROOT.parent / "knowledge-base")
 
 
 # ---------------------------------------------------------------------------
-# Rule parity (widened 2026-07-25, after knowledge-base#24 ported all 22)
+# Rule sync (widened 2026-07-25, after knowledge-base#24 ported all 22)
 # ---------------------------------------------------------------------------
 
 
@@ -204,7 +210,7 @@ def test_a_rule_missing_from_one_repo_is_a_gap(tmp_path: Path) -> None:
     """
     a = _rules(_repo(tmp_path / "a", plugins={}), "zero-skip-policy")
     b = _rules(_repo(tmp_path / "b", plugins={}))
-    gaps = parity.find_parity_gaps(
+    gaps = rule_sync.find_rule_sync_gaps(
         {"a": a, "b": b}, _shared(rules=("zero-skip-policy",))
     )
     assert [(g.repo, g.kind, g.ref) for g in gaps] == [
@@ -217,7 +223,9 @@ def test_a_rule_present_in_both_is_not_a_gap(tmp_path: Path) -> None:
     a = _rules(_repo(tmp_path / "a", plugins={}), "zero-skip-policy")
     b = _rules(_repo(tmp_path / "b", plugins={}), "zero-skip-policy")
     assert (
-        parity.find_parity_gaps({"a": a, "b": b}, _shared(rules=("zero-skip-policy",)))
+        rule_sync.find_rule_sync_gaps(
+            {"a": a, "b": b}, _shared(rules=("zero-skip-policy",))
+        )
         == []
     )
 
@@ -232,11 +240,11 @@ def test_a_repo_with_no_rules_dir_is_a_gap_not_a_pass(tmp_path: Path) -> None:
     """
     a = _rules(_repo(tmp_path / "a", plugins={}), "do-not")
     b = _repo(tmp_path / "b", plugins={})  # no .claude/rules/ at all
-    gaps = parity.find_parity_gaps({"a": a, "b": b}, _shared(rules=("do-not",)))
+    gaps = rule_sync.find_rule_sync_gaps({"a": a, "b": b}, _shared(rules=("do-not",)))
     assert [(g.repo, g.ref) for g in gaps] == [("b", "do-not")]
 
 
-def test_rule_parity_is_by_stem_not_by_content(tmp_path: Path) -> None:
+def test_rule_sync_is_by_stem_not_by_content(tmp_path: Path) -> None:
     """Each rule is ADAPTED per repo; gating on bytes would force a lie.
 
     knowledge-base's `local-devcontainer-first` is an ingestion cost ladder,
@@ -249,7 +257,10 @@ def test_rule_parity_is_by_stem_not_by_content(tmp_path: Path) -> None:
     (b / ".claude" / "rules").mkdir(parents=True)
     (a / ".claude" / "rules" / "do-not.md").write_text("# Do not\n\nNo local builds.\n")
     (b / ".claude" / "rules" / "do-not.md").write_text("# Do not\n\nNever go global.\n")
-    assert parity.find_parity_gaps({"a": a, "b": b}, _shared(rules=("do-not",))) == []
+    assert (
+        rule_sync.find_rule_sync_gaps({"a": a, "b": b}, _shared(rules=("do-not",)))
+        == []
+    )
 
 
 def test_a_scoped_rule_still_counts_as_declared(tmp_path: Path) -> None:
@@ -263,18 +274,18 @@ def test_a_scoped_rule_still_counts_as_declared(tmp_path: Path) -> None:
     (a / ".claude" / "rules" / "ci-local-parity.md").write_text(
         '---\npaths:\n  - "hk.pkl"\n---\n\n# CI parity\n'
     )
-    assert parity.declared_rules(a) == {"ci-local-parity"}
+    assert rule_sync.declared_rules(a) == {"ci-local-parity"}
 
 
 def test_the_declared_rules_match_what_dotfiles_actually_carries() -> None:
     """The set must describe THIS repo truthfully, or it is fiction.
 
     Independent source of truth: the real `.claude/rules/` tree on disk, not
-    anything the parity module computes for the comparison.
+    anything the rule-sync module computes for the comparison.
     """
-    shared = parity.load_shared(_ROOT / "parity.toml")
+    shared = rule_sync.load_shared(_ROOT / "rule-sync.toml")
     assert shared.rules
-    assert set(shared.rules) <= parity.declared_rules(_ROOT)
+    assert set(shared.rules) <= rule_sync.declared_rules(_ROOT)
 
 
 # ---------------------------------------------------------------------------
@@ -290,7 +301,7 @@ def test_divergence_report_names_what_is_not_gated(tmp_path: Path) -> None:
     """
     a = _repo(tmp_path / "a", plugins={_PLUGIN: True, "extra@x": True})
     b = _repo(tmp_path / "b", plugins={_PLUGIN: True})
-    report = parity.divergence_report({"a": a, "b": b})
+    report = rule_sync.divergence_report({"a": a, "b": b})
     assert "extra@x" in report
 
 
@@ -301,9 +312,11 @@ def test_the_live_repos_pass_the_gated_set() -> None:
     condition is pinned by `test_missing_sibling_repo_fails_in_ci` above, so
     the skip here cannot hide a broken gate.
     """
-    kb = parity.resolve_kb_path(None)
+    kb = rule_sync.resolve_kb_path(None)
     if not (kb / ".claude").is_dir():
         pytest.skip("knowledge-base clone not present")
-    shared = parity.load_shared(_ROOT / "parity.toml")
-    gaps = parity.find_parity_gaps({"dotfiles": _ROOT, "knowledge-base": kb}, shared)
+    shared = rule_sync.load_shared(_ROOT / "rule-sync.toml")
+    gaps = rule_sync.find_rule_sync_gaps(
+        {"dotfiles": _ROOT, "knowledge-base": kb}, shared
+    )
     assert gaps == [], [f"{g.repo}: missing {g.kind} {g.ref}" for g in gaps]

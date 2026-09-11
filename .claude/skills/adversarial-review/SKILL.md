@@ -210,13 +210,24 @@ The cycle it breaks is real but narrower than it looks — of #601's 7 HIGHs onl
 in-scope-looking findings with another commit, which re-opened the review
 surface each time. Write the ticket, cite it in the reason string, move on.
 
+## Two pins every review brief needs
+
+- **Pin exactly one ref.** A brief names one immutable commit or resolved head,
+  never a range of candidate refs that lets the reviewed subject change between
+  claims. If another ref must be reviewed, that is another brief.
+- **Name the exact artifact each control arm measures.** "Run a control" is not
+  a discriminating instruction; identify the file, output, fixture, or runtime
+  object whose change separates the positive arm from the negative one.
+
+Both are permanent lessons from the 2026-09-10 `/grilling` pass (ruling 12).
+
 ## Templates
 
 ### Brief — round 1 (open hunting)
 
 ```markdown
 ## Subject
-<commit range / branch / PR>. Read the code; do not read the ticket.
+<exactly one commit SHA or resolved PR head>. Read the code; do not read the ticket.
 
 ## Question (open — this is round 1)
 What in this diff is wrong?
@@ -248,7 +259,7 @@ unverified.
 
 ```markdown
 ## Subject
-<commit range>. Read the code; do not read the ticket.
+<exactly one commit SHA>. Read the code; do not read the ticket.
 
 ## The domain — this is the whole answer set
 <the enumeration: N cells over M axes, or the K call sites, or the J strings>

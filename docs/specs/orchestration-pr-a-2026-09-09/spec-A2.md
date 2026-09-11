@@ -28,7 +28,7 @@ Every rule keeps its `## Applies to` / `## See also` shape, stays under its OWN 
 
 ## 4. Constraints and invariants
 - One writer: A-1's files are frozen; if a rule refactor needs an agent body change, report it as a follow-up, do not edit `.claude/agents/**`.
-- Re-read every doc anchor before citing it; the KB corpus stops at Claude Code 2.1.257 — for anything newer use `.agent/kb/raw/claude-code-changelog-2.1.258-2.1.266.md` (saved verbatim) and say so.
+- Re-read every doc anchor before citing it; the KB corpus stops at Claude Code 2.1.257 — for anything newer use `docs/research/kb/raw/claude-code-changelog-2.1.258-2.1.266.md` (saved verbatim) and say so.
 - No new bash; hooks call python entrypoints. No suppressions. No root `CLAUDE.md` edits (the stub gate).
 - Secrets: never print a credential value.
 - Licensed dissent: if a report row's native anchor does not say what the row claims after you re-read it, drop that change and record the refutation in the evidence note instead of guessing.

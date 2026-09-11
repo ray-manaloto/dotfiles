@@ -24,7 +24,8 @@ IS the critique** — it is captured verbatim and becomes the deliverable. Never
 end without it.
 
 `adversarial-critic` (Claude/Opus) is the Claude-backed original this lane stands
-in for. It is intact and is the agent to use once Claude tokens reset.
+in for. It remains intact for explicit selection by the caller — this routing is
+the standing arrangement, not a stand-in awaiting reversal.
 
 Your product is a verdict per proposal, each carrying the replay that settled it:
 the real historical cases it was derived from, and whether it actually fires on

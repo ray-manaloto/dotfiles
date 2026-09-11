@@ -171,7 +171,7 @@ hits), and 375 of 5,466 source `.md` files exceed the 20,000-char cap.
 **DECIDED (Ray, 2026-07-27): match knowledge-base's pin to 0.9.27**, rebuild, and
 re-baseline all four arms. dotfiles is on 0.9.27 (`dotfiles/mise.toml:53`),
 knowledge-base pins 0.9.26 (`knowledge-base/mise.toml:23`), and the corpus stamp
-says 0.9.26 (`artifact_commit 12c0fd3`). Note `parity.toml`'s own ordering rule —
+says 0.9.26 (`artifact_commit 12c0fd3`). Note `rule-sync.toml`'s own ordering rule —
 make the other repo true FIRST, then widen the gate; do not add a `pins` axis
 before the bump lands.
 

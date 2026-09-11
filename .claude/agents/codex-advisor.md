@@ -160,6 +160,7 @@ Carry a fact's **condition**, never just the fact.
 
 When `codex` is unavailable or fails outright, say so and hand the decision back
 to the caller. The sanctioned fallback is
-**`fable-orchestrator:fable-advisor` (Claude/Fable 5), which is the agent to use
-once Claude tokens reset** — never a silent switch to reasoning in this agent's
-own context. That original is deliberately left intact for exactly that reversal.
+**`fable-orchestrator:fable-advisor` (Claude/Fable 5), invoked explicitly by the
+caller** — never a silent switch to reasoning in this agent's own context. That
+original remains intact for that explicit selection, not as a default this
+lane reverts to (2026-09-10 `/grilling` ruling 10, `.claude/token-routing.md`).

@@ -226,7 +226,7 @@ this kind of Claude-specific content (it is stub-exempt). Re-running
 ## Project doctor — declared setup vs reality on this host (#418)
 
 `SessionStart hook → mise run doctor → dotfiles_setup.doctor`, baseline
-**`doctor.toml`** (sibling of `currency.toml` / `parity.toml`). Silent when
+**`doctor.toml`** (sibling of `currency.toml` / `rule-sync.toml`). Silent when
 healthy; always exits 0, so it cannot disrupt a session. `-- --verbose` for a PASS
 line per check, `-- --live` adds the MCP spawn + `claude mcp list` probes,
 `-- --strict` exits 1.

@@ -47,7 +47,7 @@ the official `@devcontainers/cli` (pinned in `mise.toml`).
 | `hk-common.pkl` | Shared step definitions (hygiene, safety, security, typos) reused by `hk.pkl` and `hk-image.pkl` |
 | `hk-image.pkl` | Image-only hook config for devcontainer validation |
 | `docker-bake.hcl` | BuildKit bake config (`dev`, `dev-load` build targets + `base`/`p2996-cache` CI stages); `IMAGE_REF` consolidates registry+image |
-| `renovate.json` · `currency.toml` · `parity.toml` | Declarative sets: Renovate deps; deep-tracked tools (`mise run tool-currency`); the cross-repo shared set (`mise run parity`, #354) |
+| `renovate.json` · `currency.toml` · `rule-sync.toml` | Declarative sets: Renovate deps; deep-tracked tools (`mise run tool-currency`); the cross-repo shared set (`mise run rule-sync`, #354) |
 | `AGENTS.md` | Agent-agnostic project instructions (this file) |
 | `CLAUDE.md` | Thin `@AGENTS.md` import stub for Claude Code |
 

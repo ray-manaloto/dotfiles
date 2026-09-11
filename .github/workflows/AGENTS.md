@@ -64,8 +64,8 @@ behavior unchanged):
    `github:agent-sh/agnix` backend (not `npm:agnix`).
 2. **contract-preflight** — full `mise install` + `fetch-depth: 0`;
    `dotfiles-setup verify run` over `suites.toml` (+ `orchestration`/`eval`,
-   #354), then checks out knowledge-base to `.parity/` and runs `mise run
-   parity` (hard-FAIL on a missing checkout; SKIPs locally), then **pytest**
+   #354), then checks out knowledge-base to `.rule-sync/` and runs `mise run
+   rule-sync` (hard-FAIL on a missing checkout; SKIPs locally), then **pytest**
    (#808 — the only place it runs in CI, so a bot PR that never runs
    `mise run ship` still gets tested).
 3. **base-prep** — `dotfiles-setup base-hash` → probe `:base-<hash16>`

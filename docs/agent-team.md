@@ -479,7 +479,7 @@ line is cited to the source report, which carries the file:line.
 | **Prove disjoint file ownership at DISPATCH time and demote overlapping chunks to sequential** — because the main session has no way to serialize subagents' worktree exits, so "merge sequentially" is an unenforceable norm | `claude-code-kit` |
 | **Shared state files must not be written from inside a worktree** — invisible to main until merge. We have this hazard already; it bit us this session | `claude-code-kit` |
 | **One markdown prompt, N model bindings** — generate `executor-low` / `executor` / `executor-high` from a single definition rather than three drifting files | `oh-my-claudecode` |
-| **A single declared source of truth for model routing**, with every skill forbidden from duplicating the table — our `parity.toml` / `currency.toml` pattern, applied to agent tiering | `oh-my-claudecode` |
+| **A single declared source of truth for model routing**, with every skill forbidden from duplicating the table — our `rule-sync.toml` / `currency.toml` pattern, applied to agent tiering | `oh-my-claudecode` |
 | **Keyword NOMINATES, primary deliverable DECIDES** — the cleanest fix for skill-trigger collisions, which we have several of | `cc10x` |
 | **Model/effort ladder tied to read-vs-write** — haiku+low for read-only scanners, opus+max only for adversarial review and requirement clarification | `claude-code-kit` |
 

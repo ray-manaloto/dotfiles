@@ -9,7 +9,7 @@ have produced on its own. Two jobs:
 2. **The loop gap.** Name where research and adversarial review are *supposed*
    to fire in our flow, and where they actually don't.
 
-Sibling of `currency.toml` (tool versions) and `parity.toml` (cross-repo set):
+Sibling of `currency.toml` (tool versions) and `rule-sync.toml` (cross-repo set):
 a declarative record that goes stale loudly rather than silently. Re-run the
 review when a marketplace publishes new skills.
 

@@ -220,8 +220,11 @@ def total_chars(entries: Iterable[ListingEntry]) -> int:
     return sum(entry.chars for entry in entries)
 
 
-def over_cap(entries: Iterable[ListingEntry]) -> list[ListingEntry]:
-    """Entries whose listed text exceeds the HARD 1,536-character cap.
+def over_cap(
+    entries: Iterable[ListingEntry],
+    max_description_chars: int = SKILL_DESCRIPTION_MAX,
+) -> list[ListingEntry]:
+    """Entries whose listed text exceeds the supplied per-entry cap.
 
     "Listed text" is ``desc_chars`` — for a skill, ``description`` +
     ``when_to_use`` combined.
@@ -233,4 +236,4 @@ def over_cap(entries: Iterable[ListingEntry]) -> list[ListingEntry]:
     the break-even — just do it directly"), so truncation removed the half of the
     trigger that says when NOT to use it.
     """
-    return [entry for entry in entries if entry.desc_chars > SKILL_DESCRIPTION_MAX]
+    return [entry for entry in entries if entry.desc_chars > max_description_chars]
