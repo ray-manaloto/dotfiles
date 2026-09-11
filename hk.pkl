@@ -412,6 +412,14 @@ local allSteps = new Mapping<String, Config.Step> {
     )
     check = "uv run --project python dotfiles-setup workflow-hooks"
   }
+  ["workflow_skip_cascade"] {
+    glob = List(
+      ".github/workflows/*.yml",
+      ".github/workflows/*.yaml",
+      "python/src/dotfiles_setup/workflow_skip_cascade.py"
+    )
+    check = "uv run --project python dotfiles-setup workflow-skip-cascade"
+  }
   //
   // #154: no pinact / pinact_update steps — they call the GitHub API to
   // resolve SHAs and hit the unauthenticated 60/hr rate limit in CI (the

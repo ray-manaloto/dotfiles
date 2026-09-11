@@ -734,7 +734,7 @@ per_path_tokens = { ".github/workflows/build-publish.yml" = [
 
 [[suite]]
 name = "ci.dev-prep-gate-exists"
-description = "The third-tier dev-image content-hash gate (#122) must exist: a dev-prep job probes ':dev-<hash>' (via dotfiles-setup dev-hash) to skip build+smoke on an unchanged image, and a dev-tag job pushes the ':dev-<hash>' marker ONLY after smoke-test passes (validated-marker invariant — what makes the probe-skip safe). Lives in the reusable build-publish.yml (Phase B / #118). Since #676 the probe itself lives in the dev-cache-probe composite: a matrix job has ONE outputs map, so a per-leg hit cannot be published as a job output and each leg asks the registry directly — which is why the composite is named here too."
+description = "The third-tier dev-image content-hash gate (#122) must exist: a dev-prep job probes ':dev-<hash>' (via dotfiles-setup dev-hash) to skip build+smoke on an unchanged image, and a dev-tag job pushes the ':dev-<hash>' marker ONLY after smoke-test passes (validated-marker invariant — what makes the probe-skip safe). The dev-tag token is ONE CONTIGUOUS BLOCK spanning the job key, its `needs:` and its `!cancelled()` rescue, and that shape is load-bearing: `require_tokens` matches each token anywhere in the file with no order or adjacency, so two separate tokens would still both match after the identical `if:` block was relocated onto another job — leaving dev-tag rescue-free with verify green. That is the #394 stand-in failure in miniature, and it is why build-publish.yml keeps dev-tag's explanatory comment ABOVE the job key rather than between `needs:` and `if:`. Lives in the reusable build-publish.yml (Phase B / #118). Since #676 the probe itself lives in the dev-cache-probe composite: a matrix job has ONE outputs map, so a per-leg hit cannot be published as a job output and each leg asks the registry directly — which is why the composite is named here too."
 category = "ci"
 check_type = "static"
 handler = "require_tokens"
@@ -745,8 +745,7 @@ paths = [
 per_path_tokens = { ".github/workflows/build-publish.yml" = [
     "\n  dev-prep:\n",
     "hash=$(uv run --project python dotfiles-setup dev-hash)",
-    "\n  dev-tag:\n",
-    "needs: [plan, build, smoke-test]\n    if: needs.smoke-test.result == 'success'",
+    "\n  dev-tag:\n    needs: [plan, build, smoke-test]\n    if: |\n      !cancelled()\n      && needs.smoke-test.result == 'success'",
 ], ".github/actions/dev-cache-probe/action.yml" = [
     "hash=$(uv run --project python dotfiles-setup dev-hash)",
     "if out=$(docker manifest inspect \"${cache_ref}\" 2>&1); then",
@@ -754,7 +753,7 @@ per_path_tokens = { ".github/workflows/build-publish.yml" = [
 
 [[suite]]
 name = "ci.smoke-test-survives-a-skipped-dev-prep"
-description = "smoke-test must carry `always() && needs.build.result == 'success'`. A SKIP propagates transitively down the whole `needs` chain and `always()` rescues only the job that declares it, never its descendants — so the nightly path's deliberately-skipped `dev-prep` flowed straight THROUGH a successful `build` into a smoke-test that had no `if:` at all. EVERY nightly checked — 12 of 12 scheduled runs from 2026-08-05 through 2026-09-08 — skipped smoke-test, dev-tag and manifest while the run reported `success`, so `:dev` never advanced and the failure was invisible. The six most recent at the time of writing: 33751870948, 33870070511, 33962268077, 34030262700, 34125796027, 34223065746 (2026-09-03..2026-09-08 inclusive, one per day). The six originally cited (31160356317, 31246703402, 32111681368, 32228142294, 32344505820, 32459225087) show the same pattern but are NOT consecutive and were NOT the most recent — they came off a stale `gh run list` page, and two identical invocations of that command minutes apart returned different result sets. Control arm: the PR path, where `dev-prep` runs and smoke-test runs with it (34023706702, 34108535802, 34272293197). The `strategy:` anchor is load-bearing — `manifest` carries a byte-identical `always() && needs.build.result == 'success'` clause, so without it the contract could be satisfied by the wrong job. dev-tag and manifest need no clause of their own: both already gate on `needs.smoke-test.result == 'success'`, which is self-consistent once smoke-test runs."
+description = "smoke-test must carry `always() && needs.build.result == 'success'`. A SKIP propagates transitively down the whole `needs` chain and `always()` rescues only the job that declares it, never its descendants — so the nightly path's deliberately-skipped `dev-prep` flowed straight THROUGH a successful `build` into a smoke-test that had no `if:` at all. EVERY nightly checked — 12 of 12 scheduled runs from 2026-08-05 through 2026-09-08 — skipped smoke-test, dev-tag and manifest while the run reported `success`, so `:dev` never advanced and the failure was invisible. The six most recent at the time of writing: 33751870948, 33870070511, 33962268077, 34030262700, 34125796027, 34223065746 (2026-09-03..2026-09-08 inclusive, one per day). The six originally cited (31160356317, 31246703402, 32111681368, 32228142294, 32344505820, 32459225087) show the same pattern but are NOT consecutive and were NOT the most recent — they came off a stale `gh run list` page, and two identical invocations of that command minutes apart returned different result sets. Control arm: the PR path, where `dev-prep` runs and smoke-test runs with it (34023706702, 34108535802, 34272293197). The `strategy:` anchor is load-bearing — `manifest` carries a byte-identical `always() && needs.build.result == 'success'` clause, so without it the contract could be satisfied by the wrong job. CORRECTED (#995): this description previously ended 'dev-tag and manifest need no clause of their own: both already gate on `needs.smoke-test.result == 'success'`, which is self-consistent once smoke-test runs.' That was WRONG, and writing it down is why the class shipped a SECOND time. Gating on a need's result is not a status-check function, and GitHub applies a default `success()` to every `if:` that omits one (expressions.md: 'A default status check of success() is applied unless you include one of these functions'), so the transitive skip kept flowing THROUGH a genuinely-successful smoke-test into dev-tag. Measured on schedule run 34474060289 (`7998d0c`): smoke-test success on all three legs, manifest success, dev-tag SKIPPED. Control arm PR run 34584169216, where dev-prep runs and dev-tag is success on all three. manifest survived only because its own clause carries `always()` AND explicitly tolerates `needs.dev-tag.result == 'skipped'` — it did not dodge the cascade, it whitelisted the casualty. dev-tag now carries `!cancelled()`, which GitHub's docs recommend over `always()` for a job that must not run on a cancelled workflow — and this one must not, since it moves registry tags. The class is now gated by `workflow_skip_cascade` (a graph walk over every workflow's `needs` DAG) rather than by anyone remembering this paragraph."
 category = "ci"
 check_type = "static"
 handler = "require_tokens"
@@ -1470,6 +1469,27 @@ tokens = [
     'def bash_budget_main(',
     'def find_violations(',
     'ALLOWLIST:',
+]
+
+[[suite]]
+name = "workflow.skip-cascade-enforcement"
+description = "The transitive-skip-cascade gate must stay wired end-to-end (cold review of b436168, finding F2): hk.pkl's `workflow_skip_cascade` step shells out to `dotfiles-setup workflow-skip-cascade`, main.py registers and dispatches the subcommand, the workflow_skip_cascade module (graph walk + control-arm canary) and its tests exist. Same shape as workflow.bash-logic-enforcement. This gate closes #982/#995 — a job downstream of a skippable job with no status-check function silently inherits a skip through the whole `needs:` DAG — and it shipped TWICE before anything checked the DAG at all; deleting this suite's own wiring left `verify run` at 151/0 with nothing noticing, which is exactly the F2 defect this suite exists to close."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    "hk.pkl",
+    "python/src/dotfiles_setup/main.py",
+    "python/src/dotfiles_setup/workflow_skip_cascade.py",
+    "tests/test_workflow_skip_cascade.py",
+]
+per_path_tokens = { "hk.pkl" = ['workflow_skip_cascade"] {', 'dotfiles-setup workflow-skip-cascade"'], "python/src/dotfiles_setup/main.py" = ['"workflow-skip-cascade",', '"workflow-skip-cascade": lambda'], "python/src/dotfiles_setup/workflow_skip_cascade.py" = ['def find_violations(', 'def workflow_skip_cascade_main('], "tests/test_workflow_skip_cascade.py" = ['def test_cli_wires_end_to_end()'] }
+tokens = [
+    'dotfiles-setup workflow-skip-cascade"',
+    'def workflow_skip_cascade_main(',
+    'def find_violations(',
+    'def assert_predicate_is_live(',
 ]
 
 [[suite]]
