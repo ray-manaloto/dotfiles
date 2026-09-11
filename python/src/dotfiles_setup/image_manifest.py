@@ -61,10 +61,12 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
 
 __all__ = [
+    "EXPECTED_OS",
     "ArchTarget",
     "Inspector",
     "ResolvedTag",
     "docker_inspector",
+    "index_entry_digest",
     "parse_matrix",
     "real_platform_entries",
     "resolve_arch_tag",
@@ -233,9 +235,17 @@ def resolve_arch_tag(ref: str, *, inspector: Inspector) -> ResolvedTag:
     )
 
 
-def _index_entry_digest(
+def index_entry_digest(
     entries: Sequence[Mapping[str, Any]], arch: str, index_ref: str
 ) -> str:
+    """The one real digest ``entries`` lists for ``arch``, or raise.
+
+    ``entries`` comes from :func:`real_platform_entries`. Exported (not
+    module-private) because :mod:`dotfiles_setup.image_promote`
+    reads the same digest out of a candidate ``:pr-N`` index — the #1007
+    staleness guard reuses this seam rather than writing a second registry
+    reader (`.claude/rules/use-tool-builtins.md`).
+    """
     matches = [
         entry
         for entry in entries
@@ -301,7 +311,7 @@ def verify_arch_tags(
     lines: list[str] = []
     digests: list[str] = []
     for target in targets:
-        entry_digest = _index_entry_digest(entries, target.arch, index_ref)
+        entry_digest = index_entry_digest(entries, target.arch, index_ref)
         tag = f"{index_ref}-{target.tag_suffix}"
         resolved = resolve_arch_tag(tag, inspector=inspector)
         expected_platform = f"{EXPECTED_OS}/{target.arch}"

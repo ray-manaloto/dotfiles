@@ -24,6 +24,7 @@ from dotfiles_setup.image_manifest import (
     parse_matrix,
     verify_arch_tags,
 )
+from dotfiles_setup.image_promote import check_promote_eligibility
 from dotfiles_setup.p2996_hash import _extract_bake_variable
 from dotfiles_setup.platform_target import (
     host_platform,
@@ -2279,10 +2280,41 @@ def _handle_verify_arch_tags(cmd: ImageCommand) -> int:
     return 0
 
 
+def _handle_verify_promote_eligibility(cmd: ImageCommand) -> int:
+    """CLI: `promote`'s pre-retag staleness guard (#1007).
+
+    Emits `eligible=`/`status=` GitHub-Actions-output lines to stdout (the
+    workflow step redirects them straight to `$GITHUB_OUTPUT`, per
+    `resolve-analysis-ref`'s existing pattern) and the human-readable
+    per-architecture report to stderr, so a `>> "$GITHUB_OUTPUT"` redirect
+    never captures anything but `key=value` pairs.
+
+    Exit codes:
+        0 — ELIGIBLE: retag is safe.
+        1 — STALE or UNPROVABLE: never retag; the reason is on stderr.
+    A hard failure (malformed OCI shape, wrong platform, registry
+    auth/network error) is NOT caught here — it propagates as an uncaught
+    exception (traceback, nonzero exit), never reinterpreted as either
+    verdict above. See :mod:`dotfiles_setup.image_promote`'s module
+    docstring for the full four-way classification.
+    """
+    verdict = check_promote_eligibility(
+        repo_root=_project_root(),
+        candidate_ref=cmd.image_ref,
+        inspector=docker_inspector(),
+    )
+    for line in verdict.lines:
+        sys.stderr.write(f"{line}\n")
+    sys.stdout.write(f"eligible={'true' if verdict.eligible else 'false'}\n")
+    sys.stdout.write(f"status={verdict.status}\n")
+    return 0 if verdict.eligible else 1
+
+
 def main(cmd: ImageCommand) -> int:
     """CLI entry point for image operations (command → handler dispatch)."""
     handlers: dict[str, Callable[[ImageCommand], int]] = {
         "verify-arch-tags": _handle_verify_arch_tags,
+        "verify-promote-eligibility": _handle_verify_promote_eligibility,
         "smoke-script": _handle_smoke_script,
         "smoke": _handle_smoke,
         "size-report": _handle_size_report,
