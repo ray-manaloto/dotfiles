@@ -34,7 +34,7 @@ is the **built-in `chezmoi.os` runtime fact**:
 
 Do **not** introduce a custom `is_container` data variable or env-var-based
 detection. We tried that and it caused real bugs — see
-`.Codex/rules/use-tool-builtins.md` and memory `feedback_use_tool_builtins.md`.
+`.claude/rules/use-tool-builtins.md` and memory `feedback_use_tool_builtins.md`.
 
 ## Template Variables (custom user-defined)
 

@@ -1429,6 +1429,30 @@ tokens = [
 ]
 
 [[suite]]
+name = "workflow.skills-mirror-enforcement"
+description = "The .agents/skills mirror generator must stay wired end-to-end (#1006): hk.pkl's `skills_mirror_parity` step shells out to `dotfiles-setup skills-mirror --check`, mise.toml wraps the bare (write) form as a thin task, main.py registers and dispatches the `skills-mirror` subcommand, the skills_mirror module (RULES/PER_FILE/EXEMPT/CODEX_ONLY + render/find_drift/find_stale_per_file/write_mirror) + its tests exist. Replaces the old `session_review_skill_parity` step, whose `cmp -s` covered exactly one of 32 skill pairs — the other 31 drifted silently, including a real behavioural regression (devcontainer-sync never received PR #804's fix) and two mechanical corruptions (oh-my-claudecode -> oh-my-Codex; a CLAUDE.md/AGENTS.md sentence made self-referential). `--check` also fails on a stale `PER_FILE` pattern (cold-review F8), naming the skill. Same shape as workflow.bash-logic-enforcement."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    "hk.pkl",
+    "mise.toml",
+    "python/src/dotfiles_setup/main.py",
+    "python/src/dotfiles_setup/skills_mirror.py",
+    "tests/test_skills_mirror.py",
+]
+per_path_tokens = { "hk.pkl" = ['skills_mirror_parity"] {', 'dotfiles-setup skills-mirror --check"'], "mise.toml" = ['run = "uv run --project python dotfiles-setup skills-mirror"'], "python/src/dotfiles_setup/main.py" = ['"skills-mirror",', '"skills-mirror": lambda'], "python/src/dotfiles_setup/skills_mirror.py" = ['def find_drift(', 'def write_mirror(', 'def skills_mirror_main('] }
+tokens = [
+    'dotfiles-setup skills-mirror --check"',
+    'def skills_mirror_main(',
+    'def find_drift(',
+    'def write_mirror(',
+    'EXEMPT: frozenset[str]',
+    'CODEX_ONLY: frozenset[str]',
+]
+
+[[suite]]
 name = "workflow.instructions-observer-wiring"
 description = "InstructionsLoaded observer wiring (#917): the hot-path observer must stay wired end-to-end — .claude/settings.json registers the InstructionsLoaded hook invoking `python -m dotfiles_setup.instructions_observer` directly (never the console script, per C1's stdlib-only hot-path budget), hook_selfcheck.py's _SETTINGS_WIRING asserts that registration on every ship/land, main.py registers and dispatches the `instructions-report` subcommand, mise.toml wraps it as a task, and both the observer and report modules plus their tests exist. Modelled on workflow.bash-logic-enforcement; per_path_tokens bind CALL SITES (the wired command string, the dispatch lambda, the settings-wiring tuple entry), never definitions alone — workflow.apt-pins-enforcement's description records why a definition-only token stayed green through a deleted wiring line."
 category = "workflow"

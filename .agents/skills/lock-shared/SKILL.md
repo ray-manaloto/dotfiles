@@ -10,7 +10,7 @@ user-invocable: true
 name against `shared.toml`, routes into the devcontainer when this host
 cannot resolve linux assets, and verifies platform coverage afterwards. The
 recipe lives in `python/src/dotfiles_setup/lock_shared.py`; the task is a thin
-caller (`.Codex/rules/zero-bash-logic.md`).
+caller (`.claude/rules/zero-bash-logic.md`).
 
 ```bash
 mise run lock-shared -- "uv"              # derive host capability, auto-route
@@ -35,7 +35,7 @@ files and neither covers the other. `lock-image` touches only the two
 `.devcontainer/*.lock` files; it will never repair `.config/mise/mise.lock`.
 
 Bare `mise lock` is never the answer for any of them: it re-locks the whole
-file for the current platform. See `.Codex/rules/do-not.md` and
+file for the current platform. See `.claude/rules/do-not.md` and
 `feedback_mise_lock_whole_file_is_destructive`.
 
 ## Why routing exists: the asset is chosen by the RESOLVING host
@@ -96,6 +96,6 @@ it cannot drift into being an eleventh place to update.
 
 ## See also
 
-- `.Codex/skills/lock-image/SKILL.md` — the sibling task and its own traps.
-- `.Codex/rules/do-not.md` — bare `mise lock` / `mise install` are destructive.
+- `.agents/skills/lock-image/SKILL.md` — the sibling task and its own traps.
+- `.claude/rules/do-not.md` — bare `mise lock` / `mise install` are destructive.
 - `python/src/dotfiles_setup/lock_shared.py` — the recipe and its full history.

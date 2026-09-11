@@ -193,7 +193,7 @@ v1-v6**, and each of them independently kills a finding that cost a full round.
   version was proposed and deliberately not adopted (issue #608 §N1), and the
   asymmetry is worth stating because a sibling change in the same batch DID add
   clauses to two eager rules. Those clauses each shipped **with an enforcing
-  call site**: `agent-report-persistence.md` rule 5 rides on `clear-prep`'s
+  call site**: `agent-report-persistence.md` rule 5 rides on `session-handoff`'s
   audit step, and the `clarify-before-acting.md` edit was a factual correction
   to a matcher that `hook_selfcheck` asserts. The write-time clause audit has
   **no available enforcing site** — a machine cannot check "does this clause
@@ -317,14 +317,14 @@ Five checks, in order. Any "no" means fix the brief, not the reviewer.
 
 ## See also
 
-- `.Codex/agents/adversarial-critic.md` — attacks a *proposal* (would this gate
+- `.claude/agents/adversarial-critic.md` — attacks a *proposal* (would this gate
   have caught its own motivating defect?), where this skill bounds a review of
   *code*.
 - `docs/research/kb/reports/session-20260806-review-loop-reflection.md` — the
   full #601 measurement this skill is derived from, including the DROPPED table.
 - `tests/AGENTS.md` § "What a good test is here" — the mutation-signature
   anti-pattern, the test-side half of the same failure.
-- `.Codex/rules/probes-need-a-control-arm.md` — arm both directions; a review
+- `.claude/rules/probes-need-a-control-arm.md` — arm both directions; a review
   that can only return findings is the loop-level instance of the same error.
-- `.Codex/rules/agent-report-persistence.md` — persist every review report
+- `.claude/rules/agent-report-persistence.md` — persist every review report
   verbatim, at receipt, and persist the **brief** alongside it.

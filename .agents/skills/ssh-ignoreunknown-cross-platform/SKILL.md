@@ -81,7 +81,7 @@ templating.
 
 This is a special case of the **"use the tool's built-in mechanism
 before inventing custom logic"** principle from
-`feedback_use_tool_builtins.md` and `.Codex/rules/use-tool-builtins.md`.
+`feedback_use_tool_builtins.md` and `.claude/rules/use-tool-builtins.md`.
 Before reaching for chezmoi templating, conditional file generation,
 or platform-specific bind mounts, check if the tool has a built-in
 escape hatch. OpenSSH has had `IgnoreUnknown` since version 4.4 (2006).

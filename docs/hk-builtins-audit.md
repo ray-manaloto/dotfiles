@@ -93,7 +93,7 @@ opinion about them, and neither does this table beyond recording them.
 | `require_pipefail` | hk.pkl |
 | `ruff` | hk.pkl |
 | `ruff_format` | hk.pkl |
-| `session_review_skill_parity` | hk.pkl |
+| `skills_mirror_parity` | hk.pkl |
 | `test` | hk.pkl |
 | `uv_lock_check` | hk.pkl |
 | `workflow_hk_skip_hooks` | hk.pkl |

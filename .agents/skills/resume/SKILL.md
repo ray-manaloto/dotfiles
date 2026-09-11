@@ -52,12 +52,12 @@ dotfiles-setup verify run
 ```
 
 Trust the real `rc`/`conclusion`, never a piped tail
-(`.Codex/rules/verify-before-advancing.md`).
+(`.claude/rules/verify-before-advancing.md`).
 
 ### 5. Continue
 Proceed with the next task from the handoff. If it was ambiguous, resolve it
 with the user (`AskUserQuestion`) before acting
-(`.Codex/rules/clarify-before-acting.md`).
+(`.claude/rules/clarify-before-acting.md`).
 
 ## Checklist
 
@@ -69,6 +69,6 @@ with the user (`AskUserQuestion`) before acting
 
 ## See also
 
-- `.Codex/skills/handoff/SKILL.md` — the sending side.
+- `.agents/skills/handoff/SKILL.md` — the sending side.
 - `docs/handoffs/README.md` — the protocol + template.
-- `.Codex/rules/verify-before-advancing.md` — trust the artifact, not a tail.
+- `.claude/rules/verify-before-advancing.md` — trust the artifact, not a tail.

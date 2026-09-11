@@ -80,7 +80,7 @@ For everything changed this session (uncommitted **and** recent commits not yet
 reflected in docs), find and update every affected doc. Walk these in order:
 
 1. **Directory docs.** For each touched directory, update its `AGENTS.md`
-   (the `AGENTS.md` is a thin `@AGENTS.md` stub — edit `AGENTS.md`). Root
+   Root
    `AGENTS.md` for cross-cutting changes (pipeline shape, build types, tasks).
 2. **Cross-references.** Grep for anything renamed, moved, deleted, or
    re-timed and fix every hit:
@@ -94,7 +94,7 @@ reflected in docs), find and update every affected doc. Walk these in order:
    checklists; keep point-in-time analysis legible (mark the old state as
    baseline rather than rewriting the reasoning). Add any newly-consulted
    repos to a `## GitHub repos touched` section
-   (`.Codex/rules/research-repo-enumeration.md`).
+   (`.claude/rules/research-repo-enumeration.md`).
 4. **Issue / epic checklists** on GitHub — tick boxes, file follow-ups,
    cross-link (`gh issue edit`, `gh issue comment`). **On a self-triggered
    run**, step 4's review gate applies to these two verbs before you run
@@ -111,8 +111,8 @@ reflected in docs), find and update every affected doc. Walk these in order:
    **This step used to print an ad-hoc `git grep | while read` loop, and it
    was retired 2026-07-24 because it was actively misleading**: it matched
    bare basenames and reported **~120 false MISSING hits** in one run (a
-   `.Codex/rules/*.md` "see also" cites `do-not.md`, which resolves at
-   `.Codex/rules/do-not.md`). Filtering by "does this basename exist anywhere
+   `.claude/rules/*.md` "see also" cites `do-not.md`, which resolves at
+   `.claude/rules/do-not.md`). Filtering by "does this basename exist anywhere
    in `git ls-files`" still left 58, nearly all legitimately external —
    container paths, gitignored artifacts, memory files living outside the
    repo, illustrative examples. Exactly one was real. The checker encodes all
@@ -126,7 +126,7 @@ reflected in docs), find and update every affected doc. Walk these in order:
    re-add a manual loop.
 
 **Constraints (machine-enforced — respect or the gate fails):**
-- Markdown size is **class-aware** — see `.Codex/rules/md-size-budgets.md`
+- Markdown size is **class-aware** — see `.claude/rules/md-size-budgets.md`
   for the table (hk step **`md_size_budget`**, which replaced the retired
   `claude_md_size_limit`). An `AGENTS.md` additionally carries agnix
   AGM-003's 12,000-char cap — **Windsurf's rule, not Anthropic's** — which
@@ -138,10 +138,10 @@ reflected in docs), find and update every affected doc. Walk these in order:
   pointer (rule files / `action.yml` / other docs are the authority) over
   deleting load-bearing facts. Long single-line table rows are more
   line-efficient than wrapped prose.
-- Project docs/rules/cross-refs point to `AGENTS.md` (which imports
-  `AGENTS.md`), never reference `AGENTS.md` directly
-  (`feedback_refer_to_claude_md_not_agents_md`).
-- Follow `.Codex/rules/` (zero-skip, ci-local-parity, use-tool-builtins).
+- Project docs/rules/cross-refs point to `AGENTS.md` directly — there is no `CLAUDE.md` layer
+  to route through on this side (`feedback_refer_to_claude_md_not_agents_md`
+  describes the `.claude`-side convention this inverts).
+- Follow `.claude/rules/` (zero-skip, ci-local-parity, use-tool-builtins).
 
 ## 3. Persist recovery context — two layers
 
@@ -150,7 +150,7 @@ Both, every time. They cover different recovery surfaces.
 ### a. Durable memory (survives `/clear` AND fresh clones; auto-loaded each session)
 
 Write or update a `project_*` (or `feedback_*`) file under
-`~/.Codex/projects/-Users-rmanaloto-dev-github-ray-manaloto-dotfiles/memory/`
+`~/.claude/projects/-Users-rmanaloto-dev-github-ray-manaloto-dotfiles/memory/`
 with frontmatter (`name`, `description`, `metadata.type`). Record: what
 shipped, what's next (with issue/PR numbers), locked decisions, and any
 non-obvious gotcha. Convert relative dates to absolute. Add a one-line
@@ -160,7 +160,7 @@ file rather than duplicating; delete memories proven wrong.
 ### b. Local handoff (survives `/clear`; gitignored, this-clone-only)
 
 Write `.agent/plans/session-<YYYY-MM-DD>[-letter].md`
-(`.Codex/rules/agent-artifact-conventions.md` — handoffs are plans). The
+(`.claude/rules/agent-artifact-conventions.md` — handoffs are plans). The
 handoff must be **self-sufficient** — the resume prompt (step 5) only points
 here, so *everything the next session needs lives in this file*. Include:
 **State at handoff** (branch/PR/merge state, gate results), **what shipped**,
@@ -171,7 +171,7 @@ overwriting.
 ### c. Research artifacts — verbatim, receipt-time (audit coverage here)
 
 Full subagent reports must already be on disk per
-`.Codex/rules/agent-report-persistence.md`: every findings-bearing agent's
+`.claude/rules/agent-report-persistence.md`: every findings-bearing agent's
 final report persisted VERBATIM under `docs/research/kb/reports/agents/` at the
 moment it was received — condensed notepad summaries do NOT count (near-loss
 observed 2026-07-05: 13 reports existed only in context until a manual
@@ -195,7 +195,7 @@ dotfiles-setup verify run                       # if .devcontainer/ or contracts
 ```
 
 Stage specific paths (never `git add .` — phantom `.agent/state/**` files;
-`.Codex/rules/do-not.md`). Commit doc updates with the standard trailers.
+`.claude/rules/do-not.md`). Commit doc updates with the standard trailers.
 The handoff (`.agent/plans/`) is gitignored and memory lives outside the repo —
 neither is committed. If on `main`, branch first; open a PR only if the user
 asks.
@@ -278,4 +278,4 @@ Then a one-line reminder: *"Run `/clear`, paste that line, and
 
 ## See also
 
-- `.Codex/skills/session-resume/SKILL.md` — invoked by the resume prompt to read the newest handoff and reconcile it against live repo/PR state after `/clear`.
+- `.agents/skills/session-resume/SKILL.md` — invoked by the resume prompt to read the newest handoff and reconcile it against live repo/PR state after `/clear`.

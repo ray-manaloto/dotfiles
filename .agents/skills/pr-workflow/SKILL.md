@@ -31,10 +31,10 @@ mise run land -- <PR#>             # (after it auto-merges) confirm merged → m
 1. **Preflight**: refuses `main`/detached HEAD and dirty trees (commit
    first — the gates must validate exactly what ships).
 2. **Path-aware gate matrix, cheap-first** (from
-   `.Codex/rules/verify-before-advancing.md`): `mise run lint` →
+   `.claude/rules/verify-before-advancing.md`): `mise run lint` →
    pytest → `dotfiles-setup verify run` → `hook-selfcheck` (always-run:
    drives the wired host-side hooks end-to-end — see
-   `.Codex/rules/mise-tasks-only.md`); + `pin-actions` when `.github/**`
+   `.claude/rules/mise-tasks-only.md`); + `pin-actions` when `.github/**`
    changed; + `lint-docs` when agent docs changed; + **`mise run sync --
    --full` (hard gate, no override)** when the diff touches the
    devcontainer/image/validation surface (`SURFACE_PATTERNS` in pr.py:
@@ -146,6 +146,6 @@ when new validation code lands).
 
 ## See also
 
-- `.Codex/skills/devcontainer-sync/SKILL.md` — the sync workflow land calls.
-- `.Codex/rules/verify-before-advancing.md` — the check matrix ship encodes.
-- `.Codex/rules/gh-cli-watch.md` — why buckets, never watch exit codes.
+- `.agents/skills/devcontainer-sync/SKILL.md` — the sync workflow land calls.
+- `.claude/rules/verify-before-advancing.md` — the check matrix ship encodes.
+- `.claude/rules/gh-cli-watch.md` — why buckets, never watch exit codes.

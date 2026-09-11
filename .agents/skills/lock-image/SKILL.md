@@ -10,7 +10,7 @@ user-invocable: true
 config, installs the image's **pinned** mise, converges under GitHub rate
 limits, and collects only after verifying platform coverage against `HEAD`.
 The recipe lives in `python/src/dotfiles_setup/image_lock.py`; the task is a
-thin caller (`.Codex/rules/zero-bash-logic.md`).
+thin caller (`.claude/rules/zero-bash-logic.md`).
 
 ```bash
 mise run lock-image                            # derive platforms, auto-route
@@ -38,10 +38,10 @@ even after a clean `mise run lock-shared`.
 **A shared tool is `lock-shared`'s, not `lock`'s.** `mise run lock` resolves
 on THIS host, and macOS picks a different release asset than linux for at
 least one shared tool — an entry that is wrong only on the platform no local
-gate exercises. See `.Codex/skills/lock-shared/SKILL.md`.
+gate exercises. See `.agents/skills/lock-shared/SKILL.md`.
 
 Bare `mise lock` is never the answer for either — it re-locks the whole file
-for the current platform. `.Codex/rules/do-not.md` and
+for the current platform. `.claude/rules/do-not.md` and
 `feedback_mise_lock_whole_file_is_destructive` carry that.
 
 ## Three ways a regen looks fine and is not

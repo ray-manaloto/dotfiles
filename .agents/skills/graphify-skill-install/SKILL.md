@@ -15,15 +15,15 @@ task is a thin caller of `dotfiles-setup graphify skill-install`.
 
 `graphify install` / `graphify <platform> install` / `graphify hook
 install` / `graphify --watch` are hard-banned against this repo
-(`.Codex/rules/do-not.md` #8): a bare install mutates `~/.Codex` (~43 KB
-of skill files plus an appended `~/.Codex/AGENTS.md`), and a
+(`.claude/rules/do-not.md` #8): a bare install mutates `~/.claude` (~43 KB
+of skill files plus an appended `~/.claude/CLAUDE.md`), and a
 codex-platform install ALSO appends the line-budgeted root `AGENTS.md` —
 this repo's size gate rejects that append. `CLAUDE_CONFIG_DIR` is NOT
 containment; both writes are hardcoded into graphify's installer.
 
 This repo's own installer copies only `SKILL.md`, its optional
 `references/` sidecar, and `.graphify_version` into the project directory
-you name — nothing under `$HOME`, no `AGENTS.md`/`AGENTS.md` append, no
+you name — nothing under `$HOME`, no `AGENTS.md`/`CLAUDE.md` append, no
 `.codex/hooks.json` patch. It reads WHICH platform maps to WHICH relative
 path straight from the installed graphify package's own
 `_PLATFORM_CONFIG`, so the placement table can never drift from what that
@@ -32,7 +32,7 @@ package actually declares.
 ## When to reach for it
 
 - A pinned graphify version bump (`python/pyproject.toml`) changed the
-  packaged skill bundle for `Codex` and `.Codex/skills/graphify/` needs
+  packaged skill bundle for `claude` and `.claude/skills/graphify/` needs
   refreshing to match.
 - You are deliberately adding a NEW platform's skill surface to this repo
   (see the two "not obvious" decisions below before you do).
@@ -41,7 +41,7 @@ package actually declares.
   missing.
 
 ```bash
-mise run graphify-skill-install -- Codex   # refresh .Codex/skills/graphify/
+mise run graphify-skill-install -- claude   # refresh .claude/skills/graphify/
 mise run graphify-skill-install -- agents   # would write .agents/skills/graphify/ — see below first
 mise run graphify-skill-install -- codex    # refresh .codex/skills/graphify/ — adopted, tracked
 ```
@@ -53,8 +53,8 @@ mise run graphify-skill-install -- codex    # refresh .codex/skills/graphify/ �
   redirect stub (marked `DELIBERATE STUB` inside the file) — not a failed
   install — because the vendor's generic bundle would tell any agent
   reading it to invoke a global `graphify` binary directly, which is
-  exactly what `.Codex/rules/graphify-first.md` and the repo's mise tasks
-  exist to prevent. Codex has a PreToolUse hook enforcing the
+  exactly what `.claude/rules/graphify-first.md` and the repo's mise tasks
+  exist to prevent. Claude Code has a PreToolUse hook enforcing the
   redirect regardless of `SKILL.md` content; no such hook exists for other
   agents reading `.agents/skills/`, so the stub IS the enforcement there.
   Running it against `agents` will not fail by itself, but silently
@@ -70,7 +70,7 @@ mise run graphify-skill-install -- codex    # refresh .codex/skills/graphify/ �
   check-ignore -v` on a skills file and a runtime file if you touch that
   pattern), so the install this task produces IS the durable mechanism —
   running it for `codex` is the normal, sanctioned refresh path, same as
-  `Codex`. `.codex/config.toml`, `.codex/hooks.json` and `.codex/agents/`
+  `claude`. `.codex/config.toml`, `.codex/hooks.json` and `.codex/agents/`
   stay ignored; only `.codex/skills/` is tracked.
 - **A destination that already differs from the packaged source is backed
   up to `SKILL.md.bak`, not silently overwritten** — but the `.bak` file is
@@ -78,7 +78,7 @@ mise run graphify-skill-install -- codex    # refresh .codex/skills/graphify/ �
   running and delete a `.bak` you don't want committed.
 - **`known_platforms()` enumerates graphify's `_PLATFORM_CONFIG` keys, and
   `gemini` is deliberately absent** — it has no entry in that table (it
-  installs Codex's monolith body through a different code path this
+  installs claude's monolith body through a different code path this
   installer does not replicate). Asking for `gemini` raises `KeyError`,
   same as any other typo.
 - **This only ever writes inside the `project_dir` you pass — default is
@@ -98,8 +98,8 @@ mise run graphify-skill-install -- codex    # refresh .codex/skills/graphify/ �
 
 ## See also
 
-- `.Codex/rules/do-not.md` #8 — the ban this installer exists to work around.
-- `.Codex/rules/graphify-first.md` — the query-time doctrine this installer
+- `.claude/rules/do-not.md` #8 — the ban this installer exists to work around.
+- `.claude/rules/graphify-first.md` — the query-time doctrine this installer
   has nothing to do with (that rule governs reading the graph; this skill
   governs installing the skill files that describe how).
 - `doctor.toml`'s `[graphify]` section and `hk.pkl`'s `graphify_skill_surface`

@@ -41,7 +41,7 @@ this is the list the gate would have shown you without the bump.
 list. Options in rough order of preference: fix them (often mechanical), narrow
 the rule in `python/pyproject.toml`'s `[tool.ruff.lint]` with a stated reason,
 or raise it with Ray. Not an option: an inline suppression —
-`.Codex/rules/zero-skip-policy.md` and the `no_lint_skip` hk step both refuse
+`.claude/rules/zero-skip-policy.md` and the `no_lint_skip` hk step both refuse
 `noqa`.
 
 **Retired** — the old version fired these and the new one does not. Read this

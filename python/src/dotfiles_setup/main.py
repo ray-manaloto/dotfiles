@@ -128,6 +128,7 @@ from dotfiles_setup.schema_vendor import check_main as schema_vendor_check_main
 from dotfiles_setup.schema_vendor import refresh_main as schema_vendor_refresh_main
 from dotfiles_setup.session_review import LaneChoice, session_review_main
 from dotfiles_setup.session_state import main as session_state_main
+from dotfiles_setup.skills_mirror import skills_mirror_main
 from dotfiles_setup.sync import SyncOptions, sync_main
 from dotfiles_setup.token_audit import preflight_main, token_audit_main
 from dotfiles_setup.verify import main as verify_main
@@ -477,6 +478,28 @@ def _add_instructions_report_subcommand(subparsers: _SubParsers) -> None:
     )
 
 
+def _add_skills_mirror_subcommand(subparsers: _SubParsers) -> None:
+    """Register `skills-mirror` as its own function.
+
+    Same PLR0915 statement-ceiling reason `_add_instructions_report_subcommand`
+    is its own function — `_add_honesty_subcommands` sits at ruff's ceiling.
+
+    Args:
+        subparsers: The parent subparsers action to attach this to.
+    """
+    skills_mirror_parser = subparsers.add_parser(
+        "skills-mirror",
+        help="Generate/check the .agents/skills mirror of .claude/skills. "
+        "Bare form WRITES every drifted skill; --check is read-only and "
+        "exits 1 naming every drifted skill",
+    )
+    skills_mirror_parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Report drift without writing",
+    )
+
+
 def _add_hk_builtins_audit_subcommand(subparsers: _SubParsers) -> None:
     """Register `hk-builtins-audit` as its own function (#994).
 
@@ -810,6 +833,22 @@ def _add_honesty_subcommands(subparsers: _SubParsers) -> None:
         action="store_true",
         help="Print a line when the comparison is clean instead of staying silent",
     )
+
+
+def _add_honesty_and_skills_mirror_subcommands(subparsers: _SubParsers) -> None:
+    """Call `_add_honesty_subcommands` + `_add_skills_mirror_subcommand`.
+
+    `setup_parser` is itself at ruff's PLR0915 statement ceiling, same as
+    `_add_honesty_subcommands` — this thin combinator keeps `setup_parser`'s
+    own statement count unchanged (still one call site here) while adding
+    the `skills-mirror` registration alongside it, rather than growing
+    either function past its ceiling.
+
+    Args:
+        subparsers: The parent subparsers action to attach both to.
+    """
+    _add_honesty_subcommands(subparsers)
+    _add_skills_mirror_subcommand(subparsers)
 
 
 def _add_consistency_subcommands(subparsers: _SubParsers) -> None:
@@ -1811,7 +1850,7 @@ def setup_parser() -> argparse.ArgumentParser:
     apt_pins_parser.add_argument(
         "--json", action="store_true", help="Emit the probe result as JSON"
     )
-    _add_honesty_subcommands(subparsers)
+    _add_honesty_and_skills_mirror_subcommands(subparsers)
     subparsers.add_parser(
         "workflow-hooks",
         help="Enforce ADR-0001: every CI job that commits or pushes must set "
@@ -2445,6 +2484,9 @@ def _build_command_handlers(
             apt_pins_main(project_root, json_output=args.json)
         ),
         "bash-budget": lambda: sys.exit(bash_budget_main(project_root)),
+        "skills-mirror": lambda: sys.exit(
+            skills_mirror_main(project_root, check=args.check)
+        ),
         "audit-aggregate": lambda: sys.exit(
             modernization_audit_main(
                 project_root,

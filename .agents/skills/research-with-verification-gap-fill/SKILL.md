@@ -3,7 +3,7 @@ name: research-with-verification-gap-fill
 description: "Use when running parallel-scientist research - ALWAYS follow with an opus verification stage that re-probes load-bearing claims and surfaces gaps. Skipping the verifier almost shipped a wrong recommendation in session 2026-04-07e."
 type: skill-draft
 status: draft
-inspired-by: oh-my-Codex:sciomc + lessons from session 2026-04-07e
+inspired-by: oh-my-claudecode:sciomc + lessons from session 2026-04-07e
 applicability: any open-ended research task that will inform a load-bearing recommendation
 ---
 
@@ -11,7 +11,7 @@ applicability: any open-ended research task that will inform a load-bearing reco
 
 ## Status
 
-Draft. Lives at `.Codex/skills/research-with-verification-gap-fill/SKILL.md`
+Draft. Lives at `.agents/skills/research-with-verification-gap-fill/SKILL.md`
 (this file) until validated across at least one more session. Remove this
 Status section once promoted.
 
@@ -112,7 +112,7 @@ of wrong-direction implementation work.
 
 ## See also
 
-- `oh-my-Codex:sciomc` skill — the formal protocol this draft
+- `oh-my-claudecode:sciomc` skill — the formal protocol this draft
   is inspired by
 - `docs/research/runs/research-20260407-ssh-devcontainer/` — the session
   that produced this lesson
