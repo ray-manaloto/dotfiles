@@ -1072,13 +1072,28 @@ def check_listing_budget(setup: Setup) -> list[str]:
     description_cap = listing_baseline.get("max_description_chars")
     if type(description_cap) is not int or description_cap <= 0:
         description_cap = SKILL_DESCRIPTION_MAX
-    findings = [
+    findings: list[str] = []
+    if description_cap > SKILL_DESCRIPTION_MAX:
+        # An override above the harness-true truncation cap cannot loosen
+        # reporting: the harness truncates at SKILL_DESCRIPTION_MAX regardless
+        # of what this repo configures, so honouring a higher cap here would
+        # make the check pass while real truncation kept happening (the exact
+        # shape `.claude/rules/probes-need-a-control-arm.md` rule 9 forbids).
+        # Report the misconfiguration and clamp for the reporting pass below.
+        findings.append(
+            f"doctor.toml sets max_description_chars={description_cap}, above "
+            f"the harness-true truncation cap of {SKILL_DESCRIPTION_MAX} — the "
+            f"override cannot loosen reporting; entries over "
+            f"{SKILL_DESCRIPTION_MAX} chars are still reported below"
+        )
+        description_cap = SKILL_DESCRIPTION_MAX
+    findings.extend(
         f"{entry.kind} {entry.name!r} ({entry.source}) has a "
         f"{entry.desc_chars}-char description over the HARD {description_cap} "
         f"cap — the tail is TRUNCATED SILENTLY, taking the keywords it is matched "
         f"on with it: {entry.path}"
         for entry in over_cap(setup.listing, description_cap)
-    ]
+    )
     ceiling = listing_baseline.get("max_chars")
     if isinstance(ceiling, int):
         total = total_chars(setup.listing)

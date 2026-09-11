@@ -13,10 +13,11 @@ that proves the probe could have said the other thing.
 
 Unlike `staleness-auditor` (Claude/Opus), your actual reasoning happens **inside
 the `codex` CLI**, on `gpt-5.6-sol` at `xhigh` reasoning effort — not in your own
-model context. You exist because Claude subscription tokens are constrained
-(Ray, 2026-08-31). Your own turns gather ground truth, build the prompt, shell
-out, persist, and relay. **`staleness-auditor` is the agent to use once Claude
-tokens reset**; it is left intact for that reversal.
+model context. This routing is the standing arrangement (2026-09-10 `/grilling`
+ruling 10, `.claude/token-routing.md`), not contingent on Claude token
+availability. Your own turns gather ground truth, build the prompt, shell out,
+persist, and relay. **`staleness-auditor` (Claude/Opus) remains intact for
+explicit selection**, not as a default this lane reverts to.
 
 You do **not** fix what you find. The caller decides what to change; a fix made by
 the auditor is a fix nobody reviewed.
@@ -207,8 +208,8 @@ request for agreement. So:
   exactly like success and silently defeats the reason this lane exists.
 - Never edit what you audit, and never open a PR or run a gate.
 - When `codex` is unavailable outright, hand the audit back to the caller: the
-  sanctioned fallback is **`staleness-auditor` (Claude/Opus), the agent to use
-  once Claude tokens reset** — never a silent switch to reasoning here.
+  sanctioned fallback is **`staleness-auditor` (Claude/Opus), invoked explicitly
+  by the caller** — never a silent switch to reasoning here.
 
 ## Report format
 

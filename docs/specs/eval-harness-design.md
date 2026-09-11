@@ -296,7 +296,7 @@ on the direction that has never failed.
 1. **BOTH repos' guards, one shared fixture engine.** The engine lives in
    `kb_setup` and each repo declares its own table — the shape PR 2 landed. So
    it is a KB PR + pin bump + a dotfiles PR. Covering only dotfiles was
-   rejected: the rules-parity gate now makes the repos' doctrine symmetric, so
+   rejected: the rule-sync gate now makes the repos' doctrine symmetric, so
    leaving KB's guard ungated is the same defect class one level down. KB's
    `_ALLOWED_READONLY` set (`path`/`explain`/`god-nodes`/`affected`/`diagnose`)
    is exactly the surface a careless pattern breaks, so it wants the must-ALLOW
@@ -512,8 +512,8 @@ overall: `verify run` for declaration contracts, `eval` for probes and fixtures.
 PR 1 alone closes the bug that opened #354, and is the cheapest thing in the
 list. Findings from #355 land as cases in PRs 1–3.
 
-**A prerequisite PR 1 did not have, and PRs 3–6 do:** the cross-repo rules
-parity that landed alongside PR 2 (KB#24 + dotfiles#362) means both repos now
+**A prerequisite PR 1 did not have, and PRs 3–6 do:** the cross-repo rule-sync
+that landed alongside PR 2 (KB#24 + dotfiles#362) means both repos now
 carry all 22 `.claude/rules/`, gated by `rule-sync.toml`'s `rules` axis. A new rule
 added to one repo without the other now fails `mise run rule-sync` on `main`.
 

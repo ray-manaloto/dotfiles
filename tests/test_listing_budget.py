@@ -274,6 +274,65 @@ def test_invalid_description_cap_defaults_to_imported_limit(
     ) == (True, 1, True)
 
 
+def test_override_above_the_harness_cap_does_not_loosen_reporting(
+    tmp_path: Path,
+) -> None:
+    """F2: an override ABOVE SKILL_DESCRIPTION_MAX must not silence truncation.
+
+    The harness truncates at SKILL_DESCRIPTION_MAX regardless of what this repo
+    configures. An entry over that hard cap but under the (too-high) override
+    must still be reported — otherwise the check can only pass while real
+    truncation keeps happening.
+    """
+    repo = tmp_path / "repo"
+    _skill(repo / ".claude", "fat", "x" * (SKILL_DESCRIPTION_MAX + 1))
+    listing = collect_listing(repo, tmp_path / "home", [])
+
+    findings = doctor.check_listing_budget(
+        _setup(
+            listing, {"listing": {"max_description_chars": SKILL_DESCRIPTION_MAX + 500}}
+        )
+    )
+
+    assert any("TRUNCATED SILENTLY" in one for one in findings)
+    assert any(f"HARD {SKILL_DESCRIPTION_MAX} cap" in one for one in findings)
+
+
+def test_override_above_the_harness_cap_is_reported_as_a_notice(
+    tmp_path: Path,
+) -> None:
+    """F2: a too-high override must be surfaced, not silently clamped."""
+    repo = tmp_path / "repo"
+    _skill(repo / ".claude", "small", "x" * 5)
+    listing = collect_listing(repo, tmp_path / "home", [])
+
+    findings = doctor.check_listing_budget(
+        _setup(
+            listing, {"listing": {"max_description_chars": SKILL_DESCRIPTION_MAX + 500}}
+        )
+    )
+
+    assert len(findings) == 1
+    assert f"max_description_chars={SKILL_DESCRIPTION_MAX + 500}" in findings[0]
+    assert (
+        f"above the harness-true truncation cap of {SKILL_DESCRIPTION_MAX}"
+        in findings[0]
+    )
+
+
+def test_override_below_the_harness_cap_reports_no_notice(tmp_path: Path) -> None:
+    """An override that TIGHTENS the cap must not trigger the too-high notice."""
+    repo = tmp_path / "repo"
+    _skill(repo / ".claude", "small", "x" * 5)
+    listing = collect_listing(repo, tmp_path / "home", [])
+
+    findings = doctor.check_listing_budget(
+        _setup(listing, {"listing": {"max_description_chars": 10}})
+    )
+
+    assert findings == []
+
+
 @pytest.mark.parametrize("ceiling", ["34000", 34000.5, None])
 def test_a_non_int_ceiling_is_ignored_rather_than_crashing(
     tmp_path: Path, ceiling: object
