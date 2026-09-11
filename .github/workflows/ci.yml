@@ -485,8 +485,35 @@ jobs:
             cat "${err_log}" >&2
             exit 1
           fi
-      - name: Retag PR image as :dev and :latest
+      # #1007: promote verified the retag was FAITHFUL (source digest in ==
+      # tag digest out) but never asked whether the SOURCE was CURRENT. A
+      # second PR merging shortly after a first, but built before the first
+      # landed, republished a stale image and :dev silently regressed for
+      # ~3h45m before `mise run land`'s smoke tier-1 identity caught it
+      # downstream. The checkout + mise install below exist ONLY to compute
+      # the expected `:dev-<hash>` marker for github.sha — see
+      # `python/src/dotfiles_setup/image_promote.py` for the full design.
+      - name: Checkout code at github.sha
         if: steps.pr.outputs.fallback != 'true' && steps.source_probe.outputs.source_present == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install mise (python + uv)
+        if: steps.pr.outputs.fallback != 'true' && steps.source_probe.outputs.source_present == 'true'
+        uses: $/.github/actions/setup-mise
+        with:
+          install_args: "python uv"
+      - name: Verify candidate image is content-current before retag (#1007)
+        if: steps.pr.outputs.fallback != 'true' && steps.source_probe.outputs.source_present == 'true'
+        id: eligibility
+        env:
+          SOURCE_REF: ${{ steps.source_probe.outputs.source_ref }}
+        run: |
+          set -euo pipefail
+          uv run --project python dotfiles-setup image verify-promote-eligibility \
+            --image-ref "${SOURCE_REF}" >> "$GITHUB_OUTPUT"
+      - name: Retag PR image as :dev and :latest
+        if: steps.pr.outputs.fallback != 'true' && steps.source_probe.outputs.source_present == 'true' && steps.eligibility.outputs.eligible == 'true'
         env:
           IMAGE: ${{ env.CONTAINER_REGISTRY }}/${{ env.IMAGE_NAME }}
           SOURCE_REF: ${{ steps.source_probe.outputs.source_ref }}

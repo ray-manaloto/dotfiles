@@ -1251,6 +1251,50 @@ tokens = [
 ]
 
 [[suite]]
+name = "workflow.promote-staleness-guard"
+description = "#1007: `promote` must prove a candidate `:pr-N` image is content-CURRENT (not merely that its retag was faithful) before moving `:dev`/`:latest`. Measured 2026-09-11: `:dev` carried pre-#1004 bytes for ~3h45m because promote never asked the question at all. The guard reuses the existing `:dev-<dev-hash>` smoke-validated marker (`build-publish.yml`'s `dev-tag`) and the SAME AC2 registry seam (`image_manifest.Inspector`/`index_entry_digest`) rather than a new registry client or a `docker pull`. Tokens bind the CALL SITES, not definitions: `ci.yml`'s eligibility step must run BEFORE the retag step and the retag step's `if:` must actually reference `steps.eligibility.outputs.eligible` — a perfect-but-unreachable verifier (or one wired but ignored) is exactly what a bare-existence check would miss (#394)."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    "python/src/dotfiles_setup/image_promote.py",
+    "python/src/dotfiles_setup/image.py",
+    "python/src/dotfiles_setup/main.py",
+    "tests/test_image_promote.py",
+    ".github/workflows/ci.yml",
+]
+# The retag step's `if:` is asserted to depend on `steps.eligibility` (a
+# hard-fail-and-skip design, per the module docstring) — NOT that a stale
+# verdict auto-routes to the fallback rebuild, which #1007's advisory
+# consult explicitly rejected (two out-of-order fallback rebuilds could
+# still race a newer `:dev` — the same class of regression this closes).
+per_path_tokens = { "python/src/dotfiles_setup/image_promote.py" = [
+    "def check_promote_eligibility(",
+    "class PromoteVerdict",
+], "python/src/dotfiles_setup/image.py" = [
+    "\"verify-promote-eligibility\": _handle_verify_promote_eligibility,",
+], "python/src/dotfiles_setup/main.py" = [
+    "args.image_command == \"verify-promote-eligibility\"",
+], "tests/test_image_promote.py" = [
+    "def test_registry_auth_failure_is_a_hard_failure_not_a_verdict(",
+    "def test_eligibility_step_precedes_and_gates_the_retag_step(",
+], ".github/workflows/ci.yml" = [
+    "dotfiles-setup image verify-promote-eligibility \\",
+    "steps.eligibility.outputs.eligible == 'true'",
+] }
+tokens = [
+    "def check_promote_eligibility(",
+    "class PromoteVerdict",
+    "\"verify-promote-eligibility\": _handle_verify_promote_eligibility,",
+    "args.image_command == \"verify-promote-eligibility\"",
+    "def test_registry_auth_failure_is_a_hard_failure_not_a_verdict(",
+    "def test_eligibility_step_precedes_and_gates_the_retag_step(",
+    "dotfiles-setup image verify-promote-eligibility \\",
+    "steps.eligibility.outputs.eligible == 'true'",
+]
+
+[[suite]]
 name = "workflow.ask-quality-enforcement"
 description = "The AskUserQuestion quality standard (Ray, 2026-08-02) must stay wired end-to-end: .claude/settings.json's PreToolUse matcher covers AskUserQuestion as well as Bash, hook_guard dispatches on tool_name into dotfiles_setup.ask_quality, that module enforces the three checkable components (a first-and-only `(Recommended)` option, `PRO:`/`CON:` in every option description, a citation marker or the explicit `[no prior evidence]` escape), hook_selfcheck drives BOTH arms through the real wrapper, and the rule doc states the standard. The matcher is one alternation string, which is the specific drift this pins: a wiring check that only looked for `Bash` would keep passing after AskUserQuestion were dropped from it, and the gate would go silently absent for that tool exactly as #343 did for off-root Bash. Both regressions were mutation-tested on 2026-08-02 and are caught by DIFFERENT checks — reverting the matcher fails settings-wiring, deleting the dispatch call site fails pretooluse-endtoend — so neither check can stand in for the other. What is deliberately NOT asserted anywhere: whether asking was the right call at all. No hook can observe an ask that never happened, so that half lives in the rule and the memory."
 category = "workflow"

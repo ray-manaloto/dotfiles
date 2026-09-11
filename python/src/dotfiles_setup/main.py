@@ -1290,6 +1290,21 @@ def _add_image_subcommands(
         help="The build matrix JSON the legs fanned out over "
         "(needs.plan.outputs.matrix)",
     )
+    verify_promote_parser = image_sub.add_parser(
+        "verify-promote-eligibility",
+        help="promote's pre-retag staleness guard (#1007): prove a "
+        "candidate :pr-N index is content-identical to the smoke-validated "
+        ":dev-<hash> marker for github.sha, per architecture, before any "
+        "tag moves. Prints eligible=/status= GitHub outputs to stdout; a "
+        "hard registry/shape failure propagates uncaught rather than being "
+        "reinterpreted as staleness.",
+    )
+    verify_promote_parser.add_argument(
+        "--image-ref",
+        required=True,
+        help="The candidate :pr-N multi-architecture index ref "
+        "(steps.source_probe.outputs.source_ref)",
+    )
 
 
 def _add_pr_subcommands(
@@ -2192,6 +2207,12 @@ def handle_image(args: argparse.Namespace) -> None:
             args.image_ref,
             command="verify-arch-tags",
             matrix=args.matrix,
+        )
+        sys.exit(image_main(cmd))
+    if args.image_command == "verify-promote-eligibility":
+        cmd = ImageCommand(
+            args.image_ref,
+            command="verify-promote-eligibility",
         )
         sys.exit(image_main(cmd))
     if args.image_command == "resolve-analysis-ref":
