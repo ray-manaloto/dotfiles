@@ -22,15 +22,21 @@ const RESEARCH = {
   },
 }
 const TASK_RESULTS = {
-  type: 'array',
-  items: {
-    type: 'object',
-    required: ['name', 'rc', 'log', 'delta'],
-    properties: {
-      name: { type: 'string' },
-      rc: { type: 'number' },
-      log: { type: 'string' },
-      delta: { type: 'string' },
+  type: 'object',
+  required: ['tasks'],
+  properties: {
+    tasks: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['name', 'rc', 'log', 'delta'],
+        properties: {
+          name: { type: 'string' },
+          rc: { type: 'number' },
+          log: { type: 'string' },
+          delta: { type: 'string' },
+        },
+      },
     },
   },
 }
@@ -72,12 +78,13 @@ if (A.researchBrief) {
 
 phase('Operate')
 log(`Operate: dispatching ${A.tasks.length} ordered tasks`)
-const tasks = await agent(`Run exactly this ordered JSON task list. Stop at the first rc that differs from expectRc (default 0), and return rows only for attempted tasks.\n${JSON.stringify(A.tasks)}`, {
+const taskOutput = await agent(`Run exactly this ordered JSON task list. Stop at the first rc that differs from expectRc (default 0), and return an object with a "tasks" array holding rows only for attempted tasks.\n${JSON.stringify(A.tasks)}`, {
   label: 'graphify-operator',
   phase: 'Operate',
   agentType: 'graphify-operator',
   schema: TASK_RESULTS,
 })
+const tasks = taskOutput === null ? null : taskOutput.tasks
 if (tasks === null) {
   log('Operate: graphify-operator returned null; the task list stopped')
   return { research, tasks: null, audit: null }
