@@ -1053,7 +1053,25 @@ jobs:
   # ============================================================
   dev-tag:
     needs: [plan, build, smoke-test]
-    if: needs.smoke-test.result == 'success'
+    # #995: this job had NO status-check function, so GitHub combined its `if:`
+    # with the implicit `success()` AND let the transitive skip through. On the
+    # nightly, `dev-prep` is skipped by design (`tag_strategy != 'pr'`, below);
+    # `build` and `smoke-test` each carry a rescue and save only THEMSELVES, so
+    # the skip kept flowing and landed here — `:dev` never got its marker even
+    # though all three smoke legs passed. Measured on schedule run 34474060289
+    # (`7998d0c`): smoke-test success x3, manifest success, dev-tag SKIPPED;
+    # control arm PR run 34584169216, where `dev-prep` runs and dev-tag is
+    # success x3. #982 fixed this exact class one job upstream and did not
+    # reach its own descendant.
+    #
+    # `!cancelled()` rather than the `always()` its three siblings use: this job
+    # MOVES TAGS in the registry, so a cancelled run must not retag. #981 tracks
+    # converting the other `always()` sites; this is the first at the target
+    # state. The explicit success check restores the failure gating that
+    # dropping the default `success()` would otherwise lose.
+    if: |
+      !cancelled()
+      && needs.smoke-test.result == 'success'
     strategy:
       fail-fast: false
       matrix:

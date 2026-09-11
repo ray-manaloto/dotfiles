@@ -133,6 +133,7 @@ from dotfiles_setup.sync import SyncOptions, sync_main
 from dotfiles_setup.token_audit import preflight_main, token_audit_main
 from dotfiles_setup.verify import main as verify_main
 from dotfiles_setup.workflow_hooks import workflow_hooks_main
+from dotfiles_setup.workflow_skip_cascade import workflow_skip_cascade_main
 
 if TYPE_CHECKING:
     from argparse import _SubParsersAction
@@ -849,6 +850,35 @@ def _add_honesty_and_skills_mirror_subcommands(subparsers: _SubParsers) -> None:
     """
     _add_honesty_subcommands(subparsers)
     _add_skills_mirror_subcommand(subparsers)
+
+
+def _add_workflow_dag_subcommands(subparsers: _SubParsers) -> None:
+    """Register both `needs:`-DAG-reading workflow checks in one call site.
+
+    `setup_parser` is at ruff's PLR0915 statement ceiling (see
+    `_add_honesty_and_skills_mirror_subcommands`'s docstring for the same
+    constraint) — this thin combinator keeps `setup_parser`'s own statement
+    count unchanged while adding `workflow-skip-cascade` alongside the
+    existing `workflow-hooks` registration, rather than growing either
+    function past its ceiling.
+
+    Args:
+        subparsers: The parent subparsers action to attach both to.
+    """
+    subparsers.add_parser(
+        "workflow-hooks",
+        help="Enforce ADR-0001: every CI job that commits or pushes must set "
+        "HK_SKIP_HOOKS: pre-commit,pre-push at job level, or hk's git hooks "
+        "run on the runner and fail",
+    )
+    subparsers.add_parser(
+        "workflow-skip-cascade",
+        help="Fail when a job downstream of a skippable job (in its "
+        "transitive `needs:` closure) carries no status-check function "
+        "(always()/!cancelled()/failure()/success()) — a skip cascades "
+        "through the DAG and a rescue on an upstream job saves only that "
+        "job, never its descendants (#982, #995)",
+    )
 
 
 def _add_consistency_subcommands(subparsers: _SubParsers) -> None:
@@ -1866,12 +1896,7 @@ def setup_parser() -> argparse.ArgumentParser:
         "--json", action="store_true", help="Emit the probe result as JSON"
     )
     _add_honesty_and_skills_mirror_subcommands(subparsers)
-    subparsers.add_parser(
-        "workflow-hooks",
-        help="Enforce ADR-0001: every CI job that commits or pushes must set "
-        "HK_SKIP_HOOKS: pre-commit,pre-push at job level, or hk's git hooks "
-        "run on the runner and fail",
-    )
+    _add_workflow_dag_subcommands(subparsers)
     ghcr_cleanup_parser = subparsers.add_parser(
         "ghcr-cleanup",
         help="Plan (default) or execute GHCR retention cleanup for the "
@@ -2621,6 +2646,9 @@ def _build_command_handlers(
             hk_builtins_audit_main(project_root, check=args.check)
         ),
         "workflow-hooks": lambda: sys.exit(workflow_hooks_main(project_root)),
+        "workflow-skip-cascade": lambda: sys.exit(
+            workflow_skip_cascade_main(project_root)
+        ),
         "bootstrap-gap-report": lambda: handle_bootstrap_gap_report(args, project_root),
         "lock-refresh-root": lambda: handle_lock_refresh_root(project_root),
         "lock-stage": lambda: handle_lock_stage(args, project_root),
