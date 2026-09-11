@@ -1472,6 +1472,27 @@ tokens = [
 ]
 
 [[suite]]
+name = "workflow.skip-cascade-enforcement"
+description = "The transitive-skip-cascade gate must stay wired end-to-end (cold review of b436168, finding F2): hk.pkl's `workflow_skip_cascade` step shells out to `dotfiles-setup workflow-skip-cascade`, main.py registers and dispatches the subcommand, the workflow_skip_cascade module (graph walk + control-arm canary) and its tests exist. Same shape as workflow.bash-logic-enforcement. This gate closes #982/#995 — a job downstream of a skippable job with no status-check function silently inherits a skip through the whole `needs:` DAG — and it shipped TWICE before anything checked the DAG at all; deleting this suite's own wiring left `verify run` at 151/0 with nothing noticing, which is exactly the F2 defect this suite exists to close."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    "hk.pkl",
+    "python/src/dotfiles_setup/main.py",
+    "python/src/dotfiles_setup/workflow_skip_cascade.py",
+    "tests/test_workflow_skip_cascade.py",
+]
+per_path_tokens = { "hk.pkl" = ['workflow_skip_cascade"] {', 'dotfiles-setup workflow-skip-cascade"'], "python/src/dotfiles_setup/main.py" = ['"workflow-skip-cascade",', '"workflow-skip-cascade": lambda'], "python/src/dotfiles_setup/workflow_skip_cascade.py" = ['def find_violations(', 'def workflow_skip_cascade_main('], "tests/test_workflow_skip_cascade.py" = ['def test_cli_wires_end_to_end()'] }
+tokens = [
+    'dotfiles-setup workflow-skip-cascade"',
+    'def workflow_skip_cascade_main(',
+    'def find_violations(',
+    'def assert_predicate_is_live(',
+]
+
+[[suite]]
 name = "workflow.skills-mirror-enforcement"
 description = "The .agents/skills mirror generator must stay wired end-to-end (#1006): hk.pkl's `skills_mirror_parity` step shells out to `dotfiles-setup skills-mirror --check`, mise.toml wraps the bare (write) form as a thin task, main.py registers and dispatches the `skills-mirror` subcommand, the skills_mirror module (RULES/PER_FILE/EXEMPT/CODEX_ONLY + render/find_drift/find_stale_per_file/write_mirror) + its tests exist. Replaces the old `session_review_skill_parity` step, whose `cmp -s` covered exactly one of 32 skill pairs — the other 31 drifted silently, including a real behavioural regression (devcontainer-sync never received PR #804's fix) and two mechanical corruptions (oh-my-claudecode -> oh-my-Codex; a CLAUDE.md/AGENTS.md sentence made self-referential). `--check` also fails on a stale `PER_FILE` pattern (cold-review F8), naming the skill. Same shape as workflow.bash-logic-enforcement."
 category = "workflow"

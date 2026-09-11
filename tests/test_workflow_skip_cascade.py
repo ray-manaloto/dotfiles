@@ -12,6 +12,7 @@ requiring the gate to catch it, then requiring the real #995 rescue
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -175,6 +176,46 @@ def test_status_function_call_regex_rejects_bare_mention() -> None:
     assert wsc.has_status_function("always() && needs.x.result == 'success'")
 
 
+# 5b. F1: `success()` displaces GitHub's implicit default with an identical
+# condition, so it rescues nothing — it must NOT count as a status-check
+# function, and a job carrying only `success()` must be flagged exactly like
+# a job with no `if:` function at all (see #995's real shape:
+# `if: needs.smoke-test.result == 'success'`, differing only by whether the
+# call is explicit).
+
+_SUCCESS_ONLY_WORKFLOW = _PRE_FIX_DEV_TAG_WORKFLOW.replace(
+    "  dev-tag:\n    needs: [plan, build, smoke-test]\n"
+    "    if: needs.smoke-test.result == 'success'\n",
+    "  dev-tag:\n    needs: [plan, build, smoke-test]\n"
+    "    if: success() && needs.smoke-test.result == 'success'\n",
+)
+
+
+def test_success_call_alone_does_not_rescue(tmp_path: Path) -> None:
+    """The F1 fail-arm: this MUST fail against the pre-change module.
+
+    `success()` is GitHub's implicit default made explicit — including it
+    changes nothing about whether the job is exposed to a transitive skip,
+    so a job whose `if:` carries only `success()` must be flagged the same
+    way `_PRE_FIX_DEV_TAG_WORKFLOW`'s unrescued `dev-tag` is.
+    """
+    assert not wsc.has_status_function("success()")
+    _write_workflow(tmp_path, _SUCCESS_ONLY_WORKFLOW)
+    violations = wsc.find_violations(tmp_path)
+    assert any("`dev-tag`" in line for line in violations), violations
+
+
+def test_the_three_rescuing_functions_still_rescue() -> None:
+    """`always()`, `!cancelled()` and `failure()` each still count as a call.
+
+    Only `success()` was removed from the recognised set.
+    """
+    assert wsc.has_status_function("always()")
+    assert wsc.has_status_function("!cancelled()")
+    assert wsc.has_status_function("failure()")
+    assert "success" not in wsc.STATUS_FUNCTIONS
+
+
 # 6. Both `needs:` YAML forms parse — bare string and list.
 
 
@@ -283,3 +324,25 @@ def test_main_exits_zero_on_clean_and_one_on_violation(tmp_path: Path) -> None:
     other = tmp_path / "bad"
     _write_workflow(other, _PRE_FIX_DEV_TAG_WORKFLOW)
     assert wsc.workflow_skip_cascade_main(other) == 1
+
+
+# F3: the CLI-registration seam, end-to-end — the sibling `workflow-hooks`
+# subcommand has this test (`tests/test_workflow_hooks.py:512-528`); this
+# module had none, so a broken `main.py` dispatch entry could regress
+# silently while every in-process test above kept passing (they all call
+# `wsc.*` directly and never go through argparse). Real subprocess, real
+# repo tree — asserts both the exit code AND stdout, since a subcommand that
+# printed nothing would otherwise pass just as easily.
+
+
+def test_cli_wires_end_to_end() -> None:
+    result = subprocess.run(
+        ["uv", "run", "--project", "python", "dotfiles-setup", "workflow-skip-cascade"],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=REPO_ROOT,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "workflow-skip-cascade OK" in result.stdout

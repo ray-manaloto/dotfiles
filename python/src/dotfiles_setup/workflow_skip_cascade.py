@@ -1,11 +1,14 @@
 # Copyright (c) 2026 Raymond Manaloto
 """Gate the transitive-skip class: a status rescue only saves ITS OWN job.
 
-A GitHub Actions job whose `if:` contains no status-check function
-(`always()`, `!cancelled()`, `failure()`, `success()`) is skipped whenever ANY
-job in its transitive `needs` closure is skipped — the implicit `success()`
-GitHub ANDs onto every `if:` propagates the skip down the whole chain, and a
-rescue on an UPSTREAM job saves only that job, never its descendants.
+A GitHub Actions job whose `if:` contains no RESCUING status-check function
+(`always()`, `!cancelled()`, `failure()`) is skipped whenever ANY job in its
+transitive `needs` closure is skipped — the implicit `success()` GitHub ANDs
+onto every `if:` propagates the skip down the whole chain, and a rescue on an
+UPSTREAM job saves only that job, never its descendants. `success()` is
+GitHub's default and is NOT a rescue: writing it explicitly reproduces the
+default condition, so `if: success() && ...` is exactly as exposed to the
+cascade as no `if:` function at all.
 
 This repo has shipped that exact defect TWICE, both in
 `.github/workflows/build-publish.yml`, both with every gate green because
@@ -83,14 +86,21 @@ if TYPE_CHECKING:
 
 WORKFLOW_DIR = ".github/workflows"
 
-# The four functions GitHub Actions recognises as status-check functions —
+# The status-check functions GitHub Actions recognises —
 # https://docs.github.com/actions/reference/workflows-and-actions/expressions
-# lists exactly these under "status check functions". Each one, called, ANDs
-# a value other than the implicit success() into the job's evaluation, which
-# is what stops a skip upstream from propagating unconditionally.
-STATUS_FUNCTIONS: frozenset[str] = frozenset(
-    {"always", "cancelled", "failure", "success"}
-)
+# ("A default status check of success() is applied unless you include one of
+# these functions") lists `always`, `cancelled`, `failure` and `success`, but
+# `success` is deliberately EXCLUDED here. Including any of these functions
+# displaces GitHub's implicit `success()` default — but `success()` displaces
+# it with an identical condition, so writing `if: success() && ...` is
+# indistinguishable from writing no status function at all: it rescues
+# nothing, and a job with only `success()` is exactly the #995 defect
+# (`if: needs.smoke-test.result == 'success'` with no rescue). A prior
+# version of this set included `success` on the false premise that every
+# member "ANDs a value other than the implicit success()" into the
+# evaluation — that is true for the other three but not for this one, and
+# accepting it as a rescue is what would have let the #995 shape read clean.
+STATUS_FUNCTIONS: frozenset[str] = frozenset({"always", "cancelled", "failure"})
 
 # A CALL, not a mention: the function name immediately followed by `(`
 # (optional whitespace between, matching how `if: |` block text can wrap).
