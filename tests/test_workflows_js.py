@@ -145,21 +145,30 @@ const schemaValue = (schema) => {
   return null
 }
 const agent = async (_prompt, options = {}) => {
+  if (options.schema !== undefined && options.schema.type !== 'object') {
+    throw new Error(
+      `agent() schema root must be type 'object', got '${options.schema.type}'`
+    )
+  }
   const label = options.label || 'general-purpose'
   calls.push({ label, agentType: options.agentType || 'general-purpose' })
   if (label === 'codex-implementer') return 'CODEX REPORT\nCOMMIT: abcdef1234567'
   if (label === 'gate-runner') {
-    return args.verify.map((cmd, index) => ({
-      cmd, rc: 0, log: `/tmp/gate-${index}.log`, firstFailure: '',
-    }))
+    return {
+      gates: args.verify.map((cmd, index) => ({
+        cmd, rc: 0, log: `/tmp/gate-${index}.log`, firstFailure: '',
+      })),
+    }
   }
   if (label === 'graphify-operator') {
-    return args.tasks.map((task, index) => ({
-      name: task.name,
-      rc: task.expectRc || 0,
-      log: `/tmp/task-${index}.log`,
-      delta: '0/0/0',
-    }))
+    return {
+      tasks: args.tasks.map((task, index) => ({
+        name: task.name,
+        rc: task.expectRc || 0,
+        log: `/tmp/task-${index}.log`,
+        delta: '0/0/0',
+      })),
+    }
   }
   return schemaValue(options.schema)
 }
@@ -230,6 +239,29 @@ def test_top_level_syntax_error_fails_under_pinned_bun(tmp_path: Path) -> None:
 GATED_IMPLEMENTATION = WORKFLOWS / "gated-implementation.js"
 
 
+def test_root_array_schema_is_rejected_at_agent_boundary(tmp_path: Path) -> None:
+    """Guard negative arm: a root-array `agent()` schema must be rejected.
+
+    Every shipped workflow already passes this guard with its object-rooted
+    schema (`test_every_saved_workflow_dry_runs_with_known_agents` is the
+    positive arm). This reproduces the actual regression class — GATES
+    flipped back to a bare root array, exactly the shape that made
+    `/gated-implementation` abort mid-run — with only the root `type`
+    changed, and confirms the shared `agent()` stub rejects it before
+    dispatch rather than accepting whatever it is handed.
+    """
+    source = GATED_IMPLEMENTATION.read_text(encoding="utf-8")
+    mutated = source.replace(
+        "const GATES = {\n  type: 'object',\n  required: ['gates'],\n",
+        "const GATES = {\n  type: 'array',\n  required: ['gates'],\n",
+        1,
+    )
+    assert mutated != source, "mutation must actually change the schema root"
+    result = _bun_run(mutated, tmp_path / "gates-root-array.js")
+    assert result.returncode != 0, "a root-array schema must fail, not dry-run clean"
+    assert "type 'object'" in result.stderr
+
+
 def _custom_stub_source(
     source: str, args: Mapping[str, object], agent_body: str
 ) -> str:
@@ -278,9 +310,9 @@ _NO_COMMIT_REPORT = "CODEX REPORT\\n(no commit — apply failed)"
 _GATES_OK_BODY = (
     f"if (label === 'codex-implementer') return '{_NO_COMMIT_REPORT}'\n"
     "  if (label === 'gate-runner') {\n"
-    "    return args.verify.map((cmd, index) => (\n"
+    "    return { gates: args.verify.map((cmd, index) => (\n"
     "      { cmd, rc: 0, log: `/tmp/gate-${index}.log`, firstFailure: '' }\n"
-    "    ))\n"
+    "    )) }\n"
     "  }\n"
 )
 

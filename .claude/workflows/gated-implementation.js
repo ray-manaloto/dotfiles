@@ -16,15 +16,21 @@ if (typeof A.premises !== 'string' || !A.premises) throw new Error('args.premise
 if (!Array.isArray(A.verify)) throw new Error('args.verify must be an array of shell commands')
 
 const GATES = {
-  type: 'array',
-  items: {
-    type: 'object',
-    required: ['cmd', 'rc', 'log', 'firstFailure'],
-    properties: {
-      cmd: { type: 'string' },
-      rc: { type: 'number' },
-      log: { type: 'string' },
-      firstFailure: { type: 'string' },
+  type: 'object',
+  required: ['gates'],
+  properties: {
+    gates: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['cmd', 'rc', 'log', 'firstFailure'],
+        properties: {
+          cmd: { type: 'string' },
+          rc: { type: 'number' },
+          log: { type: 'string' },
+          firstFailure: { type: 'string' },
+        },
+      },
     },
   },
 }
@@ -90,12 +96,13 @@ const commit = commitMatch ? commitMatch[1] : ''
 
 phase('Gates')
 log(`Gates: dispatching ${A.verify.length} verification commands`)
-const gates = await agent(`Run every command in this JSON array, in order, even when an earlier command fails. Capture each rc in its log file and return one schema row per command.\n${JSON.stringify(A.verify)}`, {
+const gateOutput = await agent(`Run every command in this JSON array, in order, even when an earlier command fails. Capture each rc in its log file and return an object with a "gates" array holding one row per command.\n${JSON.stringify(A.verify)}`, {
   label: 'gate-runner',
   phase: 'Gates',
   agentType: 'gate-runner',
   schema: GATES,
 })
+const gates = gateOutput === null ? null : gateOutput.gates
 if (gates === null) log('Gates: gate-runner returned null; gates are unknown, not passed')
 
 const ref = A.reviewRef || commit
