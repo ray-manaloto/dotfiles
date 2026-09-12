@@ -6,6 +6,14 @@
 [default.extend-identifiers]
 ba41c3748e298012 = "ba41c3748e298012"
 
+# `f6ba0ae` is a commit SHA cited as evidence in docs/agents/goal-history.md,
+# whose `ba` segment typos reads as a misspelling of "by"/"be" -- the same shape
+# as the `ba41c374...` checksum above. Allowlisted as an EXACT identifier rather
+# than allowing bare `ba`: goal-history.md is prose-heavy and append-only, so a
+# `[type]` block permitting `ba` there would silence a real typo in every future
+# entry. One SHA, one line, no collateral.
+f6ba0ae = "f6ba0ae"
+
 # `fpr` is gpg's --with-colons RECORD TYPE for a fingerprint line, not a
 # misspelling of "for"/"far"/"fps" (#251). The Dockerfile's apt.llvm.org key
 # check parses that exact format:

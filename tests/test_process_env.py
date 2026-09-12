@@ -268,6 +268,66 @@ def test_poisoned_git_env_mutation_reaches_outer_without_scrub(tmp_path: Path) -
     assert _git(outer, "config", "--get", "core.bare") == "true"
 
 
+def test_pre_push_step_resolves_the_root_without_mise_project_root() -> None:
+    """#877: the pre-push step must resolve the repo root from a plain shell.
+
+    `MISE_PROJECT_ROOT` is set by mise in TASK execution contexts only (jdx/mise
+    PR #9657, docs/hooks.md). A git pre-push hook is not one, so from a shell
+    mise never touched the variable is EMPTY and the step became `mise --cd ""`
+    -> "Directory specified with --cd does not exist". It therefore errored
+    before reaching `test-hook-isolated`: on a bare push the gate certified
+    nothing.
+
+    It stayed hidden for eleven days (#877 filed 2026-08-31, re-filed as #998,
+    diagnosed a third time 2026-09-11) because `mise run ship` DOES export the
+    variable, and that is the path a normal push takes. Nothing exercised the
+    empty case.
+
+    This asserts the SHELL EXPANSION, not the command string: a substring check
+    passes on any spelling that still yields an empty path, which is exactly the
+    regression to catch.
+    """
+    root = Path(__file__).parent.parent
+    hk_text = (root / "hk.pkl").read_text(encoding="utf-8")
+    marker = 'mise --cd \\"'
+    lines = [
+        line for line in hk_text.splitlines() if marker in line and "check =" in line
+    ]
+    assert len(lines) == 1, f"expected one --cd check line, found {len(lines)}"
+    # The --cd argument exactly as the shell sees it, unescaped from pkl.
+    cd_arg = lines[0].split(marker, 1)[1].split('\\"', 1)[0]
+
+    def expand(env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["sh", "-c", f'printf %s "{cd_arg}"'],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            env=env,
+            check=False,
+        )
+
+    base = {k: v for k, v in os.environ.items() if k != "MISE_PROJECT_ROOT"}
+
+    # The real defect's arm: no MISE_PROJECT_ROOT anywhere, as in a bare push.
+    absent = expand(base)
+    assert absent.returncode == 0, absent.stderr
+    assert absent.stdout, (
+        "the --cd argument expanded to an EMPTY string with MISE_PROJECT_ROOT "
+        'unset -- that is #877: `mise --cd ""` errors, so the pre-push test '
+        "step certifies nothing on a bare push"
+    )
+    assert Path(absent.stdout).resolve() == root.resolve()
+
+    # CONTROL ARM: where mise DOES supply it, that value still wins -- so the
+    # fix changes nothing on the `mise run ship` path, which already worked.
+    # Not under /tmp: this value is never opened, only expanded, and a literal
+    # /tmp path trips ruff's S108 for a filesystem use this test does not make.
+    sentinel = "/nonexistent/sentinel-877"
+    supplied = expand({**base, "MISE_PROJECT_ROOT": sentinel})
+    assert supplied.stdout == sentinel
+
+
 def test_mise_and_pre_push_wiring_use_the_public_boundary() -> None:
     """Dropping the boundary from the real hook wiring must fail this gate."""
     root = Path(__file__).parent.parent
@@ -280,5 +340,6 @@ def test_mise_and_pre_push_wiring_use_the_public_boundary() -> None:
     ) in mise
     assert (
         'check = "env -u MISE_IGNORED_CONFIG_PATHS mise --cd '
-        '\\"$MISE_PROJECT_ROOT\\" run test-hook-isolated"' in hk
+        '\\"${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}\\" '
+        'run test-hook-isolated"' in hk
     )

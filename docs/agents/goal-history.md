@@ -769,3 +769,67 @@ flowchart LR
     COLD --> APPEND["Append this iteration"]
     APPEND --> SHIP["mise run ship, CI, land clean main"]
 ```
+
+## 2026-09-11 — decouple function-hook adoption from the knowledge-base gate
+
+- **Iteration ID:** `dotfiles-goal-20260911-015`
+- **Prior goal digest:** `sha256:902af18f847ff9b231aa9691a63abf67efe72f877f2110ed2b552a310a6079d1`
+- **Current goal digest:** `sha256:83cb5c93e477f5471a57174b17850f624727bbbc9c00a321f061889c316de09d`
+- **Changed requirement:** #1020's first ask — "dotfiles acts only after
+  knowledge-base G04 (`ray-manaloto/knowledge-base#757`) observes a function-hook
+  mod actually firing" — no longer binds. Ray's ruling is "don't depend on
+  knowledge-base": dotfiles does not block its own work on a knowledge-base
+  milestone. Scope is deliberately TIMING only; the five live code couplings
+  (the SHA-pinned `kb-setup` dep at `python/pyproject.toml:40`, five `kb_setup`
+  imports, `hk.pkl:625`, `ci.yml:202`, the currency engine) are unchanged and
+  remain tracked separately. #1020's other three asks are unaffected. The
+  evidence bar is NOT relaxed: with no external party producing the first firing
+  observation, the two-arm probe becomes dotfiles' own obligation and runs
+  BEFORE anything is built on the engine.
+- **Reason:** On 2026-09-11 a defect already filed as #877 on 2026-08-31 —
+  labelled `ready-for-agent`, carrying a live reproduction and a working fix in
+  its comment — was independently re-diagnosed for the third time, after which
+  an advisor and two upstream research lanes re-derived that same fix from
+  scratch. #998 was closed the same day as its duplicate. Recording was never
+  the gap: there are 117 `feedback_*` memory files and two issues for this one
+  defect. Retrieval was the gap. Ray chose function hooks as the substrate for
+  the fix and removed the knowledge-base dependency that would have deferred it.
+- **Evidence:** #877 (OPEN, 2026-08-31, `bug`+`ready-for-agent`, parent #848)
+  and its 2026-09-01 comment containing the fix; #998 closed 2026-09-11 as its
+  duplicate (`issues/998#issuecomment-5642316997`); the ruling recorded at
+  `issues/1020#issuecomment-5642327691`. Advisories persisted in commit `f6ba0ae`
+  at `docs/research/kb/reports/agents/2026-09-11-mise-project-root-advisory.md`
+  and `-function-hooks-retrieval-advisory.md`. Upstream: jdx/mise PR #9657 and
+  `docs/hooks.md` establish `MISE_PROJECT_ROOT` as set in TASK contexts only;
+  jdx/hk exposes no project-root variable and runs steps with cwd at the repo
+  root. Every claim about the function-hooks engine itself remains
+  RUNTIME-UNVERIFIED pending the probe.
+- **Affected tickets:** #1020 (gate amended by comment), #877 (the fix lands
+  under it), #998 (closed as duplicate), #524 (a verified `branch_guard`
+  fail-closed-under-load defect recorded against it), `ray-manaloto/knowledge-base#757`
+  (no longer a dotfiles prerequisite).
+- **Disposition:** `ACCEPTED_AND_ACTIVE` — ruling made and recorded; the probe
+  and both PRs remain.
+- **Topology and ownership:** The Claude session `7febd9f8` is the architect and
+  sole writer in the canonical checkout, on `fix/877-pre-push-project-root`
+  branched from `origin/main` at `9156dcf`. `fix/lock-refresh-producer-swap` is
+  shipped as PR #1021 with auto-merge armed and is CLOSED to further writes. Four
+  read-only advisory/research lanes ran during this session and wrote only to
+  `docs/research/kb/reports/agents/`; none is a writer. No worktree is registered.
+
+### Current goal
+
+> Adopt Claude Code function hooks for issue-retrieval/dedup on dotfiles' own evidence rather than waiting on a knowledge-base milestone; gate adoption on a two-arm firing probe executed in this repo's deployed environment, and stop rather than route around if that probe does not produce a MEASURED result.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    HIT["Hit #998 on a bare push; worked around it"] --> RECON["Recon: already filed as #877, 11 days old"]
+    RECON --> RULE["Ray: record mandatory; don't depend on knowledge-base"]
+    RULE --> RECORD["Comment #1020 + append this iteration"]
+    RECORD --> FIX["PR 1: #877 hk.pkl fallback + de-rig the rigged test"]
+    FIX --> PROBE["Two-arm classic.SessionStart firing probe, in this repo"]
+    PROBE -->|MEASURED| RETRIEVAL["PR 2: retrieval on function hooks"]
+    PROBE -->|does not fire| STOP["STOP and re-grill"]
+```
