@@ -6,7 +6,7 @@ requires-python = ">=3.14"
 dependencies = [
     # Graphify is a Python runtime dependency, not a second mise/pipx tool.
     # The CLI console script and SDK therefore resolve from the same uv lock.
-    "graphifyy[all]==0.9.53",
+    "graphifyy[all]==0.9.54",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.15.0",
     # deb822 control-file parser, maintained by Debian's own
@@ -54,7 +54,7 @@ build-backend = "setuptools.build_meta"
 # lets THIS project run graphifyy 0.9.53 while kb-setup keeps its own
 # (unmodified, out-of-bounds) declaration — no cross-repo change needed.
 [tool.uv]
-override-dependencies = ["graphifyy[all]==0.9.53"]
+override-dependencies = ["graphifyy[all]==0.9.54"]
 
 [tool.ruff]
 line-length = 88
