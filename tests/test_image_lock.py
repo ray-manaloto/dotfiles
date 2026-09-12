@@ -246,21 +246,32 @@ def test_the_lock_command_re_resolves_fuzzy_pins() -> None:
     assert "--bump" in argv
 
 
-def test_the_composite_and_the_local_task_resolve_the_same_way(
-    staged_lock_line: str,
+def test_the_composite_delegates_instead_of_re_inlining_the_recipe(
+    lock_refresh_commands: str,
 ) -> None:
-    """CI's staged lock and `mise run lock-image` must not disagree.
+    """The composite must CALL the shared producer, never spell the recipe again.
 
-    They are separate call sites — a shell line in the composite and this
-    argv builder — so nothing but this test keeps them in lockstep. If they
-    drift, a locally regenerated lock resolves different versions than the one
-    CI would produce, and the difference surfaces only as a confusing diff.
+    It used to shell out to `mise lock --bump --platform linux-x64` in a
+    five-pass loop of its own, and naming ONE platform is exactly what made the
+    scheduled path destructive: `mise lock` writes only the platforms it is
+    given, so every pass pruned the five others the committed lock carries, and
+    `--bump` landed that pruning whenever a version advanced.
+
+    The two call sites are now one, so the drift the predecessor of this test
+    policed is structurally impossible. What can still regress is someone
+    re-inlining the recipe here, which is what the second assertion catches.
     """
-    argv = image_lock.lock_command(Path("/s/mise-pinned"), Path("/s"), ("linux-x64",))
-    for flag in ("--bump", "--platform"):
-        assert flag in argv, f"{flag} missing from lock_command"
-        assert flag in staged_lock_line, (
-            f"{flag} missing from the composite's staged lock line"
+    assert "mise run lock-image -- --no-container" in lock_refresh_commands
+
+    # Control arm for the regression: the composite must not shell out to
+    # `mise lock` itself. Re-inlining the old recipe fails here, and because
+    # the fixture yields only `run:` values, a mention in a comment cannot
+    # satisfy — or trip — this.
+    for hand_rolled in ("lock --bump", "--platform linux-x64", "mise-pinned"):
+        assert hand_rolled not in lock_refresh_commands, (
+            f"the composite re-inlined the lock recipe ({hand_rolled!r}); "
+            "call `mise run lock-image` instead — image_lock.platforms_to_lock "
+            "derives the platform set from the committed lock, a literal does not"
         )
 
 
