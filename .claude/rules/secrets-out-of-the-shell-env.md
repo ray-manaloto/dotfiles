@@ -28,8 +28,19 @@ Measured: `gh` and `doppler` both kept their tokens in the keychain and hung
 forever from background processes (**190 stuck processes**, load 13.5). The
 discriminating arm is the same command with an isolated config dir, which returns
 in **0.45s**. Both entries were deleted (`security delete-generic-password -s
-'gh:github.com'` / `-s 'doppler-cli'`) and both now fall through to their ENV
+'gh:github.com'` / `-s 'doppler-cli'`) and both then fell through to their ENV
 token.
+
+⚠️ **BOTH ENTRIES ARE BACK — measured 2026-09-12, so the paragraph above is
+HISTORY, not current state.** `security find-generic-password -s` returns rc=0
+for `gh:github.com` (created 2026-08-26) and `doppler-cli` (2026-08-04);
+control arm, a bogus service name → rc=44, against 286 keychain entries.
+Something re-created them after the 2026-08-02 deletion. **The hang risk above
+is LIVE again**, which is why a mise `credential_command` must NOT be wired to
+`gh auth token` or `fnox get` (fnox is Doppler-primary for these names and
+shells out to the `doppler` CLI). Deleting them again is an OPERATOR action and
+wants its own triage — find what recreates them first, or it simply recurs.
+Evidence: `docs/research/kb/reports/agents/2026-09-12-gh-token-for-mise.md` §Q5.
 
 ⚠️ **This reaches fnox: its doppler provider SHELLS OUT to the `doppler` CLI**
 (error text `Doppler: command failed` — a subprocess failure). A hung `doppler`
