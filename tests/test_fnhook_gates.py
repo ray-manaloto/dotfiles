@@ -579,3 +579,38 @@ def test_every_mise_invocation_names_its_tool_not_a_bare_shim() -> None:
         assert fnhook_gates.tool_spec(REPO_ROOT, tool) == spec, (
             f"{tool} invoked at {version}, which is not its mise.toml pin"
         )
+
+
+def test_a_plugin_in_a_nested_checkout_is_not_discovered(tmp_path: Path) -> None:
+    """Reproduces the CI failure: another repo's plugin must not be gated here.
+
+    CI clones the sibling knowledge-base repo into `.rule-sync/` for the
+    cross-repo rule gate, and that repo ships a real function-hook plugin
+    (`kb-settings-guard`, untyped). On a GitHub runner 2026-09-12 discovery
+    found it and the typed-module assertion flagged it — both working as
+    designed, but failing this repo's gate over code it does not own.
+
+    Both arms run: the nested plugin is excluded AND a sibling plugin in the
+    repo proper is still found, so the exclusion cannot become a hole that
+    hides a real module.
+    """
+    (tmp_path / ".git").mkdir()
+
+    ours = tmp_path / "plugins" / "ours"
+    _write_plugin_markers(ours)
+
+    nested_root = tmp_path / ".rule-sync" / "knowledge-base"
+    (nested_root / ".git").mkdir(parents=True)
+    theirs = nested_root / ".claude" / "mods" / "kb-settings-guard"
+    _write_plugin_markers(theirs)
+
+    discovered = fnhook_gates.discover_plugin_dirs(tmp_path)
+
+    assert ours in discovered, (
+        "a plugin in the repo proper must still be discovered — without this "
+        "arm the exclusion could hide every real module"
+    )
+    assert theirs not in discovered, (
+        "a plugin inside a nested git checkout belongs to that repo's gate, "
+        "not this one"
+    )

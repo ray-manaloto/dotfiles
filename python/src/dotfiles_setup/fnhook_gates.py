@@ -144,19 +144,52 @@ def discover_plugin_dirs(
 ) -> list[Path]:
     """Return dirs containing both required Claude Code plugin manifests.
 
-    The set is derived from the tree. Only :data:`FIXTURE_ROOT` is excluded
-    from the production gate; a plugin elsewhere under ``tests/`` still counts.
+    The set is derived from the tree. Two things are excluded:
+    :data:`FIXTURE_ROOT` from the production gate (a plugin elsewhere under
+    ``tests/`` still counts), and any plugin inside a NESTED GIT CHECKOUT.
+
+    The nested-checkout rule is not hypothetical. CI clones the sibling
+    knowledge-base repo into `.rule-sync/` for the cross-repo rule gate, and
+    that repo really does ship a function-hook plugin — `kb-settings-guard`,
+    untyped. Discovery found it on a GitHub runner (2026-09-12) and the typed-
+    module assertion correctly flagged it, failing this repo's gate over
+    another repo's code. Both halves of that were working as designed; the
+    scope was wrong.
+
+    Excluding by "has its own `.git`" rather than by the name `.rule-sync`
+    means any future sibling checkout is handled the day it appears, and the
+    rule states the actual invariant: this gate governs THIS repo's modules.
     """
     fixture_root = (repo_root / FIXTURE_ROOT).resolve()
+    root = repo_root.resolve()
     discovered: list[Path] = []
     for plugin_manifest in repo_root.rglob(".claude-plugin/plugin.json"):
         plugin_dir = plugin_manifest.parent.parent
         if not (plugin_dir / "hooks" / "hooks.json").is_file():
             continue
-        if not include_fixtures and plugin_dir.resolve().is_relative_to(fixture_root):
+        resolved = plugin_dir.resolve()
+        if not include_fixtures and resolved.is_relative_to(fixture_root):
+            continue
+        if _is_in_nested_checkout(resolved, root):
             continue
         discovered.append(plugin_dir)
     return sorted(discovered)
+
+
+def _is_in_nested_checkout(plugin_dir: Path, repo_root: Path) -> bool:
+    """Whether any directory between `plugin_dir` and `repo_root` owns a `.git`.
+
+    `repo_root`'s own `.git` is deliberately not consulted — every path is
+    inside it, so including it would exclude everything.
+    """
+    for parent in (plugin_dir, *plugin_dir.parents):
+        if parent == repo_root:
+            return False
+        if not parent.is_relative_to(repo_root):
+            return False
+        if (parent / ".git").exists():
+            return True
+    return False
 
 
 def validate_plugin(
