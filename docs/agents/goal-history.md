@@ -833,3 +833,75 @@ flowchart LR
     PROBE -->|MEASURED| RETRIEVAL["PR 2: retrieval on function hooks"]
     PROBE -->|does not fire| STOP["STOP and re-grill"]
 ```
+
+## 2026-09-11 — discharge the function-hooks adoption gate by measurement
+
+- **Iteration ID:** `dotfiles-goal-20260911-016`
+- **Prior goal digest:** `sha256:83cb5c93e477f5471a57174b17850f624727bbbc9c00a321f061889c316de09d`
+- **Current goal digest:** `sha256:b0b405158cd329931aec937ce8d27a83863c59117de5059bce55ad8653f18726`
+- **Changed requirement:** Iteration 015 made the two-arm firing probe dotfiles'
+  own obligation and gated PR 2 on it. **The probe ran and produced a MEASURED
+  result: the engine fires and enforces.** The gate is discharged, so the goal
+  advances from "prove the substrate" to "build on it". Two design constraints
+  replace the open question, both measured rather than assumed: no NATIVE
+  `tool.call` registration that can reach Bash, and `--debug-file` plus a real
+  enforcement control arm in every verification. #1020's own restriction is
+  narrowed by measurement — it reads "wildcard observers included", but
+  `classic.*` is unaffected, so a session-wide observer and a `hook_guard`
+  migration both remain available.
+- **Reason:** 015 recorded the decision; this records verified delivery, which
+  the append-only contract requires be distinguishable from an accepted
+  decision. The probe's stop condition ("if it does not fire, or fires without
+  enforcing, work stops and the approach is re-decided") was not triggered.
+- **Evidence:** Three probes on `~/.local/share/claude/versions/2.1.269`, each
+  with both arms armed.
+  (1) **Firing/enforcement** — `classic.SessionStart` injected a fresh nonce into
+  the model's context (control: absent without the plugin);
+  `classic.PreToolUse{tool=Read}` `deny` was enforced under
+  `--permission-mode bypassPermissions` (`Hook result has permissionBehavior=deny`;
+  control: the Read succeeded without the plugin).
+  (2) **#92533** — reproduced on 2.1.269 (arm B), `on("*")` and bare
+  `on("tool.call")` also break worktree Bash (C, D), while `classic.*` (E) and
+  `classic.PreToolUse{tool=Bash}` (F) do not — F's hook fired twice on the
+  worktree agent's own Bash calls. Control arm A (no plugin) succeeded.
+  (3) **Double registration** does NOT silently replace: with the first handler a
+  passthrough, the second's deny reached the model, so both are live and nest.
+  Reports: `docs/research/kb/reports/agents/2026-09-11-function-hooks-firing-probe.md`
+  and `-worktree-bash-probe.md`; five lane reports beside them; posted to
+  `issues/1020#issuecomment-5643019562`. Two upstream sources promoted to
+  `docs/research/kb/raw/`. **Still UNVERIFIED:** `@skills-dir` deployment
+  (DOCUMENTED, and a GitHub sweep found zero users), interactive-session
+  behaviour, coexistence with this repo's nine classic registrations, the
+  `agentId`/`agent_id` lane-marker trap, and any cost model.
+- **Affected tickets:** #1020 (gate discharged by measurement; kept open for
+  `@skills-dir` and cost), #877 (fixed and closed by #1022), #524 (unchanged),
+  `anthropics/claude-code#92533` (confirmed live on 2.1.269),
+  `anthropics/claude-code#92469` (corroborated: `session.authorize` and
+  `flag.value` are real shipped capabilities).
+- **Disposition:** `ACCEPTED_AND_ACTIVE` — substrate verified; PR 2 unblocked and
+  not yet designed.
+- **Topology and ownership:** The Claude session `7febd9f8` is the architect and
+  sole writer in the canonical checkout, on `feat/function-hooks-probe` branched
+  from `origin/main` at `4362a78`. #1021 and #1022 are merged and landed
+  (`land -- 1022` rc=0). Six read-only research lanes ran and wrote only to
+  `docs/research/kb/reports/agents/` and `.agent/kb/raw/`; none is a writer. One
+  lane (`fnhook-codesearch`) declined its task on role grounds and the work was
+  re-routed. No worktree is registered in this repository; the #92533 probe
+  created worktrees only inside a throwaway scratchpad repository.
+
+### Current goal
+
+> Build issue-retrieval/dedup on Claude Code function hooks in the classic.* namespace, which measurement has established both fires and enforces on 2.1.269; keep every native tool.call registration that can reach Bash out of the design, and carry --debug-file plus a real enforcement control arm through every verification, because a runtime hook failure is silent and fails open.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    GATE["015: probe is dotfiles' own obligation"] --> PROBE["Two-arm firing probe on 2.1.269"]
+    PROBE -->|"MEASURED: fires + enforces"| NARROW["#92533 probe: 6 arms"]
+    NARROW -->|"classic.* and classic.PreToolUse are SAFE"| DESIGN["PR 2: retrieval in the classic namespace"]
+    NARROW -->|"native tool.call reaching Bash BREAKS worktrees"| CONSTRAINT["Constraint: no native tool.call on Bash"]
+    CONSTRAINT --> DESIGN
+    DESIGN --> SKILLSDIR["Open: probe @skills-dir for a clone-ready path"]
+    DESIGN --> CANARY["Open: plugin-validate contract in CI, per orchestkit"]
+```
