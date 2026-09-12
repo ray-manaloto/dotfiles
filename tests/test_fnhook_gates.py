@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path, PurePosixPath
 from typing import cast
@@ -20,6 +21,42 @@ from dotfiles_setup.main import setup_parser
 REPO_ROOT = Path(__file__).parent.parent.absolute()
 FIXTURE_ROOT = REPO_ROOT / fnhook_gates.FIXTURE_ROOT
 TYPE_FILENAMES = ("claude-code.d.ts", "claude-code-mcp.d.ts")
+
+
+def _real_tools_available() -> bool:
+    """Whether the two pinned binaries the gate shells out to actually resolve.
+
+    They are pinned in `mise.toml` (host-only, #1026 ruling), deliberately NOT
+    in the shared fragment, so they are absent inside the devcontainer — where
+    `sync --full` runs this suite. Skipping there keeps the suite runnable
+    everywhere WITHOUT weakening the gate: the `fnhook-gates` CLI still fails
+    loudly when a binary is missing, because a gate that shrugs is not a gate.
+
+    This only ever skips the arms that shell out to a real tool. Every
+    pure-python arm — discovery, the normalizer and its control arm, the typed-
+    module assertion, the hk-glob arming — runs unconditionally.
+    """
+    return all(
+        subprocess.run(
+            ["mise", "exec", "--", tool, "--version"],
+            capture_output=True,
+            check=False,
+            cwd=REPO_ROOT,
+        ).returncode
+        == 0
+        for tool in ("claude", "tsc")
+    )
+
+
+_REAL_TOOLS = _real_tools_available()
+_needs_real_tools = pytest.mark.skipif(
+    not _REAL_TOOLS,
+    reason=(
+        "`claude` and/or `tsc` do not resolve here — they are pinned host-only "
+        "in mise.toml, so this arm cannot run inside the devcontainer. The "
+        "fnhook-gates CLI still fails loudly on a missing binary."
+    ),
+)
 
 
 def _fixture_plugins() -> dict[str, Path]:
@@ -151,6 +188,7 @@ def test_typecheck_uses_discovered_files_and_committed_config(
     } | {str((plugin_dir / "hooks" / "register.ts").resolve())}
 
 
+@_needs_real_tools
 def test_valid_fixture_passes_both_real_tools(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -176,6 +214,7 @@ def test_valid_fixture_passes_both_real_tools(
         ("untyped", "typed", "untyped function-hook module"),
     ],
 )
+@_needs_real_tools
 def test_broken_fixtures_stay_invalid_for_the_intended_reason(
     fixture_name: str,
     gate_name: str,
@@ -206,6 +245,7 @@ def test_every_fixture_manifest_has_strict_mode_author() -> None:
         assert manifest["author"] == {"name": "dotfiles test suite"}
 
 
+@_needs_real_tools
 def test_every_discovered_production_plugin_passes_all_module_gates(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -456,4 +496,27 @@ def test_mcp_declarations_are_excluded_from_drift_but_the_api_file_is_not() -> N
     assert "claude-code.d.ts" in compared, (
         "excluding the MCP file must not stop the API declarations being compared — "
         "without this the drift check is a check that can only pass"
+    )
+
+
+def test_missing_binary_fails_the_gate_rather_than_skipping_it() -> None:
+    """The skip above must not become a way for the gate to shrug.
+
+    `_needs_real_tools` skips only the TEST arms that shell out. The gate
+    itself must still fail loudly when a binary does not resolve — otherwise
+    running it anywhere without the pinned tools would report success, which
+    is the "check that can only pass" this ticket exists to prevent.
+    """
+
+    def _missing(command: list[str], **_: object) -> GateResult:
+        return GateResult(
+            rc=127, stdout="", stderr=f"{command[0]}: command not found\n"
+        )
+
+    plugin_dir = _fixture_plugins()["valid"]
+    result = fnhook_gates.validate_plugin(plugin_dir, runner=_missing)
+
+    assert result.rc != 0, (
+        "a missing binary must fail the gate; a gate that passes when its tool "
+        "is absent is a check that can only pass"
     )
