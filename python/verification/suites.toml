@@ -2618,3 +2618,28 @@ per_path_lines = { "mise.toml" = [
 ], ".devcontainer/mise-runtime.toml" = [
     "#:schema ../schemas/mise.json",
 ] }
+
+[[suite]]
+name = "workflow.function-hook-build-gates"
+description = "#1026 prefactor: Claude Code function-hook modules must stay gated before #1029 adds the first production plugin. The hk step covers production plugin manifests/modules plus the one fixture subtree, invokes the public CLI, and the CLI dispatches to Python gate logic. Tests derive plugins from the tree, arm the exact fixture exclusion and production hk globs, keep one deliberately broken fixture per gate, and bind the generated declarations plus strict tsconfig. The suite asserts this chain exists; real validate/tsc/regeneration execution remains hk/pytest's job because verification suites are static."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    "mise.toml",
+    "hk.pkl",
+    "python/src/dotfiles_setup/main.py",
+    "python/src/dotfiles_setup/fnhook_gates.py",
+    "tests/test_fnhook_gates.py",
+    "tests/fixtures/fnhook/valid/.claude-plugin/plugin.json",
+    "tests/fixtures/fnhook/bad-event/hooks/register.ts",
+    "tests/fixtures/fnhook/parse-error/hooks/register.ts",
+    "tests/fixtures/fnhook/bad-return/hooks/register.ts",
+    "tests/fixtures/fnhook/untyped/hooks/register.ts",
+    ".claude/types/claude-code.d.ts",
+    ".claude/types/claude-code-mcp.d.ts",
+    ".claude/types/README.md",
+    "tsconfig.json",
+]
+per_path_tokens = { "mise.toml" = ['run = "uv run --project python dotfiles-setup fnhook-gates"', 'run = "uv run --project python dotfiles-setup fnhook-types-refresh"'], "hk.pkl" = ['["fnhook_gates"] {', '"**/.claude-plugin/plugin.json",', '"**/hooks/hooks.json",', '"**/hooks/*.ts",', 'check = "uv run --project python dotfiles-setup fnhook-gates"'], "python/src/dotfiles_setup/main.py" = ['"fnhook-gates",', '"fnhook-gates": lambda', '"fnhook-types-refresh",', '"fnhook-types-refresh": lambda'], "python/src/dotfiles_setup/fnhook_gates.py" = ['def discover_plugin_dirs(', 'def validate_plugin(', 'def typecheck_modules(', 'def assert_modules_are_typed(', 'def normalize_claude_code_declarations(', 'def fnhook_gates_main(', 'def fnhook_types_refresh_main('], "tests/test_fnhook_gates.py" = ['def test_plugin_elsewhere_under_tests_is_discovered(', 'def test_broken_fixtures_stay_invalid_for_the_intended_reason(', 'def test_hk_glob_is_armed_for_production_plugin_surfaces(', 'def test_normalizer_ignores_environment_specific_tool_inventory(', 'def test_normalizer_detects_plugin_api_surface_mutation('], "tests/fixtures/fnhook/bad-event/hooks/register.ts" = ['on("classic.SessionStartt",'], "tests/fixtures/fnhook/parse-error/hooks/register.ts" = ['export const register: Register = ('], "tests/fixtures/fnhook/bad-return/hooks/register.ts" = ['additionalContext: "not-an-array"'], "tests/fixtures/fnhook/untyped/hooks/register.ts" = ['(on: any, _options: any)'], ".claude/types/claude-code.d.ts" = ["// Written by Claude Code 2.1.269."], ".claude/types/claude-code-mcp.d.ts" = ["interface McpToolInputs {"], ".claude/types/README.md" = ["CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 mise exec -- claude -p '/plugin-types'"], "tsconfig.json" = ['"strict": true,', '".claude/types",'] }

@@ -1,0 +1,4 @@
+{
+  "description": "Function-hook module with an invalid event name",
+  "modules": ["./register.ts"]
+}

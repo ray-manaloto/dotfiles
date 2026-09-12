@@ -1,0 +1,4 @@
+{
+  "description": "Function-hook module with a top-level syntax error",
+  "modules": ["./register.ts"]
+}

@@ -249,6 +249,19 @@ local allSteps = new Mapping<String, Config.Step> {
     check = "uv run --project python dotfiles-setup bash-budget"
   }
 
+  ["fnhook_gates"] {
+    glob = List(
+      "**/.claude-plugin/plugin.json",
+      "**/hooks/hooks.json",
+      "**/hooks/*.ts",
+      ".claude/types/*.d.ts",
+      "tsconfig.json",
+      "tests/fixtures/fnhook/**",
+      "python/src/dotfiles_setup/fnhook_gates.py",
+    )
+    check = "uv run --project python dotfiles-setup fnhook-gates"
+  }
+
   // One platform parameter (#673). The target architecture used to be the
   // literal `linux/amd64/v2` repeated across bake config, three mise task
   // envs, devcontainer.json, five python modules, the benchmark script and

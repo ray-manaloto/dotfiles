@@ -1,0 +1,8 @@
+{
+  "name": "fnhook-fixture-bad-event",
+  "version": "1.0.0",
+  "description": "Invalid event-name function-hook fixture",
+  "author": {
+    "name": "dotfiles test suite"
+  }
+}

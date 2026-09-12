@@ -1,0 +1,8 @@
+{
+  "name": "fnhook-fixture-valid",
+  "version": "1.0.0",
+  "description": "Valid function-hook gate fixture",
+  "author": {
+    "name": "dotfiles test suite"
+  }
+}

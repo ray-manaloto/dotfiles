@@ -1,0 +1,8 @@
+{
+  "name": "fnhook-fixture-bad-return",
+  "version": "1.0.0",
+  "description": "Bad-return function-hook fixture",
+  "author": {
+    "name": "dotfiles test suite"
+  }
+}
