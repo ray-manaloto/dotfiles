@@ -789,7 +789,17 @@ hooks {
       }
       ["test"] {
         exclusive = true
-        check = "env -u MISE_IGNORED_CONFIG_PATHS mise --cd \"$MISE_PROJECT_ROOT\" run test-hook-isolated"
+        // #877: MISE_PROJECT_ROOT is set by mise in TASK execution contexts
+        // (jdx/mise PR #9657, docs/hooks.md). A git pre-push hook is NOT one, so
+        // from a plain shell the variable is empty and this became `mise --cd ""`
+        // -> "Directory specified with --cd does not exist". The step then
+        // ERRORED before reaching test-hook-isolated, so a bare push certified
+        // nothing. It stayed hidden because `mise run ship` DOES supply the
+        // variable, and that is the path every normal push takes.
+        // The fallback keeps mise's value where mise sets it and resolves the
+        // root from git everywhere else. Pinned by
+        // tests/test_process_env.py::test_pre_push_step_resolves_the_root_without_mise_project_root.
+        check = "env -u MISE_IGNORED_CONFIG_PATHS mise --cd \"${MISE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}\" run test-hook-isolated"
       }
     }
   }
