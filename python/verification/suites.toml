@@ -1587,11 +1587,11 @@ paths = [
     "python/src/dotfiles_setup/codex_lane.py",
     "tests/test_codex_lane.py",
     ".claude/rules/agent-report-persistence.md",
-    ".claude/agents/codex-advisor.md",
-    ".claude/agents/codex-operator.md",
-    ".claude/agents/codex-adversarial-critic.md",
-    ".claude/agents/codex-claude-code-expert.md",
-    ".claude/agents/codex-staleness-auditor.md",
+    ".claude/agents/codex-sol-advisor.md",
+    ".claude/agents/codex-sol-operator.md",
+    ".claude/agents/codex-sol-adversarial-critic.md",
+    ".claude/agents/codex-sol-claude-code-expert.md",
+    ".claude/agents/codex-sol-staleness-auditor.md",
 ]
 per_path_tokens = { "python/src/dotfiles_setup/codex_lane.py" = [
     'LANE_ENV_OVERRIDES = {"PLANNING_DISABLED": "1"}',
@@ -1602,15 +1602,15 @@ per_path_tokens = { "python/src/dotfiles_setup/codex_lane.py" = [
 ], ".claude/rules/agent-report-persistence.md" = [
     "| Phases, checkboxes, current phase, distilled decisions | `task_plan.md` | **coordinator ONLY** |",
     "codex_lane.LANE_ENV_OVERRIDES",
-], ".claude/agents/codex-advisor.md" = [
+], ".claude/agents/codex-sol-advisor.md" = [
     "PLANNING_DISABLED=1 codex exec",
-], ".claude/agents/codex-operator.md" = [
+], ".claude/agents/codex-sol-operator.md" = [
     "PLANNING_DISABLED=1 codex exec",
-], ".claude/agents/codex-adversarial-critic.md" = [
+], ".claude/agents/codex-sol-adversarial-critic.md" = [
     "PLANNING_DISABLED=1 codex exec",
-], ".claude/agents/codex-claude-code-expert.md" = [
+], ".claude/agents/codex-sol-claude-code-expert.md" = [
     "PLANNING_DISABLED=1 codex exec",
-], ".claude/agents/codex-staleness-auditor.md" = [
+], ".claude/agents/codex-sol-staleness-auditor.md" = [
     "PLANNING_DISABLED=1 codex exec",
 ] }
 tokens = [
@@ -1632,9 +1632,9 @@ paths = [
     "python/src/dotfiles_setup/main.py",
     "python/src/dotfiles_setup/codex_agent_parity.py",
     "tests/test_codex_agent_parity.py",
-    ".codex/agents/codex-advisor.toml",
+    ".codex/agents/codex-sol-advisor.toml",
 ]
-per_path_tokens = { "hk.pkl" = ['codex_agent_parity"', 'dotfiles-setup codex-agent-parity"'], "mise.toml" = ["[tasks.codex-agent-parity]"], "python/src/dotfiles_setup/main.py" = ['"codex-agent-parity",', '"codex-agent-parity": lambda'], "python/src/dotfiles_setup/codex_agent_parity.py" = ['SENTINEL = "dotfiles-hand-authored-codex-lane"', 'def codex_agent_parity_main(', 'def flatten(', 'def _md_violations('], "tests/test_codex_agent_parity.py" = ['def test_the_sentinel_is_absent_from_every_exported_mirror(', 'def test_the_entry_point_returns_nonzero_on_a_violation(', 'def test_real_exporter_output_in_scope_fails(', 'def test_a_line_wrap_cannot_hide_a_marker('], ".codex/agents/codex-advisor.toml" = ["dotfiles-hand-authored-codex-lane"] }
+per_path_tokens = { "hk.pkl" = ['codex_agent_parity"', 'dotfiles-setup codex-agent-parity"'], "mise.toml" = ["[tasks.codex-agent-parity]"], "python/src/dotfiles_setup/main.py" = ['"codex-agent-parity",', '"codex-agent-parity": lambda'], "python/src/dotfiles_setup/codex_agent_parity.py" = ['SENTINEL = "dotfiles-hand-authored-codex-lane"', 'def codex_agent_parity_main(', 'def flatten(', 'def _md_violations('], "tests/test_codex_agent_parity.py" = ['def test_the_sentinel_is_absent_from_every_exported_mirror(', 'def test_the_entry_point_returns_nonzero_on_a_violation(', 'def test_real_exporter_output_in_scope_fails(', 'def test_a_line_wrap_cannot_hide_a_marker('], ".codex/agents/codex-sol-advisor.toml" = ["dotfiles-hand-authored-codex-lane"] }
 tokens = [
     'dotfiles-setup codex-agent-parity"',
     'def codex_agent_parity_main(',
@@ -2304,7 +2304,7 @@ paths = [
     "tests/test_codex_lane.py",
     "tests/test_codex_lane_e2e.py",
 ]
-per_path_tokens = { "python/src/dotfiles_setup/codex_lane.py" = ['LANE_DIRNAME = CODEX_LANE_DIRNAME', 'codex_verdict.write_schema(run_dir / SCHEMA_FILENAME)', 'for name in _STALE_ARTIFACTS:', '(run_dir / name).unlink(missing_ok=True)', 'codex_verdict.PROCESSED_FILENAME,', 'str(run_dir / SCHEMA_FILENAME),', 'str(run_dir / codex_verdict.VERDICT_FILENAME),', 'argv.append("-")', 'READ_ONLY_SANDBOX = "read-only"', 'LAUNCHER_FAILED_EXIT = 70', 'except BaseException as exc:', 'record_exit(run_dir, exit_code)', 'def run_lane_cli(', 'def write_lane_record(', '"status": codex_verdict.IN_PROGRESS,', 'fcntl.flock(handle.fileno(), fcntl.LOCK_EX)', 'def warn_if_node_unknown(', 'read_rework_count(run_dir) if rework_count is None else rework_count', 'def previous_round_was_rework(', 'if rework_count is None and previous_round_was_rework(run_dir):', 'codex_verdict.PROCESSED_FILENAME).read_text()', 'codex_verdict.demands_rework(parsed.verdict)'], "python/src/dotfiles_setup/main.py" = ['_add_codex_lane_subcommand(subparsers)', '"codex-lane": lambda: sys.exit(run_lane_cli(args)),', 'from dotfiles_setup.codex_lane import run_lane_cli'], "mise.toml" = ['[tasks.codex-lane]', '[tasks.codex-lane-e2e]', 'dotfiles-setup codex-lane', '-m codex_exec tests/test_codex_lane_e2e.py'], "pytest.ini" = ['addopts = -m "not image_exec and not codex_exec"', 'codex_exec: end-to-end Codex lane test'], "tests/test_codex_lane.py" = ['def test_the_run_dir_is_the_one_the_reaper_actually_scans(', 'def test_the_producer_does_not_restate_the_consumers_dirname(', 'def test_prepare_lane_materialises_the_schema_the_provider_enforces(', 'def test_prepare_lane_clears_a_stale_exit_signal(', 'def test_prepare_lane_clears_a_stale_marker_file_too(', 'def test_prepare_lane_clears_a_consumed_verdict_from_the_previous_round(', 'def test_the_argv_passes_both_output_flags(', 'def test_a_launcher_crash_still_settles_the_lane(', 'def test_a_launched_lane_is_reaped_into_an_advance_edge(', 'def test_the_tick_reports_a_lane_this_producer_launched(', 'def test_the_producer_does_not_restate_the_consumers_status(', 'def test_prepare_lane_waits_for_the_reapers_lock(', 'def test_a_relaunch_carries_the_previous_rounds_rework_count(', 'def test_a_node_with_no_job_directory_is_warned_about(', 'def test_a_relaunch_after_a_revise_spends_a_rework_round(', 'def test_a_relaunch_after_an_approve_spends_nothing(', 'def test_a_verdict_that_was_never_reaped_spends_nothing(', 'def test_the_increment_is_idempotent_without_a_new_round(', 'def test_an_explicit_rework_count_is_not_incremented_on_top(', 'def test_a_revise_loop_really_reaches_the_bound('], "tests/test_codex_lane_e2e.py" = ['pytestmark = pytest.mark.codex_exec', 'def test_a_real_codex_call_round_trips_into_an_advance_edge(', 'def test_the_provider_really_constrains_the_payload_shape(', 'def test_the_schema_file_is_one_codex_accepts(', 'def test_a_real_lane_is_reported_by_the_tick(', 'def launched(', 'def rework_loop(', 'def test_a_real_revise_verdict_makes_the_producer_spend_a_round(', 'def test_a_real_revise_loop_escalates_to_needs_human('] }
+per_path_tokens = { "python/src/dotfiles_setup/codex_lane.py" = ['LANE_DIRNAME = CODEX_LANE_DIRNAME', 'codex_verdict.write_schema(run_dir / SCHEMA_FILENAME)', 'for name in _STALE_ARTIFACTS:', '(run_dir / name).unlink(missing_ok=True)', 'codex_verdict.PROCESSED_FILENAME,', 'str(run_dir / SCHEMA_FILENAME),', 'str(run_dir / codex_verdict.VERDICT_FILENAME),', 'argv.append("-")', 'READ_ONLY_SANDBOX = "read-only"', 'LAUNCHER_FAILED_EXIT = 70', 'except BaseException as exc:', 'record_exit(run_dir, exit_code)', 'def run_lane_cli(', 'def write_lane_record(', '"status": codex_verdict.IN_PROGRESS,', 'fcntl.flock(handle.fileno(), fcntl.LOCK_EX)', 'def warn_if_node_unknown(', 'read_rework_count(run_dir) if rework_count is None else rework_count', 'def previous_round_was_rework(', 'if rework_count is None and previous_round_was_rework(run_dir):', 'codex_verdict.PROCESSED_FILENAME).read_text()', 'codex_verdict.demands_rework(parsed.verdict)'], "python/src/dotfiles_setup/main.py" = ['_add_codex_lane_subcommand(subparsers)', '"codex-lane": lambda: sys.exit(run_lane_cli(args)),', 'from dotfiles_setup.codex_lane import run_lane_cli'], "mise.toml" = ['[tasks.codex-lane]', '[tasks.codex-lane-e2e]', "dotfiles-setup codex-lane'", '-m codex_exec tests/test_codex_lane_e2e.py'], "pytest.ini" = ['addopts = -m "not image_exec and not codex_exec"', 'codex_exec: end-to-end Codex lane test'], "tests/test_codex_lane.py" = ['def test_the_run_dir_is_the_one_the_reaper_actually_scans(', 'def test_the_producer_does_not_restate_the_consumers_dirname(', 'def test_prepare_lane_materialises_the_schema_the_provider_enforces(', 'def test_prepare_lane_clears_a_stale_exit_signal(', 'def test_prepare_lane_clears_a_stale_marker_file_too(', 'def test_prepare_lane_clears_a_consumed_verdict_from_the_previous_round(', 'def test_the_argv_passes_both_output_flags(', 'def test_a_launcher_crash_still_settles_the_lane(', 'def test_a_launched_lane_is_reaped_into_an_advance_edge(', 'def test_the_tick_reports_a_lane_this_producer_launched(', 'def test_the_producer_does_not_restate_the_consumers_status(', 'def test_prepare_lane_waits_for_the_reapers_lock(', 'def test_a_relaunch_carries_the_previous_rounds_rework_count(', 'def test_a_node_with_no_job_directory_is_warned_about(', 'def test_a_relaunch_after_a_revise_spends_a_rework_round(', 'def test_a_relaunch_after_an_approve_spends_nothing(', 'def test_a_verdict_that_was_never_reaped_spends_nothing(', 'def test_the_increment_is_idempotent_without_a_new_round(', 'def test_an_explicit_rework_count_is_not_incremented_on_top(', 'def test_a_revise_loop_really_reaches_the_bound('], "tests/test_codex_lane_e2e.py" = ['pytestmark = pytest.mark.codex_exec', 'def test_a_real_codex_call_round_trips_into_an_advance_edge(', 'def test_the_provider_really_constrains_the_payload_shape(', 'def test_the_schema_file_is_one_codex_accepts(', 'def test_a_real_lane_is_reported_by_the_tick(', 'def launched(', 'def rework_loop(', 'def test_a_real_revise_verdict_makes_the_producer_spend_a_round(', 'def test_a_real_revise_loop_escalates_to_needs_human('] }
 
 [[suite]]
 name = "workflow.listing-budget-enforcement"

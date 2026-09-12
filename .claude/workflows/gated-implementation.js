@@ -6,7 +6,7 @@ export const meta = {
     { title: 'Implement', detail: 'dispatch the marked spec file and verbatim PREMISES to codex-implementer' },
     { title: 'Gates', detail: 'run every requested verification command through gate-runner' },
     { title: 'Review', detail: 'cold-review the reported commit or caller-supplied ref' },
-    { title: 'Critique', detail: 'optionally replay a proposal with codex-adversarial-critic' },
+    { title: 'Critique', detail: 'optionally replay a proposal with codex-sol-adversarial-critic' },
   ],
 }
 
@@ -126,12 +126,12 @@ if (A.criticProposal) {
   phase('Critique')
   log('Critique: dispatching the supplied proposal')
   critic = await agent(A.criticProposal, {
-    label: 'codex-adversarial-critic',
+    label: 'codex-sol-adversarial-critic',
     phase: 'Critique',
-    agentType: 'codex-adversarial-critic',
+    agentType: 'codex-sol-adversarial-critic',
     schema: CRITIC,
   })
-  if (critic === null) log('Critique: codex-adversarial-critic returned null')
+  if (critic === null) log('Critique: codex-sol-adversarial-critic returned null')
 } else {
   log('Critique: skipped because criticProposal is empty')
 }

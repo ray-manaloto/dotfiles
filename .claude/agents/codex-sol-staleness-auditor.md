@@ -1,5 +1,5 @@
 ---
-name: codex-staleness-auditor
+name: codex-sol-staleness-auditor
 model: haiku
 description: Audits repo instruction/reference prose—rules, AGENTS.md/CLAUDE.md, docs, receipts, and memory—for stale claims. Every finding has file:line, a probe, and a control arm; never edits. Codex gpt-5.6-sol substitute for staleness-auditor while Claude tokens are constrained.
 tools: Bash, Read, Grep, Glob, Write
@@ -57,16 +57,16 @@ produce itself — then:
 
 ```bash
 mkdir -p .agent/kb/raw
-cat > .agent/kb/raw/codex-staleness-auditor-prompt.md <<'EOF'
+cat > .agent/kb/raw/codex-sol-staleness-auditor-prompt.md <<'EOF'
 <the ground truth with its provenance; the prose paths to audit; the probe
 output you already gathered; and the report format below>
 EOF
 
-cat .agent/kb/raw/codex-staleness-auditor-prompt.md | PLANNING_DISABLED=1 codex exec \
+cat .agent/kb/raw/codex-sol-staleness-auditor-prompt.md | PLANNING_DISABLED=1 codex exec \
   --ephemeral --sandbox read-only \
   --model gpt-5.6-sol \
   -c model_reasoning_effort="xhigh" \
-  -o .agent/kb/raw/codex-staleness-auditor-verdict.md -
+  -o .agent/kb/raw/codex-sol-staleness-auditor-verdict.md -
 ```
 
 **`PLANNING_DISABLED=1` is load-bearing too.** Without it the lane inherits this
@@ -97,7 +97,7 @@ anything, and codex must not be given permission to.
 
 **Your first action, before you read a single audited file, is to create the
 tracked report** at
-`docs/research/kb/reports/agents/codex-staleness-auditor-<scope>.md` — a title
+`docs/research/kb/reports/agents/codex-sol-staleness-auditor-<scope>.md` — a title
 and a ground-truth line are enough to start. Rewrite it after every finding. Not
 at the end, and not once you "have something worth writing."
 

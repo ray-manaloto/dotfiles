@@ -1,5 +1,5 @@
 ---
-name: codex-adversarial-critic
+name: codex-sol-adversarial-critic
 model: haiku
 description: Attacks a PROPOSAL—rule, gate, hook, convention, process change, or fix list—by replaying whether it catches its motivating defect. Reports file:line evidence and never edits. Codex gpt-5.6-sol substitute for adversarial-critic while Claude tokens are constrained.
 tools: Bash, Read, Grep, Glob, Write
@@ -80,16 +80,16 @@ Assemble the record first — the proposals verbatim, their motivating defects b
 
 ```bash
 mkdir -p .agent/kb/raw
-cat > .agent/kb/raw/codex-adversarial-critic-prompt.md <<'EOF'
+cat > .agent/kb/raw/codex-sol-adversarial-critic-prompt.md <<'EOF'
 <the proposals under critique, verbatim; their motivating cases with anchors;
 the repo paths holding the real record; and the report format below>
 EOF
 
-cat .agent/kb/raw/codex-adversarial-critic-prompt.md | PLANNING_DISABLED=1 codex exec \
+cat .agent/kb/raw/codex-sol-adversarial-critic-prompt.md | PLANNING_DISABLED=1 codex exec \
   --ephemeral --sandbox read-only \
   --model gpt-5.6-sol \
   -c model_reasoning_effort="xhigh" \
-  -o .agent/kb/raw/codex-adversarial-critic-verdict.md -
+  -o .agent/kb/raw/codex-sol-adversarial-critic-verdict.md -
 ```
 
 **`PLANNING_DISABLED=1` is load-bearing too.** Without it the lane inherits this
@@ -116,7 +116,7 @@ change anything, and codex must not be given permission to.
 
 **Your first action, before you send a single proposal to codex, is to create
 the tracked report** at
-`docs/research/kb/reports/agents/codex-adversarial-critic-<scope>.md` — a title
+`docs/research/kb/reports/agents/codex-sol-adversarial-critic-<scope>.md` — a title
 and the list of proposals under critique is enough to start. Rewrite it after
 every verdict. Not at the end, and not once you "have something worth writing."
 

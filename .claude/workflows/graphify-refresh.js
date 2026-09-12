@@ -95,12 +95,12 @@ phase('Audit')
 if (A.staleTerms.length) {
   log(`Audit: dispatching ${A.staleTerms.length} stale terms`)
   audit = await agent(`Audit repository prose for these stale terms and report every claim with evidence:\n${A.staleTerms.join('\n')}`, {
-    label: 'codex-staleness-auditor',
+    label: 'codex-sol-staleness-auditor',
     phase: 'Audit',
-    agentType: 'codex-staleness-auditor',
+    agentType: 'codex-sol-staleness-auditor',
     schema: AUDIT,
   })
-  if (audit === null) log('Audit: codex-staleness-auditor returned null')
+  if (audit === null) log('Audit: codex-sol-staleness-auditor returned null')
 } else {
   log('Audit: skipped because staleTerms is empty')
 }

@@ -60,10 +60,10 @@ KNOWN_LABEL_PREFIXES = {
     "codex-implementer",
     "gate-runner",
     "cold-reviewer",
-    "codex-adversarial-critic",
+    "codex-sol-adversarial-critic",
     "graphify-researcher",
     "graphify-operator",
-    "codex-staleness-auditor",
+    "codex-sol-staleness-auditor",
 }
 
 ARGS = {
@@ -341,7 +341,7 @@ def test_m1_missing_commit_and_no_review_ref_skips_review_and_critique(
     assert run_result["review"] is None
     assert run_result["critic"] is None
     assert "cold-reviewer" not in labels, "must not review an empty ref"
-    assert "codex-adversarial-critic" not in labels
+    assert "codex-sol-adversarial-critic" not in labels
     assert "gate-runner" in labels, "gates still run — evidence about the tree"
 
 
@@ -359,7 +359,7 @@ def test_m1_explicit_review_ref_still_dispatches_despite_missing_commit(
     body = (
         _GATES_OK_BODY
         + f"  if (label === 'cold-reviewer') return {review_ok}\n"
-        + f"  if (label === 'codex-adversarial-critic') return {critic_ok}\n"
+        + f"  if (label === 'codex-sol-adversarial-critic') return {critic_ok}\n"
         + "  return null"
     )
     wrapped = _custom_stub_source(source, args, body)

@@ -25,6 +25,7 @@ from dotfiles_setup.bootstrap_packages import gap_report_failures
 from dotfiles_setup.classifier_tables import classifier_axes_main
 from dotfiles_setup.codex_agent_parity import codex_agent_parity_main
 from dotfiles_setup.codex_lane import run_lane_cli
+from dotfiles_setup.codex_lane_mirror import codex_lane_mirror_main
 from dotfiles_setup.command_audit import DEFAULT_SESSION_LIMIT, command_audit_main
 from dotfiles_setup.config import DotfilesConfig
 from dotfiles_setup.container import verify_latest_main
@@ -501,6 +502,28 @@ def _add_skills_mirror_subcommand(subparsers: _SubParsers) -> None:
     )
 
 
+def _add_codex_lane_mirror_subcommand(subparsers: _SubParsers) -> None:
+    """Register `codex-lane-mirror` as its own function.
+
+    Same PLR0915 statement-ceiling reason `_add_skills_mirror_subcommand` is its
+    own function.
+
+    Args:
+        subparsers: The parent subparsers action to attach this to.
+    """
+    codex_lane_mirror_parser = subparsers.add_parser(
+        "codex-lane-mirror",
+        help="Generate/check the codex-astra-* lanes mirrored from codex-sol-*. "
+        "Bare form WRITES; --check is read-only and exits 1 naming every "
+        "drifted or stale generated lane",
+    )
+    codex_lane_mirror_parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Report drift without writing",
+    )
+
+
 def _add_hk_builtins_audit_subcommand(subparsers: _SubParsers) -> None:
     """Register `hk-builtins-audit` as its own function (#994).
 
@@ -850,6 +873,7 @@ def _add_honesty_and_skills_mirror_subcommands(subparsers: _SubParsers) -> None:
     """
     _add_honesty_subcommands(subparsers)
     _add_skills_mirror_subcommand(subparsers)
+    _add_codex_lane_mirror_subcommand(subparsers)
 
 
 def _add_workflow_dag_subcommands(subparsers: _SubParsers) -> None:
@@ -2532,6 +2556,9 @@ def _build_command_handlers(
         "bash-budget": lambda: sys.exit(bash_budget_main(project_root)),
         "skills-mirror": lambda: sys.exit(
             skills_mirror_main(project_root, check=args.check)
+        ),
+        "codex-lane-mirror": lambda: sys.exit(
+            codex_lane_mirror_main(project_root, check=args.check)
         ),
         "audit-aggregate": lambda: sys.exit(
             modernization_audit_main(

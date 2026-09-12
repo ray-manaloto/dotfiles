@@ -1268,6 +1268,11 @@ description = "Generate/check the .agents/skills mirror of .claude/skills. Bare 
 # Thin caller; all rewrite logic lives in python/src/dotfiles_setup/skills_mirror.py.
 run = "uv run --project python dotfiles-setup skills-mirror"
 
+[tasks.codex-lane-mirror]
+description = "Generate/check the codex-astra-* lanes mirrored from codex-sol-*. Bare form WRITES; `-- --check` is read-only and exits 1 naming every drifted or stale generated lane."
+# Thin caller; all rewrite logic lives in python/src/dotfiles_setup/codex_lane_mirror.py.
+run = "uv run --project python dotfiles-setup codex-lane-mirror"
+
 [tasks.lint-docs]
 description = "Validate agent documentation"
 # --strict: warnings-as-errors (#250) — parity with ci.yml + the hk agnix step.

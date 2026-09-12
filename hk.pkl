@@ -658,6 +658,15 @@ local allSteps = new Mapping<String, Config.Step> {
     check = "uv run --project python dotfiles-setup skills-mirror --check"
   }
 
+  // Every codex role ships in two model families: `codex-sol-*` is AUTHORED and
+  // `codex-astra-*` is generated from it. They share ~270 lines of evidence
+  // discipline and hard limits per role, so hand-maintaining both means the
+  // drift is silent — nothing fails when only one twin is updated. This is the
+  // `--check` arm of that generator, same shape as `skills_mirror_parity`.
+  ["codex_lane_mirror"] {
+    check = "uv run --project python dotfiles-setup codex-lane-mirror --check"
+  }
+
   // --- Graphify skill surface must stay in its reviewed, DELIBERATE shape.
   //     `.claude/skills/graphify/SKILL.md` is the full installed Claude Code
   //     bundle. `.agents/skills/graphify/SKILL.md` is a DELIBERATE
