@@ -1,0 +1,4 @@
+{
+  "description": "Function-hook module whose any types evade TypeScript",
+  "modules": ["./register.ts"]
+}

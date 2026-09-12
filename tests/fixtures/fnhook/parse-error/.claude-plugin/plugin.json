@@ -1,0 +1,8 @@
+{
+  "name": "fnhook-fixture-parse-error",
+  "version": "1.0.0",
+  "description": "Parse-error function-hook fixture",
+  "author": {
+    "name": "dotfiles test suite"
+  }
+}

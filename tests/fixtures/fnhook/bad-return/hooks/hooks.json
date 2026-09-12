@@ -1,0 +1,4 @@
+{
+  "description": "Typed function-hook module with an invalid return shape",
+  "modules": ["./register.ts"]
+}

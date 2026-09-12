@@ -54,6 +54,10 @@ from dotfiles_setup.docker import DevContainerManager
 from dotfiles_setup.doctor import doctor_main
 from dotfiles_setup.env_blob_scan import env_blob_scan_main
 from dotfiles_setup.eval_cases import cases as eval_cases_for
+from dotfiles_setup.fnhook_gates import (
+    fnhook_gates_main,
+    fnhook_types_refresh_main,
+)
 from dotfiles_setup.gcc_sha import gcc_sha_main
 from dotfiles_setup.ghcr import validate_ghcr_prereqs
 from dotfiles_setup.ghcr_cleanup import plan_cleanup
@@ -1492,6 +1496,20 @@ def _add_hook_subcommands(
     # avoid pushing setup_parser's own statement count over PLR0915's cap —
     # schema-vendor has nothing to do with Claude Code hooks.
     _add_schema_vendor_subcommands(subparsers)
+    _add_fnhook_subcommands(subparsers)
+
+
+def _add_fnhook_subcommands(subparsers: _SubParsers) -> None:
+    """Register the function-hook validation and declaration refresh commands."""
+    subparsers.add_parser(
+        "fnhook-gates",
+        help="Validate and type-check every discovered Claude Code "
+        "function-hook module",
+    )
+    subparsers.add_parser(
+        "fnhook-types-refresh",
+        help="Regenerate both function-hook declaration files from pinned Claude Code",
+    )
 
 
 def _add_schema_vendor_subcommands(subparsers: _SubParsers) -> None:
@@ -2535,6 +2553,8 @@ def _build_command_handlers(
         ),
         "hook": lambda: handle_hook(args, project_root),
         "schema-vendor": lambda: handle_schema_vendor(args),
+        "fnhook-gates": lambda: sys.exit(fnhook_gates_main()),
+        "fnhook-types-refresh": lambda: sys.exit(fnhook_types_refresh_main()),
         "graphify": lambda: handle_graphify(args, project_root),
         "dependency-ownership": lambda: sys.exit(
             dependency_ownership_main(project_root)

@@ -1,0 +1,8 @@
+{
+  "name": "fnhook-fixture-untyped",
+  "version": "1.0.0",
+  "description": "Untyped function-hook fixture",
+  "author": {
+    "name": "dotfiles test suite"
+  }
+}

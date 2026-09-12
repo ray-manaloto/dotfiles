@@ -6794,6 +6794,10 @@ url = "https://github.com/lima-vm/lima/releases/download/v2.2.0/lima-2.2.0-Windo
 url_api = "https://api.github.com/repos/lima-vm/lima/releases/assets/484814002"
 provenance = "github-attestations"
 
+[[tools."npm:@anthropic-ai/claude-code"]]
+version = "2.1.269"
+backend = "npm:@anthropic-ai/claude-code"
+
 [[tools."npm:@contextlint/cli"]]
 version = "1.1.1"
 backend = "npm:@contextlint/cli"
@@ -6837,6 +6841,10 @@ backend = "npm:renovate"
 [[tools."npm:skills"]]
 version = "1.5.23"
 backend = "npm:skills"
+
+[[tools."npm:typescript"]]
+version = "5.9.3"
+backend = "npm:typescript"
 
 [[tools.opencode]]
 version = "1.18.27"

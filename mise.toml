@@ -20,6 +20,11 @@ editorconfig-checker = "3.11.2" # provides `ec` — hk editorconfig_checker buil
 # over the whole 31.5 MB tree in 199 ms.
 "aqua:betterleaks/betterleaks" = "1.8.1"
 "npm:@devcontainers/cli" = "0.89.0"
+# Host/CI-only build gates for Claude Code function-hook modules (#1026).
+# These stay out of shared.toml because hk-image.pkl never runs the gate and
+# neither tool belongs in the devcontainer image.
+"npm:@anthropic-ai/claude-code" = "2.1.269"
+"npm:typescript" = "5.9.3"
 # Critical host-side secrets transport for devcontainer initialization. Keep it
 # deep-tracked in currency.toml: Doppler's mounted-secret behavior is part of
 # the devcontainer security boundary, not an optional interactive convenience.
@@ -222,6 +227,14 @@ timeout = "700s"
 # with `--timeout <secs>` or `DOTFILES_LINT_TIMEOUT=<secs> mise run lint`.
 description = "Run hk check --all (read-only, ≡ CI) under a hard timeout (default 600s) so a hung lint self-aborts; fix path is `mise run fmt`"
 run = "uv run --project python dotfiles-setup lint"
+
+[tasks.fnhook-gates]
+description = "Reject invalid or untyped Claude Code function-hook modules"
+run = "uv run --project python dotfiles-setup fnhook-gates"
+
+[tasks.fnhook-types-refresh]
+description = "Regenerate Claude Code function-hook declarations from the pinned harness"
+run = "uv run --project python dotfiles-setup fnhook-types-refresh"
 
 [tasks.check]
 description = "Run full quality check (pre-commit + test)"
