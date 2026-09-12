@@ -38,13 +38,23 @@ def _real_tools_available() -> bool:
     """
     return all(
         subprocess.run(
-            ["mise", "exec", "--", tool, "--version"],
+            [
+                "mise",
+                "exec",
+                fnhook_gates.tool_spec(REPO_ROOT, mise_tool),
+                "--",
+                tool,
+                "--version",
+            ],
             capture_output=True,
             check=False,
             cwd=REPO_ROOT,
         ).returncode
         == 0
-        for tool in ("claude", "tsc")
+        for tool, mise_tool in (
+            ("claude", fnhook_gates.CLAUDE_TOOL),
+            ("tsc", fnhook_gates.TSC_TOOL),
+        )
     )
 
 
@@ -133,6 +143,7 @@ def test_validate_plugin_issues_the_strict_mise_command() -> None:
             [
                 "mise",
                 "exec",
+                fnhook_gates.tool_spec(REPO_ROOT, fnhook_gates.CLAUDE_TOOL),
                 "--",
                 "claude",
                 "plugin",
@@ -174,6 +185,7 @@ def test_typecheck_uses_discovered_files_and_committed_config(
     assert observed["command"] == [
         "mise",
         "exec",
+        fnhook_gates.tool_spec(REPO_ROOT, fnhook_gates.TSC_TOOL),
         "--",
         "tsc",
         "--noEmit",
@@ -384,7 +396,11 @@ def test_refresh_requires_new_nonempty_outputs_and_restores_old_bytes(
         env: object = None,
         input_text: str | None = None,
     ) -> GateResult:
-        assert command[3:6] == ["claude", "-p", "/plugin-types"]
+        # Anchored on the `--` boundary, not a fixed index: inserting the
+        # `<tool>@<version>` spec before it shifted these by one and broke a
+        # hard-coded slice, so the assertion now says what it means.
+        after_sep = command[command.index("--") + 1 :]
+        assert after_sep[:3] == ["claude", "-p", "/plugin-types"]
         assert cwd == tmp_path
         assert env == {"CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1"}
         assert input_text == ""
@@ -418,7 +434,11 @@ def test_refresh_accepts_files_not_process_status(
         env: object = None,
         input_text: str | None = None,
     ) -> GateResult:
-        assert command[3:6] == ["claude", "-p", "/plugin-types"]
+        # Anchored on the `--` boundary, not a fixed index: inserting the
+        # `<tool>@<version>` spec before it shifted these by one and broke a
+        # hard-coded slice, so the assertion now says what it means.
+        after_sep = command[command.index("--") + 1 :]
+        assert after_sep[:3] == ["claude", "-p", "/plugin-types"]
         assert env == {"CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1"}
         assert input_text == ""
         _write_types(cwd, fresh)
@@ -520,3 +540,42 @@ def test_missing_binary_fails_the_gate_rather_than_skipping_it() -> None:
         "a missing binary must fail the gate; a gate that passes when its tool "
         "is absent is a check that can only pass"
     )
+
+
+def test_every_mise_invocation_names_its_tool_not_a_bare_shim() -> None:
+    """`mise exec -- <bin>` resolves the bare SHIM and has no version to map.
+
+    Measured on a GitHub runner 2026-09-12: both pinned tools installed
+    successfully and the gate still died on
+    `mise ERROR No version is set for shim: claude`. It passed on the
+    development Mac, where a shim resolves — so the host was not a control arm
+    for CI, and only naming the tool fixes it.
+
+    This binds all three call sites at once: the argv must carry a
+    `<tool>@<version>` spec between `exec` and `--`. The version is read from
+    `mise.toml`, so a pin bump cannot leave an invocation naming a stale one.
+    """
+    seen: list[list[str]] = []
+
+    def _capture(command: list[str], **_: object) -> GateResult:
+        seen.append(command)
+        return GateResult(rc=0, stdout="", stderr="")
+
+    valid = _fixture_plugins()["valid"]
+    fnhook_gates.validate_plugin(valid, runner=_capture)
+    fnhook_gates.typecheck_modules([valid], runner=_capture)
+
+    assert seen, "no commands captured — the stub was never called"
+    for command in seen:
+        assert command[:2] == ["mise", "exec"], command
+        spec = command[2]
+        assert "@" in spec, (
+            f"argv[2] is {spec!r}, not a <tool>@<version> spec — a bare "
+            f"`mise exec -- <bin>` resolves the shim and fails on a runner"
+        )
+        assert spec.startswith("npm:"), spec
+        # The pin must match mise.toml, not a literal written into the module.
+        tool, _, version = spec.rpartition("@")
+        assert fnhook_gates.tool_spec(REPO_ROOT, tool) == spec, (
+            f"{tool} invoked at {version}, which is not its mise.toml pin"
+        )

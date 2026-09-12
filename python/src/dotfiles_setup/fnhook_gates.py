@@ -17,6 +17,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
@@ -27,6 +28,39 @@ if TYPE_CHECKING:
 FIXTURE_ROOT = "tests/fixtures/fnhook"
 
 _TYPE_FILENAMES = ("claude-code.d.ts", "claude-code-mcp.d.ts")
+
+# The mise tool names whose pins back the two gate binaries. `mise exec -- <bin>`
+# is NOT enough: with no tool named it resolves the bare SHIM, and mise then has
+# no version to map it to. Measured on a GitHub runner 2026-09-12 — both tools
+# installed fine and the gate still died on
+# `mise ERROR No version is set for shim: claude`. It passed locally because a
+# shim resolves on this Mac, so the host is not a control arm for CI.
+#
+# The version is READ FROM `mise.toml` rather than written here, so a pin bump
+# cannot leave the invocation naming a stale version.
+# This module lives at python/src/dotfiles_setup/, so the repo root is three
+# parents up. The tool spec always comes from the REPO's mise.toml, never from
+# whatever cwd a gate happens to run in — `_generate_types` runs in a temp dir.
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+CLAUDE_TOOL = "npm:@anthropic-ai/claude-code"
+TSC_TOOL = "npm:typescript"
+
+
+def tool_spec(repo_root: Path, tool: str) -> str:
+    """`<tool>@<version>` using the pin in `mise.toml`, so the two cannot drift."""
+    config = tomllib.loads((repo_root / "mise.toml").read_text(encoding="utf-8"))
+    tools = config.get("tools", {})
+    version = tools.get(tool)
+    if not isinstance(version, str):
+        message = (
+            f"{tool} is not pinned as an exact version in mise.toml — the gate "
+            f"cannot name a tool it has no pin for (found {version!r})"
+        )
+        raise TypeError(message)
+    return f"{tool}@{version}"
+
+
 _FUNCTION_HOOKS_FLAG = "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS"
 _COMMAND_TIMEOUT_SECONDS = 120.0
 _TYPED_REGISTER_RE = re.compile(
@@ -135,6 +169,7 @@ def validate_plugin(
         [
             "mise",
             "exec",
+            tool_spec(_REPO_ROOT, CLAUDE_TOOL),
             "--",
             "claude",
             "plugin",
@@ -229,6 +264,7 @@ def typecheck_modules(
             [
                 "mise",
                 "exec",
+                tool_spec(_REPO_ROOT, TSC_TOOL),
                 "--",
                 "tsc",
                 "--noEmit",
@@ -240,11 +276,16 @@ def typecheck_modules(
 
 
 def _generate_types(work_root: Path, *, runner: Runner) -> GateResult:
-    """Invoke `/plugin-types`; its rc is intentionally not interpreted."""
+    """Invoke `/plugin-types`; its rc is intentionally not interpreted.
+
+    `work_root` is a temp dir, so the tool spec is read from the REPO's
+    `mise.toml`, not from the cwd the command runs in.
+    """
     return runner(
         [
             "mise",
             "exec",
+            tool_spec(_REPO_ROOT, CLAUDE_TOOL),
             "--",
             "claude",
             "-p",
