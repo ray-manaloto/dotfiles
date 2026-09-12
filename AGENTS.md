@@ -30,6 +30,7 @@ mise run lint-docs                           # Validate agent documentation (agn
 mise run lock -- "<backend/name>"            # Re-lock ONE host tool (bare form is destructive, #370)
 mise run lock-shared -- "<name>"             # shared.toml tools — resolves on linux, NOT the host (#790)
 mise run lock-image                          # Regenerate the IMAGE locks (#650; routes to amd64)
+mise run fnhook-types-refresh                # Regenerate .claude/types/*.d.ts (#1026)
 ```
 
 The devloop is `mise run up` → work inside the container → `mise run down`.
