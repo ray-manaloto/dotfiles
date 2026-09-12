@@ -34,6 +34,52 @@ is this*, and is unaffected:
 **Both axes coexist on one issue** — `enhancement` + `ready-for-agent` is the normal shape, not a
 conflict. Nothing here changes how `enhancement`/`bug`/`dependencies` are used.
 
+## A third axis: `known-workaround` — handled, not fixed
+
+| Label | Meaning | Status |
+|---|---|---|
+| `known-workaround` | Open, known, **already worked around** — someone is relying on a documented alternative today | created 2026-09-12 (#1025) |
+
+It answers *has anyone done anything about this yet*, which neither other axis
+can express. `bug` says what kind of thing it is; `ready-for-agent` says where
+it sits in the flow; **neither distinguishes a defect nobody has touched from
+one that has a working answer written down.** All three coexist on one issue.
+
+It does **not** mean fixed. A fixed defect gets closed. This label exists for
+the state in between, which is where the failure it was created for lives:
+`#877` sat open, correctly labelled `bug` + `ready-for-agent`, with a working
+fix in its own comment, and was independently re-diagnosed **three times over
+eleven days** (`#998`, then again on 2026-09-11). Nothing was unrecorded. The
+record was complete and nobody retrieved it.
+
+### ⚠️ This label is load-bearing, not decorative
+
+`#1024`'s session-start register queries open issues carrying `bug` **and**
+`ready-for-agent` while **excluding** `known-workaround`. Removing the label
+from an issue therefore puts it back in front of every future session, and
+adding it to the wrong issue hides a defect nobody has handled.
+
+That is the opposite of how the other labels behave — a wrong `needs-triage`
+costs a triager one glance. Treat a change here as a change to what the
+session-start surface shows, because that is what it is.
+
+### When to apply it
+
+Apply it when the issue records a **workaround someone is relying on now** — a
+different command, a manual step, a guard, a pin, an avoidance rule. Do not
+apply it for:
+
+- a *proposed fix* with nothing describing what people do meanwhile (that is
+  still an unhandled defect, and the surface should keep showing it);
+- a defect already fixed by a merged PR whose issue was never closed — close it
+  instead, with the PR reference;
+- a defect whose workaround is "don't do that", unless that avoidance is
+  actually written down somewhere a reader will meet it.
+
+`mise run record-defect` (`#1027`) applies the label and writes the comment in
+one invocation, because the half that gets dropped under time pressure is
+always the label.
+
 ## Adoption — measured 2026-08-08, not asserted
 
 The labels **are** in use, but coverage is thin. Counted over all open issues at
