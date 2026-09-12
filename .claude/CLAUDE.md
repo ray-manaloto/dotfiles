@@ -65,7 +65,7 @@ lane to use — the answer is fixed:
 |---|---|
 | Implementation | `fable-orchestrator:codex-implementer`, effort `xhigh` |
 | Cold review of a codex diff | an Opus subagent, diff-only (`Agent`, `model: "opus"`) |
-| Advisory / critique / audit / harness | `codex-advisor`, `codex-adversarial-critic`, `codex-staleness-auditor`, `codex-claude-code-expert` |
+| Advisory / critique / audit / harness | `codex-{sol,astra}-{advisor,adversarial-critic,staleness-auditor,claude-code-expert}` |
 | Premise verification | `fable-orchestrator:premise-verifier` (Claude, read-only) |
 | Research | a read-only `Explore`/`Agent` lane |
 
@@ -73,7 +73,10 @@ New roster: `gate-runner`, `cold-reviewer`, `graphify-operator`, `graphify-resea
 `spec-scribe`, `pwf-scribe`, `issue-filer`. Saved workflows: `/gated-implementation`,
 `/graphify-refresh`.
 
-⚠️ **`codex-adversarial-critic` is NOT the cold-review lens for a codex diff** —
+Two model families per role: `codex-sol-*` (authored) and `codex-astra-*`
+(generated — `mise run codex-lane-mirror`). Neither is a default.
+
+⚠️ **No `codex-*` lane is the cold-review lens for a codex diff** —
 same model family as the implementer, so it inherits its blind spots. The
 orchestration skill requires a family the implementer isn't; with grok gone,
 Claude IS that third family, so an Opus cold pass on a codex diff is the full

@@ -45,7 +45,7 @@ recipe that can drift independently.
 - `--full-context` does not exist.
 
 The operator-specific control plane and error history remain in
-`.claude/agents/codex-operator.md`; this rule owns only the shared invocation
+`.claude/agents/codex-sol-operator.md`; this rule owns only the shared invocation
 contract.
 
 ## Gemini and OpenCode traps
@@ -108,7 +108,7 @@ All direct Codex, Gemini/Antigravity, and OpenCode CLI calls from this repo.
 
 ## See also
 
-- `.claude/agents/codex-operator.md` — operational lane policy.
+- `.claude/agents/codex-sol-operator.md` — operational lane policy.
 - `mise.toml` — pinned tools and `codex-lane` task.
 - `docs/rules-evidence/ai-cli-invocation.md` — live probe output.
 - `.claude/rules/md-size-budgets.md` — why this rule remains eager.

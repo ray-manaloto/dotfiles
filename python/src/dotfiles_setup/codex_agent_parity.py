@@ -1,9 +1,15 @@
 # Copyright (c) 2026 Raymond Manaloto
 """Two-surface consistency gate for the hand-authored codex-backed agent lanes.
 
-The four lanes added by #884 ship as a pair per agent: a Claude-side wrapper at
+The lanes added by #884 ship as a pair per agent: a Claude-side wrapper at
 ``.claude/agents/codex-<name>.md`` and the codex-side role definition at
-``.codex/agents/codex-<name>.toml``. The two halves deliberately DIFFER in body
+``.codex/agents/codex-<name>.toml``. Since 2026-09-11 each role exists in TWO
+model families — ``codex-sol-<role>`` (authored) and ``codex-astra-<role>``
+(generated from it by ``codex_lane_mirror.py``) — and this gate holds for both:
+a lane must pin the model its NAME advertises, so choosing `codex-astra-advisor`
+and silently getting sol is a failure rather than a surprise.
+
+The two halves deliberately DIFFER in body
 — the ``.md`` addresses a Claude Code subagent that shells out, the ``.toml``
 addresses the codex role that does the reasoning — so byte-equality is the wrong
 check. What must hold is the wiring: both halves exist, they agree on identity,
@@ -75,9 +81,10 @@ logger = logging.getLogger(__name__)
 CLAUDE_AGENT_DIR = ".claude/agents"
 CODEX_AGENT_DIR = ".codex/agents"
 
-# Only the hand-authored lanes are in scope. The Codex-app EXPORTED mirrors in
-# the same directory carry no `codex-` prefix, stay gitignored, and are not ours
-# to police — see the module docstring.
+# Only this repo's own lanes are in scope — the authored `codex-sol-*` and the
+# generated `codex-astra-*` alike. The Codex-app EXPORTED mirrors in the same
+# directory carry no `codex-` prefix, stay gitignored, and are not ours to
+# police — see the module docstring.
 STEM_PREFIX = "codex-"
 
 REQUIRED_EFFORT = "xhigh"
@@ -99,14 +106,24 @@ CORRUPTION_MARKERS: tuple[str, ...] = (
     "docs/Codex",
 )
 
-# What the `.md` wrapper must still say. Each is a string THIS repo authored, so
-# none of them can drift out from under us the way an exporter's output can.
+#: The model each lane family must pin, by filename-stem prefix. A lane pins the
+#: model its NAME advertises, so a dispatch site cannot be surprised: picking
+#: `codex-astra-advisor` and silently getting sol is exactly the drift that made
+#: this map per-family (2026-09-11). Neither family is a default.
+MODEL_BY_PREFIX: tuple[tuple[str, str], ...] = (
+    ("codex-astra-", "gpt-6-astra"),
+    ("codex-sol-", "gpt-5.6-sol"),
+)
+
+# What the `.md` wrapper must still say, whatever its model family. Each is a
+# string THIS repo authored, so none can drift out from under us the way an
+# exporter's output can.
 #
-# The two flags are load-bearing together: omit either and codex resolves it from
-# `~/.codex/config.toml`, a file this repo neither owns nor watches, silently
-# running the lane at `medium` on whatever model that file names.
+# The effort pin and the per-family model pin above are load-bearing TOGETHER:
+# omit either and codex resolves it from `~/.codex/config.toml`, a file this repo
+# neither owns nor watches, silently running the lane at `medium` on whatever
+# model that file names.
 MD_REQUIRED_MARKERS: tuple[tuple[str, str], ...] = (
-    ("--model gpt-5.6-sol", "the explicit model pin in the codex invocation"),
     (
         f'model_reasoning_effort="{REQUIRED_EFFORT}"',
         "the explicit effort pin in the codex invocation",
@@ -308,6 +325,32 @@ def _md_violations(repo_root: Path) -> Iterator[ParityViolation]:
                 ),
             )
 
+        expected_model = next(
+            (model for prefix, model in MODEL_BY_PREFIX if stem.startswith(prefix)),
+            None,
+        )
+        if expected_model is None:
+            yield ParityViolation(
+                kind="md-unknown-family",
+                path=rel,
+                detail=(
+                    "stem names no model family — every lane must start with "
+                    + " or ".join(prefix for prefix, _ in MODEL_BY_PREFIX)
+                    + " so its pinned model is visible at the dispatch site"
+                ),
+            )
+        elif flatten(f"--model {expected_model}") not in flat:
+            yield ParityViolation(
+                kind="md-missing-marker",
+                path=rel,
+                detail=(
+                    f"does not carry '--model {expected_model}' — the explicit "
+                    "model pin its name advertises; without it codex resolves "
+                    "the model from ~/.codex/config.toml, a file this repo "
+                    "neither owns nor watches"
+                ),
+            )
+
         for marker, why in MD_REQUIRED_MARKERS:
             if flatten(marker) not in flat:
                 yield ParityViolation(
@@ -336,7 +379,7 @@ def codex_agent_parity_main(repo_root: Path) -> int:
 
     paired = len(_stems(repo_root / CODEX_AGENT_DIR, ".toml"))
     logger.info(
-        "codex-agent-parity OK: %d hand-authored lane(s) paired, sentinel "
+        "codex-agent-parity OK: %d lane(s) paired, sentinel "
         "intact, named consistently, pinned to %s effort, and carrying the "
         "no-substitute prohibition",
         paired,

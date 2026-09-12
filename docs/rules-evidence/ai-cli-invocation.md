@@ -50,7 +50,7 @@ forms in the rule are dated — re-probe `--help` before trusting one._
 
 **Findings applied:** `rule-ai-cli-invocation-1` through `-7`.
 
-**Native/current anchors re-read:** `.claude/agents/codex-operator.md:73-79`
+**Native/current anchors re-read:** `.claude/agents/codex-sol-operator.md:73-79`
 records the sandbox conflict and missing `--full-auto`; Claude Code
 `hooks.md:1773` covers headless behavior. (An earlier draft also cited
 `hooks.md:664` for "background/task behavior"; that line is about

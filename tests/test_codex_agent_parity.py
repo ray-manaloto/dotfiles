@@ -39,17 +39,17 @@ EXPORTED_MIRRORS = (
 _TQ = "'" * 3
 
 _GOOD_TOML = f"""# {cap.SENTINEL} (#884)
-name = "codex-advisor"
+name = "codex-sol-advisor"
 description = "A second-opinion advisor."
 model_reasoning_effort = "xhigh"
 developer_instructions = {_TQ}
-You advise. Read `.claude/agents/codex-advisor.md` for the wrapper half.
+You advise. Read `.claude/agents/codex-sol-advisor.md` for the wrapper half.
 Claude Code is the harness; `claude mcp add` is the command.
 {_TQ}
 """
 
 _GOOD_MD = """---
-name: codex-advisor
+name: codex-sol-advisor
 model: haiku
 description: An advisor.
 tools: Bash, Read, Grep, Glob, Write
@@ -73,7 +73,7 @@ def _tree(
     *,
     toml: str = _GOOD_TOML,
     md: str = _GOOD_MD,
-    stem: str = "codex-advisor",
+    stem: str = "codex-sol-advisor",
 ) -> Path:
     """Build a minimal well-formed two-surface fixture and return its root."""
     (root / cap.CLAUDE_AGENT_DIR).mkdir(parents=True, exist_ok=True)
@@ -102,7 +102,7 @@ def test_correct_claude_references_are_not_corruption(tmp_path: Path) -> None:
     exactly as useless as a check that can only pass.
     """
     root = _tree(tmp_path)
-    raw = (root / cap.CODEX_AGENT_DIR / "codex-advisor.toml").read_text()
+    raw = (root / cap.CODEX_AGENT_DIR / "codex-sol-advisor.toml").read_text()
     assert "Claude Code" in raw
     assert ".claude/" in raw
     assert "claude mcp add" in raw
@@ -183,19 +183,20 @@ def test_each_corruption_marker_is_detected_on_its_own(tmp_path: Path) -> None:
 
 def test_a_deleted_codex_counterpart_fails(tmp_path: Path) -> None:
     root = _tree(tmp_path)
-    (root / cap.CODEX_AGENT_DIR / "codex-advisor.toml").unlink()
+    (root / cap.CODEX_AGENT_DIR / "codex-sol-advisor.toml").unlink()
     assert _kinds(root) == ["unpaired"]
 
 
 def test_a_deleted_claude_counterpart_fails(tmp_path: Path) -> None:
     root = _tree(tmp_path)
-    (root / cap.CLAUDE_AGENT_DIR / "codex-advisor.md").unlink()
+    (root / cap.CLAUDE_AGENT_DIR / "codex-sol-advisor.md").unlink()
     assert "unpaired" in _kinds(root)
 
 
 def test_a_name_disagreeing_with_the_stem_fails(tmp_path: Path) -> None:
     root = _tree(
-        tmp_path, toml=_GOOD_TOML.replace('name = "codex-advisor"', 'name = "codex-x"')
+        tmp_path,
+        toml=_GOOD_TOML.replace('name = "codex-sol-advisor"', 'name = "codex-x"'),
     )
     assert "name-mismatch" in _kinds(root)
 
@@ -235,7 +236,9 @@ def test_undecodable_bytes_are_reported_as_a_violation(tmp_path: Path) -> None:
     command failure.
     """
     root = _tree(tmp_path)
-    (root / cap.CODEX_AGENT_DIR / "codex-advisor.toml").write_bytes(b"\xff\xfe\x00bad")
+    (root / cap.CODEX_AGENT_DIR / "codex-sol-advisor.toml").write_bytes(
+        b"\xff\xfe\x00bad"
+    )
     kinds = _kinds(root)
     assert "sentinel-missing" in kinds
     assert cap.codex_agent_parity_main(root) == 1
@@ -273,7 +276,9 @@ def test_an_md_without_frontmatter_fails(tmp_path: Path) -> None:
 
 
 def test_an_md_name_disagreeing_with_the_stem_fails(tmp_path: Path) -> None:
-    root = _tree(tmp_path, md=_GOOD_MD.replace("name: codex-advisor", "name: codex-x"))
+    root = _tree(
+        tmp_path, md=_GOOD_MD.replace("name: codex-sol-advisor", "name: codex-x")
+    )
     assert "md-name-mismatch" in _kinds(root)
 
 
@@ -347,7 +352,7 @@ def test_the_entry_point_returns_nonzero_on_a_violation(tmp_path: Path) -> None:
     green.
     """
     root = _tree(tmp_path)
-    (root / cap.CODEX_AGENT_DIR / "codex-advisor.toml").unlink()
+    (root / cap.CODEX_AGENT_DIR / "codex-sol-advisor.toml").unlink()
     assert cap.codex_agent_parity_main(root) == 1
 
 
@@ -363,7 +368,7 @@ def test_the_cli_returns_nonzero_on_a_violating_tree(tmp_path: Path) -> None:
     not only by the hk step failing to protect anything.
     """
     root = _tree(tmp_path)
-    (root / cap.CLAUDE_AGENT_DIR / "codex-advisor.md").unlink()
+    (root / cap.CLAUDE_AGENT_DIR / "codex-sol-advisor.md").unlink()
     res = subprocess.run(
         [
             sys.executable,
@@ -398,12 +403,19 @@ def test_the_shipped_lanes_are_all_present() -> None:
         for p in (REPO_ROOT / cap.CODEX_AGENT_DIR).iterdir()
         if p.suffix == ".toml" and p.name.startswith(cap.STEM_PREFIX)
     }
+    # Every role ships in BOTH model families since 2026-09-11: `codex-sol-*` is
+    # authored and `codex-astra-*` is generated from it. Deriving the expected
+    # set from one role list rather than writing ten literals means a role added
+    # to only one family still fails here, which is the drift worth catching.
+    roles = {
+        "advisor",
+        "adversarial-critic",
+        "staleness-auditor",
+        "claude-code-expert",
+        "operator",
+    }
     assert shipped == {
-        "codex-advisor",
-        "codex-adversarial-critic",
-        "codex-staleness-auditor",
-        "codex-claude-code-expert",
-        "codex-operator",
+        f"codex-{family}-{role}" for family in ("sol", "astra") for role in roles
     }
 
 
