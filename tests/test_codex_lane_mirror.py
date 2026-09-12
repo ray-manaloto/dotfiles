@@ -118,4 +118,16 @@ def test_the_real_repo_mirror_is_current() -> None:
     """The tracked tree must already satisfy the gate CI will run."""
     root = Path(__file__).parent.parent
     assert clm.find_drift(root) == []
-    assert len(clm.roles(root)) == 5
+    # `find_drift == []` is vacuously true over an empty role set, so pin the
+    # roles themselves rather than a count. Naming them means adding a role
+    # fails HERE with the role's name, instead of failing on a magic number
+    # whose only fix is to bump it — and a role silently disappearing is caught
+    # in the same assertion.
+    assert clm.roles(root) == [
+        "adversarial-critic",
+        "advisor",
+        "claude-code-expert",
+        "implementer",
+        "operator",
+        "staleness-auditor",
+    ]

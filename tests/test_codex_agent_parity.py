@@ -412,6 +412,7 @@ def test_the_shipped_lanes_are_all_present() -> None:
         "adversarial-critic",
         "staleness-auditor",
         "claude-code-expert",
+        "implementer",
         "operator",
     }
     assert shipped == {

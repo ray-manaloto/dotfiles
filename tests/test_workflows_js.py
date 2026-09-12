@@ -57,7 +57,7 @@ KNOWN_LABEL_PREFIXES = {
     "verify",
     "synthesize",
     "critique",
-    "codex-implementer",
+    "codex-sol-implementer",
     "gate-runner",
     "cold-reviewer",
     "codex-sol-adversarial-critic",
@@ -152,7 +152,7 @@ const agent = async (_prompt, options = {}) => {
   }
   const label = options.label || 'general-purpose'
   calls.push({ label, agentType: options.agentType || 'general-purpose' })
-  if (label === 'codex-implementer') return 'CODEX REPORT\nCOMMIT: abcdef1234567'
+  if (label === 'codex-sol-implementer') return 'CODEX REPORT\nCOMMIT: abcdef1234567'
   if (label === 'gate-runner') {
     return {
       gates: args.verify.map((cmd, index) => ({
@@ -308,7 +308,7 @@ def _bun_run_wrapped(wrapped: str, target: Path) -> subprocess.CompletedProcess[
 
 _NO_COMMIT_REPORT = "CODEX REPORT\\n(no commit — apply failed)"
 _GATES_OK_BODY = (
-    f"if (label === 'codex-implementer') return '{_NO_COMMIT_REPORT}'\n"
+    f"if (label === 'codex-sol-implementer') return '{_NO_COMMIT_REPORT}'\n"
     "  if (label === 'gate-runner') {\n"
     "    return { gates: args.verify.map((cmd, index) => (\n"
     "      { cmd, rc: 0, log: `/tmp/gate-${index}.log`, firstFailure: '' }\n"
@@ -384,7 +384,7 @@ def test_n15_gates_null_takes_precedence_over_review_null(tmp_path: Path) -> Non
     args = {**ARGS, "reviewRef": "", "criticProposal": ""}
     source = GATED_IMPLEMENTATION.read_text(encoding="utf-8")
     body = (
-        "if (label === 'codex-implementer') "
+        "if (label === 'codex-sol-implementer') "
         "return 'CODEX REPORT\\nCOMMIT: abcdef1234567'\n"
         "  return null"
     )
