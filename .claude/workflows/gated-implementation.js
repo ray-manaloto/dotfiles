@@ -3,7 +3,7 @@ export const meta = {
   description: 'Run one spec-file Codex implementation, every requested gate, a cold review by ref, and an optional adversarial critique.',
   whenToUse: 'When a ratified seven-part spec should move through implementation, evidence gates, cold review, and optional proposal critique without retyping the orchestration.',
   phases: [
-    { title: 'Implement', detail: 'dispatch the marked spec file and verbatim PREMISES to codex-implementer' },
+    { title: 'Implement', detail: 'dispatch the marked spec file and verbatim PREMISES to codex-sol-implementer' },
     { title: 'Gates', detail: 'run every requested verification command through gate-runner' },
     { title: 'Review', detail: 'cold-review the reported commit or caller-supplied ref' },
     { title: 'Critique', detail: 'optionally replay a proposal with codex-sol-adversarial-critic' },
@@ -86,9 +86,9 @@ const implementerLines = [
 ]
 if (A.attestation) implementerLines.push(`PREMISES-VERIFIED: ${A.attestation}`)
 const implementerReport = await agent(implementerLines.join('\n'), {
-  label: 'codex-implementer',
+  label: 'codex-sol-implementer',
   phase: 'Implement',
-  agentType: 'fable-orchestrator:codex-implementer',
+  agentType: 'codex-sol-implementer',
 })
 if (implementerReport === null) return { status: 'implementer-null' }
 const commitMatch = /^COMMIT:\s*(\S+)\s*$/m.exec(implementerReport)

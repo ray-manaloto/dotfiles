@@ -63,7 +63,7 @@ lane to use — the answer is fixed:
 
 | Lane | Use |
 |---|---|
-| Implementation | `fable-orchestrator:codex-implementer`, effort `xhigh` |
+| Implementation | `codex-{sol,astra}-implementer`, effort `xhigh` — OURS, at full access |
 | Cold review of a codex diff | an Opus subagent, diff-only (`Agent`, `model: "opus"`) |
 | Advisory / critique / audit / harness | `codex-{sol,astra}-{advisor,adversarial-critic,staleness-auditor,claude-code-expert}` |
 | Premise verification | `fable-orchestrator:premise-verifier` (Claude, read-only) |

@@ -2106,7 +2106,7 @@ paths_required = true
 paths = [".claude/CLAUDE.md"]
 lines = [
     "### There is no `grok` here — codex lanes only, stop asking",
-    "| Implementation | `fable-orchestrator:codex-implementer`, effort `xhigh` |",
+    "| Implementation | `codex-{sol,astra}-implementer`, effort `xhigh` — OURS, at full access |",
     "| Cold review of a codex diff | an Opus subagent, diff-only (`Agent`, `model: \"opus\"`) |",
 ]
 
