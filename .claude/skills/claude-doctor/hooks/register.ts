@@ -89,6 +89,29 @@ async function readVerdict($: {
 /** Tools that only READ. Denying these is how a gate becomes unrecoverable. */
 const READ_ONLY_TOOLS = new Set(["Read", "Glob", "Grep", "NotebookRead", "TodoWrite"]);
 
+/**
+ * Tools that cannot repair anything, and must never be denied anyway.
+ *
+ * `READ_ONLY_TOOLS` is scoped by what a tool DOES; this set is scoped by what
+ * denying it COSTS. The split is deliberate rather than tidy: appending these
+ * to a constant documented as "tools that only READ" would make that name lie,
+ * and the next reader applying the name literally would remove them as a
+ * mistake. Two sets, two reasons, both feeding one permit decision.
+ *
+ * Measured 2026-09-13, three sessions in a row. With the verdict INVALID this
+ * hook denied `AskUserQuestion` and `SendUserMessage` — the only tools that can
+ * put the repair choice to the operator, or report the finding at all. The
+ * session could see the problem and had no way to say so; the fix had to be
+ * dictated as plain text and applied by hand. That is precisely the failure
+ * this module's own contract names above: a gate you cannot talk your way out
+ * of does not protect the session, it ends it.
+ *
+ * Neither tool can run a command, so permitting them widens nothing. The gate's
+ * whole purpose is preventing silent wrong-version EXECUTION, and asking a
+ * question executes nothing.
+ */
+const ESCAPE_HATCH_TOOLS = new Set(["AskUserQuestion", "SendUserMessage"]);
+
 /** Programs that can repair the install. Matched on a token's basename. */
 const REPAIR_PROGRAMS = new Set(["claude", "mise", "uv"]);
 
@@ -118,6 +141,8 @@ const COMMAND_SEPARATORS = /[\s;|&()<>]+/;
  *
  * - read-only tools always pass, because the first thing anyone needs is to
  *   SEE the finding, this file, and the settings that disable the plugin;
+ * - escape-hatch tools always pass, because the second thing anyone needs is to
+ *   ASK about it or REPORT it, and neither executes anything;
  * - a Bash command passes when ANY of its tokens names a repair program.
  *
  * Scanning tokens rather than anchoring at the start is the load-bearing
@@ -132,7 +157,7 @@ const COMMAND_SEPARATORS = /[\s;|&()<>]+/;
  * malice.
  */
 function isRepairPermitted(e: { tool: string } & Record<string, unknown>): boolean {
-  if (READ_ONLY_TOOLS.has(e.tool)) {
+  if (READ_ONLY_TOOLS.has(e.tool) || ESCAPE_HATCH_TOOLS.has(e.tool)) {
     return true;
   }
   if (e.tool !== "Bash") {

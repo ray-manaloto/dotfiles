@@ -1,0 +1,6 @@
+{
+  "description": "Deny-capable module that permits no escape-hatch tool",
+  "modules": [
+    "./register.ts"
+  ]
+}

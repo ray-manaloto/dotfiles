@@ -1,0 +1,6 @@
+{
+  "description": "Deny-capable module declaring the escape-hatch set but never consulting it",
+  "modules": [
+    "./register.ts"
+  ]
+}

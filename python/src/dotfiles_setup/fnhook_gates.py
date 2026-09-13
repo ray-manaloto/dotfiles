@@ -20,7 +20,7 @@ import tempfile
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Final, Protocol
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -66,6 +66,23 @@ def tool_spec(repo_root: Path, tool: str) -> str:
 
 _FUNCTION_HOOKS_FLAG = "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS"
 _COMMAND_TIMEOUT_SECONDS = 120.0
+#: Tools whose denial removes the session's only way to report or ask about the
+#: denial. Not repair tools — neither executes anything — which is why
+#: permitting them widens no capability.
+ESCAPE_HATCH_TOOLS: Final = ("AskUserQuestion", "SendUserMessage")
+
+#: A module that registers this event can return `deny`; no other classic event
+#: can. Scoping by the EVENT rather than by the presence of a `deny` literal is
+#: deliberate: a handler that only observes today can deny tomorrow without
+#: re-registering, and a `deny` returned from a helper would drop out of a
+#: literal-matching scope silently — passing the gate by becoming invisible to
+#: it.
+_PRE_TOOL_USE_RE = re.compile(r"""on\(\s*["']classic\.PreToolUse["']""")
+
+#: `const NAME = new Set([...])` — the identifier is captured so the call-site
+#: half can be bound to the same name the set half matched.
+_TOOL_SET_RE = re.compile(r"const\s+(\w+)\s*=\s*new\s+Set\(\[(.*?)\]\)", re.DOTALL)
+
 _TYPED_REGISTER_RE = re.compile(
     r"\bexport\s+const\s+register\s*:\s*Register\b",
 )
@@ -260,6 +277,64 @@ def assert_modules_are_typed(dirs: list[Path]) -> GateResult:
         return GateResult(rc=0)
     rendered = "\n".join(f"untyped function-hook module: {path}" for path in untyped)
     return GateResult(rc=1, stdout=f"{rendered}\n")
+
+
+def assert_escape_hatch_permitted(dirs: list[Path]) -> GateResult:
+    """Require every deny-capable module to permit the escape-hatch tools.
+
+    Measured 2026-09-13: the ``claude-doctor`` hook denied ``AskUserQuestion``
+    and ``SendUserMessage`` while reporting a broken install, so three sessions
+    in a row could see the finding and had no way to ask about it or report it.
+    The fix had to be dictated as plain text and applied by hand. Its own
+    contract names the rule it broke — "a gate you cannot talk your way out of
+    does not protect the session, it ends it" — which is why this is a gate and
+    not a comment.
+
+    **Both halves are asserted, and the second is the load-bearing one.** A set
+    naming both tools proves nothing on its own: a module can declare it and
+    never consult it, and a membership-only check would stay green while the
+    lockout came back. So the set's identifier is captured and required to
+    appear in a ``.has(`` call in the same module. That is the call-site binding
+    ``feedback_forbid_tokens_substring_fragile`` asks for, and it is the shape
+    ``feedback_coarse_mutation_certifies_nothing`` records passing at rc=0 when
+    only half a two-part change was reverted.
+
+    Scope is the EVENT, not a ``deny`` literal — see :data:`_PRE_TOOL_USE_RE`.
+    A module registering no blocking event is out of scope and needs no set.
+    """
+    try:
+        modules = _module_paths(dirs)
+    except ValueError as exc:
+        return GateResult(rc=1, stdout=f"{exc}\n")
+
+    problems: list[str] = []
+    for module in modules:
+        source = module.read_text(encoding="utf-8")
+        if _PRE_TOOL_USE_RE.search(source) is None:
+            continue
+        permitting = [
+            name
+            for name, body in _TOOL_SET_RE.findall(source)
+            if all(f'"{tool}"' in body for tool in ESCAPE_HATCH_TOOLS)
+        ]
+        if not permitting:
+            problems.append(
+                f"{module}: registers classic.PreToolUse but no Set permits "
+                f"{', '.join(ESCAPE_HATCH_TOOLS)} — denying those leaves the "
+                f"session no way to ask about the denial or report it"
+            )
+            continue
+        if not any(
+            re.search(rf"\b{re.escape(name)}\.has\s*\(", source) for name in permitting
+        ):
+            problems.append(
+                f"{module}: declares {', '.join(permitting)} naming the "
+                f"escape-hatch tools but never consults it — a set nothing "
+                f"reads permits nothing"
+            )
+    if not problems:
+        return GateResult(rc=0)
+    return GateResult(rc=1, stdout="\n".join(problems) + "\n")
 
 
 def typecheck_modules(
@@ -478,6 +553,7 @@ def fnhook_gates_main(
     results.extend(
         (
             assert_modules_are_typed(plugin_dirs),
+            assert_escape_hatch_permitted(plugin_dirs),
             typecheck_modules(plugin_dirs, runner=runner),
             _check_types_current(repo_root, runner=runner),
         )

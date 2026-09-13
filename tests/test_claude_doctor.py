@@ -67,6 +67,10 @@ No installation issues found.
 
 AMBIENT = "/ambient/bin:/usr/bin"
 
+#: A root holding no ``doctor.toml``, so :func:`claude_doctor.load_baseline`
+#: returns its documented default instead of this repo's real baseline.
+NO_BASELINE = Path("/nonexistent/dotfiles-test-root")
+
 
 def _fake_run(
     *,
@@ -322,13 +326,19 @@ def test_the_cli_exit_code_tracks_enforcement_eligibility_only(
     oracle_out: str,
     expected_rc: int,
 ) -> None:
-    """UNKNOWN exits 0 on purpose: a question never asked must not block."""
+    """UNKNOWN exits 0 on purpose: a question never asked must not block.
+
+    ``project_root`` names a root with no ``doctor.toml`` so this asserts the
+    exit-code mapping alone. Without it the call reads the REAL ``doctor.toml``
+    and the case flips with whatever this repo currently expects - which is how
+    the baseline-reading regression below was first caught.
+    """
     monkeypatch.setattr(
         claude_doctor,
         "_run",
         _fake_run(doctor=(0, doctor_out), oracle=(0, oracle_out)),
     )
-    assert claude_doctor.claude_doctor_main() == expected_rc
+    assert claude_doctor.claude_doctor_main(project_root=NO_BASELINE) == expected_rc
     assert json.loads(capsys.readouterr().out)["verdict"] is not None
 
 
@@ -364,4 +374,119 @@ def test_a_non_native_expectation_does_not_blame_the_mise_shim(
     assert "mise env -C" not in result.findings[0], (
         "the PATH-shadowing advice is only true when the NATIVE install is the "
         "one being displaced"
+    )
+
+
+# --------------------------------------------------------------------------- #
+# the reviewed baseline must reach the ENFORCING path (#1044 regression)
+# --------------------------------------------------------------------------- #
+
+
+#: Current version, clean marker, non-native method: the ONLY deviation is the
+#: install method. ``SHADOWED_DOCTOR`` is 2.1.269, so it goes INVALID on
+#: staleness no matter what the baseline says - which made the control arm
+#: below pass for the wrong reason on first run.
+CURRENT_NON_NATIVE_DOCTOR = """Claude Code doctor
+
+Running: npm-global (2.1.270)
+Platform: darwin-arm64
+No installation issues found.
+"""
+
+
+def _baseline(tmp_path: Path, body: str) -> Path:
+    """Write a minimal ``doctor.toml`` and return its root."""
+    (tmp_path / "doctor.toml").write_text(f"[claude]\n{body}\n")
+    return tmp_path
+
+
+def test_the_enforcing_cli_reads_expected_install_method_from_doctor_toml(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    """The lever documented in ``doctor.toml`` must move the blocking path.
+
+    Regression for the 2026-09-13 disconnect: ``claude_doctor_main`` defaulted
+    to ``NATIVE_METHOD`` and never opened the file, so editing
+    ``expected_install_method`` silenced :func:`doctor.check_claude_doctor`'s
+    advisory finding while ``classic.PreToolUse`` - the only path that can deny
+    a tool call - kept enforcing the constant. Measured in one session: the
+    doctor's finding disappeared and the hook's behaviour did not change.
+    """
+    monkeypatch.setattr(
+        claude_doctor, "_run", _fake_run(doctor=(0, CURRENT_NON_NATIVE_DOCTOR))
+    )
+    root = _baseline(tmp_path, 'expected_install_method = "npm-global"')
+    assert claude_doctor.claude_doctor_main(project_root=root) == 0
+    assert json.loads(capsys.readouterr().out)["verdict"] == Verdict.OK
+
+
+def test_the_enforcing_cli_still_blocks_when_the_baseline_disagrees(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    """The control arm: the same seam must still produce INVALID.
+
+    A lever that can only relax is not a lever. Without this arm a
+    ``load_baseline`` that always returned a matching method would pass the
+    test above.
+    """
+    monkeypatch.setattr(
+        claude_doctor, "_run", _fake_run(doctor=(0, CURRENT_NON_NATIVE_DOCTOR))
+    )
+    root = _baseline(tmp_path, 'expected_install_method = "native"')
+    assert claude_doctor.claude_doctor_main(project_root=root) == 1
+    assert json.loads(capsys.readouterr().out)["verdict"] == Verdict.INVALID
+
+
+def test_the_baseline_off_switch_reaches_the_enforcing_path(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    """``enabled = false`` must stop the DENY, not just the advisory finding.
+
+    UNKNOWN rather than OK, because ``doctor.toml`` warns that a disabled check
+    "reports nothing, which reads exactly like a healthy host".
+    """
+    monkeypatch.setattr(
+        claude_doctor, "_run", _fake_run(doctor=(0, CURRENT_NON_NATIVE_DOCTOR))
+    )
+    root = _baseline(tmp_path, 'enabled = false\nexpected_install_method = "native"')
+    assert claude_doctor.claude_doctor_main(project_root=root) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["verdict"] == Verdict.UNKNOWN
+    assert payload["enforcement_eligible"] is False
+    assert "not a clean bill of health" in payload["findings"][0].lower()
+
+
+def test_a_missing_baseline_asserts_the_documented_default(tmp_path: Path) -> None:
+    """An unreadable baseline must assert ``native``, never silently disable.
+
+    The failure direction matters: falling back to "disabled" would turn a
+    typo in ``doctor.toml`` into a check that reads exactly like a healthy host.
+    """
+    assert claude_doctor.load_baseline(tmp_path) == (True, claude_doctor.NATIVE_METHOD)
+    (tmp_path / "doctor.toml").write_text("this is not = valid toml [[[")
+    assert claude_doctor.load_baseline(tmp_path) == (True, claude_doctor.NATIVE_METHOD)
+
+
+def test_the_cli_hands_the_project_root_to_the_baseline_loader() -> None:
+    """Wiring guard: the seam reverts to cwd silently if this argument is lost.
+
+    ``load_baseline`` falls back to ``CLAUDE_PROJECT_DIR`` or ``"."``, so a
+    dropped argument keeps every unit test green while the hook - which runs
+    with its own cwd - reads the wrong file or none at all.
+    """
+    main_src = (REPO_ROOT / "python" / "src" / "dotfiles_setup" / "main.py").read_text()
+    wired = (
+        "claude_doctor_main(\n"
+        "                force_refresh=not args.no_refresh, project_root=project_root\n"
+        "            )"
+    )
+    assert wired in main_src, (
+        "`claude-doctor` must pass project_root, or the enforcing path resolves "
+        "doctor.toml against the process cwd instead of the repository"
     )

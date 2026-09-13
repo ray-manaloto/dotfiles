@@ -2572,7 +2572,9 @@ def _build_command_handlers(
         "fnhook-gates": lambda: sys.exit(fnhook_gates_main()),
         "fnhook-types-refresh": lambda: sys.exit(fnhook_types_refresh_main()),
         "claude-doctor": lambda: sys.exit(
-            claude_doctor_main(force_refresh=not args.no_refresh)
+            claude_doctor_main(
+                force_refresh=not args.no_refresh, project_root=project_root
+            )
         ),
         "graphify": lambda: handle_graphify(args, project_root),
         "dependency-ownership": lambda: sys.exit(
