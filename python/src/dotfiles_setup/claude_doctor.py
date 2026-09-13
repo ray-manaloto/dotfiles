@@ -53,8 +53,10 @@ import re
 import shutil
 import subprocess
 import sys
+import tomllib
 from dataclasses import dataclass, field
 from enum import StrEnum
+from pathlib import Path
 from typing import Final
 
 from dotfiles_setup.path_drift import Provenance, resolve_ambient_path
@@ -342,8 +344,61 @@ def evaluate(
     )
 
 
+#: The reviewed baseline, relative to the repository root.
+_BASELINE_FILE: Final = "doctor.toml"
+
+#: What a deliberately disabled check reports.
+#:
+#: ``UNKNOWN`` rather than ``OK`` on purpose: ``doctor.toml`` warns that "a
+#: disabled check reports nothing, which reads exactly like a healthy host".
+#: Routing to ``UNKNOWN`` keeps the off-switch honest — it warns, and because
+#: only ``INVALID`` is enforcement-eligible it still never blocks.
+_DISABLED_ADVICE: Final = (
+    "claude-doctor is disabled: doctor.toml [claude] sets enabled = false. "
+    "This is NOT a clean bill of health - the question was not asked."
+)
+
+
+def load_baseline(project_root: Path | None = None) -> tuple[bool, str]:
+    """Read ``[claude]`` from ``doctor.toml`` as ``(enabled, expected_method)``.
+
+    The ENFORCING path must read the same reviewed baseline the advisory one
+    does. It did not until 2026-09-13: :func:`claude_doctor_main` defaulted
+    ``expected_method`` to :data:`NATIVE_METHOD` and never opened the file, so
+    ``doctor.toml``'s two documented levers moved
+    :func:`doctor.check_claude_doctor`'s advisory finding while the
+    ``classic.PreToolUse`` half of the ``claude-doctor`` plugin - the only path
+    that can BLOCK a tool call - went on asserting a hardcoded constant.
+
+    Measured that day, one session, same config: editing
+    ``expected_install_method`` removed the doctor's finding and changed the
+    hook's behaviour not at all. A documented off-switch wired to a different
+    consumer is worse than no off-switch, because it reads as configurable.
+
+    An unreadable or absent file falls back to ``(True, NATIVE_METHOD)``: a
+    missing baseline asserts the documented default rather than silently
+    disabling the check, which is the failure direction that reads as healthy.
+    """
+    root = project_root or Path(os.environ.get("CLAUDE_PROJECT_DIR", "."))
+    try:
+        parsed = tomllib.loads((root / _BASELINE_FILE).read_text())
+    except OSError, tomllib.TOMLDecodeError:
+        return True, NATIVE_METHOD
+    block = parsed.get("claude")
+    if not isinstance(block, dict):
+        return True, NATIVE_METHOD
+    expected = block.get("expected_install_method")
+    return (
+        block.get("enabled") is not False,
+        expected if isinstance(expected, str) else NATIVE_METHOD,
+    )
+
+
 def claude_doctor_main(
-    *, force_refresh: bool = True, expected_method: str = NATIVE_METHOD
+    *,
+    force_refresh: bool = True,
+    expected_method: str | None = None,
+    project_root: Path | None = None,
 ) -> int:
     """Print the verdict as JSON and return an exit code.
 
@@ -357,6 +412,14 @@ def claude_doctor_main(
     question must warn rather than block. A caller wanting the distinction reads
     ``verdict`` from the JSON, which is always emitted.
     """
-    verdict = evaluate(force_refresh=force_refresh, expected_method=expected_method)
+    enabled, configured = load_baseline(project_root)
+    if not enabled:
+        disabled = DoctorVerdict(verdict=Verdict.UNKNOWN, findings=[_DISABLED_ADVICE])
+        sys.stdout.write(disabled.to_json() + "\n")
+        return 0
+    verdict = evaluate(
+        force_refresh=force_refresh,
+        expected_method=configured if expected_method is None else expected_method,
+    )
     sys.stdout.write(verdict.to_json() + "\n")
     return 1 if verdict.enforcement_eligible else 0

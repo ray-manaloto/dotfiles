@@ -1,0 +1,8 @@
+{
+  "name": "fnhook-fixture-escape-hatch-unconsulted",
+  "version": "1.0.0",
+  "description": "Deny-capable module declaring the escape-hatch set but never consulting it",
+  "author": {
+    "name": "dotfiles test suite"
+  }
+}

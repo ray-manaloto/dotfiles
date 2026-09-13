@@ -92,7 +92,7 @@ def _write_plugin_markers(plugin_dir: Path) -> None:
 
 
 def test_fixture_inventory_is_tree_derived_and_excluded_from_production() -> None:
-    """All five complete fixtures are discoverable only when explicitly included."""
+    """All seven complete fixtures are discoverable only when explicitly included."""
     all_plugins = set(
         fnhook_gates.discover_plugin_dirs(REPO_ROOT, include_fixtures=True)
     )
@@ -102,6 +102,8 @@ def test_fixture_inventory_is_tree_derived_and_excluded_from_production() -> Non
     assert {path.name for path in fixtures} == {
         "bad-event",
         "bad-return",
+        "escape-hatch-unconsulted",
+        "no-escape-hatch",
         "parse-error",
         "untyped",
         "valid",
@@ -637,4 +639,103 @@ def test_a_plugin_in_a_nested_checkout_is_not_discovered(tmp_path: Path) -> None
     assert theirs not in discovered, (
         "a plugin inside a nested git checkout belongs to that repo's gate, "
         "not this one"
+    )
+
+
+# --------------------------------------------------------------------------- #
+# assert_escape_hatch_permitted — a deny-capable module must leave a way out
+# --------------------------------------------------------------------------- #
+
+
+def test_a_module_permitting_the_escape_hatch_passes() -> None:
+    """The ALLOW arm, exercised rather than assumed.
+
+    A gate verified only in the failing direction is half a gate; this is the
+    arm that proves a compliant module is actually accepted.
+    """
+    valid = _fixture_plugins()["valid"]
+    assert fnhook_gates.assert_escape_hatch_permitted([valid]).rc == 0
+
+
+def test_a_module_registering_no_blocking_event_is_out_of_scope() -> None:
+    """Scope is `classic.PreToolUse`; a module that cannot deny needs no set.
+
+    `bad-event` registers something else entirely, so it must pass this gate
+    even while failing its own — otherwise the gate is asserting event coverage
+    rather than the escape hatch.
+    """
+    bad_event = _fixture_plugins()["bad-event"]
+    assert fnhook_gates.assert_escape_hatch_permitted([bad_event]).rc == 0
+
+
+def test_a_deny_capable_module_with_no_escape_hatch_is_rejected() -> None:
+    """Reject arm 1: the blocking event is registered and nothing permits."""
+    plugin = _fixture_plugins()["no-escape-hatch"]
+    result = fnhook_gates.assert_escape_hatch_permitted([plugin])
+    assert result.rc == 1
+    assert "no Set permits" in result.stdout
+    for tool in fnhook_gates.ESCAPE_HATCH_TOOLS:
+        assert tool in result.stdout
+
+
+def test_an_unconsulted_escape_hatch_set_is_rejected() -> None:
+    """Reject arm 2, and the reason this gate binds a call site at all.
+
+    This is the REAL regression shape: reverting one `||` clause in
+    `isRepairPermitted` leaves the set present, correct, and completely
+    inert. A membership-only check stays green through it, which is the
+    "passes at rc=0 because only half a two-part change was reverted" failure
+    `feedback_coarse_mutation_certifies_nothing` records.
+    """
+    plugin = _fixture_plugins()["escape-hatch-unconsulted"]
+    result = fnhook_gates.assert_escape_hatch_permitted([plugin])
+    assert result.rc == 1
+    assert "never consults it" in result.stdout
+
+
+def test_the_two_reject_fixtures_are_still_genuinely_broken() -> None:
+    """Guard against a tidy-up neutering the gate into a check that only passes.
+
+    Asserts the defect is still present in the SOURCE, not merely that the gate
+    still returns 1 — a gate and its fixtures can rot together silently.
+    """
+    plugins = _fixture_plugins()
+    absent = (plugins["no-escape-hatch"] / "hooks" / "register.ts").read_text()
+    assert "classic.PreToolUse" in absent, "fixture must still register the event"
+    assert "ESCAPE_HATCH_TOOLS" not in absent, (
+        "no-escape-hatch must NOT declare the set, or reject arm 1 is unreachable"
+    )
+
+    inert = (plugins["escape-hatch-unconsulted"] / "hooks" / "register.ts").read_text()
+    assert "ESCAPE_HATCH_TOOLS = new Set" in inert, (
+        "escape-hatch-unconsulted must still DECLARE the set"
+    )
+    assert "ESCAPE_HATCH_TOOLS.has" not in inert, (
+        "escape-hatch-unconsulted must never CONSULT it, or reject arm 2 is "
+        "unreachable and the call-site binding goes untested"
+    )
+
+
+def test_the_production_hook_permits_the_escape_hatch() -> None:
+    """The real module, not a fixture — this gate exists because it did not.
+
+    Measured 2026-09-13: this hook denied both tools while reporting a broken
+    install, so the session could see the finding and not report it.
+    """
+    production = fnhook_gates.discover_plugin_dirs(REPO_ROOT)
+    assert production, "expected at least one production function-hook plugin"
+    assert fnhook_gates.assert_escape_hatch_permitted(production).rc == 0
+
+
+def test_the_escape_hatch_gate_is_wired_into_the_cli() -> None:
+    """Wiring guard: an unwired check is a check that cannot fail.
+
+    `.claude/rules/probes-need-a-control-arm.md` #2 asks for the realistic
+    mutation — deleting the line that CALLS the check, not renaming the check.
+    """
+    source = (
+        REPO_ROOT / "python" / "src" / "dotfiles_setup" / "fnhook_gates.py"
+    ).read_text()
+    assert "assert_escape_hatch_permitted(plugin_dirs)," in source, (
+        "the check must be invoked from fnhook_gates_main, or it never runs"
     )
