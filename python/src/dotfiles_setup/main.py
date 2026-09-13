@@ -110,7 +110,10 @@ from dotfiles_setup.p2996_hash import (
 )
 from dotfiles_setup.p2996_refresh import refresh as refresh_p2996_ref
 from dotfiles_setup.path_drift import AMBIENT_PATH_ENV, path_drift_main
-from dotfiles_setup.plan_attest import plan_attest_main
+from dotfiles_setup.plan_attest import (
+    insert_passthrough_separator,
+    plan_attest_main,
+)
 from dotfiles_setup.platform_target import (
     PLATFORM_FIELDS,
     platform_literals_main,
@@ -2756,7 +2759,12 @@ def main() -> None:
         stream=sys.stderr,
     )
     parser = setup_parser()
-    args = parser.parse_args()
+    # Not `parse_args()`: plan-attest forwards flags to the plugin's script, and
+    # argparse would claim `--show` as an unknown option, leaving the read-only
+    # form dead while the WRITING bare form worked. See
+    # `plan_attest.insert_passthrough_separator` — a no-op for every other
+    # command.
+    args = parser.parse_args(insert_passthrough_separator(sys.argv[1:]))
     project_root = Path(__file__).parent.parent.parent.parent
     config = DotfilesConfig()
 
