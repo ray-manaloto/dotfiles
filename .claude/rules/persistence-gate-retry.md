@@ -49,7 +49,36 @@ Detail: `docs/rules-evidence/persistence-gate-retry.md`.
 | `FAIL: in-volume canary missing` | real defect | home-volume mount regression — investigate volume name / mount opts |
 | `R[123] ... not works` | real defect | the corresponding R-invariant regressed; do NOT retry without diagnosing |
 | `FAIL smoke-tiers-1-3` inside `mise run land`, while `mise run smoke` standalone is rc=0 | environmental | retry `land` once — see "The land-smoke transient" below |
+| `fatal: detected dubious ownership in repository at '/workspaces/dotfiles'` | environmental | retry once — see "The dubious-ownership transient" below; do NOT reach for `dev-rebuild` |
 | `<tool>@latest: no versions found for <tool> matching date filter` (every pass identical) | real defect | do NOT retry — the candidate set is empty (a registry/backend change against `minimum_release_age`); more passes cannot help |
+
+## The dubious-ownership transient (in-container pytest, measured once)
+
+`mise run land -- 1047` (2026-09-13) died inside `verify-local` with the
+in-container suite stopping on its FIRST test:
+
+```
+git ls-files failed: fatal: detected dubious ownership
+  in repository at '/workspaces/dotfiles'
+FAILED tests/test_env_blob_scan.py::test_tracked_files_reads_the_repo_and_not_an_empty_list
+```
+
+Git refused the bind-mounted workspace, `tracked_files()` logged the error and
+returned `[]` (`env_blob_scan.py:210-212`), and the test caught the empty list.
+That test exists to stop a silently-empty scan reading as a clean one — it
+worked, and it is the reason this surfaced as a failure rather than a pass.
+
+**An immediate `mise run verify-local` returned rc=0 with ZERO occurrences of
+the string**, R1/R3 and all three smoke tiers green. So: retry once.
+
+⚠️ **`safe.directory` is configured NOWHERE in this repo** — not the Dockerfile,
+devcontainer config, scripts, or chezmoi templates (grepped). That is a real
+absence, and it is NOT the cause: an unconfigured `safe.directory` would fail
+every run, not one in two. Do not "fix" it by adding the config on this
+evidence; the actual trigger is unidentified and one measurement cannot name it.
+
+⚠️ The expensive wrong move is `mise run dev-rebuild` — inside the failing land
+it had ALREADY run rc=0, so a rebuild cannot be the repair.
 
 ## The land-smoke transient (`land` only, twice in two sessions)
 
