@@ -117,6 +117,38 @@ attempts auto-rolled-back and the declaration was wrongly blamed.
    correction runs in the **worse** direction: assume every credential is reachable
    from any shell. `docs/rules-evidence/secrets-out-of-the-shell-env.md`.
 
+8. **⚠️ A FILE can be the credential, and "it's config" is not evidence.** Rule 7
+   guards a *variable*; on 2026-09-13 the leak came through a **file**, so nothing
+   could have fired. `~/.agentsview/config.toml` was described as holding feature
+   flags, and a `cat` of it put an `auth_token` and a `cursor_secret` in the
+   transcript. **The description was the whole error** — an unknown dotfile in a
+   tool's own directory is a credential store until proven otherwise, and the tool
+   most likely to hold one is the tool you have not read the source of.
+
+   **Never open an unfamiliar dotfile to find out what it is.** Ask a question
+   whose answer is not the content: `ls -la ~/.<tool>/` for sizes and names, the
+   tool's `--help` or docs for its config schema. If you truly need to confirm a
+   key is present, `grep -c '<key>' <file>` returns a COUNT; `grep '<key>'` returns
+   the line, which is the secret.
+
+   **Machine-enforced since 2026-09-13**, in `permissions.deny` rather than
+   `hook_guard`, because a hard ban must not fail open (#343) — 24 rules, two
+   halves that fail differently:
+
+   - **`Read(~/…)` — load-bearing.** Path-normalised and tool-level, so it holds
+     however the path is spelled. Only `Read()`/`Edit()` path rules are consulted
+     by the file tools; a `Write()`/`Glob()` path rule is accepted and **never
+     checked** (`$CC/permissions.md:316`).
+   - **`Bash(*<path fragment>*)` — best-effort.** Anchored on the PATH, not on a
+     reader name, so `sed`, `python -c open()` and `cp` are covered as well as
+     `cat` — a reader allowlist is walked around by the next spelling. Still string
+     matching, so still evadable; treat it as a second line, never the first.
+
+   Both arms were verified live, on an **absent** covered path so a failed rule
+   could not leak: `cat ~/.netrc` → *denied* (not "No such file"), `Read` of
+   `~/.aws/credentials` → *denied*, while a normal `cat` of a repo file still
+   worked. Project-scoped by decision, so it binds sessions in this repo only.
+
 ## See also
 
 - `probes-need-a-control-arm.md` — every measurement above ran both arms.
