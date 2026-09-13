@@ -52,9 +52,12 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Final
+
+from dotfiles_setup.path_drift import Provenance, resolve_ambient_path
 
 #: The tool spec the version oracle resolves. ``github:`` is Anthropic's own
 #: prebuilt native release asset set, which is what the native installer ships.
@@ -76,6 +79,46 @@ _RUNNING_RE: Final = re.compile(
 
 #: The summary line whose presence is the "no errors" assertion.
 _CLEAN_MARKER: Final = "No installation issues found."
+
+#: The install method grilling decision Q1 settled on: "Native installer owns
+#: claude. Not mise."
+#:
+#: Asserted, not merely captured. The 2026-09-12 session observed a shadowing
+#: install, wrote :data:`_RUNNING_RE`'s ``method`` group to expose it, and then
+#: asserted only on the two facts that were *symptoms* of it — so when the class
+#: recurred within a day, the check described it as a missed update. A field
+#: captured but never asserted on is documentation, not a gate.
+#:
+#: The recurrence is worth naming because it is self-inflicted: ``mise.toml``
+#: pins ``npm:@anthropic-ai/claude-code`` so :mod:`dotfiles_setup.fnhook_gates`
+#: can name an exact ``claude@<version>`` for the build gate, and a ``[tools]``
+#: pin necessarily puts a competing ``claude`` shim on PATH. It loses to
+#: ``~/.local/bin/claude`` on PATH order — until something removes that symlink,
+#: which ``claude update`` run as a probe has already done once.
+#:
+#: Binding a third upstream string is the cost. It is bounded the same way the
+#: other two are: an output that does not parse never reaches this comparison,
+#: because :func:`parse_doctor` returns ``None`` and the caller routes to
+#: ``UNKNOWN``. A rewording therefore warns; it cannot pass silently.
+NATIVE_METHOD: Final = "native"
+
+#: What the check reports when it cannot see the shell's own ``claude``.
+#:
+#: Measured 2026-09-13, both arms from one fresh login shell: resolving against
+#: the captured ambient ``PATH`` finds ``~/.local/bin/claude`` (native 2.1.270),
+#: while the ``PATH`` inherited inside ``uv run`` finds
+#: ``~/.local/share/mise/installs/npm-anthropic-ai-claude-code/2.1.269/bin/claude``.
+#: Reporting on the second one is not a smaller answer, it is an answer about a
+#: different binary — and while today it produced a false INVALID, the same
+#: mechanism yields a false OK the moment the mise pin happens to be current.
+#: Blindness is therefore a finding, never a pass, exactly as in
+#: :mod:`dotfiles_setup.path_drift`.
+_BLIND_ADVICE: Final = (
+    "claude-doctor check is BLIND: mise already rewrote PATH for this process, "
+    "so the claude this shell would actually run is not visible here. This is "
+    "NOT 'claude is fine'. Have the caller capture it: "
+    'DOTFILES_AMBIENT_PATH="$PATH" mise run <task>'
+)
 
 #: Bound on every subprocess. `.claude/rules/long-running-command-hangs.md`
 #: requires a hard bound on anything that can block on network or IO, and this
@@ -129,17 +172,27 @@ class DoctorVerdict:
 
 
 def _run(
-    argv: list[str], *, extra_env: dict[str, str] | None = None
+    argv: list[str],
+    *,
+    extra_env: dict[str, str] | None = None,
+    path: str | None = None,
 ) -> tuple[int, str]:
     """Run ``argv``, returning ``(rc, combined output)``.
 
     A missing binary, a timeout and a crash all collapse to a non-zero rc with
     the reason as output, so every caller reaches the same ``UNKNOWN`` path
     rather than raising out of a SessionStart hook.
+
+    ``path`` is the ``PATH`` the binary is resolved against **and** the one the
+    child inherits. Both halves matter: resolving against it picks the binary the
+    operator's shell would run, and handing it down means ``claude doctor``
+    reports on the installation it would report on there.
     """
-    if shutil.which(argv[0]) is None:
+    resolved = shutil.which(argv[0], path=path) if path else shutil.which(argv[0])
+    if resolved is None:
         return 127, f"{argv[0]}: not found on PATH"
-    env = {**os.environ, **(extra_env or {})}
+    argv = [resolved, *argv[1:]]
+    env = {**os.environ, **({"PATH": path} if path else {}), **(extra_env or {})}
     try:
         # Fixed argv, no shell: nothing here is user-controlled.
         done = subprocess.run(
@@ -169,7 +222,9 @@ def parse_doctor(text: str) -> tuple[str | None, str | None, bool]:
     return match["version"].strip(), match["method"].strip(), _CLEAN_MARKER in text
 
 
-def latest_version(*, force_refresh: bool = True) -> tuple[str | None, str | None]:
+def latest_version(
+    *, force_refresh: bool = True, path: str | None = None
+) -> tuple[str | None, str | None]:
     """Newest published release, or ``(None, reason)``.
 
     ``force_refresh`` bypasses mise's 1h ``fetch_remote_versions_cache`` so the
@@ -178,6 +233,7 @@ def latest_version(*, force_refresh: bool = True) -> tuple[str | None, str | Non
     rc, out = _run(
         ["mise", "latest", ORACLE_SPEC],
         extra_env=_NO_CACHE_ENV if force_refresh else None,
+        path=path,
     )
     if rc != 0:
         return None, f"version oracle failed (rc={rc}): {out.strip()[:200]}"
@@ -187,13 +243,27 @@ def latest_version(*, force_refresh: bool = True) -> tuple[str | None, str | Non
     return version, None
 
 
-def evaluate(*, force_refresh: bool = True) -> DoctorVerdict:
+def evaluate(
+    *, force_refresh: bool = True, expected_method: str = NATIVE_METHOD
+) -> DoctorVerdict:
     """Run both probes and decide.
 
     Order matters: ``claude doctor`` failing to run at all is ``UNKNOWN``, not
     ``INVALID`` — a missing binary is a question that could not be asked.
+
+    ``expected_method`` is the install method :data:`NATIVE_METHOD` documents.
+    Pass ``""`` to skip that assertion entirely — a host that deliberately runs a
+    non-native build should say so in ``doctor.toml`` rather than read a standing
+    finding it has decided to accept.
     """
-    rc, text = _run(["claude", "doctor"])
+    path, provenance = resolve_ambient_path(os.environ)
+    if provenance is Provenance.BLIND:
+        return DoctorVerdict(
+            verdict=Verdict.UNKNOWN,
+            findings=[_BLIND_ADVICE],
+        )
+
+    rc, text = _run(["claude", "doctor"], path=path)
     if rc != 0:
         return DoctorVerdict(
             verdict=Verdict.UNKNOWN,
@@ -214,7 +284,7 @@ def evaluate(*, force_refresh: bool = True) -> DoctorVerdict:
             clean_marker_present=clean,
         )
 
-    latest, oracle_error = latest_version(force_refresh=force_refresh)
+    latest, oracle_error = latest_version(force_refresh=force_refresh, path=path)
     if latest is None:
         return DoctorVerdict(
             verdict=Verdict.UNKNOWN,
@@ -230,6 +300,23 @@ def evaluate(*, force_refresh: bool = True) -> DoctorVerdict:
         )
 
     findings: list[str] = []
+    if expected_method and method != expected_method:
+        # The shim advice is only true when the NATIVE install is the one being
+        # displaced. Appending it unconditionally made the finding blame a mise
+        # pin for shadowing the native build in the very case where the install
+        # on PATH *was* native — advice that contradicts the fact beside it.
+        detail = (
+            " Check `which -a claude`: a mise `[tools]` pin of "
+            "npm:@anthropic-ai/claude-code puts a shim on PATH, which wins "
+            "whenever ~/.local/bin/claude is missing. Repair with "
+            "`claude install latest`."
+            if expected_method == NATIVE_METHOD
+            else ""
+        )
+        findings.append(
+            f"claude on PATH is a {method!r} install, not the expected "
+            f"{expected_method!r}.{detail}"
+        )
     if running != latest:
         findings.append(
             f"claude on PATH is {running} but {latest} is published "
@@ -249,3 +336,23 @@ def evaluate(*, force_refresh: bool = True) -> DoctorVerdict:
         latest_version=latest,
         clean_marker_present=clean,
     )
+
+
+def claude_doctor_main(
+    *, force_refresh: bool = True, expected_method: str = NATIVE_METHOD
+) -> int:
+    """Print the verdict as JSON and return an exit code.
+
+    This is the seam the function-hook module calls. ``zero-bash-logic.md``
+    keeps the judgement in python, so ``hooks/register.ts`` only shells out to
+    this and renders the answer.
+
+    The exit code encodes **enforcement eligibility, not success**: non-zero
+    only for :attr:`Verdict.INVALID`. ``UNKNOWN`` returns 0 on purpose — it is a
+    question that could not be asked, and per this module's docstring such a
+    question must warn rather than block. A caller wanting the distinction reads
+    ``verdict`` from the JSON, which is always emitted.
+    """
+    verdict = evaluate(force_refresh=force_refresh, expected_method=expected_method)
+    sys.stdout.write(verdict.to_json() + "\n")
+    return 1 if verdict.enforcement_eligible else 0

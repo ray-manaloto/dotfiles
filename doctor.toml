@@ -218,3 +218,28 @@ forbidden_agents_md_marker = "use the installed graphify skill"
 # task can only ever report clean. Blindness is reported as a finding, never as a
 # pass; if you see it, the hook prefix was dropped.
 gate_tools = ["hk", "uv", "python", "ruff", "npm:renovate"]
+
+[claude]
+# The `claude` binary this host runs, checked against the newest published
+# release and against `claude doctor`'s own summary line. The check is
+# `check_claude_doctor`; the judgement lives in
+# `python/src/dotfiles_setup/claude_doctor.py`.
+#
+# Grilling decision Q1 (2026-09-12): "Native installer owns claude. Not mise."
+# That is asserted, not assumed, because the repo itself undermines it: the
+# `npm:@anthropic-ai/claude-code` pin in `mise.toml` exists so `fnhook_gates`
+# can name an exact `claude@<version>` for the build gate, and a `[tools]` pin
+# necessarily puts a competing `claude` shim on PATH. It loses to
+# `~/.local/bin/claude` on PATH order — until something removes that symlink,
+# which `claude update` run as a probe has already done once (2026-09-12), at
+# which point the shim wins and every session silently runs the wrong build.
+#
+# Set to a different method only if you have deliberately adopted a non-native
+# install; set to "" to stop asserting the method at all. Either is a reviewed
+# decision, which is the point of it living here rather than in the module.
+expected_install_method = "native"
+
+# Set false to disable the check entirely. Prefer narrowing
+# `expected_install_method` over switching this off: a disabled check reports
+# nothing, which reads exactly like a healthy host.
+enabled = true
