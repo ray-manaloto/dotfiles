@@ -11,6 +11,7 @@ irrelevant — it stops the command, never the script.
 
 from __future__ import annotations
 
+import inspect
 import json
 from pathlib import Path
 
@@ -19,10 +20,12 @@ from dotfiles_setup.hook_selfcheck import (
     _ATTEST_DENY_BASES,
     check_plan_attest_deny,
 )
+from dotfiles_setup.main import main, setup_parser
 from dotfiles_setup.plan_attest import (
     ATTEST_SCRIPT,
     PLUGIN_ID,
     PluginNotInstalledError,
+    insert_passthrough_separator,
     resolve_attest_script,
 )
 
@@ -121,3 +124,86 @@ def test_an_unreadable_settings_file_fails_rather_than_passing(
     """A check that returns clean when it cannot read is a check that can only pass."""
     missing = tmp_path / "nope.json"
     assert check_plan_attest_deny(missing) != []
+
+
+# --- The read-only form must actually reach the script (2026-09-13) ----------
+#
+# `--show` was unreachable for eleven days: argparse claims a dash-prefixed
+# token as an unknown OPTION rather than a value for the `nargs="*"`
+# passthrough, so the read-only form exited 2 while the BARE form -- the one
+# that WRITES the attestation -- ran fine. Docs could not fix it, because
+# `mise run` eats one `--` of its own before the task's command line is built.
+
+
+@pytest.mark.parametrize(
+    ("argv", "expected"),
+    [
+        # The defect itself, in both flags the script accepts.
+        (["plan-attest", "--show"], ["plan-attest", "--", "--show"]),
+        (["plan-attest", "--clear"], ["plan-attest", "--", "--clear"]),
+        # Idempotent: a second separator would forward a literal `--`.
+        (["plan-attest", "--", "--show"], ["plan-attest", "--", "--show"]),
+        # The BARE form WRITES; it must pass through completely untouched.
+        (["plan-attest"], ["plan-attest"]),
+        # A non-flag positional never needed the separator.
+        (["plan-attest", "somefile"], ["plan-attest", "somefile"]),
+        # Every other command is out of scope.
+        (["handoff-check", "--help"], ["handoff-check", "--help"]),
+        # `plan-attest` as another command's VALUE is not this subcommand:
+        # the root parser declares no global options, so ours is at index 0.
+        (
+            ["process", "git-isolated", "plan-attest", "-x"],
+            ["process", "git-isolated", "plan-attest", "-x"],
+        ),
+        ([], []),
+    ],
+)
+def test_the_separator_is_inserted_only_where_it_is_needed(
+    argv: list[str], expected: list[str]
+) -> None:
+    """Both arms: the flag forms gain a separator, everything else is untouched."""
+    assert insert_passthrough_separator(argv) == expected
+
+
+def test_the_documented_read_only_form_reaches_the_script() -> None:
+    """END TO END through the real parser: `--show` must arrive as a script arg.
+
+    This is the assertion the eleven-day outage needed. It binds the CALL SITE
+    in `main()`, not just the helper: deleting
+    `insert_passthrough_separator(...)` from `main.py` leaves the helper present
+    and correct while this test fails, which is exactly the regression shape a
+    membership-only check sails through.
+    """
+    parser = setup_parser()
+
+    # What `main()` actually does, read from the source rather than restated,
+    # so a refactor that drops the call cannot leave this test green.
+    source = inspect.getsource(main)
+    assert "insert_passthrough_separator(sys.argv[1:])" in source
+    assert "parser.parse_args()" not in source
+
+    for argv in (["plan-attest", "--show"], ["plan-attest", "--", "--show"]):
+        parsed = parser.parse_args(insert_passthrough_separator(argv))
+        assert parsed.args == ["--show"], argv
+
+
+def test_the_bare_form_still_forwards_nothing() -> None:
+    """The WRITING form must not acquire arguments it never had.
+
+    If the separator leaked into the bare invocation, the script would receive a
+    stray `--` and the operator's one-word command would change meaning.
+    """
+    parsed = setup_parser().parse_args(insert_passthrough_separator(["plan-attest"]))
+    assert parsed.args == []
+
+
+def test_argparse_alone_still_rejects_the_flag() -> None:
+    """The control arm: prove the defect is real and the fix is what repairs it.
+
+    Without the separator the parser must STILL exit 2 on `--show`. If this ever
+    starts passing, argparse changed underneath us and the helper has quietly
+    become a no-op -- a fix that can only succeed proves nothing.
+    """
+    with pytest.raises(SystemExit) as excinfo:
+        setup_parser().parse_args(["plan-attest", "--show"])
+    assert excinfo.value.code == 2

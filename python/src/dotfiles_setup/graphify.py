@@ -201,6 +201,106 @@ def _receipt_problem(
     return None
 
 
+def _git_output(project_root: Path, *args: str) -> str | None:
+    """Return stripped stdout of a read-only git command, or None if it failed."""
+    try:
+        done = subprocess.run(  # read-only, no shell, fixed argv
+            ["git", *args],
+            cwd=project_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return None
+    return done.stdout.strip() if done.returncode == 0 else None
+
+
+def _staleness_problem(
+    graph_payload: dict[str, object],
+    project_root: Path,
+    runtime: str,
+) -> HealthResult | None:
+    """Return STALE when the graph was not built from the current commit.
+
+    **This axis did not exist until 2026-09-13, and its absence was expensive.**
+    Health checked that the file parsed, matched the schema, and that the
+    INSTALLED graphify was the pinned version — nothing compared the graph to
+    the code. A graph built on 2026-08-31 therefore reported ``fresh`` for
+    thirteen days and 76 commits, through a rule that tells agents a ``fresh``
+    graph is citable and a PreToolUse hook that makes querying it MANDATORY
+    before grepping. Two symbols a session needed that day (``plan_attest_main``,
+    ``claude_doctor_main``) were absent because their modules postdated the
+    build; the graph answered as though they did not exist.
+
+    The signal is ``built_at_commit``, which **graphify itself** writes from the
+    repository HEAD at export time (``graphify/export.py:405-407``, via its own
+    ``_git_head``). That provenance is what makes this check honest, and it is
+    the precise thing the removed rebuild stamp lacked: that stamp was written
+    by our own ``update()`` and could only ever record the version ``update()``
+    already resolves, so it could never fail. This field is written by another
+    program, from a fact we do not supply, and is compared against a HEAD we
+    read independently — two sources, so both answers are reachable. See
+    ``_receipt_problem`` for the stamp that was removed rather than kept as
+    decoration.
+
+    Ancestry is deliberately NOT the test. This repo squash-merges, so a graph
+    built on a PR branch records a commit that never enters main's history —
+    measured: the 2026-08-31 graph's ``b75fa3b`` has six commits unreachable
+    from HEAD and no branch contains it. An "is it an ancestor" check would
+    therefore report STALE on nearly every graph, which is the mirror of the
+    defect being fixed. Equality with HEAD is the whole test; ancestry is used
+    only to make the message more useful when it fails.
+
+    Conservative by construction. ``graphify/cli.py:2263`` carries a previous
+    ``built_at_commit`` forward on some re-export paths, so the field can lag a
+    graph that is really current. That direction is safe: the check would say
+    STALE about a fresh graph, never FRESH about a stale one. A graph with no
+    provenance at all is STALE for the same reason — the pinned runtime always
+    writes the field, so its absence means the graph did not come from that
+    runtime, and silence is what this whole function exists to end.
+
+    Uncommitted edits are out of scope: this answers "which commit built it",
+    not "has anything changed since". A dirty tree can still hold a graph that
+    passes here.
+
+    Args:
+        graph_payload: The decoded ``graph.json``.
+        project_root: Repository root, used to read HEAD.
+        runtime: Installed graphify version, carried into the result.
+
+    Returns:
+        A STALE ``HealthResult``, or None when the graph matches HEAD.
+    """
+    built_at = graph_payload.get("built_at_commit")
+    if not isinstance(built_at, str) or not built_at:
+        return HealthResult(
+            GraphifyStatus.STALE,
+            runtime,
+            "graph carries no built_at_commit, so nothing states which code it "
+            "describes",
+        )
+    head = _git_output(project_root, "rev-parse", "HEAD")
+    if head is None:
+        # Not a repository, or git is unavailable: the question cannot be
+        # asked, and a probe that cannot ask must not answer "fine".
+        return HealthResult(
+            GraphifyStatus.STALE,
+            runtime,
+            "cannot read HEAD, so the graph's build commit cannot be checked",
+        )
+    if built_at == head:
+        return None
+    behind = _git_output(project_root, "rev-list", "--count", f"{built_at}..HEAD")
+    distance = f"{behind} commit(s) behind" if behind else "on a different history"
+    return HealthResult(
+        GraphifyStatus.STALE,
+        runtime,
+        f"graph was built at {built_at[:8]}, HEAD is {head[:8]} ({distance}) — "
+        f"rebuild with `mise run graphify-update`",
+    )
+
+
 def _graph_schema_problem(payload: dict[str, object]) -> str:
     """Return the first required Graphify collection schema problem, if any."""
     for field in ("nodes", _edges_field(payload), "hyperedges"):
@@ -234,8 +334,16 @@ def graphify_health(project_root: Path) -> HealthResult:
         return HealthResult(GraphifyStatus.CORRUPT, runtime, schema_problem)
     if runtime != "0.9.53":
         return HealthResult(GraphifyStatus.VERSION_DRIFT, runtime, "expected 0.9.53")
-    if problem := _receipt_problem(graph_path, graph_bytes, payload, runtime):
-        return problem
+    # One loop rather than a return per check: each stays lazy (the staleness
+    # probe shells out to git, so it must not run when the receipt already
+    # settled the answer) while the function keeps a single failure exit.
+    problem_checks = (
+        lambda: _receipt_problem(graph_path, graph_bytes, payload, runtime),
+        lambda: _staleness_problem(payload, project_root, runtime),
+    )
+    for check in problem_checks:
+        if problem := check():
+            return problem
     return HealthResult(
         GraphifyStatus.FRESH,
         runtime,

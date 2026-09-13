@@ -6,10 +6,41 @@ Before broad source search, run `mise run graphify-health`.
   source paths.
 - `missing`, `stale`, `corrupt`, version drift, warnings, or truncation: say the
   graph is unavailable and fall back to source. Never translate these states to
-  an empty or complete answer.
+  an empty or complete answer. A `stale` graph names the fix in its own detail
+  line: `mise run graphify-update`.
 - **Always the mise tasks, never a bare `graphify` on `PATH`.** Query with
   `mise run graphify-query`, rebuild with `mise run graphify-update` — never
   `graphify query`/`graphify update` directly.
+
+## `fresh` now means "built from HEAD" — it did not until 2026-09-13
+
+Health used to check only that the graph file existed, parsed, matched the schema,
+and that the INSTALLED graphify was the pinned version. **Nothing compared the
+graph to the code.** The graph in this clone was built 2026-08-31 and reported
+`fresh` for thirteen days and 76 commits, while this rule told every agent a
+`fresh` graph is citable and a PreToolUse hook made querying it MANDATORY before
+grepping. Two symbols a session needed that day — `plan_attest_main`,
+`claude_doctor_main` — were absent because their modules postdated the build,
+and the graph answered as though they did not exist. Measured against controls:
+`setup_parser` 76 hits, `handle_pr` 21, both subjects 0.
+
+`_staleness_problem` closes it by comparing `built_at_commit` — a field
+**graphify itself** writes from HEAD at export time
+(its own `graphify.export` module, via that package's `_git_head`) — against a
+HEAD read independently. Two sources,
+so both answers are reachable; that is exactly what the removed rebuild stamp
+below lacked.
+
+⚠️ **Ancestry is deliberately not the test.** This repo squash-merges, so a graph
+built on a PR branch records a commit that never enters main's history — the
+2026-08-31 graph's `b75fa3b` has six commits unreachable from HEAD and no branch
+contains it. An "is it an ancestor" check would report `stale` on nearly every
+graph: the mirror of the defect. Equality with HEAD is the whole test.
+
+A graph carrying no `built_at_commit` is `stale` too. The pinned runtime always
+writes it, so its absence means the bytes did not come from that runtime — and
+silence is what this axis exists to end. Uncommitted edits are out of scope:
+this answers "which commit built it", not "has anything changed since".
 
 ## Nothing records WHICH graphify built the graph
 

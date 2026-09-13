@@ -301,6 +301,29 @@ def test_query_rejects_output_larger_than_agent_transport_budget(
     assert "65536-byte" in str(exc.value)
 
 
+# The commit every stub graph in this module claims it was built from. The
+# staleness axis (`_staleness_problem`) compares it to HEAD, so a test about
+# some OTHER axis must satisfy this one explicitly rather than rely on the
+# field being absent — an absent field is itself STALE, by design.
+GRAPH_HEAD = "c" * 40
+_PROV = f'"built_at_commit": "{GRAPH_HEAD}"'
+_PROV_B = _PROV.encode()
+
+
+@pytest.fixture
+def head_matches_graph(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Point HEAD at the commit the stub graphs name.
+
+    Deliberately NOT "make the check pass": the graph states a commit and this
+    states HEAD, so a test can still disagree with it — the staleness tests
+    below do exactly that.
+    """
+    monkeypatch.setattr(
+        "dotfiles_setup.graphify._git_output",
+        lambda _root, *_args: GRAPH_HEAD,
+    )
+
+
 def test_graphify_health_reports_missing_graph(tmp_path: Path) -> None:
     """Missing graph is an explicit blocking status."""
     result = graphify_health(tmp_path)
@@ -321,7 +344,7 @@ def test_graphify_health_reports_version_drift(
     graph_dir = tmp_path / "graphify-out"
     graph_dir.mkdir()
     graph_dir.joinpath("graph.json").write_bytes(
-        b'{"nodes": [], "links": [], "hyperedges": []}'
+        b'{"nodes": [], "links": [], "hyperedges": [], ' + _PROV_B + b"}"
     )
     monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.42")
 
@@ -332,6 +355,7 @@ def test_graphify_health_reports_version_drift(
     assert not result.ok
 
 
+@pytest.mark.usefixtures("head_matches_graph")
 def test_graphify_health_accepts_graph_without_build_receipt(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -344,7 +368,7 @@ def test_graphify_health_accepts_graph_without_build_receipt(
     graph_dir = tmp_path / "graphify-out"
     graph_dir.mkdir()
     (graph_dir / "graph.json").write_text(
-        '{"nodes": [], "edges": [], "hyperedges": []}'
+        '{"nodes": [], "edges": [], "hyperedges": [], ' + _PROV + "}"
     )
     monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.53")
     result = graphify_health(tmp_path)
@@ -352,11 +376,12 @@ def test_graphify_health_accepts_graph_without_build_receipt(
     assert result.ok
 
 
+@pytest.mark.usefixtures("head_matches_graph")
 def test_graphify_health_accepts_exact_receipted_graph(tmp_path: Path) -> None:
     """Freshness binds the exact graph bytes and runtime version."""
     graph_dir = tmp_path / "graphify-out"
     graph_dir.mkdir()
-    graph_bytes = b'{"nodes": [], "edges": [], "hyperedges": []}'
+    graph_bytes = b'{"nodes": [], "edges": [], "hyperedges": [], ' + _PROV_B + b"}"
     (graph_dir / "graph.json").write_bytes(graph_bytes)
     (graph_dir / "build-receipt.json").write_bytes(
         codec.encode(
@@ -387,7 +412,7 @@ def test_graphify_health_rejects_forged_producer_receipt_fields(
 ) -> None:
     graph_dir = tmp_path / "graphify-out"
     graph_dir.mkdir()
-    graph_bytes = b'{"nodes": [], "edges": [], "hyperedges": []}'
+    graph_bytes = b'{"nodes": [], "edges": [], "hyperedges": [], ' + _PROV_B + b"}"
     (graph_dir / "graph.json").write_bytes(graph_bytes)
     receipt = GraphifyBuildReceipt(
         schema_version=1,
@@ -408,14 +433,19 @@ def test_graphify_health_rejects_forged_producer_receipt_fields(
     assert graphify_health(tmp_path).status is GraphifyStatus.STALE
 
 
+@pytest.mark.usefixtures("head_matches_graph")
 def test_graphify_health_binds_one_graph_byte_snapshot(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     graph_dir = tmp_path / "graphify-out"
     graph_dir.mkdir()
     graph_path = graph_dir / "graph.json"
-    graph_a = b'{"nodes": [{"id":"a"}], "edges": [], "hyperedges": []}'
-    graph_b = b'{"nodes": [{"id":"b"}], "edges": [], "hyperedges": []}'
+    graph_a = (
+        b'{"nodes": [{"id":"a"}], "edges": [], "hyperedges": [], ' + _PROV_B + b"}"
+    )
+    graph_b = (
+        b'{"nodes": [{"id":"b"}], "edges": [], "hyperedges": [], ' + _PROV_B + b"}"
+    )
     graph_path.write_bytes(graph_a)
     receipt = GraphifyBuildReceipt(
         schema_version=1,
@@ -479,6 +509,7 @@ def test_graphify_health_rejects_invalid_graph_schema(
     assert result.status is GraphifyStatus.CORRUPT
 
 
+@pytest.mark.usefixtures("head_matches_graph")
 def test_graphify_health_accepts_links_keyed_graph(tmp_path: Path) -> None:
     """A links-keyed graph must be usable.
 
@@ -489,7 +520,7 @@ def test_graphify_health_accepts_links_keyed_graph(tmp_path: Path) -> None:
     """
     graph_dir = tmp_path / "graphify-out"
     graph_dir.mkdir()
-    graph_bytes = b'{"nodes": [], "links": [], "hyperedges": []}'
+    graph_bytes = b'{"nodes": [], "links": [], "hyperedges": [], ' + _PROV_B + b"}"
     (graph_dir / "graph.json").write_bytes(graph_bytes)
     (graph_dir / "build-receipt.json").write_bytes(
         codec.encode(
@@ -524,7 +555,9 @@ def test_graphify_health_rejects_graph_missing_edge_collection(tmp_path: Path) -
     """
     graph_dir = tmp_path / "graphify-out"
     graph_dir.mkdir()
-    graph_bytes = json.dumps({"nodes": [], "hyperedges": []}).encode()
+    graph_bytes = json.dumps(
+        {"nodes": [], "hyperedges": [], "built_at_commit": GRAPH_HEAD}
+    ).encode()
     (graph_dir / "graph.json").write_bytes(graph_bytes)
 
     result = graphify_health(tmp_path)
@@ -1067,3 +1100,92 @@ def test_prs_main_reports_error_and_returns_1(
 
     assert rc == 1
     assert "not authenticated" in capsys.readouterr().err
+
+
+# --- The staleness axis (2026-09-13) ----------------------------------------
+#
+# Health had no way to notice that a graph described older code. The graph in
+# this repo was 13 days and 76 commits behind while reporting `fresh`, through
+# a rule that calls a fresh graph citable and a PreToolUse hook that makes
+# querying it mandatory before grepping. Two symbols a session needed that day
+# were simply absent, and the graph answered as though they did not exist.
+
+
+def _stub_graph(tmp_path: Path, commit: str | None) -> Path:
+    """Write a minimal graph, optionally claiming a build commit."""
+    graph_dir = tmp_path / "graphify-out"
+    graph_dir.mkdir(exist_ok=True)
+    payload: dict[str, object] = {"nodes": [], "links": [], "hyperedges": []}
+    if commit is not None:
+        payload["built_at_commit"] = commit
+    (graph_dir / "graph.json").write_text(json.dumps(payload))
+    return tmp_path
+
+
+def test_graphify_health_reports_stale_when_the_graph_predates_head(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """THE FAIL ARM: a graph built at another commit must not read as fresh.
+
+    This is the 2026-09-13 case reproduced: the graph names a commit, HEAD is a
+    different one, and the answer has to be STALE with the distance in it.
+    """
+    _stub_graph(tmp_path, "b" * 40)
+    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.53")
+    monkeypatch.setattr(
+        "dotfiles_setup.graphify._git_output",
+        lambda _root, *args: "77" if "rev-list" in args else "a" * 40,
+    )
+    result = graphify_health(tmp_path)
+    assert result.status is GraphifyStatus.STALE
+    assert not result.ok
+    assert "77 commit(s) behind" in result.detail
+    assert "graphify-update" in result.detail
+
+
+def test_graphify_health_reports_stale_without_build_provenance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A graph that cannot say which code it describes is not evidence.
+
+    The pinned runtime always writes `built_at_commit`, so its absence means the
+    bytes did not come from that runtime. Treating that as fresh is the silence
+    this axis exists to end.
+    """
+    _stub_graph(tmp_path, None)
+    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.53")
+    result = graphify_health(tmp_path)
+    assert result.status is GraphifyStatus.STALE
+    assert "built_at_commit" in result.detail
+
+
+def test_graphify_health_reports_stale_when_head_is_unreadable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A probe that cannot ask the question must not answer "fine"."""
+    _stub_graph(tmp_path, "b" * 40)
+    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.53")
+    monkeypatch.setattr(
+        "dotfiles_setup.graphify._git_output", lambda _root, *_args: None
+    )
+    result = graphify_health(tmp_path)
+    assert result.status is GraphifyStatus.STALE
+    assert "HEAD" in result.detail
+
+
+def test_graphify_health_is_fresh_when_the_graph_matches_head(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """THE PASS ARM: matching commits must still be usable evidence.
+
+    Without this the axis could be satisfied by a check that only ever reports
+    STALE — the mirror of the defect it replaced, and just as useless.
+    """
+    _stub_graph(tmp_path, "d" * 40)
+    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.53")
+    monkeypatch.setattr(
+        "dotfiles_setup.graphify._git_output", lambda _root, *_args: "d" * 40
+    )
+    result = graphify_health(tmp_path)
+    assert result.status is GraphifyStatus.FRESH
+    assert result.ok
