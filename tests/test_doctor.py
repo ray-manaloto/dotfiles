@@ -1106,9 +1106,10 @@ def test_every_check_function_is_actually_registered() -> None:
     # published build, and does `claude doctor` itself report clean. Host state,
     # like `path-drift`, and blind for the same reason unless the SessionStart
     # hook captured PATH first. It exists because the repo's own
-    # `npm:@anthropic-ai/claude-code` pin (added by #1038 so `fnhook_gates` can
-    # name an exact version) puts a competing `claude` shim on PATH, which wins
-    # the moment `~/.local/bin/claude` goes missing.
+    # claude pin (added by #1038 so `fnhook_gates` can name an exact version)
+    # puts a competing `claude` on PATH. #1043 moved it off the npm backend, so
+    # it can no longer produce a broken launcher — but it is still not the
+    # operator's install, and that is what this check asserts.
     assert len(doctor.CHECKS) == 12, "every specified check must be wired"
 
 

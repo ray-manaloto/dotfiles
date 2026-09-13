@@ -226,13 +226,17 @@ gate_tools = ["hk", "uv", "python", "ruff", "npm:renovate"]
 # `python/src/dotfiles_setup/claude_doctor.py`.
 #
 # Grilling decision Q1 (2026-09-12): "Native installer owns claude. Not mise."
-# That is asserted, not assumed, because the repo itself undermines it: the
-# `npm:@anthropic-ai/claude-code` pin in `mise.toml` exists so `fnhook_gates`
-# can name an exact `claude@<version>` for the build gate, and a `[tools]` pin
-# necessarily puts a competing `claude` shim on PATH. It loses to
+# Asserted, not assumed, because the repo undermined it within hours: a
+# `npm:@anthropic-ai/claude-code` pin landed in `mise.toml` ~7 hours BEFORE that
+# decision was recorded, and the grilling never saw it. A `[tools]` pin
+# necessarily puts a competing `claude` on PATH, which loses to
 # `~/.local/bin/claude` on PATH order — until something removes that symlink,
-# which `claude update` run as a probe has already done once (2026-09-12), at
-# which point the shim wins and every session silently runs the wrong build.
+# which `claude update` run as a probe has already done once (2026-09-12).
+#
+# That pin is now `github:anthropics/claude-code` (#1043), which removes the npm
+# failure mode, and this assertion is what keeps the decision honest: a
+# mise-provided claude reports `package-manager`, a leftover npm one reports
+# `npm-global`, and neither is `native`.
 #
 # Set to a different method only if you have deliberately adopted a non-native
 # install; set to "" to stop asserting the method at all. Either is a reviewed

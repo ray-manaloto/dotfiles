@@ -23,7 +23,24 @@ editorconfig-checker = "3.11.2" # provides `ec` — hk editorconfig_checker buil
 # Host/CI-only build gates for Claude Code function-hook modules (#1026).
 # These stay out of shared.toml because hk-image.pkl never runs the gate and
 # neither tool belongs in the devcontainer image.
-"npm:@anthropic-ai/claude-code" = "2.1.269"
+#
+# `github:` — Anthropic's own native release asset — NOT `npm:`. The npm backend
+# was here from #1038 until 2026-09-13 and cost a broken host (#1043): a `[tools]`
+# entry activates, so it put an npm `claude` on PATH, sessions launched here were
+# therefore npm-global installs, and their auto-updater self-updated via
+# `npm install --global`. npm 12 refuses a postinstall it has not been allowed to
+# run, WARNS, and exits 0 — leaving a 500-byte launcher whose whole body echoes
+# "claude native binary not installed" and exits 1.
+#
+# It also contradicted grilling decision Q1 ("Native installer owns claude. Not
+# mise."), which was recorded ~7 hours AFTER the pin landed and never saw it.
+#
+# This backend ships the real binary, so there is no postinstall to block. It is
+# still visible to `check_claude_doctor`: a mise-provided claude reports
+# `Running: package-manager`, not `native`, so it cannot silently shadow
+# ~/.local/bin/claude. Same spec the version oracle uses
+# (`claude_doctor.ORACLE_SPEC`).
+"github:anthropics/claude-code" = "2.1.270"
 "npm:typescript" = "5.9.3"
 # Critical host-side secrets transport for devcontainer initialization. Keep it
 # deep-tracked in currency.toml: Doppler's mounted-secret behavior is part of

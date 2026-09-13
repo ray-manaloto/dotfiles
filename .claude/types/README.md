@@ -5,16 +5,30 @@ no upstream URL or source file to download. Regenerate both files from the
 repository root with:
 
 ```console
-CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 mise exec -- claude -p '/plugin-types' --permission-mode bypassPermissions < /dev/null
+mise run fnhook-types-refresh
 ```
+
+That task is the canonical route. The command it runs is, in effect:
+
+```console
+CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 mise exec github:anthropics/claude-code@<pin> -- claude -p '/plugin-types' --permission-mode bypassPermissions < /dev/null
+```
+
+Two details are load-bearing and were both wrong here until 2026-09-13.
+`mise exec -- claude` with **no tool named** resolves the bare SHIM, and mise
+then has no version to map it to: measured on a GitHub runner, the gate died on
+`mise ERROR No version is set for shim: claude` while passing on a development
+Mac, where a shim resolves. And the tool is `github:` — Anthropic's native
+release asset — **not** `npm:`, whose launcher needs a postinstall that npm 12
+blocks by default while still exiting 0 (#1043).
 
 The mandatory `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1` flag makes
 `/plugin-types` available. Without it, Claude Code reports an unknown command,
 writes nothing, and still exits zero, so the refresh task verifies that both
 outputs exist and are non-empty rather than trusting the process status.
 
-- Harness: Claude Code 2.1.269
-- Generated: 2026-09-12
+- Harness: Claude Code 2.1.270
+- Generated: 2026-09-13
 - Outputs: `claude-code.d.ts` and `claude-code-mcp.d.ts`
 
 The main declaration file is environment-dependent: `/plugin-types` includes

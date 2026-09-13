@@ -1223,7 +1223,7 @@ def check_claude_doctor(setup: Setup) -> list[str]:
     ⚠️ Blind unless the SessionStart hook captured ``PATH`` first, exactly as
     :func:`check_path_drift` is: ``uv run`` executes under mise's activated
     environment, so an uncaptured ``PATH`` resolves mise's pinned
-    ``npm:@anthropic-ai/claude-code`` shim rather than the operator's install.
+    pinned ``claude`` rather than the operator's own install.
     :func:`claude_doctor.evaluate` reports that blindness rather than passing.
     """
     baseline = _str_keys(setup.baseline.get("claude"))

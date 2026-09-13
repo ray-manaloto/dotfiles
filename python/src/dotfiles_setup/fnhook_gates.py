@@ -43,7 +43,10 @@ _TYPE_FILENAMES = ("claude-code.d.ts", "claude-code-mcp.d.ts")
 # whatever cwd a gate happens to run in — `_generate_types` runs in a temp dir.
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
-CLAUDE_TOOL = "npm:@anthropic-ai/claude-code"
+#: Anthropic's native release asset. Deliberately NOT the `npm:` backend — see
+#: the `mise.toml` comment on this pin and #1043: npm's launcher needs a
+#: postinstall that npm 12 blocks by default while still exiting 0.
+CLAUDE_TOOL = "github:anthropics/claude-code"
 TSC_TOOL = "npm:typescript"
 
 

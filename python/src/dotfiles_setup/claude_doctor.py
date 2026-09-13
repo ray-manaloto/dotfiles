@@ -89,12 +89,14 @@ _CLEAN_MARKER: Final = "No installation issues found."
 #: recurred within a day, the check described it as a missed update. A field
 #: captured but never asserted on is documentation, not a gate.
 #:
-#: The recurrence is worth naming because it is self-inflicted: ``mise.toml``
-#: pins ``npm:@anthropic-ai/claude-code`` so :mod:`dotfiles_setup.fnhook_gates`
-#: can name an exact ``claude@<version>`` for the build gate, and a ``[tools]``
-#: pin necessarily puts a competing ``claude`` shim on PATH. It loses to
-#: ``~/.local/bin/claude`` on PATH order — until something removes that symlink,
-#: which ``claude update`` run as a probe has already done once.
+#: The recurrence was self-inflicted: ``mise.toml`` pinned
+#: ``npm:@anthropic-ai/claude-code`` so :mod:`dotfiles_setup.fnhook_gates` could
+#: name an exact ``claude@<version>``, and a ``[tools]`` pin necessarily puts a
+#: competing ``claude`` on PATH. That pin is now ``github:anthropics/claude-code``
+#: (#1043), which removes the npm failure mode — but NOT the need for this
+#: assertion: a mise-provided claude still lands on PATH, it simply reports
+#: ``package-manager`` instead of ``npm-global``. Either way it is not ``native``,
+#: and that is exactly what this catches.
 #:
 #: Binding a third upstream string is the cost. It is bounded the same way the
 #: other two are: an output that does not parse never reaches this comparison,
@@ -306,10 +308,12 @@ def evaluate(
         # pin for shadowing the native build in the very case where the install
         # on PATH *was* native — advice that contradicts the fact beside it.
         detail = (
-            " Check `which -a claude`: a mise `[tools]` pin of "
-            "npm:@anthropic-ai/claude-code puts a shim on PATH, which wins "
-            "whenever ~/.local/bin/claude is missing. Repair with "
-            "`claude install latest`."
+            " Check `which -a claude` — but note it inherits this process's "
+            "PATH; `mise env -C <dir>` is the inheritance-free question. A mise "
+            "`[tools]` pin of claude puts one on PATH (reported as "
+            "'package-manager'), and a leftover npm global reports 'npm-global'. "
+            "Repair with `claude install latest`; `claude doctor` names a "
+            "leftover npm install and its uninstall command directly."
             if expected_method == NATIVE_METHOD
             else ""
         )

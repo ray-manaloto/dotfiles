@@ -17,10 +17,10 @@ a fact nobody established.
 
 The ambient-``PATH`` tests exist because the check shipped measuring the wrong
 binary: ``uv run`` executes under mise's activated environment, so the inherited
-``PATH`` resolved mise's pinned ``npm:@anthropic-ai/claude-code`` shim rather
-than the native install the operator actually runs. That produced a false
-``INVALID`` on 2026-09-13 — and would produce a false ``OK`` whenever the pin
-happens to match the newest release.
+``PATH`` resolved mise's pinned ``claude`` rather than the native install the
+operator actually runs. That produced a false ``INVALID`` on 2026-09-13 — and
+would produce a false ``OK`` whenever the pin happens to match the newest
+release.
 
 ``tests/test_path_drift.py::test_the_session_start_hook_captures_the_ambient_path``
 is the other half of that guard and is deliberately not duplicated here: this
@@ -177,9 +177,9 @@ def test_a_shadowed_install_is_invalid_and_names_the_shadowing(
     # can only come from the install-method assertion.
     assert len(result.findings) == 1
     assert "not the expected 'native'" in result.findings[0]
-    # The shim advice is only appended when NATIVE is the displaced install, so
+    # The PATH advice is only appended when NATIVE is the displaced install, so
     # its presence here also pins that branch.
-    assert "npm:@anthropic-ai/claude-code" in result.findings[0]
+    assert "mise env -C" in result.findings[0]
 
 
 def test_an_accepted_non_native_install_can_opt_out(
@@ -361,7 +361,7 @@ def test_a_non_native_expectation_does_not_blame_the_mise_shim(
     result = claude_doctor.evaluate(expected_method="homebrew")
     assert result.verdict is Verdict.INVALID
     assert "not the expected 'homebrew'" in result.findings[0]
-    assert "npm:@anthropic-ai/claude-code" not in result.findings[0], (
-        "the mise-shim advice is only true when the NATIVE install is the one "
-        "being displaced"
+    assert "mise env -C" not in result.findings[0], (
+        "the PATH-shadowing advice is only true when the NATIVE install is the "
+        "one being displaced"
     )
