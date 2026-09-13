@@ -1,4 +1,4 @@
-// Written by Claude Code 2.1.269.
+// Written by Claude Code 2.1.270.
 // Claude Code function hooks: the plugin API's TypeScript declarations.
 //
 // EARLY ACCESS: this surface may change between releases without notice.
@@ -8419,6 +8419,17 @@ declare module 'claude-code' {
       /** Page range for PDF files (e.g., "1-5", "3", "10-20"). Only applicable to PDF files. Maximum 20 pages per request. */
       pages?: string
     }
+    RemoteTrigger: {
+      action: "list" | "get" | "create" | "update" | "run" | "create_webhook_trigger" | "list_runs" | "get_run_log"
+      /** Required for get, update, run, and list_runs */
+      trigger_id?: string
+      /** Required for get_run_log: a run session id (cse_… or session_…, from list_runs) */
+      session_id?: string
+      /** next_cursor from a previous list_runs or get_run_log page */
+      cursor?: string
+      /** Required for create and update; optional for run */
+      body?: {}
+    }
     ReportFindings: {
       /** Effort level the review ran at */
       level?: "low" | "medium" | "high" | "xhigh" | "max"
@@ -8991,6 +9002,11 @@ declare module 'claude-code' {
       }
       /** Set when the dedup matched a startup-seeded entry (CLAUDE.md / nested memory) rather than a prior Read tool_result */
       source?: "seeded"
+    }
+    RemoteTrigger: {
+      status: number
+      json: string
+      summary?: string
     }
     ReportFindings: {
       /** Number of findings reported */

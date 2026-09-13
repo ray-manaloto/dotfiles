@@ -218,3 +218,32 @@ forbidden_agents_md_marker = "use the installed graphify skill"
 # task can only ever report clean. Blindness is reported as a finding, never as a
 # pass; if you see it, the hook prefix was dropped.
 gate_tools = ["hk", "uv", "python", "ruff", "npm:renovate"]
+
+[claude]
+# The `claude` binary this host runs, checked against the newest published
+# release and against `claude doctor`'s own summary line. The check is
+# `check_claude_doctor`; the judgement lives in
+# `python/src/dotfiles_setup/claude_doctor.py`.
+#
+# Grilling decision Q1 (2026-09-12): "Native installer owns claude. Not mise."
+# Asserted, not assumed, because the repo undermined it within hours: a
+# `npm:@anthropic-ai/claude-code` pin landed in `mise.toml` ~7 hours BEFORE that
+# decision was recorded, and the grilling never saw it. A `[tools]` pin
+# necessarily puts a competing `claude` on PATH, which loses to
+# `~/.local/bin/claude` on PATH order — until something removes that symlink,
+# which `claude update` run as a probe has already done once (2026-09-12).
+#
+# That pin is now `github:anthropics/claude-code` (#1043), which removes the npm
+# failure mode, and this assertion is what keeps the decision honest: a
+# mise-provided claude reports `package-manager`, a leftover npm one reports
+# `npm-global`, and neither is `native`.
+#
+# Set to a different method only if you have deliberately adopted a non-native
+# install; set to "" to stop asserting the method at all. Either is a reviewed
+# decision, which is the point of it living here rather than in the module.
+expected_install_method = "native"
+
+# Set false to disable the check entirely. Prefer narrowing
+# `expected_install_method` over switching this off: a disabled check reports
+# nothing, which reads exactly like a healthy host.
+enabled = true

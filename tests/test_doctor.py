@@ -1102,7 +1102,15 @@ def test_every_check_function_is_actually_registered() -> None:
     # (2026-08-31): the graphify skill surface's reviewed, DELIBERATE shape —
     # the deliberate-stub marker, and the forbidden vendor-install AGENTS.md
     # marker — the commit-time twin of hk's `graphify_skill_surface` step.
-    assert len(doctor.CHECKS) == 11, "every specified check must be wired"
+    # + `claude-doctor` (2026-09-13): is the `claude` THIS shell runs the newest
+    # published build, and does `claude doctor` itself report clean. Host state,
+    # like `path-drift`, and blind for the same reason unless the SessionStart
+    # hook captured PATH first. It exists because the repo's own
+    # claude pin (added by #1038 so `fnhook_gates` can name an exact version)
+    # puts a competing `claude` on PATH. #1043 moved it off the npm backend, so
+    # it can no longer produce a broken launcher — but it is still not the
+    # operator's install, and that is what this check asserts.
+    assert len(doctor.CHECKS) == 12, "every specified check must be wired"
 
 
 def test_the_shipped_baseline_parses_and_declares_what_the_checks_read() -> None:
@@ -1133,6 +1141,14 @@ def test_the_shipped_baseline_parses_and_declares_what_the_checks_read() -> None
     # `filesystem` entry alive purely to satisfy a test.
     assert "scope_servers" in mcp
     assert isinstance(mcp.get("mutating_tools"), dict)
+    # KEY PRESENCE again, for the same reason: a missing [claude] section makes
+    # `check_claude_doctor` fall back to its module default silently, so the
+    # reviewed decision about which install method is expected would live
+    # nowhere a reviewer looks.
+    claude = setup.baseline.get("claude")
+    assert isinstance(claude, dict)
+    assert "expected_install_method" in claude
+    assert "enabled" in claude
 
 
 def test_the_baseline_seam_still_discriminates_when_the_file_is_missing(

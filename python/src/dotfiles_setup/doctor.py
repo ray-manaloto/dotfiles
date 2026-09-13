@@ -67,6 +67,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from dotfiles_setup import claude_doctor
 from dotfiles_setup.listing_budget import (
     SKILL_DESCRIPTION_MAX,
     ListingEntry,
@@ -1207,6 +1208,36 @@ def check_path_drift(setup: Setup) -> list[str]:
     return [drift_advice(report.drifts, gate=report.gate_drifts(gate_tools))]
 
 
+def check_claude_doctor(setup: Setup) -> list[str]:
+    """Is the `claude` this shell runs the newest one, and does it report clean?
+
+    Host state, so a doctor check rather than an hk step: the answer is a
+    property of one operator's machine, and a CI runner installs afresh.
+
+    Only ``INVALID`` is reported as a finding here even though ``UNKNOWN`` also
+    carries text, because the doctor's findings are advice and ``UNKNOWN`` says
+    the question could not be asked. Both surface; neither blocks — the
+    ``classic.PreToolUse`` half of the ``claude-doctor`` plugin owns enforcement,
+    and it enforces on ``INVALID`` alone.
+
+    ⚠️ Blind unless the SessionStart hook captured ``PATH`` first, exactly as
+    :func:`check_path_drift` is: ``uv run`` executes under mise's activated
+    environment, so an uncaptured ``PATH`` resolves mise's pinned
+    pinned ``claude`` rather than the operator's own install.
+    :func:`claude_doctor.evaluate` reports that blindness rather than passing.
+    """
+    baseline = _str_keys(setup.baseline.get("claude"))
+    if baseline.get("enabled") is False:
+        return []
+    expected = baseline.get("expected_install_method")
+    verdict = claude_doctor.evaluate(
+        expected_method=expected
+        if isinstance(expected, str)
+        else claude_doctor.NATIVE_METHOD,
+    )
+    return list(verdict.findings)
+
+
 # --------------------------------------------------------------------------- #
 # Entry point
 # --------------------------------------------------------------------------- #
@@ -1225,6 +1256,7 @@ CHECKS: tuple[tuple[str, Callable[[Setup], list[str]]], ...] = (
     ("listing-budget", check_listing_budget),
     ("path-drift", check_path_drift),
     ("graphify-skill-surface", check_graphify_skill_surface),
+    ("claude-doctor", check_claude_doctor),
 )
 
 #: Only run with ``--live``: each entry spawns subprocesses.

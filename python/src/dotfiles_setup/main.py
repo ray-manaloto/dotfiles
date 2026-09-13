@@ -23,6 +23,7 @@ from dotfiles_setup.autofix import autofix_apply_main
 from dotfiles_setup.bash_budget import bash_budget_main
 from dotfiles_setup.bootstrap_packages import gap_report_failures
 from dotfiles_setup.classifier_tables import classifier_axes_main
+from dotfiles_setup.claude_doctor import claude_doctor_main
 from dotfiles_setup.codex_agent_parity import codex_agent_parity_main
 from dotfiles_setup.codex_lane import run_lane_cli
 from dotfiles_setup.codex_lane_mirror import codex_lane_mirror_main
@@ -1497,6 +1498,7 @@ def _add_hook_subcommands(
     # schema-vendor has nothing to do with Claude Code hooks.
     _add_schema_vendor_subcommands(subparsers)
     _add_fnhook_subcommands(subparsers)
+    _add_claude_doctor_subcommand(subparsers)
 
 
 def _add_fnhook_subcommands(subparsers: _SubParsers) -> None:
@@ -1509,6 +1511,20 @@ def _add_fnhook_subcommands(subparsers: _SubParsers) -> None:
     subparsers.add_parser(
         "fnhook-types-refresh",
         help="Regenerate both function-hook declaration files from pinned Claude Code",
+    )
+
+
+def _add_claude_doctor_subcommand(subparsers: _SubParsers) -> None:
+    """Register the machine-readable ``claude doctor`` verdict command."""
+    parser = subparsers.add_parser(
+        "claude-doctor",
+        help="Emit a machine-readable verdict for `claude doctor` as JSON",
+    )
+    parser.add_argument(
+        "--no-refresh",
+        action="store_true",
+        help="Use mise's cached release list instead of forcing a live lookup "
+        "(faster, but may compare against a version up to an hour stale)",
     )
 
 
@@ -2555,6 +2571,9 @@ def _build_command_handlers(
         "schema-vendor": lambda: handle_schema_vendor(args),
         "fnhook-gates": lambda: sys.exit(fnhook_gates_main()),
         "fnhook-types-refresh": lambda: sys.exit(fnhook_types_refresh_main()),
+        "claude-doctor": lambda: sys.exit(
+            claude_doctor_main(force_refresh=not args.no_refresh)
+        ),
         "graphify": lambda: handle_graphify(args, project_root),
         "dependency-ownership": lambda: sys.exit(
             dependency_ownership_main(project_root)

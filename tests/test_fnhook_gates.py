@@ -542,6 +542,12 @@ def test_missing_binary_fails_the_gate_rather_than_skipping_it() -> None:
     )
 
 
+#: Which tool must supply each binary the gates invoke. Written out here on
+#: purpose: an expectation copied from the module under test cannot disagree
+#: with it (`tests/AGENTS.md`, "tautological").
+_TOOL_SUPPLYING = {"claude": "anthropics/claude-code", "tsc": "typescript"}
+
+
 def test_every_mise_invocation_names_its_tool_not_a_bare_shim() -> None:
     """`mise exec -- <bin>` resolves the bare SHIM and has no version to map.
 
@@ -573,9 +579,27 @@ def test_every_mise_invocation_names_its_tool_not_a_bare_shim() -> None:
             f"argv[2] is {spec!r}, not a <tool>@<version> spec — a bare "
             f"`mise exec -- <bin>` resolves the shim and fails on a runner"
         )
-        assert spec.startswith("npm:"), spec
-        # The pin must match mise.toml, not a literal written into the module.
         tool, _, version = spec.rpartition("@")
+        # The tool must SUPPLY the binary the same argv then runs. Stated here
+        # as an independent expectation rather than read back off the module's
+        # own constants, because two weaker forms were tried and both were
+        # worthless:
+        #
+        #   `spec.startswith("npm:")` — pinned the BACKEND, so it failed #1043's
+        #   move of claude from `npm:` to `github:` (npm's launcher needs a
+        #   postinstall npm 12 blocks while still exiting 0) without testing
+        #   anything the gate depends on.
+        #
+        #   `tool in {CLAUDE_TOOL, TSC_TOOL}` — TAUTOLOGICAL. It compares the
+        #   observed tool against the very constant that produced it, so it
+        #   cannot disagree with the code. Measured: repointing CLAUDE_TOOL at
+        #   `npm:@devcontainers/cli` left all 25 tests green.
+        binary = command[command.index("--") + 1]
+        assert _TOOL_SUPPLYING[binary] in tool, (
+            f"argv runs {binary!r} but the spec names {tool!r} — the gate would "
+            f"resolve a tool that does not provide the binary it then invokes"
+        )
+        # The pin must match mise.toml, not a literal written into the module.
         assert fnhook_gates.tool_spec(REPO_ROOT, tool) == spec, (
             f"{tool} invoked at {version}, which is not its mise.toml pin"
         )
