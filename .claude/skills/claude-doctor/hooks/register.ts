@@ -47,8 +47,10 @@ let cachedReport: DoctorReport | null = null;
  * The capture is the whole reason this is not a one-liner. `uv run` executes
  * under mise's activated environment, which prepends mise install dirs to PATH
  * before Python starts - so a check that reads its own inherited PATH resolves
- * mise's pinned `npm:@anthropic-ai/claude-code` shim rather than the native
- * install the operator actually runs. Handing down `DOTFILES_AMBIENT_PATH`
+ * mise's pinned `claude` rather than the native install the operator actually
+ * runs. (That pin was `npm:` until #1043 and produced a broken launcher; it is
+ * `github:` now, which is a real binary - but still not the operator's
+ * install, so the capture matters either way.) Handing down `DOTFILES_AMBIENT_PATH`
  * (this process's PATH, which is the launching shell's) is what makes the
  * check measure the right binary; without it `resolve_ambient_path` falls back
  * to the rewritten one.
