@@ -68,6 +68,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from dotfiles_setup import claude_doctor
+from dotfiles_setup.dependency_currency import (
+    check_dependency_currency as dependency_currency_findings,
+)
 from dotfiles_setup.listing_budget import (
     SKILL_DESCRIPTION_MAX,
     ListingEntry,
@@ -87,6 +90,7 @@ from dotfiles_setup.path_drift import (
 # each to be in CHECKS, so an imported one would be an unregistrable false
 # positive — the guard caught this import on its first run.
 from dotfiles_setup.path_drift import check_path_drift as shell_path_drift
+from dotfiles_setup.plugin_health import check_plugin_health as plugin_health_findings
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -106,6 +110,25 @@ _PROBE_TIMEOUT_S = 180.0
 # `${VAR}` / `${VAR:-default}` — the interpolation Claude Code performs on an
 # MCP server's env and headers before spawning it.
 _INTERPOLATION_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-[^}]*)?\}")
+
+# Placeholders Claude Code SUBSTITUTES ITSELF before spawning an MCP server, so
+# this process's environment says nothing about them. They are documented as
+# "path placeholders" (`$CC/mcp.md:481`), and `$CC/mcp.md:941` scopes the first
+# one explicitly: "the plugin's root directory. Set only when a plugin provides
+# the server". A plugin server therefore gets a resolved absolute path while a
+# `mise run doctor` child — which no plugin provides — sees nothing.
+#
+# Without this exemption `check_mcp_env_opt_in` reports permanent drift for
+# EVERY plugin that uses the documented placeholder (measured: enabling
+# context7, whose `.mcp.json` headersHelper is
+# `node "${CLAUDE_PLUGIN_ROOT}/scripts/headers.mjs"`). That is the check's own
+# failure mode turned inward — a finding about the prober's environment, not the
+# server's. The credential axis it exists for is untouched: these three names
+# are paths, never secrets, so exempting them cannot hide an anonymous-tier
+# fallback.
+_HARNESS_SUBSTITUTED = frozenset(
+    {"CLAUDE_PLUGIN_ROOT", "CLAUDE_PLUGIN_DATA", "CLAUDE_PROJECT_DIR"}
+)
 
 # Package-runner commands whose first non-flag argument is an npm spec. `npx -y
 # <pkg>` resolves the CURRENT dist-tag on every spawn, so an unpinned server can
@@ -221,6 +244,9 @@ class Setup:
     fnox: FnoxState
     environ: Mapping[str, str]
     listing: tuple[ListingEntry, ...] = ()
+    #: `~/.claude/settings.json`. Held so checks can reproduce the
+    #: user-then-project precedence `enabled_plugin_ids` applies.
+    user_settings: dict[str, object] = field(default_factory=dict)
 
     def fnox_baseline(self) -> dict[str, object]:
         """The ``[fnox]`` section of the baseline; ``{}`` when it is absent."""
@@ -397,6 +423,7 @@ def collect(
         baseline=baseline,
         servers=collect_servers(repo_root, home, user_settings, settings),
         settings=settings,
+        user_settings=user_settings,
         local_settings=load_json(repo_root / ".claude" / "settings.local.json"),
         fnox=read_fnox(home / ".config" / "fnox" / "config.toml"),
         environ=environ,
@@ -487,6 +514,8 @@ def check_mcp_env_opt_in(setup: Setup) -> list[str]:
     findings: list[str] = []
     for server in setup.servers:
         for var in sorted(interpolations(server.config)):
+            if var in _HARNESS_SUBSTITUTED:
+                continue
             if setup.environ.get(var):
                 continue
             findings.append(
@@ -1242,6 +1271,31 @@ def check_claude_doctor(setup: Setup) -> list[str]:
 # Entry point
 # --------------------------------------------------------------------------- #
 
+
+def check_plugin_health(setup: Setup) -> list[str]:
+    """LIVE: reconcile declared plugins against what `claude plugin list` reports.
+
+    Thin adapter. The reconciliation lives in ``plugin_health`` so it is
+    testable without a doctor fixture; the precedence pair is resolved here
+    because ``enabled_plugin_ids`` is this module's, and ``plugin_health``
+    importing it back would be circular.
+    """
+    return plugin_health_findings(
+        setup, enabled_plugin_ids(setup.user_settings, setup.settings)
+    )
+
+
+def check_dependency_currency(setup: Setup) -> list[str]:
+    """LIVE: first-level mise and Python pins that are behind.
+
+    Imported under a non-`check_*` alias for the same reason as plugin-health:
+    an imported `check_*` lands in this module's namespace and
+    `test_every_check_function_is_actually_registered` then demands that exact
+    object be registered, which a wrapper cannot satisfy.
+    """
+    return dependency_currency_findings(setup)
+
+
 #: Check name -> implementation. The name tags every finding, so it is part of
 #: the interface: keep it stable.
 CHECKS: tuple[tuple[str, Callable[[Setup], list[str]]], ...] = (
@@ -1263,6 +1317,13 @@ CHECKS: tuple[tuple[str, Callable[[Setup], list[str]]], ...] = (
 LIVE_CHECKS: tuple[tuple[str, Callable[[Setup], list[str]]], ...] = (
     ("mcp-live-tools", check_live_servers),
     ("mcp-health", check_mcp_health),
+    # Declared-vs-actual plugin reconciliation. LIVE because it runs
+    # `claude plugin list --json`. `declared` is computed HERE so the
+    # user-then-project precedence has exactly one implementation
+    # (`enabled_plugin_ids`) and plugin_health.py needs no import of this
+    # module, which would be circular.
+    ("plugin-health", check_plugin_health),
+    ("dependency-currency", check_dependency_currency),
 )
 
 

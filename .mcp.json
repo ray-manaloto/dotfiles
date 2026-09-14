@@ -1,3 +1,12 @@
 {
-  "mcpServers": {}
+  "mcpServers": {
+    "exa": {
+      "type": "http",
+      "url": "https://mcp.exa.ai/mcp?client=claude-code-dotfiles",
+      "headers": {
+        "Authorization": "Bearer ${EXA_API_KEY}",
+        "x-exa-source": "agent-plugin"
+      }
+    }
+  }
 }

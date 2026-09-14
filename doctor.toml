@@ -160,7 +160,27 @@ scope_servers = []
 # roles were added while all nine existing local agent descriptions were held
 # to 320 chars. Crossing 41,305 (~4% headroom) means a plugin materially grew
 # its listing, or a new one was enabled — both worth a look.
-max_chars = 41305
+#
+# 2026-09-13 — RAISED to 48,110, and it is the second clause above that fired:
+# three new plugins were enabled on operator request (firecrawl, exa,
+# context7), for the research preference chain in
+# `.claude/rules/research-doc-sources.md`. Measured 41,945 / 122 entries before
+# and 46,259 / 138 after — +4,314 chars, +16 entries. firecrawl is 12 of those
+# 16 on its own; exa adds 2, context7 1 skill + 1 agent.
+#
+# ⚠️ The estimate was WRONG and the measurement is what is recorded here. Summing
+# skill `name` + `description` predicted +2,223 — a 48% undercount, because the
+# listing also carries `when_to_use`, agent descriptions, and commands. Do not
+# re-derive this ceiling by summing frontmatter; run `mise run doctor` and read
+# the number it prints.
+#
+# The headroom stays proportional (~4% over the new measurement) for the same
+# ownership reason given above: these bytes belong to third-party plugins that
+# patch-bump on their own schedule. The cost is real and accepted — every one of
+# those 138 entries is carried every turn — so if the research plugins turn out
+# not to earn it, the correct fix is to disable firecrawl (the biggest single
+# contributor) and lower this back, not to widen the ceiling again.
+max_chars = 48110
 # Optional per-entry description + when_to_use cap. When omitted, the doctor
 # inherits the imported SKILL_DESCRIPTION_MAX. Any active override MUST carry
 # an adjacent written reason explaining why silent harness truncation is safe.

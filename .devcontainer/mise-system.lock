@@ -72,9 +72,9 @@ checksum = "sha256:2c4901f4227b0850328ed0c69f958b30ad2cd18982f7a31c7c1f911827004
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libarchive-3.8.9-gpl_h1204ebd_101.conda"
 checksum = "sha256:5f6a00f0fdefd023b45d9688d3b74e73f9e996a2ae73d976bf8215194d8c183f"
 
-[conda-packages.linux-arm64."libcapstone-5.0.9-he30d5cf_1"]
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libcapstone-5.0.9-he30d5cf_1.conda"
-checksum = "sha256:8677dd388fff6a197deacdfe377d428b69540b7e3fe08bfcf79472090109a563"
+[conda-packages.linux-arm64."libcapstone-5.0.9-h5bc82ec_2"]
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libcapstone-5.0.9-h5bc82ec_2.conda"
+checksum = "sha256:f3f635c8481bf704a270fb8974fb2df2360b9fc6471d78f3c25f4cf48b3be379"
 
 [conda-packages.linux-arm64."libclang-cpp22.1-22.1.8-default_h01b09c7_10"]
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libclang-cpp22.1-22.1.8-default_h01b09c7_10.conda"
@@ -444,9 +444,9 @@ checksum = "sha256:2c4901f4227b0850328ed0c69f958b30ad2cd18982f7a31c7c1f911827004
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libarchive-3.8.9-gpl_h1204ebd_101.conda"
 checksum = "sha256:5f6a00f0fdefd023b45d9688d3b74e73f9e996a2ae73d976bf8215194d8c183f"
 
-[conda-packages.linux-arm64-musl."libcapstone-5.0.9-he30d5cf_1"]
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libcapstone-5.0.9-he30d5cf_1.conda"
-checksum = "sha256:8677dd388fff6a197deacdfe377d428b69540b7e3fe08bfcf79472090109a563"
+[conda-packages.linux-arm64-musl."libcapstone-5.0.9-h5bc82ec_2"]
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libcapstone-5.0.9-h5bc82ec_2.conda"
+checksum = "sha256:f3f635c8481bf704a270fb8974fb2df2360b9fc6471d78f3c25f4cf48b3be379"
 
 [conda-packages.linux-arm64-musl."libclang-cpp22.1-22.1.8-default_h01b09c7_10"]
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libclang-cpp22.1-22.1.8-default_h01b09c7_10.conda"
@@ -816,9 +816,9 @@ checksum = "sha256:27d83f1188cd19bcb7754a078b3fa7f4cfb8527f8eb2fde54dd01fc529d1a
 url = "https://conda.anaconda.org/conda-forge/linux-64/libarchive-3.8.9-gpl_h3152399_101.conda"
 checksum = "sha256:bfae027a67d02325cd6b75edd60beb67cf24483af9df0ae9ef74d4438e41c806"
 
-[conda-packages.linux-x64."libcapstone-5.0.9-hb03c661_1"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libcapstone-5.0.9-hb03c661_1.conda"
-checksum = "sha256:c4727883e30e2f17cb88c19a823e0e0833424e662bf7c02655bc2fbbdc02b5a9"
+[conda-packages.linux-x64."libcapstone-5.0.9-h7cc23a3_2"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libcapstone-5.0.9-h7cc23a3_2.conda"
+checksum = "sha256:8ddad10d51fd327bff25cd74030f47b86d1c884c0e06fa02b0be914c225c4bad"
 
 [conda-packages.linux-x64."libclang-cpp22.1-22.1.8-default_h0acdd01_10"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libclang-cpp22.1-22.1.8-default_h0acdd01_10.conda"
@@ -1196,9 +1196,9 @@ checksum = "sha256:27d83f1188cd19bcb7754a078b3fa7f4cfb8527f8eb2fde54dd01fc529d1a
 url = "https://conda.anaconda.org/conda-forge/linux-64/libarchive-3.8.9-gpl_h3152399_101.conda"
 checksum = "sha256:bfae027a67d02325cd6b75edd60beb67cf24483af9df0ae9ef74d4438e41c806"
 
-[conda-packages.linux-x64-baseline."libcapstone-5.0.9-hb03c661_1"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libcapstone-5.0.9-hb03c661_1.conda"
-checksum = "sha256:c4727883e30e2f17cb88c19a823e0e0833424e662bf7c02655bc2fbbdc02b5a9"
+[conda-packages.linux-x64-baseline."libcapstone-5.0.9-h7cc23a3_2"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libcapstone-5.0.9-h7cc23a3_2.conda"
+checksum = "sha256:8ddad10d51fd327bff25cd74030f47b86d1c884c0e06fa02b0be914c225c4bad"
 
 [conda-packages.linux-x64-baseline."libclang-cpp22.1-22.1.8-default_h0acdd01_10"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libclang-cpp22.1-22.1.8-default_h0acdd01_10.conda"
@@ -1576,9 +1576,9 @@ checksum = "sha256:27d83f1188cd19bcb7754a078b3fa7f4cfb8527f8eb2fde54dd01fc529d1a
 url = "https://conda.anaconda.org/conda-forge/linux-64/libarchive-3.8.9-gpl_h3152399_101.conda"
 checksum = "sha256:bfae027a67d02325cd6b75edd60beb67cf24483af9df0ae9ef74d4438e41c806"
 
-[conda-packages.linux-x64-musl."libcapstone-5.0.9-hb03c661_1"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libcapstone-5.0.9-hb03c661_1.conda"
-checksum = "sha256:c4727883e30e2f17cb88c19a823e0e0833424e662bf7c02655bc2fbbdc02b5a9"
+[conda-packages.linux-x64-musl."libcapstone-5.0.9-h7cc23a3_2"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libcapstone-5.0.9-h7cc23a3_2.conda"
+checksum = "sha256:8ddad10d51fd327bff25cd74030f47b86d1c884c0e06fa02b0be914c225c4bad"
 
 [conda-packages.linux-x64-musl."libclang-cpp22.1-22.1.8-default_h0acdd01_10"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libclang-cpp22.1-22.1.8-default_h0acdd01_10.conda"
@@ -1956,9 +1956,9 @@ checksum = "sha256:27d83f1188cd19bcb7754a078b3fa7f4cfb8527f8eb2fde54dd01fc529d1a
 url = "https://conda.anaconda.org/conda-forge/linux-64/libarchive-3.8.9-gpl_h3152399_101.conda"
 checksum = "sha256:bfae027a67d02325cd6b75edd60beb67cf24483af9df0ae9ef74d4438e41c806"
 
-[conda-packages.linux-x64-musl-baseline."libcapstone-5.0.9-hb03c661_1"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libcapstone-5.0.9-hb03c661_1.conda"
-checksum = "sha256:c4727883e30e2f17cb88c19a823e0e0833424e662bf7c02655bc2fbbdc02b5a9"
+[conda-packages.linux-x64-musl-baseline."libcapstone-5.0.9-h7cc23a3_2"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libcapstone-5.0.9-h7cc23a3_2.conda"
+checksum = "sha256:8ddad10d51fd327bff25cd74030f47b86d1c884c0e06fa02b0be914c225c4bad"
 
 [conda-packages.linux-x64-musl-baseline."libclang-cpp22.1-22.1.8-default_h0acdd01_10"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libclang-cpp22.1-22.1.8-default_h0acdd01_10.conda"
@@ -3306,8 +3306,8 @@ backend = "conda:git"
 channel = "conda-forge"
 
 [tools."conda:git"."platforms.linux-arm64"]
-checksum = "sha256:02615f600a0d4242dcedcb7ebd8f1faa02f7136551cc3e804fc879a015237644"
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/git-2.55.0-pl5321h06f7e71_1.conda"
+checksum = "sha256:f5623ff073977b1e53af9882c075a1f598b277181fabcc8446622ce801da1df7"
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/git-2.55.0-pl5321h0749d22_2.conda"
 conda_deps = [
     "libcurl-8.22.0-h86273da_0",
     "libexpat-2.8.1-hfae3067_1",
@@ -3337,8 +3337,8 @@ conda_deps = [
 ]
 
 [tools."conda:git"."platforms.linux-arm64-musl"]
-checksum = "sha256:02615f600a0d4242dcedcb7ebd8f1faa02f7136551cc3e804fc879a015237644"
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/git-2.55.0-pl5321h06f7e71_1.conda"
+checksum = "sha256:f5623ff073977b1e53af9882c075a1f598b277181fabcc8446622ce801da1df7"
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/git-2.55.0-pl5321h0749d22_2.conda"
 conda_deps = [
     "libcurl-8.22.0-h86273da_0",
     "libexpat-2.8.1-hfae3067_1",
@@ -3368,13 +3368,13 @@ conda_deps = [
 ]
 
 [tools."conda:git"."platforms.linux-x64"]
-checksum = "sha256:ffe825e3ff78876dc5aa28eee791d8d9be4a47157761aa38dbff79e9222b3b8e"
-url = "https://conda.anaconda.org/conda-forge/linux-64/git-2.55.0-pl5321h5685339_1.conda"
+checksum = "sha256:762e393f66cff2f4053f986cd4eaaa93b0fd22a6decec8f9cdefe9c9e12591be"
+url = "https://conda.anaconda.org/conda-forge/linux-64/git-2.55.0-pl5321h3795e67_2.conda"
 conda_deps = [
+    "libcurl-8.22.0-ha042cf0_0",
     "libexpat-2.8.1-hecca717_1",
     "libzlib-1.3.2-h25fd6f3_3",
     "pcre2-10.47-h8b3dc9c_1",
-    "libcurl-8.22.0-ha042cf0_0",
     "libgcc-16.2.0-ha9f2e26_4",
     "libiconv-1.18-h0cb94f2_3",
     "openssl-3.6.4-h781a0a9_0",
@@ -3399,13 +3399,13 @@ conda_deps = [
 ]
 
 [tools."conda:git"."platforms.linux-x64-baseline"]
-checksum = "sha256:ffe825e3ff78876dc5aa28eee791d8d9be4a47157761aa38dbff79e9222b3b8e"
-url = "https://conda.anaconda.org/conda-forge/linux-64/git-2.55.0-pl5321h5685339_1.conda"
+checksum = "sha256:762e393f66cff2f4053f986cd4eaaa93b0fd22a6decec8f9cdefe9c9e12591be"
+url = "https://conda.anaconda.org/conda-forge/linux-64/git-2.55.0-pl5321h3795e67_2.conda"
 conda_deps = [
+    "libcurl-8.22.0-ha042cf0_0",
     "libexpat-2.8.1-hecca717_1",
     "libzlib-1.3.2-h25fd6f3_3",
     "pcre2-10.47-h8b3dc9c_1",
-    "libcurl-8.22.0-ha042cf0_0",
     "libgcc-16.2.0-ha9f2e26_4",
     "libiconv-1.18-h0cb94f2_3",
     "openssl-3.6.4-h781a0a9_0",
@@ -3430,13 +3430,13 @@ conda_deps = [
 ]
 
 [tools."conda:git"."platforms.linux-x64-musl"]
-checksum = "sha256:ffe825e3ff78876dc5aa28eee791d8d9be4a47157761aa38dbff79e9222b3b8e"
-url = "https://conda.anaconda.org/conda-forge/linux-64/git-2.55.0-pl5321h5685339_1.conda"
+checksum = "sha256:762e393f66cff2f4053f986cd4eaaa93b0fd22a6decec8f9cdefe9c9e12591be"
+url = "https://conda.anaconda.org/conda-forge/linux-64/git-2.55.0-pl5321h3795e67_2.conda"
 conda_deps = [
+    "libcurl-8.22.0-ha042cf0_0",
     "libexpat-2.8.1-hecca717_1",
     "libzlib-1.3.2-h25fd6f3_3",
     "pcre2-10.47-h8b3dc9c_1",
-    "libcurl-8.22.0-ha042cf0_0",
     "libgcc-16.2.0-ha9f2e26_4",
     "libiconv-1.18-h0cb94f2_3",
     "openssl-3.6.4-h781a0a9_0",
@@ -3461,13 +3461,13 @@ conda_deps = [
 ]
 
 [tools."conda:git"."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:ffe825e3ff78876dc5aa28eee791d8d9be4a47157761aa38dbff79e9222b3b8e"
-url = "https://conda.anaconda.org/conda-forge/linux-64/git-2.55.0-pl5321h5685339_1.conda"
+checksum = "sha256:762e393f66cff2f4053f986cd4eaaa93b0fd22a6decec8f9cdefe9c9e12591be"
+url = "https://conda.anaconda.org/conda-forge/linux-64/git-2.55.0-pl5321h3795e67_2.conda"
 conda_deps = [
+    "libcurl-8.22.0-ha042cf0_0",
     "libexpat-2.8.1-hecca717_1",
     "libzlib-1.3.2-h25fd6f3_3",
     "pcre2-10.47-h8b3dc9c_1",
-    "libcurl-8.22.0-ha042cf0_0",
     "libgcc-16.2.0-ha9f2e26_4",
     "libiconv-1.18-h0cb94f2_3",
     "openssl-3.6.4-h781a0a9_0",
@@ -3996,7 +3996,7 @@ conda_deps = [
     "libpython-3.14.7-hc71fabe_106_cp314",
     "libnuma-2.0.18-he30d5cf_4",
     "libzlib-1.3.2-hdc9db2a_3",
-    "libcapstone-5.0.9-he30d5cf_1",
+    "libcapstone-5.0.9-h5bc82ec_2",
     "liblzma-5.8.3-he30d5cf_1",
     "python_abi-3.14-9_cp314",
     "libgcc-16.2.0-h205dda4_4",
@@ -4059,7 +4059,7 @@ conda_deps = [
     "libpython-3.14.7-hc71fabe_106_cp314",
     "libnuma-2.0.18-he30d5cf_4",
     "libzlib-1.3.2-hdc9db2a_3",
-    "libcapstone-5.0.9-he30d5cf_1",
+    "libcapstone-5.0.9-h5bc82ec_2",
     "liblzma-5.8.3-he30d5cf_1",
     "python_abi-3.14-9_cp314",
     "libgcc-16.2.0-h205dda4_4",
@@ -4124,7 +4124,7 @@ conda_deps = [
     "liblzma-5.8.3-hb03c661_1",
     "python_abi-3.14-9_cp314",
     "libzlib-1.3.2-h25fd6f3_3",
-    "libcapstone-5.0.9-hb03c661_1",
+    "libcapstone-5.0.9-h7cc23a3_2",
     "libstdcxx-16.2.0-h934c35e_4",
     "libgcc-16.2.0-ha9f2e26_4",
     "libstdcxx-ng-16.2.0-hdf11a46_4",
@@ -4187,7 +4187,7 @@ conda_deps = [
     "liblzma-5.8.3-hb03c661_1",
     "python_abi-3.14-9_cp314",
     "libzlib-1.3.2-h25fd6f3_3",
-    "libcapstone-5.0.9-hb03c661_1",
+    "libcapstone-5.0.9-h7cc23a3_2",
     "libstdcxx-16.2.0-h934c35e_4",
     "libgcc-16.2.0-ha9f2e26_4",
     "libstdcxx-ng-16.2.0-hdf11a46_4",
@@ -4250,7 +4250,7 @@ conda_deps = [
     "liblzma-5.8.3-hb03c661_1",
     "python_abi-3.14-9_cp314",
     "libzlib-1.3.2-h25fd6f3_3",
-    "libcapstone-5.0.9-hb03c661_1",
+    "libcapstone-5.0.9-h7cc23a3_2",
     "libstdcxx-16.2.0-h934c35e_4",
     "libgcc-16.2.0-ha9f2e26_4",
     "libstdcxx-ng-16.2.0-hdf11a46_4",
@@ -4313,7 +4313,7 @@ conda_deps = [
     "liblzma-5.8.3-hb03c661_1",
     "python_abi-3.14-9_cp314",
     "libzlib-1.3.2-h25fd6f3_3",
-    "libcapstone-5.0.9-hb03c661_1",
+    "libcapstone-5.0.9-h7cc23a3_2",
     "libstdcxx-16.2.0-h934c35e_4",
     "libgcc-16.2.0-ha9f2e26_4",
     "libstdcxx-ng-16.2.0-hdf11a46_4",
@@ -5659,38 +5659,38 @@ url = "https://github.com/crate-ci/typos/releases/download/v1.50.1/typos-v1.50.1
 url_api = "https://api.github.com/repos/crate-ci/typos/releases/assets/539858793"
 
 [[tools.uv]]
-version = "0.12.9"
+version = "0.12.13"
 backend = "aqua:astral-sh/uv"
 
 [tools.uv."platforms.linux-arm64"]
-checksum = "sha256:c36fe17937ff6bd16dc42fc13854b5465999fcab2efe0af559381e945e3c6001"
-url = "https://github.com/astral-sh/uv/releases/download/0.12.9/uv-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/540200939"
+checksum = "sha256:2eaa5d94f5db7b3a1a092156b9420459e42ab0217d917fe74a876309cef9b5e9"
+url = "https://github.com/astral-sh/uv/releases/download/0.12.13/uv-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/555670186"
 
 [tools.uv."platforms.linux-arm64-musl"]
-checksum = "sha256:7eb9bf48516448c9db6a9e436d8e747ac9c8a9cac74717160a29918249b080a6"
-url = "https://github.com/astral-sh/uv/releases/download/0.12.9/uv-aarch64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/540200941"
+checksum = "sha256:f44bc1037a17889fe562fffd2002d4ed108e499fbe68b4f022af244dc7b8244f"
+url = "https://github.com/astral-sh/uv/releases/download/0.12.13/uv-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/555670202"
 
 [tools.uv."platforms.linux-x64"]
-checksum = "sha256:ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460"
-url = "https://github.com/astral-sh/uv/releases/download/0.12.9/uv-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/540201041"
+checksum = "sha256:745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+url = "https://github.com/astral-sh/uv/releases/download/0.12.13/uv-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/555670375"
 
 [tools.uv."platforms.linux-x64-baseline"]
-checksum = "sha256:ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460"
-url = "https://github.com/astral-sh/uv/releases/download/0.12.9/uv-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/540201041"
+checksum = "sha256:745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+url = "https://github.com/astral-sh/uv/releases/download/0.12.13/uv-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/555670375"
 
 [tools.uv."platforms.linux-x64-musl"]
-checksum = "sha256:aa4b1f8770910f7c7c543c7acc980e4270e52e70750c996acef813ea1c7c2912"
-url = "https://github.com/astral-sh/uv/releases/download/0.12.9/uv-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/540201044"
+checksum = "sha256:4e2bfd0c9007b1032a50e539e965fd0a6037d87ad93ae1580d220a92d4c94098"
+url = "https://github.com/astral-sh/uv/releases/download/0.12.13/uv-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/555670382"
 
 [tools.uv."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:aa4b1f8770910f7c7c543c7acc980e4270e52e70750c996acef813ea1c7c2912"
-url = "https://github.com/astral-sh/uv/releases/download/0.12.9/uv-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/540201044"
+checksum = "sha256:4e2bfd0c9007b1032a50e539e965fd0a6037d87ad93ae1580d220a92d4c94098"
+url = "https://github.com/astral-sh/uv/releases/download/0.12.13/uv-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/555670382"
 
 [[tools.yamlfmt]]
 version = "0.21.0"

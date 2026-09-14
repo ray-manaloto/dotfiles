@@ -118,6 +118,19 @@ opencode = "1.18.27"
 # test correctly flags as drift risk).
 antigravity-cli = "1.1.24"
 
+# Firecrawl CLI — the `firecrawl` binary the firecrawl@firecrawl plugin's skills
+# name in their own `allowed-tools` (`Bash(firecrawl *)`), so without this pin
+# `/firecrawl:firecrawl-search` dies on its first command. Measured 2026-09-13
+# before pinning: `command -v firecrawl` resolved an ORPHAN mise shim and
+# `firecrawl --version` exited `No version is set for shim` — the same
+# shape that blocks agentsview. NOT a mise registry short name (`mise registry
+# firecrawl` -> "tool not found"; control: `antigravity-cli` resolves), hence the
+# explicit `npm:` backend, whose package declares `bin: {firecrawl: ...}`.
+# Host-only like the executor-lane CLIs above: an operator research tool, never
+# an image build input, and unused by hk/CI (so ci-local-parity rule 2 does not
+# bind it). Auth is per-user via FIRECRAWL_API_KEY.
+"npm:firecrawl-cli" = "1.23.3"
+
 [settings]
 experimental = true
 auto_install = true
@@ -1598,3 +1611,20 @@ description = "Reap wedged processes by pattern and age, ancestor-protected (#65
 #   mise run reap -- --pattern 'shims/git' --min-age 3600
 #   mise run reap -- --pattern 'fnox export' --kill             # signals
 run = 'uv run --project python dotfiles-setup reap'
+
+[tasks.plugin-health]
+description = "Check plugin/skill setup health: verify declared plugins are actually installed and enabled"
+run = 'uv run --project python dotfiles-setup plugin-health'
+
+[tasks.plugin-health-types-refresh]
+description = "Regenerate plugin-health TypeScript declarations"
+run = 'uv run --project python dotfiles-setup plugin-health-types-refresh'
+
+[tasks.plugin-health-e2e]
+description = "Cross-session e2e check: verify a fresh claude session against this project starts cleanly"
+run = 'uv run --project python dotfiles-setup plugin-health-e2e'
+
+[tasks.dependency-currency]
+description = "Report FIRST-LEVEL mise and Python pins that are behind, as JSON; rc is the verdict"
+# Thin caller; all logic in python/src/dotfiles_setup/dependency_currency.py.
+run = 'uv run --project python dotfiles-setup dependency-currency'

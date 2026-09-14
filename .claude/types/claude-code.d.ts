@@ -8377,6 +8377,10 @@ declare module 'claude-code' {
       /** Not available in this build; leave unset. */
       q?: string
     }
+    ListMcpResourcesTool: {
+      /** Optional server name to filter resources by */
+      server?: string
+    }
     Monitor: {
       /** Short human-readable description of what you are monitoring (shown in notifications). */
       description: string
@@ -8418,6 +8422,18 @@ declare module 'claude-code' {
       limit?: number
       /** Page range for PDF files (e.g., "1-5", "3", "10-20"). Only applicable to PDF files. Maximum 20 pages per request. */
       pages?: string
+    }
+    ReadMcpResourceDirTool: {
+      /** The MCP server name */
+      server: string
+      /** The directory resource URI to list */
+      uri: string
+    }
+    ReadMcpResourceTool: {
+      /** The MCP server name */
+      server: string
+      /** The resource URI to read */
+      uri: string
     }
     RemoteTrigger: {
       action: "list" | "get" | "create" | "update" | "run" | "create_webhook_trigger" | "list_runs" | "get_run_log"
@@ -8873,6 +8889,18 @@ declare module 'claude-code' {
       /** Formatted list of reachable agents */
       listing: string
     }
+    ListMcpResourcesTool: Array<{
+      /** Resource URI */
+      uri: string
+      /** Resource name */
+      name: string
+      /** MIME type of the resource */
+      mimeType?: string
+      /** Resource description */
+      description?: string
+      /** Server that provides this resource */
+      server: string
+    }>
     Monitor: {
       /** ID of the background monitor task. */
       taskId: string
@@ -9002,6 +9030,33 @@ declare module 'claude-code' {
       }
       /** Set when the dedup matched a startup-seeded entry (CLAUDE.md / nested memory) rather than a prior Read tool_result */
       source?: "seeded"
+    }
+    ReadMcpResourceDirTool: {
+      /** Direct children of the directory resource. Subdirectories appear with mimeType "inode/directory". */
+      resources: Array<{
+        /** Child resource URI */
+        uri: string
+        /** Child resource name */
+        name: string
+        /** Child MIME type */
+        mimeType?: string
+      }>
+      /** Human-readable error when the server could not list the directory */
+      error?: string
+    }
+    ReadMcpResourceTool: {
+      contents: Array<{
+        /** Resource URI */
+        uri: string
+        /** MIME type of the content */
+        mimeType?: string
+        /** Text content of the resource */
+        text?: string
+        /** Path where binary blob content was saved */
+        blobSavedTo?: string
+      }>
+      /** Human-readable error when the server could not read the resource */
+      error?: string
     }
     RemoteTrigger: {
       status: number

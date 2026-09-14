@@ -1,0 +1,4 @@
+{
+  "description": "plugin-health: report declared-vs-actual plugin drift at SessionStart",
+  "modules": ["./plugin-health.ts"]
+}

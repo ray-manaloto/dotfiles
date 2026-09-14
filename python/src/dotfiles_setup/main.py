@@ -37,6 +37,7 @@ from dotfiles_setup.dag_tick import (
     DEFAULT_STALL_AFTER_SECONDS,
     run_tick,
 )
+from dotfiles_setup.dependency_currency import dependency_currency_main
 from dotfiles_setup.dependency_ownership import dependency_ownership_main
 from dotfiles_setup.devcontainer_names import (
     NAME_FIELDS,
@@ -121,6 +122,7 @@ from dotfiles_setup.platform_target import (
     publish_matrix_main,
     resolve_platform,
 )
+from dotfiles_setup.plugin_health import plugin_health_e2e_main, plugin_health_main
 from dotfiles_setup.pr import automerge_main, land_main, ship_main
 from dotfiles_setup.process_env import command_after_separator, run_git_isolated
 from dotfiles_setup.reap import (
@@ -1502,6 +1504,8 @@ def _add_hook_subcommands(
     _add_schema_vendor_subcommands(subparsers)
     _add_fnhook_subcommands(subparsers)
     _add_claude_doctor_subcommand(subparsers)
+    _add_plugin_health_subcommands(subparsers)
+    _add_dependency_currency_subcommand(subparsers)
 
 
 def _add_fnhook_subcommands(subparsers: _SubParsers) -> None:
@@ -1528,6 +1532,27 @@ def _add_claude_doctor_subcommand(subparsers: _SubParsers) -> None:
         action="store_true",
         help="Use mise's cached release list instead of forcing a live lookup "
         "(faster, but may compare against a version up to an hour stale)",
+    )
+
+
+def _add_dependency_currency_subcommand(subparsers: _SubParsers) -> None:
+    """Register the first-level dependency-currency report."""
+    subparsers.add_parser(
+        "dependency-currency",
+        help="Report FIRST-LEVEL mise and Python pins that are behind, as JSON",
+    )
+
+
+def _add_plugin_health_subcommands(subparsers: _SubParsers) -> None:
+    """Register the plugin/skill health check commands."""
+    subparsers.add_parser(
+        "plugin-health",
+        help="Check plugin/skill setup health: verify declared plugins are "
+        "actually installed and enabled",
+    )
+    subparsers.add_parser(
+        "plugin-health-types-refresh",
+        help="Regenerate plugin-health declaration file from pinned Claude Code",
     )
 
 
@@ -2578,6 +2603,16 @@ def _build_command_handlers(
             claude_doctor_main(
                 force_refresh=not args.no_refresh, project_root=project_root
             )
+        ),
+        "dependency-currency": lambda: sys.exit(
+            dependency_currency_main(project_root=project_root)
+        ),
+        "plugin-health": lambda: sys.exit(
+            plugin_health_main(project_root=project_root)
+        ),
+        "plugin-health-types-refresh": lambda: sys.exit(fnhook_types_refresh_main()),
+        "plugin-health-e2e": lambda: sys.exit(
+            plugin_health_e2e_main(project_root=project_root)
         ),
         "graphify": lambda: handle_graphify(args, project_root),
         "dependency-ownership": lambda: sys.exit(

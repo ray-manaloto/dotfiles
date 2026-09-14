@@ -192,9 +192,10 @@
     "mattpocock-skills@mattpocock": true,
     "fable-orchestrator@fable-orchestrator": true,
     "antigravity@antigravity-for-claude-code": true,
-    "context7@context7-marketplace": false,
+    "context7@context7-marketplace": true,
     "last30days@last30days-skill": true,
-    "exa@exa": false,
+    "exa@exa": true,
+    "firecrawl@firecrawl": true,
     "builder-skills@builder-skills": false,
     "eli5@claude-community": true,
     "ponytail@ponytail": true,
@@ -202,6 +203,24 @@
     "planning-with-files@planning-with-files": true
   },
   "extraKnownMarketplaces": {
+    "firecrawl": {
+      "source": {
+        "source": "github",
+        "repo": "firecrawl/firecrawl-claude-plugin"
+      }
+    },
+    "exa": {
+      "source": {
+        "source": "github",
+        "repo": "exa-labs/exa-mcp-server"
+      }
+    },
+    "context7-marketplace": {
+      "source": {
+        "source": "github",
+        "repo": "upstash/context7"
+      }
+    },
     "fable-orchestrator": {
       "source": {
         "source": "github",
