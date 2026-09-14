@@ -16,13 +16,14 @@
   "prHourlyLimit": 0,
   "packageRules": [
     {
-      "description": "Image-build inputs ship as ONE PR. Two reasons, both measured. (a) Cost: a change to any of these paths invalidates the devcontainer base, and CI then does a COLD base build - ~2.5h against ~10min warm. Six separate shared.toml bumps would be six cold builds; grouped they are one. (b) Correctness: mise-system.lock / mise-runtime.lock are regenerated together from shared.toml by `mise run lock-image`, so splitting a shared.toml bump from its companion locks produces a PR whose lockfiles disagree with its config. This rule is also what keeps image bumps OFF the ungrouped fast path: every other dependency now gets its own PR, so a single red pin blocks only itself. That is the failure `group:all` caused - PR #947 held all 28 outstanding bumps in one PR and sat DIRTY from 2026-09-03 to 2026-09-14, merging none of them.",
+      "description": "Image-build inputs ship as ONE PR. Two reasons, both measured. (a) Cost: a change to any of these paths invalidates the devcontainer base, and CI then does a COLD base build - ~2.5h against ~10min warm. Six separate shared.toml bumps would be six cold builds; grouped they are one. (b) Correctness: mise-system.lock / mise-runtime.lock are regenerated together from shared.toml by `mise run lock-image`, so splitting a shared.toml bump from its companion locks produces a PR whose lockfiles disagree with its config. This rule is also what keeps image bumps OFF the ungrouped fast path: every other dependency now gets its own PR, so a single red pin blocks only itself. That is the failure `group:all` caused - PR #947 held all 28 outstanding bumps in one PR and sat DIRTY from 2026-09-03 to 2026-09-14, merging none of them. (c) Lockstep for chezmoi, added 2026-09-14 after this rule's own ungrouping broke main. chezmoi is TWO Renovate deps: the minimum-version floor in .chezmoiversion (customManagers[1], github-releases) and the mise pin in shared.toml. Ungrouped, they move independently - PR #1072 raised the floor to 2.72.2 in a one-file commit (0f622b9) while shared.toml stayed 2.72.1, and chezmoi REFUSES to apply a source state whose floor exceeds the running binary, so `chezmoi init --apply` exited 1 inside onCreateCommand and every devcontainer bring-up on main died (`mise run land` -> converge: dev-rebuild rc=1). The same skew already fired once at #210 (.chezmoiversion 2.71.0 vs shared.toml 2.70.5) and was healed silently by the next group:all sweep, which is why it was never diagnosed. Matched here by FILE name rather than a matchDepNames pair on purpose: packageRules[7] records that a guessed depName silently matches NOTHING in this repo (agnix's real depName is the full config key github:agent-sh/agnix), and a separate groupName would also override this rule for the shared.toml entry, pulling chezmoi out of the image group and back into its own ~2.5h cold build - the exact cost (a) exists to prevent.",
       "matchFileNames": [
         ".config/mise/conf.d/shared.toml",
         ".devcontainer/mise-system.toml",
         ".devcontainer/mise-runtime.toml",
         ".devcontainer/Dockerfile",
-        "docker-bake.hcl"
+        "docker-bake.hcl",
+        ".chezmoiversion"
       ],
       "groupName": "image-build inputs"
     },
