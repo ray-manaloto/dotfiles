@@ -57,7 +57,7 @@ biome = "2.5.11"
 # scheduled for post-devcontainer-work review (see GH issue tracking
 # follow-up). md_size_budget (below in hk.pkl) provides the immediate,
 # class-aware enforcement — see .claude/rules/md-size-budgets.md.
-"npm:claude-code-lint" = "0.8.0"
+"npm:claude-code-lint" = "0.9.0"
 "npm:@contextlint/cli" = "1.1.1"
 "npm:markdownlint-cli2" = "0.23.2"
 "aqua:jackchuka/mdschema" = "0.15.2"

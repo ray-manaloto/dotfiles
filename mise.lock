@@ -6863,7 +6863,7 @@ version = "0.5.0"
 backend = "npm:agents-lint"
 
 [[tools."npm:claude-code-lint"]]
-version = "0.8.0"
+version = "0.9.0"
 backend = "npm:claude-code-lint"
 
 [[tools."npm:ctx7"]]
