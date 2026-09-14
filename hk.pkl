@@ -15,7 +15,7 @@ import "hk-common.pkl" as common
 // One-directional binary-vs-config drift guard (#160 T12): an older hk binary
 // refuses this config instead of silently misreading 1.49 features. The
 // cross-file pin parity (3 pkl URLs == shared.toml binary pin) is enforced by
-// the hk_version_parity step below (check-H).
+// the pin_parity step below (check-H), which covers every multi-site tool.
 min_hk_version = "1.49.0"
 
 // Zero-skip policy: fail_fast=false to report ALL issues, not just the first
@@ -541,10 +541,17 @@ local allSteps = new Mapping<String, Config.Step> {
   //     across the 3 pkl package URLs AND equal the shared.toml binary pin.
   //     min_hk_version above guards binary-too-old; this guards pin drift
   //     (the exact 1.44.2-vs-1.46 split this task found). ---
-  ["hk_version_parity"] {
-    glob = List("hk.pkl", "hk-common.pkl", "hk-image.pkl", ".config/mise/conf.d/shared.toml")
-    check =
-      "set -- $(grep -ohE 'hk@[0-9]+\\.[0-9]+\\.[0-9]+' hk.pkl hk-common.pkl hk-image.pkl | sort -u); pin=$(grep -E '^hk = ' .config/mise/conf.d/shared.toml | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+'); [ $# -eq 1 ] && [ \"$1\" = \"hk@${pin}\" ] || { echo \"hk pin drift: pkl URLs [$*] vs shared.toml pin ${pin} — bump all four together\" >&2; exit 1; }"
+  ["pin_parity"] {
+    glob = List(
+      "pin-parity.toml",
+      "hk.pkl", "hk-common.pkl", "hk-image.pkl",
+      ".config/mise/conf.d/shared.toml",
+      ".chezmoiversion",
+      ".devcontainer/Dockerfile",
+      ".github/actions/setup-mise/action.yml",
+      "schemas/sources.toml"
+    )
+    check = "uv run --project python dotfiles-setup pin-parity"
   }
 
   // --- `depends` is a DEADLOCK LANDMINE under `fail_fast = false` (#268) ---

@@ -1450,6 +1450,23 @@ tokens = [
 ]
 
 [[suite]]
+name = "workflow.pin-parity-enforcement"
+description = "Cross-site pin-parity wiring: the `pin_parity` hk step must stay wired to the python checker end-to-end — hk.pkl shells out to `dotfiles-setup pin-parity`, main.py registers and dispatches the subcommand, the pin_parity module and its tests exist, and pin-parity.toml declares the sites. Same shape as workflow.bash-logic-enforcement. This generalises the bespoke `hk_version_parity` inline-shell step, which covered exactly one tool and was un-gated bash logic (bash_logic_budget globs `scripts/*.sh` only). It exists because ONE logical tool pinned at N sites drifted FOUR times on 2026-09-14 — chezmoi's floor vs its mise pin broke every devcontainer bring-up on main for 7 hours, hk's three pkl URLs vs shared.toml deadlocked PRs #1063 and #1079, and mise split across its four sites twice, the second time via Renovate's own #1085. `mise outdated` cannot see any of them: it reads the manifest, and every one of these sites is outside it."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    "hk.pkl",
+    "python/src/dotfiles_setup/main.py",
+    "python/src/dotfiles_setup/pin_parity.py",
+    "tests/test_pin_parity.py",
+    "pin-parity.toml",
+    ".claude/skills/pin-parity/SKILL.md",
+]
+per_path_tokens = { "hk.pkl" = ['pin_parity"', 'dotfiles-setup pin-parity"'], "python/src/dotfiles_setup/main.py" = ['"pin-parity",', '"pin-parity": lambda'], "python/src/dotfiles_setup/pin_parity.py" = ['def pin_parity_main(', 'def check_tool('], "tests/test_pin_parity.py" = ['def test_pattern_matching_nothing_fails('], "pin-parity.toml" = ['[tools.chezmoi]', '[tools.hk]', '[tools.mise]'], ".claude/skills/pin-parity/SKILL.md" = ['A pattern that matches nothing FAILS'] }
+
+[[suite]]
 name = "workflow.bash-logic-enforcement"
 description = "Zero-bash-logic policy wiring: the `bash_logic_budget` hk step must stay wired to the python enforcer end-to-end — hk.pkl shells out to `dotfiles-setup bash-budget`, main.py registers the subcommand, the bash_budget module (allowlist + per-file growth budget) + its tests exist, and the rule doc records the policy. The check LOGIC lives in python so the enforcer does not itself violate the policy it enforces; this contract asserts the whole chain so it can't drift out."
 category = "workflow"

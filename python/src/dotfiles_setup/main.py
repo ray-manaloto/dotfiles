@@ -111,6 +111,7 @@ from dotfiles_setup.p2996_hash import (
 )
 from dotfiles_setup.p2996_refresh import refresh as refresh_p2996_ref
 from dotfiles_setup.path_drift import AMBIENT_PATH_ENV, path_drift_main
+from dotfiles_setup.pin_parity import pin_parity_main
 from dotfiles_setup.plan_attest import (
     insert_passthrough_separator,
     plan_attest_main,
@@ -1506,6 +1507,7 @@ def _add_hook_subcommands(
     _add_claude_doctor_subcommand(subparsers)
     _add_plugin_health_subcommands(subparsers)
     _add_dependency_currency_subcommand(subparsers)
+    _add_pin_parity_subcommand(subparsers)
 
 
 def _add_fnhook_subcommands(subparsers: _SubParsers) -> None:
@@ -1532,6 +1534,14 @@ def _add_claude_doctor_subcommand(subparsers: _SubParsers) -> None:
         action="store_true",
         help="Use mise's cached release list instead of forcing a live lookup "
         "(faster, but may compare against a version up to an hour stale)",
+    )
+
+
+def _add_pin_parity_subcommand(subparsers: _SubParsers) -> None:
+    """Register the cross-site pin-parity check (registry: pin-parity.toml)."""
+    subparsers.add_parser(
+        "pin-parity",
+        help="Assert every pin site for one tool carries the same version",
     )
 
 
@@ -2607,6 +2617,7 @@ def _build_command_handlers(
         "dependency-currency": lambda: sys.exit(
             dependency_currency_main(project_root=project_root)
         ),
+        "pin-parity": lambda: sys.exit(pin_parity_main(project_root)),
         "plugin-health": lambda: sys.exit(
             plugin_health_main(project_root=project_root)
         ),
