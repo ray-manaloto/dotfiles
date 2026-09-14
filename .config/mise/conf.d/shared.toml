@@ -29,12 +29,12 @@ actionlint = "1.7.12"
 # image use under mise 2026.7.12 (aube default rejects our low-download npm
 # tools). Shared so both install the same bun; the setup-mise action installs it
 # before the npm: tools that need it.
-bun = "1.4.0"
-chezmoi = "2.72.1"
+bun = "1.4.2"
+chezmoi = "2.72.2"
 ghalint = "1.5.6"
 gitleaks = "8.30.1"
 hadolint = "2.15.1"
-hk = "1.57.0"
+hk = "1.58.1"
 jq = "1.8.2"
 # The npm CLI shared by the root mise.toml's orchestrator executor lane and
 # .devcontainer/mise-runtime.toml's #613 in-container review lane (both used
@@ -44,11 +44,11 @@ jq = "1.8.2"
 "npm:@openai/codex" = { version = "0.154.0", allow_builds = ["@openai/codex"] }
 pinact = "4.1.1"
 "pipx:check-jsonschema" = "0.38.0"
-pixi = "0.78.0"
+pixi = "0.80.0"
 pkl = "0.32.1"
 python = "3.14.7"
 shellcheck = "0.11.0"
-shfmt = "3.14.0"
+shfmt = "3.14.1"
 taplo = "0.10.0"
 typos = "1.50.1"
 uv = "0.12.13"
