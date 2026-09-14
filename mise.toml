@@ -71,7 +71,7 @@ lefthook = "2.1.12"
 "npm:ctx7" = "0.5.11"
 "aqua:rtk-ai/rtk" = "0.47.0"          # aqua is the registry's first backend (`mise registry rtk`); the old bare `rtk` resolved to github: and mise doctor flagged the mismatch
 "npm:skills" = "1.5.26"
-"npm:agent-browser" = "0.36.0"
+"npm:agent-browser" = "0.37.1"
 "npm:portless" = "0.15.6"
 "pipx:deepagents-cli" = "0.3.0"
 # ffmpeg: system binary the graphify `video` extra (faster-whisper) needs to
