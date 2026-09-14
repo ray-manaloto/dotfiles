@@ -1637,6 +1637,11 @@ run = 'uv run --project python dotfiles-setup plugin-health-types-refresh'
 description = "Cross-session e2e check: verify a fresh claude session against this project starts cleanly"
 run = 'uv run --project python dotfiles-setup plugin-health-e2e'
 
+[tasks.pin-parity]
+description = "Assert every pin site for one tool carries the same version (registry: pin-parity.toml)"
+# Thin caller; all logic in python/src/dotfiles_setup/pin_parity.py.
+run = 'uv run --project python dotfiles-setup pin-parity'
+
 [tasks.dependency-currency]
 description = "Report FIRST-LEVEL mise and Python pins that are behind, as JSON; rc is the verdict"
 # Thin caller; all logic in python/src/dotfiles_setup/dependency_currency.py.

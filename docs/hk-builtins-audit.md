@@ -79,7 +79,6 @@ opinion about them, and neither does this table beyond recording them.
 | `ghcr_publish_prereqs` | hk.pkl |
 | `graphify_skill_surface` | hk.pkl |
 | `hk_audit` | hk.pkl |
-| `hk_version_parity` | hk.pkl |
 | `md_size_budget` | hk.pkl |
 | `mise_lock_integrity` | hk.pkl |
 | `no_env_dump` | hk.pkl |
@@ -88,6 +87,7 @@ opinion about them, and neither does this table beyond recording them.
 | `no_hk_depends` | hk.pkl |
 | `no_lint_skip` | hk.pkl |
 | `no_platform_literals` | hk.pkl |
+| `pin_parity` | hk.pkl |
 | `pre-commit` | hk.pkl, hk-image.pkl |
 | `pre-push` | hk.pkl |
 | `py_ty` | hk.pkl |

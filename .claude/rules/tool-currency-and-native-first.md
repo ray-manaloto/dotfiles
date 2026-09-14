@@ -91,8 +91,8 @@ The engine tracks **versions**. This rule's remaining, un-automatable job is the
 feature? Only a human decides retirement.
 
 Machine enforcement is partial by nature — `workflow.tool-currency-wiring`
-(suites.toml) asserts the whole chain exists, `hk_version_parity` catches hk pin
-drift across the three pkl files, Renovate PRs carry the CHANGELOG, and agnix
+(suites.toml) asserts the whole chain exists, `pin_parity` catches drift across
+every declared pin site, Renovate PRs carry the CHANGELOG, and agnix
 validates this file structurally. Detail:
 `docs/rules-evidence/tool-currency-and-native-first.md`.
 
