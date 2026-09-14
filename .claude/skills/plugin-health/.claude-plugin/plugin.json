@@ -1,0 +1,8 @@
+{
+  "name": "plugin-health",
+  "version": "1.0.0",
+  "description": "Reports at session start when plugins declared in settings are not actually installed or are disabled for this project",
+  "author": {
+    "name": "Raymond Manaloto"
+  }
+}

@@ -90,7 +90,20 @@ lefthook = "2.1.12"
 # skip the tool entirely, so no linux URL is demanded.
 "conda:ffmpeg" = { version = "9.0.1", os = ["macos"] }
 aws-cli = { version = "2.36.38", symlink_bins = "true" }
-azure-cli = { version = "2.90.0", uvx_args = "--prerelease=allow" }
+# pipx exists ONLY to serve the `uvx = false` below: that flag routes the
+# install through real pipx, and mise's own error names the fix ("Install
+# pipx first: mise use pipx@latest"). It is installed in setup-mise's FIRST
+# mise-action pass, alongside bun, because mise does not guarantee ordering
+# within one pass -- the same hazard that comment already documents for bun.
+pipx = "1.17.2"
+# Backend-qualified deliberately. The bare `azure-cli` name resolves only
+# through mise's registry, and the `azure-cli -> pypi:azure-cli` alias is
+# absent in older mise (2026.9.1 answered "not found in mise tool registry",
+# suggesting `azure`), so a version skew between host and CI silently breaks
+# one side. Naming the backend skips the lookup on every version.
+# `uvx = false` is load-bearing: it short-circuits 2026.9.7's --no-build
+# lockfile path onto legacy version-only locking (see commit 3744cea).
+"pypi:azure-cli" = { version = "2.90.0", uvx = false }
 docker-cli = "29.7.2"
 opencode = "1.18.27"
 # bun (the npm package_manager) is a host↔image SHARED tool → declared in
@@ -117,6 +130,19 @@ opencode = "1.18.27"
 # declarations pinned the SAME tool under the same key, which the parity
 # test correctly flags as drift risk).
 antigravity-cli = "1.1.24"
+
+# Firecrawl CLI — the `firecrawl` binary the firecrawl@firecrawl plugin's skills
+# name in their own `allowed-tools` (`Bash(firecrawl *)`), so without this pin
+# `/firecrawl:firecrawl-search` dies on its first command. Measured 2026-09-13
+# before pinning: `command -v firecrawl` resolved an ORPHAN mise shim and
+# `firecrawl --version` exited `No version is set for shim` — the same
+# shape that blocks agentsview. NOT a mise registry short name (`mise registry
+# firecrawl` -> "tool not found"; control: `antigravity-cli` resolves), hence the
+# explicit `npm:` backend, whose package declares `bin: {firecrawl: ...}`.
+# Host-only like the executor-lane CLIs above: an operator research tool, never
+# an image build input, and unused by hk/CI (so ci-local-parity rule 2 does not
+# bind it). Auth is per-user via FIRECRAWL_API_KEY.
+"npm:firecrawl-cli" = "1.23.3"
 
 [settings]
 experimental = true
@@ -773,7 +799,7 @@ description = "Rebuild the project knowledge graph and stamp the graphify versio
 # Thin caller (zero-bash-logic); logic in python/src/dotfiles_setup/graphify.py.
 # AST-only re-extraction (no LLM, no API cost). This is the ONLY sanctioned
 # way to rebuild the graph in this repo — it runs the SAME uv-venv-pinned
-# graphify `mise run graphify-query`/`graphify-health` resolve (0.9.53,
+# graphify `mise run graphify-query`/`graphify-health` resolve (0.9.61,
 # python/pyproject.toml), not the user-global PATH shim (see
 # graphify-first.md), and records the builder version so graphify_health can
 # catch a graph built by the wrong binary.
@@ -1598,3 +1624,20 @@ description = "Reap wedged processes by pattern and age, ancestor-protected (#65
 #   mise run reap -- --pattern 'shims/git' --min-age 3600
 #   mise run reap -- --pattern 'fnox export' --kill             # signals
 run = 'uv run --project python dotfiles-setup reap'
+
+[tasks.plugin-health]
+description = "Check plugin/skill setup health: verify declared plugins are actually installed and enabled"
+run = 'uv run --project python dotfiles-setup plugin-health'
+
+[tasks.plugin-health-types-refresh]
+description = "Regenerate plugin-health TypeScript declarations"
+run = 'uv run --project python dotfiles-setup plugin-health-types-refresh'
+
+[tasks.plugin-health-e2e]
+description = "Cross-session e2e check: verify a fresh claude session against this project starts cleanly"
+run = 'uv run --project python dotfiles-setup plugin-health-e2e'
+
+[tasks.dependency-currency]
+description = "Report FIRST-LEVEL mise and Python pins that are behind, as JSON; rc is the verdict"
+# Thin caller; all logic in python/src/dotfiles_setup/dependency_currency.py.
+run = 'uv run --project python dotfiles-setup dependency-currency'

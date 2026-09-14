@@ -130,6 +130,50 @@ def test_env_opt_in_explains_a_variable_fnox_never_heard_of() -> None:
     assert "does not declare NOPE at all" in doctor.check_mcp_env_opt_in(setup)[0]
 
 
+def test_env_opt_in_exempts_harness_substituted_path_placeholders() -> None:
+    """Claude Code resolves these itself, so the doctor's env cannot speak to them.
+
+    The live shape: context7's `.mcp.json` headersHelper is
+    `node "${CLAUDE_PLUGIN_ROOT}/scripts/headers.mjs"`. Before the exemption,
+    enabling that plugin produced permanent drift from a `mise run doctor`
+    child, which no plugin provides and which therefore never has the variable.
+    """
+    setup = _setup(
+        servers=(
+            _server(
+                "context7",
+                headersHelper='node "${CLAUDE_PLUGIN_ROOT}/scripts/headers.mjs"',
+            ),
+        ),
+        fnox=_fnox(per_secret={}),
+        environ={},
+    )
+    assert doctor.check_mcp_env_opt_in(setup) == []
+
+
+def test_env_opt_in_still_flags_a_credential_beside_a_placeholder() -> None:
+    """The FAIL arm: exempting paths must not exempt the secret next to them.
+
+    Same server, same absent environment. If this ever returns [] the exemption
+    has widened past paths and the check has become one that can only pass.
+    """
+    setup = _setup(
+        servers=(
+            _server(
+                "context7",
+                headersHelper='node "${CLAUDE_PLUGIN_ROOT}/scripts/headers.mjs"',
+                headers={"Authorization": "${C7_KEY:-}"},
+            ),
+        ),
+        fnox=_fnox(per_secret={}),
+        environ={},
+    )
+    findings = doctor.check_mcp_env_opt_in(setup)
+    assert len(findings) == 1
+    assert "C7_KEY" in findings[0]
+    assert "CLAUDE_PLUGIN_ROOT" not in findings[0]
+
+
 def test_interpolations_finds_both_plain_and_defaulted_forms() -> None:
     config = {"env": {"A": "${A}", "B": "${B:-fallback}"}, "url": "https://x/${C}"}
     assert doctor.interpolations(config) == {"A", "B", "C"}
@@ -1208,4 +1252,14 @@ def test_collect_reads_the_real_repo_without_touching_the_real_home(
     # Current declared state, pinned deliberately so a future reader does not
     # "restore" the stale expectation above. The parsing path itself is covered
     # by the fixtures in test_collect_servers_* — not by this test.
-    assert [s.name for s in setup.servers] == []
+    #
+    # 2026-09-13: back to ONE server. `exa` was re-added when the `exa@exa`
+    # plugin was enabled, because plugin 3.4.1 ships `mcp.json` (no leading dot,
+    # `agent-plugins.org` schema) and declares no `mcpServers` in plugin.json —
+    # so Claude Code, which reads `.mcp.json` or an inline `plugin.json` key
+    # (`$CC/plugins-reference.md:166`), registers nothing for it and the
+    # `/exa:search` skill's server would be absent. This also un-vacuums the four
+    # doctor checks that iterate `setup.servers`, and restores this assertion's
+    # control arm: a non-empty expectation fails if `collect` reads nothing,
+    # which `== []` could not.
+    assert [s.name for s in setup.servers] == ["exa"]

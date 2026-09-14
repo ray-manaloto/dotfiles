@@ -1,0 +1,4 @@
+{
+  "description": "claude doctor verdict: report at SessionStart, deny while INVALID",
+  "modules": ["./register.ts"]
+}

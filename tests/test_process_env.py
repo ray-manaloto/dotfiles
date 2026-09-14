@@ -217,6 +217,15 @@ def test_real_pre_push_poison_cannot_modify_outer_repository(tmp_path: Path) -> 
         f'{os.pathsep}{runtime_global_mise}"\n'
         f'export MISE_IGNORED_CONFIG_PATHS="{task_root}"\n'
         f'export MISE_PROJECT_ROOT="{task_root}"\n'
+        # #1053: repointing MISE_GLOBAL_CONFIG_FILE above demotes the real
+        # ~/.config/mise/config.toml to a non-global config, so mise auto-
+        # installs ITS tools before running the task. That made this test
+        # depend on the host's entire tool inventory resolving: mise 2026.9.7's
+        # npm trust policy (trustPolicy=no-downgrade) started failing 4 of 36,
+        # and mise aborted before the task ran, so the marker below was never
+        # written. The task under test needs no mise-managed tool -- it runs
+        # console scripts by absolute path -- so turn the install step off.
+        "export MISE_TASK_RUN_AUTO_INSTALL=0\n"
         f'export GLOBAL_MISE_MARKER="{global_task_marker}"\n'
         'exec env -u MISE_IGNORED_CONFIG_PATHS mise --cd "$MISE_PROJECT_ROOT" '
         "run test-hook-isolated "

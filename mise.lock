@@ -4989,13 +4989,6 @@ url = "https://awscli.amazonaws.com/AWSCLIV2-2.36.38.pkg"
 [tools.aws-cli."platforms.macos-x64-baseline"]
 url = "https://awscli.amazonaws.com/AWSCLIV2-2.36.38.pkg"
 
-[[tools.azure-cli]]
-version = "2.90.0"
-backend = "pipx:azure-cli"
-
-[tools.azure-cli.options]
-uvx_args = "--prerelease=allow"
-
 [[tools.biome]]
 version = "2.5.11"
 backend = "aqua:biomejs/biome"
@@ -6877,6 +6870,10 @@ backend = "npm:claude-code-lint"
 version = "0.5.9"
 backend = "npm:ctx7"
 
+[[tools."npm:firecrawl-cli"]]
+version = "1.23.3"
+backend = "npm:firecrawl-cli"
+
 [[tools."npm:markdownlint-cli2"]]
 version = "0.23.2"
 backend = "npm:markdownlint-cli2"
@@ -6960,6 +6957,55 @@ checksum = "sha256:ac26bb6f0309e9a6de279b64dc7bec5e69ab9b79c1a4e2d947d68d213b7eb
 url = "https://github.com/anomalyco/opencode/releases/download/v1.18.27/opencode-windows-x64.zip"
 url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/541773273"
 
+[[tools.pipx]]
+version = "1.17.2"
+backend = "aqua:pypa/pipx"
+
+[tools.pipx."platforms.linux-arm64"]
+checksum = "sha256:31d517b7afebf55d3b597d613c735389068a973a54712a50641845cf2cb2bb1d"
+url = "https://github.com/pypa/pipx/releases/download/1.17.2/pipx.pyz"
+url_api = "https://api.github.com/repos/pypa/pipx/releases/assets/540192956"
+
+[tools.pipx."platforms.linux-arm64-musl"]
+checksum = "sha256:31d517b7afebf55d3b597d613c735389068a973a54712a50641845cf2cb2bb1d"
+url = "https://github.com/pypa/pipx/releases/download/1.17.2/pipx.pyz"
+url_api = "https://api.github.com/repos/pypa/pipx/releases/assets/540192956"
+
+[tools.pipx."platforms.linux-x64"]
+checksum = "sha256:31d517b7afebf55d3b597d613c735389068a973a54712a50641845cf2cb2bb1d"
+url = "https://github.com/pypa/pipx/releases/download/1.17.2/pipx.pyz"
+url_api = "https://api.github.com/repos/pypa/pipx/releases/assets/540192956"
+
+[tools.pipx."platforms.linux-x64-baseline"]
+checksum = "sha256:31d517b7afebf55d3b597d613c735389068a973a54712a50641845cf2cb2bb1d"
+url = "https://github.com/pypa/pipx/releases/download/1.17.2/pipx.pyz"
+url_api = "https://api.github.com/repos/pypa/pipx/releases/assets/540192956"
+
+[tools.pipx."platforms.linux-x64-musl"]
+checksum = "sha256:31d517b7afebf55d3b597d613c735389068a973a54712a50641845cf2cb2bb1d"
+url = "https://github.com/pypa/pipx/releases/download/1.17.2/pipx.pyz"
+url_api = "https://api.github.com/repos/pypa/pipx/releases/assets/540192956"
+
+[tools.pipx."platforms.linux-x64-musl-baseline"]
+checksum = "sha256:31d517b7afebf55d3b597d613c735389068a973a54712a50641845cf2cb2bb1d"
+url = "https://github.com/pypa/pipx/releases/download/1.17.2/pipx.pyz"
+url_api = "https://api.github.com/repos/pypa/pipx/releases/assets/540192956"
+
+[tools.pipx."platforms.macos-arm64"]
+checksum = "sha256:31d517b7afebf55d3b597d613c735389068a973a54712a50641845cf2cb2bb1d"
+url = "https://github.com/pypa/pipx/releases/download/1.17.2/pipx.pyz"
+url_api = "https://api.github.com/repos/pypa/pipx/releases/assets/540192956"
+
+[tools.pipx."platforms.macos-x64"]
+checksum = "sha256:31d517b7afebf55d3b597d613c735389068a973a54712a50641845cf2cb2bb1d"
+url = "https://github.com/pypa/pipx/releases/download/1.17.2/pipx.pyz"
+url_api = "https://api.github.com/repos/pypa/pipx/releases/assets/540192956"
+
+[tools.pipx."platforms.macos-x64-baseline"]
+checksum = "sha256:31d517b7afebf55d3b597d613c735389068a973a54712a50641845cf2cb2bb1d"
+url = "https://github.com/pypa/pipx/releases/download/1.17.2/pipx.pyz"
+url_api = "https://api.github.com/repos/pypa/pipx/releases/assets/540192956"
+
 [[tools."pipx:deepagents-cli"]]
 version = "0.3.0"
 backend = "pipx:deepagents-cli"
@@ -6967,6 +7013,13 @@ backend = "pipx:deepagents-cli"
 [[tools."pipx:mcp2cli"]]
 version = "3.7.0"
 backend = "pipx:mcp2cli"
+
+[[tools."pypi:azure-cli"]]
+version = "2.90.0"
+backend = "pypi:azure-cli"
+
+[tools."pypi:azure-cli".options]
+uvx = "false"
 
 [[tools.rumdl]]
 version = "0.2.63"
