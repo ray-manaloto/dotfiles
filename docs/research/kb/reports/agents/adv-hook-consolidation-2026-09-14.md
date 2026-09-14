@@ -189,7 +189,7 @@ scratchpad. Working tree never touched (`git status --porcelain .claude/settings
 
 `_SETTINGS_WIRING` uses **superset** semantics —
 `all(token in entry_tokens for token in required_matchers)`
-(`python/src/dotfiles_setup/hook_selfcheck.py:276-278`). It fails a matcher that **drops** a
+(`python/src/dotfiles_setup/hook_selfcheck.py:274-275` [anchor corrected 2026-09-14; the lane wrote :276-278]). It fails a matcher that **drops** a
 required token (A1 ✓) and is **blind to one that adds tokens** (A2/B1 ✗). There is no
 `matchers_exact` mode.
 
@@ -229,7 +229,7 @@ myself. Distribution is bursty by day: 36 (08-11), 34 (09-14), 27 (08-13), 16 (0
 ### The structural findings, which do not depend on the root cause
 
 1. **The log undercounts by construction.** Only `scripts/pretooluse-guard.sh` records a
-   fail-open. `scripts/graphify-hook-guard.sh:27-31` swallows everything
+   fail-open. `scripts/graphify-hook-guard.sh:28` [anchor corrected 2026-09-14; the lane wrote :27-31] swallows everything
    (`uv run … 2>/dev/null || true`, then `exit 0`) and records nothing. The 159/160 count is
    **entry 0's alone**; entries 1 and 2 fail open invisibly. The real fail-open surface is
    larger than the log shows, and nobody knows by how much.
