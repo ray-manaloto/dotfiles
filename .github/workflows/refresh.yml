@@ -259,9 +259,14 @@ jobs:
     #
     # Deliberately NO actor-based loop guard. `gcc-sha-repair.yml` mints from
     # the SAME REFRESH_APP_ID/REFRESH_APP_PRIVATE_KEY and pushes to
-    # `renovate/**` too, so it can push as the same bot; `renovate.json`
-    # extends `group:all`, so a PR touching both a dated gcc `.deb` and a
-    # `shared.toml` pin is the default shape, not an edge case. A guard on
+    # `renovate/**` too, so it can push as the same bot; renovate.json's
+    # `image-build inputs` packageRule groups `.devcontainer/Dockerfile` and
+    # `.config/mise/conf.d/shared.toml` into ONE PR, so a PR touching both a
+    # dated gcc `.deb` and a `shared.toml` pin is the default shape, not an
+    # edge case. (This used to say `extends group:all`, which grouped
+    # EVERYTHING; that was dropped in #1062 because one red pin then blocked
+    # all the others. The conclusion is unchanged -- these two paths are still
+    # deliberately in the same group -- only the rule that does it.) A guard on
     # `github.actor` would then skip this job on the very `synchronize` that
     # OTHER job's push causes, restoring the #887 deadlock on the commonest
     # PR shape. The drift check below is genuinely idempotent — after our own
