@@ -6867,7 +6867,7 @@ version = "0.8.0"
 backend = "npm:claude-code-lint"
 
 [[tools."npm:ctx7"]]
-version = "0.5.9"
+version = "0.5.11"
 backend = "npm:ctx7"
 
 [[tools."npm:firecrawl-cli"]]
