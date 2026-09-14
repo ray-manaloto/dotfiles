@@ -6893,7 +6893,7 @@ version = "1.5.26"
 backend = "npm:skills"
 
 [[tools."npm:typescript"]]
-version = "5.9.3"
+version = "7.0.2"
 backend = "npm:typescript"
 
 [[tools.opencode]]
