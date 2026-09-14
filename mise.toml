@@ -90,7 +90,20 @@ lefthook = "2.1.12"
 # skip the tool entirely, so no linux URL is demanded.
 "conda:ffmpeg" = { version = "9.0.1", os = ["macos"] }
 aws-cli = { version = "2.36.38", symlink_bins = "true" }
-azure-cli = { version = "2.90.0", uvx = false }
+# pipx exists ONLY to serve the `uvx = false` below: that flag routes the
+# install through real pipx, and mise's own error names the fix ("Install
+# pipx first: mise use pipx@latest"). It is installed in setup-mise's FIRST
+# mise-action pass, alongside bun, because mise does not guarantee ordering
+# within one pass -- the same hazard that comment already documents for bun.
+pipx = "1.17.2"
+# Backend-qualified deliberately. The bare `azure-cli` name resolves only
+# through mise's registry, and the `azure-cli -> pypi:azure-cli` alias is
+# absent in older mise (2026.9.1 answered "not found in mise tool registry",
+# suggesting `azure`), so a version skew between host and CI silently breaks
+# one side. Naming the backend skips the lookup on every version.
+# `uvx = false` is load-bearing: it short-circuits 2026.9.7's --no-build
+# lockfile path onto legacy version-only locking (see commit 3744cea).
+"pypi:azure-cli" = { version = "2.90.0", uvx = false }
 docker-cli = "29.7.2"
 opencode = "1.18.27"
 # bun (the npm package_manager) is a host↔image SHARED tool → declared in
