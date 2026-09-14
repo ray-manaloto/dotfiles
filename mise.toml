@@ -41,7 +41,7 @@ editorconfig-checker = "3.11.3" # provides `ec` — hk editorconfig_checker buil
 # ~/.local/bin/claude. Same spec the version oracle uses
 # (`claude_doctor.ORACLE_SPEC`).
 "github:anthropics/claude-code" = "2.1.270"
-"npm:typescript" = "5.9.3"
+"npm:typescript" = "7.0.2"
 # Critical host-side secrets transport for devcontainer initialization. Keep it
 # deep-tracked in currency.toml: Doppler's mounted-secret behavior is part of
 # the devcontainer security boundary, not an optional interactive convenience.
