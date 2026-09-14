@@ -1,8 +1,7 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "github>jdx/renovate-config",
-    "group:all"
+    "github>jdx/renovate-config"
   ],
   "schedule": [
     "at any time"
@@ -16,6 +15,17 @@
   "prConcurrentLimit": 20,
   "prHourlyLimit": 0,
   "packageRules": [
+    {
+      "description": "Image-build inputs ship as ONE PR. Two reasons, both measured. (a) Cost: a change to any of these paths invalidates the devcontainer base, and CI then does a COLD base build - ~2.5h against ~10min warm. Six separate shared.toml bumps would be six cold builds; grouped they are one. (b) Correctness: mise-system.lock / mise-runtime.lock are regenerated together from shared.toml by `mise run lock-image`, so splitting a shared.toml bump from its companion locks produces a PR whose lockfiles disagree with its config. This rule is also what keeps image bumps OFF the ungrouped fast path: every other dependency now gets its own PR, so a single red pin blocks only itself. That is the failure `group:all` caused - PR #947 held all 28 outstanding bumps in one PR and sat DIRTY from 2026-09-03 to 2026-09-14, merging none of them.",
+      "matchFileNames": [
+        ".config/mise/conf.d/shared.toml",
+        ".devcontainer/mise-system.toml",
+        ".devcontainer/mise-runtime.toml",
+        ".devcontainer/Dockerfile",
+        "docker-bake.hcl"
+      ],
+      "groupName": "image-build inputs"
+    },
     {
       "matchPackageNames": [
         "bats-core"
