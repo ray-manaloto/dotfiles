@@ -45,15 +45,30 @@ seatbelt, not a cage — treat it as binding on yourself.
 
 ```bash
 mkdir -p .agent/kb/raw
-cat > .agent/kb/raw/codex-sol-operator-prompt.md <<'EOF'
+# Unique per invocation (#1112): two lanes of the same family running at
+# once would otherwise overwrite each other's prompt and read each other's
+# output, and the wrong answer is well-formed enough to look right.
+# CODEX_LANE_ID must be unique PER LANE — never share one across a batch.
+LANE_ID="${CODEX_LANE_ID:-$$-$(date +%s)}"
+case "$LANE_ID" in (""|*[!A-Za-z0-9._-]*)
+  echo "refusing: CODEX_LANE_ID must match [A-Za-z0-9._-]+, got: $LANE_ID"; exit 1;; esac
+PROMPT=".agent/kb/raw/codex-sol-operator-prompt-$LANE_ID.md"
+OUT=".agent/kb/raw/codex-sol-operator-result-$LANE_ID.md"
+# Claim $OUT ATOMICALLY, before codex runs. `codex -o` creates it only on
+# completion, so a mere existence test cannot see a concurrent peer.
+( set -C; : > "$OUT" ) 2>/dev/null || { echo "refusing: $OUT already claimed"; exit 1; }
+
+cat > "$PROMPT" <<'EOF'
 <the ONE task to run, the repo path, and what to report>
 EOF
 
-cat .agent/kb/raw/codex-sol-operator-prompt.md | PLANNING_DISABLED=1 codex exec \
+cat "$PROMPT" | PLANNING_DISABLED=1 codex exec \
   --ephemeral --sandbox danger-full-access \
   --model gpt-5.6-sol \
   -c model_reasoning_effort="xhigh" \
-  -o .agent/kb/raw/codex-sol-operator-result.md -
+  -o "$OUT" -
+
+echo "lane output: $OUT"   # report this path — the coordinator cannot guess it
 ```
 
 **`PLANNING_DISABLED=1` is load-bearing too.** Without it the lane inherits this

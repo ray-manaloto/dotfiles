@@ -90,17 +90,32 @@ it could not have observed.
 
 ```bash
 mkdir -p .agent/kb/raw
-cat > .agent/kb/raw/codex-sol-claude-code-expert-prompt.md <<'EOF'
+# Unique per invocation (#1112): two lanes of the same family running at
+# once would otherwise overwrite each other's prompt and read each other's
+# output, and the wrong answer is well-formed enough to look right.
+# CODEX_LANE_ID must be unique PER LANE — never share one across a batch.
+LANE_ID="${CODEX_LANE_ID:-$$-$(date +%s)}"
+case "$LANE_ID" in (""|*[!A-Za-z0-9._-]*)
+  echo "refusing: CODEX_LANE_ID must match [A-Za-z0-9._-]+, got: $LANE_ID"; exit 1;; esac
+PROMPT=".agent/kb/raw/codex-sol-claude-code-expert-prompt-$LANE_ID.md"
+OUT=".agent/kb/raw/codex-sol-claude-code-expert-verdict-$LANE_ID.md"
+# Claim $OUT ATOMICALLY, before codex runs. `codex -o` creates it only on
+# completion, so a mere existence test cannot see a concurrent peer.
+( set -C; : > "$OUT" ) 2>/dev/null || { echo "refusing: $OUT already claimed"; exit 1; }
+
+cat > "$PROMPT" <<'EOF'
 <the question as a falsifiable claim; `claude --version`; the verbatim output of
 every corpus probe you ran, including the control arm; the relevant rows of the
 ledger in .claude/agents/claude-code-expert.md; and the report format below>
 EOF
 
-cat .agent/kb/raw/codex-sol-claude-code-expert-prompt.md | PLANNING_DISABLED=1 codex exec \
+cat "$PROMPT" | PLANNING_DISABLED=1 codex exec \
   --ephemeral --sandbox read-only \
   --model gpt-5.6-sol \
   -c model_reasoning_effort="xhigh" \
-  -o .agent/kb/raw/codex-sol-claude-code-expert-verdict.md -
+  -o "$OUT" -
+
+echo "lane output: $OUT"   # report this path — the coordinator cannot guess it
 ```
 
 **`PLANNING_DISABLED=1` is load-bearing too.** Without it the lane inherits this
