@@ -65,7 +65,7 @@ rumdl = "0.2.73"
 # zizmor: GHA security scanner — backs the hk zizmor builtin (#160 T12);
 # host-only lint tool, so it lives here (not shared.toml).
 zizmor = "1.30.1"
-"npm:oh-my-claude-sisyphus" = "5.1.0"
+"npm:oh-my-claude-sisyphus" = "5.4.0"
 "github:ast-grep/ast-grep" = "0.45.3"
 lefthook = "2.1.14"
 "npm:ctx7" = "0.5.11"
