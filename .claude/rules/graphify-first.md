@@ -44,7 +44,7 @@ this answers "which commit built it", not "has anything changed since".
 
 ## Nothing records WHICH graphify built the graph
 
-**The two installs are aligned as of 2026-08-31 — both 0.9.53.** `graphify`
+**The two installs are aligned as of 2026-09-14 — both 0.9.61.** `graphify`
 on bare `PATH` resolves the **user-global** pin
 (`~/.config/mise/config.toml`, outside this repo's review);
 `mise run graphify-query`/`graphify-update` resolve **this repo's pinned

@@ -90,7 +90,7 @@ lefthook = "2.1.12"
 # skip the tool entirely, so no linux URL is demanded.
 "conda:ffmpeg" = { version = "9.0.1", os = ["macos"] }
 aws-cli = { version = "2.36.38", symlink_bins = "true" }
-azure-cli = { version = "2.90.0", uvx_args = "--prerelease=allow" }
+azure-cli = { version = "2.90.0", uvx = false }
 docker-cli = "29.7.2"
 opencode = "1.18.27"
 # bun (the npm package_manager) is a host↔image SHARED tool → declared in
@@ -786,7 +786,7 @@ description = "Rebuild the project knowledge graph and stamp the graphify versio
 # Thin caller (zero-bash-logic); logic in python/src/dotfiles_setup/graphify.py.
 # AST-only re-extraction (no LLM, no API cost). This is the ONLY sanctioned
 # way to rebuild the graph in this repo — it runs the SAME uv-venv-pinned
-# graphify `mise run graphify-query`/`graphify-health` resolve (0.9.53,
+# graphify `mise run graphify-query`/`graphify-health` resolve (0.9.61,
 # python/pyproject.toml), not the user-global PATH shim (see
 # graphify-first.md), and records the builder version so graphify_health can
 # catch a graph built by the wrong binary.

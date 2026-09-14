@@ -60,7 +60,7 @@ def test_graphify_runtime_and_skill_stamps_match_project_pin() -> None:
         if value.startswith("graphifyy")
     )
 
-    assert dependency == "graphifyy[all]==0.9.53"
+    assert dependency == "graphifyy[all]==0.9.61"
     version = dependency.removeprefix("graphifyy[all]==")
     stamp = repo / ".agents/skills/graphify/.graphify_version"
     assert stamp.read_text(encoding="utf-8").strip() == version
@@ -81,7 +81,7 @@ def _force_fresh_health(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "dotfiles_setup.graphify.graphify_health",
         lambda _root: HealthResult(
-            GraphifyStatus.FRESH, "0.9.53", graph_sha256="stable"
+            GraphifyStatus.FRESH, "0.9.61", graph_sha256="stable"
         ),
     )
 
@@ -230,7 +230,7 @@ def test_query_refuses_stale_health_before_running_graphify(
     monkeypatch.setattr(
         "dotfiles_setup.graphify.graphify_health",
         lambda _root: HealthResult(
-            GraphifyStatus.STALE, "0.9.53", "build receipt missing"
+            GraphifyStatus.STALE, "0.9.61", "build receipt missing"
         ),
     )
 
@@ -245,8 +245,8 @@ def test_query_rejects_graph_changed_during_subprocess(
     """Post-query health must bind the answer to the preflight graph digest."""
     health_results = iter(
         (
-            HealthResult(GraphifyStatus.FRESH, "0.9.53", graph_sha256="before"),
-            HealthResult(GraphifyStatus.STALE, "0.9.53", "receipt mismatch"),
+            HealthResult(GraphifyStatus.FRESH, "0.9.61", graph_sha256="before"),
+            HealthResult(GraphifyStatus.STALE, "0.9.61", "receipt mismatch"),
         )
     )
     monkeypatch.setattr(
@@ -370,7 +370,7 @@ def test_graphify_health_accepts_graph_without_build_receipt(
     (graph_dir / "graph.json").write_text(
         '{"nodes": [], "edges": [], "hyperedges": [], ' + _PROV + "}"
     )
-    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.53")
+    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.61")
     result = graphify_health(tmp_path)
     assert result.status is GraphifyStatus.FRESH
     assert result.ok
@@ -388,7 +388,7 @@ def test_graphify_health_accepts_exact_receipted_graph(tmp_path: Path) -> None:
             GraphifyBuildReceipt(
                 schema_version=1,
                 status="complete",
-                runtime_version="0.9.53",
+                runtime_version="0.9.61",
                 graph_sha256=hashlib.sha256(graph_bytes).hexdigest(),
                 graph_bytes=len(graph_bytes),
                 node_count=0,
@@ -417,7 +417,7 @@ def test_graphify_health_rejects_forged_producer_receipt_fields(
     receipt = GraphifyBuildReceipt(
         schema_version=1,
         status="complete",
-        runtime_version="0.9.53",
+        runtime_version="0.9.61",
         graph_sha256=hashlib.sha256(graph_bytes).hexdigest(),
         graph_bytes=len(graph_bytes),
         node_count=0,
@@ -450,7 +450,7 @@ def test_graphify_health_binds_one_graph_byte_snapshot(
     receipt = GraphifyBuildReceipt(
         schema_version=1,
         status="complete",
-        runtime_version="0.9.53",
+        runtime_version="0.9.61",
         graph_sha256=hashlib.sha256(graph_a).hexdigest(),
         graph_bytes=len(graph_a),
         node_count=1,
@@ -496,13 +496,13 @@ def test_graphify_health_rejects_invalid_graph_schema(
         json.dumps(
             {
                 "graph_sha256": hashlib.sha256(graph_bytes).hexdigest(),
-                "runtime_version": "0.9.53",
+                "runtime_version": "0.9.61",
                 "status": "complete",
                 "warnings": [],
             }
         )
     )
-    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.53")
+    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.61")
 
     result = graphify_health(tmp_path)
 
@@ -527,7 +527,7 @@ def test_graphify_health_accepts_links_keyed_graph(tmp_path: Path) -> None:
             GraphifyBuildReceipt(
                 schema_version=1,
                 status="complete",
-                runtime_version="0.9.53",
+                runtime_version="0.9.61",
                 graph_sha256=hashlib.sha256(graph_bytes).hexdigest(),
                 graph_bytes=len(graph_bytes),
                 node_count=0,
@@ -914,7 +914,7 @@ def test_affected_refuses_unhealthy_graph_before_running_graphify(
     monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
     monkeypatch.setattr(
         "dotfiles_setup.graphify.graphify_health",
-        lambda _root: HealthResult(GraphifyStatus.MISSING, "0.9.53", "no graph"),
+        lambda _root: HealthResult(GraphifyStatus.MISSING, "0.9.61", "no graph"),
     )
 
     with pytest.raises(GraphifyIncompleteError) as exc:
@@ -967,7 +967,7 @@ def test_affected_main_reports_incomplete_and_returns_3(
 ) -> None:
     monkeypatch.setattr(
         "dotfiles_setup.graphify.graphify_health",
-        lambda _root: HealthResult(GraphifyStatus.MISSING, "0.9.53", "no graph"),
+        lambda _root: HealthResult(GraphifyStatus.MISSING, "0.9.61", "no graph"),
     )
 
     rc = affected_main(tmp_path, "anything")
@@ -1023,7 +1023,7 @@ def test_prs_returns_dashboard_text_with_no_health_gate(
     def fake_health(_root: Path) -> HealthResult:
         nonlocal health_called
         health_called = True
-        return HealthResult(GraphifyStatus.MISSING, "0.9.53", "no graph")
+        return HealthResult(GraphifyStatus.MISSING, "0.9.61", "no graph")
 
     monkeypatch.setattr("dotfiles_setup.graphify.graphify_health", fake_health)
 
@@ -1131,7 +1131,7 @@ def test_graphify_health_reports_stale_when_the_graph_predates_head(
     different one, and the answer has to be STALE with the distance in it.
     """
     _stub_graph(tmp_path, "b" * 40)
-    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.53")
+    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.61")
     monkeypatch.setattr(
         "dotfiles_setup.graphify._git_output",
         lambda _root, *args: "77" if "rev-list" in args else "a" * 40,
@@ -1153,7 +1153,7 @@ def test_graphify_health_reports_stale_without_build_provenance(
     this axis exists to end.
     """
     _stub_graph(tmp_path, None)
-    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.53")
+    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.61")
     result = graphify_health(tmp_path)
     assert result.status is GraphifyStatus.STALE
     assert "built_at_commit" in result.detail
@@ -1164,7 +1164,7 @@ def test_graphify_health_reports_stale_when_head_is_unreadable(
 ) -> None:
     """A probe that cannot ask the question must not answer "fine"."""
     _stub_graph(tmp_path, "b" * 40)
-    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.53")
+    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.61")
     monkeypatch.setattr(
         "dotfiles_setup.graphify._git_output", lambda _root, *_args: None
     )
@@ -1182,7 +1182,7 @@ def test_graphify_health_is_fresh_when_the_graph_matches_head(
     STALE — the mirror of the defect it replaced, and just as useless.
     """
     _stub_graph(tmp_path, "d" * 40)
-    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.53")
+    monkeypatch.setattr("dotfiles_setup.graphify._runtime_version", lambda: "0.9.61")
     monkeypatch.setattr(
         "dotfiles_setup.graphify._git_output", lambda _root, *_args: "d" * 40
     )

@@ -4991,10 +4991,11 @@ url = "https://awscli.amazonaws.com/AWSCLIV2-2.36.38.pkg"
 
 [[tools.azure-cli]]
 version = "2.90.0"
-backend = "pipx:azure-cli"
+backend = "pypi:azure-cli"
 
 [tools.azure-cli.options]
-uvx_args = "--prerelease=allow"
+uvx = "false"
+uvx_args = "--prerelease=allow --with pip"
 
 [[tools.biome]]
 version = "2.5.11"
