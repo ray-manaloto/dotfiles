@@ -11,7 +11,7 @@
 # 26.04 manifest-list (multi-arch resolution preserved); Renovate bumps the
 # digest via the custom `ubuntu` manager (docker datasource). Keep in lockstep
 # with docker-bake.hcl's BASE_IMAGE default (the base hash reads bake).
-ARG BASE_IMAGE=ubuntu:26.04@sha256:2260313b31c8c011cd2eebe728008efac1b3982be73eb71348ea2648d2c0e09b
+ARG BASE_IMAGE=ubuntu:26.04@sha256:513c074113a871b51a8d16ab445c88779d6452d937a164fb5cc479f32668a41d
 
 # Builder image for the clang-p2996 compile (#160 T11). DELIBERATELY a
 # separate, rarely-bumped variable (NOT Renovate-tracked): its digest is a
@@ -20,7 +20,7 @@ ARG BASE_IMAGE=ubuntu:26.04@sha256:2260313b31c8c011cd2eebe728008efac1b3982be73eb
 # into the final image (only /opt/clang-p2996 is exported), so pinning it
 # older than BASE_IMAGE is ABI-safe while both are the same ubuntu series.
 # Keep in lockstep with docker-bake.hcl's BUILDER_IMAGE default.
-ARG BUILDER_IMAGE=ubuntu:26.04@sha256:2260313b31c8c011cd2eebe728008efac1b3982be73eb71348ea2648d2c0e09b
+ARG BUILDER_IMAGE=ubuntu:26.04@sha256:513c074113a871b51a8d16ab445c88779d6452d937a164fb5cc479f32668a41d
 
 # NOTE (#160 T11): the former ARG P2996_SOURCE / ARG DEVCONTAINER_BASE_REF
 # FROM-indirection is retired. CI now injects prebuilt tiers as
@@ -423,7 +423,7 @@ ARG CLANG_P2996_REPO=https://github.com/bloomberg/clang-p2996.git
 # p2996_hash.py reads it from bake, so this default was stale drift. The
 # git-refs Renovate manager rewrites BOTH files in lockstep now that they
 # hold the same SHA.
-ARG CLANG_P2996_REF=f349a2d801fbde1f2796dcc003db3d57b3f84515
+ARG CLANG_P2996_REF=0664c3f65dd5b198341412d7402b41f8e766b4b4
 
 # Self-contained compile toolchain (#160 T11): gcc/g++ via build-essential,
 # cmake + ninja from apt (26.04 ships cmake ≥3.28, well past LLVM's 3.20
@@ -568,7 +568,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # jwakely.github.io index (see renovate.json). Compatibility with the current
 # base image is empirical; if `dpkg -i` fails, build from source.
 # renovate: datasource=custom.gcc-latest depName=gcc-latest versioning=loose
-ARG GCC_LATEST_DEB=gcc-latest_17.0.0-20260816git8df013222dff.deb
+ARG GCC_LATEST_DEB=gcc-latest_17.0.0-20260906gitb6dabcdc335a.deb
 # Validation D (#160 T13): kayari publishes NO checksum or signature (all
 # 404), so this locally-computed pin is the .deb's only integrity handle.
 # NOT Renovate-managed (Renovate can't compute a sha): a GCC_LATEST_DEB bump
@@ -576,7 +576,7 @@ ARG GCC_LATEST_DEB=gcc-latest_17.0.0-20260816git8df013222dff.deb
 # the newly-pinned .deb and commits the fix to the Renovate branch — the pin
 # stays byte-exact without the old human-recompute friction. To repair by hand:
 # `uv run --project python dotfiles-setup gcc-sha` (or `--check` to dry-run).
-ARG GCC_LATEST_DEB_SHA256=a9c2f9f7d6189ccff55ccead9ae949d29d45fa32f93268de82ce319223aaa506
+ARG GCC_LATEST_DEB_SHA256=e9171e33334b8ff88dea49fe7dc60cd286e6b94e717f29557b7a3c60d426434b
 # amd64 ONLY, permanently (#698). This is not a gap upstream may close — the
 # maintainer states the policy on the index page: "Only the C and C++ compilers
 # are included, and only for x86_64, in a single large package." Probed

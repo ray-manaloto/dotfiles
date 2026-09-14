@@ -78,7 +78,7 @@ variable "COMPRESSION_OUTPUT" {
 # so a digest bump busts the base cache. Renovate bumps it via the custom
 # `ubuntu` manager; keep in lockstep with the Dockerfile BASE_IMAGE ARG.
 variable "BASE_IMAGE" {
-  default = "ubuntu:26.04@sha256:2260313b31c8c011cd2eebe728008efac1b3982be73eb71348ea2648d2c0e09b"
+  default = "ubuntu:26.04@sha256:513c074113a871b51a8d16ab445c88779d6452d937a164fb5cc479f32668a41d"
 }
 
 variable "DEVCONTAINER_USER" {
@@ -92,7 +92,7 @@ variable "DEVCONTAINER_USER" {
 # bytes into the final image. Keep in lockstep with the Dockerfile
 # BUILDER_IMAGE ARG default.
 variable "BUILDER_IMAGE" {
-  default = "ubuntu:26.04@sha256:2260313b31c8c011cd2eebe728008efac1b3982be73eb71348ea2648d2c0e09b"
+  default = "ubuntu:26.04@sha256:513c074113a871b51a8d16ab445c88779d6452d937a164fb5cc479f32668a41d"
 }
 
 # Pinned commit SHA for Bloomberg's clang-p2996 fork (C++ P2996 reflection).
