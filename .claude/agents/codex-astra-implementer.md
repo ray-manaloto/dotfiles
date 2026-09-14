@@ -84,10 +84,15 @@ mkdir -p .agent/kb/raw
 # Unique per invocation (#1112): two lanes of the same family running at
 # once would otherwise overwrite each other's prompt and read each other's
 # output, and the wrong answer is well-formed enough to look right.
+# CODEX_LANE_ID must be unique PER LANE — never share one across a batch.
 LANE_ID="${CODEX_LANE_ID:-$$-$(date +%s)}"
+case "$LANE_ID" in (""|*[!A-Za-z0-9._-]*)
+  echo "refusing: CODEX_LANE_ID must match [A-Za-z0-9._-]+, got: $LANE_ID"; exit 1;; esac
 PROMPT=".agent/kb/raw/codex-astra-implementer-prompt-$LANE_ID.md"
 OUT=".agent/kb/raw/codex-astra-implementer-result-$LANE_ID.md"
-test ! -e "$OUT" || { echo "refusing: $OUT already exists"; exit 1; }
+# Claim $OUT ATOMICALLY, before codex runs. `codex -o` creates it only on
+# completion, so a mere existence test cannot see a concurrent peer.
+( set -C; : > "$OUT" ) 2>/dev/null || { echo "refusing: $OUT already claimed"; exit 1; }
 
 cat > "$PROMPT" <<'EOF'
 <the seven-part spec, verbatim, including its PREMISES block>
@@ -98,6 +103,8 @@ cat "$PROMPT" | PLANNING_DISABLED=1 codex exec \
   --model gpt-6-astra \
   -c model_reasoning_effort="xhigh" \
   -o "$OUT" -
+
+echo "lane output: $OUT"   # report this path — the coordinator cannot guess it
 ```
 
 **`PLANNING_DISABLED=1` is load-bearing.** Without it the lane inherits this
