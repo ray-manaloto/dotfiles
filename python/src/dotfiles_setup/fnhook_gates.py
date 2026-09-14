@@ -53,8 +53,16 @@ TSC_TOOL = "npm:typescript"
 def tool_spec(repo_root: Path, tool: str) -> str:
     """`<tool>@<version>` using the pin in `mise.toml`, so the two cannot drift."""
     config = tomllib.loads((repo_root / "mise.toml").read_text(encoding="utf-8"))
-    tools = config.get("tools", {})
-    version = tools.get(tool)
+
+    # Claude version is in [env] as CLAUDE_CODE_VERSION (native installer owns PATH).
+    # All other tools are in [tools].
+    if tool == CLAUDE_TOOL:
+        env_config = config.get("env", {})
+        version = env_config.get("CLAUDE_CODE_VERSION")
+    else:
+        tools = config.get("tools", {})
+        version = tools.get(tool)
+
     if not isinstance(version, str):
         message = (
             f"{tool} is not pinned as an exact version in mise.toml — the gate "

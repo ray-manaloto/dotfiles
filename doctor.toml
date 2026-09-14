@@ -253,15 +253,15 @@ gate_tools = ["hk", "uv", "python", "ruff", "npm:renovate"]
 # `~/.local/bin/claude` on PATH order — until something removes that symlink,
 # which `claude update` run as a probe has already done once (2026-09-12).
 #
-# That pin is now `github:anthropics/claude-code` (#1043), which removes the npm
-# failure mode, and this assertion is what keeps the decision honest: a
-# mise-provided claude reports `package-manager`, a leftover npm one reports
-# `npm-global`, and neither is `native`.
+# The pin has been removed from [tools] in mise.toml (#1112). The native
+# installer at ~/.local/bin/claude now wins PATH lookup and manages updates.
+# The gate validates against the version recorded in mise.toml [env], not
+# through mise activation. This assertion enforces the decision.
 #
 # Set to a different method only if you have deliberately adopted a non-native
 # install; set to "" to stop asserting the method at all. Either is a reviewed
 # decision, which is the point of it living here rather than in the module.
-expected_install_method = "package-manager"
+expected_install_method = "native"
 
 # Set false to disable the check entirely. Prefer narrowing
 # `expected_install_method` over switching this off: a disabled check reports

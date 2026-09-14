@@ -26,6 +26,14 @@ binary = "doppler"
 # used by mise's canonical `doppler` registry key (`github:DopplerHQ/cli`).
 github = "DopplerHQ/cli"
 
+[tool.claude-code]
+mise_key = "claude-code"
+binary = "claude"
+# Claude Code is a native-installed tool owned by ~/.local/bin/claude,
+# which self-updates. This entry records the version the gate validates
+# against. GitHub is the upstream for release notes.
+github = "anthropics/claude-code"
+
 [tool.graphify]
 python_package = "graphifyy"
 python_project_dir = "python"
