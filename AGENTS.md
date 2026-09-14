@@ -21,16 +21,17 @@ runner-validation leg, #676/#736) → `ci-gate`;
 mise install                                 # Install all tools
 mise run lint                                # Run lint checks (hk under a hard timeout)
 mise run up / down                           # Bring up / tear down devcontainer (.devcontainer/AGENTS.md)
-mise run sync / ship / automerge / land -- <PR#>  # Sync + gated PR loop; automerge = bot PRs (skill: pr-workflow)
-mise run verify-container-latest             # Gate: container on latest branch code + base (hard)
+mise run sync / ship / automerge / land -- <PR#>  # Gated PR loop; automerge = bot PRs (pr-workflow)
+mise run verify-container-latest             # Gate: container on latest + base
 uv run --project python pytest tests/ -x -q  # Run tests (see python/AGENTS.md)
-mise run verify                    # Run structured verification contracts
+mise run verify                              # Structured verification contracts
 mise run pin-actions                         # Verify GHA actions are SHA-pinned
 mise run lint-docs                           # Validate agent documentation (agnix)
-mise run lock -- "<backend/name>"            # Re-lock ONE host tool (bare form is destructive, #370)
-mise run lock-shared -- "<name>"             # shared.toml tools — resolves on linux, NOT the host (#790)
+mise run lock -- "<backend/name>"            # Re-lock ONE host tool (bare = destructive, #370)
+mise run lock-shared -- "<name>"             # shared.toml tools: linux-resolved, NOT host (#790)
 mise run lock-image                          # Regenerate the IMAGE locks (#650; routes to amd64)
-mise run fnhook-types-refresh                # Regenerate .claude/types/*.d.ts (#1026)
+mise run fnhook-types-refresh                # Regen .claude/types/*.d.ts (#1026)
+mise run plugin-health / dependency-currency # Doctor LIVE checks (rc=verdict)
 ```
 
 The devloop is `mise run up` → work inside the container → `mise run down`.
