@@ -47,15 +47,23 @@ seatbelt, not a cage — treat it as binding on yourself.
 
 ```bash
 mkdir -p .agent/kb/raw
-cat > .agent/kb/raw/codex-astra-operator-prompt.md <<'EOF'
+# Unique per invocation (#1112): two lanes of the same family running at
+# once would otherwise overwrite each other's prompt and read each other's
+# output, and the wrong answer is well-formed enough to look right.
+LANE_ID="${CODEX_LANE_ID:-$$-$(date +%s)}"
+PROMPT=".agent/kb/raw/codex-astra-operator-prompt-$LANE_ID.md"
+OUT=".agent/kb/raw/codex-astra-operator-result-$LANE_ID.md"
+test ! -e "$OUT" || { echo "refusing: $OUT already exists"; exit 1; }
+
+cat > "$PROMPT" <<'EOF'
 <the ONE task to run, the repo path, and what to report>
 EOF
 
-cat .agent/kb/raw/codex-astra-operator-prompt.md | PLANNING_DISABLED=1 codex exec \
+cat "$PROMPT" | PLANNING_DISABLED=1 codex exec \
   --ephemeral --sandbox danger-full-access \
   --model gpt-6-astra \
   -c model_reasoning_effort="xhigh" \
-  -o .agent/kb/raw/codex-astra-operator-result.md -
+  -o "$OUT" -
 ```
 
 **`PLANNING_DISABLED=1` is load-bearing too.** Without it the lane inherits this

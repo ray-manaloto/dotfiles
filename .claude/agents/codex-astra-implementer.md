@@ -81,15 +81,23 @@ each is consistent across all sections.** If two disagree, refuse and name them.
 
 ```bash
 mkdir -p .agent/kb/raw
-cat > .agent/kb/raw/codex-astra-implementer-prompt.md <<'EOF'
+# Unique per invocation (#1112): two lanes of the same family running at
+# once would otherwise overwrite each other's prompt and read each other's
+# output, and the wrong answer is well-formed enough to look right.
+LANE_ID="${CODEX_LANE_ID:-$$-$(date +%s)}"
+PROMPT=".agent/kb/raw/codex-astra-implementer-prompt-$LANE_ID.md"
+OUT=".agent/kb/raw/codex-astra-implementer-result-$LANE_ID.md"
+test ! -e "$OUT" || { echo "refusing: $OUT already exists"; exit 1; }
+
+cat > "$PROMPT" <<'EOF'
 <the seven-part spec, verbatim, including its PREMISES block>
 EOF
 
-cat .agent/kb/raw/codex-astra-implementer-prompt.md | PLANNING_DISABLED=1 codex exec \
+cat "$PROMPT" | PLANNING_DISABLED=1 codex exec \
   --ephemeral --sandbox danger-full-access \
   --model gpt-6-astra \
   -c model_reasoning_effort="xhigh" \
-  -o .agent/kb/raw/codex-astra-implementer-result.md -
+  -o "$OUT" -
 ```
 
 **`PLANNING_DISABLED=1` is load-bearing.** Without it the lane inherits this

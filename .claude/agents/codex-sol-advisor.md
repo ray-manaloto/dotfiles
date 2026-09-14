@@ -80,16 +80,24 @@ evidence:
 
 ```bash
 mkdir -p .agent/kb/raw
-cat > .agent/kb/raw/codex-sol-advisor-prompt.md <<'EOF'
+# Unique per invocation (#1112): two lanes of the same family running at
+# once would otherwise overwrite each other's prompt and read each other's
+# output, and the wrong answer is well-formed enough to look right.
+LANE_ID="${CODEX_LANE_ID:-$$-$(date +%s)}"
+PROMPT=".agent/kb/raw/codex-sol-advisor-prompt-$LANE_ID.md"
+OUT=".agent/kb/raw/codex-sol-advisor-verdict-$LANE_ID.md"
+test ! -e "$OUT" || { echo "refusing: $OUT already exists"; exit 1; }
+
+cat > "$PROMPT" <<'EOF'
 <the decision, the constraints, the options already considered, and the
 file:line evidence you gathered — plus the repo paths codex should read itself>
 EOF
 
-cat .agent/kb/raw/codex-sol-advisor-prompt.md | PLANNING_DISABLED=1 codex exec \
+cat "$PROMPT" | PLANNING_DISABLED=1 codex exec \
   --ephemeral --sandbox read-only \
   --model gpt-5.6-sol \
   -c model_reasoning_effort="xhigh" \
-  -o .agent/kb/raw/codex-sol-advisor-verdict.md -
+  -o "$OUT" -
 ```
 
 **`PLANNING_DISABLED=1` is load-bearing too.** Without it the lane inherits this
