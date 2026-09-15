@@ -13,7 +13,7 @@ import pathlib
 import shutil
 import subprocess
 import tempfile
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -78,6 +78,69 @@ def check_schema_currency(repo_root: Path, current_version: str) -> tuple[bool, 
         "was upgraded."
     )
     return (True, msg)
+
+
+#: The three keys a custom agent file MUST define, per codex's own schema table.
+#: They are agent-file-only: `config.toml` declares `developer_instructions` but
+#: NOT `name` or `description`, and it sets `additionalProperties: false` — so an
+#: agent file pointed at the raw config schema is rejected for two of its three
+#: required keys. Measured 2026-09-14: all six specialists went INVALID that way.
+AGENT_ONLY_KEYS: Final = ("name", "description")
+
+
+def config_schema_path(repo_root: Path) -> Path:
+    """The vendored codex `config.toml` JSON schema."""
+    return repo_root / "schemas" / "codex-config.json"
+
+
+def agent_schema_path(repo_root: Path) -> Path:
+    """The DERIVED schema that validates a `.codex/agents/*.toml` file."""
+    return repo_root / "schemas" / "codex-agent.json"
+
+
+def derive_agent_schema(config_schema: dict[str, Any]) -> dict[str, Any]:
+    """Build the agent-file schema from codex's `config.toml` schema.
+
+    An agent file accepts every `config.toml` key PLUS `name` and
+    `description`, and requires those two plus `developer_instructions`.
+
+    `additionalProperties` stays False deliberately: that is what makes a typo'd
+    or wrong-typed key an ERROR rather than silent. Codex itself drops an invalid
+    agent file with no message, no warning and no exit code, so this schema is
+    the only thing standing between a malformed file and an agent that simply
+    does not exist.
+    """
+    return {
+        "$schema": config_schema.get(
+            "$schema", "http://json-schema.org/draft-07/schema#"
+        ),
+        "title": "Codex custom agent file (.codex/agents/*.toml)",
+        "description": (
+            "DERIVED from schemas/codex-config.json. Regenerate with "
+            "`mise run codex-schema-generate`; never hand-edit."
+        ),
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["name", "description", "developer_instructions"],
+        "properties": {
+            "name": {
+                "type": "string",
+                "description": (
+                    "Agent name codex uses when spawning. This is the identity; "
+                    "the filename is convention only."
+                ),
+            },
+            "description": {
+                "type": "string",
+                "description": (
+                    "When codex should use this agent. THIS IS THE ROUTING "
+                    "SIGNAL — overlapping descriptions send work to the wrong agent."
+                ),
+            },
+            **config_schema.get("properties", {}),
+        },
+        "definitions": config_schema.get("definitions", {}),
+    }
 
 
 def generate_schema(repo_root: Path, output_dir: Path | None = None) -> bool:

@@ -55,9 +55,9 @@ the real name is **`gpt-5.3-codex-spark`**. Both would have failed on first spaw
 
 One agent per ARTIFACT, because `description` is what codex routes on and artifacts
 are naturally disjoint where phases are not (`design` and `implement` overlap, and
-description collision is the documented mis-routing risk). Each agent OWNS a repo
+description collision is the documented wrong-agent routing risk). Each agent OWNS a repo
 gate, so its success signal is that gate's real rc. PHASE is expressed inside
-`developer_instructions`, where it cannot cause mis-routing.
+`developer_instructions`, where it cannot cause wrong-agent routing.
 
 Artifact axes present in this repo: `python/`, `*.pkl` + `hk.pkl`, `.github/`,
 `.devcontainer/` + image, `docs/` + `.claude/rules/`, `tests/`.

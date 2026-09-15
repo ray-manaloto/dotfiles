@@ -215,3 +215,59 @@ class TestGetInstalledCodexVersion:
             mock_run.side_effect = subprocess.CalledProcessError(1, "codex")
             with pytest.raises(subprocess.CalledProcessError):
                 codex_schema.get_installed_codex_version()
+
+
+class TestAgentSchemaDerivation:
+    """The agent schema is DERIVED; it must not drift from its source."""
+
+    def test_committed_agent_schema_matches_the_derivation(self) -> None:
+        """`schemas/codex-agent.json` must equal derive(codex-config.json).
+
+        It is generated, so a hand-edit or a stale copy after a codex bump is
+        the failure this catches. The fail arm is below: a mutated property must
+        make this test red, or the comparison is decoration.
+        """
+        root = pathlib.Path(__file__).parent.parent
+        cfg = json.loads(codex_schema.config_schema_path(root).read_text())
+        committed = json.loads(codex_schema.agent_schema_path(root).read_text())
+        assert committed == codex_schema.derive_agent_schema(cfg), (
+            "run `mise run codex-schema-generate` — the agent schema is stale"
+        )
+
+    def test_derivation_allows_the_agent_only_keys_and_requires_all_three(
+        self,
+    ) -> None:
+        """`name`/`description` are agent-only; the config schema lacks them.
+
+        Pointing an agent file at the RAW config schema rejects two of its three
+        required keys — measured, all six specialists went INVALID that way. This
+        pins the reason the derived schema exists.
+        """
+        cfg = {"properties": {"developer_instructions": {"type": "string"}}}
+        for key in codex_schema.AGENT_ONLY_KEYS:
+            assert key not in cfg["properties"], (
+                f"{key} must NOT be a config.toml key — that is the whole point"
+            )
+        derived = codex_schema.derive_agent_schema(cfg)
+        assert set(derived["required"]) == {
+            "name",
+            "description",
+            "developer_instructions",
+        }
+        for key in codex_schema.AGENT_ONLY_KEYS:
+            assert key in derived["properties"]
+        assert derived["additionalProperties"] is False, (
+            "a permissive agent schema cannot catch a wrong-typed key, which is "
+            "the silent-drop failure it exists to prevent"
+        )
+
+    def test_derivation_preserves_mcp_servers_as_an_object(self) -> None:
+        """The one type that mattered: `mcp_servers` must stay an OBJECT.
+
+        `mcp_servers = ["context7"]` made every agent file invalid and codex
+        dropped them silently. If the derivation ever loosened this, the schema
+        would stop catching the exact defect that motivated it.
+        """
+        root = pathlib.Path(__file__).parent.parent
+        derived = json.loads(codex_schema.agent_schema_path(root).read_text())
+        assert derived["properties"]["mcp_servers"]["type"] == "object"

@@ -36,3 +36,22 @@ version = "1.50.1"
 source = "https://raw.githubusercontent.com/crate-ci/typos/v1.50.1/config.schema.json"
 pin_source = ".config/mise/conf.d/shared.toml"
 sha256 = "c7ba0c41d3e216c562b021a296de833c2c070d76f4ae550705d98bc2e1f6395b"
+
+# Codex's own config.toml schema. This is the schema that validates a
+# `.codex/agents/*.toml` custom agent file — NOT the app-server protocol bundle
+# that `codex app-server generate-json-schema` emits, which contains no
+# `mcp_servers` at all. It is published rather than generated, so `version` is
+# the codex release it was fetched against.
+#
+# It earns its place by measurement: it declares `mcp_servers` as
+# `"type": "object"` ("Definition for MCP servers that Codex can reach out to"),
+# so `mcp_servers = ["context7"]` is schema-INVALID. Codex drops such a file
+# silently, with no error and no exit code — six specialist agents sat on disk
+# and none loaded. A `#:schema` directive catches that before codex ever sees it.
+[[schema]]
+tool = "codex"
+file = "schemas/codex-config.json"
+version = "0.154.0"
+source = "https://learn.chatgpt.com/docs/config-schema.json"
+pin_source = ".config/mise/conf.d/shared.toml"
+sha256 = "2e1fcf1cbb20f255c3baca2e174b4a3c954cef577a130587b8935e2d12c8ade6"

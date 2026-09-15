@@ -1,3 +1,4 @@
+#:schema ../../schemas/codex-agent.json
 name = "sdlc-python-specialist"
 description = "Changes to Python library modules in python/src/dotfiles_setup/ and python/tests/. Owns verification gate: pytest tests/"
 model_reasoning_effort = "high"

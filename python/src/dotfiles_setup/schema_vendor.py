@@ -112,6 +112,11 @@ _PIN_RESOLVERS: dict[str, Any] = {
     "typos": lambda root: _read_shared_toml_pin("typos", root),
     "ruff": lambda root: _read_uv_lock_pin("ruff", root),
     "mise": _read_setup_mise_pin,
+    # codex is pinned in the shared host<->image fragment under its FULL backend
+    # key, `npm:@openai/codex`, as a dict (`{ version = "...", allow_builds = ... }`)
+    # — not as a bare `codex` entry in root mise.toml, which has no codex key at
+    # all. `_read_shared_toml_pin` already unwraps the dict shape, same as typos.
+    "codex": lambda root: _read_shared_toml_pin("npm:@openai/codex", root),
 }
 
 

@@ -1,3 +1,4 @@
+#:schema ../../schemas/codex-agent.json
 # NOTE: `mcp_servers` is deliberately ABSENT. In config.toml it DEFINES servers
 # (a table of name -> command/url), it does not select existing ones by name. An
 # array of names makes this file invalid and codex DROPS IT SILENTLY — measured
