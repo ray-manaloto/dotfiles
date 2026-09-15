@@ -30,7 +30,7 @@ mise run lint-docs                           # Validate agent documentation (agn
 mise run lock -- "<backend/name>"            # Re-lock ONE host tool (bare = destructive, #370)
 mise run lock-shared -- "<name>"             # shared.toml tools: linux-resolved, NOT host (#790)
 mise run lock-image                          # Regenerate the IMAGE locks (#650; routes to amd64)
-mise run fnhook-types-refresh                # Regen .claude/types/*.d.ts (#1026)
+mise run schema-vendor-refresh               # Re-vendor upstream files (#1026)
 mise run plugin-health / dependency-currency # Doctor LIVE checks (rc=verdict)
 ```
 

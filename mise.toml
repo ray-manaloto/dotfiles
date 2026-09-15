@@ -211,7 +211,6 @@ HK_MISE = "1"
 
 # Native claude installer owns the PATH. This records the version the
 # gate validates against; mise exec can resolve it without the pin activating.
-CLAUDE_CODE_VERSION = "2.1.271"
 
 # #154: the hk `gitleaks` builtin runs `gitleaks dir` (whole-tree scan, no
 # --config flag), so point gitleaks at the repo allowlist config via env — it
@@ -289,10 +288,6 @@ run = "uv run --project python dotfiles-setup sdlc-team"
 [tasks.fnhook-gates]
 description = "Reject invalid or untyped Claude Code function-hook modules"
 run = "uv run --project python dotfiles-setup fnhook-gates"
-
-[tasks.fnhook-types-refresh]
-description = "Regenerate Claude Code function-hook declarations from the pinned harness"
-run = "uv run --project python dotfiles-setup fnhook-types-refresh"
 
 [tasks.check]
 description = "Run full quality check (pre-commit + test)"

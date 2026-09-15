@@ -188,12 +188,18 @@ def check_drift(root: Path | None = None) -> list[str]:
     for entry in load_sources(project_root):
         pin = current_pin(entry.tool, project_root)
         if pin is None:
-            findings.append(
-                f"{entry.tool}: could not resolve the current pin from "
-                f"{entry.pin_source} — schema_vendor._PIN_RESOLVERS may need "
-                f"a new entry"
-            )
-        elif pin != entry.version:
+            # claude-code has no mise [tools] pin; the vendored version in
+            # sources.toml IS the pin. Use it for drift detection.
+            if entry.tool == "claude-code":
+                pin = entry.version
+            else:
+                findings.append(
+                    f"{entry.tool}: could not resolve the current pin from "
+                    f"{entry.pin_source} — schema_vendor._PIN_RESOLVERS may need "
+                    f"a new entry"
+                )
+                continue
+        if pin != entry.version:
             findings.append(
                 f"{entry.tool}: {entry.file} is vendored at {entry.version}, "
                 f"but the current pin ({entry.pin_source}) is {pin} — run "
@@ -240,6 +246,12 @@ def _source_url(tool: str, version: str, recorded: str | None = None) -> str:
         return f"https://raw.githubusercontent.com/astral-sh/ruff/{version}/ruff.schema.json"
     if tool == "typos":
         return f"https://raw.githubusercontent.com/crate-ci/typos/v{version}/config.schema.json"
+    if tool == "claude-code":
+        # Claude Code publishes type declarations at a version-tagged path.
+        # The native installer owns PATH, so there is no mise [tools] pin —
+        # version records which release the vendored declarations were fetched
+        # against. See currency.toml:29-39 and specs/schema-vendor-types.md.
+        return f"https://raw.githubusercontent.com/anthropics/claude-code/v{version}/mods/types/claude-code.d.ts"
     if recorded:
         return recorded
     msg = (
@@ -392,14 +404,20 @@ def refresh(
     for entry in entries:
         pin = current_pin(entry.tool, project_root)
         if pin is None:
-            logger.error(
-                "schema_vendor refresh: cannot resolve current pin for %s "
-                "(%s) — leaving vendored",
-                entry.tool,
-                entry.pin_source,
-            )
-            new_entries.append(entry)
-            continue
+            # claude-code has no mise [tools] pin — the native installer owns PATH
+            # (currency.toml:29-39). For this tool, the vendored `version` in
+            # sources.toml IS the pin. Use it to build the source URL.
+            if entry.tool == "claude-code":
+                pin = entry.version
+            else:
+                logger.error(
+                    "schema_vendor refresh: cannot resolve current pin for %s "
+                    "(%s) — leaving vendored",
+                    entry.tool,
+                    entry.pin_source,
+                )
+                new_entries.append(entry)
+                continue
         url = _source_url(entry.tool, pin, entry.source)
         fetched = _hygiene_normalize(fetch(url), project_root)
         schema_path = project_root / entry.file

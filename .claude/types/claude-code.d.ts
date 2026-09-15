@@ -9936,6 +9936,8 @@ declare module 'claude-code' {
       subagent_type?: string
       /** Optional model override for this agent. Takes precedence over the agent definition's model frontmatter and the configured default subagent model. If omitted, uses the agent definition's model, else the default (inherits from the parent unless a default subagent model is configured). Ignored for subagent_type: "fork" — forks always inherit the parent model. */
       model?: "sonnet" | "opus" | "haiku" | "fable"
+      /** Agents run in the background by default; you will be notified when one completes. Set to false only when your very next action depends on this agent's result and nothing else could usefully happen while it runs — otherwise leave it in the background so the user can hand you other work. */
+      run_in_background?: boolean
       /** Name for the spawned agent. Makes it addressable via SendMessage({to: name}) while running. */
       name?: string
       /** Deprecated; ignored. The session has a single implicit team. */
@@ -9964,7 +9966,7 @@ declare module 'claude-code' {
       prompt: string
       /** true (default) = fire on every cron match until deleted or auto-expired after 7 days. false = fire once at the next match, then auto-delete. Use false for "remind me at X" one-shot requests with pinned minute/hour/dom/month. */
       recurring?: boolean
-      /** Has no effect — durable persistence is not available. All jobs are session-only (in-memory, gone when this Claude session ends). */
+      /** true = persist to .claude/scheduled_tasks.json and survive restarts. false (default) = in-memory only, dies when this Claude session ends. Use true only when the user asks the task to survive across sessions. */
       durable?: boolean
     }
     CronDelete: {
@@ -9972,61 +9974,6 @@ declare module 'claude-code' {
       id: string
     }
     CronList: {}
-    DesignSync: {
-      method: "list_projects" | "get_project" | "list_files" | "get_file" | "finalize_plan" | "write_files" | "delete_files" | "register_assets" | "unregister_assets" | "create_project" | "report_validate"
-      /** Required for all methods except list_projects and create_project */
-      projectId?: string
-      /** get_file: file path to read */
-      path?: string
-      /** finalize_plan: exact paths or glob patterns that will be written. `*` matches within a single segment, `**` matches any depth (e.g. `ui_kits/acme/** /*.html`). Max 3 `*`/`**` wildcards per pattern and max 256 entries — use broader globs to cover more files rather than enumerating paths. */
-      writes?: string[]
-      /** finalize_plan: exact paths or glob patterns that will be deleted (same syntax and limits as writes). */
-      deletes?: string[]
-      /** write_files/delete_files/register_assets/unregister_assets: token from a prior finalize_plan call */
-      planId?: string
-      /** write_files: file contents to write (max 256 per call — split larger bundles across multiple write_files calls under the same planId). */
-      files?: Array<{
-        /** Path within the project, e.g. components/button/index.html */
-        path: string
-        /** Path on disk to read file contents from, relative to the localDir approved at finalize_plan. Preferred for anything you have on disk: the tool reads, encodes, and uploads directly so the contents never enter the model context. Mutually exclusive with data. */
-        localPath?: string
-        /** Inline file contents (UTF-8 text, or base64 when encoding is "base64"). For small dynamic content only — anything you have on disk should use localPath instead. */
-        data?: string
-        /** Set to "base64" for binary inline data */
-        encoding?: "base64"
-        mimeType?: string
-      }>
-      /** delete_files: paths to delete. unregister_assets: paths whose Design System pane card should be removed. Max 256 per call — split larger batches across multiple calls under the same planId. */
-      paths?: string[]
-      /** create_project: name for the new design-system project */
-      name?: string
-      /** register_assets: cards to register in the Design System pane. Each path must be in the finalized plan. Run after write_files succeeds. Max 256 per call. */
-      assets?: Array<{
-        /** Short human-readable label ("Primary buttons"), not a path */
-        name: string
-        /** Project-relative path to the preview/spec file this card renders */
-        path: string
-        /** Variants shown ("Primary / secondary / ghost, 3 sizes") */
-        subtitle?: string
-        /** Card dimensions in the Design System pane */
-        viewport?: {
-          width: number
-          height?: number
-        }
-        /** Free-form section label for the Design System pane (max 64 chars). Use the source design system's own categorization if it has one — e.g. Material has Buttons/Cards/Forms/etc., a corporate kit might have Actions/Forms/Navigation. Common foundational labels: "Type", "Colors", "Spacing", "Components", "Brand". The pane groups by the value you send. */
-        group?: string
-      }>
-      /** finalize_plan: directory the bundle was built into. write_files with localPath may only read files inside this directory. Defaults to the current working directory. Resolved to an absolute path and shown in the permission prompt. */
-      localDir?: string
-      /** report_validate: aggregate from the final .render-check.json — counts only, no component names or paths. */
-      counts?: {
-        total: number
-        bad: number
-        thin: number
-        variantsIdentical: number
-        iterations: number
-      }
-    }
     Edit: {
       /** The absolute path to the file to modify */
       file_path: string
@@ -10055,23 +10002,6 @@ declare module 'claude-code' {
       /** Not available in this build; leave unset. */
       q?: string
     }
-    ListMcpResourcesTool: {
-      /** Optional server name to filter resources by */
-      server?: string
-    }
-    Monitor: {
-      /** Short human-readable description of what you are monitoring (shown in notifications). */
-      description: string
-      /** Kill the monitor after this deadline. Default 300000ms. Deadlines above 600000ms are capped to 600000ms. You are notified at expiry and can re-arm. */
-      timeout_ms: number
-      /** Shell command or script. Each stdout line is an event; exit ends the watch. */
-      command?: string
-      /** WebSocket to open. Each text frame is an event; binary frames are reported as a placeholder line. Socket close ends the watch. Cannot be combined with command. */
-      ws?: {
-        url: string
-        protocols?: string[]
-      }
-    }
     NotebookEdit: {
       /** The absolute path to the Jupyter notebook file to edit (must be absolute, not relative) */
       notebook_path: string
@@ -10084,10 +10014,17 @@ declare module 'claude-code' {
       /** The type of edit to make (replace, insert, delete). Defaults to replace. */
       edit_mode?: "replace" | "insert" | "delete"
     }
-    PushNotification: {
-      /** The notification body. Keep it under 200 characters; mobile OSes truncate. */
-      message: string
-      status: "proactive"
+    PowerShell: {
+      /** The PowerShell command to execute */
+      command: string
+      /** Optional timeout in milliseconds (max 600000) */
+      timeout?: number
+      /** Clear, concise description of what this command does in active voice. */
+      description?: string
+      /** Set to true to run this command in the background. */
+      run_in_background?: boolean
+      /** Set this to true to dangerously override sandbox mode and run commands without sandboxing. */
+      dangerouslyDisableSandbox?: boolean
     }
     Read: {
       /** The absolute path to the file to read */
@@ -10098,29 +10035,6 @@ declare module 'claude-code' {
       limit?: number
       /** Page range for PDF files (e.g., "1-5", "3", "10-20"). Only applicable to PDF files. Maximum 20 pages per request. */
       pages?: string
-    }
-    ReadMcpResourceDirTool: {
-      /** The MCP server name */
-      server: string
-      /** The directory resource URI to list */
-      uri: string
-    }
-    ReadMcpResourceTool: {
-      /** The MCP server name */
-      server: string
-      /** The resource URI to read */
-      uri: string
-    }
-    RemoteTrigger: {
-      action: "list" | "get" | "create" | "update" | "run" | "create_webhook_trigger" | "list_runs" | "get_run_log"
-      /** Required for get, update, run, and list_runs */
-      trigger_id?: string
-      /** Required for get_run_log: a run session id (cse_… or session_…, from list_runs) */
-      session_id?: string
-      /** next_cursor from a previous list_runs or get_run_log page */
-      cursor?: string
-      /** Required for create and update; optional for run */
-      body?: {}
     }
     ReportFindings: {
       /** Effort level the review ran at */
@@ -10162,36 +10076,10 @@ declare module 'claude-code' {
       to: unknown & unknown
       /** A 5-10 word label for your own transcript row (not transmitted — the recipient previews the first line of `message`). Truncated to 200 characters rather than rejected. */
       summary?: string
-      message: string | {
-        type: "shutdown_request"
-        reason?: string
-      } | {
-        type: "shutdown_response"
-        request_id: unknown & unknown
-        approve: boolean
-        reason?: string
-      } | {
-        type: "plan_approval_response"
-        request_id: unknown & unknown
-        approve: boolean
-        feedback?: string
-      }
+      /** Plain text message content. The recipient's human sees only the FIRST LINE as a one-line preview until they expand it, so make the first line a clear, self-contained sentence saying what this is about — not a greeting, preamble, or bare @-mention. */
+      message: string
       /** Ask a session ON THIS MACHINE to send you ONE notice when it next goes idle (finishes its turn with nothing queued) or exits — opt-in, one-shot, no polling. With a message: deliver it now AND subscribe. Without a message (omit it): a pure subscription that costs the other session nothing. */
       notify_when_idle?: boolean
-    }
-    SendUserMessage: {
-      /** The message for the user. Supports markdown formatting. */
-      message: string
-      /** Optional attachments for the user to see alongside your message. Each entry is either a file path (absolute or relative to cwd) for a file you can read locally, or a pre-resolved {file_uuid, file_name, size, is_image} object you obtained from a device tool such as attach_file. */
-      attachments?: Array<string | {
-        file_uuid: string
-        file_name: string
-        size: number
-        is_image: boolean
-        media_type?: string
-      }>
-      /** Use 'proactive' when you're surfacing something the user hasn't asked for and needs to see now — task completion while they're away, a blocker you hit, an unsolicited status update. Use 'normal' when replying to something the user just said. */
-      status: "normal" | "proactive"
     }
     Skill: {
       /** The name of a skill from the available-skills list. Do not guess names. */
@@ -10450,68 +10338,6 @@ declare module 'claude-code' {
         durable?: boolean
       }[]
     }
-    DesignSync: {
-      method: "list_projects"
-      notice?: string
-      projects: {
-        projectId: string
-        name: string
-        ownerDisplayName?: string
-        isOwned?: boolean
-        updatedAt?: string
-      }[]
-    } | {
-      method: "get_project"
-      notice?: string
-      projectId: string
-      name: string
-      type?: string
-      ownerDisplayName?: string
-      isOwned?: boolean
-      canEdit?: boolean
-    } | {
-      method: "list_files"
-      notice?: string
-      paths: string[]
-    } | {
-      method: "get_file"
-      notice?: string
-      path: string
-      content: string
-      contentType: string
-      isBase64: boolean
-      truncated: boolean
-    } | {
-      method: "finalize_plan"
-      notice?: string
-      planId: string
-      writes: string[]
-      deletes: string[]
-    } | {
-      method: "write_files"
-      notice?: string
-      written: number
-    } | {
-      method: "delete_files"
-      notice?: string
-      deleted: number
-    } | {
-      method: "register_assets"
-      notice?: string
-      registered: number
-    } | {
-      method: "unregister_assets"
-      notice?: string
-      unregistered: number
-    } | {
-      method: "create_project"
-      notice?: string
-      projectId: string
-      name: string
-    } | {
-      method: "report_validate"
-      notice?: string
-    }
     Edit: {
       /** The file path that was edited */
       filePath: string
@@ -10565,26 +10391,6 @@ declare module 'claude-code' {
       /** Formatted list of reachable agents */
       listing: string
     }
-    ListMcpResourcesTool: Array<{
-      /** Resource URI */
-      uri: string
-      /** Resource name */
-      name: string
-      /** MIME type of the resource */
-      mimeType?: string
-      /** Resource description */
-      description?: string
-      /** Server that provides this resource */
-      server: string
-    }>
-    Monitor: {
-      /** ID of the background monitor task. */
-      taskId: string
-      /** Timeout deadline in milliseconds (0 when persistent). */
-      timeoutMs: number
-      /** No timeout — runs until TaskStop or session end. */
-      persistent?: boolean
-    }
     NotebookEdit: {
       /** The new source code that was written to the cell */
       new_source: string
@@ -10607,13 +10413,53 @@ declare module 'claude-code' {
       /** The updated notebook content after modification */
       updated_file: string
     }
-    PushNotification: {
-      message: string
-      pushSent?: boolean
-      localSent?: boolean
-      disabledReason?: "config_off" | "user_present" | "no_transport"
-      /** ISO timestamp captured at tool execution on the emitting process. Optional — resumed sessions replay pre-sentAt outputs verbatim. */
-      sentAt?: string
+    PowerShell: {
+      /** The standard output of the command */
+      stdout: string
+      /** The standard error output of the command */
+      stderr: string
+      /** Whether the command was interrupted */
+      interrupted: boolean
+      /** Semantic interpretation for non-error exit codes with special meaning */
+      returnCodeInterpretation?: string
+      /** Flag to indicate if stdout contains image data */
+      isImage?: boolean
+      /** Path to persisted full output when too large for inline */
+      persistedOutputPath?: string
+      /** Total output size in bytes when persisted */
+      persistedOutputSize?: number
+      /** ID of the background task if command is running in background */
+      backgroundTaskId?: string
+      /** True if the user manually backgrounded the command with Ctrl+B */
+      backgroundedByUser?: boolean
+      /** @internal True if a plugin's turn abort moved the running command to the background */
+      backgroundedByTurnAbort?: boolean
+      /** @internal True if the command was moved to the background so a message queued for the model could reach it */
+      backgroundedToDeliverMessage?: boolean
+      /** Set when the command hit its timeout and was auto-backgrounded; the timeout value in ms */
+      timedOutAfterMs?: number
+      /** True when this backgrounded command is owned by a synchronous subagent and is therefore terminated when that agent gives its final response; absent when the command survives (main loop, async subagents) */
+      backgroundEndsWithFinalResponse?: true
+      /** Structured classification of git/gh operations detected in this command (commit/push/merge/rebase/PR). Client-facing — lets clients render git activity without re-parsing stdout; not surfaced to the model. */
+      gitOperation?: {
+        commit?: {
+          sha: string
+          kind: "committed" | "amended" | "cherry-picked"
+          branch?: string
+        }
+        push?: {
+          branch: string
+        }
+        branch?: {
+          ref: string
+          action: "merged" | "rebased"
+        }
+        pr?: {
+          number: number
+          url?: string
+          action: "created" | "edited" | "merged" | "commented" | "closed" | "reopened" | "ready" | "draft" | "auto-merge-enabled" | "auto-merge-disabled"
+        }
+      }
     }
     Read: {
       type: "text"
@@ -10707,38 +10553,6 @@ declare module 'claude-code' {
       /** Set when the dedup matched a startup-seeded entry (CLAUDE.md / nested memory) rather than a prior Read tool_result */
       source?: "seeded"
     }
-    ReadMcpResourceDirTool: {
-      /** Direct children of the directory resource. Subdirectories appear with mimeType "inode/directory". */
-      resources: Array<{
-        /** Child resource URI */
-        uri: string
-        /** Child resource name */
-        name: string
-        /** Child MIME type */
-        mimeType?: string
-      }>
-      /** Human-readable error when the server could not list the directory */
-      error?: string
-    }
-    ReadMcpResourceTool: {
-      contents: Array<{
-        /** Resource URI */
-        uri: string
-        /** MIME type of the content */
-        mimeType?: string
-        /** Text content of the resource */
-        text?: string
-        /** Path where binary blob content was saved */
-        blobSavedTo?: string
-      }>
-      /** Human-readable error when the server could not read the resource */
-      error?: string
-    }
-    RemoteTrigger: {
-      status: number
-      json: string
-      summary?: string
-    }
     ReportFindings: {
       /** Number of findings reported */
       count: number
@@ -10777,23 +10591,6 @@ declare module 'claude-code' {
       cancelledWakeups?: number
     }
     SendMessage: unknown
-    SendUserMessage: {
-      /** The message */
-      message: string
-      /** Resolved attachment metadata */
-      attachments?: {
-        path: string
-        size: number
-        isImage: boolean
-        file_uuid?: string
-        media_type?: string
-        pathValidated?: boolean
-        upload_error?: string
-      }[]
-      /** ISO timestamp captured at tool execution on the emitting process. Optional — resumed sessions replay pre-sentAt outputs verbatim. */
-      sentAt?: string
-      rendered_locally?: boolean
-    }
     Skill: {
       /** Whether the skill is valid */
       success: boolean

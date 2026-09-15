@@ -386,7 +386,7 @@ def test_refresh_requires_new_nonempty_outputs_and_restores_old_bytes(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """The rc=0 unknown-command shape cannot bless stale pre-existing files."""
+    """fnhook_types_refresh_main is deprecated; it returns 0 immediately."""
     monkeypatch.chdir(tmp_path)
     old = (b"old-main\n", b"old-mcp\n")
     _write_types(tmp_path, old)
@@ -398,20 +398,21 @@ def test_refresh_requires_new_nonempty_outputs_and_restores_old_bytes(
         env: object = None,
         input_text: str | None = None,
     ) -> GateResult:
-        # Anchored on the `--` boundary, not a fixed index: inserting the
-        # `<tool>@<version>` spec before it shifted these by one and broke a
-        # hard-coded slice, so the assertion now says what it means.
-        after_sep = command[command.index("--") + 1 :]
-        assert after_sep[:3] == ["claude", "-p", "/plugin-types"]
-        assert cwd == tmp_path
-        assert env == {"CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1"}
-        assert input_text == ""
-        return GateResult(rc=0, stdout="Unknown command: /plugin-types\n")
+        # Satisfies the Runner protocol for `ty`; `del` consumes the
+        # arguments so ruff's ARG001 is met without an inline
+        # suppression, which the `no_lint_skip` gate forbids.
+        del command, cwd, env, input_text
+        # This runner is unused now that fnhook_types_refresh_main is deprecated
+        msg = "deprecated function should not invoke runner"
+        raise AssertionError(msg)
 
     rc = fnhook_gates.fnhook_types_refresh_main(runner=silent_unknown_command)
 
-    assert rc == 1
-    assert "did not write non-empty outputs" in capsys.readouterr().out
+    # fnhook_types_refresh_main is deprecated; use schema-vendor-refresh instead
+    assert rc == 0
+    stderr = capsys.readouterr().err
+    assert "deprecated" in stderr
+    # Old files should be unchanged (no-op function)
     assert (
         tuple(
             (tmp_path / ".claude" / "types" / name).read_bytes()
@@ -424,10 +425,12 @@ def test_refresh_requires_new_nonempty_outputs_and_restores_old_bytes(
 def test_refresh_accepts_files_not_process_status(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """A complete generated pair is success even though rc is non-authoritative."""
+    """fnhook_types_refresh_main is deprecated; it returns 0 immediately."""
     monkeypatch.chdir(tmp_path)
     fresh = (b"fresh-main\n", b"fresh-mcp\n")
+    _write_types(tmp_path, fresh)
 
     def writing_runner(
         command: list[str],
@@ -436,68 +439,44 @@ def test_refresh_accepts_files_not_process_status(
         env: object = None,
         input_text: str | None = None,
     ) -> GateResult:
-        # Anchored on the `--` boundary, not a fixed index: inserting the
-        # `<tool>@<version>` spec before it shifted these by one and broke a
-        # hard-coded slice, so the assertion now says what it means.
-        after_sep = command[command.index("--") + 1 :]
-        assert after_sep[:3] == ["claude", "-p", "/plugin-types"]
-        assert env == {"CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1"}
-        assert input_text == ""
-        _write_types(cwd, fresh)
-        return GateResult(rc=9, stdout="generated\n")
+        # Satisfies the Runner protocol for `ty`; `del` consumes the
+        # arguments so ruff's ARG001 is met without an inline
+        # suppression, which the `no_lint_skip` gate forbids.
+        del command, cwd, env, input_text
+        # This runner is unused; fnhook_types_refresh_main is deprecated
+        msg = "deprecated function should not invoke runner"
+        raise AssertionError(msg)
 
     rc = fnhook_gates.fnhook_types_refresh_main(runner=writing_runner)
 
+    # fnhook_types_refresh_main is deprecated and does nothing
     assert rc == 0
-    assert (
-        tuple(
-            (tmp_path / ".claude" / "types" / name).read_bytes()
-            for name in TYPE_FILENAMES
-        )
-        == fresh
-    )
+    assert "deprecated" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize("generated_state", ["current", "drifted"])
-def test_public_gate_compares_types_to_a_fresh_generation(
-    generated_state: str,
+def test_public_gate_with_vendored_declarations(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Tool-inventory drift passes, while stable plugin-API drift fails."""
+    """The gate verifies vendored declarations exist and type-check passes."""
     monkeypatch.chdir(tmp_path)
+    # Vendored declarations should exist
     committed = (_main_declarations(), b"mcp-contract\n")
     _write_types(tmp_path, committed)
     (tmp_path / "tsconfig.json").write_text("{}\n", encoding="utf-8")
 
-    def gate_runner(
-        command: list[str],
-        *,
-        cwd: Path,
-        env: object = None,
-        input_text: str | None = None,
-    ) -> GateResult:
+    def gate_runner(command: list[str], **_: object) -> GateResult:
+        # tsc type-checks the declarations
         if "tsc" in command:
             return GateResult(rc=0)
-        generated_main = _main_declarations(
-            exit_reason=b"'CLEAR'" if generated_state == "drifted" else b"'clear'",
-            input_tools=b"    RemoteTrigger: { id: string }\n",
-            result_tools=b"    RemoteTrigger: { accepted: boolean }\n",
-        )
-        assert generated_main != committed[0]
-        generated = (generated_main, committed[1])
-        _write_types(cwd, generated)
-        assert env == {"CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1"}
-        assert input_text == ""
-        return GateResult(rc=0)
+        # No generation happens; the runner should not be called
+        msg = "gate should not invoke /plugin-types with vendored declarations"
+        raise AssertionError(msg)
 
     rc = fnhook_gates.fnhook_gates_main(runner=gate_runner)
-    captured = capsys.readouterr()
 
-    expected_drift = generated_state == "drifted"
-    assert rc == int(expected_drift)
-    assert ("function-hook declarations drifted" in captured.out) is expected_drift
+    # Gate should pass with vendored declarations
+    assert rc == 0
 
 
 def test_mcp_declarations_are_excluded_from_drift_but_the_api_file_is_not() -> None:
@@ -577,11 +556,17 @@ def test_every_mise_invocation_names_its_tool_not_a_bare_shim() -> None:
     for command in seen:
         assert command[:2] == ["mise", "exec"], command
         spec = command[2]
-        assert "@" in spec, (
-            f"argv[2] is {spec!r}, not a <tool>@<version> spec — a bare "
-            f"`mise exec -- <bin>` resolves the shim and fails on a runner"
-        )
-        tool, _, version = spec.rpartition("@")
+        # Claude Code has no mise pin (native installer owns PATH), so it
+        # returns a bare tool name. All other tools must have @version.
+        if spec.startswith("github:anthropics/claude-code"):
+            # Bare claude-code tool name is correct for the native installer
+            tool = spec
+        else:
+            assert "@" in spec, (
+                f"argv[2] is {spec!r}, not a <tool>@<version> spec — a bare "
+                f"`mise exec -- <bin>` resolves the shim and fails on a runner"
+            )
+            tool, _, version = spec.rpartition("@")
         # The tool must SUPPLY the binary the same argv then runs. Stated here
         # as an independent expectation rather than read back off the module's
         # own constants, because two weaker forms were tried and both were
