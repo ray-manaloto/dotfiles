@@ -19,22 +19,29 @@ Declared in `.codex/agents/codex-sdlc-*.toml`. ⚠️ The **filenames** carry a
 | `sdlc-image-specialist` | `.devcontainer/`, Dockerfile | `mise run verify-container-latest` |
 | `sdlc-documentation-specialist` | `docs/`, `.claude/rules/`, `AGENTS.md` | `mise run lint-docs` |
 
-## Invocation — prompt-triggered, NOT a mise task
-
-This team has no mise task at all. You pipe a prompt to `codex exec`; codex
-spawns, routes and closes the threads itself. Address the dispatcher and let it
-choose:
+## Invocation — `mise run sdlc-team`, never a hand-rolled `codex exec`
 
 ```bash
-cat prompt.md | mise exec -- codex exec --ephemeral -s read-only -o out.md -
+mise run sdlc-team -- request.json    # typed request in, typed dispatch out
 ```
 
-Use `-s workspace-write` for implementation. Follow
-`.claude/rules/ai-cli-invocation.md` for the flag contract, and re-probe
-`codex exec --help` before changing any flag.
+The request names a spec file and a mode (`review` -> read-only,
+`implement` -> workspace-write); everything else has a deterministic default.
+The task owns prompt construction, sandbox selection, the Codex argv, detached
+launch, timeout supervision and every artifact path — so none of it is retyped
+or remembered. It returns immediately with an `SdlcTeamDispatch` (supervisor
+pid, resolved argv, prompt/output/log/receipt paths); a detached supervisor
+writes `SdlcTeamSettlement` when the run ends. Details: the
+`codex-sdlc-team` skill.
 
-⚠️ **The trailing `-` is load-bearing** — without it the prompt is never read and
-the call hangs forever.
+⚠️ **A hand-rolled `codex exec` for this team is guard-denied** (`hook_guard`
+rule `hand-rolled Codex SDLC dispatcher`). That guard sees only the COMMAND
+LINE, so it catches an invocation naming an sdlc artifact path and cannot catch
+one whose dispatcher address lives only inside a prompt file — use the task
+regardless.
+
+⚠️ **The trailing `-` is why the task exists.** Omit it from a hand-rolled call
+and codex never reads the prompt; it hangs forever. The task always supplies it.
 
 ⚠️ **Under `-s read-only` every repo gate fails for sandbox reasons** (uv cache,
 mise state, DNS). That is sandbox noise, not a finding. Tell a read-only lane
