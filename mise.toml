@@ -274,6 +274,18 @@ timeout = "700s"
 description = "Run hk check --all (read-only, ≡ CI) under a hard timeout (default 600s) so a hung lint self-aborts; fix path is `mise run fmt`"
 run = "uv run --project python dotfiles-setup lint"
 
+[tasks.gate]
+description = "Run or read typed gate results at the known .agent/gate-results path"
+run = "uv run --project python dotfiles-setup gate"
+
+[tasks.lane-receipt]
+description = "Write a typed JSON and Mermaid receipt for one SDLC agent lane"
+run = "uv run --project python dotfiles-setup lane-receipt"
+
+[tasks.sdlc-team]
+description = "Dispatch a detached Codex SDLC team from a typed request"
+run = "uv run --project python dotfiles-setup sdlc-team"
+
 [tasks.fnhook-gates]
 description = "Reject invalid or untyped Claude Code function-hook modules"
 run = "uv run --project python dotfiles-setup fnhook-gates"
@@ -1321,6 +1333,11 @@ description = "Assert the hand-authored codex agent lanes stay paired + at xhigh
 # Thin caller; see python/src/dotfiles_setup/codex_agent_parity.py. Also wired as
 # the `codex_agent_parity` hk step, so `mise run lint` covers it.
 run = "uv run --project python dotfiles-setup codex-agent-parity"
+
+[tasks.codex-agent-validate]
+description = "Validate the codex SDLC agent files against their schema and required roster"
+# Thin caller; all validation logic lives in dotfiles_setup.codex_agent_validate.
+run = "uv run --project python dotfiles-setup codex-agent-validate"
 
 [tasks.skills-mirror]
 description = "Generate/check the .agents/skills mirror of .claude/skills. Bare form WRITES; `-- --check` is read-only and exits 1 naming every drifted skill."

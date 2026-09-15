@@ -210,15 +210,42 @@ def check_drift(root: Path | None = None) -> list[str]:
     return findings
 
 
-def _source_url(tool: str, version: str) -> str:
-    """Build the tagged raw-GitHub URL a fresh vendor of `tool` fetches from."""
+def _source_url(tool: str, version: str, recorded: str | None = None) -> str:
+    """Return the URL a fresh vendor of `tool` fetches from.
+
+    Three tools publish their schema at a VERSION-TAGGED path, so the URL is
+    rebuilt from the current pin and the recorded one is ignored — that is what
+    makes a refresh actually move to the new version.
+
+    Anything else falls back to the ``source`` recorded in
+    ``schemas/sources.toml``. Codex is the first such tool: OpenAI publishes a
+    single unversioned URL that always serves the current schema, so there is
+    no tag to interpolate and ``version`` records which codex release the bytes
+    were fetched against rather than selecting them.
+
+    Raising here instead was a real outage, not a hypothetical: the codex entry
+    was added without a template, so `mise run schema-vendor-refresh` exited 1
+    with ``no source-URL template for tool 'codex'`` on EVERY run, including the
+    scheduled one in `refresh.yml`. The entry could therefore only ever be
+    hand-authored — which is how its ``sha256`` came to hold the RAW upstream
+    hash while the file on disk holds the hygiene-normalised one.
+
+    Raises:
+        ValueError: when a tool has neither a tagged template nor a recorded
+            source URL, which means `sources.toml` is malformed.
+    """
     if tool == "mise":
         return f"https://raw.githubusercontent.com/jdx/mise/v{version}/schema/mise.json"
     if tool == "ruff":
         return f"https://raw.githubusercontent.com/astral-sh/ruff/{version}/ruff.schema.json"
     if tool == "typos":
         return f"https://raw.githubusercontent.com/crate-ci/typos/v{version}/config.schema.json"
-    msg = f"schema_vendor: no source-URL template for tool {tool!r}"
+    if recorded:
+        return recorded
+    msg = (
+        f"schema_vendor: no source-URL template for tool {tool!r} and no "
+        f"`source` recorded in {SOURCES_PATH}"
+    )
     raise ValueError(msg)
 
 
@@ -373,11 +400,21 @@ def refresh(
             )
             new_entries.append(entry)
             continue
-        url = _source_url(entry.tool, pin)
+        url = _source_url(entry.tool, pin, entry.source)
         fetched = _hygiene_normalize(fetch(url), project_root)
         schema_path = project_root / entry.file
         existing = schema_path.read_bytes() if schema_path.exists() else None
-        if pin != entry.version or fetched != existing:
+        fetched_sha = hashlib.sha256(fetched).hexdigest()
+        # The third clause makes a WRONGLY RECORDED provenance self-healing. Version
+        # and bytes can both be correct while `sha256` is simply wrong — which is
+        # not hypothetical: the codex entry was hand-authored (refresh could not
+        # run for it, see `_source_url`) and recorded the RAW upstream hash,
+        # while every entry on disk holds the hygiene-normalised bytes. Without
+        # this clause `refresh` reports "no drift, nothing refreshed" and leaves
+        # `config.schema-vendor-drift` failing forever, with no command able to
+        # fix it — the record would have to be hand-edited, which is the very
+        # thing the sha256 exists to detect.
+        if pin != entry.version or fetched != existing or fetched_sha != entry.sha256:
             schema_path.write_bytes(fetched)
             new_entries.append(
                 SchemaEntry(
@@ -386,7 +423,7 @@ def refresh(
                     version=pin,
                     source=url,
                     pin_source=entry.pin_source,
-                    sha256=hashlib.sha256(fetched).hexdigest(),
+                    sha256=fetched_sha,
                 )
             )
             changed.append(entry.tool)

@@ -24,8 +24,8 @@ you decide which specialists to invoke, monitor their work, and deliver a synthe
 ## Routing rules
 
 Examine the task description and changed files:
-1. If the change touches `python/src/` or `python/tests/`, invoke sdlc-python-specialist
-2. If it touches `.pkl`, `.toml`, `docker-bake.hcl`, or `currency.toml`, invoke sdlc-config-specialist
+1. If the change touches `python/src/` or `tests/`, invoke sdlc-python-specialist
+2. If it touches `.pkl`, `.toml`, `.json`, `schemas/`, `docker-bake.hcl`, or `currency.toml`, invoke sdlc-config-specialist
 3. If it touches `.github/workflows/`, invoke sdlc-workflows-specialist
 4. If it touches `.devcontainer/`, `Dockerfile`, or `docker-bake.hcl`, invoke sdlc-image-specialist
 5. If it touches `docs/`, `.claude/rules/`, or AGENTS.md files, invoke sdlc-documentation-specialist
@@ -54,5 +54,9 @@ specialists.
 - Commit or push
 - Bypass a specialist's gate result
 - Attempt to fix a specialist's finding
-- Invoke a specialist not listed in the roster
+- Add a specialist WITHOUT naming it, what it owns, and its gate in your synthesis
+
+The roster is the DEFAULT team, not a closed set. When a task's scope genuinely
+needs a role the roster lacks, define one and say so — the spec requires you to
+ADJUST the team per task, and a closed roster made that impossible.
 """

@@ -5,7 +5,7 @@
 # 2026-09-14: with the array present this agent did not exist; removing it made it
 # load. Tool surface therefore inherits from the parent session.
 name = "sdlc-config-specialist"
-description = "Pickle configuration files (hk.pkl, renovate.pkl, etc.) and git hook definitions. Owns verification gate: mise run lint"
+description = "Pickle configuration files (hk.pkl, renovate.json, etc.) and git hook definitions. Owns verification gate: mise run lint"
 model_reasoning_effort = "high"
 developer_instructions = """
 # SDLC config specialist
@@ -13,7 +13,7 @@ developer_instructions = """
 You review and validate changes to project configuration files in Pickle format:
 - hk.pkl (git hook configuration)
 - hk-common.pkl (shared hook steps)
-- renovate.pkl (dependency configuration)
+- renovate.json (dependency configuration)
 - currency.toml (tool version tracking)
 - docker-bake.hcl (Docker build configuration)
 
@@ -24,7 +24,7 @@ When reviewing changes:
 2. Check for missing or broken step definitions
 3. Confirm hook constraints are honored (bash logic budget, no skips, etc.)
 4. Validate Docker build configuration syntax
-5. Confirm all pins in renovate.pkl resolve
+5. Confirm all pins in renovate.json resolve
 
 Your gate: `mise run lint` (hk under hard timeout; never raw `hk`)
 """

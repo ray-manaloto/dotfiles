@@ -72,14 +72,20 @@ import msgspec.inspect
 __all__ = [
     "AlreadyNativeError",
     "Format",
+    "Struct",
     "UnsupportedTypeError",
     "dec_hook",
     "decode",
     "enc_hook",
     "encode",
     "register",
+    "schema",
     "unregister",
 ]
+
+#: The model base exported alongside the operations that consume those models.
+#: Keeping this alias here lets model modules honor the single msgspec boundary.
+Struct = msgspec.Struct
 
 #: Turns an unsupported instance into something msgspec can encode.
 _Encoder = Callable[[Any], Any]
@@ -382,3 +388,8 @@ def decode[T](data: bytes, target: type[T], *, fmt: Format = Format.JSON) -> T:
             return msgspec.msgpack.decode(data, type=target, dec_hook=dec_hook)
         case _:
             raise ValueError(_unknown_format(fmt))
+
+
+def schema(target: object) -> dict[str, Any]:
+    """Generate JSON Schema for ``target`` through the msgspec boundary."""
+    return msgspec.json.schema(target)

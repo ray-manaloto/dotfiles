@@ -1,0 +1,66 @@
+{
+  "$ref": "#/$defs/GateResult",
+  "$defs": {
+    "GateResult": {
+      "title": "GateResult",
+      "description": "One gate execution outcome and the command that produced it.",
+      "type": "object",
+      "properties": {
+        "gate": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/GateStatus"
+        },
+        "returncode": {
+          "type": "integer"
+        },
+        "duration_s": {
+          "type": "number"
+        },
+        "command": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "failures": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "log_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "gate",
+        "status",
+        "returncode",
+        "duration_s",
+        "command"
+      ]
+    },
+    "GateStatus": {
+      "title": "GateStatus",
+      "description": "The complete set of outcomes exposed by a gate result.",
+      "enum": [
+        "failed",
+        "not_a_gate",
+        "passed",
+        "timed_out",
+        "tool_missing"
+      ]
+    }
+  }
+}
