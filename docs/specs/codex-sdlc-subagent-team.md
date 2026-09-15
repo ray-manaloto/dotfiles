@@ -114,7 +114,32 @@ Currency is layered (operator chose all three, plus a fourth):
 ⚠️ **Trap:** a `# :schema` directive written WITH A SPACE is INERT (measured, session
 2026-09-10c). Get the directive form right and pin it with a fail-arm test.
 
-### D6 — Self-optimizing/self-healing/self-learning is OUT OF SCOPE here
+### D6 — Self-learning: DESIGNED, not built
+
+Codex "Memories" is a ChatGPT-account context feature, not per-agent performance
+learning (`app__settings.md:108-111`, `chrome-extension.md:155`). No native
+mechanism exists, so any loop is homegrown.
+
+Scoped out of the build at grilling Q3; **designed** at the operator's later
+ruling. See **`docs/specs/codex-sdlc-team-learning-loop.md`**.
+
+Its load-bearing idea: D1 gave every specialist an owned gate, so routing accuracy
+is measurable WITHOUT self-assessment — compare the dispatcher's selected team
+against the artifacts `git diff --name-only` says were actually touched. An
+untouched-but-selected specialist is an over-select; a touched-but-unselected one
+is an under-select. Both fall out of the diff.
+
+Two constraints the design fixes in advance: the signal must live in a **tracked**
+path (`.agent/` is gitignored at `.gitignore:109`, so telemetry there dies with a
+`git clean`), and the loop **proposes** an instruction change to a separate delta
+file rather than editing an agent — the `pwf-scribe` shape, keeping every change a
+reviewed diff.
+
+⚠️ It is a design. Nothing in it has been run, and it explicitly warns against
+starting at the proposal-generator step, which fed two data points would rewrite
+instructions on noise.
+
+### D6-original — why it was scoped out
 
 Codex "Memories" is a ChatGPT-account feature for carrying context between chats, not
 per-agent performance learning (`app__settings.md:108-111`, `chrome-extension.md:155`).
