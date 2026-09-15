@@ -104,7 +104,7 @@ pipx = "1.17.2"
 # `uvx = false` is load-bearing: it short-circuits 2026.9.7's --no-build
 # lockfile path onto legacy version-only locking (see commit 3744cea).
 "pypi:azure-cli" = { version = "2.90.0", uvx = false }
-docker-cli = "29.8.0"
+docker-cli = "29.8.1"
 opencode = "1.18.31"
 # bun (the npm package_manager) is a host↔image SHARED tool → declared in
 # .config/mise/conf.d/shared.toml, not here (mise-parity: a tool used by both
