@@ -34,7 +34,7 @@ chezmoi = "2.72.2"
 ghalint = "1.5.6"
 gitleaks = "8.30.1"
 hadolint = "2.15.1"
-hk = "1.57.0"
+hk = "2.0.0"
 jq = "1.8.2"
 # The npm CLI shared by the root mise.toml's orchestrator executor lane and
 # .devcontainer/mise-runtime.toml's #613 in-container review lane (both used
@@ -42,7 +42,7 @@ jq = "1.8.2"
 # mise-parity's duplicate-tool check correctly flags as drift risk). allow_builds
 # is needed because @openai/codex's postinstall builds a native module.
 "npm:@openai/codex" = { version = "0.154.0", allow_builds = ["@openai/codex"] }
-pinact = "4.1.1"
+pinact = "5.0.0"
 "pipx:check-jsonschema" = "0.38.0"
 pixi = "0.78.0"
 pkl = "0.32.1"
