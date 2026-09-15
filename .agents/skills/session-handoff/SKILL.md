@@ -57,6 +57,34 @@ outlive the session; note anything intentionally left running in the handoff.
 A stale wakeup firing after handoff re-triggers work that is already done
 (observed 2026-07-05).
 
+⚠️ **Enumerate by ANCESTOR CHAIN, and exclude NOTHING.** This step was prose
+until 2026-09-15 and it failed: a sweep reported "nothing outlives this session"
+while a 32-minute orphaned wait loop was running. The sweep had excluded
+`/bin/zsh -c source …snapshot-zsh…` — which is exactly how the harness runs a
+background task, so it filtered out the category the target belongs to. The
+operator's status line ("1 shell") was ground truth; the probe was not.
+
+The method that works: walk `ppid` from each process up to init, keep everything
+whose chain reaches THIS session's `claude` pid, and only then classify. That
+same chain is what proves a foreign `codex exec` (the ChatGPT desktop app runs
+one under `ChatGPT.app` -> `Codex Computer Use.app`) is **not yours and must not
+be killed**.
+
+Three probe shapes that each returned a confident wrong answer in one session —
+none of them can produce the other outcome, so none is evidence:
+
+- `until [ -f X ]` where `X` already exists from an earlier run — exits instantly
+  against a stale file. **Delete `X` first, or the wait is a no-op.**
+- `until ! pgrep -f "<literal>"` — the waiting shell's own argv CONTAINS the
+  literal, so it matches itself and can never finish.
+- any sweep with an exclusion — see above.
+
+⚠️ **An `until [ -f X ]` wait is UNSATISFIABLE if the producer of `X` was killed.**
+The 2026-09-15 orphan waited on a receipt whose gate run had been terminated
+mid-flight; it would have spun forever. Prefer the harness's background run plus
+its completion notification over any hand-rolled wait; when a wait is genuinely
+needed, give it a deadline and a loud failure.
+
 **Distinguish session-LOCAL state from session-INDEPENDENT autonomous
 processes — do NOT block `/clear` on the latter (Ray, 2026-07-08).** GitHub-side
 processes — running GHA runs, and autonomous bots like **Renovate** that
