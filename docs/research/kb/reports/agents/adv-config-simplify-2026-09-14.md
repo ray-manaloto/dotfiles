@@ -1,3 +1,22 @@
+> ⚠️ **PHASE 2 IS WRONG — do not implement it as written (annotated 2026-09-14).**
+>
+> Phase 2 says *"mise.toml still carries `[tools]` entries (mise CLI needs them);
+> they are now synthesized from registry."* That is true only for tools you want on
+> PATH, and following it would **leave the claude PATH shadowing in place** — the
+> defect the change exists to fix. Measured: `mise exec
+> "github:anthropics/claude-code@2.1.270" -- claude --version` returns 2.1.270 rc=0
+> with **no** `[tools]` entry, so an exec-only consumer needs no activation.
+>
+> Two further cautions. Its "Evidence Gathering" section still reads *"Probes
+> running..."* while its answers are written, so its table is opinion rather than
+> measurement. And its file-count summary contradicts itself three ways — "only 4
+> authored files", a table marking ~11 unique, and prose saying "5-6".
+>
+> **Its Q4 is the part worth keeping**: *"Both halves matter: Consolidate AND
+> index."*
+>
+> Left otherwise verbatim per `agent-artifact-conventions.md` §8.
+
 # Advisory: Config File Consolidation — Tool Version Duplication
 
 **Scope:** Review the measured proliferation of version declarations across 15 config files and advise a path to consolidate while addressing the retrieval failure that generates it.

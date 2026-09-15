@@ -1,3 +1,24 @@
+> ⚠️ **OPERATOR OVERRULED THIS VERDICT — 2026-09-14, after this report was written.**
+>
+> This report concludes **"KEEP the pin"** and recommends scoping claude off PATH
+> inside `hk.pkl`. The operator settled the opposite: **remove
+> `github:anthropics/claude-code` from `mise.toml [tools]` entirely and use the
+> native installer**, recording the synced version in a config file instead.
+>
+> The report's own premise for keeping it — that `fnhook_gates.py` needs a
+> `[tools]` entry — was DISPROVED after it was written: `mise exec
+> "github:anthropics/claude-code@2.1.270" -- claude --version` returns 2.1.270
+> rc=0 in a directory with **no** claude pin. The gate needs a readable version
+> string, not an installed-and-activated tool. Its Recommendation 1 would also
+> have left the PATH shadowing in place for every context other than the hk step.
+>
+> Also stale here: this report states 2.1.271 is not yet in the mise backend.
+> Re-measured later the same day, `mise ls-remote "github:anthropics/claude-code"`
+> **does** list 2.1.271 (control: 2.1.270 -> 1 hit).
+>
+> Left otherwise verbatim per `agent-artifact-conventions.md` §8 — archived
+> records preserve what was observed. Read this banner, not the verdict.
+
 # Advisory: claude-code mise pin — native-only decision violated
 
 **Date:** 2026-09-14  
