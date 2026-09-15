@@ -129,7 +129,7 @@ opencode = "1.18.31"
 # `.config/mise/conf.d/shared.toml` (mise-parity: the two per-tier npm
 # declarations pinned the SAME tool under the same key, which the parity
 # test correctly flags as drift risk).
-antigravity-cli = "1.2.2"
+antigravity-cli = "1.2.3"
 
 # Firecrawl CLI — the `firecrawl` binary the firecrawl@firecrawl plugin's skills
 # name in their own `allowed-tools` (`Bash(firecrawl *)`), so without this pin
