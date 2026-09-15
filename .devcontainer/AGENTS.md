@@ -53,18 +53,13 @@ inside the container.
 temp-then-rename (#893).** A shared `doppler.env` let two concurrent
 `up`s hand a container the other clone's secrets.
 
-Doppler project/config defaults (`dotfiles`/`dev_personal`) come from
-`mise.toml [tasks.up].env` (`:251`, `:277`, `:771`), templated
-`{{ env.DOPPLER_CONFIG | default(value='dev_personal') }}`. Override per-clone
-via a top-level `[env]` block in `mise.local.toml` — `DOPPLER_CONFIG = "dev"` —
-**never** by redefining `[tasks.up]`, which replaces the whole task and strips
-its `run` body (`mise.local.toml.example:9-13`).
-
-**Aligned onto `dev_personal` 2026-08-03** (`dev` was a strict subset; its 6
-extras are all host-side). ⚠️ Accepted cost: `AGE_PRIVATE_KEY`, which decrypts
-the fnox age cache, now reaches the container's `--env-file`. Rationale,
-measurements and the still-open contract gap:
-`docs/secrets-doppler-fnox-keychain.md` § "One config".
+Project/config defaults (`dotfiles`/`dev_personal`) come from `mise.toml
+[tasks.up].env`. Override per-clone with a top-level `[env]` block in
+`mise.local.toml` — **never** by redefining `[tasks.up]`, which replaces the
+whole task and strips its `run` body (`mise.local.toml.example:9-13`).
+⚠️ Accepted cost of the 2026-08-03 alignment onto `dev_personal`:
+`AGE_PRIVATE_KEY` reaches the container's `--env-file`. Rationale and the
+still-open contract gap: `docs/secrets-doppler-fnox-keychain.md` § "One config".
 
 Future: migrate to mise-env-fnox with doppler provider inside the
 container for runtime secret resolution (#83).
@@ -82,30 +77,17 @@ the **arch** separates amd64 from arm64.
   49152+ ephemeral range); `DEVCONTAINER_SSH_PORT` still pins one per clone.
   `mise run ssh-port` / `mise run names` print them.
 
-⚠️ **The name does NOT identify a container — the id labels do.** The CLI looks
-one up by `--id-label`, inferring it from the **workspace folder** when none is
-given, so `up`/`dev-rebuild`/every `exec` pass `$DEVCONTAINER_ID_FLAGS`
-(`dotfiles.workspace=` + `dotfiles.arch=`) and `mise run stop` resolves targets
-via `dotfiles-setup devcontainer teardown`. Without them an arm64 `up` **finds
-and reuses** the amd64 container and reports success.
+⚠️ **The name does NOT identify a container — the id labels do.** Without
+`$DEVCONTAINER_ID_FLAGS` an arm64 `up` **finds and reuses** the amd64 container
+and reports success, so `up`/`dev-rebuild`/every `exec` pass them and
+`mise run stop` resolves via `dotfiles-setup devcontainer teardown`. Migrate a
+pre-#677 volume with `mise run migrate-home-volume` (dry-run; `-- --apply`
+executes). The CLI mechanism, the migration, and why the arch is a name rather
+than a check: **`.devcontainer/TOOL-PERSISTENCE.md`**.
 
-**Migrating a pre-#677 volume:** `mise run migrate-home-volume` (dry-run;
-`-- --apply` executes) — never deletes the source, refuses rather than guessing.
-That, the id-label mechanism, and why the arch is a name not a check:
+What the volume covers, and what `onCreateCommand`'s
+`chezmoi init --apply --force` wipes on every creation:
 **`.devcontainer/TOOL-PERSISTENCE.md`**.
-
-The volume covers the whole user home, so `~/.cache/mise`, `~/.cache/uv`,
-`~/.bash_history`, `~/.ssh/known_hosts` and TMPDIR
-(`ENV TMPDIR=/home/${USER}/.local/tmp`, swept >30d by `on-create.sh`) persist
-across `stop/up`. The v5 per-directory volumes it replaced are orphans;
-`mise run prune` cleans them.
-
-**Reset-on-recreate:** `onCreateCommand` runs `chezmoi init --apply
---force` on every container creation; chezmoi-managed files (`.bashrc`,
-`.zshrc`, `.profile`, `.config/mise/config.toml`) are wiped and
-re-rendered from `home/`. The home volume protects unmanaged state
-(caches, history, TMPDIR) — to change managed files, edit `home/`.
-
 
 ## Override Model
 

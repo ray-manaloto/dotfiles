@@ -88,3 +88,22 @@ repo collide; the workspace label is what folder inference used to provide.
 container too, so teardown resolves its targets through `dotfiles-setup
 devcontainer teardown` — this architecture's container, plus any pre-#677
 leftover this folder owns that carries none of our labels.
+
+## What the home volume covers, and what a recreate wipes
+
+Moved here from `.devcontainer/AGENTS.md` on 2026-09-15: that file is
+budgeted at 200 lines for class `agents_root` (it is read IN FULL by every
+codex lane and imported by no root `CLAUDE.md`, so nothing else bounds it),
+and it stood at 218. This is persistence detail, which is this file's subject.
+
+The volume covers the whole user home, so `~/.cache/mise`, `~/.cache/uv`,
+`~/.bash_history`, `~/.ssh/known_hosts` and TMPDIR
+(`ENV TMPDIR=/home/${USER}/.local/tmp`, swept >30d by `on-create.sh`) persist
+across `stop/up`. The v5 per-directory volumes it replaced are orphans;
+`mise run prune` cleans them.
+
+**Reset-on-recreate:** `onCreateCommand` runs `chezmoi init --apply --force`
+on every container creation; chezmoi-managed files (`.bashrc`, `.zshrc`,
+`.profile`, `.config/mise/config.toml`) are wiped and re-rendered from
+`home/`. The home volume protects unmanaged state (caches, history, TMPDIR)
+— to change managed files, edit `home/`.
