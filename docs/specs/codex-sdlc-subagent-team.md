@@ -185,6 +185,36 @@ already runs through hk, so an explicit CI step would execute it twice.
 
 So artifact-keyed descriptions route correctly in practice, not just in theory.
 
+### V4 — REUSABLE: a different task selects a different team
+
+One passing test proves routing works once, not that it generalises. A second task
+of a deliberately different shape — bump hk in `hk.pkl`/`hk-common.pkl` AND update
+`.claude/rules/` + docs, with nothing in `python/` or `.github/`:
+
+| task shape | team the dispatcher selected |
+|---|---|
+| `python/` + `.github/workflows/` | `sdlc-python-specialist` + `sdlc-workflows-specialist` |
+| `*.pkl` + docs/rules | **`sdlc-config-specialist` + `sdlc-documentation-specialist`** |
+
+> "It excluded the Python, workflows, and image specialists because their owned
+> paths are outside the issue."
+
+Two disjoint answers, with stated exclusion reasoning. The routing discriminates;
+it is not selecting everything or defaulting to one team.
+
+**And the team found real defects nobody asked it for**, which is the strongest
+reusability evidence available:
+
+- `AGENTS.md` sits at **11,999 bytes against agnix's 12,000-char cap** — one byte
+  of headroom, so the next character added fails `lint-docs`. Confirmed by
+  `wc -c`. Filed as **#1126**.
+- `long-running-command-hangs.md:110` cross-references cache-clearing guidance
+  that the same file's rule 5 states is retired. Confirmed by direct read. Filed
+  with a sibling scoping finding as **#1127**.
+- It also correctly understood this session's own `pin_parity` work unprompted,
+  warning that changing only the two issue-named pkl files "may fail lint" because
+  the check also covers `hk-image.pkl` and `shared.toml`.
+
 ### The schema is what makes V1 non-recurring
 
 Every agent file carries `#:schema ../../schemas/codex-agent.json`. Fail arms:
