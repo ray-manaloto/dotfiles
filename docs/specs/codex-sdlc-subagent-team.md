@@ -138,6 +138,65 @@ first line `# Reproducible Dotfiles (AMD64)`), and 7 spawn/subagent mentions in 
 log. **Design input:** spawn is not perfectly reliable — the first attempt failed and
 codex self-retried. Any orchestration must tolerate that.
 
+## Verification: the team is FUNCTIONAL, not merely loadable
+
+Three things were proven by running them, in this order, because each earlier one
+turned out to be a precondition nobody had checked.
+
+### V1 — the agents load at all
+
+They did not, at first. All six declared `mcp_services`-style
+`mcp_servers = ["context7", ...]` and **codex rejected every file silently**:
+`codex exec` reported `sdlc-python-specialist` as "an unknown agent type" and fell
+back to built-in `default` agents. Removing that one key made all six appear.
+
+`mcp_servers` is `"type": "object"` in codex's own config schema — *"Definition
+for MCP servers that Codex can reach out to"*. It DEFINES servers; it cannot
+select existing ones by name. **The per-agent tool narrowing this spec's D3 asked
+for is not achievable through that key.**
+
+### V2 — a named specialist actually spawns
+
+```
+codex exec --ephemeral -s read-only   # rc=0
+"Agent types actually spawned: sdlc-python-specialist and
+ sdlc-documentation-specialist."
+```
+
+Control-armed: both returned values correct (89 `.py` in
+`python/src/dotfiles_setup/`, 26 `.md` in `.claude/rules/`).
+
+### V3 — the DISPATCHER selects an appropriate team
+
+The load-bearing test, because the operator chose a dispatcher over the advisor's
+`AGENTS.md`-block recommendation. Task given: change `doc_refs.py` to log git's
+stderr AND add a CI step to `ci.yml` — deliberately spanning two artifacts.
+
+> "The dispatcher selected: `sdlc-python-specialist` — owns `doc_refs.py` behavior
+> and Python tests. `sdlc-workflows-specialist` — owns `ci.yml` and workflow
+> validation."
+> "The dispatcher spawned exactly `sdlc-python-specialist` and
+> `sdlc-workflows-specialist`. No other agents were spawned."
+
+It selected correctly, did **not** over-select the config/image/documentation
+specialists, and produced real `file:line` findings — including `doc_refs.py:198`,
+which is the actual defect behind #1110. Unprompted, it also noted the check
+already runs through hk, so an explicit CI step would execute it twice.
+
+So artifact-keyed descriptions route correctly in practice, not just in theory.
+
+### The schema is what makes V1 non-recurring
+
+Every agent file carries `#:schema ../../schemas/codex-agent.json`. Fail arms:
+
+| mutation | result |
+|---|---|
+| `mcp_servers = ["context7"]` | `error: ["context7"] is not of type "object"` rc=1 |
+| drop `description` | `error: "description" is a required property` rc=1 |
+
+That first row is the failure codex reports with no error, no warning and no exit
+code. The directive converts it into a lint failure before codex ever sees it.
+
 ## Not yet decided
 
 - The concrete agent names, descriptions, and `developer_instructions` per artifact.
