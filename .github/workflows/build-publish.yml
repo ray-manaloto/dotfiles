@@ -235,7 +235,7 @@ jobs:
         run: echo "${{ secrets.GITHUB_TOKEN }}" > /tmp/github_token
       - name: Build and push base image
         if: steps.probe.outputs.hit != 'true'
-        uses: docker/bake-action@d3418bd7d0e9324001bca92fa8ba175ea7e6dc9b # v7.3.0
+        uses: docker/bake-action@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
         # PUSH=true (bake reads it into the `PUSH` variable) instead of the
         # `push: true` shorthand: the shorthand injects `--set *.output=type=
         # registry`, and a bake `--set` on output REPLACES the list, dropping
@@ -387,7 +387,7 @@ jobs:
         run: echo "${{ secrets.GITHUB_TOKEN }}" > /tmp/github_token
       - name: Build and push p2996-cache image
         if: steps.probe.outputs.hit != 'true'
-        uses: docker/bake-action@d3418bd7d0e9324001bca92fa8ba175ea7e6dc9b # v7.3.0
+        uses: docker/bake-action@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
         # PUSH=true instead of `push: true` — see base-prep step for why (a
         # `--set` output override from the push shorthand would drop the zstd
         # compression flags, #222).
@@ -706,7 +706,7 @@ jobs:
       - name: Build and push
         id: bake
         if: steps.probe.outputs.hit != 'true'
-        uses: docker/bake-action@d3418bd7d0e9324001bca92fa8ba175ea7e6dc9b # v7.3.0
+        uses: docker/bake-action@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
         # PUSH=<publish> feeds the bake `PUSH` variable (target output =
         # type=image,push=${PUSH},...zstd...) instead of the `push:` shorthand,
         # which would inject `--set *.output=type=registry` and REPLACE the
