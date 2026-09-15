@@ -165,3 +165,88 @@ sites = [
 
 **One fix**: Register env-var pins in pin-parity.toml. claude-code is the canonical case.
 
+
+---
+
+## RESEARCH: Can mise-action Install Required Tools in CI?
+
+**Context**: The `lint` job needs `claude plugin validate` to run via `mise exec github:anthropics/claude-code@2.1.272`, but the job fails under `MISE_LOCKED=1` with "No lockfile URL found for github:anthropics/claude-code on platform linux-x64". claude-code has no `[tools]` entry (native installer owns it per 2026-09-14 ruling).
+
+### 1. mise-action Inputs & Capabilities
+
+**Source**: `.github/actions/setup-mise/action.yml:33-45` (local composite wrapping jdx/mise-action@v4.3.0)
+
+**mise-action inputs supported**:
+- `version`: pin mise CLI version (used: "2026.9.8")
+- `install_args`: space-separated tool list to install (default: empty = all from mise.toml)
+- `cache`: default true, keys on {platform}-{install_args_hash}-{file_hash}
+
+**What the composite forwards**:
+- `version` → hardcoded "2026.9.8"
+- `install_args` → passed through from caller
+
+**What mise-action does NOT support** (per its GitHub action interface):
+- No `tool_versions` input to override per-tool versions
+- No `mise_toml` input to use a custom config file
+- No way to install a tool that is NOT in mise.toml
+
+### 2. Can mise-action Install claude-code on linux-x64 with MISE_LOCKED=1?
+
+**Answer: NO.**
+
+**Evidence**:
+- `.github/workflows/ci.yml:90` sets `MISE_LOCKED: "1"`
+- claude-code has NO entry in `mise.toml [tools]` (only "npm:claude-code-lint" is there)
+- `mise-action` with `install_args=""` or `install_args="python uv"` will NOT install claude-code (it's not in the args list)
+- If explicitly passed as `install_args="github:anthropics/claude-code@2.1.272"`, mise will look for a lockfile URL under `MISE_LOCKED=1` (required per mise docs)
+- mise.lock has NO entry for claude-code (verified: only "npm:claude-code-lint" is present)
+
+**To make it work via mise-action would require**:
+1. Add `claude-code` to `mise.toml [tools]` (conflicts with 2026-09-14 native-installer ruling)
+2. Run `mise lock github:anthropics/claude-code` to generate a lockfile entry
+3. Pass `install_args="claude-code"` to mise-action
+
+### 3. Does MISE_LOCKED=1 Make This Impossible Without a Lock Entry?
+
+**Answer: YES, it makes mise-action unusable for this case.**
+
+**Evidence**:
+- Under `MISE_LOCKED=1`, mise requires a lockfile URL for ANY tool being installed
+- The lockfile URL is generated only when the tool is declared in `mise.toml` and `mise lock` is run
+- claude-code is deliberately NOT in mise.toml (per 2026-09-14 ruling: native installer owns it)
+- Therefore: `MISE_LOCKED=1` + claude-code in no `[tools]` entry = impossible via mise-action
+
+**Coexistence question**: The 2026-09-14 ruling (native installer owns PATH) and mise-action's requirement (tool must be in `mise.toml` to lock) are **mutually exclusive**. Choosing mise-action for claude-code REQUIRES re-adding it to `mise.toml`, which reverses the native-installer ruling.
+
+### 4. Compare: mise-action vs Native Installer for THIS Job
+
+| Factor | mise-action | Native Installer (`curl ... | bash`) |
+|---|---|---|
+| **Declaration required** | YES: must be in mise.toml [tools] | NO: install script is independent |
+| **Lock entry required** | YES: MISE_LOCKED=1 blocks without it | NO: native installer ignores lock |
+| **Runner caching** | YES: via mise-action's cache (platform + args hash + file hash) | NO: re-downloads every run (unless manual cache added) |
+| **Version control** | YES: locked version in mise.lock (reproducible across runs) | NO: curl script specifies version but is not locked across runners (if version bumps mid-week, next run gets new version) |
+| **Conflicts with ruling** | YES: requires reversing native-installer ruling | NO: native installer is the ruling |
+| **Complexity** | Low: pass install_args | Low: one curl step |
+
+**Deciding risk**: mise-action requires reversing a deliberate design decision (2026-09-14). Native installer is simpler and aligns with the ruling.
+
+### 5. Other Tools in the Same Position?
+
+**Question**: Are there OTHER tools deliberately not in mise.toml because they use native installers or non-mise backends?
+
+**Control-arm search**:
+- ✅ claude-code: deliberately not in [tools] (currency.toml:29 says so explicitly)
+- ✅ codex: via fable-orchestrator plugin (not in mise.toml [tools])
+- ❌ antigravity-cli: IS in mise.toml (aqua backend pin)
+- ❌ opencode: IS in mise.toml (direct backend pin)
+- ❌ gemini-cli: IS in mise-runtime.toml (npm backend)
+
+**Finding**: claude-code and codex are the ONLY tools deliberately kept out of mise.toml. Both use external package managers (native installer + plugin manager respectively). No other repo-wide pattern exists.
+
+---
+
+## Conclusion
+
+**For the lint job's claude-code need**: Use the native installer (curl + bash script to specified version) as a CI step. This aligns with the 2026-09-14 ruling and avoids the lock-file conflict. mise-action cannot handle it without reversing that ruling.
+
