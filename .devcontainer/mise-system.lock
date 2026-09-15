@@ -344,9 +344,9 @@ checksum = "sha256:bf817fbdb9953dda8f4b0d3c5bdf23a072c6baf6d39cb80e067f274a9d6fe
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/tbb-2023.1.0-h33d95ba_0.conda"
 checksum = "sha256:4b4ec1ad2996341145f612016fc5115c376b474b766cc13ee63b6aa4ef71d8d7"
 
-[conda-packages.linux-arm64."tinyxml2-11.0.0-h5ad3122_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/tinyxml2-11.0.0-h5ad3122_0.conda"
-checksum = "sha256:720c2f979947b22940424245b780a792b947a4e2d8bfb9939acf75dcb4728af9"
+[conda-packages.linux-arm64."tinyxml2-11.0.0-hfb11796_1"]
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/tinyxml2-11.0.0-hfb11796_1.conda"
+checksum = "sha256:b69457cae56289dab085029774cc75db37b8c2787593e577c57cd64168cbc592"
 
 [conda-packages.linux-arm64."tk-8.6.13-noxft_hf03c496_4"]
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/tk-8.6.13-noxft_hf03c496_4.conda"
@@ -716,9 +716,9 @@ checksum = "sha256:bf817fbdb9953dda8f4b0d3c5bdf23a072c6baf6d39cb80e067f274a9d6fe
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/tbb-2023.1.0-h33d95ba_0.conda"
 checksum = "sha256:4b4ec1ad2996341145f612016fc5115c376b474b766cc13ee63b6aa4ef71d8d7"
 
-[conda-packages.linux-arm64-musl."tinyxml2-11.0.0-h5ad3122_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/tinyxml2-11.0.0-h5ad3122_0.conda"
-checksum = "sha256:720c2f979947b22940424245b780a792b947a4e2d8bfb9939acf75dcb4728af9"
+[conda-packages.linux-arm64-musl."tinyxml2-11.0.0-hfb11796_1"]
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/tinyxml2-11.0.0-hfb11796_1.conda"
+checksum = "sha256:b69457cae56289dab085029774cc75db37b8c2787593e577c57cd64168cbc592"
 
 [conda-packages.linux-arm64-musl."tk-8.6.13-noxft_hf03c496_4"]
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/tk-8.6.13-noxft_hf03c496_4.conda"
@@ -1096,9 +1096,9 @@ checksum = "sha256:7d235e4337f122f3439d0196e1c1c6e715a5b88fcbf24f944510186c84168
 url = "https://conda.anaconda.org/conda-forge/linux-64/tbb-2023.1.0-hfd44327_0.conda"
 checksum = "sha256:ea35780ec77e2431bcfc193e75ddcc3ec1ae79a34464469b0b2186d93035c9e7"
 
-[conda-packages.linux-x64."tinyxml2-11.0.0-h3f2d84a_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/tinyxml2-11.0.0-h3f2d84a_0.conda"
-checksum = "sha256:3ae98c2ca54928b2c72dbb4bd8ea229d3c865ad39367d377908294d9fb1e6f2c"
+[conda-packages.linux-x64."tinyxml2-11.0.0-hee9eb32_1"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/tinyxml2-11.0.0-hee9eb32_1.conda"
+checksum = "sha256:856be65b3a1f11cec5a6d183b38da6c6fa5bdfe85d166fc38515a90af9ae4179"
 
 [conda-packages.linux-x64."tk-8.6.13-noxft_h1df4ec4_4"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/tk-8.6.13-noxft_h1df4ec4_4.conda"
@@ -1476,9 +1476,9 @@ checksum = "sha256:7d235e4337f122f3439d0196e1c1c6e715a5b88fcbf24f944510186c84168
 url = "https://conda.anaconda.org/conda-forge/linux-64/tbb-2023.1.0-hfd44327_0.conda"
 checksum = "sha256:ea35780ec77e2431bcfc193e75ddcc3ec1ae79a34464469b0b2186d93035c9e7"
 
-[conda-packages.linux-x64-baseline."tinyxml2-11.0.0-h3f2d84a_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/tinyxml2-11.0.0-h3f2d84a_0.conda"
-checksum = "sha256:3ae98c2ca54928b2c72dbb4bd8ea229d3c865ad39367d377908294d9fb1e6f2c"
+[conda-packages.linux-x64-baseline."tinyxml2-11.0.0-hee9eb32_1"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/tinyxml2-11.0.0-hee9eb32_1.conda"
+checksum = "sha256:856be65b3a1f11cec5a6d183b38da6c6fa5bdfe85d166fc38515a90af9ae4179"
 
 [conda-packages.linux-x64-baseline."tk-8.6.13-noxft_h1df4ec4_4"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/tk-8.6.13-noxft_h1df4ec4_4.conda"
@@ -1856,9 +1856,9 @@ checksum = "sha256:7d235e4337f122f3439d0196e1c1c6e715a5b88fcbf24f944510186c84168
 url = "https://conda.anaconda.org/conda-forge/linux-64/tbb-2023.1.0-hfd44327_0.conda"
 checksum = "sha256:ea35780ec77e2431bcfc193e75ddcc3ec1ae79a34464469b0b2186d93035c9e7"
 
-[conda-packages.linux-x64-musl."tinyxml2-11.0.0-h3f2d84a_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/tinyxml2-11.0.0-h3f2d84a_0.conda"
-checksum = "sha256:3ae98c2ca54928b2c72dbb4bd8ea229d3c865ad39367d377908294d9fb1e6f2c"
+[conda-packages.linux-x64-musl."tinyxml2-11.0.0-hee9eb32_1"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/tinyxml2-11.0.0-hee9eb32_1.conda"
+checksum = "sha256:856be65b3a1f11cec5a6d183b38da6c6fa5bdfe85d166fc38515a90af9ae4179"
 
 [conda-packages.linux-x64-musl."tk-8.6.13-noxft_h1df4ec4_4"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/tk-8.6.13-noxft_h1df4ec4_4.conda"
@@ -2236,9 +2236,9 @@ checksum = "sha256:7d235e4337f122f3439d0196e1c1c6e715a5b88fcbf24f944510186c84168
 url = "https://conda.anaconda.org/conda-forge/linux-64/tbb-2023.1.0-hfd44327_0.conda"
 checksum = "sha256:ea35780ec77e2431bcfc193e75ddcc3ec1ae79a34464469b0b2186d93035c9e7"
 
-[conda-packages.linux-x64-musl-baseline."tinyxml2-11.0.0-h3f2d84a_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/tinyxml2-11.0.0-h3f2d84a_0.conda"
-checksum = "sha256:3ae98c2ca54928b2c72dbb4bd8ea229d3c865ad39367d377908294d9fb1e6f2c"
+[conda-packages.linux-x64-musl-baseline."tinyxml2-11.0.0-hee9eb32_1"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/tinyxml2-11.0.0-hee9eb32_1.conda"
+checksum = "sha256:856be65b3a1f11cec5a6d183b38da6c6fa5bdfe85d166fc38515a90af9ae4179"
 
 [conda-packages.linux-x64-musl-baseline."tk-8.6.13-noxft_h1df4ec4_4"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/tk-8.6.13-noxft_h1df4ec4_4.conda"
@@ -2772,7 +2772,6 @@ channel = "conda-forge"
 checksum = "sha256:d45cd87c2c9e33895cdb4ee277dcc4688781f8bdffc0db0f6e13e8a8124d4f93"
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/cppcheck-2.21.0-py314h63ea2b9_0.conda"
 conda_deps = [
-    "tinyxml2-11.0.0-h5ad3122_0",
     "pcre-8.45-h01db608_0",
     "pygments-2.21.0-pyhcf101f3_0",
     "python-3.14.7-hbec3b18_106_cp314",
@@ -2783,6 +2782,7 @@ conda_deps = [
     "libstdcxx-ng-16.2.0-hdbbeba8_4",
     "libgcc-ng-16.2.0-he9431aa_4",
     "python_abi-3.14-9_cp314",
+    "tinyxml2-11.0.0-hfb11796_1",
     "bzip2-1.0.8-h4777abc_10",
     "ld_impl_linux-aarch64-2.46.1-default_h1979696_102",
     "libmpdec-4.0.0-he30d5cf_2",
@@ -2807,7 +2807,6 @@ conda_deps = [
 checksum = "sha256:d45cd87c2c9e33895cdb4ee277dcc4688781f8bdffc0db0f6e13e8a8124d4f93"
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/cppcheck-2.21.0-py314h63ea2b9_0.conda"
 conda_deps = [
-    "tinyxml2-11.0.0-h5ad3122_0",
     "pcre-8.45-h01db608_0",
     "pygments-2.21.0-pyhcf101f3_0",
     "python-3.14.7-hbec3b18_106_cp314",
@@ -2818,6 +2817,7 @@ conda_deps = [
     "libstdcxx-ng-16.2.0-hdbbeba8_4",
     "libgcc-ng-16.2.0-he9431aa_4",
     "python_abi-3.14-9_cp314",
+    "tinyxml2-11.0.0-hfb11796_1",
     "bzip2-1.0.8-h4777abc_10",
     "ld_impl_linux-aarch64-2.46.1-default_h1979696_102",
     "libmpdec-4.0.0-he30d5cf_2",
@@ -2842,7 +2842,6 @@ conda_deps = [
 checksum = "sha256:0f163304ab7078beaffeebd35a977dea80d6e66bd3ff666dc57b0c2e26668da7"
 url = "https://conda.anaconda.org/conda-forge/linux-64/cppcheck-2.21.0-py314hceea1aa_0.conda"
 conda_deps = [
-    "tinyxml2-11.0.0-h3f2d84a_0",
     "pcre-8.45-h9c3ff4c_0",
     "pygments-2.21.0-pyhcf101f3_0",
     "python-3.14.7-hcd007b5_106_cp314",
@@ -2853,6 +2852,7 @@ conda_deps = [
     "libstdcxx-ng-16.2.0-hdf11a46_4",
     "libgcc-ng-16.2.0-h69a702a_4",
     "python_abi-3.14-9_cp314",
+    "tinyxml2-11.0.0-hee9eb32_1",
     "bzip2-1.0.8-hda65f42_10",
     "ld_impl_linux-64-2.46.1-default_hbd61a6d_102",
     "libmpdec-4.0.0-hb03c661_2",
@@ -2877,7 +2877,6 @@ conda_deps = [
 checksum = "sha256:0f163304ab7078beaffeebd35a977dea80d6e66bd3ff666dc57b0c2e26668da7"
 url = "https://conda.anaconda.org/conda-forge/linux-64/cppcheck-2.21.0-py314hceea1aa_0.conda"
 conda_deps = [
-    "tinyxml2-11.0.0-h3f2d84a_0",
     "pcre-8.45-h9c3ff4c_0",
     "pygments-2.21.0-pyhcf101f3_0",
     "python-3.14.7-hcd007b5_106_cp314",
@@ -2888,6 +2887,7 @@ conda_deps = [
     "libstdcxx-ng-16.2.0-hdf11a46_4",
     "libgcc-ng-16.2.0-h69a702a_4",
     "python_abi-3.14-9_cp314",
+    "tinyxml2-11.0.0-hee9eb32_1",
     "bzip2-1.0.8-hda65f42_10",
     "ld_impl_linux-64-2.46.1-default_hbd61a6d_102",
     "libmpdec-4.0.0-hb03c661_2",
@@ -2912,7 +2912,6 @@ conda_deps = [
 checksum = "sha256:0f163304ab7078beaffeebd35a977dea80d6e66bd3ff666dc57b0c2e26668da7"
 url = "https://conda.anaconda.org/conda-forge/linux-64/cppcheck-2.21.0-py314hceea1aa_0.conda"
 conda_deps = [
-    "tinyxml2-11.0.0-h3f2d84a_0",
     "pcre-8.45-h9c3ff4c_0",
     "pygments-2.21.0-pyhcf101f3_0",
     "python-3.14.7-hcd007b5_106_cp314",
@@ -2923,6 +2922,7 @@ conda_deps = [
     "libstdcxx-ng-16.2.0-hdf11a46_4",
     "libgcc-ng-16.2.0-h69a702a_4",
     "python_abi-3.14-9_cp314",
+    "tinyxml2-11.0.0-hee9eb32_1",
     "bzip2-1.0.8-hda65f42_10",
     "ld_impl_linux-64-2.46.1-default_hbd61a6d_102",
     "libmpdec-4.0.0-hb03c661_2",
@@ -2947,7 +2947,6 @@ conda_deps = [
 checksum = "sha256:0f163304ab7078beaffeebd35a977dea80d6e66bd3ff666dc57b0c2e26668da7"
 url = "https://conda.anaconda.org/conda-forge/linux-64/cppcheck-2.21.0-py314hceea1aa_0.conda"
 conda_deps = [
-    "tinyxml2-11.0.0-h3f2d84a_0",
     "pcre-8.45-h9c3ff4c_0",
     "pygments-2.21.0-pyhcf101f3_0",
     "python-3.14.7-hcd007b5_106_cp314",
@@ -2958,6 +2957,7 @@ conda_deps = [
     "libstdcxx-ng-16.2.0-hdf11a46_4",
     "libgcc-ng-16.2.0-h69a702a_4",
     "python_abi-3.14-9_cp314",
+    "tinyxml2-11.0.0-hee9eb32_1",
     "bzip2-1.0.8-hda65f42_10",
     "ld_impl_linux-64-2.46.1-default_hbd61a6d_102",
     "libmpdec-4.0.0-hb03c661_2",
@@ -5376,7 +5376,7 @@ checksum = "sha256:9964e2d618ebea03be8ea3e65ab0ecc0f2b030ce203345b8f92654641fd4d
 url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260807/cpython-3.14.7+20260807-x86_64-apple-darwin-install_only_stripped.tar.gz"
 
 [[tools.ruby]]
-version = "4.0.6"
+version = "4.0.7"
 backend = "core:ruby"
 
 [tools.ruby.options]
@@ -5386,28 +5386,28 @@ ruby_build_repo = "https://github.com/rbenv/ruby-build.git"
 ruby_install = "false"
 
 [tools.ruby."platforms.linux-arm64"]
-checksum = "sha256:6144c26cd5a1ff85358beb7e68e592ada6d0319aa8093cf353465d60f10aa970"
-url = "https://github.com/jdx/ruby/releases/download/4.0.6-1/ruby-4.0.6.arm64_linux.tar.gz"
+checksum = "sha256:911ace20f90d068ca0e4dda6d0e4f0f81e52e52f2dd4f4004c721e253412e82d"
+url = "https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.7.tar.gz"
 
 [tools.ruby."platforms.linux-arm64-musl"]
-checksum = "sha256:837d299e8f7ddf2be31a229a7a7e019d354979825117989acb3b32b1a9be262a"
-url = "https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.6.tar.gz"
+checksum = "sha256:911ace20f90d068ca0e4dda6d0e4f0f81e52e52f2dd4f4004c721e253412e82d"
+url = "https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.7.tar.gz"
 
 [tools.ruby."platforms.linux-x64"]
-checksum = "sha256:aefa111873bac3b15c5c416bfaaca84e793d5312d4496d651ad79c44521b200a"
-url = "https://github.com/jdx/ruby/releases/download/4.0.6-1/ruby-4.0.6.x86_64_linux.tar.gz"
+checksum = "sha256:911ace20f90d068ca0e4dda6d0e4f0f81e52e52f2dd4f4004c721e253412e82d"
+url = "https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.7.tar.gz"
 
 [tools.ruby."platforms.linux-x64-baseline"]
-checksum = "sha256:aefa111873bac3b15c5c416bfaaca84e793d5312d4496d651ad79c44521b200a"
-url = "https://github.com/jdx/ruby/releases/download/4.0.6-1/ruby-4.0.6.x86_64_linux.tar.gz"
+checksum = "sha256:911ace20f90d068ca0e4dda6d0e4f0f81e52e52f2dd4f4004c721e253412e82d"
+url = "https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.7.tar.gz"
 
 [tools.ruby."platforms.linux-x64-musl"]
-checksum = "sha256:837d299e8f7ddf2be31a229a7a7e019d354979825117989acb3b32b1a9be262a"
-url = "https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.6.tar.gz"
+checksum = "sha256:911ace20f90d068ca0e4dda6d0e4f0f81e52e52f2dd4f4004c721e253412e82d"
+url = "https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.7.tar.gz"
 
 [tools.ruby."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:837d299e8f7ddf2be31a229a7a7e019d354979825117989acb3b32b1a9be262a"
-url = "https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.6.tar.gz"
+checksum = "sha256:911ace20f90d068ca0e4dda6d0e4f0f81e52e52f2dd4f4004c721e253412e82d"
+url = "https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.7.tar.gz"
 
 [[tools.rust]]
 version = "1.98.1"
