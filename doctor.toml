@@ -267,3 +267,15 @@ expected_install_method = "native"
 # `expected_install_method` over switching this off: a disabled check reports
 # nothing, which reads exactly like a healthy host.
 enabled = true
+
+[codex]
+# Codex app-server JSON schema currency.
+#
+# The schema is generated from the exact installed codex version and should be
+# regenerated whenever codex is updated. A stale schema describes settings the
+# current codex lacks, leading to offline documentation gaps.
+#
+# Run `mise run codex-schema-generate` to regenerate after a codex upgrade.
+# Run `mise run codex-schema-check` to validate (automatically run by `mise run
+# verify`).
+enabled = true

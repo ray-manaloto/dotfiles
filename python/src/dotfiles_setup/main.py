@@ -27,6 +27,11 @@ from dotfiles_setup.claude_doctor import claude_doctor_main
 from dotfiles_setup.codex_agent_parity import codex_agent_parity_main
 from dotfiles_setup.codex_lane import run_lane_cli
 from dotfiles_setup.codex_lane_mirror import codex_lane_mirror_main
+from dotfiles_setup.codex_schema import (
+    check_schema_currency,
+    generate_schema,
+    get_installed_codex_version,
+)
 from dotfiles_setup.command_audit import DEFAULT_SESSION_LIMIT, command_audit_main
 from dotfiles_setup.config import DotfilesConfig
 from dotfiles_setup.container import verify_latest_main
@@ -1572,6 +1577,19 @@ def _add_schema_vendor_subcommands(subparsers: _SubParsers) -> None:
     Args:
         subparsers: The parent subparsers action to attach commands to.
     """
+    # Codex's own app-server schema lives here rather than with the honesty
+    # gates: it is schema management, and `_add_honesty_subcommands` was at 52
+    # statements against PLR0915's limit of 50 once these two landed there.
+    subparsers.add_parser(
+        "codex-schema-generate",
+        help="Generate the codex app-server JSON schema for the EXACT installed "
+        "codex version; the bundle is gitignored because it is derived output",
+    )
+    subparsers.add_parser(
+        "codex-schema-check",
+        help="Verify the codex app-server schema exists and matches the installed "
+        "codex version (also asserted by doctor's codex-schema check)",
+    )
     schema_vendor_parser = subparsers.add_parser(
         "schema-vendor",
         help="Vendored config schemas (schemas/*.json) for mise.toml/"
@@ -2628,6 +2646,14 @@ def _build_command_handlers(
         "graphify": lambda: handle_graphify(args, project_root),
         "dependency-ownership": lambda: sys.exit(
             dependency_ownership_main(project_root)
+        ),
+        "codex-schema-generate": lambda: sys.exit(
+            0 if generate_schema(project_root) else 1
+        ),
+        "codex-schema-check": lambda: sys.exit(
+            0
+            if check_schema_currency(project_root, get_installed_codex_version())[0]
+            else 1
         ),
         "version": _version,
         "install": lambda: handle_install(project_root),

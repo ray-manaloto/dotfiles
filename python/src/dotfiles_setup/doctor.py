@@ -67,7 +67,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from dotfiles_setup import claude_doctor
+from dotfiles_setup import claude_doctor, codex_schema
 from dotfiles_setup.dependency_currency import (
     check_dependency_currency as dependency_currency_findings,
 )
@@ -1298,6 +1298,29 @@ def check_dependency_currency(setup: Setup) -> list[str]:
 
 #: Check name -> implementation. The name tags every finding, so it is part of
 #: the interface: keep it stable.
+
+
+def check_codex_schema(setup: Setup) -> list[str]:
+    """Codex app-server JSON schema exists and valid for installed version.
+
+    The schema is version-specific and regenerates on codex upgrade.
+    """
+    findings: list[str] = []
+
+    # `Setup` exposes `repo_root: Path` — there is no `.config.project_root`, and
+    # reaching for one crashed this check on every run until item 5's fail arm
+    # exercised it (`AttributeError: 'Setup' object has no attribute 'config'`).
+    # `repo_root` is non-optional, so no guard clause is needed.
+    is_current, message = codex_schema.check_schema_currency(
+        setup.repo_root, codex_schema.get_installed_codex_version()
+    )
+
+    if not is_current:
+        findings.append(f"codex schema: {message}")
+
+    return findings
+
+
 CHECKS: tuple[tuple[str, Callable[[Setup], list[str]]], ...] = (
     ("mcp-env-opt-in", check_mcp_env_opt_in),
     ("mcp-scope", check_mcp_scope),
@@ -1311,6 +1334,7 @@ CHECKS: tuple[tuple[str, Callable[[Setup], list[str]]], ...] = (
     ("path-drift", check_path_drift),
     ("graphify-skill-surface", check_graphify_skill_surface),
     ("claude-doctor", check_claude_doctor),
+    ("codex-schema", check_codex_schema),
 )
 
 #: Only run with ``--live``: each entry spawns subprocesses.

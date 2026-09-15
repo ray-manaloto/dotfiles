@@ -26,13 +26,17 @@ binary = "doppler"
 # used by mise's canonical `doppler` registry key (`github:DopplerHQ/cli`).
 github = "DopplerHQ/cli"
 
-[tool.claude-code]
-mise_key = "claude-code"
-binary = "claude"
-# Claude Code is a native-installed tool owned by ~/.local/bin/claude,
-# which self-updates. This entry records the version the gate validates
-# against. GitHub is the upstream for release notes.
-github = "anthropics/claude-code"
+# Claude Code is deliberately NOT tracked here. It has no mise owner any more:
+# the `[tools]` pin was removed 2026-09-14 so the native installer at
+# ~/.local/bin/claude owns PATH and self-updates. This engine reads root
+# `mise.toml` pins, so a `mise_key` entry for it would name an absent pin —
+# exactly what `test_deep_currency_tools_have_one_declared_owner` exists to
+# reject, and it did (`{'claude-code': 'claude-code'}`).
+#
+# Its currency already has a better-suited home: doctor's `claude-doctor` check
+# asks whether the `claude` THIS shell runs is the newest published build, which
+# is the real question for a self-updating native install. Adding a second
+# mechanism here would duplicate it against a pin that does not exist.
 
 [tool.graphify]
 python_package = "graphifyy"

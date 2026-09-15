@@ -134,3 +134,16 @@ graphify-out/
 # plan edit -- tracking it would guarantee a mismatch for anyone else. The
 # sibling `.mode` file IS tracked: it is a reviewed project setting.
 /.plan-attestation
+
+# Codex app-server JSON schema bundles — GENERATED, never committed.
+#
+# `mise run codex-schema-generate` produces these from the exact installed codex
+# version. They are 688 KB and 589 KB, which `check_added_large_files` rejects,
+# and they are pure derived output: the bundle is regenerated in seconds and is
+# only meaningful for the codex version that emitted it. Committing them would
+# pin a snapshot that goes stale on every codex bump.
+#
+# Doctor's `codex-schema` check asserts presence-and-currency and names the fix
+# command, so a fresh clone is told to generate rather than handed a stale copy.
+schemas/codex_app_server_protocol.schemas.json
+schemas/codex_app_server_protocol.v2.schemas.json
