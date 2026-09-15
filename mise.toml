@@ -211,7 +211,7 @@ HK_MISE = "1"
 
 # Native claude installer owns the PATH. This records the version the
 # gate validates against; mise exec can resolve it without the pin activating.
-CLAUDE_CODE_VERSION = "2.1.270"
+CLAUDE_CODE_VERSION = "2.1.271"
 
 # #154: the hk `gitleaks` builtin runs `gitleaks dir` (whole-tree scan, no
 # --config flag), so point gitleaks at the repo allowlist config via env — it
