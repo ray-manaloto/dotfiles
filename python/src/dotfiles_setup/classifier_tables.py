@@ -261,6 +261,22 @@ REGISTRY: dict[str, ClassifierSpec] = {
             "of silently going unenumerated, which is #601's defect exactly"
         ),
     ),
+    "dotfiles_setup.gate_result:_status_for": ClassifierSpec(
+        module_path="python/src/dotfiles_setup/gate_result.py",
+        function="_status_for",
+        subject_param=None,
+        subject_type=None,
+        axes=frozenset({"returncode", "known", "tool_missing", "timed_out"}),
+        pinned_axes={},
+        table_path="tests/test_gate_result.py",
+        table_symbol="_STATUS_TABLE",
+        table_excluded_classes=frozenset(),
+        reason=(
+            "typed gate results must distinguish unknown gates, missing tools, "
+            "timeouts, successful children, and failing children while preserving "
+            "the precedence among all four inputs"
+        ),
+    ),
     "dotfiles_setup.session_ledger:status": ClassifierSpec(
         module_path="python/src/dotfiles_setup/session_ledger.py",
         function="status",

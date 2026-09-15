@@ -143,6 +143,68 @@ def test_legitimate_commands_allowed(command: str) -> None:
     assert hook_guard.decide(command) is None
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        (
+            "mise exec -- codex exec --ephemeral -s workspace-write "
+            "-o .agent/sdlc-runs/run-1/output.md -"
+        ),
+        (
+            "SDLC_PROMPT=.agent/sdlc-runs/run-1/prompt.md "
+            "codex exec --ephemeral -s read-only -"
+        ),
+        (
+            "echo ready && SDLC_PROMPT=.agent/sdlc-runs/run-1/prompt.md "
+            "mise exec -- codex exec --ephemeral -s read-only -"
+        ),
+        (
+            "mise exec -- codex exec --ephemeral -s read-only - "
+            "< .codex/agents/codex-sdlc-dispatcher.md"
+        ),
+        (
+            "cat /private/tmp/session/scratchpad/spec-sdlc-task.md | "
+            "codex exec --ephemeral -s read-only -"
+        ),
+    ],
+)
+def test_codex_exec_with_visible_sdlc_artifact_path_is_denied(command: str) -> None:
+    rule = hook_guard.match(command)
+    assert rule is not None, command
+    assert rule.name == "hand-rolled Codex SDLC dispatcher"
+    assert "mise run sdlc-team" in rule.reason
+    assert "general case is undetectable from a command string" in rule.reason
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        (
+            "printf '%s\\n' 'Address the SDLC dispatcher' | "
+            "mise exec -- codex exec --ephemeral -s workspace-write -"
+        ),
+        (
+            "printf '%s\\n' 'Use the codex-sol-implementer lane' | "
+            "mise exec -- codex exec --ephemeral -s workspace-write -"
+        ),
+        (
+            "cat .codex/agents/codex-sol-implementer.md | "
+            "mise exec -- codex exec --ephemeral -s workspace-write -"
+        ),
+        "mise run codex-lane -- request.json",
+        "mise exec -- codex exec --ephemeral -s read-only - < /tmp/spec-review.md",
+        'echo "SDLC_PROMPT=.agent/sdlc-runs/x/prompt.md codex exec -s read-only -"',
+        (
+            "SDLC_PROMPT=.agent/sdlc-runs/x/prompt.md "
+            "echo codex exec --ephemeral -s read-only -"
+        ),
+        "SDLC_PROMPT=/tmp/review-prompt.md codex exec --ephemeral -s read-only -",
+    ],
+)
+def test_sdlc_guard_allows_commands_without_visible_artifact_path(command: str) -> None:
+    assert hook_guard.decide(command) is None, command
+
+
 def test_pretooluse_emits_deny_json(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

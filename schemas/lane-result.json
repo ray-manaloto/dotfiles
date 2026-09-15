@@ -1,0 +1,92 @@
+{
+  "$ref": "#/$defs/LaneResult",
+  "$defs": {
+    "LaneResult": {
+      "title": "LaneResult",
+      "description": "One lane invocation and its source-attributed agent graph.",
+      "type": "object",
+      "properties": {
+        "run_id": {
+          "type": "string"
+        },
+        "lane": {
+          "type": "string"
+        },
+        "agents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AgentNode"
+          },
+          "default": []
+        },
+        "disagreements": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "started_at": {
+          "type": "string",
+          "default": ""
+        },
+        "duration_s": {
+          "type": "number",
+          "default": 0.0
+        }
+      },
+      "required": [
+        "run_id",
+        "lane"
+      ]
+    },
+    "AgentNode": {
+      "title": "AgentNode",
+      "description": "One participating agent and the evidence that observed it.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string",
+          "default": ""
+        },
+        "parent": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AgentSource"
+          },
+          "default": []
+        },
+        "status": {
+          "type": "string",
+          "default": ""
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "AgentSource": {
+      "title": "AgentSource",
+      "description": "Independent evidence sources for agent participation.",
+      "enum": [
+        "hook",
+        "observed",
+        "self_report"
+      ]
+    }
+  }
+}

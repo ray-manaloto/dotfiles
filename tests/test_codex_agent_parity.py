@@ -401,7 +401,7 @@ def test_the_shipped_lanes_are_all_present() -> None:
     shipped = {
         p.stem
         for p in (REPO_ROOT / cap.CODEX_AGENT_DIR).iterdir()
-        if p.suffix == ".toml" and p.name.startswith(cap.STEM_PREFIX)
+        if p.suffix == ".toml" and p.name.startswith(cap.LANE_PREFIXES)
     }
     # Every role ships in BOTH model families since 2026-09-11: `codex-sol-*` is
     # authored and `codex-astra-*` is generated from it. Deriving the expected
@@ -474,6 +474,51 @@ def test_hk_can_actually_see_the_tracked_codex_tomls() -> None:
     assert ".codex/config.toml" in entries
     assert ".codex/hooks.json" in entries
     assert not [e for e in entries if e.startswith(".codex/agents/")]
+
+
+def test_a_non_lane_codex_agent_is_out_of_scope(tmp_path: Path) -> None:
+    """A project-scoped codex agent outside the two lane families is NOT ours.
+
+    Scoping used to be the bare `codex-` stem, on the reasoning that the Codex
+    Desktop export "carries no `codex-` prefix". That silently made EVERY future
+    `codex-*` file a lane this gate demands a sol/astra pair for — so adding an
+    SDLC specialist at `.codex/agents/codex-sdlc-*.toml` (tracked by
+    `.gitignore`'s `!.codex/agents/codex-*.toml` negation) would have failed the
+    gate for lacking an `.md` counterpart it was never meant to have.
+
+    The fail arm below is the load-bearing half: narrowing scope must not make
+    the gate blind to a REAL unpaired lane.
+    """
+    root = _tree(tmp_path)
+    (root / cap.CODEX_AGENT_DIR / "codex-sdlc-python.toml").write_text(
+        'name = "codex-sdlc-python"\ndescription = "d"\ndeveloper_instructions = "i"\n'
+    )
+    assert cap.find_violations(root) == [], (
+        "a codex-sdlc-* agent is not one of the two paired lane families and must "
+        "not be claimed by this gate"
+    )
+
+    # FAIL ARM: an unpaired file that IS in a lane family must still be caught.
+    (root / cap.CODEX_AGENT_DIR / "codex-sol-orphan.toml").write_text(
+        'name = "codex-sol-orphan"\ndescription = "d"\ndeveloper_instructions = "i"\n'
+    )
+    assert "unpaired" in _kinds(root), (
+        "narrowing the scope must not stop the gate catching a real unpaired lane"
+    )
+
+
+def test_lane_prefixes_are_derived_from_the_family_map() -> None:
+    """The scoping tuple and the model map cannot drift apart.
+
+    If someone adds a third family to MODEL_BY_PREFIX, scoping must follow
+    automatically; a hand-maintained second list is how the two disagree.
+    """
+    assert tuple(p for p, _ in cap.MODEL_BY_PREFIX) == cap.LANE_PREFIXES
+    assert cap.LANE_PREFIXES, "at least one lane family must be in scope"
+    for prefix in cap.LANE_PREFIXES:
+        assert prefix.startswith(cap.STEM_PREFIX), (
+            f"{prefix!r} must still be a {cap.STEM_PREFIX}* name"
+        )
 
 
 def test_the_exclude_parser_is_armed() -> None:

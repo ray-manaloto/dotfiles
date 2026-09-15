@@ -1,0 +1,97 @@
+{
+  "$ref": "#/$defs/SdlcTeamDispatch",
+  "$defs": {
+    "SdlcTeamDispatch": {
+      "title": "SdlcTeamDispatch",
+      "description": "Immediate, fully resolved description of a dispatched lane.",
+      "type": "object",
+      "properties": {
+        "run_id": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/SdlcStatus"
+        },
+        "pid": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "argv": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "prompt_file": {
+          "type": "string",
+          "default": ""
+        },
+        "output_file": {
+          "type": "string",
+          "default": ""
+        },
+        "log_file": {
+          "type": "string",
+          "default": ""
+        },
+        "receipt_json": {
+          "type": "string",
+          "default": ""
+        },
+        "receipt_md": {
+          "type": "string",
+          "default": ""
+        },
+        "workdir": {
+          "type": "string",
+          "default": ""
+        },
+        "mode": {
+          "$ref": "#/$defs/SdlcMode",
+          "default": "review"
+        },
+        "started_at": {
+          "type": "string",
+          "default": ""
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "run_id",
+        "status"
+      ]
+    },
+    "SdlcStatus": {
+      "title": "SdlcStatus",
+      "description": "Immediate dispatch status.",
+      "enum": [
+        "cli_missing",
+        "dispatched",
+        "invalid_request",
+        "spec_missing"
+      ]
+    },
+    "SdlcMode": {
+      "title": "SdlcMode",
+      "description": "Whether the team reviews the tree or may implement in it.",
+      "enum": [
+        "implement",
+        "review"
+      ]
+    }
+  }
+}

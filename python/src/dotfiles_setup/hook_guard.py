@@ -152,6 +152,9 @@ _V1B = "2026-07-18"
 # layer (the rule said so itself, and #474 tracks the gap); this is the first
 # machine layer for the shape.
 _V7 = "2026-08-02"
+# Hand-assembled Codex SDLC dispatcher calls gained a complete typed mise task
+# on 2026-09-15. Keep this cutoff separate: the task did not exist earlier.
+_V8 = "2026-09-15"
 
 # Variable names that carry credentials. Suffix/infix match on an ALL-CAPS
 # environment name, minus the path-ish tails (`SSH_KEY_PATH`, `AWS_KEY_FILE`)
@@ -244,6 +247,29 @@ _GATE = (
 # `uv run --project python pytest …` — the canonical runner prefix, which
 # `_WRAPPER` does not model (it covers env/exec/nohup/time/timeout/xargs).
 _RUNNER = r"(?:uv\s+run\s+(?:-\S+\s+\S+\s+)*)?"
+_CODEX_EXEC = r"(?:mise\s+exec\s+--\s+)?codex\s+exec\b"
+_SDLC_ARTIFACT_PATH = (
+    r"(?:\.codex/agents/codex-sdlc-[^\s;&|\n]*"
+    r"|\.agent/sdlc-runs[^\s;&|\n]*"
+    r"|(?:[^\s;&|\n]*/)?spec-sdlc[^\s;&|\n]*)"
+)
+_HAND_ROLLED_SDLC = re.compile(
+    r"(?is)(?:"
+    r"(?:^|[;&|\n]\s*)"
+    r"(?=[^;&|\n]*"
+    + _SDLC_ARTIFACT_PATH
+    + r")"
+    + _WRAPPER
+    + _CODEX_EXEC
+    + r"|"
+    + _CMD
+    + r"cat\b[^;&|\n]*"
+    + _SDLC_ARTIFACT_PATH
+    + r"[^;&|\n]*\|\s*"
+    + _WRAPPER
+    + _CODEX_EXEC
+    + r")"
+)
 
 _RULES: tuple[Rule, ...] = (
     Rule(
@@ -253,6 +279,16 @@ _RULES: tuple[Rule, ...] = (
         "`agnix`, not `npx agnix`) — all tools are pinned in mise.toml. "
         "See .claude/rules/ci-local-parity.md.",
         _V1,
+    ),
+    Rule(
+        "hand-rolled Codex SDLC dispatcher",
+        _HAND_ROLLED_SDLC,
+        "Use `mise run sdlc-team -- <request.json>` — it owns the typed request, "
+        "prompt, trailing stdin marker, sandbox, detached supervisor, timeout, "
+        "logs, lane receipts, and settlement. The general case is undetectable "
+        "from a command string when the SDLC address exists only inside a prompt "
+        "file.",
+        _V8,
     ),
     Rule(
         "chezmoi apply/update",

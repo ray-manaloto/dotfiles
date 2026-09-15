@@ -1,0 +1,80 @@
+{
+  "$ref": "#/$defs/SdlcTeamRequest",
+  "$defs": {
+    "SdlcTeamRequest": {
+      "title": "SdlcTeamRequest",
+      "description": "Every caller-controlled input needed to dispatch one SDLC lane.",
+      "type": "object",
+      "properties": {
+        "spec_file": {
+          "type": "string"
+        },
+        "mode": {
+          "$ref": "#/$defs/SdlcMode",
+          "default": "review"
+        },
+        "effort": {
+          "type": "string",
+          "default": "xhigh"
+        },
+        "timeout_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "allowlist": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "run_id": {
+          "type": "string",
+          "default": ""
+        },
+        "task": {
+          "type": "string",
+          "default": ""
+        },
+        "prompt_file": {
+          "type": "string",
+          "default": ""
+        },
+        "output_file": {
+          "type": "string",
+          "default": ""
+        },
+        "log_file": {
+          "type": "string",
+          "default": ""
+        },
+        "receipt_json": {
+          "type": "string",
+          "default": ""
+        },
+        "receipt_md": {
+          "type": "string",
+          "default": ""
+        }
+      },
+      "required": [
+        "spec_file"
+      ]
+    },
+    "SdlcMode": {
+      "title": "SdlcMode",
+      "description": "Whether the team reviews the tree or may implement in it.",
+      "enum": [
+        "implement",
+        "review"
+      ]
+    }
+  }
+}

@@ -667,6 +667,13 @@ local allSteps = new Mapping<String, Config.Step> {
     check = "uv run --project python dotfiles-setup codex-agent-parity"
   }
 
+  // Codex silently drops an invalid agent file, so validate every SDLC agent
+  // against its derived schema and assert the required roster by name.
+  // Logic lives in python per zero-bash-logic; this is the thin hk seam.
+  ["codex_agent_validate"] {
+    check = "uv run --project python dotfiles-setup codex-agent-validate"
+  }
+
   // The Codex-callable and Claude skill surfaces are one contract. A stale
   // copy is worse than absence because the harness appears to accept it.
   // Replaces the old single-file `cmp -s` on session-review alone (which is

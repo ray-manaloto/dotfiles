@@ -7,6 +7,33 @@
 # "../tests/*.py" per-file-ignore in python/pyproject.toml was dead config).
 extend = "python/pyproject.toml"
 
+# ── Record trees: ruff 0.16 formats PYTHON FENCES INSIDE MARKDOWN ────────────
+# `ruff format` reformats ```python blocks in .md, and the rewrite can change
+# MEANING: measured 2026-09-14, `["mise","lock","--bump",*tools],` quoted from
+# image.py became `(["mise","lock","--bump",*tools],)` — a one-tuple that does
+# not exist in the source the report cites. A bare `uv run --project python
+# ruff format` from the repo root rewrote 18 archived reports in one command.
+#
+# These trees are RECORDS, not source. The list mirrors `hk-common.pkl`'s
+# `excludePaths`, which already protects them from hk's own builtins for the
+# same reason (`.claude/rules/agent-artifact-conventions.md` rule 8, "Do not
+# normalize records"; `.claude/rules/agent-report-persistence.md` rule 4,
+# "Verbatim means verbatim"). hk was never the culprit — it already excluded
+# them; ruff had no such list at all. Keep the two lists mirrored.
+extend-exclude = [
+    "docs/research/mintlify-cache/**",
+    "docs/research/trail/findings/**",
+    "docs/research/runs/**",
+    "docs/research/kb/**",
+    "docs/specs/**",
+]
+
+# Apply the exclusions even when a path is named EXPLICITLY on the command
+# line. Without this, `ruff format docs/research/kb/reports/agents/x.md` still
+# rewrites the file — the exclusion would only govern directory discovery, so
+# the very invocation shape that caused the damage would stay live.
+force-exclude = true
+
 [lint.per-file-ignores]
 # pytest convention: test functions self-describe via their names (D103),
 # magic values in assertions are idiomatic (PLR2004), and `assert` IS the test
