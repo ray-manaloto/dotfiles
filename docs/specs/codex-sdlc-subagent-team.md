@@ -1,6 +1,6 @@
 # Codex SDLC subagent team — settled design
 
-**Status:** design settled by operator grilling 2026-09-14. NOT implemented.
+**Status:** design settled by operator grilling 2026-09-14; implemented in `python/src/dotfiles_setup/sdlc_team.py` (`mise run sdlc-team`), spawn reconciliation landed 2026-09-16 (see "Spawn reconciliation" below).
 **Research:** `docs/research/kb/reports/agents/adv-sdlc-team-2026-09-14.md`
 **Primary source:** `$KB/agent-harness-docs/docs/codex/agent-configuration__subagents.md`
 where `$KB=~/dev/github/ray-manaloto/knowledge-base/sources`. Codex CLI **0.154.0**.

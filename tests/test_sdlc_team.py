@@ -1659,3 +1659,102 @@ def test_arm_29_prose_led_claim_cannot_pair_with_a_different_specialist(
     assert control_code == 0
     assert control.status is sdlc_team.SdlcSettledStatus.COMPLETED
     assert control.errors == ()
+
+
+def test_arm_30_recorded_child_role_must_be_asserted_by_the_claim(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A path basename can never override a recorded, different agent_role.
+
+    Reverting `_recorded_role_unasserted` lets a config specialist spawned at
+    `/root/sdlc-python-specialist` satisfy a `sdlc-python-specialist` claim
+    through the basename rule and settle the run `completed`.
+    """
+    parent_id = "01a0a8da-6d39-74e3-a8fc-fe66f5505378"
+    child = {
+        "id": "01a0a8db-de4d-7c93-a96f-8d001939aecd",
+        "parent_thread_id": parent_id,
+        "agent_role": "sdlc-config-specialist",
+        "agent_path": "/root/sdlc-python-specialist",
+    }
+    returncode, settlement, _receipt = _run_supervisor(
+        tmp_path,
+        monkeypatch,
+        _SupervisorFixture(
+            report="Specialists spawned:\n\n- `sdlc-python-specialist`\n",
+            log_text=_codex_banner(parent_id),
+            children=(child,),
+        ),
+    )
+
+    assert returncode == 1
+    assert settlement.status is sdlc_team.SdlcSettledStatus.FAILED
+    assert settlement.errors == (
+        (
+            "spawn reconciliation: claimed item 'sdlc-python-specialist' matches "
+            "no observed child"
+        ),
+        (
+            "spawn reconciliation: observed child 'sdlc-config-specialist' "
+            "(/root/sdlc-python-specialist) was not claimed"
+        ),
+    )
+
+    control_code, control, _receipt = _run_supervisor(
+        tmp_path / "control",
+        monkeypatch,
+        _SupervisorFixture(
+            report=(
+                "Specialists spawned:\n\n"
+                "- `sdlc-config-specialist` — `/root/sdlc-python-specialist`\n"
+            ),
+            log_text=_codex_banner(parent_id),
+            children=(child,),
+        ),
+    )
+
+    assert control_code == 0
+    assert control.status is sdlc_team.SdlcSettledStatus.COMPLETED
+    assert control.errors == ()
+
+
+def test_arm_31_review_thread_only_child_does_not_mask_zero_spawns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A codex review thread is observed, but it is not a spawned specialist.
+
+    Reverting the review-aware zero check lets `- None.` plus one review thread
+    settle `completed` with no roster specialist having run at all.
+    """
+    parent_id = "01a0a8da-6d39-74e3-a8fc-fe66f5505378"
+    review_id = "01a0a8dc-de4d-7c93-a96f-8d001939aecd"
+    returncode, settlement, receipt = _run_supervisor(
+        tmp_path,
+        monkeypatch,
+        _SupervisorFixture(
+            report="Specialists spawned:\n\n- None.\n",
+            log_text=_codex_banner(parent_id),
+            children=(
+                {
+                    "id": review_id,
+                    "parent_thread_id": parent_id,
+                    "source": {"subagent": "review"},
+                },
+            ),
+        ),
+    )
+
+    sessions_root = tmp_path / "codex-home" / "sessions"
+    assert returncode == 1
+    assert settlement.status is sdlc_team.SdlcSettledStatus.FAILED
+    assert settlement.specialists_claimed == ()
+    assert settlement.specialists_observed == (review_id,)
+    assert settlement.errors == (
+        (
+            "spawn reconciliation: zero specialists observed under "
+            f"{sessions_root} (1 codex review thread(s) ignored)"
+        ),
+    )
+    assert [node.status for node in receipt.agents if node.name == review_id] == [
+        "review-thread"
+    ]

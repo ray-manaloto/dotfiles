@@ -400,11 +400,29 @@ def _claim_anchors_child(
     return bool(claim.paths) and all(path == child.agent_path for path in claim.paths)
 
 
+def _recorded_role_unasserted(
+    claim: _ClaimedIdentity,
+    child: _ObservedIdentity,
+) -> bool:
+    """Return whether the child RECORDS a role that no claim roster token asserts.
+
+    The basename rule exists for role-less children and for spawn names written
+    beside the role; it must never let a recorded, different ``agent_role`` pass
+    (a config specialist spawned at ``/root/sdlc-python-specialist`` is not a
+    python specialist, whatever its path says).
+    """
+    return bool(
+        child.agent_role and claim.roles and child.agent_role not in claim.roles
+    )
+
+
 def _consistent_child(
     claim: _ClaimedIdentity,
     child: _ObservedIdentity,
 ) -> bool:
     """Require every grammar-bounded candidate to describe the same child."""
+    if _recorded_role_unasserted(claim, child):
+        return False
     path_anchored = _claim_anchors_child(claim, child)
     return all(
         _candidate_satisfied(candidate, child, path_anchored=path_anchored)
@@ -462,6 +480,8 @@ def _unmatched_claim_error(
         ),
         None,
     )
+    if roster_token is None and _recorded_role_unasserted(claim, child):
+        roster_token = claim.roles[0]
     if roster_token is None:
         return f"claimed item {claim.node.name!r} matches no observed child", None
     detail = (
@@ -592,11 +612,16 @@ def reconcile_spawns(
         if parent_known and observed.available
         else ()
     )
-    if parent_known and observed.available and not children:
+    review_threads = sum(
+        1 for child in children if child.node.status == "review-thread"
+    )
+    if parent_known and observed.available and review_threads == len(children):
+        ignored = ""
+        if review_threads:
+            ignored = f" ({review_threads} codex review thread(s) ignored)"
+        root = sessions_root or "<unknown>"
         errors.append(
-            _reconciliation_error(
-                f"zero specialists observed under {sessions_root or '<unknown>'}"
-            )
+            _reconciliation_error(f"zero specialists observed under {root}{ignored}")
         )
     can_pair = parent_known and observed.available
     matches, unmatched, pairing_errors = _pair_claims(
