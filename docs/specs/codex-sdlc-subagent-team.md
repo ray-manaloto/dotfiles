@@ -150,11 +150,20 @@ No native mechanism was found. Scoped out deliberately as its own design.
 `SdlcTeamSettlement` now records the dispatcher's closing claimed roster and
 the direct child sessions observed in Codex rollout metadata. Settlement fails
 closed when the parent session id or observed source is unavailable, when no
-children were observed, or when one-to-one path-first/role-fallback pairing
-leaves a claim or child unmatched; ambiguous multi-path or multi-role claims
-also fail. The pinned negative arm is a Codex rc=0 report claiming
+children were observed, when a rollout written during the run is unreadable, or
+when one-to-one pairing leaves a claim or non-review child unmatched; a claim
+whose candidates do not all describe one child, or which carries two agent
+paths, also fails. The pinned negative arm is a Codex rc=0 report claiming
 `sdlc-python-specialist` with a valid parent banner but zero child rollouts:
 its terminal status must be `failed`, never `completed`.
+A roster token is satisfied by the child's `agent_role`, by the spawn name its
+`agent_path` encodes, or vacuously when the child records no role at all and
+the same claim's path candidate already anchors that child. Accepted limits: a
+role-only claim reaches a path-only child only when its token is that path's
+basename, a team run with zero observed specialists fails by design, and roster
+identities stay lowercase-only. Terminators cover `no other`, `none`, and
+`nothing else`; `No further specialists were spawned.` remains a claim and
+fails closed.
 
 ## Verification already performed
 

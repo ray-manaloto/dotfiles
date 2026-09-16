@@ -11,6 +11,7 @@ import os
 import re
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Final, cast
 from urllib.parse import quote
@@ -87,7 +88,7 @@ AGENTSVIEW_PATH: Final = Path(
 )
 _AGENTSVIEW_TIMEOUT_S: Final = 30.0
 _MIN_CONFLICTING_VALUES: Final = 2
-_MIN_BANNER_LINES: Final = 3
+_BANNER_SEARCH_LINES: Final = 50
 
 _SECTION_LINE = re.compile(
     r"(?:\bselected\s*:|\bspecialists?\s+(?:spawned|invoked)\s*:|"
@@ -101,6 +102,12 @@ _AGENT_LINE = re.compile(
     r"(?:\s+(?:—|-|:)\s*(?P<role>.+))?\s*$"
 )
 _SPAWN_SECTION_LINE = re.compile(r"\bspecialists\s+spawned\s*:", re.IGNORECASE)
+_MARKDOWN_LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(?P<text>.+?)\s*$")
+_BACKTICK_TOKEN = re.compile(r"`([^`]+)`")
+_SPAWN_TERMINATOR = re.compile(
+    r"^(?:no\s+other|none\b|nothing\s+else)",
+    re.IGNORECASE,
+)
 
 
 def _safe_run_id(run_id: str) -> str:
@@ -183,15 +190,23 @@ def parse_parent_thread_id(log_text: str) -> str | None:
     if not isinstance(log_text, str):
         return None
     lines = log_text.splitlines()
+    banner_index = next(
+        (
+            index
+            for index, line in enumerate(lines[:_BANNER_SEARCH_LINES])
+            if line.startswith("OpenAI Codex v")
+        ),
+        None,
+    )
     if (
-        len(lines) < _MIN_BANNER_LINES
-        or not lines[0].startswith("OpenAI Codex v")
-        or lines[1].strip() != "--------"
+        banner_index is None
+        or banner_index + 1 >= len(lines)
+        or lines[banner_index + 1].strip() != "--------"
     ):
         return None
 
     banner: list[str] = []
-    for line in lines[2:]:
+    for line in lines[banner_index + 2 :]:
         if line.strip() == "--------":
             break
         banner.append(line)
@@ -221,16 +236,31 @@ def collect_spawn_report(report_text: str) -> CollectorOutcome:
         )
 
     agents: list[AgentNode] = []
+    saw_terminator = False
     for line in lines[section_indexes[-1] + 1 :]:
         if not line.strip():
             continue
+        list_item = _MARKDOWN_LIST_ITEM.match(line)
+        item_text = (
+            list_item.group("text").strip() if list_item is not None else line.strip()
+        )
+        if _SPAWN_TERMINATOR.match(item_text):
+            saw_terminator = True
+            break
+        if list_item is None:
+            break
         match = _AGENT_LINE.match(line)
         if match is None:
-            if agents:
-                break
-            continue
-        name = match.group("code") or match.group("bold") or match.group("plain")
-        role = (match.group("role") or "").strip()
+            token = _BACKTICK_TOKEN.search(item_text)
+            if token is None:
+                name = item_text
+                role = ""
+            else:
+                name = token.group(1)
+                role = item_text[token.end() :].strip()
+        else:
+            name = match.group("code") or match.group("bold") or match.group("plain")
+            role = (match.group("role") or "").strip()
         agents.append(
             AgentNode(
                 name=name.strip(),
@@ -239,7 +269,7 @@ def collect_spawn_report(report_text: str) -> CollectorOutcome:
             )
         )
 
-    if not agents:
+    if not agents and not saw_terminator:
         return _unavailable(
             AgentSource.SELF_REPORT,
             "self-report Specialists spawned section contains no parseable list items",
@@ -291,8 +321,52 @@ def _rollout_payload(rollout_file: Path) -> dict[str, object] | None:
     return cast("dict[str, object]", payload)
 
 
+def _started_at_epoch(started_at: str) -> float | None:
+    """Return the run-start epoch, or ``None`` when the timestamp is unknown."""
+    try:
+        return datetime.fromisoformat(started_at).timestamp()
+    except ValueError, TypeError, OSError:
+        return None
+
+
+def _rollout_was_written_during_run(
+    rollout_file: Path,
+    started_at_epoch: float | None,
+) -> bool:
+    """Fail closed when an unreadable rollout cannot be proven older than the run."""
+    if started_at_epoch is None:
+        return True
+    try:
+        return rollout_file.stat().st_mtime >= started_at_epoch
+    except OSError:
+        return True
+
+
+def _unreadable_rollout_note(
+    skipped_older: int,
+    skipped_during_run: int,
+    started_at_epoch: float | None,
+) -> str:
+    """Describe old and settlement-causal unreadable rollout counts separately."""
+    notes: list[str] = []
+    if skipped_older:
+        notes.append(f"skipped {skipped_older} unreadable rollout file(s)")
+    if skipped_during_run:
+        during_note = (
+            f"skipped {skipped_during_run} unreadable rollout file(s) "
+            "written during this run"
+        )
+        if started_at_epoch is None:
+            during_note = f"{during_note} (start time was unknown)"
+        notes.append(during_note)
+    return "; ".join(notes)
+
+
 def collect_session_files(
-    parent_thread_id: str, sessions_root: Path
+    parent_thread_id: str,
+    sessions_root: Path,
+    *,
+    started_at: str = "",
 ) -> CollectorOutcome:
     """Collect direct child sessions from Codex rollout-file metadata."""
     if not parent_thread_id:
@@ -311,12 +385,18 @@ def collect_session_files(
             f"sessions root could not be scanned: {error}",
         )
 
+    started_at_epoch = _started_at_epoch(started_at)
+
     agents: list[AgentNode] = []
-    skipped = 0
+    skipped_older = 0
+    skipped_during_run = 0
     for rollout_file in rollout_files:
         payload = _rollout_payload(rollout_file)
         if payload is None:
-            skipped += 1
+            if _rollout_was_written_during_run(rollout_file, started_at_epoch):
+                skipped_during_run += 1
+            else:
+                skipped_older += 1
             continue
         if payload.get("parent_thread_id") != parent_thread_id:
             continue
@@ -324,21 +404,26 @@ def collect_session_files(
         agent_role = _text_field(payload, "agent_role")
         agent_path = _text_field(payload, "agent_path")
         child_id = _text_field(payload, "id")
+        source = payload.get("source")
+        subagent = source.get("subagent") if isinstance(source, dict) else None
+        review_thread = isinstance(subagent, str) and subagent == "review"
         agents.append(
             AgentNode(
                 name=agent_role or agent_path or child_id,
-                role=agent_path,
+                role="" if review_thread else agent_path,
                 sources=(AgentSource.OBSERVED,),
+                status="review-thread" if review_thread else "",
             )
         )
 
-    error = ""
-    if skipped:
-        error = f"skipped {skipped} unreadable rollout file(s)"
     return CollectorOutcome(
         source=AgentSource.OBSERVED,
         agents=tuple(agents),
-        error=error,
+        error=_unreadable_rollout_note(
+            skipped_older,
+            skipped_during_run,
+            started_at_epoch,
+        ),
     )
 
 

@@ -299,7 +299,11 @@ def _is_none_claim(name: str) -> bool:
 def _claimed_identity(node: lane_result.AgentNode) -> _ClaimedIdentity:
     """Extract ordered, grammar-bounded identities from one claimed item."""
     identities: list[str] = []
-    for candidate in (node.name, *_BACKTICK_TOKEN.findall(node.role)):
+    role_token = _BACKTICK_TOKEN.search(node.role)
+    candidates = (node.name,) + (
+        (role_token.group(1),) if role_token is not None else ()
+    )
+    for candidate in candidates:
         identity = candidate.strip()
         if not (
             _ROSTER_IDENTITY.fullmatch(identity) or _PATH_IDENTITY.fullmatch(identity)
@@ -337,13 +341,25 @@ def _reconciliation_error(detail: str) -> str:
     return f"spawn reconciliation: {detail}"
 
 
+def _during_run_skip_note(error: str) -> str:
+    """Extract the settlement-causal unreadable-rollout note, if present."""
+    return next(
+        (
+            note
+            for note in error.split("; ")
+            if "unreadable rollout file(s) written during this run" in note
+        ),
+        "",
+    )
+
+
 def _claim_problem(claim: _ClaimedIdentity) -> str:
     """Return the fail-closed validation error for one claim, if any."""
     if not claim.identities:
         return (
             f"claimed item {claim.node.name!r} names no roster specialist or agent path"
         )
-    if len(claim.paths) > 1 or len(claim.roles) > 1:
+    if len(claim.paths) > 1:
         return (
             f"claimed item {claim.node.name!r} carries more than one path "
             "or role identity"
@@ -351,19 +367,108 @@ def _claim_problem(claim: _ClaimedIdentity) -> str:
     return ""
 
 
+def _path_basename(agent_path: str) -> str:
+    """Return the Codex spawn name encoded by an agent path."""
+    return agent_path.rsplit("/", maxsplit=1)[-1]
+
+
+def _candidate_satisfied(
+    candidate: str,
+    child: _ObservedIdentity,
+    *,
+    path_anchored: bool,
+) -> bool:
+    """Return whether one claim constraint agrees with one observed child.
+
+    A roster token is satisfied by the child's recorded ``agent_role``, by the
+    spawn name its ``agent_path`` encodes, or — when the child records NO role
+    at all and a path candidate of the same claim already anchors this child —
+    vacuously: a missing field cannot contradict a claim the path pins down.
+    """
+    if _PATH_IDENTITY.fullmatch(candidate):
+        return candidate == child.agent_path
+    if candidate in {child.agent_role, _path_basename(child.agent_path)}:
+        return True
+    return path_anchored and not child.agent_role
+
+
+def _claim_anchors_child(
+    claim: _ClaimedIdentity,
+    child: _ObservedIdentity,
+) -> bool:
+    """Return whether the claim's own path candidates pin down this child."""
+    return bool(claim.paths) and all(path == child.agent_path for path in claim.paths)
+
+
+def _consistent_child(
+    claim: _ClaimedIdentity,
+    child: _ObservedIdentity,
+) -> bool:
+    """Require every grammar-bounded candidate to describe the same child."""
+    path_anchored = _claim_anchors_child(claim, child)
+    return all(
+        _candidate_satisfied(candidate, child, path_anchored=path_anchored)
+        for candidate in claim.identities
+    )
+
+
 def _matching_child(
     claim: _ClaimedIdentity,
     children: tuple[_ObservedIdentity, ...],
     unmatched: set[int],
 ) -> int | None:
-    """Choose one unmatched child, preferring the unique path identity."""
+    """Choose the first unmatched non-review child consistent with the claim."""
     for child_index in sorted(unmatched):
-        if children[child_index].agent_path in claim.paths:
-            return child_index
-    for child_index in sorted(unmatched):
-        if children[child_index].agent_role in claim.roles:
+        if _consistent_child(claim, children[child_index]):
             return child_index
     return None
+
+
+def _claim_name(claim: _ClaimedIdentity) -> str:
+    """Keep the dispatcher's own preferred identity for settlement evidence."""
+    if claim.roles:
+        return claim.roles[0]
+    if claim.paths:
+        return claim.paths[0]
+    return claim.node.name
+
+
+def _unmatched_claim_error(
+    claim: _ClaimedIdentity,
+    children: tuple[_ObservedIdentity, ...],
+) -> tuple[str, int | None]:
+    """Describe why a well-formed claim matched no observed child."""
+    if not claim.paths:
+        return f"claimed item {claim.node.name!r} matches no observed child", None
+
+    claimed_path = claim.paths[0]
+    path_match = next(
+        (
+            (child_index, child)
+            for child_index, child in enumerate(children)
+            if child.node.status != "review-thread" and child.agent_path == claimed_path
+        ),
+        None,
+    )
+    if path_match is None:
+        return f"claimed path {claimed_path!r} matches no observed child", None
+
+    child_index, child = path_match
+    roster_token = next(
+        (
+            candidate
+            for candidate in claim.roles
+            if not _candidate_satisfied(candidate, child, path_anchored=True)
+        ),
+        None,
+    )
+    if roster_token is None:
+        return f"claimed item {claim.node.name!r} matches no observed child", None
+    detail = (
+        f"claimed {roster_token!r} does not match child at {claimed_path} "
+        f"(agent_role {child.agent_role!r}, name {_path_basename(claimed_path)!r})"
+    )
+    return detail, child_index
 
 
 def _pair_claims(
@@ -371,33 +476,32 @@ def _pair_claims(
     children: tuple[_ObservedIdentity, ...],
     *,
     can_pair: bool,
-) -> tuple[dict[int, int], set[int], tuple[str, ...], tuple[str, ...]]:
-    """Greedily pair well-formed claims under the v5 single-identity invariant."""
+) -> tuple[dict[int, int], set[int], tuple[str, ...]]:
+    """Pair report-ordered claims to first consistent unmatched children."""
     matches: dict[int, int] = {}
-    unmatched = set(range(len(children)))
-    claimed_names: list[str] = []
+    unmatched = {
+        index
+        for index, child in enumerate(children)
+        if child.node.status != "review-thread"
+    }
+    diagnosed_children: set[int] = set()
     errors: list[str] = []
     for claim_index, claim in enumerate(claims):
-        fallback_name = claim.identities[0] if claim.identities else claim.node.name
         problem = _claim_problem(claim)
         if problem:
             errors.append(_reconciliation_error(problem))
-            claimed_names.append(fallback_name)
             continue
         child_index = _matching_child(claim, children, unmatched) if can_pair else None
         if child_index is None:
-            claimed_names.append(fallback_name)
             if can_pair:
-                errors.append(
-                    _reconciliation_error(
-                        f"claimed {fallback_name!r} has no observed child session"
-                    )
-                )
+                detail, diagnosed_child = _unmatched_claim_error(claim, children)
+                errors.append(_reconciliation_error(detail))
+                if diagnosed_child is not None:
+                    diagnosed_children.add(diagnosed_child)
             continue
         matches[claim_index] = child_index
         unmatched.remove(child_index)
-        claimed_names.append(children[child_index].node.name)
-    return matches, unmatched, tuple(claimed_names), tuple(errors)
+    return matches, unmatched - diagnosed_children, tuple(errors)
 
 
 def _unmatched_child_errors(
@@ -433,13 +537,10 @@ def _canonical_self_report(
             canonical_agents.append(claim.node)
             continue
         child = children[child_index]
-        role = claim.node.role
-        if _PATH_IDENTITY.fullmatch(claim.node.name):
-            role = child.agent_path
         canonical_agents.append(
             lane_result.AgentNode(
                 name=child.node.name,
-                role=role,
+                role=child.agent_path,
                 parent=claim.node.parent,
                 sources=claim.node.sources,
                 status=claim.node.status,
@@ -472,6 +573,10 @@ def reconcile_spawns(
     if not observed.available:
         detail = observed.error or "collector supplied no error"
         errors.append(_reconciliation_error(f"observed source unavailable: {detail}"))
+    else:
+        during_run_skip = _during_run_skip_note(observed.error)
+        if during_run_skip:
+            errors.append(_reconciliation_error(during_run_skip))
 
     claims = (
         tuple(
@@ -494,7 +599,7 @@ def reconcile_spawns(
             )
         )
     can_pair = parent_known and observed.available
-    matches, unmatched, claimed_names, pairing_errors = _pair_claims(
+    matches, unmatched, pairing_errors = _pair_claims(
         claims, children, can_pair=can_pair
     )
     errors.extend(pairing_errors)
@@ -506,7 +611,7 @@ def reconcile_spawns(
     return SpawnReconciliation(
         consistent=not errors,
         parent_thread_id=parent_thread_id,
-        specialists_claimed=claimed_names,
+        specialists_claimed=tuple(_claim_name(claim) for claim in claims),
         specialists_observed=tuple(sorted(node.name for node in observed.agents)),
         errors=tuple(errors),
         self_report=canonical_self_report,
@@ -774,7 +879,9 @@ def _write_lane_receipts(
         parent_thread_id = lane_result.parse_parent_thread_id(log_text)
     if payload.sessions_root:
         observed = lane_result.collect_session_files(
-            parent_thread_id or "", Path(payload.sessions_root)
+            parent_thread_id or "",
+            Path(payload.sessions_root),
+            started_at=payload.started_at,
         )
     else:
         observed = lane_result.CollectorOutcome(

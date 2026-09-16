@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -134,6 +135,34 @@ The model quoted session id: later-value here.
     assert lane_result.parse_parent_thread_id(quoted_later) is None
 
 
+def test_arm_24_parent_banner_may_follow_traces_within_first_fifty_lines() -> None:
+    parent_id = "01a0a8da-6d39-74e3-a8fc-fe66f5505378"
+    after_three_traces = "\n".join(
+        (
+            "trace: loading config",
+            "trace: resolving model",
+            "trace: starting exec",
+            "OpenAI Codex v0.154.0",
+            "--------",
+            "workdir: /repo",
+            f"session id: {parent_id}",
+            "--------",
+        )
+    )
+    after_fifty_lines = "\n".join(
+        (
+            *(f"trace {index}" for index in range(50)),
+            "OpenAI Codex v0.154.0",
+            "--------",
+            f"session id: {parent_id}",
+            "--------",
+        )
+    )
+
+    assert lane_result.parse_parent_thread_id(after_three_traces) == parent_id
+    assert lane_result.parse_parent_thread_id(after_fifty_lines) is None
+
+
 def test_spawn_report_uses_the_last_anchor_while_self_report_keeps_first_match() -> (
     None
 ):
@@ -164,6 +193,45 @@ No other specialists were spawned.
         ("sdlc-python-specialist", "`/root/python_review`"),
         ("sdlc-config-specialist", "`/root/config_review`"),
         ("sdlc-documentation-specialist", "`/root/docs_review`"),
+    ]
+
+
+def test_arm_28_spawn_report_terminators_end_the_list_without_becoming_claims() -> None:
+    supported = (
+        "No other specialists were spawned.",
+        "No other specialists or subagents were spawned.",
+        "No others were spawned.",
+        "None others were spawned.",
+        "Nothing else was spawned.",
+    )
+
+    for terminator in supported:
+        empty = lane_result.collect_spawn_report(
+            f"Specialists spawned:\n\n- {terminator}\n"
+        )
+        outcome = lane_result.collect_spawn_report(
+            "Specialists spawned:\n\n"
+            "- `sdlc-python-specialist`\n"
+            f"- {terminator}\n"
+            "- `must-not-be-parsed`\n"
+        )
+
+        assert empty.available is True
+        assert empty.agents == ()
+        assert outcome.available is True
+        assert [(node.name, node.role) for node in outcome.agents] == [
+            ("sdlc-python-specialist", "")
+        ]
+
+    unsupported = lane_result.collect_spawn_report(
+        "Specialists spawned:\n\n"
+        "- `sdlc-python-specialist`\n"
+        "- No further specialists were spawned.\n"
+    )
+    assert unsupported.available is True
+    assert [(node.name, node.role) for node in unsupported.agents] == [
+        ("sdlc-python-specialist", ""),
+        ("No further specialists were spawned.", ""),
     ]
 
 
@@ -214,8 +282,13 @@ def test_session_file_collector_reads_first_records_and_guards_payload_shapes(
     bad = sessions_root / "2026" / "04" / "16" / "rollout-zero.jsonl"
     bad.parent.mkdir(parents=True)
     bad.write_text("")
+    os.utime(bad, (0, 0))
 
-    outcome = lane_result.collect_session_files(parent_id, sessions_root)
+    outcome = lane_result.collect_session_files(
+        parent_id,
+        sessions_root,
+        started_at="2026-09-16T00:00:00+00:00",
+    )
 
     assert outcome.available is True
     assert outcome.error == "skipped 1 unreadable rollout file(s)"
