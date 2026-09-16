@@ -79,6 +79,15 @@ def test_review_dispatch_is_detached_complete_and_has_no_false_settlement(
     assert result.pid == _DetachedProcess.pid
     assert not hasattr(result, "codex_pid")
     assert result.argv[-1] == "-"
+    assert "--ephemeral" not in result.argv, (
+        "--ephemeral means 'Run without persisting session files to disk', and a "
+        "spawned subagent IS a persisted thread — under it every spawn dies with "
+        "`collab spawn failed: no thread with id`, so the team silently degrades "
+        "to one generalist lane (#1142). Measured 2026-09-16 on one variable: 3 "
+        "spawn failures and 0 session files with it; 0 failures and 2 files "
+        'without, the child carrying "parent_thread_id". It also hides the run '
+        "from agentsview, which reads those same files."
+    )
     assert result.argv[result.argv.index("-s") + 1] == "read-only"
     assert result.argv[result.argv.index("-o") + 1] == result.output_file
     assert Path(result.argv[0]).is_absolute()

@@ -347,10 +347,30 @@ def dispatch(request: SdlcTeamRequest, repo_root: Path) -> SdlcTeamDispatch:
         ),
     )
     sandbox = "read-only" if request.mode is SdlcMode.REVIEW else "workspace-write"
+    # `--ephemeral` is deliberately ABSENT, and re-adding it breaks the team.
+    #
+    # It means "Run without persisting session files to disk" (`codex exec
+    # --help`). A spawned subagent IS a persisted thread — `app-server.md:291`
+    # archives "spawned descendant thread logs" and `:747` calls a thread log
+    # a JSONL file on disk — so with nothing persisted the router has no thread
+    # to attach a descendant to and every spawn dies:
+    #
+    #     ERROR codex_core::tools::router: error=collab spawn failed:
+    #       no thread with id: 01a0a848-…
+    #
+    # Measured 2026-09-16, same prompt, one variable, evidence on disk rather
+    # than from the model's own report:
+    #
+    #     with    --ephemeral : 3 spawn failures, 0 session files written
+    #     without --ephemeral : 0 spawn failures, 2 session files — and the
+    #                           child carries "parent_thread_id":"<parent>"
+    #                           plus the payload the subagent was asked for
+    #
+    # Dropping it also makes a lane visible to agentsview, which reads exactly
+    # these session files; under `--ephemeral` no lane could ever be audited.
     argv = (
         str(Path(codex).resolve()),
         "exec",
-        "--ephemeral",
         "-s",
         sandbox,
         "-c",

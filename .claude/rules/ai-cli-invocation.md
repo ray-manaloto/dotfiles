@@ -26,6 +26,15 @@ printf '%s\n' "prompt" | mise exec -- agy --print --output-format text
 printf '%s\n' "prompt" | mise exec -- opencode run --format json
 ```
 
+⚠️ **`--ephemeral` blocks subagent spawning — drop it for any lane that
+delegates.** It means "Run without persisting session files to disk", and a
+spawned subagent IS a persisted thread, so under it every spawn dies with
+`collab spawn failed: no thread with id`. Measured 2026-09-16 on one variable:
+3 failures / 0 session files with it, 0 failures / 2 files without — the child
+carrying `"parent_thread_id"`. The blocks above keep it because a research or
+implementation lane does not delegate; `sdlc_team.py` deliberately omits it
+(#1142). It also hides the run from agentsview, which reads those same files.
+
 This is the only hand-kept argv block. Agent definitions, workflows, and task
 documentation point here or to `mise run codex-lane`; do not duplicate a flag
 recipe that can drift independently.

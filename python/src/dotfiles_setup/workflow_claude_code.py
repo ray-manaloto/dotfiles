@@ -247,7 +247,17 @@ def find_violations(root: Path) -> list[str]:
     violations: list[str] = []
     for path in sorted((root / WORKFLOW_DIR).glob("*.y*ml")):
         workflow = f"{WORKFLOW_DIR}/{path.name}"
-        document = yaml.safe_load(path.read_text(encoding="utf-8"))
+        try:
+            document = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except yaml.YAMLError, OSError, UnicodeDecodeError:
+            # Deliberate fail-OPEN on malformed YAML, matching
+            # `workflow_hooks.parse_jobs`: `actionlint` already gates workflow
+            # syntax in both CI and hk, so a parse error here is a duplicate
+            # failure with a worse message. Measured before this guard existed:
+            # a workflow that did not parse produced a raw
+            # `yaml.scanner.ScannerError` traceback under "Unexpected command
+            # failure" instead of naming the file.
+            continue
         violations.extend(
             f"{job.workflow}: job `{job.name}` runs an hk hook that includes "
             f"`{GATE_STEP}` but never installs Claude Code. That step shells "
