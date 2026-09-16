@@ -441,6 +441,31 @@ jobs:
     assert len(wcc.find_violations(root)) == 1
 
 
+def test_a_comment_continuation_cannot_hide_the_next_route(tmp_path: Path) -> None:
+    """A comment's trailing backslash cannot absorb the following command."""
+    caught = _tree(
+        tmp_path / "caught",
+        {"ci.yml": _job("# note \\\nhk run check --all", installs=False)},
+    )
+    control = _tree(
+        tmp_path / "control",
+        {"ci.yml": _job("# hk fix \\", installs=False)},
+    )
+
+    assert len(wcc.find_violations(caught)) == 1
+    assert wcc.find_violations(control) == []
+
+
+def test_an_in_word_continuation_preserves_the_task_name(tmp_path: Path) -> None:
+    """Removing backslash-newline must not split one shell word into two."""
+    root = _tree(
+        tmp_path,
+        {"ci.yml": _job("mise run li\\\nnt", installs=False)},
+    )
+
+    assert len(wcc.find_violations(root)) == 1
+
+
 @pytest.mark.parametrize(
     "command",
     [

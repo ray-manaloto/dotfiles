@@ -235,11 +235,11 @@ _MISE_RUN_FLAG_INDEX = _flag_index(MISE_RUN_FLAGS)
 
 
 def _shell_tokens(command: str) -> tuple[str, ...]:
-    """Small shell-ish token stream after dropping full-line comments."""
-    command = command.replace("\\\n", " ")
+    """Drop full-line comments, then join shell continuations into tokens."""
     uncommented = "\n".join(
         line for line in command.splitlines() if not _SHELL_COMMENT_RE.match(line)
     )
+    uncommented = uncommented.replace("\\\n", "")
     return tuple(_SHELL_TOKEN_RE.findall(uncommented))
 
 
