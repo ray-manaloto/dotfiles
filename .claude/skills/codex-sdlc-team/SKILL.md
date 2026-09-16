@@ -53,7 +53,8 @@ review selects a read-only sandbox, while `implement` selects workspace-write.
 omit them to use deterministic defaults.
 
 The task code generates the dispatcher address, spec pointer, licensed-dissent
-and test-craft clauses, file allowlist, `COMMIT: caller`, spawn-retry clause, and
+and test-craft clauses, file allowlist, `COMMIT: caller`, the stop-on-spawn-failure
+clause (never "do the work yourself"), the pinned closing-list format, and
 the prohibition on piping results into a pager. It also selects the sandbox,
 constructs the Codex argv, includes the load-bearing trailing `-`, and launches
 the detached supervisor. Do not assemble any of those pieces manually.
