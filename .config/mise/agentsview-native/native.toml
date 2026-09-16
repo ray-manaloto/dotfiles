@@ -1,0 +1,18 @@
+# Inert until independent review and ROOT's selected host action.
+# Native mise writes literal values; no Tera expressions in this LaunchAgent.
+[settings]
+auto_install = false
+
+[task_config]
+includes = ["tasks.toml"]
+
+[bootstrap.macos.launchd.agents."com.raymanaloto.agentsview-native"]
+program = "/Users/rmanaloto/.local/share/mise/installs/github-kenn-io-agentsview/0.43.0/agentsview"
+args = ["serve", "--host", "127.0.0.1", "--port", "8080", "--no-browser", "--no-update-check", "--require-auth"]
+working_directory = "/Users/rmanaloto/Library/Application Support/AgentsView-M1-working-b0ae79c5365e-20260915/archive"
+stdout_path = "/Users/rmanaloto/Library/Application Support/AgentsView-M1-working-b0ae79c5365e-20260915/archive/native.stdout.log"
+stderr_path = "/Users/rmanaloto/Library/Application Support/AgentsView-M1-working-b0ae79c5365e-20260915/archive/native.stderr.log"
+run_at_load = true
+keep_alive = true
+throttle_interval = 30
+environment = { HOME = "/Users/rmanaloto", AGENTSVIEW_DATA_DIR = "/Users/rmanaloto/Library/Application Support/AgentsView-M1-working-b0ae79c5365e-20260915/archive", AGENTSVIEW_TELEMETRY_ENABLED = "0", AGENTSVIEW_DISABLE_UPDATE_CHECK = "1", AGENTSVIEW_ARCHIVE_CONTENT = "full", PATH = "/usr/bin:/bin" }
