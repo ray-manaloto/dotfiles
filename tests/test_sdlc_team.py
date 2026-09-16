@@ -7,14 +7,15 @@ import json
 import signal
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, BinaryIO, cast
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
-from dotfiles_setup import codec, main, sdlc_team
+from dotfiles_setup import codec, lane_result, main, sdlc_team
 from dotfiles_setup.config import ContainerConfig, DotfilesConfig, MiseConfig
 
 
@@ -22,6 +23,129 @@ class _DetachedProcess:
     """Minimal process returned at the detached-supervisor boundary."""
 
     pid = 4242
+
+
+class _CompletedChild:
+    """Minimal successful Codex child for supervisor-boundary tests."""
+
+    pid = 8181
+    returncode: int | None = None
+
+    def wait(self, timeout: float | None = None) -> int:
+        assert timeout is None
+        self.returncode = 0
+        return 0
+
+
+def _codex_banner(parent_thread_id: str) -> str:
+    """Build the real delimited exec-banner shape captured in codex.log."""
+    return (
+        "OpenAI Codex v0.154.0\n"
+        "--------\n"
+        "workdir: /repo\n"
+        f"session id: {parent_thread_id}\n"
+        "--------\n"
+    )
+
+
+def _write_child_rollout(
+    sessions_root: Path,
+    filename: str,
+    child: dict[str, str],
+) -> Path:
+    """Write the verified first-line Codex child metadata shape."""
+    payload: dict[str, object] = {
+        "id": child["id"],
+        "session_id": child["parent_thread_id"],
+        "parent_thread_id": child["parent_thread_id"],
+        "originator": "codex_exec",
+        "thread_source": "subagent",
+        "source": {"subagent": "type-guard-control"},
+        "cwd": "/repo",
+    }
+    if child.get("agent_role"):
+        payload["agent_role"] = child["agent_role"]
+    if child.get("agent_path"):
+        payload["agent_path"] = child["agent_path"]
+    path = sessions_root / "2026" / "09" / "16" / filename
+    path.parent.mkdir(parents=True, exist_ok=True)
+    record = {
+        "timestamp": "2026-09-16T06:16:17.947Z",
+        "ordinal": 0,
+        "type": "session_meta",
+        "payload": payload,
+    }
+    path.write_text(json.dumps(record) + "\n" + '{"type":"session_meta"}\n')
+    return path
+
+
+@dataclass(frozen=True)
+class _SupervisorFixture:
+    """All external evidence supplied to one isolated supervisor run."""
+
+    report: str
+    log_text: str
+    children: tuple[dict[str, str], ...] = ()
+    add_unreadable_rollout: bool = False
+
+
+def _run_supervisor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    fixture: _SupervisorFixture,
+) -> tuple[int, sdlc_team.SdlcTeamSettlement, lane_result.LaneResult]:
+    """Run the real supervisor composition around an isolated fake Codex process."""
+    prompt = tmp_path / "prompt.md"
+    output = tmp_path / "output.md"
+    sessions_root = tmp_path / "codex-home" / "sessions"
+    prompt.write_text("dispatch\n")
+    output.write_text(fixture.report)
+    sessions_root.mkdir(parents=True)
+    for index, child in enumerate(fixture.children):
+        _write_child_rollout(
+            sessions_root,
+            f"rollout-child-{index}.jsonl",
+            child,
+        )
+    if fixture.add_unreadable_rollout:
+        (sessions_root / "rollout-zero.jsonl").write_text("")
+
+    child_process = _CompletedChild()
+
+    def fake_popen(*_args: object, **kwargs: object) -> _CompletedChild:
+        stdout = cast("BinaryIO", kwargs["stdout"])
+        stdout.write(fixture.log_text.encode())
+        stdout.flush()
+        return child_process
+
+    monkeypatch.setattr(sdlc_team.subprocess, "Popen", fake_popen)
+    ticks = iter((10.0, 10.25))
+    monkeypatch.setattr(sdlc_team.time, "monotonic", lambda: next(ticks))
+    payload_type = vars(sdlc_team)["_SupervisorPayload"]
+    supervise = vars(sdlc_team)["_supervise"]
+    payload = payload_type(
+        run_id="spawn-run",
+        argv=("/bin/codex", "exec", "-"),
+        prompt_file=str(prompt),
+        output_file=str(output),
+        log_file=str(tmp_path / "codex.log"),
+        receipt_json=str(tmp_path / "receipt.json"),
+        receipt_md=str(tmp_path / "receipt.md"),
+        settlement_file=str(tmp_path / "settlement.json"),
+        workdir=str(tmp_path),
+        started_at="2026-09-15T00:00:00+00:00",
+        sessions_root=str(sessions_root),
+    )
+
+    returncode = supervise(payload)
+    settlement = codec.decode(
+        (tmp_path / "settlement.json").read_bytes(),
+        sdlc_team.SdlcTeamSettlement,
+    )
+    receipt = codec.decode(
+        (tmp_path / "receipt.json").read_bytes(), lane_result.LaneResult
+    )
+    return returncode, settlement, receipt
 
 
 def _isolated_config(tmp_path: Path) -> DotfilesConfig:
@@ -108,7 +232,12 @@ def test_review_dispatch_is_detached_complete_and_has_no_false_settlement(
     assert "STANDING CLAUSE — LICENSED DISSENT" in prompt
     assert "STANDING CLAUSE — TEST CRAFT" in prompt
     assert "COMMIT: caller" in prompt
-    assert "retry once without conversation history" in prompt
+    assert (
+        "If a specialist cannot be spawned, stop and report the spawn failure" in prompt
+    )
+    assert "do the work yourself" not in prompt
+    assert "exactly one item per spawned specialist" in prompt
+    assert "formatted as - `<agent_role>` — `<agent_path>`" in prompt
     assert "Never pipe a command into head, tail, sed, awk" in prompt
     assert "Do not run repository gates" in prompt
     assert "Do not write a report file" in prompt
@@ -163,6 +292,20 @@ def test_explicit_artifact_locations_are_resolved_and_echoed(
     assert result.receipt_json == str((tmp_path / request.receipt_json).resolve())
     assert result.receipt_md == str((tmp_path / request.receipt_md).resolve())
     assert Path(result.prompt_file).is_file()
+
+
+def test_dispatch_snapshots_codex_home_sessions_in_the_supervisor_payload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    codex_home = tmp_path / "isolated-codex-home"
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+
+    _result, calls = _capture_dispatch(tmp_path, monkeypatch, _request(tmp_path))
+    supervisor_argv, _options = calls[0]
+    decode_payload = vars(sdlc_team)["_decode_payload"]
+    payload = decode_payload(supervisor_argv[-1])
+
+    assert payload.sessions_root == str((codex_home / "sessions").resolve())
 
 
 def test_missing_spec_launches_no_process_and_returns_resolved_paths(
@@ -296,54 +439,461 @@ def test_read_status_rejects_an_on_disk_abandoned_settlement(tmp_path: Path) -> 
         sdlc_team.read_status(tmp_path, "bad", pid=1)
 
 
-def test_supervisor_records_child_pid_and_completed_outcome(
+def test_old_seven_field_settlement_decodes_with_new_field_defaults() -> None:
+    old_bytes = json.dumps(
+        {
+            "run_id": "old-run",
+            "status": "completed",
+            "codex_returncode": 0,
+            "codex_pid": 42,
+            "finished_at": "2026-09-15T00:00:00+00:00",
+            "duration_s": 1.5,
+            "errors": [],
+        }
+    ).encode()
+
+    settlement = codec.decode(old_bytes, sdlc_team.SdlcTeamSettlement)
+
+    assert settlement.parent_thread_id is None
+    assert settlement.specialists_claimed == ()
+    assert settlement.specialists_observed == ()
+    with pytest.raises(ValueError, match="run_id"):
+        codec.decode(b'{"status":"completed"}', sdlc_team.SdlcTeamSettlement)
+
+
+def test_supervisor_fails_when_claimed_specialist_has_no_child_session(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Dropping settlement ownership of codex_pid loses the launched child identity."""
-    prompt = tmp_path / "prompt.md"
-    output = tmp_path / "output.md"
-    prompt.write_text("dispatch\n")
-    output.write_text("Specialists spawned:\n\n- `sdlc-python-specialist`\n")
-
-    class CompletedChild:
-        pid = 8181
-        returncode: int | None = None
-
-        def wait(self, timeout: float | None = None) -> int:
-            assert timeout is None
-            self.returncode = 0
-            return 0
-
-    child = CompletedChild()
-    monkeypatch.setattr(sdlc_team.subprocess, "Popen", lambda *_a, **_kw: child)
-    ticks = iter((10.0, 10.25))
-    monkeypatch.setattr(sdlc_team.time, "monotonic", lambda: next(ticks))
-    payload_type = vars(sdlc_team)["_SupervisorPayload"]
-    supervise = vars(sdlc_team)["_supervise"]
-    payload = payload_type(
-        run_id="complete",
-        argv=("/bin/codex", "exec", "-"),
-        prompt_file=str(prompt),
-        output_file=str(output),
-        log_file=str(tmp_path / "codex.log"),
-        receipt_json=str(tmp_path / "receipt.json"),
-        receipt_md=str(tmp_path / "receipt.md"),
-        settlement_file=str(tmp_path / "settlement.json"),
-        workdir=str(tmp_path),
-        started_at="2026-09-15T00:00:00+00:00",
+    parent_id = "01a0a8da-6d39-74e3-a8fc-fe66f5505378"
+    returncode, settlement, _receipt = _run_supervisor(
+        tmp_path,
+        monkeypatch,
+        _SupervisorFixture(
+            report="Specialists spawned:\n\n- `sdlc-python-specialist`\n",
+            log_text=_codex_banner(parent_id),
+        ),
     )
 
-    assert supervise(payload) == 0
-    settlement = codec.decode(
-        (tmp_path / "settlement.json").read_bytes(),
-        sdlc_team.SdlcTeamSettlement,
-    )
-    assert settlement.status is sdlc_team.SdlcSettledStatus.COMPLETED
+    assert returncode == 1
+    assert settlement.status is sdlc_team.SdlcSettledStatus.FAILED
     assert settlement.codex_returncode == 0
-    assert settlement.codex_pid == child.pid
-    assert settlement.duration_s == 0.25
-    assert (tmp_path / "receipt.json").is_file()
-    assert (tmp_path / "receipt.md").is_file()
+    assert settlement.codex_pid == _CompletedChild.pid
+    assert settlement.parent_thread_id == parent_id
+    sessions_root = tmp_path / "codex-home" / "sessions"
+    assert settlement.errors == (
+        f"spawn reconciliation: zero specialists observed under {sessions_root}",
+        (
+            "spawn reconciliation: claimed 'sdlc-python-specialist' has no observed "
+            "child session"
+        ),
+    )
+    assert settlement.specialists_claimed == ("sdlc-python-specialist",)
+    assert settlement.specialists_observed == ()
+
+
+def test_supervisor_completes_when_claim_and_child_role_match(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    parent_id = "01a0a8da-6d39-74e3-a8fc-fe66f5505378"
+    returncode, settlement, _receipt = _run_supervisor(
+        tmp_path,
+        monkeypatch,
+        _SupervisorFixture(
+            report="Specialists spawned:\n\n- `sdlc-python-specialist`\n",
+            log_text=_codex_banner(parent_id),
+            children=(
+                {
+                    "id": "01a0a8db-de4d-7c93-a96f-8d001939aecd",
+                    "parent_thread_id": parent_id,
+                    "agent_role": "sdlc-python-specialist",
+                },
+            ),
+        ),
+    )
+
+    assert returncode == 0
+    assert settlement.status is sdlc_team.SdlcSettledStatus.COMPLETED
+    assert settlement.parent_thread_id == parent_id
+    assert settlement.specialists_claimed == ("sdlc-python-specialist",)
+    assert settlement.specialists_observed == ("sdlc-python-specialist",)
+    assert settlement.errors == ()
+
+
+def test_supervisor_fails_with_one_error_per_claimed_and_observed_mismatch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    parent_id = "01a0a8da-6d39-74e3-a8fc-fe66f5505378"
+    returncode, settlement, _receipt = _run_supervisor(
+        tmp_path,
+        monkeypatch,
+        _SupervisorFixture(
+            report="Specialists spawned:\n\n- `sdlc-python-specialist`\n",
+            log_text=_codex_banner(parent_id),
+            children=(
+                {
+                    "id": "01a0a8db-de4d-7c93-a96f-8d001939aecd",
+                    "parent_thread_id": parent_id,
+                    "agent_role": "sdlc-config-specialist",
+                    "agent_path": "/root/config_review",
+                },
+            ),
+        ),
+    )
+
+    assert returncode == 1
+    assert settlement.status is sdlc_team.SdlcSettledStatus.FAILED
+    assert settlement.errors == (
+        (
+            "spawn reconciliation: claimed 'sdlc-python-specialist' has no observed "
+            "child session"
+        ),
+        (
+            "spawn reconciliation: observed child 'sdlc-config-specialist' "
+            "(/root/config_review) was not claimed"
+        ),
+    )
+
+
+def test_supervisor_fails_closed_when_codex_banner_has_no_parent_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    parent_id = "01a0a8da-6d39-74e3-a8fc-fe66f5505378"
+    returncode, settlement, _receipt = _run_supervisor(
+        tmp_path,
+        monkeypatch,
+        _SupervisorFixture(
+            report="Specialists spawned:\n\n- `sdlc-python-specialist`\n",
+            log_text="Codex output without an exec banner\n",
+            children=(
+                {
+                    "id": "01a0a8db-de4d-7c93-a96f-8d001939aecd",
+                    "parent_thread_id": parent_id,
+                    "agent_role": "sdlc-python-specialist",
+                },
+            ),
+        ),
+    )
+
+    assert returncode == 1
+    assert settlement.status is sdlc_team.SdlcSettledStatus.FAILED
+    assert settlement.parent_thread_id is None
+    assert settlement.errors == (
+        "spawn reconciliation: parent thread id not found in codex.log banner",
+        (
+            "spawn reconciliation: observed source unavailable: parent thread id was "
+            "not provided"
+        ),
+    )
+    assert settlement.specialists_claimed == ("sdlc-python-specialist",)
+    assert settlement.specialists_observed == ()
+
+
+def test_path_first_claim_is_canonicalized_once_in_the_lane_receipt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    parent_id = "01a0a8da-6d39-74e3-a8fc-fe66f5505378"
+    report = (
+        "Specialists spawned:\n\n"
+        "- `/root/config_pin_review` — `sdlc-config-specialist`; initial spawn "
+        "failed with `no thread with id`, retry succeeded\n"
+    )
+    returncode, settlement, receipt = _run_supervisor(
+        tmp_path,
+        monkeypatch,
+        _SupervisorFixture(
+            report=report,
+            log_text=_codex_banner(parent_id),
+            children=(
+                {
+                    "id": "01a0a8db-de4d-7c93-a96f-8d001939aecd",
+                    "parent_thread_id": parent_id,
+                    "agent_role": "sdlc-config-specialist",
+                    "agent_path": "/root/config_pin_review",
+                },
+            ),
+        ),
+    )
+
+    assert returncode == 0
+    assert settlement.status is sdlc_team.SdlcSettledStatus.COMPLETED
+    assert settlement.specialists_claimed == ("sdlc-config-specialist",)
+    assert settlement.specialists_observed == ("sdlc-config-specialist",)
+    assert settlement.errors == ()
+    assert [(agent.name, agent.role) for agent in receipt.agents] == [
+        ("sdlc-config-specialist", "/root/config_pin_review")
+    ]
+    assert all(
+        "no thread with id" not in identity
+        for identity in (
+            *settlement.specialists_claimed,
+            *settlement.specialists_observed,
+            *(agent.name for agent in receipt.agents),
+        )
+    )
+
+
+def test_roleless_child_pairs_by_agent_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    parent_id = "01a0a8da-6d39-74e3-a8fc-fe66f5505378"
+    returncode, settlement, _receipt = _run_supervisor(
+        tmp_path,
+        monkeypatch,
+        _SupervisorFixture(
+            report=(
+                "Specialists spawned:\n\n"
+                "- `/root/config_pin_review` — `sdlc-config-specialist`\n"
+            ),
+            log_text=_codex_banner(parent_id),
+            children=(
+                {
+                    "id": "01a0a8db-de4d-7c93-a96f-8d001939aecd",
+                    "parent_thread_id": parent_id,
+                    "agent_path": "/root/config_pin_review",
+                },
+            ),
+        ),
+    )
+
+    assert returncode == 0
+    assert settlement.status is sdlc_team.SdlcSettledStatus.COMPLETED
+    assert settlement.specialists_claimed == ("/root/config_pin_review",)
+    assert settlement.specialists_observed == ("/root/config_pin_review",)
+    assert settlement.errors == ()
+
+
+@pytest.mark.parametrize("empty_item", ["None.", "none"])
+def test_none_spawn_item_is_not_treated_as_a_claim(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    empty_item: str,
+) -> None:
+    parent_id = "01a0a8da-6d39-74e3-a8fc-fe66f5505378"
+    returncode, settlement, _receipt = _run_supervisor(
+        tmp_path,
+        monkeypatch,
+        _SupervisorFixture(
+            report=f"Specialists spawned:\n\n- {empty_item}\n",
+            log_text=_codex_banner(parent_id),
+        ),
+    )
+
+    assert returncode == 1
+    assert settlement.status is sdlc_team.SdlcSettledStatus.FAILED
+    assert settlement.specialists_claimed == ()
+    sessions_root = tmp_path / "codex-home" / "sessions"
+    assert settlement.errors == (
+        f"spawn reconciliation: zero specialists observed under {sessions_root}",
+    )
+
+
+def test_real_shape_uses_closing_spawn_list_and_three_matching_children(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    parent_id = "01a0a8da-6d39-74e3-a8fc-fe66f5505378"
+    report = """A finding near the top quotes `Specialists spawned:` in prose.
+
+- `P1` — not a specialist.
+
+The actual closing report follows.
+
+Specialists spawned:
+
+- `sdlc-python-specialist` — `/root/python_review`
+- `sdlc-config-specialist` — `/root/config_review`
+- `sdlc-documentation-specialist` — `/root/docs_review`
+
+No other specialists were spawned.
+"""
+    roles_and_paths = (
+        ("sdlc-python-specialist", "/root/python_review"),
+        ("sdlc-config-specialist", "/root/config_review"),
+        ("sdlc-documentation-specialist", "/root/docs_review"),
+    )
+    children = tuple(
+        {
+            "id": f"01a0a8db-de4d-7c93-a96f-8d001939aec{index}",
+            "parent_thread_id": parent_id,
+            "agent_role": role,
+            "agent_path": path,
+        }
+        for index, (role, path) in enumerate(roles_and_paths)
+    )
+
+    returncode, settlement, _receipt = _run_supervisor(
+        tmp_path,
+        monkeypatch,
+        _SupervisorFixture(
+            report=report,
+            log_text=_codex_banner(parent_id),
+            children=children,
+        ),
+    )
+
+    assert returncode == 0
+    assert settlement.status is sdlc_team.SdlcSettledStatus.COMPLETED
+    assert settlement.specialists_claimed == tuple(
+        role for role, _path in roles_and_paths
+    )
+    assert settlement.specialists_observed == tuple(
+        sorted(role for role, _path in roles_and_paths)
+    )
+    assert settlement.errors == ()
+
+
+def test_unreadable_rollout_note_stays_in_receipt_and_does_not_fail_settlement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    parent_id = "01a0a8da-6d39-74e3-a8fc-fe66f5505378"
+    returncode, settlement, receipt = _run_supervisor(
+        tmp_path,
+        monkeypatch,
+        _SupervisorFixture(
+            report="Specialists spawned:\n\n- `sdlc-python-specialist`\n",
+            log_text=_codex_banner(parent_id),
+            children=(
+                {
+                    "id": "01a0a8db-de4d-7c93-a96f-8d001939aecd",
+                    "parent_thread_id": parent_id,
+                    "agent_role": "sdlc-python-specialist",
+                },
+            ),
+            add_unreadable_rollout=True,
+        ),
+    )
+
+    assert returncode == 0
+    assert settlement.status is sdlc_team.SdlcSettledStatus.COMPLETED
+    assert settlement.errors == ()
+    assert any(
+        disagreement == "source observed note: skipped 1 unreadable rollout file(s)"
+        for disagreement in receipt.disagreements
+    )
+
+
+def test_identityless_child_fails_with_its_uuid_and_missing_fields(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    parent_id = "01a0a8da-6d39-74e3-a8fc-fe66f5505378"
+    child_id = "01a0a8db-de4d-7c93-a96f-8d001939aecd"
+    returncode, settlement, _receipt = _run_supervisor(
+        tmp_path,
+        monkeypatch,
+        _SupervisorFixture(
+            report="Specialists spawned:\n\n- `sdlc-python-specialist`\n",
+            log_text=_codex_banner(parent_id),
+            children=({"id": child_id, "parent_thread_id": parent_id},),
+        ),
+    )
+
+    assert returncode == 1
+    assert settlement.status is sdlc_team.SdlcSettledStatus.FAILED
+    assert settlement.errors == (
+        (
+            "spawn reconciliation: claimed 'sdlc-python-specialist' has no observed "
+            "child session"
+        ),
+        (
+            f"spawn reconciliation: observed child {child_id!r} carries neither "
+            "agent_role nor agent_path"
+        ),
+    )
+
+
+def test_reconciliation_rejects_ambiguous_claim_but_pairs_well_formed_sibling() -> None:
+    self_report = lane_result.collect_spawn_report(
+        "Specialists spawned:\n\n"
+        "- `/root/p1` — `sdlc-python-specialist`, also `/root/p2`\n"
+        "- `/root/p2` — `sdlc-python-specialist`\n"
+    )
+    observed = lane_result.CollectorOutcome(
+        source=lane_result.AgentSource.OBSERVED,
+        agents=(
+            lane_result.AgentNode(
+                name="sdlc-python-specialist",
+                role="/root/p1",
+                sources=(lane_result.AgentSource.OBSERVED,),
+            ),
+            lane_result.AgentNode(
+                name="sdlc-python-specialist",
+                role="/root/p2",
+                sources=(lane_result.AgentSource.OBSERVED,),
+            ),
+        ),
+    )
+
+    result = sdlc_team.reconcile_spawns("parent", "/sessions", self_report, observed)
+
+    assert result.consistent is False
+    assert result.errors == (
+        (
+            "spawn reconciliation: claimed item '/root/p1' carries more than one path "
+            "or role identity"
+        ),
+        (
+            "spawn reconciliation: observed child 'sdlc-python-specialist' (/root/p1) "
+            "was not claimed"
+        ),
+    )
+    assert result.specialists_claimed == (
+        "/root/p1",
+        "sdlc-python-specialist",
+    )
+    assert result.specialists_observed == (
+        "sdlc-python-specialist",
+        "sdlc-python-specialist",
+    )
+
+
+def test_reconciliation_pairs_duplicate_roles_by_path_then_by_unmatched_role() -> None:
+    observed = lane_result.CollectorOutcome(
+        source=lane_result.AgentSource.OBSERVED,
+        agents=tuple(
+            lane_result.AgentNode(
+                name="sdlc-python-specialist",
+                role=path,
+                sources=(lane_result.AgentSource.OBSERVED,),
+            )
+            for path in ("/root/python_a", "/root/python_b")
+        ),
+    )
+    by_path = lane_result.collect_spawn_report(
+        "Specialists spawned:\n\n"
+        "- `sdlc-python-specialist` — `/root/python_a`\n"
+        "- `sdlc-python-specialist` — `/root/python_b`\n"
+    )
+    one_claim = lane_result.collect_spawn_report(
+        "Specialists spawned:\n\n- `sdlc-python-specialist` — `/root/python_a`\n"
+    )
+    by_role = lane_result.collect_spawn_report(
+        "Specialists spawned:\n\n"
+        "- `sdlc-python-specialist`\n"
+        "- `sdlc-python-specialist`\n"
+    )
+
+    path_result = sdlc_team.reconcile_spawns("parent", "/sessions", by_path, observed)
+    one_result = sdlc_team.reconcile_spawns("parent", "/sessions", one_claim, observed)
+    role_result = sdlc_team.reconcile_spawns("parent", "/sessions", by_role, observed)
+
+    assert path_result.consistent is True
+    assert path_result.specialists_observed == (
+        "sdlc-python-specialist",
+        "sdlc-python-specialist",
+    )
+    assert path_result.errors == ()
+    assert one_result.consistent is False
+    assert one_result.errors == (
+        (
+            "spawn reconciliation: observed child 'sdlc-python-specialist' "
+            "(/root/python_b) was not claimed"
+        ),
+    )
+    assert role_result.consistent is True
+    assert role_result.specialists_claimed == (
+        "sdlc-python-specialist",
+        "sdlc-python-specialist",
+    )
+    assert role_result.errors == ()
 
 
 def test_supervisor_timeout_kills_the_codex_process_group(
@@ -352,8 +902,19 @@ def test_supervisor_timeout_kills_the_codex_process_group(
     """A bare-pid kill would leave Codex descendants alive after timeout."""
     prompt = tmp_path / "prompt.md"
     output = tmp_path / "output.md"
+    sessions_root = tmp_path / "sessions"
+    parent_id = "01a0a8da-6d39-74e3-a8fc-fe66f5505378"
     prompt.write_text("dispatch\n")
     output.write_text("Specialists spawned:\n\n- `sdlc-python-specialist`\n")
+    _write_child_rollout(
+        sessions_root,
+        "rollout-child.jsonl",
+        {
+            "id": "01a0a8db-de4d-7c93-a96f-8d001939aecd",
+            "parent_thread_id": parent_id,
+            "agent_role": "sdlc-python-specialist",
+        },
+    )
 
     class TimedOutChild:
         pid = 9191
@@ -368,7 +929,14 @@ def test_supervisor_timeout_kills_the_codex_process_group(
             return self.returncode
 
     child = TimedOutChild()
-    monkeypatch.setattr(sdlc_team.subprocess, "Popen", lambda *_a, **_kw: child)
+
+    def fake_popen(*_args: object, **kwargs: object) -> TimedOutChild:
+        stdout = cast("BinaryIO", kwargs["stdout"])
+        stdout.write(_codex_banner(parent_id).encode())
+        stdout.flush()
+        return child
+
+    monkeypatch.setattr(sdlc_team.subprocess, "Popen", fake_popen)
     signals: list[tuple[int, signal.Signals]] = []
     monkeypatch.setattr(
         sdlc_team.os, "killpg", lambda pid, sig: signals.append((pid, sig))
@@ -389,6 +957,7 @@ def test_supervisor_timeout_kills_the_codex_process_group(
         workdir=str(tmp_path),
         started_at="2026-09-15T00:00:00+00:00",
         timeout_s=7.0,
+        sessions_root=str(sessions_root),
     )
 
     assert supervise(payload) == 1

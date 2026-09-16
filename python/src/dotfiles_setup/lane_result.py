@@ -7,6 +7,7 @@ import argparse
 import enum
 import html
 import json
+import os
 import re
 import subprocess
 import sys
@@ -26,10 +27,13 @@ __all__ = [
     "collect_hook_events",
     "collect_observed",
     "collect_self_report",
+    "collect_session_files",
+    "collect_spawn_report",
     "generate_schema",
     "hook_events_path",
     "lane_receipt_main",
     "merge_sources",
+    "parse_parent_thread_id",
     "read_result",
     "receipt_path",
     "render_mermaid",
@@ -83,6 +87,7 @@ AGENTSVIEW_PATH: Final = Path(
 )
 _AGENTSVIEW_TIMEOUT_S: Final = 30.0
 _MIN_CONFLICTING_VALUES: Final = 2
+_MIN_BANNER_LINES: Final = 3
 
 _SECTION_LINE = re.compile(
     r"(?:\bselected\s*:|\bspecialists?\s+(?:spawned|invoked)\s*:|"
@@ -95,6 +100,7 @@ _AGENT_LINE = re.compile(
     r"(?P<plain>[A-Za-z0-9][A-Za-z0-9_.-]*))"
     r"(?:\s+(?:—|-|:)\s*(?P<role>.+))?\s*$"
 )
+_SPAWN_SECTION_LINE = re.compile(r"\bspecialists\s+spawned\s*:", re.IGNORECASE)
 
 
 def _safe_run_id(run_id: str) -> str:
@@ -172,6 +178,75 @@ def collect_self_report(report_text: str) -> CollectorOutcome:
     return CollectorOutcome(source=AgentSource.SELF_REPORT, agents=tuple(agents))
 
 
+def parse_parent_thread_id(log_text: str) -> str | None:
+    """Return the session id from the first delimited Codex exec banner."""
+    if not isinstance(log_text, str):
+        return None
+    lines = log_text.splitlines()
+    if (
+        len(lines) < _MIN_BANNER_LINES
+        or not lines[0].startswith("OpenAI Codex v")
+        or lines[1].strip() != "--------"
+    ):
+        return None
+
+    banner: list[str] = []
+    for line in lines[2:]:
+        if line.strip() == "--------":
+            break
+        banner.append(line)
+    else:
+        return None
+
+    for line in banner:
+        key, separator, value = line.partition(":")
+        if separator and key.strip().lower() == "session id" and value.strip():
+            return value.strip()
+    return None
+
+
+def collect_spawn_report(report_text: str) -> CollectorOutcome:
+    """Collect the dispatcher's closing ``Specialists spawned:`` list."""
+    if not isinstance(report_text, str):
+        return _unavailable(AgentSource.SELF_REPORT, "self-report is not text")
+
+    lines = report_text.splitlines()
+    section_indexes = [
+        index for index, line in enumerate(lines) if _SPAWN_SECTION_LINE.search(line)
+    ]
+    if not section_indexes:
+        return _unavailable(
+            AgentSource.SELF_REPORT,
+            "self-report has no Specialists spawned section",
+        )
+
+    agents: list[AgentNode] = []
+    for line in lines[section_indexes[-1] + 1 :]:
+        if not line.strip():
+            continue
+        match = _AGENT_LINE.match(line)
+        if match is None:
+            if agents:
+                break
+            continue
+        name = match.group("code") or match.group("bold") or match.group("plain")
+        role = (match.group("role") or "").strip()
+        agents.append(
+            AgentNode(
+                name=name.strip(),
+                role=role,
+                sources=(AgentSource.SELF_REPORT,),
+            )
+        )
+
+    if not agents:
+        return _unavailable(
+            AgentSource.SELF_REPORT,
+            "self-report Specialists spawned section contains no parseable list items",
+        )
+    return CollectorOutcome(source=AgentSource.SELF_REPORT, agents=tuple(agents))
+
+
 def _session_rows(output: str) -> list[dict[str, object]]:
     """Decode the list shape emitted by ``agentsview session list --json``."""
     payload = json.loads(output)
@@ -198,6 +273,73 @@ def _text_field(row: dict[str, object], *names: str) -> str:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return ""
+
+
+def _rollout_payload(rollout_file: Path) -> dict[str, object] | None:
+    """Read and validate only the first metadata record in one rollout."""
+    try:
+        with rollout_file.open() as handle:
+            first_line = handle.readline()
+        record = json.loads(first_line)
+    except OSError, UnicodeError, json.JSONDecodeError:
+        return None
+    if not isinstance(record, dict) or record.get("type") != "session_meta":
+        return None
+    payload = record.get("payload")
+    if not isinstance(payload, dict):
+        return None
+    return cast("dict[str, object]", payload)
+
+
+def collect_session_files(
+    parent_thread_id: str, sessions_root: Path
+) -> CollectorOutcome:
+    """Collect direct child sessions from Codex rollout-file metadata."""
+    if not parent_thread_id:
+        return _unavailable(AgentSource.OBSERVED, "parent thread id was not provided")
+    if not sessions_root.is_dir() or not os.access(sessions_root, os.R_OK | os.X_OK):
+        return _unavailable(
+            AgentSource.OBSERVED,
+            f"sessions root is not a readable directory: {sessions_root}",
+        )
+
+    try:
+        rollout_files = sorted(sessions_root.rglob("rollout-*.jsonl"))
+    except OSError as error:
+        return _unavailable(
+            AgentSource.OBSERVED,
+            f"sessions root could not be scanned: {error}",
+        )
+
+    agents: list[AgentNode] = []
+    skipped = 0
+    for rollout_file in rollout_files:
+        payload = _rollout_payload(rollout_file)
+        if payload is None:
+            skipped += 1
+            continue
+        if payload.get("parent_thread_id") != parent_thread_id:
+            continue
+
+        agent_role = _text_field(payload, "agent_role")
+        agent_path = _text_field(payload, "agent_path")
+        child_id = _text_field(payload, "id")
+        agents.append(
+            AgentNode(
+                name=agent_role or agent_path or child_id,
+                role=agent_path,
+                sources=(AgentSource.OBSERVED,),
+            )
+        )
+
+    error = ""
+    if skipped:
+        error = f"skipped {skipped} unreadable rollout file(s)"
+    return CollectorOutcome(
+        source=AgentSource.OBSERVED,
+        agents=tuple(agents),
+        error=error,
+    )
 
 
 def _observed_agents(
@@ -433,6 +575,8 @@ def merge_sources(
             detail = outcome.error or "collector supplied no error"
             disagreements.append(f"source {outcome.source.value} unavailable: {detail}")
             continue
+        if outcome.error:
+            disagreements.append(f"source {outcome.source.value} note: {outcome.error}")
         available[outcome.source] = outcome
 
     source_nodes: dict[AgentSource, dict[str, AgentNode]] = {

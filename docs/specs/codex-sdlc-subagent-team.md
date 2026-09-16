@@ -145,6 +145,17 @@ Codex "Memories" is a ChatGPT-account feature for carrying context between chats
 per-agent performance learning (`app__settings.md:108-111`, `chrome-extension.md:155`).
 No native mechanism was found. Scoped out deliberately as its own design.
 
+## Spawn reconciliation (2026-09-16)
+
+`SdlcTeamSettlement` now records the dispatcher's closing claimed roster and
+the direct child sessions observed in Codex rollout metadata. Settlement fails
+closed when the parent session id or observed source is unavailable, when no
+children were observed, or when one-to-one path-first/role-fallback pairing
+leaves a claim or child unmatched; ambiguous multi-path or multi-role claims
+also fail. The pinned negative arm is a Codex rc=0 report claiming
+`sdlc-python-specialist` with a valid parent banner but zero child rollouts:
+its terminal status must be `failed`, never `completed`.
+
 ## Verification already performed
 
 > ⚠️ **REFUTED 2026-09-16 (#1142). The claim below is wrong, and the way it was

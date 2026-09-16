@@ -58,6 +58,24 @@ def _node(
     )
 
 
+def _write_rollout(
+    sessions_root: Path,
+    filename: str,
+    payload: dict[str, object],
+) -> Path:
+    """Write a rollout whose first record is independently controlled metadata."""
+    path = sessions_root / "2026" / "09" / "16" / filename
+    path.parent.mkdir(parents=True, exist_ok=True)
+    record = {
+        "timestamp": "2026-09-16T06:16:17.947Z",
+        "ordinal": 0,
+        "type": "session_meta",
+        "payload": payload,
+    }
+    path.write_text(json.dumps(record) + "\n" + '{"type":"session_meta"}\n')
+    return path
+
+
 def test_self_report_collects_the_first_selected_block_with_roles() -> None:
     report = """The dispatcher selected:
 
@@ -92,6 +110,147 @@ def test_empty_self_report_is_available_but_unparsable_prose_is_not() -> None:
     assert unparsable.available is False
     assert unparsable.agents == ()
     assert "no selected or spawned agent section" in unparsable.error
+
+
+def test_parent_thread_id_is_read_only_from_the_first_codex_banner() -> None:
+    banner = """OpenAI Codex v0.154.0
+--------
+workdir: /repo
+session id: 01a0a8da-6d39-74e3-a8fc-fe66f5505378
+--------
+model output
+"""
+    quoted_later = """OpenAI Codex v0.154.0
+--------
+workdir: /repo
+--------
+The model quoted session id: later-value here.
+"""
+
+    assert (
+        lane_result.parse_parent_thread_id(banner)
+        == "01a0a8da-6d39-74e3-a8fc-fe66f5505378"
+    )
+    assert lane_result.parse_parent_thread_id(quoted_later) is None
+
+
+def test_spawn_report_uses_the_last_anchor_while_self_report_keeps_first_match() -> (
+    None
+):
+    report = """Summary prose quotes `Specialists spawned:` before the findings.
+
+- `P1` — this is a finding, not a specialist.
+
+Final synthesis.
+
+Specialists spawned:
+
+- `sdlc-python-specialist` — `/root/python_review`
+- `sdlc-config-specialist` — `/root/config_review`
+- `sdlc-documentation-specialist` — `/root/docs_review`
+
+No other specialists were spawned.
+"""
+
+    first_match = lane_result.collect_self_report(report)
+    closing_match = lane_result.collect_spawn_report(report)
+
+    assert first_match.available is True
+    assert first_match.error == ""
+    assert [agent.name for agent in first_match.agents] == ["P1"]
+    assert closing_match.available is True
+    assert closing_match.error == ""
+    assert [(agent.name, agent.role) for agent in closing_match.agents] == [
+        ("sdlc-python-specialist", "`/root/python_review`"),
+        ("sdlc-config-specialist", "`/root/config_review`"),
+        ("sdlc-documentation-specialist", "`/root/docs_review`"),
+    ]
+
+
+def test_session_file_collector_reads_first_records_and_guards_payload_shapes(
+    tmp_path: Path,
+) -> None:
+    sessions_root = tmp_path / "sessions"
+    parent_id = "01a0a8da-6d39-74e3-a8fc-fe66f5505378"
+    _write_rollout(
+        sessions_root,
+        "rollout-parent.jsonl",
+        {"id": parent_id, "parent_thread_id": None, "source": "exec"},
+    )
+    _write_rollout(
+        sessions_root,
+        "rollout-role.jsonl",
+        {
+            "id": "01a0a8db-de4d-7c93-a96f-8d001939aecd",
+            "session_id": parent_id,
+            "parent_thread_id": parent_id,
+            "agent_role": "sdlc-python-specialist",
+            "agent_path": "/root/python_review",
+            "source": {"subagent": "not-an-object"},
+        },
+    )
+    _write_rollout(
+        sessions_root,
+        "rollout-path.jsonl",
+        {
+            "id": "01a0a8db-fbb1-7db3-8384-978b2e8cd6a1",
+            "session_id": parent_id,
+            "parent_thread_id": parent_id,
+            "agent_path": "/root/config_pin_review",
+            "source": {"subagent": {"thread_spawn": {}}},
+        },
+    )
+    child_without_identity = "01a0a8dc-1ee0-7e10-912c-70a417e45218"
+    _write_rollout(
+        sessions_root,
+        "rollout-identityless.jsonl",
+        {
+            "id": child_without_identity,
+            "session_id": parent_id,
+            "parent_thread_id": parent_id,
+            "source": {},
+        },
+    )
+    bad = sessions_root / "2026" / "04" / "16" / "rollout-zero.jsonl"
+    bad.parent.mkdir(parents=True)
+    bad.write_text("")
+
+    outcome = lane_result.collect_session_files(parent_id, sessions_root)
+
+    assert outcome.available is True
+    assert outcome.error == "skipped 1 unreadable rollout file(s)"
+    assert [(node.name, node.role) for node in outcome.agents] == [
+        (child_without_identity, ""),
+        ("/root/config_pin_review", "/root/config_pin_review"),
+        ("sdlc-python-specialist", "/root/python_review"),
+    ]
+    assert all(
+        node.sources == (lane_result.AgentSource.OBSERVED,) for node in outcome.agents
+    )
+
+
+def test_session_file_collector_distinguishes_unavailable_from_available_empty(
+    tmp_path: Path,
+) -> None:
+    missing = lane_result.collect_session_files("parent", tmp_path / "missing")
+    sessions_root = tmp_path / "sessions"
+    sessions_root.mkdir()
+    empty = lane_result.collect_session_files("parent", sessions_root)
+    no_parent = lane_result.collect_session_files("", sessions_root)
+
+    assert missing == lane_result.CollectorOutcome(
+        source=lane_result.AgentSource.OBSERVED,
+        available=False,
+        error=f"sessions root is not a readable directory: {tmp_path / 'missing'}",
+    )
+    assert no_parent == lane_result.CollectorOutcome(
+        source=lane_result.AgentSource.OBSERVED,
+        available=False,
+        error="parent thread id was not provided",
+    )
+    assert empty == lane_result.CollectorOutcome(
+        source=lane_result.AgentSource.OBSERVED
+    )
 
 
 def test_observed_collector_uses_absolute_binary_and_builds_descendant_dag(

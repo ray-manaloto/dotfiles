@@ -93,6 +93,11 @@ while the run is live. `read_status` returns the recorded terminal status when
 the file exists, returns no settled status while the supervisor is alive, and
 derives `abandoned` when the file is absent after the supervisor dies.
 
+Settlement records the dispatcher's claimed specialists separately from child
+sessions observed in Codex rollout files. A missing parent id, unavailable scan,
+zero observed children, or claimed/observed mismatch fails closed even when the
+Codex process exits zero; inspect both rosters and the reconciliation errors.
+
 Lane receipts belong to `lane_result`, not to the run-artifact directory. Their
 defaults are `.agent/lane-results/<run-id>.json` and
 `.agent/lane-results/<run-id>.md`; both resolved paths are returned in the
