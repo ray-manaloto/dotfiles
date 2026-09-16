@@ -425,6 +425,24 @@ local allSteps = new Mapping<String, Config.Step> {
     )
     check = "uv run --project python dotfiles-setup workflow-hooks"
   }
+  // A job that runs `hk run check`/`pre-commit` runs `fnhook_gates`, which
+  // shells out to `claude` — NOT a mise tool here (the [tools] pin was removed
+  // in 6d1ae23; the native installer owns PATH). PR #1128 fixed that in
+  // ci.yml's lint job by name and autofix.yml, which runs the same hk steps,
+  // went red on the very next run with "[Errno 2] No such file or directory:
+  // 'claude'". This catches a NEW job rather than re-asserting the two known
+  // ones; hk.pkl is in the glob because the hook set is derived from it.
+  ["workflow_claude_code"] {
+    glob = List(
+      ".github/workflows/*.yml",
+      ".github/workflows/*.yaml",
+      ".github/actions/**/action.yml",
+      ".github/actions/**/action.yaml",
+      "hk.pkl",
+      "python/src/dotfiles_setup/workflow_claude_code.py"
+    )
+    check = "uv run --project python dotfiles-setup workflow-claude-code"
+  }
   ["workflow_skip_cascade"] {
     glob = List(
       ".github/workflows/*.yml",

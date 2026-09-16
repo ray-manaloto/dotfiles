@@ -156,6 +156,7 @@ from dotfiles_setup.skills_mirror import skills_mirror_main
 from dotfiles_setup.sync import SyncOptions, sync_main
 from dotfiles_setup.token_audit import preflight_main, token_audit_main
 from dotfiles_setup.verify import main as verify_main
+from dotfiles_setup.workflow_claude_code import workflow_claude_code_main
 from dotfiles_setup.workflow_hooks import workflow_hooks_main
 from dotfiles_setup.workflow_skip_cascade import workflow_skip_cascade_main
 
@@ -933,6 +934,14 @@ def _add_workflow_dag_subcommands(subparsers: _SubParsers) -> None:
         help="Enforce ADR-0001: every CI job that commits or pushes must set "
         "HK_SKIP_HOOKS: pre-commit,pre-push at job level, or hk's git hooks "
         "run on the runner and fail",
+    )
+    subparsers.add_parser(
+        "workflow-claude-code",
+        help="Fail when a CI job runs an hk hook carrying `fnhook_gates` "
+        "without installing Claude Code — that step shells out to `claude`, "
+        "which is deliberately not a mise tool here, so the job dies on a "
+        "missing binary (PR #1128: fixed in ci.yml by name, autofix.yml "
+        "went red on the next run)",
     )
     subparsers.add_parser(
         "workflow-skip-cascade",
@@ -2920,6 +2929,9 @@ def _build_command_handlers(
             hk_builtins_audit_main(project_root, check=args.check)
         ),
         "workflow-hooks": lambda: sys.exit(workflow_hooks_main(project_root)),
+        "workflow-claude-code": lambda: sys.exit(
+            workflow_claude_code_main(project_root)
+        ),
         "workflow-skip-cascade": lambda: sys.exit(
             workflow_skip_cascade_main(project_root)
         ),

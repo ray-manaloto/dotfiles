@@ -38,16 +38,30 @@ def _sources_version(tool: str) -> str:
 
 
 def _binary_resolves(command: list[str]) -> bool:
-    """Whether one `--version` probe exits 0 from the repo root."""
-    return (
-        subprocess.run(
+    """Whether one `--version` probe exits 0 from the repo root.
+
+    `OSError` is the ABSENT answer, not an error to propagate. `claude` is
+    probed directly now, and `subprocess.run` RAISES `FileNotFoundError` for a
+    binary that is not on PATH rather than returning non-zero — so without this
+    the module cannot even be imported on a runner that has no `claude`, and
+    the whole file errors at collection instead of skipping the arms that need
+    it. Measured on contract-preflight, CI run 35050785004:
+
+        E  FileNotFoundError: [Errno 2] No such file or directory: 'claude'
+
+    The old form went through `mise exec`, and `mise` always exists, so the
+    subprocess always started and mise reported the failure as an exit code.
+    """
+    try:
+        completed = subprocess.run(
             command,
             capture_output=True,
             check=False,
             cwd=REPO_ROOT,
-        ).returncode
-        == 0
-    )
+        )
+    except OSError:
+        return False
+    return completed.returncode == 0
 
 
 def _real_tools_available() -> bool:
