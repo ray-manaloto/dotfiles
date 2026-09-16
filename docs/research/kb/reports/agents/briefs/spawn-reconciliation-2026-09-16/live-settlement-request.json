@@ -1,0 +1,9 @@
+{
+  "spec_file": "/private/tmp/claude-501/-Users-rmanaloto-dev-github-ray-manaloto-dotfiles/68a8b3b8-90eb-4d81-ab35-ceabe415ec3b/scratchpad/live-settlement-review-spec.md",
+  "mode": "review",
+  "effort": "xhigh",
+  "timeout_s": 1800,
+  "run_id": "live-settlement-probe-20260916",
+  "allowlist": [],
+  "task": "Cold third review of commits 22bee5a, 301472a, a506b12 (spawn reconciliation); this run is also the first live settlement under the new reconciliation code"
+}
