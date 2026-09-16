@@ -28,6 +28,11 @@ rejects. :func:`hooks_running_the_gate` reads which hooks spread the mapping
 that defines ``fnhook_gates``, and raises when the premise no longer holds
 instead of returning an empty set that would exempt every workflow.
 
+The other routes are derived too. ``mise.toml`` supplies the tracked task
+graph, while :data:`dotfiles_setup.lint.HK_COMMAND` supplies the hook reached
+by ``dotfiles-setup lint``. ``mise.local.toml`` is deliberately not read: it
+is gitignored and per-clone, so it does not exist where CI runs.
+
 The logic lives here rather than in an inline-bash hk step, per
 ``.claude/rules/zero-bash-logic.md``; the ``workflow-claude-code`` CLI
 subcommand and the ``workflow_claude_code`` hk step are thin wrappers over
@@ -38,10 +43,13 @@ from __future__ import annotations
 
 import re
 import sys
+import tomllib
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import yaml
+
+from dotfiles_setup.lint import HK_COMMAND
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -58,10 +66,38 @@ SETUP_ACTION = ".github/actions/setup-claude-code"
 #: :func:`hooks_running_the_gate`.
 GATE_STEP = "fnhook_gates"
 
-#: `hk run <hook>` — the only hk subcommand that executes steps. `hk validate`
-#: parses the config and runs nothing, so a job that only validates needs no
-#: binary and must not be flagged.
-_HK_RUN_RE = re.compile(r"\bhk\s+run\s+([A-Za-z][\w-]*)")
+#: hk commands that execute hooks. The middle group is the complete hk 1.57.0
+#: GLOBAL-flag surface measured for this gate; subcommand-specific flags come
+#: after the hook selection and do not affect routing.
+_HK_COMMAND_RE = re.compile(
+    r"""
+    \bhk\b
+    (?:
+        \s+
+        (?:
+            (?:--cd|--format|-j|--jobs|-p|--profile)\s+\S+
+            |(?:-s|-v|-n|-q|--silent|--trace|--json)\b
+        )
+    )*
+    \s+
+    (?:
+        (?:run|r)\b\s+(?P<run>[A-Za-z][\w-]*)\b
+        |(?P<check>check|c)\b
+        |(?P<fix>fix|f)\b
+    )
+    """,
+    re.VERBOSE,
+)
+
+_DOTFILES_LINT_RE = re.compile(r"\bdotfiles-setup\b\s+lint(?=\s|[;&|)]|$)")
+
+#: `mise run <task>` / `mise r <task>`. Both the subcommand and task token are
+#: bounded so `mise reshim` cannot become the alias `mise r`, and a prefix of a
+#: longer task name cannot resolve accidentally.
+_MISE_TASK_RE = re.compile(
+    r"\bmise\b\s+(?:run|r)\b\s+"
+    r"([A-Za-z0-9][\w:.-]*)(?=\s|[;&|)]|$)"
+)
 
 #: A pkl mapping entry: `["name"] {` or `["name"] = ...`.
 _PKL_ENTRY_RE = re.compile(r'^\s*\["([^"]+)"\]\s*[={]', re.MULTILINE)
@@ -69,6 +105,93 @@ _PKL_ENTRY_RE = re.compile(r'^\s*\["([^"]+)"\]\s*[={]', re.MULTILINE)
 #: The same entry name, anchored at END of the text searched, so it reads the
 #: key immediately preceding a `{` rather than the first key in a window.
 _PKL_ENTRY_NAME_RE = re.compile(r'\["([^"]+)"\]\s*$')
+
+
+def _hooks_in_command(command: str) -> set[str]:
+    """Hook names reached directly by one shell command block."""
+    hooks: set[str] = set()
+    for match in _HK_COMMAND_RE.finditer(command):
+        if hook := match.group("run"):
+            hooks.add(hook)
+        elif match.group("check"):
+            hooks.add("check")
+        elif match.group("fix"):
+            hooks.add("fix")
+    if _DOTFILES_LINT_RE.search(command):
+        hooks.add(HK_COMMAND[2])
+    return hooks
+
+
+def _mise_tasks_in_command(command: str) -> set[str]:
+    """Task names reached by tracked `mise run` spellings in a run block."""
+    return {match.group(1) for match in _MISE_TASK_RE.finditer(command)}
+
+
+def _run_strings(value: object) -> tuple[str, ...]:
+    """Normalize mise's string/list/absent `run` shapes without raising."""
+    if isinstance(value, str):
+        return (value,)
+    if isinstance(value, list):
+        return tuple(item for item in value if isinstance(item, str))
+    return ()
+
+
+def mise_task_hooks(root: Path) -> dict[str, frozenset[str]]:
+    """Tracked mise tasks mapped to every hk hook their closure reaches.
+
+    Both explicit ``depends`` edges and task calls inside ``run`` bodies join
+    the graph. Repeated union to a fixed point makes cycles terminate naturally
+    while preserving a reachable hook elsewhere in the same component.
+    """
+    path = root / "mise.toml"
+    if not path.is_file():
+        return {}
+
+    document = tomllib.loads(path.read_text(encoding="utf-8"))
+    raw_tasks = document.get("tasks")
+    if not isinstance(raw_tasks, dict):
+        return {}
+
+    direct: dict[str, set[str]] = {}
+    edges: dict[str, set[str]] = {}
+    for raw_name, raw_task in raw_tasks.items():
+        name = str(raw_name)
+        if isinstance(raw_task, str):
+            runs = (raw_task,)
+            depends: object = None
+        elif isinstance(raw_task, dict):
+            runs = _run_strings(raw_task.get("run"))
+            depends = raw_task.get("depends")
+        else:
+            runs = ()
+            depends = None
+
+        direct[name] = {hook for command in runs for hook in _hooks_in_command(command)}
+        run_edges = {
+            task for command in runs for task in _mise_tasks_in_command(command)
+        }
+        dependency_edges = (
+            {item for item in depends if isinstance(item, str)}
+            if isinstance(depends, list)
+            else set()
+        )
+        edges[name] = run_edges | dependency_edges
+
+    reachable = {name: set(hooks) for name, hooks in direct.items()}
+    changed = True
+    while changed:
+        changed = False
+        for name, dependencies in edges.items():
+            inherited = {
+                hook
+                for dependency in dependencies
+                for hook in reachable.get(dependency, set())
+            }
+            before = len(reachable[name])
+            reachable[name].update(inherited)
+            changed = changed or len(reachable[name]) != before
+
+    return {name: frozenset(hooks) for name, hooks in reachable.items() if hooks}
 
 
 def _spread_name(source: str, step: str) -> str:
@@ -164,12 +287,29 @@ def hook_bodies(source: str) -> list[tuple[str, str]]:
 
 
 @dataclass(frozen=True)
-class Job:
-    """One workflow job, flattened to what the predicates below need.
+class RunStep:
+    """An ordered workflow/composite `run:` entry and its resolved routes."""
 
-    Mirrors :class:`dotfiles_setup.workflow_hooks.Job`: parsing YAML into a
-    typed record keeps the predicates free of `Any` and of repeated isinstance
-    narrowing, and makes each one testable from a literal.
+    command: str
+    reached_hooks: frozenset[str] = frozenset()
+
+
+@dataclass(frozen=True)
+class UsesStep:
+    """An ordered workflow/composite `uses:` entry."""
+
+    reference: str
+
+
+type WorkflowStep = RunStep | UsesStep
+
+
+@dataclass(frozen=True)
+class Job:
+    """One workflow job with both compatibility views and ordered steps.
+
+    ``run_commands`` and ``uses`` remain available to existing callers. Only
+    ``steps`` can answer whether setup happened before the first gated route.
     """
 
     workflow: str
@@ -183,6 +323,47 @@ class Job:
 
     uses: tuple[str, ...]
     """Every `uses:` reference, in order."""
+
+    steps: tuple[WorkflowStep, ...] = ()
+    """Run and uses entries in execution order, including local expansions."""
+
+
+def _steps_of(body: object) -> list[dict[object, object]]:
+    """The `steps:`/`runs.steps:` list of a job or composite action."""
+    if not isinstance(body, dict):
+        return []
+    steps: object = body.get("steps")
+    if steps is None:
+        runs: object = body.get("runs")
+        if isinstance(runs, dict):
+            steps = runs.get("steps")
+    if not isinstance(steps, list):
+        return []
+    return [step for step in steps if isinstance(step, dict)]
+
+
+def _ordered_steps(entries: list[dict[object, object]]) -> tuple[WorkflowStep, ...]:
+    """Typed step entries in the order GitHub executes them."""
+    ordered: list[WorkflowStep] = []
+    for entry in entries:
+        run = entry.get("run")
+        if isinstance(run, str):
+            ordered.append(RunStep(run))
+        uses = entry.get("uses")
+        if isinstance(uses, str):
+            ordered.append(UsesStep(uses))
+    return tuple(ordered)
+
+
+def _job_with_steps(workflow: str, name: str, steps: tuple[WorkflowStep, ...]) -> Job:
+    """Build compatibility views from the ordered source of truth."""
+    return Job(
+        workflow=workflow,
+        name=name,
+        run_commands=tuple(step.command for step in steps if isinstance(step, RunStep)),
+        uses=tuple(step.reference for step in steps if isinstance(step, UsesStep)),
+        steps=steps,
+    )
 
 
 def parse_jobs(document: object, workflow: str) -> list[Job]:
@@ -201,55 +382,183 @@ def parse_jobs(document: object, workflow: str) -> list[Job]:
     for name, job in sorted(jobs.items()):
         if not isinstance(job, dict):
             continue
-        steps = job.get("steps")
-        entries = (
-            [step for step in steps if isinstance(step, dict)]
-            if isinstance(steps, list)
-            else []
-        )
         records.append(
-            Job(
-                workflow=workflow,
-                name=str(name),
-                run_commands=tuple(
-                    step["run"] for step in entries if isinstance(step.get("run"), str)
-                ),
-                uses=tuple(
-                    step["uses"]
-                    for step in entries
-                    if isinstance(step.get("uses"), str)
-                ),
+            _job_with_steps(
+                workflow,
+                str(name),
+                _ordered_steps(_steps_of(job)),
             )
         )
     return records
 
 
+def _reached_hooks(
+    command: str, task_hooks: dict[str, frozenset[str]]
+) -> frozenset[str]:
+    """Direct hooks plus hooks reached through any tracked mise task."""
+    hooks = _hooks_in_command(command)
+    for task in _mise_tasks_in_command(command):
+        hooks.update(task_hooks.get(task, frozenset()))
+    return frozenset(hooks)
+
+
+def _expand_local(
+    uses: str,
+    root: Path,
+    task_hooks: dict[str, frozenset[str]],
+    seen: frozenset[str],
+) -> tuple[WorkflowStep, ...]:
+    """Steps inside a local composite, recursively and in execution order.
+
+    The caller retains the ``uses:`` entry and splices this result immediately
+    after it. A path-local ``seen`` set terminates cycles without suppressing a
+    legitimate second invocation of the same action elsewhere in the job.
+    """
+    if not uses.startswith(("./", "$/")) or uses in seen:
+        return ()
+    action_dir = root / uses[2:]
+    candidates = (action_dir / "action.yml", action_dir / "action.yaml")
+    action_file = next((path for path in candidates if path.is_file()), None)
+    if action_file is None:
+        return ()
+    try:
+        document = yaml.safe_load(action_file.read_text(encoding="utf-8"))
+    except yaml.YAMLError, OSError, UnicodeDecodeError:
+        return ()
+
+    runs = document.get("runs") if isinstance(document, dict) else None
+    using = runs.get("using") if isinstance(runs, dict) else None
+    if str(using).lower() != "composite":
+        return ()
+
+    expanded: list[WorkflowStep] = []
+    nested_seen = seen | {uses}
+    for step in _ordered_steps(_steps_of(document)):
+        if isinstance(step, RunStep):
+            expanded.append(
+                RunStep(step.command, _reached_hooks(step.command, task_hooks))
+            )
+        else:
+            expanded.append(step)
+            expanded.extend(
+                _expand_local(step.reference, root, task_hooks, nested_seen)
+            )
+    return tuple(expanded)
+
+
+def resolve_job(job: Job, root: Path, task_hooks: dict[str, frozenset[str]]) -> Job:
+    """Resolve routes and inline local composites without losing step order."""
+    resolved: list[WorkflowStep] = []
+    for step in job.steps:
+        if isinstance(step, RunStep):
+            resolved.append(
+                RunStep(step.command, _reached_hooks(step.command, task_hooks))
+            )
+        else:
+            resolved.append(step)
+            resolved.extend(
+                _expand_local(step.reference, root, task_hooks, frozenset())
+            )
+    return _job_with_steps(job.workflow, job.name, tuple(resolved))
+
+
 def job_runs_the_gate(job: Job, hooks: set[str]) -> bool:
-    """Whether any of the job's `run` steps invokes an hk hook carrying it."""
-    return any(
-        match.group(1) in hooks
-        for command in job.run_commands
-        for match in _HK_RUN_RE.finditer(command)
-    )
+    """Whether any ordered run step reaches an hk hook carrying the gate."""
+    if job.steps:
+        return any(
+            bool((step.reached_hooks or _hooks_in_command(step.command)) & hooks)
+            for step in job.steps
+            if isinstance(step, RunStep)
+        )
+    return any(_hooks_in_command(command) & hooks for command in job.run_commands)
 
 
 def job_installs_claude_code(job: Job) -> bool:
     """Whether the job uses the setup-claude-code composite."""
-    return any(reference.endswith(SETUP_ACTION) for reference in job.uses)
+    references = (
+        (step.reference for step in job.steps if isinstance(step, UsesStep))
+        if job.steps
+        else iter(job.uses)
+    )
+    return any(reference.endswith(SETUP_ACTION) for reference in references)
 
 
-def find_violations(root: Path) -> list[str]:
-    """Human-readable violation lines; empty means the policy holds.
+def _first_gate_step(job: Job, hooks: set[str]) -> int | None:
+    """Index of the first ordered run step reaching a gated hook."""
+    for index, step in enumerate(job.steps):
+        if isinstance(step, RunStep) and step.reached_hooks & hooks:
+            return index
+    return None
 
-    Ordered by workflow then job so the output is stable across runs.
-    """
+
+def _first_install_step(job: Job) -> int | None:
+    """Index of the first ordered Claude Code setup action."""
+    for index, step in enumerate(job.steps):
+        if isinstance(step, UsesStep) and step.reference.endswith(SETUP_ACTION):
+            return index
+    return None
+
+
+def job_installs_before_gate(job: Job, hooks: set[str]) -> bool:
+    """Whether the first setup action precedes the first gated run step."""
+    install_index = _first_install_step(job)
+    gate_index = _first_gate_step(job, hooks)
+    return (
+        install_index is not None
+        and gate_index is not None
+        and install_index < gate_index
+    )
+
+
+@dataclass(frozen=True)
+class SkippedWorkflow:
+    """A workflow this gate deliberately left to actionlint."""
+
+    workflow: str
+    exception_class: str
+
+
+@dataclass(frozen=True)
+class WorkflowScan:
+    """Side-effect-free result consumed by both tests and the CLI seam."""
+
+    violations: tuple[str, ...]
+    skipped: tuple[SkippedWorkflow, ...]
+
+
+def _never_installs_violation(job: Job) -> str:
+    return (
+        f"{job.workflow}: job `{job.name}` runs an hk hook that includes "
+        f"`{GATE_STEP}` but never installs Claude Code. That step shells "
+        f"out to `claude`, which is NOT a mise tool here, so the job "
+        f"fails on a missing binary. Add before the hk step:\n"
+        f"      - name: Install Claude Code\n"
+        f"        uses: $/{SETUP_ACTION}"
+    )
+
+
+def _late_install_violation(job: Job) -> str:
+    return (
+        f"{job.workflow}: job `{job.name}` runs an hk hook that includes "
+        f"`{GATE_STEP}` but installs Claude Code AFTER the first hk step. "
+        f"The install comes too late: that hk step can already shell out to "
+        f"`claude`. Move this step before the hk step:\n"
+        f"      - name: Install Claude Code\n"
+        f"        uses: $/{SETUP_ACTION}"
+    )
+
+
+def scan_workflows(root: Path) -> WorkflowScan:
+    """Collect violations and named fail-open workflow parse skips."""
     hooks = hooks_running_the_gate(root)
+    task_hooks = mise_task_hooks(root)
     violations: list[str] = []
+    skipped: list[SkippedWorkflow] = []
     for path in sorted((root / WORKFLOW_DIR).glob("*.y*ml")):
         workflow = f"{WORKFLOW_DIR}/{path.name}"
         try:
             document = yaml.safe_load(path.read_text(encoding="utf-8"))
-        except yaml.YAMLError, OSError, UnicodeDecodeError:
+        except (yaml.YAMLError, OSError, UnicodeDecodeError) as error:
             # Deliberate fail-OPEN on malformed YAML, matching
             # `workflow_hooks.parse_jobs`: `actionlint` already gates workflow
             # syntax in both CI and hk, so a parse error here is a duplicate
@@ -257,24 +566,38 @@ def find_violations(root: Path) -> list[str]:
             # a workflow that did not parse produced a raw
             # `yaml.scanner.ScannerError` traceback under "Unexpected command
             # failure" instead of naming the file.
+            skipped.append(SkippedWorkflow(workflow, type(error).__name__))
             continue
-        violations.extend(
-            f"{job.workflow}: job `{job.name}` runs an hk hook that includes "
-            f"`{GATE_STEP}` but never installs Claude Code. That step shells "
-            f"out to `claude`, which is NOT a mise tool here, so the job "
-            f"fails on a missing binary. Add before the hk step:\n"
-            f"      - name: Install Claude Code\n"
-            f"        uses: $/{SETUP_ACTION}"
-            for job in parse_jobs(document, workflow)
-            if job_runs_the_gate(job, hooks) and not job_installs_claude_code(job)
-        )
-    return violations
+        for parsed_job in parse_jobs(document, workflow):
+            job = resolve_job(parsed_job, root, task_hooks)
+            gate_index = _first_gate_step(job, hooks)
+            if gate_index is None:
+                continue
+            install_index = _first_install_step(job)
+            if install_index is None:
+                violations.append(_never_installs_violation(job))
+            elif install_index > gate_index:
+                violations.append(_late_install_violation(job))
+    return WorkflowScan(tuple(violations), tuple(skipped))
+
+
+def find_violations(root: Path) -> list[str]:
+    """Human-readable violation lines; empty means the policy holds.
+
+    Ordered by workflow then job so the output is stable across runs.
+    """
+    return list(scan_workflows(root).violations)
 
 
 def workflow_claude_code_main(root: Path) -> int:
     """CLI entry: 0 when every hk-running job installs Claude Code, else 1."""
-    violations = find_violations(root)
-    if not violations:
+    result = scan_workflows(root)
+    for skipped in result.skipped:
+        sys.stdout.write(
+            f"workflow-claude-code: skipped {skipped.workflow} "
+            f"({skipped.exception_class})\n"
+        )
+    if not result.violations:
         hooks = ", ".join(sorted(hooks_running_the_gate(root)))
         sys.stdout.write(
             f"workflow-claude-code OK: every job running hk "
@@ -282,7 +605,7 @@ def workflow_claude_code_main(root: Path) -> int:
         )
         return 0
     sys.stdout.write("workflow-claude-code: violations\n\n")
-    for line in violations:
+    for line in result.violations:
         sys.stdout.write(f"  - {line}\n")
-    sys.stdout.write(f"\n{len(violations)} violation(s).\n")
+    sys.stdout.write(f"\n{len(result.violations)} violation(s).\n")
     return 1

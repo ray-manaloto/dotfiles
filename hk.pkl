@@ -439,6 +439,8 @@ local allSteps = new Mapping<String, Config.Step> {
       ".github/actions/**/action.yml",
       ".github/actions/**/action.yaml",
       "hk.pkl",
+      "mise.toml",
+      "python/src/dotfiles_setup/lint.py",
       "python/src/dotfiles_setup/workflow_claude_code.py"
     )
     check = "uv run --project python dotfiles-setup workflow-claude-code"
