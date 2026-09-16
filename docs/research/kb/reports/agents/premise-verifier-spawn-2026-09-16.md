@@ -250,6 +250,43 @@ Two smaller notes on F9. The zero-byte file's mtime is `2026-04-16T21:14 UTC` wh
 Findings appended to `/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/findings.md`. Nothing edited.
 
 
+---
+
+# Pass on the v7 RESPEC (same agent, 2026-09-16 08:57Z) — all 10 marks confirmed
+
+> PERSISTED VERBATIM at receipt. Architect decisions: arm 28's limitation now names `no further`; the consistency rule is stated explicitly as AND (every candidate must be satisfied by the paired child) — a space-free prose first token therefore fails that claim closed with an error naming it, which is the intended direction; no new factual premise, so this is the last pass before dispatch.
+
+# Premise verification — v7 respec
+
+Code unchanged since `22bee5a` (empty diff over `python/src`, `tests`, `schemas`), so all v6 row verdicts carry. All 10 [v7] marks **CONFIRMED**.
+
+| [v7] mark | Verdict | Evidence |
+|---|---|---|
+| Row 74, `b941647c` list | **CONFIRMED exact** | anchor `:84`, five items `:86-90`, bulleted terminator `:91` |
+| Row 74, `smoke-real` list | **CONFIRMED exact** | anchor `:4`, single item `:6` carrying the same-line terminator phrase |
+| Row 75, three terminator phrasings | **CONFIRMED** | My sweep of all 21 runs returns exactly those three, no fourth |
+| Row 76, F9 epoch comparison | **CONFIRMED** | `fromisoformat(started_at).timestamp()` discriminates in both directions; April file at `2026-04-16T21:14Z` is older than any run today |
+| Arm 25, basename pairing | **Sound** | `round3_docs` is the basename of the child path `/root/round3_docs` |
+| Arm 26, same-line terminator | **Sound** | The regex does not match a line starting with a backtick, so the item stays a claim; both candidates resolve to the same child |
+| Arm 27, F9 clock arm | **Sound** | Empty `started_at` failing closed reverses v6's fail-open default |
+| Arm 28 + terminator regex | **CONFIRMED, one note** | See below |
+| Identity rule, roster candidate satisfied by role or path basename | **Sound** | Resolves the three ambiguous runs I reported |
+| Ambiguity narrowed to two PATH candidates | **Sound** | Path uniqueness on both sides still holds (0 of 330 groups repeat a path) |
+
+**Arm 28 is more pessimistic than the regex.** `^(no\s+other|none\b|nothing\s+else)` **does** match `None others were spawned.`, because `none\b` fires on the boundary before the space. It also matches `None.`, `none`, and `Nothing else was spawned.`. The only near-miss I found is `No further specialists were spawned.`, which parses as a claim. Either drop the limitation sentence or reword it to name `no further` instead. No real claim collides: all 71 real claim items begin with a backtick.
+
+## Your question: no bare-name claims, and prose first-tokens exist but are harmless
+
+**No claim item lacks a backticked name.** Zero of 71 across all 21 runs. The bare `- sdlc-python-specialist` shape never occurs, though `_AGENT_LINE`'s plain group and the F1 fallback would both handle it.
+
+**The first role-text token is prose in four items, all in run `7ff5aaf3`:** `mise run lint-docs`, `mise run lint`, `mise run verify-container-latest`, `mise run pin-actions`. Every one contains spaces, so both grammars reject them and the candidate set collapses to the single clean roster name. They are not failing constraints today.
+
+The residual risk is narrow and worth one line in the spec: a prose token **without** spaces would pass the roster grammar and become a spurious second candidate. Under v7 that is no longer an ambiguity error, since ambiguity is now two paths only, so the spurious candidate simply matches no child while the real one still pairs. It would only bite if the token happened to equal another child's role or path basename. That is a real but remote collision, and materially safer than v6, where the same shape hard-failed five correct claims.
+
+Thirteen of the 71 items are single-token, role-only claims (runs `0f8b6973`, `2dab7794`, `7912a742`, and one in `7ff5aaf3`); those depend entirely on the role-pairing path, which arm 14 already covers.
+
+Findings persisted earlier in `/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/findings.md`. Nothing edited.
+
 ## GitHub repos touched
 
 - [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — the repo under change (sdlc_team.py, lane_result.py, tests).
