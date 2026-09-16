@@ -48,8 +48,8 @@ sha256 = "b28908a730e7518d34494148475c8f27eb6b724103bae78190f939ed01e41de0"
 [[schema]]
 tool = "claude-code"
 file = ".claude/types/claude-code.d.ts"
-version = "2.1.272"
-source = "https://raw.githubusercontent.com/anthropics/claude-code/v2.1.272/mods/types/claude-code.d.ts"
+version = "2.1.273"
+source = "https://raw.githubusercontent.com/anthropics/claude-code/v2.1.273/mods/types/claude-code.d.ts"
 pin_source = "schemas/sources.toml (vendored; no mise [tools] pin)"
 sha256 = "69d14af889cae22568b6051382e72971578156b36479d4ce4ad13f473797d4ac"
 # WHAT: Vendor Claude Code's published function-hook type declarations instead of
@@ -67,8 +67,14 @@ sha256 = "69d14af889cae22568b6051382e72971578156b36479d4ce4ad13f473797d4ac"
 # raw difference is the two environment-dependent built-in-tool interfaces
 # (BuiltinToolInputs, BuiltinToolResults), which the normalizer removes.
 #
-# NOTE: Upstream's types lag by one release. The file at tag v2.1.272 says
-# "Written by Claude Code 2.1.271". v2.1.271 and v2.1.272 are byte-identical.
+# NOTE: Upstream's types lag the RELEASE, and by more than one version — so this
+# row's `version` and its file's header deliberately disagree, and forcing them
+# to match would be wrong. Measured 2026-09-15 by fetching both tags: v2.1.272
+# and v2.1.273 serve a BYTE-IDENTICAL file (405,845 B, sha256 69d14af889cae225…,
+# the value recorded above) whose header still reads "Written by Claude Code
+# 2.1.271". That is why bumping this row from 2.1.272 to 2.1.273 changed the
+# version and the URL but NOT the sha256, and why `pin-parity.toml` registers
+# this row and the README while deliberately excluding the .d.ts headers.
 # This is not a bug — it is how Anthropic's release cycle works.
 #
 # HOW TO REFRESH: `mise run schema-vendor-refresh` (CI job: refresh.yml's

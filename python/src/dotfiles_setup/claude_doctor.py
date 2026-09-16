@@ -60,6 +60,7 @@ from pathlib import Path
 from typing import Final
 
 from dotfiles_setup.path_drift import Provenance, resolve_ambient_path
+from dotfiles_setup.schema_vendor import sources_path, vendored_version
 
 #: The tool spec the version oracle resolves. ``github:`` is Anthropic's own
 #: prebuilt native release asset set, which is what the native installer ships.
@@ -226,6 +227,46 @@ def parse_doctor(text: str) -> tuple[str | None, str | None, bool]:
     return match["version"].strip(), match["method"].strip(), _CLEAN_MARKER in text
 
 
+#: The `schemas/sources.toml` key whose `version` is Claude Code's ONLY pin
+#: here. Named as a constant so the doctor and `fnhook_gates` agree on it.
+PIN_TOOL: Final = "claude-code"
+
+
+def pin_currency_findings(latest: str, project_root: Path | None = None) -> list[str]:
+    """Report when the REPO's Claude Code pin has fallen behind upstream.
+
+    The check above asks whether the BINARY on PATH is current. Nothing asked
+    whether the `schemas/sources.toml` pin is — and nothing else could:
+    `currency.toml:29-39` deliberately excludes claude-code (it would name an
+    absent mise pin), Renovate cannot see a tool with no mise entry, and
+    `schema_vendor.refresh` re-fetches at the version already recorded rather
+    than resolving a newer one. So the pin can only ever move by hand, and
+    until this existed nothing told anyone it should. Measured 2026-09-15: the
+    pin sat at 2.1.272 while 2.1.273 was published, and every gate was green.
+
+    A tree with no ``schemas/sources.toml`` at all is NOT this repo, so the
+    question does not apply and nothing is reported. A file that EXISTS but
+    cannot yield the row is different — that is a pin nothing is checking, and
+    it is reported. The distinction matters because every other finding here is
+    about the host, so a non-repo root must not manufacture one.
+    """
+    if not sources_path(project_root).is_file():
+        return []
+    try:
+        pinned = vendored_version(PIN_TOOL, project_root)
+    except (ValueError, OSError) as exc:
+        return [f"cannot read the {PIN_TOOL} pin, so pin currency is UNKNOWN: {exc}"]
+    if pinned == latest:
+        return []
+    message = (
+        f"schemas/sources.toml pins {PIN_TOOL} at {pinned} but {latest} is "
+        f"published. Bump `version` and the `source` tag there, and "
+        f"`.claude/types/README.md` in the same change (pin-parity requires "
+        f"both); the sha256 only changes if upstream's .d.ts did."
+    )
+    return [message]
+
+
 def latest_version(
     *, force_refresh: bool = True, path: str | None = None
 ) -> tuple[str | None, str | None]:
@@ -248,7 +289,11 @@ def latest_version(
 
 
 def evaluate(
-    *, force_refresh: bool = True, expected_method: str = NATIVE_METHOD
+    *,
+    force_refresh: bool = True,
+    expected_method: str = NATIVE_METHOD,
+    check_pin: bool = True,
+    project_root: Path | None = None,
 ) -> DoctorVerdict:
     """Run both probes and decide.
 
@@ -259,6 +304,13 @@ def evaluate(
     Pass ``""`` to skip that assertion entirely — a host that deliberately runs a
     non-native build should say so in ``doctor.toml`` rather than read a standing
     finding it has decided to accept.
+
+    ``check_pin`` adds the REPO-state question (:func:`pin_currency_findings`)
+    to the two host-state ones. It is a separate switch because the two have
+    different subjects: every other finding here is about this machine, while
+    that one is about a tracked file. Tests that fabricate ``latest`` pass
+    ``False`` so a real pin bump does not turn six host-state assertions red —
+    the pin's own arms are tested directly against the function.
     """
     path, provenance = resolve_ambient_path(os.environ)
     if provenance is Provenance.BLIND:
@@ -328,6 +380,8 @@ def evaluate(
             f"claude on PATH is {running} but {latest} is published "
             f"(install method: {method}). Run `claude install latest`."
         )
+    if check_pin:
+        findings.extend(pin_currency_findings(latest, project_root))
     if not clean:
         findings.append(
             f"`claude doctor` did not report {_CLEAN_MARKER!r} — it found "
@@ -420,6 +474,9 @@ def claude_doctor_main(
     verdict = evaluate(
         force_refresh=force_refresh,
         expected_method=configured if expected_method is None else expected_method,
+        # Same root the baseline was read from, so the pin question is asked
+        # about the tree this invocation is actually talking about.
+        project_root=project_root,
     )
     sys.stdout.write(verdict.to_json() + "\n")
     return 1 if verdict.enforcement_eligible else 0

@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, Protocol
 
-from dotfiles_setup.schema_vendor import load_sources
+from dotfiles_setup.schema_vendor import load_sources, vendored_version
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -77,18 +77,11 @@ TSC_TOOL = "npm:typescript"
 def claude_code_pin(repo_root: Path) -> str:
     """The Claude Code version `schemas/sources.toml` pins.
 
-    Raises rather than returning a default: a missing row means CI would
-    install an unpinned Claude Code and validate against declarations vendored
-    from a different one, which is the drift this pin exists to prevent.
+    Delegates to :func:`dotfiles_setup.schema_vendor.vendored_version` rather
+    than re-reading the file, so this and the `schema-vendor pin` subcommand CI
+    installs from cannot disagree about the same field.
     """
-    for entry in load_sources(repo_root):
-        if entry.tool == CLAUDE_SCHEMA_TOOL:
-            return entry.version
-    message = (
-        f"schemas/sources.toml has no {CLAUDE_SCHEMA_TOOL!r} row — nothing "
-        f"pins the Claude Code version the plugin validator must run at"
-    )
-    raise ValueError(message)
+    return vendored_version(CLAUDE_SCHEMA_TOOL, repo_root)
 
 
 def tool_spec(repo_root: Path, tool: str) -> str:

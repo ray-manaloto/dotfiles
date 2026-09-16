@@ -51,11 +51,18 @@ detected after stripping the environment-dependent parts.
 
 ## Metadata
 
-**Upstream version:** 2.1.272
+**Upstream version:** 2.1.273
 **Upstream file:** `mods/types/claude-code.d.ts` in the `anthropics/claude-code` repo
-**Note:** Upstream's types lag by one release. The file at tag v2.1.272 says
-"Written by Claude Code 2.1.271". v2.1.271 and v2.1.272 are byte-identical.
-This is not a bug — it is how Anthropic's release cycle works.
+**Note:** Upstream's types lag the release, and by more than one version — so the
+header inside the vendored file deliberately disagrees with the version above.
+Measured 2026-09-15 by fetching both tags: v2.1.272 and v2.1.273 serve a
+byte-identical file (405,845 B) whose header still reads "Written by Claude Code
+2.1.271". This is not a bug — it is how Anthropic's release cycle works, and it
+is why `pin-parity.toml` registers this line but not the `.d.ts` headers.
+
+⚠️ **This line is a PIN, not prose.** `pin-parity.toml`'s `claude-code` entry
+reads it and requires it to equal `schemas/sources.toml`'s `version`, so edit
+the two together (or let `mise run schema-vendor-refresh` do it).
 
 Do not edit the generated declarations by hand. Run `mise run schema-vendor-refresh`
 after a pin bump or if the sha256 check fails.
