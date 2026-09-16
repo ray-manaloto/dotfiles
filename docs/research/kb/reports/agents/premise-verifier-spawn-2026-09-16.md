@@ -77,6 +77,58 @@ Files read live outside the repo: `/Users/rmanaloto/.codex/sessions/2026/09/16/r
 
 Findings were appended (never overwritten) to `/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/findings.md` and `/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/progress.md`. Nothing else was edited.
 
+---
+
+# Delta pass on spec v2 (same agent, SendMessage continuation, 2026-09-16 07:39Z)
+
+> PERSISTED VERBATIM at receipt. Recovered from the subagent transcript because the mailbox delivery truncated the report again.
+
+# Premise verification v2 — delta pass
+
+Repo at `3e1119b`. `git diff --stat bce4ffd..HEAD` over `sdlc_team.py`, `lane_result.py`, both test files, `schemas/`, `hk.pkl`, `suites.toml` and `mise.toml` is **empty**, so every unchanged v1 verdict carries at `3e1119b` without re-reading.
+
+## [v2] row verdicts
+
+| [v2] item | Verdict | Evidence |
+|---|---|---|
+| §3 `collect_spawn_report` last-anchor | **CONFIRMED on real data** | Anchors found at `output.md:9` and `:125`; binding `:125` parses exactly `sdlc-python-specialist`, `sdlc-config-specialist`, `sdlc-documentation-specialist` and stops at the terminator |
+| §3 `payload.session_id` ban | **CONFIRMED** | 449 of 495 children have `session_id == parent_thread_id`; the row's figure is exact |
+| §3 node-name fallback chain | **REFUTED at the middle link** | See below |
+| §3 roster grammar | **CONFIRMED** | 29 of 29 `name` fields in `.codex/agents/*.toml` match `^[a-z0-9][a-z0-9_-]{0,63}$`, including all six sdlc specialists |
+| §3 receipt canonicalization (M5) | **CONFIRMED** | `merge_sources` keys on `name` at `lane_result.py:439` |
+| §3/§4 skipped-file counting, `available=True` | **CONFIRMED** | Exactly 1 unparsable file, zero bytes |
+| §4 `:111` prompt assertion | **CONFIRMED** | `tests/test_sdlc_team.py:111`; block is `:105-115` |
+| §4 base64 payload note | **CONFIRMED** | `sdlc_team.py:286` encodes, `:291` decodes; `os` at `:11` |
+| §4 old-settlement decode | **CONFIRMED** | Seven-field bytes decode; control arm, missing `run_id` raises |
+| §5 arms 7-10 | **Sound**, one caveat | Arm 7 now has real backing. Arm 9 is the only realistic no-role case, not an edge |
+| §7 rows 148-156, 172, 174 (line corrections) | **CONFIRMED** | All five corrections applied correctly; `_SECTION_LINE` is `:87-91`, `_AGENT_LINE` `:92-97` |
+| §7 row 157 (`test_lane_result.py:61`) | **CONFIRMED** | `test_self_report_collects_the_first_selected_block_with_roles`, fixture anchors on `The dispatcher selected:` |
+| §7 row 158 (prose at `output.md:9`) | **CONFIRMED verbatim** | Re-ran live: `available=True`, one item, name `P1 — `4d91064`'s workflow policy loses setup/run ordering.` |
+| §7 row 163 (`session_id` addition), 164 (line 2), 169 (`timestamp` key) | **CONFIRMED** | Direct reads |
+| §7 row 165 (corpus) | **CONFIRMED, all five figures exact** | 3,236 / 495 / 326 / 169 / 449, `subagent` for all 495 |
+| §7 rows 166, 171, 173 | **CONFIRMED** | Zero-byte file path exact |
+
+## The `sub-agent` discrepancy: neither of us read the wrong field
+
+The single `thread_source == "sub-agent"` record has `parent_thread_id` null, so it is **not** one of the 495 children. Your count is correct as stated. My v1 line was under-qualified, not wrong-fielded. Non-child `thread_source` values are `None` (1,848), `user` (656), `subagent` (184), `automation` (43), `agent_created_thread` (8), `sub-agent` (1). The v2 row needs no change.
+
+## New missing premises
+
+**N1 — the fallback chain's middle link is dead, and the last link is unmatchable.** Of the 326 children with no top-level `agent_role`, **zero** carry `payload.source.subagent.thread_spawn.agent_role`. That link can never fire. Meanwhile 80 of the 326 **do** carry `agent_path`, and 244 of the 326 have `originator == "codex_exec"` — the same originator as our own sdlc children — so this is not a foreign-tool shape. Those 80 fall straight through to a uuid name that no claimed roster token can match, forcing `failed`. The spec assigns `agent_path` to `role` but never admits it as an identity, even though the path-first claimed shape carries exactly that path as its `name`. Recommend adding `agent_path` as the second identity before the uuid, or stating explicitly that an `agent_role`-less child is always a failure.
+
+**N2 — `- None.` parses as a claimed item.** `_AGENT_LINE` matches it with name `None.`, which fails the roster grammar and yields `claimed item 'None.' names no roster specialist`. The fail direction is right but the message is misleading for a run that legitimately spawned nothing. Worth pinning in a test.
+
+**N3 — `payload.source` type varies by record class.** It is a dict on all 495 children but the bare string `"exec"` on parent records, so an unguarded nested dig raises `AttributeError` (mine did on the first scan). Safe only because `parent_thread_id` filters parents first. Make that ordering explicit or type-guard the dig.
+
+## Answers to the two direct questions
+
+**Terminator: yes, cleanly.** `- No other specialists were spawned.` is not an `_AGENT_LINE` item, in both the bulleted (`2c97f4bc:140`) and bare (`4e6f6a4d:131`) forms, with and without the trailing period. Control arm: the real item shape on the same regex does match. The last-anchor parse therefore terminates correctly on both real files.
+
+**Grammar: yes, all 29.** Every `name` in `.codex/agents/*.toml` is kebab-case under 64 characters and passes. Note the filenames carry a `codex-` prefix the `name` fields do not, which the grammar is indifferent to.
+
+Findings appended (never overwritten) to `/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/findings.md`. Nothing edited.
+
+
 ## GitHub repos touched
 
 - [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — the repo under change (sdlc_team.py, lane_result.py, tests).
