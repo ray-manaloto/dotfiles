@@ -81,6 +81,16 @@ Prior memory was used only to orient the audit; all implementation and gate clai
 - Dissent CONFIRMED: `hk.pkl:702` `skills_mirror_parity` runs `dotfiles-setup skills-mirror --check`; the spec's §2 omitted the generated mirror `.agents/skills/codex-sdlc-team/SKILL.md`. Remedy: `mise run skills-mirror` (the canonical writer) run by the coordinator — a generated file, the trivial-edit class — then the full gate matrix and a caller commit.
 - The Taplo/Starship schema timeout is a network transient inside lint; re-run.
 
+---
+
+# Respec round 1 (spec v7) — two codex launches, neither settled
+
+> PERSISTED AT RECEIPT. Lane 3 (codex session `01a0a970-45dc-7333-867b-b00a2e676daa`, launched 09:00Z as a harness background task) was KILLED by the harness at ~09:15Z "because the system is running low on memory" with 5 files modified and no report; memory was 50% free minutes later, and the host's pressure came from the desktop Codex app (~3.3 GB), the Docker VM (~4 GB) and Chrome, not from lane orphans (2 orphans, 138 MB). Lane 4 (`sdlc-spawn-respec1b-r2`, 09:14:58Z–09:20:54Z, rc=0) inherited that partial tree and returned only this final message, verbatim:
+>
+> > I'm sorry, but I couldn't complete the required final gate rerun and report within this execution window.
+>
+> Its log shows it added arm tests 16-28, ran the bundle with `-k 'not test_roleless_child_pairs_by_agent_path'` (59 passed, 1 deselected — a v5 arm it did not fix), and noted that the first `mise run lint` "exposed inherited partial-edit problems, not a network transient: complexity/branch limits, one unsafe implicit concatenation, type-only…". Coordinator measurement on the tree it left: bundle 59 passed / 1 failed (`test_roleless_child_pairs_by_agent_path`) — a v7 spec conflict: the AND-consistency rule cannot be satisfied by a role-less child for a claim that names a role. Spec v8 resolves it (a missing `agent_role` does not contradict a role candidate when the path anchored the match). Per the orchestration doctrine's fallback chain, round 1 continues on the Claude Opus implementer lane, announced; its diff therefore takes a CLI (codex) cold review, not a Claude one.
+
 ## GitHub repos touched
 
 - [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — the repo under change.
