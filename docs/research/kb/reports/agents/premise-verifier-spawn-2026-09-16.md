@@ -129,6 +129,44 @@ The single `thread_source == "sub-agent"` record has `parent_thread_id` null, so
 Findings appended (never overwritten) to `/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/findings.md`. Nothing edited.
 
 
+---
+
+# Delta pass on spec v3 (same agent, 2026-09-16 07:44Z)
+
+> PERSISTED VERBATIM at receipt (mailbox delivery was complete this time; transcript copy identical).
+
+# Premise verification v3 — delta pass
+
+Repo at `f7f019e`; `git diff` over `python/src`, `tests`, `schemas`, `hk.pkl`, `python/verification`, `mise.toml`, `.codex` against `3e1119b` is empty, so v1/v2 verdicts carry.
+
+**All 13 [v3] marks CONFIRMED.** Every corpus figure re-derived independently and matched exactly.
+
+| [v3] item | Verdict | Evidence |
+|---|---|---|
+| Observed identity set = {agent_role, agent_path}, nested link dropped | **CONFIRMED** | role-less 326, nested-role 0, with-path 80, neither 246 |
+| Type-guard counts | **CONFIRMED** | parents 2,429 str / 311 dict source (2,740 total); children dict on all 495; `source.subagent` str 239 / dict 256 |
+| Identity grammar, dual roster-or-path | **CONFIRMED on real data** | Both real reports resolve every item to exactly {agent path, roster name}; `no thread with id` filtered out |
+| `- None.` / `- none` not a claim | **CONFIRMED** | `- none` → `none`, `- None.` → `None.`, `- None` → `None`; terminator lines still no-match in both bulleted and bare forms |
+| 29/29 roster grammar row | **CONFIRMED** | Re-read with tomllib |
+| Arms 9, 11, 12, 13 | **Sound** | Arm 13's fixture shapes are all real: parent `"source": "exec"` string, child `source.subagent` string, child `source.subagent` dict |
+| Rows 176-179 | **CONFIRMED verbatim** | All five figure groups exact |
+
+## Path grammar: admits repo paths, but cannot produce a false match
+
+Your suspicion is half right. `^/[A-Za-z0-9_./-]{1,200}$` **does** admit an absolute repo path such as `/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/python/src/dotfiles_setup/sdlc_team.py`, and also `/etc/passwd`. It rejects the more common citation forms: relative paths (`python/src/...`, `.claude/rules/do-not.md`), `path:line` anchors, and anything with a space or semicolon.
+
+A false **positive** match is still not reachable. Matching is set intersection on exact strings, and every observed identity is either a roster name or a codex-internal `/root/<name>` path. A repo path under `/Users/` can never string-equal `/root/...`. So the widening is cosmetic noise in the identity set, not a correctness hole.
+
+## New missing premise: `agent_role` is not unique among siblings
+
+**13 of 330 parent groups on this host have duplicate `agent_role` among their children** — `explorer` sixteen times under one parent, `default` fourteen times under another, `default` seven times under a third. By contrast **`agent_path` is never duplicated**: zero of 330 groups. I also checked the cross case, a role-less child sharing its path with a roled sibling, and found zero.
+
+This breaks the v3 cardinality clause. "Every claimed item matches exactly one observed child" fails the moment a dispatcher legitimately spawns the same specialist twice, because one claimed roster token intersects both children. The result is `failed` on a correct run, which is the exact false-negative class v2 was rewritten to remove. The duplicated roles I measured belong to other agent sets rather than the sdlc roster, so this is a latent hazard rather than a live one, but nothing in the roster or the prompt forbids two spawns of one specialist.
+
+The fix is cheap and already available: the new pinned prompt format emits both tokens per item, and path is the unique discriminator. Either match on the path when both sides carry one, falling back to role only when no path exists, or state explicitly that a duplicate-role spawn is a declared failure with its own error line.
+
+Findings appended to `/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/findings.md`. Nothing edited.
+
 ## GitHub repos touched
 
 - [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — the repo under change (sdlc_team.py, lane_result.py, tests).
