@@ -235,3 +235,36 @@ Safe to dispatch once three text fixes land: L23 must cite `hk.pkl:424` inside `
 
 N1, N2, L23 (must-change) and N3–N6 (advisory) all applied before dispatch;
 the precedence arm now tests both directions of a same-named task.
+
+## Part 8 (delivered 18:21Z — the round-3 spec pass)
+
+## Verdicts
+
+| Row | Verdict | Evidence |
+|---|---|---|
+| **L26** | **CONFIRMED** | `_SHELL_TOKEN_RE = re.compile(r"[^\s;&\|)\"'`]+")` at `workflow_claude_code.py:222`; `(` and `/` are indeed not terminators |
+| **L27** | **CONFIRMED** | `_hooks_in_command` `:335-349`, `word == "hk"` at `:343`, the `dotfiles-setup` plus `lint` pair at `:347`; `_mise_tasks_in_command` `:352-361`, `word == "mise"` at `:358` |
+| **L28** | **CONFIRMED** | `:379-384` catches only `tomllib.TOMLDecodeError` and raises `ValueError(f"{relative}: {error}")`; the YAML readers catch the wider triple |
+| **L29** | **CONFIRMED** | `resolve_job` at `:725` calls `hooks_running_the_gate(root)` at `:727`; `scan_workflows` derives it at `:849` and `workflow_claude_code_main` again at `:895` |
+| **P9** | **CONFIRMED as mechanism** | Report-sourced, but the code path is exactly as described: exact-equality tests at `:343`/`:347`/`:358` plus a terminator set without `(` make every one of the six spellings a single foreign token. I did not re-run the reviewer's git-archive measurement |
+| **P10** | **CONFIRMED, independently re-probed** | `hk run README.md pre-commit --plan` rc=1 `Error: Hook 'README.md' not found`; without `--plan` also rc=1; control `hk run --plan pre-commit` rc=0. So a bare token after the run flags is the hook and no file-skipping is needed |
+| **E5** | **CONFIRMED** as a design statement | Widening `:381` to the triple emits only the relative path plus the exception message |
+| **A4** | **CONFIRMED in conclusion, imprecise in wording** | My own grep, control-armed against `$(uv|git|docker|gh)` which returns 7 and 21 rows in two workflows, finds no `$(hk`, `(hk` or path-qualified invocation in any `run:` block. But A4 says the grep "returned only comment prose", and that is not what is there: `autofix.yml:92` has `~/.local/state/hk/hk.log`, `:21` and `refresh.yml:75` have `/tmp/mise.log`, and `autofix.yml:85` has the literal `(hk + mise)`. All are `name:`/`env:`/`with:` values or basenames that are not bare `hk`/`mise`, so the conclusion holds |
+
+## MISSING
+
+**M1, the basename rule must apply to the program token only. Should be stated.** If it is also applied to the subcommand or hook token, `cp -r ~/.cache/mise run/` reads as `mise` then `run` and the next token becomes a task name. Say the strip-and-basename happens once, on the candidate program token, and that `run`, `r`, `check`, `fix` and the hook or task token are compared literally.
+
+**M2, a directory argument whose last segment is `mise` or `hk` becomes a candidate.** `rm -rf $HOME/.cache/mise` basenames to `mise`. It is harmless today because nothing follows, but the safety comes from the following token, not from the rule. Worth one sentence, and a NOT-flagged arm alongside the existing `.mise/` and `mise.lock` ones.
+
+**M3, backslash line continuation is not in the terminator set.** `hk run \` newline `check --all` leaves `\` as the token between `run` and `check`, so the hook lookup gets `\` and the command is missed. No hk or mise command uses one today, but `\` continuations are idiomatic in this repo's run blocks, at `ghcr-cleanup.yml:77` and `image-analysis.yml:92` among others. Adjacent to outcome 1 and cheap to close in the same edit.
+
+**M4, minor.** The `NAME=$(` strip should be anchored to an identifier, or `-Dopt=$(hk` strips too. That over-matches, which is the safe direction for this gate, so it only needs a comment.
+
+## Closing
+
+Safe to dispatch as written. Add the one-sentence M1 clarification so the basename rule cannot leak onto the subcommand token, and consider folding M3's backslash into the terminator set while the tokeniser is open; L26 through L29, P9, P10, E5 and A4's conclusion all hold against the tree at `3b1eb0b`.
+
+## Architect disposition (round-3 spec)
+
+M1–M4 and the A4 wording applied before dispatch.
