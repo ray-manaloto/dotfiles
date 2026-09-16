@@ -466,6 +466,38 @@ def check_main(argv: list[str] | None = None) -> int:
     return 0
 
 
+def sources_path(root: Path | None = None) -> Path:
+    """Absolute path to ``schemas/sources.toml`` under ``root``.
+
+    Public so a caller can ask "is this tree even this repo?" without importing
+    the private root resolver — :mod:`dotfiles_setup.claude_doctor` needs that
+    distinction to avoid manufacturing a finding for a directory that simply
+    has no vendored schemas.
+    """
+    return (root if root is not None else _project_root()) / SOURCES_PATH
+
+
+def vendored_version(tool: str, root: Path | None = None) -> str:
+    """The version ``schemas/sources.toml`` records for ``tool``.
+
+    The one reader of that field. Three callers depend on it — the ``pin``
+    subcommand CI installs from, :func:`dotfiles_setup.fnhook_gates.claude_code_pin`,
+    and doctor's claude-code currency check — and a second private copy is how
+    the sites this pin governs start disagreeing about it.
+
+    Raises rather than returning a default: for a tool with no mise pin, this
+    file IS the pin, so a silent fallback would let CI install an unpinned
+    build and validate against declarations vendored from another release.
+    """
+    entries = load_sources(root)
+    for entry in entries:
+        if entry.tool == tool:
+            return entry.version
+    known = ", ".join(sorted(entry.tool for entry in entries))
+    message = f"no {tool!r} row in {SOURCES_PATH} (known tools: {known})"
+    raise ValueError(message)
+
+
 def pin_main(tool: str) -> int:
     """CLI entry point: ``dotfiles-setup schema-vendor pin --tool <tool>``.
 
@@ -477,15 +509,13 @@ def pin_main(tool: str) -> int:
     forgets ``set -o pipefail`` still installs nothing rather than installing
     ``@latest`` from an empty string.
     """
-    for entry in load_sources():
-        if entry.tool == tool:
-            sys.stdout.write(f"{entry.version}\n")
-            return 0
-    known = ", ".join(sorted(entry.tool for entry in load_sources()))
-    sys.stderr.write(
-        f"schema-vendor: no {tool!r} row in {SOURCES_PATH} (known tools: {known})\n"
-    )
-    return 1
+    try:
+        version = vendored_version(tool)
+    except ValueError as exc:
+        sys.stderr.write(f"schema-vendor: {exc}\n")
+        return 1
+    sys.stdout.write(f"{version}\n")
+    return 0
 
 
 def refresh_main(argv: list[str] | None = None) -> int:

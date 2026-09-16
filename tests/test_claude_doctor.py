@@ -147,7 +147,7 @@ def test_parse_doctor_reports_a_missing_clean_marker() -> None:
 
 def test_a_current_native_install_is_ok(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(claude_doctor, "_run", _fake_run())
-    result = claude_doctor.evaluate()
+    result = claude_doctor.evaluate(check_pin=False)
     assert result.verdict is Verdict.OK
     assert result.findings == []
     assert result.enforcement_eligible is False
@@ -155,7 +155,7 @@ def test_a_current_native_install_is_ok(monkeypatch: pytest.MonkeyPatch) -> None
 
 def test_a_stale_version_is_invalid(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(claude_doctor, "_run", _fake_run(oracle=(0, "2.1.271\n")))
-    result = claude_doctor.evaluate()
+    result = claude_doctor.evaluate(check_pin=False)
     assert result.verdict is Verdict.INVALID
     assert result.enforcement_eligible is True
     assert any("2.1.271 is published" in f for f in result.findings)
@@ -174,7 +174,7 @@ def test_a_shadowed_install_is_invalid_and_names_the_shadowing(
         "_run",
         _fake_run(doctor=(0, SHADOWED_DOCTOR), oracle=(0, "2.1.269\n")),
     )
-    result = claude_doctor.evaluate()
+    result = claude_doctor.evaluate(check_pin=False)
     assert result.verdict is Verdict.INVALID
     assert result.install_method == "npm-global"
     # The version assertion PASSES here (2.1.269 == 2.1.269), so this finding
@@ -195,7 +195,7 @@ def test_an_accepted_non_native_install_can_opt_out(
         "_run",
         _fake_run(doctor=(0, SHADOWED_DOCTOR), oracle=(0, "2.1.269\n")),
     )
-    result = claude_doctor.evaluate(expected_method="")
+    result = claude_doctor.evaluate(expected_method="", check_pin=False)
     assert result.verdict is Verdict.OK
 
 
@@ -205,7 +205,7 @@ def test_a_missing_binary_is_unknown_not_invalid(
     monkeypatch.setattr(
         claude_doctor, "_run", _fake_run(doctor=(127, "claude: not found on PATH"))
     )
-    result = claude_doctor.evaluate()
+    result = claude_doctor.evaluate(check_pin=False)
     assert result.verdict is Verdict.UNKNOWN
     assert result.enforcement_eligible is False
 
@@ -217,7 +217,7 @@ def test_reworded_output_is_unknown_not_a_silent_pass(
     monkeypatch.setattr(
         claude_doctor, "_run", _fake_run(doctor=(0, "Now running: native 2.1.270"))
     )
-    result = claude_doctor.evaluate()
+    result = claude_doctor.evaluate(check_pin=False)
     assert result.verdict is Verdict.UNKNOWN
     assert result.enforcement_eligible is False
 
@@ -229,7 +229,7 @@ def test_an_oracle_failure_is_unknown_never_current(
     monkeypatch.setattr(
         claude_doctor, "_run", _fake_run(oracle=(1, "network unreachable"))
     )
-    result = claude_doctor.evaluate()
+    result = claude_doctor.evaluate(check_pin=False)
     assert result.verdict is Verdict.UNKNOWN
     assert any("cannot determine latest" in f for f in result.findings)
     assert result.running_version == "2.1.270"
@@ -241,7 +241,7 @@ def test_a_missing_clean_marker_is_invalid(monkeypatch: pytest.MonkeyPatch) -> N
         "_run",
         _fake_run(doctor=(0, "Running: native (2.1.270)\nFound 1 problem.\n")),
     )
-    result = claude_doctor.evaluate()
+    result = claude_doctor.evaluate(check_pin=False)
     assert result.verdict is Verdict.INVALID
     assert any("installation issues" in f for f in result.findings)
 
@@ -261,7 +261,7 @@ def test_a_rewritten_path_is_blind_and_therefore_unknown(
         lambda _environ: ("/rewritten", Provenance.BLIND),
     )
     monkeypatch.setattr(claude_doctor, "_run", _fake_run())
-    result = claude_doctor.evaluate()
+    result = claude_doctor.evaluate(check_pin=False)
     assert result.verdict is Verdict.UNKNOWN
     assert "BLIND" in result.findings[0]
     assert result.enforcement_eligible is False
@@ -278,7 +278,7 @@ def test_blindness_short_circuits_before_any_subprocess(
         lambda _environ: ("/rewritten", Provenance.BLIND),
     )
     monkeypatch.setattr(claude_doctor, "_run", _fake_run(seen=seen))
-    claude_doctor.evaluate()
+    claude_doctor.evaluate(check_pin=False)
     assert seen == []
 
 
@@ -288,7 +288,7 @@ def test_both_probes_run_against_the_ambient_path(
     """The regression arm: an inherited PATH resolves the wrong ``claude``."""
     seen: list[str | None] = []
     monkeypatch.setattr(claude_doctor, "_run", _fake_run(seen=seen))
-    claude_doctor.evaluate()
+    claude_doctor.evaluate(check_pin=False)
     assert seen == [AMBIENT, AMBIENT], (
         "every probe must resolve against the captured ambient PATH; an "
         "inherited one finds mise's pinned claude shim, not the operator's"
@@ -304,7 +304,7 @@ def test_to_json_is_parseable_and_carries_the_verdict(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(claude_doctor, "_run", _fake_run())
-    payload = json.loads(claude_doctor.evaluate().to_json())
+    payload = json.loads(claude_doctor.evaluate(check_pin=False).to_json())
     assert payload["verdict"] == "ok"
     assert payload["enforcement_eligible"] is False
     assert payload["install_method"] == "native"
@@ -368,7 +368,7 @@ def test_a_non_native_expectation_does_not_blame_the_mise_shim(
     here satisfies, which is the only way that branch is reachable.
     """
     monkeypatch.setattr(claude_doctor, "_run", _fake_run())
-    result = claude_doctor.evaluate(expected_method="homebrew")
+    result = claude_doctor.evaluate(expected_method="homebrew", check_pin=False)
     assert result.verdict is Verdict.INVALID
     assert "not the expected 'homebrew'" in result.findings[0]
     assert "mise env -C" not in result.findings[0], (
@@ -490,3 +490,107 @@ def test_the_cli_hands_the_project_root_to_the_baseline_loader() -> None:
         "`claude-doctor` must pass project_root, or the enforcing path resolves "
         "doctor.toml against the process cwd instead of the repository"
     )
+
+
+def _sources_with(version: str, tmp_path: Path) -> Path:
+    """A minimal repo root whose sources.toml pins claude-code at `version`."""
+    schemas = tmp_path / "schemas"
+    schemas.mkdir(parents=True, exist_ok=True)
+    (schemas / "sources.toml").write_text(
+        "[[schema]]\n"
+        'tool = "claude-code"\n'
+        'file = ".claude/types/claude-code.d.ts"\n'
+        f'version = "{version}"\n'
+        f'source = "https://example.invalid/v{version}/claude-code.d.ts"\n'
+        'pin_source = "schemas/sources.toml"\n'
+        'sha256 = "0" \n',
+        encoding="utf-8",
+    )
+    return tmp_path
+
+
+def test_a_current_pin_reports_nothing(tmp_path: Path) -> None:
+    """Control arm: without it the failing arm below proves nothing."""
+    root = _sources_with("2.1.273", tmp_path)
+
+    assert claude_doctor.pin_currency_findings("2.1.273", root) == []
+
+
+def test_a_pin_behind_upstream_is_reported(tmp_path: Path) -> None:
+    """The gap this closes: nothing else watches the repo's own pin.
+
+    Renovate cannot see a tool with no mise entry, `currency.toml` excludes
+    claude-code deliberately, and `schema_vendor.refresh` re-fetches at the
+    version already recorded rather than resolving a newer one. Measured
+    2026-09-15: the pin sat at 2.1.272 while 2.1.273 was published and every
+    gate was green.
+    """
+    root = _sources_with("2.1.272", tmp_path)
+
+    findings = claude_doctor.pin_currency_findings("2.1.273", root)
+
+    assert len(findings) == 1, findings
+    assert "2.1.272" in findings[0]
+    assert "2.1.273" in findings[0]
+
+
+def test_a_tree_without_sources_toml_is_not_this_repo(tmp_path: Path) -> None:
+    """A non-repo root must not manufacture a host finding.
+
+    Every other finding in this module is about the machine. Reporting one for
+    a directory that simply has no `schemas/sources.toml` would make
+    `claude_doctor_main(project_root=<anything>)` fail on a question that does
+    not apply to it — which is how this seam was first caught.
+    """
+    assert claude_doctor.pin_currency_findings("2.1.273", tmp_path) == []
+
+
+def test_an_unreadable_pin_is_a_finding_not_silence(tmp_path: Path) -> None:
+    """A sources.toml that EXISTS but lacks the row is a real gap.
+
+    Distinct from the case above: the file is this repo's, so the question
+    applies — and a pin nothing can read is a pin nothing is checking.
+    """
+    schemas = tmp_path / "schemas"
+    schemas.mkdir(parents=True)
+    (schemas / "sources.toml").write_text(
+        '[[schema]]\ntool = "mise"\nfile = "schemas/mise.json"\n'
+        'version = "1"\nsource = "https://example.invalid/x"\n'
+        'pin_source = "x"\nsha256 = "0"\n',
+        encoding="utf-8",
+    )
+
+    findings = claude_doctor.pin_currency_findings("2.1.273", tmp_path)
+
+    assert len(findings) == 1, findings
+    assert "UNKNOWN" in findings[0]
+
+
+def test_the_pin_check_is_wired_into_evaluate(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Bind the CALL SITE, not just the helper.
+
+    A helper with perfect arms that nothing calls is the classic way a gate
+    stops biting while every logic test stays green — so this asserts
+    `evaluate` reaches it, and that `check_pin=False` really suppresses it.
+    """
+    monkeypatch.setattr(
+        claude_doctor,
+        "_run",
+        _fake_run(doctor=(0, NATIVE_DOCTOR), oracle=(0, "2.1.270\n")),
+    )
+    seen: list[tuple[str, object]] = []
+
+    def _spy(latest: str, project_root: object = None) -> list[str]:
+        seen.append((latest, project_root))
+        return ["synthetic pin finding"]
+
+    monkeypatch.setattr(claude_doctor, "pin_currency_findings", _spy)
+
+    on = claude_doctor.evaluate()
+    assert seen, "evaluate() never called the pin check"
+    assert "synthetic pin finding" in on.findings
+
+    seen.clear()
+    off = claude_doctor.evaluate(check_pin=False)
+    assert seen == [], "check_pin=False still called the pin check"
+    assert "synthetic pin finding" not in off.findings
