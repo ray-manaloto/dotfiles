@@ -147,6 +147,7 @@ from dotfiles_setup.renovate_dryrun import renovate_dryrun_main
 from dotfiles_setup.renovate_validate import renovate_validate_main
 from dotfiles_setup.rule_sync import run as rule_sync_run
 from dotfiles_setup.schema_vendor import check_main as schema_vendor_check_main
+from dotfiles_setup.schema_vendor import pin_main as schema_vendor_pin_main
 from dotfiles_setup.schema_vendor import refresh_main as schema_vendor_refresh_main
 from dotfiles_setup.sdlc_team import sdlc_team_main
 from dotfiles_setup.session_review import LaneChoice, session_review_main
@@ -1688,6 +1689,16 @@ def _add_schema_vendor_subcommands(subparsers: _SubParsers) -> None:
         help="Re-download every vendored schema at its current pin "
         "(network; CI's schema-refresh job, never the lint gate)",
     )
+    pin_parser = schema_vendor_sub.add_parser(
+        "pin",
+        help="Print one tool's pinned version from schemas/sources.toml "
+        "(CI installs Claude Code at exactly this pin)",
+    )
+    pin_parser.add_argument(
+        "--tool",
+        required=True,
+        help="The sources.toml `tool` key, e.g. claude-code",
+    )
 
 
 def _add_dag_tick_subcommand(subparsers: _SubParsers) -> None:
@@ -2251,7 +2262,7 @@ def handle_hook(args: argparse.Namespace, project_root: Path) -> None:
 
 
 def handle_schema_vendor(args: argparse.Namespace) -> None:
-    """Dispatch a schema-vendor subcommand (ITEM 11: `check` or `refresh`).
+    """Dispatch a schema-vendor subcommand (ITEM 11: `check`, `refresh`, `pin`).
 
     Unknown/absent subcommand is a no-op, matching `handle_hook`.
     """
@@ -2260,6 +2271,8 @@ def handle_schema_vendor(args: argparse.Namespace) -> None:
         sys.exit(schema_vendor_check_main())
     elif command == "refresh":
         sys.exit(schema_vendor_refresh_main())
+    elif command == "pin":
+        sys.exit(schema_vendor_pin_main(args.tool))
 
 
 def handle_graphify(args: argparse.Namespace, project_root: Path) -> None:

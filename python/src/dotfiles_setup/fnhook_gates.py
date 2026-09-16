@@ -43,33 +43,62 @@ _TYPE_FILENAMES = ("claude-code.d.ts", "claude-code-mcp.d.ts")
 # cannot leave the invocation naming a stale version.
 # This module lives at python/src/dotfiles_setup/, so the repo root is three
 # parents up. The tool spec always comes from the REPO's mise.toml, never from
-# whatever cwd a gate happens to run in — `_generate_types` runs in a temp dir.
+# whatever cwd a gate happens to run in.
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
-#: Anthropic's native release asset. Deliberately NOT the `npm:` backend — see
-#: the `mise.toml` comment on this pin and #1043: npm's launcher needs a
-#: postinstall that npm 12 blocks by default while still exiting 0.
-CLAUDE_TOOL = "github:anthropics/claude-code"
+#: The Claude Code binary, invoked straight off `PATH` — deliberately NOT
+#: through `mise exec`.
+#:
+#: The `github:anthropics/claude-code` `[tools]` pin was removed in `6d1ae23`
+#: so the native installer at `~/.local/bin/claude` owns PATH and self-updates
+#: (grilling decision Q1; `currency.toml:29-39`). `mise exec <spec>` survived
+#: that removal and became a trap: with no pin to activate, mise falls through
+#: to an on-demand `@latest` install, which `MISE_LOCKED=1` refuses on a linux
+#: runner. Measured on PR #1128 (run 35011570326):
+#:
+#:     mise ✗ github:anthropics/claude-code@2.1.272  failed: No lockfile URL
+#:     found for github:anthropics/claude-code@2.1.272 on platform linux-x64
+#:     (--locked mode)
+#:
+#: It passed on the development Mac throughout, because an on-demand install is
+#: allowed there — the host was not a control arm for CI. CI now installs the
+#: pinned version with Anthropic's own installer (`ci.yml`, the lint job), which
+#: `MISE_LOCKED` does not govern, so the gate runs for real on both.
+CLAUDE_BINARY = "claude"
+
+#: `schemas/sources.toml`'s key for Claude Code. That file IS the pin for this
+#: tool — there is no mise entry to read — so it is the single source CI's
+#: installer and the vendored declarations both resolve from.
+CLAUDE_SCHEMA_TOOL = "claude-code"
+
 TSC_TOOL = "npm:typescript"
+
+
+def claude_code_pin(repo_root: Path) -> str:
+    """The Claude Code version `schemas/sources.toml` pins.
+
+    Raises rather than returning a default: a missing row means CI would
+    install an unpinned Claude Code and validate against declarations vendored
+    from a different one, which is the drift this pin exists to prevent.
+    """
+    for entry in load_sources(repo_root):
+        if entry.tool == CLAUDE_SCHEMA_TOOL:
+            return entry.version
+    message = (
+        f"schemas/sources.toml has no {CLAUDE_SCHEMA_TOOL!r} row — nothing "
+        f"pins the Claude Code version the plugin validator must run at"
+    )
+    raise ValueError(message)
 
 
 def tool_spec(repo_root: Path, tool: str) -> str:
     """`<tool>@<version>` using the pin in `mise.toml`, so the two cannot drift.
 
-    Special case: claude-code has no mise [tools] pin (the native installer owns
-    PATH as of 2026-09-14; see currency.toml:29-39). For this tool, the version
-    comes from schemas/sources.toml (the vendored declarations' pin), and we
-    return just the tool name for direct invocation since it's on PATH natively.
+    Claude Code is deliberately not resolvable here: it has no `[tools]` pin,
+    and `validate_plugin` runs the binary off `PATH` instead. Passing its mise
+    spec raises, which is what stops the removed wrapper being reinstated.
     """
     config = tomllib.loads((repo_root / "mise.toml").read_text(encoding="utf-8"))
-
-    # Claude Code has no mise pin — native installer owns PATH.
-    # All other tools are in [tools].
-    if tool == CLAUDE_TOOL:
-        # Return bare tool name; it's on PATH via native installer.
-        # The gate validates against vendored declarations, not generated ones,
-        # so no version is needed for the gate to run.
-        return tool
     tools = config.get("tools", {})
     version = tools.get(tool)
 
@@ -82,7 +111,6 @@ def tool_spec(repo_root: Path, tool: str) -> str:
     return f"{tool}@{version}"
 
 
-_FUNCTION_HOOKS_FLAG = "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS"
 _COMMAND_TIMEOUT_SECONDS = 120.0
 #: Tools whose denial removes the session's only way to report or ask about the
 #: denial. Not repair tools — neither executes anything — which is why
@@ -235,14 +263,17 @@ def validate_plugin(
     *,
     runner: Runner = default_runner,
 ) -> GateResult:
-    """Run Claude Code's strict static validator for one complete plugin."""
+    """Run Claude Code's strict static validator for one complete plugin.
+
+    `--strict` promotes warnings to errors, which is the mode Anthropic
+    documents for CI use (`plugins-reference.md:506`). The binary comes off
+    `PATH`; see :data:`CLAUDE_BINARY` for why it is not wrapped in `mise exec`.
+    A missing binary is rc=127 from :func:`default_runner` and fails the gate —
+    never a pass, per `.claude/rules/probes-need-a-control-arm.md`.
+    """
     return runner(
         [
-            "mise",
-            "exec",
-            tool_spec(_REPO_ROOT, CLAUDE_TOOL),
-            "--",
-            "claude",
+            CLAUDE_BINARY,
             "plugin",
             "validate",
             "--strict",
@@ -402,30 +433,6 @@ def typecheck_modules(
             ],
             cwd=repo_root,
         )
-
-
-def _generate_types(work_root: Path, *, runner: Runner) -> GateResult:
-    """Invoke `/plugin-types`; its rc is intentionally not interpreted.
-
-    `work_root` is a temp dir, so the tool spec is read from the REPO's
-    `mise.toml`, not from the cwd the command runs in.
-    """
-    return runner(
-        [
-            "mise",
-            "exec",
-            tool_spec(_REPO_ROOT, CLAUDE_TOOL),
-            "--",
-            "claude",
-            "-p",
-            "/plugin-types",
-            "--permission-mode",
-            "bypassPermissions",
-        ],
-        cwd=work_root,
-        env={_FUNCTION_HOOKS_FLAG: "1"},
-        input_text="",
-    )
 
 
 def _generated_files(work_root: Path) -> list[Path]:
@@ -590,20 +597,6 @@ def fnhook_gates_main(
         if not result.ok:
             rc = 1
     return rc
-
-
-def _restore_generated_files(
-    paths: Sequence[Path],
-    previous: Mapping[Path, bytes | None],
-) -> None:
-    """Restore declaration bytes when regeneration writes an incomplete pair."""
-    for path in paths:
-        old_bytes = previous[path]
-        if old_bytes is None:
-            path.unlink(missing_ok=True)
-        else:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(old_bytes)
 
 
 def fnhook_types_refresh_main(

@@ -466,6 +466,28 @@ def check_main(argv: list[str] | None = None) -> int:
     return 0
 
 
+def pin_main(tool: str) -> int:
+    """CLI entry point: ``dotfiles-setup schema-vendor pin --tool <tool>``.
+
+    Prints one bare version to stdout so a workflow step can install exactly
+    the pin ``sources.toml`` records, instead of restating it in YAML — a
+    second pin site is precisely what ``pin_parity`` exists to reject.
+
+    An unknown tool is a non-zero exit with nothing on stdout, so a caller that
+    forgets ``set -o pipefail`` still installs nothing rather than installing
+    ``@latest`` from an empty string.
+    """
+    for entry in load_sources():
+        if entry.tool == tool:
+            sys.stdout.write(f"{entry.version}\n")
+            return 0
+    known = ", ".join(sorted(entry.tool for entry in load_sources()))
+    sys.stderr.write(
+        f"schema-vendor: no {tool!r} row in {SOURCES_PATH} (known tools: {known})\n"
+    )
+    return 1
+
+
 def refresh_main(argv: list[str] | None = None) -> int:
     """CLI entry point: ``dotfiles-setup schema-vendor refresh``."""
     del argv

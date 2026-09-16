@@ -7,6 +7,7 @@ import json
 import re
 import subprocess
 import sys
+import tomllib
 from pathlib import Path, PurePosixPath
 from typing import cast
 
@@ -23,39 +24,60 @@ FIXTURE_ROOT = REPO_ROOT / fnhook_gates.FIXTURE_ROOT
 TYPE_FILENAMES = ("claude-code.d.ts", "claude-code-mcp.d.ts")
 
 
-def _real_tools_available() -> bool:
-    """Whether the two pinned binaries the gate shells out to actually resolve.
+def _sources_version(tool: str) -> str:
+    """Read a pin straight out of `schemas/sources.toml`.
 
-    They are pinned in `mise.toml` (host-only, #1026 ruling), deliberately NOT
-    in the shared fragment, so they are absent inside the devcontainer — where
-    `sync --full` runs this suite. Skipping there keeps the suite runnable
-    everywhere WITHOUT weakening the gate: the `fnhook-gates` CLI still fails
-    loudly when a binary is missing, because a gate that shrugs is not a gate.
-
-    This only ever skips the arms that shell out to a real tool. Every
-    pure-python arm — discovery, the normalizer and its control arm, the typed-
-    module assertion, the hk-glob arming — runs unconditionally.
+    Parsed here rather than read back off `fnhook_gates`, so the expectation
+    cannot agree with the module by construction (`tests/AGENTS.md`,
+    "tautological").
     """
-    return all(
+    data = tomllib.loads(
+        (REPO_ROOT / "schemas" / "sources.toml").read_text(encoding="utf-8")
+    )
+    return next(row["version"] for row in data["schema"] if row["tool"] == tool)
+
+
+def _binary_resolves(command: list[str]) -> bool:
+    """Whether one `--version` probe exits 0 from the repo root."""
+    return (
         subprocess.run(
-            [
-                "mise",
-                "exec",
-                fnhook_gates.tool_spec(REPO_ROOT, mise_tool),
-                "--",
-                tool,
-                "--version",
-            ],
+            command,
             capture_output=True,
             check=False,
             cwd=REPO_ROOT,
         ).returncode
         == 0
-        for tool, mise_tool in (
-            ("claude", fnhook_gates.CLAUDE_TOOL),
-            ("tsc", fnhook_gates.TSC_TOOL),
-        )
     )
+
+
+def _real_tools_available() -> bool:
+    """Whether the two binaries the gate shells out to actually resolve.
+
+    They reach the gate by different routes on purpose. `tsc` is a `mise.toml`
+    pin (host-only, #1026 ruling), deliberately NOT in the shared fragment, so
+    it is absent inside the devcontainer — where `sync --full` runs this suite.
+    `claude` comes off `PATH` from the native installer, which is why the probe
+    below cannot go through `mise exec` for it; doing so is the very defect
+    `test_validate_plugin_does_not_route_through_mise` now pins.
+
+    Skipping keeps the suite runnable everywhere WITHOUT weakening the gate:
+    the `fnhook-gates` CLI still fails loudly when a binary is missing, because
+    a gate that shrugs is not a gate.
+
+    This only ever skips the arms that shell out to a real tool. Every
+    pure-python arm — discovery, the normalizer and its control arm, the typed-
+    module assertion, the hk-glob arming — runs unconditionally.
+    """
+    claude = [fnhook_gates.CLAUDE_BINARY, "--version"]
+    tsc = [
+        "mise",
+        "exec",
+        fnhook_gates.tool_spec(REPO_ROOT, fnhook_gates.TSC_TOOL),
+        "--",
+        "tsc",
+        "--version",
+    ]
+    return _binary_resolves(claude) and _binary_resolves(tsc)
 
 
 _REAL_TOOLS = _real_tools_available()
@@ -120,8 +142,8 @@ def test_plugin_elsewhere_under_tests_is_discovered(tmp_path: Path) -> None:
     assert fnhook_gates.discover_plugin_dirs(tmp_path) == [plugin_dir]
 
 
-def test_validate_plugin_issues_the_strict_mise_command() -> None:
-    """The external validator is pinned through mise and warnings are errors."""
+def test_validate_plugin_issues_the_strict_command() -> None:
+    """The validator runs off PATH, on the plugin dir, with warnings as errors."""
     calls: list[tuple[list[str], Path]] = []
 
     def fake_runner(
@@ -143,10 +165,6 @@ def test_validate_plugin_issues_the_strict_mise_command() -> None:
     assert calls == [
         (
             [
-                "mise",
-                "exec",
-                fnhook_gates.tool_spec(REPO_ROOT, fnhook_gates.CLAUDE_TOOL),
-                "--",
                 "claude",
                 "plugin",
                 "validate",
@@ -156,6 +174,52 @@ def test_validate_plugin_issues_the_strict_mise_command() -> None:
             Path.cwd(),
         )
     ]
+
+
+def test_validate_plugin_does_not_route_through_mise() -> None:
+    """Reproduces PR #1128: `mise exec` around claude cannot work on a runner.
+
+    The `[tools]` pin was removed in `6d1ae23` (native installer owns PATH),
+    but the `mise exec` wrapper survived. With no pin to activate, mise falls
+    through to an on-demand `@latest` install, and `MISE_LOCKED=1` refuses it:
+
+        No lockfile URL found for github:anthropics/claude-code@2.1.272
+        on platform linux-x64 (--locked mode)
+
+    Asserted on the argv rather than on mise's error text, which is a string
+    this repo does not own (`probes-need-a-control-arm.md` rule 9). The
+    development Mac allows the on-demand install, so it stayed green for the
+    whole outage and could never have caught this.
+    """
+    seen: list[list[str]] = []
+
+    def _capture(command: list[str], **_: object) -> GateResult:
+        seen.append(command)
+        return GateResult(rc=0)
+
+    fnhook_gates.validate_plugin(_fixture_plugins()["valid"], runner=_capture)
+
+    assert seen, "no command captured — the stub was never called"
+    for command in seen:
+        assert "mise" not in command, (
+            f"{command!r} routes claude through mise — it has no [tools] pin, "
+            f"so MISE_LOCKED=1 turns this into an install failure on a runner"
+        )
+        assert command[0] == fnhook_gates.CLAUDE_BINARY, command
+
+
+def test_claude_code_pin_reads_sources_toml() -> None:
+    """The one pin CI installs from, with an armed failure direction.
+
+    `claude_code_pin` must RAISE on a sources.toml with no claude-code row, not
+    return a default: a silent fallback would let CI install an unpinned Claude
+    Code and validate against declarations vendored from another release.
+    """
+    assert fnhook_gates.claude_code_pin(REPO_ROOT) == _sources_version("claude-code")
+
+    empty = REPO_ROOT / "tests" / "fixtures"  # any dir without schemas/sources.toml
+    with pytest.raises((ValueError, FileNotFoundError)):
+        fnhook_gates.claude_code_pin(empty)
 
 
 def test_typecheck_uses_discovered_files_and_committed_config(
@@ -526,7 +590,14 @@ def test_missing_binary_fails_the_gate_rather_than_skipping_it() -> None:
 #: Which tool must supply each binary the gates invoke. Written out here on
 #: purpose: an expectation copied from the module under test cannot disagree
 #: with it (`tests/AGENTS.md`, "tautological").
-_TOOL_SUPPLYING = {"claude": "anthropics/claude-code", "tsc": "typescript"}
+#: Which tool must supply each binary a `mise exec` argv then runs. Written out
+#: here on purpose: an expectation copied from the module under test cannot
+#: disagree with it (`tests/AGENTS.md`, "tautological").
+#:
+#: `claude` is deliberately absent. It is no longer a mise invocation at all —
+#: the native installer owns PATH — and `test_validate_plugin_does_not_route_
+#: through_mise` is what holds that end.
+_TOOL_SUPPLYING = {"tsc": "typescript"}
 
 
 def test_every_mise_invocation_names_its_tool_not_a_bare_shim() -> None:
@@ -538,9 +609,9 @@ def test_every_mise_invocation_names_its_tool_not_a_bare_shim() -> None:
     development Mac, where a shim resolves — so the host was not a control arm
     for CI, and only naming the tool fixes it.
 
-    This binds all three call sites at once: the argv must carry a
-    `<tool>@<version>` spec between `exec` and `--`. The version is read from
-    `mise.toml`, so a pin bump cannot leave an invocation naming a stale one.
+    The argv must carry a `<tool>@<version>` spec between `exec` and `--`. The
+    version is read from `mise.toml`, so a pin bump cannot leave an invocation
+    naming a stale one.
     """
     seen: list[list[str]] = []
 
@@ -549,27 +620,20 @@ def test_every_mise_invocation_names_its_tool_not_a_bare_shim() -> None:
         return GateResult(rc=0, stdout="", stderr="")
 
     valid = _fixture_plugins()["valid"]
-    fnhook_gates.validate_plugin(valid, runner=_capture)
     fnhook_gates.typecheck_modules([valid], runner=_capture)
 
     assert seen, "no commands captured — the stub was never called"
     for command in seen:
         assert command[:2] == ["mise", "exec"], command
         spec = command[2]
-        # Claude Code has no mise pin (native installer owns PATH), so it
-        # returns a bare tool name. All other tools must have @version.
-        if spec.startswith("github:anthropics/claude-code"):
-            # Bare claude-code tool name is correct for the native installer
-            tool = spec
-        else:
-            assert "@" in spec, (
-                f"argv[2] is {spec!r}, not a <tool>@<version> spec — a bare "
-                f"`mise exec -- <bin>` resolves the shim and fails on a runner"
-            )
-            tool, _, version = spec.rpartition("@")
-        # The tool must SUPPLY the binary the same argv then runs. Stated here
-        # as an independent expectation rather than read back off the module's
-        # own constants, because two weaker forms were tried and both were
+        assert "@" in spec, (
+            f"argv[2] is {spec!r}, not a <tool>@<version> spec — a bare "
+            f"`mise exec -- <bin>` resolves the shim and fails on a runner"
+        )
+        tool, _, version = spec.rpartition("@")
+        # The tool must SUPPLY the binary the same argv then runs. Stated as an
+        # independent expectation rather than read back off the module's own
+        # constants, because two weaker forms were tried and both were
         # worthless:
         #
         #   `spec.startswith("npm:")` — pinned the BACKEND, so it failed #1043's
@@ -590,6 +654,21 @@ def test_every_mise_invocation_names_its_tool_not_a_bare_shim() -> None:
         assert fnhook_gates.tool_spec(REPO_ROOT, tool) == spec, (
             f"{tool} invoked at {version}, which is not its mise.toml pin"
         )
+
+
+def test_tool_spec_refuses_the_removed_claude_pin() -> None:
+    """The wrapper cannot be reinstated by reaching back through `tool_spec`.
+
+    Claude Code has no `[tools]` entry (`6d1ae23`), so asking `tool_spec` for
+    one must raise rather than hand back a spec that only fails later, inside
+    mise, on a runner. Control arm: the tool that IS pinned still resolves.
+    """
+    with pytest.raises(TypeError):
+        fnhook_gates.tool_spec(REPO_ROOT, "github:anthropics/claude-code")
+
+    assert fnhook_gates.tool_spec(REPO_ROOT, fnhook_gates.TSC_TOOL).startswith(
+        f"{fnhook_gates.TSC_TOOL}@"
+    )
 
 
 def test_a_plugin_in_a_nested_checkout_is_not_discovered(tmp_path: Path) -> None:

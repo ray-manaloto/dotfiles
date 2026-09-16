@@ -99,6 +99,37 @@ jobs:
         # {platform}-{install_args_hash}-{file_hash} — granular per-platform
         # AND per-install-args cache hygiene, preserved across all jobs.
         uses: $/.github/actions/setup-mise
+      - name: Install Claude Code at the vendored pin
+        # The `fnhook_gates` hk step runs `claude plugin validate --strict`,
+        # which Anthropic documents for CI use. It cannot come from mise: the
+        # `[tools]` pin was removed in `6d1ae23` so the native installer owns
+        # PATH (grilling decision Q1), and with no pin to activate `mise exec`
+        # falls through to an on-demand `@latest` install that MISE_LOCKED=1
+        # refuses here — which is exactly how PR #1128 went red while the
+        # development Mac stayed green.
+        #
+        # The version is READ from schemas/sources.toml, never restated here:
+        # that file is the pin for this tool, and a second copy in YAML is the
+        # drift `pin_parity` exists to reject. It also keeps the validator and
+        # the vendored .d.ts declarations on the same release.
+        #
+        # `set -o pipefail` is load-bearing — the default `bash -e {0}` returns
+        # the PIPE's last exit code, so a failed `curl` would install nothing
+        # and still report success.
+        run: |
+          set -euo pipefail
+          version="$(uv run --project python dotfiles-setup schema-vendor pin --tool claude-code)"
+          curl -fsSL https://claude.ai/install.sh | bash -s "$version"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          # Control arm: prove the binary resolves AND is the pin we asked for.
+          # A wrong-version install would otherwise validate plugins against a
+          # release the vendored declarations never described.
+          installed="$("$HOME/.local/bin/claude" --version)"
+          echo "claude --version -> $installed (pin: $version)"
+          case "$installed" in
+            *"$version"*) ;;
+            *) echo "FAIL: installed Claude Code is not the $version pin" >&2; exit 1 ;;
+          esac
       - name: Configure git identity for hk
         run: |
           git config --global user.name "github-actions[bot]"
