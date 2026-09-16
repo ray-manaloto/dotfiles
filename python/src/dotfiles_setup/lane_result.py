@@ -251,7 +251,11 @@ def collect_spawn_report(report_text: str) -> CollectorOutcome:
             break
         match = _AGENT_LINE.match(line)
         if match is None:
-            token = _BACKTICK_TOKEN.search(item_text)
+            # Anchored: an item must START with its backticked token, or it is
+            # an identity-less claim that fails closed. A `.search` here let
+            # `- Python specialist — `/root/python_review`` collapse to a
+            # path-only claim that paired with ANY child at that path.
+            token = _BACKTICK_TOKEN.match(item_text)
             if token is None:
                 name = item_text
                 role = ""

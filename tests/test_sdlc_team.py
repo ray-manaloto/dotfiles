@@ -1599,3 +1599,63 @@ def test_committed_schema_matches_its_canonical_model(
     expected = json.loads(json.dumps(cast("Any", generated)()))
 
     assert committed == expected
+
+
+def test_arm_29_prose_led_claim_cannot_pair_with_a_different_specialist(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A claim whose name is prose carries no identity and fails closed.
+
+    Before the anchor fix the prose was discarded and the item became the
+    path-only claim `/root/python_review`, which paired with the config
+    specialist that actually ran there and settled the run `completed`.
+    """
+    parent_id = "01a0a8da-6d39-74e3-a8fc-fe66f5505378"
+    child = {
+        "id": "01a0a8db-de4d-7c93-a96f-8d001939aecd",
+        "parent_thread_id": parent_id,
+        "agent_role": "sdlc-config-specialist",
+        "agent_path": "/root/python_review",
+    }
+    returncode, settlement, _receipt = _run_supervisor(
+        tmp_path,
+        monkeypatch,
+        _SupervisorFixture(
+            report=(
+                "Specialists spawned:\n\n- Python specialist — `/root/python_review`\n"
+            ),
+            log_text=_codex_banner(parent_id),
+            children=(child,),
+        ),
+    )
+
+    assert returncode == 1
+    assert settlement.status is sdlc_team.SdlcSettledStatus.FAILED
+    assert settlement.errors == (
+        (
+            "spawn reconciliation: claimed item "
+            "'Python specialist — `/root/python_review`' names no roster specialist "
+            "or agent path"
+        ),
+        (
+            "spawn reconciliation: observed child 'sdlc-config-specialist' "
+            "(/root/python_review) was not claimed"
+        ),
+    )
+
+    control_code, control, _receipt = _run_supervisor(
+        tmp_path / "control",
+        monkeypatch,
+        _SupervisorFixture(
+            report=(
+                "Specialists spawned:\n\n"
+                "- `sdlc-config-specialist` — `/root/python_review`\n"
+            ),
+            log_text=_codex_banner(parent_id),
+            children=(child,),
+        ),
+    )
+
+    assert control_code == 0
+    assert control.status is sdlc_team.SdlcSettledStatus.COMPLETED
+    assert control.errors == ()

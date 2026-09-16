@@ -634,3 +634,26 @@ def test_mise_task_is_a_thin_lane_receipt_cli_wrapper() -> None:
 
     assert "[tasks.lane-receipt]" in mise
     assert 'run = "uv run --project python dotfiles-setup lane-receipt"' in mise
+
+
+def test_arm_29_spawn_item_must_start_with_its_backticked_token() -> None:
+    """A prose-led item is not silently reduced to the first backticked token.
+
+    Reverting the `.match` anchor to `.search` makes the first item collapse to
+    the path-only claim `/root/python_review`, which then pairs with ANY child
+    at that path regardless of the specialist that actually ran.
+    """
+    prose_led = lane_result.collect_spawn_report(
+        "Specialists spawned:\n\n- Python specialist — `/root/python_review`\n"
+    )
+    backtick_led = lane_result.collect_spawn_report(
+        "Specialists spawned:\n\n- `/root/python_review` — Python specialist\n"
+    )
+
+    assert prose_led.available is True
+    assert [(node.name, node.role) for node in prose_led.agents] == [
+        ("Python specialist — `/root/python_review`", "")
+    ]
+    assert [(node.name, node.role) for node in backtick_led.agents] == [
+        ("/root/python_review", "Python specialist")
+    ]
