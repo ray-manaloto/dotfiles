@@ -25,8 +25,16 @@ from dotfiles_setup.bootstrap_packages import gap_report_failures
 from dotfiles_setup.classifier_tables import classifier_axes_main
 from dotfiles_setup.claude_doctor import claude_doctor_main
 from dotfiles_setup.codex_agent_parity import codex_agent_parity_main
+from dotfiles_setup.codex_agent_validate import (
+    validate_main as codex_agent_validate_main,
+)
 from dotfiles_setup.codex_lane import run_lane_cli
 from dotfiles_setup.codex_lane_mirror import codex_lane_mirror_main
+from dotfiles_setup.codex_schema import (
+    check_schema_currency,
+    generate_schema,
+    get_installed_codex_version,
+)
 from dotfiles_setup.command_audit import DEFAULT_SESSION_LIMIT, command_audit_main
 from dotfiles_setup.config import DotfilesConfig
 from dotfiles_setup.container import verify_latest_main
@@ -60,6 +68,7 @@ from dotfiles_setup.fnhook_gates import (
     fnhook_gates_main,
     fnhook_types_refresh_main,
 )
+from dotfiles_setup.gate_result import gate_main
 from dotfiles_setup.gcc_sha import gcc_sha_main
 from dotfiles_setup.ghcr import validate_ghcr_prereqs
 from dotfiles_setup.ghcr_cleanup import plan_cleanup
@@ -86,6 +95,7 @@ from dotfiles_setup.image import ImageCommand
 from dotfiles_setup.image import main as image_main
 from dotfiles_setup.image_lock import image_lock_main
 from dotfiles_setup.instructions_report import instructions_report_main
+from dotfiles_setup.lane_result import lane_receipt_main
 from dotfiles_setup.lint import (
     DEFAULT_TIMEOUT_SECONDS,
     TIMEOUT_ENV_VAR,
@@ -137,13 +147,16 @@ from dotfiles_setup.renovate_dryrun import renovate_dryrun_main
 from dotfiles_setup.renovate_validate import renovate_validate_main
 from dotfiles_setup.rule_sync import run as rule_sync_run
 from dotfiles_setup.schema_vendor import check_main as schema_vendor_check_main
+from dotfiles_setup.schema_vendor import pin_main as schema_vendor_pin_main
 from dotfiles_setup.schema_vendor import refresh_main as schema_vendor_refresh_main
+from dotfiles_setup.sdlc_team import sdlc_team_main
 from dotfiles_setup.session_review import LaneChoice, session_review_main
 from dotfiles_setup.session_state import main as session_state_main
 from dotfiles_setup.skills_mirror import skills_mirror_main
 from dotfiles_setup.sync import SyncOptions, sync_main
 from dotfiles_setup.token_audit import preflight_main, token_audit_main
 from dotfiles_setup.verify import main as verify_main
+from dotfiles_setup.workflow_claude_code import workflow_claude_code_main
 from dotfiles_setup.workflow_hooks import workflow_hooks_main
 from dotfiles_setup.workflow_skip_cascade import workflow_skip_cascade_main
 
@@ -172,6 +185,22 @@ class EnvironmentValidator:
         if current_os not in cls.SUPPORTED_PLATFORMS:
             msg = f"Platform {current_os} is not supported"
             raise RuntimeError(msg)
+
+
+def _exit_with_message(result: tuple[bool, str]) -> None:
+    """Exit on a ``(ok, message)`` check result, printing the message on failure.
+
+    The codex schema check returns a reason with its verdict, and the dispatch
+    entry discarded it — so a genuine failure exited 1 with NO output at all.
+    Measured 2026-09-14: `mise run codex-schema-check` printed only
+    "ERROR task failed" while the real cause (a missing version stamp) was sitting
+    unused in the tuple's second element. A check that cannot say why it failed
+    is only marginally better than one that cannot fail.
+    """
+    ok, message = result
+    if not ok:
+        sys.stderr.write(f"{message}\n")
+    sys.exit(0 if ok else 1)
 
 
 def _add_apt_repo_subcommand(subparsers: _SubParsers) -> None:
@@ -907,6 +936,14 @@ def _add_workflow_dag_subcommands(subparsers: _SubParsers) -> None:
         "run on the runner and fail",
     )
     subparsers.add_parser(
+        "workflow-claude-code",
+        help="Fail when a CI job runs an hk hook carrying `fnhook_gates` "
+        "without installing Claude Code — that step shells out to `claude`, "
+        "which is deliberately not a mise tool here, so the job dies on a "
+        "missing binary (PR #1128: fixed in ci.yml by name, autofix.yml "
+        "went red on the next run)",
+    )
+    subparsers.add_parser(
         "workflow-skip-cascade",
         help="Fail when a job downstream of a skippable job (in its "
         "transitive `needs:` closure) carries no status-check function "
@@ -1066,6 +1103,60 @@ def _add_verify_subcommands(
         action="append",
         dest="categories",
         help="Filter by category (repeatable)",
+    )
+
+
+def _add_gate_subcommands(subparsers: _SubParsers) -> None:
+    """Register typed gate-result commands."""
+    gate_parser = subparsers.add_parser(
+        "gate", help="Run or read a typed result for a declared gate"
+    )
+    gate_subparsers = gate_parser.add_subparsers(
+        dest="gate_command", required=True, help="Gate commands"
+    )
+    run_parser = gate_subparsers.add_parser("run", help="Run a declared gate")
+    run_parser.add_argument("gate_name")
+    run_parser.add_argument("--timeout", type=float, default=None)
+    read_parser = gate_subparsers.add_parser(
+        "read", help="Read a stored typed gate result"
+    )
+    read_parser.add_argument("gate_name")
+
+
+def _add_verify_and_gate_subcommands(subparsers: _SubParsers) -> None:
+    """Register the structured verification and result command families."""
+    _add_verify_subcommands(subparsers)
+    _add_gate_subcommands(subparsers)
+    _add_lane_receipt_subcommand(subparsers)
+    _add_sdlc_team_subcommand(subparsers)
+
+
+def _add_lane_receipt_subcommand(subparsers: _SubParsers) -> None:
+    """Register the typed lane receipt command."""
+    lane_parser = subparsers.add_parser(
+        "lane-receipt",
+        help="Write a typed, source-attributed receipt for one agent lane",
+    )
+    lane_parser.add_argument("--run-id", required=True)
+    lane_parser.add_argument("--lane", required=True)
+    lane_parser.add_argument("--report", type=Path, required=True)
+    lane_parser.add_argument("--parent-session-id", required=True)
+    lane_parser.add_argument("--since", default="2h")
+    lane_parser.add_argument("--started-at", default="")
+    lane_parser.add_argument("--duration-s", type=float, default=0.0)
+
+
+def _add_sdlc_team_subcommand(subparsers: _SubParsers) -> None:
+    """Register the typed, detached SDLC-team dispatcher."""
+    parser = subparsers.add_parser(
+        "sdlc-team",
+        help="Dispatch the Codex SDLC team from a typed JSON request",
+    )
+    parser.add_argument(
+        "request",
+        nargs="?",
+        default="-",
+        help="SdlcTeamRequest JSON file, or - for stdin",
     )
 
 
@@ -1572,6 +1663,23 @@ def _add_schema_vendor_subcommands(subparsers: _SubParsers) -> None:
     Args:
         subparsers: The parent subparsers action to attach commands to.
     """
+    # Codex's own app-server schema lives here rather than with the honesty
+    # gates: it is schema management, and `_add_honesty_subcommands` was at 52
+    # statements against PLR0915's limit of 50 once these two landed there.
+    subparsers.add_parser(
+        "codex-schema-generate",
+        help="Generate the codex app-server JSON schema for the EXACT installed "
+        "codex version; the bundle is gitignored because it is derived output",
+    )
+    subparsers.add_parser(
+        "codex-schema-check",
+        help="Verify the codex app-server schema exists and matches the installed "
+        "codex version (also asserted by doctor's codex-schema check)",
+    )
+    subparsers.add_parser(
+        "codex-agent-validate",
+        help="Validate the complete Codex SDLC agent roster against its schema",
+    )
     schema_vendor_parser = subparsers.add_parser(
         "schema-vendor",
         help="Vendored config schemas (schemas/*.json) for mise.toml/"
@@ -1589,6 +1697,16 @@ def _add_schema_vendor_subcommands(subparsers: _SubParsers) -> None:
         "refresh",
         help="Re-download every vendored schema at its current pin "
         "(network; CI's schema-refresh job, never the lint gate)",
+    )
+    pin_parser = schema_vendor_sub.add_parser(
+        "pin",
+        help="Print one tool's pinned version from schemas/sources.toml "
+        "(CI installs Claude Code at exactly this pin)",
+    )
+    pin_parser.add_argument(
+        "--tool",
+        required=True,
+        help="The sources.toml `tool` key, e.g. claude-code",
     )
 
 
@@ -1917,7 +2035,7 @@ def setup_parser() -> argparse.ArgumentParser:
     )
 
     _add_docker_subcommands(subparsers)
-    _add_verify_subcommands(subparsers)
+    _add_verify_and_gate_subcommands(subparsers)
     _add_graphify_subcommands(subparsers)
     _add_image_subcommands(subparsers)
     _add_pr_subcommands(subparsers)
@@ -2153,7 +2271,7 @@ def handle_hook(args: argparse.Namespace, project_root: Path) -> None:
 
 
 def handle_schema_vendor(args: argparse.Namespace) -> None:
-    """Dispatch a schema-vendor subcommand (ITEM 11: `check` or `refresh`).
+    """Dispatch a schema-vendor subcommand (ITEM 11: `check`, `refresh`, `pin`).
 
     Unknown/absent subcommand is a no-op, matching `handle_hook`.
     """
@@ -2162,6 +2280,8 @@ def handle_schema_vendor(args: argparse.Namespace) -> None:
         sys.exit(schema_vendor_check_main())
     elif command == "refresh":
         sys.exit(schema_vendor_refresh_main())
+    elif command == "pin":
+        sys.exit(schema_vendor_pin_main(args.tool))
 
 
 def handle_graphify(args: argparse.Namespace, project_root: Path) -> None:
@@ -2573,6 +2693,38 @@ def _build_command_handlers(
             )
         )
 
+    def _gate() -> None:
+        gate_argv = [
+            "--repo-root",
+            str(project_root),
+            args.gate_command,
+            args.gate_name,
+        ]
+        if args.gate_command == "run" and args.timeout is not None:
+            gate_argv.extend(("--timeout", str(args.timeout)))
+        sys.exit(gate_main(gate_argv))
+
+    def _lane_receipt() -> None:
+        lane_argv = [
+            "--repo-root",
+            str(project_root),
+            "--run-id",
+            args.run_id,
+            "--lane",
+            args.lane,
+            "--report",
+            str(args.report),
+            "--parent-session-id",
+            args.parent_session_id,
+            "--since",
+            args.since,
+            "--started-at",
+            args.started_at,
+            "--duration-s",
+            str(args.duration_s),
+        ]
+        sys.exit(lane_receipt_main(lane_argv))
+
     return {
         "validate": _validate,
         "audit": lambda: handle_audit(config=config),
@@ -2629,9 +2781,23 @@ def _build_command_handlers(
         "dependency-ownership": lambda: sys.exit(
             dependency_ownership_main(project_root)
         ),
+        "codex-schema-generate": lambda: sys.exit(
+            0 if generate_schema(project_root) else 1
+        ),
+        "codex-schema-check": lambda: _exit_with_message(
+            check_schema_currency(project_root, get_installed_codex_version())
+        ),
+        "codex-agent-validate": lambda: sys.exit(
+            codex_agent_validate_main([str(project_root)])
+        ),
         "version": _version,
         "install": lambda: handle_install(project_root),
         "verify": lambda: handle_verify(args),
+        "gate": _gate,
+        "lane-receipt": _lane_receipt,
+        "sdlc-team": lambda: sys.exit(
+            sdlc_team_main([args.request, "--repo-root", str(project_root)])
+        ),
         "image": lambda: handle_image(args),
         "ghcr-check": lambda: handle_ghcr_check(args, project_root),
         "ghcr-cleanup": lambda: handle_ghcr_cleanup(args),
@@ -2763,6 +2929,9 @@ def _build_command_handlers(
             hk_builtins_audit_main(project_root, check=args.check)
         ),
         "workflow-hooks": lambda: sys.exit(workflow_hooks_main(project_root)),
+        "workflow-claude-code": lambda: sys.exit(
+            workflow_claude_code_main(project_root)
+        ),
         "workflow-skip-cascade": lambda: sys.exit(
             workflow_skip_cascade_main(project_root)
         ),

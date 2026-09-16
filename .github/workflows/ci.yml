@@ -99,6 +99,12 @@ jobs:
         # {platform}-{install_args_hash}-{file_hash} — granular per-platform
         # AND per-install-args cache hygiene, preserved across all jobs.
         uses: $/.github/actions/setup-mise
+      - name: Install Claude Code
+        # hk's `fnhook_gates` step shells out to `claude plugin validate
+        # --strict`. Extracted to a composite because `autofix.yml` runs the
+        # same hk steps and needs the same binary — the first version of this
+        # fix lived here only, and autofix went red on the missing `claude`.
+        uses: $/.github/actions/setup-claude-code
       - name: Configure git identity for hk
         run: |
           git config --global user.name "github-actions[bot]"

@@ -1154,7 +1154,12 @@ def test_every_check_function_is_actually_registered() -> None:
     # puts a competing `claude` on PATH. #1043 moved it off the npm backend, so
     # it can no longer produce a broken launcher — but it is still not the
     # operator's install, and that is what this check asserts.
-    assert len(doctor.CHECKS) == 12, "every specified check must be wired"
+    # + `codex-schema` (2026-09-14): is the vendored codex app-server JSON schema
+    # bundle still the one the INSTALLED codex emits. It exists because an agent or
+    # config authored against a stale schema validates clean and then fails at
+    # runtime — and codex drops an invalid `.codex/agents/*.toml` SILENTLY, with no
+    # error, which is how six specialist agents existed on disk and none loaded.
+    assert len(doctor.CHECKS) == 13, "every specified check must be wired"
 
 
 def test_the_shipped_baseline_parses_and_declares_what_the_checks_read() -> None:

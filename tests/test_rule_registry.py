@@ -66,6 +66,16 @@ def _git_untracked_or_ignored(root: Path, subdir: str) -> set[str]:
     assertion tolerate the normal authoring workflow — a newly written,
     not-yet-staged rule file — instead of reading it as a classifier
     disagreement.
+
+    RAISES when git cannot be asked, rather than returning an empty set.
+    Measured 2026-09-15: a transient in-container git failure during a
+    devcontainer `postCreateCommand` emptied BOTH sides of the caller's
+    assertion at once — `tracked_files` upstream and this helper here — so the
+    two halves agreed on a fiction and the caller blamed a classifier. Nothing
+    in the ~4,200-line ship log named a git error, because neither side raised
+    or logged one. An empty set is an ANSWER ("git reports nothing untracked");
+    it must not also mean "git was never asked". `probes-need-a-control-arm.md`
+    rule 4: a redirect/timeout/parse-error is not a "no".
     """
     result = subprocess.run(
         ["git", "-C", str(root), "status", "--porcelain", "--ignored", "--", subdir],
@@ -73,6 +83,14 @@ def _git_untracked_or_ignored(root: Path, subdir: str) -> set[str]:
         text=True,
         check=False,
     )
+    if result.returncode != 0:
+        # Assigned first, per `tests/test_process_env.py:28-31` — ruff's EM102
+        # and TRY003 both reject an inline f-string here.
+        msg = (
+            f"git status failed in {root} (rc={result.returncode}): "
+            f"{result.stderr.strip() or '<no stderr>'}"
+        )
+        raise RuntimeError(msg)
     paths: set[str] = set()
     for line in result.stdout.splitlines():
         if len(line) < 4:

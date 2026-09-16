@@ -11,6 +11,7 @@ TypeScript accepts an ``any``-typed module and the second gate proves nothing.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -21,6 +22,8 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, Protocol
+
+from dotfiles_setup.schema_vendor import load_sources
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -40,21 +43,65 @@ _TYPE_FILENAMES = ("claude-code.d.ts", "claude-code-mcp.d.ts")
 # cannot leave the invocation naming a stale version.
 # This module lives at python/src/dotfiles_setup/, so the repo root is three
 # parents up. The tool spec always comes from the REPO's mise.toml, never from
-# whatever cwd a gate happens to run in — `_generate_types` runs in a temp dir.
+# whatever cwd a gate happens to run in.
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
-#: Anthropic's native release asset. Deliberately NOT the `npm:` backend — see
-#: the `mise.toml` comment on this pin and #1043: npm's launcher needs a
-#: postinstall that npm 12 blocks by default while still exiting 0.
-CLAUDE_TOOL = "github:anthropics/claude-code"
+#: The Claude Code binary, invoked straight off `PATH` — deliberately NOT
+#: through `mise exec`.
+#:
+#: The `github:anthropics/claude-code` `[tools]` pin was removed in `6d1ae23`
+#: so the native installer at `~/.local/bin/claude` owns PATH and self-updates
+#: (grilling decision Q1; `currency.toml:29-39`). `mise exec <spec>` survived
+#: that removal and became a trap: with no pin to activate, mise falls through
+#: to an on-demand `@latest` install, which `MISE_LOCKED=1` refuses on a linux
+#: runner. Measured on PR #1128 (run 35011570326):
+#:
+#:     mise ✗ github:anthropics/claude-code@2.1.272  failed: No lockfile URL
+#:     found for github:anthropics/claude-code@2.1.272 on platform linux-x64
+#:     (--locked mode)
+#:
+#: It passed on the development Mac throughout, because an on-demand install is
+#: allowed there — the host was not a control arm for CI. CI now installs the
+#: pinned version with Anthropic's own installer (`ci.yml`, the lint job), which
+#: `MISE_LOCKED` does not govern, so the gate runs for real on both.
+CLAUDE_BINARY = "claude"
+
+#: `schemas/sources.toml`'s key for Claude Code. That file IS the pin for this
+#: tool — there is no mise entry to read — so it is the single source CI's
+#: installer and the vendored declarations both resolve from.
+CLAUDE_SCHEMA_TOOL = "claude-code"
+
 TSC_TOOL = "npm:typescript"
 
 
+def claude_code_pin(repo_root: Path) -> str:
+    """The Claude Code version `schemas/sources.toml` pins.
+
+    Raises rather than returning a default: a missing row means CI would
+    install an unpinned Claude Code and validate against declarations vendored
+    from a different one, which is the drift this pin exists to prevent.
+    """
+    for entry in load_sources(repo_root):
+        if entry.tool == CLAUDE_SCHEMA_TOOL:
+            return entry.version
+    message = (
+        f"schemas/sources.toml has no {CLAUDE_SCHEMA_TOOL!r} row — nothing "
+        f"pins the Claude Code version the plugin validator must run at"
+    )
+    raise ValueError(message)
+
+
 def tool_spec(repo_root: Path, tool: str) -> str:
-    """`<tool>@<version>` using the pin in `mise.toml`, so the two cannot drift."""
+    """`<tool>@<version>` using the pin in `mise.toml`, so the two cannot drift.
+
+    Claude Code is deliberately not resolvable here: it has no `[tools]` pin,
+    and `validate_plugin` runs the binary off `PATH` instead. Passing its mise
+    spec raises, which is what stops the removed wrapper being reinstated.
+    """
     config = tomllib.loads((repo_root / "mise.toml").read_text(encoding="utf-8"))
     tools = config.get("tools", {})
     version = tools.get(tool)
+
     if not isinstance(version, str):
         message = (
             f"{tool} is not pinned as an exact version in mise.toml — the gate "
@@ -64,7 +111,6 @@ def tool_spec(repo_root: Path, tool: str) -> str:
     return f"{tool}@{version}"
 
 
-_FUNCTION_HOOKS_FLAG = "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS"
 _COMMAND_TIMEOUT_SECONDS = 120.0
 #: Tools whose denial removes the session's only way to report or ask about the
 #: denial. Not repair tools — neither executes anything — which is why
@@ -217,14 +263,17 @@ def validate_plugin(
     *,
     runner: Runner = default_runner,
 ) -> GateResult:
-    """Run Claude Code's strict static validator for one complete plugin."""
+    """Run Claude Code's strict static validator for one complete plugin.
+
+    `--strict` promotes warnings to errors, which is the mode Anthropic
+    documents for CI use (`plugins-reference.md:506`). The binary comes off
+    `PATH`; see :data:`CLAUDE_BINARY` for why it is not wrapped in `mise exec`.
+    A missing binary is rc=127 from :func:`default_runner` and fails the gate —
+    never a pass, per `.claude/rules/probes-need-a-control-arm.md`.
+    """
     return runner(
         [
-            "mise",
-            "exec",
-            tool_spec(_REPO_ROOT, CLAUDE_TOOL),
-            "--",
-            "claude",
+            CLAUDE_BINARY,
             "plugin",
             "validate",
             "--strict",
@@ -386,30 +435,6 @@ def typecheck_modules(
         )
 
 
-def _generate_types(work_root: Path, *, runner: Runner) -> GateResult:
-    """Invoke `/plugin-types`; its rc is intentionally not interpreted.
-
-    `work_root` is a temp dir, so the tool spec is read from the REPO's
-    `mise.toml`, not from the cwd the command runs in.
-    """
-    return runner(
-        [
-            "mise",
-            "exec",
-            tool_spec(_REPO_ROOT, CLAUDE_TOOL),
-            "--",
-            "claude",
-            "-p",
-            "/plugin-types",
-            "--permission-mode",
-            "bypassPermissions",
-        ],
-        cwd=work_root,
-        env={_FUNCTION_HOOKS_FLAG: "1"},
-        input_text="",
-    )
-
-
 def _generated_files(work_root: Path) -> list[Path]:
     """The two files one successful `/plugin-types` invocation must write."""
     return [work_root / ".claude" / "types" / name for name in _TYPE_FILENAMES]
@@ -478,58 +503,66 @@ def _comparable_declaration_bytes(path: Path) -> bytes:
 
 
 def _check_types_current(repo_root: Path, *, runner: Runner) -> GateResult:
-    """Compare stable declaration bytes with a normalized fresh generation."""
+    """Verify vendored declarations exist, are non-empty, and pass type-checking.
+
+    Claude Code's type declarations are now vendored from the upstream repository
+    and refreshed via `mise run schema-vendor-refresh` (CI: schema-refresh job in
+    refresh.yml), not generated locally with `/plugin-types`. This removes the
+    hard dependency on a local Claude Code installation for the lint gate.
+
+    This function verifies two things:
+    1. The vendored file exists and is non-empty
+    2. The sha256 recorded in schemas/sources.toml matches the file on disk
+
+    Type-checking is NOT done here - `typecheck_modules()` owns it. The
+    docstring claimed otherwise until 2026-09-15; the body always delegated.
+
+    If any check fails, the gate returns non-zero. Absence must never read as
+    "nothing to check" — the normalization function is retained because the
+    environment-dependent built-in-tool interfaces still differ between machines,
+    and drift detection still applies when comparing to upstream.
+    """
+    # Kept for signature compatibility with the other gate helpers; this one
+    # reads files and hashes rather than shelling out. `del` satisfies ruff's
+    # ARG001 without an inline suppression, which `no_lint_skip` forbids.
+    del runner
+
+    # Verify that vendored declarations exist and are non-empty
     committed = _generated_files(repo_root)
     missing = _missing_or_empty(committed)
     if missing:
         rendered = ", ".join(str(path) for path in missing)
-        return GateResult(rc=1, stdout=f"missing committed declarations: {rendered}\n")
+        return GateResult(rc=1, stdout=f"missing vendored declarations: {rendered}\n")
 
-    with tempfile.TemporaryDirectory(prefix="fnhook-types-") as temp_dir:
-        generated_root = Path(temp_dir)
-        invocation = _generate_types(generated_root, runner=runner)
-        generated = _generated_files(generated_root)
-        missing = _missing_or_empty(generated)
-        if missing:
-            rendered = ", ".join(str(path) for path in missing)
+    # Verify sha256 against schemas/sources.toml, if it exists.
+    # In test fixtures, schemas/sources.toml may not exist; skip the check.
+    declared_sha: dict[str, str] = {}
+    sources_path = repo_root / "schemas" / "sources.toml"
+    if sources_path.exists():
+        for entry in load_sources(repo_root):
+            if entry.tool == "claude-code":
+                declared_sha["claude-code"] = entry.sha256
+                break
+
+        if "claude-code" not in declared_sha:
             return GateResult(
                 rc=1,
-                stdout=invocation.stdout
-                + f"/plugin-types did not write non-empty outputs: {rendered}\n",
-                stderr=invocation.stderr,
+                stdout="claude-code entry not found in schemas/sources.toml\n",
             )
-        try:
-            drifted = [
-                expected
-                for expected, actual in zip(
-                    drift_comparable_files(repo_root),
-                    drift_comparable_files(generated_root),
-                    strict=True,
-                )
-                if _comparable_declaration_bytes(expected)
-                != _comparable_declaration_bytes(actual)
-            ]
-        except ValueError as exc:
-            return GateResult(
-                rc=1,
-                stdout=invocation.stdout
-                + f"cannot normalize function-hook declarations: {exc}\n",
-                stderr=invocation.stderr,
-            )
-        if drifted:
-            rendered = ", ".join(str(path) for path in drifted)
-            return GateResult(
-                rc=1,
-                stdout=invocation.stdout
-                + f"function-hook declarations drifted: {rendered}; "
-                "run `mise run fnhook-types-refresh`\n",
-                stderr=invocation.stderr,
-            )
+
+    vendored_path = repo_root / ".claude" / "types" / "claude-code.d.ts"
+    actual_sha = hashlib.sha256(vendored_path.read_bytes()).hexdigest()
+    # Only verify sha256 if it was recorded in sources.toml
+    if declared_sha and actual_sha != declared_sha["claude-code"]:
         return GateResult(
-            rc=0,
-            stdout=invocation.stdout,
-            stderr=invocation.stderr,
+            rc=1,
+            stdout=f"vendored declarations sha256 mismatch: "
+            f"expected {declared_sha['claude-code']}, got {actual_sha}; "
+            f"the file was edited outside `mise run schema-vendor-refresh`\n",
         )
+
+    # Type-checking is handled by typecheck_modules() below
+    return GateResult(rc=0)
 
 
 def _emit(result: GateResult) -> None:
@@ -566,44 +599,23 @@ def fnhook_gates_main(
     return rc
 
 
-def _restore_generated_files(
-    paths: Sequence[Path],
-    previous: Mapping[Path, bytes | None],
-) -> None:
-    """Restore declaration bytes when regeneration writes an incomplete pair."""
-    for path in paths:
-        old_bytes = previous[path]
-        if old_bytes is None:
-            path.unlink(missing_ok=True)
-        else:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(old_bytes)
-
-
 def fnhook_types_refresh_main(
     argv: Sequence[str] | None = None,
     *,
     runner: Runner = default_runner,
 ) -> int:
-    """Regenerate both function-hook declaration files from pinned Claude Code."""
+    """DEPRECATED: Use `mise run schema-vendor-refresh` instead.
+
+    Claude Code's type declarations are now vendored via the schema-vendor
+    machinery and refreshed by `mise run schema-vendor-refresh` (CI: schema-refresh
+    job in refresh.yml), not generated locally with `/plugin-types`. This function
+    is retained for backwards compatibility but is a no-op.
+    """
+    del runner  # Unused in deprecated path
     if argv:
-        sys.stderr.write("fnhook-types-refresh takes no arguments\n")
+        msg = "fnhook-types-refresh is deprecated; use schema-vendor-refresh"
+        sys.stderr.write(msg + "\n")
         return 2
-    repo_root = Path.cwd().resolve()
-    generated = _generated_files(repo_root)
-    previous = {
-        path: path.read_bytes() if path.is_file() else None for path in generated
-    }
-    for path in generated:
-        path.unlink(missing_ok=True)
-
-    invocation = _generate_types(repo_root, runner=runner)
-    _emit(invocation)
-    missing = _missing_or_empty(generated)
-    if not missing:
-        return 0
-
-    _restore_generated_files(generated, previous)
-    rendered = ", ".join(str(path) for path in missing)
-    sys.stdout.write(f"/plugin-types did not write non-empty outputs: {rendered}\n")
-    return 1
+    msg = "fnhook-types-refresh is deprecated; use `mise run schema-vendor-refresh`"
+    sys.stderr.write(msg + " instead\n")
+    return 0

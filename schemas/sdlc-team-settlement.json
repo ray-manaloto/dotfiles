@@ -1,0 +1,69 @@
+{
+  "$ref": "#/$defs/SdlcTeamSettlement",
+  "$defs": {
+    "SdlcTeamSettlement": {
+      "title": "SdlcTeamSettlement",
+      "description": "Terminal outcome atomically written by the detached supervisor.",
+      "type": "object",
+      "properties": {
+        "run_id": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/SdlcSettledStatus"
+        },
+        "codex_returncode": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "codex_pid": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "finished_at": {
+          "type": "string",
+          "default": ""
+        },
+        "duration_s": {
+          "type": "number",
+          "default": 0.0
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "run_id",
+        "status"
+      ]
+    },
+    "SdlcSettledStatus": {
+      "title": "SdlcSettledStatus",
+      "description": "Terminal supervisor status.",
+      "enum": [
+        "abandoned",
+        "completed",
+        "failed",
+        "timed_out"
+      ]
+    }
+  }
+}

@@ -7,6 +7,7 @@ import json
 import re
 import subprocess
 import sys
+import tomllib
 from pathlib import Path, PurePosixPath
 from typing import cast
 
@@ -23,39 +24,74 @@ FIXTURE_ROOT = REPO_ROOT / fnhook_gates.FIXTURE_ROOT
 TYPE_FILENAMES = ("claude-code.d.ts", "claude-code-mcp.d.ts")
 
 
-def _real_tools_available() -> bool:
-    """Whether the two pinned binaries the gate shells out to actually resolve.
+def _sources_version(tool: str) -> str:
+    """Read a pin straight out of `schemas/sources.toml`.
 
-    They are pinned in `mise.toml` (host-only, #1026 ruling), deliberately NOT
-    in the shared fragment, so they are absent inside the devcontainer — where
-    `sync --full` runs this suite. Skipping there keeps the suite runnable
-    everywhere WITHOUT weakening the gate: the `fnhook-gates` CLI still fails
-    loudly when a binary is missing, because a gate that shrugs is not a gate.
+    Parsed here rather than read back off `fnhook_gates`, so the expectation
+    cannot agree with the module by construction (`tests/AGENTS.md`,
+    "tautological").
+    """
+    data = tomllib.loads(
+        (REPO_ROOT / "schemas" / "sources.toml").read_text(encoding="utf-8")
+    )
+    return next(row["version"] for row in data["schema"] if row["tool"] == tool)
+
+
+def _binary_resolves(command: list[str]) -> bool:
+    """Whether one `--version` probe exits 0 from the repo root.
+
+    `OSError` is the ABSENT answer, not an error to propagate. `claude` is
+    probed directly now, and `subprocess.run` RAISES `FileNotFoundError` for a
+    binary that is not on PATH rather than returning non-zero — so without this
+    the module cannot even be imported on a runner that has no `claude`, and
+    the whole file errors at collection instead of skipping the arms that need
+    it. Measured on contract-preflight, CI run 35050785004:
+
+        E  FileNotFoundError: [Errno 2] No such file or directory: 'claude'
+
+    The old form went through `mise exec`, and `mise` always exists, so the
+    subprocess always started and mise reported the failure as an exit code.
+    """
+    try:
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+    except OSError:
+        return False
+    return completed.returncode == 0
+
+
+def _real_tools_available() -> bool:
+    """Whether the two binaries the gate shells out to actually resolve.
+
+    They reach the gate by different routes on purpose. `tsc` is a `mise.toml`
+    pin (host-only, #1026 ruling), deliberately NOT in the shared fragment, so
+    it is absent inside the devcontainer — where `sync --full` runs this suite.
+    `claude` comes off `PATH` from the native installer, which is why the probe
+    below cannot go through `mise exec` for it; doing so is the very defect
+    `test_validate_plugin_does_not_route_through_mise` now pins.
+
+    Skipping keeps the suite runnable everywhere WITHOUT weakening the gate:
+    the `fnhook-gates` CLI still fails loudly when a binary is missing, because
+    a gate that shrugs is not a gate.
 
     This only ever skips the arms that shell out to a real tool. Every
     pure-python arm — discovery, the normalizer and its control arm, the typed-
     module assertion, the hk-glob arming — runs unconditionally.
     """
-    return all(
-        subprocess.run(
-            [
-                "mise",
-                "exec",
-                fnhook_gates.tool_spec(REPO_ROOT, mise_tool),
-                "--",
-                tool,
-                "--version",
-            ],
-            capture_output=True,
-            check=False,
-            cwd=REPO_ROOT,
-        ).returncode
-        == 0
-        for tool, mise_tool in (
-            ("claude", fnhook_gates.CLAUDE_TOOL),
-            ("tsc", fnhook_gates.TSC_TOOL),
-        )
-    )
+    claude = [fnhook_gates.CLAUDE_BINARY, "--version"]
+    tsc = [
+        "mise",
+        "exec",
+        fnhook_gates.tool_spec(REPO_ROOT, fnhook_gates.TSC_TOOL),
+        "--",
+        "tsc",
+        "--version",
+    ]
+    return _binary_resolves(claude) and _binary_resolves(tsc)
 
 
 _REAL_TOOLS = _real_tools_available()
@@ -120,8 +156,8 @@ def test_plugin_elsewhere_under_tests_is_discovered(tmp_path: Path) -> None:
     assert fnhook_gates.discover_plugin_dirs(tmp_path) == [plugin_dir]
 
 
-def test_validate_plugin_issues_the_strict_mise_command() -> None:
-    """The external validator is pinned through mise and warnings are errors."""
+def test_validate_plugin_issues_the_strict_command() -> None:
+    """The validator runs off PATH, on the plugin dir, with warnings as errors."""
     calls: list[tuple[list[str], Path]] = []
 
     def fake_runner(
@@ -143,10 +179,6 @@ def test_validate_plugin_issues_the_strict_mise_command() -> None:
     assert calls == [
         (
             [
-                "mise",
-                "exec",
-                fnhook_gates.tool_spec(REPO_ROOT, fnhook_gates.CLAUDE_TOOL),
-                "--",
                 "claude",
                 "plugin",
                 "validate",
@@ -156,6 +188,52 @@ def test_validate_plugin_issues_the_strict_mise_command() -> None:
             Path.cwd(),
         )
     ]
+
+
+def test_validate_plugin_does_not_route_through_mise() -> None:
+    """Reproduces PR #1128: `mise exec` around claude cannot work on a runner.
+
+    The `[tools]` pin was removed in `6d1ae23` (native installer owns PATH),
+    but the `mise exec` wrapper survived. With no pin to activate, mise falls
+    through to an on-demand `@latest` install, and `MISE_LOCKED=1` refuses it:
+
+        No lockfile URL found for github:anthropics/claude-code@2.1.272
+        on platform linux-x64 (--locked mode)
+
+    Asserted on the argv rather than on mise's error text, which is a string
+    this repo does not own (`probes-need-a-control-arm.md` rule 9). The
+    development Mac allows the on-demand install, so it stayed green for the
+    whole outage and could never have caught this.
+    """
+    seen: list[list[str]] = []
+
+    def _capture(command: list[str], **_: object) -> GateResult:
+        seen.append(command)
+        return GateResult(rc=0)
+
+    fnhook_gates.validate_plugin(_fixture_plugins()["valid"], runner=_capture)
+
+    assert seen, "no command captured — the stub was never called"
+    for command in seen:
+        assert "mise" not in command, (
+            f"{command!r} routes claude through mise — it has no [tools] pin, "
+            f"so MISE_LOCKED=1 turns this into an install failure on a runner"
+        )
+        assert command[0] == fnhook_gates.CLAUDE_BINARY, command
+
+
+def test_claude_code_pin_reads_sources_toml() -> None:
+    """The one pin CI installs from, with an armed failure direction.
+
+    `claude_code_pin` must RAISE on a sources.toml with no claude-code row, not
+    return a default: a silent fallback would let CI install an unpinned Claude
+    Code and validate against declarations vendored from another release.
+    """
+    assert fnhook_gates.claude_code_pin(REPO_ROOT) == _sources_version("claude-code")
+
+    empty = REPO_ROOT / "tests" / "fixtures"  # any dir without schemas/sources.toml
+    with pytest.raises((ValueError, FileNotFoundError)):
+        fnhook_gates.claude_code_pin(empty)
 
 
 def test_typecheck_uses_discovered_files_and_committed_config(
@@ -386,7 +464,7 @@ def test_refresh_requires_new_nonempty_outputs_and_restores_old_bytes(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """The rc=0 unknown-command shape cannot bless stale pre-existing files."""
+    """fnhook_types_refresh_main is deprecated; it returns 0 immediately."""
     monkeypatch.chdir(tmp_path)
     old = (b"old-main\n", b"old-mcp\n")
     _write_types(tmp_path, old)
@@ -398,20 +476,21 @@ def test_refresh_requires_new_nonempty_outputs_and_restores_old_bytes(
         env: object = None,
         input_text: str | None = None,
     ) -> GateResult:
-        # Anchored on the `--` boundary, not a fixed index: inserting the
-        # `<tool>@<version>` spec before it shifted these by one and broke a
-        # hard-coded slice, so the assertion now says what it means.
-        after_sep = command[command.index("--") + 1 :]
-        assert after_sep[:3] == ["claude", "-p", "/plugin-types"]
-        assert cwd == tmp_path
-        assert env == {"CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1"}
-        assert input_text == ""
-        return GateResult(rc=0, stdout="Unknown command: /plugin-types\n")
+        # Satisfies the Runner protocol for `ty`; `del` consumes the
+        # arguments so ruff's ARG001 is met without an inline
+        # suppression, which the `no_lint_skip` gate forbids.
+        del command, cwd, env, input_text
+        # This runner is unused now that fnhook_types_refresh_main is deprecated
+        msg = "deprecated function should not invoke runner"
+        raise AssertionError(msg)
 
     rc = fnhook_gates.fnhook_types_refresh_main(runner=silent_unknown_command)
 
-    assert rc == 1
-    assert "did not write non-empty outputs" in capsys.readouterr().out
+    # fnhook_types_refresh_main is deprecated; use schema-vendor-refresh instead
+    assert rc == 0
+    stderr = capsys.readouterr().err
+    assert "deprecated" in stderr
+    # Old files should be unchanged (no-op function)
     assert (
         tuple(
             (tmp_path / ".claude" / "types" / name).read_bytes()
@@ -424,10 +503,12 @@ def test_refresh_requires_new_nonempty_outputs_and_restores_old_bytes(
 def test_refresh_accepts_files_not_process_status(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """A complete generated pair is success even though rc is non-authoritative."""
+    """fnhook_types_refresh_main is deprecated; it returns 0 immediately."""
     monkeypatch.chdir(tmp_path)
     fresh = (b"fresh-main\n", b"fresh-mcp\n")
+    _write_types(tmp_path, fresh)
 
     def writing_runner(
         command: list[str],
@@ -436,68 +517,44 @@ def test_refresh_accepts_files_not_process_status(
         env: object = None,
         input_text: str | None = None,
     ) -> GateResult:
-        # Anchored on the `--` boundary, not a fixed index: inserting the
-        # `<tool>@<version>` spec before it shifted these by one and broke a
-        # hard-coded slice, so the assertion now says what it means.
-        after_sep = command[command.index("--") + 1 :]
-        assert after_sep[:3] == ["claude", "-p", "/plugin-types"]
-        assert env == {"CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1"}
-        assert input_text == ""
-        _write_types(cwd, fresh)
-        return GateResult(rc=9, stdout="generated\n")
+        # Satisfies the Runner protocol for `ty`; `del` consumes the
+        # arguments so ruff's ARG001 is met without an inline
+        # suppression, which the `no_lint_skip` gate forbids.
+        del command, cwd, env, input_text
+        # This runner is unused; fnhook_types_refresh_main is deprecated
+        msg = "deprecated function should not invoke runner"
+        raise AssertionError(msg)
 
     rc = fnhook_gates.fnhook_types_refresh_main(runner=writing_runner)
 
+    # fnhook_types_refresh_main is deprecated and does nothing
     assert rc == 0
-    assert (
-        tuple(
-            (tmp_path / ".claude" / "types" / name).read_bytes()
-            for name in TYPE_FILENAMES
-        )
-        == fresh
-    )
+    assert "deprecated" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize("generated_state", ["current", "drifted"])
-def test_public_gate_compares_types_to_a_fresh_generation(
-    generated_state: str,
+def test_public_gate_with_vendored_declarations(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Tool-inventory drift passes, while stable plugin-API drift fails."""
+    """The gate verifies vendored declarations exist and type-check passes."""
     monkeypatch.chdir(tmp_path)
+    # Vendored declarations should exist
     committed = (_main_declarations(), b"mcp-contract\n")
     _write_types(tmp_path, committed)
     (tmp_path / "tsconfig.json").write_text("{}\n", encoding="utf-8")
 
-    def gate_runner(
-        command: list[str],
-        *,
-        cwd: Path,
-        env: object = None,
-        input_text: str | None = None,
-    ) -> GateResult:
+    def gate_runner(command: list[str], **_: object) -> GateResult:
+        # tsc type-checks the declarations
         if "tsc" in command:
             return GateResult(rc=0)
-        generated_main = _main_declarations(
-            exit_reason=b"'CLEAR'" if generated_state == "drifted" else b"'clear'",
-            input_tools=b"    RemoteTrigger: { id: string }\n",
-            result_tools=b"    RemoteTrigger: { accepted: boolean }\n",
-        )
-        assert generated_main != committed[0]
-        generated = (generated_main, committed[1])
-        _write_types(cwd, generated)
-        assert env == {"CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1"}
-        assert input_text == ""
-        return GateResult(rc=0)
+        # No generation happens; the runner should not be called
+        msg = "gate should not invoke /plugin-types with vendored declarations"
+        raise AssertionError(msg)
 
     rc = fnhook_gates.fnhook_gates_main(runner=gate_runner)
-    captured = capsys.readouterr()
 
-    expected_drift = generated_state == "drifted"
-    assert rc == int(expected_drift)
-    assert ("function-hook declarations drifted" in captured.out) is expected_drift
+    # Gate should pass with vendored declarations
+    assert rc == 0
 
 
 def test_mcp_declarations_are_excluded_from_drift_but_the_api_file_is_not() -> None:
@@ -547,7 +604,14 @@ def test_missing_binary_fails_the_gate_rather_than_skipping_it() -> None:
 #: Which tool must supply each binary the gates invoke. Written out here on
 #: purpose: an expectation copied from the module under test cannot disagree
 #: with it (`tests/AGENTS.md`, "tautological").
-_TOOL_SUPPLYING = {"claude": "anthropics/claude-code", "tsc": "typescript"}
+#: Which tool must supply each binary a `mise exec` argv then runs. Written out
+#: here on purpose: an expectation copied from the module under test cannot
+#: disagree with it (`tests/AGENTS.md`, "tautological").
+#:
+#: `claude` is deliberately absent. It is no longer a mise invocation at all —
+#: the native installer owns PATH — and `test_validate_plugin_does_not_route_
+#: through_mise` is what holds that end.
+_TOOL_SUPPLYING = {"tsc": "typescript"}
 
 
 def test_every_mise_invocation_names_its_tool_not_a_bare_shim() -> None:
@@ -559,9 +623,9 @@ def test_every_mise_invocation_names_its_tool_not_a_bare_shim() -> None:
     development Mac, where a shim resolves — so the host was not a control arm
     for CI, and only naming the tool fixes it.
 
-    This binds all three call sites at once: the argv must carry a
-    `<tool>@<version>` spec between `exec` and `--`. The version is read from
-    `mise.toml`, so a pin bump cannot leave an invocation naming a stale one.
+    The argv must carry a `<tool>@<version>` spec between `exec` and `--`. The
+    version is read from `mise.toml`, so a pin bump cannot leave an invocation
+    naming a stale one.
     """
     seen: list[list[str]] = []
 
@@ -570,7 +634,6 @@ def test_every_mise_invocation_names_its_tool_not_a_bare_shim() -> None:
         return GateResult(rc=0, stdout="", stderr="")
 
     valid = _fixture_plugins()["valid"]
-    fnhook_gates.validate_plugin(valid, runner=_capture)
     fnhook_gates.typecheck_modules([valid], runner=_capture)
 
     assert seen, "no commands captured — the stub was never called"
@@ -582,9 +645,9 @@ def test_every_mise_invocation_names_its_tool_not_a_bare_shim() -> None:
             f"`mise exec -- <bin>` resolves the shim and fails on a runner"
         )
         tool, _, version = spec.rpartition("@")
-        # The tool must SUPPLY the binary the same argv then runs. Stated here
-        # as an independent expectation rather than read back off the module's
-        # own constants, because two weaker forms were tried and both were
+        # The tool must SUPPLY the binary the same argv then runs. Stated as an
+        # independent expectation rather than read back off the module's own
+        # constants, because two weaker forms were tried and both were
         # worthless:
         #
         #   `spec.startswith("npm:")` — pinned the BACKEND, so it failed #1043's
@@ -605,6 +668,21 @@ def test_every_mise_invocation_names_its_tool_not_a_bare_shim() -> None:
         assert fnhook_gates.tool_spec(REPO_ROOT, tool) == spec, (
             f"{tool} invoked at {version}, which is not its mise.toml pin"
         )
+
+
+def test_tool_spec_refuses_the_removed_claude_pin() -> None:
+    """The wrapper cannot be reinstated by reaching back through `tool_spec`.
+
+    Claude Code has no `[tools]` entry (`6d1ae23`), so asking `tool_spec` for
+    one must raise rather than hand back a spec that only fails later, inside
+    mise, on a runner. Control arm: the tool that IS pinned still resolves.
+    """
+    with pytest.raises(TypeError):
+        fnhook_gates.tool_spec(REPO_ROOT, "github:anthropics/claude-code")
+
+    assert fnhook_gates.tool_spec(REPO_ROOT, fnhook_gates.TSC_TOOL).startswith(
+        f"{fnhook_gates.TSC_TOOL}@"
+    )
 
 
 def test_a_plugin_in_a_nested_checkout_is_not_discovered(tmp_path: Path) -> None:

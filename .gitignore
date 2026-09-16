@@ -78,6 +78,21 @@ mise.*.local.toml
 .codex/agents/*
 !.codex/agents/codex-*.toml
 
+# ...and `.codex/hooks.json`, tracked from 2026-09-14. It is not runtime state:
+# it is the codex-side GUARD SURFACE — the `PreToolUse` wiring for
+# `scripts/pretooluse-guard.sh` and `scripts/graphify-hook-guard.sh`, the
+# `SessionStart` doctor/currency run, and the `SessionEnd` command audit. The
+# Claude half of exactly that wiring lives in the tracked `.claude/settings.json`.
+#
+# Untracked, it did not survive a clone, so every other checkout ran codex lanes
+# with NO guard at all — and `hook_guard` is a Claude `PreToolUse` hook, so a
+# codex lane is already invisible to it. An unsynced guard file makes that blind
+# spot per-machine and silent. The sibling knowledge-base repo already tracks its
+# own `.codex/hooks.json`; this closes the asymmetry.
+#
+# `.codex/config.toml` deliberately stays ignored — that one IS per-machine.
+!.codex/hooks.json
+
 # Logging
 .logging/
 
@@ -134,3 +149,17 @@ graphify-out/
 # plan edit -- tracking it would guarantee a mismatch for anyone else. The
 # sibling `.mode` file IS tracked: it is a reviewed project setting.
 /.plan-attestation
+
+# Codex app-server JSON schema bundles — GENERATED, never committed.
+#
+# `mise run codex-schema-generate` produces these from the exact installed codex
+# version. They are 688 KB and 589 KB, which `check_added_large_files` rejects,
+# and they are pure derived output: the bundle is regenerated in seconds and is
+# only meaningful for the codex version that emitted it. Committing them would
+# pin a snapshot that goes stale on every codex bump.
+#
+# Doctor's `codex-schema` check asserts presence-and-currency and names the fix
+# command, so a fresh clone is told to generate rather than handed a stale copy.
+schemas/codex_app_server_protocol.schemas.json
+schemas/codex_app_server_protocol.v2.schemas.json
+schemas/codex_app_server_protocol.version

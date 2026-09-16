@@ -863,6 +863,7 @@ def test_classifier_shaped_finds_the_three_real_classifiers() -> None:
         "dag_tick.py:classify",
         "branch_guard.py:classify",
         "codex_verdict.py:edge_for",
+        "gate_result.py:_status_for",
     }
     session_review_classifiers = {
         "session_ledger.py:status",
@@ -889,6 +890,18 @@ def test_classifier_shaped_registers_coverage_status() -> None:
         {"omissions", "high_severity_findings", "dispositions"}
     )
     assert spec.table_symbol == "_COVERAGE_STATUS_TABLE"
+
+
+def test_classifier_shaped_registers_gate_result_status() -> None:
+    found = classifier_tables.classifier_shaped(
+        (_repo_root() / "python/src/dotfiles_setup/gate_result.py").read_text()
+    )
+    assert "_status_for" in found
+    spec = classifier_tables.REGISTRY["dotfiles_setup.gate_result:_status_for"]
+    assert spec.axes == frozenset({"returncode", "known", "tool_missing", "timed_out"})
+    assert spec.pinned_axes == {}
+    assert spec.table_path == "tests/test_gate_result.py"
+    assert spec.table_symbol == "_STATUS_TABLE"
 
 
 def test_classifier_shaped_ignores_functions_not_returning_a_local_enum() -> None:

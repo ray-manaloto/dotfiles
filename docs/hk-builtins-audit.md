@@ -9,7 +9,7 @@
 - **hk version:** hk 1.57.0
 - **Builtins available:** 152
 - **Wired as builtins:** 28
-- **Steps defined in total:** 71 (43 custom, with their own check/fix commands)
+- **Steps defined in total:** 73 (45 custom, with their own check/fix commands)
 
 A *wired builtin* is referenced as `Builtins.<name>`. A *custom step* is a
 `["name"] { … }` block carrying its own commands — it may share a
@@ -50,7 +50,7 @@ as builtins in use.
 | `yamllint` | hk.pkl |
 | `zizmor` | hk.pkl |
 
-## Custom steps (43)
+## Custom steps (45)
 
 Not builtins. Each carries its own `check`/`fix`, so `hk builtins` has no
 opinion about them, and neither does this table beyond recording them.
@@ -65,6 +65,7 @@ opinion about them, and neither does this table beyond recording them.
 | `claude_agents_md_pairs` | hk.pkl |
 | `claude_md_import_stub` | hk.pkl |
 | `codex_agent_parity` | hk.pkl |
+| `codex_agent_validate` | hk.pkl |
 | `codex_lane_mirror` | hk.pkl |
 | `commit-msg` | hk.pkl |
 | `contract_token_uniqueness` | hk.pkl |
@@ -98,6 +99,7 @@ opinion about them, and neither does this table beyond recording them.
 | `skills_mirror_parity` | hk.pkl |
 | `test` | hk.pkl |
 | `uv_lock_check` | hk.pkl |
+| `workflow_claude_code` | hk.pkl |
 | `workflow_hk_skip_hooks` | hk.pkl |
 | `workflow_skip_cascade` | hk.pkl |
 

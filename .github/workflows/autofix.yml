@@ -55,6 +55,11 @@ jobs:
         # scopes HK_MISE to hook generation, so tools must be installed
         # up front (#160 T12 follow-up, PR #169).
         uses: $/.github/actions/setup-mise
+      - name: Install Claude Code
+        # Same reason as the lint job: the hk steps below include
+        # `fnhook_gates`, which shells out to `claude plugin validate --strict`
+        # and fails loudly on a missing binary rather than shrugging.
+        uses: $/.github/actions/setup-claude-code
       - name: Configure git identity for hk
         run: |
           git config --global user.name "github-actions[bot]"

@@ -66,6 +66,22 @@ class _Sample(msgspec.Struct):
     label: str
 
 
+class _SchemaSample(codec.Struct):
+    """A schema-native model exercising the codec-owned model base."""
+
+    count: int
+
+
+def test_schema_is_generated_from_the_requested_model() -> None:
+    """The schema boundary must not return a fixed or unrelated contract."""
+    sample_schema = codec.schema(_SchemaSample)
+
+    assert sample_schema["$ref"] == "#/$defs/_SchemaSample"
+    assert sample_schema["$defs"]["_SchemaSample"]["required"] == ["count"]
+    assert codec.schema(str) == {"type": "string"}
+    assert codec.schema(str) != sample_schema
+
+
 # --------------------------------------------------------------------------- #
 # AC2 — round-tripping a filesystem path works in both directions
 # --------------------------------------------------------------------------- #

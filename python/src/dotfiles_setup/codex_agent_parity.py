@@ -81,10 +81,18 @@ logger = logging.getLogger(__name__)
 CLAUDE_AGENT_DIR = ".claude/agents"
 CODEX_AGENT_DIR = ".codex/agents"
 
-# Only this repo's own lanes are in scope — the authored `codex-sol-*` and the
-# generated `codex-astra-*` alike. The Codex-app EXPORTED mirrors in the same
-# directory carry no `codex-` prefix, stay gitignored, and are not ours to
-# police — see the module docstring.
+# Only this repo's own PAIRED lanes are in scope — the authored `codex-sol-*` and
+# the generated `codex-astra-*`. The Codex-app EXPORTED mirrors in the same
+# directory stay gitignored and are not ours to police — see the module docstring.
+#
+# ⚠️ Scoping is by LANE FAMILY (`LANE_PREFIXES`), not by the bare `codex-` stem.
+# It used to be the stem, on the reasoning that the exported mirrors "carry no
+# `codex-` prefix" — true when written, and it silently made every future
+# `codex-*` file a lane this gate would demand a sol/astra pair for. A
+# project-scoped codex agent that is NOT one of these two families (an SDLC
+# specialist, say) is tracked by `.gitignore`'s `!.codex/agents/codex-*.toml`
+# negation and must NOT be claimed here. `STEM_PREFIX` survives only as the
+# human-facing name in the "nothing found" message below.
 STEM_PREFIX = "codex-"
 
 REQUIRED_EFFORT = "xhigh"
@@ -114,6 +122,10 @@ MODEL_BY_PREFIX: tuple[tuple[str, str], ...] = (
     ("codex-astra-", "gpt-6-astra"),
     ("codex-sol-", "gpt-5.6-sol"),
 )
+
+#: The prefixes that make a file one of OUR paired lanes, derived from the family
+#: map so the two can never disagree. `str.startswith` takes a tuple.
+LANE_PREFIXES: tuple[str, ...] = tuple(prefix for prefix, _ in MODEL_BY_PREFIX)
 
 # What the `.md` wrapper must still say, whatever its model family. Each is a
 # string THIS repo authored, so none can drift out from under us the way an
@@ -176,7 +188,7 @@ def _stems(directory: Path, suffix: str) -> set[str]:
     return {
         p.name[: -len(suffix)]
         for p in directory.iterdir()
-        if p.is_file() and p.name.startswith(STEM_PREFIX) and p.name.endswith(suffix)
+        if p.is_file() and p.name.startswith(LANE_PREFIXES) and p.name.endswith(suffix)
     }
 
 
