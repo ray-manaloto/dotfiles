@@ -72,6 +72,137 @@ run = "uv run --project python pytest tests/ -x -q"
 run = "uv run --project python dotfiles-setup lint-delta"
 """
 
+_EXPECTED_FLAG_TABLES = {
+    "HK_GLOBAL_FLAGS": (
+        (("--cd",), True, False),
+        (("--format",), True, False),
+        (("-j", "--jobs"), True, False),
+        (("-p", "--profile"), True, False),
+        (("-s", "--slow"), False, False),
+        (("-v", "--verbose"), False, False),
+        (("-n", "--no-progress"), False, False),
+        (("-q", "--quiet"), False, False),
+        (("--silent",), False, False),
+        (("--trace",), False, False),
+        (("--json",), False, False),
+    ),
+    "HK_RUN_FLAGS": (
+        (("-e", "--exclude"), True, False),
+        (("-g", "--glob"), True, False),
+        (("-S", "--step"), True, False),
+        (("--files0-from",), True, False),
+        (("--format",), True, False),
+        (("--from-ref",), True, False),
+        (("--to-ref",), True, False),
+        (("--sarif",), True, False),
+        (("--skip-step",), True, False),
+        (("--stash",), True, False),
+        (("-W", "--why"), False, True),
+        (("-a", "--all"), False, False),
+        (("-c", "--check"), False, False),
+        (("-f", "--fix"), False, False),
+        (("-J", "--json"), False, False),
+        (("-P", "--plan"), False, False),
+        (("--fail-fast",), False, False),
+        (("--no-fail-fast",), False, False),
+        (("--no-stage",), False, False),
+        (("--pr",), False, False),
+        (("--safe",), False, False),
+        (("--stage",), False, False),
+        (("--staged",), False, False),
+        (("--stats",), False, False),
+        (("--unstaged",), False, False),
+    ),
+    "MISE_GLOBAL_FLAGS": (
+        (("-C", "--cd"), True, False),
+        (("-E", "--env"), True, False),
+        (("-j", "--jobs"), True, False),
+        (("-q", "--quiet"), False, False),
+        (("-v", "--verbose"), False, False),
+        (("-y", "--yes"), False, False),
+        (("--no-config",), False, False),
+        (("--no-env",), False, False),
+        (("--no-hooks",), False, False),
+        (("--raw",), False, False),
+        (("--locked",), False, False),
+        (("--silent",), False, False),
+    ),
+    "MISE_RUN_FLAGS": (
+        (("--affected-base",), True, False),
+        (("--affected-head",), True, False),
+        (("-C", "--cd"), True, False),
+        (("-j", "--jobs"), True, False),
+        (("-o", "--output"), True, False),
+        (("-s", "--shell"), True, False),
+        (("-t", "--tool"), True, False),
+        (("--allow-env",), True, False),
+        (("--allow-net",), True, False),
+        (("--allow-read",), True, False),
+        (("--allow-write",), True, False),
+        (("--task-cache",), True, False),
+        (("--timeout",), True, False),
+        (("-E", "--env"), True, False),
+        (("--affected",), False, False),
+        (("--affected-explain",), False, False),
+        (("--affected-json",), False, False),
+        (("--all",), False, False),
+        (("-c", "--continue-on-error"), False, False),
+        (("-f", "--force"), False, False),
+        (("-n", "--dry-run"), False, False),
+        (("-q", "--quiet"), False, False),
+        (("-r", "--raw"), False, False),
+        (("-S", "--silent"), False, False),
+        (("--deny-all",), False, False),
+        (("--deny-env",), False, False),
+        (("--deny-net",), False, False),
+        (("--deny-read",), False, False),
+        (("--deny-write",), False, False),
+        (("--fresh-env",), False, False),
+        (("--no-cache",), False, False),
+        (("--no-deps",), False, False),
+        (("--no-timings",), False, False),
+        (("--skip-deps",), False, False),
+        (("--skip-tools",), False, False),
+        (("--task-cache-explain",), False, False),
+        (("--task-cache-explain-json",), False, False),
+        (("--task-cache-stats",), False, False),
+        (("-v", "--verbose"), False, False),
+        (("-y", "--yes"), False, False),
+        (("--locked",), False, False),
+    ),
+}
+
+
+def _flag_text(flag: wcc.Flag, spelling: str) -> str:
+    return f"{spelling} value" if flag.takes_value or flag.optional_value else spelling
+
+
+def _derived_flag_commands() -> tuple[str, ...]:
+    commands: list[str] = []
+    for flag in wcc.HK_GLOBAL_FLAGS:
+        commands.extend(
+            f"hk {_flag_text(flag, spelling)} run check" for spelling in flag.spellings
+        )
+        commands.extend(
+            f"hk run {_flag_text(flag, spelling)} check" for spelling in flag.spellings
+        )
+    for flag in wcc.HK_RUN_FLAGS:
+        commands.extend(
+            f"hk run {_flag_text(flag, spelling)} check" for spelling in flag.spellings
+        )
+    for flag in wcc.MISE_GLOBAL_FLAGS:
+        commands.extend(
+            f"mise {_flag_text(flag, spelling)} run lint" for spelling in flag.spellings
+        )
+    for flag in wcc.MISE_RUN_FLAGS:
+        commands.extend(
+            f"mise run {_flag_text(flag, spelling)} lint" for spelling in flag.spellings
+        )
+    return tuple(commands)
+
+
+_DERIVED_FLAG_COMMANDS = _derived_flag_commands()
+
 
 def _tree(
     tmp_path: Path,
@@ -97,7 +228,8 @@ def _job(run: str, *, installs: bool, install_after: bool = False) -> str:
     steps = ""
     if installs and not install_after:
         steps += f"      - uses: ./{wcc.SETUP_ACTION}\n"
-    steps += f"      - run: {run}\n"
+    indented_run = "\n".join(f"          {line}" for line in run.splitlines())
+    steps += f"      - run: |\n{indented_run}\n"
     if installs and install_after:
         steps += f"      - uses: ./{wcc.SETUP_ACTION}\n"
     return f"jobs:\n  build:\n    steps:\n{steps}"
@@ -154,10 +286,6 @@ def test_the_same_job_with_the_install_passes(tmp_path: Path) -> None:
         "hk c --all",
         "hk f",
         "hk r check --all",
-        "hk --cd . run check --all",
-        "hk -j 4 run check",
-        "hk --profile slow fix",
-        "hk -s check",
         "uv run --project python dotfiles-setup lint",
     ],
 )
@@ -173,15 +301,130 @@ def test_every_supported_route_to_a_gated_hook_is_seen(
 
 
 @pytest.mark.parametrize(
+    ("table_name", "expected"),
+    _EXPECTED_FLAG_TABLES.items(),
+)
+def test_pinned_flag_tables_match_the_documented_help(
+    table_name: str,
+    expected: tuple[tuple[tuple[str, ...], bool, bool], ...],
+) -> None:
+    """The independent shape catches a missing short or long spelling."""
+    table = getattr(wcc, table_name)
+    actual = tuple(
+        (flag.spellings, flag.takes_value, flag.optional_value) for flag in table
+    )
+
+    assert actual == expected
+
+
+@pytest.mark.parametrize("command", _DERIVED_FLAG_COMMANDS)
+def test_every_pinned_flag_spelling_preserves_the_route(
+    command: str, tmp_path: Path
+) -> None:
+    """Flag-route arms come from the same version-pinned data as production."""
+    root = _tree(tmp_path, {"ci.yml": _job(command, installs=False)})
+
+    violations = wcc.find_violations(root)
+
+    assert len(violations) == 1, (command, violations)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "hk --verbose run check --all",
+        "hk --quiet run check --all",
+        "hk --slow run check --all",
+        "hk --no-progress run check --all",
+        "hk run --all check",
+        "mise run --force lint",
+        "mise --cd . run lint",
+        "mise run render ::: lint",
+        'bash -c "mise run lint"',
+        "hk run pc --all",
+        "hk run -e 'x' check",
+        "hk run --stash none pre-commit --all",
+        "hk run --format json fix",
+        "hk run -W check",
+        "hk --cd=. run check",
+        "mise run -j 2 lint",
+        "mise run --output prefix lint",
+        "mise -C . run lint",
+        "mise run --timeout 60s lint",
+        "mise run --tool foo@1 lint",
+        "mise run test ::: lint",
+        "mise run test ::: -j 2 lint",
+        "hk run -W pc",
+        "hk run --format=json fix",
+        "mise --cd=. run lint",
+        "mise run --timeout=60s lint",
+    ],
+)
+def test_adversarial_documented_argv_routes_are_seen(
+    command: str, tmp_path: Path
+) -> None:
+    """Cold-review misses plus value, alias, quote, and multi-task grammar."""
+    root = _tree(tmp_path, {"ci.yml": _job(command, installs=False)})
+
+    violations = wcc.find_violations(root)
+
+    assert len(violations) == 1, (command, violations)
+
+
+@pytest.mark.parametrize(
+    ("alias", "hook"),
+    wcc.HK_HOOK_ALIASES.items(),
+)
+def test_every_hk_hook_alias_resolves_before_gate_matching(
+    alias: str, hook: str, tmp_path: Path
+) -> None:
+    """Alias resolution applies to configured hooks, not only `pc`."""
+    hk_pkl = f"""\
+hooks {{
+  ["{hook}"] {{
+    steps {{
+      ...allSteps
+    }}
+  }}
+}}
+"""
+    root = _tree(
+        tmp_path,
+        {"ci.yml": _job(f"hk run {alias} --all", installs=False)},
+        hk_pkl=hk_pkl,
+    )
+
+    assert len(wcc.find_violations(root)) == 1
+
+
+def test_a_route_after_a_full_line_shell_comment_is_seen(tmp_path: Path) -> None:
+    """Dropping one shell comment must not drop later commands in the block."""
+    workflow = """\
+jobs:
+  build:
+    steps:
+      - run: |
+          # explain the gate
+          mise run lint
+"""
+    root = _tree(tmp_path, {"ci.yml": workflow})
+
+    assert len(wcc.find_violations(root)) == 1
+
+
+@pytest.mark.parametrize(
     "command",
     [
         "mise run lint-delta",
+        "mise run --force lint-delta",
         "mise run test",
+        "mise run test ::: lint-delta",
         "mise reshim",
         "hk validate",
         "hk config",
         "hk completion",
         "hk run commit-msg",
+        "hk run --step foo commit-msg",
     ],
 )
 def test_non_hook_routes_and_ungated_hooks_are_not_flagged(
@@ -189,6 +432,20 @@ def test_non_hook_routes_and_ungated_hooks_are_not_flagged(
 ) -> None:
     """Token prefixes and unrelated tasks must not create false positives."""
     root = _tree(tmp_path, {"ci.yml": _job(command, installs=False)})
+
+    assert wcc.find_violations(root) == []
+
+
+def test_a_full_line_shell_comment_is_not_a_route(tmp_path: Path) -> None:
+    """A comment-only run block cannot demand a Claude install."""
+    workflow = """\
+jobs:
+  build:
+    steps:
+      - run: |
+          # hk fix
+"""
+    root = _tree(tmp_path, {"ci.yml": workflow})
 
     assert wcc.find_violations(root) == []
 
@@ -256,6 +513,39 @@ def test_setup_inside_a_composite_after_hk_is_too_late(tmp_path: Path) -> None:
 
     assert len(violations) == 1, violations
     assert "too late" in violations[0]
+
+
+def test_a_local_action_cannot_escape_the_repository(tmp_path: Path) -> None:
+    """An existing `./../outside` composite contributes no expanded routes."""
+    workflow = """\
+jobs:
+  build:
+    steps:
+      - uses: ./../outside
+"""
+    root = _tree(tmp_path / "repo", {"ci.yml": workflow})
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "action.yml").write_text(
+        "name: outside\nruns:\n  using: composite\n  steps:\n    - run: hk fix\n",
+        encoding="utf-8",
+    )
+
+    assert wcc.find_violations(root) == []
+
+
+def test_an_in_repo_composite_expands_through_a_symlinked_root(
+    tmp_path: Path,
+) -> None:
+    """Resolving both containment operands preserves a legitimate fixture."""
+    actual_root = tmp_path / "actual"
+    actual_root.mkdir()
+    linked_root = tmp_path / "linked"
+    linked_root.symlink_to(actual_root, target_is_directory=True)
+    root = _tree(linked_root, {"ci.yml": _uses_job("inside")})
+    _composite(root, "inside", "    - run: hk fix\n")
+
+    assert len(wcc.find_violations(root)) == 1
 
 
 def test_an_install_after_the_hk_step_is_a_named_order_violation(
@@ -330,6 +620,98 @@ run = ["printf harmless", "hk fix"]
     assert len(wcc.find_violations(root)) == 1
 
 
+def test_a_malformed_mise_toml_fails_loud_with_its_name(tmp_path: Path) -> None:
+    """Broken tracked config is a readable gate error, not a decode traceback."""
+    root = _tree(tmp_path, {}, mise_toml="[tasks.lint\n")
+
+    with pytest.raises(ValueError, match=r"mise\.toml") as error:
+        wcc.find_violations(root)
+
+    assert "mise.toml" in str(error.value)
+    assert "line" in str(error.value)
+
+
+def test_a_malformed_conf_fragment_fails_loud_with_its_name(
+    tmp_path: Path,
+) -> None:
+    """Every tracked config source has the same named-error posture."""
+    root = _tree(tmp_path, {}, mise_toml="")
+    config_dir = root / ".config" / "mise" / "conf.d"
+    config_dir.mkdir(parents=True)
+    (config_dir / "broken.toml").write_text("[tasks.lint\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"broken\.toml") as error:
+        wcc.find_violations(root)
+
+    assert ".config/mise/conf.d/broken.toml" in str(error.value)
+    assert "line" in str(error.value)
+
+
+def test_a_conf_fragment_contributes_tracked_task_routes(tmp_path: Path) -> None:
+    """A task absent from mise.toml can come from tracked conf.d."""
+    root = _tree(
+        tmp_path,
+        {"ci.yml": _job("mise run lint", installs=False)},
+        mise_toml='[tasks.test]\nrun = "echo no"\n',
+    )
+    config_dir = root / ".config" / "mise" / "conf.d"
+    config_dir.mkdir(parents=True)
+    (config_dir / "x.toml").write_text(
+        '[tasks.lint]\nrun = "hk check"\n', encoding="utf-8"
+    )
+
+    assert len(wcc.find_violations(root)) == 1
+
+
+def test_later_sorted_conf_fragment_overrides_an_earlier_one(
+    tmp_path: Path,
+) -> None:
+    """Fragment precedence is deterministic even without a project task."""
+    root = _tree(
+        tmp_path,
+        {"ci.yml": _job("mise run lint", installs=False)},
+        mise_toml="",
+    )
+    config_dir = root / ".config" / "mise" / "conf.d"
+    config_dir.mkdir(parents=True)
+    (config_dir / "a.toml").write_text(
+        '[tasks.lint]\nrun = "hk check"\n', encoding="utf-8"
+    )
+    (config_dir / "z.toml").write_text(
+        '[tasks.lint]\nrun = "echo no"\n', encoding="utf-8"
+    )
+
+    assert wcc.find_violations(root) == []
+
+
+@pytest.mark.parametrize(
+    ("fragment_run", "project_run", "expected_violations"),
+    [
+        ("hk check", "echo no", 0),
+        ("echo no", "hk check", 1),
+    ],
+)
+def test_mise_toml_overrides_a_same_named_conf_task(
+    fragment_run: str,
+    project_run: str,
+    expected_violations: int,
+    tmp_path: Path,
+) -> None:
+    """Later mise.toml replaces the earlier conf.d task in both directions."""
+    root = _tree(
+        tmp_path,
+        {"ci.yml": _job("mise run lint", installs=False)},
+        mise_toml=f'[tasks.lint]\nrun = "{project_run}"\n',
+    )
+    config_dir = root / ".config" / "mise" / "conf.d"
+    config_dir.mkdir(parents=True)
+    (config_dir / "x.toml").write_text(
+        f'[tasks.lint]\nrun = "{fragment_run}"\n', encoding="utf-8"
+    )
+
+    assert len(wcc.find_violations(root)) == expected_violations
+
+
 def test_the_derivation_refuses_a_vacuous_pass(tmp_path: Path) -> None:
     """A missing gate step raises instead of exempting every workflow.
 
@@ -363,10 +745,11 @@ def test_hook_names_come_from_hk_pkl_not_a_hardcoded_list() -> None:
 
 
 def test_live_mise_task_routes_are_derived_from_the_tracked_graph() -> None:
-    """Live task reachability comes from mise.toml, not a frozen name list.
+    """Live task reachability comes from tracked configs, not a frozen list.
 
-    ``check`` is the only live task with a ``depends`` key, so its inherited
-    ``pre-commit`` hook is the sole live witness that the dependency walk ran.
+    Today conf.d is tools-only. ``check`` is the only live task with a
+    ``depends`` key, so its inherited ``pre-commit`` hook is the sole live
+    witness that the dependency walk ran.
     """
     routes = wcc.mise_task_hooks(REPO_ROOT)
 
@@ -416,6 +799,24 @@ def test_live_composite_expansion_retains_setup_before_the_first_gate(
     assert wcc.job_runs_the_gate(resolved, hooks)
     assert wcc.job_installs_claude_code(resolved)
     assert wcc.job_installs_before_gate(resolved, hooks)
+
+
+def test_install_order_predicate_agrees_before_and_after_resolution(
+    tmp_path: Path,
+) -> None:
+    """The public policy predicate cannot depend on a private resolution state."""
+    root = _tree(tmp_path, {"ci.yml": _job("hk check", installs=True)})
+    document = yaml.safe_load(
+        (root / wcc.WORKFLOW_DIR / "ci.yml").read_text(encoding="utf-8")
+    )
+    unresolved = wcc.parse_jobs(document, ".github/workflows/ci.yml")[0]
+    resolved = wcc.resolve_job(unresolved, root, wcc.mise_task_hooks(root))
+    hooks = wcc.hooks_running_the_gate(root)
+
+    assert wcc.job_installs_before_gate(unresolved, hooks)
+    assert wcc.job_installs_before_gate(unresolved, hooks) == (
+        wcc.job_installs_before_gate(resolved, hooks)
+    )
 
 
 def test_the_entry_point_returns_nonzero_on_a_violation(tmp_path: Path) -> None:
@@ -490,6 +891,9 @@ def test_the_hk_step_is_wired_to_the_cli() -> None:
     body = source[start : source.index("check = ", start)]
     assert '"hk.pkl"' in body, "the glob must include hk.pkl — the hooks come from it"
     assert '"mise.toml"' in body, "the glob must include the tracked task graph"
+    assert '".config/mise/conf.d/*.toml"' in body, (
+        "the glob must include every tracked mise config fragment"
+    )
     assert '"python/src/dotfiles_setup/lint.py"' in body, (
         "the glob must include lint.py — dotfiles-setup lint's hook comes from it"
     )

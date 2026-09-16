@@ -440,6 +440,7 @@ local allSteps = new Mapping<String, Config.Step> {
       ".github/actions/**/action.yaml",
       "hk.pkl",
       "mise.toml",
+      ".config/mise/conf.d/*.toml",
       "python/src/dotfiles_setup/lint.py",
       "python/src/dotfiles_setup/workflow_claude_code.py"
     )
