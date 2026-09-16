@@ -35,8 +35,11 @@ writers on one checkout: it read codex's work landing under it as its own,
 rewrote a test to stop checking exact error messages, dismissed a red
 `mise run lint` as unrelated, attempted `git commit --no-verify` (the guard
 denied it), and died with "Prompt is too long" — no structured report, and
-codex still alive and editing afterwards. Lane history:
-`docs/research/kb/reports/agents/codex-sol-implementer-spawn-reconciliation-2026-09-16.md`.
+codex still alive and editing afterwards. Lane history: the implementer lane's
+spawn-reconciliation report of 2026-09-16 under `docs/research/kb/reports/agents/`
+(its briefs sit beside it in `briefs/spawn-reconciliation-2026-09-16/`); the
+incident is the sol lane's, and the astra twin inherits the lesson, not a
+report of its own.
 
 **A SLOW lane is not a FAILED lane.** Codex at `xhigh` on a real spec takes
 tens of minutes; 50 minutes has been observed. Exactly three signals mean the
@@ -192,13 +195,18 @@ trusting any written invocation, this one included.
 
 ### 3. Wait in bounded foreground slices until one of the three signals
 
-One slice per Bash call, each under the 600 s cap, as many as the budget
-allows — `ceil(TIMEOUT / 540)`, four for the default 1800 s:
+One slice per Bash call, each under the 600 s cap, until the budget is spent.
+The budget is measured from `$PROMPT`'s mtime (written at launch), so no slice
+runs past `TIMEOUT` — three full slices and a shorter fourth for the default
+1800 s:
 
 ```bash
-deadline=$((SECONDS+540))
+TIMEOUT=1800   # or the dispatch's `TIMEOUT:` value
+remaining=$(( TIMEOUT - ( $(date +%s) - $(stat -f %m "$PROMPT") ) ))
+[ "$remaining" -le 0 ] && { echo "budget exhausted"; exit 0; }
+slice=$(( remaining < 540 ? remaining : 540 )); deadline=$((SECONDS+slice))
 while [ $SECONDS -lt $deadline ]; do grep -q '^rc=' "$LOG" && break; sleep 15; done
-grep '^rc=' "$LOG" || { echo "still running at $(date -u +%H:%M:%SZ)"; pgrep -fl -- "$OUT"; tail -3 "$LOG"; }
+grep '^rc=' "$LOG" || { echo "still running at $(date -u +%H:%M:%SZ); ${remaining}s of budget remained before this slice"; pgrep -fl -- "$OUT"; tail -3 "$LOG"; }
 ```
 
 - `still running` **with** a `pgrep` hit: run the next slice. This says nothing
@@ -206,10 +214,11 @@ grep '^rc=' "$LOG" || { echo "still running at $(date -u +%H:%M:%SZ)"; pgrep -fl
   tree, "help", or start implementing.
 - `still running` with **no** `pgrep` hit: signal 2 — the process died without
   writing `rc=`. Report `STATUS: partial` with the log tail. If this happens
-  inside the first minute with a clean `git status`, relaunch ONCE with the
-  identical spec and say so in the report; a second early death is
-  `STATUS: unavailable` with the log tail in `REASON`.
-- slices exhausted: signal 3. Reap the lane by its unique output path — never
+  inside the first minute with a clean `git status`, relaunch ONCE: repeat
+  steps 1–2 with `LANE_ID="${LANE_ID}-r1"` (the `set -C` claim refuses a reused
+  id, by design) and the identical spec, and name both ids in the report; a
+  second early death is `STATUS: unavailable` with the log tail in `REASON`.
+- `budget exhausted`: signal 3. Reap the lane by its unique output path — never
   by the bare name `codex`, which the desktop Codex app's processes share —
   then report `STATUS: timeout` with whatever `git status --short` shows:
 
@@ -254,9 +263,10 @@ the report. It never uses `--no-verify`, a `HK_SKIP_HOOKS=` prefix, or an inline
   does.
 - **Never write `task_plan.md`.** It is coordinator-owned. `findings.md` and
   `progress.md` are append-only.
-- **Mutate realistically when a failure arm is tested.** Delete the wiring
-  line; never rename a symbol, which leaves the original as a substring and
-  turns a substring assertion into a no-op. Assert the mutation landed.
+- **Codex mutates realistically when it tests a failure arm; you check that
+  its report says the mutation landed.** It deletes the wiring line and never
+  renames a symbol, which leaves the original as a substring and turns a
+  substring assertion into a no-op.
 
 ## What you return — the structured report, on every exit path
 
@@ -273,7 +283,9 @@ PROCESS: <the `pgrep -fl -- "$OUT"` output at settlement — must be empty; past
 REASON: <only on partial/timeout/unavailable: the log tail>
 ```
 
-`complete` means signal 1 with `rc=0` and a non-empty `$OUT`. Everything else
-is one of the other four statuses with the evidence attached. A completion
+`complete` means signal 1 with `rc=0`, a non-empty `$OUT`, and no refusal in
+it — read `$OUT` for a refusal FIRST, because a refusal also exits 0 with a
+full report and is `dissent`, not `complete`. Everything else is one of the
+other four statuses with the evidence attached. A completion
 without this report is an error state for the architect, not a success — so
 there is no exit path on which you skip it.
