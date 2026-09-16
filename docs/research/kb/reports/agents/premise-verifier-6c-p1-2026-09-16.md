@@ -184,3 +184,54 @@ expansion arm), N4 (cycle arm), N5 (sole live `depends` witness noted), N6
 (`mise.toml:263` `timeout = "700s"`), N7 (`hk -s check` arm) applied. L17
 (all five local composites are `using: composite`) added from the
 architect's own read. Dispatched to `codex-sol-implementer` as spec v3.
+
+## Part 6 (delivered 17:18Z — the round-2 spec pass, truncated inside N1)
+
+Eleven of twelve rows confirmed. L23 miscites the sibling glob, and two design rules would invert in practice.
+
+## Premise verdicts
+
+| Row | Verdict | Evidence |
+|---|---|---|
+| **L18** | **CONFIRMED** | `_HK_COMMAND_RE` `workflow_claude_code.py:72-90`; value-taking group `:78`, boolean group `:79`, and `--slow`, `--verbose`, `--no-progress`, `--quiet` are all absent; hook anchored at `:84`. `_DOTFILES_LINT_RE` `:92`. `_MISE_TASK_RE` `:97-100`, lookahead `(?=\s|[;&\|)]|$)` at `:99`, no flag tolerance |
+| **L19** | **CONFIRMED** | `_hooks_in_command` `:110`, `_mise_tasks_in_command` `:125`, `_run_strings` `:130`, `mise_task_hooks` `:139-194`, unguarded `tomllib.loads` `:150`, sole source `root / "mise.toml"` `:146` |
+| **L20** | **CONFIRMED** | `_expand_local` `:405-447`; `action_dir = root / uses[2:]` at `:419`, no containment check |
+| **L21** | **CONFIRMED** | `resolve_job` `:449`, `job_runs_the_gate` `:465` with the `_hooks_in_command` fallback, `job_installs_claude_code` `:476`, `_first_gate_step` `:486` reading `reached_hooks` only, `_first_install_step` `:494`, `job_installs_before_gate` `:502`, `scan_workflows` `:551-581` deciding at `:573`/`:576` and never calling a public predicate, `find_violations` `:584`, `workflow_claude_code_main` `:592` |
+| **L22** | **CONFIRMED, one miscite** | `_tree` `:76`, `_job(run, *, installs, install_after=False)` `:96`, `_uses_job` `:106`, `_composite` `:114`, route parametrize `:143`, non-route `:175`, malformed `:433`/`:456`, wiring `:479`. Baseline 49 passed, `rc=0`. The live tests are `:365`, `:393`, `:402`; `:381` is `test_a_mise_toml_less_root_has_no_task_routes`, a `tmp_path` test, not a live one |
+| **L23** | **PARTLY REFUTED** | The `:436-445` half is right, with `mise.toml` at `:442` and `lint.py` at `:443`. The sibling claim is wrong twice: the conf.d glob is `hk.pkl:424`, not `:432`, and it belongs to the step named `["workflow_hk_skip_hooks"]` at `:416`, whose check is `dotfiles-setup workflow-hooks` at `:426`. There is no step named `workflow_hooks` |
+| **L24** | **CONFIRMED** | `.config/mise/conf.d/` holds only `shared.toml`; `grep -c "^\[tasks"` returns 0, control `mise.toml` 102 |
+| **P6** | **CONFIRMED, control-armed** | `hk run --help` prints `Usage: hk run [FLAGS] [FILES]… <SUBCOMMAND>` and the aliases `cm`, `pc`, `pp`, `pcm`. Live, literal argv, file-captured rc: `hk run check --all --plan` 0, `hk run --all --plan check` 0, `hk run pc --plan` 0, `hk --verbose run check --plan` 0, `hk --slow run check --plan` 0, `hk run --stash none pre-commit --plan` 0, `hk run -W check` 0; control `hk run zzqnothook --plan` rc=1, `Hook 'zzqnothook' not found` |
+| **P7** | **CONFIRMED verbatim** | `mise run --help` line 5 `Put mise flags before the task name`, `:::` at lines 4, 32-33, 35, example `mise run --force build` at line 184, usage `mise run [FLAGS] [TASK] [ARGS]…` |
+| **P8** | **CONFIRMED** | `scan_workflows(root).violations` is `()` at `9e1b9dd`; `ci.yml:107`/`:119` and `autofix.yml:62`/`:72`/`:78` unchanged |
+| **E3, E4** | **CONFIRMED** as design statements | `SkippedWorkflow` `:514`, violation builders `:529`/`:540` |
+| **A3** | **ASSUMED, sound** | Quote-as-terminator gives `bash -c "mise run lint"` the tokens it needs. A quoted argument containing spaces stays out of scope, which the spec already requires the module to state |
+
+**Flag tables verified complete by enumeration**, not by reading. hk-run value-taking is exactly the ten listed plus `-W/--why [STEP]` optional plus the three globals; mise top-level is exactly `-C/--cd`, `-E/--env`, `-j/--jobs`; mise-run is exactly the fourteen listed. No omission found in any of the three tables.
+
+## MISSING
+
+**N1, conf.d precedence is backwards. Must change.** `mise config ls` orders `.config/mise/conf.d/shared.toml` **before** `mise.toml`, so `mise.toml` wins a same-named task. Section 3 says to read `mise.toml` then sorted conf.d, with "later files override same-named tasks", which makes conf.d win instead. Today conf.d de
+[truncated in delivery — continued in Part 7 below]
+
+## Part 7 (delivered 17:18:54Z — the round-2 pass's remainder and closing)
+
+**N1, remainder.** Today conf.d defines zero tasks, so nothing is observable, and §5's conf.d arm only tests a task that is absent from `mise.toml`. That arm cannot catch the inversion. State the order as mise's own: conf.d first, `mise.toml` last and authoritative.
+
+**N2, containment must resolve both sides. Must change.** Measured on the real path: `root / "../outside"` returns `is_relative_to(root) == True` unresolved and `False` resolved. The obvious one-line check therefore passes the exact case outcome 5 exists to reject. The mirror trap is macOS: `tmp_path` lives under `/private/tmp` while the symlink says `/tmp`, so resolving only the candidate and not the root fails legitimate in-repo fixtures. Require resolving both, then `is_relative_to`.
+
+**N3, no live `run:` block is newly flagged, and the reason belongs in the spec.** `mise run lint` does appear twice in workflow files, at `build-publish.yml:88` and `refresh.yml:535`, and `lint` is a gated route in the live map `{check: pre-commit, fmt: fix, lint: check, pre-commit: pre-commit}`. Both are YAML comments that `safe_load` strips before `parse_jobs` sees them, which is a different mechanism from outcome 6. Outcome 6 governs shell comments inside a `run:` block and is load-bearing on exactly one live line, in `probe-aslr-tsan.yml`. Without that note a reviewer finds the two hits and reads them as a live violation.
+
+**N4, the `-W/--why` rule now collides with hook aliases.** Section 3 says treat a following bare token that is not a known hook as the optional value. With `pc`, `cm`, `pp`, `pcm` newly resolving, `hk run -W pc` reads as the `pre-commit` hook rather than as `--why pc`. That is the safe direction for a gate, but the alias table changes the meaning of the `-W` rule and the spec does not say so.
+
+**N5, the `:::` walk needs its own flag reset.** Outcome 1 requires every task after each `:::` to be a route, and §5 tests `mise run test ::: lint`. Nothing says the run-flag table applies again after a separator, so `mise run test ::: -j 2 lint` is unspecified. One sentence fixes it.
+
+**N6, minor.** L22 lists `:381` among the live tests; that line is `test_a_mise_toml_less_root_has_no_task_routes`, a `tmp_path` test. Section 4's "all 49 existing tests keep passing" matches the measured baseline of 49 passed at `rc=0`.
+
+## Closing
+
+Safe to dispatch once three text fixes land: L23 must cite `hk.pkl:424` inside `["workflow_hk_skip_hooks"]` rather than a nonexistent `workflow_hooks` step at `:432`, §3 must state mise's real fragment precedence with `mise.toml` last, and outcome 5 must require resolving both root and candidate before the containment test. N4 through N6 are advisory and can land with the implementation.
+
+## Architect disposition (round-2 spec)
+
+N1, N2, L23 (must-change) and N3–N6 (advisory) all applied before dispatch;
+the precedence arm now tests both directions of a same-named task.
