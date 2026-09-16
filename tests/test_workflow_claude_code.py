@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -372,6 +373,34 @@ def test_adversarial_documented_argv_routes_are_seen(
 
 
 @pytest.mark.parametrize(
+    "command",
+    [
+        pytest.param(
+            "OUT=$(hk run pre-commit --all --stash none)",
+            id="assignment-command-substitution-hk",
+        ),
+        pytest.param("(hk run check --all)", id="subshell-hk"),
+        pytest.param("/usr/local/bin/hk run pre-commit --all", id="absolute-path-hk"),
+        pytest.param("./bin/hk fix", id="relative-path-hk"),
+        pytest.param("python/.venv/bin/dotfiles-setup lint", id="path-dotfiles-setup"),
+        pytest.param("$(mise run lint)", id="command-substitution-mise"),
+        pytest.param("x=$(mise r lint)", id="assigned-command-substitution-mise"),
+        pytest.param("hk run \\\n  check --all", id="continued-hk-command"),
+        pytest.param("mise run \\\n  lint", id="continued-mise-command"),
+    ],
+)
+def test_program_name_routes_inside_wrappers_and_paths_are_seen(
+    command: str, tmp_path: Path
+) -> None:
+    """Program wrappers, paths, and continuations cannot hide a gated route."""
+    root = _tree(tmp_path, {"ci.yml": _job(command, installs=False)})
+
+    violations = wcc.find_violations(root)
+
+    assert len(violations) == 1, (command, violations)
+
+
+@pytest.mark.parametrize(
     ("alias", "hook"),
     wcc.HK_HOOK_ALIASES.items(),
 )
@@ -431,6 +460,25 @@ def test_non_hook_routes_and_ungated_hooks_are_not_flagged(
     command: str, tmp_path: Path
 ) -> None:
     """Token prefixes and unrelated tasks must not create false positives."""
+    root = _tree(tmp_path, {"ci.yml": _job(command, installs=False)})
+
+    assert wcc.find_violations(root) == []
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "cat hk.pkl hk-common.pkl",
+        "ls .mise/ mise.lock",
+        "echo some-hk",
+        "git log -- mise.toml",
+        "rm -rf $HOME/.cache/mise",
+        "cp -r ~/.cache/mise run/",
+        "command -v hk",
+    ],
+)
+def test_program_like_arguments_are_not_flagged(command: str, tmp_path: Path) -> None:
+    """Only a candidate followed by literal route grammar reaches the gate."""
     root = _tree(tmp_path, {"ci.yml": _job(command, installs=False)})
 
     assert wcc.find_violations(root) == []
@@ -631,6 +679,30 @@ def test_a_malformed_mise_toml_fails_loud_with_its_name(tmp_path: Path) -> None:
     assert "line" in str(error.value)
 
 
+def test_an_undecodable_mise_toml_fails_loud_with_its_name(tmp_path: Path) -> None:
+    """Invalid UTF-8 gets the same relative-path error as invalid TOML."""
+    root = _tree(tmp_path, {}, mise_toml=None)
+    (root / "mise.toml").write_bytes(b"\xff\xfe")
+
+    with pytest.raises(ValueError, match=r"mise\.toml"):
+        wcc.find_violations(root)
+
+
+def test_an_unreadable_mise_toml_fails_loud_with_its_name(tmp_path: Path) -> None:
+    """Filesystem read failures name the tracked config that could not be read."""
+    if not hasattr(os, "geteuid") or os.geteuid() == 0:
+        pytest.skip("permission bits do not make files unreadable to this process")
+    root = _tree(tmp_path, {})
+    path = root / "mise.toml"
+    path.chmod(0o000)
+
+    try:
+        with pytest.raises(ValueError, match=r"mise\.toml"):
+            wcc.find_violations(root)
+    finally:
+        path.chmod(0o600)
+
+
 def test_a_malformed_conf_fragment_fails_loud_with_its_name(
     tmp_path: Path,
 ) -> None:
@@ -776,6 +848,25 @@ def test_a_mise_toml_less_root_has_no_task_routes(tmp_path: Path) -> None:
 def test_the_live_repo_satisfies_its_own_gate() -> None:
     """Both workflows that run hk install Claude Code today."""
     assert wcc.find_violations(REPO_ROOT) == []
+
+
+def test_the_live_scan_derives_gate_hooks_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The scan passes its derived hook set through every job resolution."""
+    calls: list[Path] = []
+    original = wcc.hooks_running_the_gate
+
+    def counted(root: Path) -> set[str]:
+        calls.append(root)
+        return original(root)
+
+    monkeypatch.setattr(wcc, "hooks_running_the_gate", counted)
+
+    result = wcc.scan_workflows(REPO_ROOT)
+
+    assert result.violations == ()
+    assert calls == [REPO_ROOT]
 
 
 @pytest.mark.parametrize(

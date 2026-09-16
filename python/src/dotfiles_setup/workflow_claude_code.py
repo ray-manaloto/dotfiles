@@ -221,6 +221,7 @@ _HK_DOCUMENTED_HOOKS = frozenset(
 )
 _SHELL_TOKEN_RE = re.compile(r"[^\s;&|)\"'`]+")
 _SHELL_COMMENT_RE = re.compile(r"^\s*#")
+_PROGRAM_PREFIX_RE = re.compile(r"^(?:(?:[A-Za-z_][A-Za-z0-9_]*=)?\$\(|\()")
 
 
 def _flag_index(flags: tuple[Flag, ...]) -> dict[str, Flag]:
@@ -235,10 +236,20 @@ _MISE_RUN_FLAG_INDEX = _flag_index(MISE_RUN_FLAGS)
 
 def _shell_tokens(command: str) -> tuple[str, ...]:
     """Small shell-ish token stream after dropping full-line comments."""
+    command = command.replace("\\\n", " ")
     uncommented = "\n".join(
         line for line in command.splitlines() if not _SHELL_COMMENT_RE.match(line)
     )
     return tuple(_SHELL_TOKEN_RE.findall(uncommented))
+
+
+def _program_name(token: str) -> str:
+    """Normalize one candidate program token, leaving every argv token literal."""
+    # The assignment form is identifier-anchored: `-Dopt=$(hk` is not a shell
+    # assignment. A path argument ending in hk/mise can still be a candidate,
+    # but the literal argv grammar that follows makes that harmless.
+    unwrapped = _PROGRAM_PREFIX_RE.sub("", token, count=1)
+    return unwrapped.rsplit("/", maxsplit=1)[-1]
 
 
 def _advance_flag(
@@ -339,12 +350,13 @@ def _hooks_in_command(
     tokens = _shell_tokens(command)
     hooks: set[str] = set()
     for index, word in enumerate(tokens):
+        program = _program_name(word)
         if (
-            word == "hk"
+            program == "hk"
             and (hook := _hk_hook_at(tokens, index + 1, known_hooks)) is not None
         ):
             hooks.add(hook)
-        if word == "dotfiles-setup" and tokens[index + 1 : index + 2] == ("lint",):
+        if program == "dotfiles-setup" and tokens[index + 1 : index + 2] == ("lint",):
             hooks.add(HK_COMMAND[2])
     return hooks
 
@@ -355,7 +367,7 @@ def _mise_tasks_in_command(command: str) -> set[str]:
     return {
         task
         for index, word in enumerate(tokens)
-        if word == "mise"
+        if _program_name(word) == "mise"
         for task in _mise_tasks_at(tokens, index + 1)
     }
 
@@ -378,7 +390,7 @@ def _tracked_mise_tasks(root: Path) -> dict[str, object]:
             continue
         try:
             document = tomllib.loads(path.read_text(encoding="utf-8"))
-        except tomllib.TOMLDecodeError as error:
+        except (tomllib.TOMLDecodeError, OSError, UnicodeDecodeError) as error:
             relative = path.relative_to(root).as_posix()
             message = f"{relative}: {error}"
             raise ValueError(message) from None
@@ -722,16 +734,25 @@ def _expand_local(
     return tuple(expanded)
 
 
-def resolve_job(job: Job, root: Path, task_hooks: dict[str, frozenset[str]]) -> Job:
+def resolve_job(
+    job: Job,
+    root: Path,
+    task_hooks: dict[str, frozenset[str]],
+    *,
+    known_hooks: set[str] | frozenset[str] | None = None,
+) -> Job:
     """Resolve routes and inline local composites without losing step order."""
-    known_hooks = _HK_DOCUMENTED_HOOKS | frozenset(hooks_running_the_gate(root))
+    configured_hooks = (
+        hooks_running_the_gate(root) if known_hooks is None else known_hooks
+    )
+    all_known_hooks = _HK_DOCUMENTED_HOOKS | frozenset(configured_hooks)
     resolved: list[WorkflowStep] = []
     for step in job.steps:
         if isinstance(step, RunStep):
             resolved.append(
                 RunStep(
                     step.command,
-                    _reached_hooks(step.command, task_hooks, known_hooks),
+                    _reached_hooks(step.command, task_hooks, all_known_hooks),
                 )
             )
         else:
@@ -741,7 +762,7 @@ def resolve_job(job: Job, root: Path, task_hooks: dict[str, frozenset[str]]) -> 
                     step.reference,
                     root,
                     task_hooks,
-                    known_hooks,
+                    all_known_hooks,
                     frozenset(),
                 )
             )
@@ -865,7 +886,7 @@ def scan_workflows(root: Path) -> WorkflowScan:
             skipped.append(SkippedWorkflow(workflow, type(error).__name__))
             continue
         for parsed_job in parse_jobs(document, workflow):
-            job = resolve_job(parsed_job, root, task_hooks)
+            job = resolve_job(parsed_job, root, task_hooks, known_hooks=hooks)
             if not job_runs_the_gate(job, hooks):
                 continue
             if not job_installs_claude_code(job):
