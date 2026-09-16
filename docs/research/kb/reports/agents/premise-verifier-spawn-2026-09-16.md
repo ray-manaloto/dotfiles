@@ -196,6 +196,60 @@ Cheapest hardening, pick one: treat a claimed item with more than one path ident
 
 Findings appended to `/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/findings.md`. Nothing edited.
 
+---
+
+# Pass on the v6 RESPEC (after the cold review of 22bee5a; same agent, 2026-09-16 08:53Z)
+
+> PERSISTED VERBATIM at receipt. Architect decisions: (1) identity model widened — a roster-grammar token may match `agent_role` OR the basename of `agent_path`, since real dispatchers write `- `<role>` as `<spawn name>`` and `- `<role>` (`<spawn name>`)`; ambiguity is reserved for two PATH identities; (2) F9 compares `st_mtime` to `datetime.fromisoformat(started_at).timestamp()` and an empty `started_at` fails closed; (3) the terminator regex is widened to `^(no\s+other|none\b|nothing\s+else)`.
+
+# Premise verification — v6 respec on 22bee5a
+
+All 19 PREMISES rows **CONFIRMED** against the committed implementation; every cited line is exact. Spot corrections: none.
+
+| Row | Cite | Verdict |
+|---|---|---|
+| 69 | `lane_result.py:228-230` break, `_AGENT_LINE` `:97-102` | CONFIRMED |
+| 70 | `7912a742/output.md:24-30` | CONFIRMED: anchor `:24`, roster `:26-28`, `json_probe` `:29`, terminator `:30` |
+| 71 | `sdlc_team.py:302` harvests all backticked tokens, `:346-349` rejects >1 | CONFIRMED |
+| 72 | `:399` appends the **child's** name | CONFIRMED (the F3 defect) |
+| 73 | `:354-367` path then role, no cross-check | CONFIRMED |
+| 74 | `:437-438` rewrites role only when the claim name is a path | CONFIRMED |
+| 75 | no read of `payload.source` | CONFIRMED **with a control arm**: 0 hits for `"source"` in either module, while `agent_role` returns 2 |
+| 76 | `lane_result.py:335-337`, `sdlc_team.py:472-474` | CONFIRMED |
+| 77 | `:186-191` requires `lines[0].startswith` | CONFIRMED |
+| 78 | `_utc_now` `:194-196`, `started_at` `:146` | CONFIRMED |
+| 79-81 | corpus rows | CONFIRMED (carried from passes v2/v3, figures unchanged) |
+| 82 | all 21 codex.log banners at line 1 | **CONFIRMED and strengthened** — I checked all 21, not two; zero exceptions |
+| 83-87 | P/E/A rows | Sound; A row's fail direction is correct |
+
+## Q1 — terminator rule holds on real data, with one near-miss worth knowing
+
+Three distinct real phrasings exist across the 21 runs: `No other specialists were spawned.`, `No other specialists or subagents were spawned.`, and `No others were spawned.` (run `3cac53d7`). All three are caught, the third **only** because "no others" happens to contain "no other" as a prefix. No legitimate claim line starts with those words, so there is no false termination. The rule is correct, but it is one rewording away from missing (`None others were spawned`, `Nothing else was spawned`). Matching `^no\s+other` or `^(no other|none|nothing else)` would cost nothing.
+
+## New missing premise — F1+F2 make three real runs ambiguous, not one
+
+Simulating the v6 rules over every real `output.md`, ambiguous claims appear in **3 of 21 runs**, not just the `json_probe` case the spec plans for in arm 16:
+
+- **`b941647c`, five claims**, shape `` - `sdlc-python-specialist` as `round3_python` ``. The bare tail `round3_python` passes the **roster** grammar, so the claim carries two roster identities and `_claim_problem` rejects it. All five are correct spawns, and the child's path would be `/root/round3_python`, the same token with the prefix stripped.
+- **`smoke-real`, one claim**, via `` (`config_smoke_review`) ``.
+- **`7912a742`, one claim** — the case arm 16 already covers.
+
+So the spec's own F1 objective, that a real dispatcher output must not fail for the wrong reason, is not met for `b941647c`. Two cheap fixes: prefer a candidate that matches an observed identity before declaring ambiguity, or treat a second roster-grammar token as a weak identity used only when the first fails.
+
+## Q2 — the mtime trap is real, and the dangerous form is silent
+
+`_utc_now()` emits an aware ISO string with `+00:00`; `st_mtime` is a POSIX epoch float. The correct comparison is `mtime >= datetime.fromisoformat(started_at).timestamp()`, measured False for the April zero-byte file and True for a file written now, so it discriminates.
+
+Two wrong forms, one loud and one silent:
+
+- Aware parsed `started_at` against a naive `datetime.fromtimestamp(mtime)` raises `TypeError`. Loud, so a test catches it.
+- Naive-LOCAL `datetime.fromtimestamp(mtime)` against a naive-stripped UTC `started_at` returns **False for a file written during the run**. Measured: local `03:53:30` against UTC `08:53:30`. This host is UTC-5, so the F9 failure arm would be dead for every run shorter than five hours, which is all of them. That is the "check that can only pass" shape.
+
+Two smaller notes on F9. The zero-byte file's mtime is `2026-04-16T21:14 UTC` while its filename reads `16-14-05` local, the same local/UTC split the spec already documents elsewhere, so the old-file arm is naturally armed. And `collect_session_files` defaults `started_at=""` to "treat every skipped file as old", which is fail-open; `_SupervisorPayload.started_at` has no default so the supervisor path always supplies it, but the standalone CLI path does not. Worth one sentence in the spec.
+
+Findings appended to `/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/findings.md`. Nothing edited.
+
+
 ## GitHub repos touched
 
 - [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — the repo under change (sdlc_team.py, lane_result.py, tests).
