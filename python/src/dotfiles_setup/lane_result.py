@@ -7,9 +7,11 @@ import argparse
 import enum
 import html
 import json
+import os
 import re
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Final, cast
 from urllib.parse import quote
@@ -26,10 +28,13 @@ __all__ = [
     "collect_hook_events",
     "collect_observed",
     "collect_self_report",
+    "collect_session_files",
+    "collect_spawn_report",
     "generate_schema",
     "hook_events_path",
     "lane_receipt_main",
     "merge_sources",
+    "parse_parent_thread_id",
     "read_result",
     "receipt_path",
     "render_mermaid",
@@ -83,6 +88,7 @@ AGENTSVIEW_PATH: Final = Path(
 )
 _AGENTSVIEW_TIMEOUT_S: Final = 30.0
 _MIN_CONFLICTING_VALUES: Final = 2
+_BANNER_SEARCH_LINES: Final = 50
 
 _SECTION_LINE = re.compile(
     r"(?:\bselected\s*:|\bspecialists?\s+(?:spawned|invoked)\s*:|"
@@ -94,6 +100,13 @@ _AGENT_LINE = re.compile(
     r"(?:`(?P<code>[^`]+)`|\*\*(?P<bold>[^*]+)\*\*|"
     r"(?P<plain>[A-Za-z0-9][A-Za-z0-9_.-]*))"
     r"(?:\s+(?:—|-|:)\s*(?P<role>.+))?\s*$"
+)
+_SPAWN_SECTION_LINE = re.compile(r"\bspecialists\s+spawned\s*:", re.IGNORECASE)
+_MARKDOWN_LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(?P<text>.+?)\s*$")
+_BACKTICK_TOKEN = re.compile(r"`([^`]+)`")
+_SPAWN_TERMINATOR = re.compile(
+    r"^(?:no\s+other|none\b|nothing\s+else)",
+    re.IGNORECASE,
 )
 
 
@@ -172,6 +185,102 @@ def collect_self_report(report_text: str) -> CollectorOutcome:
     return CollectorOutcome(source=AgentSource.SELF_REPORT, agents=tuple(agents))
 
 
+def parse_parent_thread_id(log_text: str) -> str | None:
+    """Return the session id from the first delimited Codex exec banner."""
+    if not isinstance(log_text, str):
+        return None
+    lines = log_text.splitlines()
+    banner_index = next(
+        (
+            index
+            for index, line in enumerate(lines[:_BANNER_SEARCH_LINES])
+            if line.startswith("OpenAI Codex v")
+        ),
+        None,
+    )
+    if (
+        banner_index is None
+        or banner_index + 1 >= len(lines)
+        or lines[banner_index + 1].strip() != "--------"
+    ):
+        return None
+
+    banner: list[str] = []
+    for line in lines[banner_index + 2 :]:
+        if line.strip() == "--------":
+            break
+        banner.append(line)
+    else:
+        return None
+
+    for line in banner:
+        key, separator, value = line.partition(":")
+        if separator and key.strip().lower() == "session id" and value.strip():
+            return value.strip()
+    return None
+
+
+def collect_spawn_report(report_text: str) -> CollectorOutcome:
+    """Collect the dispatcher's closing ``Specialists spawned:`` list."""
+    if not isinstance(report_text, str):
+        return _unavailable(AgentSource.SELF_REPORT, "self-report is not text")
+
+    lines = report_text.splitlines()
+    section_indexes = [
+        index for index, line in enumerate(lines) if _SPAWN_SECTION_LINE.search(line)
+    ]
+    if not section_indexes:
+        return _unavailable(
+            AgentSource.SELF_REPORT,
+            "self-report has no Specialists spawned section",
+        )
+
+    agents: list[AgentNode] = []
+    saw_terminator = False
+    for line in lines[section_indexes[-1] + 1 :]:
+        if not line.strip():
+            continue
+        list_item = _MARKDOWN_LIST_ITEM.match(line)
+        item_text = (
+            list_item.group("text").strip() if list_item is not None else line.strip()
+        )
+        if _SPAWN_TERMINATOR.match(item_text):
+            saw_terminator = True
+            break
+        if list_item is None:
+            break
+        match = _AGENT_LINE.match(line)
+        if match is None:
+            # Anchored: an item must START with its backticked token, or it is
+            # an identity-less claim that fails closed. A `.search` here let
+            # `- Python specialist — `/root/python_review`` collapse to a
+            # path-only claim that paired with ANY child at that path.
+            token = _BACKTICK_TOKEN.match(item_text)
+            if token is None:
+                name = item_text
+                role = ""
+            else:
+                name = token.group(1)
+                role = item_text[token.end() :].strip()
+        else:
+            name = match.group("code") or match.group("bold") or match.group("plain")
+            role = (match.group("role") or "").strip()
+        agents.append(
+            AgentNode(
+                name=name.strip(),
+                role=role,
+                sources=(AgentSource.SELF_REPORT,),
+            )
+        )
+
+    if not agents and not saw_terminator:
+        return _unavailable(
+            AgentSource.SELF_REPORT,
+            "self-report Specialists spawned section contains no parseable list items",
+        )
+    return CollectorOutcome(source=AgentSource.SELF_REPORT, agents=tuple(agents))
+
+
 def _session_rows(output: str) -> list[dict[str, object]]:
     """Decode the list shape emitted by ``agentsview session list --json``."""
     payload = json.loads(output)
@@ -198,6 +307,128 @@ def _text_field(row: dict[str, object], *names: str) -> str:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return ""
+
+
+def _rollout_payload(rollout_file: Path) -> dict[str, object] | None:
+    """Read and validate only the first metadata record in one rollout."""
+    try:
+        with rollout_file.open() as handle:
+            first_line = handle.readline()
+        record = json.loads(first_line)
+    except OSError, UnicodeError, json.JSONDecodeError:
+        return None
+    if not isinstance(record, dict) or record.get("type") != "session_meta":
+        return None
+    payload = record.get("payload")
+    if not isinstance(payload, dict):
+        return None
+    return cast("dict[str, object]", payload)
+
+
+def _started_at_epoch(started_at: str) -> float | None:
+    """Return the run-start epoch, or ``None`` when the timestamp is unknown."""
+    try:
+        return datetime.fromisoformat(started_at).timestamp()
+    except ValueError, TypeError, OSError:
+        return None
+
+
+def _rollout_was_written_during_run(
+    rollout_file: Path,
+    started_at_epoch: float | None,
+) -> bool:
+    """Fail closed when an unreadable rollout cannot be proven older than the run."""
+    if started_at_epoch is None:
+        return True
+    try:
+        return rollout_file.stat().st_mtime >= started_at_epoch
+    except OSError:
+        return True
+
+
+def _unreadable_rollout_note(
+    skipped_older: int,
+    skipped_during_run: int,
+    started_at_epoch: float | None,
+) -> str:
+    """Describe old and settlement-causal unreadable rollout counts separately."""
+    notes: list[str] = []
+    if skipped_older:
+        notes.append(f"skipped {skipped_older} unreadable rollout file(s)")
+    if skipped_during_run:
+        during_note = (
+            f"skipped {skipped_during_run} unreadable rollout file(s) "
+            "written during this run"
+        )
+        if started_at_epoch is None:
+            during_note = f"{during_note} (start time was unknown)"
+        notes.append(during_note)
+    return "; ".join(notes)
+
+
+def collect_session_files(
+    parent_thread_id: str,
+    sessions_root: Path,
+    *,
+    started_at: str = "",
+) -> CollectorOutcome:
+    """Collect direct child sessions from Codex rollout-file metadata."""
+    if not parent_thread_id:
+        return _unavailable(AgentSource.OBSERVED, "parent thread id was not provided")
+    if not sessions_root.is_dir() or not os.access(sessions_root, os.R_OK | os.X_OK):
+        return _unavailable(
+            AgentSource.OBSERVED,
+            f"sessions root is not a readable directory: {sessions_root}",
+        )
+
+    try:
+        rollout_files = sorted(sessions_root.rglob("rollout-*.jsonl"))
+    except OSError as error:
+        return _unavailable(
+            AgentSource.OBSERVED,
+            f"sessions root could not be scanned: {error}",
+        )
+
+    started_at_epoch = _started_at_epoch(started_at)
+
+    agents: list[AgentNode] = []
+    skipped_older = 0
+    skipped_during_run = 0
+    for rollout_file in rollout_files:
+        payload = _rollout_payload(rollout_file)
+        if payload is None:
+            if _rollout_was_written_during_run(rollout_file, started_at_epoch):
+                skipped_during_run += 1
+            else:
+                skipped_older += 1
+            continue
+        if payload.get("parent_thread_id") != parent_thread_id:
+            continue
+
+        agent_role = _text_field(payload, "agent_role")
+        agent_path = _text_field(payload, "agent_path")
+        child_id = _text_field(payload, "id")
+        source = payload.get("source")
+        subagent = source.get("subagent") if isinstance(source, dict) else None
+        review_thread = isinstance(subagent, str) and subagent == "review"
+        agents.append(
+            AgentNode(
+                name=agent_role or agent_path or child_id,
+                role="" if review_thread else agent_path,
+                sources=(AgentSource.OBSERVED,),
+                status="review-thread" if review_thread else "",
+            )
+        )
+
+    return CollectorOutcome(
+        source=AgentSource.OBSERVED,
+        agents=tuple(agents),
+        error=_unreadable_rollout_note(
+            skipped_older,
+            skipped_during_run,
+            started_at_epoch,
+        ),
+    )
 
 
 def _observed_agents(
@@ -433,6 +664,8 @@ def merge_sources(
             detail = outcome.error or "collector supplied no error"
             disagreements.append(f"source {outcome.source.value} unavailable: {detail}")
             continue
+        if outcome.error:
+            disagreements.append(f"source {outcome.source.value} note: {outcome.error}")
         available[outcome.source] = outcome
 
     source_nodes: dict[AgentSource, dict[str, AgentNode]] = {

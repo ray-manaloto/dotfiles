@@ -1,6 +1,6 @@
 # Codex SDLC subagent team — settled design
 
-**Status:** design settled by operator grilling 2026-09-14. NOT implemented.
+**Status:** design settled by operator grilling 2026-09-14; implemented in `python/src/dotfiles_setup/sdlc_team.py` (`mise run sdlc-team`), spawn reconciliation landed 2026-09-16 (see "Spawn reconciliation" below).
 **Research:** `docs/research/kb/reports/agents/adv-sdlc-team-2026-09-14.md`
 **Primary source:** `$KB/agent-harness-docs/docs/codex/agent-configuration__subagents.md`
 where `$KB=~/dev/github/ray-manaloto/knowledge-base/sources`. Codex CLI **0.154.0**.
@@ -144,6 +144,26 @@ instructions on noise.
 Codex "Memories" is a ChatGPT-account feature for carrying context between chats, not
 per-agent performance learning (`app__settings.md:108-111`, `chrome-extension.md:155`).
 No native mechanism was found. Scoped out deliberately as its own design.
+
+## Spawn reconciliation (2026-09-16)
+
+`SdlcTeamSettlement` now records the dispatcher's closing claimed roster and
+the direct child sessions observed in Codex rollout metadata. Settlement fails
+closed when the parent session id or observed source is unavailable, when no
+children were observed, when a rollout written during the run is unreadable, or
+when one-to-one pairing leaves a claim or non-review child unmatched; a claim
+whose candidates do not all describe one child, or which carries two agent
+paths, also fails. The pinned negative arm is a Codex rc=0 report claiming
+`sdlc-python-specialist` with a valid parent banner but zero child rollouts:
+its terminal status must be `failed`, never `completed`.
+A roster token is satisfied by the child's `agent_role`, by the spawn name its
+`agent_path` encodes, or vacuously when the child records no role at all and
+the same claim's path candidate already anchors that child. Accepted limits: a
+role-only claim reaches a path-only child only when its token is that path's
+basename, a team run with zero observed specialists fails by design, and roster
+identities stay lowercase-only. Terminators cover `no other`, `none`, and
+`nothing else`; `No further specialists were spawned.` remains a claim and
+fails closed.
 
 ## Verification already performed
 

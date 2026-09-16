@@ -9,12 +9,15 @@ import contextlib
 import enum
 import math
 import os
+import re
 import shutil
 import signal
+import string
 import subprocess
 import sys
 import time
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
@@ -30,12 +33,14 @@ __all__ = [
     "SdlcTeamDispatch",
     "SdlcTeamRequest",
     "SdlcTeamSettlement",
+    "SpawnReconciliation",
     "build_prompt",
     "dispatch",
     "generate_dispatch_schema",
     "generate_request_schema",
     "generate_settlement_schema",
     "read_status",
+    "reconcile_spawns",
     "sdlc_team_main",
 ]
 
@@ -110,6 +115,20 @@ class SdlcTeamSettlement(codec.Struct, frozen=True):
     finished_at: str = ""
     duration_s: float = 0.0
     errors: tuple[str, ...] = ()
+    parent_thread_id: str | None = None
+    specialists_claimed: tuple[str, ...] = ()
+    specialists_observed: tuple[str, ...] = ()
+
+
+class SpawnReconciliation(codec.Struct, frozen=True):
+    """Pure claimed-versus-observed spawn reconciliation result."""
+
+    consistent: bool
+    parent_thread_id: str | None
+    specialists_claimed: tuple[str, ...]
+    specialists_observed: tuple[str, ...]
+    errors: tuple[str, ...]
+    self_report: lane_result.CollectorOutcome
 
 
 class _SupervisorPayload(codec.Struct, frozen=True):
@@ -126,6 +145,26 @@ class _SupervisorPayload(codec.Struct, frozen=True):
     workdir: str
     started_at: str
     timeout_s: float | None = None
+    sessions_root: str = ""
+
+
+@dataclass(frozen=True)
+class _ClaimedIdentity:
+    """One parsed claim and its grammar-bounded identities."""
+
+    node: lane_result.AgentNode
+    identities: tuple[str, ...]
+    paths: tuple[str, ...]
+    roles: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class _ObservedIdentity:
+    """One observed child and its independently recorded identities."""
+
+    node: lane_result.AgentNode
+    agent_role: str
+    agent_path: str
 
 
 class _DispatchState(codec.Struct, frozen=True):
@@ -143,6 +182,13 @@ SDLC_RUNS_DIR: Final = ".agent/sdlc-runs"
 _SUPERVISE_ACTION: Final = "_supervise"
 _SUPERVISE_ARG_COUNT: Final = 2
 _TIMEOUT_GRACE_S: Final = 5.0
+_ROSTER_IDENTITY = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
+_PATH_IDENTITY = re.compile(r"^/[A-Za-z0-9_./-]{1,200}$")
+_CHILD_UUID = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
+_BACKTICK_TOKEN = re.compile(r"`([^`]+)`")
 
 
 def _utc_now() -> str:
@@ -235,13 +281,365 @@ def build_prompt(request: SdlcTeamRequest, repo_root: Path) -> str:
         "FILE ALLOWLIST:\n"
         f"{allowlist}\n\n"
         "COMMIT: caller\n\n"
-        "If a specialist spawn fails with `no thread with id` before the agent exists, "
-        "retry once without conversation history. If spawning still fails, do the "
-        "work yourself and report every spawn failure.\n\n"
+        "If a specialist cannot be spawned, stop and report the spawn failure with "
+        "its error text; do not do that specialist's work yourself.\n\n"
         "Never pipe a command into head, tail, sed, awk, or another pager to read its "
         "result; capture and report the command's real exit code.\n\n"
-        "End with a Markdown list under `Specialists spawned:` naming every specialist "
-        "actually spawned, and confirm that no others were spawned.\n"
+        "End with a Markdown list under `Specialists spawned:` with exactly one item "
+        "per spawned specialist, each item formatted as - `<agent_role>` — "
+        "`<agent_path>`, and state that no others were spawned.\n"
+    )
+
+
+def _is_none_claim(name: str) -> bool:
+    """Return whether a parsed list item is the model's empty-list sentinel."""
+    return name.strip().rstrip(string.punctuation).lower() == "none"
+
+
+def _claimed_identity(node: lane_result.AgentNode) -> _ClaimedIdentity:
+    """Extract ordered, grammar-bounded identities from one claimed item."""
+    identities: list[str] = []
+    role_token = _BACKTICK_TOKEN.search(node.role)
+    candidates = (node.name,) + (
+        (role_token.group(1),) if role_token is not None else ()
+    )
+    for candidate in candidates:
+        identity = candidate.strip()
+        if not (
+            _ROSTER_IDENTITY.fullmatch(identity) or _PATH_IDENTITY.fullmatch(identity)
+        ):
+            continue
+        if identity not in identities:
+            identities.append(identity)
+    return _ClaimedIdentity(
+        node=node,
+        identities=tuple(identities),
+        paths=tuple(
+            identity for identity in identities if _PATH_IDENTITY.fullmatch(identity)
+        ),
+        roles=tuple(
+            identity for identity in identities if _ROSTER_IDENTITY.fullmatch(identity)
+        ),
+    )
+
+
+def _observed_identity(node: lane_result.AgentNode) -> _ObservedIdentity:
+    """Recover the role/path presence encoded by ``collect_session_files``."""
+    agent_path = node.role
+    agent_role = ""
+    if node.name != agent_path and not _CHILD_UUID.fullmatch(node.name):
+        agent_role = node.name
+    return _ObservedIdentity(
+        node=node,
+        agent_role=agent_role,
+        agent_path=agent_path,
+    )
+
+
+def _reconciliation_error(detail: str) -> str:
+    """Prefix one settlement-causal spawn reconciliation error."""
+    return f"spawn reconciliation: {detail}"
+
+
+def _during_run_skip_note(error: str) -> str:
+    """Extract the settlement-causal unreadable-rollout note, if present."""
+    return next(
+        (
+            note
+            for note in error.split("; ")
+            if "unreadable rollout file(s) written during this run" in note
+        ),
+        "",
+    )
+
+
+def _claim_problem(claim: _ClaimedIdentity) -> str:
+    """Return the fail-closed validation error for one claim, if any."""
+    if not claim.identities:
+        return (
+            f"claimed item {claim.node.name!r} names no roster specialist or agent path"
+        )
+    if len(claim.paths) > 1:
+        return (
+            f"claimed item {claim.node.name!r} carries more than one path "
+            "or role identity"
+        )
+    return ""
+
+
+def _path_basename(agent_path: str) -> str:
+    """Return the Codex spawn name encoded by an agent path."""
+    return agent_path.rsplit("/", maxsplit=1)[-1]
+
+
+def _candidate_satisfied(
+    candidate: str,
+    child: _ObservedIdentity,
+    *,
+    path_anchored: bool,
+) -> bool:
+    """Return whether one claim constraint agrees with one observed child.
+
+    A roster token is satisfied by the child's recorded ``agent_role``, by the
+    spawn name its ``agent_path`` encodes, or — when the child records NO role
+    at all and a path candidate of the same claim already anchors this child —
+    vacuously: a missing field cannot contradict a claim the path pins down.
+    """
+    if _PATH_IDENTITY.fullmatch(candidate):
+        return candidate == child.agent_path
+    if candidate in {child.agent_role, _path_basename(child.agent_path)}:
+        return True
+    return path_anchored and not child.agent_role
+
+
+def _claim_anchors_child(
+    claim: _ClaimedIdentity,
+    child: _ObservedIdentity,
+) -> bool:
+    """Return whether the claim's own path candidates pin down this child."""
+    return bool(claim.paths) and all(path == child.agent_path for path in claim.paths)
+
+
+def _recorded_role_unasserted(
+    claim: _ClaimedIdentity,
+    child: _ObservedIdentity,
+) -> bool:
+    """Return whether the child RECORDS a role that no claim roster token asserts.
+
+    The basename rule exists for role-less children and for spawn names written
+    beside the role; it must never let a recorded, different ``agent_role`` pass
+    (a config specialist spawned at ``/root/sdlc-python-specialist`` is not a
+    python specialist, whatever its path says).
+    """
+    return bool(
+        child.agent_role and claim.roles and child.agent_role not in claim.roles
+    )
+
+
+def _consistent_child(
+    claim: _ClaimedIdentity,
+    child: _ObservedIdentity,
+) -> bool:
+    """Require every grammar-bounded candidate to describe the same child."""
+    if _recorded_role_unasserted(claim, child):
+        return False
+    path_anchored = _claim_anchors_child(claim, child)
+    return all(
+        _candidate_satisfied(candidate, child, path_anchored=path_anchored)
+        for candidate in claim.identities
+    )
+
+
+def _matching_child(
+    claim: _ClaimedIdentity,
+    children: tuple[_ObservedIdentity, ...],
+    unmatched: set[int],
+) -> int | None:
+    """Choose the first unmatched non-review child consistent with the claim."""
+    for child_index in sorted(unmatched):
+        if _consistent_child(claim, children[child_index]):
+            return child_index
+    return None
+
+
+def _claim_name(claim: _ClaimedIdentity) -> str:
+    """Keep the dispatcher's own preferred identity for settlement evidence."""
+    if claim.roles:
+        return claim.roles[0]
+    if claim.paths:
+        return claim.paths[0]
+    return claim.node.name
+
+
+def _unmatched_claim_error(
+    claim: _ClaimedIdentity,
+    children: tuple[_ObservedIdentity, ...],
+) -> tuple[str, int | None]:
+    """Describe why a well-formed claim matched no observed child."""
+    if not claim.paths:
+        return f"claimed item {claim.node.name!r} matches no observed child", None
+
+    claimed_path = claim.paths[0]
+    path_match = next(
+        (
+            (child_index, child)
+            for child_index, child in enumerate(children)
+            if child.node.status != "review-thread" and child.agent_path == claimed_path
+        ),
+        None,
+    )
+    if path_match is None:
+        return f"claimed path {claimed_path!r} matches no observed child", None
+
+    child_index, child = path_match
+    roster_token = next(
+        (
+            candidate
+            for candidate in claim.roles
+            if not _candidate_satisfied(candidate, child, path_anchored=True)
+        ),
+        None,
+    )
+    if roster_token is None and _recorded_role_unasserted(claim, child):
+        roster_token = claim.roles[0]
+    if roster_token is None:
+        return f"claimed item {claim.node.name!r} matches no observed child", None
+    detail = (
+        f"claimed {roster_token!r} does not match child at {claimed_path} "
+        f"(agent_role {child.agent_role!r}, name {_path_basename(claimed_path)!r})"
+    )
+    return detail, child_index
+
+
+def _pair_claims(
+    claims: tuple[_ClaimedIdentity, ...],
+    children: tuple[_ObservedIdentity, ...],
+    *,
+    can_pair: bool,
+) -> tuple[dict[int, int], set[int], tuple[str, ...]]:
+    """Pair report-ordered claims to first consistent unmatched children."""
+    matches: dict[int, int] = {}
+    unmatched = {
+        index
+        for index, child in enumerate(children)
+        if child.node.status != "review-thread"
+    }
+    diagnosed_children: set[int] = set()
+    errors: list[str] = []
+    for claim_index, claim in enumerate(claims):
+        problem = _claim_problem(claim)
+        if problem:
+            errors.append(_reconciliation_error(problem))
+            continue
+        child_index = _matching_child(claim, children, unmatched) if can_pair else None
+        if child_index is None:
+            if can_pair:
+                detail, diagnosed_child = _unmatched_claim_error(claim, children)
+                errors.append(_reconciliation_error(detail))
+                if diagnosed_child is not None:
+                    diagnosed_children.add(diagnosed_child)
+            continue
+        matches[claim_index] = child_index
+        unmatched.remove(child_index)
+    return matches, unmatched - diagnosed_children, tuple(errors)
+
+
+def _unmatched_child_errors(
+    children: tuple[_ObservedIdentity, ...], unmatched: set[int]
+) -> tuple[str, ...]:
+    """Describe every observed child left after one-to-one pairing."""
+    errors: list[str] = []
+    for child_index in sorted(unmatched):
+        child = children[child_index]
+        if not child.agent_role and not child.agent_path:
+            detail = (
+                f"observed child {child.node.name!r} carries neither "
+                "agent_role nor agent_path"
+            )
+        else:
+            path_detail = f" ({child.agent_path})" if child.agent_path else ""
+            detail = f"observed child {child.node.name!r}{path_detail} was not claimed"
+        errors.append(_reconciliation_error(detail))
+    return tuple(errors)
+
+
+def _canonical_self_report(
+    self_report: lane_result.CollectorOutcome,
+    claims: tuple[_ClaimedIdentity, ...],
+    children: tuple[_ObservedIdentity, ...],
+    matches: dict[int, int],
+) -> lane_result.CollectorOutcome:
+    """Rename matched claims to observed receipt identities."""
+    canonical_agents: list[lane_result.AgentNode] = []
+    for claim_index, claim in enumerate(claims):
+        child_index = matches.get(claim_index)
+        if child_index is None:
+            canonical_agents.append(claim.node)
+            continue
+        child = children[child_index]
+        canonical_agents.append(
+            lane_result.AgentNode(
+                name=child.node.name,
+                role=child.agent_path,
+                parent=claim.node.parent,
+                sources=claim.node.sources,
+                status=claim.node.status,
+            )
+        )
+    return lane_result.CollectorOutcome(
+        source=self_report.source,
+        agents=tuple(canonical_agents),
+        available=self_report.available,
+        error=self_report.error,
+    )
+
+
+def reconcile_spawns(
+    parent_thread_id: str | None,
+    sessions_root: str,
+    self_report: lane_result.CollectorOutcome,
+    observed: lane_result.CollectorOutcome,
+) -> SpawnReconciliation:
+    """Pair claimed items to observed children and fail every unknown or mismatch."""
+    errors: list[str] = []
+    parent_known = bool(parent_thread_id)
+    if not parent_known:
+        errors.append(
+            _reconciliation_error("parent thread id not found in codex.log banner")
+        )
+    if not self_report.available:
+        detail = self_report.error or "collector supplied no error"
+        errors.append(_reconciliation_error(f"self-report unavailable: {detail}"))
+    if not observed.available:
+        detail = observed.error or "collector supplied no error"
+        errors.append(_reconciliation_error(f"observed source unavailable: {detail}"))
+    else:
+        during_run_skip = _during_run_skip_note(observed.error)
+        if during_run_skip:
+            errors.append(_reconciliation_error(during_run_skip))
+
+    claims = (
+        tuple(
+            _claimed_identity(node)
+            for node in self_report.agents
+            if not _is_none_claim(node.name)
+        )
+        if self_report.available
+        else ()
+    )
+    children = (
+        tuple(_observed_identity(node) for node in observed.agents)
+        if parent_known and observed.available
+        else ()
+    )
+    review_threads = sum(
+        1 for child in children if child.node.status == "review-thread"
+    )
+    if parent_known and observed.available and review_threads == len(children):
+        ignored = ""
+        if review_threads:
+            ignored = f" ({review_threads} codex review thread(s) ignored)"
+        root = sessions_root or "<unknown>"
+        errors.append(
+            _reconciliation_error(f"zero specialists observed under {root}{ignored}")
+        )
+    can_pair = parent_known and observed.available
+    matches, unmatched, pairing_errors = _pair_claims(
+        claims, children, can_pair=can_pair
+    )
+    errors.extend(pairing_errors)
+    if can_pair:
+        errors.extend(_unmatched_child_errors(children, unmatched))
+    canonical_self_report = _canonical_self_report(
+        self_report, claims, children, matches
+    )
+    return SpawnReconciliation(
+        consistent=not errors,
+        parent_thread_id=parent_thread_id,
+        specialists_claimed=tuple(_claim_name(claim) for claim in claims),
+        specialists_observed=tuple(sorted(node.name for node in observed.agents)),
+        errors=tuple(errors),
+        self_report=canonical_self_report,
     )
 
 
@@ -387,6 +785,9 @@ def dispatch(request: SdlcTeamRequest, repo_root: Path) -> SdlcTeamDispatch:
         prompt_file.parent.mkdir(parents=True, exist_ok=True)
         prompt_file.write_text(build_prompt(request, repo_root))
         settlement_file.unlink(missing_ok=True)
+        sessions_root = (
+            Path(os.environ.get("CODEX_HOME") or "~/.codex").expanduser() / "sessions"
+        ).resolve()
         payload = _SupervisorPayload(
             run_id=run_id,
             argv=argv,
@@ -399,6 +800,7 @@ def dispatch(request: SdlcTeamRequest, repo_root: Path) -> SdlcTeamDispatch:
             workdir=paths.workdir,
             started_at=started_at,
             timeout_s=request.timeout_s,
+            sessions_root=str(sessions_root),
         )
         supervisor = subprocess.Popen(
             (
@@ -482,25 +884,46 @@ def read_status(
 
 def _write_lane_receipts(
     payload: _SupervisorPayload, duration_s: float
-) -> tuple[str, ...]:
+) -> tuple[tuple[str, ...], SpawnReconciliation]:
     """Compose truthful lane_result receipts from sources available to this request."""
     errors: list[str] = []
     try:
         report_text = Path(payload.output_file).read_text()
-        self_report = lane_result.collect_self_report(report_text)
-    except OSError as error:
+        self_report = lane_result.collect_spawn_report(report_text)
+    except (OSError, UnicodeError) as error:
         self_report = lane_result.CollectorOutcome(
             source=lane_result.AgentSource.SELF_REPORT,
             available=False,
             error=f"dispatcher output could not be read: {error}",
         )
-    observed = lane_result.CollectorOutcome(
-        source=lane_result.AgentSource.OBSERVED,
-        available=False,
-        error="parent session id is not carried by SdlcTeamRequest",
+    try:
+        log_text = Path(payload.log_file).read_text()
+    except OSError, UnicodeError:
+        parent_thread_id = None
+    else:
+        parent_thread_id = lane_result.parse_parent_thread_id(log_text)
+    if payload.sessions_root:
+        observed = lane_result.collect_session_files(
+            parent_thread_id or "",
+            Path(payload.sessions_root),
+            started_at=payload.started_at,
+        )
+    else:
+        observed = lane_result.CollectorOutcome(
+            source=lane_result.AgentSource.OBSERVED,
+            available=False,
+            error="sessions root was not provided",
+        )
+    reconciliation = reconcile_spawns(
+        parent_thread_id,
+        payload.sessions_root,
+        self_report,
+        observed,
     )
     hook = lane_result.collect_hook_events(Path(payload.workdir), payload.run_id)
-    agents, disagreements = lane_result.merge_sources(self_report, observed, hook)
+    agents, disagreements = lane_result.merge_sources(
+        reconciliation.self_report, observed, hook
+    )
     result = lane_result.LaneResult(
         run_id=payload.run_id,
         lane="codex-sdlc-dispatcher",
@@ -521,7 +944,7 @@ def _write_lane_receipts(
             _atomic_write(path, content)
         except OSError as error:
             errors.append(f"could not write lane receipt {label}: {error}")
-    return tuple(errors)
+    return tuple(errors), reconciliation
 
 
 def _supervise(payload: _SupervisorPayload) -> int:
@@ -560,7 +983,11 @@ def _supervise(payload: _SupervisorPayload) -> int:
         errors.append(f"could not run codex: {error}")
 
     duration_s = time.monotonic() - started
-    errors.extend(_write_lane_receipts(payload, duration_s))
+    receipt_errors, reconciliation = _write_lane_receipts(payload, duration_s)
+    errors.extend(reconciliation.errors)
+    errors.extend(receipt_errors)
+    if status is SdlcSettledStatus.COMPLETED and not reconciliation.consistent:
+        status = SdlcSettledStatus.FAILED
     settlement = SdlcTeamSettlement(
         run_id=payload.run_id,
         status=status,
@@ -569,6 +996,9 @@ def _supervise(payload: _SupervisorPayload) -> int:
         finished_at=_utc_now(),
         duration_s=duration_s,
         errors=tuple(errors),
+        parent_thread_id=reconciliation.parent_thread_id,
+        specialists_claimed=reconciliation.specialists_claimed,
+        specialists_observed=reconciliation.specialists_observed,
     )
     try:
         _write_settlement(Path(payload.settlement_file), settlement)

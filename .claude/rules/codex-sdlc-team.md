@@ -32,7 +32,8 @@ launch, timeout supervision and every artifact path — so none of it is retyped
 or remembered. It returns immediately with an `SdlcTeamDispatch` (supervisor
 pid, resolved argv, prompt/output/log/receipt paths); a detached supervisor
 writes `SdlcTeamSettlement` when the run ends. Details: the
-`codex-sdlc-team` skill.
+`codex-sdlc-team` skill; settlement records claimed versus rollout-observed
+specialists and fails closed when that evidence is unavailable or inconsistent.
 
 ⚠️ **A hand-rolled `codex exec` for this team is guard-denied** (`hook_guard`
 rule `hand-rolled Codex SDLC dispatcher`). That guard sees only the COMMAND

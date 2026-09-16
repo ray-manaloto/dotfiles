@@ -53,7 +53,8 @@ review selects a read-only sandbox, while `implement` selects workspace-write.
 omit them to use deterministic defaults.
 
 The task code generates the dispatcher address, spec pointer, licensed-dissent
-and test-craft clauses, file allowlist, `COMMIT: caller`, spawn-retry clause, and
+and test-craft clauses, file allowlist, `COMMIT: caller`, the stop-on-spawn-failure
+clause (never "do the work yourself"), the pinned closing-list format, and
 the prohibition on piping results into a pager. It also selects the sandbox,
 constructs the Codex argv, includes the load-bearing trailing `-`, and launches
 the detached supervisor. Do not assemble any of those pieces manually.
@@ -92,6 +93,11 @@ code, Codex child `codex_pid`, finish time, duration, and errors. It is absent
 while the run is live. `read_status` returns the recorded terminal status when
 the file exists, returns no settled status while the supervisor is alive, and
 derives `abandoned` when the file is absent after the supervisor dies.
+
+Settlement records the dispatcher's claimed specialists separately from child
+sessions observed in Codex rollout files. A missing parent id, unavailable scan,
+zero observed children, or claimed/observed mismatch fails closed even when the
+Codex process exits zero; inspect both rosters and the reconciliation errors.
 
 Lane receipts belong to `lane_result`, not to the run-artifact directory. Their
 defaults are `.agent/lane-results/<run-id>.json` and
