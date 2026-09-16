@@ -905,3 +905,72 @@ flowchart LR
     DESIGN --> SKILLSDIR["Open: probe @skills-dir for a clone-ready path"]
     DESIGN --> CANARY["Open: plugin-validate contract in CI, per orchestkit"]
 ```
+
+## 2026-09-16 — PR #1154 landed; the handoff workflow itself becomes the goal
+
+- **Iteration ID:** `dotfiles-goal-20260916-017`
+- **Prior goal digest:** `sha256:b0b405158cd329931aec937ce8d27a83863c59117de5059bce55ad8653f18726`
+- **Current goal digest:** `sha256:92307e302d1678fbf6ef3e50a4f6081eedcfe8fe7f18a745671f22b5b83badac`
+- **Changed requirement:** The function-hooks goal (016) is not advanced here;
+  the operator redirected the next unit of work to the SESSION WORKFLOW after a
+  session in which four codex lanes, six cold reviews and eight verifier passes
+  were needed to land one PR. The new goal: `task_plan.md` is the only
+  next-task carrier (the handoff's "next task" pointer is retired), session
+  review runs through AgentsView and the codex SDLC team, `mise run
+  session-review` must parse every current Codex record (it exited 1 today on
+  `unknown Codex record 'token_usage_record'` with 19,056 omissions), and each
+  session ends with a self-improvement pass. The six operator-stated goals are
+  recorded verbatim in `task_plan.md` (Phase 7) and `.agent/plans/session-2026-09-16c.md`.
+- **Reason:** Ray, 2026-09-16 (verbatim intent): "fully removed the next task
+  pointer and only rely on pwf task plan"; "migrate wherever possible to
+  agentsview for reviewing the session"; "utilize the /codex-sdlc-team skill and
+  team for any of the steps in /session-handoff"; "self-improve … based on
+  learnings from the session"; "find any missing steps that should be added to
+  /session-review"; "overall improvement of /session-review". AgentsView is
+  maintained by another project: features/issues found are written up as a
+  document for that project's agents, not fixed here.
+- **Evidence:** PR #1154 merged `24e4a5d`, `mise run land -- 1154` rc=0 (main
+  run 35142655392 `conclusion=success`, smoke tiers 1-3 OK). Gate trio on the
+  merged tree: lint rc=0, pytest 3525 passed, verify 155/0/4. Evidence chain
+  under `docs/research/kb/reports/agents/*2026-09-16.md` (premise-verifier ×8,
+  cold reviews of `49d7af6`/`fb93d8a`/`67a6cad`/`6d2881f`/`bdb78b4`/`a8b20b1`,
+  four lane settlements, `advisor-ship-6c-p1`). `mise run session-review`
+  rc=1 today (see Changed requirement).
+- **Affected tickets:** #1154 (merged), #1155 (opened: wrapper/gate residuals),
+  #1142 (closed 2026-09-16 while its body still reads "decision 4 open" —
+  unresolved), #1141 (agentsview service PR, bot/other-project managed), #1020
+  (unchanged; goal 016 paused, not abandoned).
+- **Disposition:** `ACCEPTED_AND_ACTIVE` — decision recorded; delivery is the
+  next session's (review → typed findings → implement accepted ones, per the
+  operator's ruling).
+- **Topology and ownership:** The Claude session `dotfiles-20260916.001`
+  (Fable 5.1) was the architect and sole writer of the canonical checkout on
+  `fix/codex-implementer-wrapper-and-6c-p1` (landed) and now on
+  `docs/session-2026-09-16c-handoff`. Implementation writers were four
+  sequential `codex-sol-implementer` lanes (codex session ids
+  `01a0ab0e-ee79-7a43-8b97-6ff4c75e6a2f` → `67a6cad`,
+  `01a0ab3d-c2da-7632-ad5d-cdaa3c6f1391` → `6d2881f`,
+  `01a0ab75-5cf9-7a91-99d1-a9dfe49b405b` → `bdb78b4`,
+  `01a0ab8f-66cd-7341-845a-d88fbd99c40f` → `a8b20b1`), each owning the checkout
+  from dispatch to settlement with no concurrent writer. Read-only lanes:
+  `premise-verifier-6c-p1` (8 passes), codex reviewers of `49d7af6` and
+  `fb93d8a`, Opus cold reviewers of the four codex commits, `codex-sol-advisor`,
+  and — for this handoff — the codex SDLC team (run `session-review-20260916c`,
+  review mode) plus an AgentsView search lane. No worktrees.
+
+### Current goal
+
+> Make the session-handoff workflow trustworthy after /clear: the pwf task plan is the ONLY next-task carrier (no separate next-task pointer), session review is done through AgentsView plus the codex SDLC team rather than hand-written summaries, `mise run session-review` parses every current Codex record, and each session's learnings feed a self-improvement pass — with the hardened codex-sol-implementer wrapper (PR #1154) as the implementation lane and issue #1155 carrying the wrapper/gate residuals.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    LAND["#1154 landed: hardened wrapper + hk-route gate"] --> HANDOFF["Handoff 2026-09-16c: SDLC-team review + AgentsView pass + DAG"]
+    HANDOFF --> ATTEST["Operator: ! mise run plan-attest"]
+    ATTEST --> NEXT["Next session: SDLC team reviews /session-handoff vs the six goals"]
+    NEXT -->|"typed findings"| IMPL["Implement accepted findings (codex-sol-implementer)"]
+    IMPL --> SR["mise run session-review parses token_usage_record; agentsview-based review"]
+    NEXT -->|"agentsview issues"| DOC["docs/handoffs/: document for the AgentsView project's agents"]
+    IMPL --> RESID["#1155 residuals (wrapper hook rule, mirror citations, tokeniser)"]
+```
