@@ -167,6 +167,35 @@ The fix is cheap and already available: the new pinned prompt format emits both 
 
 Findings appended to `/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/findings.md`. Nothing edited.
 
+---
+
+# Pass on spec v4 (same agent, 2026-09-16 07:46Z)
+
+> PERSISTED VERBATIM at receipt. Architect decision on its greedy-pairing counterexample: spec v5 fails a multi-identity claimed item closed as AMBIGUOUS rather than adding an augmenting-path matcher — a strict tightening resting on no new factual premise, so no fifth pass.
+
+# Premise verification v4
+
+Repo at `ca6cd57`; source still unchanged, so all prior verdicts carry.
+
+| [v4] mark | Verdict | Evidence |
+|---|---|---|
+| Line 104, pairing clause replacing set-intersection | **CONFIRMED** | Rests on the three measured facts, all re-derived: 13/330 groups repeat a role, 0/330 repeat a path, 0 cross-case |
+| Line 150, arm 14 | **Sound** | All three sub-cases are reachable under the measured structure; the "claimed as ONE item" case correctly yields one unpaired child |
+| Line 180, sibling-uniqueness row | **CONFIRMED, including the parenthetical** | Parent `019feca1` carries exactly `explorer` ×16, `default` ×14, `worker` ×5, plus `adversarial-critic` ×1 |
+| Revision header line 6 | **CONFIRMED** | Marks are consistently attributed by introducing revision |
+
+## Your question: greedy can fail, but only on a shape the pinned format forbids
+
+**Refuted as stated, with a concrete configuration** — though the counterexample needs one claimed item to carry **two identities of the same kind**, which neither real report produces.
+
+Counterexample. Children: A with `agent_path == /root/p1`, B with `agent_path == /root/p2`, B role-less. Claimed item 1 backticks both paths, so its path identities are `{/root/p1, /root/p2}`; claimed item 2 names only `/root/p2`. Greedy walks item 1 first and takes the first unmatched child whose path is in that set. If B precedes A in child iteration order, item 1 consumes B, item 2 then finds no unmatched child with path `/root/p2`, and the run settles `failed`. A valid one-to-one assignment exists: item 1 to A, item 2 to B. The same shape works with roles: item 1 with identities `{R1, R2}` and item 2 with only `{R2}`.
+
+Your reasoning holds for the single-identity case, which is what the evidence shows. Across both real reports every one of the seven claimed items resolved to exactly one path plus exactly one role, and the v4 pinned format emits exactly one of each. When each item has at most one path identity, path uniqueness on both sides makes the path phase a bijection on its domain, and the role phase then only ever chooses among interchangeable same-role children, so greedy is optimal. The failure requires prose drift that adds a second path or a second roster name to one item, which the model has already demonstrated it will do with prose tokens like `no thread with id`.
+
+Cheapest hardening, pick one: treat a claimed item with more than one path identity as ambiguous and fail it by name, or run one augmenting-path pass instead of plain greedy. With at most six specialists the augmenting pass is a few lines and removes the class outright rather than the instance.
+
+Findings appended to `/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/findings.md`. Nothing edited.
+
 ## GitHub repos touched
 
 - [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — the repo under change (sdlc_team.py, lane_result.py, tests).
