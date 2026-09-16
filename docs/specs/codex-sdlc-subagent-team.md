@@ -254,6 +254,17 @@ codex exec --ephemeral -s read-only   # rc=0
 
 ### V3 — the DISPATCHER selects an appropriate team
 
+> ⚠️ **Same defect as V2, same refutation (#1142, fixed in #1145).** This run
+> used `--ephemeral`, under which nothing spawns, so "The dispatcher spawned
+> exactly …" was the model's self-report, not an observation; the `file:line`
+> findings prove only that *values* were produced, which one generalist lane
+> also produces. Routing evidence now means a settlement whose
+> `specialists_observed` (rollout children carrying this run's
+> `parent_thread_id`) pairs one-to-one with the claimed roster — "Spawn
+> reconciliation (2026-09-16)" above, shipped in #1150. This section stays as
+> the record of what was believed; re-run V3 through `mise run sdlc-team` and
+> cite the settlement, not the sentence.
+
 The load-bearing test, because the operator chose a dispatcher over the advisor's
 `AGENTS.md`-block recommendation. Task given: change `doc_refs.py` to log git's
 stderr AND add a CI step to `ci.yml` — deliberately spanning two artifacts.
@@ -269,9 +280,16 @@ specialists, and produced real `file:line` findings — including `doc_refs.py:1
 which is the actual defect behind #1110. Unprompted, it also noted the check
 already runs through hk, so an explicit CI step would execute it twice.
 
-So artifact-keyed descriptions route correctly in practice, not just in theory.
+~~So artifact-keyed descriptions route correctly in practice, not just in theory.~~
+Corrected 2026-09-16: the selection *text* was right; whether the selected
+specialists ran is unproven for this run (see the note above).
 
 ### V4 — REUSABLE: a different task selects a different team
+
+> ⚠️ **Same caveat as V3.** Both rows below are the dispatcher's self-report
+> under `--ephemeral`; the roster *text* discriminates, the execution of either
+> team was never observed. Re-verify against `specialists_observed` in the
+> settlement after a non-ephemeral run.
 
 One passing test proves routing works once, not that it generalises. A second task
 of a deliberately different shape — bump hk in `hk.pkl`/`hk-common.pkl` AND update
@@ -285,8 +303,10 @@ of a deliberately different shape — bump hk in `hk.pkl`/`hk-common.pkl` AND up
 > "It excluded the Python, workflows, and image specialists because their owned
 > paths are outside the issue."
 
-Two disjoint answers, with stated exclusion reasoning. The routing discriminates;
-it is not selecting everything or defaulting to one team.
+~~Two disjoint answers, with stated exclusion reasoning. The routing discriminates;
+it is not selecting everything or defaulting to one team.~~
+Corrected 2026-09-16: two disjoint *self-reports*. Roster discrimination is
+shown; team execution is not.
 
 **And the team found real defects nobody asked it for**, which is the strongest
 reusability evidence available:
