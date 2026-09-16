@@ -88,9 +88,19 @@ publish. Same for `claude_doctor.py`'s docstrings and the `2.1.270` fixtures in 
 `tests/test_claude_doctor.py`, which are about PARSING a version string, not \
 about being current."""
 sites = [
-  # Matched on the source URL tag rather than the bare `version` field: this
-  # file carries one `version` per vendored schema, so a bare match would
-  # collide with mise's and codex's rows. Same technique the mise entry uses.
+  # TWO patterns against the SAME file, deliberately. The `version` field and
+  # the tag inside `source` are adjacent lines that must agree, and nothing
+  # compared them: measured 2026-09-16, setting `version = "2.1.274"` while the
+  # URL stayed at v2.1.273 left BOTH `pin-parity` and `schema-vendor check` at
+  # rc=0 — and `schema-vendor pin` then hands CI 2.1.274 while the vendored
+  # `.d.ts` came from 273. `pin_parity` collects EVERY match per site and
+  # compares them all, so listing the file twice is what makes the two fields
+  # check each other.
+  #
+  # The `version` pattern is anchored through `tool`/`file` because this file
+  # carries one `version` per vendored schema; a bare `^version` would collide
+  # with mise's, ruff's, typos' and codex's rows.
+  { path = "schemas/sources.toml", pattern = 'tool = "claude-code"\nfile = "[^"]*"\nversion = "(\d+\.\d+\.\d+)"' },
   { path = "schemas/sources.toml", pattern = 'anthropics/claude-code/v(\d+\.\d+\.\d+)/mods/types' },
   { path = ".claude/types/README.md", pattern = '^\*\*Upstream version:\*\* (\d+\.\d+\.\d+)' },
 ]
