@@ -152,8 +152,8 @@ The spec reaches codex verbatim: never rewrite, summarise, reorder or
 "clarify" it, and never read the artifacts it tells codex to read. A dispatch
 line `TIMEOUT: <seconds>` is yours — it sets the wait budget below (default
 1800). Shell variables do not survive between your Bash calls, so
-re-assign `LANE_ID`, `OUT` and `LOG` from the printed literals at the top of
-every later call.
+re-assign `LANE_ID`, `PROMPT`, `OUT` and `LOG` from the printed literals at
+the top of every later call — the slice below reads `$PROMPT`'s mtime.
 
 ### 2. Launch codex — in the background, never in the foreground
 
@@ -201,8 +201,9 @@ runs past `TIMEOUT` — three full slices and a shorter fourth for the default
 1800 s:
 
 ```bash
+grep '^rc=' "$LOG" && exit 0   # signal 1 already — read $OUT next, not the budget
 TIMEOUT=1800   # or the dispatch's `TIMEOUT:` value
-remaining=$(( TIMEOUT - ( $(date +%s) - $(stat -f %m "$PROMPT") ) ))
+remaining=$(( TIMEOUT - ( $(date +%s) - $(stat -f %m "$PROMPT") ) ))   # BSD stat: this lane runs on the macOS host (GNU: stat -c %Y)
 [ "$remaining" -le 0 ] && { echo "budget exhausted"; exit 0; }
 slice=$(( remaining < 540 ? remaining : 540 )); deadline=$((SECONDS+slice))
 while [ $SECONDS -lt $deadline ]; do grep -q '^rc=' "$LOG" && break; sleep 15; done
