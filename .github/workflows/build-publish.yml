@@ -218,7 +218,7 @@ jobs:
           fi
       - name: Free runner disk space
         if: steps.probe.outputs.hit != 'true'
-        uses: jlumbroso/free-disk-space@3f13feab2962a87273d379ebc36ea159527e6cc9 # v1.3.2
+        uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6 # v2.0.0
         with:
           tool-cache: true
           android: true
@@ -370,7 +370,7 @@ jobs:
           fi
       - name: Free runner disk space
         if: steps.probe.outputs.hit != 'true'
-        uses: jlumbroso/free-disk-space@3f13feab2962a87273d379ebc36ea159527e6cc9 # v1.3.2
+        uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6 # v2.0.0
         with:
           tool-cache: true
           android: true
@@ -576,7 +576,7 @@ jobs:
         # BuildKit cache that the build NEEDS for the warm-cache path.
         # The cache-cold path needs more disk, not less, and that's
         # what bit ffd6b50.
-        uses: jlumbroso/free-disk-space@3f13feab2962a87273d379ebc36ea159527e6cc9 # v1.3.2
+        uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6 # v2.0.0
         with:
           # tool-cache (mise / hostedtoolcache / etc.) is only used by
           # the lint + contract-preflight jobs, which run on separate
@@ -854,7 +854,7 @@ jobs:
         # ("no space left on device"). Sibling build jobs already free disk;
         # smoke-test was the one that didn't (it passed before only on roomier
         # runners). No BuildKit cache to preserve here — this job only pulls.
-        uses: jlumbroso/free-disk-space@3f13feab2962a87273d379ebc36ea159527e6cc9 # v1.3.2
+        uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6 # v2.0.0
         with:
           tool-cache: true
           android: true
