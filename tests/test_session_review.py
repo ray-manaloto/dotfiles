@@ -19,6 +19,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -136,6 +137,51 @@ def test_a_canonical_mise_command_is_not_a_candidate() -> None:
     """It is already the thing a skill would propose — proposing it is a loop."""
     commands = [_cmd("mise run lint") for _ in range(5)]
     assert session_review.shape_candidates(commands) == []
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "&& gh issue edit 1 --add-label x",
+        "gh issue edit 1 --add-label x && echo done",
+        "\\\ngh issue edit 1 --add-label x",
+        "# gh issue edit 1 --add-label x",
+        "timeout 30s gh issue edit 1 --add-label x",
+        "sleep 30",
+        "then gh issue edit 1 --add-label x",
+    ],
+)
+def test_structural_shell_noise_is_rejected_at_the_public_ranking_seam(
+    command: str,
+) -> None:
+    assert session_review.shape_candidates([_cmd(command)], min_occurrences=1) == []
+
+
+@pytest.mark.parametrize(
+    ("command", "shape"),
+    [
+        ("gh issue edit 1 --add-label x", "gh issue"),
+        ("uv run python tool.py", "uv run"),
+    ],
+)
+def test_real_commands_remain_ranked_beside_noise(command: str, shape: str) -> None:
+    ranked = session_review.shape_candidates([_cmd(command)], min_occurrences=1)
+    assert [item.shape for item in ranked] == [shape]
+    assert re.fullmatch(r"[0-9a-f]{12}", ranked[0].candidate_id)
+
+
+def test_both_report_lanes_emit_stable_candidate_ids() -> None:
+    shape = session_review.ShapeCandidate("gh issue", 3, 2, "gh issue edit 1")
+    hit = session_review.NarrativeHit("notes.md", 5, "work done manually", "by hand")
+    report = session_review.render_report(
+        [shape],
+        [hit],
+        transcripts_scanned=1,
+        tail_lines=10,
+        lanes=("transcript", "narrative"),
+    )
+    assert f"`{shape.candidate_id}`" in report
+    assert f"`{hit.candidate_id}`" in report
 
 
 # --------------------------------------------------------------------------- #
@@ -1186,6 +1232,7 @@ def test_requirements_cli_cannot_certify_active_session_from_recency(
     env["CODEX_HOME"] = str(tmp_path / "codex")
     env["CLAUDE_CONFIG_DIR"] = str(tmp_path / "empty-claude")
     env.pop("CODEX_THREAD_ID", None)
+    output = tmp_path / "recency-review.md"
     result = subprocess.run(
         [
             "uv",
@@ -1197,6 +1244,8 @@ def test_requirements_cli_cannot_certify_active_session_from_recency(
             "--requirements-only",
             "--source-repo-root",
             str(REPO_ROOT),
+            "--output",
+            str(output),
         ],
         cwd=REPO_ROOT,
         env=env,
@@ -1276,6 +1325,7 @@ def test_requirements_cli_fails_closed_when_recorded_cwd_does_not_match(
         "CODEX_HOME": str(tmp_path / "empty-codex"),
         "CLAUDE_CONFIG_DIR": str(tmp_path / "empty-claude"),
     }
+    output = tmp_path / "mismatched-root.md"
     result = subprocess.run(
         [
             "uv",
@@ -1287,6 +1337,8 @@ def test_requirements_cli_fails_closed_when_recorded_cwd_does_not_match(
             "--requirements-only",
             "--source-repo-root",
             str(unmatched),
+            "--output",
+            str(output),
         ],
         cwd=REPO_ROOT,
         env=env,
@@ -1297,3 +1349,152 @@ def test_requirements_cli_fails_closed_when_recorded_cwd_does_not_match(
     )
     assert result.returncode == 1
     assert "no transcripts matched recorded cwd" in result.stderr
+
+
+def test_cross_root_implicit_output_is_refused_without_touching_sentinels(
+    tmp_path: Path,
+) -> None:
+    invoking = tmp_path / "invoking"
+    source = tmp_path / "source"
+    invoking.mkdir()
+    source.mkdir()
+    agent = invoking / ".agent"
+    agent.mkdir()
+    report = agent / "session-review.md"
+    sidecar = agent / "session-review.md.omissions.json"
+    report.write_bytes(b"operator-report-sentinel")
+    sidecar.write_bytes(b"operator-sidecar-sentinel")
+
+    rc = session_review.session_review_main(
+        invoking,
+        lanes=session_review.LaneChoice(
+            requirements_only=True,
+            source_repo_root=source,
+        ),
+    )
+
+    assert rc == 2
+    assert report.read_bytes() == b"operator-report-sentinel"
+    assert sidecar.read_bytes() == b"operator-sidecar-sentinel"
+
+
+def test_requirements_publication_switches_generation_then_prunes_old_segments(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    output = tmp_path / "session-review.md"
+    coverage = session_ledger.RequirementCoverage(
+        (),
+        (),
+        (),
+        (),
+        (),
+        (),
+        (),
+        str(repo),
+        tuple(
+            f"unknown Codex record 'shape-{index}' {'.' * 900}" for index in range(160)
+        ),
+    )
+    current = {"coverage": coverage}
+
+    def build_coverage(
+        source_repo_root: Path,
+        **kwargs: object,
+    ) -> session_ledger.RequirementCoverage:
+        assert source_repo_root == repo
+        assert kwargs["selection"]
+        return current["coverage"]
+
+    monkeypatch.setattr(session_ledger, "build_requirement_coverage", build_coverage)
+    lanes = session_review.LaneChoice(requirements_only=True, source_repo_root=repo)
+
+    assert session_review.session_review_main(repo, lanes=lanes, output=output) == 1
+    omissions_index = output.with_suffix(output.suffix + ".omissions.json")
+    first_index = json.loads(omissions_index.read_text())
+    first_generation = first_index["generation"]
+    first_segments = tuple(
+        omissions_index.with_name(omissions_index.name + ref["suffix"])
+        for ref in first_index["segments"]
+    )
+    assert len(first_segments) > 1
+    assert all(path.is_file() for path in first_segments)
+
+    current["coverage"] = session_ledger.RequirementCoverage(
+        (), (), (), (), (), (), (), str(repo), ("one fresh omission",)
+    )
+    assert session_review.session_review_main(repo, lanes=lanes, output=output) == 1
+    second_index = json.loads(omissions_index.read_text())
+    second_segments = tuple(
+        omissions_index.with_name(omissions_index.name + ref["suffix"])
+        for ref in second_index["segments"]
+    )
+
+    assert second_index["generation"] != first_generation
+    assert len(second_segments) == 1
+    assert all(path.is_file() for path in second_segments)
+    assert all(not path.exists() for path in first_segments)
+    assert second_segments[0].read_text()
+
+
+def test_zero_omission_generation_does_not_invent_segment_zero(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    output = tmp_path / "session-review.md"
+    coverage = session_ledger.RequirementCoverage(
+        (), (), (), (), (), (), (), str(repo), ()
+    )
+    monkeypatch.setattr(
+        session_ledger,
+        "build_requirement_coverage",
+        lambda *_args, **_kwargs: coverage,
+    )
+
+    rc = session_review.session_review_main(
+        repo,
+        lanes=session_review.LaneChoice(requirements_only=True, source_repo_root=repo),
+        output=output,
+    )
+
+    assert rc == 0
+    index = json.loads(output.with_suffix(".md.omissions.json").read_text())
+    assert index["generation"]
+    assert index["segments"] == []
+    assert "Newest omissions segment: `not-published`" in output.read_text()
+
+
+def test_unknown_path_attachment_makes_public_review_exit_one(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    output = tmp_path / "session-review.md"
+    coverage = session_ledger.parse_transcripts(
+        [
+            session_ledger.TranscriptSource(
+                session_ledger.Provider.CLAUDE,
+                REPO_ROOT
+                / "tests/fixtures/session_review/claude-attachment-path-arms.jsonl",
+            )
+        ]
+    )
+    monkeypatch.setattr(
+        session_ledger,
+        "build_requirement_coverage",
+        lambda *_args, **_kwargs: coverage,
+    )
+
+    rc = session_review.session_review_main(
+        repo,
+        lanes=session_review.LaneChoice(requirements_only=True, source_repo_root=repo),
+        output=output,
+    )
+
+    assert rc == 1
+    assert "future_shape_zzq" in output.read_text()

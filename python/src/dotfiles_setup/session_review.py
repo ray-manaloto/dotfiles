@@ -55,6 +55,7 @@ import json
 import logging
 import re
 import subprocess
+import uuid
 from collections import Counter, defaultdict
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -177,6 +178,14 @@ _COMPILED_MARKERS = tuple(
     (re.compile(pattern, re.IGNORECASE), meaning)
     for pattern, meaning in NARRATIVE_MARKERS
 )
+_STRUCTURAL_COMMAND = re.compile(
+    r"(?is)(?:^\s*(?:#|\\|>|&&|\|\||;|then\b|do\b|else\b|fi\b|done\b))"
+    r"|(?:^|\s)(?:&&|\|\||;|\|)(?:\s|$)|(?:^|\s)#|\\\n"
+)
+_TIMEOUT_WRAPPER = re.compile(r"^\s*timeout(?:\s+-\S+)*\s+\S+\s+", re.IGNORECASE)
+_DURATION_SLEEP = re.compile(
+    r"^\s*sleep\s+\d+(?:\.\d+)?(?:ms|s|m|h|d)?(?:\s|$)", re.IGNORECASE
+)
 
 
 @dataclass(frozen=True)
@@ -235,12 +244,18 @@ class ShapeCandidate:
         """True when the shape outlived a single session — the durable signal."""
         return self.sessions > 1
 
+    @property
+    def candidate_id(self) -> str:
+        """Stable 12-hex identity derived from the normalized command shape."""
+        return hashlib.sha256(self.shape.encode()).hexdigest()[:12]
+
     def render(self) -> str:
         """One table row: sessions first, because that is the ranking key."""
         signal = "workflow" if self.cross_session else "one grind"
         example = command_audit.truncate(self.example, 60)
         return (
-            f"| {self.sessions} | {self.occurrences} | {signal} | "
+            f"| `{self.candidate_id}` | {self.sessions} | {self.occurrences} | "
+            f"{signal} | "
             f"`{self.shape}` | `{example}` |"
         )
 
@@ -254,10 +269,17 @@ class NarrativeHit:
     meaning: str
     line: str
 
+    @property
+    def candidate_id(self) -> str:
+        """Stable identity from the normalized passage rather than its line number."""
+        normalized = " ".join(self.line.casefold().split())
+        return hashlib.sha256(normalized.encode()).hexdigest()[:12]
+
     def render(self) -> str:
         """One table row: a clickable ``path:line``, the reading, the passage."""
         return (
-            f"| `{self.path}:{self.line_number}` | {self.meaning} | "
+            f"| `{self.candidate_id}` | `{self.path}:{self.line_number}` | "
+            f"{self.meaning} | "
             f"{command_audit.truncate(self.line, 90)} |"
         )
 
@@ -283,6 +305,20 @@ def is_reportable_shape(shape: str) -> bool:
     )
 
 
+def normalized_candidate_shape(command: str) -> str | None:
+    """Return a workflow-shaped command key, rejecting shell scaffolding."""
+    stripped = command.strip()
+    if (
+        not stripped
+        or _STRUCTURAL_COMMAND.search(stripped)
+        or _TIMEOUT_WRAPPER.match(stripped)
+        or _DURATION_SLEEP.match(stripped)
+    ):
+        return None
+    shape = command_audit.group_key(stripped)
+    return shape if is_reportable_shape(shape) else None
+
+
 def shape_candidates(
     commands: Iterable[command_audit.BashCommand],
     *,
@@ -302,8 +338,8 @@ def shape_candidates(
     for bc in commands:
         if command_audit.classify(bc) not in kinds:
             continue
-        shape = command_audit.group_key(bc.command)
-        if not is_reportable_shape(shape):
+        shape = normalized_candidate_shape(bc.command)
+        if shape is None:
             continue
         occurrences[shape] += 1
         sessions[shape].add(bc.session)
@@ -615,8 +651,8 @@ def render_report(
                 "may be a single grind, while one that comes back is a workflow."
             ),
             "",
-            "| sessions | uses | signal | shape | example |",
-            "|---|---|---|---|---|",
+            "| id | sessions | uses | signal | shape | example |",
+            "|---|---:|---:|---|---|---|",
             *(candidate.render() for candidate in shapes),
         ]
     else:
@@ -633,8 +669,8 @@ def render_report(
                 "a sentence describing one. Read the passage before believing it."
             ),
             "",
-            "| where | reads like | line |",
-            "|---|---|---|",
+            "| id | where | reads like | line |",
+            "|---|---|---|---|",
             *(hit.render() for hit in hits),
         ]
     else:
@@ -701,12 +737,25 @@ def session_review_main(
 ) -> int:
     """Run the requested lanes and write (or print) the report.
 
+    Two concurrent runs targeting the same report path are unsupported because
+    segment pruning is scoped by report name.
+
     Asking for both ``--transcript-only`` and ``--narrative-only`` is refused
     rather than silently resolved: the two flags mean opposite things, so any
     interpretation would be a guess about intent, and the lanes are disjoint
     enough that guessing wrong loses the finding.
     """
     transcript_only, narrative_only = lanes.transcript_only, lanes.narrative_only
+    if (
+        lanes.source_repo_root is not None
+        and lanes.source_repo_root.resolve() != repo_root.resolve()
+        and output is None
+    ):
+        logger.error(
+            "--source-repo-root differs from the invoking repo; explicit --output "
+            "is required"
+        )
+        return 2
     if preflight_error := _review_preflight_error(repo_root, lanes, sessions):
         logger.error("%s", preflight_error)
         return 2
@@ -855,18 +904,38 @@ def _requirements_review(
             ),
             previous_disposition_ids=prior_dispositions,
         )
-    requirements_report = session_ledger.render_coverage(coverage)
+    destination = output or Path(".agent/session-review.md")
+    written = destination if destination.is_absolute() else repo_root / destination
+    generation = uuid.uuid4().hex
+    omissions_path = written.with_suffix(written.suffix + ".omissions.json")
+    omission_count = len(coverage.omission_segments_to_json())
+    newest_omission_segment = (
+        omissions_path.with_name(
+            f"{omissions_path.name}.g{generation}.{omission_count:04d}.json"
+        )
+        if omission_count
+        else None
+    )
+    requirements_report = session_ledger.render_coverage(
+        coverage,
+        context=session_ledger.CoverageRenderContext(
+            invoking_repo_root=repo_root,
+            generation_id=generation,
+            omissions_index=omissions_path,
+            newest_omission_segment=newest_omission_segment,
+            iteration_action=iteration.action,
+        ),
+    )
     report = (
         f"{automation_report.rstrip()}\n\n{requirements_report}"
         if automation_report
         else requirements_report
     )
-    destination = output or Path(".agent/session-review.md")
     written = command_audit.write_report(report, repo_root, destination)
     iteration_path = written.with_suffix(written.suffix + ".iteration.json")
     try:
-        artifact_paths = _write_coverage_artifacts(coverage, written)
-    except ValueError:
+        artifact_paths = _write_coverage_artifacts(coverage, written, generation)
+    except TypeError, ValueError:
         logger.exception("bounded evidence reference artifact could not be written")
         return 1
     evidence_path, cutoff_path = artifact_paths[:2]
@@ -919,25 +988,52 @@ def _requirements_review(
 
 
 def _write_segmented_artifact(
-    path: Path, index: str, segments: tuple[str, ...]
+    path: Path,
+    index: str,
+    segments: tuple[str, ...],
+    generation: str,
 ) -> None:
-    for number, segment in enumerate(segments, start=1):
-        segment_path = path.with_name(f"{path.name}.{number:04d}.json")
+    """Publish one generation; same-path concurrent publishers are unsupported."""
+    payload = json.loads(index)
+    refs = payload.get("segments")
+    if not isinstance(refs, list) or len(refs) != len(segments):
+        message = f"invalid segment index for {path.name}"
+        raise ValueError(message)
+    live_paths: set[Path] = set()
+    for number, (segment, ref) in enumerate(zip(segments, refs, strict=True), start=1):
+        if not isinstance(ref, dict):
+            message = f"invalid segment reference for {path.name}"
+            raise TypeError(message)
+        suffix = f".g{generation}.{number:04d}.json"
+        ref["suffix"] = suffix
+        segment_path = path.with_name(f"{path.name}{suffix}")
         segment_path.write_text(segment)
+        live_paths.add(segment_path)
         if (
             hashlib.sha256(segment_path.read_bytes()).hexdigest()
             != hashlib.sha256(segment.encode()).hexdigest()
         ):
             message = f"segment readback failed for {path.name}"
             raise ValueError(message)
-    path.write_text(index)
-    if path.read_text() != index:
+    payload["generation"] = generation
+    rendered_index = json.dumps(
+        payload, separators=(",", ":"), sort_keys=True, ensure_ascii=False
+    )
+    staged_index = path.with_name(f".{path.name}.{generation}.tmp")
+    staged_index.write_text(rendered_index)
+    if staged_index.read_text() != rendered_index:
         message = f"index readback failed for {path.name}"
         raise ValueError(message)
+    staged_index.replace(path)
+    for candidate in path.parent.glob(f"{path.name}.*.json"):
+        if candidate not in live_paths:
+            candidate.unlink()
 
 
 def _write_coverage_artifacts(
-    coverage: session_ledger.RequirementCoverage, report_path: Path
+    coverage: session_ledger.RequirementCoverage,
+    report_path: Path,
+    generation: str,
 ) -> tuple[Path, Path, Path, Path, Path]:
     """Persist bounded indexes before the iteration references their digests."""
     evidence = report_path.with_suffix(report_path.suffix + ".evidence.json")
@@ -947,19 +1043,41 @@ def _write_coverage_artifacts(
     semantic = report_path.with_suffix(
         report_path.suffix + ".semantic-dispositions.draft.json"
     )
-    evidence.write_text(coverage.to_json())
     _write_segmented_artifact(
-        cutoffs, coverage.cutoffs_to_json(), coverage.cutoff_segments_to_json()
+        cutoffs,
+        coverage.cutoffs_to_json(),
+        coverage.cutoff_segments_to_json(),
+        generation,
     )
     _write_segmented_artifact(
-        claims, coverage.claims_to_json(), coverage.claim_segments_to_json()
+        claims,
+        coverage.claims_to_json(),
+        coverage.claim_segments_to_json(),
+        generation,
     )
     _write_segmented_artifact(
-        omissions, coverage.omissions_to_json(), coverage.omission_segments_to_json()
+        omissions,
+        coverage.omissions_to_json(),
+        coverage.omission_segments_to_json(),
+        generation,
     )
     _write_segmented_artifact(
         semantic,
         coverage.semantic_disposition_draft_to_json(),
         coverage.semantic_disposition_draft_segments_to_json(),
+        generation,
+    )
+    evidence_payload = json.loads(coverage.to_json())
+    evidence_payload["generation"] = generation
+    evidence_payload["cutoff_manifest_sha256"] = hashlib.sha256(
+        cutoffs.read_bytes()
+    ).hexdigest()
+    evidence.write_text(
+        json.dumps(
+            evidence_payload,
+            separators=(",", ":"),
+            sort_keys=True,
+            ensure_ascii=False,
+        )
     )
     return evidence, cutoffs, claims, omissions, semantic

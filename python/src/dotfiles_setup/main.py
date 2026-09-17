@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from kb_setup import evals
 
 from dotfiles_setup import image_lock
+from dotfiles_setup.agentsview_pass import PassRequest
+from dotfiles_setup.agentsview_pass import main as agentsview_pass_main
 from dotfiles_setup.ai import AIOrchestrator
 from dotfiles_setup.apt_pins import apt_pins_main
 from dotfiles_setup.apt_repo import LLVM_DEV, RepoQuery, apt_repo_main
@@ -22,6 +24,8 @@ from dotfiles_setup.audit import DevEnvironmentAuditor, ToolManager
 from dotfiles_setup.autofix import autofix_apply_main
 from dotfiles_setup.bash_budget import bash_budget_main
 from dotfiles_setup.bootstrap_packages import gap_report_failures
+from dotfiles_setup.bounded_wait import DEFAULT_INTERVAL_S, WaitRequest
+from dotfiles_setup.bounded_wait import main as bounded_wait_main
 from dotfiles_setup.classifier_tables import classifier_axes_main
 from dotfiles_setup.claude_doctor import claude_doctor_main
 from dotfiles_setup.codex_agent_parity import codex_agent_parity_main
@@ -126,6 +130,7 @@ from dotfiles_setup.plan_attest import (
     insert_passthrough_separator,
     plan_attest_main,
 )
+from dotfiles_setup.plan_pointer import main as plan_pointer_main
 from dotfiles_setup.platform_target import (
     PLATFORM_FIELDS,
     platform_literals_main,
@@ -150,6 +155,8 @@ from dotfiles_setup.schema_vendor import check_main as schema_vendor_check_main
 from dotfiles_setup.schema_vendor import pin_main as schema_vendor_pin_main
 from dotfiles_setup.schema_vendor import refresh_main as schema_vendor_refresh_main
 from dotfiles_setup.sdlc_team import sdlc_team_main
+from dotfiles_setup.session_orphans import OrphanRequest
+from dotfiles_setup.session_orphans import main as session_orphans_main
 from dotfiles_setup.session_review import LaneChoice, session_review_main
 from dotfiles_setup.session_state import main as session_state_main
 from dotfiles_setup.skills_mirror import skills_mirror_main
@@ -1547,6 +1554,56 @@ def _add_session_subcommands(
         default=None,
         help="Specific handoff path (default: newest .agent/plans/session-*.md)",
     )
+    subparsers.add_parser(
+        "plan-pointer",
+        help="Refresh the tracked digest pointer to the active NEXT SESSION phase",
+    )
+    orphan_parser = subparsers.add_parser(
+        "session-orphans",
+        help="Audit descendants of this Claude session; optionally reap wait loops",
+    )
+    orphan_parser.add_argument(
+        "--root",
+        type=int,
+        help="Root pid (default: nearest ancestor whose command matches claude)",
+    )
+    orphan_parser.add_argument(
+        "--kill",
+        action="store_true",
+        help="TERM then KILL WAIT-LOOP descendants; OTHER descendants are never reaped",
+    )
+    orphan_parser.add_argument(
+        "--allow",
+        action="append",
+        type=int,
+        default=[],
+        help="Explicitly allow one OTHER descendant pid (repeatable)",
+    )
+    wait_parser = subparsers.add_parser(
+        "bounded-wait",
+        help="Poll a file or command under a mandatory wall-clock deadline",
+    )
+    wait_parser.add_argument("--deadline", type=float, required=True)
+    wait_parser.add_argument("--interval", type=float, default=DEFAULT_INTERVAL_S)
+    wait_target = wait_parser.add_mutually_exclusive_group(required=True)
+    wait_target.add_argument("--file", type=Path)
+    wait_target.add_argument("--cmd", dest="wait_command")
+    agentsview_parser = subparsers.add_parser(
+        "session-agentsview-pass",
+        help="Census recent project sessions through AgentsView tool-call JSON",
+    )
+    agentsview_parser.add_argument(
+        "--session",
+        action="append",
+        default=[],
+        help="Explicit session id (repeatable; skips session list)",
+    )
+    agentsview_parser.add_argument("--limit", type=int, default=3)
+    agentsview_parser.add_argument(
+        "--skill",
+        type=Path,
+        default=Path("~/.claude/skills/agentsview-finding-history/SKILL.md"),
+    )
 
 
 def _add_process_subcommands(
@@ -2739,6 +2796,36 @@ def _build_command_handlers(
         "handoff-check": lambda: sys.exit(
             handoff_check_main(
                 [args.path] if args.path is not None else [], project_root
+            )
+        ),
+        "plan-pointer": lambda: sys.exit(plan_pointer_main(project_root)),
+        "session-orphans": lambda: sys.exit(
+            session_orphans_main(
+                OrphanRequest(
+                    root_pid=args.root,
+                    kill=args.kill,
+                    allowed_pids=frozenset(args.allow),
+                )
+            )
+        ),
+        "bounded-wait": lambda: sys.exit(
+            bounded_wait_main(
+                WaitRequest(
+                    deadline_s=args.deadline,
+                    file=args.file,
+                    command=args.wait_command,
+                    interval_s=args.interval,
+                )
+            )
+        ),
+        "session-agentsview-pass": lambda: sys.exit(
+            agentsview_pass_main(
+                project_root,
+                PassRequest(
+                    session_ids=tuple(args.session),
+                    limit=args.limit,
+                    skill_path=args.skill,
+                ),
             )
         ),
         "process": lambda: handle_process(args, project_root),

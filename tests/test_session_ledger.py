@@ -2913,3 +2913,211 @@ def test_promise_fragment_gets_the_same_safe_candidate_context() -> None:
     assert claim.context_kind == session_ledger.ClaimContextKind.URL_FRAGMENT
     assert claim.candidate_receipt_refs[0].startswith("candidate:artifact:url-")
     assert statement not in coverage.claims_to_json()
+
+
+def test_known_codex_token_usage_types_have_separate_census_labels(
+    tmp_path: Path,
+) -> None:
+    transcript = tmp_path / "rollout.jsonl"
+    records = [
+        {"type": "session_meta", "payload": {"id": "telemetry", "cwd": "/repo"}},
+        *(
+            {"type": "token_usage_record", "payload": {"total_tokens": index}}
+            for index in range(100)
+        ),
+        *(
+            {"type": "token_usage", "payload": {"total_tokens": index}}
+            for index in range(3)
+        ),
+    ]
+    transcript.write_text("\n".join(json.dumps(record) for record in records) + "\n")
+
+    coverage = session_ledger.parse_transcripts(
+        [session_ledger.TranscriptSource(session_ledger.Provider.CODEX, transcript)]
+    )
+
+    assert not any("unknown Codex record" in item for item in coverage.omissions)
+    assert dict(coverage.skipped_record_census) == {
+        "Codex record token_usage": 3,
+        "Codex record token_usage_record": 100,
+    }
+
+
+def test_unknown_codex_records_are_grouped_once_with_count_and_first_source(
+    tmp_path: Path,
+) -> None:
+    transcript = tmp_path / "rollout.jsonl"
+    records = [
+        {"type": "session_meta", "payload": {"id": "future", "cwd": "/repo"}},
+        *(
+            {"type": "renamed_token_usage_record", "payload": {"ordinal": index}}
+            for index in range(100)
+        ),
+    ]
+    transcript.write_text("\n".join(json.dumps(record) for record in records) + "\n")
+
+    coverage = session_ledger.parse_transcripts(
+        [session_ledger.TranscriptSource(session_ledger.Provider.CODEX, transcript)]
+    )
+    unknown = [
+        item for item in coverage.omissions if "renamed_token_usage_record" in item
+    ]
+
+    assert len(unknown) == 1
+    assert (
+        "unknown Codex record 'renamed_token_usage_record' "
+        "\N{MULTIPLICATION SIGN}100" in unknown[0]
+    )
+    assert "first codex:future:2" in unknown[0]
+    assert coverage.omission_census()[0].count == 100
+
+
+def test_observed_claude_harness_attachment_union_has_no_unknown_omissions() -> None:
+    coverage = session_ledger.parse_transcripts(
+        [_source("claude-harness-attachments.jsonl", session_ledger.Provider.CLAUDE)]
+    )
+
+    assert not any("unknown Claude attachment" in item for item in coverage.omissions)
+    assert dict(coverage.skipped_record_census) == {
+        "Claude attachment bash_output_audience_note": 1,
+        "Claude attachment batching_reminder_sent": 1,
+        "Claude attachment total_tokens_reminder": 1,
+    }
+    diagnostics = [
+        event
+        for event in coverage.events
+        if event.kind == session_ledger.EventKind.DIAGNOSTIC
+    ]
+    assert len(diagnostics) == 9
+    assert all(event.actor == "harness" for event in diagnostics)
+    assert all("attachment_bytes" in dict(event.metadata) for event in diagnostics)
+    assert all("attachment_sha256" in dict(event.metadata) for event in diagnostics)
+
+
+def test_attachment_path_does_not_let_an_unknown_type_bypass_blocking() -> None:
+    coverage = session_ledger.parse_transcripts(
+        [_source("claude-attachment-path-arms.jsonl", session_ledger.Provider.CLAUDE)]
+    )
+
+    unknown = [item for item in coverage.omissions if "future_shape_zzq" in item]
+    diagnostics = [
+        event
+        for event in coverage.events
+        if event.kind == session_ledger.EventKind.DIAGNOSTIC
+    ]
+    assert coverage.status == session_ledger.CoverageStatus.INCOMPLETE
+    assert len(unknown) == 1
+    assert "unknown Claude attachment 'future_shape_zzq'" in unknown[0]
+    assert "first claude:attachment-arms:2" in unknown[0]
+    assert any(event.text == "Claude attachment instructions" for event in diagnostics)
+    assert not any(
+        event.kind == session_ledger.EventKind.ATTACHMENT
+        and event.text == "future_shape_zzq"
+        for event in coverage.events
+    )
+
+
+def test_unknown_claude_attachments_are_grouped_once_with_count(
+    tmp_path: Path,
+) -> None:
+    transcript = tmp_path / "claude.jsonl"
+    rows = [
+        {
+            "type": "attachment",
+            "sessionId": "future",
+            "uuid": f"future-{index}",
+            "cwd": "/repo",
+            "attachment": {"type": "future_attachment_zzq", "value": index},
+        }
+        for index in range(7)
+    ]
+    transcript.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
+
+    coverage = session_ledger.parse_transcripts(
+        [session_ledger.TranscriptSource(session_ledger.Provider.CLAUDE, transcript)]
+    )
+    unknown = [item for item in coverage.omissions if "future_attachment_zzq" in item]
+
+    assert len(unknown) == 1
+    assert (
+        "unknown Claude attachment 'future_attachment_zzq' "
+        "\N{MULTIPLICATION SIGN}7" in unknown[0]
+    )
+    assert "first claude:future:1" in unknown[0]
+
+
+def test_render_coverage_starts_with_operator_verdict_and_iteration_fields() -> None:
+    coverage = session_ledger.RequirementCoverage(
+        (),
+        (),
+        (),
+        (),
+        (),
+        (),
+        (),
+        "/private/tmp/pytest-of-user/run/repo",
+        (
+            (
+                "unknown Codex record 'future_shape_zzq' "
+                "\N{MULTIPLICATION SIGN}7 (first codex:future:2)"
+            ),
+        ),
+        skipped_record_census=(("Codex record token_usage", 100),),
+    )
+
+    rendered = session_ledger.render_coverage(
+        coverage,
+        context=session_ledger.CoverageRenderContext(
+            invoking_repo_root=Path("/repo"),
+            generation_id="generation-7",
+            omissions_index=Path("report.omissions.index.json"),
+            newest_omission_segment=Path("report.omissions.generation-7.0001.json"),
+            iteration_action="new_findings",
+        ),
+    )
+
+    assert rendered.startswith("VERDICT: INCOMPLETE")
+    assert "pytest-temp detected: yes" in rendered
+    assert "Omission total: 7" in rendered
+    assert "- Codex record future_shape_zzq: 7" in rendered
+    assert "Generation: `generation-7`" in rendered
+    assert "Omissions index: `report.omissions.index.json`" in rendered
+    assert "Newest omissions segment:" in rendered
+    assert "Iteration action: `new_findings`" in rendered
+    assert "- Codex record token_usage: 100" in rendered
+
+
+def test_primary_reason_uses_selection_enum_not_omission_wording() -> None:
+    stale_wording = session_ledger.RequirementCoverage(
+        (),
+        (),
+        (),
+        (),
+        (),
+        (),
+        (),
+        "/repo",
+        ("explicit Codex session appears only as diagnostic wording",),
+        session_ledger.SelectionCertification.EXPLICIT_SESSION_ID,
+    )
+    unresolved = session_ledger.RequirementCoverage(
+        (),
+        (),
+        (),
+        (),
+        (),
+        (),
+        (),
+        "/repo",
+        ("selection failed without the historical wording",),
+        session_ledger.SelectionCertification.EXPLICIT_SESSION_ID_UNRESOLVED,
+    )
+
+    assert (
+        "selection certification is"
+        not in session_ledger.render_coverage(stale_wording).splitlines()[0]
+    )
+    assert (
+        "selection certification is explicit_session_id_unresolved"
+        in session_ledger.render_coverage(unresolved).splitlines()[0]
+    )

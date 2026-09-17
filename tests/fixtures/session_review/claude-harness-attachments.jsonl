@@ -1,0 +1,12 @@
+{"type":"attachment","sessionId":"structural-session","uuid":"a01","cwd":"/repo","attachment":{"type":"total_tokens_reminder","text":""}}
+{"type":"attachment","sessionId":"structural-session","uuid":"a02","cwd":"/repo","attachment":{"type":"batching_reminder_sent","model":"","text":""}}
+{"type":"attachment","sessionId":"structural-session","uuid":"a03","cwd":"/repo","attachment":{"type":"hook_system_message","content":"","hookEvent":"","hookName":"","toolUseID":""}}
+{"type":"attachment","sessionId":"structural-session","uuid":"a04","cwd":"/repo","attachment":{"type":"prompt_snapshot","systemPrompt":[]}}
+{"type":"attachment","sessionId":"structural-session","uuid":"a05","cwd":"/repo","attachment":{"type":"bash_output_audience_note","toolUseID":""}}
+{"type":"attachment","sessionId":"structural-session","uuid":"a06","cwd":"/repo","attachment":{"type":"environment","snapshot":{}}}
+{"type":"attachment","sessionId":"structural-session","uuid":"a07","cwd":"/repo","attachment":{"type":"date","date":""}}
+{"type":"attachment","sessionId":"structural-session","uuid":"a08","cwd":"/repo","attachment":{"type":"model","identity":{},"text":""}}
+{"type":"attachment","sessionId":"structural-session","uuid":"a09","cwd":"/repo","attachment":{"type":"instructions","files":[]}}
+{"type":"attachment","sessionId":"structural-session","uuid":"a10","cwd":"/repo","attachment":{"type":"session_context","context":{}}}
+{"type":"attachment","sessionId":"structural-session","uuid":"a11","cwd":"/repo","attachment":{"type":"remote_session_change","commit":"","managedCommit":false,"managedPr":false,"pr":"","sendUserFileHint":false,"url":""}}
+{"type":"attachment","sessionId":"structural-session","uuid":"a12","cwd":"/repo","attachment":{"type":"output_style_instructions","style":{}}}

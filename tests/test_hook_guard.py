@@ -748,6 +748,124 @@ def test_match_returns_the_rule_behind_the_reason() -> None:
     assert hook_guard.match("git status") is None
 
 
+def test_unbounded_wait_loop_is_denied_with_a_working_redirect() -> None:
+    command = "until [ -f x ]; do sleep 5; done"
+    rule = hook_guard.match(command)
+    assert rule is not None
+    assert rule.name == "unbounded wait loop"
+    assert "mise run bounded-wait" in rule.reason
+    assert hook_guard.is_unbounded_wait_loop(hook_guard.mask_shell_syntax(command))
+
+
+def test_deadline_bounded_in_turn_poll_shape_is_allowed() -> None:
+    command = (
+        "deadline=$((SECONDS+60)); while [ $SECONDS -lt $deadline ]; do sleep 5; done"
+    )
+    assert not hook_guard.is_unbounded_wait_loop(hook_guard.mask_shell_syntax(command))
+    assert hook_guard.decide(command) is None
+
+
+def test_quoted_description_of_wait_loop_is_not_denied() -> None:
+    command = "git commit -m 'docs: until [ -f x ]; do sleep 1; done'"
+    assert not hook_guard.is_unbounded_wait_loop(hook_guard.mask_shell_syntax(command))
+    assert hook_guard.decide(command) is None
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "nohup bash -c 'until grep -q ready status; do sleep 1; done'",
+        "env MODE=test setsid sh -c 'while ! pgrep worker; do sleep 1; done'",
+        "( until kill -0 123; do sleep 1; done )",
+        "if true; then while curl -fsS example.invalid; do sleep 1; done; fi",
+        "$(until nc -z localhost 1234; do sleep 1; done)",
+        "until gh run view 1; do sleep 1; done",
+        "while docker inspect worker; do sleep 1; done",
+    ],
+)
+def test_wait_capabilities_survive_shell_prefixes(command: str) -> None:
+    rule = hook_guard.match(command)
+    assert rule is not None
+    assert rule.name == "unbounded wait loop"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "while true; do sleep 1; done",
+        "while :; do sleep 1; done",
+        "until false; do sleep 1; done",
+        "while [ 1 ]; do sleep 1; done",
+        "until custom-ready-check --quiet; do sleep 1; done",
+        "until /opt/bin/custom-ready-check; do sleep 1; done",
+    ],
+)
+def test_command_and_constant_wait_conditions_fire(command: str) -> None:
+    rule = hook_guard.match(command)
+    assert rule is not None
+    assert rule.name == "unbounded wait loop"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "while [ $i -lt 40 ]; do sleep 1; done",
+        'while [ "$a" = ready ]; do sleep 1; done',
+        "while (( i < 40 )); do sleep 1; done",
+        'while [[ "$a" = ready ]]; do sleep 1; done',
+        "while read -r line; do sleep 1; done",
+        'until [ -f x ]; do "$SLEEP" 1; done',
+        "while [ $SECONDS -lt 30 ] && [ ! -f x ]; do sleep 1; done",
+        "until [ -f x ] || [ $deadline -le 0 ]; do sleep 1; done",
+        "until [ -f x ] || [ $DEADLINE -le 0 ]; do sleep 1; done",
+        "until [ -f x ] || [ $end -le 0 ]; do sleep 1; done",
+        "until [ -f x ] || [ $(date +%s) -ge 1 ]; do sleep 1; done",
+        "timeout 30 sh -c 'until [ -f x ]; do sleep 1; done'",
+        (
+            "mise run bounded-wait -- --deadline 30 --cmd "
+            "'until [ -f x ]; do sleep 1; done'"
+        ),
+    ],
+)
+def test_non_waits_and_capability_bounded_waits_do_not_fire(command: str) -> None:
+    assert hook_guard.decide(command) is None
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "# timeout 30\nuntil [ -f x ]; do sleep 1; done",
+        "until curl --connect-timeout 2 example.invalid; do sleep 1; done",
+        "/opt/example-timeout/runner; until [ -f x ]; do sleep 1; done",
+        "DEADLINE=30; until [ -f x ]; do sleep 1; done",
+        "until grep -q DONE status; do sleep 1; echo /tmp/done/x; done",
+    ],
+)
+def test_incidental_bound_words_do_not_exempt_waits(command: str) -> None:
+    rule = hook_guard.match(command)
+    assert rule is not None
+    assert rule.name == "unbounded wait loop"
+
+
+def test_lowercase_seconds_does_not_claim_the_shell_seconds_deadline() -> None:
+    rule = hook_guard.match("while [ $seconds -lt 30 ] && [ ! -f x ]; do sleep 1; done")
+    assert rule is not None
+    assert rule.name == "unbounded wait loop"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "`until ready-check; do /bin/sleep 1; done`",
+        "$(until ready-check; do (sleep 1); done)",
+    ],
+)
+def test_substitution_prefixes_and_sleep_forms_fire(command: str) -> None:
+    rule = hook_guard.match(command)
+    assert rule is not None
+    assert rule.name == "unbounded wait loop"
+
+
 def test_read_command_real_hook_payload() -> None:
     """[17]: exercise the ACTUAL stdin contract through the CLI subprocess."""
     payload = json.dumps(

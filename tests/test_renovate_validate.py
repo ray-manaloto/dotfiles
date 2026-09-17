@@ -208,3 +208,74 @@ def test_cli_wires_end_to_end() -> None:
 def test_canary_config_is_serialisable() -> None:
     """The canary is written as JSON; a non-serialisable value would crash."""
     json.dumps(renovate_validate.RE2_CANARY_CONFIG)
+
+
+def test_validator_routes_through_the_repo_pinned_renovate(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config = tmp_path / "renovate.json"
+    config.write_text("{}\n")
+    seen: list[tuple[list[str], Path]] = []
+    install = tmp_path / "install"
+
+    def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        cwd = kwargs["cwd"]
+        assert isinstance(cwd, Path)
+        seen.append((command, cwd))
+        stdout = str(install) if command[1] == "where" else "ok"
+        return subprocess.CompletedProcess(command, 0, stdout, "")
+
+    monkeypatch.setattr(renovate_validate.subprocess, "run", run)
+
+    result = renovate_validate.run_validator(config)
+
+    assert result.returncode == 0
+    spec = renovate_validate.renovate_tool_spec()
+    assert seen == [
+        (["mise", "where", spec], REPO_ROOT),
+        (
+            [
+                "mise",
+                "exec",
+                spec,
+                "--",
+                str(install / "bin" / renovate_validate.VALIDATOR),
+                *renovate_validate.VALIDATOR_FLAGS,
+                str(config),
+            ],
+            REPO_ROOT,
+        ),
+    ]
+
+
+def test_validator_resolves_with_a_shims_only_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    shim_dir = tmp_path / "shims"
+    install = tmp_path / "renovate-install"
+    shim_dir.mkdir()
+    (install / "bin").mkdir(parents=True)
+    mise = shim_dir / "mise"
+    mise.write_text(
+        f"#!{sys.executable}\n"
+        "import os, subprocess, sys\n"
+        "if sys.argv[1] == 'where':\n"
+        "    print(os.environ['TEST_RENOVATE_ROOT'])\n"
+        "    raise SystemExit(0)\n"
+        "separator = sys.argv.index('--')\n"
+        "raise SystemExit(subprocess.run(sys.argv[separator + 1:]).returncode)\n"
+    )
+    mise.chmod(0o755)
+    validator = install / "bin" / renovate_validate.VALIDATOR
+    validator.write_text(f"#!{sys.executable}\nraise SystemExit(0)\n")
+    validator.chmod(0o755)
+    config = tmp_path / "renovate.json"
+    config.write_text("{}\n")
+    monkeypatch.setenv("PATH", f"{shim_dir}:/usr/bin:/bin")
+    monkeypatch.setenv("TEST_RENOVATE_ROOT", str(install))
+
+    result = renovate_validate.run_validator(config)
+
+    assert result.returncode == 0, result.output

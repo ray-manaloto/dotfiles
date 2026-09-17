@@ -1,40 +1,32 @@
 ---
 name: session-handoff
-description: "Prepare for a /clear: bring all documentation up to date with this session's changes, persist recovery context (memory + handoff), and emit a copy-paste resume prompt so the next session begins the next task with zero context loss. Invoke explicitly as /session-handoff [next-task], or on your own judgment when this session's context is getting full and a clean handoff would protect against losing work."
+description: "Prepare for a /clear: reconcile the active plan, bring documentation up to date, persist recovery evidence, and emit the canonical /session-resume prompt. Invoke explicitly as /session-handoff, or on your own judgment when context is getting full and a clean handoff would protect against losing work."
 disable-model-invocation: false
-argument-hint: "[one-line description of the next task, optional]"
 ---
 
 # Session-Handoff — Before `/clear`
 
 Run this **before** `/clear` to (1) make every doc reflect the latest changes,
 (2) persist recovery context that survives the clear, and (3) print a resume
-prompt to paste after `/clear`. `$ARGUMENTS` (optional) is the next task; if it
-is empty, infer the next task from open issues / the prior handoff and state
-your guess.
+prompt to paste after `/clear`. `task_plan.md` is the sole task authority;
+memory and the handoff carry evidence, traps, and state, never task prose.
 
 Work top-to-bottom. Do not skip the validation gate. Keep the final resume
 prompt short — durable detail lives in memory + the handoff, not the prompt.
 
-## 0. Resolve next-task ambiguity FIRST — mandatory (Ray, 2026-07-08)
+## 0. Resolve active-plan ambiguity FIRST — mandatory (Ray, 2026-07-08)
 
-**Before writing the handoff, drive the next-task scope to zero ambiguity by
-asking the user clarifying questions** (`AskUserQuestion`), and keep asking
-across rounds until nothing material is unresolved. The handoff's "Next task"
-section is only as good as this step — a vague next-task line makes the whole
-`/clear` lossy. This is a hard requirement, not a courtesy: if the next task
-admits multiple interpretations, scope forks, an undecided B-vs-C, or an
-unstated end-goal, you MUST surface each and get the user's answer, then encode
-the answers verbatim in the handoff. Skipping this because the task "seems
-clear" is the failure mode this step exists to prevent.
+Before writing the handoff, inspect the active phase in `task_plan.md`. When
+its scope, order, owner, end state, or a material choice is ambiguous, ask the
+user clarifying questions (`AskUserQuestion`) across as many rounds as needed.
+Record every ruling in `task_plan.md` only. Do not copy or paraphrase the
+active phase into memory or the handoff.
 
 **Then double-check nothing will be lost by `/clear`** (see step 3c + the
 final checklist): every findings-bearing agent/research report is on disk,
-every decision + open question is in the handoff, and the resume prompt +
-memory + handoff together reconstruct the full working context. Verify by
-asking: "if I `/clear` right now and only have MEMORY.md + the handoff + the
-research artifacts, can the next session continue with no gaps?" If the answer
-is no, fix it before emitting the resume prompt.
+every non-task decision and open question is in the handoff, and the plan +
+memory + handoff + research artifacts reconstruct the full working context.
+If that set has a gap, fix it before emitting the resume prompt.
 
 ## 1. Snapshot the working state
 
@@ -48,8 +40,17 @@ gh pr list --head "$(git branch --show-current)" --json number,title,state 2>/de
 ```
 
 Note: current branch, staged/unstaged/untracked files, open PR + its CI state
-(`gh pr checks <n> --json name,state`), and any in-flight task from the prior
-`.agent/plans/session-*.md`.
+(`gh pr checks <n> --json name,state`), and any in-flight process or owed
+evidence from the prior `.agent/plans/session-*.md`.
+
+Refresh the tracked identity of the authoritative plan after step 0:
+
+```bash
+mise run plan-pointer
+```
+
+This writes only the plan SHA-256, active phase heading, and timestamp to
+`docs/agents/plan-pointer.json`; it never copies the phase body.
 
 Also inventory **session runtime state**: in-flight background tasks/agents
 and any scheduled wakeups or crons created this session. Stop what should not
@@ -83,7 +84,19 @@ none of them can produce the other outcome, so none is evidence:
 The 2026-09-15 orphan waited on a receipt whose gate run had been terminated
 mid-flight; it would have spun forever. Prefer the harness's background run plus
 its completion notification over any hand-rolled wait; when a wait is genuinely
-needed, give it a deadline and a loud failure.
+needed, use `mise run bounded-wait` with its required deadline.
+
+Run the descendant census instead of reimplementing the ancestry walk:
+
+```bash
+mise run session-orphans
+```
+
+At handoff, every session-local wait loop is an orphan whether its predicate is
+bounded or unbounded; `session-orphans` intentionally classifies both. The dry
+run labels each `WAIT-LOOP` as `bounded` or `unbounded`. Reap the reported wait
+loops with `mise run session-orphans -- --kill`. Any `OTHER` row blocks handoff
+until it is stopped or explicitly named with `--allow`.
 
 **Distinguish session-LOCAL state from session-INDEPENDENT autonomous
 processes — do NOT block `/clear` on the latter (Ray, 2026-07-08).** GitHub-side
@@ -100,7 +113,23 @@ failing and why), pin the handoff to the current HEAD, note that `main` is
 bot-advanced and the next session just `git pull`s the latest — then `/clear`.
 Do not idle waiting for a quiescent `main` that an active bot will never
 produce. (Only wait on a GHA run if YOU need its result to finish THIS
-session's task — e.g. a merge you must confirm landed.)
+session's active work — e.g. a merge you must confirm landed.)
+
+### 1b. AgentsView session-integrity pass
+
+Run the named deterministic census:
+
+```bash
+mise run session-agentsview-pass
+```
+
+It reads the remote-daemon flags from the installed AgentsView skill, inspects
+this project's current and two prior Claude sessions, and reports unbounded
+wait ordinals, `AskUserQuestion` count, handoff-skill position relative to the
+first commit, and report writes under `docs/research/kb/reports/agents/`.
+A daemon failure is `UNVERIFIABLE`, never zero findings. Any unbounded wait or
+out-of-order evidence is a finding that must be dispositioned before drafting
+the handoff.
 
 ## 2. Documentation sync — make docs match reality
 
@@ -180,8 +209,9 @@ Both, every time. They cover different recovery surfaces.
 Write or update a `project_*` (or `feedback_*`) file under
 `~/.claude/projects/-Users-rmanaloto-dev-github-ray-manaloto-dotfiles/memory/`
 with frontmatter (`name`, `description`, `metadata.type`). Record: what
-shipped, what's next (with issue/PR numbers), locked decisions, and any
-non-obvious gotcha. Convert relative dates to absolute. Add a one-line
+shipped, locked decisions, evidence pointers, and any non-obvious gotcha.
+Memory may cite the plan path and digest but must not restate its task text.
+Convert relative dates to absolute. Add a one-line
 pointer to `MEMORY.md` (`- [Title](file.md) — hook`). Update an existing
 file rather than duplicating; delete memories proven wrong.
 
@@ -189,12 +219,13 @@ file rather than duplicating; delete memories proven wrong.
 
 Write `.agent/plans/session-<YYYY-MM-DD>[-letter].md`
 (`.claude/rules/agent-artifact-conventions.md` — handoffs are plans). The
-handoff must be **self-sufficient** — the resume prompt (step 5) only points
-here, so *everything the next session needs lives in this file*. Include:
-**State at handoff** (branch/PR/merge state, gate results), **what shipped**,
-**next task + preload pointers** (epic/issue/spec links), and **gotchas**. If
-a prior handoff exists for today, append a letter suffix rather than
-overwriting.
+handoff must be self-sufficient for recovery evidence while leaving task
+authority in `task_plan.md`. Include **State at handoff** (branch/PR/merge
+state, gate results), **what shipped**, the plan path and SHA-256 from
+`docs/agents/plan-pointer.json`, evidence/preload pointers, owed non-task
+obligations, open decisions, and **gotchas**. Do not copy a plan phase,
+directive, or task description. If a prior handoff exists for today, append a
+letter suffix rather than overwriting.
 
 ### c. Research artifacts — verbatim, receipt-time (audit coverage here)
 
@@ -210,6 +241,10 @@ handoff). Anything missing: write it now, verbatim from context, before
 `/clear` destroys the only copy. Briefs are in scope because #601's seven
 review rounds left all seven briefs in an ephemeral scratchpad — the reports
 survived, the questions that produced them did not.
+
+Every report written this session also needs an inbound pointer from the
+handoff **and** from the rule or skill whose behavior it governs. If no such
+consumer exists, record the report as deliberately orphaned in the handoff.
 
 ## 4. Validate, then commit doc changes
 
@@ -248,59 +283,41 @@ issue edits are outward-facing and get a review pass instead.)
 ## 5. Self-verify the handoff — claims must match reality
 
 The handoff is written by paraphrase; wrong details cost the next session
-more than missing ones. Before printing the resume prompt, verify:
+more than missing ones. Run the single checker against the exact handoff:
 
-- every repo path the handoff cites exists (run the step-2.5 ref loop
-  against the handoff file itself — it is gitignored, so the hk gate never
-  sees it);
-- spot-check every `file:line` claim (Read the cited line; a stale line
-  number sends the next session spelunking);
-- every `mise run <task>` / CLI command it names exists (`mise tasks ls`);
-- gate results it reports match the recorded `rc` files, not memory.
+```bash
+mise run handoff-check -- .agent/plans/session-<YYYY-MM-DD>[-letter].md
+```
 
-## 6. Emit the resume prompt — keep it MINIMAL
+Resolve every finding. The checker validates cited paths/lines and mise tasks,
+forbids a second task carrier, requires an active plan, and verifies the tracked
+plan pointer. Also confirm gate results against recorded exit codes, not memory.
 
-All context lives in memory (auto-loaded) + the handoff (step 3b).
-`/session-resume` finds the newest handoff and reconciles it against live
-repo/PR state, so the resume prompt is a **one-line invocation**, nothing more.
-Do NOT inline the task plan, issue summaries, gotchas, preload lists, or gate
-commands — those are all in the handoff; duplicating them in the prompt is the
-failure mode this skill exists to prevent.
+## 6. Emit the resume prompt — exact output
 
-Print exactly this (single line, no extra sections):
+Print exactly this single line and nothing else:
 
 ```text
 Run /session-resume
 ```
 
-At most, echo the task for the human's benefit on the same line:
-
-```text
-Resume <task>: run /session-resume
-```
-
-The two blocks above show the line's shape, not literal text to print. Replace
-`<task>` in the second form with the concrete one-line task name already
-determined in step 0; never emit the literal angle-bracket placeholder. If
-step 0 produced no single concrete task because the user explicitly deferred
-deciding, use the first form with no `Resume <task>:` prefix.
-
-Then a one-line reminder: *"Run `/clear`, paste that line, and
-`/session-resume` reconciles the handoff with live state before work resumes."*
-
 ## Checklist (all true before you're done)
 
-- [ ] **Next-task ambiguity driven to zero via clarifying questions (step 0, mandatory); answers encoded in the handoff.**
-- [ ] **No-context-lost self-check passed: MEMORY.md + handoff + research artifacts alone reconstruct the full working context.**
+- [ ] **Active-plan ambiguity driven to zero; every ruling recorded in `task_plan.md` only.**
+- [ ] **No-context-lost self-check passed: plan + MEMORY.md + handoff + research artifacts reconstruct the full working context.**
 - [ ] Working state snapshotted; open PR/CI state known.
+- [ ] `mise run plan-pointer` refreshed the tracked plan digest.
+- [ ] `mise run session-orphans` reports no unallowed `OTHER` descendants and no live wait loops.
+- [ ] `mise run session-agentsview-pass` completed; findings dispositioned or daemon marked `UNVERIFIABLE`.
 - [ ] Session-LOCAL background tasks/agents + scheduled wakeups inventoried; stale ones cancelled or noted.
 - [ ] Session-INDEPENDENT autonomous processes (running GHA runs, Renovate PRs) inventoried in the handoff — NOT waited/blocked on; `main` noted as bot-advanced.
 - [ ] Every doc affected by this session's changes updated; cross-refs grep-clean.
-- [ ] Repo-wide doc-ref sweep run (step 2.5); every MISSING hit fixed or justified in place.
+- [ ] `mise run lint` covered repository doc refs; every finding fixed or justified in place.
 - [ ] `mise run lint` + `mise run lint-docs` green (class-aware `md_size_budget` + agnix AGM-003); at-limit files flagged in the handoff.
 - [ ] Every findings-bearing agent's brief AND report persisted verbatim under `docs/research/kb/reports/agents/`; coverage audited.
+- [ ] Every report has handoff + governing rule/skill pointers, or is explicitly recorded as deliberately orphaned.
 - [ ] Durable memory written + `MEMORY.md` pointer added.
-- [ ] Local handoff written under `.agent/plans/` and self-verified (paths, file:line, task names, gate rcs).
+- [ ] Local handoff written under `.agent/plans/` and `mise run handoff-check` returned zero findings.
 - [ ] Relevant local gate green; doc commit made (if appropriate).
 - [ ] Resume prompt printed for the user to paste after `/clear`.
 

@@ -8,12 +8,16 @@ prove that a handoff is complete or reconcile claims across handoff versions.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 import subprocess
 import sys
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+
+from dotfiles_setup.plan_pointer import POINTER_PATH, active_phase
 
 _MISE_TIMEOUT = 30
 _HANDOFF_RE = re.compile(
@@ -28,6 +32,11 @@ _PATH_CITATION_RE = re.compile(
 _TASK_CITATION_RE = re.compile(
     r"\bmise[ \t]+run[ \t]+(?P<name>[A-Za-z0-9][\w-]*)(?![\w:-])"
 )
+_TASK_CARRIER_HEADING = re.compile(
+    r"(?im)^#{1,6}[ \t]+(?:[^\w\s]+[ \t]*)*next[ -]task\b"
+    r"(?:[ \t]*:)?(?:[ \t]+.*)?$"
+)
+_TASK_CARRIER_LINE = re.compile(r"(?im)^[ \t]*(?:next:|next[ -]task[ \t]*:)[ \t]*.*$")
 
 
 class Verdict(Enum):
@@ -37,6 +46,11 @@ class Verdict(Enum):
     MISSING_PATH = "missing_path"
     BAD_LINE_RANGE = "bad_line_range"
     UNKNOWN_TASK = "unknown_task"
+    FORBIDDEN_TASK_CARRIER = "forbidden_task_carrier"
+    UNCLOSED_FENCE = "unclosed_fence"
+    MISSING_ACTIVE_PLAN = "missing_active_plan"
+    MISSING_PLAN_POINTER = "missing_plan_pointer"
+    STALE_PLAN_POINTER = "stale_plan_pointer"
 
 
 @dataclass(frozen=True)
@@ -152,9 +166,107 @@ def _task_findings(repo_root: Path, text: str) -> list[Finding]:
     ]
 
 
+def _task_carrier_findings(text: str) -> list[Finding]:
+    """Reject the first handoff line that attempts to carry the next task."""
+    visible: list[str] = []
+    fence: tuple[str, int] | None = None
+    fence_citation = ""
+    for line in text.splitlines(keepends=True):
+        marker = re.match(r"^\s*(?P<fence>`{3,}|~{3,})", line)
+        if marker is not None:
+            token = marker.group("fence")
+            if fence is None:
+                fence = (token[0], len(token))
+                fence_citation = token
+            elif token[0] == fence[0] and len(token) >= fence[1]:
+                fence = None
+            visible.append("\n" if line.endswith("\n") else "")
+        elif fence is None:
+            visible.append(line)
+        else:
+            visible.append("\n" if line.endswith("\n") else "")
+    check_text = "".join(visible)
+    matches = [
+        *_TASK_CARRIER_HEADING.finditer(check_text),
+        *_TASK_CARRIER_LINE.finditer(check_text),
+    ]
+    findings: list[Finding] = []
+    if matches:
+        match = min(matches, key=lambda item: item.start())
+        findings.append(
+            Finding(
+                Verdict.FORBIDDEN_TASK_CARRIER,
+                match.group(0).strip(),
+                "task_plan.md is the only task carrier; handoffs carry state and "
+                "evidence",
+            )
+        )
+    if fence is not None:
+        findings.append(
+            Finding(
+                Verdict.UNCLOSED_FENCE,
+                fence_citation,
+                "fenced code block reaches end of file without a closing fence",
+            )
+        )
+    return findings
+
+
+def _plan_findings(repo_root: Path) -> list[Finding]:
+    """Require an active plan phase and verify the tracked digest pointer."""
+    plan_path = repo_root / "task_plan.md"
+    if not plan_path.is_file():
+        return []
+    plan_bytes = plan_path.read_bytes()
+    heading = active_phase(plan_bytes.decode(errors="replace"))
+    if heading is None:
+        return [
+            Finding(
+                Verdict.MISSING_ACTIVE_PLAN,
+                "task_plan.md",
+                "no ## heading contains NEXT SESSION",
+            )
+        ]
+
+    pointer_path = repo_root / POINTER_PATH
+    if not pointer_path.is_file():
+        return [
+            Finding(
+                Verdict.MISSING_PLAN_POINTER,
+                POINTER_PATH,
+                "task_plan.md exists but its tracked digest pointer is absent",
+            )
+        ]
+    expected_sha = hashlib.sha256(plan_bytes).hexdigest()
+    try:
+        pointer = json.loads(pointer_path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        return [
+            Finding(
+                Verdict.STALE_PLAN_POINTER,
+                POINTER_PATH,
+                f"pointer is unreadable or invalid: {exc}",
+            )
+        ]
+    if not isinstance(pointer, dict):
+        detail = "pointer is not a JSON object"
+    elif pointer.get("plan_sha256") != expected_sha:
+        detail = "plan_sha256 disagrees with task_plan.md"
+    elif pointer.get("active_phase") != heading:
+        detail = "active_phase disagrees with the last NEXT SESSION heading"
+    else:
+        return []
+    return [Finding(Verdict.STALE_PLAN_POINTER, POINTER_PATH, detail)]
+
+
 def check(repo_root: Path, text: str) -> list[Finding]:
-    """Return only non-OK path/line/task findings for one handoff body."""
-    return [*_path_findings(repo_root, text), *_task_findings(repo_root, text)]
+    """Return only non-OK citation, task-carrier, and active-plan findings."""
+    return [
+        *_task_carrier_findings(text),
+        *_plan_findings(repo_root),
+        *_path_findings(repo_root, text),
+        *_task_findings(repo_root, text),
+    ]
 
 
 def render(findings: list[Finding], *, source: str) -> str:
@@ -197,5 +309,11 @@ def main(args: list[str], repo_root: Path) -> int:
     except (RuntimeError, OSError) as exc:
         sys.stderr.write(f"handoff-check: {exc}\n")
         return 1
-    sys.stdout.write(render(findings, source=source) + "\n")
+    rendered = render(findings, source=source)
+    if not (repo_root / "task_plan.md").is_file():
+        rendered += (
+            "\nhandoff-check: info — task_plan.md absent (fresh clone); "
+            "active-plan checks skipped"
+        )
+    sys.stdout.write(rendered + "\n")
     return 1 if findings else 0

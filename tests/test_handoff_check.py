@@ -11,7 +11,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
-from dotfiles_setup import handoff_check
+from dotfiles_setup import handoff_check, plan_pointer
 from dotfiles_setup import main as cli_main
 
 _COMMAND_TIMEOUT = 30
@@ -64,6 +64,96 @@ def test_check_reports_missing_paths_and_bad_line_ranges(tmp_path: Path) -> None
             "cited lines 3-4 are outside the file's 1-2 range",
         ),
     ]
+
+
+@pytest.mark.parametrize(
+    "carrier",
+    [
+        "## Next task\nDo the thing\n",
+        "## NEXT TASK — do X\n",
+        "## 🚀: Next-task: do X\n",
+        "NEXT: do the thing\n",
+        "Next task: do the thing\n",
+    ],
+)
+def test_task_carrier_is_forbidden_in_a_handoff(tmp_path: Path, carrier: str) -> None:
+    repo = _repo(tmp_path)
+
+    findings = handoff_check.check(repo, carrier)
+
+    assert [item.verdict for item in findings] == [
+        handoff_check.Verdict.FORBIDDEN_TASK_CARRIER
+    ]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "The next task is X, according to the historical report.\n",
+        "## Where the next task lives\n",
+        "## What the audit says beyond the next task\n",
+        "next-task without a colon is prose\n",
+        "```text\nNEXT: this is example data\n```\n",
+    ],
+)
+def test_prose_and_fenced_examples_are_not_task_carriers(
+    tmp_path: Path, text: str
+) -> None:
+    repo = _repo(tmp_path)
+    assert handoff_check.check(repo, text) == []
+
+
+def test_unclosed_fence_is_reported_instead_of_hiding_the_remainder(
+    tmp_path: Path,
+) -> None:
+    repo = _repo(tmp_path)
+
+    findings = handoff_check.check(repo, "```text\nNEXT: hidden by broken markdown\n")
+
+    assert [item.verdict for item in findings] == [handoff_check.Verdict.UNCLOSED_FENCE]
+
+
+def test_plan_without_next_session_heading_is_missing_active_plan(
+    tmp_path: Path,
+) -> None:
+    repo = _repo(tmp_path)
+    (repo / "task_plan.md").write_text("# Plan\n\n## Phase 1\n")
+
+    findings = handoff_check.check(repo, "State only.\n")
+
+    assert [item.verdict for item in findings] == [
+        handoff_check.Verdict.MISSING_ACTIVE_PLAN
+    ]
+
+
+def test_pointer_stale_after_plan_bytes_change(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    plan = repo / "task_plan.md"
+    plan.write_text("# Plan\n\n## Phase 7 — NEXT SESSION\n")
+    assert plan_pointer.write(repo) == 0
+    plan.write_text("# Plan\n\n## Phase 8 — NEXT SESSION\n")
+
+    findings = handoff_check.check(repo, "State only.\n")
+
+    assert [item.verdict for item in findings] == [
+        handoff_check.Verdict.STALE_PLAN_POINTER
+    ]
+
+
+def test_plan_without_pointer_is_reported(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    (repo / "task_plan.md").write_text("# Plan\n\n## Phase 7 — NEXT SESSION\n")
+
+    findings = handoff_check.check(repo, "State only.\n")
+
+    assert [item.verdict for item in findings] == [
+        handoff_check.Verdict.MISSING_PLAN_POINTER
+    ]
+
+
+def test_fresh_clone_without_plan_has_no_active_plan_finding(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    assert handoff_check.check(repo, "State only.\n") == []
 
 
 @pytest.mark.parametrize(

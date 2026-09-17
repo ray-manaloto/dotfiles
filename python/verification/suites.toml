@@ -1489,6 +1489,120 @@ tokens = [
 ]
 
 [[suite]]
+name = "workflow.session-orphans-wiring"
+description = "Session-handoff orphan detection must stay wired end-to-end: `mise run session-orphans` is a thin caller of the Python library, main.py registers and dispatches the subcommand, the descendant-process implementation and its public tests exist, and the session-handoff skill invokes the task. This closes the 2026-09-15 failure where ancestry prose shipped without the ratified task, leaving an unsatisfiable wait alive for 32 minutes. Per-path call-site tokens prevent the skill's documentation from standing in for missing executable wiring."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    "mise.toml",
+    "python/src/dotfiles_setup/main.py",
+    "python/src/dotfiles_setup/session_orphans.py",
+    "tests/test_session_orphans.py",
+    ".claude/skills/session-handoff/SKILL.md",
+]
+per_path_tokens = { "mise.toml" = [
+    "[tasks.session-orphans]",
+    "dotfiles-setup session-orphans'",
+], "python/src/dotfiles_setup/main.py" = [
+    '"session-orphans",',
+    '"session-orphans": lambda: sys.exit(',
+], "python/src/dotfiles_setup/session_orphans.py" = [
+    "def build_plan(",
+    "def main(",
+], ".claude/skills/session-handoff/SKILL.md" = [
+    "mise run session-orphans\n```",
+] }
+
+[[suite]]
+name = "workflow.bounded-wait-wiring"
+description = "The sanctioned bounded-wait path must stay wired end-to-end: mise exposes the thin caller, main.py registers and dispatches the subcommand, the Python entry point exists, the hook guard redirects unbounded wait loops to it, and the handoff skill plus long-running-command rule teach the same task. Per-path call-site tokens prevent prose in one surface from standing in for missing executable wiring."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    "mise.toml",
+    "python/src/dotfiles_setup/main.py",
+    "python/src/dotfiles_setup/bounded_wait.py",
+    "python/src/dotfiles_setup/hook_guard.py",
+    ".claude/skills/session-handoff/SKILL.md",
+    ".claude/rules/long-running-command-hangs.md",
+]
+per_path_tokens = { "mise.toml" = [
+    "[tasks.bounded-wait]",
+    "dotfiles-setup bounded-wait'",
+], "python/src/dotfiles_setup/main.py" = [
+    '"bounded-wait",',
+    '"bounded-wait": lambda: sys.exit(',
+], "python/src/dotfiles_setup/bounded_wait.py" = [
+    "def main(",
+], "python/src/dotfiles_setup/hook_guard.py" = [
+    '"unbounded wait loop"',
+], ".claude/skills/session-handoff/SKILL.md" = [
+    "mise run bounded-wait",
+], ".claude/rules/long-running-command-hangs.md" = [
+    "mise run bounded-wait -- --deadline <s>",
+] }
+
+[[suite]]
+name = "workflow.plan-pointer-wiring"
+description = "The session-handoff plan pointer must stay wired end-to-end: mise exposes the thin caller, main.py registers and dispatches the subcommand, the Python entry point and its public CLI test exist, and the session-handoff skill invokes the task. Per-path tokens make every executable and documented link independently necessary."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    "mise.toml",
+    "python/src/dotfiles_setup/main.py",
+    "python/src/dotfiles_setup/plan_pointer.py",
+    "tests/test_plan_pointer.py",
+    ".claude/skills/session-handoff/SKILL.md",
+]
+per_path_tokens = { "mise.toml" = [
+    "[tasks.plan-pointer]",
+    "dotfiles-setup plan-pointer'",
+], "python/src/dotfiles_setup/main.py" = [
+    '"plan-pointer",',
+    '"plan-pointer": lambda: sys.exit(',
+], "python/src/dotfiles_setup/plan_pointer.py" = [
+    "def main(",
+], "tests/test_plan_pointer.py" = [
+    "def test_public_cli_registers_plan_pointer(",
+], ".claude/skills/session-handoff/SKILL.md" = [
+    "mise run plan-pointer\n```",
+] }
+
+[[suite]]
+name = "workflow.session-agentsview-pass-wiring"
+description = "The session-handoff AgentsView census must stay wired end-to-end: mise exposes the thin caller, main.py registers and dispatches the subcommand, the Python entry point and its public CLI test exist, and the session-handoff skill invokes the task. Per-path tokens make every executable and documented link independently necessary."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    "mise.toml",
+    "python/src/dotfiles_setup/main.py",
+    "python/src/dotfiles_setup/agentsview_pass.py",
+    "tests/test_agentsview_pass.py",
+    ".claude/skills/session-handoff/SKILL.md",
+]
+per_path_tokens = { "mise.toml" = [
+    "[tasks.session-agentsview-pass]",
+    "dotfiles-setup session-agentsview-pass'",
+], "python/src/dotfiles_setup/main.py" = [
+    '"session-agentsview-pass",',
+    '"session-agentsview-pass": lambda: sys.exit(',
+], "python/src/dotfiles_setup/agentsview_pass.py" = [
+    "def main(",
+], "tests/test_agentsview_pass.py" = [
+    "def test_public_cli_accepts_repeatable_session_and_skill(",
+], ".claude/skills/session-handoff/SKILL.md" = [
+    "mise run session-agentsview-pass\n```",
+] }
+
+[[suite]]
 name = "workflow.skip-cascade-enforcement"
 description = "The transitive-skip-cascade gate must stay wired end-to-end (cold review of b436168, finding F2): hk.pkl's `workflow_skip_cascade` step shells out to `dotfiles-setup workflow-skip-cascade`, main.py registers and dispatches the subcommand, the workflow_skip_cascade module (graph walk + control-arm canary) and its tests exist. Same shape as workflow.bash-logic-enforcement. This gate closes #982/#995 — a job downstream of a skippable job with no status-check function silently inherits a skip through the whole `needs:` DAG — and it shipped TWICE before anything checked the DAG at all; deleting this suite's own wiring left `verify run` at 151/0 with nothing noticing, which is exactly the F2 defect this suite exists to close."
 category = "workflow"

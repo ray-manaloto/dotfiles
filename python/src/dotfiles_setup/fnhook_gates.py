@@ -105,6 +105,7 @@ def tool_spec(repo_root: Path, tool: str) -> str:
 
 
 _COMMAND_TIMEOUT_SECONDS = 120.0
+_DEFAULT_MISE_STATE_DIR = Path(tempfile.mkdtemp(prefix="fnhook-mise-state-"))
 #: Tools whose denial removes the session's only way to report or ask about the
 #: denial. Not repair tools — neither executes anything — which is why
 #: permitting them widens no capability.
@@ -163,17 +164,30 @@ class Runner(Protocol):
         ...
 
 
+def mise_child_env(state_dir: Path | None = None) -> dict[str, str]:
+    """Return isolated mise state/log paths, sharing one temp root by default."""
+    root = _DEFAULT_MISE_STATE_DIR if state_dir is None else state_dir
+    root.mkdir(parents=True, exist_ok=True)
+    return {
+        "MISE_STATE_DIR": str(root),
+        "MISE_LOG_FILE": str(root / "mise.log"),
+    }
+
+
 def default_runner(
     command: list[str],
     *,
     cwd: Path,
     env: Mapping[str, str] | None = None,
     input_text: str | None = None,
+    mise_state_dir: Path | None = None,
 ) -> GateResult:
     """Run one bounded command; missing binaries and timeouts fail loudly."""
     child_env = os.environ.copy()
     if env is not None:
         child_env.update(env)
+    if command and command[0] == "mise":
+        child_env.update(mise_child_env(mise_state_dir))
     try:
         completed = subprocess.run(
             command,
