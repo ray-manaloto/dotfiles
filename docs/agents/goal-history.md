@@ -1012,3 +1012,41 @@ flowchart LR
     CHILDREN --> NEXT["Continue #1165–#1173"]
     RESIDUAL --> NEXT
 ```
+
+## 2026-09-17 — #1183 lands: the dubious-ownership transient is attributed and closed
+
+- **Iteration ID:** `dotfiles-goal-20260917-019`
+- **Prior goal digest:** `sha256:c37f0d20a4c75cb8a6083ce4421bbdce9bd020af70cefc3df0936bc63c3ed1ce`
+- **Current goal digest:** `sha256:03c7688170df99ffc246bc81509ea7a2e5dbadba876ab190c5899afddda8cd50`
+- **Changed requirement:** Phase 8 item 1 (#1183) landed as PR #1186 at
+  `ca109b7`. The mechanism differs from the Phase 8 plan text by ruling: a
+  workspace-scoped `safe.directory` rendered by the chezmoi-managed
+  `home/dot_gitconfig.tmpl`, not `postStartCommand` or the image. The live arm
+  also corrected the diagnosis: the virtiofs mount-root owner FLICKERS to
+  `0:0` for single samples under load; it is not a five-minute window. The
+  goal advances to #1171, then #1157, then the remaining follow-ups plus the
+  new #1185.
+- **Reason:** Ray, 2026-09-17: order #1183 → #1171 → #1157; mechanism ruled
+  chezmoi `dot_gitconfig` when asked (declarative, no sudo, no base rebuild).
+- **Evidence:** PR #1186; `mise run land -- 1186` rc=0 on the first attempt
+  (main run 35276009029 success); live arm — git rc=0 on 42 of 42 samples
+  including two `0:0` samples (`docs/rules-evidence/persistence-gate-retry.md`);
+  `docs/research/kb/reports/agents/cold-review-1183-2026-09-17.md` and
+  `cold-review-1183-r2-2026-09-17.md`.
+- **Affected tickets:** #1183, #1185, #1165, #1171, #1157.
+- **Disposition:** `ACCEPTED`.
+- **Topology and ownership:** One writer: the Claude architect session.
+  Implementation lanes are the codex SDLC team; cold review is Opus.
+
+### Current goal
+
+> Complete Phase 8 and the remaining Phase 7 follow-ups: #1171 (harness-children allowlist) then #1157 (session-review non-record residual), then #1172, #1173, #1169, #1170, #1165, #1166, #1167, #1168 and #1185; keep task_plan.md as the sole task authority, use only its tracked digest pointer for continuity, route implementation through the codex SDLC team, and run /verify after each landed PR.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    SAFE["#1183 landed at ca109b7"] --> CHILDREN["#1171: harness-children allowlist"]
+    CHILDREN --> RESIDUAL["#1157: session-review non-record residual"]
+    RESIDUAL --> NEXT["#1172, #1173, #1169, #1170, #1165–#1168, #1185"]
+```
