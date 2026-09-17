@@ -6830,7 +6830,7 @@ version = "44.96.1"
 backend = "npm:renovate"
 
 [[tools."npm:skills"]]
-version = "1.6.0"
+version = "1.7.0"
 backend = "npm:skills"
 
 [[tools."npm:typescript"]]
