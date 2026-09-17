@@ -86,7 +86,9 @@ ALLOWLIST: dict[str, BashAllowance] = {
         57, "hk check wrapper — CLAUDE.md thin-import-stub assertion"
     ),
     "scripts/devcontainer-smoke.sh": BashAllowance(
-        157,
+        # 157 -> 163 (#1183): pre-tier git probe names a missing workspace
+        # safe.directory before libgit2 consumers obscure the ownership error.
+        163,
         "tier 1-3 smoke harness — thin wrapper; the non-trivial tier-1/tier-3 "
         "cores live in `dotfiles-setup image smoke-script` (#223)",
     ),

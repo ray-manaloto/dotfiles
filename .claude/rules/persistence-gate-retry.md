@@ -49,42 +49,20 @@ Detail: `docs/rules-evidence/persistence-gate-retry.md`.
 | `FAIL: in-volume canary missing` | real defect | home-volume mount regression — investigate volume name / mount opts |
 | `R[123] ... not works` | real defect | the corresponding R-invariant regressed; do NOT retry without diagnosing |
 | `FAIL smoke-tiers-1-3` inside `mise run land`, while `mise run smoke` standalone is rc=0 | environmental | retry `land` once — see "The land-smoke transient" below |
-| `fatal: detected dubious ownership in repository at '/workspaces/dotfiles'` | environmental | retry once — see "The dubious-ownership transient" below; do NOT reach for `dev-rebuild` |
+| `fatal: detected dubious ownership in repository at '/workspaces/<clone>'` | real defect | should no longer occur after #1183; retry once to retain timing evidence, then verify the scoped `safe.directory` stanza was rendered and applied |
 | `<tool>@latest: no versions found for <tool> matching date filter` (every pass identical) | real defect | do NOT retry — the candidate set is empty (a registry/backend change against `minimum_release_age`); more passes cannot help |
 
-## The dubious-ownership transient (in-container pytest, three sightings)
+## The dubious-ownership defect (#1183)
 
-**2026-09-13 — `mise run land -- 1047`.** `verify-local` stopped on the first
-test: `git ls-files` returned rc=128 with `fatal: detected dubious ownership
-in repository at '/workspaces/dotfiles'`, then
-`tests/test_env_blob_scan.py`, test
-`test_tracked_files_reads_the_repo_and_not_an_empty_list`, failed. The scanner
-logged the git error instead of treating an empty file list as clean. An
-immediate `mise run verify-local` returned rc=0 with zero occurrences of the
-signature and all smoke tiers green.
-
-**2026-09-16 — `mise run land -- 1158`.** It reported
-`FAIL smoke-tiers-1-3` on the first git call of the pytest run:
-`tests/test_bash_budget.py`, test `test_cli_wires_end_to_end`, with
-`git ls-files` rc=128 in `/workspaces/dotfiles`. Standalone `mise run smoke`
-reproduced the failure once (rc=1). Minutes later, the in-container probe
-showed uid 1000 = workspace owner 1000 and `git ls-files` rc=0; the smoke retry
-passed with 3521 tests.
-
-**2026-09-17 — `mise run ship` (Phase 7 branch, `fb35cb8`).** The in-container
-smoke stopped at test ~3,095 of the run:
-`test_requirements_cli_requires_an_explicit_source_root` saw the goal-history
-validator print `fb35cb8… deletes the goal history` — its `git show
-<rev>:docs/agents/goal-history.md` had returned non-zero, which the validator
-reports as a deletion. Minutes later, in the same container, `git show` returned
-61,880 bytes and the test passed alone.
-
-Three sightings, three different git calls, one mid-suite — so this is NOT
-"the first git call". The trigger remains unattributed. `safe.directory` is configured nowhere in
-this repository, but that absence cannot explain an intermittent result; do
-not add it on this evidence. Retry once and retain the direct rc. The expensive
-wrong move is `mise run dev-rebuild`: it had already succeeded inside the
-failing land, so rebuilding cannot be credited as the repair.
+Docker Desktop's virtiofs can report the workspace mount root as uid 0 for
+roughly five minutes after a re-create while its files remain uid 1000. Git and
+libgit2 then reject the repository. The chezmoi-managed global gitconfig now
+renders one scoped `safe.directory` entry from the source working tree, and the
+smoke harness probes the workspace before tier 1. This signature should no
+longer occur; recurrence means the stanza was not rendered or applied and is a
+real defect. Retain the direct rc and do not credit `dev-rebuild` as a repair.
+Case history and the discriminating arms live in
+`docs/rules-evidence/persistence-gate-retry.md`.
 
 ## The land-smoke transient (`land` only, twice in two sessions)
 

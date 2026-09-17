@@ -17,6 +17,12 @@ echo "[devcontainer-smoke][start]"
 
 WORKSPACE_FOLDER="${WORKSPACE_FOLDER:-/workspaces/$(basename "$PWD")}"
 
+echo "[preflight] git workspace safe.directory"
+if ! git -C "${WORKSPACE_FOLDER}" rev-parse HEAD >/dev/null; then
+  echo "  FAIL: git cannot open the workspace at ${WORKSPACE_FOLDER}; verify safe.directory in ${HOME}/.gitconfig" >&2
+  exit 1
+fi
+
 echo "::group::Tier 1 — tools + hk"
 echo "[tier1] image identity + exact tool-set (python-generated shared core)"
 # #223: the image-identity hashes and the exact (tool, backend, version)
