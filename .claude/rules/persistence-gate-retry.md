@@ -52,7 +52,7 @@ Detail: `docs/rules-evidence/persistence-gate-retry.md`.
 | `fatal: detected dubious ownership in repository at '/workspaces/dotfiles'` | environmental | retry once — see "The dubious-ownership transient" below; do NOT reach for `dev-rebuild` |
 | `<tool>@latest: no versions found for <tool> matching date filter` (every pass identical) | real defect | do NOT retry — the candidate set is empty (a registry/backend change against `minimum_release_age`); more passes cannot help |
 
-## The dubious-ownership transient (in-container pytest, two sightings)
+## The dubious-ownership transient (in-container pytest, three sightings)
 
 **2026-09-13 — `mise run land -- 1047`.** `verify-local` stopped on the first
 test: `git ls-files` returned rc=128 with `fatal: detected dubious ownership
@@ -71,8 +71,16 @@ reproduced the failure once (rc=1). Minutes later, the in-container probe
 showed uid 1000 = workspace owner 1000 and `git ls-files` rc=0; the smoke retry
 passed with 3521 tests.
 
-Both sightings hit the **first git call of a pytest run**, then disappeared.
-The trigger remains unattributed. `safe.directory` is configured nowhere in
+**2026-09-17 — `mise run ship` (Phase 7 branch, `fb35cb8`).** The in-container
+smoke stopped at test ~3,095 of the run:
+`test_requirements_cli_requires_an_explicit_source_root` saw the goal-history
+validator print `fb35cb8… deletes the goal history` — its `git show
+<rev>:docs/agents/goal-history.md` had returned non-zero, which the validator
+reports as a deletion. Minutes later, in the same container, `git show` returned
+61,880 bytes and the test passed alone.
+
+Three sightings, three different git calls, one mid-suite — so this is NOT
+"the first git call". The trigger remains unattributed. `safe.directory` is configured nowhere in
 this repository, but that absence cannot explain an intermittent result; do
 not add it on this evidence. Retry once and retain the direct rc. The expensive
 wrong move is `mise run dev-rebuild`: it had already succeeded inside the
