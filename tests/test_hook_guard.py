@@ -754,15 +754,31 @@ def test_unbounded_wait_loop_is_denied_with_a_working_redirect() -> None:
     assert rule is not None
     assert rule.name == "unbounded wait loop"
     assert "mise run bounded-wait" in rule.reason
-    assert hook_guard.is_unbounded_wait_loop(hook_guard.mask_shell_syntax(command))
+    masked = hook_guard.mask_shell_syntax(command)
+    assert hook_guard.is_audit_wait_loop(masked)
+    assert hook_guard.is_unbounded_wait_loop(masked)
 
 
 def test_deadline_bounded_in_turn_poll_shape_is_allowed() -> None:
     command = (
         "deadline=$((SECONDS+60)); while [ $SECONDS -lt $deadline ]; do sleep 5; done"
     )
-    assert not hook_guard.is_unbounded_wait_loop(hook_guard.mask_shell_syntax(command))
+    masked = hook_guard.mask_shell_syntax(command)
+    assert hook_guard.is_audit_wait_loop(masked)
+    assert not hook_guard.is_wait_loop(masked)
+    assert not hook_guard.is_unbounded_wait_loop(masked)
     assert hook_guard.decide(command) is None
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "while [ $i -lt 40 ]; do sleep 1; done",
+        "while read -r line; do sleep 1; done",
+    ],
+)
+def test_audit_wait_loop_excludes_iteration_loops(command: str) -> None:
+    assert not hook_guard.is_audit_wait_loop(hook_guard.mask_shell_syntax(command))
 
 
 def test_quoted_description_of_wait_loop_is_not_denied() -> None:

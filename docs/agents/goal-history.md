@@ -974,3 +974,41 @@ flowchart LR
     NEXT -->|"agentsview issues"| DOC["docs/handoffs/: document for the AgentsView project's agents"]
     IMPL --> RESID["#1155 residuals (wrapper hook rule, mirror citations, tokeniser)"]
 ```
+
+## 2026-09-17 — Phase 7 lands and `/verify` closes the bounded-loop mismatch
+
+- **Iteration ID:** `dotfiles-goal-20260917-018`
+- **Prior goal digest:** `sha256:92307e302d1678fbf6ef3e50a4f6081eedcfe8fe7f18a745671f22b5b83badac`
+- **Current goal digest:** `sha256:c37f0d20a4c75cb8a6083ce4421bbdce9bd020af70cefc3df0936bc63c3ed1ce`
+- **Changed requirement:** Phase 7 landed as PR #1163 at `0865524`: plan-only
+  task authority, the orphan/bounded-wait guard, AgentsView census, and a
+  self-describing session review. The `/verify` pass found one docs-vs-code
+  mismatch: bounded loops were not classified. This iteration closes that
+  mismatch. The goal now becomes the nine filed follow-ups #1165–#1173, with
+  #1171 (harness-children allowlist) and #1157 (session-review non-record
+  residual) first.
+- **Reason:** Ray, 2026-09-16/17: one PR; the codex SDLC team does the work;
+  continuity is the tracked plan digest pointer only; run `/verify` after the
+  PR.
+- **Evidence:** PR #1163; `docs/research/kb/reports/agents/*2026-09-16.md`;
+  the Phase 7 `/verify` report.
+- **Affected tickets:** #1157, #1155, #1165–#1173.
+- **Disposition:** `ACCEPTED`.
+- **Topology and ownership:** One writer: the Claude architect session.
+  Implementation lanes are the codex SDLC team; cold review is Opus.
+
+### Current goal
+
+> Complete the nine filed Phase 7 follow-ups (#1165–#1173), prioritizing #1171 (harness-children allowlist) and #1157 (session-review non-record residual); keep task_plan.md as the sole task authority, use only its tracked digest pointer for continuity, route implementation through the codex SDLC team, and run /verify after each landed PR.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    LAND["#1163 landed at 0865524"] --> VERIFY["/verify: bounded-loop mismatch"]
+    VERIFY --> FIX["018: classify bounded deadline polls"]
+    FIX --> CHILDREN["#1171: harness-children allowlist"]
+    FIX --> RESIDUAL["#1157: session-review non-record residual"]
+    CHILDREN --> NEXT["Continue #1165–#1173"]
+    RESIDUAL --> NEXT
+```
