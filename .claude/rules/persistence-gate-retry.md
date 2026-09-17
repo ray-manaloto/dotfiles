@@ -54,9 +54,9 @@ Detail: `docs/rules-evidence/persistence-gate-retry.md`.
 
 ## The dubious-ownership defect (#1183)
 
-Docker Desktop's virtiofs can report the workspace mount root as uid 0 for
-roughly five minutes after a re-create while its files remain uid 1000. Git and
-libgit2 then reject the repository. The chezmoi-managed global gitconfig now
+Docker Desktop's virtiofs intermittently reports the workspace mount root as
+uid 0 — single-sample flickers under load, not a fixed post-re-create window —
+while its files remain uid 1000. Git and libgit2 then reject the repository. The chezmoi-managed global gitconfig now
 renders one scoped `safe.directory` entry from the source working tree, and the
 smoke harness probes the workspace before tier 1. This signature should no
 longer occur; recurrence means the stanza was not rendered or applied and is a

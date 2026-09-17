@@ -61,12 +61,22 @@ after Docker Desktop's ownership state had settled:
   command returned 61,880 bytes and the test passed alone.
 
 The 2026-09-17 re-create attributed the trigger: Docker Desktop's virtiofs
-reported the `/workspaces/dotfiles` mount root as `0:0` for roughly five
-minutes while `.git` and the tracked files were `1000:1000`. In a fixture with
+reported the `/workspaces/dotfiles` mount root as `0:0` while `.git` and the
+tracked files were `1000:1000`. Two samples (`0:0` at 18:44Z, `1000:1000` at
+18:49Z) were first read as a ~5-minute window; the live arm below corrected that. In a fixture with
 that exact shape, no global `safe.directory` produced `git rev-parse` rc=128
 and hk/libgit2 rc=1 with `Owner (-36)`. Adding the fixture path to the global
 gitconfig made both commands return rc=0 with no owner message. A mise task
 returned rc=0 in both arms, so mise remained unarmed by that probe.
+
+**Live arm, 2026-09-17 (fix applied):** `mise run down` at 20:11:34Z, then
+`mise run up`, sampling the mount-root owner and `git -C /workspaces/dotfiles
+rev-parse` every ~12s for nine minutes while the post-create smoke ran. The
+root read `0:0` at 20:14:42Z and again at 20:17:08Z — one sample each,
+`1000:1000` on both sides — and git returned rc=0 on all 42 samples, the two
+`0:0` ones included. The condition is therefore an intermittent FLICKER while
+the mount is under load, not a window that closes: it accounts for the
+mid-suite sighting above and for reds with no re-create at all.
 
 Issue #1183 therefore renders one workspace-scoped `safe.directory` through the
 chezmoi-managed global gitconfig and checks Git access before smoke tier 1.
