@@ -13,75 +13,15 @@ SMOKE_SCRIPT = REPO_ROOT / "scripts" / "devcontainer-smoke.sh"
 PREFLIGHT_MARKER = "[preflight] git workspace safe.directory"
 
 
-def test_gitconfig_renders_the_current_chezmoi_working_tree(
-    tmp_path: Path,
-) -> None:
-    source = tmp_path / "alternate-clone-name"
-    source.mkdir()
-
-    rendered = subprocess.run(
-        [
-            "chezmoi",
-            f"--source={source}",
-            "execute-template",
-        ],
-        input=GITCONFIG_TEMPLATE.read_text(),
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout
-    rendered_gitconfig = tmp_path / "rendered.gitconfig"
-    rendered_gitconfig.write_text(rendered)
-
-    safe_directories = subprocess.run(
-        [
-            "git",
-            "config",
-            "--file",
-            str(rendered_gitconfig),
-            "--get-all",
-            "safe.directory",
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.splitlines()
-
-    assert safe_directories == [str(source)]
-
-
-def test_smoke_fails_before_tier_one_when_git_cannot_open_workspace(
-    tmp_path: Path,
-) -> None:
-    workspace = tmp_path / "not-a-git-workspace"
-    workspace.mkdir()
-
-    result = subprocess.run(
-        ["bash", str(SMOKE_SCRIPT)],
-        env={**os.environ, "WORKSPACE_FOLDER": str(workspace)},
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    diagnostics = result.stdout + result.stderr
-
-    assert result.returncode == 1
-    assert PREFLIGHT_MARKER in result.stdout
-    assert "git cannot open the workspace" in diagnostics
-    assert "safe.directory" in diagnostics
-    assert str(workspace) in diagnostics
-    assert "::group::Tier 1" not in result.stdout
-
-
-def test_smoke_runs_workspace_preflight_before_tier_one(
-    tmp_path: Path,
-) -> None:
+def _committed_workspace(tmp_path: Path) -> Path:
     workspace = tmp_path / "git-workspace"
     workspace.mkdir()
-    subprocess.run(["git", "init", str(workspace)], check=True, capture_output=True)
+    (workspace / ".chezmoiroot").write_text("home\n")
+    (workspace / "home").mkdir()
     (workspace / "tracked").write_text("fixture\n")
+    subprocess.run(["git", "init", str(workspace)], check=True, capture_output=True)
     subprocess.run(
-        ["git", "-C", str(workspace), "add", "tracked"],
+        ["git", "-C", str(workspace), "add", ".chezmoiroot", "tracked"],
         check=True,
         capture_output=True,
     )
@@ -101,6 +41,87 @@ def test_smoke_runs_workspace_preflight_before_tier_one(
         check=True,
         capture_output=True,
     )
+    return workspace
+
+
+def _render_gitconfig(workspace: Path, destination: Path) -> None:
+    rendered = subprocess.run(
+        ["chezmoi", f"--source={workspace}", "execute-template"],
+        input=GITCONFIG_TEMPLATE.read_text(),
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    destination.write_text(rendered)
+
+
+def _smoke_env(workspace: Path, gitconfig: Path) -> dict[str, str]:
+    return {
+        **os.environ,
+        "GIT_CONFIG_GLOBAL": str(gitconfig),
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_TEST_ASSUME_DIFFERENT_OWNER": "1",
+        "WORKSPACE_FOLDER": str(workspace),
+    }
+
+
+def test_gitconfig_renders_the_current_chezmoi_working_tree(
+    tmp_path: Path,
+) -> None:
+    source = _committed_workspace(tmp_path)
+    rendered_gitconfig = tmp_path / "rendered.gitconfig"
+    _render_gitconfig(source, rendered_gitconfig)
+
+    safe_directories = subprocess.run(
+        [
+            "git",
+            "config",
+            "--file",
+            str(rendered_gitconfig),
+            "--get-all",
+            "safe.directory",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+
+    source_dir = source / "home"
+    assert safe_directories == [str(source)]
+    assert str(source_dir) not in safe_directories
+
+
+def test_smoke_refuses_dubious_ownership_before_tier_one(
+    tmp_path: Path,
+) -> None:
+    workspace = _committed_workspace(tmp_path)
+    unsafe_gitconfig = tmp_path / "unsafe.gitconfig"
+    unsafe_gitconfig.write_text("")
+
+    result = subprocess.run(
+        ["bash", str(SMOKE_SCRIPT)],
+        env=_smoke_env(workspace, unsafe_gitconfig),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    diagnostics = result.stdout + result.stderr
+
+    assert result.returncode == 1
+    assert PREFLIGHT_MARKER in result.stdout
+    assert "detected dubious ownership" in diagnostics
+    assert "git cannot open the workspace" in diagnostics
+    assert "safe.directory" in diagnostics
+    assert str(workspace) in diagnostics
+    assert "::group::Tier 1" not in result.stdout
+
+
+def test_rendered_safe_directory_clears_ownership_preflight(
+    tmp_path: Path,
+) -> None:
+    workspace = _committed_workspace(tmp_path)
+    rendered_gitconfig = tmp_path / "rendered.gitconfig"
+    _render_gitconfig(workspace, rendered_gitconfig)
     stub_bin = tmp_path / "bin"
     stub_bin.mkdir()
     uv_stub = stub_bin / "uv"
@@ -110,9 +131,8 @@ def test_smoke_runs_workspace_preflight_before_tier_one(
     result = subprocess.run(
         ["bash", str(SMOKE_SCRIPT)],
         env={
-            **os.environ,
+            **_smoke_env(workspace, rendered_gitconfig),
             "PATH": f"{stub_bin}{os.pathsep}{os.environ['PATH']}",
-            "WORKSPACE_FOLDER": str(workspace),
         },
         check=False,
         capture_output=True,

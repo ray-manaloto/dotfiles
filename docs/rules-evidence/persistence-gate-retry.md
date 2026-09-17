@@ -68,7 +68,7 @@ and hk/libgit2 rc=1 with `Owner (-36)`. Adding the fixture path to the global
 gitconfig made both commands return rc=0 with no owner message. A mise task
 returned rc=0 in both arms, so mise remained unarmed by that probe.
 
-#1183 therefore renders one workspace-scoped `safe.directory` through the
+Issue #1183 therefore renders one workspace-scoped `safe.directory` through the
 chezmoi-managed global gitconfig and checks Git access before smoke tier 1.
 Unlike DNS and image-store signatures, another dubious-ownership result is a
 real defect: it means the stanza was not rendered or applied. A single retry is

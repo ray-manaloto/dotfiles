@@ -100,6 +100,8 @@ SURFACE_PATTERNS: tuple[str, ...] = (
     ".devcontainer/**/*",
     "docker-bake.hcl",
     "scripts/devcontainer-smoke.sh",
+    # #1183: on-create renders this file and the smoke preflight depends on it.
+    "home/dot_gitconfig.tmpl",
     "python/src/dotfiles_setup/devcontainer_names.py",
     "python/src/dotfiles_setup/container.py",
     "python/src/dotfiles_setup/sync.py",
