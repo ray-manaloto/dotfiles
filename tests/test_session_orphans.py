@@ -147,16 +147,34 @@ def test_plan_labels_bounded_wait_loops_without_excluding_them() -> None:
         age_s=10,
         state="S",
         command=(
-            "sh -c 'while [ $SECONDS -lt $deadline ] && [ ! -f x ]; do sleep 1; done'"
+            "sh -c 'deadline=$((SECONDS+600)); "
+            "while [ $SECONDS -lt $deadline ]; do sleep 5; done'"
         ),
     )
-    processes = (*reap.parse_processes(PS_TREE), bounded)
+    counter = reap.Process(
+        pid=302,
+        ppid=100,
+        age_s=10,
+        state="S",
+        command="sh -c 'while [ $i -lt 40 ]; do sleep 1; done'",
+    )
+    read_loop = reap.Process(
+        pid=303,
+        ppid=100,
+        age_s=10,
+        state="S",
+        command="sh -c 'while read -r line; do sleep 1; done'",
+    )
+    processes = (*reap.parse_processes(PS_TREE), bounded, counter, read_loop)
     plan = session_orphans.build_plan(processes, root_pid=100, self_pid=201)
 
     rendered = session_orphans.format_plan(plan)
     assert {item.pid for item in plan.wait_loops} == {300, 301}
+    assert {item.pid for item in plan.other} == {302, 303, 400}
     assert "WAIT-LOOP unbounded     300" in rendered
     assert "WAIT-LOOP bounded     301" in rendered
+    assert "BLOCK OTHER     302" in rendered
+    assert "BLOCK OTHER     303" in rendered
 
 
 def test_default_root_is_the_nearest_claude_ancestor() -> None:

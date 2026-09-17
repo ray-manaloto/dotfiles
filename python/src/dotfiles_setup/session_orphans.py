@@ -4,6 +4,8 @@
 At handoff, every session-local wait loop is an orphan, including a loop whose
 condition carries a deadline. Boundedness changes the audit label, not whether
 the process belongs to the session being closed.
+Only argv-visible loops are classifiable; a ``zsh -c source ...snapshot...``
+wrapper is OTHER and is left to #1171.
 """
 
 from __future__ import annotations
@@ -76,7 +78,7 @@ def build_plan(
         process
         for process in descendants
         if _SHELL_COMMAND.search(process.command)
-        and hook_guard.is_wait_loop(hook_guard.mask_shell_syntax(process.command))
+        and hook_guard.is_audit_wait_loop(hook_guard.mask_shell_syntax(process.command))
     )
     wait_ids = {process.pid for process in wait_loops}
     other = tuple(process for process in descendants if process.pid not in wait_ids)

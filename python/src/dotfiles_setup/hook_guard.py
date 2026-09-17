@@ -158,12 +158,22 @@ _V8 = "2026-09-15"
 # Deadline-bound wait enforcement landed with the helper it redirects to.
 _V9 = "2026-09-16"
 
-_WAIT_LOOP_CANDIDATE = re.compile(
-    rf"(?is)(?P<prefix>{_CMD}(?:then\b\s*)?(?:(?:\$\(|\(|`)\s*)*"
-    r"(?:(?:\S*/)?(?:bash|zsh|dash|sh)\s+-c\s+['\"]?\s*)?)"
-    r"(?P<keyword>until|while)\b(?P<condition>.*?)"
-    r"(?:;|\n|\x00)\s*do\b(?P<body>.*?)"
-    r"(?P<terminator>(?:^|[;&|\n\x00])\s*done\b)"
+
+def _compile_wait_loop_candidate(command_boundary: str) -> re.Pattern[str]:
+    """Compile a loop parser for one definition of executable command position."""
+    return re.compile(
+        rf"(?is)(?P<prefix>{command_boundary}(?:then\b\s*)?"
+        r"(?:(?:\$\(|\(|`)\s*)*"
+        r"(?:(?:\S*/)?(?:bash|zsh|dash|sh)\s+-c\s+['\"]?\s*)?)"
+        r"(?P<keyword>until|while)\b(?P<condition>.*?)"
+        r"(?:;|\n|\x00)\s*do\b(?P<body>.*?)"
+        r"(?P<terminator>(?:^|[;&|\n\x00])\s*done\b)"
+    )
+
+
+_WAIT_LOOP_CANDIDATE = _compile_wait_loop_candidate(_CMD)
+_AUDIT_WAIT_LOOP_CANDIDATE = _compile_wait_loop_candidate(
+    r"(?:^|[;&|\n\x00]\s*)" + _WRAPPER
 )
 _NEGATED_WAIT = re.compile(r"(?is)(?:^|[;&|\x00]\s*)\s*!\s*\S+")
 _FILE_TEST_WAIT = re.compile(
@@ -201,15 +211,26 @@ def _is_wait_condition(condition: str) -> bool:
 class _WaitLoopPattern:
     """Regex-compatible capability predicate used by the rule table."""
 
-    def __init__(self, *, require_unbounded: bool) -> None:
+    def __init__(
+        self,
+        *,
+        require_unbounded: bool,
+        accept_deadline_condition: bool = False,
+        candidates: re.Pattern[str] = _WAIT_LOOP_CANDIDATE,
+    ) -> None:
         self.require_unbounded = require_unbounded
+        self.accept_deadline_condition = accept_deadline_condition
+        self.candidates = candidates
 
     def search(self, masked: str) -> re.Match[str] | None:
         """Return the first sleeping wait-family loop satisfying this policy."""
-        for candidate in _WAIT_LOOP_CANDIDATE.finditer(masked):
+        for candidate in self.candidates.finditer(masked):
             condition = candidate.group("condition")
             body = candidate.group("body")
-            if not _is_wait_condition(condition):
+            if not _is_wait_condition(condition) and not (
+                self.accept_deadline_condition
+                and _CONDITION_BOUND.search(condition) is not None
+            ):
                 continue
             if _SLEEP_COMMAND.search(body) is None:
                 continue
@@ -224,6 +245,11 @@ class _WaitLoopPattern:
 
 _WAIT_LOOP_PATTERN = _WaitLoopPattern(require_unbounded=False)
 _UNBOUNDED_WAIT_LOOP = _WaitLoopPattern(require_unbounded=True)
+_AUDIT_WAIT_LOOP = _WaitLoopPattern(
+    require_unbounded=False,
+    accept_deadline_condition=True,
+    candidates=_AUDIT_WAIT_LOOP_CANDIDATE,
+)
 
 
 def mask_shell_syntax(text: str) -> str:
@@ -234,6 +260,11 @@ def mask_shell_syntax(text: str) -> str:
 def is_wait_loop(masked: str) -> bool:
     """Whether already-masked shell syntax contains a sleeping wait predicate."""
     return _WAIT_LOOP_PATTERN.search(masked) is not None
+
+
+def is_audit_wait_loop(masked: str) -> bool:
+    """Whether masked syntax contains a sleeping wait or deadline poll."""
+    return _AUDIT_WAIT_LOOP.search(masked) is not None
 
 
 def is_unbounded_wait_loop(masked: str) -> bool:
