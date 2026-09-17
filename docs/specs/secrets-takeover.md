@@ -371,14 +371,16 @@ lands, and splitting the widening from the file would put one change in two PRs 
 
 Four sub-steps; each is its own PR.
 
-**T4a — `.gitconfig` ← #446.** Merged file = dotfiles' behaviour-only `home/dot_gitconfig` **plus**
-#439's `[user]`. Three things are **dropped, not merged**: `core.excludesFile` (git reads
-`$XDG_CONFIG_HOME/git/ignore` natively — 3 arms on both machines), all **8** `[safe] directory`
-entries (inert on both machines — every path is uid 501, three are not repos, and the container's
-bind mount presents uid 1000 = the container user), and the whole `[credential]` block, whose arch
-branch is **inverted for this Mac** (it renders the `/opt/homebrew` helper, which is absent, while
-the binary that exists is the `/usr/local` amd64 one) — so it prints `No such file or directory` on
-every HTTPS credential lookup. All three repos use SSH remotes; the native path is
+**T4a — `.gitconfig` ← #446.** Merged file = dotfiles' behaviour-only `home/dot_gitconfig.tmpl` **plus**
+#439's `[user]`. Three things from mde are **dropped, not merged**: `core.excludesFile` (git reads
+`$XDG_CONFIG_HOME/git/ignore` natively — 3 arms on both machines), all **8** historical
+`[safe] directory` entries (every named path is uid 501 and three are not repos), and the whole
+`[credential]` block, whose arch branch is **inverted for this Mac** (it renders the
+`/opt/homebrew` helper, which is absent, while the binary that exists is the `/usr/local` amd64
+one) — so it prints `No such file or directory` on every HTTPS credential lookup. #1183 adds one
+replacement `[safe] directory` rendered from chezmoi's source working tree: Docker Desktop's
+virtiofs can temporarily present the workspace mount root as uid 0 after a re-create even while
+its contents remain uid 1000. All three repos use SSH remotes; the native path is
 `gh auth setup-git`. `[filter "lfs"]` is byte-equivalent and needs no reconciliation.
 *Gate:* `git config --list --show-origin` on the applied file names no missing helper; FAIL arm is
 today's error string.

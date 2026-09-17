@@ -32,9 +32,9 @@ spec), not a bootstrap shell wrapper:
   initialize-host`, which stages `authorized_keys` AND downloads the
   Doppler secrets (KEY=VALUE for `--env-file`). #893 moved the
   download out of the shell chain into python.
-- `onCreateCommand` (in container, once): `chezmoi init --apply`
-  against `/workspaces/${localWorkspaceFolderBasename}`, chowns
-  named-volume mountpoints to `${USER}:${USER}`.
+- `onCreateCommand` (in container, once): `chezmoi init --apply` against
+  `/workspaces/${localWorkspaceFolderBasename}` (renders it as the gitconfig's scoped
+  `safe.directory`, #1183), chowns named-volume mountpoints to `${USER}:${USER}`.
 - `postCreateCommand` (once): chowns the magic SSH socket, installs
   `authorized_keys` from `/tmp/dotfiles-host-state/` for R1, seeds
   `~/.ssh/known_hosts`, runs `scripts/devcontainer-smoke.sh` tier 1/2/3

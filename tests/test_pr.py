@@ -51,6 +51,7 @@ def _paths_for_oid(expected_oid: str, paths: list[str]) -> object:
         ".devcontainer/scripts/on-create.sh",
         "docker-bake.hcl",
         "scripts/devcontainer-smoke.sh",
+        "home/dot_gitconfig.tmpl",
         "python/src/dotfiles_setup/sync.py",
         "python/src/dotfiles_setup/container.py",
         "python/verification/suites.toml",
