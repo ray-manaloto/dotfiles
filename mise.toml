@@ -986,6 +986,11 @@ description = "OPERATOR ONLY: attest the planning-with-files plan. Run it as `! 
 # Thin caller; python/src/dotfiles_setup/plan_attest.py.
 run = 'uv run --project python dotfiles-setup plan-attest'
 
+[tasks.plan-pointer]
+description = "Refresh the tracked digest + active-phase pointer for task_plan.md"
+# Thin caller; python/src/dotfiles_setup/plan_pointer.py.
+run = 'uv run --project python dotfiles-setup plan-pointer'
+
 [tasks.handoff-check]
 description = "Verify a handoff's own citations (paths, file:line, mise task names): mise run handoff-check [-- <path>]"
 # Thin caller; python/src/dotfiles_setup/handoff_check.py.
@@ -1578,6 +1583,11 @@ description = "Review Claude and Codex requirements plus manual-work candidates 
 #   mise run session-review -- --requirements-only   # lossless evidence ledger
 run = 'uv run --project python dotfiles-setup session-review'
 
+[tasks.session-agentsview-pass]
+description = "Census recent project sessions for handoff integrity through AgentsView"
+# Thin caller; python/src/dotfiles_setup/agentsview_pass.py.
+run = 'uv run --project python dotfiles-setup session-agentsview-pass'
+
 [tasks.session-requirements]
 description = "Review bounded Claude roots and the active Codex root for requirements and promises"
 # Requirements-only remains a focused seam; default session-review includes it.
@@ -1620,6 +1630,16 @@ description = "Partition linter violations into YOURS vs THE UPGRADE'S by runnin
 #   mise run lint-delta -- --tool ty
 #   mise run lint-delta -- --baseline 0.15.20
 run = 'uv run --project python dotfiles-setup lint-delta'
+
+[tasks.bounded-wait]
+description = "Poll a file or command with a mandatory deadline"
+# Thin caller; python/src/dotfiles_setup/bounded_wait.py.
+run = 'uv run --project python dotfiles-setup bounded-wait'
+
+[tasks.session-orphans]
+description = "Audit this session's descendant processes; optionally reap wait loops"
+# Thin caller; python/src/dotfiles_setup/session_orphans.py. Dry-run by default.
+run = 'uv run --project python dotfiles-setup session-orphans'
 
 [tasks.reap]
 description = "Reap wedged processes by pattern and age, ancestor-protected (#653). DRY RUN unless --kill"

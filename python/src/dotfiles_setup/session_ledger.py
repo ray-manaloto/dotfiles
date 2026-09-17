@@ -70,6 +70,13 @@ _GIT_HOOK_CONTAMINATION = re.compile(
     r"(?=.*\b(?:contaminat|corrupt|rewrite|escape|inherit)\w*\b)",
     re.IGNORECASE,
 )
+_UNKNOWN_RECORD = re.compile(
+    r"^(?P<source>.+):(?P<line>\d+): unknown "
+    r"(?P<provider>Codex|Claude) (?P<family>record|attachment) "
+    r"'(?P<type>[^']*)'$"
+)
+_COUNT_MARK = "\N{MULTIPLICATION SIGN}"
+_GROUPED_UNKNOWN = re.compile(rf" {_COUNT_MARK}(?P<count>\d+) \(first .+:\d+\)$")
 
 
 class Provider(StrEnum):
@@ -342,6 +349,7 @@ class OmissionCensusEntry:
     authority: OmissionAuthority
     disposition: OmissionDisposition
     statement: str
+    count: int = 1
 
 
 @dataclass(frozen=True)
@@ -775,9 +783,22 @@ def _classify_omission(statement: str) -> OmissionCensusEntry:
         category = OmissionCategory.SEMANTIC
         authority = OmissionAuthority.REVIEWER
     digest = hashlib.sha256(statement.encode()).hexdigest()
+    count_match = _GROUPED_UNKNOWN.search(statement)
+    count = int(count_match.group("count")) if count_match else 1
     return OmissionCensusEntry(
-        f"omission-{digest[:24]}", category, authority, disposition, statement
+        f"omission-{digest[:24]}", category, authority, disposition, statement, count
     )
+
+
+@dataclass(frozen=True)
+class CoverageRenderContext:
+    """Publication details that make the operator header actionable."""
+
+    invoking_repo_root: Path | None = None
+    generation_id: str = "not-published"
+    omissions_index: Path | None = None
+    newest_omission_segment: Path | None = None
+    iteration_action: str = "not-computed"
 
 
 @dataclass(frozen=True)
@@ -801,6 +822,7 @@ class RequirementCoverage:
     semantic_dispositions: tuple[SemanticDisposition, ...] = ()
     provider_census: tuple[ProviderCensus, ...] = ()
     import_registry: tuple[ImportRegistryEntry, ...] = ()
+    skipped_record_census: tuple[tuple[str, int], ...] = ()
 
     @property
     def status(self) -> CoverageStatus:
@@ -872,6 +894,9 @@ class RequirementCoverage:
                 "imports": len(self.import_registry),
             },
             "provider_census": [asdict(item) for item in self.provider_census],
+            "skipped_record_census": [
+                list(item) for item in self.skipped_record_census
+            ],
             "import_registry_sha256": hashlib.sha256(
                 json.dumps(
                     [asdict(item) for item in self.import_registry],
@@ -1159,12 +1184,15 @@ class RequirementCoverage:
 
     def omission_segments_to_json(self) -> tuple[str, ...]:
         """Render every original omission with its typed classification."""
+        rows = [asdict(item) for item in self.omission_census()]
+        if not rows:
+            return ()
         common = {
             "schema_version": self.schema_version,
             "manifest_sha256": self.manifest_sha256,
         }
         chunks = _bounded_json_chunks(
-            [asdict(item) for item in self.omission_census()],
+            rows,
             common=common,
             member="omissions",
         )
@@ -1233,6 +1261,7 @@ class _Accumulator:
     source_authority: dict[str, AuthorityProvenance] = field(default_factory=dict)
     import_registry: list[ImportRegistryEntry] = field(default_factory=list)
     attachment_dependencies: list[AttachmentDependency] = field(default_factory=list)
+    skipped_records: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -2541,6 +2570,8 @@ def _parse_codex(
         "event_msg",
         "world_state",
         "inter_agent_communication_metadata",
+        "token_usage",
+        "token_usage_record",
     }
     state = continuation or _CodexContinuation()
     direct_messages = state.direct_messages
@@ -2560,6 +2591,9 @@ def _parse_codex(
         evidence = _evidence(Provider.CODEX, source_id, line, obj, raw)
         payload = obj.get("payload")
         values = payload if isinstance(payload, dict) else {}
+        if record_type in {"token_usage", "token_usage_record"}:
+            key = f"Codex record {record_type}"
+            acc.skipped_records[key] = acc.skipped_records.get(key, 0) + 1
         if record_type == "turn_context":
             state.active_turn_id = _turn_id(values)
         elif (
@@ -2706,11 +2740,22 @@ def _claude_attachment_event(
         "output_style",
         "queued_command",
         "skill_listing",
+        "hook_system_message",
+        "prompt_snapshot",
+        "environment",
+        "date",
+        "model",
+        "instructions",
+        "session_context",
+        "remote_session_change",
+        "output_style_instructions",
     }
-    file_like = attachment_type in {"file", "image", "document"} or (
-        attachment_type not in warning_types | diagnostic_types
-        and any(attachment.get(name) for name in ("image_url", "file_url", "path"))
-    )
+    skipped_types = {
+        "total_tokens_reminder",
+        "batching_reminder_sent",
+        "bash_output_audience_note",
+    }
+    file_like = attachment_type in {"file", "image", "document"}
     if file_like:
         meta = _attachment(attachment, evidence, acc)
         _add_event(
@@ -2723,6 +2768,10 @@ def _claude_attachment_event(
                 attachment=meta,
             ),
         )
+        return
+    if attachment_type in skipped_types:
+        key = f"Claude attachment {attachment_type}"
+        acc.skipped_records[key] = acc.skipped_records.get(key, 0) + 1
         return
     if attachment_type not in warning_types | diagnostic_types:
         acc.omissions.append(
@@ -3282,6 +3331,8 @@ def _merge_source_fact(acc: _Accumulator, state: _SourceFacts) -> None:
                     ),
                 )
     acc.omissions.extend(state.acc.omissions)
+    for key, count in state.acc.skipped_records.items():
+        acc.skipped_records[key] = acc.skipped_records.get(key, 0) + count
     acc.lineage.extend(state.acc.lineage)
     open_turn = bool(
         state.codex
@@ -3322,6 +3373,35 @@ def _merge_source_fact(acc: _Accumulator, state: _SourceFacts) -> None:
             for turn_id, turn_state in sorted(state.codex.turn_states.items())
             if turn_state != "complete"
         )
+
+
+def _consolidate_unknown_omissions(items: Iterable[str]) -> tuple[str, ...]:
+    """Collapse parser-drift floods to one blocking row per provider/type."""
+    preserved: list[str] = []
+    grouped: dict[tuple[str, str, str], tuple[int, str, str]] = {}
+    order: list[tuple[str, str, str]] = []
+    for item in items:
+        match = _UNKNOWN_RECORD.fullmatch(item)
+        if match is None:
+            preserved.append(item)
+            continue
+        key = (
+            match.group("provider"),
+            match.group("family"),
+            match.group("type"),
+        )
+        if key not in grouped:
+            grouped[key] = (0, match.group("source"), match.group("line"))
+            order.append(key)
+        count, source, line = grouped[key]
+        grouped[key] = (count + 1, source, line)
+    for provider, family, record_type in order:
+        count, source, line = grouped[(provider, family, record_type)]
+        preserved.append(
+            f"unknown {provider} {family} {record_type!r} {_COUNT_MARK}{count} "
+            f"(first {source}:{line})"
+        )
+    return tuple(preserved)
 
 
 def _finalize_relationships(acc: _Accumulator) -> None:
@@ -3436,9 +3516,10 @@ def _finalize_source_facts(
         tuple(acc.lineage),
         tuple(acc.cutoffs),
         recorded_cwd,
-        tuple(acc.omissions),
+        _consolidate_unknown_omissions(acc.omissions),
         semantic_dispositions=semantic_rows,
         import_registry=tuple(acc.import_registry),
+        skipped_record_census=tuple(sorted(acc.skipped_records.items())),
     )
     return apply_semantic_dispositions(coverage, semantic_rows)
 
@@ -4212,17 +4293,89 @@ def _cap_utf8(text: str, limit: int = MAX_RENDER_BYTES) -> str:
             prefix = prefix[:-1]
 
 
-def render_coverage(coverage: RequirementCoverage) -> str:
+def _omission_histogram(
+    coverage: RequirementCoverage,
+) -> tuple[tuple[str, int], ...]:
+    """Top omission families with grouped counts preserved."""
+    counts: dict[str, int] = {}
+    for item in coverage.omission_census():
+        match = re.search(
+            r"unknown (?P<provider>Codex|Claude) "
+            r"(?P<family>record|attachment) '(?P<type>[^']*)'",
+            item.statement,
+        )
+        label = (
+            f"{match.group('provider')} {match.group('family')} {match.group('type')}"
+            if match
+            else f"{item.authority} {item.category}"
+        )
+        counts[label] = counts.get(label, 0) + item.count
+    return tuple(sorted(counts.items(), key=lambda row: (-row[1], row[0]))[:10])
+
+
+def _primary_reason(coverage: RequirementCoverage) -> str:
+    """One operator-actionable reason for the current verdict."""
+    if coverage.status == CoverageStatus.COMPLETE:
+        return "all parsed evidence and dispositions are complete"
+    if coverage.selection_certification in {
+        SelectionCertification.EXPLICIT_SESSION_ID_UNRESOLVED,
+        SelectionCertification.UNCERTIFIED_ACTIVITY_FALLBACK,
+    }:
+        return f"selection certification is {coverage.selection_certification}"
+    histogram = _omission_histogram(coverage)
+    if histogram:
+        label, count = histogram[0]
+        return f"largest omission family is {label} ({count})"
+    return "one or more semantic dispositions remain incomplete"
+
+
+def render_coverage(
+    coverage: RequirementCoverage,
+    *,
+    context: CoverageRenderContext | None = None,
+) -> str:
     """Render a bounded review packet without leaking attachment payloads."""
+    context = CoverageRenderContext() if context is None else context
+    histogram = _omission_histogram(coverage)
+    omission_total = sum(item.count for item in coverage.omission_census())
+    source_root = coverage.recorded_cwd or "not supplied"
+    invoking_root = (
+        str(context.invoking_repo_root.resolve())
+        if context.invoking_repo_root
+        else "not supplied"
+    )
+    pytest_temp = "pytest-of-" in source_root or "pytest-of-" in invoking_root
     out = [
-        "# Session requirement and promise ledger",
-        "",
-        f"Coverage: **{coverage.status.upper()}**. Schema: {coverage.schema_version}. ",
+        f"VERDICT: {coverage.status.upper()} — {_primary_reason(coverage)}",
         (
             "Active selection: "
             f"**{coverage.selection_certification.upper()}**"
             f" (`{coverage.selected_session_id or 'none'}`)."
         ),
+        f"Selected session: `{coverage.selected_session_id or 'none'}`",
+        f"Source root: `{source_root}`",
+        f"Invoking repo root: `{invoking_root}`",
+        f"pytest-temp detected: {'yes' if pytest_temp else 'no'}",
+        (
+            f"Counts: sources={len(coverage.cutoffs)} "
+            f"requirements={len(coverage.requirements)} "
+            f"promises={len(coverage.promises)}"
+        ),
+        f"Omission total: {omission_total}",
+        "Omission histogram (top 10):",
+        *(f"- {label}: {count}" for label, count in histogram),
+        *([] if histogram else ["- none: 0"]),
+        f"Generation: `{context.generation_id}`",
+        f"Omissions index: `{context.omissions_index or 'not-published'}`",
+        (
+            "Newest omissions segment: "
+            f"`{context.newest_omission_segment or 'not-published'}`"
+        ),
+        f"Iteration action: `{context.iteration_action}`",
+        "",
+        "# Session requirement and promise ledger",
+        "",
+        f"Coverage: **{coverage.status.upper()}**. Schema: {coverage.schema_version}. ",
         f"Cutoff manifest: `{coverage.manifest_sha256}`.",
         f"Recorded cwd: `{coverage.recorded_cwd or 'not supplied'}`.",
         "",
@@ -4238,6 +4391,10 @@ def render_coverage(coverage: RequirementCoverage) -> str:
             "not inferred completion. "
         ),
         "Only explicit user evidence can grant authority.",
+        "",
+        "Known-and-skipped telemetry:",
+        *(f"- {name}: {count}" for name, count in coverage.skipped_record_census),
+        *([] if coverage.skipped_record_census else ["- none: 0"]),
         "",
         "## Provider census",
         "",

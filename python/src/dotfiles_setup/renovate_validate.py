@@ -64,6 +64,7 @@ import json
 import logging
 import subprocess
 import tempfile
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -71,6 +72,8 @@ logger = logging.getLogger(__name__)
 
 VALIDATOR = "renovate-config-validator"
 CONFIG_NAME = "renovate.json"
+RENOVATE_TOOL = "npm:renovate"
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 
 # `--no-global` validates the named file AS A REPO CONFIG; without it the
 # validator applies the global self-hosted schema. `--strict` is warnings-as-
@@ -103,10 +106,40 @@ class ValidatorRun:
     output: str
 
 
+def renovate_tool_spec(repo_root: Path = _REPO_ROOT) -> str:
+    """Return the exact Renovate mise spec declared by this checkout."""
+    config = tomllib.loads((repo_root / "mise.toml").read_text(encoding="utf-8"))
+    version = config.get("tools", {}).get(RENOVATE_TOOL)
+    if not isinstance(version, str):
+        message = f"{RENOVATE_TOOL} is not exactly pinned in mise.toml: {version!r}"
+        raise TypeError(message)
+    return f"{RENOVATE_TOOL}@{version}"
+
+
 def run_validator(config_path: Path) -> ValidatorRun:
     """Run the native validator against ``config_path``, capturing rc + output."""
+    spec = renovate_tool_spec()
+    location = subprocess.run(
+        ["mise", "where", spec],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if location.returncode != 0:
+        return ValidatorRun(location.returncode, location.stdout + location.stderr)
+    executable = Path(location.stdout.strip()) / "bin" / VALIDATOR
     result = subprocess.run(
-        [VALIDATOR, *VALIDATOR_FLAGS, str(config_path)],
+        [
+            "mise",
+            "exec",
+            spec,
+            "--",
+            str(executable),
+            *VALIDATOR_FLAGS,
+            str(config_path),
+        ],
+        cwd=_REPO_ROOT,
         capture_output=True,
         text=True,
         check=False,

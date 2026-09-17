@@ -164,6 +164,8 @@ PER_FILE: dict[str, tuple[tuple[str, str], ...]] = {
     # to route through, so pointing at `AGENTS.md` directly is already
     # correct.
     "session-handoff": (
+        # AgentsView's `--agent claude` census makes this history Claude-specific.
+        ("two prior Codex sessions", "two prior Claude sessions"),
         (
             "(the `CLAUDE.md` is a thin `@AGENTS.md` stub — edit `AGENTS.md`). Root",
             "Root",
@@ -221,17 +223,11 @@ PER_FILE: dict[str, tuple[tuple[str, str], ...]] = {
     # pre-existing `session_review_skill_parity` step already asserted this
     # file must be BYTE-IDENTICAL to its `.claude` source — these four
     # reversions are what keeps it that way under the general RULES.
+    # 2026-09-16 (Phase 7): the skill was cut to judgment only; the three
+    # "both harnesses" sentences moved to docs/session-review-reference.md,
+    # which the mirror does not rewrite, so only the description survives here.
     "session-review": (
         ("Review Codex and Codex requirements", "Review Claude and Codex requirements"),
-        ("It reads both Codex and", "It reads both Claude and"),
-        (
-            "as an explicit selector. Codex roots are selected independently",
-            "as an explicit selector. Claude roots are selected independently",
-        ),
-        (
-            "`selected=0` and remains `INCOMPLETE`; Codex evidence cannot satisfy the",
-            "`selected=0` and remains `INCOMPLETE`; Claude evidence cannot satisfy the",
-        ),
     ),
     # No `tmux-extended-keys` entry (RESPEC 2): its lowercase
     # `"claude code newline tmux"` frontmatter trigger is now handled by

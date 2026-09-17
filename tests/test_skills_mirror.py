@@ -133,6 +133,35 @@ def test_claude_skills_prefix_rewrites_to_the_real_mirror_location() -> None:
     assert rendered == "See `.agents/skills/other/SKILL.md`.\n"
 
 
+def test_session_handoff_preserves_agentsview_claude_session_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = (
+        "Inspect this project's current and two prior Claude sessions with "
+        "AgentsView `--agent claude`.\n"
+    )
+
+    rendered = skills_mirror.render(source, "session-handoff")
+
+    assert rendered == source
+    assert "two prior Codex sessions" not in rendered
+    assert "--agent claude" in rendered
+
+    reversion = ("two prior Codex sessions", "two prior Claude sessions")
+    monkeypatch.setitem(
+        skills_mirror.PER_FILE,
+        "session-handoff",
+        tuple(
+            replacement
+            for replacement in skills_mirror.PER_FILE["session-handoff"]
+            if replacement != reversion
+        ),
+    )
+    without_reversion = skills_mirror.render(source, "session-handoff")
+    assert "two prior Codex sessions" in without_reversion
+    assert "--agent claude" in without_reversion
+
+
 def test_mutating_a_mirrored_reference_file_makes_check_fail_and_name_it(
     tmp_path: Path,
 ) -> None:

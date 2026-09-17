@@ -52,33 +52,31 @@ Detail: `docs/rules-evidence/persistence-gate-retry.md`.
 | `fatal: detected dubious ownership in repository at '/workspaces/dotfiles'` | environmental | retry once — see "The dubious-ownership transient" below; do NOT reach for `dev-rebuild` |
 | `<tool>@latest: no versions found for <tool> matching date filter` (every pass identical) | real defect | do NOT retry — the candidate set is empty (a registry/backend change against `minimum_release_age`); more passes cannot help |
 
-## The dubious-ownership transient (in-container pytest, measured once)
+## The dubious-ownership transient (in-container pytest, two sightings)
 
-`mise run land -- 1047` (2026-09-13) died inside `verify-local` with the
-in-container suite stopping on its FIRST test:
+**2026-09-13 — `mise run land -- 1047`.** `verify-local` stopped on the first
+test: `git ls-files` returned rc=128 with `fatal: detected dubious ownership
+in repository at '/workspaces/dotfiles'`, then
+`tests/test_env_blob_scan.py`, test
+`test_tracked_files_reads_the_repo_and_not_an_empty_list`, failed. The scanner
+logged the git error instead of treating an empty file list as clean. An
+immediate `mise run verify-local` returned rc=0 with zero occurrences of the
+signature and all smoke tiers green.
 
-```
-git ls-files failed: fatal: detected dubious ownership
-  in repository at '/workspaces/dotfiles'
-FAILED tests/test_env_blob_scan.py::test_tracked_files_reads_the_repo_and_not_an_empty_list
-```
+**2026-09-16 — `mise run land -- 1158`.** It reported
+`FAIL smoke-tiers-1-3` on the first git call of the pytest run:
+`tests/test_bash_budget.py`, test `test_cli_wires_end_to_end`, with
+`git ls-files` rc=128 in `/workspaces/dotfiles`. Standalone `mise run smoke`
+reproduced the failure once (rc=1). Minutes later, the in-container probe
+showed uid 1000 = workspace owner 1000 and `git ls-files` rc=0; the smoke retry
+passed with 3521 tests.
 
-Git refused the bind-mounted workspace, `tracked_files()` logged the error and
-returned `[]` (`env_blob_scan.py:210-212`), and the test caught the empty list.
-That test exists to stop a silently-empty scan reading as a clean one — it
-worked, and it is the reason this surfaced as a failure rather than a pass.
-
-**An immediate `mise run verify-local` returned rc=0 with ZERO occurrences of
-the string**, R1/R3 and all three smoke tiers green. So: retry once.
-
-⚠️ **`safe.directory` is configured NOWHERE in this repo** — not the Dockerfile,
-devcontainer config, scripts, or chezmoi templates (grepped). That is a real
-absence, and it is NOT the cause: an unconfigured `safe.directory` would fail
-every run, not one in two. Do not "fix" it by adding the config on this
-evidence; the actual trigger is unidentified and one measurement cannot name it.
-
-⚠️ The expensive wrong move is `mise run dev-rebuild` — inside the failing land
-it had ALREADY run rc=0, so a rebuild cannot be the repair.
+Both sightings hit the **first git call of a pytest run**, then disappeared.
+The trigger remains unattributed. `safe.directory` is configured nowhere in
+this repository, but that absence cannot explain an intermittent result; do
+not add it on this evidence. Retry once and retain the direct rc. The expensive
+wrong move is `mise run dev-rebuild`: it had already succeeded inside the
+failing land, so rebuilding cannot be credited as the repair.
 
 ## The land-smoke transient (`land` only, twice in two sessions)
 

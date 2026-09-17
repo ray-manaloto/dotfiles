@@ -82,7 +82,7 @@ class Rule:
     """
 
     name: str
-    pattern: re.Pattern[str]
+    pattern: re.Pattern[str] | _WaitLoopPattern
     reason: str
     since: str
     quoted_blind: bool = False
@@ -116,7 +116,7 @@ class Rule:
 # trading recall for precision — never the reverse.
 _WRAPPER = (
     r"(?:(?:env\s+)?(?:\w+=\S*\s+)*"
-    r"(?:exec\s+|nohup\s+|time\s+|timeout\s+\S+\s+|xargs\s+)?)*"
+    r"(?:exec\s+|nohup\s+|setsid\s+|time\s+|timeout\s+\S+\s+|xargs\s+)?)*"
 )
 _CMD = r"(?:^|[;&|\n]\s*)" + _WRAPPER
 # The eight original rules landed together in #174 (90d699e, 2026-07-07);
@@ -155,6 +155,91 @@ _V7 = "2026-08-02"
 # Hand-assembled Codex SDLC dispatcher calls gained a complete typed mise task
 # on 2026-09-15. Keep this cutoff separate: the task did not exist earlier.
 _V8 = "2026-09-15"
+# Deadline-bound wait enforcement landed with the helper it redirects to.
+_V9 = "2026-09-16"
+
+_WAIT_LOOP_CANDIDATE = re.compile(
+    rf"(?is)(?P<prefix>{_CMD}(?:then\b\s*)?(?:(?:\$\(|\(|`)\s*)*"
+    r"(?:(?:\S*/)?(?:bash|zsh|dash|sh)\s+-c\s+['\"]?\s*)?)"
+    r"(?P<keyword>until|while)\b(?P<condition>.*?)"
+    r"(?:;|\n|\x00)\s*do\b(?P<body>.*?)"
+    r"(?P<terminator>(?:^|[;&|\n\x00])\s*done\b)"
+)
+_NEGATED_WAIT = re.compile(r"(?is)(?:^|[;&|\x00]\s*)\s*!\s*\S+")
+_FILE_TEST_WAIT = re.compile(
+    r"(?is)(?:^|[;&|\x00]\s*)\s*(?:test\b|\[)"
+    r"[^;&|\n\x00]*?(?:^|\s)-(?:f|e|s|d|r)\b"
+)
+_CONSTANT_WAIT = re.compile(r"(?is)^\s*(?:true|false|:|\[\s*[01]\s*\])\s*$")
+_READ_WAIT = re.compile(r"(?is)^\s*read\b")
+_BRACKET_OR_ARITHMETIC_WAIT = re.compile(r"(?s)^\s*(?:\[\[?|\(\()")
+_TEST_WAIT = re.compile(r"(?is)^\s*test\b")
+_COMMAND_WAIT = re.compile(r"(?is)^\s*(?:\S*/)?[A-Za-z_.][\w.-]*(?:\s|$)")
+_CONDITION_BOUND = re.compile(
+    r"(?s)(?:\bSECONDS\b|\$(?:\{)?(?:deadline|DEADLINE|end|END)(?:\}|\b)|"
+    r"date\s+\+%s\b)"
+)
+_TIMEOUT_WRAPPER = re.compile(
+    r"(?is)(?:^|\s)timeout\s+\d+(?:\.\d+)?(?:ms|s|m|h|d)?(?:\s|$)"
+)
+_SLEEP_COMMAND = re.compile(r"(?is)(?:^|[;&|\n\x00])\s*(?:\(\s*)?(?:\S*/)?sleep\b")
+
+
+def _is_wait_condition(condition: str) -> bool:
+    """Whether a loop condition represents polling rather than iteration."""
+    if _NEGATED_WAIT.search(condition) or _FILE_TEST_WAIT.search(condition):
+        return True
+    if _CONSTANT_WAIT.fullmatch(condition):
+        return True
+    if _READ_WAIT.match(condition):
+        return False
+    if _BRACKET_OR_ARITHMETIC_WAIT.match(condition) or _TEST_WAIT.match(condition):
+        return False
+    return _COMMAND_WAIT.match(condition) is not None
+
+
+class _WaitLoopPattern:
+    """Regex-compatible capability predicate used by the rule table."""
+
+    def __init__(self, *, require_unbounded: bool) -> None:
+        self.require_unbounded = require_unbounded
+
+    def search(self, masked: str) -> re.Match[str] | None:
+        """Return the first sleeping wait-family loop satisfying this policy."""
+        for candidate in _WAIT_LOOP_CANDIDATE.finditer(masked):
+            condition = candidate.group("condition")
+            body = candidate.group("body")
+            if not _is_wait_condition(condition):
+                continue
+            if _SLEEP_COMMAND.search(body) is None:
+                continue
+            if self.require_unbounded and (
+                _CONDITION_BOUND.search(condition)
+                or _TIMEOUT_WRAPPER.search(candidate.group("prefix"))
+            ):
+                continue
+            return candidate
+        return None
+
+
+_WAIT_LOOP_PATTERN = _WaitLoopPattern(require_unbounded=False)
+_UNBOUNDED_WAIT_LOOP = _WaitLoopPattern(require_unbounded=True)
+
+
+def mask_shell_syntax(text: str) -> str:
+    """Expose the shared executable-shell view without duplicating its chokepoint."""
+    return _inert_masked(text)
+
+
+def is_wait_loop(masked: str) -> bool:
+    """Whether already-masked shell syntax contains a sleeping wait predicate."""
+    return _WAIT_LOOP_PATTERN.search(masked) is not None
+
+
+def is_unbounded_wait_loop(masked: str) -> bool:
+    """Whether already-masked shell syntax contains an unbounded wait predicate."""
+    return _UNBOUNDED_WAIT_LOOP.search(masked) is not None
+
 
 # Variable names that carry credentials. Suffix/infix match on an ALL-CAPS
 # environment name, minus the path-ish tails (`SSH_KEY_PATH`, `AWS_KEY_FILE`)
@@ -454,6 +539,15 @@ _RULES: tuple[Rule, ...] = (
         "watches main CI. A one-shot `gh pr checks <n> --json` read is fine. "
         "See .claude/rules/mise-tasks-only.md.",
         _V2,
+    ),
+    Rule(
+        "unbounded wait loop",
+        _UNBOUNDED_WAIT_LOOP,
+        "Do not hand-roll an unbounded `until`/`while` + `sleep` loop. Use "
+        "`mise run bounded-wait -- --deadline <seconds> (--file <path> | "
+        "--cmd '<predicate>')`; every wait must have a terminal deadline. See "
+        ".claude/rules/long-running-command-hangs.md rule 2.",
+        _V9,
     ),
     # Bash returns the LAST pipeline element's exit code, so `mise run lint
     # 2>&1 | tail -40` reports tail's 0 even when the gate failed or was

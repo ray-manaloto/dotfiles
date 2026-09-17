@@ -13,9 +13,8 @@ so when it was finally killed **the pipeline reported exit 0** (tail's),
 masking the fact that the gate never passed. Two traps in one incident;
 both are now operative rules below, and both are guard-enforced.
 
-Case history — the backgrounding reversal, which log file to read, and
-the ruff wedge's two published red herrings:
-`docs/rules-evidence/long-running-command-hangs.md`.
+Case history — the backgrounding reversal, log selection, and the ruff wedge's
+red herrings — lives in `docs/rules-evidence/long-running-command-hangs.md`.
 
 ## Rules
 
@@ -28,35 +27,39 @@ the ruff wedge's two published red herrings:
    `DOTFILES_LINT_TIMEOUT=<secs>`. Source:
    `python/src/dotfiles_setup/lint.py`.
 
-2. **For any command expected to exceed ~30s, never wait blind.** Either
-   bound it with a timeout, or run it in the background and monitor its
-   debug log. **EXCEPTION — Mac-side container ops: background-and-idle gets
-   them REAPED.** `mise run ship`/`land`, `verify-local`, `sync`, and image
-   pulls are killed if the turn goes idle waiting on them, so "background it"
-   is precisely wrong here (a foreground bound also killed a `ship`, rc=143).
-   What works is **in-turn polling** —
-   background the command, then keep the turn engaged reading its log:
+2. **For any command expected to exceed ~30s, never wait blind.** For a file or
+   command condition, use the sanctioned helper:
+   `mise run bounded-wait -- --deadline <s> (--file <path> | --cmd '<sh -c>')`.
+   Its deadline is mandatory and expiry returns rc=124 with the awaited target.
+
+   **EXCEPTION — Mac-side container ops: background-and-idle gets them
+   REAPED.** `mise run ship`/`land`, `verify-local`, `sync`, and image pulls
+   are killed if the turn goes idle waiting on them. What works is **in-turn
+   polling**: background the command, then keep the turn engaged reading its
+   log:
 
    ```bash
    deadline=$((SECONDS+540))
    while [ $SECONDS -lt $deadline ]; do grep -q RC "$LOG" && break; sleep 15; done
    ```
 
-   *Machine-enforced since 2026-07-21* — the PreToolUse guard denies a
-   `&`-detached `mise run` (`hook_guard` rule `backgrounded mise run`), the
-   sibling of the existing `nohup mise run` rule. `&&` and a `2>&1` fd-dup are
-   not background operators and stay allowed.
+   Preserve that `deadline`. The wait-loop guard accepts a bound only when the
+   loop condition compares `SECONDS`, `deadline`/`DEADLINE`/`end`, or
+   `date +%s`, or when command position wraps the loop with `timeout <n>` or
+   `mise run bounded-wait`. A comment, `--connect-timeout`, path containing
+   `timeout`, or out-of-condition deadline assignment is not a bound. The
+   separate `backgrounded mise run` guard still denies `&`-detached or `nohup`
+   mise tasks; `&&` and `2>&1` remain allowed.
 
    **Backgrounding stays correct for CI/remote waits** (`gh pr checks --watch`,
    `gh run watch`) — those run on GitHub's infrastructure and nothing local
    reaps them. The hazard is specifically local, long, Mac-side work.
 
-   For `mise run lint` the log is the symlink
-   **`~/.local/state/dotfiles/hk-lint-<hash>.log`** — names only the MOST
-   RECENT run; with two runs live, read the exact path each logs at start.
-   `~/.local/state/hk/hk.log` is different, usually stale — reading it made a
-   live hang look idle. mise → `~/.local/state/mise/mise.log`. Count-diff
-   monitor, not a fixed sleep.
+   For `mise run lint`, the symlink
+   **`~/.local/state/dotfiles/hk-lint-<hash>.log`** names only the most recent
+   run; with two live, read the exact path each logs at start. The hk state log
+   is different and usually stale. mise → `~/.local/state/mise/mise.log`.
+   Count-diff monitor, not a fixed sleep.
 
 3. **Preserve real exit codes — never `cmd 2>&1 | tail -N` to capture.**
    *Machine-enforced since 2026-07-21* — the PreToolUse guard denies a
@@ -109,5 +112,4 @@ network- or IO-bound command an agent or human launches in this repo.
 - `gh-cli-watch.md` — sibling rule: use `--watch`, never sleep-poll.
 - `ci-local-parity.md` — hk pkl-cache clearing after `hk.pkl` edits.
 - Memory: `feedback_long_running_tail_logs`, `feedback_pipe_kills_exit_code`.
-- CLAUDE.md → `AGENTS.md` "Validate before committing" — prefer
-  `mise run lint` for the lint gate.
+- CLAUDE.md → `AGENTS.md` "Validate before committing" — prefer `mise run lint`.

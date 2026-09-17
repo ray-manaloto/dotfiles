@@ -1,6 +1,6 @@
 ---
 name: session-resume
-description: "Pick up where the last dotfiles session stopped: find the local handoff, compare it with the real git and PR state, and report disagreements, the exact next task, owed work, and traps. Use this as the first action after /clear or in a fresh same-clone session, and whenever the user says resume, catch me up, where were we, what was I doing, or what is next."
+description: "Pick up where the last dotfiles session stopped: reconcile the local handoff and authoritative task plan with real git and PR state, then report disagreements, the active plan phase, owed work, and traps. Use this first after /clear or whenever the user says resume, catch me up, where were we, or what is active."
 argument-hint: "[optional: a specific handoff path, or a nudge like 'just the traps']"
 ---
 
@@ -32,7 +32,12 @@ Apply `$ARGUMENTS` before choosing a file:
 
 `.agent/` is gitignored. A fresh clone can have no handoff, which is different
 from "no work pending." Say that plainly, then orient from these tracked/live
-sources instead of inventing a directive:
+sources instead of inventing a directive. If `task_plan.md` is also absent,
+say task authority is unavailable; issues and commits are context, not a
+substitute plan:
+
+The tracked plan pointer is a same-clone continuity check; a fresh clone cannot
+verify its digest because `task_plan.md` is gitignored.
 
 ```bash
 git log --oneline -8
@@ -56,8 +61,9 @@ mise run handoff-check
 ```
 
 With a specifically named handoff, pass the same path after `--`.
-`handoff-check` verifies paths, line ranges, and mise task names; it does not
-prove the handoff covered every obligation.
+`handoff-check` verifies paths, line ranges, mise task names, absence of a
+second task carrier, the active-plan shape, and the tracked plan pointer; it
+does not prove the handoff covered every non-task obligation.
 
 ### 3. Reconcile and report disagreements first
 
@@ -65,8 +71,10 @@ Compare the handoff with the snapshot and checker. Lead with every
 contradiction: branch or SHA drift, a PR whose live state differs, dirty paths
 the handoff omitted, or a stale citation.
 
-Quote the handoff's own wording for the next task and traps. Preserve issue
-numbers and explicit owed work. If everything agrees, say so in one line.
+Read the active phase heading directly from `task_plan.md`; never recover task
+selection from handoff prose. Quote the handoff's traps and preserve issue
+numbers and explicit owed non-task work. If everything agrees, say so in one
+line.
 
 Use this tight shape:
 
@@ -75,7 +83,7 @@ On <branch> at <sha> — clean|N uncommitted. <PR state.>
 
 DISAGREEMENT: <only when one exists>
 
-NEXT: <the next task, quoted>
+PLAN: task_plan.md → <active phase heading>
 
 OWED: <short list with issue numbers>
 
@@ -85,10 +93,11 @@ TRAPS: <the ones that can bite now, quoted>
 When `$ARGUMENTS` is a nudge, print the header plus only the requested section.
 `DISAGREEMENT` remains mandatory whenever reality contradicts the handoff.
 
-### 4. Offer the next step
+### 4. Offer to begin the active phase
 
-End by naming the next task and asking whether to start it. Orientation is the
-whole action here; the user may have arrived with a different priority.
+Ask whether to begin the active plan phase without copying its task text into
+another carrier. Orientation is the whole action here; the user may have
+arrived with a different priority.
 
 ## What this does not do
 

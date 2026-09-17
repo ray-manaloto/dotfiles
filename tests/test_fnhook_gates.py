@@ -222,6 +222,26 @@ def test_validate_plugin_does_not_route_through_mise() -> None:
         assert command[0] == fnhook_gates.CLAUDE_BINARY, command
 
 
+def test_mise_child_does_not_register_a_temporary_config_in_host_state(
+    tmp_path: Path,
+) -> None:
+    host_registry = Path.home() / ".local/state/mise/tracked-configs"
+    before = set(host_registry.iterdir()) if host_registry.is_dir() else set()
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "mise.toml").write_text('[tools]\npython = "3.14"\n')
+
+    result = fnhook_gates.default_runner(
+        ["mise", "config", "ls"],
+        cwd=project,
+        mise_state_dir=tmp_path / "isolated-state",
+    )
+
+    after = set(host_registry.iterdir()) if host_registry.is_dir() else set()
+    assert result.rc == 0, result.stderr
+    assert after == before
+
+
 def test_claude_code_pin_reads_sources_toml() -> None:
     """The one pin CI installs from, with an armed failure direction.
 

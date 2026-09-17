@@ -134,6 +134,20 @@ def test_a_ppid_cycle_terminates_instead_of_hanging() -> None:
     assert set(reap.ancestor_pids(cyclic, 10)) == {10, 11}
 
 
+def test_descendants_are_selected_by_ancestry_not_command_pattern() -> None:
+    table = _table()
+    assert reap.descendant_pids(table, 500) == (6001, 6002)
+    assert 6003 not in reap.descendant_pids(table, 500)
+
+
+def test_descendant_walk_is_cycle_safe() -> None:
+    cyclic = (
+        reap.Process(pid=10, ppid=11, age_s=99, state="S", command="a"),
+        reap.Process(pid=11, ppid=10, age_s=99, state="S", command="b"),
+    )
+    assert reap.descendant_pids(cyclic, 10) == (11,)
+
+
 def test_init_is_protected_even_when_the_walk_never_reaches_it() -> None:
     orphan = (reap.Process(pid=42, ppid=999, age_s=99, state="S", command="a"),)
     assert reap.INIT_PID in reap.protected_pids(orphan, self_pid=42)

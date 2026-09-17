@@ -236,6 +236,25 @@ def ancestor_pids(processes: Iterable[Process], start_pid: int) -> tuple[int, ..
     return tuple(chain)
 
 
+def descendant_pids(processes: Iterable[Process], root_pid: int) -> tuple[int, ...]:
+    """Every process reachable below ``root_pid``, breadth-first and cycle-safe."""
+    children: dict[int, list[int]] = {}
+    for process in processes:
+        children.setdefault(process.ppid, []).append(process.pid)
+    descendants: list[int] = []
+    seen = {root_pid}
+    frontier = [root_pid]
+    while frontier:
+        parent = frontier.pop(0)
+        for child in sorted(children.get(parent, [])):
+            if child in seen:
+                continue
+            seen.add(child)
+            descendants.append(child)
+            frontier.append(child)
+    return tuple(descendants)
+
+
 def protected_pids(
     processes: Iterable[Process],
     *,
