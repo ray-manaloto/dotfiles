@@ -4,8 +4,13 @@
 At handoff, every session-local wait loop is an orphan, including a loop whose
 condition carries a deadline. Boundedness changes the audit label, not whether
 the process belongs to the session being closed.
-Only argv-visible loops are classifiable; a ``zsh -c source ...snapshot...``
-wrapper is OTHER and is left to #1171.
+Only argv-visible loops are classifiable. A ``zsh -c source ...snapshot...``
+wrapper is WAIT-LOOP only when the audit predicate finds the loop in its argv;
+measured 2026-09-17, that holds for a one-line ``deadline=...; while`` body and
+NOT for a loop that is the first statement inside ``eval '...'`` or for a
+multi-line body (``ps`` renders a newline as the four characters backslash-012).
+Those wrappers, and their sleeps, stay OTHER and block, which fails closed
+(#1190).
 """
 
 from __future__ import annotations
@@ -14,12 +19,81 @@ import logging
 import os
 import re
 from dataclasses import dataclass
+from enum import Enum
 
 from dotfiles_setup import hook_guard, reap
 
 logger = logging.getLogger(__name__)
 _CLAUDE_COMMAND = re.compile(r"(?:^|[/\s])claude(?:\s|$)", re.IGNORECASE)
 _SHELL_COMMAND = re.compile(r"(?:^|[/\s])(?:bash|zsh|dash|sh)(?:\s|$)", re.IGNORECASE)
+
+
+class HarnessParentRequirement(Enum):
+    """The already-classified parent needed to admit a harness child."""
+
+    SESSION_ROOT = "session root"
+    HARNESS = "harness"
+
+
+@dataclass(frozen=True)
+class HarnessChildShape:
+    """One command shape whose parent proves harness ownership."""
+
+    name: str
+    command_pattern: re.Pattern[str]
+    parent_requirement: HarnessParentRequirement
+
+
+@dataclass(frozen=True)
+class WaitLoopChildShape:
+    """One inert direct-child command owned by a WAIT-LOOP."""
+
+    name: str
+    command_pattern: re.Pattern[str]
+
+
+@dataclass(frozen=True)
+class ShapedProcess:
+    """A process together with the reviewed shape that admitted it."""
+
+    process: reap.Process
+    shape_name: str
+
+
+# Each pattern is a full command line, not a substring allowlist. The launcher
+# and its server are the measured PDF MCP pair; the server additionally needs
+# an already-admitted HARNESS parent so an unrelated node process cannot pass.
+HARNESS_CHILD_SHAPES = (
+    HarnessChildShape(
+        "MCP server launcher",
+        re.compile(r"^(?:/[^\s]+/)?npm exec @modelcontextprotocol/server-pdf --stdio$"),
+        HarnessParentRequirement.SESSION_ROOT,
+    ),
+    HarnessChildShape(
+        "MCP server process",
+        re.compile(
+            r"^(?:/[^\s]+/)?node "
+            r"/Users/[^/\s]+/\.npm/_npx/[A-Za-z0-9]+/node_modules/\.bin/"
+            r"mcp-pdf-server --stdio$"
+        ),
+        HarnessParentRequirement.HARNESS,
+    ),
+    # The harness renews this exact five-minute macOS sleep inhibitor.
+    HarnessChildShape(
+        "caffeinate inhibitor",
+        re.compile(r"^(?:/[^\s]+/)?caffeinate -i -t 300$"),
+        HarnessParentRequirement.SESSION_ROOT,
+    ),
+)
+
+# A shell loop's direct sleep is inert bookkeeping, but broader descendants
+# may be real work and deliberately remain subject to HARNESS/OTHER handling.
+WAIT_LOOP_CHILD_SHAPES = (
+    WaitLoopChildShape(
+        "sleep",
+        re.compile(r"^(?:/[^\s]+/)?sleep [0-9]+(?:\.[0-9]+)?[smh]?$"),
+    ),
+)
 
 
 @dataclass(frozen=True)
@@ -38,6 +112,8 @@ class OrphanPlan:
     root_pid: int
     descendants: tuple[reap.Process, ...]
     wait_loops: tuple[reap.Process, ...]
+    wait_loop_children: tuple[ShapedProcess, ...]
+    harness: tuple[ShapedProcess, ...]
     other: tuple[reap.Process, ...]
     allowed_other: tuple[reap.Process, ...]
     protected_pids: frozenset[int]
@@ -81,15 +157,62 @@ def build_plan(
         and hook_guard.is_audit_wait_loop(hook_guard.mask_shell_syntax(process.command))
     )
     wait_ids = {process.pid for process in wait_loops}
-    other = tuple(process for process in descendants if process.pid not in wait_ids)
+    wait_loop_children: list[ShapedProcess] = []
+    harness: list[ShapedProcess] = []
+    harness_ids: set[int] = set()
+    other: list[reap.Process] = []
+    # These ordered exits are the classification precedence contract:
+    # WAIT-LOOP > direct typed child > parent-qualified HARNESS > OTHER.
+    for process in descendants:
+        if process.pid in wait_ids:
+            continue
+        match_command = process.command.rstrip()
+        wait_shape = next(
+            (
+                shape
+                for shape in WAIT_LOOP_CHILD_SHAPES
+                if process.ppid in wait_ids
+                and shape.command_pattern.fullmatch(match_command)
+            ),
+            None,
+        )
+        if wait_shape is not None:
+            wait_loop_children.append(ShapedProcess(process, wait_shape.name))
+            continue
+        harness_shape = next(
+            (
+                shape
+                for shape in HARNESS_CHILD_SHAPES
+                if shape.command_pattern.fullmatch(match_command)
+                and (
+                    (
+                        shape.parent_requirement
+                        is HarnessParentRequirement.SESSION_ROOT
+                        and process.ppid == root_pid
+                    )
+                    or (
+                        shape.parent_requirement is HarnessParentRequirement.HARNESS
+                        and process.ppid in harness_ids
+                    )
+                )
+            ),
+            None,
+        )
+        if harness_shape is not None:
+            harness.append(ShapedProcess(process, harness_shape.name))
+            harness_ids.add(process.pid)
+            continue
+        other.append(process)
     allowed_other = tuple(process for process in other if process.pid in allowed_pids)
     return OrphanPlan(
-        root_pid,
-        descendants,
-        wait_loops,
-        other,
-        allowed_other,
-        protected,
+        root_pid=root_pid,
+        descendants=descendants,
+        wait_loops=wait_loops,
+        wait_loop_children=tuple(wait_loop_children),
+        harness=tuple(harness),
+        other=tuple(other),
+        allowed_other=allowed_other,
+        protected_pids=protected,
     )
 
 
@@ -103,7 +226,9 @@ def format_plan(plan: OrphanPlan) -> str:
         "  protected caller chain: "
         + ", ".join(str(pid) for pid in sorted(plan.protected_pids)),
         f"  WAIT-LOOP: {len(plan.wait_loops)}",
-        *(
+    ]
+    for item in plan.wait_loops:
+        lines.append(
             "    WAIT-LOOP "
             + (
                 "unbounded "
@@ -113,15 +238,23 @@ def format_plan(plan: OrphanPlan) -> str:
                 else "bounded "
             )
             + item.describe()
-            for item in plan.wait_loops
-        ),
-        f"  OTHER: {len(plan.other)}",
-        *(
-            f"    {'ALLOWED' if item in plan.allowed_other else 'BLOCK'} OTHER "
-            f"{item.describe()}"
-            for item in plan.other
-        ),
-    ]
+        )
+        lines.extend(
+            f"      WAIT-LOOP child {child.shape_name} {child.process.describe()}"
+            for child in plan.wait_loop_children
+            if child.process.ppid == item.pid
+        )
+    lines.append(f"  HARNESS: {len(plan.harness)}")
+    lines.extend(
+        f"    HARNESS {item.shape_name} {item.process.describe()}"
+        for item in plan.harness
+    )
+    lines.append(f"  OTHER: {len(plan.other)}")
+    lines.extend(
+        f"    {'ALLOWED' if item in plan.allowed_other else 'BLOCK'} OTHER "
+        f"{item.describe()}"
+        for item in plan.other
+    )
     return "\n".join(lines)
 
 
@@ -131,7 +264,7 @@ def main(
     runtime: reap.Runtime | None = None,
     self_pid: int | None = None,
 ) -> int:
-    """Print a dry-run plan; with ``--kill``, reap only WAIT-LOOP descendants."""
+    """Print a dry-run plan; with ``--kill``, reap WAIT-LOOP groups only."""
     runtime = reap.Runtime() if runtime is None else runtime
     caller_pid = os.getpid() if self_pid is None else self_pid
     try:
@@ -157,9 +290,13 @@ def main(
     )
     logger.info("%s", format_plan(plan))
     survivors = False
-    if request.kill and plan.wait_loops:
+    reapable = (
+        *plan.wait_loops,
+        *(item.process for item in plan.wait_loop_children),
+    )
+    if request.kill and reapable:
         selection = reap.Selection(
-            targets=plan.wait_loops,
+            targets=reapable,
             protected_set=plan.protected_pids,
             scanned=len(processes),
         )
@@ -174,7 +311,7 @@ def main(
                 len(result.survivors),
             )
             survivors = True
-    elif plan.wait_loops:
+    elif reapable:
         logger.info("session-orphans: DRY RUN — no WAIT-LOOP was signalled")
     if plan.blocking_other:
         logger.error(

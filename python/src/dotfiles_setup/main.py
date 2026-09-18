@@ -1570,7 +1570,10 @@ def _add_session_subcommands(
     orphan_parser.add_argument(
         "--kill",
         action="store_true",
-        help="TERM then KILL WAIT-LOOP descendants; OTHER descendants are never reaped",
+        help=(
+            "TERM then KILL WAIT-LOOP rows and their typed sleep children; "
+            "HARNESS and OTHER rows are never reaped"
+        ),
     )
     orphan_parser.add_argument(
         "--allow",

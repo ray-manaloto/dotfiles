@@ -17,7 +17,7 @@ probe writes to a file and reads the recorded `rc` — never a piped tail.
 | guard | `printf '%s' '{"tool_name":"Bash","tool_input":{"command":"<CMD>"}}' \| bash scripts/pretooluse-guard.sh` | a deny prints JSON with `"permissionDecision": "deny"`; an allow prints nothing (rc=0 either way) |
 | handoff-check | `mise run handoff-check -- <fixture.md>` with a fixture carrying `## Next task`, and one with `NEXT:` inside a fence | `forbidden_task_carrier` for the first; none for the fenced one; `stale_plan_pointer` whenever the plan was edited after the pointer |
 | bounded-wait | `mise run bounded-wait -- --file x` (no deadline) · `-- --deadline 3 --interval 1 --cmd 'sleep 47 \| cat'` then `pgrep -f 'sleep 47'` · `-- --deadline 10 --file <path touched 2 s later>` | rc=2 usage · rc=124 `DEADLINE EXPIRED`, 0 survivors · rc=0 `satisfied file` |
-| session-orphans | in **bash** (zsh does not word-split `$var`): spawn `sh -c 'deadline=$((SECONDS+600)); while [ $SECONDS -lt $deadline ]; do sleep 5; done' &`, then `mise run session-orphans`, then `mise run session-orphans -- --kill --allow <each OTHER pid>` | the loop as `WAIT-LOOP bounded …`; harness children (MCP servers, `caffeinate`) as `BLOCK OTHER`; after `--kill` the loop pid is gone |
+| session-orphans | in **bash** (zsh does not word-split `$var`): spawn `sh -c 'deadline=$((SECONDS+600)); while [ $SECONDS -lt $deadline ]; do sleep 5; done' &`, then `mise run session-orphans`, then `mise run session-orphans -- --kill` | the loop is `WAIT-LOOP bounded`, its direct sleep is `WAIT-LOOP child`, parent-constrained MCP/caffeinate shapes are `HARNESS`, the healthy dry run is rc=0, and `--kill` selects the loop + sleep but no harness row |
 | AgentsView census | `mise run session-agentsview-pass -- --limit 2` · `-- --skill /nonexistent/SKILL.md` | two `AGENTSVIEW PASS` blocks · `UNVERIFIABLE`, rc=2, no `Traceback` |
 | session-review isolation | `mise run session-review -- --requirements-only --source-repo-root <tmp git repo>` (no `--output`) | rc=2 `explicit --output is required`; `.agent/session-review.md` sha unchanged |
 | session-review report | `mise run session-review` | rc=1 while codex turns are open; the `VERDICT:` block sits after the automation lanes (line ~56), not line 1 |
@@ -27,9 +27,15 @@ probe writes to a file and reads the recorded `rc` — never a piped tail.
 
 - The guard denies a hand-rolled `gh pr checks --watch`; wait on a merge with
   `mise run bounded-wait -- --cmd 'test "$(gh pr view N --json state --jq .state)" = MERGED'`.
-- Anything this harness runs in the background appears in `ps` only as
-  `/bin/zsh -c source …/shell-snapshots/snapshot-zsh-….sh`; only an argv-visible
-  `sh -c '<loop>'` is classifiable by `session-orphans` (#1171).
+- The snapshot `zsh -c source …/shell-snapshots/snapshot-zsh-….sh` wrapper is a
+  `WAIT-LOOP` only when the audit predicate sees the loop in its argv — measured:
+  a one-line `deadline=…; while …` body yes; a loop that is the FIRST statement
+  inside `eval '…'`, or a multi-line body (`ps` shows a literal `\012`), no — those
+  stay `OTHER` and block (fail closed, #1190). Only a typed direct sleep is grouped
+  beneath a `WAIT-LOOP`; other descendants keep normal classification.
+- MCP launchers/processes and `caffeinate` are `HARNESS` only when both their
+  typed command shape and parent requirement match. The same command under the
+  wrong parent is `OTHER`; do not use `--allow` to hide that mismatch.
 - `kill(pid, 0)` succeeds on a zombie; read `ps -o stat=` before calling a
   survivor real.
 - `mise ls` can list a version whose install dir has no `bin/`; `mise install -f

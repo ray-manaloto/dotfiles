@@ -94,9 +94,12 @@ mise run session-orphans
 
 At handoff, every session-local wait loop is an orphan whether its predicate is
 bounded or unbounded; `session-orphans` intentionally classifies both. The dry
-run labels each `WAIT-LOOP` as `bounded` or `unbounded`. Reap the reported wait
-loops with `mise run session-orphans -- --kill`. Any `OTHER` row blocks handoff
-until it is stopped or explicitly named with `--allow`.
+run labels each `WAIT-LOOP` as `bounded` or `unbounded` and groups a typed,
+directly owned sleep as its `WAIT-LOOP child`; `--kill` reaps both. A typed
+harness shape is `HARNESS` only when its parent requirement also matches; those
+rows neither block nor receive signals. Every remaining `OTHER` row blocks
+handoff until stopped or explicitly named with `--allow` — never `--allow` a
+healthy harness row merely to make the census pass.
 
 **Distinguish session-LOCAL state from session-INDEPENDENT autonomous
 processes — do NOT block `/clear` on the latter (Ray, 2026-07-08).** GitHub-side
