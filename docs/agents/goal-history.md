@@ -1086,3 +1086,49 @@ flowchart LR
     ORPHANS["#1171 landed at dbb4ce3"] --> RESIDUAL["#1157: session-review non-record residual"]
     RESIDUAL --> NEXT["#1172, #1173, #1169, #1170, #1165–#1168, #1185, #1190"]
 ```
+
+## 2026-09-18 — the claude-doctor lockout: a mise warning read as a version
+
+- **Iteration ID:** `dotfiles-goal-20260918-021`
+- **Prior goal digest:** `sha256:a1aa22f76e11c923f2baa7fb99faad9a1485f80c510af86a519f2e4459d268a6`
+- **Current goal digest:** `sha256:aa6d85cef2764a5889498dadcb20997deb43d2c4005bc6a5716b0792f69916c2`
+- **Changed requirement:** An unplanned incident displaced Phase 8 item 3.
+  `claude_doctor._run` merged stdout and stderr and `latest_version` took the
+  last line, so a mise deprecation WARN became "the published version"; the
+  verdict went INVALID and the claude-doctor PreToolUse hook denied
+  Bash/Edit/Write/Skill for the session. Three PRs landed: #1196 (`130614a`,
+  main was ALSO red — bot PR #1194 recorded a codex-config sha without staging
+  the JSON or the derived agent schema, and dropped authored comments), #1206
+  (`8dd721b`, the oracle reads stdout only; a non-version operand is UNKNOWN;
+  enforcement equals the prior behaviour except that false-positive class), and
+  #1207 (`b205e4e`, claude-code pin 2.1.273 → 2.1.277 with re-vendored types).
+  #1157 remains the next plan item; four follow-up issues join the queue.
+- **Reason:** Ray, 2026-09-18: fix the doctor parse first; have the codex SDLC
+  team review, fix, code-review and verify it "and won't happen again";
+  separate repair PR for main first; "match HEAD except the bug" for
+  enforcement; bump the pin now; file all five follow-ups.
+- **Evidence:** PRs #1196, #1206, #1207; `mise run land` rc=0 for each (main
+  run 35403515390 success for #1207); live `dotfiles-setup claude-doctor` on
+  main → verdict `ok`, 0 findings, `latest_version` 2.1.277;
+  `docs/research/kb/reports/agents/cold-review-doctor-oracle-r3-2026-09-18.md`
+  (SHIP; 240-cell prior-vs-new table, 0 cells gained enforcement, 13 of 13
+  sharp mutations caught) and its r1/r2 siblings; SDLC lane reports
+  `sdlc-doctor-oracle-stdout*-2026-09-18.md`.
+- **Affected tickets:** #1194, #1196, #1206, #1207, #1202, #1203, #1204,
+  #1205, #1165, #1157.
+- **Disposition:** `ACCEPTED`.
+- **Topology and ownership:** One writer: the Claude architect session.
+  Implementation lanes are the codex SDLC team; cold review is Opus.
+
+### Current goal
+
+> Complete Phase 8 and the remaining Phase 7 follow-ups: #1157 (session-review non-record residual) next, then #1172, #1173, #1169, #1170, #1165, #1166, #1167, #1168, #1185, #1190, and the 2026-09-18 incident follow-ups #1202, #1203, #1204, #1205; keep task_plan.md as the sole task authority, use only its tracked digest pointer for continuity, route implementation through the codex SDLC team, and run /verify after each landed PR.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    LOCKOUT["doctor lockout fixed: #1196, #1206, #1207 landed at b205e4e"] --> RESIDUAL["#1157: session-review non-record residual"]
+    RESIDUAL --> NEXT["#1172, #1173, #1169, #1170, #1165–#1168, #1185, #1190"]
+    NEXT --> INCIDENT["#1202, #1203, #1204, #1205"]
+```
