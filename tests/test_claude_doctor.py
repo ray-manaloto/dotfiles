@@ -32,6 +32,7 @@ blind together and that test is what fails.
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -67,6 +68,13 @@ No installation issues found.
 
 AMBIENT = "/ambient/bin:/usr/bin"
 
+MISE_DEPRECATION_WARN = (
+    "mise WARN  deprecated [python.uv_venv_auto.true]: "
+    "python.uv_venv_auto=true is deprecated. Use "
+    'python.uv_venv_auto="create|source" or "source" instead. '
+    "This will be removed in mise 2027.7.0."
+)
+
 #: A root holding no ``doctor.toml``, so :func:`claude_doctor.load_baseline`
 #: returns its documented default instead of this repo's real baseline.
 NO_BASELINE = Path("/nonexistent/dotfiles-test-root")
@@ -77,7 +85,7 @@ def _fake_run(
     doctor: tuple[int, str] = (0, NATIVE_DOCTOR),
     oracle: tuple[int, str] = (0, "2.1.270\n"),
     seen: list[str | None] | None = None,
-) -> Callable[..., tuple[int, str]]:
+) -> Callable[..., tuple[int, str, str]]:
     """A ``_run`` stub that answers by argv, recording each call's ``path``."""
 
     def run(
@@ -85,16 +93,54 @@ def _fake_run(
         *,
         extra_env: dict[str, str] | None = None,
         path: str | None = None,
-    ) -> tuple[int, str]:
+        stdout_only: bool = False,
+    ) -> tuple[int, str, str]:
         # `extra_env` is accepted and ignored on purpose: the stub must match
         # `_run`'s real signature, or a caller passing it would TypeError here
         # and the test would pass for the wrong reason.
-        del extra_env
+        del extra_env, stdout_only
         if seen is not None:
             seen.append(path)
-        return doctor if argv[0] == "claude" else oracle
+        rc, output = doctor if argv[0] == "claude" else oracle
+        return rc, output, ""
 
     return run
+
+
+def _stub_process_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    oracle_responses: list[tuple[int, str, str]],
+    doctor_responses: list[tuple[int, str, str]] | None = None,
+    calls: list[tuple[list[str], dict[str, object]]] | None = None,
+) -> None:
+    """Stub executable lookup and process launch, not our parsing functions."""
+    scripted = {
+        "claude": list(doctor_responses or [(0, NATIVE_DOCTOR, "")]),
+        "mise": list(oracle_responses),
+    }
+
+    def which(command: str, *, path: str | None = None) -> str:
+        del path
+        return f"/test/bin/{command}"
+
+    def run(
+        argv: list[str],
+        **kwargs: object,
+    ) -> subprocess.CompletedProcess[str]:
+        assert kwargs["capture_output"] is True
+        assert kwargs["text"] is True
+        if calls is not None:
+            calls.append((list(argv), dict(kwargs)))
+        command = Path(argv[0]).name
+        assert command in scripted, f"unexpected subprocess command: {command!r}"
+        responses = scripted[command]
+        assert responses, f"unexpected subprocess call beyond script: {argv!r}"
+        rc, stdout, stderr = responses.pop(0)
+        return subprocess.CompletedProcess(argv, rc, stdout, stderr)
+
+    monkeypatch.setattr(claude_doctor.shutil, "which", which)
+    monkeypatch.setattr(claude_doctor.subprocess, "run", run)
 
 
 @pytest.fixture(autouse=True)
@@ -143,6 +189,224 @@ def test_parse_doctor_reports_a_missing_clean_marker() -> None:
 # --------------------------------------------------------------------------- #
 # evaluate — the three verdicts
 # --------------------------------------------------------------------------- #
+
+
+def test_latest_version_reads_stdout_not_a_success_warning(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A diagnostic line must never become the successful oracle's value."""
+    calls: list[tuple[list[str], dict[str, object]]] = []
+    _stub_process_boundary(
+        monkeypatch,
+        oracle_responses=[(0, "2.1.277\n", MISE_DEPRECATION_WARN)],
+        calls=calls,
+    )
+
+    assert claude_doctor.latest_version() == ("2.1.277", None)
+    _, kwargs = calls[0]
+    assert kwargs["timeout"] == 20.0
+    env = kwargs["env"]
+    assert isinstance(env, dict)
+    assert env["MISE_FETCH_REMOTE_VERSIONS_CACHE"] == "0s"
+
+
+def test_empty_oracle_stdout_is_unknown_even_when_stderr_has_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A warning is ABOUT an empty answer; it cannot make the answer INVALID."""
+    diagnostic = f"{MISE_DEPRECATION_WARN} {'x' * 250} OMITTED"
+    _stub_process_boundary(
+        monkeypatch,
+        oracle_responses=[
+            (0, "", diagnostic),
+            (0, "", diagnostic),
+        ],
+    )
+
+    assert claude_doctor.latest_version() == (
+        None,
+        f"version oracle returned no version; stderr: {diagnostic[:200]!r}",
+    )
+    result = claude_doctor.evaluate(check_pin=False)
+    assert result.verdict is Verdict.UNKNOWN
+    assert result.enforcement_eligible is False
+
+
+def test_non_version_oracle_stdout_is_unknown_never_invalid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Even the value channel remains untrusted until its shape is established."""
+    stdout = "oracle prelude\nthe newest release is ready\n" + "x" * 250 + " OMITTED\n"
+    _stub_process_boundary(
+        monkeypatch,
+        oracle_responses=[(0, stdout, "")],
+    )
+
+    result = claude_doctor.evaluate(check_pin=False)
+    assert result.verdict is Verdict.UNKNOWN
+    assert result.enforcement_eligible is False
+    assert "non-version output" in result.findings[0]
+    assert "oracle prelude" in result.findings[0]
+    assert "the newest release is ready" in result.findings[0]
+    assert "OMITTED" not in result.findings[0]
+
+
+def test_running_version_shape_rejects_a_trailing_newline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A newline inside the captured token is content, not process framing."""
+    doctor = "Running: native (2.1.277\n)\nNo installation issues found.\n"
+    _stub_process_boundary(
+        monkeypatch,
+        doctor_responses=[(0, doctor, "")],
+        oracle_responses=[(0, "2.1.277\n", "")],
+    )
+
+    result = claude_doctor.evaluate(check_pin=False)
+
+    assert result.verdict is Verdict.UNKNOWN
+    assert result.running_version == "2.1.277\n"
+
+
+def test_claude_doctor_is_read_across_stdout_and_stderr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The defensive default survives if upstream moves ``Running:`` to stderr.
+
+    This is not the observed stream split: measured 2026-09-18, the real command
+    wrote 655 bytes to stdout and zero to stderr. The synthetic split protects
+    the documented merged default against a future upstream change.
+    """
+    _stub_process_boundary(
+        monkeypatch,
+        doctor_responses=[
+            (
+                0,
+                "Claude Code doctor\nNo installation issues found.\n",
+                "Running: native (2.1.270)\n",
+            )
+        ],
+        oracle_responses=[(0, "2.1.270\n", "")],
+    )
+
+    result = claude_doctor.evaluate(check_pin=False)
+
+    assert result.verdict is Verdict.OK
+    assert result.running_version == "2.1.270"
+    assert result.clean_marker_present is True
+
+
+@pytest.mark.parametrize(
+    ("running", "method", "clean_marker", "expected"),
+    [
+        (
+            "unknown",
+            "native",
+            "No installation issues found.\n",
+            (Verdict.UNKNOWN, ["non-version running value", "'unknown'"]),
+        ),
+        (
+            "dev",
+            "npm-global",
+            "No installation issues found.\n",
+            (
+                Verdict.INVALID,
+                ["non-version running value", "not the expected 'native'"],
+            ),
+        ),
+        (
+            "dev",
+            "native",
+            "",
+            (Verdict.INVALID, ["non-version running value", "installation issues"]),
+        ),
+        (
+            "dev-" + "x" * 250 + " OMITTED",
+            "native",
+            "No installation issues found.\n",
+            (Verdict.UNKNOWN, ["non-version running value", "'dev-"]),
+        ),
+    ],
+    ids=[
+        "unknown-version",
+        "wrong-method",
+        "missing-clean-marker",
+        "bounded-value",
+    ],
+)
+def test_unreadable_running_version_is_unknown_but_keeps_known_facts(
+    monkeypatch: pytest.MonkeyPatch,
+    running: str,
+    method: str,
+    clean_marker: str,
+    expected: tuple[Verdict, list[str]],
+) -> None:
+    """Unreadable currency skips only that comparison, not other assertions."""
+    expected_verdict, expected_fragments = expected
+    doctor = f"Running: {method} ({running})\n{clean_marker or 'Found 1 problem.\n'}"
+    calls: list[tuple[list[str], dict[str, object]]] = []
+    _stub_process_boundary(
+        monkeypatch,
+        doctor_responses=[(0, doctor, "")],
+        oracle_responses=[(0, "2.1.277\n", "")],
+        calls=calls,
+    )
+
+    result = claude_doctor.evaluate(check_pin=False)
+
+    assert result.verdict is expected_verdict
+    assert result.enforcement_eligible is (expected_verdict is Verdict.INVALID)
+    assert result.running_version == running
+    assert result.install_method == method
+    assert result.clean_marker_present is bool(clean_marker)
+    assert [Path(argv[0]).name for argv, _kwargs in calls] == ["claude", "mise"]
+    for fragment in expected_fragments:
+        assert any(fragment in finding for finding in result.findings)
+    if "OMITTED" in running:
+        assert all("OMITTED" not in finding for finding in result.findings)
+        payload = json.loads(result.to_json())
+        assert payload["running_version"] == running[:200]
+        assert "OMITTED" not in payload["running_version"]
+
+
+def test_release_suffix_is_unreadable_not_an_enforcing_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No published tag needs a suffix, so ``-dev`` cannot become INVALID."""
+    doctor = "Running: native (2.1.277-dev)\nNo installation issues found.\n"
+    _stub_process_boundary(
+        monkeypatch,
+        doctor_responses=[(0, doctor, "")],
+        oracle_responses=[(0, "2.1.277\n", "")],
+    )
+
+    result = claude_doctor.evaluate(check_pin=False)
+
+    assert result.verdict is Verdict.UNKNOWN
+    assert result.enforcement_eligible is False
+    assert result.findings == [
+        "`claude doctor` returned a non-version running value: '2.1.277-dev'"
+    ]
+
+
+def test_oracle_stderr_is_diagnostic_on_success_and_reason_on_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The same stream changes role only when the command itself fails."""
+    failure = "mise failed to reach the release service"
+    _stub_process_boundary(
+        monkeypatch,
+        oracle_responses=[
+            (0, "2.1.277\n", MISE_DEPRECATION_WARN),
+            (9, "", failure),
+        ],
+    )
+
+    assert claude_doctor.latest_version() == ("2.1.277", None)
+    latest, reason = claude_doctor.latest_version()
+    assert latest is None
+    assert reason is not None
+    assert failure in reason
 
 
 def test_a_current_native_install_is_ok(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -213,25 +477,35 @@ def test_a_missing_binary_is_unknown_not_invalid(
 def test_reworded_output_is_unknown_not_a_silent_pass(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The whole reason the verdict is three-way rather than a boolean."""
+    """A parse failure remains UNKNOWN but retains the known clean-marker fact."""
     monkeypatch.setattr(
         claude_doctor, "_run", _fake_run(doctor=(0, "Now running: native 2.1.270"))
     )
     result = claude_doctor.evaluate(check_pin=False)
     assert result.verdict is Verdict.UNKNOWN
     assert result.enforcement_eligible is False
+    assert "could not parse" in result.findings[0]
+    assert "installation issues" in result.findings[1]
 
 
 def test_an_oracle_failure_is_unknown_never_current(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Grilling decision Q14: 'cannot determine latest', never 'current'."""
-    monkeypatch.setattr(
-        claude_doctor, "_run", _fake_run(oracle=(1, "network unreachable"))
+    """Oracle failure stays UNKNOWN while listing established install failures."""
+    doctor = "Running: npm-global (2.1.270)\nFound 1 problem.\n"
+    _stub_process_boundary(
+        monkeypatch,
+        doctor_responses=[(0, doctor, "")],
+        oracle_responses=[(1, "", "network unreachable")],
     )
+
     result = claude_doctor.evaluate(check_pin=False)
+
     assert result.verdict is Verdict.UNKNOWN
-    assert any("cannot determine latest" in f for f in result.findings)
+    assert result.enforcement_eligible is False
+    assert "cannot determine latest" in result.findings[0]
+    assert "not the expected 'native'" in result.findings[1]
+    assert "installation issues" in result.findings[2]
     assert result.running_version == "2.1.270"
 
 
@@ -507,6 +781,73 @@ def _sources_with(version: str, tmp_path: Path) -> Path:
         encoding="utf-8",
     )
     return tmp_path
+
+
+def test_unreadable_running_value_still_enforces_a_stale_repo_pin(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A garbage host token cannot disarm the independent repo-pin assertion."""
+    root = _sources_with("2.1.272", tmp_path)
+    doctor = "Running: native (unknown)\nNo installation issues found.\n"
+    _stub_process_boundary(
+        monkeypatch,
+        doctor_responses=[(0, doctor, "")],
+        oracle_responses=[(0, "2.1.273\n", "")],
+    )
+
+    result = claude_doctor.evaluate(project_root=root)
+
+    assert result.verdict is Verdict.INVALID
+    assert result.enforcement_eligible is True
+    assert "non-version running value" in result.findings[0]
+    assert "schemas/sources.toml pins claude-code at 2.1.272" in result.findings[1]
+    assert not any("claude on PATH is unknown but" in item for item in result.findings)
+
+
+def test_unreadable_running_value_with_current_pin_remains_unknown(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Skipping the one unaskable comparison must never manufacture OK."""
+    root = _sources_with("2.1.273", tmp_path)
+    doctor = "Running: native (unknown)\nNo installation issues found.\n"
+    _stub_process_boundary(
+        monkeypatch,
+        doctor_responses=[(0, doctor, "")],
+        oracle_responses=[(0, "2.1.273\n", "")],
+    )
+
+    result = claude_doctor.evaluate(project_root=root)
+
+    assert result.verdict is Verdict.UNKNOWN
+    assert result.enforcement_eligible is False
+    assert result.findings == [
+        "`claude doctor` returned a non-version running value: 'unknown'"
+    ]
+
+
+def test_findings_keep_head_order_method_version_pin_then_clean(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The hook prints item zero first, so order is part of its public output."""
+    root = _sources_with("2.1.272", tmp_path)
+    doctor = "Running: npm-global (2.1.270)\nFound 1 problem.\n"
+    _stub_process_boundary(
+        monkeypatch,
+        doctor_responses=[(0, doctor, "")],
+        oracle_responses=[(0, "2.1.273\n", "")],
+    )
+
+    result = claude_doctor.evaluate(project_root=root)
+
+    assert result.verdict is Verdict.INVALID
+    assert len(result.findings) == 4
+    assert "not the expected 'native'" in result.findings[0]
+    assert "claude on PATH is 2.1.270 but 2.1.273 is published" in result.findings[1]
+    assert "schemas/sources.toml pins claude-code at 2.1.272" in result.findings[2]
+    assert "installation issues" in result.findings[3]
 
 
 def test_a_current_pin_reports_nothing(tmp_path: Path) -> None:

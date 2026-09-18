@@ -80,6 +80,11 @@ _RUNNING_RE: Final = re.compile(
     re.MULTILINE,
 )
 
+#: Claude Code's published releases use exactly three numeric components.
+#: Measured 2026-09-18, none of the latest 100 tags needed a prerelease/build
+#: suffix. Any other token is therefore an unanswered question, never a version.
+_VERSION_RE: Final = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+")
+
 #: The summary line whose presence is the "no errors" assertion.
 _CLEAN_MARKER: Final = "No installation issues found."
 
@@ -160,12 +165,23 @@ class DoctorVerdict:
         return self.verdict is Verdict.INVALID
 
     def to_json(self) -> str:
-        """Serialise the verdict for a hook or a log."""
+        """Serialise the verdict for a hook or a log.
+
+        Unreadable running text is bounded just like the finding that quotes it.
+        Otherwise one malformed ``Running:`` line could bypass the 200-character
+        diagnostic budget through this separate JSON field.
+        """
+        running_version = self.running_version
+        if (
+            running_version is not None
+            and _VERSION_RE.fullmatch(running_version) is None
+        ):
+            running_version = running_version[:200]
         return json.dumps(
             {
                 "verdict": self.verdict.value,
                 "enforcement_eligible": self.enforcement_eligible,
-                "running_version": self.running_version,
+                "running_version": running_version,
                 "install_method": self.install_method,
                 "latest_version": self.latest_version,
                 "clean_marker_present": self.clean_marker_present,
@@ -181,12 +197,28 @@ def _run(
     *,
     extra_env: dict[str, str] | None = None,
     path: str | None = None,
-) -> tuple[int, str]:
-    """Run ``argv``, returning ``(rc, combined output)``.
+    stdout_only: bool = False,
+) -> tuple[int, str, str]:
+    """Run ``argv``, returning ``(rc, output, stderr)``.
 
     A missing binary, a timeout and a crash all collapse to a non-zero rc with
     the reason as output, so every caller reaches the same ``UNKNOWN`` path
     rather than raising out of a SessionStart hook.
+
+    ``stdout_only`` separates a successful command's value channel from its
+    diagnostic channel. On failure stderr remains part of the returned output:
+    it is evidence ABOUT why the command failed, not a candidate value. Stderr
+    is also returned separately so a successful value-only caller can retain
+    the reason an empty answer was produced. The default stays merged because
+    this code deliberately reads ``claude doctor`` across both streams before
+    applying its regex-anchored parser. That merge is defensive: measured
+    2026-09-18, the real command wrote 655 bytes to stdout and zero to stderr,
+    but reading both protects against upstream moving the ``Running:`` line.
+
+    Measured 2026-09-18: mise emitted a deprecation warning on stderr after a
+    valid version on stdout. Combining the streams made the warning the oracle's
+    last line, produced a false ``INVALID``, and denied the tools needed to
+    repair the check. The split prevents diagnostics from becoming values.
 
     ``path`` is the ``PATH`` the binary is resolved against **and** the one the
     child inherits. Both halves matter: resolving against it picks the binary the
@@ -195,7 +227,7 @@ def _run(
     """
     resolved = shutil.which(argv[0], path=path) if path else shutil.which(argv[0])
     if resolved is None:
-        return 127, f"{argv[0]}: not found on PATH"
+        return 127, f"{argv[0]}: not found on PATH", ""
     argv = [resolved, *argv[1:]]
     env = {**os.environ, **({"PATH": path} if path else {}), **(extra_env or {})}
     try:
@@ -209,10 +241,14 @@ def _run(
             check=False,
         )
     except subprocess.TimeoutExpired:
-        return 124, f"{argv[0]}: timed out after {_TIMEOUT_S:g}s"
+        return 124, f"{argv[0]}: timed out after {_TIMEOUT_S:g}s", ""
     except OSError as exc:
-        return 126, f"{argv[0]}: {exc}"
-    return done.returncode, (done.stdout or "") + (done.stderr or "")
+        return 126, f"{argv[0]}: {exc}", ""
+    stdout = done.stdout or ""
+    stderr = done.stderr or ""
+    if done.returncode == 0 and stdout_only:
+        return done.returncode, stdout, stderr
+    return done.returncode, stdout + stderr, stderr
 
 
 def parse_doctor(text: str) -> tuple[str | None, str | None, bool]:
@@ -224,7 +260,11 @@ def parse_doctor(text: str) -> tuple[str | None, str | None, bool]:
     match = _RUNNING_RE.search(text)
     if match is None:
         return None, None, _CLEAN_MARKER in text
-    return match["version"].strip(), match["method"].strip(), _CLEAN_MARKER in text
+    return (
+        match["version"].strip(" \t"),
+        match["method"].strip(),
+        _CLEAN_MARKER in text,
+    )
 
 
 #: The `schemas/sources.toml` key whose `version` is Claude Code's ONLY pin
@@ -275,86 +315,28 @@ def latest_version(
     ``force_refresh`` bypasses mise's 1h ``fetch_remote_versions_cache`` so the
     comparison is against the true newest release rather than a cached one.
     """
-    rc, out = _run(
+    rc, out, stderr = _run(
         ["mise", "latest", ORACLE_SPEC],
         extra_env=_NO_CACHE_ENV if force_refresh else None,
         path=path,
+        stdout_only=True,
     )
     if rc != 0:
         return None, f"version oracle failed (rc={rc}): {out.strip()[:200]}"
-    version = out.strip().splitlines()[-1].strip() if out.strip() else ""
+    version = out.strip()
+    stderr_reason = f"; stderr: {stderr.strip()[:200]!r}" if stderr.strip() else ""
     if not version:
-        return None, "version oracle returned no version"
+        return None, f"version oracle returned no version{stderr_reason}"
+    if _VERSION_RE.fullmatch(version) is None:
+        return None, (
+            f"version oracle returned non-version output: {version[:200]!r}"
+            f"{stderr_reason}"
+        )
     return version, None
 
 
-def evaluate(
-    *,
-    force_refresh: bool = True,
-    expected_method: str = NATIVE_METHOD,
-    check_pin: bool = True,
-    project_root: Path | None = None,
-) -> DoctorVerdict:
-    """Run both probes and decide.
-
-    Order matters: ``claude doctor`` failing to run at all is ``UNKNOWN``, not
-    ``INVALID`` — a missing binary is a question that could not be asked.
-
-    ``expected_method`` is the install method :data:`NATIVE_METHOD` documents.
-    Pass ``""`` to skip that assertion entirely — a host that deliberately runs a
-    non-native build should say so in ``doctor.toml`` rather than read a standing
-    finding it has decided to accept.
-
-    ``check_pin`` adds the REPO-state question (:func:`pin_currency_findings`)
-    to the two host-state ones. It is a separate switch because the two have
-    different subjects: every other finding here is about this machine, while
-    that one is about a tracked file. Tests that fabricate ``latest`` pass
-    ``False`` so a real pin bump does not turn six host-state assertions red —
-    the pin's own arms are tested directly against the function.
-    """
-    path, provenance = resolve_ambient_path(os.environ)
-    if provenance is Provenance.BLIND:
-        return DoctorVerdict(
-            verdict=Verdict.UNKNOWN,
-            findings=[_BLIND_ADVICE],
-        )
-
-    rc, text = _run(["claude", "doctor"], path=path)
-    if rc != 0:
-        return DoctorVerdict(
-            verdict=Verdict.UNKNOWN,
-            findings=[f"`claude doctor` did not run (rc={rc}): {text.strip()[:200]}"],
-        )
-
-    running, method, clean = parse_doctor(text)
-    if running is None:
-        return DoctorVerdict(
-            verdict=Verdict.UNKNOWN,
-            findings=[
-                (
-                    "could not parse a `Running: <method> (<version>)` line "
-                    "from `claude doctor` — upstream may have changed its "
-                    "output. Treating as UNKNOWN rather than asserting anything."
-                )
-            ],
-            clean_marker_present=clean,
-        )
-
-    latest, oracle_error = latest_version(force_refresh=force_refresh, path=path)
-    if latest is None:
-        return DoctorVerdict(
-            verdict=Verdict.UNKNOWN,
-            findings=[
-                (
-                    "cannot determine latest version, so currency is unknown "
-                    f"(NOT 'current'): {oracle_error}"
-                )
-            ],
-            running_version=running,
-            install_method=method,
-            clean_marker_present=clean,
-        )
-
+def _method_findings(method: str | None, expected_method: str) -> list[str]:
+    """Report an independently established install-method failure."""
     findings: list[str] = []
     if expected_method and method != expected_method:
         # The shim advice is only true when the NATIVE install is the one being
@@ -375,21 +357,126 @@ def evaluate(
             f"claude on PATH is a {method!r} install, not the expected "
             f"{expected_method!r}.{detail}"
         )
-    if running != latest:
+    return findings
+
+
+def _clean_marker_findings(*, clean: bool) -> list[str]:
+    """Report the clean-marker failure separately so it remains ordered last."""
+    if clean:
+        return []
+    return [
+        (
+            f"`claude doctor` did not report {_CLEAN_MARKER!r} — it found "
+            "installation issues."
+        )
+    ]
+
+
+def evaluate(
+    *,
+    force_refresh: bool = True,
+    expected_method: str = NATIVE_METHOD,
+    check_pin: bool = True,
+    project_root: Path | None = None,
+) -> DoctorVerdict:
+    """Run both probes and decide.
+
+    Order matters: ``claude doctor`` failing to run at all is ``UNKNOWN``, not
+    ``INVALID`` — a missing binary is a question that could not be asked.
+
+    ``expected_method`` is the install method :data:`NATIVE_METHOD` documents.
+    Pass ``""`` to skip that assertion entirely — a host that deliberately runs a
+    non-native build should say so in ``doctor.toml`` rather than read a standing
+    finding it has decided to accept.
+
+    The install method is independent of the captured version token. If that
+    token is not version-shaped, only the running-versus-latest comparison is
+    unanswered. With no other failure the verdict is ``UNKNOWN``; an established
+    method, pin, or clean-marker failure remains ``INVALID`` rather than being
+    silently masked by the unreadable version.
+
+    ``check_pin`` adds the REPO-state question (:func:`pin_currency_findings`)
+    to the two host-state ones. It is a separate switch because the two have
+    different subjects: every other finding here is about this machine, while
+    that one is about a tracked file. Tests that fabricate ``latest`` pass
+    ``False`` so a real pin bump does not turn six host-state assertions red —
+    the pin's own arms are tested directly against the function.
+    """
+    path, provenance = resolve_ambient_path(os.environ)
+    if provenance is Provenance.BLIND:
+        return DoctorVerdict(
+            verdict=Verdict.UNKNOWN,
+            findings=[_BLIND_ADVICE],
+        )
+
+    rc, text, _stderr = _run(["claude", "doctor"], path=path)
+    if rc != 0:
+        return DoctorVerdict(
+            verdict=Verdict.UNKNOWN,
+            findings=[f"`claude doctor` did not run (rc={rc}): {text.strip()[:200]}"],
+        )
+
+    running, method, clean = parse_doctor(text)
+    if running is None:
+        findings = [
+            (
+                "could not parse a `Running: <method> (<version>)` line "
+                "from `claude doctor` — upstream may have changed its "
+                "output. Treating as UNKNOWN rather than asserting anything."
+            )
+        ]
+        findings.extend(_clean_marker_findings(clean=clean))
+        return DoctorVerdict(
+            verdict=Verdict.UNKNOWN,
+            findings=findings,
+            clean_marker_present=clean,
+        )
+
+    method_findings = _method_findings(method, expected_method)
+    clean_findings = _clean_marker_findings(clean=clean)
+    latest, oracle_error = latest_version(force_refresh=force_refresh, path=path)
+    if latest is None:
+        findings = [
+            (
+                "cannot determine latest version, so currency is unknown "
+                f"(NOT 'current'): {oracle_error}"
+            )
+        ]
+        findings.extend(method_findings)
+        findings.extend(clean_findings)
+        return DoctorVerdict(
+            verdict=Verdict.UNKNOWN,
+            findings=findings,
+            running_version=running,
+            install_method=method,
+            clean_marker_present=clean,
+        )
+
+    pin_findings = pin_currency_findings(latest, project_root) if check_pin else []
+    running_is_version = _VERSION_RE.fullmatch(running) is not None
+    findings = list(method_findings)
+    if not running_is_version:
+        findings.append(
+            f"`claude doctor` returned a non-version running value: {running[:200]!r}"
+        )
+    elif running != latest:
         findings.append(
             f"claude on PATH is {running} but {latest} is published "
             f"(install method: {method}). Run `claude install latest`."
         )
-    if check_pin:
-        findings.extend(pin_currency_findings(latest, project_root))
-    if not clean:
-        findings.append(
-            f"`claude doctor` did not report {_CLEAN_MARKER!r} — it found "
-            f"installation issues."
-        )
-
+    findings.extend(pin_findings)
+    findings.extend(clean_findings)
+    failed_assertion = bool(method_findings or pin_findings or clean_findings)
+    if running_is_version:
+        failed_assertion = failed_assertion or running != latest
     return DoctorVerdict(
-        verdict=Verdict.INVALID if findings else Verdict.OK,
+        verdict=(
+            Verdict.INVALID
+            if failed_assertion
+            else Verdict.OK
+            if running_is_version
+            else Verdict.UNKNOWN
+        ),
         findings=findings,
         running_version=running,
         install_method=method,
