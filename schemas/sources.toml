@@ -43,7 +43,7 @@ file = "schemas/codex-config.json"
 version = "0.154.0"
 source = "https://learn.chatgpt.com/docs/config-schema.json"
 pin_source = ".config/mise/conf.d/shared.toml"
-sha256 = "b28908a730e7518d34494148475c8f27eb6b724103bae78190f939ed01e41de0"
+sha256 = "895287b978baf5cb6dec9c2e91b71d067ed0ec8b67fd88e6be96ac2ffd3f027e"
 
 [[schema]]
 tool = "claude-code"
@@ -52,35 +52,3 @@ version = "2.1.273"
 source = "https://raw.githubusercontent.com/anthropics/claude-code/v2.1.273/mods/types/claude-code.d.ts"
 pin_source = "schemas/sources.toml (vendored; no mise [tools] pin)"
 sha256 = "69d14af889cae22568b6051382e72971578156b36479d4ce4ad13f473797d4ac"
-# WHAT: Vendor Claude Code's published function-hook type declarations instead of
-# generating them with `claude -p '/plugin-types'`. Upstream publishes at
-# https://github.com/anthropics/claude-code/blob/main/mods/types/claude-code.d.ts
-#
-# WHY: The `fnhook-types-refresh` task ran `/plugin-types`, making a local Claude
-# Code binary a hard dependency of `mise run lint`. On CI runners under
-# MISE_LOCKED=1, the tool cannot install, generation writes nothing, and the gate
-# fails. Vendoring replaces this with `mise run schema-vendor-refresh` — a network
-# task in CI only, never on the lint path.
-#
-# PROVEN SAFE: After normalize_claude_code_declarations, upstream's file (405,845 B)
-# and our generated one (412,856 B) are byte-identical (368,789 bytes). The 7 KB
-# raw difference is the two environment-dependent built-in-tool interfaces
-# (BuiltinToolInputs, BuiltinToolResults), which the normalizer removes.
-#
-# NOTE: Upstream's types lag the RELEASE, and by more than one version — so this
-# row's `version` and its file's header deliberately disagree, and forcing them
-# to match would be wrong. Measured 2026-09-15 by fetching both tags: v2.1.272
-# and v2.1.273 serve a BYTE-IDENTICAL file (405,845 B, sha256 69d14af889cae225…,
-# the value recorded above) whose header still reads "Written by Claude Code
-# 2.1.271". That is why bumping this row from 2.1.272 to 2.1.273 changed the
-# version and the URL but NOT the sha256, and why `pin-parity.toml` registers
-# this row and the README while deliberately excluding the .d.ts headers.
-# This is not a bug — it is how Anthropic's release cycle works.
-#
-# HOW TO REFRESH: `mise run schema-vendor-refresh` (CI job: refresh.yml's
-# schema-refresh task). The task will rewrite this entry with the current version
-# and sha256 when the version moves or the fetched bytes differ.
-#
-# NO MISE PIN: Claude Code's native installer owns PATH; the [tools] entry was
-# removed 2026-09-14 (currency.toml:29-39). The version field above IS the pin.
-# check_drift() and refresh() handle the absence of a pin resolver explicitly.
