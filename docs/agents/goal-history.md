@@ -1050,3 +1050,39 @@ flowchart LR
     CHILDREN --> RESIDUAL["#1157: session-review non-record residual"]
     RESIDUAL --> NEXT["#1172, #1173, #1169, #1170, #1165–#1168, #1185"]
 ```
+
+## 2026-09-17 — #1171 lands: a healthy session's orphan census is green
+
+- **Iteration ID:** `dotfiles-goal-20260917-020`
+- **Prior goal digest:** `sha256:03c7688170df99ffc246bc81509ea7a2e5dbadba876ab190c5899afddda8cd50`
+- **Current goal digest:** `sha256:a1aa22f76e11c923f2baa7fb99faad9a1485f80c510af86a519f2e4459d268a6`
+- **Changed requirement:** Phase 8 item 2 (#1171) landed as PR #1191 at
+  `dbb4ce3`: typed harness-child shapes with a parent requirement, a typed
+  `sleep` child grouped with (and reaped with) its WAIT-LOOP, trailing
+  whitespace forgiven at the matcher. The first lane run dissented — the
+  spec had made every WAIT-LOOP descendant non-blocking — and was corrected;
+  the live arm then caught npm's padded process title. After both respec
+  rounds the cold review's residuals (audit-predicate gaps for eval-first and
+  multi-line loops, the sleep-child PID-reuse guard, pinned argv, multi-lane
+  census, six LOWs) were filed as #1190 by ruling. The goal advances to #1157.
+- **Reason:** Ray, 2026-09-17: ship with the false doc claims corrected and
+  file the residuals rather than run a third round.
+- **Evidence:** PR #1191; `mise run land -- 1191` rc=0 (main run 35305891609
+  success); live arms in `findings.md` (quiet rc=0 / fixtures rc=1 / `--kill`
+  rc=0); `docs/research/kb/reports/agents/cold-review-1171-2026-09-17.md`.
+- **Affected tickets:** #1171, #1190, #1157.
+- **Disposition:** `ACCEPTED`.
+- **Topology and ownership:** One writer: the Claude architect session.
+  Implementation lanes are the codex SDLC team; cold review is Opus.
+
+### Current goal
+
+> Complete Phase 8 and the remaining Phase 7 follow-ups: #1157 (session-review non-record residual) next, then #1172, #1173, #1169, #1170, #1165, #1166, #1167, #1168, #1185 and #1190; keep task_plan.md as the sole task authority, use only its tracked digest pointer for continuity, route implementation through the codex SDLC team, and run /verify after each landed PR.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    ORPHANS["#1171 landed at dbb4ce3"] --> RESIDUAL["#1157: session-review non-record residual"]
+    RESIDUAL --> NEXT["#1172, #1173, #1169, #1170, #1165–#1168, #1185, #1190"]
+```
