@@ -27,9 +27,12 @@ probe writes to a file and reads the recorded `rc` — never a piped tail.
 
 - The guard denies a hand-rolled `gh pr checks --watch`; wait on a merge with
   `mise run bounded-wait -- --cmd 'test "$(gh pr view N --json state --jq .state)" = MERGED'`.
-- The snapshot `zsh -c source …/shell-snapshots/snapshot-zsh-….sh` wrapper is
-  itself a `WAIT-LOOP`; only a typed direct sleep is grouped beneath it. Other
-  descendants keep normal classification, so real work still blocks as `OTHER`.
+- The snapshot `zsh -c source …/shell-snapshots/snapshot-zsh-….sh` wrapper is a
+  `WAIT-LOOP` only when the audit predicate sees the loop in its argv — measured:
+  a one-line `deadline=…; while …` body yes; a loop that is the FIRST statement
+  inside `eval '…'`, or a multi-line body (`ps` shows a literal `\012`), no — those
+  stay `OTHER` and block (fail closed, #1190). Only a typed direct sleep is grouped
+  beneath a `WAIT-LOOP`; other descendants keep normal classification.
 - MCP launchers/processes and `caffeinate` are `HARNESS` only when both their
   typed command shape and parent requirement match. The same command under the
   wrong parent is `OTHER`; do not use `--allow` to hide that mismatch.

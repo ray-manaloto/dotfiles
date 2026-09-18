@@ -4,8 +4,13 @@
 At handoff, every session-local wait loop is an orphan, including a loop whose
 condition carries a deadline. Boundedness changes the audit label, not whether
 the process belongs to the session being closed.
-Only argv-visible loops are classifiable; a ``zsh -c source ...snapshot...``
-wrapper whose argv contains the loop is classified as that WAIT-LOOP.
+Only argv-visible loops are classifiable. A ``zsh -c source ...snapshot...``
+wrapper is WAIT-LOOP only when the audit predicate finds the loop in its argv;
+measured 2026-09-17, that holds for a one-line ``deadline=...; while`` body and
+NOT for a loop that is the first statement inside ``eval '...'`` or for a
+multi-line body (``ps`` renders a newline as the four characters backslash-012).
+Those wrappers, and their sleeps, stay OTHER and block, which fails closed
+(#1190).
 """
 
 from __future__ import annotations
