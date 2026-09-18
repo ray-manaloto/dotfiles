@@ -48,10 +48,10 @@ sha256 = "895287b978baf5cb6dec9c2e91b71d067ed0ec8b67fd88e6be96ac2ffd3f027e"
 [[schema]]
 tool = "claude-code"
 file = ".claude/types/claude-code.d.ts"
-version = "2.1.273"
-source = "https://raw.githubusercontent.com/anthropics/claude-code/v2.1.273/mods/types/claude-code.d.ts"
+version = "2.1.277"
+source = "https://raw.githubusercontent.com/anthropics/claude-code/v2.1.277/mods/types/claude-code.d.ts"
 pin_source = "schemas/sources.toml (vendored; no mise [tools] pin)"
-sha256 = "69d14af889cae22568b6051382e72971578156b36479d4ce4ad13f473797d4ac"
+sha256 = "ac107a37c08ad46f8632edc1639b13a740fae0b8249a2245532adfd325e57d0d"
 # WHAT: Vendor Claude Code's published function-hook type declarations instead of
 # generating them with `claude -p '/plugin-types'`. Upstream publishes at
 # https://github.com/anthropics/claude-code/blob/main/mods/types/claude-code.d.ts
@@ -76,6 +76,11 @@ sha256 = "69d14af889cae22568b6051382e72971578156b36479d4ce4ad13f473797d4ac"
 # version and the URL but NOT the sha256, and why `pin-parity.toml` registers
 # this row and the README while deliberately excluding the .d.ts headers.
 # This is not a bug — it is how Anthropic's release cycle works.
+#
+# 2026-09-18: the lag is NOT permanent. The v2.1.277 tag serves a NEW file
+# (499,059 B, sha256 ac107a37c08ad46f…) whose header reads "Written by Claude
+# Code 2.1.277", so this bump DID change the sha256 and the vendored bytes.
+# Expect either outcome on a bump; `schema-vendor-refresh` records whichever.
 #
 # HOW TO REFRESH: `mise run schema-vendor-refresh` (CI job: refresh.yml's
 # schema-refresh task). The task will rewrite this entry with the current version
