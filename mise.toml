@@ -90,7 +90,7 @@ aws-cli = { version = "2.36.49", symlink_bins = "true" }
 # pipx first: mise use pipx@latest"). It is installed in setup-mise's FIRST
 # mise-action pass, alongside bun, because mise does not guarantee ordering
 # within one pass -- the same hazard that comment already documents for bun.
-pipx = "1.17.3"
+pipx = "1.17.4"
 # Backend-qualified deliberately. The bare `azure-cli` name resolves only
 # through mise's registry, and the `azure-cli -> pypi:azure-cli` alias is
 # absent in older mise (2026.9.1 answered "not found in mise tool registry",
