@@ -3306,8 +3306,8 @@ backend = "conda:git"
 channel = "conda-forge"
 
 [tools."conda:git"."platforms.linux-arm64"]
-checksum = "sha256:f5623ff073977b1e53af9882c075a1f598b277181fabcc8446622ce801da1df7"
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/git-2.55.0-pl5321h0749d22_2.conda"
+checksum = "sha256:5fe1e43a8b3d82f87bd04ee32dbc0b2e47b706601578de5cec081be4df2a1b68"
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/git-2.55.0-pl5321h0749d22_3.conda"
 conda_deps = [
     "libcurl-8.22.0-h86273da_0",
     "libexpat-2.8.1-hfae3067_1",
@@ -3337,8 +3337,8 @@ conda_deps = [
 ]
 
 [tools."conda:git"."platforms.linux-arm64-musl"]
-checksum = "sha256:f5623ff073977b1e53af9882c075a1f598b277181fabcc8446622ce801da1df7"
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/git-2.55.0-pl5321h0749d22_2.conda"
+checksum = "sha256:5fe1e43a8b3d82f87bd04ee32dbc0b2e47b706601578de5cec081be4df2a1b68"
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/git-2.55.0-pl5321h0749d22_3.conda"
 conda_deps = [
     "libcurl-8.22.0-h86273da_0",
     "libexpat-2.8.1-hfae3067_1",
@@ -3368,8 +3368,8 @@ conda_deps = [
 ]
 
 [tools."conda:git"."platforms.linux-x64"]
-checksum = "sha256:762e393f66cff2f4053f986cd4eaaa93b0fd22a6decec8f9cdefe9c9e12591be"
-url = "https://conda.anaconda.org/conda-forge/linux-64/git-2.55.0-pl5321h3795e67_2.conda"
+checksum = "sha256:dc160f995b3d49627bf5c865f9c0db79d803c73a605a2c05c3f950d5f884936e"
+url = "https://conda.anaconda.org/conda-forge/linux-64/git-2.55.0-pl5321h3795e67_3.conda"
 conda_deps = [
     "libcurl-8.22.0-ha042cf0_0",
     "libexpat-2.8.1-hecca717_1",
@@ -3399,8 +3399,8 @@ conda_deps = [
 ]
 
 [tools."conda:git"."platforms.linux-x64-baseline"]
-checksum = "sha256:762e393f66cff2f4053f986cd4eaaa93b0fd22a6decec8f9cdefe9c9e12591be"
-url = "https://conda.anaconda.org/conda-forge/linux-64/git-2.55.0-pl5321h3795e67_2.conda"
+checksum = "sha256:dc160f995b3d49627bf5c865f9c0db79d803c73a605a2c05c3f950d5f884936e"
+url = "https://conda.anaconda.org/conda-forge/linux-64/git-2.55.0-pl5321h3795e67_3.conda"
 conda_deps = [
     "libcurl-8.22.0-ha042cf0_0",
     "libexpat-2.8.1-hecca717_1",
@@ -3430,8 +3430,8 @@ conda_deps = [
 ]
 
 [tools."conda:git"."platforms.linux-x64-musl"]
-checksum = "sha256:762e393f66cff2f4053f986cd4eaaa93b0fd22a6decec8f9cdefe9c9e12591be"
-url = "https://conda.anaconda.org/conda-forge/linux-64/git-2.55.0-pl5321h3795e67_2.conda"
+checksum = "sha256:dc160f995b3d49627bf5c865f9c0db79d803c73a605a2c05c3f950d5f884936e"
+url = "https://conda.anaconda.org/conda-forge/linux-64/git-2.55.0-pl5321h3795e67_3.conda"
 conda_deps = [
     "libcurl-8.22.0-ha042cf0_0",
     "libexpat-2.8.1-hecca717_1",
@@ -3461,8 +3461,8 @@ conda_deps = [
 ]
 
 [tools."conda:git"."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:762e393f66cff2f4053f986cd4eaaa93b0fd22a6decec8f9cdefe9c9e12591be"
-url = "https://conda.anaconda.org/conda-forge/linux-64/git-2.55.0-pl5321h3795e67_2.conda"
+checksum = "sha256:dc160f995b3d49627bf5c865f9c0db79d803c73a605a2c05c3f950d5f884936e"
+url = "https://conda.anaconda.org/conda-forge/linux-64/git-2.55.0-pl5321h3795e67_3.conda"
 conda_deps = [
     "libcurl-8.22.0-ha042cf0_0",
     "libexpat-2.8.1-hecca717_1",
@@ -3977,33 +3977,33 @@ conda_deps = [
 ]
 
 [[tools."conda:linux-perf"]]
-version = "7.2.4"
+version = "7.2.6"
 backend = "conda:linux-perf"
 
 [tools."conda:linux-perf".options]
 channel = "conda-forge"
 
 [tools."conda:linux-perf"."platforms.linux-arm64"]
-checksum = "sha256:53f1ebef17633222e457af3ea8dd38e5bb0e17aff7171ab45f82bc4892afdef1"
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/linux-perf-7.2.4-py314h0b82a52_0.conda"
+checksum = "sha256:69c5641c722104d133044573ddfba67827bd4af612bfce47bd239a35b71d3583"
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/linux-perf-7.2.6-py314h0b82a52_0.conda"
 conda_deps = [
     "slang-2.3.3-h1c92901_0",
-    "libtraceevent-1.9.0-h80f16a2_0",
     "elfutils-0.194-h7d8af26_0",
+    "libtraceevent-1.9.0-h80f16a2_0",
     "pcre-8.45-h01db608_0",
     "python-3.14.7-hbec3b18_106_cp314",
     "libuuid-2.42.3-hd6fdeab_0",
     "libpython-3.14.7-hc71fabe_106_cp314",
     "libnuma-2.0.18-he30d5cf_4",
-    "libzlib-1.3.2-hdc9db2a_3",
-    "libcapstone-5.0.9-h5bc82ec_2",
-    "liblzma-5.8.3-he30d5cf_1",
-    "python_abi-3.14-9_cp314",
     "libgcc-16.2.0-h205dda4_5",
     "libgcc-ng-16.2.0-he9431aa_5",
     "libstdcxx-16.2.0-hef695bb_5",
     "libstdcxx-ng-16.2.0-hdbbeba8_5",
     "zstd-1.5.7-h9d15635_7",
+    "python_abi-3.14-9_cp314",
+    "libzlib-1.3.2-hdc9db2a_3",
+    "liblzma-5.8.3-he30d5cf_1",
+    "libcapstone-5.0.9-h5bc82ec_2",
     "bzip2-1.0.8-h4777abc_10",
     "ld_impl_linux-aarch64-2.46.1-default_h1979696_102",
     "libmpdec-4.0.0-he30d5cf_2",
@@ -4047,26 +4047,26 @@ conda_deps = [
 ]
 
 [tools."conda:linux-perf"."platforms.linux-arm64-musl"]
-checksum = "sha256:53f1ebef17633222e457af3ea8dd38e5bb0e17aff7171ab45f82bc4892afdef1"
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/linux-perf-7.2.4-py314h0b82a52_0.conda"
+checksum = "sha256:69c5641c722104d133044573ddfba67827bd4af612bfce47bd239a35b71d3583"
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/linux-perf-7.2.6-py314h0b82a52_0.conda"
 conda_deps = [
     "slang-2.3.3-h1c92901_0",
-    "libtraceevent-1.9.0-h80f16a2_0",
     "elfutils-0.194-h7d8af26_0",
+    "libtraceevent-1.9.0-h80f16a2_0",
     "pcre-8.45-h01db608_0",
     "python-3.14.7-hbec3b18_106_cp314",
     "libuuid-2.42.3-hd6fdeab_0",
     "libpython-3.14.7-hc71fabe_106_cp314",
     "libnuma-2.0.18-he30d5cf_4",
-    "libzlib-1.3.2-hdc9db2a_3",
-    "libcapstone-5.0.9-h5bc82ec_2",
-    "liblzma-5.8.3-he30d5cf_1",
-    "python_abi-3.14-9_cp314",
     "libgcc-16.2.0-h205dda4_5",
     "libgcc-ng-16.2.0-he9431aa_5",
     "libstdcxx-16.2.0-hef695bb_5",
     "libstdcxx-ng-16.2.0-hdbbeba8_5",
     "zstd-1.5.7-h9d15635_7",
+    "python_abi-3.14-9_cp314",
+    "libzlib-1.3.2-hdc9db2a_3",
+    "liblzma-5.8.3-he30d5cf_1",
+    "libcapstone-5.0.9-h5bc82ec_2",
     "bzip2-1.0.8-h4777abc_10",
     "ld_impl_linux-aarch64-2.46.1-default_h1979696_102",
     "libmpdec-4.0.0-he30d5cf_2",
@@ -4110,26 +4110,26 @@ conda_deps = [
 ]
 
 [tools."conda:linux-perf"."platforms.linux-x64"]
-checksum = "sha256:583f60e26e4fa309fccd5395b9f2025902d1f789119644611c8594c75bf07142"
-url = "https://conda.anaconda.org/conda-forge/linux-64/linux-perf-7.2.4-py314h88d699f_0.conda"
+checksum = "sha256:4526cb747b245d2cf97fa2a8b4877d48f4b82ef3613f38136ef1f9343a2fd25f"
+url = "https://conda.anaconda.org/conda-forge/linux-64/linux-perf-7.2.6-py314h88d699f_0.conda"
 conda_deps = [
-    "libtraceevent-1.9.0-h280c20c_0",
     "elfutils-0.194-h849f50c_0",
+    "libtraceevent-1.9.0-h280c20c_0",
     "slang-2.3.3-hac012bb_0",
     "pcre-8.45-h9c3ff4c_0",
     "python-3.14.7-hcd007b5_106_cp314",
     "libuuid-2.42.3-hcfc3c73_0",
     "libpython-3.14.7-hdc7f604_106_cp314",
     "libnuma-2.0.18-hb03c661_4",
-    "liblzma-5.8.3-hb03c661_1",
-    "python_abi-3.14-9_cp314",
-    "libzlib-1.3.2-h25fd6f3_3",
-    "libcapstone-5.0.9-h7cc23a3_2",
     "libstdcxx-16.2.0-h934c35e_5",
     "libgcc-16.2.0-ha9f2e26_5",
     "libstdcxx-ng-16.2.0-hdf11a46_5",
     "libgcc-ng-16.2.0-h69a702a_5",
     "zstd-1.5.7-hb78ec9c_7",
+    "libzlib-1.3.2-h25fd6f3_3",
+    "liblzma-5.8.3-hb03c661_1",
+    "libcapstone-5.0.9-h7cc23a3_2",
+    "python_abi-3.14-9_cp314",
     "bzip2-1.0.8-hda65f42_10",
     "ld_impl_linux-64-2.46.1-default_hbd61a6d_102",
     "libmpdec-4.0.0-hb03c661_2",
@@ -4173,26 +4173,26 @@ conda_deps = [
 ]
 
 [tools."conda:linux-perf"."platforms.linux-x64-baseline"]
-checksum = "sha256:583f60e26e4fa309fccd5395b9f2025902d1f789119644611c8594c75bf07142"
-url = "https://conda.anaconda.org/conda-forge/linux-64/linux-perf-7.2.4-py314h88d699f_0.conda"
+checksum = "sha256:4526cb747b245d2cf97fa2a8b4877d48f4b82ef3613f38136ef1f9343a2fd25f"
+url = "https://conda.anaconda.org/conda-forge/linux-64/linux-perf-7.2.6-py314h88d699f_0.conda"
 conda_deps = [
-    "libtraceevent-1.9.0-h280c20c_0",
     "elfutils-0.194-h849f50c_0",
+    "libtraceevent-1.9.0-h280c20c_0",
     "slang-2.3.3-hac012bb_0",
     "pcre-8.45-h9c3ff4c_0",
     "python-3.14.7-hcd007b5_106_cp314",
     "libuuid-2.42.3-hcfc3c73_0",
     "libpython-3.14.7-hdc7f604_106_cp314",
     "libnuma-2.0.18-hb03c661_4",
-    "liblzma-5.8.3-hb03c661_1",
-    "python_abi-3.14-9_cp314",
-    "libzlib-1.3.2-h25fd6f3_3",
-    "libcapstone-5.0.9-h7cc23a3_2",
     "libstdcxx-16.2.0-h934c35e_5",
     "libgcc-16.2.0-ha9f2e26_5",
     "libstdcxx-ng-16.2.0-hdf11a46_5",
     "libgcc-ng-16.2.0-h69a702a_5",
     "zstd-1.5.7-hb78ec9c_7",
+    "libzlib-1.3.2-h25fd6f3_3",
+    "liblzma-5.8.3-hb03c661_1",
+    "libcapstone-5.0.9-h7cc23a3_2",
+    "python_abi-3.14-9_cp314",
     "bzip2-1.0.8-hda65f42_10",
     "ld_impl_linux-64-2.46.1-default_hbd61a6d_102",
     "libmpdec-4.0.0-hb03c661_2",
@@ -4236,26 +4236,26 @@ conda_deps = [
 ]
 
 [tools."conda:linux-perf"."platforms.linux-x64-musl"]
-checksum = "sha256:583f60e26e4fa309fccd5395b9f2025902d1f789119644611c8594c75bf07142"
-url = "https://conda.anaconda.org/conda-forge/linux-64/linux-perf-7.2.4-py314h88d699f_0.conda"
+checksum = "sha256:4526cb747b245d2cf97fa2a8b4877d48f4b82ef3613f38136ef1f9343a2fd25f"
+url = "https://conda.anaconda.org/conda-forge/linux-64/linux-perf-7.2.6-py314h88d699f_0.conda"
 conda_deps = [
-    "libtraceevent-1.9.0-h280c20c_0",
     "elfutils-0.194-h849f50c_0",
+    "libtraceevent-1.9.0-h280c20c_0",
     "slang-2.3.3-hac012bb_0",
     "pcre-8.45-h9c3ff4c_0",
     "python-3.14.7-hcd007b5_106_cp314",
     "libuuid-2.42.3-hcfc3c73_0",
     "libpython-3.14.7-hdc7f604_106_cp314",
     "libnuma-2.0.18-hb03c661_4",
-    "liblzma-5.8.3-hb03c661_1",
-    "python_abi-3.14-9_cp314",
-    "libzlib-1.3.2-h25fd6f3_3",
-    "libcapstone-5.0.9-h7cc23a3_2",
     "libstdcxx-16.2.0-h934c35e_5",
     "libgcc-16.2.0-ha9f2e26_5",
     "libstdcxx-ng-16.2.0-hdf11a46_5",
     "libgcc-ng-16.2.0-h69a702a_5",
     "zstd-1.5.7-hb78ec9c_7",
+    "libzlib-1.3.2-h25fd6f3_3",
+    "liblzma-5.8.3-hb03c661_1",
+    "libcapstone-5.0.9-h7cc23a3_2",
+    "python_abi-3.14-9_cp314",
     "bzip2-1.0.8-hda65f42_10",
     "ld_impl_linux-64-2.46.1-default_hbd61a6d_102",
     "libmpdec-4.0.0-hb03c661_2",
@@ -4299,26 +4299,26 @@ conda_deps = [
 ]
 
 [tools."conda:linux-perf"."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:583f60e26e4fa309fccd5395b9f2025902d1f789119644611c8594c75bf07142"
-url = "https://conda.anaconda.org/conda-forge/linux-64/linux-perf-7.2.4-py314h88d699f_0.conda"
+checksum = "sha256:4526cb747b245d2cf97fa2a8b4877d48f4b82ef3613f38136ef1f9343a2fd25f"
+url = "https://conda.anaconda.org/conda-forge/linux-64/linux-perf-7.2.6-py314h88d699f_0.conda"
 conda_deps = [
-    "libtraceevent-1.9.0-h280c20c_0",
     "elfutils-0.194-h849f50c_0",
+    "libtraceevent-1.9.0-h280c20c_0",
     "slang-2.3.3-hac012bb_0",
     "pcre-8.45-h9c3ff4c_0",
     "python-3.14.7-hcd007b5_106_cp314",
     "libuuid-2.42.3-hcfc3c73_0",
     "libpython-3.14.7-hdc7f604_106_cp314",
     "libnuma-2.0.18-hb03c661_4",
-    "liblzma-5.8.3-hb03c661_1",
-    "python_abi-3.14-9_cp314",
-    "libzlib-1.3.2-h25fd6f3_3",
-    "libcapstone-5.0.9-h7cc23a3_2",
     "libstdcxx-16.2.0-h934c35e_5",
     "libgcc-16.2.0-ha9f2e26_5",
     "libstdcxx-ng-16.2.0-hdf11a46_5",
     "libgcc-ng-16.2.0-h69a702a_5",
     "zstd-1.5.7-hb78ec9c_7",
+    "libzlib-1.3.2-h25fd6f3_3",
+    "liblzma-5.8.3-hb03c661_1",
+    "libcapstone-5.0.9-h7cc23a3_2",
+    "python_abi-3.14-9_cp314",
     "bzip2-1.0.8-hda65f42_10",
     "ld_impl_linux-64-2.46.1-default_hbd61a6d_102",
     "libmpdec-4.0.0-hb03c661_2",
@@ -4860,32 +4860,32 @@ conda_deps = [
 ]
 
 [[tools.deno]]
-version = "2.9.6"
+version = "2.9.7"
 backend = "core:deno"
 
 [tools.deno."platforms.linux-arm64"]
-checksum = "sha256:9a46afc6c392c7cd2ff71a31558935545b46408d0e87f7a86908c712721c046e"
-url = "https://dl.deno.land/release/v2.9.6/deno-aarch64-unknown-linux-gnu.zip"
+checksum = "sha256:c832298b1ad4422481334855f6003e0f54145762c5a134f20a489511d2f65bbf"
+url = "https://dl.deno.land/release/v2.9.7/deno-aarch64-unknown-linux-gnu.zip"
 
 [tools.deno."platforms.linux-arm64-musl"]
-checksum = "sha256:9a46afc6c392c7cd2ff71a31558935545b46408d0e87f7a86908c712721c046e"
-url = "https://dl.deno.land/release/v2.9.6/deno-aarch64-unknown-linux-gnu.zip"
+checksum = "sha256:c832298b1ad4422481334855f6003e0f54145762c5a134f20a489511d2f65bbf"
+url = "https://dl.deno.land/release/v2.9.7/deno-aarch64-unknown-linux-gnu.zip"
 
 [tools.deno."platforms.linux-x64"]
-checksum = "sha256:394f07f4da2bebe6ce6f1e7ce0fa16429b29b08c35e3fac3fe25972676dff4b2"
-url = "https://dl.deno.land/release/v2.9.6/deno-x86_64-unknown-linux-gnu.zip"
+checksum = "sha256:c6527f24f4b16031d3ae4fa9f658d5f11534c8d84ce7dc8502420280919c3490"
+url = "https://dl.deno.land/release/v2.9.7/deno-x86_64-unknown-linux-gnu.zip"
 
 [tools.deno."platforms.linux-x64-baseline"]
-checksum = "sha256:394f07f4da2bebe6ce6f1e7ce0fa16429b29b08c35e3fac3fe25972676dff4b2"
-url = "https://dl.deno.land/release/v2.9.6/deno-x86_64-unknown-linux-gnu.zip"
+checksum = "sha256:c6527f24f4b16031d3ae4fa9f658d5f11534c8d84ce7dc8502420280919c3490"
+url = "https://dl.deno.land/release/v2.9.7/deno-x86_64-unknown-linux-gnu.zip"
 
 [tools.deno."platforms.linux-x64-musl"]
-checksum = "sha256:394f07f4da2bebe6ce6f1e7ce0fa16429b29b08c35e3fac3fe25972676dff4b2"
-url = "https://dl.deno.land/release/v2.9.6/deno-x86_64-unknown-linux-gnu.zip"
+checksum = "sha256:c6527f24f4b16031d3ae4fa9f658d5f11534c8d84ce7dc8502420280919c3490"
+url = "https://dl.deno.land/release/v2.9.7/deno-x86_64-unknown-linux-gnu.zip"
 
 [tools.deno."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:394f07f4da2bebe6ce6f1e7ce0fa16429b29b08c35e3fac3fe25972676dff4b2"
-url = "https://dl.deno.land/release/v2.9.6/deno-x86_64-unknown-linux-gnu.zip"
+checksum = "sha256:c6527f24f4b16031d3ae4fa9f658d5f11534c8d84ce7dc8502420280919c3490"
+url = "https://dl.deno.land/release/v2.9.7/deno-x86_64-unknown-linux-gnu.zip"
 
 [[tools.ghalint]]
 version = "1.5.6"
@@ -5179,32 +5179,32 @@ url = "https://github.com/mamba-org/micromamba-releases/releases/download/2.9.0-
 url_api = "https://api.github.com/repos/mamba-org/micromamba-releases/releases/assets/505526153"
 
 [[tools.node]]
-version = "26.8.2"
+version = "26.9.0"
 backend = "core:node"
 
 [tools.node."platforms.linux-arm64"]
-checksum = "sha256:746cdbf21565b4ea06f77642bb0e85466de8bb722242be2c5e006f272c361c63"
-url = "https://nodejs.org/dist/v26.8.2/node-v26.8.2-linux-arm64.tar.gz"
+checksum = "sha256:d5077591aa38b48d90bf9b3ac10da8d2f40dce289b20294913c58c19f153eb12"
+url = "https://nodejs.org/dist/v26.9.0/node-v26.9.0-linux-arm64.tar.gz"
 
 [tools.node."platforms.linux-arm64-musl"]
-checksum = "sha256:125437a0b59d69592b8f4bb813a47245337afac8c973d15ab7720f0ec55d182d"
-url = "https://unofficial-builds.nodejs.org/download/release/v26.8.2/node-v26.8.2-linux-arm64-musl.tar.gz"
+checksum = "sha256:b52b747e86ef6d18068f02f43f508a608358c974dc5da8ef270bc823ba4710ca"
+url = "https://unofficial-builds.nodejs.org/download/release/v26.9.0/node-v26.9.0-linux-arm64-musl.tar.gz"
 
 [tools.node."platforms.linux-x64"]
-checksum = "sha256:badb3fe6a61b85e1352ca6564dc56b8b7bd5ecd5c474c52acc21dd0cdd586f35"
-url = "https://nodejs.org/dist/v26.8.2/node-v26.8.2-linux-x64.tar.gz"
+checksum = "sha256:03d9104fc4f19652e74480fed11c023d75981464b7292f21a601c3f95ce7d90d"
+url = "https://nodejs.org/dist/v26.9.0/node-v26.9.0-linux-x64.tar.gz"
 
 [tools.node."platforms.linux-x64-baseline"]
-checksum = "sha256:badb3fe6a61b85e1352ca6564dc56b8b7bd5ecd5c474c52acc21dd0cdd586f35"
-url = "https://nodejs.org/dist/v26.8.2/node-v26.8.2-linux-x64.tar.gz"
+checksum = "sha256:03d9104fc4f19652e74480fed11c023d75981464b7292f21a601c3f95ce7d90d"
+url = "https://nodejs.org/dist/v26.9.0/node-v26.9.0-linux-x64.tar.gz"
 
 [tools.node."platforms.linux-x64-musl"]
-checksum = "sha256:696eb0180248a06c9893f3f07bcc4e2680891c83118c73aaf1de330efd053910"
-url = "https://unofficial-builds.nodejs.org/download/release/v26.8.2/node-v26.8.2-linux-x64-musl.tar.gz"
+checksum = "sha256:669dd67ec374f7315dbac9e119641d0e4f371519e00c4b692f1f81e7a04b747c"
+url = "https://unofficial-builds.nodejs.org/download/release/v26.9.0/node-v26.9.0-linux-x64-musl.tar.gz"
 
 [tools.node."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:696eb0180248a06c9893f3f07bcc4e2680891c83118c73aaf1de330efd053910"
-url = "https://unofficial-builds.nodejs.org/download/release/v26.8.2/node-v26.8.2-linux-x64-musl.tar.gz"
+checksum = "sha256:669dd67ec374f7315dbac9e119641d0e4f371519e00c4b692f1f81e7a04b747c"
+url = "https://unofficial-builds.nodejs.org/download/release/v26.9.0/node-v26.9.0-linux-x64-musl.tar.gz"
 
 [[tools."npm:@openai/codex"]]
 version = "0.154.0"
