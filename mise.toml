@@ -54,7 +54,7 @@ biome = "2.5.11"
 # class-aware enforcement — see .claude/rules/md-size-budgets.md.
 "npm:claude-code-lint" = "0.9.0"
 "npm:@contextlint/cli" = "1.1.1"
-"npm:markdownlint-cli2" = "0.23.2"
+"npm:markdownlint-cli2" = "0.23.3"
 "aqua:jackchuka/mdschema" = "0.15.4"
 rumdl = "0.2.74"
 # zizmor: GHA security scanner — backs the hk zizmor builtin (#160 T12);
