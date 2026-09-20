@@ -6814,7 +6814,7 @@ version = "1.23.3"
 backend = "npm:firecrawl-cli"
 
 [[tools."npm:markdownlint-cli2"]]
-version = "0.23.2"
+version = "0.23.3"
 backend = "npm:markdownlint-cli2"
 
 [[tools."npm:oh-my-claude-sisyphus"]]
