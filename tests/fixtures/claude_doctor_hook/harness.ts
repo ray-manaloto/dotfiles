@@ -196,8 +196,16 @@ async function call(
   return preToolUse(services, event, next);
 }
 
-function assertDenied(result: Record<string, unknown>) {
+function assertDenied(result: Record<string, unknown>, expectedFinding?: string) {
   assert.equal(typeof result.deny, "string");
+  const deny = result.deny as string;
+  assert.match(
+    deny,
+    /^claude-doctor: refusing tool calls until the Claude Code install is repaired\./,
+  );
+  if (expectedFinding !== undefined) {
+    assert.ok(deny.includes(expectedFinding), `deny omitted cached finding: ${expectedFinding}`);
+  }
   assert.equal("allow" in result, false, "a deny must not spread the allow result");
 }
 
@@ -254,7 +262,7 @@ for (const refused of [
   const services = makeServices(root);
   await start(services, invalid());
   services.push(invalid("still broken"));
-  assertDenied(await call(services, { tool: "Edit", file_path: refused }));
+  assertDenied(await call(services, { tool: "Edit", file_path: refused }), "still broken");
   assert.equal(services.spawned(), 2);
   arms += 1;
 }
@@ -459,12 +467,18 @@ for (const fresh of [invalid("freshly broken"), unknown(), null]) {
   arms += 1;
 }
 
-// Invalid JSON shapes never enter the cache, so the established deny stands.
+// Malformed-but-establishing JSON must never clear an established deny. Each
+// typed-key payload would otherwise qualify through OK or the explicit disabled
+// signal; the array remains malformed because JSON arrays cannot carry a named
+// verdict property.
 for (const malformed of [
   42,
-  { ...unknown(), verdict: "future-verdict" },
-  { ...unknown(), findings: ["valid", 7] },
-  { ...unknown(), baseline_path: 7 },
+  [],
+  { ...unknown(), verdict: "future-verdict", disabled_by_baseline: true },
+  { ...ok(), findings: ["valid", 7] },
+  { ...ok(), baseline_path: 7 },
+  { ...ok(), disabled_by_baseline: "yes" },
+  { ...ok(), enforcement_eligible: 1 },
 ]) {
   const services = makeServices(root);
   await start(services, invalid());

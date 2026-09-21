@@ -79,7 +79,7 @@ type HookServices = {
  */
 /** Validate untrusted subprocess JSON before it can enter the session cache. */
 function parseDoctorReport(value: unknown): DoctorReport | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+  if (typeof value !== "object" || value === null) {
     return null;
   }
   const record = value as Record<string, unknown>;
@@ -104,6 +104,12 @@ function parseDoctorReport(value: unknown): DoctorReport | null {
   if (
     record.disabled_by_baseline !== undefined &&
     typeof record.disabled_by_baseline !== "boolean"
+  ) {
+    return null;
+  }
+  if (
+    record.enforcement_eligible !== undefined &&
+    typeof record.enforcement_eligible !== "boolean"
   ) {
     return null;
   }
@@ -289,6 +295,12 @@ async function refreshCachedReport($: HookServices): Promise<void> {
  * - Edit/Write pass only when resolved placement identifies the repository-root
  *   `doctor.toml`, so the reviewed off-switch can be changed in-session;
  * - a Bash command passes when ANY of its tokens names a repair program.
+ *
+ * Two limits are intentional. A final-component symlink at the baseline
+ * `doctor.toml` closes the Edit/Write hatch because resolved placement refuses
+ * links; the Bash repair lane remains available. A malformed
+ * `schemas/sources.toml` is an enforcing state, but that file is not a permitted
+ * edit target: its in-session exit is the `doctor.toml` off-switch.
  *
  * Scanning tokens rather than anchoring at the start is the load-bearing
  * choice. `^\s*(claude|mise)` looks stricter and is mostly a trap: it refuses

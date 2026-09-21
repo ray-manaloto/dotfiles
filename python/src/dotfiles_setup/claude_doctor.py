@@ -575,7 +575,7 @@ def load_baseline(project_root: Path | None = None) -> tuple[bool, str, Path]:
     baseline_path = (root / _BASELINE_FILE).absolute()
     try:
         parsed = tomllib.loads(baseline_path.read_text())
-    except OSError, tomllib.TOMLDecodeError:
+    except OSError, UnicodeDecodeError, tomllib.TOMLDecodeError:
         return True, NATIVE_METHOD, baseline_path
     block = parsed.get("claude")
     if not isinstance(block, dict):

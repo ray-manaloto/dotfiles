@@ -764,6 +764,18 @@ def test_a_missing_baseline_asserts_the_documented_default(tmp_path: Path) -> No
     )
 
 
+def test_a_non_utf8_baseline_asserts_the_documented_default(tmp_path: Path) -> None:
+    """A decode failure uses the same fail-safe fallback as missing or bad TOML."""
+    baseline_path = (tmp_path / "doctor.toml").absolute()
+    baseline_path.write_bytes(b"\xff")
+
+    assert claude_doctor.load_baseline(tmp_path) == (
+        True,
+        claude_doctor.NATIVE_METHOD,
+        baseline_path,
+    )
+
+
 def test_the_cli_hands_the_project_root_to_the_baseline_loader() -> None:
     """Wiring guard: the seam reverts to cwd silently if this argument is lost.
 
