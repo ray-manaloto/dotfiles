@@ -59,7 +59,7 @@ import shutil
 import subprocess
 import sys
 import tomllib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
 from typing import Final
@@ -160,6 +160,8 @@ class DoctorVerdict:
     install_method: str | None = None
     latest_version: str | None = None
     clean_marker_present: bool | None = None
+    disabled_by_baseline: bool = False
+    baseline_path: str | None = None
 
     @property
     def enforcement_eligible(self) -> bool:
@@ -193,6 +195,8 @@ class DoctorVerdict:
                 "install_method": self.install_method,
                 "latest_version": self.latest_version,
                 "clean_marker_present": self.clean_marker_present,
+                "disabled_by_baseline": self.disabled_by_baseline,
+                "baseline_path": self.baseline_path,
                 "findings": self.findings,
             },
             indent=2,
@@ -303,7 +307,7 @@ def _pin_currency_check(latest: str, project_root: Path | None = None) -> _PinCh
         return _PinCheck(state=_PinState.NOT_APPLICABLE)
     try:
         pinned = vendored_version(PIN_TOOL, project_root)
-    except (ValueError, OSError) as exc:
+    except (KeyError, TypeError, ValueError, OSError) as exc:
         return _PinCheck(
             state=_PinState.UNKNOWN,
             findings=[
@@ -429,7 +433,9 @@ def evaluate(
     unanswered. With no other result the verdict is ``UNKNOWN``. An established
     host failure or an unreadable pin remains ``INVALID`` rather than being
     silently masked. Positively established pin drift alone becomes ``DRIFT``
-    and cannot enforce, including when the running-version question is unknown.
+    and cannot enforce only after a version-shaped running value establishes
+    that the host is current. An unreadable running value remains ``UNKNOWN``
+    even while carrying the stale-pin finding.
 
     ``check_pin`` adds the REPO-state question (:func:`pin_currency_findings`)
     to the two host-state ones. It is a separate switch because the two have
@@ -514,11 +520,11 @@ def evaluate(
         verdict=(
             Verdict.INVALID
             if host_failed_assertion or pin_check.state is _PinState.UNKNOWN
+            else Verdict.UNKNOWN
+            if not running_is_version
             else Verdict.DRIFT
             if pin_check.state is _PinState.DRIFT
             else Verdict.OK
-            if running_is_version
-            else Verdict.UNKNOWN
         ),
         findings=findings,
         running_version=running,
@@ -543,8 +549,8 @@ _DISABLED_ADVICE: Final = (
 )
 
 
-def load_baseline(project_root: Path | None = None) -> tuple[bool, str]:
-    """Read ``[claude]`` from ``doctor.toml`` as ``(enabled, expected_method)``.
+def load_baseline(project_root: Path | None = None) -> tuple[bool, str, Path]:
+    """Read ``[claude]`` and return enabled, method, and its absolute path.
 
     The ENFORCING path must read the same reviewed baseline the advisory one
     does. It did not until 2026-09-13: :func:`claude_doctor_main` defaulted
@@ -559,22 +565,26 @@ def load_baseline(project_root: Path | None = None) -> tuple[bool, str]:
     hook's behaviour not at all. A documented off-switch wired to a different
     consumer is worse than no off-switch, because it reads as configurable.
 
-    An unreadable or absent file falls back to ``(True, NATIVE_METHOD)``: a
-    missing baseline asserts the documented default rather than silently
+    An unreadable or absent file falls back to enabled plus ``NATIVE_METHOD``:
+    a missing baseline asserts the documented default rather than silently
     disabling the check, which is the failure direction that reads as healthy.
+    The absolute path is returned in every case so the hook can permit repair of
+    the exact file this function attempted to read.
     """
     root = project_root or Path(os.environ.get("CLAUDE_PROJECT_DIR", "."))
+    baseline_path = (root / _BASELINE_FILE).absolute()
     try:
-        parsed = tomllib.loads((root / _BASELINE_FILE).read_text())
+        parsed = tomllib.loads(baseline_path.read_text())
     except OSError, tomllib.TOMLDecodeError:
-        return True, NATIVE_METHOD
+        return True, NATIVE_METHOD, baseline_path
     block = parsed.get("claude")
     if not isinstance(block, dict):
-        return True, NATIVE_METHOD
+        return True, NATIVE_METHOD, baseline_path
     expected = block.get("expected_install_method")
     return (
         block.get("enabled") is not False,
         expected if isinstance(expected, str) else NATIVE_METHOD,
+        baseline_path,
     )
 
 
@@ -596,9 +606,14 @@ def claude_doctor_main(
     is the explicit non-enforcing repository-pin exception. A caller wanting the
     distinction reads ``verdict`` from the JSON, which is always emitted.
     """
-    enabled, configured = load_baseline(project_root)
+    enabled, configured, baseline_path = load_baseline(project_root)
     if not enabled:
-        disabled = DoctorVerdict(verdict=Verdict.UNKNOWN, findings=[_DISABLED_ADVICE])
+        disabled = DoctorVerdict(
+            verdict=Verdict.UNKNOWN,
+            findings=[_DISABLED_ADVICE],
+            disabled_by_baseline=True,
+            baseline_path=str(baseline_path),
+        )
         sys.stdout.write(disabled.to_json() + "\n")
         return 0
     verdict = evaluate(
@@ -608,5 +623,6 @@ def claude_doctor_main(
         # about the tree this invocation is actually talking about.
         project_root=project_root,
     )
+    verdict = replace(verdict, baseline_path=str(baseline_path))
     sys.stdout.write(verdict.to_json() + "\n")
     return 1 if verdict.enforcement_eligible else 0

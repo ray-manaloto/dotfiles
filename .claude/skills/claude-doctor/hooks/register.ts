@@ -27,10 +27,9 @@ import type { Register } from "claude-code";
 type DoctorReport = {
   verdict: "ok" | "invalid" | "unknown" | "drift";
   enforcement_eligible: boolean;
+  disabled_by_baseline: boolean;
+  baseline_path?: string;
   findings: string[];
-  running_version: string | null;
-  install_method: string | null;
-  latest_version: string | null;
 };
 
 /**
@@ -78,6 +77,45 @@ type HookServices = {
  * check measure the right binary; without it `resolve_ambient_path` falls back
  * to the rewritten one.
  */
+/** Validate untrusted subprocess JSON before it can enter the session cache. */
+function parseDoctorReport(value: unknown): DoctorReport | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  const verdict = record.verdict;
+  if (
+    verdict !== "ok" &&
+    verdict !== "invalid" &&
+    verdict !== "unknown" &&
+    verdict !== "drift"
+  ) {
+    return null;
+  }
+  if (
+    !Array.isArray(record.findings) ||
+    !record.findings.every((finding) => typeof finding === "string")
+  ) {
+    return null;
+  }
+  if (record.baseline_path !== undefined && typeof record.baseline_path !== "string") {
+    return null;
+  }
+  if (
+    record.disabled_by_baseline !== undefined &&
+    typeof record.disabled_by_baseline !== "boolean"
+  ) {
+    return null;
+  }
+  return {
+    verdict,
+    enforcement_eligible: record.enforcement_eligible === true,
+    disabled_by_baseline: record.disabled_by_baseline === true,
+    ...(record.baseline_path === undefined ? {} : { baseline_path: record.baseline_path }),
+    findings: record.findings,
+  };
+}
+
 async function readVerdict($: HookServices): Promise<DoctorReport | null> {
   try {
     const ambientPath = await $.env.get("PATH");
@@ -92,7 +130,7 @@ async function readVerdict($: HookServices): Promise<DoctorReport | null> {
     );
     // rc is deliberately ignored: it encodes enforcement eligibility, not
     // success, and the JSON carries the verdict either way.
-    return JSON.parse(stdout) as DoctorReport;
+    return parseDoctorReport(JSON.parse(stdout) as unknown);
   } catch {
     // A hook that throws fails open and silent, so failure must be a value.
     // Leaving the cache null means PreToolUse denies nothing, which is correct:
@@ -175,7 +213,7 @@ async function placed($: HookServices, path: string): Promise<Placement | undefi
   };
 }
 
-/** True only for Edit/Write of this session root's actual doctor.toml. */
+/** True only for Edit/Write of the baseline doctor.toml Python actually read. */
 async function isDoctorTomlRepair(
   $: HookServices,
   e: { tool: string } & Record<string, unknown>,
@@ -184,18 +222,20 @@ async function isDoctorTomlRepair(
     return false;
   }
   try {
-    let root: string | undefined;
-    try {
-      root = await $.session.root();
-    } catch {
-      root = await $.env.get("CLAUDE_PROJECT_DIR");
+    let expectedPath = cachedReport?.baseline_path;
+    if (expectedPath === undefined) {
+      let root: string | undefined;
+      try {
+        root = await $.session.root();
+      } catch {
+        root = await $.env.get("CLAUDE_PROJECT_DIR");
+      }
+      if (!root) return false;
+      expectedPath = `${root.replace(/[\\/]$/, "")}/doctor.toml`;
     }
-    if (!root) return false;
-
-    const rootDoctor = `${root.replace(/[\\/]$/, "")}/doctor.toml`;
     const [target, expected] = await Promise.all([
       placed($, e.file_path),
-      placed($, rootDoctor),
+      placed($, expectedPath),
     ]);
     return (
       target !== undefined &&
@@ -209,13 +249,27 @@ async function isDoctorTomlRepair(
   }
 }
 
-/** Trust Python's eligibility field, with today's INVALID fallback for old JSON. */
+/** INVALID cannot be talked down; an explicit true may make other states enforce. */
 function isEnforcementEligible(report: DoctorReport | null): boolean {
   if (report === null) return false;
-  if (typeof report.enforcement_eligible === "boolean") {
-    return report.enforcement_eligible;
+  return report.verdict === "invalid" || report.enforcement_eligible;
+}
+
+/** Accept an enforcing refresh or a positive answer that may clear the deny. */
+function isEstablishedRefresh(report: DoctorReport): boolean {
+  return (
+    isEnforcementEligible(report) ||
+    report.verdict === "ok" ||
+    report.verdict === "drift" ||
+    report.disabled_by_baseline
+  );
+}
+
+async function refreshCachedReport($: HookServices): Promise<void> {
+  const refreshed = await readVerdict($);
+  if (refreshed !== null && isEstablishedRefresh(refreshed)) {
+    cachedReport = refreshed;
   }
-  return report.verdict === "invalid";
 }
 
 /**
@@ -314,19 +368,22 @@ export const register: Register = (on) => {
       return result;
     }
 
-    // Only the about-to-deny path refreshes. A null refresh never weakens the
-    // prior enforcing verdict, and the timestamp is read rather than awaited as
-    // a delay: $.clock waits are the one `$` operation charged to HookBudget.
+    // Only the about-to-deny path refreshes. A null, malformed, or unanswered
+    // refresh never weakens the prior enforcing verdict. The timestamp is read
+    // rather than awaited as a delay: the hook clock stops during every `$` call
+    // except a `$.clock` wait (`claude-code.d.ts:4173-4175`).
     try {
       const now = await $.clock.now();
-      if (lastRefreshAtMs === null || now - lastRefreshAtMs >= REFRESH_REUSE_MS) {
+      if (
+        lastRefreshAtMs === null ||
+        now < lastRefreshAtMs ||
+        now - lastRefreshAtMs >= REFRESH_REUSE_MS
+      ) {
         lastRefreshAtMs = now;
-        const refreshed = await readVerdict($);
-        if (refreshed !== null) cachedReport = refreshed;
+        await refreshCachedReport($);
       }
     } catch {
-      const refreshed = await readVerdict($);
-      if (refreshed !== null) cachedReport = refreshed;
+      await refreshCachedReport($);
     }
     if (!isEnforcementEligible(cachedReport)) {
       return result;

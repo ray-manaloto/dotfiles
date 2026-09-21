@@ -583,6 +583,8 @@ def test_to_json_is_parseable_and_carries_the_verdict(
     payload = json.loads(claude_doctor.evaluate(check_pin=False).to_json())
     assert payload["verdict"] == "ok"
     assert payload["enforcement_eligible"] is False
+    assert payload["disabled_by_baseline"] is False
+    assert payload["baseline_path"] is None
     assert payload["install_method"] == "native"
 
 
@@ -615,7 +617,9 @@ def test_the_cli_exit_code_tracks_enforcement_eligibility_only(
         _fake_run(doctor=(0, doctor_out), oracle=(0, oracle_out)),
     )
     assert claude_doctor.claude_doctor_main(project_root=NO_BASELINE) == expected_rc
-    assert json.loads(capsys.readouterr().out)["verdict"] is not None
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["verdict"] is not None
+    assert payload["baseline_path"] == str((NO_BASELINE / "doctor.toml").absolute())
 
 
 # --------------------------------------------------------------------------- #
@@ -735,6 +739,8 @@ def test_the_baseline_off_switch_reaches_the_enforcing_path(
     payload = json.loads(capsys.readouterr().out)
     assert payload["verdict"] == Verdict.UNKNOWN
     assert payload["enforcement_eligible"] is False
+    assert payload["disabled_by_baseline"] is True
+    assert payload["baseline_path"] == str((root / "doctor.toml").absolute())
     assert "not a clean bill of health" in payload["findings"][0].lower()
 
 
@@ -744,9 +750,18 @@ def test_a_missing_baseline_asserts_the_documented_default(tmp_path: Path) -> No
     The failure direction matters: falling back to "disabled" would turn a
     typo in ``doctor.toml`` into a check that reads exactly like a healthy host.
     """
-    assert claude_doctor.load_baseline(tmp_path) == (True, claude_doctor.NATIVE_METHOD)
+    baseline_path = (tmp_path / "doctor.toml").absolute()
+    assert claude_doctor.load_baseline(tmp_path) == (
+        True,
+        claude_doctor.NATIVE_METHOD,
+        baseline_path,
+    )
     (tmp_path / "doctor.toml").write_text("this is not = valid toml [[[")
-    assert claude_doctor.load_baseline(tmp_path) == (True, claude_doctor.NATIVE_METHOD)
+    assert claude_doctor.load_baseline(tmp_path) == (
+        True,
+        claude_doctor.NATIVE_METHOD,
+        baseline_path,
+    )
 
 
 def test_the_cli_hands_the_project_root_to_the_baseline_loader() -> None:
@@ -800,7 +815,7 @@ def test_unreadable_running_value_does_not_make_pin_drift_enforcing(
 
     result = claude_doctor.evaluate(project_root=root)
 
-    assert result.verdict is Verdict.DRIFT
+    assert result.verdict is Verdict.UNKNOWN
     assert result.enforcement_eligible is False
     assert "non-version running value" in result.findings[0]
     assert "schemas/sources.toml pins claude-code at 2.1.272" in result.findings[1]
@@ -827,7 +842,7 @@ def test_unreadable_running_value_does_not_make_pin_drift_enforcing(
         (True, True, False, "mismatch", Verdict.INVALID),
         (True, True, True, "mismatch", Verdict.INVALID),
         (False, False, False, "unreadable", Verdict.UNKNOWN),
-        (False, False, True, "unreadable", Verdict.DRIFT),
+        (False, False, True, "unreadable", Verdict.UNKNOWN),
         (False, True, False, "unreadable", Verdict.INVALID),
         (False, True, True, "unreadable", Verdict.INVALID),
         (True, False, False, "unreadable", Verdict.INVALID),
@@ -1016,6 +1031,44 @@ def test_an_unreadable_pin_is_a_finding_not_silence(tmp_path: Path) -> None:
 
     assert len(findings) == 1, findings
     assert "UNKNOWN" in findings[0]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        '[[schema]]\ntool = "claude-code"\nfile = "claude-code.d.ts"\n',
+        'schema = "not-a-list-of-tables"\n',
+    ],
+    ids=["missing-key", "scalar-schema"],
+)
+def test_malformed_pin_shapes_emit_an_enforcing_verdict(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    body: str,
+) -> None:
+    """Malformed pin structure must be a verdict, never an escaping exception."""
+    schemas = tmp_path / "schemas"
+    schemas.mkdir(parents=True)
+    (schemas / "sources.toml").write_text(body, encoding="utf-8")
+    (tmp_path / "doctor.toml").write_text(
+        '[claude]\nenabled = true\nexpected_install_method = "native"\n',
+        encoding="utf-8",
+    )
+    _stub_process_boundary(
+        monkeypatch,
+        doctor_responses=[
+            (0, "Running: native (2.1.273)\nNo installation issues found.\n", "")
+        ],
+        oracle_responses=[(0, "2.1.273\n", "")],
+    )
+
+    assert claude_doctor.claude_doctor_main(project_root=tmp_path) == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["verdict"] == Verdict.INVALID
+    assert payload["enforcement_eligible"] is True
+    assert "cannot read the claude-code pin" in payload["findings"][0]
+    assert "pin currency is UNKNOWN" in payload["findings"][0]
 
 
 def test_an_unreadable_pin_keeps_its_prior_enforcement(

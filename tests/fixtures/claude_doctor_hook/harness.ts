@@ -16,6 +16,8 @@ import { register } from "../../../.claude/skills/claude-doctor/hooks/register.t
 type DoctorReport = {
   verdict: "ok" | "invalid" | "unknown" | "drift";
   enforcement_eligible?: boolean;
+  disabled_by_baseline?: boolean;
+  baseline_path?: string;
   findings: string[];
   running_version: string | null;
   install_method: string | null;
@@ -49,6 +51,21 @@ const ok = (): DoctorReport => ({
   latest_version: "2.1.278",
 });
 
+const unknown = (finding = "the host question could not be asked"): DoctorReport => ({
+  verdict: "unknown",
+  enforcement_eligible: false,
+  findings: [finding],
+  running_version: null,
+  install_method: null,
+  latest_version: null,
+});
+
+const disabled = (baselinePath: string): DoctorReport => ({
+  ...unknown("claude-doctor is disabled by doctor.toml"),
+  disabled_by_baseline: true,
+  baseline_path: baselinePath,
+});
+
 const drift = (): DoctorReport => ({
   verdict: "drift",
   enforcement_eligible: false,
@@ -62,18 +79,24 @@ const drift = (): DoctorReport => ({
 
 function makeServices(root: string, cwd = root) {
   let clockMs = 1_000;
+  let clockRejects = false;
+  let envRejects = false;
   let projectDir: string | undefined = root;
   let rootAvailable = true;
   let spawnCount = 0;
-  const responses: Array<DoctorReport | null> = [];
+  const responses: unknown[] = [];
 
   const fsPath = (path: string) => (isAbsolute(path) ? path : resolve(cwd, path));
   return {
     clock: {
-      now: async () => clockMs,
+      now: async () => {
+        if (clockRejects) throw new Error("scripted clock failure");
+        return clockMs;
+      },
     },
     env: {
       get: async (name: string) => {
+        if (envRejects) throw new Error("scripted environment failure");
         if (name === "PATH") return "/test/bin:/usr/bin";
         if (name === "CLAUDE_PROJECT_DIR") return projectDir;
         return undefined;
@@ -82,13 +105,25 @@ function makeServices(root: string, cwd = root) {
     fs: {
       stat: async (path: string, options?: { resolve?: boolean }) => {
         const absolute = fsPath(path);
-        const [linkInfo, targetInfo] = await Promise.all([lstat(absolute), stat(absolute)]);
+        const linkInfo = await lstat(absolute);
+        const targetInfo = await stat(absolute).catch(() => undefined);
+        const info = targetInfo ?? linkInfo;
         return {
-          kind: targetInfo.isDirectory() ? "directory" : "file",
-          size: targetInfo.size,
-          mtimeMs: targetInfo.mtimeMs,
+          kind:
+            targetInfo === undefined
+              ? "other"
+              : targetInfo.isDirectory()
+                ? "dir"
+                : targetInfo.isFile()
+                  ? "file"
+                  : "other",
+          size: info.size,
+          mtimeMs: info.mtimeMs,
           isLink: linkInfo.isSymbolicLink(),
-          realPath: options?.resolve ? await realpath(absolute) : undefined,
+          realPath:
+            options?.resolve && targetInfo !== undefined
+              ? await realpath(absolute)
+              : undefined,
         };
       },
     },
@@ -99,7 +134,12 @@ function makeServices(root: string, cwd = root) {
         if (response === null || response === undefined) {
           throw new Error("scripted claude-doctor failure");
         }
-        return { exitCode: response.enforcement_eligible ? 1 : 0, stdout: JSON.stringify(response), stderr: "" };
+        const eligible =
+          typeof response === "object" &&
+          response !== null &&
+          "enforcement_eligible" in response &&
+          response.enforcement_eligible === true;
+        return { exitCode: eligible ? 1 : 0, stdout: JSON.stringify(response), stderr: "" };
       },
     },
     session: {
@@ -111,6 +151,15 @@ function makeServices(root: string, cwd = root) {
     advanceClock(ms: number) {
       clockMs += ms;
     },
+    setClock(ms: number) {
+      clockMs = ms;
+    },
+    rejectClock() {
+      clockRejects = true;
+    },
+    rejectEnvironment() {
+      envRejects = true;
+    },
     disableRoots() {
       rootAvailable = false;
       projectDir = undefined;
@@ -119,7 +168,7 @@ function makeServices(root: string, cwd = root) {
       rootAvailable = false;
       projectDir = root;
     },
-    push(...reports: Array<DoctorReport | null>) {
+    push(...reports: unknown[]) {
       responses.push(...reports);
     },
     spawned() {
@@ -164,6 +213,8 @@ await writeFile(join(root, "contains-doctor.toml-name"), "not the baseline\n");
 await writeFile(join(otherRoot, "doctor.toml"), "another clone\n");
 
 let arms = 0;
+let caseAliasExercised = false;
+let caseAliasSkippedReason: string | null = null;
 
 // An enforcing cache permits only the resolved root baseline and never refreshes
 // on the permitted path.
@@ -185,8 +236,11 @@ let arms = 0;
     await start(services, invalid());
     const result = await call(services, { tool: "Edit", file_path: alias });
     assert.equal(result.allow, true);
+    caseAliasExercised = true;
+    arms += 1;
+  } else {
+    caseAliasSkippedReason = "the fixture filesystem is case-sensitive";
   }
-  arms += 1;
 }
 
 // Every spelling that is not the root baseline remains denied after a fresh,
@@ -256,6 +310,27 @@ for (const refused of [
   arms += 1;
 }
 
+// The real fs service describes a dangling link instead of rejecting it. The
+// faithful fake must therefore reach production's missing-realPath refusal.
+{
+  const danglingRoot = join(scratch, "dangling-file-root");
+  await mkdir(danglingRoot);
+  await symlink(
+    join(scratch, "missing-outside.toml"),
+    join(danglingRoot, "doctor.toml"),
+  );
+  const services = makeServices(danglingRoot);
+  await start(services, invalid());
+  services.push(invalid("still broken"));
+  assertDenied(
+    await call(services, {
+      tool: "Write",
+      file_path: join(danglingRoot, "doctor.toml"),
+    }),
+  );
+  arms += 1;
+}
+
 // Session root is preferred, but the documented environment fallback can keep
 // the repair path alive; only losing both roots refuses it.
 {
@@ -288,11 +363,73 @@ for (const refused of [
   arms += 1;
 }
 
-// A successful repair or off-switch immediately replaces the enforcing cache.
+// Python's reported baseline path wins when the installed package root and the
+// session root diverge. Editing the session-root lookalike must not unbrick.
 {
+  const pythonRoot = join(scratch, "installed-package-root");
+  const sessionRoot = join(scratch, "nested-session-root");
+  await mkdir(pythonRoot);
+  await mkdir(sessionRoot);
+  await writeFile(join(pythonRoot, "doctor.toml"), "[claude]\n");
+  await writeFile(join(sessionRoot, "doctor.toml"), "[claude]\n");
+  const report = invalid();
+  report.baseline_path = join(pythonRoot, "doctor.toml");
+
+  const refused = makeServices(sessionRoot);
+  await start(refused, report);
+  refused.push(invalid("still broken"));
+  assertDenied(
+    await call(refused, {
+      tool: "Edit",
+      file_path: join(sessionRoot, "doctor.toml"),
+    }),
+  );
+
+  const permitted = makeServices(sessionRoot);
+  await start(permitted, report);
+  assert.equal(
+    (
+      await call(permitted, {
+        tool: "Edit",
+        file_path: join(pythonRoot, "doctor.toml"),
+      })
+    ).allow,
+    true,
+  );
+  arms += 1;
+}
+
+// Every POSIX-reachable isPlaceable clause is discriminating: with the named
+// clause removed, target and reported baseline resolve to the same placement.
+const driveRelative = "C:folder/doctor.toml";
+await mkdir(join(root, "C:folder"));
+await writeFile(join(root, driveRelative), "[claude]\n");
+const driveNamed = join(root, "C:doctor.toml");
+await writeFile(driveNamed, "[claude]\n");
+const doubleSlash = `/${join(root, "doctor.toml")}`;
+for (const refused of [
+  driveRelative,
+  doubleSlash,
+  driveNamed,
+  `${join(root, "x")}/`,
+  `${join(root, "x")}/.`,
+  `${join(root, "x")}/..`,
+]) {
+  const report = invalid("unplaceable baseline");
+  report.baseline_path = refused;
+  const services = makeServices(root);
+  await start(services, report);
+  services.push(invalid("still broken"));
+  assertDenied(await call(services, { tool: "Edit", file_path: refused }));
+  arms += 1;
+}
+
+// Each positive answer immediately replaces the enforcing cache: repaired host,
+// pin-only drift, or the explicit baseline off-switch.
+for (const fresh of [ok(), drift(), disabled(join(root, "doctor.toml"))]) {
   const services = makeServices(root);
   await start(services, invalid());
-  services.push(ok());
+  services.push(fresh);
   assert.equal((await call(services, { tool: "Bash", command: "git status" })).allow, true);
   const afterRefresh = services.spawned();
   assert.equal((await call(services, { tool: "Bash", command: "git diff" })).allow, true);
@@ -300,8 +437,9 @@ for (const refused of [
   arms += 1;
 }
 
-// A fresh enforcing verdict and a failed refresh both keep the deny in place.
-for (const fresh of [invalid("freshly broken"), null]) {
+// A fresh enforcing verdict, an unanswered question, and a failed refresh all
+// keep the prior deny in place.
+for (const fresh of [invalid("freshly broken"), unknown(), null]) {
   const services = makeServices(root);
   await start(services, invalid());
   services.push(fresh);
@@ -310,7 +448,7 @@ for (const fresh of [invalid("freshly broken"), null]) {
   arms += 1;
 }
 
-// Malformed payloads keep today's verdict fallback instead of failing open.
+// A missing eligibility key remains compatible: INVALID itself still enforces.
 {
   const malformed = invalid("legacy invalid payload");
   delete malformed.enforcement_eligible;
@@ -321,16 +459,76 @@ for (const fresh of [invalid("freshly broken"), null]) {
   arms += 1;
 }
 
-// A present eligibility field is authoritative even when the legacy verdict
-// value says invalid; TypeScript must not independently re-derive Python's rule.
+// Invalid JSON shapes never enter the cache, so the established deny stands.
+for (const malformed of [
+  42,
+  { ...unknown(), verdict: "future-verdict" },
+  { ...unknown(), findings: ["valid", 7] },
+  { ...unknown(), baseline_path: 7 },
+]) {
+  const services = makeServices(root);
+  await start(services, invalid());
+  services.push(malformed);
+  assertDenied(await call(services, { tool: "Bash", command: "git status" }));
+  arms += 1;
+}
+
+// The same validator makes a malformed SessionStart report an unanswered check.
+{
+  const services = makeServices(root);
+  services.push(42);
+  const context = await sessionStart(services, {}, next);
+  assert.match(JSON.stringify(context.additionalContext), /check could not run/);
+  arms += 1;
+}
+
+// INVALID cannot be talked down by an inconsistent false eligibility field.
 {
   const explicitlyNonEnforcing = invalid("python ruled this non-enforcing");
   explicitlyNonEnforcing.enforcement_eligible = false;
   const services = makeServices(root);
   await start(services, explicitlyNonEnforcing);
-  const before = services.spawned();
-  assert.equal((await call(services, { tool: "Bash", command: "git status" })).allow, true);
-  assert.equal(services.spawned(), before);
+  services.push(null);
+  assertDenied(await call(services, { tool: "Bash", command: "git status" }));
+  arms += 1;
+}
+
+// A rejecting clock takes the catch arm, where UNKNOWN still cannot disarm but
+// a subsequent positive answer can.
+{
+  const services = makeServices(root);
+  await start(services, invalid());
+  services.rejectClock();
+  services.push(unknown());
+  assertDenied(await call(services, { tool: "Bash", command: "git status" }));
+  services.push(ok());
+  assert.equal((await call(services, { tool: "Bash", command: "git diff" })).allow, true);
+  assert.equal(services.spawned(), 3);
+  arms += 1;
+}
+
+// A backward wall-clock jump expires the reuse window instead of freezing it.
+{
+  const services = makeServices(root);
+  await start(services, invalid());
+  services.push(invalid("first refresh"));
+  assertDenied(await call(services, { tool: "Bash", command: "git status" }));
+  services.setClock(999);
+  services.push(ok());
+  assert.equal((await call(services, { tool: "Bash", command: "git diff" })).allow, true);
+  assert.equal(services.spawned(), 3);
+  arms += 1;
+}
+
+// An environment-service rejection is a null refresh, not a thrown hook or a
+// reason to clear the established deny.
+{
+  const services = makeServices(root);
+  await start(services, invalid());
+  services.rejectEnvironment();
+  services.push(ok());
+  assertDenied(await call(services, { tool: "Bash", command: "git status" }));
+  assert.equal(services.spawned(), 1);
   arms += 1;
 }
 
@@ -364,6 +562,21 @@ for (const fresh of [invalid("freshly broken"), null]) {
   arms += 1;
 }
 
+// A stale pin does not hide an unreadable running version behind DRIFT prose.
+{
+  const report = unknown(
+    "schemas/sources.toml pins claude-code at 2.1.278 but 2.1.279 is published.",
+  );
+  report.running_version = "dev-build";
+  const services = makeServices(root);
+  const context = await start(services, report);
+  const rendered = JSON.stringify(context.additionalContext);
+  assert.match(rendered, /schemas\/sources\.toml pins claude-code/);
+  assert.match(rendered, /could not determine/);
+  assert.doesNotMatch(rendered, /BROKEN/);
+  arms += 1;
+}
+
 // A SessionStart check that cannot run remains report-only and non-enforcing.
 {
   const services = makeServices(root);
@@ -376,4 +589,10 @@ for (const fresh of [invalid("freshly broken"), null]) {
   arms += 1;
 }
 
-console.log(JSON.stringify({ arms }));
+console.log(
+  JSON.stringify({
+    arms,
+    case_alias_exercised: caseAliasExercised,
+    case_alias_skipped_reason: caseAliasSkippedReason,
+  }),
+);
