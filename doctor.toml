@@ -265,7 +265,8 @@ expected_install_method = "native"
 
 # Set false to disable the check entirely. Prefer narrowing
 # `expected_install_method` over switching this off: a disabled check reports
-# nothing, which reads exactly like a healthy host.
+# that its question was not asked and never enforces; it is not reported as a
+# healthy host. The function hook re-reads this switch before an imminent deny.
 enabled = true
 
 [codex]

@@ -1243,16 +1243,15 @@ def check_claude_doctor(setup: Setup) -> list[str]:
     Host state, so a doctor check rather than an hk step: the answer is a
     property of one operator's machine, and a CI runner installs afresh.
 
-    Only ``INVALID`` is reported as a finding here even though ``UNKNOWN`` also
-    carries text, because the doctor's findings are advice and ``UNKNOWN`` says
-    the question could not be asked. Both surface; neither blocks — the
-    ``classic.PreToolUse`` half of the ``claude-doctor`` plugin owns enforcement,
-    and it enforces on ``INVALID`` alone.
+    Every verdict's findings are advisory here; the ``classic.PreToolUse`` half
+    of the ``claude-doctor`` plugin owns enforcement. It denies an ``INVALID``
+    report or one that explicitly sets ``enforcement_eligible`` and clears an
+    established deny only after a positive OK, DRIFT, or disabled answer.
 
     ⚠️ Blind unless the SessionStart hook captured ``PATH`` first, exactly as
     :func:`check_path_drift` is: ``uv run`` executes under mise's activated
-    environment, so an uncaptured ``PATH`` resolves mise's pinned
-    pinned ``claude`` rather than the operator's own install.
+    environment, so an uncaptured ``PATH`` resolves mise's pinned ``claude``
+    rather than the operator's own install.
     :func:`claude_doctor.evaluate` reports that blindness rather than passing.
     """
     baseline = _str_keys(setup.baseline.get("claude"))
