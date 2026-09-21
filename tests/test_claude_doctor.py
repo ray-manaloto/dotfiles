@@ -2,12 +2,14 @@
 """Tests for the machine-readable ``claude doctor`` verdict.
 
 The property under test is **which question the check refused to answer**, not
-whether it can spot a stale version. Three states have to stay distinguishable:
+whether it can spot a stale version. Four states have to stay distinguishable:
 
 * ``INVALID`` — an assertion was made and failed. Only this may enforce.
 * ``UNKNOWN`` — the question could not be asked (binary gone, output reworded,
   oracle down, or mise already rewrote ``PATH`` so the wrong ``claude`` is
   visible).
+* ``DRIFT`` — the host is healthy, but the repository's Claude Code pin is
+  positively established as stale. It is reported but cannot enforce.
 * ``OK`` — every assertion was made and passed.
 
 Collapsing ``UNKNOWN`` into either neighbour is the real defect this guards.
@@ -783,11 +785,11 @@ def _sources_with(version: str, tmp_path: Path) -> Path:
     return tmp_path
 
 
-def test_unreadable_running_value_still_enforces_a_stale_repo_pin(
+def test_unreadable_running_value_does_not_make_pin_drift_enforcing(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """A garbage host token cannot disarm the independent repo-pin assertion."""
+    """A stale repo pin cannot turn an unanswered host question into a deny."""
     root = _sources_with("2.1.272", tmp_path)
     doctor = "Running: native (unknown)\nNo installation issues found.\n"
     _stub_process_boundary(
@@ -798,11 +800,120 @@ def test_unreadable_running_value_still_enforces_a_stale_repo_pin(
 
     result = claude_doctor.evaluate(project_root=root)
 
-    assert result.verdict is Verdict.INVALID
-    assert result.enforcement_eligible is True
+    assert result.verdict is Verdict.DRIFT
+    assert result.enforcement_eligible is False
     assert "non-version running value" in result.findings[0]
     assert "schemas/sources.toml pins claude-code at 2.1.272" in result.findings[1]
     assert not any("claude on PATH is unknown but" in item for item in result.findings)
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        (False, False, False, "current", Verdict.OK),
+        (False, False, True, "current", Verdict.DRIFT),
+        (False, True, False, "current", Verdict.INVALID),
+        (False, True, True, "current", Verdict.INVALID),
+        (True, False, False, "current", Verdict.INVALID),
+        (True, False, True, "current", Verdict.INVALID),
+        (True, True, False, "current", Verdict.INVALID),
+        (True, True, True, "current", Verdict.INVALID),
+        (False, False, False, "mismatch", Verdict.INVALID),
+        (False, False, True, "mismatch", Verdict.INVALID),
+        (False, True, False, "mismatch", Verdict.INVALID),
+        (False, True, True, "mismatch", Verdict.INVALID),
+        (True, False, False, "mismatch", Verdict.INVALID),
+        (True, False, True, "mismatch", Verdict.INVALID),
+        (True, True, False, "mismatch", Verdict.INVALID),
+        (True, True, True, "mismatch", Verdict.INVALID),
+        (False, False, False, "unreadable", Verdict.UNKNOWN),
+        (False, False, True, "unreadable", Verdict.DRIFT),
+        (False, True, False, "unreadable", Verdict.INVALID),
+        (False, True, True, "unreadable", Verdict.INVALID),
+        (True, False, False, "unreadable", Verdict.INVALID),
+        (True, False, True, "unreadable", Verdict.INVALID),
+        (True, True, False, "unreadable", Verdict.INVALID),
+        (True, True, True, "unreadable", Verdict.INVALID),
+    ],
+)
+def test_verdict_matrix_preserves_host_enforcement_and_isolates_pin_drift(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    case: tuple[bool, bool, bool, str, Verdict],
+) -> None:
+    """Every valid combination of the five verdict axes has a pinned outcome."""
+    method_failed, clean_failed, pin_drift, running, expected = case
+    latest = "2.1.273"
+    running_token = {
+        "current": latest,
+        "mismatch": "2.1.272",
+        "unreadable": "dev-build",
+    }[running]
+    method = "npm-global" if method_failed else "native"
+    clean_line = "Found 1 problem." if clean_failed else "No installation issues found."
+    root = _sources_with("2.1.272" if pin_drift else latest, tmp_path)
+    _stub_process_boundary(
+        monkeypatch,
+        doctor_responses=[
+            (0, f"Running: {method} ({running_token})\n{clean_line}\n", "")
+        ],
+        oracle_responses=[(0, f"{latest}\n", "")],
+    )
+
+    result = claude_doctor.evaluate(project_root=root)
+
+    assert result.verdict is expected
+    assert result.enforcement_eligible is (expected is Verdict.INVALID)
+
+
+def test_pin_only_is_reported_but_the_cli_returns_zero(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    """The 2026-09-21 ruling changes pin-only reporting, not its visibility."""
+    root = _sources_with("2.1.272", tmp_path)
+    (root / "doctor.toml").write_text(
+        '[claude]\nenabled = true\nexpected_install_method = "native"\n',
+        encoding="utf-8",
+    )
+    _stub_process_boundary(
+        monkeypatch,
+        doctor_responses=[
+            (0, "Running: native (2.1.273)\nNo installation issues found.\n", "")
+        ],
+        oracle_responses=[(0, "2.1.273\n", "")],
+    )
+
+    assert claude_doctor.claude_doctor_main(project_root=root) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["verdict"] == "drift"
+    assert payload["enforcement_eligible"] is False
+    assert payload["findings"]
+
+
+def test_pin_plus_method_failure_still_returns_one(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    """A repo finding must not mask an independently broken host install."""
+    root = _sources_with("2.1.272", tmp_path)
+    (root / "doctor.toml").write_text(
+        '[claude]\nenabled = true\nexpected_install_method = "native"\n',
+        encoding="utf-8",
+    )
+    doctor = "Running: npm-global (2.1.273)\nNo installation issues found.\n"
+    _stub_process_boundary(
+        monkeypatch,
+        doctor_responses=[(0, doctor, "")],
+        oracle_responses=[(0, "2.1.273\n", "")],
+    )
+
+    assert claude_doctor.claude_doctor_main(project_root=root) == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["verdict"] == "invalid"
+    assert payload["enforcement_eligible"] is True
 
 
 def test_unreadable_running_value_with_current_pin_remains_unknown(
@@ -907,7 +1018,38 @@ def test_an_unreadable_pin_is_a_finding_not_silence(tmp_path: Path) -> None:
     assert "UNKNOWN" in findings[0]
 
 
-def test_the_pin_check_is_wired_into_evaluate(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_an_unreadable_pin_keeps_its_prior_enforcement(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Only established stale-pin drift receives the 2026-09-21 exception."""
+    schemas = tmp_path / "schemas"
+    schemas.mkdir(parents=True)
+    (schemas / "sources.toml").write_text(
+        '[[schema]]\ntool = "mise"\nfile = "schemas/mise.json"\n'
+        'version = "1"\nsource = "https://example.invalid/x"\n'
+        'pin_source = "x"\nsha256 = "0"\n',
+        encoding="utf-8",
+    )
+    _stub_process_boundary(
+        monkeypatch,
+        doctor_responses=[
+            (0, "Running: native (2.1.273)\nNo installation issues found.\n", "")
+        ],
+        oracle_responses=[(0, "2.1.273\n", "")],
+    )
+
+    result = claude_doctor.evaluate(project_root=tmp_path)
+
+    assert result.verdict is Verdict.INVALID
+    assert result.enforcement_eligible is True
+    assert "pin currency is UNKNOWN" in result.findings[0]
+
+
+def test_the_pin_check_is_wired_into_evaluate(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
     """Bind the CALL SITE, not just the helper.
 
     A helper with perfect arms that nothing calls is the classic way a gate
@@ -919,19 +1061,14 @@ def test_the_pin_check_is_wired_into_evaluate(monkeypatch: pytest.MonkeyPatch) -
         "_run",
         _fake_run(doctor=(0, NATIVE_DOCTOR), oracle=(0, "2.1.270\n")),
     )
-    seen: list[tuple[str, object]] = []
+    root = _sources_with("2.1.269", tmp_path)
 
-    def _spy(latest: str, project_root: object = None) -> list[str]:
-        seen.append((latest, project_root))
-        return ["synthetic pin finding"]
+    on = claude_doctor.evaluate(project_root=root)
+    assert on.verdict is Verdict.DRIFT
+    assert any("schemas/sources.toml pins claude-code" in item for item in on.findings)
 
-    monkeypatch.setattr(claude_doctor, "pin_currency_findings", _spy)
-
-    on = claude_doctor.evaluate()
-    assert seen, "evaluate() never called the pin check"
-    assert "synthetic pin finding" in on.findings
-
-    seen.clear()
-    off = claude_doctor.evaluate(check_pin=False)
-    assert seen == [], "check_pin=False still called the pin check"
-    assert "synthetic pin finding" not in off.findings
+    off = claude_doctor.evaluate(check_pin=False, project_root=root)
+    assert off.verdict is Verdict.OK
+    assert not any(
+        "schemas/sources.toml pins claude-code" in item for item in off.findings
+    )

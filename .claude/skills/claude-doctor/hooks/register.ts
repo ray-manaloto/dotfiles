@@ -17,14 +17,15 @@ import type { Register } from "claude-code";
  * and then silently do nothing at runtime. Function-hook failures fail open and
  * silent. Verify this module by observed behaviour, never by a green build.
  *
- * The verdict is computed ONCE, at session start, and cached in module scope
- * for PreToolUse to read. Recomputing per tool call would spawn `claude doctor`
- * plus a release-list lookup on every single call.
+ * The verdict is computed at session start and cached in module scope for
+ * PreToolUse to read. Only a call that would otherwise be denied re-establishes
+ * it, with a short reuse interval so a repair loop does not spawn
+ * `claude doctor` plus a release-list lookup on every attempt.
  */
 
 /** Mirrors `DoctorVerdict.to_json()` in `python/src/dotfiles_setup/claude_doctor.py`. */
 type DoctorReport = {
-  verdict: "ok" | "invalid" | "unknown";
+  verdict: "ok" | "invalid" | "unknown" | "drift";
   enforcement_eligible: boolean;
   findings: string[];
   running_version: string | null;
@@ -41,6 +42,28 @@ type DoctorReport = {
  */
 let cachedReport: DoctorReport | null = null;
 
+/** Reuse a deny-path refresh briefly; the injected clock keeps tests sleepless. */
+const REFRESH_REUSE_MS = 7_500;
+let lastRefreshAtMs: number | null = null;
+
+type HookServices = {
+  clock: { now: () => Promise<number> };
+  env: { get: (name: string) => Promise<string | undefined> };
+  fs: {
+    stat: (
+      path: string,
+      options?: { resolve: boolean },
+    ) => Promise<{ isLink: boolean; realPath?: string }>;
+  };
+  process: {
+    run: (
+      argv: readonly string[],
+      init?: { cwd?: string; env?: Record<string, string>; timeoutMs?: number },
+    ) => Promise<{ exitCode: number; stdout: string; stderr: string }>;
+  };
+  session: { root: () => Promise<string> };
+};
+
 /**
  * Runs the Python check with the ambient PATH captured from this process.
  *
@@ -55,18 +78,10 @@ let cachedReport: DoctorReport | null = null;
  * check measure the right binary; without it `resolve_ambient_path` falls back
  * to the rewritten one.
  */
-async function readVerdict($: {
-  env: { get: (name: string) => Promise<string | undefined> };
-  process: {
-    run: (
-      argv: readonly string[],
-      init?: { cwd?: string; env?: Record<string, string>; timeoutMs?: number },
-    ) => Promise<{ exitCode: number; stdout: string; stderr: string }>;
-  };
-}): Promise<DoctorReport | null> {
-  const ambientPath = await $.env.get("PATH");
-  const projectDir = await $.env.get("CLAUDE_PROJECT_DIR");
+async function readVerdict($: HookServices): Promise<DoctorReport | null> {
   try {
+    const ambientPath = await $.env.get("PATH");
+    const projectDir = await $.env.get("CLAUDE_PROJECT_DIR");
     const { stdout } = await $.process.run(
       ["uv", "run", "--project", "python", "dotfiles-setup", "claude-doctor"],
       {
@@ -129,6 +144,80 @@ const NATIVE_VERSIONS_DIR = "/claude/versions/";
 /** Shell metacharacters that separate one command from the next. */
 const COMMAND_SEPARATORS = /[\s;|&()<>]+/;
 
+type Placement = { realPath: string; isLink: boolean };
+
+/** Resolve an existing path, or place a missing basename through its parent. */
+async function placed($: HookServices, path: string): Promise<Placement | undefined> {
+  const cut = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  const name = path.slice(cut + 1);
+  const isPlaceable =
+    !/^[A-Za-z]:(?![\\/])/.test(path) &&
+    !/^[\\/][\\/]/.test(path) &&
+    !/^[A-Za-z]:/.test(name) &&
+    name !== "" &&
+    name !== "." &&
+    name !== "..";
+  if (!isPlaceable) return undefined;
+
+  const own = await $.fs.stat(path, { resolve: true }).catch(() => undefined);
+  if (own !== undefined) {
+    return own.realPath === undefined
+      ? undefined
+      : { realPath: own.realPath, isLink: own.isLink };
+  }
+
+  const folder = cut < 0 ? "." : path.slice(0, cut + 1);
+  const dir = await $.fs.stat(folder, { resolve: true }).catch(() => undefined);
+  if (dir?.realPath === undefined) return undefined;
+  return {
+    realPath: `${dir.realPath.replace(/[\\/]$/, "")}/${name}`,
+    isLink: false,
+  };
+}
+
+/** True only for Edit/Write of this session root's actual doctor.toml. */
+async function isDoctorTomlRepair(
+  $: HookServices,
+  e: { tool: string } & Record<string, unknown>,
+): Promise<boolean> {
+  if ((e.tool !== "Edit" && e.tool !== "Write") || typeof e.file_path !== "string") {
+    return false;
+  }
+  try {
+    let root: string | undefined;
+    try {
+      root = await $.session.root();
+    } catch {
+      root = await $.env.get("CLAUDE_PROJECT_DIR");
+    }
+    if (!root) return false;
+
+    const rootDoctor = `${root.replace(/[\\/]$/, "")}/doctor.toml`;
+    const [target, expected] = await Promise.all([
+      placed($, e.file_path),
+      placed($, rootDoctor),
+    ]);
+    return (
+      target !== undefined &&
+      expected !== undefined &&
+      !target.isLink &&
+      !expected.isLink &&
+      target.realPath === expected.realPath
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Trust Python's eligibility field, with today's INVALID fallback for old JSON. */
+function isEnforcementEligible(report: DoctorReport | null): boolean {
+  if (report === null) return false;
+  if (typeof report.enforcement_eligible === "boolean") {
+    return report.enforcement_eligible;
+  }
+  return report.verdict === "invalid";
+}
+
 /**
  * May this tool call proceed while the install is provably broken?
  *
@@ -143,6 +232,8 @@ const COMMAND_SEPARATORS = /[\s;|&()<>]+/;
  *   SEE the finding, this file, and the settings that disable the plugin;
  * - escape-hatch tools always pass, because the second thing anyone needs is to
  *   ASK about it or REPORT it, and neither executes anything;
+ * - Edit/Write pass only when resolved placement identifies the repository-root
+ *   `doctor.toml`, so the reviewed off-switch can be changed in-session;
  * - a Bash command passes when ANY of its tokens names a repair program.
  *
  * Scanning tokens rather than anchoring at the start is the load-bearing
@@ -156,8 +247,14 @@ const COMMAND_SEPARATORS = /[\s;|&()<>]+/;
  * gate - and the failure it prevents is silent wrong-version execution, not
  * malice.
  */
-function isRepairPermitted(e: { tool: string } & Record<string, unknown>): boolean {
+async function isRepairPermitted(
+  $: HookServices,
+  e: { tool: string } & Record<string, unknown>,
+): Promise<boolean> {
   if (READ_ONLY_TOOLS.has(e.tool) || ESCAPE_HATCH_TOOLS.has(e.tool)) {
+    return true;
+  }
+  if (await isDoctorTomlRepair($, e)) {
     return true;
   }
   if (e.tool !== "Bash") {
@@ -181,6 +278,7 @@ export const register: Register = (on) => {
   on("classic.SessionStart", async ($, e, next) => {
     const result = await next(e);
     cachedReport = await readVerdict($);
+    lastRefreshAtMs = null;
 
     if (cachedReport === null) {
       return {
@@ -196,7 +294,9 @@ export const register: Register = (on) => {
     const lead =
       cachedReport.verdict === "invalid"
         ? "claude-doctor: your Claude Code install is BROKEN."
-        : "claude-doctor: could not determine whether your install is current (this is NOT 'it is fine').";
+        : cachedReport.verdict === "drift"
+          ? "claude-doctor: the repository's Claude Code pin is stale."
+          : "claude-doctor: could not determine whether your install is current (this is NOT 'it is fine').";
     return {
       ...result,
       additionalContext: [[lead, ...cachedReport.findings].join(" ")],
@@ -205,12 +305,30 @@ export const register: Register = (on) => {
 
   on("classic.PreToolUse", async ($, e, next) => {
     const result = await next(e);
-    // Only INVALID enforces. UNKNOWN and a null cache pass through untouched -
-    // a question that could not be asked must never block.
-    if (cachedReport?.verdict !== "invalid") {
+    // Python owns the judgement. UNKNOWN, DRIFT and a null cache pass through;
+    // malformed older JSON retains the prior INVALID fallback.
+    if (!isEnforcementEligible(cachedReport)) {
       return result;
     }
-    if (isRepairPermitted(e)) {
+    if (await isRepairPermitted($, e)) {
+      return result;
+    }
+
+    // Only the about-to-deny path refreshes. A null refresh never weakens the
+    // prior enforcing verdict, and the timestamp is read rather than awaited as
+    // a delay: $.clock waits are the one `$` operation charged to HookBudget.
+    try {
+      const now = await $.clock.now();
+      if (lastRefreshAtMs === null || now - lastRefreshAtMs >= REFRESH_REUSE_MS) {
+        lastRefreshAtMs = now;
+        const refreshed = await readVerdict($);
+        if (refreshed !== null) cachedReport = refreshed;
+      }
+    } catch {
+      const refreshed = await readVerdict($);
+      if (refreshed !== null) cachedReport = refreshed;
+    }
+    if (!isEnforcementEligible(cachedReport)) {
       return result;
     }
     // NOT `{ ...result, deny }`. A deny is one arm of a discriminated union, so
@@ -221,7 +339,7 @@ export const register: Register = (on) => {
     return {
       deny: [
         "claude-doctor: refusing tool calls until the Claude Code install is repaired.",
-        ...cachedReport.findings,
+        ...(cachedReport?.findings ?? []),
       ].join(" "),
       additionalContext: result.additionalContext,
     };

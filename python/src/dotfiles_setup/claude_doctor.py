@@ -7,20 +7,25 @@
 by parsing its text. That is a deliberate, reviewed decision with a cost, and
 the cost is handled by :data:`Verdict.UNKNOWN` below.
 
-The check answers two questions, both settled by the 2026-09-12 grilling:
+The check answers host-health questions settled by the 2026-09-12 grilling and
+one repository-currency question added afterward:
 
 1. is the running version the newest release, and
-2. does ``claude doctor`` itself report no installation issues?
+2. does ``claude doctor`` itself report no installation issues, and
+3. does the tracked Claude Code schema pin match the newest release?
 
 Why parsing unowned text is survivable here
 -------------------------------------------
 ``.claude/rules/probes-need-a-control-arm.md`` #9 warns that binding a check to
 a string you do not own turns it into a silent no-op the day upstream rewords
-it. The mitigation is the three-way verdict rather than a boolean:
+it. The mitigation is the four-way verdict rather than a boolean:
 
 * :attr:`Verdict.OK` — every assertion was made and passed.
 * :attr:`Verdict.INVALID` — an assertion was **made and failed**. Only this
   state is enforcement-eligible.
+* :attr:`Verdict.DRIFT` — the host assertions passed or stayed unanswered, and
+  the repository pin is positively established as stale. It is reported but is
+  deliberately not enforcement-eligible under the 2026-09-21 operator ruling.
 * :attr:`Verdict.UNKNOWN` — the question could not be asked: output did not
   parse, the binary is missing, or the version oracle failed.
 
@@ -137,11 +142,12 @@ _TIMEOUT_S: Final = 20.0
 
 
 class Verdict(StrEnum):
-    """Three-way outcome. Only ``INVALID`` is enforcement-eligible."""
+    """Four-way outcome. Only ``INVALID`` is enforcement-eligible."""
 
     OK = "ok"
     INVALID = "invalid"
     UNKNOWN = "unknown"
+    DRIFT = "drift"
 
 
 @dataclass(frozen=True)
@@ -159,8 +165,10 @@ class DoctorVerdict:
     def enforcement_eligible(self) -> bool:
         """True only when an assertion was made and failed.
 
-        ``UNKNOWN`` deliberately returns False: a question that could not be
-        asked must never block.
+        ``UNKNOWN`` deliberately returns False because an unanswered question
+        must never block. ``DRIFT`` also returns False by the explicit
+        2026-09-21 ruling: a stale repository pin is reported, but a healthy
+        host remains usable.
         """
         return self.verdict is Verdict.INVALID
 
@@ -272,6 +280,47 @@ def parse_doctor(text: str) -> tuple[str | None, str | None, bool]:
 PIN_TOOL: Final = "claude-code"
 
 
+class _PinState(StrEnum):
+    """Typed distinction between established drift and an unreadable pin."""
+
+    CURRENT = "current"
+    DRIFT = "drift"
+    UNKNOWN = "unknown"
+    NOT_APPLICABLE = "not-applicable"
+
+
+@dataclass(frozen=True)
+class _PinCheck:
+    """Repository-pin result before it is combined with host assertions."""
+
+    state: _PinState
+    findings: list[str] = field(default_factory=list)
+
+
+def _pin_currency_check(latest: str, project_root: Path | None = None) -> _PinCheck:
+    """Return the typed pin state used to distinguish drift from unreadability."""
+    if not sources_path(project_root).is_file():
+        return _PinCheck(state=_PinState.NOT_APPLICABLE)
+    try:
+        pinned = vendored_version(PIN_TOOL, project_root)
+    except (ValueError, OSError) as exc:
+        return _PinCheck(
+            state=_PinState.UNKNOWN,
+            findings=[
+                f"cannot read the {PIN_TOOL} pin, so pin currency is UNKNOWN: {exc}"
+            ],
+        )
+    if pinned == latest:
+        return _PinCheck(state=_PinState.CURRENT)
+    message = (
+        f"schemas/sources.toml pins {PIN_TOOL} at {pinned} but {latest} is "
+        f"published. Bump `version` and the `source` tag there, and "
+        f"`.claude/types/README.md` in the same change (pin-parity requires "
+        f"both); the sha256 only changes if upstream's .d.ts did."
+    )
+    return _PinCheck(state=_PinState.DRIFT, findings=[message])
+
+
 def pin_currency_findings(latest: str, project_root: Path | None = None) -> list[str]:
     """Report when the REPO's Claude Code pin has fallen behind upstream.
 
@@ -290,21 +339,7 @@ def pin_currency_findings(latest: str, project_root: Path | None = None) -> list
     it is reported. The distinction matters because every other finding here is
     about the host, so a non-repo root must not manufacture one.
     """
-    if not sources_path(project_root).is_file():
-        return []
-    try:
-        pinned = vendored_version(PIN_TOOL, project_root)
-    except (ValueError, OSError) as exc:
-        return [f"cannot read the {PIN_TOOL} pin, so pin currency is UNKNOWN: {exc}"]
-    if pinned == latest:
-        return []
-    message = (
-        f"schemas/sources.toml pins {PIN_TOOL} at {pinned} but {latest} is "
-        f"published. Bump `version` and the `source` tag there, and "
-        f"`.claude/types/README.md` in the same change (pin-parity requires "
-        f"both); the sha256 only changes if upstream's .d.ts did."
-    )
-    return [message]
+    return _pin_currency_check(latest, project_root).findings
 
 
 def latest_version(
@@ -391,9 +426,10 @@ def evaluate(
 
     The install method is independent of the captured version token. If that
     token is not version-shaped, only the running-versus-latest comparison is
-    unanswered. With no other failure the verdict is ``UNKNOWN``; an established
-    method, pin, or clean-marker failure remains ``INVALID`` rather than being
-    silently masked by the unreadable version.
+    unanswered. With no other result the verdict is ``UNKNOWN``. An established
+    host failure or an unreadable pin remains ``INVALID`` rather than being
+    silently masked. Positively established pin drift alone becomes ``DRIFT``
+    and cannot enforce, including when the running-version question is unknown.
 
     ``check_pin`` adds the REPO-state question (:func:`pin_currency_findings`)
     to the two host-state ones. It is a separate switch because the two have
@@ -452,7 +488,12 @@ def evaluate(
             clean_marker_present=clean,
         )
 
-    pin_findings = pin_currency_findings(latest, project_root) if check_pin else []
+    pin_check = (
+        _pin_currency_check(latest, project_root)
+        if check_pin
+        else _PinCheck(state=_PinState.NOT_APPLICABLE)
+    )
+    pin_findings = pin_check.findings
     running_is_version = _VERSION_RE.fullmatch(running) is not None
     findings = list(method_findings)
     if not running_is_version:
@@ -466,13 +507,15 @@ def evaluate(
         )
     findings.extend(pin_findings)
     findings.extend(clean_findings)
-    failed_assertion = bool(method_findings or pin_findings or clean_findings)
+    host_failed_assertion = bool(method_findings or clean_findings)
     if running_is_version:
-        failed_assertion = failed_assertion or running != latest
+        host_failed_assertion = host_failed_assertion or running != latest
     return DoctorVerdict(
         verdict=(
             Verdict.INVALID
-            if failed_assertion
+            if host_failed_assertion or pin_check.state is _PinState.UNKNOWN
+            else Verdict.DRIFT
+            if pin_check.state is _PinState.DRIFT
             else Verdict.OK
             if running_is_version
             else Verdict.UNKNOWN
@@ -548,10 +591,10 @@ def claude_doctor_main(
     this and renders the answer.
 
     The exit code encodes **enforcement eligibility, not success**: non-zero
-    only for :attr:`Verdict.INVALID`. ``UNKNOWN`` returns 0 on purpose — it is a
-    question that could not be asked, and per this module's docstring such a
-    question must warn rather than block. A caller wanting the distinction reads
-    ``verdict`` from the JSON, which is always emitted.
+    only for :attr:`Verdict.INVALID`. ``UNKNOWN`` and ``DRIFT`` return 0 on
+    purpose — the former is a question that could not be asked, while the latter
+    is the explicit non-enforcing repository-pin exception. A caller wanting the
+    distinction reads ``verdict`` from the JSON, which is always emitted.
     """
     enabled, configured = load_baseline(project_root)
     if not enabled:
