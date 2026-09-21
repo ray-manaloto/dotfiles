@@ -131,7 +131,7 @@ function makeServices(root: string, cwd = root) {
       run: async () => {
         spawnCount += 1;
         const response = responses.shift();
-        if (response === null || response === undefined) {
+        if (response === undefined) {
           throw new Error("scripted claude-doctor failure");
         }
         const eligible =
@@ -184,7 +184,7 @@ assert(preToolUse, "PreToolUse handler was not registered");
 
 const next = async () => ({ allow: true, additionalContext: ["base context"] });
 
-async function start(services: ReturnType<typeof makeServices>, report: DoctorReport) {
+async function start(services: ReturnType<typeof makeServices>, report: unknown) {
   services.push(report);
   return sessionStart(services, {}, next);
 }
@@ -456,14 +456,137 @@ for (const fresh of [invalid("freshly broken"), unknown(), null]) {
   arms += 1;
 }
 
-// A missing eligibility key remains compatible: INVALID itself still enforces.
+const malformedEligibilityValues: readonly unknown[] = [1, "true"];
+const deniedEvents = [
+  { name: "Bash", event: { tool: "Bash", command: "ls" } },
+  {
+    name: "Edit-other",
+    event: { tool: "Edit", file_path: join(root, "contains-doctor.toml-name") },
+  },
+] as const;
+
+// A malformed eligibility value cannot erase an otherwise valid INVALID at
+// establishment or refresh. Both denied tool classes pin the four regressions
+// measured in the round-3 review.
+for (const malformedEligibility of malformedEligibilityValues) {
+  for (const { name, event } of deniedEvents) {
+    const finding = `malformed ${String(malformedEligibility)} SessionStart ${name}`;
+    const malformed = {
+      ...invalid(finding),
+      enforcement_eligible: malformedEligibility,
+    };
+    const services = makeServices(root);
+    const context = await start(services, malformed);
+    assert.match(JSON.stringify(context.additionalContext), /BROKEN/);
+    assertDenied(await call(services, event), finding);
+    arms += 1;
+  }
+}
+for (const malformedEligibility of malformedEligibilityValues) {
+  for (const { name, event } of deniedEvents) {
+    const finding = `malformed ${String(malformedEligibility)} refresh ${name}`;
+    const malformed = {
+      ...invalid(finding),
+      enforcement_eligible: malformedEligibility,
+    };
+    const services = makeServices(root);
+    await start(services, invalid("prior deny"));
+    services.push(malformed);
+    assertDenied(await call(services, event), finding);
+    arms += 1;
+  }
+}
+
+const nonEnforcingReports = () => [
+  { name: "ok", report: ok() },
+  { name: "drift", report: drift() },
+  { name: "unknown", report: unknown() },
+  { name: "disabled", report: disabled(join(root, "doctor.toml")) },
+] as const;
+
+// A malformed eligibility value on any non-INVALID verdict is unanswered at
+// SessionStart and cannot replace a prior deny during refresh.
+for (const malformedEligibility of malformedEligibilityValues) {
+  for (const { name, report: baseReport } of nonEnforcingReports()) {
+    const malformed = {
+      ...baseReport,
+      enforcement_eligible: malformedEligibility,
+      findings: [`malformed ${name} SessionStart`],
+    };
+    const services = makeServices(root);
+    const context = await start(services, malformed);
+    assert.match(JSON.stringify(context.additionalContext), /check could not run/);
+    const before = services.spawned();
+    assert.equal((await call(services, { tool: "Bash", command: "git status" })).allow, true);
+    assert.equal(services.spawned(), before);
+    arms += 1;
+  }
+}
+for (const malformedEligibility of malformedEligibilityValues) {
+  for (const { name, report: baseReport } of nonEnforcingReports()) {
+    const malformed = {
+      ...baseReport,
+      enforcement_eligible: malformedEligibility,
+      findings: [`malformed ${name} refresh`],
+    };
+    const services = makeServices(root);
+    await start(services, invalid("prior deny survives malformed refresh"));
+    services.push(malformed);
+    assertDenied(
+      await call(services, { tool: "Bash", command: "git status" }),
+      "prior deny survives malformed refresh",
+    );
+    arms += 1;
+  }
+}
+
+// A missing eligibility key remains compatible in both directions: INVALID
+// itself establishes and refreshes the enforcing state.
 {
-  const malformed = invalid("legacy invalid payload");
-  delete malformed.enforcement_eligible;
+  const established = invalid("legacy SessionStart payload");
+  delete established.enforcement_eligible;
+  const establishmentServices = makeServices(root);
+  await start(establishmentServices, established);
+  assertDenied(
+    await call(establishmentServices, { tool: "Bash", command: "git status" }),
+    "legacy SessionStart payload",
+  );
+
+  const refreshed = invalid("legacy refresh payload");
+  delete refreshed.enforcement_eligible;
+  const refreshServices = makeServices(root);
+  await start(refreshServices, invalid("prior deny"));
+  refreshServices.push(refreshed);
+  assertDenied(
+    await call(refreshServices, { tool: "Bash", command: "git status" }),
+    "legacy refresh payload",
+  );
+  arms += 2;
+}
+
+// An explicit boolean true is enforcing for every allowed verdict at both
+// SessionStart and refresh, independent of the verdict's ordinary policy.
+for (const { name, report: baseReport } of [
+  ...nonEnforcingReports(),
+  { name: "invalid", report: invalid() },
+]) {
+  const finding = `explicit true ${name} SessionStart`;
+  const report = { ...baseReport, enforcement_eligible: true, findings: [finding] };
   const services = makeServices(root);
-  await start(services, malformed);
-  services.push(malformed);
-  assertDenied(await call(services, { tool: "Bash", command: "git status" }));
+  await start(services, report);
+  assertDenied(await call(services, { tool: "Bash", command: "git status" }), finding);
+  arms += 1;
+}
+for (const { name, report: baseReport } of [
+  ...nonEnforcingReports(),
+  { name: "invalid", report: invalid() },
+]) {
+  const finding = `explicit true ${name} refresh`;
+  const report = { ...baseReport, enforcement_eligible: true, findings: [finding] };
+  const services = makeServices(root);
+  await start(services, invalid("prior deny"));
+  services.push(report);
+  assertDenied(await call(services, { tool: "Bash", command: "git status" }), finding);
   arms += 1;
 }
 
@@ -487,12 +610,16 @@ for (const malformed of [
   arms += 1;
 }
 
-// The same validator makes a malformed SessionStart report an unanswered check.
-{
+// Non-object and null reports are unanswered and non-enforcing. This loop is
+// the A/B arm for parseDoctorReport's object/null clause.
+for (const malformed of [null, 42, "ok", true, []]) {
   const services = makeServices(root);
-  services.push(42);
+  services.push(malformed);
   const context = await sessionStart(services, {}, next);
   assert.match(JSON.stringify(context.additionalContext), /check could not run/);
+  const before = services.spawned();
+  assert.equal((await call(services, { tool: "Bash", command: "git status" })).allow, true);
+  assert.equal(services.spawned(), before);
   arms += 1;
 }
 

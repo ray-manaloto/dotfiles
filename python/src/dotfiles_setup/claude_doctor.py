@@ -549,7 +549,9 @@ _DISABLED_ADVICE: Final = (
 )
 
 
-def load_baseline(project_root: Path | None = None) -> tuple[bool, str, Path]:
+def load_baseline(
+    project_root: Path | None = None, *, findings: list[str]
+) -> tuple[bool, str, Path]:
     """Read ``[claude]`` and return enabled, method, and its absolute path.
 
     The ENFORCING path must read the same reviewed baseline the advisory one
@@ -565,17 +567,24 @@ def load_baseline(project_root: Path | None = None) -> tuple[bool, str, Path]:
     hook's behaviour not at all. A documented off-switch wired to a different
     consumer is worse than no off-switch, because it reads as configurable.
 
-    An unreadable or absent file falls back to enabled plus ``NATIVE_METHOD``:
-    a missing baseline asserts the documented default rather than silently
-    disabling the check, which is the failure direction that reads as healthy.
-    The absolute path is returned in every case so the hook can permit repair of
-    the exact file this function attempted to read.
+    An unreadable or absent file falls back to enabled plus ``NATIVE_METHOD``.
+    A missing baseline silently asserts the documented default; a baseline that
+    exists but cannot be read, decoded, or parsed appends a diagnostic to
+    ``findings``. Both paths preserve the same non-disabling fallback values.
+    The absolute path is returned in every case so the hook can permit repair
+    of the exact file this function attempted to read.
     """
     root = project_root or Path(os.environ.get("CLAUDE_PROJECT_DIR", "."))
     baseline_path = (root / _BASELINE_FILE).absolute()
     try:
-        parsed = tomllib.loads(baseline_path.read_text())
-    except OSError, UnicodeDecodeError, tomllib.TOMLDecodeError:
+        parsed = tomllib.loads(baseline_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return True, NATIVE_METHOD, baseline_path
+    except OSError, ValueError:
+        findings.append(
+            f"claude-doctor could not read or parse {baseline_path}; asserted "
+            "defaults: enabled = true and expected_install_method = 'native'."
+        )
         return True, NATIVE_METHOD, baseline_path
     block = parsed.get("claude")
     if not isinstance(block, dict):
@@ -606,7 +615,10 @@ def claude_doctor_main(
     is the explicit non-enforcing repository-pin exception. A caller wanting the
     distinction reads ``verdict`` from the JSON, which is always emitted.
     """
-    enabled, configured, baseline_path = load_baseline(project_root)
+    baseline_findings: list[str] = []
+    enabled, configured, baseline_path = load_baseline(
+        project_root, findings=baseline_findings
+    )
     if not enabled:
         disabled = DoctorVerdict(
             verdict=Verdict.UNKNOWN,
@@ -623,6 +635,10 @@ def claude_doctor_main(
         # about the tree this invocation is actually talking about.
         project_root=project_root,
     )
-    verdict = replace(verdict, baseline_path=str(baseline_path))
+    verdict = replace(
+        verdict,
+        baseline_path=str(baseline_path),
+        findings=[*baseline_findings, *verdict.findings],
+    )
     sys.stdout.write(verdict.to_json() + "\n")
     return 1 if verdict.enforcement_eligible else 0

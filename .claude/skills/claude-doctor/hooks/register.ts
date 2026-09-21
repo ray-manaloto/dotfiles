@@ -27,6 +27,7 @@ import type { Register } from "claude-code";
 type DoctorReport = {
   verdict: "ok" | "invalid" | "unknown" | "drift";
   enforcement_eligible: boolean;
+  enforcement_eligibility_malformed: boolean;
   disabled_by_baseline: boolean;
   baseline_path?: string;
   findings: string[];
@@ -79,9 +80,6 @@ type HookServices = {
  */
 /** Validate untrusted subprocess JSON before it can enter the session cache. */
 function parseDoctorReport(value: unknown): DoctorReport | null {
-  if (typeof value !== "object" || value === null) {
-    return null;
-  }
   const record = value as Record<string, unknown>;
   const verdict = record.verdict;
   if (
@@ -107,15 +105,13 @@ function parseDoctorReport(value: unknown): DoctorReport | null {
   ) {
     return null;
   }
-  if (
+  const enforcementEligibilityMalformed =
     record.enforcement_eligible !== undefined &&
-    typeof record.enforcement_eligible !== "boolean"
-  ) {
-    return null;
-  }
+    typeof record.enforcement_eligible !== "boolean";
   return {
     verdict,
     enforcement_eligible: record.enforcement_eligible === true,
+    enforcement_eligibility_malformed: enforcementEligibilityMalformed,
     disabled_by_baseline: record.disabled_by_baseline === true,
     ...(record.baseline_path === undefined ? {} : { baseline_path: record.baseline_path }),
     findings: record.findings,
@@ -263,6 +259,9 @@ function isEnforcementEligible(report: DoctorReport | null): boolean {
 
 /** Accept an enforcing refresh or a positive answer that may clear the deny. */
 function isEstablishedRefresh(report: DoctorReport): boolean {
+  if (report.enforcement_eligibility_malformed) {
+    return report.verdict === "invalid";
+  }
   return (
     isEnforcementEligible(report) ||
     report.verdict === "ok" ||
@@ -346,7 +345,10 @@ export const register: Register = (on) => {
     cachedReport = await readVerdict($);
     lastRefreshAtMs = null;
 
-    if (cachedReport === null) {
+    if (
+      cachedReport === null ||
+      (cachedReport.enforcement_eligibility_malformed && cachedReport.verdict !== "invalid")
+    ) {
       return {
         ...result,
         additionalContext: [

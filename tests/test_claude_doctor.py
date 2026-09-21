@@ -744,36 +744,112 @@ def test_the_baseline_off_switch_reaches_the_enforcing_path(
     assert "not a clean bill of health" in payload["findings"][0].lower()
 
 
-def test_a_missing_baseline_asserts_the_documented_default(tmp_path: Path) -> None:
-    """An unreadable baseline must assert ``native``, never silently disable.
+def _baseline_read_failure_finding(baseline_path: Path) -> str:
+    return (
+        f"claude-doctor could not read or parse {baseline_path}; asserted defaults: "
+        "enabled = true and expected_install_method = 'native'."
+    )
+
+
+def test_a_missing_baseline_asserts_the_documented_default_silently(
+    tmp_path: Path,
+) -> None:
+    """An absent baseline asserts ``native`` without diagnosing an error.
 
     The failure direction matters: falling back to "disabled" would turn a
     typo in ``doctor.toml`` into a check that reads exactly like a healthy host.
     """
     baseline_path = (tmp_path / "doctor.toml").absolute()
-    assert claude_doctor.load_baseline(tmp_path) == (
+    findings: list[str] = []
+    assert claude_doctor.load_baseline(tmp_path, findings=findings) == (
         True,
         claude_doctor.NATIVE_METHOD,
         baseline_path,
     )
+    assert findings == []
+
+
+def test_invalid_toml_asserts_defaults_with_a_finding(tmp_path: Path) -> None:
+    baseline_path = (tmp_path / "doctor.toml").absolute()
     (tmp_path / "doctor.toml").write_text("this is not = valid toml [[[")
-    assert claude_doctor.load_baseline(tmp_path) == (
+    findings: list[str] = []
+
+    assert claude_doctor.load_baseline(tmp_path, findings=findings) == (
         True,
         claude_doctor.NATIVE_METHOD,
         baseline_path,
     )
+    assert findings == [_baseline_read_failure_finding(baseline_path)]
 
 
 def test_a_non_utf8_baseline_asserts_the_documented_default(tmp_path: Path) -> None:
     """A decode failure uses the same fail-safe fallback as missing or bad TOML."""
     baseline_path = (tmp_path / "doctor.toml").absolute()
     baseline_path.write_bytes(b"\xff")
+    findings: list[str] = []
 
-    assert claude_doctor.load_baseline(tmp_path) == (
+    assert claude_doctor.load_baseline(tmp_path, findings=findings) == (
         True,
         claude_doctor.NATIVE_METHOD,
         baseline_path,
     )
+    assert findings == [_baseline_read_failure_finding(baseline_path)]
+
+
+def test_an_os_error_asserts_defaults_with_a_finding(tmp_path: Path) -> None:
+    baseline_path = (tmp_path / "doctor.toml").absolute()
+    baseline_path.mkdir()
+    findings: list[str] = []
+
+    assert claude_doctor.load_baseline(tmp_path, findings=findings) == (
+        True,
+        claude_doctor.NATIVE_METHOD,
+        baseline_path,
+    )
+    assert findings == [_baseline_read_failure_finding(baseline_path)]
+
+
+def test_the_baseline_is_read_as_utf8(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    baseline_path = (tmp_path / "doctor.toml").absolute()
+    baseline_path.write_text("[claude]\nenabled = true\n", encoding="utf-8")
+    original_read_text = Path.read_text
+    seen: list[tuple[str | None, str | None]] = []
+
+    def read_text(
+        path: Path, encoding: str | None = None, errors: str | None = None
+    ) -> str:
+        seen.append((encoding, errors))
+        return original_read_text(path, encoding=encoding, errors=errors)
+
+    monkeypatch.setattr(Path, "read_text", read_text)
+    findings: list[str] = []
+
+    assert claude_doctor.load_baseline(tmp_path, findings=findings) == (
+        True,
+        claude_doctor.NATIVE_METHOD,
+        baseline_path,
+    )
+    assert seen == [("utf-8", None)]
+    assert findings == []
+
+
+def test_a_baseline_read_failure_is_non_enforcing_but_visible(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    """The diagnostic is added after evaluation and cannot become an assertion."""
+    monkeypatch.setattr(claude_doctor, "_run", _fake_run())
+    baseline_path = (tmp_path / "doctor.toml").absolute()
+    baseline_path.write_bytes(b"\xff")
+
+    assert claude_doctor.claude_doctor_main(project_root=tmp_path) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["verdict"] == Verdict.OK
+    assert payload["enforcement_eligible"] is False
+    assert payload["findings"] == [_baseline_read_failure_finding(baseline_path)]
 
 
 def test_the_cli_hands_the_project_root_to_the_baseline_loader() -> None:
