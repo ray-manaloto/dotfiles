@@ -48,8 +48,8 @@ sha256 = "895287b978baf5cb6dec9c2e91b71d067ed0ec8b67fd88e6be96ac2ffd3f027e"
 [[schema]]
 tool = "claude-code"
 file = ".claude/types/claude-code.d.ts"
-version = "2.1.277"
-source = "https://raw.githubusercontent.com/anthropics/claude-code/v2.1.277/mods/types/claude-code.d.ts"
+version = "2.1.278"
+source = "https://raw.githubusercontent.com/anthropics/claude-code/v2.1.278/mods/types/claude-code.d.ts"
 pin_source = "schemas/sources.toml (vendored; no mise [tools] pin)"
 sha256 = "ac107a37c08ad46f8632edc1639b13a740fae0b8249a2245532adfd325e57d0d"
 # WHAT: Vendor Claude Code's published function-hook type declarations instead of
