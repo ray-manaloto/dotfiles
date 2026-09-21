@@ -1132,3 +1132,62 @@ flowchart LR
     RESIDUAL --> NEXT["#1172, #1173, #1169, #1170, #1165–#1168, #1185, #1190"]
     NEXT --> INCIDENT["#1202, #1203, #1204, #1205"]
 ```
+
+## 2026-09-21 — #1202 closed; Phase 9 ratified: herdr research and one codex entry point
+
+- **Iteration ID:** `dotfiles-goal-20260921-022`
+- **Prior goal digest:** `sha256:aa6d85cef2764a5889498dadcb20997deb43d2c4005bc6a5716b0792f69916c2`
+- **Current goal digest:** `sha256:56b0d2a3ccac26b0d7034dffc20a23b59ac587bcfa5e0f999a8b538903e879b8`
+- **Changed requirement:** Two changes. (1) The claude-doctor deny recurred
+  three days after the last pin bump (pin 2.1.277 vs published 2.1.278), so
+  #1202 displaced the plan again: #1224 (`b9bae81`) bumped the pin, then #1231
+  (`fbb27c9`) made the deny repairable in-session — a cached enforcing verdict
+  is re-validated before denying, Edit/Write of the baseline `doctor.toml` is
+  permitted while denying, and a stale REPO pin alone is a non-enforcing DRIFT
+  verdict (a named exception to the 2026-09-18 "no state more or less
+  enforcing" ruling). (2) Ray opened Phase 9, ahead of #1157: research and plan
+  only for herdr, for herdr as the Claude-codex channel, and for replacing the
+  fable-orchestrator plugin and the twelve `codex-{sol,astra}-*` wrappers with
+  ONE `/codex-sdlc-team` entry point (skill -> mise task -> python library,
+  code-generated input model with required `model` and `effort`, enforcement
+  hooks). A two-family feature review of claudex-loop and fable-advisor /
+  fable-orchestrator produced a ratified matrix.
+- **Reason:** Ray, 2026-09-21, by AskUserQuestion and artifact comments: bump
+  the pin; fix #1202 before #1157 and make a pin-only finding non-enforcing;
+  one extra fix round twice past the two-round bound, then "fix HIGH/MED, file
+  LOW"; Phase 9 right after #1202; the codex team does the research; one entry
+  point; parity first, then one removal PR; retire the twelve wrappers; daemon
+  auto-update yes with notify-on-drift; "don't guess — provide cited research".
+- **Evidence:** PRs #1224, #1231; `mise run land` rc=0 for both (main run
+  35663621169 success for #1231; smoke tiers 1-3 OK); issue #1202 closed,
+  residuals #1225-#1230 filed;
+  `docs/research/kb/reports/agents/cold-review-1202-r4-2026-09-21.md` (0 of 800
+  matrix cells flip enforcing to non-enforcing vs parent) and its r1-r3
+  siblings, `premises-1202*`, `silent-failure-1202`, `impl-1202*`;
+  `feature-matrix-final-2026-09-21.md` (RATIFIED) with `feature-review-fable`,
+  `feature-review-astra`, `research-upstream-predecessors`,
+  `research-three-calls`, `research-plugin-pass`, `history-herdr-claudex`,
+  `agentsview-history`; `docs/specs/phase9-lane-dag.md`.
+- **Affected tickets:** #1202, #1224, #1231, #1225, #1226, #1227, #1228,
+  #1229, #1230, #1157.
+- **Disposition:** `ACCEPTED`. #1202 is delivered and verified; Phase 9 is an
+  accepted decision with research partly delivered and no implementation.
+- **Topology and ownership:** One writer: the Claude architect session.
+  Implementation lanes are codex (`codex-sol-implementer`, xhigh); premise
+  verification, cold review and the silent-failure read stay Claude-side
+  (Opus) as the cross-family check. Every delegate of this session was shut
+  down at handoff; no codex process of this project remains.
+
+### Current goal
+
+> Run Phase 9 as research and plan only: bump codex to the latest release, probe openai/codex #45482 against the SDLC review lane, and measure whether app-server daemon auto-update works for a mise install; then the remaining Phase 9 research (herdr setup and verify, herdr as the Claude-codex channel, codex CLI flag contract, offline docs to the knowledge-base, codex currency) and the design of ONE /codex-sdlc-team entry point (skill to mise task to python library, code-generated input model, enforcement hooks) built from the ratified feature matrix, retiring fable-orchestrator and the twelve codex wrappers only after parity; then resume Phase 8 at #1157. Keep task_plan.md as the sole task authority and use only its tracked digest pointer for continuity.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    DONE["#1202 landed: #1224 b9bae81, #1231 fbb27c9"] --> FIRST["Phase 9 first session: 9.1 codex bump, 9.1c #45482 probe, 9.1b daemon measurements"]
+    FIRST --> RESEARCH["Phase 9 research: herdr, flag contract, offline docs, currency"]
+    RESEARCH --> DESIGN["9.7 one /codex-sdlc-team entry point from the ratified matrix"]
+    DESIGN --> RESUME["Phase 8: #1157"]
+```
