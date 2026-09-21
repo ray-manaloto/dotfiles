@@ -357,7 +357,18 @@ export const register: Register = (on) => {
       };
     }
     if (cachedReport.verdict === "ok") {
-      return result;
+      // A healthy verdict can still carry a diagnostic - an unreadable
+      // doctor.toml yields exactly this on a native host. Render-only: the
+      // verdict stays "ok" and nothing here can enforce.
+      if (cachedReport.findings.length === 0) {
+        return result;
+      }
+      return {
+        ...result,
+        additionalContext: [
+          ["claude-doctor: your install is current, with a note.", ...cachedReport.findings].join(" "),
+        ],
+      };
     }
     const lead =
       cachedReport.verdict === "invalid"

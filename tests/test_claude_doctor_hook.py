@@ -36,7 +36,7 @@ def test_claude_doctor_hook_behaviour_under_bun() -> None:
     assert case_alias_exercised or (
         isinstance(case_alias_skipped_reason, str) and case_alias_skipped_reason
     ), "the case-alias arm must run or name why the filesystem cannot exercise it"
-    assert payload["arms"] == 81 + int(case_alias_exercised)
+    assert payload["arms"] == 83 + int(case_alias_exercised)
 
 
 def test_claude_doctor_hook_copies_are_byte_identical() -> None:

@@ -730,6 +730,25 @@ for (const malformed of [null, 42, "ok", true, []]) {
   arms += 1;
 }
 
+// A healthy verdict that carries a diagnostic must SHOW it; a healthy verdict
+// with none stays silent. Neither can enforce.
+{
+  const services = makeServices(root);
+  const noted = { ...ok(), findings: ["doctor.toml could not be read; defaults asserted"] };
+  const context = (await start(services, noted)) as Record<string, unknown>;
+  const rendered = JSON.stringify(context.additionalContext);
+  assert.match(rendered, /doctor\.toml could not be read/);
+  assert.doesNotMatch(rendered, /BROKEN|could not determine|check could not run/);
+  assert.equal((await call(services, { tool: "Bash", command: "git status" })).allow, true);
+  arms += 1;
+}
+{
+  const services = makeServices(root);
+  const context = (await start(services, ok())) as Record<string, unknown>;
+  assert.deepEqual(context.additionalContext, ["base context"]);
+  arms += 1;
+}
+
 console.log(
   JSON.stringify({
     arms,
