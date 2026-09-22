@@ -6398,75 +6398,73 @@ url = "https://download.docker.com/win/static/stable/x86_64/docker-29.8.1.zip"
 url = "https://download.docker.com/win/static/stable/x86_64/docker-29.8.1.zip"
 
 [[tools.doppler]]
-version = "3.76.5"
+version = "3.76.6"
 backend = "github:DopplerHQ/cli"
 
 [tools.doppler."platforms.linux-arm64"]
-checksum = "sha256:567f051c4c334b79a37ee44c9373671c451dd8a4945ed49288a8f3fd0b73ec89"
-url = "https://github.com/DopplerHQ/cli/releases/download/3.76.5/doppler_3.76.5_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/514702520"
+checksum = "sha256:621456ac08436c4037a72c8641e4bdcccd0e404ab43b79a61d449445bb02e6e5"
+url = "https://github.com/DopplerHQ/cli/releases/download/3.76.6/doppler_3.76.6_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/580040602"
 provenance = "github-attestations"
 
 [tools.doppler."platforms.linux-arm64-musl"]
-checksum = "sha256:567f051c4c334b79a37ee44c9373671c451dd8a4945ed49288a8f3fd0b73ec89"
-url = "https://github.com/DopplerHQ/cli/releases/download/3.76.5/doppler_3.76.5_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/514702520"
+checksum = "sha256:621456ac08436c4037a72c8641e4bdcccd0e404ab43b79a61d449445bb02e6e5"
+url = "https://github.com/DopplerHQ/cli/releases/download/3.76.6/doppler_3.76.6_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/580040602"
 provenance = "github-attestations"
 
 [tools.doppler."platforms.linux-x64"]
-checksum = "sha256:1b2f412d984920d665daf233ab6c15b364df9339b5c5b5224d5e8ee4e0a70154"
-url = "https://github.com/DopplerHQ/cli/releases/download/3.76.5/doppler_3.76.5_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/514702541"
+checksum = "sha256:67e4e020761adf3ffe5a030712d61721b4e2752182670bf90de5a2a88e4961e3"
+url = "https://github.com/DopplerHQ/cli/releases/download/3.76.6/doppler_3.76.6_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/580040608"
 provenance = "github-attestations"
-provenance_verified = true
 
 [tools.doppler."platforms.linux-x64-baseline"]
-checksum = "sha256:1b2f412d984920d665daf233ab6c15b364df9339b5c5b5224d5e8ee4e0a70154"
-url = "https://github.com/DopplerHQ/cli/releases/download/3.76.5/doppler_3.76.5_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/514702541"
+checksum = "sha256:67e4e020761adf3ffe5a030712d61721b4e2752182670bf90de5a2a88e4961e3"
+url = "https://github.com/DopplerHQ/cli/releases/download/3.76.6/doppler_3.76.6_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/580040608"
 provenance = "github-attestations"
 
 [tools.doppler."platforms.linux-x64-musl"]
-checksum = "sha256:1b2f412d984920d665daf233ab6c15b364df9339b5c5b5224d5e8ee4e0a70154"
-url = "https://github.com/DopplerHQ/cli/releases/download/3.76.5/doppler_3.76.5_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/514702541"
+checksum = "sha256:67e4e020761adf3ffe5a030712d61721b4e2752182670bf90de5a2a88e4961e3"
+url = "https://github.com/DopplerHQ/cli/releases/download/3.76.6/doppler_3.76.6_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/580040608"
 provenance = "github-attestations"
 
 [tools.doppler."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:1b2f412d984920d665daf233ab6c15b364df9339b5c5b5224d5e8ee4e0a70154"
-url = "https://github.com/DopplerHQ/cli/releases/download/3.76.5/doppler_3.76.5_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/514702541"
+checksum = "sha256:67e4e020761adf3ffe5a030712d61721b4e2752182670bf90de5a2a88e4961e3"
+url = "https://github.com/DopplerHQ/cli/releases/download/3.76.6/doppler_3.76.6_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/580040608"
 provenance = "github-attestations"
 
 [tools.doppler."platforms.macos-arm64"]
-checksum = "sha256:91c4bab5bbd3b630dea8c96e9c0a39cf9e59bf7772f34ab979bea66ccee9560a"
-url = "https://github.com/DopplerHQ/cli/releases/download/3.76.5/doppler_3.76.5_macOS_arm64.tar.gz"
-url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/514702542"
+checksum = "sha256:0023854e5e19a871234b9b705287483265eb65a64c0560b3eaafa7143ecc4e4b"
+url = "https://github.com/DopplerHQ/cli/releases/download/3.76.6/doppler_3.76.6_macOS_arm64.tar.gz"
+url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/580040607"
 provenance = "github-attestations"
-provenance_verified = true
 
 [tools.doppler."platforms.macos-x64"]
-checksum = "sha256:0a3c51cefbeb0d15a4ee34925366f9019efe9cb0a330892df8bd103348a4fc81"
-url = "https://github.com/DopplerHQ/cli/releases/download/3.76.5/doppler_3.76.5_macOS_amd64.tar.gz"
-url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/514702523"
+checksum = "sha256:b8edd464489d51b3856281e9aba0ac5ea36d364272cd143138b1efa5ea568042"
+url = "https://github.com/DopplerHQ/cli/releases/download/3.76.6/doppler_3.76.6_macOS_amd64.tar.gz"
+url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/580040609"
 provenance = "github-attestations"
 
 [tools.doppler."platforms.macos-x64-baseline"]
-checksum = "sha256:0a3c51cefbeb0d15a4ee34925366f9019efe9cb0a330892df8bd103348a4fc81"
-url = "https://github.com/DopplerHQ/cli/releases/download/3.76.5/doppler_3.76.5_macOS_amd64.tar.gz"
-url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/514702523"
+checksum = "sha256:b8edd464489d51b3856281e9aba0ac5ea36d364272cd143138b1efa5ea568042"
+url = "https://github.com/DopplerHQ/cli/releases/download/3.76.6/doppler_3.76.6_macOS_amd64.tar.gz"
+url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/580040609"
 provenance = "github-attestations"
 
 [tools.doppler."platforms.windows-x64"]
-checksum = "sha256:648792a583e1a688615a9b8f3e3ff9e94bbf79a6ccf27f0b4dba59054551a3da"
-url = "https://github.com/DopplerHQ/cli/releases/download/3.76.5/doppler_3.76.5_windows_amd64.zip"
-url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/514702521"
+checksum = "sha256:fe6157c7294b859335116aa2f8d96a9f149d66ec0307bee02b273e30107e9a3f"
+url = "https://github.com/DopplerHQ/cli/releases/download/3.76.6/doppler_3.76.6_windows_amd64.zip"
+url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/580040617"
 provenance = "github-attestations"
 
 [tools.doppler."platforms.windows-x64-baseline"]
-checksum = "sha256:648792a583e1a688615a9b8f3e3ff9e94bbf79a6ccf27f0b4dba59054551a3da"
-url = "https://github.com/DopplerHQ/cli/releases/download/3.76.5/doppler_3.76.5_windows_amd64.zip"
-url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/514702521"
+checksum = "sha256:fe6157c7294b859335116aa2f8d96a9f149d66ec0307bee02b273e30107e9a3f"
+url = "https://github.com/DopplerHQ/cli/releases/download/3.76.6/doppler_3.76.6_windows_amd64.zip"
+url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/580040617"
 provenance = "github-attestations"
 
 [[tools.editorconfig-checker]]
