@@ -1,0 +1,5 @@
+to-spec: ABSENT
+chezmoi-check: ABSENT
+
+Neither skill is available in this session.
+SessionEnd hook [mise -C "${CLAUDE_PROJECT_DIR:-.}" run command-audit -- --output "${CLAUDE_PROJECT_DIR:-.}/.agent/command-audit.md"] failed: Hook cancelled

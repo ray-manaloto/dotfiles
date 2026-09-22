@@ -1,5 +1,7 @@
 # Fable synthesis — program review across all research lanes (2026-09-22)
 
+> **CORRECTIONS (session review, 2026-09-22d): `daemon version` JSON keys are camelCase (`cliVersion`, `appServerVersion`, `managedCodexVersion`), not snake_case (CHANGE 3); `graphify_native_extract.py:298` is `DEFAULT_BACKEND` (openai-cli refs at 502/580/800); D1 'updater OFF' was rejected (kept ON); the order in §E is superseded by `task_plan.md` Phase 10.**
+
 > Persisted verbatim at receipt by the coordinator (session 2026-09-22d), from the
 > `fable-orchestrator:fable-advisor` final message. Inputs: firecrawl-alexandria,
 > exa, context7 and last30days program reviews plus the seven earlier deep reports

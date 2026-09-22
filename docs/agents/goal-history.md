@@ -1321,3 +1321,64 @@ flowchart LR
     RESEARCH --> DESIGN["9.7 one /codex-sdlc-team entry point from the ratified matrix"]
     DESIGN --> RESUME["Phase 8: #1157"]
 ```
+
+## 2026-09-22 — fourth session: grilling to Phase 10; codex goes native on the host; #1244 landed
+
+- **Iteration ID:** `dotfiles-goal-20260922-026`
+- **Prior goal digest:** `sha256:56b0d2a3ccac26b0d7034dffc20a23b59ac587bcfa5e0f999a8b538903e879b8`
+- **Current goal digest:** `sha256:56bba92e79310b4e5de34276116b6e984a733c2f80a5f45e3aacbc266246a04e`
+- **Changed requirement:** Phase 9's first session (9.1 codex bump via
+  lock-shared, 9.1b daemon at-or-ahead of the mise pin) is superseded by a new
+  Phase 10 program: codex moves to the native installer with no mise pin in
+  any repo or user-global config, the synced version is recorded in
+  `schemas/sources.toml` and knowledge-base `currency.toml`, sol lanes move
+  to gpt-6-sol, a strict codex gate plus mid-turn pause/update/resume hooks,
+  and a currency + knowledge-base + pwf program across both repos. The
+  2026-09-16 user-global "match the mise pin exactly" ruling is retired.
+- **Reason:** Ray, 2026-09-22, by ~50 AskUserQuestion rounds of /grilling in
+  session `b72c95e0`, informed by 13 research reports, four external-research
+  lanes (Firecrawl Alexandria, Exa, Context7, last30days), two Fable
+  syntheses, a four-lane agentsview session review, and codex 0.156.0 plus the
+  GPT-6 Sol/Luna release landing mid-session.
+- **Evidence:** PR #1243 landed (`land -- 1243` rc=0); PR #1244 (13 research
+  reports) merged `76449f6d`, `land -- 1244` rc=0 ("main green, Mac synced",
+  main `312adf08`); lint rc=0, pytest 3,758 passed, verify 163 passed / 0
+  failed / 4 skipped on `126c0ebf`. Operator-authorized user-global changes
+  at ~20:25Z: npm codex pin and its release-age excludes removed from
+  `~/.config/mise/config.toml` (backups kept); official install.sh
+  (byte-identical to the rust-v0.156.0 tag) upgraded native codex 0.151.0 →
+  0.156.0; `daemon start` → `daemon version` running with
+  `cliVersion`/`appServerVersion`/`managedCodexVersion` all 0.156.0.
+  `uv_venv_auto` deprecation WARN root-caused to two other repos' tracked
+  configs (fixed, control-armed: true → warn=1, fixed → 0). Reports:
+  `docs/research/kb/reports/agents/*-2026-09-22.md`,
+  `session-2026-09-22d-agent-briefs.md`,
+  `docs/research/kb/raw/session-2026-09-22d/`.
+- **Affected tickets:** #1243, #1244 (landed); #1248 (filed: pytest pollutes
+  mise tracked-configs); Renovate #1090/#1093/#1079 (to close), #1221 (to
+  gate); openai/codex #41188, #40969, #41112, #32983 (upstream context).
+- **Disposition:** `ACCEPTED`. Rulings are in `task_plan.md` Phase 10 only;
+  plan re-attestation is owed by the operator (`! mise run plan-attest`).
+- **Topology and ownership:** One writer: the Claude architect session.
+  ~20 read-only research/review delegates (general-purpose, fable-advisor);
+  no codex lane launched by the architect. Two orphaned research-probe
+  `codex exec … hi` processes (pids 46279, 49290) from a delegate's dummy-
+  provider probes, reported for reaping.
+
+### Current goal
+
+> Run Phase 10 of task_plan.md in its ruled order across dotfiles and knowledge-base: claude-code 2.1.280; codex to the native installer with no mise pin anywhere, the last-synced version recorded in schemas/sources.toml and the knowledge-base currency.toml, and sol lanes moved to gpt-6-sol in the same PR; codex-doctor hooks that pause at a checkpoint, update and resume on any codex version change and block dispatch on skew, on a record behind latest, and on the Desktop bundle; Renovate lockstep rules; the pwf interim; plugin CLI pins; knowledge-base deps, graphify unfork, manifests and full resync; hk 2.0 in both repos; every dependency, plugin and action at latest; then wrappers and the pwf design after pwf deep extraction. Every code or config item goes through /to-spec, /to-tickets and /implement; done means land rc=0. Keep task_plan.md as the sole task authority.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    LANDED["#1244 landed; host codex native 0.156.0"] --> CC["1 claude-code 2.1.280"]
+    CC --> CX["2 codex-native + gpt-6-sol (base rebuild) + KB mirror"]
+    CX --> DR["3 codex-doctor pause/update/resume hooks"]
+    DR --> RN["4 Renovate lockstep"] --> PWF["5 pwf interim"] --> CLI["6 plugin CLI pins"]
+    CLI --> KB["7-9 KB deps, graphify unfork, manifests + resync"]
+    KB --> HK["10 hk 2.0 both repos"] --> DEPS["11 all deps/plugins/actions latest"]
+    DEPS --> REST["12-15 Desktop probe, kb-setup SHA, wrappers, pwf design"]
+    REST --> P9["Phase 9 remainder, then Phase 8 #1157"]
+```

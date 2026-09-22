@@ -1,5 +1,7 @@
 # Codex CLI, app-server daemon and ChatGPT Desktop: settings and env vars (2026-09-22)
 
+> **SUPERSEDED IN PART (Ray, 2026-09-22d): the `CODEX_APP_SERVER_USE_LOCAL_DAEMON` plan is probe-first (openai/codex #41112/#41014 report it ignored), else `CODEX_CLI_PATH`; Desktop is now 26.917.51856 bundling 0.155.0-alpha.16. Authority: `task_plan.md` Phase 10.**
+
 > Persisted verbatim at receipt by the coordinator (session 2026-09-22d), from the
 > delegate's final message (its own Write was refused by the harness). Raw probe
 > outputs were left in the session scratchpad: `doctor-*.txt`, `doctor-*.json`,

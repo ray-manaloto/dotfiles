@@ -1,5 +1,7 @@
 # Fable advisor proposal — Claude + Codex on one pwf plan (2026-09-22)
 
+> **PROVISIONAL (Ray, 2026-09-22d): 'A-enforced' is NOT settled — pwf design decisions wait for pwf deep extraction; Ray ruled codex is 'sometimes coordinator' (definition in `task_plan.md` Phase 10), contradicting this proposal's 'never'.**
+
 > Persisted verbatim at receipt by the coordinator (session 2026-09-22d), from the
 > `fable-orchestrator:fable-advisor` final message. Inputs: the three reports named
 > in its brief (`pwf-claude-codex-2026-09-22.md`, `pwf-setup-2026-09-22.md`,

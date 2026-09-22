@@ -1,5 +1,7 @@
 # AgentsView: codex latest-version + daemon enforcement history
 
+> **Persisted by the coordinator (session 2026-09-22d) as the delegate's own scratchpad report, byte-identical. The delegate's notification summary headline was: "Ray has asked for 'always latest codex' at least five times since 2026-09-01. No GitHub issue asks for hooks that enforce it, and no code in this repo checks it."**
+
 Status: COMPLETE (read-only research lane; 2026-09-22). No repo file edited.
 
 ## Searches

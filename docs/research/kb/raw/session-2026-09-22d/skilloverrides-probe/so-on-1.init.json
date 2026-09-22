@@ -1,0 +1,8 @@
+{
+  "claude_code_version": "2.1.280",
+  "skills_matching": [
+    "chezmoi-check",
+    "mattpocock-skills:to-spec",
+    "mattpocock-skills:to-tickets"
+  ]
+}

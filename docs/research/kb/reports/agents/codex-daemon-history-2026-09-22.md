@@ -1,5 +1,7 @@
 # Codex CLI pin vs. app-server daemon auto-update: history, primary sources and how to get both to latest
 
+> **SUPERSEDED IN PART (Ray, 2026-09-22d): the recommendation that the mise pin is the single codex authority was rejected (native installer, no mise pin; daemon auto-update ON with mid-turn pause/update/resume hooks). Authority: `task_plan.md` Phase 10.**
+
 > Persisted verbatim at receipt by the coordinator (session 2026-09-22d), from the
 > delegate's final message. HTML entities introduced in transit restored.
 
