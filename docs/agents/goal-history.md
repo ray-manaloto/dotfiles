@@ -1241,3 +1241,44 @@ flowchart LR
     RESEARCH --> DESIGN["9.7 one /codex-sdlc-team entry point from the ratified matrix"]
     DESIGN --> RESUME["Phase 8: #1157"]
 ```
+
+## 2026-09-22 — second session: handoff commit landed (#1241); Phase 9 still not started
+
+- **Iteration ID:** `dotfiles-goal-20260922-024`
+- **Prior goal digest:** `sha256:56b0d2a3ccac26b0d7034dffc20a23b59ac587bcfa5e0f999a8b538903e879b8`
+- **Current goal digest:** `sha256:56b0d2a3ccac26b0d7034dffc20a23b59ac587bcfa5e0f999a8b538903e879b8`
+- **Changed requirement:** None. A short session shipped and landed the
+  2026-09-22 handoff branch (goal-history 023 + plan pointer) and re-synced
+  the local devcontainer, which the previous session had left un-landed.
+- **Reason:** Ray, 2026-09-22, by AskUserQuestion: ship first; then land and
+  fix anything it reports; then handoff; graph rebuild deferred to the next
+  session after `/clear`.
+- **Evidence:** PR #1241 merged `359a77f4` (auto-merge; local gates lint,
+  pytest 3758 passed, verify-contracts, hook-selfcheck, eval all rc=0);
+  `mise run land -- 1241` rc=0 — no main run expected for the docs-only diff,
+  `dev-rebuild` rc=0, container up on `main@359a77f4`, smoke tiers 1-3 OK.
+  `mise run graphify-check`: graph STALE (built at `8aeb90f1`,
+  `docs/agents/goal-history.md` in the scanned corpus changed since).
+- **Affected tickets:** #1241. Still unfiled from 023: codex-lane guard gap,
+  SDLC settlement list-placement parser, `.gitignore`/`codex-sdlc-team.md`
+  contradiction on `.codex/hooks.json`, upstream Graphify Step-5 false success.
+- **Disposition:** `ACCEPTED`. Nothing delivered against Phase 9; 9.1 remains
+  the next step after `mise run graphify-rebuild`.
+- **Topology and ownership:** One writer: the Claude architect session. No
+  delegates launched; no codex process of this project alive at handoff
+  (`session-orphans`: WAIT-LOOP 0, OTHER 0).
+
+### Current goal
+
+> Run Phase 9 as research and plan only: bump codex to the latest release, probe openai/codex #45482 against the SDLC review lane, and measure whether app-server daemon auto-update works for a mise install; then the remaining Phase 9 research (herdr setup and verify, herdr as the Claude-codex channel, codex CLI flag contract, offline docs to the knowledge-base, codex currency) and the design of ONE /codex-sdlc-team entry point (skill to mise task to python library, code-generated input model, enforcement hooks) built from the ratified feature matrix, retiring fable-orchestrator and the twelve codex wrappers only after parity; then resume Phase 8 at #1157. Keep task_plan.md as the sole task authority and use only its tracked digest pointer for continuity.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    LANDED["#1241 359a77f4 handoff landed; Mac synced"] --> GRAPH["mise run graphify-rebuild (graph stale at 8aeb90f1)"]
+    GRAPH --> FIRST["Phase 9 first session: 9.1 codex bump, 9.1c #45482 probe, 9.1b daemon measurements"]
+    FIRST --> RESEARCH["Phase 9 research: herdr, flag contract, offline docs, currency"]
+    RESEARCH --> DESIGN["9.7 one /codex-sdlc-team entry point from the ratified matrix"]
+    DESIGN --> RESUME["Phase 8: #1157"]
+```
