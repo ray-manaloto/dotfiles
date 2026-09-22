@@ -1,5 +1,7 @@
 # Exa research sweep of program items a–e (2026-09-22)
 
+> **SUPERSEDED IN PART (Ray, 2026-09-22d): 'use start/restart, let the doctor drive updates' (daemon updater OFF) was rejected — the updater stays ON (D1). Authority: `task_plan.md` Phase 10.**
+
 > Persisted verbatim at receipt by the coordinator (session 2026-09-22d), from the
 > delegate's final message. HTML entities introduced in transit restored.
 

@@ -1,5 +1,7 @@
 # Context7 research: program items a–e (2026-09-22)
 
+> **CORRECTION (session review, 2026-09-22d): the `LifecycleOutput` field names quoted in §b are Rust names; the emitted JSON keys are camelCase (`cliVersion`, `appServerVersion`, `managedCodexVersion`, `managedCodexPath`).**
+
 > Persisted verbatim at receipt by the coordinator (session 2026-09-22d), from the
 > delegate's final message. Raw query outputs: session scratchpad `c7/`
 > (`lib-*.txt`, `q-*.txt`). HTML entities introduced in transit restored.
