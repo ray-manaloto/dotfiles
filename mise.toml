@@ -821,6 +821,12 @@ run = 'uv run --project python dotfiles-setup graphify upgrade'
 
 [tasks.graphify-check]
 description = "Read-only Graphify lock/install/PATH/stamp/skill currency check"
+# The task captures the PATH `mise run` resolves into DOTFILES_AMBIENT_PATH so the
+# operator needs no env prefix. Inside a task that PATH is mise's repaired PATH,
+# which resolves the USER-GLOBAL graphify pin (~/.config/mise) — the axis this
+# check exists for (0.9.65 vs a 0.9.61 lock went unnoticed, 2026-09-22). A stale
+# shell ACTIVATION is the doctor's path-drift check (SessionStart capture), not this.
+env = { DOTFILES_AMBIENT_PATH = "{{ get_env(name='DOTFILES_AMBIENT_PATH', default=env.PATH) }}" }
 run = 'uv run --project python dotfiles-setup graphify check'
 
 [tasks.graphify-affected]

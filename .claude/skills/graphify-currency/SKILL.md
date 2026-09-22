@@ -90,8 +90,11 @@ escalate to the `claude-cli` backend
 when no API-key backend is available, so an apparently unconfigured label
 operation can still spend agent tokens.
 
-The PATH probe is the binary an agent shell resolves: the ambient PATH captured
-at SessionStart in `DOTFILES_AMBIENT_PATH`. It prints the resolved path and
+The PATH probe is the binary an agent shell resolves, read from
+`DOTFILES_AMBIENT_PATH`: the SessionStart hook captures it for the doctor, and
+the `graphify-check` task captures the PATH `mise run` resolves (mise's repaired
+PATH, which still points at the user-global pin — the drift this axis exists
+for; a stale shell activation is the doctor's path-drift check). It prints the resolved path and
 runs that exact file with the same PATH. This is deliberately different from
 the project venv's Graphify used by `uv run --project python`.
 
