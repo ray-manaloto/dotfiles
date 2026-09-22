@@ -156,6 +156,7 @@ def test_real_registry_is_parseable_and_declares_tools() -> None:
         registry = tomllib.load(handle)
     tools = registry["tools"]
     assert tools, "the registry must declare at least one tool"
+    assert "graphify" in tools, "Graphify's split pin sites must stay registered"
     for name, spec in tools.items():
         assert spec["sites"], f"{name} declares no sites"
         assert len(spec["sites"]) > 1, (

@@ -200,6 +200,12 @@ required_skill_files = [
 ]
 stub_file = ".agents/skills/graphify/SKILL.md"
 stub_marker = "DELIBERATE STUB"
+stamp_files = [
+    ".claude/skills/graphify/.graphify_version",
+    ".codex/skills/graphify/.graphify_version",
+    ".agents/skills/graphify/.graphify_version",
+]
+path_binary_must_match_pin = true
 
 # `.codex/skills/graphify` is now ADOPTED and tracked (2026-08-31, reversing
 # a ban this section carried until then). The ban guarded against a

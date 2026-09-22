@@ -43,6 +43,21 @@
 [meta]
 version = "1"
 
+[tools.graphify]
+description = """
+On 2026-09-21 the user-global PATH binary was graphify 0.9.65 while the repo \
+still pinned 0.9.61, and no machine gate noticed. Bind both pyproject \
+declarations, the runtime health constant, and all three tracked skill stamps \
+so repository-owned Graphify versions move together. The user-global mise pin \
+is outside this registry; doctor's PATH-binary check covers that live seam."""
+sites = [
+  { path = "python/pyproject.toml", pattern = 'graphifyy\[all\]==(\d+\.\d+\.\d+)' },
+  { path = "python/src/dotfiles_setup/graphify.py", pattern = '^EXPECTED_GRAPHIFY_VERSION = "(\d+\.\d+\.\d+)"' },
+  { path = ".claude/skills/graphify/.graphify_version", pattern = '^(\d+\.\d+\.\d+)\s*$' },
+  { path = ".codex/skills/graphify/.graphify_version", pattern = '^(\d+\.\d+\.\d+)\s*$' },
+  { path = ".agents/skills/graphify/.graphify_version", pattern = '^(\d+\.\d+\.\d+)\s*$' },
+]
+
 [tools.chezmoi]
 description = """
 `.chezmoiversion` is a MINIMUM-VERSION FLOOR, not a pin: chezmoi refuses to \

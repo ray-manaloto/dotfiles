@@ -90,7 +90,10 @@ from dotfiles_setup.graphify import (
     hook_guard_main,
     prs_main,
 )
-from dotfiles_setup.graphify_skill import graphify_skill_install_main
+from dotfiles_setup.graphify_skill import (
+    graphify_skill_install_main,
+    graphify_skill_refresh_main,
+)
 from dotfiles_setup.handoff_check import main as handoff_check_main
 from dotfiles_setup.hk_builtins_audit import hk_builtins_audit_main
 from dotfiles_setup.hook_guard import pretooluse_main
@@ -1194,7 +1197,10 @@ def _add_graphify_subcommands(
     health_parser.add_argument("--json", action="store_true", dest="output_json")
     update_parser = graphify_sub.add_parser(
         "update",
-        help="Rebuild the project graph (AST-only, no API cost) and stamp its builder",
+        help=(
+            "Rebuild the project graph (AST-only, no API cost), then refresh "
+            "managed skill surfaces"
+        ),
     )
     update_parser.add_argument(
         "target", nargs="?", default=".", help="Path to re-extract (default: .)"
@@ -1290,6 +1296,20 @@ def _add_graphify_subcommands(
         ),
     )
     skill_install_parser.add_argument(
+        "--project-dir",
+        default=None,
+        help="Target project directory (default: this repo's root)",
+    )
+    skill_refresh_parser = graphify_sub.add_parser(
+        "skill-refresh",
+        help=("Refresh Claude/Codex Graphify skills and all platform version stamps"),
+    )
+    skill_refresh_parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Report drift and return 1 without writing",
+    )
+    skill_refresh_parser.add_argument(
         "--project-dir",
         default=None,
         help="Target project directory (default: this repo's root)",
@@ -2403,6 +2423,14 @@ def handle_graphify(args: argparse.Namespace, project_root: Path) -> None:
             graphify_skill_install_main(
                 project_root,
                 platform=args.platform,
+                project_dir=Path(args.project_dir) if args.project_dir else None,
+            )
+        )
+    if getattr(args, "graphify_command", None) == "skill-refresh":
+        sys.exit(
+            graphify_skill_refresh_main(
+                project_root,
+                check=args.check,
                 project_dir=Path(args.project_dir) if args.project_dir else None,
             )
         )

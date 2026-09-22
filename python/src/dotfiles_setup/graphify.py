@@ -24,6 +24,7 @@ from kb_setup.graph import GraphifyBuildReceipt
 
 from dotfiles_setup import codec
 from dotfiles_setup.child_env import without_env_diff
+from dotfiles_setup.graphify_skill import UnsafePlacementError, refresh_skills
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -33,6 +34,7 @@ _GRAPH_SUBDIR = "graphify-out"
 _GRAPH_FILE = "graph.json"
 _BUILD_RECEIPT = "build-receipt.json"
 _MAX_AGENT_OUTPUT_BYTES = 65_536
+EXPECTED_GRAPHIFY_VERSION = "0.9.65"
 
 
 class GraphifyError(RuntimeError):
@@ -167,7 +169,7 @@ def _receipt_problem(
     one recorded in ``mise.toml``. An earlier version of this fix tried to
     restore (2) with a self-authored stamp written by ``update()``, but that
     stamp could only ever record the SAME version ``update()`` itself always
-    resolves (``uv run --project python``, pinned 0.9.61) — so the check it
+    resolves (``uv run --project python``, pinned 0.9.65) — so the check it
     fed could never fail, and the one drift it existed to catch (a bare
     ``graphify update`` run through the OTHER installed version) writes no
     stamp at all, since only ``update()`` writes one. A check that can only
@@ -332,8 +334,12 @@ def graphify_health(project_root: Path) -> HealthResult:
         return HealthResult(GraphifyStatus.CORRUPT, runtime, error)
     if schema_problem := _graph_schema_problem(payload):
         return HealthResult(GraphifyStatus.CORRUPT, runtime, schema_problem)
-    if runtime != "0.9.61":
-        return HealthResult(GraphifyStatus.VERSION_DRIFT, runtime, "expected 0.9.61")
+    if runtime != EXPECTED_GRAPHIFY_VERSION:
+        return HealthResult(
+            GraphifyStatus.VERSION_DRIFT,
+            runtime,
+            f"expected {EXPECTED_GRAPHIFY_VERSION}",
+        )
     # One loop rather than a return per check: each stays lazy (the staleness
     # probe shells out to git, so it must not run when the receipt already
     # settled the answer) while the function keeps a single failure exit.
@@ -659,14 +665,32 @@ def update(project_root: Path, target: str = ".") -> subprocess.CompletedProcess
 def graphify_update_main(project_root: Path, *, target: str = ".") -> int:
     """CLI entry for ``dotfiles-setup graphify update``.
 
-    Prints graphify's own stdout/stderr through and returns its exit code.
+    Prints graphify's own stdout/stderr through and returns its exit code. After
+    a successful rebuild, refreshes the managed repository skill surfaces.
     """
     result = update(project_root, target)
     if result.stdout:
         sys.stdout.write(result.stdout)
     if result.stderr:
         sys.stderr.write(result.stderr)
-    return result.returncode
+    if result.returncode != 0:
+        return result.returncode
+    try:
+        written = refresh_skills(project_root)
+    except (
+        KeyError,
+        ModuleNotFoundError,
+        FileNotFoundError,
+        UnsafePlacementError,
+    ) as exc:
+        sys.stderr.write(f"graphify skill refresh failed: {exc}\n")
+        return 1
+    if written:
+        for path in written:
+            sys.stdout.write(f"skill refreshed -> {path}\n")
+    else:
+        sys.stdout.write(f"graphify skills current ({EXPECTED_GRAPHIFY_VERSION})\n")
+    return 0
 
 
 def rewrite_hook_nudge(text: str) -> str:
@@ -677,7 +701,7 @@ def rewrite_hook_nudge(text: str) -> str:
     flag or env var changes the wording), which is a bare PATH invocation
     that ``graphify-first.md`` forbids: two different graphify versions run
     on this machine, and only ``mise run graphify-query``/``graphify-update``
-    are guaranteed to resolve this repo's pinned 0.9.61. Plain text
+    are guaranteed to resolve this repo's pinned 0.9.65. Plain text
     substitution — the JSON structure and every other field pass through
     unchanged.
     """

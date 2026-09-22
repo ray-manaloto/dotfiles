@@ -16,6 +16,7 @@ exist where `graphify install` cannot (do-not.md #8).
 
 from __future__ import annotations
 
+import subprocess
 import sys
 import types
 from pathlib import Path
@@ -66,6 +67,7 @@ def patched_graphify(
         __file__=str(fake_package / "install.py"), _PLATFORM_CONFIG=cfg
     )
     monkeypatch.setattr(graphify_skill, "_graphify_install", fake)
+    monkeypatch.setattr(graphify_skill, "_installed_version", lambda: "9.9.9")
     return fake
 
 
@@ -464,3 +466,164 @@ def test_main_refuses_a_malicious_skill_dst_instead_of_writing_outside_target(
     err = capsys.readouterr().err
     assert "codex" in err
     assert "outside project_dir" in err
+
+
+# --------------------------------------------------------------------------- #
+# automated refresh/check surface
+# --------------------------------------------------------------------------- #
+
+
+def _seed_current_skill_bytes_with_old_stamps(project_dir: Path) -> bytes:
+    claude_dir = project_dir / ".claude" / "skills" / "graphify"
+    claude_refs = claude_dir / "references"
+    claude_refs.mkdir(parents=True)
+    (claude_dir / "SKILL.md").write_text("claude bundle body", encoding="utf-8")
+    (claude_refs / "one.md").write_text("reference one", encoding="utf-8")
+    (claude_dir / ".graphify_version").write_text("0.0.1", encoding="utf-8")
+
+    codex_dir = project_dir / ".codex" / "skills" / "graphify"
+    codex_dir.mkdir(parents=True)
+    (codex_dir / "SKILL.md").write_text("codex bundle body", encoding="utf-8")
+    (codex_dir / ".graphify_version").write_text("0.0.1", encoding="utf-8")
+
+    agents_dir = project_dir / ".agents" / "skills" / "graphify"
+    agents_dir.mkdir(parents=True)
+    agents_stub = b"<!-- DELIBERATE STUB: keep these exact bytes -->\n"
+    (agents_dir / "SKILL.md").write_bytes(agents_stub)
+    (agents_dir / ".graphify_version").write_text("0.0.1", encoding="utf-8")
+    return agents_stub
+
+
+@pytest.mark.usefixtures("patched_graphify")
+def test_refresh_skills_updates_managed_surfaces_and_only_the_agents_stamp(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    project_dir = tmp_path / "project"
+    agents_stub = _seed_current_skill_bytes_with_old_stamps(project_dir)
+
+    def forbid_subprocess(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("Graphify skill refresh must not launch a subprocess")
+
+    monkeypatch.setattr(subprocess, "run", forbid_subprocess)
+    monkeypatch.setattr(subprocess, "Popen", forbid_subprocess)
+
+    written = graphify_skill.refresh_skills(project_dir)
+
+    assert written == (
+        project_dir / ".claude" / "skills" / "graphify" / "SKILL.md",
+        project_dir / ".codex" / "skills" / "graphify" / "SKILL.md",
+        project_dir / ".agents" / "skills" / "graphify" / ".graphify_version",
+    )
+    for platform in ("claude", "codex", "agents"):
+        stamp = project_dir / f".{platform}" / "skills" / "graphify"
+        assert (stamp / ".graphify_version").read_text(encoding="utf-8") == "9.9.9\n"
+    agents_dir = project_dir / ".agents" / "skills" / "graphify"
+    assert (agents_dir / "SKILL.md").read_bytes() == agents_stub
+    assert b"DELIBERATE STUB" in (agents_dir / "SKILL.md").read_bytes()
+    assert not (agents_dir / "references").exists()
+    assert graphify_skill.refresh_skills(project_dir) == ()
+    assert not list(project_dir.rglob("*.bak"))
+    assert all(
+        path.relative_to(project_dir).parts[0] in {".claude", ".codex", ".agents"}
+        for path in project_dir.rglob("*")
+    )
+
+
+@pytest.mark.usefixtures("patched_graphify")
+def test_check_skills_names_each_drift_reason(tmp_path: Path) -> None:
+    project_dir = tmp_path / "project"
+    _seed_current_skill_bytes_with_old_stamps(project_dir)
+    graphify_skill.refresh_skills(project_dir)
+    claude_dir = project_dir / ".claude" / "skills" / "graphify"
+    (claude_dir / "SKILL.md").write_text("locally edited", encoding="utf-8")
+    (claude_dir / "references" / "one.md").write_text(
+        "locally edited", encoding="utf-8"
+    )
+    codex_stamp = project_dir / ".codex" / "skills" / "graphify" / ".graphify_version"
+    codex_stamp.write_text("0.0.1", encoding="utf-8")
+    agents_stamp = project_dir / ".agents" / "skills" / "graphify" / ".graphify_version"
+    agents_stamp.unlink()
+
+    drifts = graphify_skill.check_skills(project_dir)
+
+    assert [(drift.platform, drift.reason) for drift in drifts] == [
+        ("claude", "SKILL.md differs from packaged"),
+        ("claude", "references/ differs"),
+        ("codex", "stamp 0.0.1 != installed 9.9.9"),
+        ("agents", "missing"),
+    ]
+
+
+@pytest.mark.usefixtures("patched_graphify")
+def test_skill_refresh_check_reports_drift_without_writing(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    project_dir = tmp_path / "project"
+    _seed_current_skill_bytes_with_old_stamps(project_dir)
+    before = {
+        path.relative_to(project_dir): path.read_bytes()
+        for path in project_dir.rglob("*")
+        if path.is_file()
+    }
+
+    assert (
+        graphify_skill.graphify_skill_refresh_main(
+            tmp_path, check=True, project_dir=project_dir
+        )
+        == 1
+    )
+    assert "stamp 0.0.1 != installed 9.9.9" in capsys.readouterr().out
+    after = {
+        path.relative_to(project_dir): path.read_bytes()
+        for path in project_dir.rglob("*")
+        if path.is_file()
+    }
+    assert after == before
+
+    assert (
+        graphify_skill.graphify_skill_refresh_main(
+            tmp_path, check=False, project_dir=project_dir
+        )
+        == 0
+    )
+    assert capsys.readouterr().out.count("skill refreshed ->") == 3
+    assert (
+        graphify_skill.graphify_skill_refresh_main(
+            tmp_path, check=True, project_dir=project_dir
+        )
+        == 0
+    )
+
+
+def _assert_refresh_preserves_agents_stub(project_dir: Path, before: bytes) -> None:
+    graphify_skill.refresh_skills(project_dir)
+    agents_skill = project_dir / ".agents" / "skills" / "graphify" / "SKILL.md"
+    assert agents_skill.read_bytes() == before
+    assert b"DELIBERATE STUB" in agents_skill.read_bytes()
+    assert not (agents_skill.parent / "references").exists()
+
+
+@pytest.mark.usefixtures("patched_graphify")
+def test_the_agents_stub_guard_fails_if_agents_becomes_managed(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Mutation arm: the 2026-09-14 all-platform loop must break this guard."""
+    project_dir = tmp_path / "project"
+    before = _seed_current_skill_bytes_with_old_stamps(project_dir)
+    monkeypatch.setattr(
+        graphify_skill,
+        "MANAGED_PLATFORMS",
+        (*graphify_skill.MANAGED_PLATFORMS, "agents"),
+    )
+
+    with pytest.raises(AssertionError):
+        _assert_refresh_preserves_agents_stub(project_dir, before)
+
+
+@pytest.mark.usefixtures("patched_graphify")
+def test_write_stamp_refuses_a_managed_platform(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="not a stamp-only"):
+        graphify_skill.write_stamp("claude", project_dir=tmp_path)

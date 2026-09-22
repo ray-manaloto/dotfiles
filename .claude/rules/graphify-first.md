@@ -44,14 +44,16 @@ this answers "which commit built it", not "has anything changed since".
 
 ## Nothing records WHICH graphify built the graph
 
-**The two installs are aligned as of 2026-09-14 — both 0.9.61.** `graphify`
+**The two installs are aligned again as of 2026-09-21 — both 0.9.65.** `graphify`
 on bare `PATH` resolves the **user-global** pin
 (`~/.config/mise/config.toml`, outside this repo's review);
 `mise run graphify-query`/`graphify-update` resolve **this repo's pinned
 version** (`python/pyproject.toml`), which is what `graphify_health`'s
-`version drift` check compares against. They agree today, but nothing keeps
-them in sync, so treat the alignment as a fact with a date on it, not an
-invariant.
+`version drift` check compares against. `mise run pin-parity` now binds every
+repository-owned pin site, including the three tracked skill stamps. The
+user-global pin remains outside that registry by design; doctor's PATH-binary
+check compares it with the repo pin and names the user-global mise fix when it
+drifts.
 
 The check reads whatever graphify package is installed in the process
 *checking* health right now. It says nothing about which binary actually

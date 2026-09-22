@@ -29,6 +29,30 @@ path straight from the installed graphify package's own
 `_PLATFORM_CONFIG`, so the placement table can never drift from what that
 package actually declares.
 
+## Automatic refresh from `mise run graphify-update`
+
+After a successful graph rebuild, `mise run graphify-update` checks the
+installed package and refreshes the full `SKILL.md` + `references/` + stamp
+surface for `claude` and `codex` only. The `agents` surface is deliberately
+stamp-only: its hand-authored `DELIBERATE STUB` `SKILL.md` stays byte-identical
+and no `references/` directory is created. Run `mise run graphify-skill-check`
+for the read-only form; it reports each drift and returns 1 without writing.
+`mise run graphify-skill-refresh` performs the same refresh without rebuilding
+the graph.
+
+Vendor skill content is read-only. The former hand-added
+`raise SystemExit(1)` in the Codex bundle is intentionally dropped rather than
+patched back: the repo's own update wrapper already fails closed on its return
+code. A differing `SKILL.md` still produces `SKILL.md.bak` through the existing
+installer; the lane performing a reviewed refresh inspects and deletes that
+backup instead of committing it.
+
+The automatic path never calls `graphify label`, `--dedup-llm`, or any other
+LLM/agent command. This is a hard boundary: graphify/llm.py:3512 can silently
+select `claude-cli` when no API-key backend is detected, so even apparently
+unconfigured labeling could spend agent tokens. Refresh is local packaged-file
+comparison and copy only.
+
 ## When to reach for it
 
 - A pinned graphify version bump (`python/pyproject.toml`) changed the

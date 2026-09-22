@@ -1030,6 +1030,20 @@ _GRAPHIFY_BASELINE: dict[str, object] = {
     "forbidden_agents_md_marker": "use the installed graphify skill",
 }
 
+_GRAPHIFY_STAMP_FILES = [
+    ".claude/skills/graphify/.graphify_version",
+    ".codex/skills/graphify/.graphify_version",
+    ".agents/skills/graphify/.graphify_version",
+]
+
+
+def _graphify_runtime_baseline() -> dict[str, object]:
+    return {
+        **_GRAPHIFY_BASELINE,
+        "stamp_files": _GRAPHIFY_STAMP_FILES,
+        "path_binary_must_match_pin": True,
+    }
+
 
 def _write_healthy_graphify_surface(repo_root: Path) -> None:
     claude_skill = repo_root / ".claude" / "skills" / "graphify" / "SKILL.md"
@@ -1039,6 +1053,13 @@ def _write_healthy_graphify_surface(repo_root: Path) -> None:
     agents_skill.parent.mkdir(parents=True)
     agents_skill.write_text("<!-- DELIBERATE STUB: hand-authored redirect -->")
     (repo_root / "AGENTS.md").write_text("ordinary project instructions\n")
+
+
+def _write_graphify_stamps(repo_root: Path, version: str) -> None:
+    for rel in _GRAPHIFY_STAMP_FILES:
+        stamp = repo_root / rel
+        stamp.parent.mkdir(parents=True, exist_ok=True)
+        stamp.write_text(version, encoding="utf-8")
 
 
 def test_graphify_skill_surface_flags_a_missing_required_file(tmp_path: Path) -> None:
@@ -1115,6 +1136,109 @@ def test_graphify_skill_surface_is_silent_without_a_baseline_section(
     """An absent `[graphify]` section covers nothing — the same seam #535 named."""
     setup = _setup(repo_root=tmp_path, baseline={})
     assert doctor.check_graphify_skill_surface(setup) == []
+
+
+def test_graphify_skill_surface_accepts_current_stamps_without_a_path_binary(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """No PATH binary is the documented host-only NOT-APPLICABLE arm."""
+    _write_healthy_graphify_surface(tmp_path)
+    _write_graphify_stamps(tmp_path, doctor.EXPECTED_GRAPHIFY_VERSION)
+    monkeypatch.setattr(
+        doctor.importlib.metadata,
+        "version",
+        lambda name: doctor.EXPECTED_GRAPHIFY_VERSION if name == "graphifyy" else "",
+    )
+    monkeypatch.setattr(doctor.shutil, "which", lambda _name: None)
+    setup = _setup(
+        repo_root=tmp_path,
+        baseline={"graphify": _graphify_runtime_baseline()},
+    )
+    assert doctor.check_graphify_skill_surface(setup) == []
+
+
+def test_graphify_skill_surface_flags_stamp_drift_with_the_refresh_fix(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _write_healthy_graphify_surface(tmp_path)
+    _write_graphify_stamps(tmp_path, doctor.EXPECTED_GRAPHIFY_VERSION)
+    drifted = tmp_path / _GRAPHIFY_STAMP_FILES[1]
+    drifted.write_text("0.0.1", encoding="utf-8")
+    monkeypatch.setattr(
+        doctor.importlib.metadata,
+        "version",
+        lambda _name: doctor.EXPECTED_GRAPHIFY_VERSION,
+    )
+    monkeypatch.setattr(doctor.shutil, "which", lambda _name: None)
+    setup = _setup(
+        repo_root=tmp_path,
+        baseline={"graphify": _graphify_runtime_baseline()},
+    )
+
+    findings = doctor.check_graphify_skill_surface(setup)
+
+    assert len(findings) == 1
+    assert _GRAPHIFY_STAMP_FILES[1] in findings[0]
+    assert "mise run graphify-update" in findings[0]
+
+
+def test_graphify_skill_surface_accepts_a_matching_path_binary(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _write_healthy_graphify_surface(tmp_path)
+    _write_graphify_stamps(tmp_path, doctor.EXPECTED_GRAPHIFY_VERSION)
+    monkeypatch.setattr(
+        doctor.importlib.metadata,
+        "version",
+        lambda _name: doctor.EXPECTED_GRAPHIFY_VERSION,
+    )
+    monkeypatch.setattr(doctor.shutil, "which", lambda _name: "/mise/graphify")
+    monkeypatch.setattr(
+        doctor.subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(
+            [], 0, f"graphify {doctor.EXPECTED_GRAPHIFY_VERSION}\n", ""
+        ),
+    )
+    setup = _setup(
+        repo_root=tmp_path,
+        baseline={"graphify": _graphify_runtime_baseline()},
+    )
+    assert doctor.check_graphify_skill_surface(setup) == []
+
+
+def test_graphify_skill_surface_flags_a_drifted_path_binary(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _write_healthy_graphify_surface(tmp_path)
+    _write_graphify_stamps(tmp_path, doctor.EXPECTED_GRAPHIFY_VERSION)
+    monkeypatch.setattr(
+        doctor.importlib.metadata,
+        "version",
+        lambda _name: doctor.EXPECTED_GRAPHIFY_VERSION,
+    )
+    monkeypatch.setattr(doctor.shutil, "which", lambda _name: "/mise/graphify")
+    monkeypatch.setattr(
+        doctor.subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(
+            [], 0, "graphify 0.9.64\n", ""
+        ),
+    )
+    setup = _setup(
+        repo_root=tmp_path,
+        baseline={"graphify": _graphify_runtime_baseline()},
+    )
+
+    findings = doctor.check_graphify_skill_surface(setup)
+
+    assert len(findings) == 1
+    assert "repo pin" in findings[0]
+    assert "user-global mise pin" in findings[0]
 
 
 def test_every_check_function_is_actually_registered() -> None:

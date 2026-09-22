@@ -3,7 +3,7 @@ revision = 3
 requires-python = ">=3.14"
 
 [manifest]
-overrides = [{ name = "graphifyy", extras = ["all"], specifier = "==0.9.61" }]
+overrides = [{ name = "graphifyy", extras = ["all"], specifier = "==0.9.65" }]
 
 [[package]]
 name = "annotated-types"
@@ -487,7 +487,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "graphifyy", extras = ["all"], specifier = "==0.9.61" },
+    { name = "graphifyy", extras = ["all"], specifier = "==0.9.65" },
     { name = "kb-setup", git = "https://github.com/ray-manaloto/knowledge-base?rev=e8fe42ae208fbae227e733d38356416223d83ba7" },
     { name = "msgspec", specifier = ">=0.21.1" },
     { name = "pydantic", specifier = ">=2.13.4" },
@@ -594,7 +594,7 @@ wheels = [
 
 [[package]]
 name = "graphifyy"
-version = "0.9.61"
+version = "0.9.65"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "networkx" },
@@ -627,9 +627,9 @@ dependencies = [
     { name = "tree-sitter-verilog" },
     { name = "tree-sitter-zig" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/be/1c/a15d016983166631c8099f701c395cbf87863e4eff5e41eca649bb4b8104/graphifyy-0.9.61.tar.gz", hash = "sha256:8058174c5f2a9bcdbb3a90d19f67ef32ca0504f7814b699322a48a785b91eafd", size = 2199868, upload-time = "2026-09-12T21:24:51.186Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c7/bf/5ace8e159263fbd206130ff528511cf6a1696754432d9dcaf0e035ab5324/graphifyy-0.9.65.tar.gz", hash = "sha256:409d96a12e915fc4f76b7a692a5482671fd2696b2304a02ce39dbcdd6e5cabdd", size = 2278502, upload-time = "2026-09-20T17:47:51.089Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b9/ea/13a57ebe27db10fded0a303adee23bdf35e5b86e69dc890b1978dc371de2/graphifyy-0.9.61-py3-none-any.whl", hash = "sha256:7e11f2fd61b61552a17f8db1d4dadf8318b295436e61d997b5d85318cceccc6e", size = 1420234, upload-time = "2026-09-12T21:24:49.105Z" },
+    { url = "https://files.pythonhosted.org/packages/1f/9e/b2c3f6704306fa3c724cdaaa19391e3be14953394436013865569015eb74/graphifyy-0.9.65-py3-none-any.whl", hash = "sha256:e4c1ef6967d5a090b315f9b18b5255d9a0dead0c24a7620e7dffeaa443395535", size = 1454613, upload-time = "2026-09-20T17:47:48.524Z" },
 ]
 
 [package.optional-dependencies]
@@ -647,6 +647,7 @@ all = [
     { name = "numpy" },
     { name = "openai" },
     { name = "openpyxl" },
+    { name = "pillow" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pypdf" },
     { name = "python-docx" },

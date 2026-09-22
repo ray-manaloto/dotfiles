@@ -1489,6 +1489,38 @@ tokens = [
 ]
 
 [[suite]]
+name = "workflow.graphify-skill-refresh-wiring"
+description = "Graphify skill refresh wiring: the mise check/refresh tasks stay thin Python callers; main.py registers and dispatches the skill-refresh subcommand; graphify update calls the same refresh_skills library only after a successful rebuild; the library, behavioral tests, and owning skill documentation stay present. This prevents a future pin bump from leaving tracked skill bundles and stamps stale while preserving the deliberate Agents stub."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    "mise.toml",
+    "python/src/dotfiles_setup/main.py",
+    "python/src/dotfiles_setup/graphify.py",
+    "python/src/dotfiles_setup/graphify_skill.py",
+    "tests/test_graphify_skill.py",
+    ".claude/skills/graphify-skill-install/SKILL.md",
+]
+per_path_tokens = { "mise.toml" = [
+    "[tasks.graphify-skill-check]",
+    "[tasks.graphify-skill-refresh]",
+    "dotfiles-setup graphify skill-refresh --check'",
+], "python/src/dotfiles_setup/main.py" = [
+    '"skill-refresh",',
+    "graphify_skill_refresh_main(",
+], "python/src/dotfiles_setup/graphify.py" = [
+    "written = refresh_skills(project_root)",
+], "python/src/dotfiles_setup/graphify_skill.py" = [
+    "def refresh_skills(",
+], "tests/test_graphify_skill.py" = [
+    "def test_refresh_skills_updates_managed_surfaces_and_only_the_agents_stamp(",
+], ".claude/skills/graphify-skill-install/SKILL.md" = [
+    "## Automatic refresh from `mise run graphify-update`",
+] }
+
+[[suite]]
 name = "workflow.session-orphans-wiring"
 description = "Session-handoff orphan detection must stay wired end-to-end: `mise run session-orphans` is a thin caller of the Python library, main.py registers and dispatches the subcommand, the descendant-process implementation and its public tests exist, and the session-handoff skill invokes the task. This closes the 2026-09-15 failure where ancestry prose shipped without the ratified task, leaving an unsatisfiable wait alive for 32 minutes. Per-path call-site tokens prevent the skill's documentation from standing in for missing executable wiring."
 category = "workflow"
