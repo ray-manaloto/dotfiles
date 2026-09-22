@@ -27,12 +27,20 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 from dotfiles_setup import doctor
+from dotfiles_setup.graphify_currency import Drift
 
 REPO_ROOT = Path(__file__).parent.parent
 
 #: Raised by the fail-open fixtures; a literal in a `raise` trips EM101.
 _CRASH_MESSAGE = "kaboom"
 _SPAWN_ERROR_MESSAGE = "cannot spawn"
+
+
+@pytest.fixture(autouse=True)
+def healthy_graphify_currency(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep unrelated doctor checks independent of host Graphify state."""
+    monkeypatch.setattr(doctor, "graphify_currency_check", lambda _root: ())
+
 
 # A baseline mirroring the shipped doctor.toml closely enough that a check
 # reading it behaves as it does in production.
@@ -1032,20 +1040,6 @@ _GRAPHIFY_BASELINE: dict[str, object] = {
     "forbidden_agents_md_marker": "use the installed graphify skill",
 }
 
-_GRAPHIFY_STAMP_FILES = [
-    ".claude/skills/graphify/.graphify_version",
-    ".codex/skills/graphify/.graphify_version",
-    ".agents/skills/graphify/.graphify_version",
-]
-
-
-def _graphify_runtime_baseline() -> dict[str, object]:
-    return {
-        **_GRAPHIFY_BASELINE,
-        "stamp_files": _GRAPHIFY_STAMP_FILES,
-        "path_binary_must_match_pin": True,
-    }
-
 
 def _write_healthy_graphify_surface(repo_root: Path) -> None:
     claude_skill = repo_root / ".claude" / "skills" / "graphify" / "SKILL.md"
@@ -1055,13 +1049,6 @@ def _write_healthy_graphify_surface(repo_root: Path) -> None:
     agents_skill.parent.mkdir(parents=True)
     agents_skill.write_text("<!-- DELIBERATE STUB: hand-authored redirect -->")
     (repo_root / "AGENTS.md").write_text("ordinary project instructions\n")
-
-
-def _write_graphify_stamps(repo_root: Path, version: str) -> None:
-    for rel in _GRAPHIFY_STAMP_FILES:
-        stamp = repo_root / rel
-        stamp.parent.mkdir(parents=True, exist_ok=True)
-        stamp.write_text(version, encoding="utf-8")
 
 
 def test_graphify_skill_surface_flags_a_missing_required_file(tmp_path: Path) -> None:
@@ -1111,7 +1098,7 @@ def test_graphify_skill_surface_is_silent_on_an_adopted_codex_install(
     _write_healthy_graphify_surface(tmp_path)
     (tmp_path / ".codex" / "skills" / "graphify").mkdir(parents=True)
     (tmp_path / ".codex" / "skills" / "graphify" / "SKILL.md").write_text(
-        "installed via mise run graphify-skill-install -- codex"
+        "managed via mise run graphify-update"
     )
     setup = _setup(repo_root=tmp_path, baseline={"graphify": _GRAPHIFY_BASELINE})
     assert doctor.check_graphify_skill_surface(setup) == []
@@ -1140,243 +1127,22 @@ def test_graphify_skill_surface_is_silent_without_a_baseline_section(
     assert doctor.check_graphify_skill_surface(setup) == []
 
 
-def test_graphify_skill_surface_accepts_current_stamps_without_a_path_binary(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    """No PATH binary is the documented host-only NOT-APPLICABLE arm."""
-    _write_healthy_graphify_surface(tmp_path)
-    _write_graphify_stamps(tmp_path, doctor.EXPECTED_GRAPHIFY_VERSION)
-    monkeypatch.setattr(
-        doctor.importlib.metadata,
-        "version",
-        lambda name: doctor.EXPECTED_GRAPHIFY_VERSION if name == "graphifyy" else "",
-    )
-    monkeypatch.setattr(doctor.shutil, "which", lambda _name: None)
-    setup = _setup(
-        repo_root=tmp_path,
-        baseline={"graphify": _graphify_runtime_baseline()},
-    )
-    assert doctor.check_graphify_skill_surface(setup) == []
-
-
-def test_graphify_skill_surface_flags_stamp_drift_with_the_refresh_fix(
+def test_graphify_skill_surface_delegates_currency_checks(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     _write_healthy_graphify_surface(tmp_path)
-    _write_graphify_stamps(tmp_path, doctor.EXPECTED_GRAPHIFY_VERSION)
-    drifted = tmp_path / _GRAPHIFY_STAMP_FILES[1]
-    drifted.write_text("0.0.1", encoding="utf-8")
     monkeypatch.setattr(
-        doctor.importlib.metadata,
-        "version",
-        lambda _name: doctor.EXPECTED_GRAPHIFY_VERSION,
-    )
-    monkeypatch.setattr(doctor.shutil, "which", lambda _name: None)
-    setup = _setup(
-        repo_root=tmp_path,
-        baseline={"graphify": _graphify_runtime_baseline()},
-    )
-
-    findings = doctor.check_graphify_skill_surface(setup)
-
-    assert len(findings) == 1
-    assert _GRAPHIFY_STAMP_FILES[1] in findings[0]
-    assert "mise run graphify-update" in findings[0]
-
-
-def test_graphify_skill_surface_flags_missing_package_metadata(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _write_healthy_graphify_surface(tmp_path)
-    _write_graphify_stamps(tmp_path, doctor.EXPECTED_GRAPHIFY_VERSION)
-
-    def missing_package(_name: str) -> str:
-        raise doctor.importlib.metadata.PackageNotFoundError
-
-    monkeypatch.setattr(doctor.importlib.metadata, "version", missing_package)
-    monkeypatch.setattr(doctor.shutil, "which", lambda _name: None)
-    setup = _setup(
-        repo_root=tmp_path,
-        baseline={"graphify": _graphify_runtime_baseline()},
-    )
-
-    findings = doctor.check_graphify_skill_surface(setup)
-
-    assert len(findings) == 1
-    assert "installed graphifyy version is unavailable" in findings[0]
-
-
-def test_graphify_skill_surface_flags_a_missing_stamp(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _write_healthy_graphify_surface(tmp_path)
-    _write_graphify_stamps(tmp_path, doctor.EXPECTED_GRAPHIFY_VERSION)
-    missing = tmp_path / _GRAPHIFY_STAMP_FILES[1]
-    missing.unlink()
-    monkeypatch.setattr(
-        doctor.importlib.metadata,
-        "version",
-        lambda _name: doctor.EXPECTED_GRAPHIFY_VERSION,
-    )
-    monkeypatch.setattr(doctor.shutil, "which", lambda _name: None)
-    setup = _setup(
-        repo_root=tmp_path,
-        baseline={"graphify": _graphify_runtime_baseline()},
-    )
-
-    findings = doctor.check_graphify_skill_surface(setup)
-
-    assert len(findings) == 1
-    assert f"{_GRAPHIFY_STAMP_FILES[1]} is missing" in findings[0]
-
-
-def _setup_graphify_path_binary(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> doctor.Setup:
-    _write_healthy_graphify_surface(tmp_path)
-    _write_graphify_stamps(tmp_path, doctor.EXPECTED_GRAPHIFY_VERSION)
-    monkeypatch.setattr(
-        doctor.importlib.metadata,
-        "version",
-        lambda _name: doctor.EXPECTED_GRAPHIFY_VERSION,
-    )
-    monkeypatch.setattr(doctor.shutil, "which", lambda _name: "/mise/graphify")
-    return _setup(
-        repo_root=tmp_path,
-        baseline={"graphify": _graphify_runtime_baseline()},
-    )
-
-
-def test_graphify_skill_surface_flags_a_version_timeout(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    setup = _setup_graphify_path_binary(monkeypatch, tmp_path)
-
-    def timeout(*_args: object, **_kwargs: object) -> None:
-        raise subprocess.TimeoutExpired(cmd=["/mise/graphify", "--version"], timeout=10)
-
-    monkeypatch.setattr(doctor.subprocess, "run", timeout)
-
-    findings = doctor.check_graphify_skill_surface(setup)
-
-    assert len(findings) == 1
-    assert "PATH graphify could not report its version" in findings[0]
-
-
-def test_graphify_skill_surface_flags_a_version_spawn_error(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    setup = _setup_graphify_path_binary(monkeypatch, tmp_path)
-
-    def spawn_error(*_args: object, **_kwargs: object) -> None:
-        raise OSError(_SPAWN_ERROR_MESSAGE)
-
-    monkeypatch.setattr(doctor.subprocess, "run", spawn_error)
-
-    findings = doctor.check_graphify_skill_surface(setup)
-
-    assert len(findings) == 1
-    assert "PATH graphify could not report its version" in findings[0]
-
-
-def test_graphify_skill_surface_flags_a_nonzero_version_exit(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    setup = _setup_graphify_path_binary(monkeypatch, tmp_path)
-    monkeypatch.setattr(
-        doctor.subprocess,
-        "run",
-        lambda *_args, **_kwargs: subprocess.CompletedProcess([], 2, "", "failed"),
-    )
-
-    findings = doctor.check_graphify_skill_surface(setup)
-
-    assert len(findings) == 1
-    assert "PATH graphify did not report a usable version" in findings[0]
-
-
-def test_graphify_skill_surface_flags_malformed_version_output(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    setup = _setup_graphify_path_binary(monkeypatch, tmp_path)
-    monkeypatch.setattr(
-        doctor.subprocess,
-        "run",
-        lambda *_args, **_kwargs: subprocess.CompletedProcess(
-            [], 0, "not a semantic version", ""
+        doctor,
+        "graphify_currency_check",
+        lambda root: (
+            Drift("stamp", f"{root}/.codex stamp drift — run graphify-update"),
         ),
     )
-
-    findings = doctor.check_graphify_skill_surface(setup)
-
-    assert len(findings) == 1
-    assert "PATH graphify did not report a usable version" in findings[0]
-
-
-def test_graphify_skill_surface_accepts_a_matching_path_binary(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _write_healthy_graphify_surface(tmp_path)
-    _write_graphify_stamps(tmp_path, doctor.EXPECTED_GRAPHIFY_VERSION)
-    monkeypatch.setattr(
-        doctor.importlib.metadata,
-        "version",
-        lambda _name: doctor.EXPECTED_GRAPHIFY_VERSION,
-    )
-    monkeypatch.setattr(doctor.shutil, "which", lambda _name: "/mise/graphify")
-    monkeypatch.setattr(
-        doctor.subprocess,
-        "run",
-        lambda *_args, **_kwargs: subprocess.CompletedProcess(
-            [], 0, f"graphify {doctor.EXPECTED_GRAPHIFY_VERSION}\n", ""
-        ),
-    )
-    setup = _setup(
-        repo_root=tmp_path,
-        baseline={"graphify": _graphify_runtime_baseline()},
-    )
-    assert doctor.check_graphify_skill_surface(setup) == []
-
-
-def test_graphify_skill_surface_flags_a_drifted_path_binary(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _write_healthy_graphify_surface(tmp_path)
-    _write_graphify_stamps(tmp_path, doctor.EXPECTED_GRAPHIFY_VERSION)
-    monkeypatch.setattr(
-        doctor.importlib.metadata,
-        "version",
-        lambda _name: doctor.EXPECTED_GRAPHIFY_VERSION,
-    )
-    monkeypatch.setattr(doctor.shutil, "which", lambda _name: "/mise/graphify")
-    monkeypatch.setattr(
-        doctor.subprocess,
-        "run",
-        lambda *_args, **_kwargs: subprocess.CompletedProcess(
-            [], 0, "graphify 0.9.64\n", ""
-        ),
-    )
-    setup = _setup(
-        repo_root=tmp_path,
-        baseline={"graphify": _graphify_runtime_baseline()},
-    )
-
-    findings = doctor.check_graphify_skill_surface(setup)
-
-    assert len(findings) == 1
-    assert "repo pin" in findings[0]
-    assert "user-global mise pin" in findings[0]
+    setup = _setup(repo_root=tmp_path, baseline={"graphify": _GRAPHIFY_BASELINE})
+    assert doctor.check_graphify_skill_surface(setup) == [
+        f"{tmp_path}/.codex stamp drift — run graphify-update"
+    ]
 
 
 def test_every_check_function_is_actually_registered() -> None:

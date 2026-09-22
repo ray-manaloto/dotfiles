@@ -23,11 +23,11 @@ use `! mise run plan-attest` (`-- --show` reads, bare WRITES). Why:
 
 ## graphify + project doctor
 
-graphify is registered project-scoped and host-only; query with
-`mise run graphify-query`, refresh with `mise run graphify-update` — never a
-bare `graphify` on `PATH` (`.claude/rules/graphify-first.md`). The doctor runs
-from the SessionStart hook against `doctor.toml`, is silent when healthy, and
-always exits 0.
+Use `mise run graphify-query` for queries; `graphify-check`/`graphify-update`
+for currency; `graphify-rebuild` for extraction; or `graphify-upgrade` for
+both. Use these mise tasks instead of PATH `graphify`
+(`.claude/rules/graphify-first.md`). SessionStart doctor reads `doctor.toml`,
+exits 0, and is silent when healthy.
 
 ⚠️ Two traps that bite: **MCP registrations come from FOUR places** — `.mcp.json`,
 each enabled plugin, and `~/.claude.json`'s user-global *and* per-project blocks

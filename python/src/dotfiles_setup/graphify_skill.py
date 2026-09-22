@@ -22,15 +22,14 @@ never called), so this repo's placement table cannot silently drift from
 what the installed graphify version itself declares.
 
 Platform and target directory are both parameters (never hard-coded), per
-``.claude/rules/agent-artifact-conventions.md`` rule 6 — this repo's own case
-(this repo's root) is only ever the CLI layer's *default*, in
-:func:`graphify_skill_install_main`.
+``.claude/rules/agent-artifact-conventions.md`` rule 6. The currency workflow
+passes this repository root explicitly and keeps this library reusable in
+isolated tests.
 """
 
 from __future__ import annotations
 
 import shutil
-import sys
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -168,10 +167,8 @@ def resolve_placement(platform: str, *, project_dir: Path) -> SkillPlacement:
     Args:
         platform: A key of graphify's ``_PLATFORM_CONFIG`` (see
             :func:`known_platforms`).
-        project_dir: The directory this skill is scoped to. Has no default
-            here — the CLI layer (:func:`graphify_skill_install_main`)
-            defaults it to this repo's root, so a caller outside this repo
-            can still point it elsewhere.
+        project_dir: The directory this skill is scoped to. Has no default so
+            every caller makes the write boundary explicit.
 
     Raises:
         KeyError: ``platform`` is not one ``_PLATFORM_CONFIG`` declares —
@@ -370,61 +367,3 @@ def refresh_skills(project_dir: Path) -> tuple[Path, ...]:
         if platform in drifted
     )
     return tuple(written)
-
-
-def graphify_skill_install_main(
-    project_root: Path, *, platform: str, project_dir: Path | None = None
-) -> int:
-    """CLI entry point: ``dotfiles-setup graphify skill-install <platform>``.
-
-    ``project_dir`` defaults to ``project_root`` (this repo) — the one place
-    this repo's own case is hard-coded, per
-    ``.claude/rules/agent-artifact-conventions.md`` rule 6.
-    """
-    target = project_dir if project_dir is not None else project_root
-    try:
-        dst = install_skill(platform, project_dir=target)
-    except KeyError:
-        sys.stderr.write(
-            f"error: {platform!r} is not a platform graphify's own installer "
-            f"knows about. Known: {', '.join(known_platforms())}\n"
-        )
-        return 1
-    except (ModuleNotFoundError, FileNotFoundError, UnsafePlacementError) as exc:
-        sys.stderr.write(f"error: {exc}\n")
-        return 1
-    sys.stdout.write(f"graphify skill installed -> {dst}\n")
-    return 0
-
-
-def graphify_skill_refresh_main(
-    project_root: Path, *, check: bool, project_dir: Path | None = None
-) -> int:
-    """CLI entry point for checking or refreshing the managed skill surfaces."""
-    target = project_dir if project_dir is not None else project_root
-    try:
-        if check:
-            drifts = check_skills(target)
-            for drift in drifts:
-                sys.stdout.write(
-                    f"graphify skill drift -> {drift.path} "
-                    f"({drift.platform}: {drift.reason})\n"
-                )
-            return 1 if drifts else 0
-
-        written = refresh_skills(target)
-    except KeyError as exc:
-        sys.stderr.write(
-            f"error: installed graphify has no required skill platform {exc}\n"
-        )
-        return 1
-    except (ModuleNotFoundError, FileNotFoundError, UnsafePlacementError) as exc:
-        sys.stderr.write(f"error: {exc}\n")
-        return 1
-
-    if written:
-        for path in written:
-            sys.stdout.write(f"skill refreshed -> {path}\n")
-    else:
-        sys.stdout.write(f"graphify skills current ({_installed_version()})\n")
-    return 0

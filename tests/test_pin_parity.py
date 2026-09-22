@@ -165,6 +165,21 @@ def test_real_registry_is_parseable_and_declares_tools() -> None:
         )
 
 
+def test_graphify_registry_uses_one_lock_entry_plus_three_stamps() -> None:
+    with (PROJECT_ROOT / REGISTRY_NAME).open("rb") as handle:
+        sites = tomllib.load(handle)["tools"]["graphify"]["sites"]
+    assert [site["path"] for site in sites] == [
+        "python/uv.lock",
+        ".claude/skills/graphify/.graphify_version",
+        ".codex/skills/graphify/.graphify_version",
+        ".agents/skills/graphify/.graphify_version",
+    ]
+    lock_site = sites[0]
+    reading = read_site(PROJECT_ROOT, lock_site["path"], lock_site["pattern"])
+    assert reading is not None
+    assert reading.versions == ("0.9.65",)
+
+
 def test_every_real_pattern_still_matches_its_file() -> None:
     """Guards against pattern rot in the SHIPPED registry.
 

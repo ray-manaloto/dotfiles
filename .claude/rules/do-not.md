@@ -31,16 +31,17 @@ in this repo. Control arms and case history for each entry:
    2026-04-09c's debug goose-chase. See
    `feedback_docker_desktop_runtime.md`.
 
-8. **Do NOT run bare `graphify install` — always pass `--project`.** Without it,
-   graphify **mutates `~/.claude`**: ~43 KB of skill files and a `# graphify`
-   H1 appended to `~/.claude/CLAUDE.md`. `CLAUDE_CONFIG_DIR` is NOT containment
-   (it redirects the skill dir only; that write is hardcoded). Never run
-   `graphify hook install` or `graphify --watch`.
+8. **Do NOT run `graphify install --project` in this repo either.** Without
+   `--project`, graphify mutates `~/.claude`; with it, the `claude` platform
+   still writes root `CLAUDE.md` plus settings hooks and the `codex` platform
+   writes root `AGENTS.md` plus `.codex/hooks.json`. Use
+   `mise run graphify-update`, whose repo-owned copy boundary manages only the
+   reviewed skill bytes and stamps. `CLAUDE_CONFIG_DIR` is not containment.
+   Never run `graphify hook install` or `graphify --watch`.
 
-   ⚠️ **This generalises to every platform, and `--project` is not always
-   enough** — `graphify codex install` appends to the root `AGENTS.md` and
-   fails our size gate either way. Run any `graphify <platform> install` in a
-   **throwaway directory outside this repo**, never here.
+   The vendor `agents` platform is skill-only, but this repo deliberately keeps
+   a smaller `DELIBERATE STUB`; installing that bundle would overwrite the
+   enforcement surface. Run installer probes only in a throwaway directory.
 
 9. **Do NOT commit — or WRITE — onto the default branch. Branch FIRST.** Create
    the branch *before* the first edit, then `mise run ship`. It has happened

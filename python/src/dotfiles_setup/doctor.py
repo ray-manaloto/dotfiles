@@ -54,7 +54,6 @@ findings name variables, never contents.
 from __future__ import annotations
 
 import datetime as dt
-import importlib.metadata
 import importlib.util
 import json
 import logging
@@ -72,7 +71,7 @@ from dotfiles_setup import claude_doctor, codex_schema
 from dotfiles_setup.dependency_currency import (
     check_dependency_currency as dependency_currency_findings,
 )
-from dotfiles_setup.graphify import EXPECTED_GRAPHIFY_VERSION
+from dotfiles_setup.graphify_currency import check as graphify_currency_check
 from dotfiles_setup.listing_budget import (
     SKILL_DESCRIPTION_MAX,
     ListingEntry,
@@ -1139,81 +1138,6 @@ def check_listing_budget(setup: Setup) -> list[str]:
     return findings
 
 
-def _graphify_stamp_findings(repo_root: Path, baseline: dict[str, object]) -> list[str]:
-    """Compare every declared skill stamp with the installed distribution."""
-    stamp_files = _str_list(baseline.get("stamp_files"))
-    if not stamp_files:
-        return []
-    findings: list[str] = []
-    try:
-        installed_version: str | None = importlib.metadata.version("graphifyy")
-    except importlib.metadata.PackageNotFoundError:
-        installed_version = None
-        findings.append(
-            "installed graphifyy version is unavailable — run `uv sync "
-            "--project python` before refreshing Graphify skills"
-        )
-    for rel in stamp_files:
-        stamp_path = repo_root / rel
-        if not stamp_path.is_file():
-            findings.append(
-                f"{rel} is missing — run `mise run graphify-update` to refresh "
-                "Graphify skill stamps"
-            )
-            continue
-        if installed_version is None:
-            continue
-        recorded = stamp_path.read_text(encoding="utf-8").strip()
-        if recorded != installed_version:
-            findings.append(
-                f"{rel} records {recorded!r}, but installed graphifyy is "
-                f"{installed_version!r} — run `mise run graphify-update`"
-            )
-    return findings
-
-
-def _graphify_path_binary_findings(baseline: dict[str, object]) -> list[str]:
-    """Compare a present PATH Graphify binary with the repository pin."""
-    if baseline.get("path_binary_must_match_pin") is not True:
-        return []
-    binary = shutil.which("graphify")
-    if binary is None:
-        return []
-    try:
-        result = subprocess.run(
-            [binary, "--version"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        return [
-            (
-                f"PATH graphify could not report its version ({exc}) — repair "
-                "the user-global mise pin for the binary"
-            )
-        ]
-    output = f"{result.stdout}\n{result.stderr}"
-    match = re.search(r"\b(\d+\.\d+\.\d+)\b", output)
-    if result.returncode != 0 or match is None:
-        return [
-            (
-                "PATH graphify did not report a usable version — repair the "
-                "user-global mise pin for the binary"
-            )
-        ]
-    if match.group(1) != EXPECTED_GRAPHIFY_VERSION:
-        return [
-            (
-                f"PATH graphify reports {match.group(1)}, but the repo pin is "
-                f"{EXPECTED_GRAPHIFY_VERSION} — update the user-global mise pin "
-                "for the binary"
-            )
-        ]
-    return []
-
-
 def check_graphify_skill_surface(setup: Setup) -> list[str]:
     """The graphify skill surface stays in its reviewed, DELIBERATE shape.
 
@@ -1240,14 +1164,10 @@ def check_graphify_skill_surface(setup: Setup) -> list[str]:
       tracked, so `git diff` would also show it, but only at the next
       commit — this still needs to say so every session.
 
-    ``.codex/skills/graphify`` itself was a ``forbidden_paths`` entry until
-    2026-08-31: that guarded against the vendor installer's AGENTS.md append,
-    which this repo's OWN installer (``dotfiles-setup graphify
-    skill-install`` / ``mise run graphify-skill-install -- codex``)
-    structurally cannot cause — it only ever copies SKILL.md + references/ +
-    a version stamp (see ``graphify_skill.py``). That path is now adopted and
-    tracked, so the ban is gone; the real hazard is still caught by the
-    ``forbidden_agents_md_marker`` check above.
+    Package, lock, PATH-binary, stamp, and managed-byte comparisons delegate to
+    :func:`dotfiles_setup.graphify_currency.check`, the same function behind
+    ``mise run graphify-check``. Keeping one implementation prevents the
+    operator and SessionStart doctor from disagreeing about currency.
     """
     baseline = _str_keys(setup.baseline.get("graphify"))
     findings: list[str] = [
@@ -1255,7 +1175,7 @@ def check_graphify_skill_surface(setup: Setup) -> list[str]:
         for rel in _str_list(baseline.get("required_skill_files"))
         if not (setup.repo_root / rel).is_file()
     ]
-    findings.extend(_graphify_stamp_findings(setup.repo_root, baseline))
+    findings.extend(drift.detail for drift in graphify_currency_check(setup.repo_root))
     stub_file = baseline.get("stub_file")
     stub_marker = baseline.get("stub_marker")
     if isinstance(stub_file, str) and isinstance(stub_marker, str):
@@ -1280,7 +1200,6 @@ def check_graphify_skill_surface(setup: Setup) -> list[str]:
                 f"forbids running a codex-platform `graphify install` here, "
                 f"and that append is exactly what it leaves behind. Revert it."
             )
-    findings.extend(_graphify_path_binary_findings(baseline))
     return findings
 
 

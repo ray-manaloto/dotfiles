@@ -15,7 +15,7 @@ mise run graphify-prs -- <PR#>                          # + graph-impact deep di
 
 Both are thin `mise` callers over `python/src/dotfiles_setup/graphify.py`
 (`affected`/`affected_main`, `prs`/`prs_main`) — the same seam as
-`graphify-query`/`graphify-health`/`graphify-update`. All mechanics live
+`graphify-query`/`graphify-health`/`graphify-rebuild`. All mechanics live
 there; this file is judgement only.
 
 ## When to reach for `affected`

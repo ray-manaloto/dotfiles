@@ -1489,8 +1489,8 @@ tokens = [
 ]
 
 [[suite]]
-name = "workflow.graphify-skill-refresh-wiring"
-description = "Graphify skill refresh wiring: the mise check/refresh tasks stay thin Python callers; main.py registers and dispatches the skill-refresh subcommand; graphify update calls the same refresh_skills library only after a successful rebuild; the library, behavioral tests, and owning skill documentation stay present. This prevents a future pin bump from leaving tracked skill bundles and stamps stale while preserving the deliberate Agents stub."
+name = "workflow.graphify-currency-wiring"
+description = "Graphify currency wiring: four thin mise tasks dispatch the update/rebuild/check/upgrade Python APIs; the upgrade composite's bound call sites put update before rebuild and return before rebuild on update failure; update owns deterministic skill refresh while rebuild requires fresh graph health. Behavioral tests and the owning currency skill preserve the order, receipt, zero-token boundary, and deliberate Agents stub."
 category = "workflow"
 check_type = "static"
 handler = "require_tokens"
@@ -1498,26 +1498,44 @@ paths_required = true
 paths = [
     "mise.toml",
     "python/src/dotfiles_setup/main.py",
+    "python/src/dotfiles_setup/graphify_currency.py",
     "python/src/dotfiles_setup/graphify.py",
     "python/src/dotfiles_setup/graphify_skill.py",
+    "tests/test_graphify_currency.py",
     "tests/test_graphify_skill.py",
-    ".claude/skills/graphify-skill-install/SKILL.md",
+    ".claude/skills/graphify-currency/SKILL.md",
 ]
 per_path_tokens = { "mise.toml" = [
-    "[tasks.graphify-skill-check]",
-    "[tasks.graphify-skill-refresh]",
-    "dotfiles-setup graphify skill-refresh --check'",
+    "[tasks.graphify-update]",
+    "[tasks.graphify-rebuild]",
+    "[tasks.graphify-upgrade]",
+    "[tasks.graphify-check]",
+    "dotfiles-setup graphify upgrade'",
 ], "python/src/dotfiles_setup/main.py" = [
-    '"skill-refresh",',
-    "graphify_skill_refresh_main(",
+    '"rebuild",',
+    'help="Read-only Graphify lock, install, PATH, stamp, and skill check"',
+    '"upgrade",',
+    "graphify_upgrade_main(project_root)",
+], "python/src/dotfiles_setup/graphify_currency.py" = [
+    "update_rc = graphify_update_main(project_root)",
+    "if update_rc != 0:",
+    "return graphify.graphify_rebuild_main(project_root)",
+    "notes = release_notes_between(locked, latest",
+    "receipt = write_release_receipt(project_root, notes, high=latest)",
+    "upgrade_lock(project_root, run=subprocess.run)",
+    "graphify_skill.refresh_skills(project_root)",
 ], "python/src/dotfiles_setup/graphify.py" = [
-    "written = refresh_skills(project_root)",
+    "def graphify_rebuild_main(",
+    "return graphify_health_main(project_root)",
 ], "python/src/dotfiles_setup/graphify_skill.py" = [
     "def refresh_skills(",
+], "tests/test_graphify_currency.py" = [
+    "def test_upgrade_stops_before_rebuild_when_update_fails(",
+    "def test_upgrade_runs_update_before_rebuild(",
 ], "tests/test_graphify_skill.py" = [
     "def test_refresh_skills_updates_managed_surfaces_and_only_the_agents_stamp(",
-], ".claude/skills/graphify-skill-install/SKILL.md" = [
-    "## Automatic refresh from `mise run graphify-update`",
+], ".claude/skills/graphify-currency/SKILL.md" = [
+    "## Zero-token boundary",
 ] }
 
 [[suite]]

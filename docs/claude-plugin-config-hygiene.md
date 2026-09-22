@@ -208,20 +208,24 @@ Single-context: `CONTEXT.md` (glossary) + `docs/adr/`. See `docs/domain.md`.
 holds only domain-shaped decisions.
 ## graphify — knowledge-graph substrate
 
-Registered by `graphify install --project` (#310–#318 adoption). Host-only,
-project-scoped; `graphify-out/` is gitignored. When the user types `/graphify`,
-use `.claude/skills/graphify/SKILL.md`.
+Originally registered during #310–#318 adoption; native
+`graphify install --project` is now prohibited because it also mutates root
+instructions and hooks. Host-only, project-scoped; `graphify-out/` is
+gitignored. When the user types `/graphify`, use
+`.claude/skills/graphify/SKILL.md`.
 
 - Codebase questions: follow `.claude/rules/graphify-first.md`
   (`mise run graphify-query`, never a bare `graphify` on `PATH`).
-- After changing code: `mise run graphify-update` (AST-only, no API cost).
+- After changing code: `mise run graphify-rebuild` (AST-only, no API cost).
+- For package/skill currency: `mise run graphify-check` then
+  `mise run graphify-update` (or the ordered `graphify-upgrade` composite).
 
 **This registration lives here, NOT in the root `CLAUDE.md`:** the
 `claude_md_import_stub` hk gate locks the root file to byte-exactly `@AGENTS.md`,
 so graphify's default write there (which happened and was reverted) fails
 `mise run lint`. `.claude/CLAUDE.md` is the repo's designated home for exactly
-this kind of Claude-specific content (it is stub-exempt). Re-running
-`graphify install` will re-append to the root `CLAUDE.md`; revert that hunk.
+this kind of Claude-specific content (it is stub-exempt). The sanctioned
+currency task updates skill bytes without touching either instruction file.
 
 ## Project doctor — declared setup vs reality on this host (#418)
 

@@ -200,23 +200,16 @@ required_skill_files = [
 ]
 stub_file = ".agents/skills/graphify/SKILL.md"
 stub_marker = "DELIBERATE STUB"
-stamp_files = [
-    ".claude/skills/graphify/.graphify_version",
-    ".codex/skills/graphify/.graphify_version",
-    ".agents/skills/graphify/.graphify_version",
-]
-path_binary_must_match_pin = true
 
 # `.codex/skills/graphify` is now ADOPTED and tracked (2026-08-31, reversing
 # a ban this section carried until then). The ban guarded against a
 # codex-platform `graphify install` appending the line-budgeted root
 # AGENTS.md (do-not.md #8) — true of graphify's OWN installer, never true of
-# this repo's `dotfiles-setup graphify skill-install` / `mise run
-# graphify-skill-install -- codex`, which only ever copies
-# SKILL.md + references/ + a version stamp and never touches AGENTS.md
-# (`graphify_skill.py`, verified: it never calls graphify's
-# `_agents_install`). The path the ban forbade is now exactly the path this
-# repo's installer produces and commits, so `forbidden_paths` is gone. The
+# this repo's `mise run graphify-update`, whose `graphify_skill.py` library
+# copies only SKILL.md + references/ + a version stamp and never touches
+# AGENTS.md (verified: it never calls graphify's `_agents_install`). The path
+# the ban forbade is now exactly the path this repo manages and commits, so
+# `forbidden_paths` is gone. The
 # REAL hazard below is unaffected — it still fires unconditionally, vendor
 # install or not.
 

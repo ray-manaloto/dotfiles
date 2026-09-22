@@ -80,6 +80,7 @@ ARGS = {
     "tasks": [
         {"name": "health", "cmd": "mise run graphify-health"},
         {"name": "update", "cmd": "mise run graphify-update", "expectRc": 0},
+        {"name": "rebuild", "cmd": "mise run graphify-rebuild", "expectRc": 0},
     ],
     "researchBrief": "inventory installed graphify",
     "staleTerms": ["old graphify claim"],

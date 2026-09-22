@@ -24,7 +24,7 @@ from kb_setup.graph import GraphifyBuildReceipt
 
 from dotfiles_setup import codec
 from dotfiles_setup.child_env import without_env_diff
-from dotfiles_setup.graphify_skill import UnsafePlacementError, refresh_skills
+from dotfiles_setup.graphify_currency import GraphifyCurrencyError, locked_version
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -34,7 +34,6 @@ _GRAPH_SUBDIR = "graphify-out"
 _GRAPH_FILE = "graph.json"
 _BUILD_RECEIPT = "build-receipt.json"
 _MAX_AGENT_OUTPUT_BYTES = 65_536
-EXPECTED_GRAPHIFY_VERSION = "0.9.65"
 
 
 class GraphifyError(RuntimeError):
@@ -299,7 +298,7 @@ def _staleness_problem(
         GraphifyStatus.STALE,
         runtime,
         f"graph was built at {built_at[:8]}, HEAD is {head[:8]} ({distance}) — "
-        f"rebuild with `mise run graphify-update`",
+        f"rebuild with `mise run graphify-rebuild`",
     )
 
 
@@ -323,6 +322,28 @@ def _load_graph_snapshot(
     return graph_bytes, payload, error
 
 
+def _locked_version_problem(
+    project_root: Path,
+    runtime: str,
+) -> HealthResult | None:
+    """Return version drift without adding branches to graph health parsing."""
+    try:
+        locked = locked_version(project_root)
+    except GraphifyCurrencyError as exc:
+        return HealthResult(
+            GraphifyStatus.VERSION_DRIFT,
+            runtime,
+            f"locked version unavailable: {exc}",
+        )
+    if runtime != locked:
+        return HealthResult(
+            GraphifyStatus.VERSION_DRIFT,
+            runtime,
+            f"expected locked version {locked}",
+        )
+    return None
+
+
 def graphify_health(project_root: Path) -> HealthResult:
     """Return typed, read-only health for the repository graph."""
     graph_path = project_root / _GRAPH_SUBDIR / _GRAPH_FILE
@@ -334,12 +355,8 @@ def graphify_health(project_root: Path) -> HealthResult:
         return HealthResult(GraphifyStatus.CORRUPT, runtime, error)
     if schema_problem := _graph_schema_problem(payload):
         return HealthResult(GraphifyStatus.CORRUPT, runtime, schema_problem)
-    if runtime != EXPECTED_GRAPHIFY_VERSION:
-        return HealthResult(
-            GraphifyStatus.VERSION_DRIFT,
-            runtime,
-            f"expected {EXPECTED_GRAPHIFY_VERSION}",
-        )
+    if version_problem := _locked_version_problem(project_root, runtime):
+        return version_problem
     # One loop rather than a return per check: each stays lazy (the staleness
     # probe shells out to git, so it must not run when the receipt already
     # settled the answer) while the function keeps a single failure exit.
@@ -652,7 +669,7 @@ def update(project_root: Path, target: str = ".") -> subprocess.CompletedProcess
 
     AST-only re-extraction (no LLM, no API cost — see ``graphify --help``).
     This is the only sanctioned rebuild path in this repo (``mise run
-    graphify-update``), resolving graphify through the same ``uv run
+    graphify-rebuild``), resolving graphify through the same ``uv run
     --project python`` pin as every other graphify task — but that
     convention is procedural, not enforced: nothing here can detect whether
     a graph was instead rebuilt by the OTHER graphify installed on this
@@ -662,12 +679,8 @@ def update(project_root: Path, target: str = ".") -> subprocess.CompletedProcess
     return _run(["graphify", "update", target], cwd=project_root)
 
 
-def graphify_update_main(project_root: Path, *, target: str = ".") -> int:
-    """CLI entry for ``dotfiles-setup graphify update``.
-
-    Prints graphify's own stdout/stderr through and returns its exit code. After
-    a successful rebuild, refreshes the managed repository skill surfaces.
-    """
+def graphify_rebuild_main(project_root: Path, *, target: str = ".") -> int:
+    """Rebuild the graph, then require its read-only health to be fresh."""
     result = update(project_root, target)
     if result.stdout:
         sys.stdout.write(result.stdout)
@@ -675,22 +688,7 @@ def graphify_update_main(project_root: Path, *, target: str = ".") -> int:
         sys.stderr.write(result.stderr)
     if result.returncode != 0:
         return result.returncode
-    try:
-        written = refresh_skills(project_root)
-    except (
-        KeyError,
-        ModuleNotFoundError,
-        FileNotFoundError,
-        UnsafePlacementError,
-    ) as exc:
-        sys.stderr.write(f"graphify skill refresh failed: {exc}\n")
-        return 1
-    if written:
-        for path in written:
-            sys.stdout.write(f"skill refreshed -> {path}\n")
-    else:
-        sys.stdout.write(f"graphify skills current ({EXPECTED_GRAPHIFY_VERSION})\n")
-    return 0
+    return graphify_health_main(project_root)
 
 
 def rewrite_hook_nudge(text: str) -> str:
@@ -700,13 +698,13 @@ def rewrite_hook_nudge(text: str) -> str:
     ``graphify update`` in its advisory nudge copy (``graphify/cli.py`` — no
     flag or env var changes the wording), which is a bare PATH invocation
     that ``graphify-first.md`` forbids: two different graphify versions run
-    on this machine, and only ``mise run graphify-query``/``graphify-update``
-    are guaranteed to resolve this repo's pinned 0.9.65. Plain text
+    on this machine, and only ``mise run graphify-query``/``graphify-rebuild``
+    are guaranteed to resolve this repo's uv-locked version. Plain text
     substitution — the JSON structure and every other field pass through
     unchanged.
     """
     return text.replace("`graphify query", "`mise run graphify-query --").replace(
-        "`graphify update`", "`mise run graphify-update`"
+        "`graphify update`", "`mise run graphify-rebuild`"
     )
 
 

@@ -724,10 +724,10 @@ local allSteps = new Mapping<String, Config.Step> {
   //     tracked (2026-08-31, reversing the ban this step carried until then):
   //     the path ban guarded against a codex-platform `graphify install`
   //     appending the line-budgeted root AGENTS.md (do-not.md #8) — true of
-  //     graphify's OWN installer, never true of this repo's
-  //     `dotfiles-setup graphify skill-install` / `mise run
-  //     graphify-skill-install -- codex`, which only ever copies
-  //     SKILL.md + references/ + a version stamp (`graphify_skill.py`,
+  //     graphify's OWN installer, never true of this repo-owned installer:
+  //     `dotfiles-setup graphify update` / `mise run graphify-update`, whose
+  //     managed refresh only copies SKILL.md + references/ + a version stamp
+  //     (`graphify_skill.py`,
   //     verified: it never calls graphify's `_agents_install`). The path the
   //     ban forbade is now exactly the path this repo's installer produces
   //     and commits, so the ban is gone. The REAL hazard — the vendor

@@ -398,80 +398,6 @@ def test_install_skill_raises_when_the_packaged_source_is_missing(
 
 
 # --------------------------------------------------------------------------- #
-# graphify_skill_install_main (CLI layer)
-# --------------------------------------------------------------------------- #
-
-
-@pytest.mark.usefixtures("patched_graphify")
-def test_main_defaults_project_dir_to_project_root(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    rc = graphify_skill.graphify_skill_install_main(tmp_path, platform="codex")
-    assert rc == 0
-    assert (tmp_path / ".codex" / "skills" / "graphify" / "SKILL.md").is_file()
-    assert "graphify skill installed ->" in capsys.readouterr().out
-
-
-@pytest.mark.usefixtures("patched_graphify")
-def test_main_honors_an_explicit_project_dir(tmp_path: Path) -> None:
-    other = tmp_path / "elsewhere"
-    other.mkdir()
-    rc = graphify_skill.graphify_skill_install_main(
-        tmp_path, platform="codex", project_dir=other
-    )
-    assert rc == 0
-    assert (other / ".codex" / "skills" / "graphify" / "SKILL.md").is_file()
-    assert not (tmp_path / ".codex").exists()
-
-
-@pytest.mark.usefixtures("patched_graphify")
-def test_main_reports_an_unknown_platform_and_lists_the_known_ones(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    rc = graphify_skill.graphify_skill_install_main(
-        tmp_path, platform="not-a-real-platform"
-    )
-    assert rc == 1
-    err = capsys.readouterr().err
-    assert "not-a-real-platform" in err
-    assert "claude" in err  # one of the known platforms is named in the error
-
-
-def test_main_reports_a_missing_graphify_import(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    monkeypatch.setattr(graphify_skill, "_graphify_install", None)
-    monkeypatch.setattr(graphify_skill, "_IMPORT_ERROR", ImportError("boom"))
-    rc = graphify_skill.graphify_skill_install_main(tmp_path, platform="claude")
-    assert rc == 1
-    assert "graphify" in capsys.readouterr().err
-
-
-def test_main_refuses_a_malicious_skill_dst_instead_of_writing_outside_target(
-    monkeypatch: pytest.MonkeyPatch,
-    fake_package: Path,
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    project_dir = tmp_path / "project"
-    project_dir.mkdir()
-    escape_target = tmp_path / "etc-evil" / "SKILL.md"
-    _with_malicious_skill_dst(monkeypatch, fake_package, escape_target)
-
-    rc = graphify_skill.graphify_skill_install_main(
-        tmp_path, platform="codex", project_dir=project_dir
-    )
-
-    assert rc == 1
-    assert not escape_target.exists()
-    err = capsys.readouterr().err
-    assert "codex" in err
-    assert "outside project_dir" in err
-
-
-# --------------------------------------------------------------------------- #
 # automated refresh/check surface
 # --------------------------------------------------------------------------- #
 
@@ -585,48 +511,6 @@ def test_check_skills_names_each_drift_reason(tmp_path: Path) -> None:
         ("codex", "stamp 0.0.1 != installed 9.9.9"),
         ("agents", "missing"),
     ]
-
-
-@pytest.mark.usefixtures("patched_graphify")
-def test_skill_refresh_check_reports_drift_without_writing(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    project_dir = tmp_path / "project"
-    _seed_current_skill_bytes_with_old_stamps(project_dir)
-    before = {
-        path.relative_to(project_dir): path.read_bytes()
-        for path in project_dir.rglob("*")
-        if path.is_file()
-    }
-
-    assert (
-        graphify_skill.graphify_skill_refresh_main(
-            tmp_path, check=True, project_dir=project_dir
-        )
-        == 1
-    )
-    assert "stamp 0.0.1 != installed 9.9.9" in capsys.readouterr().out
-    after = {
-        path.relative_to(project_dir): path.read_bytes()
-        for path in project_dir.rglob("*")
-        if path.is_file()
-    }
-    assert after == before
-
-    assert (
-        graphify_skill.graphify_skill_refresh_main(
-            tmp_path, check=False, project_dir=project_dir
-        )
-        == 0
-    )
-    assert capsys.readouterr().out.count("skill refreshed ->") == 3
-    assert (
-        graphify_skill.graphify_skill_refresh_main(
-            tmp_path, check=True, project_dir=project_dir
-        )
-        == 0
-    )
 
 
 def _assert_refresh_preserves_agents_stub(project_dir: Path, before: bytes) -> None:

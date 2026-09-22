@@ -28,7 +28,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 from dotfiles_setup import codec
 from dotfiles_setup import main as cli_main
 from dotfiles_setup.graphify import (
-    EXPECTED_GRAPHIFY_VERSION,
     GraphifyError,
     GraphifyIncompleteError,
     GraphifyStatus,
@@ -41,7 +40,7 @@ from dotfiles_setup.graphify import (
     graphify_health,
     graphify_health_main,
     graphify_main,
-    graphify_update_main,
+    graphify_rebuild_main,
     hook_guard_main,
     prs,
     prs_main,
@@ -49,11 +48,21 @@ from dotfiles_setup.graphify import (
     rewrite_hook_nudge,
     update,
 )
+from dotfiles_setup.graphify_currency import locked_version
 
-_MISSING_PACKAGED_SKILL = "packaged skill vanished"
+GRAPHIFY_VERSION = "0.9.65"
 
 
-def test_graphify_runtime_constant_matches_project_pin() -> None:
+@pytest.fixture(autouse=True)
+def locked_graphify_version(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep graph-health fixtures independent of a synthetic uv.lock."""
+    monkeypatch.setattr(
+        "dotfiles_setup.graphify.locked_version",
+        lambda _root: GRAPHIFY_VERSION,
+    )
+
+
+def test_graphify_lock_is_the_single_project_pin() -> None:
     repo = Path(__file__).parent.parent
     project = tomllib.loads(
         (repo / "python/pyproject.toml").read_text(encoding="utf-8")
@@ -64,10 +73,9 @@ def test_graphify_runtime_constant_matches_project_pin() -> None:
         if value.startswith("graphifyy")
     )
 
-    assert dependency == f"graphifyy[all]=={EXPECTED_GRAPHIFY_VERSION}"
-    version = dependency.removeprefix("graphifyy[all]==")
-    assert version == EXPECTED_GRAPHIFY_VERSION
+    assert dependency == "graphifyy[all]"
     assert project["tool"]["uv"]["override-dependencies"] == [dependency]
+    assert locked_version(repo) == GRAPHIFY_VERSION
 
 
 def _force_fresh_health(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -76,7 +84,7 @@ def _force_fresh_health(monkeypatch: pytest.MonkeyPatch) -> None:
         "dotfiles_setup.graphify.graphify_health",
         lambda _root: HealthResult(
             GraphifyStatus.FRESH,
-            EXPECTED_GRAPHIFY_VERSION,
+            GRAPHIFY_VERSION,
             graph_sha256="stable",
         ),
     )
@@ -227,7 +235,7 @@ def test_query_refuses_stale_health_before_running_graphify(
         "dotfiles_setup.graphify.graphify_health",
         lambda _root: HealthResult(
             GraphifyStatus.STALE,
-            EXPECTED_GRAPHIFY_VERSION,
+            GRAPHIFY_VERSION,
             "build receipt missing",
         ),
     )
@@ -245,12 +253,12 @@ def test_query_rejects_graph_changed_during_subprocess(
         (
             HealthResult(
                 GraphifyStatus.FRESH,
-                EXPECTED_GRAPHIFY_VERSION,
+                GRAPHIFY_VERSION,
                 graph_sha256="before",
             ),
             HealthResult(
                 GraphifyStatus.STALE,
-                EXPECTED_GRAPHIFY_VERSION,
+                GRAPHIFY_VERSION,
                 "receipt mismatch",
             ),
         )
@@ -378,7 +386,7 @@ def test_graphify_health_accepts_graph_without_build_receipt(
     )
     monkeypatch.setattr(
         "dotfiles_setup.graphify._runtime_version",
-        lambda: EXPECTED_GRAPHIFY_VERSION,
+        lambda: GRAPHIFY_VERSION,
     )
     result = graphify_health(tmp_path)
     assert result.status is GraphifyStatus.FRESH
@@ -397,7 +405,7 @@ def test_graphify_health_accepts_exact_receipted_graph(tmp_path: Path) -> None:
             GraphifyBuildReceipt(
                 schema_version=1,
                 status="complete",
-                runtime_version=EXPECTED_GRAPHIFY_VERSION,
+                runtime_version=GRAPHIFY_VERSION,
                 graph_sha256=hashlib.sha256(graph_bytes).hexdigest(),
                 graph_bytes=len(graph_bytes),
                 node_count=0,
@@ -426,7 +434,7 @@ def test_graphify_health_rejects_forged_producer_receipt_fields(
     receipt = GraphifyBuildReceipt(
         schema_version=1,
         status="complete",
-        runtime_version=EXPECTED_GRAPHIFY_VERSION,
+        runtime_version=GRAPHIFY_VERSION,
         graph_sha256=hashlib.sha256(graph_bytes).hexdigest(),
         graph_bytes=len(graph_bytes),
         node_count=0,
@@ -459,7 +467,7 @@ def test_graphify_health_binds_one_graph_byte_snapshot(
     receipt = GraphifyBuildReceipt(
         schema_version=1,
         status="complete",
-        runtime_version=EXPECTED_GRAPHIFY_VERSION,
+        runtime_version=GRAPHIFY_VERSION,
         graph_sha256=hashlib.sha256(graph_a).hexdigest(),
         graph_bytes=len(graph_a),
         node_count=1,
@@ -505,7 +513,7 @@ def test_graphify_health_rejects_invalid_graph_schema(
         json.dumps(
             {
                 "graph_sha256": hashlib.sha256(graph_bytes).hexdigest(),
-                "runtime_version": EXPECTED_GRAPHIFY_VERSION,
+                "runtime_version": GRAPHIFY_VERSION,
                 "status": "complete",
                 "warnings": [],
             }
@@ -513,7 +521,7 @@ def test_graphify_health_rejects_invalid_graph_schema(
     )
     monkeypatch.setattr(
         "dotfiles_setup.graphify._runtime_version",
-        lambda: EXPECTED_GRAPHIFY_VERSION,
+        lambda: GRAPHIFY_VERSION,
     )
 
     result = graphify_health(tmp_path)
@@ -539,7 +547,7 @@ def test_graphify_health_accepts_links_keyed_graph(tmp_path: Path) -> None:
             GraphifyBuildReceipt(
                 schema_version=1,
                 status="complete",
-                runtime_version=EXPECTED_GRAPHIFY_VERSION,
+                runtime_version=GRAPHIFY_VERSION,
                 graph_sha256=hashlib.sha256(graph_bytes).hexdigest(),
                 graph_bytes=len(graph_bytes),
                 node_count=0,
@@ -701,7 +709,7 @@ def test_update_runs_graphify_update_and_returns_the_result(
     assert result.stdout == "updated\n"
 
 
-def test_graphify_update_main_passes_through_output_and_rc(
+def test_graphify_rebuild_main_passes_through_output_and_rc(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -714,11 +722,11 @@ def test_graphify_update_main_passes_through_output_and_rc(
 
     monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
     monkeypatch.setattr(
-        "dotfiles_setup.graphify.refresh_skills",
-        lambda _root: pytest.fail("a failed rebuild must not refresh skills"),
+        "dotfiles_setup.graphify.graphify_health_main",
+        lambda _root: pytest.fail("a failed rebuild must not run health"),
     )
 
-    rc = graphify_update_main(tmp_path)
+    rc = graphify_rebuild_main(tmp_path)
 
     assert rc == 1
     captured = capsys.readouterr()
@@ -726,7 +734,7 @@ def test_graphify_update_main_passes_through_output_and_rc(
     assert "update failed" in captured.err
 
 
-def test_graphify_update_main_refreshes_skills_after_success(
+def test_graphify_rebuild_main_requires_fresh_health_after_success(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -735,19 +743,20 @@ def test_graphify_update_main_refreshes_skills_after_success(
         _ = cwd
         return subprocess.CompletedProcess(args, 0, stdout="updated\n", stderr="")
 
-    refreshed = tmp_path / ".codex" / "skills" / "graphify" / "SKILL.md"
+    health_roots: list[Path] = []
     monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
     monkeypatch.setattr(
-        "dotfiles_setup.graphify.refresh_skills", lambda root: (root / refreshed,)
+        "dotfiles_setup.graphify.graphify_health_main",
+        lambda root: health_roots.append(root) or 0,
     )
 
-    assert graphify_update_main(tmp_path) == 0
+    assert graphify_rebuild_main(tmp_path) == 0
     output = capsys.readouterr().out
     assert "updated" in output
-    assert "skill refreshed ->" in output
+    assert health_roots == [tmp_path]
 
 
-def test_graphify_update_main_turns_a_refresh_error_into_rc_one(
+def test_graphify_rebuild_main_returns_unhealthy_postcondition_rc(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -756,54 +765,32 @@ def test_graphify_update_main_turns_a_refresh_error_into_rc_one(
         _ = cwd
         return subprocess.CompletedProcess(args, 0, stdout="updated\n", stderr="")
 
-    def fail_refresh(_root: Path) -> tuple[Path, ...]:
-        raise FileNotFoundError(_MISSING_PACKAGED_SKILL)
-
     monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
-    monkeypatch.setattr("dotfiles_setup.graphify.refresh_skills", fail_refresh)
+    monkeypatch.setattr("dotfiles_setup.graphify.graphify_health_main", lambda _root: 3)
 
-    assert graphify_update_main(tmp_path) == 1
+    assert graphify_rebuild_main(tmp_path) == 3
     captured = capsys.readouterr()
     assert "updated" in captured.out
-    assert "graphify skill refresh failed" in captured.err
+    assert captured.err == ""
 
 
-def test_skill_refresh_cli_parser_and_dispatch(
+def test_graphify_rebuild_cli_parser_and_dispatch(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    target = tmp_path / "target"
-    parsed = cli_main.setup_parser().parse_args(
-        [
-            "graphify",
-            "skill-refresh",
-            "--check",
-            "--project-dir",
-            str(target),
-        ]
-    )
+    parsed = cli_main.setup_parser().parse_args(["graphify", "rebuild", "src/target"])
     seen: dict[str, object] = {}
 
-    def fake_refresh_main(
-        project_root: Path, *, check: bool, project_dir: Path | None = None
-    ) -> int:
-        seen.update(
-            project_root=project_root,
-            check=check,
-            project_dir=project_dir,
-        )
+    def fake_rebuild_main(project_root: Path, *, target: str = ".") -> int:
+        seen.update(project_root=project_root, target=target)
         return 7
 
-    monkeypatch.setattr(cli_main, "graphify_skill_refresh_main", fake_refresh_main)
+    monkeypatch.setattr(cli_main, "graphify_rebuild_main", fake_rebuild_main)
 
     with pytest.raises(SystemExit) as exited:
         cli_main.handle_graphify(parsed, tmp_path)
     assert exited.value.code == 7
-    assert seen == {
-        "project_root": tmp_path,
-        "check": True,
-        "project_dir": target,
-    }
+    assert seen == {"project_root": tmp_path, "target": "src/target"}
 
 
 def test_rewrite_hook_nudge_rewrites_bare_query_and_update() -> None:
@@ -846,7 +833,7 @@ def test_rewrite_hook_nudge_rewrites_bare_query_and_update() -> None:
         '`graphify update` to refresh the graph."}}'
     )
     rewritten_stale = rewrite_hook_nudge(stale_nudge)
-    assert "`mise run graphify-update`" in rewritten_stale
+    assert "`mise run graphify-rebuild`" in rewritten_stale
     assert "`graphify update`" not in rewritten_stale
 
 
@@ -1012,7 +999,7 @@ def test_affected_refuses_unhealthy_graph_before_running_graphify(
         "dotfiles_setup.graphify.graphify_health",
         lambda _root: HealthResult(
             GraphifyStatus.MISSING,
-            EXPECTED_GRAPHIFY_VERSION,
+            GRAPHIFY_VERSION,
             "no graph",
         ),
     )
@@ -1069,7 +1056,7 @@ def test_affected_main_reports_incomplete_and_returns_3(
         "dotfiles_setup.graphify.graphify_health",
         lambda _root: HealthResult(
             GraphifyStatus.MISSING,
-            EXPECTED_GRAPHIFY_VERSION,
+            GRAPHIFY_VERSION,
             "no graph",
         ),
     )
@@ -1129,7 +1116,7 @@ def test_prs_returns_dashboard_text_with_no_health_gate(
         health_called = True
         return HealthResult(
             GraphifyStatus.MISSING,
-            EXPECTED_GRAPHIFY_VERSION,
+            GRAPHIFY_VERSION,
             "no graph",
         )
 
@@ -1241,7 +1228,7 @@ def test_graphify_health_reports_stale_when_the_graph_predates_head(
     _stub_graph(tmp_path, "b" * 40)
     monkeypatch.setattr(
         "dotfiles_setup.graphify._runtime_version",
-        lambda: EXPECTED_GRAPHIFY_VERSION,
+        lambda: GRAPHIFY_VERSION,
     )
     monkeypatch.setattr(
         "dotfiles_setup.graphify._git_output",
@@ -1251,7 +1238,7 @@ def test_graphify_health_reports_stale_when_the_graph_predates_head(
     assert result.status is GraphifyStatus.STALE
     assert not result.ok
     assert "77 commit(s) behind" in result.detail
-    assert "graphify-update" in result.detail
+    assert "graphify-rebuild" in result.detail
 
 
 def test_graphify_health_reports_stale_without_build_provenance(
@@ -1266,7 +1253,7 @@ def test_graphify_health_reports_stale_without_build_provenance(
     _stub_graph(tmp_path, None)
     monkeypatch.setattr(
         "dotfiles_setup.graphify._runtime_version",
-        lambda: EXPECTED_GRAPHIFY_VERSION,
+        lambda: GRAPHIFY_VERSION,
     )
     result = graphify_health(tmp_path)
     assert result.status is GraphifyStatus.STALE
@@ -1280,7 +1267,7 @@ def test_graphify_health_reports_stale_when_head_is_unreadable(
     _stub_graph(tmp_path, "b" * 40)
     monkeypatch.setattr(
         "dotfiles_setup.graphify._runtime_version",
-        lambda: EXPECTED_GRAPHIFY_VERSION,
+        lambda: GRAPHIFY_VERSION,
     )
     monkeypatch.setattr(
         "dotfiles_setup.graphify._git_output", lambda _root, *_args: None
@@ -1301,7 +1288,7 @@ def test_graphify_health_is_fresh_when_the_graph_matches_head(
     _stub_graph(tmp_path, "d" * 40)
     monkeypatch.setattr(
         "dotfiles_setup.graphify._runtime_version",
-        lambda: EXPECTED_GRAPHIFY_VERSION,
+        lambda: GRAPHIFY_VERSION,
     )
     monkeypatch.setattr(
         "dotfiles_setup.graphify._git_output", lambda _root, *_args: "d" * 40

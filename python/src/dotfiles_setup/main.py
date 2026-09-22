@@ -86,13 +86,14 @@ from dotfiles_setup.graphify import (
     affected_main,
     graphify_health_main,
     graphify_main,
-    graphify_update_main,
+    graphify_rebuild_main,
     hook_guard_main,
     prs_main,
 )
-from dotfiles_setup.graphify_skill import (
-    graphify_skill_install_main,
-    graphify_skill_refresh_main,
+from dotfiles_setup.graphify_currency import (
+    graphify_check_main,
+    graphify_update_main,
+    graphify_upgrade_main,
 )
 from dotfiles_setup.handoff_check import main as handoff_check_main
 from dotfiles_setup.hk_builtins_audit import hk_builtins_audit_main
@@ -1195,15 +1196,27 @@ def _add_graphify_subcommands(
         "health", help="Read-only typed graph and Graphify runtime health"
     )
     health_parser.add_argument("--json", action="store_true", dest="output_json")
-    update_parser = graphify_sub.add_parser(
+    graphify_sub.add_parser(
         "update",
         help=(
-            "Rebuild the project graph (AST-only, no API cost), then refresh "
-            "managed skill surfaces"
+            "Update the Graphify uv lock and managed skill surfaces, with a "
+            "release-notes receipt before version movement"
         ),
     )
-    update_parser.add_argument(
+    rebuild_parser = graphify_sub.add_parser(
+        "rebuild",
+        help="Rebuild the project graph (AST-only), then require fresh health",
+    )
+    rebuild_parser.add_argument(
         "target", nargs="?", default=".", help="Path to re-extract (default: .)"
+    )
+    graphify_sub.add_parser(
+        "check",
+        help="Read-only Graphify lock, install, PATH, stamp, and skill check",
+    )
+    graphify_sub.add_parser(
+        "upgrade",
+        help="Update Graphify currency, then rebuild; stop on the first failure",
     )
     hook_guard_parser = graphify_sub.add_parser(
         "hook-guard",
@@ -1279,40 +1292,6 @@ def _add_graphify_subcommands(
         action="store_true",
         dest="no_null",
         help="Drop the null arm. Removes the noise floor, so no gap is interpretable",
-    )
-    skill_install_parser = graphify_sub.add_parser(
-        "skill-install",
-        help=(
-            "Copy graphify's packaged SKILL.md (+ references) for one platform "
-            "into a project dir — never touches $HOME, AGENTS.md/CLAUDE.md, or "
-            "hooks.json (do-not.md #8 forbids `graphify install` here)"
-        ),
-    )
-    skill_install_parser.add_argument(
-        "platform",
-        help=(
-            "A platform graphify's own installer knows about (e.g. claude, "
-            "agents, codex) — see `graphify.install._PLATFORM_CONFIG`"
-        ),
-    )
-    skill_install_parser.add_argument(
-        "--project-dir",
-        default=None,
-        help="Target project directory (default: this repo's root)",
-    )
-    skill_refresh_parser = graphify_sub.add_parser(
-        "skill-refresh",
-        help=("Refresh Claude/Codex Graphify skills and all platform version stamps"),
-    )
-    skill_refresh_parser.add_argument(
-        "--check",
-        action="store_true",
-        help="Report drift and return 1 without writing",
-    )
-    skill_refresh_parser.add_argument(
-        "--project-dir",
-        default=None,
-        help="Target project directory (default: this repo's root)",
     )
 
 
@@ -2364,6 +2343,24 @@ def handle_schema_vendor(args: argparse.Namespace) -> None:
         sys.exit(schema_vendor_pin_main(args.tool))
 
 
+def _simple_graphify_result(
+    args: argparse.Namespace,
+    project_root: Path,
+) -> int | None:
+    """Dispatch Graphify commands whose complete input is already parsed."""
+    handlers = {
+        "health": lambda: graphify_health_main(
+            project_root, output_json=args.output_json
+        ),
+        "update": lambda: graphify_update_main(project_root),
+        "rebuild": lambda: graphify_rebuild_main(project_root, target=args.target),
+        "check": lambda: graphify_check_main(project_root),
+        "upgrade": lambda: graphify_upgrade_main(project_root),
+    }
+    handler = handlers.get(getattr(args, "graphify_command", None))
+    return handler() if handler is not None else None
+
+
 def handle_graphify(args: argparse.Namespace, project_root: Path) -> None:
     """Dispatch a graphify subcommand (the deterministic query read path, #313).
 
@@ -2371,7 +2368,8 @@ def handle_graphify(args: argparse.Namespace, project_root: Path) -> None:
         args: The parsed arguments.
         project_root: The project root path (the graph lives under it).
     """
-    if getattr(args, "graphify_command", None) == "query":
+    command = getattr(args, "graphify_command", None)
+    if command == "query":
         sys.exit(
             graphify_main(
                 project_root,
@@ -2381,13 +2379,11 @@ def handle_graphify(args: argparse.Namespace, project_root: Path) -> None:
                 dfs=args.dfs,
             )
         )
-    if getattr(args, "graphify_command", None) == "health":
-        sys.exit(graphify_health_main(project_root, output_json=args.output_json))
-    if getattr(args, "graphify_command", None) == "update":
-        sys.exit(graphify_update_main(project_root, target=args.target))
-    if getattr(args, "graphify_command", None) == "hook-guard":
+    if (simple_result := _simple_graphify_result(args, project_root)) is not None:
+        sys.exit(simple_result)
+    if command == "hook-guard":
         sys.exit(hook_guard_main(project_root, args.kind))
-    if getattr(args, "graphify_command", None) == "affected":
+    if command == "affected":
         sys.exit(
             affected_main(
                 project_root,
@@ -2396,7 +2392,7 @@ def handle_graphify(args: argparse.Namespace, project_root: Path) -> None:
                 relations=tuple(args.relations),
             )
         )
-    if getattr(args, "graphify_command", None) == "prs":
+    if command == "prs":
         sys.exit(
             prs_main(
                 project_root,
@@ -2405,7 +2401,7 @@ def handle_graphify(args: argparse.Namespace, project_root: Path) -> None:
                 base=args.base,
             )
         )
-    if getattr(args, "graphify_command", None) == "bakeoff":
+    if command == "bakeoff":
         corpus = (
             Path(args.corpus) if args.corpus else project_root / GOLD_CORPUS_RELPATH
         )
@@ -2416,22 +2412,6 @@ def handle_graphify(args: argparse.Namespace, project_root: Path) -> None:
                 repeats=args.repeats,
                 run_id=args.run_id,
                 no_null=args.no_null,
-            )
-        )
-    if getattr(args, "graphify_command", None) == "skill-install":
-        sys.exit(
-            graphify_skill_install_main(
-                project_root,
-                platform=args.platform,
-                project_dir=Path(args.project_dir) if args.project_dir else None,
-            )
-        )
-    if getattr(args, "graphify_command", None) == "skill-refresh":
-        sys.exit(
-            graphify_skill_refresh_main(
-                project_root,
-                check=args.check,
-                project_dir=Path(args.project_dir) if args.project_dir else None,
             )
         )
 
