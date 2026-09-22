@@ -19,6 +19,7 @@ import dataclasses
 import json
 import subprocess
 import sys
+from fnmatch import fnmatchcase
 from pathlib import Path
 
 import pytest
@@ -31,6 +32,7 @@ REPO_ROOT = Path(__file__).parent.parent
 
 #: Raised by the fail-open fixtures; a literal in a `raise` trips EM101.
 _CRASH_MESSAGE = "kaboom"
+_SPAWN_ERROR_MESSAGE = "cannot spawn"
 
 # A baseline mirroring the shipped doctor.toml closely enough that a check
 # reading it behaves as it does in production.
@@ -1184,6 +1186,142 @@ def test_graphify_skill_surface_flags_stamp_drift_with_the_refresh_fix(
     assert "mise run graphify-update" in findings[0]
 
 
+def test_graphify_skill_surface_flags_missing_package_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _write_healthy_graphify_surface(tmp_path)
+    _write_graphify_stamps(tmp_path, doctor.EXPECTED_GRAPHIFY_VERSION)
+
+    def missing_package(_name: str) -> str:
+        raise doctor.importlib.metadata.PackageNotFoundError
+
+    monkeypatch.setattr(doctor.importlib.metadata, "version", missing_package)
+    monkeypatch.setattr(doctor.shutil, "which", lambda _name: None)
+    setup = _setup(
+        repo_root=tmp_path,
+        baseline={"graphify": _graphify_runtime_baseline()},
+    )
+
+    findings = doctor.check_graphify_skill_surface(setup)
+
+    assert len(findings) == 1
+    assert "installed graphifyy version is unavailable" in findings[0]
+
+
+def test_graphify_skill_surface_flags_a_missing_stamp(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _write_healthy_graphify_surface(tmp_path)
+    _write_graphify_stamps(tmp_path, doctor.EXPECTED_GRAPHIFY_VERSION)
+    missing = tmp_path / _GRAPHIFY_STAMP_FILES[1]
+    missing.unlink()
+    monkeypatch.setattr(
+        doctor.importlib.metadata,
+        "version",
+        lambda _name: doctor.EXPECTED_GRAPHIFY_VERSION,
+    )
+    monkeypatch.setattr(doctor.shutil, "which", lambda _name: None)
+    setup = _setup(
+        repo_root=tmp_path,
+        baseline={"graphify": _graphify_runtime_baseline()},
+    )
+
+    findings = doctor.check_graphify_skill_surface(setup)
+
+    assert len(findings) == 1
+    assert f"{_GRAPHIFY_STAMP_FILES[1]} is missing" in findings[0]
+
+
+def _setup_graphify_path_binary(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> doctor.Setup:
+    _write_healthy_graphify_surface(tmp_path)
+    _write_graphify_stamps(tmp_path, doctor.EXPECTED_GRAPHIFY_VERSION)
+    monkeypatch.setattr(
+        doctor.importlib.metadata,
+        "version",
+        lambda _name: doctor.EXPECTED_GRAPHIFY_VERSION,
+    )
+    monkeypatch.setattr(doctor.shutil, "which", lambda _name: "/mise/graphify")
+    return _setup(
+        repo_root=tmp_path,
+        baseline={"graphify": _graphify_runtime_baseline()},
+    )
+
+
+def test_graphify_skill_surface_flags_a_version_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    setup = _setup_graphify_path_binary(monkeypatch, tmp_path)
+
+    def timeout(*_args: object, **_kwargs: object) -> None:
+        raise subprocess.TimeoutExpired(cmd=["/mise/graphify", "--version"], timeout=10)
+
+    monkeypatch.setattr(doctor.subprocess, "run", timeout)
+
+    findings = doctor.check_graphify_skill_surface(setup)
+
+    assert len(findings) == 1
+    assert "PATH graphify could not report its version" in findings[0]
+
+
+def test_graphify_skill_surface_flags_a_version_spawn_error(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    setup = _setup_graphify_path_binary(monkeypatch, tmp_path)
+
+    def spawn_error(*_args: object, **_kwargs: object) -> None:
+        raise OSError(_SPAWN_ERROR_MESSAGE)
+
+    monkeypatch.setattr(doctor.subprocess, "run", spawn_error)
+
+    findings = doctor.check_graphify_skill_surface(setup)
+
+    assert len(findings) == 1
+    assert "PATH graphify could not report its version" in findings[0]
+
+
+def test_graphify_skill_surface_flags_a_nonzero_version_exit(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    setup = _setup_graphify_path_binary(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        doctor.subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess([], 2, "", "failed"),
+    )
+
+    findings = doctor.check_graphify_skill_surface(setup)
+
+    assert len(findings) == 1
+    assert "PATH graphify did not report a usable version" in findings[0]
+
+
+def test_graphify_skill_surface_flags_malformed_version_output(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    setup = _setup_graphify_path_binary(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        doctor.subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(
+            [], 0, "not a semantic version", ""
+        ),
+    )
+
+    findings = doctor.check_graphify_skill_surface(setup)
+
+    assert len(findings) == 1
+    assert "PATH graphify did not report a usable version" in findings[0]
+
+
 def test_graphify_skill_surface_accepts_a_matching_path_binary(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -1350,6 +1488,25 @@ def test_the_sessionstart_hook_runs_the_doctor() -> None:
     commands = doctor.hook_commands(settings, "SessionStart")
     assert any("run doctor" in command for command in commands)
     assert all("CLAUDE_PROJECT_DIR" in command for command in commands)
+
+
+def test_claude_denies_the_label_command_even_inside_a_grep() -> None:
+    """The exact double-quoted grep accident shape must hit the deny glob.
+
+    ``hook_selfcheck`` drives the PreToolUse hook, not Claude's permission
+    engine. The whole-command ``Bash`` glob semantics come from the local
+    ``$CC/permissions.md`` corpus; this pins the live rule and both string arms.
+    """
+    settings = json.loads((REPO_ROOT / ".claude" / "settings.json").read_text())
+    rule = "Bash(*graphify label*)"
+    deny = set(settings["permissions"]["deny"])
+    assert rule in deny
+
+    pattern = rule.removeprefix("Bash(").removesuffix(")")
+    accident = 'grep -rn "Run `graphify label` to refresh" .'
+    safe_control = 'grep -rn "Run the skill refresh task" .'
+    assert fnmatchcase(accident, pattern)
+    assert not fnmatchcase(safe_control, pattern)
 
 
 def test_collect_reads_the_real_repo_without_touching_the_real_home(

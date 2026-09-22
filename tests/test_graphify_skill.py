@@ -16,6 +16,7 @@ exist where `graphify install` cannot (do-not.md #8).
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 import types
@@ -26,6 +27,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 from dotfiles_setup import graphify_skill
+
+_UNEXPECTED_WRITE = "unexpected write"
 
 
 @pytest.fixture
@@ -522,7 +525,36 @@ def test_refresh_skills_updates_managed_surfaces_and_only_the_agents_stamp(
     assert (agents_dir / "SKILL.md").read_bytes() == agents_stub
     assert b"DELIBERATE STUB" in (agents_dir / "SKILL.md").read_bytes()
     assert not (agents_dir / "references").exists()
-    assert graphify_skill.refresh_skills(project_dir) == ()
+
+    skill_dirs = tuple(
+        project_dir / f".{platform}" / "skills" / "graphify"
+        for platform in ("claude", "codex", "agents")
+    )
+    mtimes = {
+        path: path.stat().st_mtime_ns
+        for skill_dir in skill_dirs
+        for path in skill_dir.rglob("*")
+        if path.is_file()
+    }
+
+    def unexpected_write(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError(_UNEXPECTED_WRITE)
+
+    # Mutation arm (executed in-memory 2026-09-22): making check_skills'
+    # SKILL.md byte comparison report unconditional drift reaches a patched
+    # copy primitive and fails here with "unexpected write".
+    with monkeypatch.context() as second_run:
+        for method in ("write_text", "write_bytes", "replace"):
+            second_run.setattr(Path, method, unexpected_write)
+        for function in ("copy", "copy2", "copytree", "rmtree"):
+            second_run.setattr(shutil, function, unexpected_write)
+        assert graphify_skill.refresh_skills(project_dir) == ()
+    assert {
+        path: path.stat().st_mtime_ns
+        for skill_dir in skill_dirs
+        for path in skill_dir.rglob("*")
+        if path.is_file()
+    } == mtimes
     assert not list(project_dir.rglob("*.bak"))
     assert all(
         path.relative_to(project_dir).parts[0] in {".claude", ".codex", ".agents"}

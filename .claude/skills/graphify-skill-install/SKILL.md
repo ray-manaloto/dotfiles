@@ -41,9 +41,14 @@ for the read-only form; it reports each drift and returns 1 without writing.
 the graph.
 
 Vendor skill content is read-only. The former hand-added
-`raise SystemExit(1)` in the Claude bundle is intentionally dropped rather than
-patched back: the repo's own update wrapper already fails closed on its return
-code. A differing `SKILL.md` still produces `SKILL.md.bak` through the existing
+`raise SystemExit(1)` sat inside the vendor's `claude` bundle, in its Step-5 LLM
+community-labeling snippet, a flow this repo never executes: labeling stays
+outside `mise run graphify-update`, and a bare `graphify` invocation is banned.
+Without that line a refused shrink prints an ERROR, then falsely prints success
+and exits 0. That is a vendor UX defect, but it is reachable here only by
+running the banned step by hand. The durable fix belongs upstream (the operator
+will file it), not in a local patch that every routine refresh would silently
+drop. A differing `SKILL.md` still produces `SKILL.md.bak` through the existing
 installer; the lane performing a reviewed refresh inspects and deletes that
 backup instead of committing it.
 
@@ -52,6 +57,14 @@ LLM/agent command. This is a hard boundary: graphify/llm.py:3512 can silently
 select `claude-cli` when no API-key backend is detected, so even apparently
 unconfigured labeling could spend agent tokens. Refresh is local packaged-file
 comparison and copy only.
+
+Two 2026-09-21 incidents proved the command-text hazard: a research lane under
+the `claude` harness (18:47, Gemini backend) and a codex SDLC specialist
+(~01:20) each put the labeling command inside backticks in a double-quoted
+`grep`; zsh substituted it, and the latter fell through to `claude -p` before
+interruption at rc 130. `.claude/settings.json` therefore denies that two-word
+command shape anywhere in a Bash command, deliberately including a grep that
+merely contains it.
 
 ## When to reach for it
 

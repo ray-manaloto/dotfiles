@@ -11,6 +11,8 @@ Before broad source search, run `mise run graphify-health`.
 - **Always the mise tasks, never a bare `graphify` on `PATH`.** Query with
   `mise run graphify-query`, rebuild with `mise run graphify-update` — never
   `graphify query`/`graphify update` directly.
+- Claude's permission deny also blocks the labeling command words anywhere in a
+  Bash string, including the double-quoted grep shape whose backticks zsh ran.
 
 ## `fresh` now means "built from HEAD" — it did not until 2026-09-13
 
