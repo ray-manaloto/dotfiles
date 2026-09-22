@@ -1191,3 +1191,53 @@ flowchart LR
     RESEARCH --> DESIGN["9.7 one /codex-sdlc-team entry point from the ratified matrix"]
     DESIGN --> RESUME["Phase 8: #1157"]
 ```
+
+## 2026-09-22 — graphify currency interlude landed (#1239); Phase 9 unchanged
+
+- **Iteration ID:** `dotfiles-goal-20260922-023`
+- **Prior goal digest:** `sha256:56b0d2a3ccac26b0d7034dffc20a23b59ac587bcfa5e0f999a8b538903e879b8`
+- **Current goal digest:** `sha256:56b0d2a3ccac26b0d7034dffc20a23b59ac587bcfa5e0f999a8b538903e879b8`
+- **Changed requirement:** None to the goal. An unplanned interlude displaced
+  Phase 9's first session: Ray found the three graphify skill stamps had never
+  been refreshed and the repo pinned graphify 0.9.61 while the user-global pin
+  and PyPI were at 0.9.65. Ruled: bump, and automate currency as skill → mise
+  task → python with zero agent tokens and no hand edits. Delivered as
+  `graphify-upgrade` = `graphify-update` (uv-native `uv lock --upgrade-package
+  graphifyy`, `mise latest` check, tracked release-notes receipt, claude+codex
+  skill refresh) → `graphify-rebuild`, plus read-only `graphify-check`;
+  `uv.lock` is the only pin; `Bash(*graphify label*)` denied after two
+  accidental bare label runs; graph staleness is corpus-aware for 0.9.65's
+  no-op rebuilds.
+- **Reason:** Ray, 2026-09-21/22, by AskUserQuestion: bump AND auto-refresh;
+  vendor content read-only (drop the hand patch); "stop using old rules";
+  native uv commands, never hand-editing pyproject; update → skills → rebuild;
+  `/verify` then ship then handoff; record the interlude in the plan.
+- **Evidence:** PR #1239 merged `bea635d4` (10 commits `fb89c433`…`4999b18b`),
+  main run 35699954539 success; live: `mise run graphify-upgrade` rc=0 →
+  `graphify-health: fresh`, `mise run graphify-check` rc=0 (rc=1 with
+  `DOTFILES_AMBIENT_PATH=/usr/bin`), full pytest 3758 passed, verify 163/0;
+  reports `docs/research/kb/reports/agents/2026-09-2{1,2}-*graphify*`.
+- **Affected tickets:** #1239. Not yet filed: codex-lane guard gap, SDLC
+  settlement list-placement parser, `.gitignore`/`codex-sdlc-team.md`
+  contradiction on `.codex/hooks.json`, upstream Graphify Step-5 false success.
+- **Disposition:** `ACCEPTED`. Delivered and verified; Phase 9 remains the
+  active phase with 9.1 not started.
+- **Topology and ownership:** One writer: the Claude architect session.
+  Implementation lanes codex (`codex-sol-implementer`, xhigh; two of four
+  rounds needed a continuation lane after a 3600 s timeout at the full-suite
+  gate); cold review Opus; two `mise run sdlc-team` review runs. Every
+  delegate shut down at handoff; no codex process of this project remains.
+
+### Current goal
+
+> Run Phase 9 as research and plan only: bump codex to the latest release, probe openai/codex #45482 against the SDLC review lane, and measure whether app-server daemon auto-update works for a mise install; then the remaining Phase 9 research (herdr setup and verify, herdr as the Claude-codex channel, codex CLI flag contract, offline docs to the knowledge-base, codex currency) and the design of ONE /codex-sdlc-team entry point (skill to mise task to python library, code-generated input model, enforcement hooks) built from the ratified feature matrix, retiring fable-orchestrator and the twelve codex wrappers only after parity; then resume Phase 8 at #1157. Keep task_plan.md as the sole task authority and use only its tracked digest pointer for continuity.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    DONE["Interlude landed: #1239 bea635d4 graphify currency"] --> FIRST["Phase 9 first session: 9.1 codex bump, 9.1c #45482 probe, 9.1b daemon measurements"]
+    FIRST --> RESEARCH["Phase 9 research: herdr, flag contract, offline docs, currency"]
+    RESEARCH --> DESIGN["9.7 one /codex-sdlc-team entry point from the ratified matrix"]
+    DESIGN --> RESUME["Phase 8: #1157"]
+```
