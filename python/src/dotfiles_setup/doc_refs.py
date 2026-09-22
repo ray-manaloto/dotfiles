@@ -157,6 +157,10 @@ _ALLOWED_ABSENT = frozenset(
         # failed PR #359's first run. Same rationale as the vendored graphify
         # SKILL.md exclusion in DOC_PATHSPECS.
         "graphify-out/graph.json",
+        # graphify's own scan manifest (keyed by scanned path), the second
+        # source the corpus-aware staleness test in graphify-first.md reads
+        # (2026-09-22). Same local-only/CI-absent divergence as graph.json.
+        "graphify-out/manifest.json",
         # Unlike graph.json above, this one isn't a local/CI divergence case —
         # it is absent EVERYWHERE in this repo, always (see graphify-first.md):
         # only the knowledge-base's committed-corpus pipeline writes a build
