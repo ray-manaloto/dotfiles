@@ -95,6 +95,7 @@ from dotfiles_setup.graphify_currency import (
     graphify_update_main,
     graphify_upgrade_main,
 )
+from dotfiles_setup.graphify_skill import graphify_skill_refresh_main
 from dotfiles_setup.handoff_check import main as handoff_check_main
 from dotfiles_setup.hk_builtins_audit import hk_builtins_audit_main
 from dotfiles_setup.hook_guard import pretooluse_main
@@ -1210,9 +1211,18 @@ def _add_graphify_subcommands(
     rebuild_parser.add_argument(
         "target", nargs="?", default=".", help="Path to re-extract (default: .)"
     )
-    graphify_sub.add_parser(
+    check_parser = graphify_sub.add_parser(
         "check",
         help="Read-only Graphify lock, install, PATH, stamp, and skill check",
+    )
+    check_parser.add_argument(
+        "--offline",
+        action="store_true",
+        help="Skip network latest and graph-health probes",
+    )
+    graphify_sub.add_parser(
+        "refresh-skills",
+        help=argparse.SUPPRESS,
     )
     graphify_sub.add_parser(
         "upgrade",
@@ -2354,7 +2364,8 @@ def _simple_graphify_result(
         ),
         "update": lambda: graphify_update_main(project_root),
         "rebuild": lambda: graphify_rebuild_main(project_root, target=args.target),
-        "check": lambda: graphify_check_main(project_root),
+        "check": lambda: graphify_check_main(project_root, offline=args.offline),
+        "refresh-skills": lambda: graphify_skill_refresh_main(project_root),
         "upgrade": lambda: graphify_upgrade_main(project_root),
     }
     handler = handlers.get(getattr(args, "graphify_command", None))

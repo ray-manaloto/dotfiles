@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import subprocess
 import sys
 import tomllib
@@ -28,6 +29,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 from dotfiles_setup import codec
 from dotfiles_setup import main as cli_main
 from dotfiles_setup.graphify import (
+    GRAPHIFY_REBUILD_SCRUB_ENV,
     GraphifyError,
     GraphifyIncompleteError,
     GraphifyStatus,
@@ -695,10 +697,33 @@ def test_update_runs_graphify_update_and_returns_the_result(
     it could only ever record the version `update()` itself always resolves,
     so the check it fed could never fail.
     """
+    tool_bin = tmp_path / "tools"
+    tool_bin.mkdir()
+    claude = tool_bin / "claude"
+    claude.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    claude.chmod(0o755)
+    source_env = {
+        "PATH": f"{tool_bin}:/usr/bin:/bin",
+        "HOME": str(tmp_path / "home"),
+        "LANG": "C",
+        **dict.fromkeys(GRAPHIFY_REBUILD_SCRUB_ENV, "credential"),
+    }
+    monkeypatch.setattr(
+        "dotfiles_setup.graphify.without_env_diff",
+        source_env.copy,
+    )
 
-    def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+    def fake_run(
+        args: list[str], *, cwd: Path, env: dict[str, str] | None = None
+    ) -> subprocess.CompletedProcess[str]:
         _ = cwd
         assert args == ["graphify", "update", "src/some/dir"]
+        assert env is not None
+        assert not set(GRAPHIFY_REBUILD_SCRUB_ENV) & env.keys()
+        assert env["PATH"].split(":", 1)[0] == str(Path(sys.executable).parent)
+        assert shutil.which("claude", path=env["PATH"]) == str(claude)
+        assert env["HOME"] == str(tmp_path / "home")
+        assert env["LANG"] == "C"
         return subprocess.CompletedProcess(args, 0, stdout="updated\n", stderr="")
 
     monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
@@ -714,8 +739,11 @@ def test_graphify_rebuild_main_passes_through_output_and_rc(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+    def fake_run(
+        args: list[str], *, cwd: Path, env: dict[str, str] | None = None
+    ) -> subprocess.CompletedProcess[str]:
         _ = cwd
+        assert env is not None
         return subprocess.CompletedProcess(
             args, 1, stdout="partial\n", stderr="graphify: update failed\n"
         )
@@ -739,8 +767,11 @@ def test_graphify_rebuild_main_requires_fresh_health_after_success(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+    def fake_run(
+        args: list[str], *, cwd: Path, env: dict[str, str] | None = None
+    ) -> subprocess.CompletedProcess[str]:
         _ = cwd
+        assert env is not None
         return subprocess.CompletedProcess(args, 0, stdout="updated\n", stderr="")
 
     health_roots: list[Path] = []
@@ -761,8 +792,11 @@ def test_graphify_rebuild_main_returns_unhealthy_postcondition_rc(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+    def fake_run(
+        args: list[str], *, cwd: Path, env: dict[str, str] | None = None
+    ) -> subprocess.CompletedProcess[str]:
         _ = cwd
+        assert env is not None
         return subprocess.CompletedProcess(args, 0, stdout="updated\n", stderr="")
 
     monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)

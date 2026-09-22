@@ -11,12 +11,13 @@ from __future__ import annotations
 
 import importlib.metadata
 import json
+import os
 import re
 import shutil
 import subprocess
 import sys
 import tomllib
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -24,11 +25,12 @@ from typing import Any
 from packaging.version import InvalidVersion, Version
 
 from dotfiles_setup import graphify_skill
+from dotfiles_setup.path_drift import Provenance, resolve_ambient_path
 
 DIST = "graphifyy"
 MISE_TOOL = "pipx:graphifyy"
 GITHUB_REPO = "Graphify-Labs/graphify"
-RECEIPT_DIR = Path(".agent/graphify")
+RECEIPT_DIR = Path("docs/receipts/graphify")
 
 _VERSION_RE = re.compile(r"\b(\d+\.\d+\.\d+(?:[A-Za-z0-9.+-]*))\b")
 _LATEST_TIMEOUT_SECONDS = 30
@@ -62,10 +64,20 @@ class Drift:
 
 
 @dataclass(frozen=True)
+class ReleaseNote:
+    """One upstream release and the metadata preserved in its receipt."""
+
+    version: str
+    tag: str
+    published_at: str
+    body: str
+
+
+@dataclass(frozen=True)
 class _Probe:
     value: str | None
     error: str = ""
-    absent: bool = False
+    path: str | None = None
 
 
 def locked_version(project_root: Path) -> str:
@@ -130,11 +142,6 @@ def _latest_probe(*, run: Run) -> _Probe:
     return _Probe(candidate)
 
 
-def latest_version(run: Run = subprocess.run) -> str | None:
-    """Return ``mise latest pipx:graphifyy`` stdout, or ``None`` on failure."""
-    return _latest_probe(run=run).value
-
-
 def _require_latest(*, run: Run) -> str:
     """Return the latest version or fail closed with the probe diagnostic."""
     probe = _latest_probe(run=run)
@@ -144,39 +151,78 @@ def _require_latest(*, run: Run) -> str:
     return probe.value
 
 
-def _path_binary_probe(*, run: Run) -> _Probe:
-    binary = shutil.which("graphify")
+def _path_binary_probe(
+    *,
+    run: Run,
+    environ: Mapping[str, str] | None = None,
+) -> _Probe:
+    ambient_path, provenance = resolve_ambient_path(
+        os.environ if environ is None else environ
+    )
+    if provenance is Provenance.BLIND:
+        return _Probe(
+            None,
+            "path-binary UNVERIFIABLE (no ambient PATH captured)",
+        )
+    # ``uv run`` prepends its project venv after the agent shell has already
+    # resolved its ambient PATH.  That injected entry is never the host binary
+    # this axis measures, even when no mise marker is present to make the
+    # inherited fallback BLIND.
+    venv_bins = {str(Path(sys.executable).parent)}
+    if virtual_env := (os.environ if environ is None else environ).get("VIRTUAL_ENV"):
+        venv_bins.add(str(Path(virtual_env) / "bin"))
+    ambient_path = os.pathsep.join(
+        entry for entry in ambient_path.split(os.pathsep) if entry not in venv_bins
+    )
+    binary = shutil.which("graphify", path=ambient_path)
     if binary is None:
-        return _Probe(None, absent=True)
+        return _Probe(
+            None,
+            "path-binary UNVERIFIABLE (graphify absent from ambient PATH)",
+        )
     try:
         result = run(
-            ["graphify", "--version"],
+            [binary, "--version"],
             capture_output=True,
             text=True,
             check=False,
             timeout=_PATH_TIMEOUT_SECONDS,
+            env={"PATH": ambient_path},
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
-        return _Probe(None, str(exc))
+        return _Probe(
+            None,
+            f"path-binary UNVERIFIABLE ({exc})",
+            path=binary,
+        )
     output = f"{result.stdout}\n{result.stderr}"
     match = _VERSION_RE.search(output)
+    error = ""
     if result.returncode != 0:
         detail = result.stderr.strip() or (
             f"graphify --version exited {result.returncode}"
         )
-        return _Probe(None, detail)
+        error = detail
+    elif match is None:
+        error = "graphify --version returned no usable version"
+    else:
+        try:
+            Version(match.group(1))
+        except InvalidVersion:
+            error = f"graphify --version returned {match.group(1)!r}"
+    if error:
+        return _Probe(
+            None,
+            f"path-binary UNVERIFIABLE ({error})",
+            path=binary,
+        )
     if match is None:
-        return _Probe(None, "graphify --version returned no usable version")
-    try:
-        Version(match.group(1))
-    except InvalidVersion:
-        return _Probe(None, f"graphify --version returned {match.group(1)!r}")
-    return _Probe(match.group(1))
-
-
-def path_binary_version(run: Run = subprocess.run) -> str | None:
-    """Return the user-global PATH Graphify version, or ``None`` if absent."""
-    return _path_binary_probe(run=run).value
+        return _Probe(
+            None,
+            "path-binary UNVERIFIABLE (graphify --version returned no usable version)",
+            path=binary,
+        )
+    return _Probe(match.group(1), path=binary)
 
 
 def _json_documents(raw: str) -> Iterable[Any]:
@@ -207,7 +253,7 @@ def release_notes_between(
     low: str,
     high: str,
     run: Run = subprocess.run,
-) -> list[tuple[str, str]]:
+) -> list[ReleaseNote]:
     """Fetch public Graphify GitHub release notes in ``(low, high]``."""
     low_version = Version(low)
     high_version = Version(high)
@@ -227,7 +273,7 @@ def release_notes_between(
         message = f"gh api failed: {detail}"
         raise GraphifyCurrencyError(message)
 
-    notes: list[tuple[Version, str, str]] = []
+    notes: list[tuple[Version, ReleaseNote]] = []
     for row in _release_rows(result.stdout):
         tag = row.get("tag_name")
         if not isinstance(tag, str):
@@ -239,38 +285,54 @@ def release_notes_between(
             continue
         if low_version < release_version <= high_version:
             body = row.get("body")
-            notes.append((release_version, tag, body if isinstance(body, str) else ""))
+            published_at = row.get("published_at")
+            if not isinstance(published_at, str) or not published_at:
+                message = f"gh api release {tag} has no published_at"
+                raise GraphifyCurrencyError(message)
+            notes.append(
+                (
+                    release_version,
+                    ReleaseNote(
+                        version=str(release_version),
+                        tag=tag,
+                        published_at=published_at,
+                        body=body if isinstance(body, str) else "",
+                    ),
+                )
+            )
     notes.sort(key=lambda item: item[0])
-    if not any(version == high_version for version, _, _ in notes):
+    if not any(version == high_version for version, _ in notes):
         message = f"gh api returned no release for target version {high}"
         raise GraphifyCurrencyError(message)
-    return [(tag, body) for _, tag, body in notes]
+    return [note for _, note in notes]
 
 
-def write_release_receipt(
+def write_release_receipts(
     project_root: Path,
-    notes: list[tuple[str, str]],
-    *,
-    high: str,
-) -> Path:
-    """Write the fetched release-note review receipt below ``.agent/``."""
+    notes: list[ReleaseNote],
+) -> tuple[Path, ...]:
+    """Write one tracked, verbatim upstream release receipt per version."""
     receipt_dir = project_root / RECEIPT_DIR
     receipt_dir.mkdir(parents=True, exist_ok=True)
-    receipt = receipt_dir / f"release-notes-{high}.md"
-    sections = [f"# Graphify release notes through {high}", ""]
-    for tag, body in notes:
-        sections.extend((f"## {tag}", "", body.strip() or "_No release notes._", ""))
-    receipt.write_text("\n".join(sections).rstrip() + "\n", encoding="utf-8")
-    return receipt
+    written: list[Path] = []
+    for note in notes:
+        receipt = receipt_dir / f"{note.version}.md"
+        header = (
+            f"# Graphify {note.tag} release receipt\n\n"
+            "Written by `mise run graphify-update`.\n\n"
+            f"- Tag: `{note.tag}`\n"
+            f"- Published at: `{note.published_at}`\n\n"
+            "## Release notes (verbatim)\n\n"
+        )
+        receipt.write_text(f"{header}{note.body}\n", encoding="utf-8")
+        written.append(receipt)
+    return tuple(written)
 
 
 def upgrade_lock(project_root: Path, run: Run = subprocess.run) -> None:
     """Upgrade the Graphify lock entry with native uv, then sync the project."""
-    commands = (
-        ["uv", "lock", "--project", "python", "--upgrade-package", DIST],
-        ["uv", "sync", "--project", "python"],
-    )
-    for command in commands:
+
+    def _run_checked(command: list[str]) -> None:
         try:
             result = run(
                 command,
@@ -287,6 +349,9 @@ def upgrade_lock(project_root: Path, run: Run = subprocess.run) -> None:
             detail = result.stderr.strip() or f"exited {result.returncode}"
             message = f"{' '.join(command)} failed: {detail}"
             raise GraphifyCurrencyError(message)
+
+    _run_checked(["uv", "lock", "--project", "python", "--upgrade-package", DIST])
+    _run_checked(["uv", "sync", "--project", "python"])
 
 
 def _skill_drifts(project_root: Path) -> tuple[Drift, ...]:
@@ -310,7 +375,22 @@ def _skill_drifts(project_root: Path) -> tuple[Drift, ...]:
     )
 
 
-def _check_with_versions(project_root: Path) -> tuple[Versions, tuple[Drift, ...]]:
+def _receipt_drift(project_root: Path, locked: str) -> Drift | None:
+    receipt = project_root / RECEIPT_DIR / f"{locked}.md"
+    if receipt.is_file():
+        return None
+    relative = receipt.relative_to(project_root)
+    return Drift(
+        "receipt-missing",
+        f"receipt-missing: {relative} — run mise run graphify-update",
+    )
+
+
+def _check_with_versions(
+    project_root: Path,
+    *,
+    offline: bool,
+) -> tuple[Versions, tuple[Drift, ...], str | None]:
     drifts: list[Drift] = []
     try:
         locked = locked_version(project_root)
@@ -324,22 +404,24 @@ def _check_with_versions(project_root: Path) -> tuple[Versions, tuple[Drift, ...
         installed = "UNVERIFIABLE"
         drifts.append(Drift("installed!=locked", f"UNVERIFIABLE: {exc}"))
 
-    latest_probe = _latest_probe(run=subprocess.run)
-    if latest_probe.value is None:
-        drifts.append(
-            Drift(
-                "lock-behind-latest",
-                f"UNVERIFIABLE: {latest_probe.error}",
+    latest_probe = _Probe(None)
+    if not offline:
+        latest_probe = _latest_probe(run=subprocess.run)
+        if latest_probe.value is None:
+            drifts.append(
+                Drift(
+                    "lock-behind-latest",
+                    f"UNVERIFIABLE: {latest_probe.error}",
+                )
             )
-        )
-    elif locked != "UNVERIFIABLE" and Version(latest_probe.value) > Version(locked):
-        drifts.append(
-            Drift(
-                "lock-behind-latest",
-                f"graphifyy locked {locked}, latest {latest_probe.value} — "
-                "run `mise run graphify-update`",
+        elif locked != "UNVERIFIABLE" and Version(latest_probe.value) > Version(locked):
+            drifts.append(
+                Drift(
+                    "lock-behind-latest",
+                    f"graphifyy locked {locked}, latest {latest_probe.value} — "
+                    "run `mise run graphify-update`",
+                )
             )
-        )
 
     if locked != "UNVERIFIABLE" and installed not in ("UNVERIFIABLE", locked):
         drifts.append(
@@ -350,11 +432,16 @@ def _check_with_versions(project_root: Path) -> tuple[Versions, tuple[Drift, ...
             )
         )
 
+    if locked != "UNVERIFIABLE" and (
+        receipt_drift := _receipt_drift(project_root, locked)
+    ):
+        drifts.append(receipt_drift)
+
     drifts.extend(_skill_drifts(project_root))
 
     path_probe = _path_binary_probe(run=subprocess.run)
-    if path_probe.value is None and not path_probe.absent:
-        drifts.append(Drift("path-binary", f"UNVERIFIABLE: {path_probe.error}"))
+    if path_probe.value is None:
+        drifts.append(Drift("path-binary", path_probe.error))
     elif path_probe.value is not None and locked not in (
         "UNVERIFIABLE",
         path_probe.value,
@@ -362,8 +449,8 @@ def _check_with_versions(project_root: Path) -> tuple[Versions, tuple[Drift, ...
         drifts.append(
             Drift(
                 "path-binary",
-                f"PATH graphify {path_probe.value} != locked {locked} — update "
-                "the user-global mise pin",
+                f"path-binary {path_probe.path} reports {path_probe.value} != "
+                f"locked {locked} — update the user-global mise pin",
             )
         )
 
@@ -373,31 +460,63 @@ def _check_with_versions(project_root: Path) -> tuple[Versions, tuple[Drift, ...
         latest=latest_probe.value,
         path_binary=path_probe.value,
     )
-    return versions, tuple(drifts)
+    return versions, tuple(drifts), path_probe.path
 
 
-def check(project_root: Path) -> tuple[Drift, ...]:
+def check(project_root: Path, *, offline: bool = False) -> tuple[Drift, ...]:
     """Return every read-only Graphify currency and skill-surface drift."""
-    return _check_with_versions(project_root)[1]
+    return _check_with_versions(project_root, offline=offline)[1]
 
 
-def _refresh_skills(project_root: Path) -> None:
+def _run(command: list[str], *, project_root: Path) -> None:
+    """Run one post-sync CLI action in a fresh uv interpreter."""
     try:
-        written = graphify_skill.refresh_skills(project_root)
-    except (
-        KeyError,
-        ModuleNotFoundError,
-        FileNotFoundError,
-        ValueError,
-        OSError,
-    ) as exc:
-        message = f"graphify skill refresh failed: {exc}"
+        result = subprocess.run(
+            command,
+            cwd=project_root,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=_UV_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        message = f"{' '.join(command)} failed: {exc}"
         raise GraphifyCurrencyError(message) from exc
-    if written:
-        for path in written:
-            sys.stdout.write(f"skill refreshed -> {path}\n")
-    else:
-        sys.stdout.write(f"graphify skills current ({installed_version()})\n")
+    if result.stdout:
+        sys.stdout.write(result.stdout)
+    if result.stderr:
+        sys.stderr.write(result.stderr)
+    if result.returncode != 0:
+        message = f"{' '.join(command)} exited {result.returncode}"
+        raise GraphifyCurrencyError(message)
+
+
+def _refresh_and_check_fresh(project_root: Path) -> None:
+    _run(
+        [
+            "uv",
+            "run",
+            "--project",
+            "python",
+            "dotfiles-setup",
+            "graphify",
+            "refresh-skills",
+        ],
+        project_root=project_root,
+    )
+    _run(
+        [
+            "uv",
+            "run",
+            "--project",
+            "python",
+            "dotfiles-setup",
+            "graphify",
+            "check",
+            "--offline",
+        ],
+        project_root=project_root,
+    )
 
 
 def _require_updated_lock(updated: str, latest: str) -> None:
@@ -416,8 +535,9 @@ def graphify_update_main(project_root: Path) -> int:
         if Version(latest) > Version(locked):
             sys.stdout.write(f"graphifyy locked {locked}, latest {latest}\n")
             notes = release_notes_between(locked, latest, run=subprocess.run)
-            receipt = write_release_receipt(project_root, notes, high=latest)
-            sys.stdout.write(f"release notes -> {receipt} ({len(notes)} releases)\n")
+            receipts = write_release_receipts(project_root, notes)
+            for receipt in receipts:
+                sys.stdout.write(f"release notes -> {receipt}\n")
             upgrade_lock(project_root, run=subprocess.run)
             updated = locked_version(project_root)
             _require_updated_lock(updated, latest)
@@ -433,22 +553,43 @@ def graphify_update_main(project_root: Path) -> int:
                 f"graphifyy locked {locked} is ahead of latest {latest}; no downgrade\n"
             )
 
-        _refresh_skills(project_root)
+        _refresh_and_check_fresh(project_root)
     except (GraphifyCurrencyError, InvalidVersion) as exc:
         sys.stderr.write(f"graphify update failed: {exc}\n")
         return 1
     return 0
 
 
-def graphify_check_main(project_root: Path) -> int:
+def graphify_check_main(project_root: Path, *, offline: bool = False) -> int:
     """Print Graphify currency drift and return nonzero when any exists."""
-    versions, drifts = _check_with_versions(project_root)
-    latest = versions.latest if versions.latest is not None else "UNVERIFIABLE"
+    versions, drifts, path_binary = _check_with_versions(
+        project_root,
+        offline=offline,
+    )
+    latest = (
+        "SKIPPED (offline)"
+        if offline
+        else versions.latest
+        if versions.latest is not None
+        else "UNVERIFIABLE"
+    )
     sys.stdout.write(f"graphifyy locked {versions.locked}, latest {latest}\n")
+    path_version = versions.path_binary or "UNVERIFIABLE"
+    sys.stdout.write(
+        f"graphify path-binary: {path_binary or 'UNVERIFIABLE'} "
+        f"(version={path_version})\n"
+    )
     for drift in drifts:
         sys.stdout.write(f"graphify drift [{drift.kind}] {drift.detail}\n")
     if not drifts:
         sys.stdout.write("graphify currency current\n")
+    if not offline:
+        graphify = importlib.import_module("dotfiles_setup.graphify")
+        health = graphify.graphify_health(project_root)
+        sys.stdout.write(
+            f"graphify-health: {health.status} "
+            f"(runtime={health.runtime_version}) {health.detail}\n"
+        )
     return 1 if drifts else 0
 
 

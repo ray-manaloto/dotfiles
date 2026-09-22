@@ -33,7 +33,7 @@ _UNEXPECTED_WRITE = "unexpected write"
 
 @pytest.fixture
 def fake_package(tmp_path: Path) -> Path:
-    """A synthetic graphify package: skill files + one references bundle."""
+    """A synthetic graphify package with both progressive managed platforms."""
     pkg = tmp_path / "fake_graphify_pkg"
     pkg.mkdir()
     (pkg / "skill.md").write_text("claude bundle body", encoding="utf-8")
@@ -42,6 +42,9 @@ def fake_package(tmp_path: Path) -> Path:
     refs = pkg / "skills" / "claude" / "references"
     refs.mkdir(parents=True)
     (refs / "one.md").write_text("reference one", encoding="utf-8")
+    codex_refs = pkg / "skills" / "codex" / "references"
+    codex_refs.mkdir(parents=True)
+    (codex_refs / "codex.md").write_text("codex reference", encoding="utf-8")
     return pkg
 
 
@@ -59,7 +62,7 @@ def patched_graphify(
         "codex": {
             "skill_file": "skill-codex.md",
             "skill_dst": Path(".codex") / "skills" / "graphify" / "SKILL.md",
-            # No skill_refs -> monolith, matches graphify's real codex entry.
+            "skill_refs": "codex",
         },
         "agents": {
             "skill_file": "skill-agents.md",
@@ -118,6 +121,7 @@ def test_known_platforms_raises_when_graphify_is_not_importable(
 @pytest.mark.usefixtures("patched_graphify")
 def test_resolve_placement_computes_the_project_relative_destination(
     tmp_path: Path,
+    fake_package: Path,
 ) -> None:
     project_dir = tmp_path / "project"
     placement = graphify_skill.resolve_placement("codex", project_dir=project_dir)
@@ -126,8 +130,7 @@ def test_resolve_placement_computes_the_project_relative_destination(
         == project_dir / ".codex" / "skills" / "graphify" / "SKILL.md"
     )
     assert placement.skill_src.name == "skill-codex.md"
-    # codex has no skill_refs in the fixture, matching graphify's real entry.
-    assert placement.refs_src is None
+    assert placement.refs_src == fake_package / "skills" / "codex" / "references"
 
 
 @pytest.mark.usefixtures("patched_graphify")
@@ -331,7 +334,10 @@ def test_install_skill_writes_nothing_outside_its_own_skill_dir(
 
 
 @pytest.mark.usefixtures("patched_graphify")
-def test_install_skill_backs_up_a_differing_existing_file(tmp_path: Path) -> None:
+def test_install_skill_backs_up_a_differing_existing_file_outside_managed_dir(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     project_dir = tmp_path / "project"
     dst = project_dir / ".codex" / "skills" / "graphify" / "SKILL.md"
     dst.parent.mkdir(parents=True)
@@ -339,9 +345,13 @@ def test_install_skill_backs_up_a_differing_existing_file(tmp_path: Path) -> Non
 
     graphify_skill.install_skill("codex", project_dir=project_dir)
 
-    backup = dst.parent / "SKILL.md.bak"
+    backups = list((project_dir / ".agent/graphify/backups").glob("codex-SKILL.md.*"))
+    assert len(backups) == 1
+    backup = backups[0]
     assert backup.read_text(encoding="utf-8") == "a hand-edited local copy"
     assert dst.read_text(encoding="utf-8") == "codex bundle body"
+    assert not (dst.parent / "SKILL.md.bak").exists()
+    assert f"skill backup -> {backup}" in capsys.readouterr().out
 
 
 @pytest.mark.usefixtures("patched_graphify")
@@ -356,6 +366,7 @@ def test_install_skill_does_not_back_up_an_identical_existing_file(
     graphify_skill.install_skill("codex", project_dir=project_dir)
 
     assert not (dst.parent / "SKILL.md.bak").exists()
+    assert not (project_dir / ".agent/graphify/backups").exists()
 
 
 @pytest.mark.usefixtures("patched_graphify")
@@ -364,7 +375,7 @@ def test_install_skill_replaces_a_hand_edited_references_sidecar_without_backup(
 ) -> None:
     """references/ replacement is DELIBERATELY asymmetric with SKILL.md's.
 
-    No diff-check, no `.bak` — it mirrors graphify's own
+    No diff-check, no sidecar backup — it mirrors graphify's own
     `_install_skill_references`, which does the same unconditional
     rmtree+copytree. See the `install_skill` docstring for why.
     """
@@ -411,8 +422,10 @@ def _seed_current_skill_bytes_with_old_stamps(project_dir: Path) -> bytes:
     (claude_dir / ".graphify_version").write_text("0.0.1", encoding="utf-8")
 
     codex_dir = project_dir / ".codex" / "skills" / "graphify"
-    codex_dir.mkdir(parents=True)
+    codex_refs = codex_dir / "references"
+    codex_refs.mkdir(parents=True)
     (codex_dir / "SKILL.md").write_text("codex bundle body", encoding="utf-8")
+    (codex_refs / "codex.md").write_text("codex reference", encoding="utf-8")
     (codex_dir / ".graphify_version").write_text("0.0.1", encoding="utf-8")
 
     agents_dir = project_dir / ".agents" / "skills" / "graphify"
@@ -510,6 +523,32 @@ def test_check_skills_names_each_drift_reason(tmp_path: Path) -> None:
         ("claude", "references/ differs"),
         ("codex", "stamp 0.0.1 != installed 9.9.9"),
         ("agents", "missing"),
+    ]
+
+
+@pytest.mark.parametrize("damage", ["missing", "corrupt"])
+@pytest.mark.usefixtures("patched_graphify")
+def test_check_skills_flags_missing_or_corrupt_codex_references(
+    tmp_path: Path,
+    damage: str,
+) -> None:
+    project_dir = tmp_path / "project"
+    _seed_current_skill_bytes_with_old_stamps(project_dir)
+    graphify_skill.refresh_skills(project_dir)
+    refs = project_dir / ".codex/skills/graphify/references"
+    if damage == "missing":
+        shutil.rmtree(refs)
+    else:
+        (refs / "codex.md").write_text("locally changed", encoding="utf-8")
+
+    drifts = graphify_skill.check_skills(project_dir)
+    codex_refs = [
+        drift
+        for drift in drifts
+        if drift.platform == "codex" and drift.path.name == "references"
+    ]
+    assert [(drift.reason) for drift in codex_refs] == [
+        "missing" if damage == "missing" else "references/ differs"
     ]
 
 

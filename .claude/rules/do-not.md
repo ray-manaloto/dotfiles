@@ -39,9 +39,10 @@ in this repo. Control arms and case history for each entry:
    reviewed skill bytes and stamps. `CLAUDE_CONFIG_DIR` is not containment.
    Never run `graphify hook install` or `graphify --watch`.
 
-   The vendor `agents` platform is skill-only, but this repo deliberately keeps
-   a smaller `DELIBERATE STUB`; installing that bundle would overwrite the
-   enforcement surface. Run installer probes only in a throwaway directory.
+   Only `graphify install --project --platform agents` is skill-only; the
+   separate `graphify agents install` subcommand also writes root `AGENTS.md`.
+   This repo keeps a smaller `DELIBERATE STUB`; installing either vendor bundle
+   would overwrite it. Run installer probes only in a throwaway directory.
 
 9. **Do NOT commit — or WRITE — onto the default branch. Branch FIRST.** Create
    the branch *before* the first edit, then `mise run ship`. It has happened

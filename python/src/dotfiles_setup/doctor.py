@@ -1164,10 +1164,10 @@ def check_graphify_skill_surface(setup: Setup) -> list[str]:
       tracked, so `git diff` would also show it, but only at the next
       commit — this still needs to say so every session.
 
-    Package, lock, PATH-binary, stamp, and managed-byte comparisons delegate to
-    :func:`dotfiles_setup.graphify_currency.check`, the same function behind
-    ``mise run graphify-check``. Keeping one implementation prevents the
-    operator and SessionStart doctor from disagreeing about currency.
+    Package, lock, receipt, ambient-PATH binary, stamp, and managed-byte
+    comparisons delegate to :func:`dotfiles_setup.graphify_currency.check` in
+    offline mode. SessionStart therefore never reaches the network or graph
+    health while retaining every local currency gate.
     """
     baseline = _str_keys(setup.baseline.get("graphify"))
     findings: list[str] = [
@@ -1175,7 +1175,9 @@ def check_graphify_skill_surface(setup: Setup) -> list[str]:
         for rel in _str_list(baseline.get("required_skill_files"))
         if not (setup.repo_root / rel).is_file()
     ]
-    findings.extend(drift.detail for drift in graphify_currency_check(setup.repo_root))
+    findings.extend(
+        drift.detail for drift in graphify_currency_check(setup.repo_root, offline=True)
+    )
     stub_file = baseline.get("stub_file")
     stub_marker = baseline.get("stub_marker")
     if isinstance(stub_file, str) and isinstance(stub_marker, str):

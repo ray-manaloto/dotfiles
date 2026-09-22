@@ -39,7 +39,11 @@ _SPAWN_ERROR_MESSAGE = "cannot spawn"
 @pytest.fixture(autouse=True)
 def healthy_graphify_currency(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep unrelated doctor checks independent of host Graphify state."""
-    monkeypatch.setattr(doctor, "graphify_currency_check", lambda _root: ())
+    monkeypatch.setattr(
+        doctor,
+        "graphify_currency_check",
+        lambda _root, *, offline: () if offline else pytest.fail("doctor went online"),
+    )
 
 
 # A baseline mirroring the shipped doctor.toml closely enough that a check
@@ -1135,13 +1139,16 @@ def test_graphify_skill_surface_delegates_currency_checks(
     monkeypatch.setattr(
         doctor,
         "graphify_currency_check",
-        lambda root: (
-            Drift("stamp", f"{root}/.codex stamp drift — run graphify-update"),
+        lambda root, *, offline: (
+            Drift(
+                "stamp",
+                f"{root}/.codex stamp drift — run graphify-update (offline={offline})",
+            ),
         ),
     )
     setup = _setup(repo_root=tmp_path, baseline={"graphify": _GRAPHIFY_BASELINE})
     assert doctor.check_graphify_skill_surface(setup) == [
-        f"{tmp_path}/.codex stamp drift — run graphify-update"
+        f"{tmp_path}/.codex stamp drift — run graphify-update (offline=True)"
     ]
 
 

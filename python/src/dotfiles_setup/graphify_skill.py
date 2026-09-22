@@ -30,7 +30,9 @@ isolated tests.
 from __future__ import annotations
 
 import shutil
+import sys
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -58,6 +60,7 @@ _DIST_NAME = "graphifyy"
 
 MANAGED_PLATFORMS: tuple[str, ...] = ("claude", "codex")
 STAMP_ONLY_PLATFORMS: tuple[str, ...] = ("agents",)
+BACKUP_DIR = Path(".agent/graphify/backups")
 
 
 class UnsafePlacementError(ValueError):
@@ -307,11 +310,11 @@ def install_skill(platform: str, *, project_dir: Path) -> Path:
     ``AGENTS.md``/``CLAUDE.md`` append, no ``.codex/hooks.json`` patch.
 
     A destination that already differs from the packaged source is backed up
-    to ``SKILL.md.bak`` first (mirrors graphify's own installer, which added
-    this after a wholesale-replace destroyed a locally hand-edited SKILL.md
-    with no warning). SKILL.md itself is written last via a temp-file +
-    atomic rename, so an interrupted install never leaves a half-written
-    SKILL.md in place.
+    below ``.agent/graphify/backups/`` first. Keeping the residual outside the
+    managed skill directory avoids untracked ``SKILL.md.bak`` noise while
+    retaining the locally edited bytes for explicit operator review. SKILL.md
+    itself is written last via a temp-file + atomic rename, so an interrupted
+    install never leaves a half-written SKILL.md in place.
 
     The ``references/`` sidecar deliberately gets NO diff-check or backup —
     it is unconditionally ``rmtree``'d and recopied on every install. This
@@ -340,8 +343,12 @@ def install_skill(platform: str, *, project_dir: Path) -> Path:
         placement.skill_dst.exists()
         and placement.skill_dst.read_bytes() != placement.skill_src.read_bytes()
     ):
-        backup = placement.skill_dst.parent / f"{placement.skill_dst.name}.bak"
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S.%fZ")
+        backup_dir = project_dir / BACKUP_DIR
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        backup = backup_dir / f"{platform}-SKILL.md.{timestamp}"
         shutil.copy2(placement.skill_dst, backup)
+        sys.stdout.write(f"skill backup -> {backup}\n")
 
     tmp_dst = placement.skill_dst.parent / f"{placement.skill_dst.name}.tmp"
     shutil.copy(placement.skill_src, tmp_dst)
@@ -367,3 +374,24 @@ def refresh_skills(project_dir: Path) -> tuple[Path, ...]:
         if platform in drifted
     )
     return tuple(written)
+
+
+def graphify_skill_refresh_main(project_root: Path) -> int:
+    """Refresh managed surfaces in the caller's fresh interpreter."""
+    try:
+        written = refresh_skills(project_root)
+    except (
+        KeyError,
+        ModuleNotFoundError,
+        FileNotFoundError,
+        UnsafePlacementError,
+        OSError,
+    ) as exc:
+        sys.stderr.write(f"graphify skill refresh failed: {exc}\n")
+        return 1
+    if written:
+        for path in written:
+            sys.stdout.write(f"skill refreshed -> {path}\n")
+    else:
+        sys.stdout.write(f"graphify skills current ({_installed_version()})\n")
+    return 0

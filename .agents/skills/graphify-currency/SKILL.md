@@ -10,8 +10,8 @@ Use the smallest task that matches the state you need to change:
 
 | Task | Use it when | Writes |
 |---|---|---|
-| `mise run graphify-check` | Diagnose currency or skill drift. The doctor calls the same checker. | Nothing. Returns 1 on any unverifiable or drifted surface. |
-| `mise run graphify-update` | Move the uv lock to `mise latest pipx:graphifyy`, or repair managed skill bytes/stamps when the lock is already current. | On a version move: the release-note receipt, `python/uv.lock`, and the project environment. Always repairs the managed `--platform claude`/`--platform codex` skill surfaces and all three stamps when needed. |
+| `mise run graphify-check` | Diagnose currency or skill drift and print graph health. The doctor calls the offline form of the same checker. | Nothing. Returns 1 on any unverifiable or drifted currency surface; graph health is an informational line with its own typed status. |
+| `mise run graphify-update` | Move the uv lock to `mise latest pipx:graphifyy`, or repair managed skill bytes/stamps when the lock is already current. | On a version move: one tracked release receipt per tag, `python/uv.lock`, and the project environment. Always repairs the managed `--platform claude`/`--platform codex` skill surfaces and all three stamps when needed. |
 | `mise run graphify-rebuild` | Re-extract the repository graph after source changes. | `graphify-out/` only; success additionally requires `graphify-health: fresh`. |
 | `mise run graphify-upgrade` | Perform a complete operator upgrade. | Runs update, then rebuild, sequentially. The first nonzero return code stops the composite. |
 
@@ -24,12 +24,17 @@ ordering mechanism because dependencies may run in parallel.
 
 Graphify is pre-1.0 and has shipped silent data-loss defects. Before a version
 move, `graphify-update` fetches every GitHub release in `(locked, latest]`
-and writes
-`.agent/graphify/release-notes-<latest>.md`. The directory is gitignored.
-The task prints the receipt path and release count before native
+and writes one tracked `docs/receipts/graphify/<version>.md` per release. Each
+file records the tag, `publishedAt`, verbatim body, and the command that wrote
+it. The task prints every receipt path before native
 `uv lock --project python --upgrade-package graphifyy` and
 `uv sync --project python` run. A missing latest version or failed release
 fetch stops before lock mutation.
+
+The offline checker requires a receipt for the exact locked version. This is
+the CI backstop for a Renovate lockfile-maintenance re-resolution: a lock move
+without a new tracked receipt fails with `receipt-missing` even when the new
+lock equals latest.
 
 When locked equals latest, update prints `already current`, skips the receipt
 and uv commands, and still refreshes skills/stamps. That path repairs a stale
@@ -39,15 +44,19 @@ stamp without inventing a dependency change.
 
 The package bundles selected by `--platform claude` and `--platform codex` are
 reviewed vendor bytes.
-`graphify_skill.refresh_skills` copies those bundles and their packaged
-references, then stamps them with the installed distribution version. The
+After `uv sync`, an internal `graphify refresh-skills` CLI runs in a fresh
+`uv run --project python` process, then a second fresh process runs
+`graphify check --offline`. This prevents cached placement metadata from the
+old package being combined with the newly installed package bytes. The refresh
+copies the bundles and their packaged references, then stamps them. The
 `agents` surface is stamp-only: its `DELIBERATE STUB` stays byte-identical
 and no `references/` directory is created.
 
-A differing destination `SKILL.md` is copied to `SKILL.md.bak` before
-replacement. After a reviewed update, inspect the backup to understand the
-discarded local delta, then remove it if it should not be committed. A current
-surface performs no writes and creates no backup.
+A differing destination `SKILL.md` is copied to
+`.agent/graphify/backups/<platform>-SKILL.md.<timestamp>` before replacement,
+and the task prints that path. No `SKILL.md.bak` is left beside a managed
+surface. The only manual decision is whether the retained local delta mattered;
+a current surface performs no writes and creates no backup.
 
 ## Why the native project installer is excluded
 
@@ -57,31 +66,70 @@ probe showed that `--platform claude` also writes root `CLAUDE.md` and
 `AGENTS.md` and `.codex/hooks.json`. Those are broader configuration
 mutations than skill currency.
 
-The vendor `agents` platform is skill-only, but this repository deliberately
-uses the smaller `.agents/skills/graphify/SKILL.md` redirect stub. Installing
-the vendor bundle there would overwrite the enforcement surface rather than
-repair it. The sanctioned `graphify-update` path therefore manages full bytes
-for `claude`/`codex` and only the version stamp for `agents`.
+Only `graphify install --project --platform agents` is skill-only. The separate
+`graphify agents install` subcommand also writes root `AGENTS.md`. This
+repository deliberately uses the smaller `.agents/skills/graphify/SKILL.md`
+redirect stub, so either vendor bundle would overwrite the enforcement surface.
+
+Antigravity's project installer is also excluded: it targets the same
+`.agents/skills/graphify/**` tree, adds a graphify.md file to each of the `.agents`
+rules and workflows directories, and its vendor rules prescribe bare Graphify
+commands. It makes no `$HOME` writes with `--project`, but still collides with
+this repository's deliberate stub and mise-only command policy.
 
 ## Zero-token boundary
 
 These four tasks use deterministic package metadata, GitHub release data,
 native uv operations, filesystem comparison/copy, AST extraction, and graph
-health. Keep model-backed labeling outside this workflow: never run
+health. An AST test scans the repository-owned subprocess surface and permits
+only `mise`, `gh`, `uv`, the ambient version probe, and the exact rebuild argv.
+Keep model-backed labeling outside this workflow: never run
 `graphify label` or `--dedup-llm` as part of currency or rebuild work.
 The installed package's `graphify.llm` module around line 3512 can silently
 escalate to the `claude-cli` backend
 when no API-key backend is available, so an apparently unconfigured label
 operation can still spend agent tokens.
 
-The only deliberate PATH probe is `graphify --version` inside
-`graphify-check`; rebuild resolves the project-locked executable through
-`uv run --project python`.
+The PATH probe is the binary an agent shell resolves: the ambient PATH captured
+at SessionStart in `DOTFILES_AMBIENT_PATH`. It prints the resolved path and
+runs that exact file with the same PATH. This is deliberately different from
+the project venv's Graphify used by `uv run --project python`.
+
+The rebuild subprocess removes every known LLM-provider credential/backend
+selector and forces the project venv to the front of PATH. Installed Graphify
+0.9.65 ignores `--no-label` on `update`, so no such flag is passed. Residual:
+PATH must remain available for Graphify/git, and a future vendor update could
+still discover the keyless `claude` CLI fallback. The environment scrub reduces
+provider reachability; the AST argv gate is the repository-owned hard boundary.
+
+`graphify check-update` is deliberately not wired. It only inspects a
+`needs_update` sentinel produced by the banned watch/LLM path and always exits
+0, so it is not a currency or health gate.
+
+## Stable operator output
+
+- `mise run graphify-check`: `graphifyy locked <v>, latest <v>`,
+  `graphify path-binary: <resolved-path> (version=<v>)`,
+  `graphify currency current`, and `graphify-health: <status> ...`; rc 0 means
+  currency is current, while any `graphify drift [...]` line means rc 1.
+- `uv run --project python dotfiles-setup graphify check --offline`: latest is
+  `SKIPPED (offline)`; it emits no network or graph-health probe and returns 0
+  only when every local axis passes.
+- `mise run graphify-update`: either `already current` or one
+  `release notes -> docs/receipts/graphify/<v>.md` line per release, followed
+  by `graphifyy lock updated ...`, refresh/current output, and the offline
+  check's `graphify currency current`; rc 0 only after the fresh-process check.
+- `mise run graphify-rebuild`: rebuild output followed by
+  `graphify-health: fresh ...`; rc 0 only for fresh health.
+- `mise run graphify-upgrade`: the update lines followed by rebuild/fresh-health
+  lines; the first nonzero rc stops the sequence.
 
 ## Completion criteria
 
-- `mise run graphify-check` returns 0.
+- `mise run graphify-check` returns 0 and prints the ambient resolved path.
+- `docs/receipts/graphify/<locked>.md` exists and is tracked.
 - The three `.graphify_version` files equal the installed/locked version.
 - The `claude` and `codex` bundle bytes equal the installed package.
 - The `agents` stub still contains `DELIBERATE STUB` and has no references.
-- After a requested rebuild, `mise run graphify-health` reports `fresh`.
+- The health line printed by `graphify-check` is read separately from its
+  currency rc; after a requested rebuild it reports `fresh`.

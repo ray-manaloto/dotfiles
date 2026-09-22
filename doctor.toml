@@ -189,6 +189,8 @@ max_chars = 48110
 [graphify]
 # The graphify skill surface's REVIEWED, deliberate shape (issue: see the
 # `graphify_skill_surface` hk step for the commit-time twin of this check).
+# Currency delegation is deliberately offline: SessionStart never runs
+# `mise latest` or graph health, but still gates the tracked release receipt.
 # `.claude/skills/graphify/SKILL.md` is the full installed Claude Code
 # bundle. `.agents/skills/graphify/SKILL.md` is a DELIBERATE hand-authored
 # redirect stub carrying the `stub_marker` below — NOT `graphify agents

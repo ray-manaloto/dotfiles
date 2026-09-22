@@ -13,12 +13,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
 from enum import StrEnum
 from importlib.metadata import PackageNotFoundError, version
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 from kb_setup.graph import GraphifyBuildReceipt
 
@@ -26,14 +27,35 @@ from dotfiles_setup import codec
 from dotfiles_setup.child_env import without_env_diff
 from dotfiles_setup.graphify_currency import GraphifyCurrencyError, locked_version
 
-if TYPE_CHECKING:
-    from pathlib import Path
-
 _DEFAULT_BUDGET = 2000
 _GRAPH_SUBDIR = "graphify-out"
 _GRAPH_FILE = "graph.json"
 _BUILD_RECEIPT = "build-receipt.json"
 _MAX_AGENT_OUTPUT_BYTES = 65_536
+
+# Every provider credential or backend selector read by Graphify 0.9.65's
+# backend detection, plus the additional provider keys named by this repo's
+# zero-token policy. Bound by workflow.graphify-zero-token-boundary.
+GRAPHIFY_REBUILD_SCRUB_ENV: tuple[str, ...] = (
+    "GEMINI_API_KEY",
+    "GOOGLE_API_KEY",
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "XAI_API_KEY",
+    "GROQ_API_KEY",
+    "OPENROUTER_API_KEY",
+    "MISTRAL_API_KEY",
+    "DEEPSEEK_API_KEY",
+    "MOONSHOT_API_KEY",
+    "OLLAMA_API_KEY",
+    "AZURE_OPENAI_API_KEY",
+    "AZURE_OPENAI_ENDPOINT",
+    "AWS_PROFILE",
+    "AWS_REGION",
+    "AWS_DEFAULT_REGION",
+    "OLLAMA_BASE_URL",
+    "OLLAMA_HOST",
+)
 
 
 class GraphifyError(RuntimeError):
@@ -398,7 +420,12 @@ def graphify_health_main(project_root: Path, *, output_json: bool = False) -> in
     return 0 if result.ok else 3
 
 
-def _run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+def _run(
+    args: list[str],
+    *,
+    cwd: Path,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     """Run graphify and capture text output (the sole external boundary).
 
     The child does not inherit ``__MISE_DIFF``: graphify writes artifacts we
@@ -411,8 +438,21 @@ def _run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
         check=False,
         capture_output=True,
         text=True,
-        env=without_env_diff(),
+        env=without_env_diff() if env is None else env,
     )
+
+
+def _rebuild_env() -> dict[str, str]:
+    """Return a provider-scrubbed environment with this uv venv first."""
+    env = without_env_diff()
+    for name in GRAPHIFY_REBUILD_SCRUB_ENV:
+        env.pop(name, None)
+    venv_bin = str(Path(sys.executable).parent)
+    inherited = env.get("PATH", "").split(os.pathsep)
+    env["PATH"] = os.pathsep.join(
+        [venv_bin, *(entry for entry in inherited if entry and entry != venv_bin)]
+    )
+    return env
 
 
 def build_query_args(
@@ -667,7 +707,10 @@ def prs_main(
 def update(project_root: Path, target: str = ".") -> subprocess.CompletedProcess[str]:
     """Rebuild the project graph via ``graphify update``.
 
-    AST-only re-extraction (no LLM, no API cost — see ``graphify --help``).
+    Installed 0.9.65 implements this as AST-only re-extraction. The child
+    receives no known LLM-provider credential/backend selector and resolves the
+    project venv first, but PATH remains available for git and therefore may
+    still expose the keyless ``claude`` CLI fallback to a future vendor release.
     This is the only sanctioned rebuild path in this repo (``mise run
     graphify-rebuild``), resolving graphify through the same ``uv run
     --project python`` pin as every other graphify task — but that
@@ -676,7 +719,11 @@ def update(project_root: Path, target: str = ".") -> subprocess.CompletedProcess
     machine (a bare ``graphify update .``, resolving the user-global PATH
     pin). See ``graphify-first.md`` and ``_receipt_problem``'s docstring.
     """
-    return _run(["graphify", "update", target], cwd=project_root)
+    return _run(
+        ["graphify", "update", target],
+        cwd=project_root,
+        env=_rebuild_env(),
+    )
 
 
 def graphify_rebuild_main(project_root: Path, *, target: str = ".") -> int:

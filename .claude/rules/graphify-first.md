@@ -11,8 +11,10 @@ Before broad source search, run `mise run graphify-health`.
 - **Always the mise tasks, never a bare `graphify` on `PATH`.** Query with
   `mise run graphify-query`, rebuild with `mise run graphify-rebuild` — never
   `graphify query`/`graphify update` directly.
-- Use `mise run graphify-check` for read-only currency diagnosis and
-  `mise run graphify-upgrade` when package/skills and graph must move together.
+- Use `mise run graphify-check` for read-only currency diagnosis plus a typed
+  health line; it resolves the PATH binary from the ambient agent-shell PATH
+  captured at SessionStart, not from the uv venv. Use `mise run
+  graphify-upgrade` when package/skills and graph must move together.
 - Claude's permission deny also blocks the labeling command words anywhere in a
   Bash string, including the double-quoted grep shape whose backticks zsh ran.
 
@@ -55,9 +57,10 @@ on bare `PATH` resolves the **user-global** pin
 version** (`python/uv.lock`), which is what `graphify_health`'s
 `version drift` check compares against. `mise run pin-parity` now binds every
 repository-owned pin site, including the three tracked skill stamps. The
-user-global pin remains outside that registry by design; the shared
-`graphify-check`/doctor checker compares it with the lock and names the
-user-global mise fix when it drifts.
+user-global pin remains outside that registry by design; the shared checker
+compares the binary resolved from `DOTFILES_AMBIENT_PATH` with the lock and
+names the user-global mise fix when it drifts. SessionStart doctor invokes the
+offline form, so it never calls `mise latest` or probes graph health.
 
 The check reads whatever graphify package is installed in the process
 *checking* health right now. It says nothing about which binary actually
