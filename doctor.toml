@@ -189,6 +189,8 @@ max_chars = 48110
 [graphify]
 # The graphify skill surface's REVIEWED, deliberate shape (issue: see the
 # `graphify_skill_surface` hk step for the commit-time twin of this check).
+# Currency delegation is deliberately offline: SessionStart never runs
+# `mise latest` or graph health, but still gates the tracked release receipt.
 # `.claude/skills/graphify/SKILL.md` is the full installed Claude Code
 # bundle. `.agents/skills/graphify/SKILL.md` is a DELIBERATE hand-authored
 # redirect stub carrying the `stub_marker` below — NOT `graphify agents
@@ -205,12 +207,11 @@ stub_marker = "DELIBERATE STUB"
 # a ban this section carried until then). The ban guarded against a
 # codex-platform `graphify install` appending the line-budgeted root
 # AGENTS.md (do-not.md #8) — true of graphify's OWN installer, never true of
-# this repo's `dotfiles-setup graphify skill-install` / `mise run
-# graphify-skill-install -- codex`, which only ever copies
-# SKILL.md + references/ + a version stamp and never touches AGENTS.md
-# (`graphify_skill.py`, verified: it never calls graphify's
-# `_agents_install`). The path the ban forbade is now exactly the path this
-# repo's installer produces and commits, so `forbidden_paths` is gone. The
+# this repo's `mise run graphify-update`, whose `graphify_skill.py` library
+# copies only SKILL.md + references/ + a version stamp and never touches
+# AGENTS.md (verified: it never calls graphify's `_agents_install`). The path
+# the ban forbade is now exactly the path this repo manages and commits, so
+# `forbidden_paths` is gone. The
 # REAL hazard below is unaffected — it still fires unconditionally, vendor
 # install or not.
 

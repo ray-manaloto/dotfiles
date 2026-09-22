@@ -22,9 +22,9 @@ never called), so this repo's placement table cannot silently drift from
 what the installed graphify version itself declares.
 
 Platform and target directory are both parameters (never hard-coded), per
-``.claude/rules/agent-artifact-conventions.md`` rule 6 — this repo's own case
-(this repo's root) is only ever the CLI layer's *default*, in
-:func:`graphify_skill_install_main`.
+``.claude/rules/agent-artifact-conventions.md`` rule 6. The currency workflow
+passes this repository root explicitly and keeps this library reusable in
+isolated tests.
 """
 
 from __future__ import annotations
@@ -32,6 +32,7 @@ from __future__ import annotations
 import shutil
 import sys
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -56,6 +57,10 @@ _MISSING_GRAPHIFY_MESSAGE = (
 #: this module stamps and the version ``graphify_health`` reports about the
 #: running package can never name two different distributions.
 _DIST_NAME = "graphifyy"
+
+MANAGED_PLATFORMS: tuple[str, ...] = ("claude", "codex")
+STAMP_ONLY_PLATFORMS: tuple[str, ...] = ("agents",)
+BACKUP_DIR = Path(".agent/graphify/backups")
 
 
 class UnsafePlacementError(ValueError):
@@ -90,6 +95,15 @@ class SkillPlacement:
     skill_src: Path
     #: Absolute source references/ dir, or None for a monolith platform.
     refs_src: Path | None
+
+
+@dataclass(frozen=True)
+class SkillDrift:
+    """One packaged Graphify skill artifact that differs from the repo copy."""
+
+    platform: str
+    path: Path
+    reason: str
 
 
 def _require_graphify() -> ModuleType:
@@ -156,10 +170,8 @@ def resolve_placement(platform: str, *, project_dir: Path) -> SkillPlacement:
     Args:
         platform: A key of graphify's ``_PLATFORM_CONFIG`` (see
             :func:`known_platforms`).
-        project_dir: The directory this skill is scoped to. Has no default
-            here — the CLI layer (:func:`graphify_skill_install_main`)
-            defaults it to this repo's root, so a caller outside this repo
-            can still point it elsewhere.
+        project_dir: The directory this skill is scoped to. Has no default so
+            every caller makes the write boundary explicit.
 
     Raises:
         KeyError: ``platform`` is not one ``_PLATFORM_CONFIG`` declares —
@@ -213,6 +225,77 @@ def _installed_version() -> str:
         return "unknown"
 
 
+def _tree_snapshot(root: Path) -> dict[Path, bytes | None]:
+    """Return a content-and-shape snapshot for a references directory."""
+    snapshot: dict[Path, bytes | None] = {}
+    for path in sorted(root.rglob("*")):
+        relative = path.relative_to(root)
+        snapshot[relative] = None if path.is_dir() else path.read_bytes()
+    return snapshot
+
+
+def _stamp_drift(
+    platform: str, *, placement: SkillPlacement, installed: str
+) -> SkillDrift | None:
+    stamp = placement.skill_dst.parent / ".graphify_version"
+    if not stamp.is_file():
+        return SkillDrift(platform, stamp, "missing")
+    recorded = stamp.read_text(encoding="utf-8").strip()
+    if recorded != installed:
+        return SkillDrift(
+            platform,
+            stamp,
+            f"stamp {recorded} != installed {installed}",
+        )
+    return None
+
+
+def check_skills(project_dir: Path) -> tuple[SkillDrift, ...]:
+    """Read the managed skill surfaces and report drift without writing."""
+    installed = _installed_version()
+    drifts: list[SkillDrift] = []
+    for platform in MANAGED_PLATFORMS:
+        placement = resolve_placement(platform, project_dir=project_dir)
+        if not placement.skill_dst.is_file():
+            drifts.append(SkillDrift(platform, placement.skill_dst, "missing"))
+        elif placement.skill_dst.read_bytes() != placement.skill_src.read_bytes():
+            drifts.append(
+                SkillDrift(
+                    platform,
+                    placement.skill_dst,
+                    "SKILL.md differs from packaged",
+                )
+            )
+
+        if placement.refs_src is not None:
+            refs_dst = placement.skill_dst.parent / "references"
+            if not refs_dst.is_dir():
+                drifts.append(SkillDrift(platform, refs_dst, "missing"))
+            elif _tree_snapshot(refs_dst) != _tree_snapshot(placement.refs_src):
+                drifts.append(SkillDrift(platform, refs_dst, "references/ differs"))
+
+        if drift := _stamp_drift(platform, placement=placement, installed=installed):
+            drifts.append(drift)
+
+    for platform in STAMP_ONLY_PLATFORMS:
+        placement = resolve_placement(platform, project_dir=project_dir)
+        if drift := _stamp_drift(platform, placement=placement, installed=installed):
+            drifts.append(drift)
+    return tuple(drifts)
+
+
+def write_stamp(platform: str, *, project_dir: Path) -> Path:
+    """Write only the version stamp for a deliberate stamp-only platform."""
+    if platform not in STAMP_ONLY_PLATFORMS:
+        message = f"{platform!r} is not a stamp-only Graphify skill platform"
+        raise ValueError(message)
+    placement = resolve_placement(platform, project_dir=project_dir)
+    stamp = placement.skill_dst.parent / ".graphify_version"
+    stamp.parent.mkdir(parents=True, exist_ok=True)
+    stamp.write_text(f"{_installed_version()}\n", encoding="utf-8")
+    return stamp
+
+
 def install_skill(platform: str, *, project_dir: Path) -> Path:
     """Copy the packaged SKILL.md (+ references/ sidecar) into ``project_dir``.
 
@@ -227,11 +310,11 @@ def install_skill(platform: str, *, project_dir: Path) -> Path:
     ``AGENTS.md``/``CLAUDE.md`` append, no ``.codex/hooks.json`` patch.
 
     A destination that already differs from the packaged source is backed up
-    to ``SKILL.md.bak`` first (mirrors graphify's own installer, which added
-    this after a wholesale-replace destroyed a locally hand-edited SKILL.md
-    with no warning). SKILL.md itself is written last via a temp-file +
-    atomic rename, so an interrupted install never leaves a half-written
-    SKILL.md in place.
+    below ``.agent/graphify/backups/`` first. Keeping the residual outside the
+    managed skill directory avoids untracked ``SKILL.md.bak`` noise while
+    retaining the locally edited bytes for explicit operator review. SKILL.md
+    itself is written last via a temp-file + atomic rename, so an interrupted
+    install never leaves a half-written SKILL.md in place.
 
     The ``references/`` sidecar deliberately gets NO diff-check or backup —
     it is unconditionally ``rmtree``'d and recopied on every install. This
@@ -260,39 +343,55 @@ def install_skill(platform: str, *, project_dir: Path) -> Path:
         placement.skill_dst.exists()
         and placement.skill_dst.read_bytes() != placement.skill_src.read_bytes()
     ):
-        backup = placement.skill_dst.parent / f"{placement.skill_dst.name}.bak"
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S.%fZ")
+        backup_dir = project_dir / BACKUP_DIR
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        backup = backup_dir / f"{platform}-SKILL.md.{timestamp}"
         shutil.copy2(placement.skill_dst, backup)
+        sys.stdout.write(f"skill backup -> {backup}\n")
 
     tmp_dst = placement.skill_dst.parent / f"{placement.skill_dst.name}.tmp"
     shutil.copy(placement.skill_src, tmp_dst)
     tmp_dst.replace(placement.skill_dst)
 
     (placement.skill_dst.parent / ".graphify_version").write_text(
-        _installed_version(), encoding="utf-8"
+        f"{_installed_version()}\n", encoding="utf-8"
     )
     return placement.skill_dst
 
 
-def graphify_skill_install_main(
-    project_root: Path, *, platform: str, project_dir: Path | None = None
-) -> int:
-    """CLI entry point: ``dotfiles-setup graphify skill-install <platform>``.
+def refresh_skills(project_dir: Path) -> tuple[Path, ...]:
+    """Refresh drifted managed platforms and stamp-only platforms."""
+    drifted = {drift.platform for drift in check_skills(project_dir)}
+    written = [
+        install_skill(platform, project_dir=project_dir)
+        for platform in MANAGED_PLATFORMS
+        if platform in drifted
+    ]
+    written.extend(
+        write_stamp(platform, project_dir=project_dir)
+        for platform in STAMP_ONLY_PLATFORMS
+        if platform in drifted
+    )
+    return tuple(written)
 
-    ``project_dir`` defaults to ``project_root`` (this repo) — the one place
-    this repo's own case is hard-coded, per
-    ``.claude/rules/agent-artifact-conventions.md`` rule 6.
-    """
-    target = project_dir if project_dir is not None else project_root
+
+def graphify_skill_refresh_main(project_root: Path) -> int:
+    """Refresh managed surfaces in the caller's fresh interpreter."""
     try:
-        dst = install_skill(platform, project_dir=target)
-    except KeyError:
-        sys.stderr.write(
-            f"error: {platform!r} is not a platform graphify's own installer "
-            f"knows about. Known: {', '.join(known_platforms())}\n"
-        )
+        written = refresh_skills(project_root)
+    except (
+        KeyError,
+        ModuleNotFoundError,
+        FileNotFoundError,
+        UnsafePlacementError,
+        OSError,
+    ) as exc:
+        sys.stderr.write(f"graphify skill refresh failed: {exc}\n")
         return 1
-    except (ModuleNotFoundError, FileNotFoundError, UnsafePlacementError) as exc:
-        sys.stderr.write(f"error: {exc}\n")
-        return 1
-    sys.stdout.write(f"graphify skill installed -> {dst}\n")
+    if written:
+        for path in written:
+            sys.stdout.write(f"skill refreshed -> {path}\n")
+    else:
+        sys.stdout.write(f"graphify skills current ({_installed_version()})\n")
     return 0

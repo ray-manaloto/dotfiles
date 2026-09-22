@@ -53,6 +53,7 @@
       "Read(~/.pypirc)",
       "Read(.env)",
       "Read(.env.*)",
+      "Bash(*graphify label*)",
       "Bash(*.agentsview/config.toml*)",
       "Bash(*.codex/auth.json*)",
       "Bash(*gh/hosts.yml*)",

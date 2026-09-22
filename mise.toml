@@ -801,27 +801,39 @@ description = "Fail fast when the project graph or Graphify runtime is unusable"
 run = 'uv run --project python dotfiles-setup graphify health'
 
 [tasks.graphify-update]
-description = "Rebuild the project knowledge graph and stamp the graphify version that built it"
-# Thin caller (zero-bash-logic); logic in python/src/dotfiles_setup/graphify.py.
-# AST-only re-extraction (no LLM, no API cost). This is the ONLY sanctioned
-# way to rebuild the graph in this repo — it runs the SAME uv-venv-pinned
-# graphify `mise run graphify-query`/`graphify-health` resolve (0.9.61,
-# python/pyproject.toml), not the user-global PATH shim (see
-# graphify-first.md), and records the builder version so graphify_health can
-# catch a graph built by the wrong binary.
-# Pass a target: mise run graphify-update -- src/some/dir
+description = "Update the Graphify uv lock and managed skills, with release-note receipt"
+# Thin caller (zero-bash-logic); logic in graphify_currency.py. A version move
+# writes the pre-1.0 release-note receipt BEFORE native uv lock/sync; an already
+# current lock still repairs managed skill bytes and all three stamps.
+# Same ambient-PATH capture as graphify-check: the post-update offline check runs
+# in a child process and must see the user-global graphify pin, not fail UNVERIFIABLE.
+env = { DOTFILES_AMBIENT_PATH = "{{ get_env(name='DOTFILES_AMBIENT_PATH', default=env.PATH) }}" }
 run = 'uv run --project python dotfiles-setup graphify update'
 
-[tasks.graphify-skill-install]
-description = "Install/refresh one platform's graphify skill surface into this repo (never $HOME/AGENTS.md)"
-# Thin caller (zero-bash-logic); logic in
-# python/src/dotfiles_setup/graphify_skill.py. The repo-owned replacement for
-# the banned `graphify install`/`graphify <platform> install` (do-not.md #8):
-# copies the packaged SKILL.md + references/ + a .graphify_version stamp for
-# ONE platform, scoped to a project dir (default: this repo) — never touches
-# ~/.claude, never appends AGENTS.md/CLAUDE.md, never patches hooks.json.
-# Pass the platform: mise run graphify-skill-install -- claude
-run = 'uv run --project python dotfiles-setup graphify skill-install'
+[tasks.graphify-rebuild]
+description = "Rebuild the project graph AST-only, then require fresh health"
+# Deliberately separate from currency: graphify update's vendor nudge is mapped
+# here, and no skill or lock mutation occurs. Pass a target after `--`.
+run = 'uv run --project python dotfiles-setup graphify rebuild'
+
+[tasks.graphify-upgrade]
+description = "Update Graphify currency, then rebuild sequentially (first failure stops)"
+# Never express this with mise `depends`: dependencies may run in parallel.
+# The Python composite is the executable ordering contract.
+# Same ambient-PATH capture as graphify-check: the post-update offline check runs
+# in a child process and must see the user-global graphify pin, not fail UNVERIFIABLE.
+env = { DOTFILES_AMBIENT_PATH = "{{ get_env(name='DOTFILES_AMBIENT_PATH', default=env.PATH) }}" }
+run = 'uv run --project python dotfiles-setup graphify upgrade'
+
+[tasks.graphify-check]
+description = "Read-only Graphify lock/install/PATH/stamp/skill currency check"
+# The task captures the PATH `mise run` resolves into DOTFILES_AMBIENT_PATH so the
+# operator needs no env prefix. Inside a task that PATH is mise's repaired PATH,
+# which resolves the USER-GLOBAL graphify pin (~/.config/mise) — the axis this
+# check exists for (0.9.65 vs a 0.9.61 lock went unnoticed, 2026-09-22). A stale
+# shell ACTIVATION is the doctor's path-drift check (SessionStart capture), not this.
+env = { DOTFILES_AMBIENT_PATH = "{{ get_env(name='DOTFILES_AMBIENT_PATH', default=env.PATH) }}" }
+run = 'uv run --project python dotfiles-setup graphify check'
 
 [tasks.graphify-affected]
 description = "Blast radius: reverse-traverse the graph for what breaks if <node> changes"

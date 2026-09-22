@@ -19,6 +19,7 @@ import dataclasses
 import json
 import subprocess
 import sys
+from fnmatch import fnmatchcase
 from pathlib import Path
 
 import pytest
@@ -26,11 +27,24 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 from dotfiles_setup import doctor
+from dotfiles_setup.graphify_currency import Drift
 
 REPO_ROOT = Path(__file__).parent.parent
 
 #: Raised by the fail-open fixtures; a literal in a `raise` trips EM101.
 _CRASH_MESSAGE = "kaboom"
+_SPAWN_ERROR_MESSAGE = "cannot spawn"
+
+
+@pytest.fixture(autouse=True)
+def healthy_graphify_currency(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep unrelated doctor checks independent of host Graphify state."""
+    monkeypatch.setattr(
+        doctor,
+        "graphify_currency_check",
+        lambda _root, *, offline: () if offline else pytest.fail("doctor went online"),
+    )
+
 
 # A baseline mirroring the shipped doctor.toml closely enough that a check
 # reading it behaves as it does in production.
@@ -1088,7 +1102,7 @@ def test_graphify_skill_surface_is_silent_on_an_adopted_codex_install(
     _write_healthy_graphify_surface(tmp_path)
     (tmp_path / ".codex" / "skills" / "graphify").mkdir(parents=True)
     (tmp_path / ".codex" / "skills" / "graphify" / "SKILL.md").write_text(
-        "installed via mise run graphify-skill-install -- codex"
+        "managed via mise run graphify-update"
     )
     setup = _setup(repo_root=tmp_path, baseline={"graphify": _GRAPHIFY_BASELINE})
     assert doctor.check_graphify_skill_surface(setup) == []
@@ -1115,6 +1129,27 @@ def test_graphify_skill_surface_is_silent_without_a_baseline_section(
     """An absent `[graphify]` section covers nothing — the same seam #535 named."""
     setup = _setup(repo_root=tmp_path, baseline={})
     assert doctor.check_graphify_skill_surface(setup) == []
+
+
+def test_graphify_skill_surface_delegates_currency_checks(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _write_healthy_graphify_surface(tmp_path)
+    monkeypatch.setattr(
+        doctor,
+        "graphify_currency_check",
+        lambda root, *, offline: (
+            Drift(
+                "stamp",
+                f"{root}/.codex stamp drift — run graphify-update (offline={offline})",
+            ),
+        ),
+    )
+    setup = _setup(repo_root=tmp_path, baseline={"graphify": _GRAPHIFY_BASELINE})
+    assert doctor.check_graphify_skill_surface(setup) == [
+        f"{tmp_path}/.codex stamp drift — run graphify-update (offline=True)"
+    ]
 
 
 def test_every_check_function_is_actually_registered() -> None:
@@ -1226,6 +1261,25 @@ def test_the_sessionstart_hook_runs_the_doctor() -> None:
     commands = doctor.hook_commands(settings, "SessionStart")
     assert any("run doctor" in command for command in commands)
     assert all("CLAUDE_PROJECT_DIR" in command for command in commands)
+
+
+def test_claude_denies_the_label_command_even_inside_a_grep() -> None:
+    """The exact double-quoted grep accident shape must hit the deny glob.
+
+    ``hook_selfcheck`` drives the PreToolUse hook, not Claude's permission
+    engine. The whole-command ``Bash`` glob semantics come from the local
+    ``$CC/permissions.md`` corpus; this pins the live rule and both string arms.
+    """
+    settings = json.loads((REPO_ROOT / ".claude" / "settings.json").read_text())
+    rule = "Bash(*graphify label*)"
+    deny = set(settings["permissions"]["deny"])
+    assert rule in deny
+
+    pattern = rule.removeprefix("Bash(").removesuffix(")")
+    accident = 'grep -rn "Run `graphify label` to refresh" .'
+    safe_control = 'grep -rn "Run the skill refresh task" .'
+    assert fnmatchcase(accident, pattern)
+    assert not fnmatchcase(safe_control, pattern)
 
 
 def test_collect_reads_the_real_repo_without_touching_the_real_home(

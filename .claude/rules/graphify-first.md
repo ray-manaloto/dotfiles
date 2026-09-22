@@ -7,12 +7,18 @@ Before broad source search, run `mise run graphify-health`.
 - `missing`, `stale`, `corrupt`, version drift, warnings, or truncation: say the
   graph is unavailable and fall back to source. Never translate these states to
   an empty or complete answer. A `stale` graph names the fix in its own detail
-  line: `mise run graphify-update`.
+  line: `mise run graphify-rebuild`.
 - **Always the mise tasks, never a bare `graphify` on `PATH`.** Query with
-  `mise run graphify-query`, rebuild with `mise run graphify-update` — never
+  `mise run graphify-query`, rebuild with `mise run graphify-rebuild` — never
   `graphify query`/`graphify update` directly.
+- Use `mise run graphify-check` for read-only currency diagnosis plus a typed
+  health line; it resolves the PATH binary from the ambient agent-shell PATH
+  captured at SessionStart, not from the uv venv. Use `mise run
+  graphify-upgrade` when package/skills and graph must move together.
+- Claude's permission deny also blocks the labeling command words anywhere in a
+  Bash string, including the double-quoted grep shape whose backticks zsh ran.
 
-## `fresh` now means "built from HEAD" — it did not until 2026-09-13
+## `fresh` now means "no scanned-corpus change since the build"
 
 Health used to check only that the graph file existed, parsed, matched the schema,
 and that the INSTALLED graphify was the pinned version. **Nothing compared the
@@ -24,34 +30,49 @@ grepping. Two symbols a session needed that day — `plan_attest_main`,
 and the graph answered as though they did not exist. Measured against controls:
 `setup_parser` 76 hits, `handle_pr` 21, both subjects 0.
 
-`_staleness_problem` closes it by comparing `built_at_commit` — a field
-**graphify itself** writes from HEAD at export time
-(its own `graphify.export` module, via that package's `_git_head`) — against a
-HEAD read independently. Two sources,
-so both answers are reachable; that is exactly what the removed rebuild stamp
-below lacked.
+`_staleness_problem` closes it with two independent sources: Git says what
+changed after `built_at_commit` — a field **graphify itself** writes from HEAD
+at export time — while `graphify-out/manifest.json` says which relative paths
+Graphify scanned. Equality with HEAD is immediately fresh. Otherwise a
+manifest-listed path is stale for any change status; an unlisted path is stale
+only when newly added with an extension already present in the manifest. A
+modified or deleted unlisted path stays outside the corpus even when its
+extension matches a scanned file.
 
 ⚠️ **Ancestry is deliberately not the test.** This repo squash-merges, so a graph
 built on a PR branch records a commit that never enters main's history — the
 2026-08-31 graph's `b75fa3b` has six commits unreachable from HEAD and no branch
 contains it. An "is it an ancestor" check would report `stale` on nearly every
-graph: the mirror of the defect. Equality with HEAD is the whole test.
+graph: the mirror of the defect. Git compares the two endpoint trees instead;
+if the build commit is unknown to Git, health fails closed as `stale`.
+
+Graphify 0.9.65 made equality alone too strict. Measured on 2026-09-22, a
+`mise.toml`-only commit advanced HEAD from `122a4de1` to `45e09803`, while both
+ordinary update and `--force` reported no topology change and left
+`built_at_commit` untouched. Because `mise.toml` is not a manifest key, that
+no-op rebuild is now correctly fresh; a newly added file with a scanned
+extension would still be stale.
 
 A graph carrying no `built_at_commit` is `stale` too. The pinned runtime always
 writes it, so its absence means the bytes did not come from that runtime — and
-silence is what this axis exists to end. Uncommitted edits are out of scope:
-this answers "which commit built it", not "has anything changed since".
+silence is what this axis exists to end. A missing or unreadable manifest and
+an unknown build commit are also `stale`. Uncommitted edits are out of scope:
+this answers "what committed corpus changed since the build", not "is the worktree
+dirty".
 
 ## Nothing records WHICH graphify built the graph
 
-**The two installs are aligned as of 2026-09-14 — both 0.9.61.** `graphify`
+**The two installs are aligned again as of 2026-09-21 — both 0.9.65.** `graphify`
 on bare `PATH` resolves the **user-global** pin
 (`~/.config/mise/config.toml`, outside this repo's review);
-`mise run graphify-query`/`graphify-update` resolve **this repo's pinned
-version** (`python/pyproject.toml`), which is what `graphify_health`'s
-`version drift` check compares against. They agree today, but nothing keeps
-them in sync, so treat the alignment as a fact with a date on it, not an
-invariant.
+`mise run graphify-query`/`graphify-rebuild` resolve **this repo's locked
+version** (`python/uv.lock`), which is what `graphify_health`'s
+`version drift` check compares against. `mise run pin-parity` now binds every
+repository-owned pin site, including the three tracked skill stamps. The
+user-global pin remains outside that registry by design; the shared checker
+compares the binary resolved from `DOTFILES_AMBIENT_PATH` with the lock and
+names the user-global mise fix when it drifts. SessionStart doctor invokes the
+offline form, so it never calls `mise latest` or probes graph health.
 
 The check reads whatever graphify package is installed in the process
 *checking* health right now. It says nothing about which binary actually
@@ -59,15 +80,15 @@ The check reads whatever graphify package is installed in the process
 (a bare `graphify update .`) is indistinguishable from one built by the
 repo's pin, because nothing records who built it. **An earlier
 version of this rule claimed a rebuild stamp closed that gap; it did not —
-the stamp could only ever record whatever `graphify-update` itself always
+the stamp could only ever record whatever the rebuild itself always
 resolves, so the check it fed could never fail, and the one drift it
 existed to catch wrote no stamp at all. It was removed rather than kept as
 a check that always reports "fine".**
 
 So the guarantee here is **procedural, not enforced**: always run
-`mise run graphify-query`/`graphify-update`, never the bare binary, and
+`mise run graphify-query`/`graphify-rebuild`, never the bare binary, and
 `graphify-first.md`'s `version drift`/`stale` states only ever catch the
-*checking* process itself drifting (a broken `uv` env, a bad `pyproject.toml`
+*checking* process itself drifting (a broken `uv` env, a bad `uv.lock`
 edit) — not a graph built by the wrong installed graphify. Never run a
 global Graphify binary or installer as a substitute for the project tasks —
 the generated skill is reference material, repository tasks are

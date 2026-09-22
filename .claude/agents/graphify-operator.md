@@ -15,9 +15,10 @@ skills:
 
 Run exactly the ordered list of tasks handed by the caller. The current
 pipeline may include `mise run graphify-health`, `mise run graphify-update`,
-`mise run graphify-skill-install -- <platform>`, `mise run bakeoff`, and tasks
-added later as data. Never insert, omit, reorder, or rename a task. Never invoke
-a bare `graphify` binary; repository mise tasks own Graphify operations.
+`mise run graphify-check`, `mise run graphify-rebuild`, `mise run
+graphify-upgrade`, `mise run bakeoff`, and tasks added later as data. Never
+insert, omit, reorder, or rename a task. Never invoke a bare `graphify` binary;
+repository mise tasks own Graphify operations.
 
 Before the first task, read line 8 of `graphify-out/GRAPH_REPORT.md` when it
 exists and record the node/edge/community counts. Run each command with stdout

@@ -8,40 +8,34 @@ The list itself was moved out of `AGENTS.md` in session 2026-04-09c as part of a
 doc-size split — the root `AGENTS.md` was exceeding its size gate and this list
 was the largest self-contained block.
 
-## #8 — `graphify install` without `--project` mutates `~/.claude`
+## #8 — vendor Graphify installers mutate broader surfaces than their names imply
 
-Verified in the installed 0.9.20 `install.py` (2026-07-20). One flag separates
-safe from destructive:
+Re-probed against installed Graphify 0.9.65 on 2026-09-22 with a throwaway
+project and fake HOME. `install --project` avoids HOME writes, but it is not a
+skill-only boundary for most platforms:
 
-| Invocation | Scope |
+| Invocation | Project writes |
 |---|---|
-| `graphify claude install` | **project only** — `./CLAUDE.md` + `./.claude/settings.json` |
-| `graphify install --project` | **project only** — adds `./.claude/skills/graphify/**` + a block in `./.claude/CLAUDE.md` |
-| ⚠️ `graphify install` (no `--project`) | **mutates `~/.claude`** — ~43 KB of skill files, **appends a `# graphify` H1 to `~/.claude/CLAUDE.md`** (creating it if absent), and sprays `.graphify_version` stamps into every other installed platform's user skill dir |
+| `graphify install --project --platform claude` | `.claude/skills/graphify/**`, root `CLAUDE.md`, and `.claude/settings.json` hooks |
+| `graphify install --project --platform codex` | `.codex/skills/graphify/**`, root `AGENTS.md`, and `.codex/hooks.json` |
+| `graphify install --project --platform agents` | `.agents/skills/graphify/**` only |
+| `graphify install --project --platform antigravity` | `.agents/skills/graphify/**`, `.agents/rules/graphify.md`, and `.agents/workflows/graphify.md`; no HOME writes |
 
-**Control arm on the safe claim:** all **18** `Path.home()` call sites in
-`install.py` sit on `project=False` branches; the project-scoped call chain
-contains none. So the probe can distinguish the two paths — a scan that found
-zero `Path.home()` calls *everywhere* would have proved nothing.
+The similarly named platform subcommand is a different path:
+`graphify agents install` dispatches `install.py::_agents_platform_install`,
+which copies the Agents skill **and writes root `AGENTS.md`**. Therefore the
+skill-only statement applies only to `install --project --platform agents`.
 
-**`CLAUDE_CONFIG_DIR` is NOT containment.** It redirects the skill dir only; the
-`~/.claude/CLAUDE.md` write is hardcoded. Never run `graphify hook install` or
-`graphify --watch` either.
+Antigravity is still unsuitable here even though its project form stays out of
+HOME: it collides with the deliberate `.agents` redirect stub, and the vendor
+rules prescribe bare Graphify commands instead of this repository's mise tasks.
 
-### It generalises to every platform, in two flavours (0.9.22, 2026-07-21)
-
-- ⚠️ **`graphify codex install` breaks our lint gate with OR without
-  `--project`.** Both paths call `_agents_install` (`install.py:1463`), which
-  appends a 13-line / 1,129-byte `## graphify` block to the root `AGENTS.md` — a
-  file sitting at exactly **200/200 lines**. Result: 213 lines and a failed
-  `md_size_budget` step. `--project` only relocates the *skill* file.
-- ⚠️ **`graphify antigravity install` without `--project` writes OUTSIDE the
-  project** — `~/.gemini/config/skills/graphify/SKILL.md`. With `--project` it
-  stays in-repo. Control arm: `_project_install`'s body contains **zero**
-  `Path.home()` calls.
-
-Hence the operative form in the rule: run any `graphify <platform> install` in a
-throwaway directory outside this repo, never here.
+Without `--project`, the installer still mutates user configuration, including
+`~/.claude`; `CLAUDE_CONFIG_DIR` is not full containment. Never run
+`graphify hook install` or `graphify --watch` either. The control is the
+throwaway project/fake-HOME matrix above: it distinguishes project-only writes,
+root-file side effects, and actual HOME mutation instead of inferring scope from
+the flag name.
 
 ## #9 — commit onto `main`: it happened twice, and the local layers are advisory
 

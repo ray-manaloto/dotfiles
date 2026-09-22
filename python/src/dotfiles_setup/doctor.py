@@ -71,6 +71,7 @@ from dotfiles_setup import claude_doctor, codex_schema
 from dotfiles_setup.dependency_currency import (
     check_dependency_currency as dependency_currency_findings,
 )
+from dotfiles_setup.graphify_currency import check as graphify_currency_check
 from dotfiles_setup.listing_budget import (
     SKILL_DESCRIPTION_MAX,
     ListingEntry,
@@ -1163,14 +1164,10 @@ def check_graphify_skill_surface(setup: Setup) -> list[str]:
       tracked, so `git diff` would also show it, but only at the next
       commit — this still needs to say so every session.
 
-    ``.codex/skills/graphify`` itself was a ``forbidden_paths`` entry until
-    2026-08-31: that guarded against the vendor installer's AGENTS.md append,
-    which this repo's OWN installer (``dotfiles-setup graphify
-    skill-install`` / ``mise run graphify-skill-install -- codex``)
-    structurally cannot cause — it only ever copies SKILL.md + references/ +
-    a version stamp (see ``graphify_skill.py``). That path is now adopted and
-    tracked, so the ban is gone; the real hazard is still caught by the
-    ``forbidden_agents_md_marker`` check above.
+    Package, lock, receipt, ambient-PATH binary, stamp, and managed-byte
+    comparisons delegate to :func:`dotfiles_setup.graphify_currency.check` in
+    offline mode. SessionStart therefore never reaches the network or graph
+    health while retaining every local currency gate.
     """
     baseline = _str_keys(setup.baseline.get("graphify"))
     findings: list[str] = [
@@ -1178,6 +1175,9 @@ def check_graphify_skill_surface(setup: Setup) -> list[str]:
         for rel in _str_list(baseline.get("required_skill_files"))
         if not (setup.repo_root / rel).is_file()
     ]
+    findings.extend(
+        drift.detail for drift in graphify_currency_check(setup.repo_root, offline=True)
+    )
     stub_file = baseline.get("stub_file")
     stub_marker = baseline.get("stub_marker")
     if isinstance(stub_file, str) and isinstance(stub_marker, str):

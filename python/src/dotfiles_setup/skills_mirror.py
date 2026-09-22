@@ -50,10 +50,8 @@ correct citation regardless of which lane is reading it.
 ## Why some files need `PER_FILE` corrections at all
 
 A handful of skills discuss the CLAUDE/Codex distinction itself rather than
-merely citing sibling files — `graphify-skill-install` documents what each
-named platform's installer actually does (a blind rewrite would claim
-Codex's own installer does something only Claude's does), `session-review`
-audits transcripts from BOTH harnesses in the same sentence (rewriting
+merely citing sibling files — `session-review` audits transcripts from BOTH
+harnesses in the same sentence (rewriting
 "Claude" there produces "Codex and Codex"), and `session-handoff` names
 `CLAUDE.md`'s relationship to `AGENTS.md` — a concept with no Codex-side
 counterpart, since there is no general `CLAUDE.md` rule to have rewritten it
@@ -63,8 +61,7 @@ each commented with why the general rule is wrong for that spot.
 ## Why there is no `CLAUDE.md` -> `AGENTS.md` rule ("RESPEC 2")
 
 A `("CLAUDE.md", "AGENTS.md")` rule was tried and measured against every
-skill it would fire on: `graphify-skill-install` (2 occurrences, both real
-third-party-tool facts needing reversion), `memory-index-curation` (3
+skill it would fire on: `memory-index-curation` (3
 occurrences, same), `session-handoff` (2 occurrences, 1 reworded + 1 deleted
 outright — the concept doesn't exist on the Codex side), and `mcp2cli` (1
 occurrence, `~/CLAUDE.md`, with no established Codex-side equivalent — see
@@ -181,31 +178,6 @@ PER_FILE: dict[str, tuple[tuple[str, str], ...]] = {
                 "(`feedback_refer_to_claude_md_not_agents_md`\n"
                 "  describes the `.claude`-side convention this inverts)."
             ),
-        ),
-    ),
-    # This skill documents what EACH NAMED PLATFORM's installer actually
-    # does (`claude`, `agents`, `codex`, `gemini` are all literal CLI
-    # argument values, not citations of this doc corpus). A blind rewrite
-    # asserts things that are false about the other platform: that the
-    # pinned bundle refresh target is `.agents/skills/graphify/` (it is
-    # `.claude/skills/graphify/` for the `claude` platform arg), and that
-    # Codex — not Claude Code — has the PreToolUse redirect hook. Revert
-    # each to the source's literal, platform-accurate wording. (Its two
-    # `CLAUDE.md` occurrences need no entry here at all — RESPEC 2 dropped
-    # the general `CLAUDE.md` rule, so that literal text now survives
-    # untouched.)
-    "graphify-skill-install": (
-        (
-            "and `.agents/skills/graphify/` needs\n  refreshing to match.",
-            "and `.claude/skills/graphify/` needs\n  refreshing to match.",
-        ),
-        (
-            "-- claude   # refresh .agents/skills/graphify/",
-            "-- claude   # refresh .claude/skills/graphify/",
-        ),
-        (
-            "exist to prevent. Codex has a PreToolUse hook enforcing the",
-            "exist to prevent. Claude Code has a PreToolUse hook enforcing the",
         ),
     ),
     # No `memory-index-curation` entry: its three `CLAUDE.md` occurrences

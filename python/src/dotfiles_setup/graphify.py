@@ -13,26 +13,50 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
 from enum import StrEnum
 from importlib.metadata import PackageNotFoundError, version
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 from kb_setup.graph import GraphifyBuildReceipt
 
 from dotfiles_setup import codec
 from dotfiles_setup.child_env import without_env_diff
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from dotfiles_setup.graphify_currency import GraphifyCurrencyError, locked_version
 
 _DEFAULT_BUDGET = 2000
 _GRAPH_SUBDIR = "graphify-out"
 _GRAPH_FILE = "graph.json"
+_MANIFEST_FILE = "manifest.json"
 _BUILD_RECEIPT = "build-receipt.json"
 _MAX_AGENT_OUTPUT_BYTES = 65_536
+
+# Every provider credential or backend selector read by Graphify 0.9.65's
+# backend detection, plus the additional provider keys named by this repo's
+# zero-token policy. Bound by workflow.graphify-zero-token-boundary.
+GRAPHIFY_REBUILD_SCRUB_ENV: tuple[str, ...] = (
+    "GEMINI_API_KEY",
+    "GOOGLE_API_KEY",
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "XAI_API_KEY",
+    "GROQ_API_KEY",
+    "OPENROUTER_API_KEY",
+    "MISTRAL_API_KEY",
+    "DEEPSEEK_API_KEY",
+    "MOONSHOT_API_KEY",
+    "OLLAMA_API_KEY",
+    "AZURE_OPENAI_API_KEY",
+    "AZURE_OPENAI_ENDPOINT",
+    "AWS_PROFILE",
+    "AWS_REGION",
+    "AWS_DEFAULT_REGION",
+    "OLLAMA_BASE_URL",
+    "OLLAMA_HOST",
+)
 
 
 class GraphifyError(RuntimeError):
@@ -167,7 +191,7 @@ def _receipt_problem(
     one recorded in ``mise.toml``. An earlier version of this fix tried to
     restore (2) with a self-authored stamp written by ``update()``, but that
     stamp could only ever record the SAME version ``update()`` itself always
-    resolves (``uv run --project python``, pinned 0.9.61) — so the check it
+    resolves (``uv run --project python``, pinned 0.9.65) — so the check it
     fed could never fail, and the one drift it existed to catch (a bare
     ``graphify update`` run through the OTHER installed version) writes no
     stamp at all, since only ``update()`` writes one. A check that can only
@@ -216,12 +240,93 @@ def _git_output(project_root: Path, *args: str) -> str | None:
     return done.stdout.strip() if done.returncode == 0 else None
 
 
+def _parse_changed_paths(raw: str) -> list[tuple[str, str]] | None:
+    """Expand Git name-status output into status/path pairs."""
+    changed_paths: list[tuple[str, str]] = []
+    for line in raw.splitlines():
+        fields = line.split("\t")
+        status = fields[0][:1]
+        match fields:
+            case [_, old_path, new_path] if status == "R":
+                changed_paths.extend((("D", old_path), ("A", new_path)))
+            case [_, path] if status in {"A", "C", "D", "M"}:
+                changed_paths.append((status, path))
+            case _:
+                return None
+    return changed_paths
+
+
+def _manifest_scanned_paths(project_root: Path) -> set[str] | None:
+    """Return Graphify's scanned paths, or None without a usable manifest."""
+    manifest_path = project_root / _GRAPH_SUBDIR / _MANIFEST_FILE
+    try:
+        manifest_bytes = manifest_path.read_bytes()
+    except OSError:
+        return None
+    manifest, _error = _load_json_object_bytes(
+        manifest_bytes,
+        name=_MANIFEST_FILE,
+    )
+    return set(manifest) if manifest is not None else None
+
+
+def _corpus_change_paths(
+    changed_paths: list[tuple[str, str]],
+    scanned: set[str],
+) -> list[str]:
+    """Return changed paths covered by manifest membership or add inference."""
+    extensions = {Path(path).suffix for path in scanned if Path(path).suffix}
+    corpus_changes: list[str] = []
+    for status, path in changed_paths:
+        if (
+            path in scanned or (status == "A" and Path(path).suffix in extensions)
+        ) and path not in corpus_changes:
+            corpus_changes.append(path)
+    return corpus_changes
+
+
+def _divergent_staleness_detail(
+    project_root: Path,
+    *,
+    built_at: str,
+    head: str,
+) -> str:
+    """Explain why unequal build and HEAD commits are stale, or return empty."""
+    changed = _git_output(
+        project_root,
+        "diff",
+        "--name-status",
+        "--diff-filter=ACDMR",
+        f"{built_at}..{head}",
+    )
+    if changed is None:
+        return (
+            f"graph was built at {built_at[:8]}, HEAD is {head[:8]} "
+            "(on a different history) — rebuild with `mise run "
+            "graphify-rebuild`"
+        )
+    changed_paths = _parse_changed_paths(changed)
+    if changed_paths is None:
+        return "cannot interpret changed paths since the graph build — rebuild"
+    scanned = _manifest_scanned_paths(project_root)
+    if scanned is None:
+        return "manifest missing — rebuild"
+    corpus_changes = _corpus_change_paths(changed_paths, scanned)
+    if not corpus_changes:
+        return ""
+    return (
+        f"graph built at {built_at[:8]} but {corpus_changes[0]} changed since "
+        f"(HEAD {head[:8]}, {len(corpus_changes)} corpus file(s)) — rebuild "
+        "with `mise run graphify-rebuild`"
+    )
+
+
 def _staleness_problem(
     graph_payload: dict[str, object],
     project_root: Path,
     runtime: str,
 ) -> HealthResult | None:
-    """Return STALE when the graph was not built from the current commit.
+    """Return STALE when Graphify's scanned corpus changed after the build.
 
     **This axis did not exist until 2026-09-13, and its absence was expensive.**
     Health checked that the file parsed, matched the schema, and that the
@@ -249,16 +354,28 @@ def _staleness_problem(
     measured: the 2026-08-31 graph's ``b75fa3b`` has six commits unreachable
     from HEAD and no branch contains it. An "is it an ancestor" check would
     therefore report STALE on nearly every graph, which is the mirror of the
-    defect being fixed. Equality with HEAD is the whole test; ancestry is used
-    only to make the message more useful when it fails.
+    defect being fixed. Git instead compares the two endpoint trees directly;
+    an unknown build commit still fails closed because that comparison cannot
+    be made.
 
-    Conservative by construction. ``graphify/cli.py:2263`` carries a previous
-    ``built_at_commit`` forward on some re-export paths, so the field can lag a
-    graph that is really current. That direction is safe: the check would say
-    STALE about a fresh graph, never FRESH about a stale one. A graph with no
-    provenance at all is STALE for the same reason — the pinned runtime always
-    writes the field, so its absence means the graph did not come from that
-    runtime, and silence is what this whole function exists to end.
+    Equality remains the fast fresh path. When the commits differ, the graph is
+    stale only if Git reports a changed path that Graphify's own
+    ``manifest.json`` says it scanned, or a newly added path whose extension is
+    already represented in that manifest. Status matters: a modified unlisted
+    path is outside the corpus even when another scanned path shares its
+    extension. Renames become a deletion of the old path and an addition of the
+    new path so both rules remain independently visible.
+
+    This distinction became necessary with Graphify 0.9.65. Measured on
+    2026-09-22, its no-op update left ``built_at_commit`` at ``122a4de1`` after
+    a ``mise.toml``-only commit advanced HEAD to ``45e09803``; ``--force`` did
+    the same. Equality alone therefore made rebuild permanently fail until a
+    scanned file happened to change.
+
+    A graph with no provenance remains STALE — the pinned runtime always writes
+    the field, so its absence means the graph did not come from that runtime.
+    A missing or unreadable manifest is also STALE because it removes the
+    independent source that defines what Graphify covered.
 
     Uncommitted edits are out of scope: this answers "which commit built it",
     not "has anything changed since". A dirty tree can still hold a graph that
@@ -270,7 +387,7 @@ def _staleness_problem(
         runtime: Installed graphify version, carried into the result.
 
     Returns:
-        A STALE ``HealthResult``, or None when the graph matches HEAD.
+        A STALE ``HealthResult``, or None when no scanned-corpus path changed.
     """
     built_at = graph_payload.get("built_at_commit")
     if not isinstance(built_at, str) or not built_at:
@@ -291,14 +408,26 @@ def _staleness_problem(
         )
     if built_at == head:
         return None
-    behind = _git_output(project_root, "rev-list", "--count", f"{built_at}..HEAD")
-    distance = f"{behind} commit(s) behind" if behind else "on a different history"
-    return HealthResult(
-        GraphifyStatus.STALE,
-        runtime,
-        f"graph was built at {built_at[:8]}, HEAD is {head[:8]} ({distance}) — "
-        f"rebuild with `mise run graphify-update`",
+    detail = _divergent_staleness_detail(
+        project_root,
+        built_at=built_at,
+        head=head,
     )
+    return HealthResult(GraphifyStatus.STALE, runtime, detail) if detail else None
+
+
+def _fresh_staleness_detail(
+    graph_payload: dict[str, object],
+    project_root: Path,
+) -> str:
+    """Explain a fresh result whose build commit predates HEAD."""
+    built_at = graph_payload.get("built_at_commit")
+    if not isinstance(built_at, str) or not built_at:
+        return ""
+    head = _git_output(project_root, "rev-parse", "HEAD")
+    if head is None or built_at == head:
+        return ""
+    return f"(built at {built_at[:8]}; no scanned-corpus change through {head[:8]})"
 
 
 def _graph_schema_problem(payload: dict[str, object]) -> str:
@@ -321,6 +450,28 @@ def _load_graph_snapshot(
     return graph_bytes, payload, error
 
 
+def _locked_version_problem(
+    project_root: Path,
+    runtime: str,
+) -> HealthResult | None:
+    """Return version drift without adding branches to graph health parsing."""
+    try:
+        locked = locked_version(project_root)
+    except GraphifyCurrencyError as exc:
+        return HealthResult(
+            GraphifyStatus.VERSION_DRIFT,
+            runtime,
+            f"locked version unavailable: {exc}",
+        )
+    if runtime != locked:
+        return HealthResult(
+            GraphifyStatus.VERSION_DRIFT,
+            runtime,
+            f"expected locked version {locked}",
+        )
+    return None
+
+
 def graphify_health(project_root: Path) -> HealthResult:
     """Return typed, read-only health for the repository graph."""
     graph_path = project_root / _GRAPH_SUBDIR / _GRAPH_FILE
@@ -332,8 +483,8 @@ def graphify_health(project_root: Path) -> HealthResult:
         return HealthResult(GraphifyStatus.CORRUPT, runtime, error)
     if schema_problem := _graph_schema_problem(payload):
         return HealthResult(GraphifyStatus.CORRUPT, runtime, schema_problem)
-    if runtime != "0.9.61":
-        return HealthResult(GraphifyStatus.VERSION_DRIFT, runtime, "expected 0.9.61")
+    if version_problem := _locked_version_problem(project_root, runtime):
+        return version_problem
     # One loop rather than a return per check: each stays lazy (the staleness
     # probe shells out to git, so it must not run when the receipt already
     # settled the answer) while the function keeps a single failure exit.
@@ -347,6 +498,7 @@ def graphify_health(project_root: Path) -> HealthResult:
     return HealthResult(
         GraphifyStatus.FRESH,
         runtime,
+        detail=_fresh_staleness_detail(payload, project_root),
         graph_sha256=hashlib.sha256(graph_bytes).hexdigest(),
     )
 
@@ -375,7 +527,12 @@ def graphify_health_main(project_root: Path, *, output_json: bool = False) -> in
     return 0 if result.ok else 3
 
 
-def _run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+def _run(
+    args: list[str],
+    *,
+    cwd: Path,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     """Run graphify and capture text output (the sole external boundary).
 
     The child does not inherit ``__MISE_DIFF``: graphify writes artifacts we
@@ -388,8 +545,21 @@ def _run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
         check=False,
         capture_output=True,
         text=True,
-        env=without_env_diff(),
+        env=without_env_diff() if env is None else env,
     )
+
+
+def _rebuild_env() -> dict[str, str]:
+    """Return a provider-scrubbed environment with this uv venv first."""
+    env = without_env_diff()
+    for name in GRAPHIFY_REBUILD_SCRUB_ENV:
+        env.pop(name, None)
+    venv_bin = str(Path(sys.executable).parent)
+    inherited = env.get("PATH", "").split(os.pathsep)
+    env["PATH"] = os.pathsep.join(
+        [venv_bin, *(entry for entry in inherited if entry and entry != venv_bin)]
+    )
+    return env
 
 
 def build_query_args(
@@ -644,29 +814,35 @@ def prs_main(
 def update(project_root: Path, target: str = ".") -> subprocess.CompletedProcess[str]:
     """Rebuild the project graph via ``graphify update``.
 
-    AST-only re-extraction (no LLM, no API cost — see ``graphify --help``).
+    Installed 0.9.65 implements this as AST-only re-extraction. The child
+    receives no known LLM-provider credential/backend selector and resolves the
+    project venv first, but PATH remains available for git and therefore may
+    still expose the keyless ``claude`` CLI fallback to a future vendor release.
     This is the only sanctioned rebuild path in this repo (``mise run
-    graphify-update``), resolving graphify through the same ``uv run
+    graphify-rebuild``), resolving graphify through the same ``uv run
     --project python`` pin as every other graphify task — but that
     convention is procedural, not enforced: nothing here can detect whether
     a graph was instead rebuilt by the OTHER graphify installed on this
     machine (a bare ``graphify update .``, resolving the user-global PATH
     pin). See ``graphify-first.md`` and ``_receipt_problem``'s docstring.
     """
-    return _run(["graphify", "update", target], cwd=project_root)
+    return _run(
+        ["graphify", "update", target],
+        cwd=project_root,
+        env=_rebuild_env(),
+    )
 
 
-def graphify_update_main(project_root: Path, *, target: str = ".") -> int:
-    """CLI entry for ``dotfiles-setup graphify update``.
-
-    Prints graphify's own stdout/stderr through and returns its exit code.
-    """
+def graphify_rebuild_main(project_root: Path, *, target: str = ".") -> int:
+    """Rebuild the graph, then require its read-only health to be fresh."""
     result = update(project_root, target)
     if result.stdout:
         sys.stdout.write(result.stdout)
     if result.stderr:
         sys.stderr.write(result.stderr)
-    return result.returncode
+    if result.returncode != 0:
+        return result.returncode
+    return graphify_health_main(project_root)
 
 
 def rewrite_hook_nudge(text: str) -> str:
@@ -676,13 +852,13 @@ def rewrite_hook_nudge(text: str) -> str:
     ``graphify update`` in its advisory nudge copy (``graphify/cli.py`` — no
     flag or env var changes the wording), which is a bare PATH invocation
     that ``graphify-first.md`` forbids: two different graphify versions run
-    on this machine, and only ``mise run graphify-query``/``graphify-update``
-    are guaranteed to resolve this repo's pinned 0.9.61. Plain text
+    on this machine, and only ``mise run graphify-query``/``graphify-rebuild``
+    are guaranteed to resolve this repo's uv-locked version. Plain text
     substitution — the JSON structure and every other field pass through
     unchanged.
     """
     return text.replace("`graphify query", "`mise run graphify-query --").replace(
-        "`graphify update`", "`mise run graphify-update`"
+        "`graphify update`", "`mise run graphify-rebuild`"
     )
 
 

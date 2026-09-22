@@ -16,6 +16,8 @@ exist where `graphify install` cannot (do-not.md #8).
 
 from __future__ import annotations
 
+import shutil
+import subprocess
 import sys
 import types
 from pathlib import Path
@@ -26,10 +28,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 from dotfiles_setup import graphify_skill
 
+_UNEXPECTED_WRITE = "unexpected write"
+
 
 @pytest.fixture
 def fake_package(tmp_path: Path) -> Path:
-    """A synthetic graphify package: skill files + one references bundle."""
+    """A synthetic graphify package with both progressive managed platforms."""
     pkg = tmp_path / "fake_graphify_pkg"
     pkg.mkdir()
     (pkg / "skill.md").write_text("claude bundle body", encoding="utf-8")
@@ -38,6 +42,9 @@ def fake_package(tmp_path: Path) -> Path:
     refs = pkg / "skills" / "claude" / "references"
     refs.mkdir(parents=True)
     (refs / "one.md").write_text("reference one", encoding="utf-8")
+    codex_refs = pkg / "skills" / "codex" / "references"
+    codex_refs.mkdir(parents=True)
+    (codex_refs / "codex.md").write_text("codex reference", encoding="utf-8")
     return pkg
 
 
@@ -55,7 +62,7 @@ def patched_graphify(
         "codex": {
             "skill_file": "skill-codex.md",
             "skill_dst": Path(".codex") / "skills" / "graphify" / "SKILL.md",
-            # No skill_refs -> monolith, matches graphify's real codex entry.
+            "skill_refs": "codex",
         },
         "agents": {
             "skill_file": "skill-agents.md",
@@ -66,6 +73,7 @@ def patched_graphify(
         __file__=str(fake_package / "install.py"), _PLATFORM_CONFIG=cfg
     )
     monkeypatch.setattr(graphify_skill, "_graphify_install", fake)
+    monkeypatch.setattr(graphify_skill, "_installed_version", lambda: "9.9.9")
     return fake
 
 
@@ -113,6 +121,7 @@ def test_known_platforms_raises_when_graphify_is_not_importable(
 @pytest.mark.usefixtures("patched_graphify")
 def test_resolve_placement_computes_the_project_relative_destination(
     tmp_path: Path,
+    fake_package: Path,
 ) -> None:
     project_dir = tmp_path / "project"
     placement = graphify_skill.resolve_placement("codex", project_dir=project_dir)
@@ -121,8 +130,7 @@ def test_resolve_placement_computes_the_project_relative_destination(
         == project_dir / ".codex" / "skills" / "graphify" / "SKILL.md"
     )
     assert placement.skill_src.name == "skill-codex.md"
-    # codex has no skill_refs in the fixture, matching graphify's real entry.
-    assert placement.refs_src is None
+    assert placement.refs_src == fake_package / "skills" / "codex" / "references"
 
 
 @pytest.mark.usefixtures("patched_graphify")
@@ -326,7 +334,10 @@ def test_install_skill_writes_nothing_outside_its_own_skill_dir(
 
 
 @pytest.mark.usefixtures("patched_graphify")
-def test_install_skill_backs_up_a_differing_existing_file(tmp_path: Path) -> None:
+def test_install_skill_backs_up_a_differing_existing_file_outside_managed_dir(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     project_dir = tmp_path / "project"
     dst = project_dir / ".codex" / "skills" / "graphify" / "SKILL.md"
     dst.parent.mkdir(parents=True)
@@ -334,9 +345,13 @@ def test_install_skill_backs_up_a_differing_existing_file(tmp_path: Path) -> Non
 
     graphify_skill.install_skill("codex", project_dir=project_dir)
 
-    backup = dst.parent / "SKILL.md.bak"
+    backups = list((project_dir / ".agent/graphify/backups").glob("codex-SKILL.md.*"))
+    assert len(backups) == 1
+    backup = backups[0]
     assert backup.read_text(encoding="utf-8") == "a hand-edited local copy"
     assert dst.read_text(encoding="utf-8") == "codex bundle body"
+    assert not (dst.parent / "SKILL.md.bak").exists()
+    assert f"skill backup -> {backup}" in capsys.readouterr().out
 
 
 @pytest.mark.usefixtures("patched_graphify")
@@ -351,6 +366,7 @@ def test_install_skill_does_not_back_up_an_identical_existing_file(
     graphify_skill.install_skill("codex", project_dir=project_dir)
 
     assert not (dst.parent / "SKILL.md.bak").exists()
+    assert not (project_dir / ".agent/graphify/backups").exists()
 
 
 @pytest.mark.usefixtures("patched_graphify")
@@ -359,7 +375,7 @@ def test_install_skill_replaces_a_hand_edited_references_sidecar_without_backup(
 ) -> None:
     """references/ replacement is DELIBERATELY asymmetric with SKILL.md's.
 
-    No diff-check, no `.bak` — it mirrors graphify's own
+    No diff-check, no sidecar backup — it mirrors graphify's own
     `_install_skill_references`, which does the same unconditional
     rmtree+copytree. See the `install_skill` docstring for why.
     """
@@ -393,74 +409,176 @@ def test_install_skill_raises_when_the_packaged_source_is_missing(
 
 
 # --------------------------------------------------------------------------- #
-# graphify_skill_install_main (CLI layer)
+# automated refresh/check surface
 # --------------------------------------------------------------------------- #
 
 
-@pytest.mark.usefixtures("patched_graphify")
-def test_main_defaults_project_dir_to_project_root(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    rc = graphify_skill.graphify_skill_install_main(tmp_path, platform="codex")
-    assert rc == 0
-    assert (tmp_path / ".codex" / "skills" / "graphify" / "SKILL.md").is_file()
-    assert "graphify skill installed ->" in capsys.readouterr().out
+def _seed_current_skill_bytes_with_old_stamps(project_dir: Path) -> bytes:
+    claude_dir = project_dir / ".claude" / "skills" / "graphify"
+    claude_refs = claude_dir / "references"
+    claude_refs.mkdir(parents=True)
+    (claude_dir / "SKILL.md").write_text("claude bundle body", encoding="utf-8")
+    (claude_refs / "one.md").write_text("reference one", encoding="utf-8")
+    (claude_dir / ".graphify_version").write_text("0.0.1", encoding="utf-8")
+
+    codex_dir = project_dir / ".codex" / "skills" / "graphify"
+    codex_refs = codex_dir / "references"
+    codex_refs.mkdir(parents=True)
+    (codex_dir / "SKILL.md").write_text("codex bundle body", encoding="utf-8")
+    (codex_refs / "codex.md").write_text("codex reference", encoding="utf-8")
+    (codex_dir / ".graphify_version").write_text("0.0.1", encoding="utf-8")
+
+    agents_dir = project_dir / ".agents" / "skills" / "graphify"
+    agents_dir.mkdir(parents=True)
+    agents_stub = b"<!-- DELIBERATE STUB: keep these exact bytes -->\n"
+    (agents_dir / "SKILL.md").write_bytes(agents_stub)
+    (agents_dir / ".graphify_version").write_text("0.0.1", encoding="utf-8")
+    return agents_stub
 
 
 @pytest.mark.usefixtures("patched_graphify")
-def test_main_honors_an_explicit_project_dir(tmp_path: Path) -> None:
-    other = tmp_path / "elsewhere"
-    other.mkdir()
-    rc = graphify_skill.graphify_skill_install_main(
-        tmp_path, platform="codex", project_dir=other
-    )
-    assert rc == 0
-    assert (other / ".codex" / "skills" / "graphify" / "SKILL.md").is_file()
-    assert not (tmp_path / ".codex").exists()
-
-
-@pytest.mark.usefixtures("patched_graphify")
-def test_main_reports_an_unknown_platform_and_lists_the_known_ones(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    rc = graphify_skill.graphify_skill_install_main(
-        tmp_path, platform="not-a-real-platform"
-    )
-    assert rc == 1
-    err = capsys.readouterr().err
-    assert "not-a-real-platform" in err
-    assert "claude" in err  # one of the known platforms is named in the error
-
-
-def test_main_reports_a_missing_graphify_import(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    monkeypatch.setattr(graphify_skill, "_graphify_install", None)
-    monkeypatch.setattr(graphify_skill, "_IMPORT_ERROR", ImportError("boom"))
-    rc = graphify_skill.graphify_skill_install_main(tmp_path, platform="claude")
-    assert rc == 1
-    assert "graphify" in capsys.readouterr().err
-
-
-def test_main_refuses_a_malicious_skill_dst_instead_of_writing_outside_target(
+def test_refresh_skills_updates_managed_surfaces_and_only_the_agents_stamp(
     monkeypatch: pytest.MonkeyPatch,
-    fake_package: Path,
     tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
 ) -> None:
     project_dir = tmp_path / "project"
-    project_dir.mkdir()
-    escape_target = tmp_path / "etc-evil" / "SKILL.md"
-    _with_malicious_skill_dst(monkeypatch, fake_package, escape_target)
+    agents_stub = _seed_current_skill_bytes_with_old_stamps(project_dir)
 
-    rc = graphify_skill.graphify_skill_install_main(
-        tmp_path, platform="codex", project_dir=project_dir
+    def forbid_subprocess(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("Graphify skill refresh must not launch a subprocess")
+
+    monkeypatch.setattr(subprocess, "run", forbid_subprocess)
+    monkeypatch.setattr(subprocess, "Popen", forbid_subprocess)
+
+    written = graphify_skill.refresh_skills(project_dir)
+
+    assert written == (
+        project_dir / ".claude" / "skills" / "graphify" / "SKILL.md",
+        project_dir / ".codex" / "skills" / "graphify" / "SKILL.md",
+        project_dir / ".agents" / "skills" / "graphify" / ".graphify_version",
+    )
+    for platform in ("claude", "codex", "agents"):
+        stamp = project_dir / f".{platform}" / "skills" / "graphify"
+        assert (stamp / ".graphify_version").read_text(encoding="utf-8") == "9.9.9\n"
+    agents_dir = project_dir / ".agents" / "skills" / "graphify"
+    assert (agents_dir / "SKILL.md").read_bytes() == agents_stub
+    assert b"DELIBERATE STUB" in (agents_dir / "SKILL.md").read_bytes()
+    assert not (agents_dir / "references").exists()
+
+    skill_dirs = tuple(
+        project_dir / f".{platform}" / "skills" / "graphify"
+        for platform in ("claude", "codex", "agents")
+    )
+    mtimes = {
+        path: path.stat().st_mtime_ns
+        for skill_dir in skill_dirs
+        for path in skill_dir.rglob("*")
+        if path.is_file()
+    }
+
+    def unexpected_write(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError(_UNEXPECTED_WRITE)
+
+    # Mutation arm (executed in-memory 2026-09-22): making check_skills'
+    # SKILL.md byte comparison report unconditional drift reaches a patched
+    # copy primitive and fails here with "unexpected write".
+    with monkeypatch.context() as second_run:
+        for method in ("write_text", "write_bytes", "replace"):
+            second_run.setattr(Path, method, unexpected_write)
+        for function in ("copy", "copy2", "copytree", "rmtree"):
+            second_run.setattr(shutil, function, unexpected_write)
+        assert graphify_skill.refresh_skills(project_dir) == ()
+    assert {
+        path: path.stat().st_mtime_ns
+        for skill_dir in skill_dirs
+        for path in skill_dir.rglob("*")
+        if path.is_file()
+    } == mtimes
+    assert not list(project_dir.rglob("*.bak"))
+    assert all(
+        path.relative_to(project_dir).parts[0] in {".claude", ".codex", ".agents"}
+        for path in project_dir.rglob("*")
     )
 
-    assert rc == 1
-    assert not escape_target.exists()
-    err = capsys.readouterr().err
-    assert "codex" in err
-    assert "outside project_dir" in err
+
+@pytest.mark.usefixtures("patched_graphify")
+def test_check_skills_names_each_drift_reason(tmp_path: Path) -> None:
+    project_dir = tmp_path / "project"
+    _seed_current_skill_bytes_with_old_stamps(project_dir)
+    graphify_skill.refresh_skills(project_dir)
+    claude_dir = project_dir / ".claude" / "skills" / "graphify"
+    (claude_dir / "SKILL.md").write_text("locally edited", encoding="utf-8")
+    (claude_dir / "references" / "one.md").write_text(
+        "locally edited", encoding="utf-8"
+    )
+    codex_stamp = project_dir / ".codex" / "skills" / "graphify" / ".graphify_version"
+    codex_stamp.write_text("0.0.1", encoding="utf-8")
+    agents_stamp = project_dir / ".agents" / "skills" / "graphify" / ".graphify_version"
+    agents_stamp.unlink()
+
+    drifts = graphify_skill.check_skills(project_dir)
+
+    assert [(drift.platform, drift.reason) for drift in drifts] == [
+        ("claude", "SKILL.md differs from packaged"),
+        ("claude", "references/ differs"),
+        ("codex", "stamp 0.0.1 != installed 9.9.9"),
+        ("agents", "missing"),
+    ]
+
+
+@pytest.mark.parametrize("damage", ["missing", "corrupt"])
+@pytest.mark.usefixtures("patched_graphify")
+def test_check_skills_flags_missing_or_corrupt_codex_references(
+    tmp_path: Path,
+    damage: str,
+) -> None:
+    project_dir = tmp_path / "project"
+    _seed_current_skill_bytes_with_old_stamps(project_dir)
+    graphify_skill.refresh_skills(project_dir)
+    refs = project_dir / ".codex/skills/graphify/references"
+    if damage == "missing":
+        shutil.rmtree(refs)
+    else:
+        (refs / "codex.md").write_text("locally changed", encoding="utf-8")
+
+    drifts = graphify_skill.check_skills(project_dir)
+    codex_refs = [
+        drift
+        for drift in drifts
+        if drift.platform == "codex" and drift.path.name == "references"
+    ]
+    assert [(drift.reason) for drift in codex_refs] == [
+        "missing" if damage == "missing" else "references/ differs"
+    ]
+
+
+def _assert_refresh_preserves_agents_stub(project_dir: Path, before: bytes) -> None:
+    graphify_skill.refresh_skills(project_dir)
+    agents_skill = project_dir / ".agents" / "skills" / "graphify" / "SKILL.md"
+    assert agents_skill.read_bytes() == before
+    assert b"DELIBERATE STUB" in agents_skill.read_bytes()
+    assert not (agents_skill.parent / "references").exists()
+
+
+@pytest.mark.usefixtures("patched_graphify")
+def test_the_agents_stub_guard_fails_if_agents_becomes_managed(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Mutation arm: the 2026-09-14 all-platform loop must break this guard."""
+    project_dir = tmp_path / "project"
+    before = _seed_current_skill_bytes_with_old_stamps(project_dir)
+    monkeypatch.setattr(
+        graphify_skill,
+        "MANAGED_PLATFORMS",
+        (*graphify_skill.MANAGED_PLATFORMS, "agents"),
+    )
+
+    with pytest.raises(AssertionError):
+        _assert_refresh_preserves_agents_stub(project_dir, before)
+
+
+@pytest.mark.usefixtures("patched_graphify")
+def test_write_stamp_refuses_a_managed_platform(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="not a stamp-only"):
+        graphify_skill.write_stamp("claude", project_dir=tmp_path)

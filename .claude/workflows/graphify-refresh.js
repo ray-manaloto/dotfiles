@@ -1,10 +1,10 @@
 export const meta = {
   name: 'graphify-refresh',
-  description: 'Inventory installed Graphify features, execute an ordered data-defined mise task list, and optionally audit stale prose.',
-  whenToUse: 'When Graphify changes and research, repository-owned refresh tasks, and staleness checks must run in a repeatable verified order.',
+  description: 'Inventory installed Graphify features, execute ordered currency/rebuild mise tasks, and optionally audit stale prose.',
+  whenToUse: 'When Graphify currency or graph state changes and the repository-owned check, update, rebuild, or upgrade tasks must run in a repeatable verified order.',
   phases: [
     { title: 'Research', detail: 'optionally inventory installed features against a supplied brief' },
-    { title: 'Operate', detail: 'run the ordered task data through graphify-operator' },
+    { title: 'Operate', detail: 'run caller-supplied currency and graph tasks through graphify-operator in the given order' },
     { title: 'Audit', detail: 'optionally audit named stale terms after the refresh' },
   ],
 }

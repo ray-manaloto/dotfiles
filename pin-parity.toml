@@ -43,6 +43,21 @@
 [meta]
 version = "1"
 
+[tools.graphify]
+description = """
+On 2026-09-21 the user-global PATH binary was graphify 0.9.65 while the repo \
+still pinned 0.9.61, and no machine gate noticed. python/uv.lock is now the \
+single repository pin; bind its one graphifyy package entry to all three tracked \
+skill stamps. The operator currency checker covers installed/latest drift and \
+resolves PATH drift from the ambient agent-shell PATH captured at SessionStart; \
+the doctor's offline form keeps only local axes."""
+sites = [
+  { path = "python/uv.lock", pattern = 'name = "graphifyy"\nversion = "(\d+\.\d+\.\d+)"' },
+  { path = ".claude/skills/graphify/.graphify_version", pattern = '^(\d+\.\d+\.\d+)\s*$' },
+  { path = ".codex/skills/graphify/.graphify_version", pattern = '^(\d+\.\d+\.\d+)\s*$' },
+  { path = ".agents/skills/graphify/.graphify_version", pattern = '^(\d+\.\d+\.\d+)\s*$' },
+]
+
 [tools.chezmoi]
 description = """
 `.chezmoiversion` is a MINIMUM-VERSION FLOOR, not a pin: chezmoi refuses to \
