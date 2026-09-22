@@ -4959,35 +4959,35 @@ url = "https://github.com/rtk-ai/rtk/releases/download/v0.49.0/rtk-x86_64-pc-win
 url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/556881347"
 
 [[tools.aws-cli]]
-version = "2.36.50"
+version = "2.37.0"
 backend = "aqua:aws/aws-cli"
 
 [tools.aws-cli."platforms.linux-arm64"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.36.50.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.37.0.zip"
 
 [tools.aws-cli."platforms.linux-arm64-musl"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.36.50.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.37.0.zip"
 
 [tools.aws-cli."platforms.linux-x64"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.36.50.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.37.0.zip"
 
 [tools.aws-cli."platforms.linux-x64-baseline"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.36.50.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.37.0.zip"
 
 [tools.aws-cli."platforms.linux-x64-musl"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.36.50.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.37.0.zip"
 
 [tools.aws-cli."platforms.linux-x64-musl-baseline"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.36.50.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.37.0.zip"
 
 [tools.aws-cli."platforms.macos-arm64"]
-url = "https://awscli.amazonaws.com/AWSCLIV2-2.36.50.pkg"
+url = "https://awscli.amazonaws.com/AWSCLIV2-2.37.0.pkg"
 
 [tools.aws-cli."platforms.macos-x64"]
-url = "https://awscli.amazonaws.com/AWSCLIV2-2.36.50.pkg"
+url = "https://awscli.amazonaws.com/AWSCLIV2-2.37.0.pkg"
 
 [tools.aws-cli."platforms.macos-x64-baseline"]
-url = "https://awscli.amazonaws.com/AWSCLIV2-2.36.50.pkg"
+url = "https://awscli.amazonaws.com/AWSCLIV2-2.37.0.pkg"
 
 [[tools.biome]]
 version = "2.5.11"
