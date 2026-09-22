@@ -1382,3 +1382,47 @@ flowchart LR
     DEPS --> REST["12-15 Desktop probe, kb-setup SHA, wrappers, pwf design"]
     REST --> P9["Phase 9 remainder, then Phase 8 #1157"]
 ```
+
+## 2026-09-22 — fourth session addendum: fable-orchestrator removal first; one codex entry point
+
+- **Iteration ID:** `dotfiles-goal-20260922-027`
+- **Prior goal digest:** `sha256:56bba92e79310b4e5de34276116b6e984a733c2f80a5f45e3aacbc266246a04e`
+- **Current goal digest:** `sha256:7247011b367dce50477827915b83f4e58b61eb4918fef42e893334ec86e53a8f`
+- **Changed requirement:** fable-orchestrator is removed from both repos and the
+  codex harness as Phase 10 step 0 (before any codex work), replaced by in-repo
+  skills/agents; codex-side claudex-loop is disabled; all codex work goes through
+  one `/codex-sdlc-team` entry point with role-before-model routing, single
+  agent by default, teams only for separable slices; codex reviews via
+  `codex exec review` (after a settings research pass + read-only canary) and
+  Claude reviews via `/code-review` + `/mattpocock-skills:code-review`; model
+  map gpt-5.6-sol→gpt-6-sol, gpt-5.6-luna→gpt-6-luna; issue tracker moves to
+  `docs/agents/issue-tracker.md` in both repos.
+- **Reason:** Ray, 2026-09-22 (`/session-handoff` arguments and follow-up
+  AskUserQuestion rounds); the removal decision was delegated to a Fable model.
+- **Evidence:** `docs/research/kb/reports/agents/fable-orchestrator-removal-{history,decision}-2026-09-22.md`,
+  `fable-orchestrator-dependency-audit-2026-09-22.md`,
+  `codex-entrypoint-design-2026-09-22.md`, `claudex-loop-full-research-2026-09-22.md`.
+  PR #1249 landed (`land -- 1249` rc=0, main `c8fd6c01`). Upstream
+  `mar3co/fable-orchestrator` returns 404; claudex-loop upstream `8cf5e2c`
+  equals the installed 2.1.0.
+- **Affected tickets:** none filed yet — ticketing is step 0's first move.
+  Upstream context: chaseai-yt/claudex-loop #18, #20, #21, #25.
+- **Disposition:** `ACCEPTED`. Rulings in `task_plan.md` Phase 10 Addendum;
+  operator re-attestation owed.
+- **Topology and ownership:** One writer: the Claude architect session. Seven
+  read-only research/Fable delegates in this addendum. Six orphaned session
+  probe processes reaped; one foreign codex lane (graphify repo, via the
+  codex-side plugin) left untouched.
+
+### Current goal
+
+> Run Phase 10 of task_plan.md in its ruled order across dotfiles and knowledge-base, starting with step 0: remove the fable-orchestrator plugin from both repos and the codex harness (and disable codex-side claudex-loop) after additive parity PRs, before any step that triggers codex work or agents. All codex work then goes through ONE entry point, the /codex-sdlc-team skill, which picks role before model (gpt-6-luna, gpt-6-sol, gpt-6-astra), defaults to one agent and splits into a team only for separable slices; codex reviews use codex exec review after a settings research pass and a read-only canary, and Claude reviews use /code-review and /mattpocock-skills:code-review. Then claude-code 2.1.280; codex to the native installer with the record in schemas/sources.toml and the knowledge-base currency.toml and sol lanes on gpt-6-sol; codex-doctor pause/update/resume hooks with a strict gate; Renovate lockstep; the pwf interim; plugin CLI pins; knowledge-base deps, graphify unfork and resync; hk 2.0; every dependency, plugin and action at latest; issue tracker at docs/agents/issue-tracker.md in both repos; then wrappers and the pwf design after pwf deep extraction. Every code or config item goes through /to-spec, /to-tickets and /implement; done means land rc=0. Keep task_plan.md as the sole task authority.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    T["0 tickets"] --> PD["0 dotfiles parity (additive)"] --> PK["0 KB parity (additive), kb-land"]
+    PK --> RD["0 dotfiles removal (ONE PR)"] --> RK["0 KB removal"] --> OP["0 operator uninstall (Claude + codex side)"]
+    OP --> CC["1 claude-code 2.1.280"] --> CX["2 codex-native + gpt-6-sol"] --> REST["3-15 per task_plan.md Phase 10"]
+```
