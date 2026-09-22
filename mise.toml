@@ -805,6 +805,9 @@ description = "Update the Graphify uv lock and managed skills, with release-note
 # Thin caller (zero-bash-logic); logic in graphify_currency.py. A version move
 # writes the pre-1.0 release-note receipt BEFORE native uv lock/sync; an already
 # current lock still repairs managed skill bytes and all three stamps.
+# Same ambient-PATH capture as graphify-check: the post-update offline check runs
+# in a child process and must see the user-global graphify pin, not fail UNVERIFIABLE.
+env = { DOTFILES_AMBIENT_PATH = "{{ get_env(name='DOTFILES_AMBIENT_PATH', default=env.PATH) }}" }
 run = 'uv run --project python dotfiles-setup graphify update'
 
 [tasks.graphify-rebuild]
@@ -817,6 +820,9 @@ run = 'uv run --project python dotfiles-setup graphify rebuild'
 description = "Update Graphify currency, then rebuild sequentially (first failure stops)"
 # Never express this with mise `depends`: dependencies may run in parallel.
 # The Python composite is the executable ordering contract.
+# Same ambient-PATH capture as graphify-check: the post-update offline check runs
+# in a child process and must see the user-global graphify pin, not fail UNVERIFIABLE.
+env = { DOTFILES_AMBIENT_PATH = "{{ get_env(name='DOTFILES_AMBIENT_PATH', default=env.PATH) }}" }
 run = 'uv run --project python dotfiles-setup graphify upgrade'
 
 [tasks.graphify-check]
