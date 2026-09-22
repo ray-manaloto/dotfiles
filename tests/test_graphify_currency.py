@@ -384,25 +384,49 @@ def test_offline_check_fails_when_locked_release_receipt_is_missing(
     )
 
 
-def test_path_probe_fails_closed_without_captured_ambient_path_under_mise(
+def test_path_probe_uses_mise_resolved_path_when_ambient_capture_is_blind(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _patch_installed_version(monkeypatch, LOCKED)
+    _write_lock(tmp_path, LOCKED)
+    _seed_skill_surface(tmp_path)
+    binary_dir = tmp_path / "mise/bin"
+    binary_dir.mkdir(parents=True)
+    binary = binary_dir / "graphify"
+    binary.write_text(f"#!/bin/sh\nprintf 'graphify {LOCKED}\\n'\n", encoding="utf-8")
+    binary.chmod(0o755)
+    monkeypatch.delenv("DOTFILES_AMBIENT_PATH", raising=False)
+    monkeypatch.setenv("MISE_TASK_NAME", "doctor")
+    monkeypatch.setenv("PATH", str(binary_dir))
+
+    assert graphify_currency.graphify_check_main(tmp_path, offline=True) == 0
+    assert (
+        f"graphify path-binary: {binary} "
+        f"(version={LOCKED}; mise-resolved PATH; stale-activation blind)"
+        in capsys.readouterr().out
+    )
+
+
+def test_path_probe_fails_when_mise_resolved_path_has_no_graphify(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     _patch_installed_version(monkeypatch, LOCKED)
     _write_lock(tmp_path, LOCKED)
     _seed_skill_surface(tmp_path)
+    empty_path = tmp_path / "empty-bin"
+    empty_path.mkdir()
     monkeypatch.delenv("DOTFILES_AMBIENT_PATH", raising=False)
-    monkeypatch.setenv("MISE_TASK_NAME", "graphify-check")
-    monkeypatch.setenv("PATH", "/project/python/.venv/bin:/usr/bin")
-    monkeypatch.setattr(
-        graphify_currency.shutil,
-        "which",
-        lambda *_args, **_kwargs: pytest.fail("blind PATH must not be resolved"),
-    )
+    monkeypatch.setenv("MISE_TASK_NAME", "doctor")
+    monkeypatch.setenv("PATH", str(empty_path))
 
     drifts = graphify_currency.check(tmp_path, offline=True)
     path_drift = next(drift for drift in drifts if drift.kind == "path-binary")
-    assert path_drift.detail == ("path-binary UNVERIFIABLE (no ambient PATH captured)")
+    assert path_drift.detail == (
+        "path-binary UNVERIFIABLE (graphify absent from mise-resolved PATH)"
+    )
 
 
 def test_path_probe_executes_the_binary_resolved_from_ambient_path(
@@ -598,7 +622,10 @@ def test_online_check_prints_graph_health_without_folding_it_into_currency_rc(
 
     assert graphify_currency.graphify_check_main(tmp_path) == 0
     output = capsys.readouterr().out
-    assert "graphify path-binary: /ambient/bin/graphify (version=0.9.65)" in output
+    assert (
+        "graphify path-binary: /ambient/bin/graphify "
+        "(version=0.9.65; ambient PATH)" in output
+    )
     assert "graphify currency current" in output
     assert "graphify-health: stale (runtime=0.9.65) built at an older commit" in output
 
@@ -851,6 +878,19 @@ def _subprocess_literal(call: ast.Call) -> tuple[str, ...] | None:
     return tuple(values)
 
 
+def _git_output_literal(call: ast.Call) -> tuple[str, ...] | None:
+    """Return normalized argv for a direct `_git_output` call."""
+    if not isinstance(call.func, ast.Name) or call.func.id != "_git_output":
+        return None
+    values: list[str] = []
+    for item in call.args[1:]:
+        if isinstance(item, ast.Constant) and isinstance(item.value, str):
+            values.append(item.value)
+        else:
+            values.append("<dynamic>")
+    return tuple(values)
+
+
 def _module_imports(tree: ast.AST) -> set[str]:
     imports: set[str] = set()
     for node in ast.walk(tree):
@@ -897,6 +937,16 @@ def test_zero_token_subprocess_surface_is_ast_allowlisted() -> None:
         ("graphify", "--version"),
         ("graphify", "update", "<dynamic>"),
     ]
+    git_commands = {
+        command
+        for node in ast.walk(graphify_tree)
+        if isinstance(node, ast.Call)
+        if (command := _git_output_literal(node)) is not None
+    }
+    assert git_commands == {
+        ("rev-parse", "HEAD"),
+        ("diff", "--name-status", "--diff-filter=ACDMR", "<dynamic>"),
+    }
 
 
 @pytest.mark.parametrize(

@@ -78,6 +78,7 @@ class _Probe:
     value: str | None
     error: str = ""
     path: str | None = None
+    provenance_note: str = ""
 
 
 def locked_version(project_root: Path) -> str:
@@ -156,20 +157,20 @@ def _path_binary_probe(
     run: Run,
     environ: Mapping[str, str] | None = None,
 ) -> _Probe:
-    ambient_path, provenance = resolve_ambient_path(
-        os.environ if environ is None else environ
-    )
+    resolved_environ = os.environ if environ is None else environ
+    ambient_path, provenance = resolve_ambient_path(resolved_environ)
     if provenance is Provenance.BLIND:
-        return _Probe(
-            None,
-            "path-binary UNVERIFIABLE (no ambient PATH captured)",
-        )
+        provenance_note = "mise-resolved PATH; stale-activation blind"
+        path_label = "mise-resolved PATH"
+    else:
+        provenance_note = "ambient PATH"
+        path_label = "ambient PATH"
     # ``uv run`` prepends its project venv after the agent shell has already
     # resolved its ambient PATH.  That injected entry is never the host binary
     # this axis measures, even when no mise marker is present to make the
     # inherited fallback BLIND.
     venv_bins = {str(Path(sys.executable).parent)}
-    if virtual_env := (os.environ if environ is None else environ).get("VIRTUAL_ENV"):
+    if virtual_env := resolved_environ.get("VIRTUAL_ENV"):
         venv_bins.add(str(Path(virtual_env) / "bin"))
     ambient_path = os.pathsep.join(
         entry for entry in ambient_path.split(os.pathsep) if entry not in venv_bins
@@ -178,7 +179,8 @@ def _path_binary_probe(
     if binary is None:
         return _Probe(
             None,
-            "path-binary UNVERIFIABLE (graphify absent from ambient PATH)",
+            f"path-binary UNVERIFIABLE (graphify absent from {path_label})",
+            provenance_note=provenance_note,
         )
     try:
         result = run(
@@ -194,6 +196,7 @@ def _path_binary_probe(
             None,
             f"path-binary UNVERIFIABLE ({exc})",
             path=binary,
+            provenance_note=provenance_note,
         )
     output = f"{result.stdout}\n{result.stderr}"
     match = _VERSION_RE.search(output)
@@ -215,14 +218,20 @@ def _path_binary_probe(
             None,
             f"path-binary UNVERIFIABLE ({error})",
             path=binary,
+            provenance_note=provenance_note,
         )
     if match is None:
         return _Probe(
             None,
             "path-binary UNVERIFIABLE (graphify --version returned no usable version)",
             path=binary,
+            provenance_note=provenance_note,
         )
-    return _Probe(match.group(1), path=binary)
+    return _Probe(
+        match.group(1),
+        path=binary,
+        provenance_note=provenance_note,
+    )
 
 
 def _json_documents(raw: str) -> Iterable[Any]:
@@ -390,7 +399,7 @@ def _check_with_versions(
     project_root: Path,
     *,
     offline: bool,
-) -> tuple[Versions, tuple[Drift, ...], str | None]:
+) -> tuple[Versions, tuple[Drift, ...], _Probe]:
     drifts: list[Drift] = []
     try:
         locked = locked_version(project_root)
@@ -460,7 +469,7 @@ def _check_with_versions(
         latest=latest_probe.value,
         path_binary=path_probe.value,
     )
-    return versions, tuple(drifts), path_probe.path
+    return versions, tuple(drifts), path_probe
 
 
 def check(project_root: Path, *, offline: bool = False) -> tuple[Drift, ...]:
@@ -562,7 +571,7 @@ def graphify_update_main(project_root: Path) -> int:
 
 def graphify_check_main(project_root: Path, *, offline: bool = False) -> int:
     """Print Graphify currency drift and return nonzero when any exists."""
-    versions, drifts, path_binary = _check_with_versions(
+    versions, drifts, path_probe = _check_with_versions(
         project_root,
         offline=offline,
     )
@@ -576,8 +585,8 @@ def graphify_check_main(project_root: Path, *, offline: bool = False) -> int:
     sys.stdout.write(f"graphifyy locked {versions.locked}, latest {latest}\n")
     path_version = versions.path_binary or "UNVERIFIABLE"
     sys.stdout.write(
-        f"graphify path-binary: {path_binary or 'UNVERIFIABLE'} "
-        f"(version={path_version})\n"
+        f"graphify path-binary: {path_probe.path or 'UNVERIFIABLE'} "
+        f"(version={path_version}; {path_probe.provenance_note})\n"
     )
     for drift in drifts:
         sys.stdout.write(f"graphify drift [{drift.kind}] {drift.detail}\n")

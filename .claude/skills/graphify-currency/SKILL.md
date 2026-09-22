@@ -20,6 +20,9 @@ The task layer is intentionally thin. Currency mechanics live in
 live in `python/src/dotfiles_setup/graphify.py`. Mise `depends` is not an
 ordering mechanism because dependencies may run in parallel.
 
+Graph health remains fresh across a newer commit when Git reports no change to
+a manifest-listed path and no newly added file uses a manifest-known extension.
+
 ## Release-review receipt
 
 Graphify is pre-1.0 and has shipped silent data-loss defects. Before a version
@@ -92,11 +95,12 @@ operation can still spend agent tokens.
 
 The PATH probe is the binary an agent shell resolves, read from
 `DOTFILES_AMBIENT_PATH`: the SessionStart hook captures it for the doctor, and
-the `graphify-check` task captures the PATH `mise run` resolves (mise's repaired
-PATH, which still points at the user-global pin — the drift this axis exists
-for; a stale shell activation is the doctor's path-drift check). It prints the resolved path and
-runs that exact file with the same PATH. This is deliberately different from
-the project venv's Graphify used by `uv run --project python`.
+when that provenance is BLIND the Graphify axis alone falls back to the
+inherited, mise-resolved PATH with project-venv bins removed and labels it
+`mise-resolved PATH; stale-activation blind`; the separate path-drift axis stays
+BLIND and owns stale-shell detection. It prints the resolved path and runs that
+exact file with the same PATH. This is deliberately different from the project
+venv's Graphify used by `uv run --project python`.
 
 The rebuild subprocess removes every known LLM-provider credential/backend
 selector and forces the project venv to the front of PATH. Installed Graphify
@@ -112,7 +116,7 @@ provider reachability; the AST argv gate is the repository-owned hard boundary.
 ## Stable operator output
 
 - `mise run graphify-check`: `graphifyy locked <v>, latest <v>`,
-  `graphify path-binary: <resolved-path> (version=<v>)`,
+  `graphify path-binary: <resolved-path> (version=<v>; <provenance>)`,
   `graphify currency current`, and `graphify-health: <status> ...`; rc 0 means
   currency is current, while any `graphify drift [...]` line means rc 1.
 - `uv run --project python dotfiles-setup graphify check --offline`: latest is

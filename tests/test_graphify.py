@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 from dotfiles_setup import codec
 from dotfiles_setup import main as cli_main
+from dotfiles_setup.child_env import without_git_context
 from dotfiles_setup.graphify import (
     GRAPHIFY_REBUILD_SCRUB_ENV,
     GraphifyError,
@@ -1251,28 +1252,147 @@ def _stub_graph(tmp_path: Path, commit: str | None) -> Path:
     return tmp_path
 
 
-def test_graphify_health_reports_stale_when_the_graph_predates_head(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """THE FAIL ARM: a graph built at another commit must not read as fresh.
+def _git(repo: Path, *args: str) -> str:
+    """Run real Git with inherited repository-routing variables removed."""
+    return subprocess.run(
+        ["git", *args],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=True,
+        env=without_git_context(),
+    ).stdout.strip()
 
-    This is the 2026-09-13 case reproduced: the graph names a commit, HEAD is a
-    different one, and the answer has to be STALE with the distance in it.
-    """
-    _stub_graph(tmp_path, "b" * 40)
+
+def _commit_all(repo: Path, message: str) -> str:
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", message)
+    return _git(repo, "rev-parse", "HEAD")
+
+
+def _write_manifest(repo: Path, *paths: str) -> None:
+    manifest = {path: {"seen": True} for path in paths}
+    (repo / "graphify-out/manifest.json").write_text(json.dumps(manifest))
+
+
+@pytest.fixture
+def staleness_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, str]:
+    """A real repo whose manifest covers Python and TOML, but not mise.toml."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "config", "user.email", "graphify-test@example.invalid")
+    _git(repo, "config", "user.name", "Graphify Test")
+    hooks = repo / "hooks"
+    hooks.mkdir()
+    _git(repo, "config", "core.hooksPath", str(hooks))
+    _git(repo, "config", "commit.gpgsign", "false")
+    (repo / ".gitignore").write_text("graphify-out/\n")
+    (repo / "src").mkdir()
+    (repo / "src/scanned.py").write_text("VALUE = 1\n")
+    (repo / "config").mkdir()
+    (repo / "config/scanned.toml").write_text("value = 1\n")
+    (repo / "mise.toml").write_text("[tools]\n")
+    built_at = _commit_all(repo, "baseline")
+    _stub_graph(repo, built_at)
+    _write_manifest(repo, "src/scanned.py", "config/scanned.toml")
     monkeypatch.setattr(
         "dotfiles_setup.graphify._runtime_version",
         lambda: GRAPHIFY_VERSION,
     )
-    monkeypatch.setattr(
-        "dotfiles_setup.graphify._git_output",
-        lambda _root, *args: "77" if "rev-list" in args else "a" * 40,
-    )
-    result = graphify_health(tmp_path)
+    return repo, built_at
+
+
+def test_graphify_health_is_stale_when_manifest_listed_file_is_modified(
+    staleness_repo: tuple[Path, str],
+) -> None:
+    """A modified path explicitly recorded by Graphify invalidates the graph."""
+    repo, _built_at = staleness_repo
+    (repo / "src/scanned.py").write_text("VALUE = 2\n")
+    _commit_all(repo, "modify scanned Python")
+
+    result = graphify_health(repo)
+
     assert result.status is GraphifyStatus.STALE
     assert not result.ok
-    assert "77 commit(s) behind" in result.detail
+    assert "src/scanned.py changed since" in result.detail
+    assert "1 corpus file(s)" in result.detail
     assert "graphify-rebuild" in result.detail
+
+
+def test_graphify_health_is_fresh_when_only_unlisted_same_extension_is_modified(
+    staleness_repo: tuple[Path, str],
+) -> None:
+    """A modified unlisted .toml is not pulled in by extension alone."""
+    repo, built_at = staleness_repo
+    (repo / "mise.toml").write_text("[tools]\npython = '3.14'\n")
+    head = _commit_all(repo, "modify unscanned TOML")
+
+    result = graphify_health(repo)
+
+    assert result.status is GraphifyStatus.FRESH
+    assert result.ok
+    assert result.detail == (
+        f"(built at {built_at[:8]}; no scanned-corpus change through {head[:8]})"
+    )
+
+
+def test_graphify_health_is_stale_when_supported_extension_file_is_added(
+    staleness_repo: tuple[Path, str],
+) -> None:
+    """A new file with a manifest-known extension expands the source corpus."""
+    repo, _built_at = staleness_repo
+    (repo / "src/new_module.py").write_text("NEW = True\n")
+    _commit_all(repo, "add supported Python")
+
+    result = graphify_health(repo)
+
+    assert result.status is GraphifyStatus.STALE
+    assert "src/new_module.py changed since" in result.detail
+
+
+def test_graphify_health_is_stale_when_scanned_file_is_renamed(
+    staleness_repo: tuple[Path, str],
+) -> None:
+    """The deleted side of a rename remains a manifest-listed corpus change."""
+    repo, _built_at = staleness_repo
+    (repo / "notes").mkdir()
+    _git(repo, "mv", "src/scanned.py", "notes/renamed.txt")
+    _commit_all(repo, "rename scanned file")
+
+    result = graphify_health(repo)
+
+    assert result.status is GraphifyStatus.STALE
+    assert "src/scanned.py changed since" in result.detail
+
+
+def test_graphify_health_is_stale_when_build_commit_is_unknown(
+    staleness_repo: tuple[Path, str],
+) -> None:
+    """A squash-removed or unavailable build object cannot prove freshness."""
+    repo, _built_at = staleness_repo
+    _stub_graph(repo, "f" * 40)
+
+    result = graphify_health(repo)
+
+    assert result.status is GraphifyStatus.STALE
+    assert "on a different history" in result.detail
+    assert "graphify-rebuild" in result.detail
+
+
+def test_graphify_health_is_stale_when_manifest_is_missing(
+    staleness_repo: tuple[Path, str],
+) -> None:
+    """Git changes cannot be classified without Graphify's coverage record."""
+    repo, _built_at = staleness_repo
+    (repo / "mise.toml").write_text("[tools]\npython = '3.14'\n")
+    _commit_all(repo, "modify unscanned TOML")
+    (repo / "graphify-out/manifest.json").unlink()
+
+    result = graphify_health(repo)
+
+    assert result.status is GraphifyStatus.STALE
+    assert result.detail == "manifest missing — rebuild"
 
 
 def test_graphify_health_reports_stale_without_build_provenance(

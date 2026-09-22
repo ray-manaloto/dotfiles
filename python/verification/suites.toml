@@ -1531,6 +1531,10 @@ per_path_tokens = { "mise.toml" = [
     '"--offline",',
 ], "python/src/dotfiles_setup/graphify.py" = [
     "def graphify_rebuild_main(",
+    '"--name-status",',
+    '"--diff-filter=ACDMR",',
+    'path in scanned or (status == "A" and Path(path).suffix in extensions)',
+    'status == "A" and Path(path).suffix in extensions',
     "return graphify_health_main(project_root)",
 ], "python/src/dotfiles_setup/graphify_skill.py" = [
     "def refresh_skills(",
@@ -1570,6 +1574,7 @@ per_path_tokens = { "python/src/dotfiles_setup/graphify_currency.py" = [
     'SUBPROCESS_TOOL_ALLOWLIST = ("mise", "gh", "uv", "graphify")',
     "def test_zero_token_subprocess_surface_is_ast_allowlisted(",
     'not imported.startswith("graphify.llm")',
+    '("diff", "--name-status", "--diff-filter=ACDMR", "<dynamic>"),',
 ], "tests/test_graphify.py" = [
     "assert not set(GRAPHIFY_REBUILD_SCRUB_ENV) & env.keys()",
 ], ".claude/skills/graphify-currency/SKILL.md" = [
@@ -1625,14 +1630,18 @@ paths = [
 per_path_tokens = { "python/src/dotfiles_setup/graphify_currency.py" = [
     'f"graphifyy locked {versions.locked}, latest {latest}',
     'f"graphify path-binary:',
-    'if virtual_env := (os.environ if environ is None else environ).get("VIRTUAL_ENV"):',
+    'provenance_note = "mise-resolved PATH; stale-activation blind"',
+    'if virtual_env := resolved_environ.get("VIRTUAL_ENV"):',
     'sys.stdout.write("graphify currency current',
     'sys.stdout.write(f"release notes -> {receipt}',
 ], "python/src/dotfiles_setup/graphify.py" = [
     'f"graphify-health: {result.status} "',
+    'f"(built at {built_at[:8]}; no scanned-corpus change through {head[:8]})"',
 ], ".claude/skills/graphify-currency/SKILL.md" = [
     "## Stable operator output",
-    "graphify path-binary: <resolved-path> (version=<v>)",
+    "Graph health remains fresh across a newer commit",
+    "graphify path-binary: <resolved-path> (version=<v>; <provenance>)",
+    "mise-resolved PATH; stale-activation blind",
     "release notes -> docs/receipts/graphify/<v>.md",
     "graphify-health: fresh ...",
 ] }
