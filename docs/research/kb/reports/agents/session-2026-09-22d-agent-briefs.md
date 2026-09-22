@@ -1,6 +1,6 @@
 # Agent briefs — session 2026-09-22d (b72c95e0)
 
-> Every Agent-tool brief dispatched this session, extracted verbatim from the session transcript (tool_use inputs) at handoff, so the questions that produced each report survive /clear (agent-report-persistence rule; #601 lesson). Shared brief files referenced by several prompts are appended at the end.
+> Every Agent-tool brief dispatched this session, extracted verbatim from the session transcript (tool_use inputs) at handoff, so the questions that produced each report survive /clear (agent-report-persistence rule; #601 lesson). Regenerated at the addendum to include the fable-orchestrator, codex-entry-point and claudex-loop lanes. Shared brief files referenced by several prompts are appended at the end.
 
 ## Research pwf proper setup — subagent_type: general-purpose
 
@@ -292,6 +292,101 @@ Ray: "codex released new models, so anything that is astra, sol, luna and maybe 
 2. Inventory EVERY reference to these model families (grep -rn -E 'astra|sol\b|-sol|luna|terra|gpt-5\.|gpt-6' with sensible filters) in: /Users/rmanaloto/dev/github/ray-manaloto/dotfiles (tracked files: .claude/agents/codex-*.md, .codex/agents/*.toml, .codex/config.toml, python/src/dotfiles_setup/*codex*, mise.toml tasks, docs/rules), /Users/rmanaloto/dev/github/ray-manaloto/knowledge-base (same kinds), ~/.codex/config.toml (keys only for secrets; model lines are fine), the fable-orchestrator plugin's user/project config (find where `codex effort`/model is set, e.g. ~/.claude/plugins/cache/fable-orchestrator/... and any user config it reads), and ~/.claude/CLAUDE.md-style user files ONLY to report (not edit). For each: file:line, current value, what it should become, and whether it is generated (e.g. astra mirrors produced by `mise run codex-lane-mirror`) vs authored.
 3. Verification plan: the exact gates that prove the update is correct (codex-agent-validate/codex-agent-parity/codex-lane-mirror --check, pin tests, a real minimal `codex exec` per new model with trailing `-` — list it, do not run billable calls — and control arms, e.g. a bogus model id must fail).
 Label unverified; control-arm every "absent".
+```
+
+## History: fable-orchestrator removal — subagent_type: general-purpose
+
+```text
+Read-only research. Do NOT edit any file; never print credential values. Invoke the Skill `agentsview-finding-history` FIRST and follow it (note: semantic search may be down; use full-text with control arms; include child/automated sessions where the skill supports it). FINAL MESSAGE = full report (persisted verbatim), under ~1,800 words, ending with `## GitHub repos touched`.
+
+Ray's request (2026-09-22): "it might be worth doing the remove of the fable-orchestrator plugin from both [dotfiles and knowledge-base] and creating our own version — use /agentsview-finding-history and other tools to have agents review the request to remove fable-orchestrator".
+
+Deliver from Claude AND Codex session history across both repos (and the user-global ~/.config/mise track if relevant):
+1. Every prior user request/ruling about fable-orchestrator: adoption (why it was adopted, when), configuration rulings (implementation lane = codex, effort xhigh, un-gated trigger line in .claude/CLAUDE.md, "decline re-gating"), any prior request to retire/replace it (e.g. task_plan.md Phase 9 goal: "retiring fable-orchestrator and the twelve codex wrappers only after parity", item 9.7 "ONE /codex-sdlc-team entry point"), complaints/failures with it (hardcoded gpt-5.6-sol, grok lanes not installed, doctor billable calls, upstream repo mar3co/fable-orchestrator now 404). Verbatim quotes + session id + ordinal + timestamp.
+2. What was decided/built as the intended replacement (codex_lane.py, sdlc_team.py / `mise run sdlc-team`, codex-sol-*/codex-astra-* agents, gated-implementation workflow, parity matrix) and its current state — with repo file:line evidence (read `task_plan.md` Phase 9 and grep `python/src/dotfiles_setup/`, `.claude/agents/`, `.claude/workflows/`, `docs/specs/`).
+3. Existing GitHub issues on this (use `gh api '/search/issues?q=repo:ray-manaloto/dotfiles+fable'` and the same for knowledge-base; NOT `gh search issues --repo`).
+4. Gaps: what the request needs that no ruling/issue/code covers yet.
+```
+
+## Audit fable-orchestrator dependency surface — subagent_type: general-purpose
+
+```text
+Read-only audit. Do NOT edit any file; do NOT run billable model calls (do not run fable-orchestrator's doctor). FINAL MESSAGE = full report (persisted verbatim), under ~1,800 words, ending with `## GitHub repos touched`.
+
+Question: what would it take to REMOVE the fable-orchestrator plugin from both /Users/rmanaloto/dev/github/ray-manaloto/dotfiles and /Users/rmanaloto/dev/github/ray-manaloto/knowledge-base and replace it with our own version? Also: Ray wants all codex lane models moved to the new gpt-6-sol and gpt-6-luna.
+
+1. What the plugin provides: read the installed copy (~/.claude/plugins/cache/fable-orchestrator/fable-orchestrator/<version>/ — find the version bound to each project in ~/.claude/plugins/installed_plugins.json): every skill (orchestration doctrine), agent (codex-implementer, codex-reviewer, grok-*, fable-advisor, premise-verifier), command (setup, doctor), hook, script (run-lane.sh, premise-gate.sh, doctor.sh), config keys it reads (the `fable-orchestrator:` lines in CLAUDE.md), hardcoded models (gpt-5.6-sol etc.) with file:line. Upstream currency: `gh api repos/mar3co/fable-orchestrator` (reported 404) — find the marketplace source (~/.claude/plugins/known_marketplaces.json / marketplaces/fable-orchestrator) and whether it still updates.
+2. Everything in each repo that depends on it: `.claude/settings.json` enabledPlugins, `.claude/CLAUDE.md` trigger/config lines, rules/skills/docs/agents referencing `fable-orchestrator:` agents or skills (git grep, count per file), rule-sync.toml shared set, doctor.toml/plugin-health expectations, tests/contracts in python/verification/suites.toml, hook_guard rules. Classify each as: remove / replace / keep.
+3. What we already have that overlaps (dotfiles `codex_lane.py`, `sdlc_team.py`, `.claude/agents/codex-sol-*` / `codex-astra-*`, `gate-runner`, `cold-reviewer`, `spec-scribe`, `.claude/workflows/*` e.g. gated-implementation; KB `kb-codex-*` agents, `codex_run.py`) — map each plugin capability to an existing in-repo equivalent or "missing" (esp. the fable-advisor Fable-model second-opinion agent and premise-verifier).
+4. Model update inventory for "all codex models → gpt-6-sol / gpt-6-luna": list every codex model string in both repos (gpt-5.6-sol, gpt-6-astra, gpt-5.6-terra/luna, etc.) with file:line, noting which lanes are 'sol' vs 'astra' and which could sensibly be luna (cheap/fast). Note: native codex 0.156.0 server catalog lists gpt-6-sol, gpt-6-luna, gpt-6-astra; Luna has no `ultra` effort.
+5. A removal/replacement outline: ordered steps, what must land in the same PR, gates to prove parity (skills/agents present, `mise run plugin-health`, codex-agent-parity/validate, lint-docs, rule-sync), and risks.
+Arm every "absent" with a control grep.
+```
+
+## Fable decision: fable-orchestrator removal — subagent_type: fable-orchestrator:fable-advisor
+
+```text
+Decision requested by Ray, who defers to you: should the fable-orchestrator Claude Code plugin be removed from BOTH repos (/Users/rmanaloto/dev/github/ray-manaloto/dotfiles and /Users/rmanaloto/dev/github/ray-manaloto/knowledge-base) and replaced with "our own version", and if so, when and how? Ray's words: "have a fable model review the agentsview research and decide as it dictates what we've been doing with the /codex-sdlc-team skill that does most of the work". Advise and DECIDE; do not implement.
+
+Read in full:
+- /private/tmp/claude-501/-Users-rmanaloto-dev-github-ray-manaloto-dotfiles/b72c95e0-c9b0-4405-9c38-6bd9885f2f71/scratchpad/pending-reports/fable-orchestrator-removal-history-2026-09-22.md (agentsview history of every ruling; planned replacement 9.7; gaps)
+- /private/tmp/claude-501/-Users-rmanaloto-dev-github-ray-manaloto-dotfiles/b72c95e0-c9b0-4405-9c38-6bd9885f2f71/scratchpad/pending-reports/fable-orchestrator-dependency-audit-2026-09-22.md (what the plugin provides, dependency surfaces per repo, capability map, cross-repo cutover order)
+- /Users/rmanaloto/dev/github/ray-manaloto/dotfiles/docs/research/kb/reports/agents/feature-matrix-final-2026-09-21.md (the ratified feature matrix A1-A5/B1-B15/C/D)
+- /Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/skills/codex-sdlc-team/SKILL.md and python/src/dotfiles_setup/sdlc_team.py (the skill that "does most of the work")
+- /Users/rmanaloto/dev/github/ray-manaloto/dotfiles/task_plan.md — Phase 10 (current program, near the end, heading "Phase 10 — NEXT SESSION") and Phase 9 item 9.7.
+
+Constraints already ruled: Phase 10 order (codex-native + gpt-6-sol first after claude-code bump); model map gpt-5.6-sol → gpt-6-sol, gpt-5.6-luna → gpt-6-luna (astra unchanged); every code/config item goes /to-spec → /to-tickets → /implement; done = land rc=0; codex lanes only (no grok); 2026-09-21 rulings "parity first, then ONE removal PR" and "re-home premise-verifier / fable-advisor / spec contract as repo-owned"; entry point = skill → mise task → python library.
+
+Deliver (tight, cited file:line / report section):
+1. DECISION: remove yes/no; replacement form (in-repo skills/agents per repo vs a packaged homegrown Claude plugin shared by both repos — weigh the dead-upstream reinstall risk: extraKnownMarketplaces points at a 404 repo, so a fresh machine cannot install it).
+2. WHEN: where it slots into Phase 10's order (and whether the dead upstream justifies accelerating ahead of 9.7's parity-first sequencing), and what must precede it.
+3. The parity checklist (the minimal set that must exist before removal, per repo), including the missing pieces (premise-verifier, Claude fable-advisor, dotfiles codex reviewer, KB implementer, KB `cold:codex` default lane at review.py:437, KB CLAUDE.md:34 advisor directive, kb-tool-review.js:188) and the contract tests that prove parity.
+4. The PR sequence across both repos respecting rule-sync ordering.
+5. Risks and the single deciding risk; what Ray must still rule on (at most 3 crisp questions with a recommended answer).
+```
+
+## Fable synthesis: codex entry point design — subagent_type: fable-orchestrator:fable-advisor
+
+```text
+Synthesise and decide the design for our codex setup after removing the fable-orchestrator plugin. Advise/decide only; do not implement. Keep under ~2,000 words, cite file:line / report section for every claim.
+
+Ray's new requirements (2026-09-22d, verbatim intent):
+1. "the agentsview research should also have uncovered claudex-loop plugin as another source of what to take into our codex setup for claude" — fold claudex-loop's features in.
+2. "only have one entry point for codex work via the /codex-sdlc-team skill where it can dynamically create a one agent team or multiple based on the work".
+3. "use the 'codex review' or 'codex exec review' for codex reviews".
+4. "we should use these for claude reviews: /code-review and /mattpocock-skills:code-review".
+
+Already decided (do not relitigate unless evidence forces it; flag conflicts): remove fable-orchestrator from both repos FIRST, before any step that triggers codex work or agents; replacement = in-repo skills/agents, not a packaged plugin; dotfiles gets a repo-owned escalation-only Fable `advisor`; ported premise-verifier; decoupled from Phase 9 9.12/9.13/wrapper retirement; model map gpt-5.6-sol→gpt-6-sol, gpt-5.6-luna→gpt-6-luna, astra unchanged; codex installed natively (no mise pin); every code/config item via /to-spec→/to-tickets→/implement; done = land rc=0.
+
+Read (all under /Users/rmanaloto/dev/github/ray-manaloto/dotfiles unless absolute):
+- /private/tmp/claude-501/-Users-rmanaloto-dev-github-ray-manaloto-dotfiles/b72c95e0-c9b0-4405-9c38-6bd9885f2f71/scratchpad/pending-reports/fable-orchestrator-removal-decision-2026-09-22.md, -removal-history-2026-09-22.md, -dependency-audit-2026-09-22.md
+- docs/research/kb/reports/agents/feature-matrix-final-2026-09-21.md (ratified matrix — note its row D dropped `codex exec review`; reconcile with requirement 3)
+- docs/research/kb/reports/agents/history-herdr-claudex-2026-09-21.md and research-plugin-pass-2026-09-21.md (claudex-loop + DannyMac180/fable-advisor research)
+- .claude/skills/codex-sdlc-team/SKILL.md, python/src/dotfiles_setup/sdlc_team.py, python/src/dotfiles_setup/codex_lane.py, .claude/workflows/gated-implementation.js, .codex/agents/codex-sdlc-*.toml
+- task_plan.md: Phase 10 (near end, "Phase 10 — NEXT SESSION" + its Addendum) and Phase 9 items 9.2/9.7/9.12/9.13.
+- Offline docs for the review commands: grep ~/dev/github/ray-manaloto/knowledge-base/sources/agent-harness-docs/docs/codex/ for `codex review` / `exec review`, and ~/dev/github/ray-manaloto/knowledge-base/sources/agent-harness-docs/docs/claude-code/ for the bundled `/code-review` skill; the installed mattpocock `code-review` skill at ~/.claude/plugins/cache/mattpocock/mattpocock-skills/1.2.3/skills/engineering/code-review/SKILL.md (it is model-invocable: no disable-model-invocation).
+- Fact to account for: codex ALSO has fable-orchestrator installed as a codex plugin (~/.codex/plugins/cache/fable-orchestrator/fable-orchestrator/1.21.0/, observed running `run-lane.sh` for another project's lane) — decide whether "remove from both" covers the codex-side plugin.
+
+Deliver:
+1. The target architecture: the single `/codex-sdlc-team` entry point (skill → mise task → python), how it chooses one-agent vs multi-agent team from the work (inputs, decision rule, where the choice lives — typed model/enum), which modes (implement/review/research), and how codex review is performed (`codex review` vs `codex exec review` — pick one per case with evidence of flags/behaviour, e.g. base-branch/uncommitted/commit targets, read-only sandbox).
+2. Claude-side review: exact roles of `/code-review` (bundled) and `/mattpocock-skills:code-review` (standards + spec axes) — when each runs, how they pair with the codex review for cross-family coverage (a Claude-authored diff needs a non-Claude reviewer and vice versa), and what that means for the existing cold-reviewer agent and the adversarial-review skill.
+3. claudex-loop: the concrete features to adopt / adapt / reject, each cited.
+4. What this changes in the already-ratified matrix and in the removal decision's parity checklist (D1-D8/K1-K8) and PR sequence — list deltas explicitly (e.g. `codex exec review` moves from D to adopted; which agents/wrappers retire; codex-side plugin removal).
+5. Conflicts with prior rulings (name them) and at most 4 questions for Ray, each with a recommended answer.
+```
+
+## Full claudex-loop repo research — subagent_type: general-purpose
+
+```text
+Read-only research. Do NOT edit files. FINAL MESSAGE = full report (persisted verbatim), under ~1,800 words, ending with `## GitHub repos touched`. Cite path:line (upstream at a named commit) for every claim.
+
+Research the WHOLE upstream repo https://github.com/chaseai-yt/claudex-loop at its current main (record the commit SHA via `gh api repos/chaseai-yt/claudex-loop/commits/main`): README, every skill (claudex-loop, claudex-route, codex-build, codex-review) including every file under skills/*/references and skills/*/scripts (runner.py etc.), legacy/, VALIDATION.md, tests. Use `gh api 'repos/chaseai-yt/claudex-loop/git/trees/main?recursive=1'` to enumerate, then read each relevant file (gh api contents … | base64 -d). Also compare with the installed codex-side copy at ~/.codex/plugins/cache/claudex-loop/claudex-loop/2.1.0 (diff; note version drift). Use the Skill `firecrawl:firecrawl-developer-index` or `exa:search` for any issues/discussions/posts about claudex-loop / claudex-route (cite).
+
+Questions to answer for our design (a single `/codex-sdlc-team` entry point in repo ray-manaloto/dotfiles that must decide one-agent vs multi-agent teams, pick models gpt-6-luna / gpt-6-sol / gpt-6-astra, and run reviews via `codex exec review`):
+1. Exactly how claudex-route decides role, provider and model (the situation table, the model tiers, how it treats explicit user choices, "listed vs authenticated vs proven runnable", cost claims), and how it executes a handoff (CLI invocation shape, stdin prompt, timeouts, artifacts, failure handling, read-only enforcement).
+2. How the full claudex-loop workflow structures multi-step work: plan review by another provider, build, independent inspection, rounds/caps, logs, attestation/fingerprints, HEAD checks, JSON event parsing — and whether it EVER runs more than one agent concurrently or splits work across agents (quote the evidence either way).
+3. What in claudex-loop directly answers "when should one dispatch be one agent vs a team" (or its absence), and what we should adopt/adapt/reject for our team-shape rule and model routing — especially whether its model tiers need updating now that gpt-6-sol and gpt-6-luna exist (and gpt-5.6-terra's successor is gpt-6-sol per codex's catalog).
+4. Anything the prior repo research (/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/docs/research/kb/reports/agents/feature-matrix-final-2026-09-21.md, history-herdr-claudex-2026-09-21.md, research-plugin-pass-2026-09-21.md) got wrong or missed about claudex-loop.
 ```
 
 ## Shared brief file: program-brief.md
