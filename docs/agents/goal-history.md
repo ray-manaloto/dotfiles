@@ -1426,3 +1426,32 @@ flowchart LR
     PK --> RD["0 dotfiles removal (ONE PR)"] --> RK["0 KB removal"] --> OP["0 operator uninstall (Claude + codex side)"]
     OP --> CC["1 claude-code 2.1.280"] --> CX["2 codex-native + gpt-6-sol"] --> REST["3-15 per task_plan.md Phase 10"]
 ```
+
+## 2026-09-22 — fifth session: #1285 landed; no goal change
+
+- **Iteration ID:** `dotfiles-goal-20260922-028`
+- **Prior goal digest:** `sha256:7247011b367dce50477827915b83f4e58b61eb4918fef42e893334ec86e53a8f`
+- **Current goal digest:** `sha256:7247011b367dce50477827915b83f4e58b61eb4918fef42e893334ec86e53a8f`
+- **Changed requirement:** none — landing + handoff only.
+- **Reason:** Ray, 2026-09-22 (`/session-resume` arguments): land #1285, then
+  hand off; Phase 10 step 0 starts next session with `/wayfinder`, `/to-spec`.
+- **Evidence:** operator re-attested `task_plan.md` (`.plan-attestation`
+  `f613cbab…` = file sha256). `mise run land -- 1285` rc=0 (file rc): "PR #1285
+  merged, main green, Mac synced", smoke tiers 1-3 OK, main `e7017bbb`.
+- **Affected tickets:** none.
+- **Disposition:** `DELIVERED` (landing); goal unchanged and still `ACCEPTED`.
+- **Topology and ownership:** One writer: the Claude architect session. No
+  delegates, no codex lanes.
+
+### Current goal
+
+> Run Phase 10 of task_plan.md in its ruled order across dotfiles and knowledge-base, starting with step 0: remove the fable-orchestrator plugin from both repos and the codex harness (and disable codex-side claudex-loop) after additive parity PRs, before any step that triggers codex work or agents. All codex work then goes through ONE entry point, the /codex-sdlc-team skill, which picks role before model (gpt-6-luna, gpt-6-sol, gpt-6-astra), defaults to one agent and splits into a team only for separable slices; codex reviews use codex exec review after a settings research pass and a read-only canary, and Claude reviews use /code-review and /mattpocock-skills:code-review. Then claude-code 2.1.280; codex to the native installer with the record in schemas/sources.toml and the knowledge-base currency.toml and sol lanes on gpt-6-sol; codex-doctor pause/update/resume hooks with a strict gate; Renovate lockstep; the pwf interim; plugin CLI pins; knowledge-base deps, graphify unfork and resync; hk 2.0; every dependency, plugin and action at latest; issue tracker at docs/agents/issue-tracker.md in both repos; then wrappers and the pwf design after pwf deep extraction. Every code or config item goes through /to-spec, /to-tickets and /implement; done means land rc=0. Keep task_plan.md as the sole task authority.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    T["0 tickets"] --> PD["0 dotfiles parity (additive)"] --> PK["0 KB parity (additive), kb-land"]
+    PK --> RD["0 dotfiles removal (ONE PR)"] --> RK["0 KB removal"] --> OP["0 operator uninstall (Claude + codex side)"]
+    OP --> CC["1 claude-code 2.1.280"] --> CX["2 codex-native + gpt-6-sol"] --> REST["3-15 per task_plan.md Phase 10"]
+```
