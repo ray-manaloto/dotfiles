@@ -6816,7 +6816,7 @@ version = "0.23.3"
 backend = "npm:markdownlint-cli2"
 
 [[tools."npm:oh-my-claude-sisyphus"]]
-version = "5.4.0"
+version = "5.5.0"
 backend = "npm:oh-my-claude-sisyphus"
 
 [[tools."npm:portless"]]
