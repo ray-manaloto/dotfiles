@@ -4717,63 +4717,63 @@ url = "https://conda.anaconda.org/conda-forge/win-64/zstd-1.5.7-h534d264_7.conda
 checksum = "sha256:ca7daae4f218a11fab82cc2857f0ea518ec3f46acec60490485347a4c22c6b3e"
 
 [[tools.antigravity-cli]]
-version = "1.2.8"
+version = "1.2.9"
 backend = "aqua:google-antigravity/antigravity-cli"
 
 [tools.antigravity-cli."platforms.linux-arm64"]
-checksum = "sha256:85ea71929436711e4b0332026508ee4e7ddb05192f24f1774dfbed879255fc6e"
-url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.2.8/agy_cli_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/580514993"
+checksum = "sha256:8a63cf4c4f559e2ff91bd46fbdf015ca7937415805d0cff82015b9cb9dbbdfcd"
+url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.2.9/agy_cli_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/582977188"
 
 [tools.antigravity-cli."platforms.linux-arm64-musl"]
-checksum = "sha256:85ea71929436711e4b0332026508ee4e7ddb05192f24f1774dfbed879255fc6e"
-url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.2.8/agy_cli_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/580514993"
+checksum = "sha256:8a63cf4c4f559e2ff91bd46fbdf015ca7937415805d0cff82015b9cb9dbbdfcd"
+url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.2.9/agy_cli_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/582977188"
 
 [tools.antigravity-cli."platforms.linux-x64"]
-checksum = "sha256:244752206d1f65c01aff489628f1df51f1a3fddacaa8ed74984661ebb6d09136"
-url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.2.8/agy_cli_linux_x64.tar.gz"
-url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/580514986"
+checksum = "sha256:d9850373f3df866011024a961fa9740cc4adaac060eebe9c70fbf263ac6b2624"
+url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.2.9/agy_cli_linux_x64.tar.gz"
+url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/582977185"
 
 [tools.antigravity-cli."platforms.linux-x64-baseline"]
-checksum = "sha256:244752206d1f65c01aff489628f1df51f1a3fddacaa8ed74984661ebb6d09136"
-url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.2.8/agy_cli_linux_x64.tar.gz"
-url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/580514986"
+checksum = "sha256:d9850373f3df866011024a961fa9740cc4adaac060eebe9c70fbf263ac6b2624"
+url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.2.9/agy_cli_linux_x64.tar.gz"
+url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/582977185"
 
 [tools.antigravity-cli."platforms.linux-x64-musl"]
-checksum = "sha256:244752206d1f65c01aff489628f1df51f1a3fddacaa8ed74984661ebb6d09136"
-url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.2.8/agy_cli_linux_x64.tar.gz"
-url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/580514986"
+checksum = "sha256:d9850373f3df866011024a961fa9740cc4adaac060eebe9c70fbf263ac6b2624"
+url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.2.9/agy_cli_linux_x64.tar.gz"
+url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/582977185"
 
 [tools.antigravity-cli."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:244752206d1f65c01aff489628f1df51f1a3fddacaa8ed74984661ebb6d09136"
-url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.2.8/agy_cli_linux_x64.tar.gz"
-url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/580514986"
+checksum = "sha256:d9850373f3df866011024a961fa9740cc4adaac060eebe9c70fbf263ac6b2624"
+url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.2.9/agy_cli_linux_x64.tar.gz"
+url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/582977185"
 
 [tools.antigravity-cli."platforms.macos-arm64"]
-checksum = "sha256:f77d57d99ca83e50a3a767d70621c99962ce4242e5470220f3adbf1c50844538"
-url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.2.8/agy_cli_mac_arm64.tar.gz"
-url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/580514992"
+checksum = "sha256:2b2671c846f62cb1159817517e4a9fff3e9a2ffe01f9dd0b3e227298d88b46f6"
+url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.2.9/agy_cli_mac_arm64.tar.gz"
+url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/582977189"
 
 [tools.antigravity-cli."platforms.macos-x64"]
-checksum = "sha256:8ba276816890a91171a8b0861e4e9eaeb334f884743f525702095c04b4bbf446"
-url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.2.8/agy_cli_mac_x64.tar.gz"
-url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/580514997"
+checksum = "sha256:84c284693bc59334066263a397f6da8a34490b2d8a71dea6d67edc9852ef20b6"
+url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.2.9/agy_cli_mac_x64.tar.gz"
+url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/582977186"
 
 [tools.antigravity-cli."platforms.macos-x64-baseline"]
-checksum = "sha256:8ba276816890a91171a8b0861e4e9eaeb334f884743f525702095c04b4bbf446"
-url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.2.8/agy_cli_mac_x64.tar.gz"
-url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/580514997"
+checksum = "sha256:84c284693bc59334066263a397f6da8a34490b2d8a71dea6d67edc9852ef20b6"
+url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.2.9/agy_cli_mac_x64.tar.gz"
+url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/582977186"
 
 [tools.antigravity-cli."platforms.windows-x64"]
-checksum = "sha256:958f37cd492e7a7b4d4fc6cade7a6d3df41a5dd2ad281e2dd825faae23bc187f"
-url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.2.8/agy_cli_windows_x64.zip"
-url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/580514989"
+checksum = "sha256:e6f3be235c11274c38d5626fee3e0fb7ecf70d2c5381cf932e64d958a7f80b89"
+url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.2.9/agy_cli_windows_x64.zip"
+url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/582977187"
 
 [tools.antigravity-cli."platforms.windows-x64-baseline"]
-checksum = "sha256:958f37cd492e7a7b4d4fc6cade7a6d3df41a5dd2ad281e2dd825faae23bc187f"
-url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.2.8/agy_cli_windows_x64.zip"
-url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/580514989"
+checksum = "sha256:e6f3be235c11274c38d5626fee3e0fb7ecf70d2c5381cf932e64d958a7f80b89"
+url = "https://github.com/google-antigravity/antigravity-cli/releases/download/1.2.9/agy_cli_windows_x64.zip"
+url_api = "https://api.github.com/repos/google-antigravity/antigravity-cli/releases/assets/582977187"
 
 [[tools."aqua:betterleaks/betterleaks"]]
 version = "1.8.1"
@@ -4959,35 +4959,35 @@ url = "https://github.com/rtk-ai/rtk/releases/download/v0.49.0/rtk-x86_64-pc-win
 url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/556881347"
 
 [[tools.aws-cli]]
-version = "2.37.0"
+version = "2.37.1"
 backend = "aqua:aws/aws-cli"
 
 [tools.aws-cli."platforms.linux-arm64"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.37.0.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.37.1.zip"
 
 [tools.aws-cli."platforms.linux-arm64-musl"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.37.0.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.37.1.zip"
 
 [tools.aws-cli."platforms.linux-x64"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.37.0.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.37.1.zip"
 
 [tools.aws-cli."platforms.linux-x64-baseline"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.37.0.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.37.1.zip"
 
 [tools.aws-cli."platforms.linux-x64-musl"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.37.0.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.37.1.zip"
 
 [tools.aws-cli."platforms.linux-x64-musl-baseline"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.37.0.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.37.1.zip"
 
 [tools.aws-cli."platforms.macos-arm64"]
-url = "https://awscli.amazonaws.com/AWSCLIV2-2.37.0.pkg"
+url = "https://awscli.amazonaws.com/AWSCLIV2-2.37.1.pkg"
 
 [tools.aws-cli."platforms.macos-x64"]
-url = "https://awscli.amazonaws.com/AWSCLIV2-2.37.0.pkg"
+url = "https://awscli.amazonaws.com/AWSCLIV2-2.37.1.pkg"
 
 [tools.aws-cli."platforms.macos-x64-baseline"]
-url = "https://awscli.amazonaws.com/AWSCLIV2-2.37.0.pkg"
+url = "https://awscli.amazonaws.com/AWSCLIV2-2.37.1.pkg"
 
 [[tools.biome]]
 version = "2.5.11"
@@ -6824,7 +6824,7 @@ version = "0.15.6"
 backend = "npm:portless"
 
 [[tools."npm:renovate"]]
-version = "44.108.2"
+version = "44.111.3"
 backend = "npm:renovate"
 
 [[tools."npm:skills"]]
@@ -6959,73 +6959,73 @@ backend = "pypi:azure-cli"
 uvx = "false"
 
 [[tools.rumdl]]
-version = "0.2.76"
+version = "0.2.77"
 backend = "aqua:rvben/rumdl"
 
 [tools.rumdl."platforms.linux-arm64"]
-checksum = "sha256:a8a3a89bc0e1ebe92d1e5084a3785a1cce8189f02a1b3a08a69c55f53bbea967"
-url = "https://github.com/rvben/rumdl/releases/download/v0.2.76/rumdl-v0.2.76-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/583329267"
+checksum = "sha256:04569b09b8e7eb31f6a410b0a17e448f220906c5e8e13e8301319c3540fd4d29"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.77/rumdl-v0.2.77-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/583859182"
 provenance = "github-attestations"
 
 [tools.rumdl."platforms.linux-arm64-musl"]
-checksum = "sha256:ef4f1a707dad07f2fcfe207959ed03f2de6e0e0ff9e0c236dd64e89d88d75758"
-url = "https://github.com/rvben/rumdl/releases/download/v0.2.76/rumdl-v0.2.76-aarch64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/583329276"
+checksum = "sha256:cd7e0cd23697c4c0e915fb65b3566f71b4a2a0e90a392b193c418971e9ed399f"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.77/rumdl-v0.2.77-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/583859181"
 provenance = "github-attestations"
 
 [tools.rumdl."platforms.linux-x64"]
-checksum = "sha256:90a8589a34cdc9aa50c9cf9a2b1e41837afe16bb11b2a7ace2e05dfb56a51176"
-url = "https://github.com/rvben/rumdl/releases/download/v0.2.76/rumdl-v0.2.76-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/583329282"
+checksum = "sha256:cbe5cea929fbb58b64bb428a464b069f3fe12645545adedc8932e738c8bbe862"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.77/rumdl-v0.2.77-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/583859172"
 provenance = "github-attestations"
 
 [tools.rumdl."platforms.linux-x64-baseline"]
-checksum = "sha256:90a8589a34cdc9aa50c9cf9a2b1e41837afe16bb11b2a7ace2e05dfb56a51176"
-url = "https://github.com/rvben/rumdl/releases/download/v0.2.76/rumdl-v0.2.76-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/583329282"
+checksum = "sha256:cbe5cea929fbb58b64bb428a464b069f3fe12645545adedc8932e738c8bbe862"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.77/rumdl-v0.2.77-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/583859172"
 provenance = "github-attestations"
 
 [tools.rumdl."platforms.linux-x64-musl"]
-checksum = "sha256:0fe0c75a72849e877a779538d550cbefb2b4656911de188dac54067995a6ae2f"
-url = "https://github.com/rvben/rumdl/releases/download/v0.2.76/rumdl-v0.2.76-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/583329275"
+checksum = "sha256:0a516c0590dfd2f3cb0abfc42580464c7fadb9e631cbdffbcc5c2546ae885ad0"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.77/rumdl-v0.2.77-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/583859184"
 provenance = "github-attestations"
 
 [tools.rumdl."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:0fe0c75a72849e877a779538d550cbefb2b4656911de188dac54067995a6ae2f"
-url = "https://github.com/rvben/rumdl/releases/download/v0.2.76/rumdl-v0.2.76-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/583329275"
+checksum = "sha256:0a516c0590dfd2f3cb0abfc42580464c7fadb9e631cbdffbcc5c2546ae885ad0"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.77/rumdl-v0.2.77-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/583859184"
 provenance = "github-attestations"
 
 [tools.rumdl."platforms.macos-arm64"]
-checksum = "sha256:10ec95ee46e1d3f67560250db97725681a5fa4bc488f383615cc54b06c4bdbc7"
-url = "https://github.com/rvben/rumdl/releases/download/v0.2.76/rumdl-v0.2.76-aarch64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/583329273"
+checksum = "sha256:52744729012b44514b3b4de1431839035d7018464899c5b09627204eebfb73bb"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.77/rumdl-v0.2.77-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/583859185"
 provenance = "github-attestations"
 
 [tools.rumdl."platforms.macos-x64"]
-checksum = "sha256:415df77d4c5d11f336733c9570a72cd0a188d8e6a7460a76134c4c033ec5ece7"
-url = "https://github.com/rvben/rumdl/releases/download/v0.2.76/rumdl-v0.2.76-x86_64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/583329272"
+checksum = "sha256:0951dbddfa6a28274d202581f136884474fc7225349519f7ad0eb6038c4dc8ab"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.77/rumdl-v0.2.77-x86_64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/583859176"
 provenance = "github-attestations"
 
 [tools.rumdl."platforms.macos-x64-baseline"]
-checksum = "sha256:415df77d4c5d11f336733c9570a72cd0a188d8e6a7460a76134c4c033ec5ece7"
-url = "https://github.com/rvben/rumdl/releases/download/v0.2.76/rumdl-v0.2.76-x86_64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/583329272"
+checksum = "sha256:0951dbddfa6a28274d202581f136884474fc7225349519f7ad0eb6038c4dc8ab"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.77/rumdl-v0.2.77-x86_64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/583859176"
 provenance = "github-attestations"
 
 [tools.rumdl."platforms.windows-x64"]
-checksum = "sha256:f7efe829339cd70c13a5b9d0f334094e4c1c30f935fa143edd4d5d8839746655"
-url = "https://github.com/rvben/rumdl/releases/download/v0.2.76/rumdl-v0.2.76-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/583329269"
+checksum = "sha256:8b4d0f45e67c5b17aecfe992335d285019095d3f2994befc9ea44ee4cde981c2"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.77/rumdl-v0.2.77-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/583859183"
 provenance = "github-attestations"
 
 [tools.rumdl."platforms.windows-x64-baseline"]
-checksum = "sha256:f7efe829339cd70c13a5b9d0f334094e4c1c30f935fa143edd4d5d8839746655"
-url = "https://github.com/rvben/rumdl/releases/download/v0.2.76/rumdl-v0.2.76-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/583329269"
+checksum = "sha256:8b4d0f45e67c5b17aecfe992335d285019095d3f2994befc9ea44ee4cde981c2"
+url = "https://github.com/rvben/rumdl/releases/download/v0.2.77/rumdl-v0.2.77-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/583859183"
 provenance = "github-attestations"
 
 [[tools.zizmor]]
