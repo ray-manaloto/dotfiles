@@ -334,6 +334,20 @@ local allSteps = new Mapping<String, Config.Step> {
     batch = true
   }
 
+  // The global `exclude` (hk-common.pkl excludePaths) removes docs/research/kb/
+  // and docs/research/runs/ from EVERY step's `{{files}}`, and it is applied
+  // before any step runs (hk 1.57 hook.rs:1740-1776), so a step cannot opt back
+  // in. That exclusion protects verbatim agent records from fixers. It also
+  // left them unscanned for secrets, although they are exactly where probe
+  // output is committed. So this step ignores `{{files}}` and scans both trees
+  // by PATH, the same pattern as `no_env_dump`. `-c` is explicit because a
+  // `dir` scan looks for its config under the SOURCE path, not the cwd.
+  // Found 2026-09-23: hk's "Fetching staged files (N)" undercounted a staged
+  // report. The count is taken after the global exclude; see .gitleaks.toml.
+  ["betterleaks_verbatim_trees"] {
+    check = "betterleaks dir --redact --no-banner -c .gitleaks.toml docs/research/kb && betterleaks dir --redact --no-banner -c .gitleaks.toml docs/research/runs"
+  }
+
   // A whole-file re-lock on this macOS host drops every linux conda entry —
   // the amd64 devcontainer needs exactly those (jdx/mise#7700, #370). BOTH a
   // bare `mise lock` and any `mise install` do it; only the scoped

@@ -23,6 +23,15 @@ Verify what hk checked locally matches what CI will see:
 2. `git diff --cached --name-only` — should show all intended changes
 3. New files must be `git add`-ed before hk runs, or hk won't check them
 
+## hk's file counts are taken AFTER the global exclude
+
+`Fetching staged files (N)` and each step's `N files` count only files that
+survive `hk-common.pkl`'s `excludePaths`. Verbatim trees (`docs/research/kb/`,
+`docs/research/runs/`, `docs/specs/`) never appear. A count below what you
+staged is that exclusion, not an added file being skipped. This was misread
+once, and it had hidden the fact that neither secret scanner read those trees;
+they are now scanned by path (`workflow.verbatim-trees-secret-scanned`).
+
 ## Common Divergence Patterns
 
 | Local State | CI State | Fix |

@@ -2131,6 +2131,28 @@ tokens = [
     "Builtins.betterleaks)",
 ]
 
+
+[[suite]]
+name = "workflow.verbatim-trees-secret-scanned"
+description = "The verbatim agent-record trees (docs/research/kb/, docs/research/runs/) must be SECRET-SCANNED even though hk's global exclude keeps FIXERS off them. Until 2026-09-23 `.gitleaks.toml` path-allowlisted both whole trees, and the global `exclude` removed them from betterleaks' `{{files}}`, so neither scanner read the trees where subagent probe output is committed. A blanket entry was hiding five read-and-judged doc examples, and it would have hidden any real leak with them. Measured both arms: the old config returns rc=0 over a tree with a planted token; the new config plus the `betterleaks_verbatim_trees` step return rc=1. The forbid half anchors on the exact whole-tree entry form (triple-quoted, no `^`), which the per-file entries cannot contain."
+category = "workflow"
+check_type = "static"
+handler = "forbid_tokens"
+paths = [".gitleaks.toml"]
+tokens = ["'''docs/research/kb/'''", "'''docs/research/runs/'''"]
+
+[[suite]]
+name = "workflow.verbatim-trees-betterleaks-step"
+description = "Wiring half of workflow.verbatim-trees-secret-scanned: hk.pkl must run betterleaks BY PATH over both verbatim trees with the repo config passed explicitly. hk's global exclude is applied before any step and cannot be undone per step (hk 1.57 hook.rs:1740-1776), so a `{{files}}` builtin can never see these trees. A `dir` scan resolves its config under the SOURCE path, which is why `-c .gitleaks.toml` is part of the bound token. The two tokens are the two invocations, each carrying its tree argument, so deleting either scan fails."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = ["hk.pkl"]
+per_path_tokens = { "hk.pkl" = [
+    "betterleaks dir --redact --no-banner -c .gitleaks.toml docs/research/kb &&",
+    "betterleaks dir --redact --no-banner -c .gitleaks.toml docs/research/runs\"",
+] }
 [[suite]]
 name = "workflow.hk-builtins-audit"
 description = "The generated hk-builtins audit. `docs/hk-builtins-audit.md` replaced a hand-written 2026-04-05 snapshot that had drifted into asserting 15 builtins were 'used' that were wired nowhere — one of them `betterleaks`, described as a 'second scanner alongside gitleaks' while present in no config at all. A document claiming a security scanner runs when it does not is worse than one that claims nothing, so the tables are now derived from `hk builtins` + the three .pkl files and only NOT_ADOPTED is authored. This contract exists because the generated banner NAMED it before it existed (`Gated by: workflow.hk-builtins-audit`) — the doc written to stop false claims made one in its own header, found 2026-07-27 with `grep -c` returning 0. Binding the chain here makes the banner true rather than deleting the claim: hk step, mise task, CLI subcommand, generator seams (render / stale_entries / the authored map), both directions of the staleness check in tests, and the banner line in the doc itself."
