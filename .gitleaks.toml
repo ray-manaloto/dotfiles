@@ -14,14 +14,13 @@ description = "Non-source paths and documentation examples (no real secrets)."
 paths = [
   '''docs/research/mintlify-cache/''',
   '''docs/research/trail/findings/''',
-  # Promoted from `.omc/` 2026-07-25. Research prose, not code: the hits are a
-  # localhost `curl` example, a docs placeholder (`trig_01ABC...`), and a
-  # markdown link whose text matched `generic-api-key`. Each was read before
-  # allowlisting. Same class as the two entries above.
-  '''docs/research/kb/''',
-  '''docs/research/runs/''',
   '''\.codex/''',
   '''\.agent/''',
+  # Harness agent worktrees: FULL nested checkouts of this repo (ignored per-clone
+  # via .git/info/exclude, 0 tracked files, never present in CI). The scan of the
+  # real tree already covers their content. Before 2026-09-23 they were hidden
+  # only by accident, by the unanchored research-tree entries.
+  '''\.claude/worktrees/''',
   '''\.omg/''',
   '''\.omx/''',
   '''\.idea/''',
@@ -31,4 +30,49 @@ paths = [
   '''__pycache__/''',
   # Documentation with illustrative `token = "..."` examples, not real secrets.
   '''\.github/workflows/AGENTS\.md''',
+]
+
+# The two VERBATIM agent-record trees, docs/research/kb/ and docs/research/runs/,
+# were path-allowlisted here until 2026-09-23. They are no longer. These are the
+# trees where subagent output, including probe output, is committed verbatim
+# (agent-report-persistence.md), so a leaked credential is most likely to land
+# there, and the blanket path entry hid all of them to suppress five
+# false positives. Measured 2026-09-23 with the default rules and no allowlist:
+# 3 findings in kb/ and 2 in runs/ (gitleaks 8.30.1), plus 1 more in runs/ from
+# betterleaks 1.8.1. Each was read before being listed below: localhost/doc
+# `curl` examples, a redacted placeholder, and a 5-character placeholder in a
+# credential URI. A planted token in the same trees still fails both scanners.
+#
+# DELIBERATE DIVERGENCE from hk-common.pkl `excludePaths`, which still lists both
+# trees. That list protects verbatim records from FIXERS rewriting them. It must
+# not also blind the SCANNERS, which only read. hk-common.pkl is a base-image
+# build input, so its comment ("kept mirrored") was left as it is instead of
+# costing a cold rebuild. The hk.pkl step `betterleaks_verbatim_trees` scans
+# these trees by path, because hk's global exclude removes them from every
+# step's `{{files}}`.
+#
+# ⚠️ Why not a `.gitleaksignore` fingerprint file: measured 2026-09-23, neither
+# gitleaks 8.30.1 nor betterleaks 1.8.1 honored one in `dir` mode (a finding
+# listed by its exact fingerprint still returned rc=1). Narrow per-file,
+# per-rule entries are the working equivalent.
+[[allowlists]]
+description = "Five read-and-judged documentation examples inside the verbatim agent-record trees."
+targetRules = ["curl-auth-header", "generic-api-key"]
+paths = [
+  '''^docs/research/kb/raw/src-jan-api-server\.md$''',
+  '''^docs/research/kb/reports/agents/claude-code-expert-settings-blast-radius\.md$''',
+  '''^docs/research/kb/reports/track-a-cc-autonomy\.md$''',
+  '''^docs/research/runs/research-20260709-r2-mac-automation/report\.md$''',
+  '''^docs/research/runs/research-20260709-r2-knowledge-base/agents/repo-fit-design\.md$''',
+]
+
+# betterleaks-only rule `generic-credential-uri` (a 5-character placeholder in an
+# `x-access-token:` URI). gitleaks 8.30.1 has no such rule and REFUSES to load a
+# config whose `targetRules` names it ("target rule ID ... does not exist"), so
+# this one file gets a path-only entry. That is broader per file, but it covers a
+# single historical record.
+[[allowlists]]
+description = "betterleaks generic-credential-uri placeholder in one archived research run."
+paths = [
+  '''^docs/research/runs/research-20260709-r2-secrets/agents/ssh-r2-model\.md$''',
 ]
