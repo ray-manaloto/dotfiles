@@ -137,7 +137,7 @@ antigravity-cli = "1.2.8"
 # Host-only like the executor-lane CLIs above: an operator research tool, never
 # an image build input, and unused by hk/CI (so ci-local-parity rule 2 does not
 # bind it). Auth is per-user via FIRECRAWL_API_KEY.
-"npm:firecrawl-cli" = "1.24.3"
+"npm:firecrawl-cli" = "1.24.4"
 
 [settings]
 experimental = true
