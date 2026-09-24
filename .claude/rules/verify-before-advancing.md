@@ -34,7 +34,7 @@ Case history: `docs/rules-evidence/verify-before-advancing.md`.
 | `.devcontainer/**`, `mise-system.toml`, image/Dockerfile | `mise run verify-local` (R1/R2/R3 + persistence) or a direct `docker run <img> …` check; the in-image smoke can't fully run on this arm64 Mac (Rosetta) |
 | Validating **through the devcontainer** (any change you test in-container) | `mise run verify-container-latest` — the running container must bind-mount THIS workspace (source = latest branch code) and pass smoke; **base-currency is a hard gate** (smoke tier-1 identity fails a base predating the current `mise-system.toml`). See "Validate against the latest branch code" below. |
 | `.claude/CLAUDE.md`, `.claude/settings.json`, `rule-sync.toml` | `mise run rule-sync` — the declared cross-repo set must hold in dotfiles AND knowledge-base. SKIPs loudly without the sibling clone; hard-FAILs in CI (#354 tier 0) |
-| Opened a PR | `gh pr checks <n> --watch` until terminal — every check `pass` or `skipping`, **0 fail** |
+| Opened a PR | every check terminal — `pass` or `skipping`, **0 fail**. `mise run ship` only arms auto-merge; read `gh pr checks <n> --json name,bucket` (one-shot) or wait for the merge with `mise run bounded-wait`, then `mise run land` |
 | Merged to `main` | Await the main `ci.yml` run and confirm `conclusion == success` (incl. `promote` retagging `:dev`) |
 
 Scale the matrix to the blast radius — a one-line doc typo needs the docs
@@ -63,7 +63,7 @@ and a green result against it is a false positive.
   locally. Refresh with
   `mise run dev-rebuild` (pulls the registry `:dev`; on a slow link this is
   a long buildkit pull — never classic `docker pull`, which wedges on the
-  ~38GB image, see `feedback_mise_local_toml_replaces_task`);
+  large image, see `feedback_mise_local_toml_replaces_task`);
 - **it runs** — smoke tiers 1-3 pass in the container.
 
 Base-currency is a hard block by design: do not advance validating against
@@ -73,7 +73,7 @@ a base that predates the branch's `mise-system.toml`.
 base to save time.** The registry `:dev` is the base built from the
 current `mise-system.toml`, so refreshing to it is the *only* way to test
 the latest code — there is no valid local shortcut. On a slow link the
-~38GB buildkit pull can take hours; that is expected and fine. Background
+multi-GB buildkit pull can take hours; that is expected and fine. Background
 it (`mise run dev-rebuild`, or a `docker buildx build --pull --output
 type=docker` of `:dev` — buildkit, never classic `docker pull` which
 wedges on the large blob) and **wait for it to finish**, then rebuild the
@@ -86,8 +86,8 @@ speed: a green result on a stale base is worse than a slow-but-honest one.
   piped `… | tail` (bash returns tail's exit 0, masking upstream
   failure) and never a background-task "completed" notification's exit
   code. See memory `feedback_pipe_kills_exit_code`, and issue #142.
-- `gh run watch --exit-status` has reported 0 prematurely — cross-verify
-  with `gh run view <id> --json conclusion --jq .conclusion`. See
+- Read CI state from `gh run view <id> --json conclusion --jq .conclusion`
+  (`gh run watch --exit-status` has reported 0 prematurely). See
   `gh-cli-watch.md` and `feedback_gh_run_watch`.
 - A "skipped" job is a *valid terminal state* (e.g. warm-path
   build-publish), but confirm it skipped for the expected reason — do
@@ -106,13 +106,9 @@ Every task in this repo — local edits, PRs, merges, multi-step work, and
 agent-delegated work (the delegating context is responsible for
 confirming the delegate's checks actually passed).
 
-> **Carry a number with its CONDITION, not just its source.** This file is where
-> the ≤12,000-char misattribution was born: a real figure (Windsurf's, via agnix
-> AGM-003) travelled here without its source, was captioned to Anthropic, and was
-> then machine-enforced against files its real owner never governed. A true fact
-> without its provenance *or* its "true when" is indistinguishable from an
-> invented one. Three worked cases, and the habit that catches them:
-> `docs/rules-evidence/verify-before-advancing.md`.
+> **Carry a number with its CONDITION, not just its source** — a true figure
+> without its owner or its "true when" is indistinguishable from an invented
+> one. Worked cases: `docs/rules-evidence/verify-before-advancing.md`.
 
 ## See also
 
@@ -120,6 +116,6 @@ confirming the delegate's checks actually passed).
 - `zero-skip-policy.md` — no red check is ever dismissed.
 - `long-running-command-hangs.md` — bound `mise run lint`; never wait blind.
 - Memory `feedback_pipe_kills_exit_code` — read the rc, not a piped tail.
-- `gh-cli-watch.md` — use `--watch`; cross-verify `gh run watch`.
+- `gh-cli-watch.md` — auto-merge and land own CI waits; one-shot `--json` reads.
 - `do-not.md` — project invariants that never bend regardless of green checks.
 - CLAUDE.md → `AGENTS.md` "Validate before committing".

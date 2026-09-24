@@ -22,13 +22,12 @@ It is referenced, NOT `@import`ed: agnix rejects `@import` in an `AGENTS.md`
 requires every non-`.claude/` `CLAUDE.md` be solely `@AGENTS.md`. So the index
 is on-demand reference — which is what it should be anyway.
 
-Total (measured 2026-09-14): **3,116 pytest tests** run by default (`pytest
-tests/` collects all `test_*.py` files) plus **11 gated exec tests** deselected
-by default — 5 `image_exec` (`mise run smoke-exec`, needs Docker + the `:dev`
-image) and 6 `codex_exec` (`mise run codex-lane-e2e`, spawns the real `codex`
-CLI and **costs credits** — 4 paid calls) — and Bats scenarios under `infra/`.
-3,127 collected in total; re-measure with `-m <marker> --collect-only` rather
-than trusting this line, which has drifted before.
+Collected counts drift fast, so measure rather than quote them:
+`uv run --project python pytest tests/ --collect-only -q`. Default runs
+deselect the gated exec tests — `image_exec` (`mise run smoke-exec`, needs
+Docker + the `:dev` image) and `codex_exec` (`mise run codex-lane-e2e`,
+spawns the real `codex` CLI and **costs credits**); inspect one with
+`-m <marker> --collect-only`. Bats scenarios live under `infra/`.
 
 ## Running tests
 
@@ -65,8 +64,7 @@ a deliberate probe finds them.
 - **Tautological** — the assertion recomputes the expected value the way the
   code does, so it passes by construction and can never disagree with the
   code. Expected values must come from an **independent source of truth**: a
-  known-good literal, a worked example, the real artifact. The four
-  `test_memory_index.py` bugs above are this shape.
+  known-good literal, a worked example, the real artifact.
 - **A probe with no control arm** — a check that can only pass is not a check.
   Pin the FAIL direction next to the pass: tier-1 identity really fails on a
   wrong hash, tier-3 on a wrong ref, and every `_inert_masked` case is paired
@@ -82,17 +80,11 @@ a deliberate probe finds them.
   bare name**; for an imported or method predicate it is blind, and you carry
   the rule yourself. When the table gains a cell, add the axis; **never edit an expected value to make a test pass**,
   which converts an independent expectation into a transcription of behaviour.
-  ⚠️ The mutation result that reads as proof is this shape's tell:
-  **"deleting the fix breaks ONLY the arm you just wrote" is the SIGNATURE OF
-  THE FAILURE, not evidence of quality** — it means test space and fix space
-  are the same size, which is exactly the condition under which an unenumerated
-  neighbouring cell exists. This is NOT a licence to skip mutation testing, and
-  it does not soften `probes-need-a-control-arm.md`: the mutation here is a
-  GOOD one — deleting the fix is the realistic regression — and its narrow
-  blast radius is a fact about your AXIS ENUMERATION, not about the mutation.
-  All three mutation-verified fixes in #601's review
-  loop directly caused the NEXT round's HIGH finding, and the phrase went into
-  three commit bodies as a boast
+  When deleting the fix breaks only the arm you just wrote, test space and fix
+  space are the same size — the condition under which an unenumerated
+  neighbouring cell exists — so enumerate the axes before calling it covered.
+  Keep mutation testing: the narrow blast radius is a fact about your axis
+  enumeration, not about the mutation
   (`docs/research/kb/reports/session-20260806-review-loop-reflection.md`).
 
 ## Mocking

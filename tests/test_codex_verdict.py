@@ -582,9 +582,8 @@ def test_the_liveness_gate_reads_the_launchers_real_marker(tmp_path: Path) -> No
     """The form the real launcher actually emits — a log line, not a file.
 
     ⚠️ This is the arm that was missing when the module first shipped, and its
-    absence made the whole reaper inert. Verified against
-    `~/.claude/plugins/marketplaces/fable-orchestrator/scripts/run-lane.sh`:
-    the lane subshell does `echo "EXIT: $?" >> "$LOG"`, and there is no
+    absence made the whole reaper inert. In the lane launcher, the lane
+    subshell does `echo "EXIT: $?" >> "$LOG"`, and there is no
     `exit.marker` file anywhere in that script. A gate reading only the marker
     file returns False forever, so every lane stays NOT_SETTLED and the reaper
     reports nothing at all — silent rather than wrong, which is worse, because

@@ -23,8 +23,8 @@ Extract the exact warning text from CI logs or local build output.
 # From CI run
 gh run view <run-id> --log 2>&1 | grep -i "warn\|error\|fatal" | sort -u
 
-# From local Docker build
-docker buildx bake dev-load 2>&1 | tee /tmp/build.log
+# From the image build — CI-only (do-not.md #2); read its job log, never bake locally
+gh run view <run-id> --job <build-job-id> --log > /tmp/build.log 2>&1
 grep -iE "warn|error|fatal" /tmp/build.log
 ```
 
@@ -54,13 +54,13 @@ gh search issues "warning message" --repo <tool-org>/<tool-repo> --limit 5
 | **Fixable — env var** | Tool has a config/env var to suppress | Set in mise-system.toml `[env]` or Dockerfile `ENV` |
 | **Fixable — config** | Build config change resolves it | Update docker-bake.hcl, CI workflow, or mise config |
 | **Fixable — code** | Dependency ordering or install sequence issue | Reorder steps, add depends, adjust Dockerfile layers |
-| **Unfixable — upstream** | Hardcoded in tool, no suppression mechanism | Document + create GH issue |
-| **Unfixable — architectural** | Fundamental mismatch (e.g., shim vs PATH model) | Document + create GH issue |
+| **Unfixable — upstream** | Hardcoded in tool, no suppression mechanism | Document; escalate to the user; file a GH issue once deferral is approved |
+| **Unfixable — architectural** | Fundamental mismatch (e.g., shim vs PATH model) | Document; escalate to the user; file a GH issue once deferral is approved |
 
 ### 4a. If Fixable: Implement
 
 1. Apply the fix in the appropriate config file
-2. Verify locally: rebuild and confirm warning is gone
+2. Verify: re-run the CI build (or the cheapest local probe per `.claude/rules/local-devcontainer-first.md`) and confirm the warning is gone
 3. Run `mise run lint` to validate (`mise run fmt` to auto-fix)
 4. Commit with message explaining the warning and fix
 
@@ -71,7 +71,7 @@ gh search issues "warning message" --repo <tool-org>/<tool-repo> --limit 5
    # - <tool> "<warning summary>": <root cause explanation>.
    #   <why it's unfixable>. No <tool> env var suppresses this.
    ```
-2. Create a GitHub issue for tracking:
+2. Once the user approves deferring it (`.claude/rules/zero-skip-policy.md` rules 3-4), create a GitHub issue:
    ```bash
    gh issue create --repo ray-manaloto/dotfiles \
      --title "chore: <tool> '<warning summary>' in Docker build" \
@@ -88,7 +88,7 @@ gh search issues "warning message" --repo <tool-org>/<tool-repo> --limit 5
 
 - Warning root cause is identified with evidence (upstream issue, source line, or docs link)
 - Fix is verified locally OR unfixable status is documented with rationale
-- GH issue created for unfixable warnings
+- Unfixable warnings escalated to the user; GH issue filed once deferral is approved
 - Dockerfile comment block documents all known cosmetic warnings
 
 ## Pitfalls

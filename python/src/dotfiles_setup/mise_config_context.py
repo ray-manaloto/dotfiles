@@ -80,15 +80,7 @@ justification in the commit body — which options were evaluated and why each \
 was insufficient.
 
 mise's own documentation is on this disk at {docs}, so the check costs a grep \
-rather than a web fetch.
-
-A worked instance from 2026-09-01: a custom `{{rc, gates[], outcome}}` result \
-sink was scoped across several turns before anyone read those docs. mise turned \
-out to already provide the uniform log-location half — `MISE_LOG_FILE` plus \
-`MISE_LOG_FILE_LEVEL` — while the structured per-invocation result half is \
-genuinely absent, because the only completed-result store mise documents is the \
-task cache and "Only successful task runs are cached". The rule was in eager \
-context throughout; what was missing was a prompt at the moment of the edit.\
+rather than a web fetch.\
 """
 
 

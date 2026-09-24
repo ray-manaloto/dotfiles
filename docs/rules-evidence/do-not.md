@@ -96,3 +96,19 @@ _Named in the extracted text but **not** resolved during this extraction:
 `jdx/hk` (issue #1075) and the graphify distribution whose `install.py` line
 numbers are quoted above — those were probed in earlier sessions at 0.9.20 /
 0.9.22 and the pin has since moved. Re-probe before relying on a line number._
+
+## Moved from the rule (2026-09-24 prompt audit)
+
+Verbatim text removed from `.claude/rules/do-not.md` by the prompt audit (`docs/research/kb/reports/prompt-audit-2026-09-24.md`); kept here so the history survives.
+
+>    `$SSH_AUTH_SOCK` are not available to `initializeCommand`, which then
+>    fails to spawn the host-side SSH agent proxy. Terminal only. See
+>    ⚠️ **"Don't commit" was too late a gate.** On 2026-08-03 a whole session's
+>    work — including two sub-agent reports — accumulated on `main` and nothing
+>    said a word, because **hk is a git-hook system and never sees a write**. It
+>    would only have fired at the commit. Ray's standing instruction is therefore
+>    *"all work should be on a branch that can be on a PR"*, enforced *whenever
+>    anything is modified*.
+>     resort. A registered server taxes **every** conversation's system prompt
+>     with **every** tool's schema, forever — paying that for a call a `curl`
+>     already makes is pure loss.

@@ -61,17 +61,15 @@ mise run land -- <PR#>             # (after it auto-merges) confirm merged → m
    March-2026 422 enable regression. ship prints the `mise run land`
    follow-up for post-merge Mac validation.
 
-## What automerge does (#369)
+## What automerge does
 
-`mise run automerge -- <PR#>` is the missing verb for a **bot-opened** PR. Only
-ship armed auto-merge, and a bot PR never runs ship; `land` refuses an OPEN PR;
-`gh pr merge` is guard-denied. So #138, #236 and #386 sat green with no
-sanctioned way to merge — *a guard whose redirect target cannot perform the
-redirected action is not enforcement, it is an outage.*
+`mise run automerge -- <PR#>` is the verb for a **bot-opened** PR: a bot PR
+never runs ship, `land` refuses an OPEN PR, and `gh pr merge` is guard-denied,
+so without it a green bot PR has no sanctioned way to merge.
 
 1. Reads `state`, `author`, `isDraft`, `baseRefName`, `headRefOid` and refuses
    unless the PR is **OPEN**, **non-draft**, **main-based**, and authored by one
-   of `BOT_PR_AUTHORS` (`app/renovate`, `app/dotfiles-refresh-bot-org`). A
+   of `BOT_PR_AUTHORS` (the allowlist constant in `pr.py`). A
    **human PR is refused** and pointed at `ship`: ship gates the tree before
    arming and automerge does not, so the split keeps that from being a call the
    operator has to make.
@@ -87,7 +85,7 @@ redirected action is not enforcement, it is an outage.*
    against #257, rebase churn).
 
 Per-PR by construction — nothing is armed unless it is named, which is what
-keeps a deliberately HELD bot PR (e.g. #386) held.
+keeps a deliberately HELD bot PR held.
 
 ## What land does
 
@@ -107,15 +105,12 @@ The **merge approval is enabling auto-merge at ship** (`main` requires
 `ci-gate` and no review); GitHub merges when green. `--match-head-commit`
 scopes it to the SHA the local gates validated.
 
-**A PR is now mandatory, server-side** (#400, 2026-07-27): the repository
-ruleset `main: require a pull request` is active with **0 required approvals
-and no bypass actors**, so a direct push to `main` is refused by GitHub — the
-one layer an agent cannot skip. It costs these verbs nothing, because all three
-already go through a PR; verified end-to-end when PR #401 armed auto-merge under
-the active ruleset and squash-merged itself 181s after `ci-gate` went green,
-with `reviewDecision` empty throughout. If a future ruleset change ever demanded
-an approval, `ship` and `automerge` would arm and then sit — that is the
-symptom to look for, and the fix is the ruleset, not the verb.
+**A PR is mandatory, server-side:** the repository ruleset `main: require a
+pull request` has **0 required approvals and no bypass actors**, so a direct
+push to `main` is refused by GitHub — the one layer an agent cannot skip. All
+three verbs already go through a PR. If a ruleset change ever demanded an
+approval, `ship` and `automerge` would arm and then sit — that is the symptom
+to look for, and the fix is the ruleset, not the verb.
 
 ## Failure modes
 
@@ -125,11 +120,11 @@ symptom to look for, and the fix is the ruleset, not the verb.
 | `ship: working tree not clean` | Uncommitted changes | Commit (or stash) so gates validate the shipped tree |
 | `FAIL gate <name>` | A local gate failed | That failure IS the task (zero-skip); fix, rerun ship |
 | `ship: could not enable auto-merge` | The 422 regression outlasted the bounded retry, or "Allow auto-merge"/`ci-gate` isn't configured | Check the repo's auto-merge setting + branch protection; re-run `ship` (it reuses the PR) |
-| `land: PR #N is OPEN, not yet MERGED` | Auto-merge is still pending `ci-gate` (CI running). **Expected right after ship — not a failure**, though `land` does exit non-zero | Wait for the merge, then re-run `land` for the post-merge Mac validation. `land` has no `--wait` and `gh pr checks --watch` is guard-denied, so poll the blessed one-shot read, keeping the turn engaged: `until [ "$(gh pr view <N> --json state --jq .state)" = MERGED ]; do sleep 60; done` |
+| `land: PR #N is OPEN, not yet MERGED` | Auto-merge is still pending `ci-gate` (CI running). **Expected right after ship — not a failure**, though `land` does exit non-zero | Wait for the merge, then re-run `land` for the post-merge Mac validation. `land` has no `--wait` and `gh pr checks --watch` is guard-denied, so wait with a deadline: `mise run bounded-wait -- --deadline <s> --cmd 'test "$(gh pr view <N> --json state --jq .state)" = MERGED'` |
 | CI check failed (PR never auto-merges) | A required check went red, so auto-merge never fires | Triage the run; autofix "✅ Autofix task started" means the bot pushed a fix → new checks run → auto-merges when green |
 | **ship reports OK, but no CI run ever starts and the PR sits** | `mergeStateStatus=DIRTY` — the branch conflicts with main. Happens when a branch is **reused after its earlier PR was squash-merged**: main holds the squash, the branch still holds the originals, so a file created on both sides conflicts. **ship does not catch this** — it gates the local tree and the PR creation, not the resulting mergeability | `gh pr view <N> --json mergeStateStatus`. Fix by replaying only the new commits: `git rebase --onto origin/main <last-already-merged-sha>` then `git push --force-with-lease`. Verify first that main really carries the old content (compare the file blob's `md5`), or the rebase drops work. DIRTY → BLOCKED means fixed |
 | **ship reports OK, but no CI run ever starts and `mergeStateStatus=UNKNOWN`** | Not DIRTY — **GitHub dropped the PR's own event**. Measured on #634 (2026-08-07): 0 Actions runs on the head SHA for 40 min, 8 of 9 third-party check-suites stuck `queued`, `mergeable=null` across 3 REST GETs and a comment, and **auto-merge silently dropped itself**. Control arm: PR #594 computed `mergeable=true` throughout, so it is per-PR, not an outage — do not trust githubstatus, which read "All Systems Operational" | Prove Actions is alive with `mise run gha-dispatch -- ci.yml --ref <branch>` — a dispatch run starts in seconds and puts a real `ci-gate` on the SHA (readable via `gh api repos/<o>/<r>/commits/<sha>/check-runs`, which `gh pr checks` will still not show — the commit is the primary artifact, the PR view is the stale one). That alone does **not** unstick the PR: `gh pr close <N> && gh pr reopen <N>` recreates the state machine (`UNKNOWN` → `BLOCKED`/`CLEAN`) and fires a real `pull_request` event. Then re-run `mise run ship` from the branch to re-arm auto-merge — with the branch already == origin the push is a no-op, and `_open_or_update_pr` reuses the PR rather than opening a second |
-| land failed AFTER the merge (CI watch / sync) | Merged-but-unvalidated PR | `mise run land -- <PR#> --resume` replays the idempotent post-merge steps |
+| land failed AFTER the merge (CI watch / sync) | Merged-but-unvalidated PR | Re-run `mise run land -- <PR#>` — it is idempotent and replays the post-merge steps |
 | `land: no main ci.yml run appeared` | A merge that SHOULD trigger a run didn't register (~10 min) | Check Actions; land only expects a run when the diff matches `CI_PUSH_PATHS` (ci.yml on.push.paths) — a merge matching none passes without one (#179) |
 | `automerge: PR #N was opened by '<login>', which is not one of the bots…` | A human/ship-able PR (or a bot not on the allowlist) | Use `mise run ship` from the branch — it gates the tree before arming. Adding a bot means editing `BOT_PR_AUTHORS` + its test, deliberately |
 | `automerge: PR #N is MERGED, not OPEN` | Already merged (auto-merge fired, or it was hand-merged) | `mise run land -- <PR#>` for the post-merge Mac validation |

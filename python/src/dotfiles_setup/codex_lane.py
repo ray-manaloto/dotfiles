@@ -9,13 +9,12 @@ repo wrote a ``lane.json``, a ``verdict.json`` or an ``EXIT:`` line — so
 **silent**. Correct by accident rather than wrong, which is the worse failure:
 nothing reports silence. This module is the missing half.
 
-**Why not just call the plugin's ``run-lane.sh``** — the justification
+**Why not an off-the-shelf lane launcher script** — the justification
 ``use-tool-builtins.md`` requires in writing, and **this is its only home**
 (``mise.toml`` and ``suites.toml`` point here rather than restating it; the
 #613 review found three copies, two of them citing that script by line number
-into a file replaced wholesale on plugin update). It is a real reason rather
-than a preference. The ``fable-orchestrator`` plugin's script, read as of
-2026-08-06:
+into a file replaced wholesale on update). It is a real reason rather
+than a preference. The plugin launcher script evaluated on 2026-08-06:
 
 - it ``mktemp``s both its output paths, so there is no stable run directory for
   a reaper to find;

@@ -49,8 +49,8 @@ config, audit, bootstrap, ghcr, image smoke, and shell integration.
 ## Verification contracts
 
 `dotfiles-setup verify run` executes contracts defined in
-`verification/suites.toml`. This gate is **distinct** from `hk run
-pre-commit --all` — some contracts (e.g., `build.no-stderr-suppression`)
+`verification/suites.toml`. This gate is **distinct** from `mise run
+lint` — some contracts (e.g., `build.no-stderr-suppression`)
 only run through the verify CLI. Run both locally before pushing
 Dockerfile changes.
 

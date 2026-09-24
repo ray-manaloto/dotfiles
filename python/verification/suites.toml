@@ -2390,7 +2390,7 @@ per_path_tokens = { ".github/workflows/autofix.yml" = ["GIT_CONFIG_KEY_0: init.d
 
 [[suite]]
 name = "orchestration.trigger-armed"
-description = "THE bug that opened #354: `.claude/CLAUDE.md` must carry the orchestration trigger as a WHOLE LINE. Deliberately UN-gated (2026-08-27): default `/model` here is Opus 5, so a Fable-gated trigger was false in every session and the flow stayed dormant. Since #1310 the trigger names this repo's own routing-doctrine skill (`codex-sdlc-team`) instead of the removed fable-orchestrator plugin; the same line is rule-synced with knowledge-base."
+description = "THE bug that opened #354: `.claude/CLAUDE.md` must carry the orchestration trigger as a WHOLE LINE. Deliberately UN-gated: a model-gated trigger was false in most sessions and the flow stayed dormant. The trigger names this repo's own routing-doctrine skill (`codex-sdlc-team`); the same line is rule-synced with knowledge-base."
 category = "orchestration"
 check_type = "static"
 handler = "require_lines"
@@ -2402,14 +2402,14 @@ lines = [
 
 [[suite]]
 name = "orchestration.codex-only-lanes"
-description = "There is no `grok` CLI on this Mac, so every lane must resolve to codex or to Claude. A session once followed the implementation routing and still proposed a grok reviewer for the cold pass, because the (since removed, #1310) orchestration plugin's review-tier table named grok as the cross-family reviewer for a codex diff. So this binds the directive heading, the implementation row, the cold-review row (with grok gone Claude IS the third family, so an Opus cold pass on a codex diff is the full gate), and the premise-verification row naming the repo-owned `premise-verifier`. require_lines, not require_tokens: a substring is satisfied by a doc that merely QUOTES the routing while narrating it. Whitespace is normalised; wording is not, and a paraphrase of a routing table IS a routing change."
+description = "Every lane must resolve to codex or to Claude. This binds the directive heading, the implementation row, the cold-review row (Claude is the other model family, so an Opus cold pass on a codex diff is the full gate), and the premise-verification row naming the repo-owned `premise-verifier`. require_lines, not require_tokens: a substring is satisfied by a doc that merely QUOTES the routing while narrating it. Whitespace is normalised; wording is not, and a paraphrase of a routing table IS a routing change."
 category = "orchestration"
 check_type = "static"
 handler = "require_lines"
 paths_required = true
 paths = [".claude/CLAUDE.md"]
 lines = [
-    "### There is no `grok` here — codex lanes only, stop asking",
+    "### Lane routing — codex and Claude only",
     "| Implementation | `codex-{sol,astra}-implementer`, effort `xhigh` — OURS, at full access |",
     "| Cold review of a codex diff | an Opus subagent, diff-only (`Agent`, `model: \"opus\"`) |",
     "| Premise verification | `premise-verifier` (Claude, read-only) |",
@@ -2417,7 +2417,7 @@ lines = [
 
 [[suite]]
 name = "orchestration.plugins-enabled"
-description = "The orchestration plugin must be ENABLED — value `true`, not merely present as a key: `\"antigravity@antigravity-for-claude-code\": false` satisfies any check that asks whether the plugin is listed, while the lane it declares cannot run. fable-orchestrator was removed (#1310); `orchestration.no-plugin-references` forbids it coming back."
+description = "The orchestration plugin must be ENABLED — value `true`, not merely present as a key: `\"antigravity@antigravity-for-claude-code\": false` satisfies any check that asks whether the plugin is listed, while the lane it declares cannot run."
 category = "orchestration"
 check_type = "static"
 handler = "require_tokens"
@@ -2429,7 +2429,7 @@ per_path_tokens = { ".claude/settings.json" = [
 
 [[suite]]
 name = "orchestration.owned-agents"
-description = "The repo-owned replacements for fable-orchestrator's two Claude-side agents must exist with their pinned models (#1310/#1314). `claude-advisor` is the escalation-only Fable advisor (triggers in `.claude/token-routing.md`); `premise-verifier` is the MIT port of the plugin's pre-dispatch premise checker. Deleting either file, or re-modelling it, silently changes what an escalation or a premise check runs on, so both the file and its `model:` line are pinned as WHOLE lines (a substring would accept `model: opus-4`)."
+description = "The repo-owned escalation advisor and premise checker must exist with their pinned models (#1310/#1314). `claude-advisor` is the escalation-only Fable advisor (triggers in `.claude/token-routing.md`); `premise-verifier` is the MIT-licensed pre-dispatch premise checker. Deleting either file, or re-modelling it, silently changes what an escalation or a premise check runs on, so both the file and its `model:` line are pinned as WHOLE lines (a substring would accept `model: opus-4`)."
 category = "orchestration"
 check_type = "static"
 handler = "require_lines"
@@ -2444,24 +2444,6 @@ per_path_lines = { ".claude/agents/claude-advisor.md" = [
     "model: opus",
 ] }
 
-[[suite]]
-name = "orchestration.no-plugin-references"
-description = "fable-orchestrator was removed from both repos (#1310): its upstream is 404, its only copy was a plugin cache that can be garbage-collected, and knowledge-base's tool-review workflow broke on exactly that. No live instruction or config surface may name one of its agents or skills (`fable-orchestrator:`) or enable it (`fable-orchestrator@`). `path_globs` covers every agent file, workflow, codex agent and skill, including ones added later. Historical records (reports, specs, receipts) are deliberately out of scope."
-category = "orchestration"
-check_type = "static"
-handler = "forbid_tokens"
-paths_required = true
-strip_comments = false
-paths = [".claude/CLAUDE.md", ".claude/settings.json", ".claude/token-routing.md", "rule-sync.toml"]
-path_globs = [
-    ".claude/agents/*.md",
-    ".claude/rules/*.md",
-    ".claude/workflows/*.js",
-    ".codex/agents/*.toml",
-    ".claude/skills/*/SKILL.md",
-    ".agents/skills/*/SKILL.md",
-]
-tokens = ["fable-orchestrator:", "fable-orchestrator@"]
 
 [[suite]]
 name = "eval.mise-task-refs-resolve"

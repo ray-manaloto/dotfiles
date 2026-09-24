@@ -19,7 +19,6 @@ The user-facing workflow is `mise run up` → work inside → `mise run down`.
 ## Tasks
 
 ```bash
-mise run build   # docker buildx bake dev-load (build base image locally)
 mise run up      # devcontainer up --workspace-folder . (CLI pinned in mise.toml)
 mise run down    # alias of `mise run stop` — tears the container down
 mise run stop    # docker rm -f filtered on devcontainer.local_folder=$PWD
@@ -27,15 +26,17 @@ mise run stop    # docker rm -f filtered on devcontainer.local_folder=$PWD
 mise run names   # this workspace+arch's container, volume and port names
 mise run ssh-port # just the derived host-side SSH port (R1)
 mise run test          # uv run --project python pytest tests/ -x -q (HOST tests)
-mise run pre-commit    # hk run pre-commit --all
+mise run lint          # read-only hk check under a hard timeout
 ```
+
+The base image is built by CI only — never `mise run build` or
+`docker buildx bake dev-load` locally (`.claude/rules/do-not.md` #2).
 
 ## Architecture — BOTH amd64 and arm64 are first-class
 
 `PUBLISHED_ARCHES = ("amd64", "arm64")` (`platform_target.py`). Neither is a
 special case, and an arm64 container is **not** a bug — a stale amd64
-assumption is. Native ARM64 on the Mac is tracked by **#678** (open;
-unblocked since #676 and #677 merged).
+assumption is. Native ARM64 on the Mac is tracked by **#678**.
 
 **`DOTFILES_PLATFORM` is the one selector** (#673) — no task takes an
 `--arch` flag, and no other place chooses:
@@ -88,7 +89,7 @@ scripts/devcontainer-smoke.sh --include-up   # also runs `devcontainer up` first
 Tiers:
 
 - **Tier 1** — `mise ls`, `which clang++ python uv hk`, `hk run pre-commit --all`
-- **Tier 2** — `pytest 190/190`, `stat ~/.ssh ~/.claude /workspaces/dotfiles`
+- **Tier 2** — the full host `pytest` suite, `stat ~/.ssh ~/.claude /workspaces/dotfiles`
 - **Tier 3** — `clang++ -fsanitize=address,undefined hello.cc && ./hello`
 
 Tier 4 (CLion remote toolchain) is manual.

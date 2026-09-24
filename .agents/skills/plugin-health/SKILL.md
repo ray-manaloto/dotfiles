@@ -1,6 +1,6 @@
 ---
 name: plugin-health
-description: Check that every plugin declared in settings is actually installed and enabled for THIS project, via `mise run plugin-health`. Use when a skill or slash command you expected is missing, after enabling or disabling a plugin, when a SessionStart report mentions plugin drift, or before shipping a change to `.claude/settings.json`. Reach for it INSTEAD of reading `claude plugin list` by eye — the payload spans other projects, repeats ids up to 8 times, and omits `projectPath` on a fifth of its rows, so eyeballing it is how a plugin stays silently disabled.
+description: Check that every plugin declared in settings is actually installed and enabled for THIS project, via `mise run plugin-health`. Use when a skill or slash command you expected is missing, after enabling or disabling a plugin, when a SessionStart report mentions plugin drift, or before shipping a change to `.claude/settings.json`. Reach for it INSTEAD of reading `claude plugin list` by eye — the payload spans other projects and repeats ids, so eyeballing it is how a plugin stays silently disabled.
 ---
 
 # plugin-health

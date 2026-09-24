@@ -18,31 +18,20 @@ dangerous part**.
 ```bash
 mise run memory-index                    # audit: budget + what a trim would cost
 mise run memory-index -- --refs <name>   # before DELETING a memory
-wc -c ~/.claude/projects/<encoded-cwd>/memory/MEMORY.md   # the byte count you can trust
+wc -c ~/.claude/projects/<encoded-cwd>/memory/MEMORY.md   # re-measure before/after each edit
 ```
-
-⚠️ **Read the byte count from `wc -c`, never from the `mise run` line.** mise
-redacts digit runs in task output — a live regression
-(`feedback_mise_run_masks_digits`), so the report's own `22,086` may reach you as
-`[redacted]2,086`. The report is the right tool for *what a trim would cost*; it
-is the wrong one for *how big the file is*.
 
 ⚠️ **The index moves while you work on it.** Auto-memory writes concurrently, so
 a figure you measured five minutes ago may already be stale. Re-measure
 immediately before and after any edit, and treat an unchanged byte count as your
 confirmation that nothing landed underneath you.
 
-## Why this exists (measured, not theorized)
+## Why this exists
 
-On 2026-07-14 a routine trim of 4 bloated index lines would have destroyed **4
-facts that existed ONLY in the index hook** — `#244`, `#186`, `#194`, and the
-`8010c61` squash sha. The topic file each hook linked to never mentioned them.
-Nothing warns you; the line just reads better afterwards. They were migrated
-first, and the trim then verified clean.
-
-The checker's first live run found a 5th: a hook claiming CI went green at
-`3adff36` while its topic file said `c2cecd7` — a *later* commit. Same class of
-defect, opposite fix.
+An index hook can hold facts its topic file never mentions — issue refs,
+shas, sizes — and a trim that reads better destroys them without warning. The
+converse also happens: a hook can be STALER than its file (an older sha), and
+migrating it down would push the stale fact into the file.
 
 ## The operation
 
@@ -73,13 +62,10 @@ defect, opposite fix.
    fat hook as a one-line pointer. Re-run to confirm still `rc=0`, and re-measure
    with `wc -c` against the target before you stop.
 
-   ⚠️ **Verifying is not the deliverable; it is what makes the deliverable safe.**
-   Across four sandboxed eval runs on 2026-08-07 every run cleared its target,
-   but the margins were thin — **17,478 / 17,377 / 17,090 / 16,749 B against a
-   17,500 B target**, one of them by 22 bytes. A margin that small is not a
-   result you should assume; it is one you confirm. When the verification is
-   done, keep compressing hooks until `wc -c` clears the target, then say which
-   number you hit.
+   Verifying is not the deliverable; it is what makes the deliverable safe.
+   Keep compressing hooks until `wc -c` clears the target, then say which
+   number you hit — margins are often a few dozen bytes, so confirm rather
+   than assume.
 
 ## Deleting a memory
 
@@ -108,21 +94,13 @@ mise run memory-index -- --refs feedback_colima_recommendation
 ## Reading the budget
 
 The report prints both ceilings as a percentage of cap, names whichever binds
-first, and fails if any entry has fallen past it. **Do not assume it is the line
-count** — an earlier assessment asserted "the LINE count is the nearer ceiling"
-over its own numbers (60% of lines vs 82% of bytes), which say the opposite. At
-~149 bytes/line the 25KB cap arrives around line 168 and the 200-line cap is
-never reached.
+first, and fails if any entry has fallen past it. Read which one it names
+rather than assuming the line count: at this index's ~150 bytes/line the 25KB
+cap arrives well before line 200.
 
 Practical consequence: pressure is on **prose length per hook**, not entry
 count. Tightening fat hooks buys headroom; deleting whole entries buys less
 than it looks like it should.
-
-That wrong belief is also the best cautionary tale here. The checker's first
-draft enforced only the line cap — the axis that can never fire — while its own
-report correctly printed "bytes is the nearer ceiling". It would have gone green
-on the one cap it hits. Correcting a claim in prose does not correct the code
-written while believing it.
 
 ## What the checker will not catch
 
@@ -133,15 +111,11 @@ mise-system.toml") is not extractable and is not checked: a clean `rc=0` means
 no distinctive fact is lost, **not** that the line is safe to delete unread.
 Read what you are trimming.
 
-⚠️ **Quantify that before you trust a clean run: 152 of 164 hooks (93%) were
-prose-only** when this was measured on 2026-08-02, i.e. the extractor found
-*nothing to check* in them. So "no index-only facts" was a statement about **12
-entries** presented as one about the index. It is a floor, never a clearance.
-Widening the extractor to backticked spans and bolded claims would reach 44%;
-the remaining 56% is judgment. Numbers, and the redesign they argue for:
+Most hooks are prose-only, so the extractor finds nothing to check in them and
+"no index-only facts" speaks for a small minority of entries. A clean run is a
+floor, never a clearance. The redesign this argues for is
 **[#476](https://github.com/ray-manaloto/dotfiles/issues/476) — read it before
-curating again**, especially if you are about to spend agents on this (the first
-run put **52%** of its tokens into its *least* accurate phase).
+curating again**, especially before spending agents on this.
 
 ### So you will hand-verify — and your own grep needs a control arm
 
@@ -150,26 +124,22 @@ topic file yourself. The obvious way is to pull the distinctive tokens out of th
 hook and grep the file for each. That probe **fails in the direction that costs
 you**: it reports *loss* for anything the file merely says differently.
 
-Measured on 2026-08-07, checking 16 session hooks: the first pass reported **5
-missing facts. All five were false.** Every one was a case or format variant —
-`LEDGER` vs `ledger`, `Byte-search` vs `byte-search`, `BRIEF` vs `in the brief`,
-`9.5k` vs `9,500`. A paraphrase is indistinguishable from a deletion to an exact
-substring match, and prose is full of paraphrase.
+Case and format variants (`LEDGER` vs `ledger`, `9.5k` vs `9,500`, `BRIEF` vs
+`in the brief`) are indistinguishable from deletions to an exact substring
+match, and prose is full of paraphrase.
 
 So: **match case-insensitively, and read both sides before believing any miss.**
 Then arm the probe — run it against a token you know is absent (invent a fresh
 nonsense string every time; one you have written down before is now *in* the
-corpus) and confirm it reports missing. On the same pass, 77 distinctive tokens
-checked, 0 missing, control arm firing correctly — that is a result worth
-reporting, and the bare "0 missing" without the arm is not.
+corpus) and confirm it reports missing. Report "N checked, 0 missing, control
+arm fired" — never a bare "0 missing".
 
 ### Where the bytes actually are
 
-Session entries. On 2026-08-07 the 17 `project_session_*` hooks were **8,576 B
-of 22,086 (~40%)**, one of them 2,836 B on its own — 12.8% of the whole index
-for a single line. Compressing them to pointers took the index **22,086 →
-17,292 B (88% → 69% of cap)** with nothing lost, because every fact in them was
-already in the linked file.
+Session entries. `project_session_*` hooks are usually the largest share of
+the index — one can run to thousands of bytes — and their facts are almost
+always already in the linked file, so compressing them to pointers loses
+nothing.
 
 Start there. Feedback entries are mostly at their floor already, and the
 session-entry precedent is established: sessions before a cutoff get un-indexed
@@ -186,10 +156,9 @@ id read as a commit sha.
 
 ## Trigger
 
-On-demand only, by design. No hook wires it yet: whether it belongs on the
-existing `SessionEnd` command-audit hook, on a size threshold, or nowhere is a
-decision deferred until a few sessions show how the numbers actually move
-(Ray, 2026-07-14). Revisit then, with data.
+On-demand only; no repository hook runs it. Codex itself warns when
+`MEMORY.md` nears or passes its 200-line / 25KB read limit — treat that
+warning as the trigger.
 
 ## See also
 
@@ -206,9 +175,3 @@ decision deferred until a few sessions show how the numbers actually move
   works the docs are explicit that it "doesn't reduce context, since imported
   files load at launch." Ordinary markdown links are the documented design and
   are already what the index uses.
-
-## GitHub repos touched
-
-- _None._ — the checker reads `~/.claude` locally; the memory-loader behaviour
-  above is from Anthropic's hosted docs at `code.claude.com/docs/en/memory.md`,
-  not a GitHub-hosted repo.

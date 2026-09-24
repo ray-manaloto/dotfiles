@@ -45,7 +45,7 @@ equivalent exists for them):
 |----------|------|--------|---------|
 | `is_dev_computer` | bool | Interactive prompt on darwin / `true` on linux | `false` |
 | `is_personal` | bool | Interactive prompt on darwin | `false` |
-| `is_ephemeral` | bool | Interactive prompt on darwin / `true` on linux+CI | `eq .chezmoi.os "linux"` |
+| `is_darwin` | bool | `eq .chezmoi.os "darwin"` (host discriminator) | — |
 | `is_ci` | bool | Auto-detected from `CI` env var | `false` |
 
 `is_container` was **removed** in the C10 refactor — use `eq .chezmoi.os "linux"`
@@ -75,7 +75,7 @@ done
 chezmoi managed --include=externals 2>&1
 
 # 3. Check for undefined variables (grep for .chezmoi.data references)
-grep -rn '\.chezmoi\.data\.' home/*.tmpl | grep -v 'is_dev_computer\|is_personal\|is_ephemeral\|is_ci'
+grep -rn '\.chezmoi\.data\.' home/*.tmpl | grep -v 'is_dev_computer\|is_personal\|is_darwin\|is_ci'
 
 # 3a. Sanity-check: NO references to the removed is_container variable.
 # If anything turns up, replace with `eq .chezmoi.os "linux"` per use-tool-builtins.md.
@@ -87,7 +87,7 @@ grep -rn 'eq .chezmoi.os' home/*.tmpl
 
 ## Common Issues
 
-- **Template changes require `chezmoi init --init`** on existing machines to re-run prompts
+- **Template changes require `chezmoi init`** on existing machines (`--prompt` re-asks `promptBoolOnce` questions)
 - **`.tmpl` files are NOT linted by ruff/shellcheck** — hk.pkl uses type-based matching, and `.sh.tmpl` files have type `text` not `shell`
 - **Container environments skip prompts** — always test templates with both interactive and non-interactive paths
 - **`scriptEnv.PATH`** in `.chezmoi.toml.tmpl` must include mise shims for run_once/run_after scripts

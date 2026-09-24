@@ -222,6 +222,7 @@ def decide(tool_input: Mapping[str, object]) -> str | None:
         "This ask does not meet the project's AskUserQuestion standard "
         f"(Ray, 2026-08-02; {_DOC}):\n"
         f"{bullets}\n"
-        "Revise and re-ask — do NOT fall back to listing the options in prose, "
-        "which costs the user a round-trip and is what this standard exists to stop."
+        "Revise the options and call AskUserQuestion again. This is a quality "
+        "deny, not the tool being unavailable, so that rule's prose fallback does "
+        "not apply; listing the options in prose would cost the user a round-trip."
     )

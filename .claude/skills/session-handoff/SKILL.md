@@ -58,33 +58,15 @@ outlive the session; note anything intentionally left running in the handoff.
 A stale wakeup firing after handoff re-triggers work that is already done
 (observed 2026-07-05).
 
-⚠️ **Enumerate by ANCESTOR CHAIN, and exclude NOTHING.** This step was prose
-until 2026-09-15 and it failed: a sweep reported "nothing outlives this session"
-while a 32-minute orphaned wait loop was running. The sweep had excluded
-`/bin/zsh -c source …snapshot-zsh…` — which is exactly how the harness runs a
-background task, so it filtered out the category the target belongs to. The
-operator's status line ("1 shell") was ground truth; the probe was not.
-
-The method that works: walk `ppid` from each process up to init, keep everything
-whose chain reaches THIS session's `claude` pid, and only then classify. That
-same chain is what proves a foreign `codex exec` (the ChatGPT desktop app runs
-one under `ChatGPT.app` -> `Codex Computer Use.app`) is **not yours and must not
-be killed**.
-
-Three probe shapes that each returned a confident wrong answer in one session —
-none of them can produce the other outcome, so none is evidence:
-
-- `until [ -f X ]` where `X` already exists from an earlier run — exits instantly
-  against a stale file. **Delete `X` first, or the wait is a no-op.**
-- `until ! pgrep -f "<literal>"` — the waiting shell's own argv CONTAINS the
-  literal, so it matches itself and can never finish.
-- any sweep with an exclusion — see above.
-
-⚠️ **An `until [ -f X ]` wait is UNSATISFIABLE if the producer of `X` was killed.**
-The 2026-09-15 orphan waited on a receipt whose gate run had been terminated
-mid-flight; it would have spun forever. Prefer the harness's background run plus
-its completion notification over any hand-rolled wait; when a wait is genuinely
-needed, use `mise run bounded-wait` with its required deadline.
+A process belongs to this session only if its `ppid` chain reaches THIS
+session's `claude` pid — enumerate by that chain and exclude nothing. The
+harness runs its own background tasks as `/bin/zsh -c source …snapshot-zsh…`,
+so any exclusion filter hides exactly the category you are looking for; the
+same chain proves a foreign `codex exec` (e.g. one under `ChatGPT.app`) is not
+yours and must not be killed. Prefer the harness's background run and its
+completion notification over any hand-rolled wait; when a wait is genuinely
+needed, use `mise run bounded-wait` with its required deadline — a
+file-existence wait whose producer was killed never finishes.
 
 Run the descendant census instead of reimplementing the ancestry walk:
 
@@ -102,15 +84,10 @@ handoff until stopped or explicitly named with `--allow` — never `--allow` a
 healthy harness row merely to make the census pass.
 
 **Distinguish session-LOCAL state from session-INDEPENDENT autonomous
-processes — do NOT block `/clear` on the latter (Ray, 2026-07-08).** GitHub-side
-processes — running GHA runs, and autonomous bots like **Renovate** that
-continuously open/merge PRs on their own schedule — execute on GitHub
-regardless of whether you `/clear`, start a new session, or none. They are NOT
-"background tasks of this session." Trying to wait for `main` to "settle"
-before `/clear` is futile when Renovate is active: merging one PR immediately
-triggers its promote run + the next queued PR (observed 2026-07-08 — #188
-merged → promote in-flight + #189 building + #192 failing, all at once).
-Correct handling: **INVENTORY** in-flight autonomous PRs / CI runs in the
+processes, and do not block `/clear` on the latter.** Running GHA runs and bots
+like **Renovate** execute on GitHub whether or not this session exists, and an
+active bot means `main` never goes quiet: each merge triggers its promote run
+and the next queued PR. Correct handling: **INVENTORY** in-flight autonomous PRs / CI runs in the
 handoff (number, what each is, expected outcome, any that are legitimately
 failing and why), pin the handoff to the current HEAD, note that `main` is
 bot-advanced and the next session just `git pull`s the latest — then `/clear`.
@@ -144,7 +121,7 @@ are "Briefs M-P" in `docs/research/kb/reports/agents/session-2026-09-23d-agent-b
 |---|---|---|
 | dismissed errors | every non-zero rc, error, WARN, denied call, DRIFT line and repeated mistake: fixed, recorded in `task_plan.md`, or dismissed? | Opus `general-purpose` |
 | missing requests | every user message and AskUserQuestion answer: does it land in `task_plan.md`, an issue, a commit or memory? | Opus `general-purpose` |
-| bugs | cold review of the branch diff by ref (base = merge-base with `main`) | a model family different from the diff's AUTHOR (not the orchestrator): an Anthropic-authored diff gets an OpenAI codex review launched read-only with `mise exec -- codex exec -s read-only --ignore-rules review --commit <SHA> -c 'sandbox_mode="read-only"'` (pending #1297's write-probe); a codex-authored diff gets an Opus `cold-reviewer`. |
+| bugs | cold review of the branch diff by ref (base = merge-base with `main`) | a model family different from the diff's AUTHOR (not the orchestrator): an Anthropic-authored diff gets the read-only codex review lens, a codex-authored diff gets an Opus `cold-reviewer`; the exact command lives in `.claude/skills/codex-sdlc-team/SKILL.md` § Review tiers. |
 | vagueness | every doc, plan, spec, rule or agent file the session changed, read as a fresh session or a codex lane would: stale, ambiguous, contradictory, unowned | Opus `general-purpose` |
 
 Every finding gets a disposition: **FIX-NOW** (make the change before §2) or **PLAN** (exact `task_plan.md`
@@ -165,7 +142,7 @@ reflected in docs), find and update every affected doc. Walk these in order:
    re-timed and fix every hit:
    ```bash
    git grep -nE "<old-filename>|<old-command>|<old-cron>|<renamed-symbol>" \
-     -- ':!.omc*' ':!*.lock'
+     -- ':!*.lock'
    ```
    Common sources: workflow/file renames, mise task names/descriptions,
    CLI command names, cron timings, env-var names, moved docs.
@@ -187,22 +164,13 @@ reflected in docs), find and update every affected doc. Walk these in order:
    `python/src/dotfiles_setup/doc_refs.py`, pinned by `tests/test_doc_refs.py`),
    so `mise run lint` already covers it — nothing extra to run here.
 
-   **This step used to print an ad-hoc `git grep | while read` loop, and it
-   was retired 2026-07-24 because it was actively misleading**: it matched
-   bare basenames and reported **~120 false MISSING hits** in one run (a
-   `.claude/rules/*.md` "see also" cites `do-not.md`, which resolves at
-   `.claude/rules/do-not.md`). Filtering by "does this basename exist anywhere
-   in `git ls-files`" still left 58, nearly all legitimately external —
-   container paths, gitignored artifacts, memory files living outside the
-   repo, illustrative examples. Exactly one was real. The checker encodes all
-   of that as `_ALLOWED_ABSENT`, each entry justified; the loop encoded none
-   of it. A sweep whose output is ~99% noise does not get read.
-
-   So: if `mise run lint` is green, doc refs are clean. When the gate DOES
-   fire, judge the hit — fix the ref, or add a justified `_ALLOWED_ABSENT`
-   entry (prefer fixing). Widening the checker's scope is a `DOC_PATHSPECS`
-   change plus a coverage assertion in `tests/test_doc_refs.py`; do not
-   re-add a manual loop.
+   The checker's `_ALLOWED_ABSENT` list justifies each legitimately external
+   reference (container paths, gitignored artifacts, out-of-repo memory
+   files, illustrative examples); a basename-level grep loop reports mostly
+   noise, so do not hand-roll one. If `mise run lint` is green, doc refs are
+   clean. When the gate fires, judge the hit — fix the ref (preferred) or add
+   a justified `_ALLOWED_ABSENT` entry. Widening the checker's scope is a
+   `DOC_PATHSPECS` change plus a coverage assertion in `tests/test_doc_refs.py`.
 
 **Constraints (machine-enforced — respect or the gate fails):**
 - Markdown size is **class-aware** — see `.claude/rules/md-size-budgets.md`
@@ -254,15 +222,13 @@ letter suffix rather than overwriting.
 Full subagent reports must already be on disk per
 `.claude/rules/agent-report-persistence.md`: every findings-bearing agent's
 final report persisted VERBATIM under `docs/research/kb/reports/agents/` at the
-moment it was received — condensed notepad summaries do NOT count (near-loss
-observed 2026-07-05: 13 reports existed only in context until a manual
-round-2 pass). At session-handoff, audit coverage: enumerate every agent launched
+moment it was received — condensed notepad summaries do NOT count. At
+session-handoff, audit coverage: enumerate every agent launched
 this session; each findings-bearing one must map **both its brief (the prompt
 handed TO it) and its report** to an artifact file (or an explicit N/A in the
 handoff). Anything missing: write it now, verbatim from context, before
-`/clear` destroys the only copy. Briefs are in scope because #601's seven
-review rounds left all seven briefs in an ephemeral scratchpad — the reports
-survived, the questions that produced them did not.
+`/clear` destroys the only copy. Briefs are in scope because a report without
+its brief has lost the question that produced it.
 
 Every report written this session also needs an inbound pointer from the
 handoff **and** from the rule or skill whose behavior it governs. If no such
@@ -326,7 +292,7 @@ Run /session-resume
 If an attestation is owed (the plan changed and the model may not attest), put the `! mise run plan-attest` prompt
 **before** that line, and only after `mise run session-orphans` shows no live wait loops or lanes and no background
 agent, codex lane or harness task is still running, so the attestation covers the final plan bytes. Any later plan
-edit makes it stale again. Once #1351 retires D4, the orchestrator attests instead and nothing is owed.
+edit makes it stale again.
 
 ## Checklist (all true before you're done)
 

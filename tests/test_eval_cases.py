@@ -72,25 +72,23 @@ def test_the_expected_cases_are_declared() -> None:
 def test_no_case_is_live() -> None:
     """Every case is offline and gated (#1311).
 
-    The only live case was the fable-orchestrator plugin's ``doctor.sh``, which
-    pointed at a 1.14.0 cache path that no longer existed and could only skip.
-    It was removed with the plugin. If a case is ever marked live again, the
-    offline gate gets cheaper by doing less, which is the wrong direction.
+    The only live case was a plugin's ``doctor.sh`` pinned to a cache path that
+    no longer existed, so it could only skip; it was removed. If a case is ever
+    marked live again, the offline gate gets cheaper by doing less, which is
+    the wrong direction.
     """
     assert [c.name for c in _cases() if c.live] == []
 
 
-def test_grok_is_declared_and_the_case_still_passes() -> None:
-    """`grok` is named in the doctrine and is NOT installed. That is correct.
+def test_the_declared_lanes_case_passes_even_without_a_lane() -> None:
+    """A declared lane may be absent on a runner; its fallback must be written.
 
-    "Availability is discovered at run time, not declared" — so the case must
-    assert the DEGRADATION PATH is written down, not that grok exists. A case
-    that failed here would be pressure to either install a CLI we do not want or
-    delete a lane the doctrine legitimately names.
+    "Availability is discovered at run time, not declared" — so with a lane that
+    cannot resolve, the case must still pass on the DEGRADATION PATH written in
+    the doctrine doc, not on the lane existing.
     """
-    assert "grok" in eval_cases.DECLARED_LANES
     outcome = evals.declared_lanes_reconcile(
-        eval_cases.DECLARED_LANES,
+        (*eval_cases.DECLARED_LANES, "definitely-not-a-real-lane-cli"),
         fallback_doc=_ROOT / ".claude" / "CLAUDE.md",
         fallback_tokens=eval_cases.FALLBACK_TOKENS,
     )

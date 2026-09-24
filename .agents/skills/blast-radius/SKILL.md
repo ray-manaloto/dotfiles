@@ -63,11 +63,3 @@ the deep dive.
   graph at all; the impact path checks `graph_path.exists()` internally and
   silently skips impact (not an error) when the graph is missing. Don't
   expect `affected`'s health-gate error shape here.
-
-## Not authored via `/skill-creator:skill-creator`
-
-That's this repo's canonical skill-authoring path
-(`.claude/rules/agent-artifact-conventions.md` rule 6), but it's a
-Codex-side slash command an implementer lane (codex/grok) cannot invoke.
-This file was hand-written to match the shape of `.agents/skills/token-check/
-SKILL.md` instead — flagged here per the spec's premise 10, not hidden.

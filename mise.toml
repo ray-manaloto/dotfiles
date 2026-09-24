@@ -104,11 +104,9 @@ opencode = "1.18.32"
 # bun (the npm package_manager) is a host↔image SHARED tool → declared in
 # .config/mise/conf.d/shared.toml, not here (mise-parity: a tool used by both
 # sides lives only in the shared fragment).
-# claude-flow + ralph-cli removed 2026-07-23: superseded by the cross-vendor
-# orchestrator adoption (#346, fable-orchestrator + antigravity), and unused by
-# CI/hk/scripts. Re-add if needed for interactive use.
-# Cross-vendor executor-lane CLIs: codex (this repo's own codex-* lanes; the
-# fable-orchestrator plugin that once drove it was removed in #1310) and
+# claude-flow + ralph-cli removed 2026-07-23: unused by CI/hk/scripts. Re-add if
+# needed for interactive use.
+# Cross-vendor executor-lane CLIs: codex (this repo's own codex-* lanes) and
 # yuting0624/antigravity-for-claude-code.
 # Canonical mise registry short names (https://mise.jdx.dev/registry.html):
 # `antigravity-cli`=aqua:google-antigravity/antigravity-cli (Google's current
@@ -731,7 +729,7 @@ description = "Launch one Codex review lane for a node (#613): write the lane re
 # that ticket shipped a complete reaper and nothing wrote its inputs, so
 # `reap_codex_lanes` found no run directory for any node and was SILENT.
 #
-# NOT a wrapper around the fable-orchestrator plugin's run-lane.sh. The full
+# NOT a wrapper around a plugin lane launcher. The full
 # justification `use-tool-builtins.md` requires lives ONCE, in the codex_lane
 # module docstring — not restated here, because the #613 review found it written
 # out in three files, two carrying a line-number citation into a script that is
@@ -1330,7 +1328,7 @@ description = "Eval harness, tiers 1+2 (offline, gated)"
 #
 # Offline, so it joins the ship gates for free. The former `--live` lane doctor
 # (a plugin script pinned to a cache path that no longer existed) was retired
-# with fable-orchestrator (#1311). Runner is the SHARED kb_setup.evals; this
+# (#1311). Runner is the SHARED kb_setup.evals; this
 # repo's cases are dotfiles_setup.eval_cases.
 run = "uv run --project python dotfiles-setup eval"
 

@@ -9,8 +9,8 @@ worked.
 ## The chain
 
 00. **For AGENT-HARNESS behaviour, grep the knowledge-base's offline sources
-    FIRST.** `~/dev/github/ray-manaloto/knowledge-base/sources/` holds **36
-    source trees / 6,446 markdown files** (measured 2026-08-02), including
+    FIRST.** `~/dev/github/ray-manaloto/knowledge-base/sources/` holds the
+    offline source corpus, including
     `agent-harness-docs/docs/{claude-code,codex,cursor,opencode,pi}` — the
     **vendor's own docs**, on disk, greppable, zero round-trips.
 
@@ -94,11 +94,10 @@ scope limit: `docs/rules-evidence/research-doc-sources.md`.
 
 ## MCP: two lanes. Which lane you are in decides the answer
 
-⚠️ **The old "every schema in every conversation, forever" cost is FALSE here**
-(measured 2026-07-30): Claude Code presents MCP tools **deferred — names only**,
-loading a schema on demand via `ToolSearch` — a **33×** difference. Do not cite
-that sentence, and never refuse a registration on its strength. Method and
-per-server table: `docs/rules-evidence/research-doc-sources.md`.
+Claude Code presents MCP tools **deferred — names only**, loading a schema on
+demand via `ToolSearch` (measured 33× smaller than eager schemas), so a
+registration's context cost is small; never refuse one on context grounds.
+Method and per-server table: `docs/rules-evidence/research-doc-sources.md`.
 
 The residual cost is small and the same either way. What actually differs
 between the lanes is whether you control the alternative.
@@ -107,8 +106,7 @@ between the lanes is whether you control the alternative.
 justification needed.** Enabling a plugin that bundles an MCP server, or a tool
 whose features only work over MCP, is a normal thing to do. You are buying the
 plugin's value and paying its schema cost knowingly. Do not fight it, do not
-wrap it, do not refuse a useful plugin over this. Relaxed 2026-07-19; the
-`no_mcp_registration` hk step is gone and is not coming back.
+wrap it, do not refuse a useful plugin over this.
 
 **Lane 2 — anything THIS project builds, calls, or looks up: AVOID MCP.**
 For our own doc lookups, tool calls and automation, exhaust these first, in

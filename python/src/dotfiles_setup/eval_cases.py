@@ -39,17 +39,14 @@ from dotfiles_setup import hook_guard
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-#: Lane CLIs the orchestration doctrine names in `.claude/CLAUDE.md`. `grok` is
-#: deliberately included and is NOT installed (control-armed: `codex`, `agy`,
-#: `claude`, `graphify` all resolve; `grok` does not). The doctrine's position is
-#: that availability is discovered at run time, so the case asserts the
-#: DEGRADATION PATH IS DECLARED — not that grok exists.
-DECLARED_LANES = ("codex", "agy", "grok")
+#: Lane CLIs the orchestration doctrine names in `.claude/CLAUDE.md`. Availability
+#: is discovered at run time, so the case asserts each lane resolves OR its
+#: DEGRADATION PATH IS DECLARED — a runner without `agy` must still pass.
+DECLARED_LANES = ("codex", "agy")
 
 #: Tokens whose presence in the doctrine doc constitutes a declared degradation
-#: path. `.claude/CLAUDE.md` says grok "is NOT installed, so `codex` is the only
-#: viable fixed mode and cross-family review falls to antigravity or Claude".
-FALLBACK_TOKENS = ("NOT installed", "fall")
+#: path: `.claude/CLAUDE.md` states that execution falls back to Claude Opus.
+FALLBACK_TOKENS = ("terminal fallback is Claude Opus",)
 
 #: A liveness question for the local graph. Deliberately not phrased by echoing
 #: node labels — that grades lexical overlap and reports a win that isn't there.

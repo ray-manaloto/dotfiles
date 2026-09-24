@@ -43,7 +43,7 @@ Do **not** use it when:
 
 ## Local cache — use this FIRST
 
-As of 2026-04-07, every repo in `docs/research/mintlify-catalog.md`
+Every repo in `docs/research/mintlify-catalog.md`
 has both `llms.txt` and `llms-full.txt` cached under
 `docs/research/mintlify-cache/<owner>/<repo>/`. **Grep the local
 cache before reaching for `curl`** — zero latency, no network
@@ -90,10 +90,11 @@ curl -sSL "https://www.mintlify.com/<owner>/<repo>/llms.txt" | head -40
 curl -sSL "https://www.mintlify.com/<owner>/<repo>/llms-full.txt" | grep -B2 -A15 -i <topic>
 ```
 
-Output is one line per page, each in the form:
+Output is one line per page, each in the form below. The link host may be
+`mintlify.wiki` or `www.mintlify.com`; both serve the `.md` page:
 
 ```
-- [Page title](https://www.mintlify.com/<owner>/<repo>/<path>.md): one-line description
+- [Page title](https://mintlify.wiki/<owner>/<repo>/<path>.md): one-line description
 ```
 
 Grep for the topic you want and pick a page path.
@@ -119,10 +120,6 @@ curl -sSL "https://www.mintlify.com/jdx/mise/dev-tools/aliases.md" | head -60
 
 The cached file usually gives you enough inline content that the
 per-page `.md` fetch is unnecessary.
-
-This is the exact path used in
-`docs/research/devcontainer-spec-delta-2026-04-06.md` to validate
-that `[shell_alias]` is a real, current mise config key.
 
 ## Why `mcp2cli` is NOT the preferred path for this skill
 
@@ -246,18 +243,11 @@ a mintlify platform update), fetch these directly:
 - <https://www.mintlify.com/docs/ai/markdown-export.md>
 - <https://www.mintlify.com/docs/api/introduction.md>
 
-> Note: the user-provided URL `https://www.mintlify.com/docs/ai/mcp.md`
-> is a 404. The working page is `model-context-protocol.md` above.
-
 ## Prefer `mcp2cli` over `codex mcp add` for mintlify servers
 
-Registering an MCP server via `codex mcp add` injects every tool's
-schema into Codex's system prompt for every conversation forever, so
-`mcp2cli` is the preferred path here (relaxed 2026-07-19 — native
-registration is allowed when a plugin requires it, but a mintlify docs
-lookup does not). Even if a live mintlify MCP were reachable (which the
-catalog entries are not), reach it via `mcp2cli`. See
-`feedback_no_mcp_registration.md`.
+A mintlify docs lookup is this repo's own work (lane 2 in
+`.claude/rules/research-doc-sources.md`), so reach any live mintlify MCP via
+`mcp2cli` rather than registering it — for simplicity, not context cost.
 
 ## See also
 
@@ -267,5 +257,5 @@ catalog entries are not), reach it via `mcp2cli`. See
 - `docs/research/mintlify-catalog.md` — verified per-repo status.
 - `docs/research/mintlify-catalog-validation-log.md` — full probe
   evidence for the findings summarized above.
-- `feedback_no_mcp_registration.md` (auto-memory) — why we don't
-  `codex mcp add` anything.
+- `feedback_no_mcp_registration.md` (auto-memory) — when native
+  registration is and is not appropriate.

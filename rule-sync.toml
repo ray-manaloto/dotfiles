@@ -24,8 +24,8 @@
 [shared]
 # Plugins that must be ENABLED (value `true`, not merely present as a key) in
 # both repos' .claude/settings.json. antigravity is the one orchestration lane
-# still delivered as a plugin; fable-orchestrator was removed (#1310) and its
-# capabilities now live in each repo's own agents and routing skill.
+# delivered as a plugin; every other lane lives in each repo's own agents and
+# routing skill.
 plugins = [
     "antigravity@antigravity-for-claude-code",
 ]

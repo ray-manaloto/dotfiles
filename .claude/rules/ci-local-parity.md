@@ -28,9 +28,10 @@ epic #160 T5). mise merges `<repo>/.config/mise/conf.d/*.toml` into the
 project config, so CI's `mise install` (run with cwd at the repo root)
 installs both — parity holds. What must NOT be relied on is a tool present
 only in global `~/.config/mise/` (invisible to CI).
-Global mise tools are invisible to CI runners.
 
-Verification: `mise which <tool>` should resolve under `~/.local/share/mise/installs/`.
+Verification: `mise ls --current <tool>` — the source column must name
+`mise.toml` or `.config/mise/conf.d/shared.toml`, never `~/.config/mise/config.toml`.
+(`mise which` cannot tell them apart: global and project tools share one install root.)
 
 ## Rule 3: Use mise binary names, never npx
 
@@ -49,15 +50,7 @@ When running Python tools (pytest, dotfiles-setup) from the repo root:
 `--directory` changes cwd, breaking relative paths. `--project` resolves
 deps without changing cwd. This applies to hk.pkl steps and mise tasks.
 
-## Rule 5: Clear hk cache after editing hk.pkl
-
-RETIRED (#160 T12, hk 1.49): the pkl-eval cache is content-hashed since
-hk 1.47 (stale-serve impossible) and the default pklr backend evaluates
-import/spread identically to the pkl CLI (parity probe-verified), so the
-`HK_PKL_BACKEND=pkl` override was dropped. Kept as a numbered rule so
-references to "rule 5" stay valid.
-
-## Rule 6: Test new hk steps locally before committing
+## Rule 5: Test new hk steps locally before committing
 
 When adding a new step to hk.pkl:
 1. `hk validate` — verify config syntax
