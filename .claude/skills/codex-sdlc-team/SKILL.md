@@ -135,6 +135,67 @@ Use these schemas when another tool produces requests or consumes results. Never
 reconstruct the prompt, Codex command, detached process, or artifact layout in a
 wrapper.
 
+## Routing doctrine — the architect's side
+
+The session is the **architect**: it owns requirements, decomposition, specs,
+routing, and verification. This section replaced the fable-orchestrator plugin's
+routing skill (#1310, #1315). grok is not installed, so every lane below is
+codex or Anthropic.
+
+| Work | Lane |
+|---|---|
+| Trivial edit, or a small spec-saturated diff that costs less to write than to specify | the architect, inline |
+| Implementation of a ratified spec | `codex-sol-implementer` / `codex-astra-implementer` (effort `xhigh`), or this team in `implement` mode when the work splits by domain |
+| Advisor consult at a commitment boundary | `codex-sol-advisor` / `codex-astra-advisor`; escalation to `claude-advisor` only per `.claude/token-routing.md` |
+| Premise check of a spec before dispatch | `premise-verifier` |
+| Proposal critique, staleness audit, harness question | the matching `codex-{sol,astra}-*` lane |
+
+**Fallback chain:** codex lane, then an Opus subagent (`Agent`, `model: "opus"`)
+with the same spec. Say in the report that it fell back; a lane never silently
+becomes another model.
+
+### The spec contract
+
+Every delegation carries seven parts, inline or as a `SPEC FILE: <absolute path>`:
+
+1. **Objective** — the outcome and the failure it prevents (outcome, not keystrokes).
+2. **Files** — exact paths to create or modify.
+3. **Interfaces** — signatures, types, shapes the code must match.
+4. **Constraints and invariants** — conventions, untouchables, consumers; a pinned
+   mechanism only with its ruling cited.
+5. **Verification** — the smallest command bundle that proves the change.
+6. **Commit** — `lane` (default) or `caller`.
+7. **PREMISES** — one row per factual claim, each cited from a read made THIS
+   session: `L` literal (name = value — file:line), `I` interface, `P` precedent
+   (plus a data-level match), `E` emission (field ← filler, bounded?, PII class),
+   `A` explicit assumption.
+
+A spec that emits (telemetry, errors, events) or touches security, concurrency or
+migrations goes to `premise-verifier` before dispatch, and again for every
+corrected revision's changed rows. Every lane may **dissent**: a contradiction
+between the code and the spec stops the lane and comes back as a finding.
+
+### Review tiers
+
+- **Mechanical diff** (rename, literal move): verification only. In doubt, it is
+  not mechanical.
+- **Behavior-bearing diff**: one cold review BY REF (commit SHA or base branch),
+  no intent framing, from a model family different from the AUTHOR's. The
+  caller passes `author_family` explicitly:
+  - codex-authored → `cold-reviewer` (Opus).
+  - Anthropic-authored → a codex lens:
+    `mise exec -- codex exec -s read-only --ignore-rules review --commit <SHA> -c 'sandbox_mode="read-only"'`
+    (`--base <branch>` for a range; pending #1297's write-canary). Do not
+    promise `--output-schema`: `exec review` ignores it (#1296).
+- **Every behavior-bearing diff** also gets the bundled `/code-review`; **every
+  spec'd diff** also gets `/mattpocock-skills:code-review` (Standards + Spec).
+- **Security / auth / concurrency / migration paths**: add an Opus subagent read
+  of every error, nil, empty and timeout branch.
+
+Review findings are claims: refute each against the cited `file:line` before
+acting. Confirmed findings go back to the author lane as a corrected spec. Stop
+after two respec rounds on one diff and surface the residue to Ray.
+
 ## See also
 
 - `.claude/rules/codex-sdlc-team.md` — the eager summary.

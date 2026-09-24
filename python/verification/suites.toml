@@ -2449,6 +2449,23 @@ strip_comments = false
 tokens = ["codex fast mode"]
 
 [[suite]]
+name = "orchestration.owned-agents"
+description = "The repo-owned replacements for fable-orchestrator's two Claude-side agents must exist with their pinned models (#1310/#1314). `claude-advisor` is the escalation-only Fable advisor (triggers in `.claude/token-routing.md`); `premise-verifier` is the MIT port of the plugin's pre-dispatch premise checker. Deleting either file, or re-modelling it, silently changes what an escalation or a premise check runs on, so both the file and its `model:` line are pinned."
+category = "orchestration"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [".claude/agents/claude-advisor.md", ".claude/agents/premise-verifier.md"]
+per_path_tokens = { ".claude/agents/claude-advisor.md" = [
+    "name: claude-advisor",
+    "model: fable",
+    "effort: xhigh",
+], ".claude/agents/premise-verifier.md" = [
+    "name: premise-verifier",
+    "model: opus",
+] }
+
+[[suite]]
 name = "eval.mise-task-refs-resolve"
 description = "Every `mise run <task>` cited in an agent doc must name a task this repo declares. Structurally invisible to the existing doc-ref checker: `find_unresolved_refs` only considers spans that LOOK like a file path, and a span containing whitespace is disqualified before it is ever a candidate — so the single most-cited executable thing in these docs was unguarded. Task names are read from the tracked mise config, NOT from `mise tasks`, which merges the invoking user's global config and reports names no file here defines (this Mac's global config contributes four `update:*` tasks). Aliases count: `down` is an alias of `stop` and three docs cite it, so an alias-blind resolver reports three correct citations as broken — measured, not theorised. Asserts the whole chain so it cannot silently drift out."
 category = "eval"

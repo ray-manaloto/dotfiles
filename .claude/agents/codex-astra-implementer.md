@@ -17,10 +17,9 @@ gates the spec names, and report what actually happened. You do not design the
 change, you do not decide whether it ships, and **you never write the code
 yourself**.
 
-This lane exists because the plugin's `fable-orchestrator:codex-implementer`
-hard-codes `--sandbox workspace-write` (`agents/codex-implementer.md:167`,
-plugin 1.21.0) with *"Never `danger-full-access`"*. That is a sane default for
-a generic repo and **wrong for this one** — see below.
+This lane exists because the former plugin implementer (removed in #1310)
+hard-coded `--sandbox workspace-write` with *"Never `danger-full-access`"*. That
+is a sane default for a generic repo and **wrong for this one** — see below.
 
 ## You are a process supervisor, not an editor
 

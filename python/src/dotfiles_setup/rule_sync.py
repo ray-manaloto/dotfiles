@@ -56,6 +56,10 @@ class Shared:
     #: the other's false statements. What must not drift is which concerns are
     #: governed. Defaulted so a ``rule-sync.toml`` predating this axis still loads.
     rules: tuple[str, ...] = ()
+    #: Agent STEMS (``.claude/agents/<stem>.md``), presence only — the same
+    #: shape as ``rules`` (#1312). A renamed or deleted shared agent in one repo
+    #: leaves the other repo's doctrine naming a lane that cannot be spawned.
+    agents: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -78,6 +82,7 @@ def load_shared(path: Path) -> Shared:
         plugins=tuple(data.get("plugins", [])),
         lines=tuple(data.get("lines", [])),
         rules=tuple(data.get("rules", [])),
+        agents=tuple(data.get("agents", [])),
     )
 
 
@@ -123,6 +128,19 @@ def declared_rules(repo_root: Path) -> set[str]:
     return {p.stem for p in rules.glob("*.md")}
 
 
+def declared_agents(repo_root: Path) -> set[str]:
+    """Agent STEMS under ``.claude/agents/`` (#1312).
+
+    Presence only, like :func:`declared_rules`: each repo writes its own agent
+    body (its own grounding commands), so what must not drift is WHICH agents
+    both repos can spawn.
+    """
+    agents = repo_root / ".claude" / "agents"
+    if not agents.is_dir():
+        return set()
+    return {p.stem for p in agents.glob("*.md")}
+
+
 def _claude_md_lines(repo_root: Path) -> set[str]:
     doc = repo_root / ".claude" / "CLAUDE.md"
     if not doc.is_file():
@@ -160,6 +178,12 @@ def find_rule_sync_gaps(repos: dict[str, Path], shared: Shared) -> list[RuleSync
             for rule in shared.rules
             if rule not in rules
         )
+        agents = declared_agents(root)
+        gaps.extend(
+            RuleSyncGap(repo=name, kind="agent", ref=agent)
+            for agent in shared.agents
+            if agent not in agents
+        )
     return gaps
 
 
@@ -174,6 +198,7 @@ def divergence_report(repos: dict[str, Path]) -> str:
         ("plugins", enabled_plugins),
         ("skills", shipped_skills),
         ("rules", declared_rules),
+        ("agents", declared_agents),
     )
     names = list(repos)
     out: list[str] = ["advisory divergence (blocks nothing):"]
@@ -245,6 +270,7 @@ def run(
 
     lines.append(
         f"OK rule-sync: {len(shared.plugins)} plugin(s) + {len(shared.lines)} line(s) "
-        f"+ {len(shared.rules)} rule(s) hold in {', '.join(repos)}"
+        f"+ {len(shared.rules)} rule(s) + {len(shared.agents)} agent(s) "
+        f"hold in {', '.join(repos)}"
     )
     return 0, "\n".join(lines)

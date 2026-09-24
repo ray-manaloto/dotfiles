@@ -21,35 +21,44 @@ _NAME_RE = re.compile(r"^name:\s*(\S+)\s*$", re.MULTILINE)
 _AGENT_TYPE_CALL_SITE_RE = re.compile(r"agentType:\s*'([^']+)'")
 
 
-def _known_agent_types() -> set[str]:
-    """Derive the registry surface from the tree, never a hand-copied list.
+#: Claude Code's built-in subagent types a saved workflow may dispatch without
+#: a local agent file. Source: the harness docs' "Built-in subagents" section
+#: (`knowledge-base/sources/agent-harness-docs/docs/claude-code/sub-agents.md`,
+#: lines 31-84: Explore, Plan, general-purpose). `general-purpose` is also the
+#: harness default when a call site omits `agentType`.
+BUILTIN_AGENT_TYPES = frozenset({"general-purpose", "Explore", "Plan"})
 
-    Two real sources feed a call's `agentType`, and a fixed literal set
-    cannot see either drift: (1) a repo-local subagent file's frontmatter
-    `name:` IS the registry key the harness reads (`sub-agents.md`), so a
-    renamed or deleted `.claude/agents/*.md` changes this set automatically;
-    (2) a plugin-qualified name (`fable-orchestrator:codex-implementer`) has
-    no local file, so it is read from the literal `agentType: '...'` call
-    sites in the saved workflow scripts themselves. `general-purpose` is kept
-    unconditionally: it is the harness's own default agentType when a call
-    site omits the option (`modernization-audit.js` never sets one), so no
-    grep of an explicit literal can discover it.
-    """
-    names = {
+
+def _declared_agent_names(agents_dir: Path) -> set[str]:
+    """Frontmatter `name:` of every repo-local subagent file (the registry key)."""
+    return {
         match.group(1)
-        for path in sorted(AGENTS.glob("*.md"))
+        for path in sorted(agents_dir.glob("*.md"))
         for match in [_NAME_RE.search(path.read_text(encoding="utf-8"))]
         if match
     }
-    call_sites = {
-        match.group(1)
-        for path in sorted(WORKFLOWS.glob("*.js"))
+
+
+def undeclared_agent_types(workflows_dir: Path, agents_dir: Path) -> list[str]:
+    """Every literal `agentType` a saved workflow names that nothing declares (#1313).
+
+    Allowed: a built-in (:data:`BUILTIN_AGENT_TYPES`) or a repo-local agent's
+    frontmatter `name:`. A plugin-qualified type (`plugin:agent`) is never
+    allowed: a plugin's cache can be garbage-collected, and knowledge-base's
+    tool-review workflow broke exactly that way on a plugin reviewer. Before
+    #1313 the call-site literals were ADDED to the known set, so any name a
+    workflow used certified itself.
+    """
+    allowed = _declared_agent_names(agents_dir) | BUILTIN_AGENT_TYPES
+    return sorted(
+        f"{path.name}: {match.group(1)}"
+        for path in sorted(workflows_dir.glob("*.js"))
         for match in _AGENT_TYPE_CALL_SITE_RE.finditer(path.read_text(encoding="utf-8"))
-    }
-    return names | call_sites | {"general-purpose"}
+        if match.group(1) not in allowed
+    )
 
 
-KNOWN_AGENT_TYPES = _known_agent_types()
+KNOWN_AGENT_TYPES = _declared_agent_names(AGENTS) | BUILTIN_AGENT_TYPES
 KNOWN_LABEL_PREFIXES = {
     "gap",
     "load",
@@ -92,7 +101,7 @@ ARGS = {
         "claudeCode": "fixture",
         "kbChangelogTop": "fixture",
         "codexCli": "fixture",
-        "plugins": {"fable-orchestrator": "fixture"},
+        "plugins": {"antigravity": "fixture"},
     },
     "pins": {},
     "corpus": {
@@ -226,6 +235,41 @@ def test_every_saved_workflow_dry_runs_with_known_agents(tmp_path: Path) -> None
         for call in calls:
             assert call["agentType"] in KNOWN_AGENT_TYPES
             assert call["label"].split(":", 1)[0] in KNOWN_LABEL_PREFIXES
+
+
+def test_saved_workflows_only_dispatch_declared_agents() -> None:
+    """The real workflows name only built-ins or repo-declared agents (#1313)."""
+    assert undeclared_agent_types(WORKFLOWS, AGENTS) == []
+
+
+def _roster_fixture(tmp_path: Path, agent_type: str) -> list[str]:
+    workflows = tmp_path / "workflows"
+    agents = tmp_path / "agents"
+    workflows.mkdir(parents=True)
+    agents.mkdir(parents=True)
+    (agents / "cold-reviewer.md").write_text("---\nname: cold-reviewer\n---\n")
+    (workflows / "w.js").write_text(
+        f"await agent('x', {{ agentType: '{agent_type}', label: 'x' }})\n"
+    )
+    return undeclared_agent_types(workflows, agents)
+
+
+def test_roster_rejects_a_plugin_namespaced_agent(tmp_path: Path) -> None:
+    """FAIL arm: the exact shape of the knowledge-base runtime break."""
+    assert _roster_fixture(tmp_path, "fable-orchestrator:codex-reviewer") == [
+        "w.js: fable-orchestrator:codex-reviewer"
+    ]
+
+
+def test_roster_rejects_an_undeclared_agent(tmp_path: Path) -> None:
+    """FAIL arm: a name with no local agent file and no built-in."""
+    assert _roster_fixture(tmp_path, "ghost-reviewer") == ["w.js: ghost-reviewer"]
+
+
+def test_roster_accepts_builtins_and_declared_agents(tmp_path: Path) -> None:
+    """PASS arms, same fixture shape: a built-in and a declared local agent."""
+    assert _roster_fixture(tmp_path / "a", "general-purpose") == []
+    assert _roster_fixture(tmp_path / "b", "cold-reviewer") == []
 
 
 def test_top_level_syntax_error_fails_under_pinned_bun(tmp_path: Path) -> None:

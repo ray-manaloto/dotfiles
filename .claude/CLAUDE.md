@@ -43,20 +43,16 @@ that hunk. Full detail: `docs/claude-plugin-config-hygiene.md`.
 ## Cross-vendor orchestration (Fable-5 architect + executor lanes)
 
 - Without being reminded, on ANY session model: non-trivial implementation runs the fable-orchestrator architect-as-orchestrator flow — invoke the fable-orchestrator:orchestration skill before delegating and follow it as authoritative for routing, verification, review tiers, and advisor consults.
+- Without being reminded, on ANY session model: non-trivial implementation runs the architect-as-orchestrator flow — invoke this repo's routing-doctrine skill (`codex-sdlc-team` in dotfiles, `orchestrator-routing` in knowledge-base) before delegating and follow it as authoritative for routing, the spec contract, review tiers, and advisor escalation.
 - fable-orchestrator: implementation lane = codex
 - fable-orchestrator: codex effort = xhigh
 
-The first line is the **trigger**, **deliberately UN-gated**, matching
-knowledge-base. The plugin ships it Fable-gated — but default `/model` here is
-**Opus 5**, so the gated line was false every session and the flow stayed
-dormant. So `/fable-orchestrator:setup` reads an un-gated trigger as a shape to
-upgrade away from and offers to re-gate it — **decline**. It also writes to the
-root `CLAUDE.md`, which the stub gate rejects: config belongs in THIS file.
+The triggers are **deliberately UN-gated** (default `/model` is Opus 5). The
+second one replaces the first when the plugin is removed (#1310).
 
 ### There is no `grok` here — codex lanes only, stop asking
 
-`grok` is NOT installed (control-armed 2026-09-01: `command -v grok` absent while
-`codex` resolves). So every fable-orchestrator lane resolves to codex or to
+`grok` is NOT installed (2026-09-01). So every fable-orchestrator lane resolves to codex or to
 Claude, never grok. Do not propose, dispatch, or "fall back to"
 `grok-implementer`, `grok-reviewer` or `grok-researcher`, and do not ask which
 lane to use — the answer is fixed:

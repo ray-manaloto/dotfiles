@@ -42,8 +42,18 @@ def _shared(
     plugins: tuple[str, ...] = (),
     lines: tuple[str, ...] = (),
     rules: tuple[str, ...] = (),
+    agents: tuple[str, ...] = (),
 ) -> rule_sync.Shared:
-    return rule_sync.Shared(plugins=plugins, lines=lines, rules=rules)
+    return rule_sync.Shared(plugins=plugins, lines=lines, rules=rules, agents=agents)
+
+
+def _agents(root: Path, *stems: str) -> Path:
+    (root / ".claude" / "agents").mkdir(parents=True, exist_ok=True)
+    for stem in stems:
+        (root / ".claude" / "agents" / f"{stem}.md").write_text(
+            f"---\nname: {stem}\n---\n"
+        )
+    return root
 
 
 def _rules(root: Path, *stems: str) -> Path:
@@ -286,6 +296,69 @@ def test_the_declared_rules_match_what_dotfiles_actually_carries() -> None:
     shared = rule_sync.load_shared(_ROOT / "rule-sync.toml")
     assert shared.rules
     assert set(shared.rules) <= rule_sync.declared_rules(_ROOT)
+
+
+# ---------------------------------------------------------------------------
+# Agent sync (#1312) — same shape as rules: presence by stem, both repos
+# ---------------------------------------------------------------------------
+
+
+def test_an_agent_missing_from_one_repo_is_a_gap(tmp_path: Path) -> None:
+    """FAIL direction: one repo renamed or deleted a shared agent.
+
+    The fixture admits both outcomes (`probes-need-a-control-arm.md` rule 8):
+    the same two repos pass the next test once `b` gains the file.
+    """
+    a = _agents(_repo(tmp_path / "a", plugins={}), "claude-advisor")
+    b = _agents(_repo(tmp_path / "b", plugins={}), "kb-advisor")
+    gaps = rule_sync.find_rule_sync_gaps(
+        {"a": a, "b": b}, _shared(agents=("claude-advisor",))
+    )
+    assert [(g.repo, g.kind, g.ref) for g in gaps] == [("b", "agent", "claude-advisor")]
+
+
+def test_an_agent_present_in_both_is_not_a_gap(tmp_path: Path) -> None:
+    """Control arm for the test above: same fixture shape, file present in both."""
+    a = _agents(_repo(tmp_path / "a", plugins={}), "claude-advisor")
+    b = _agents(_repo(tmp_path / "b", plugins={}), "claude-advisor", "kb-extra")
+    assert (
+        rule_sync.find_rule_sync_gaps(
+            {"a": a, "b": b}, _shared(agents=("claude-advisor",))
+        )
+        == []
+    )
+
+
+def test_a_repo_with_no_agents_dir_is_a_gap_not_a_pass(tmp_path: Path) -> None:
+    """An unreadable agents directory must read as ABSENT, never as fine."""
+    a = _agents(_repo(tmp_path / "a", plugins={}), "premise-verifier")
+    b = _repo(tmp_path / "b", plugins={})
+    gaps = rule_sync.find_rule_sync_gaps(
+        {"a": a, "b": b}, _shared(agents=("premise-verifier",))
+    )
+    assert [(g.repo, g.ref) for g in gaps] == [("b", "premise-verifier")]
+
+
+def test_a_config_with_no_agents_key_declares_nothing(tmp_path: Path) -> None:
+    """Omitting `agents` behaves as before the axis existed."""
+    cfg = tmp_path / "rule-sync.toml"
+    cfg.write_text("[shared]\nplugins = []\nlines = []\n")
+    assert rule_sync.load_shared(cfg).agents == ()
+
+
+def test_the_declared_agents_match_what_dotfiles_actually_carries() -> None:
+    """Every declared shared agent exists here, read from the real tree."""
+    shared = rule_sync.load_shared(_ROOT / "rule-sync.toml")
+    assert set(shared.agents) <= rule_sync.declared_agents(_ROOT)
+
+
+def test_divergence_report_has_an_agents_section(tmp_path: Path) -> None:
+    """Agents present in one repo only are reported, not gated."""
+    a = _agents(_repo(tmp_path / "a", plugins={}), "claude-advisor", "only-a")
+    b = _agents(_repo(tmp_path / "b", plugins={}), "claude-advisor")
+    report = rule_sync.divergence_report({"a": a, "b": b})
+    assert "  agents: a=2, b=1, shared=1" in report
+    assert "only-a" in report
 
 
 # ---------------------------------------------------------------------------

@@ -51,12 +51,6 @@ DECLARED_LANES = ("codex", "agy", "grok")
 #: viable fixed mode and cross-family review falls to antigravity or Claude".
 FALLBACK_TOKENS = ("NOT installed", "fall")
 
-#: The fable-orchestrator plugin's own lane doctor. Version-pinned inside the
-#: plugin cache, so it can vanish on plugin GC — hence a LOUD skip, never silent.
-DOCTOR_SCRIPT = Path.home().joinpath(
-    ".claude/plugins/cache/fable-orchestrator/fable-orchestrator/1.14.0/scripts/doctor.sh"
-)
-
 #: A liveness question for the local graph. Deliberately not phrased by echoing
 #: node labels — that grades lexical overlap and reports a win that isn't there.
 CANARY_QUESTION = "how does the devcontainer get built?"
@@ -231,21 +225,6 @@ def _broken_graph_canary() -> evals.Outcome:
         return evals.graphify_canary(root, CANARY_QUESTION, timeout=30)
 
 
-def _broken_doctor() -> evals.Outcome:
-    """Control arm: a doctor script that reports a failing lane.
-
-    Deliberately distinct from the absent-script case. "We could not look"
-    (SKIP) and "we looked and a lane is broken" (FAIL) must never collapse into
-    each other — the first is the inert declaration wearing a green badge.
-    """
-    with tempfile.TemporaryDirectory() as tmp:
-        script = Path(tmp) / "doctor.sh"
-        script.write_text(
-            "#!/usr/bin/env bash\necho '0 ok, 0 warnings, 1 failures'\nexit 1\n"
-        )
-        return evals.doctor_health(script, timeout=30)
-
-
 def _launcher_dispatches(subcommands: Sequence[str]) -> evals.Outcome:
     """Does the pinned ``kb-setup`` CLI actually route each subcommand?
 
@@ -312,9 +291,8 @@ def _graphify_installed() -> evals.Outcome | None:
     return None
 
 
-def cases(repo_root: Path, *, doctor_script: Path | None = None) -> list[evals.Case]:
+def cases(repo_root: Path) -> list[evals.Case]:
     """Build this repo's tier-1 cases."""
-    doctor = doctor_script if doctor_script is not None else DOCTOR_SCRIPT
     fallback_doc = repo_root / ".claude" / "CLAUDE.md"
 
     return [
@@ -368,20 +346,6 @@ def cases(repo_root: Path, *, doctor_script: Path | None = None) -> list[evals.C
             probe=lambda: evals.graphify_canary(repo_root, CANARY_QUESTION),
             control=_broken_graph_canary,
             precondition=_graphify_installed,
-        ),
-        evals.Case(
-            name="tier1.lane-health",
-            description=(
-                "the plugin's own doctor.sh reports every installed lane "
-                "authenticated with model access"
-            ),
-            probe=lambda: evals.doctor_health(doctor),
-            control=_broken_doctor,
-            # doctor.sh has NO offline mode: whenever a lane's CLI is present it
-            # fires a real API call, and it exits `[ FAIL -eq 0 ]` so warnings
-            # pass. It is the live half ENTIRELY and can never join the free
-            # gated tier — the offline probes above are that tier.
-            live=True,
         ),
         evals.guard_table_case(
             "tier2.guard-fixtures",
