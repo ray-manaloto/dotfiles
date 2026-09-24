@@ -47,8 +47,9 @@ report of its own.
 tens of minutes; 50 minutes has been observed. Exactly three signals mean the
 run is over:
 
-1. the log's final `rc=<n>` line exists — codex exited; read `<n>`, then `$OUT`;
-2. there is no `rc=` line AND no live codex process for this lane — it was
+1. `$LOG.rc` exists and is non-empty — codex exited; read its number, then `$OUT`
+   (a separate file: codex's own output goes to `$LOG` and could print an `rc=` line);
+2. there is no `$LOG.rc` AND no live codex process for this lane — it was
    killed or crashed; report that, with the log tail;
 3. the spec's `TIMEOUT:` budget (default 1800 s) has elapsed — reap the lane
    and report `STATUS: timeout`.
@@ -170,10 +171,10 @@ cat "$PROMPT" | PLANNING_DISABLED=1 codex exec \
   --sandbox danger-full-access \
   --model gpt-6-astra \
   -c model_reasoning_effort="xhigh" \
-  -o "$OUT" - > "$LOG" 2>&1; echo "rc=$?" >> "$LOG"
+  -o "$OUT" - > "$LOG" 2>&1; echo "$?" > "$LOG.rc"
 ```
 
-The `rc=` line in `$LOG` is the ONLY completion signal you trust. The harness's
+`$LOG.rc` is the ONLY completion signal you trust. The harness's
 own "completed (exit code 0)" task notification has been measured lying (twice
 on 2026-09-16), and you must not end your turn to wait for it: a subagent that
 ends its turn is finished, and nothing re-wakes it while codex keeps editing
@@ -203,20 +204,20 @@ runs past `TIMEOUT` — three full slices and a shorter fourth for the default
 1800 s:
 
 ```bash
-grep '^rc=' "$LOG" && exit 0   # signal 1 already — read $OUT next, not the budget
+[ -s "$LOG.rc" ] && { echo "rc=$(cat "$LOG.rc")"; exit 0; }   # signal 1 already — read $OUT next, not the budget
 TIMEOUT=1800   # or the dispatch's `TIMEOUT:` value
 remaining=$(( TIMEOUT - ( $(date +%s) - $(stat -f %m "$PROMPT") ) ))   # BSD stat: this lane runs on the macOS host (GNU: stat -c %Y)
 [ "$remaining" -le 0 ] && { echo "budget exhausted"; exit 0; }
 slice=$(( remaining < 540 ? remaining : 540 )); deadline=$((SECONDS+slice))
-while [ $SECONDS -lt $deadline ]; do grep -q '^rc=' "$LOG" && break; sleep 15; done
-grep '^rc=' "$LOG" || { echo "still running at $(date -u +%H:%M:%SZ); ${remaining}s of budget remained before this slice"; pgrep -fl -- "$OUT"; tail -3 "$LOG"; }
+while [ $SECONDS -lt $deadline ]; do [ -s "$LOG.rc" ] && break; sleep 15; done
+[ -s "$LOG.rc" ] && echo "rc=$(cat "$LOG.rc")" || { echo "still running at $(date -u +%H:%M:%SZ); ${remaining}s of budget remained before this slice"; pgrep -fl -- "$OUT"; tail -3 "$LOG"; }
 ```
 
 - `still running` **with** a `pgrep` hit: run the next slice. This says nothing
   about the lane's health, and it is not an invitation to inspect the working
   tree, "help", or start implementing.
 - `still running` with **no** `pgrep` hit: signal 2 — the process died without
-  writing `rc=`. Report `STATUS: partial` with the log tail. If this happens
+  writing `$LOG.rc`. Report `STATUS: partial` with the log tail. If this happens
   inside the first minute with a clean `git status`, relaunch ONCE: repeat
   steps 1–2 with `LANE_ID="${LANE_ID}-r1"` (the `set -C` claim refuses a reused
   id, by design) and the identical spec, and name both ids in the report; a
@@ -242,7 +243,7 @@ into `tail`, which returns the pipe's exit code and masks a failed run:
 
 Your report carries every `EXIT=` line from codex's report **verbatim**. You do
 not run the gates yourself — the architect re-runs anything it needs at an
-integration point — and you never report your own exit code, or the log's `rc=`,
+integration point — and you never report your own exit code, or `$LOG.rc`,
 as a gate's: a lane exits 0 having watched a gate fail. **Never substitute your
 own reasoning for a failed codex call** — if the run errors, times out, or
 returns nothing, say so plainly and return that as the outcome. Backfilling it
@@ -276,7 +277,7 @@ the report. It never uses `--no-verify`, a `HK_SKIP_HOOKS=` prefix, or an inline
 ```text
 STATUS: complete | partial | timeout | dissent | unavailable
 LANE: <LANE_ID> — <$OUT> — <$LOG>
-RC: <the log's rc= line, or "none — <signal 2 or 3>">
+RC: <the number in $LOG.rc, or "none — <signal 2 or 3>">
 GATES: <every EXIT= line from codex's report, verbatim; or "none reported — <why>">
 COMMIT: <hash> | none — <reason: gate red | dissent | timeout | run ended before a committable state>
 FILES: <the list codex reports changed, cross-checked against `git status --short`>

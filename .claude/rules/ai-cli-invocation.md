@@ -6,8 +6,10 @@
 
 Use the pinned CLI through mise and re-probe its help before copying flags.
 Wrong flags are version-sensitive and may waste a lane before anyone notices.
-Prefer `mise run codex-lane` for repository orchestration; use the canonical
-direct forms below only when the task genuinely needs a raw CLI call.
+Team work goes through `mise run sdlc-team`; single-role lanes use the `codex-{sol,astra}-*`
+wrappers; `mise run codex-lane` is only the DAG review-node producer. The class fix that
+replaces all three with one launcher is a Phase 11 item. Use the direct forms below only
+when a task genuinely needs a raw CLI call.
 
 ## Canonical invocation block
 
@@ -32,14 +34,15 @@ It means "Run without persisting session files to disk": every spawn dies with `
 no thread with id` (measured 2026-09-16: 3 failures / 0 session files with it, 0 / 2 without), and
 the run leaves no rollout, so agentsview and any audit of its model, effort or sandbox see nothing.
 A per-lane "keep it where the lane does not delegate" exception was rejected on 2026-09-01 as a
-policy that drifts. Implementation lanes pass no `-s`: the machine's `danger-full-access` is the
-approved posture, and `workspace-write` also cuts the network (#1039, #1142).
+policy that drifts. Still in code, tracked by the Phase 11 codex class fix: `codex_lane.py` passes it.
+Sandbox: `sdlc-team` passes no `-s` (the machine's `danger-full-access` is the approved posture, and
+`workspace-write` also cuts the network, #1039/#1142); the implementer/operator wrappers pin the same
+`danger-full-access` explicitly; advisory wrappers keep `--sandbox read-only` — the only thing that stops them writing.
 
-This is the only hand-kept argv block. Agent definitions, workflows, and task
-documentation point here or to `mise run codex-lane`; do not duplicate a flag
-recipe that can drift independently.
+This is the canonical argv block. Until the class fix, the 12 codex wrappers still carry their own
+(sonnet, background launch, `$LOG.rc` completion file); keep them consistent with this block.
 
-## Codex facts at 0.152.1
+## Codex facts (probed at 0.152.1; the host now runs native 0.156.x — re-probe before relying)
 
 - `codex exec --full-auto` does not exist. `codex exec --help` contains zero
   `--full-auto` matches and two `workspace-write` matches.

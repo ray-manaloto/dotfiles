@@ -262,3 +262,53 @@ untouched; plan-close model-runnable; kb_setup now; `.planning/.archive/`; PLAN_
 model). Where a finding needs a genuinely NEW Ray decision, list it under "## Questions for Ray" with a
 recommendation instead of deciding. Include the #910 (absorbed) and #1327 (this precedes it) relationships.
 Read-only except the two output files.
+
+## Session-integrity review (Ray, 2026-09-23): Briefs M-Q
+
+Ray: "have agents review this session and ensure: we did not dismiss any errors/repeated mistakes (fixed now or
+added to the task plan, suggest /grilling -> /to-spec -> /to-tickets if needed); zero missing requests/issues in the
+task plan; zero bugs; zero vague documentation/plans a future session or claude/codex can misinterpret" + "the
+native codex installer migration needs to happen asap as we are running codex on an old version — review old
+session history and task plan". Common: this session = `a6750a24-770a-419d-996e-985bd27de611` (main transcript
+`~/.claude/projects/-Users-rmanaloto-dev-github-ray-manaloto-dotfiles/a6750a24-770a-419d-996e-985bd27de611.jsonl`,
+subagents under its `subagents/`); branch `docs/session-2026-09-23d-handoff`, commits `219e83cc..HEAD`; task plan
+`task_plan.md` (gitignored; Phase 11 addendum is this session's rulings). AgentsView ALWAYS with
+`--server http://127.0.0.1:8080 --server-token-file '/Users/rmanaloto/Library/Application Support/AgentsView-M1-working-b0ae79c5365e-20260915/archive/native-server-token'`,
+never `health`, `--fts` for prose. Read-only except each brief's report file. Every finding: severity, claim,
+evidence (transcript ordinal or file:line), control arm, and a disposition: FIX-NOW (exact change) or PLAN (exact
+task_plan text + whether it needs /grilling -> /to-spec -> /to-tickets). End with `## GitHub repos touched`.
+
+### Brief M — dismissed errors and repeated mistakes
+Report: `docs/research/kb/reports/agents/session-audit-dismissed-errors-2026-09-23.md`. Walk the main transcript
+and every subagent transcript: every non-zero rc, error, WARN, denied tool call, DRIFT line (e.g. the SessionStart
+doctor's 4 findings), lint/test failure, and every mistake made twice (e.g. codex wrapper misreports ×3, D4-deny
+collateral on reads, stale `.mode`/Status data). For each: was it fixed (cite the fix), recorded in task_plan (cite
+the line), or DISMISSED/unrecorded? List only the latter two classes as findings.
+
+### Brief N — missing requests
+Report: `docs/research/kb/reports/agents/session-audit-missing-requests-2026-09-23.md`. Enumerate EVERY user
+message and AskUserQuestion answer in the main transcript (verbatim quote + ordinal), extract each request/ruling,
+and map it to its landing place (task_plan line, issue #, commit, memory). Anything unmapped or only partially
+mapped is a finding. Include requests from earlier handoffs still open (`.agent/plans/session-2026-09-23c.md` owed
+list) and the open/owed items in `.agent/plans/session-2026-09-23d.md`.
+
+### Brief O — cold bug review of the branch diff (codex, cross-family)
+Diff by REF: base `219e83cc`, head = current `HEAD` of `docs/session-2026-09-23d-handoff`. Cold review — no intent.
+
+### Brief P — vague or misinterpretable docs/plans
+Report: `docs/research/kb/reports/agents/session-audit-vagueness-2026-09-23.md`. Read every doc/plan/spec/rule/agent
+definition this session changed or created (`git diff --stat 219e83cc..HEAD`, `task_plan.md` Phase 11 addendum +
+Current Phase, `.agent/plans/session-2026-09-23d.md`, #1351's body, `docs/specs/pr-loop-ship-fix-land.md`) as a
+fresh session or a codex lane would. Flag: ambiguous next steps, contradictions between docs, stale statements
+(e.g. text still calling attestation operator-only after round 4, "iteration 032" vs later iteration), undefined
+terms, unstated owners, instructions that conflict with rules. Give the exact rewrite for each.
+
+### Brief Q — native codex installer: history + plan + urgency
+Report: `docs/research/kb/reports/agents/codex-native-installer-status-2026-09-23.md`. Establish: installed codex
+version(s) (mise-pinned `npm:@openai/codex` vs PATH vs latest release — `gh release list -R openai/codex`), what
+the task plan says (Phase 10 step 2 "codex to the native installer with the record in schemas/sources.toml ...",
+the 2026-09-15 "native-installer-placement" report now restored at
+`docs/research/kb/reports/agents/native-installer-placement-2026-09-15.md`, Round-4/5 rulings on CLI tiering in
+task_plan Phase 4), all prior session decisions via AgentsView, what blocks it (Phase 10 is queued behind Phase 11),
+what breaks on the old version (release notes between installed and latest), and the smallest safe path to move it
+FIRST. Propose exact task_plan text for promoting it.

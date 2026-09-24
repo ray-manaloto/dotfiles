@@ -77,14 +77,14 @@ cat > "$PROMPT" <<'EOF'
 <the ground truth with its provenance; the prose paths to audit; the probe
 output you already gathered; and the report format below>
 EOF
+echo "lane files: LANE_ID=$LANE_ID PROMPT=$PROMPT OUT=$OUT LOG=$LOG"   # report OUT; later calls re-assign all four from this line
 
 cat "$PROMPT" | PLANNING_DISABLED=1 codex exec \
   --sandbox read-only \
   --model gpt-6-astra \
   -c model_reasoning_effort="xhigh" \
-  -o "$OUT" - > "$LOG" 2>&1; echo "rc=$?" >> "$LOG"
+  -o "$OUT" - > "$LOG" 2>&1; echo "$?" > "$LOG.rc"
 
-echo "lane output: $OUT"   # report this path — the coordinator cannot guess it
 ```
 
 **Run it in TWO Bash calls, never one.** Everything above the `cat "$PROMPT" |`
@@ -102,8 +102,9 @@ answer — they declared "timeout"/"empty" at 4-10 min while codex finished at
 when codex exits, so a 0-byte `$OUT` while codex runs is the normal state, not
 evidence of anything. Exactly three signals end the wait:
 
-1. `$LOG` has its final `rc=<n>` line — codex exited; read `<n>`, then `$OUT`;
-2. no `rc=` line AND no live process for this lane (`pgrep -fl -- "$OUT"`) — it
+1. `$LOG.rc` exists and is non-empty — codex exited; read its number, then `$OUT`
+   (a separate file, because codex's own output goes to `$LOG` and could print an `rc=` line);
+2. no `$LOG.rc` AND no live process for this lane (`pgrep -fl -- "$OUT"`) — it
    died; report that with the log tail;
 3. the budget is spent — `TIMEOUT:` from the dispatch, default **2400 s** —
    reap it (`mise run reap -- --pattern "$OUT" --kill`) and report a timeout.
@@ -112,13 +113,13 @@ Wait in bounded FOREGROUND slices, one per Bash call, each with the Bash tool's
 `timeout` parameter set to `600000`:
 
 ```bash
-grep '^rc=' "$LOG" && exit 0
+[ -s "$LOG.rc" ] && { echo "rc=$(cat "$LOG.rc")"; exit 0; }
 TIMEOUT=2400   # or the dispatch's `TIMEOUT:` value
 remaining=$(( TIMEOUT - ( $(date +%s) - $(stat -f %m "$PROMPT") ) ))
 [ "$remaining" -le 0 ] && { echo "budget exhausted"; exit 0; }
 slice=$(( remaining < 540 ? remaining : 540 )); deadline=$((SECONDS+slice))
-while [ $SECONDS -lt $deadline ]; do grep -q '^rc=' "$LOG" && break; sleep 15; done
-grep '^rc=' "$LOG" || { echo "still running at $(date -u +%H:%M:%SZ)"; pgrep -fl -- "$OUT"; ls -l "$OUT"; }
+while [ $SECONDS -lt $deadline ]; do [ -s "$LOG.rc" ] && break; sleep 15; done
+[ -s "$LOG.rc" ] && echo "rc=$(cat "$LOG.rc")" || { echo "still running at $(date -u +%H:%M:%SZ)"; pgrep -fl -- "$OUT"; ls -l "$OUT"; }
 ```
 
 `still running` with a `pgrep` hit means: run the next slice. Never end your turn

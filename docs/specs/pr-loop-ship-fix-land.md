@@ -49,6 +49,7 @@ standard, `python/AGENTS.md` § Serialization). Exit codes are a generated enum 
 | `PREFLIGHT_REFUSED` | dirty tree / on main / no diff | commit or branch, re-run |
 | `MERGE_PENDING` | checks still running at the wait bound | re-run later (no fix) |
 | `CONFLICT` | branch conflicts with main | stop, ask (rebase is a judgment call) |
+| `BRANCH_CLOSED` | a change is needed while auto-merge is armed and checks are green/pending | stop; new branch + cherry-pick (#544 race) |
 | `LAND_FAILED` | post-merge validation failed | stop; route to `persistence-gate-retry.md` signatures |
 | `ROUND_LIMIT` | fix rounds exhausted | stop, surface residuals to Ray |
 | `INFRA_ERROR` | `gh`/network/API failure | retry once, then stop |
@@ -61,18 +62,22 @@ command to run next). The CLI prints ONLY the encoded outcome on stdout; full lo
 
 1. `ship` (reused). Gate fail → `GATE_FAILED`. Success arms auto-merge pinned to the head (`--match-head-commit`,
    `pr.py:435-478`).
-2. Wait for a terminal PR state with `gh pr checks <n> --watch` (per `gh-cli-watch.md`), bounded; cross-verify with
-   `pr_checks_green` + `gh pr view --json state`. Failed check → `CHECKS_FAILED` with the failing run's log path.
+2. Read the PR state ONCE per invocation — no client-side watch (`pr.py`'s design is native auto-merge, and the
+   guard denies `gh pr checks --watch`): `pr_checks_green` + `gh pr view --json state`. Failed check →
+   `CHECKS_FAILED`; its `log_path` is written by `gh run view <run-id> --log-failed` into the universal logger's
+   directory. Still pending → `MERGE_PENDING` (the caller re-invokes later, e.g. as a harness background run).
 3. MERGED → `land` (reused) → `LANDED` or `LAND_FAILED`.
-4. Fix rounds: the agent fixes, commits, and re-invokes `pr-loop`, which re-enters at step 1 (ship re-gates, pushes,
-   re-arms on the new head). Max **2** fix rounds per loop (orchestration two-round bound), counted in a small state
+4. Re-entry is decided from the state file (keyed by branch: last step, head SHA, round): if HEAD is unchanged since
+   the last ship, re-enter at step 2 (never re-ship without a new commit — e.g. after `MERGE_PENDING`); if HEAD moved
+   (a fix was committed), re-enter at step 1 (ship re-gates, pushes, re-arms on the new head). The round counter
+   increments only on a push from a red state and resets when the PR lands or is closed. Max **2** fix rounds per loop (orchestration two-round bound), counted in a small state
    file keyed by branch; round 3 → `ROUND_LIMIT`.
 
 **Auto-merge race rule (memory `feedback_amend_after_ship_races_automerge`, #544):** a push after arming is safe
 ONLY when the PR cannot merge at the current head — i.e. a required check has FAILED. The loop therefore pushes a
 fix only from `CHECKS_FAILED` (ci-gate red, GitHub also auto-disables auto-merge on a new push) or `GATE_FAILED`
-(never pushed). It never pushes while checks are green or pending; a change needed in that state stops with
-`CONFLICT`-class "branch closed — new branch + cherry-pick" guidance.
+(never pushed). It never pushes while checks are green or pending; a change needed in that state stops with `BRANCH_CLOSED`
+("new branch + cherry-pick"), a status distinct from `CONFLICT`.
 
 ## Dry-run
 
@@ -98,7 +103,7 @@ Run `mise run pr-loop`. Read ONLY the printed outcome; open `log_path` only when
   enough), commit, run `next_command`. Do not push by hand.
 - `PREFLIGHT_REFUSED` → commit or branch as the outcome says, re-run.
 - `MERGE_PENDING` → re-run later; nothing to fix.
-- `CONFLICT`, `LAND_FAILED`, `ROUND_LIMIT` → stop and ask Ray with the outcome (AskUserQuestion).
+- `CONFLICT`, `BRANCH_CLOSED`, `LAND_FAILED`, `ROUND_LIMIT` → stop and ask Ray with the outcome (AskUserQuestion).
 - `INFRA_ERROR` → re-run once; then ask.
 
 Why the outcome and not the log: the log is for the fix, the outcome is for the decision — reading full logs on

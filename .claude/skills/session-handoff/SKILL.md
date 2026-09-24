@@ -134,6 +134,25 @@ A daemon failure is `UNVERIFIABLE`, never zero findings. Any unbounded wait or
 out-of-order evidence is a finding that must be dispositioned before drafting
 the handoff.
 
+### 1c. Session-integrity review — nothing dismissed, missing, broken or vague (Ray, 2026-09-23)
+
+Before writing the handoff, run four read-only reviews of THIS session, in parallel, each persisting its
+report under `docs/research/kb/reports/agents/session-audit-<kind>-<date>.md`. Their briefs from the first run
+are "Briefs M-P" in `docs/research/kb/reports/agents/session-2026-09-23d-agent-briefs.md`; reuse them.
+
+| Review | Question | Lane |
+|---|---|---|
+| dismissed errors | every non-zero rc, error, WARN, denied call, DRIFT line and repeated mistake: fixed, recorded in `task_plan.md`, or dismissed? | Opus `general-purpose` |
+| missing requests | every user message and AskUserQuestion answer: does it land in `task_plan.md`, an issue, a commit or memory? | Opus `general-purpose` |
+| bugs | cold review of the branch diff by ref (base = merge-base with `main`) | a model family that did NOT write the diff; for a Claude-authored diff, `fable-orchestrator:codex-reviewer` |
+| vagueness | every doc, plan, spec, rule or agent file the session changed, read as a fresh session or a codex lane would: stale, ambiguous, contradictory, unowned | Opus `general-purpose` |
+
+Every finding gets a disposition: **FIX-NOW** (make the change before §2) or **PLAN** (exact `task_plan.md`
+text; mark it "needs `/grilling` → `/to-spec` → `/to-tickets`" when a design decision is open, and ask Ray
+through AskUserQuestion when a ruling is needed). The handoff may not be written while any finding is neither
+fixed nor planned. A codex lane's "timed out"/"empty" report is not a result: check its process and output file
+first (memory `feedback_haiku_lane_wrapper_abandons_codex_and_self_implements`).
+
 ## 2. Documentation sync — make docs match reality
 
 For everything changed this session (uncommitted **and** recent commits not yet
@@ -298,11 +317,16 @@ plan pointer. Also confirm gate results against recorded exit codes, not memory.
 
 ## 6. Emit the resume prompt — exact output
 
-Print exactly this single line and nothing else:
+Print exactly this single line and nothing else (an owed attest prompt, below, is the one thing that may precede it):
 
 ```text
 Run /session-resume
 ```
+
+If an attestation is owed (the plan changed and the model may not attest), put the `! mise run plan-attest` prompt
+**before** that line, and only after `mise run session-orphans` shows no live wait loops or lanes and no background
+agent, codex lane or harness task is still running, so the attestation covers the final plan bytes. Any later plan
+edit makes it stale again. Once #1351 retires D4, the orchestrator attests instead and nothing is owed.
 
 ## Checklist (all true before you're done)
 
@@ -312,6 +336,8 @@ Run /session-resume
 - [ ] `mise run plan-pointer` refreshed the tracked plan digest.
 - [ ] `mise run session-orphans` reports no unallowed `OTHER` descendants and no live wait loops.
 - [ ] `mise run session-agentsview-pass` completed; findings dispositioned or daemon marked `UNVERIFIABLE`.
+- [ ] §1c session-integrity review ran (four reports persisted); every finding is FIX-NOW done or a PLAN line in `task_plan.md`.
+- [ ] Any owed `! mise run plan-attest` is printed only after every background task, agent and codex lane finished.
 - [ ] Session-LOCAL background tasks/agents + scheduled wakeups inventoried; stale ones cancelled or noted.
 - [ ] Session-INDEPENDENT autonomous processes (running GHA runs, Renovate PRs) inventoried in the handoff — NOT waited/blocked on; `main` noted as bot-advanced.
 - [ ] Every doc affected by this session's changes updated; cross-refs grep-clean.
