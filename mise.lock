@@ -4905,58 +4905,58 @@ url = "https://github.com/jackchuka/mdschema/releases/download/v0.15.4/mdschema_
 url_api = "https://api.github.com/repos/jackchuka/mdschema/releases/assets/569888522"
 
 [[tools."aqua:rtk-ai/rtk"]]
-version = "0.49.0"
+version = "0.50.0"
 backend = "aqua:rtk-ai/rtk"
 
 [tools."aqua:rtk-ai/rtk"."platforms.linux-arm64"]
-checksum = "sha256:c8ea4b6560841e73157c134fd4a3293914c6ede42e786ee985cf491fde691ba7"
-url = "https://github.com/rtk-ai/rtk/releases/download/v0.49.0/rtk-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/556881345"
+checksum = "sha256:d1cc49dfa2cd443fc32625444b59fe616b6c80478cca210985118347174dd758"
+url = "https://github.com/rtk-ai/rtk/releases/download/v0.50.0/rtk-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/585679946"
 
 [tools."aqua:rtk-ai/rtk"."platforms.linux-x64"]
-checksum = "sha256:7278231dfd7e6a730a4ab7f847b195bcf02289c2d57622b0dab75a6411100c8f"
-url = "https://github.com/rtk-ai/rtk/releases/download/v0.49.0/rtk-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/556881350"
+checksum = "sha256:bc2b8902b0d9c796c82ef45f16ae2307e17757afeca5ee156235a3dc7bda5f89"
+url = "https://github.com/rtk-ai/rtk/releases/download/v0.50.0/rtk-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/585679953"
 
 [tools."aqua:rtk-ai/rtk"."platforms.linux-x64-baseline"]
-checksum = "sha256:7278231dfd7e6a730a4ab7f847b195bcf02289c2d57622b0dab75a6411100c8f"
-url = "https://github.com/rtk-ai/rtk/releases/download/v0.49.0/rtk-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/556881350"
+checksum = "sha256:bc2b8902b0d9c796c82ef45f16ae2307e17757afeca5ee156235a3dc7bda5f89"
+url = "https://github.com/rtk-ai/rtk/releases/download/v0.50.0/rtk-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/585679953"
 
 [tools."aqua:rtk-ai/rtk"."platforms.linux-x64-musl"]
-checksum = "sha256:7278231dfd7e6a730a4ab7f847b195bcf02289c2d57622b0dab75a6411100c8f"
-url = "https://github.com/rtk-ai/rtk/releases/download/v0.49.0/rtk-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/556881350"
+checksum = "sha256:bc2b8902b0d9c796c82ef45f16ae2307e17757afeca5ee156235a3dc7bda5f89"
+url = "https://github.com/rtk-ai/rtk/releases/download/v0.50.0/rtk-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/585679953"
 
 [tools."aqua:rtk-ai/rtk"."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:7278231dfd7e6a730a4ab7f847b195bcf02289c2d57622b0dab75a6411100c8f"
-url = "https://github.com/rtk-ai/rtk/releases/download/v0.49.0/rtk-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/556881350"
+checksum = "sha256:bc2b8902b0d9c796c82ef45f16ae2307e17757afeca5ee156235a3dc7bda5f89"
+url = "https://github.com/rtk-ai/rtk/releases/download/v0.50.0/rtk-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/585679953"
 
 [tools."aqua:rtk-ai/rtk"."platforms.macos-arm64"]
-checksum = "sha256:bbbfebabb22686993a80da731aa4d5d35116fb8ae24abb00608efa028e13ae01"
-url = "https://github.com/rtk-ai/rtk/releases/download/v0.49.0/rtk-aarch64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/556881349"
+checksum = "sha256:fe54761a9950266e3a78ddb66a8af5e067251169da306a288e0751de63d836fe"
+url = "https://github.com/rtk-ai/rtk/releases/download/v0.50.0/rtk-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/585679940"
 
 [tools."aqua:rtk-ai/rtk"."platforms.macos-x64"]
-checksum = "sha256:d297388f4a8a786e79abe5f55b80451725bfe8c5835b4736c05d7cff4d68f627"
-url = "https://github.com/rtk-ai/rtk/releases/download/v0.49.0/rtk-x86_64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/556881348"
+checksum = "sha256:ac23e20024ab3c71e7f50069f8b34190aec1b2d8f0c2cc19834039b3dac73373"
+url = "https://github.com/rtk-ai/rtk/releases/download/v0.50.0/rtk-x86_64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/585679941"
 
 [tools."aqua:rtk-ai/rtk"."platforms.macos-x64-baseline"]
-checksum = "sha256:d297388f4a8a786e79abe5f55b80451725bfe8c5835b4736c05d7cff4d68f627"
-url = "https://github.com/rtk-ai/rtk/releases/download/v0.49.0/rtk-x86_64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/556881348"
+checksum = "sha256:ac23e20024ab3c71e7f50069f8b34190aec1b2d8f0c2cc19834039b3dac73373"
+url = "https://github.com/rtk-ai/rtk/releases/download/v0.50.0/rtk-x86_64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/585679941"
 
 [tools."aqua:rtk-ai/rtk"."platforms.windows-x64"]
-checksum = "sha256:cb971046598f0e8bd51f6c27780fcdd2c39a4c459a811bd95b0d77ba8c0d7c9f"
-url = "https://github.com/rtk-ai/rtk/releases/download/v0.49.0/rtk-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/556881347"
+checksum = "sha256:cb03399305135dd59ee23eb59a3260ccdeea5a8e08fbc7a271b115b85583a6c9"
+url = "https://github.com/rtk-ai/rtk/releases/download/v0.50.0/rtk-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/585679942"
 
 [tools."aqua:rtk-ai/rtk"."platforms.windows-x64-baseline"]
-checksum = "sha256:cb971046598f0e8bd51f6c27780fcdd2c39a4c459a811bd95b0d77ba8c0d7c9f"
-url = "https://github.com/rtk-ai/rtk/releases/download/v0.49.0/rtk-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/556881347"
+checksum = "sha256:cb03399305135dd59ee23eb59a3260ccdeea5a8e08fbc7a271b115b85583a6c9"
+url = "https://github.com/rtk-ai/rtk/releases/download/v0.50.0/rtk-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/585679942"
 
 [[tools.aws-cli]]
 version = "2.37.1"
@@ -6824,7 +6824,7 @@ version = "0.15.6"
 backend = "npm:portless"
 
 [[tools."npm:renovate"]]
-version = "44.112.1"
+version = "44.112.3"
 backend = "npm:renovate"
 
 [[tools."npm:skills"]]
