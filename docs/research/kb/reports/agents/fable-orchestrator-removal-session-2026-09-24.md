@@ -225,8 +225,8 @@ Briefs: `removal-session-audit-briefs-2026-09-24.md`. Reports: `session-audit-{d
 
 AgentsView pass: `mise run session-agentsview-pass` returned rc=0, but it covered the coordinator session `a6750a24` and
 two subagents, not this headless session `94aea797`, which its index had not reached. For this session the pass is
-**UNVERIFIABLE**. Session-orphans: 0 WAIT-LOOP, 0 OTHER (2 HARNESS MCP rows). The only issue edit this session: a
-comment on knowledge-base#748. No other GitHub mutation besides filing #1362.
+**UNVERIFIABLE**. Session-orphans: 0 WAIT-LOOP, 0 OTHER (2 HARNESS MCP rows). GitHub mutations this session: filed
+dotfiles#1362, and commented on knowledge-base#748 (flake data) and dotfiles#1310 (status).
 
 ## Open questions for Ray (this was a headless run, so none were asked)
 
