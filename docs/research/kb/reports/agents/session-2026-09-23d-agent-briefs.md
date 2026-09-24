@@ -351,3 +351,34 @@ The D4 deny is LIVE until dotfiles#1352 (D1) lands: any Bash command whose TEXT 
 reads (`sed`, `cat`, `grep`) and heredoc writes included. Use the Read/Edit/Write tools for those files.
 "SUPERSEDED" in a brief refers to the RULING, not to the enforcement. Also quote shell separators (`echo '===='`):
 zsh treats an unquoted `====` as `=`-expansion and aborts the command chain.
+
+## Brief T — final `/session-handoff` §1c (2026-09-24): bugs review of `48a1ee12..e6599421`
+
+The S1-S4 delta reviews covered up to `48a1ee12`; `e6599421` applied their FIX-NOW items and was not yet
+reviewed. Since then the session only ran `/verify` (read-only; every probe rc=0, log
+`scratchpad/verify2.log`) and this `/session-handoff`, so the dismissed-errors, missing-requests and vagueness
+reviews have no new scope (N/A: no new errors, and the only user requests were `/verify` and `/session-handoff`,
+both fulfilled). The bugs review runs: `fable-orchestrator:codex-reviewer`, diff by ref `48a1ee12..e6599421`,
+report `session-audit-final-codex-cold-review-2026-09-24.md`.
+
+## Brief U — why is fable-orchestrator still used, on old codex + old models? (Opus, read-only, 2026-09-24)
+
+Report path: `docs/research/kb/reports/agents/fable-orchestrator-still-used-2026-09-24.md`. Ray (with a `ps`
+screenshot at 00:28): "have agents review why fable-orchestrator is still being used and it is using the old codex
+models — i thought we had fixed this already". Observed: the Brief O/S3/T cold reviews were dispatched as
+`fable-orchestrator:codex-reviewer`; its `run-lane.sh` launched
+`~/.local/share/mise/installs/npm-openai-codex/0.154.0/.../codex exec review --model gpt-5.6-sol` — the npm 0.154.0
+binary (not native 0.156.1) and `gpt-5.6-sol` (not `gpt-6-sol`). Investigate and report, with file:line + probes and
+control arms: (1) every route that still sends work to fable-orchestrator (the `/session-handoff` §1c table this
+session wrote, `.claude/CLAUDE.md` routing, `token-routing.md`, the orchestration skill trigger, enabled plugins in
+`.claude/settings.json` and `~/.codex/config.toml` plugin block only), and what was already RULED (Phase 10 step 0 =
+remove fable-orchestrator from both repos + codex harness, spec dotfiles#1310, tickets #1311-#1319 / KB #793-#797 —
+queued behind Phase 11); (2) why the plugin resolves codex 0.154.0 (it invokes bare `codex`; this Claude session's
+PATH predates root `mise.toml` `disable_tools`) and where its model default `gpt-5.6-sol` comes from (plugin source vs
+user/project config; Phase 10 ruled sol lanes → `gpt-6-sol`); (3) the smallest changes to stop it NOW without waiting
+for Phase 10 step 0 (e.g. a non-plugin cold-review lane: `codex-sol-adversarial-critic`/an sdlc-team review via
+`mise exec -- codex exec review`; fix the §1c table; whether `--model gpt-6-sol` works on 0.156.1), each with its
+trade-off; (4) whether the plugin should be disabled immediately vs. at step 0, and what depends on it (skills,
+agents, hooks). Read-only except the report; run no codex review; persist incrementally; end with
+`## GitHub repos touched`. The coordinator's context is nearly full: this report is integrated into `task_plan.md`
+in the NEXT session after `/clear`.
