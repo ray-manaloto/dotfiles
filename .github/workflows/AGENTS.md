@@ -145,8 +145,8 @@ Push-to-main path (after a PR merge):
   (#160 T11). See `.devcontainer/P2996-CACHE.md`.
 - **`uv run --project python`**, not `--directory` (changes cwd, breaks
   relative test paths).
-- **CI waits belong to `mise run ship`/`land`**; one-shot reads use `--json`
-  (`gh run view <id> --json conclusion`). `.claude/rules/gh-cli-watch.md`.
+- **CI waits: `ship`'s auto-merge, then `land`**; one-shot reads use
+  `--json`. `.claude/rules/gh-cli-watch.md`.
 - **No `type=gha` cache on `base`/`p2996-cache` targets**: registry tag +
   `Probe cache` IS the durable cache; `mode=max` gha export exceeds the 1h
   Azure SAS TTL (`403` on cold runs). `dev` keeps gha cache.

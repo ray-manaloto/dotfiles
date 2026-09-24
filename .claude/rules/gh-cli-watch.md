@@ -1,8 +1,10 @@
-# gh CLI: Let ship/land Wait on CI; Read State One-Shot
+# gh CLI: Auto-Merge and land Own CI Waits; Read State One-Shot
 
-Waiting on PR checks or a workflow run is owned by `mise run ship` (PR
-checks to bucket-verified green) and `mise run land -- <PR#>` (main CI). For
-a point-in-time read use a one-shot `--json` query. Do not hand-roll a wait:
+`mise run ship` arms GitHub auto-merge and returns; GitHub merges the PR when
+`ci-gate` goes green, so a returned `ship` is NOT green CI. After the merge,
+`mise run land -- <PR#>` waits on main CI and validates locally. For a
+point-in-time read use a one-shot `--json` query; to wait for the merge, bound
+it with `mise run bounded-wait`. Do not hand-roll a wait:
 the PreToolUse guard denies `gh pr checks --watch`, `gh run watch`, and
 unbounded `while`/`until` + `sleep` loops.
 
@@ -10,7 +12,7 @@ unbounded `while`/`until` + `sleep` loops.
 
 A hand-rolled loop buries the real exit code (the `grep` becomes the
 shell's exit), races on multi-run queues, burns API quota, and shows the
-operator nothing; the ship/land tasks read `--json` buckets instead.
+operator nothing; auto-merge and `land` read the real check state instead.
 
 The canonical break: under `set -o pipefail`, `cmd | grep -q PAT`
 returns **141** when the match *succeeds* — a check that can only fail.
@@ -26,7 +28,9 @@ non-GHA systems, event filtering): `docs/rules-evidence/gh-cli-watch.md`.
 ## Canonical patterns
 
 ```bash
-mise run ship                        # opens the PR and waits for its checks
+mise run ship                        # opens the PR, arms auto-merge, returns
+mise run bounded-wait -- --deadline 3600 \
+  --cmd 'test "$(gh pr view 123 --json state --jq .state)" = MERGED'
 mise run land -- 123                 # after merge: waits on main CI, validates
 gh pr checks 123 --json name,bucket  # one-shot read of PR checks
 gh run view 1234567890 --json conclusion --jq '.conclusion'  # one run

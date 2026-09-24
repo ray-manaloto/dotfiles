@@ -34,7 +34,7 @@ Case history: `docs/rules-evidence/verify-before-advancing.md`.
 | `.devcontainer/**`, `mise-system.toml`, image/Dockerfile | `mise run verify-local` (R1/R2/R3 + persistence) or a direct `docker run <img> …` check; the in-image smoke can't fully run on this arm64 Mac (Rosetta) |
 | Validating **through the devcontainer** (any change you test in-container) | `mise run verify-container-latest` — the running container must bind-mount THIS workspace (source = latest branch code) and pass smoke; **base-currency is a hard gate** (smoke tier-1 identity fails a base predating the current `mise-system.toml`). See "Validate against the latest branch code" below. |
 | `.claude/CLAUDE.md`, `.claude/settings.json`, `rule-sync.toml` | `mise run rule-sync` — the declared cross-repo set must hold in dotfiles AND knowledge-base. SKIPs loudly without the sibling clone; hard-FAILs in CI (#354 tier 0) |
-| Opened a PR | `mise run ship` waits until terminal — every check `pass` or `skipping`, **0 fail**; confirm with a one-shot `gh pr checks <n> --json name,bucket` |
+| Opened a PR | every check terminal — `pass` or `skipping`, **0 fail**. `mise run ship` only arms auto-merge; read `gh pr checks <n> --json name,bucket` (one-shot) or wait for the merge with `mise run bounded-wait`, then `mise run land` |
 | Merged to `main` | Await the main `ci.yml` run and confirm `conclusion == success` (incl. `promote` retagging `:dev`) |
 
 Scale the matrix to the blast radius — a one-line doc typo needs the docs
@@ -116,6 +116,6 @@ confirming the delegate's checks actually passed).
 - `zero-skip-policy.md` — no red check is ever dismissed.
 - `long-running-command-hangs.md` — bound `mise run lint`; never wait blind.
 - Memory `feedback_pipe_kills_exit_code` — read the rc, not a piped tail.
-- `gh-cli-watch.md` — ship/land own CI waits; one-shot `--json` reads.
+- `gh-cli-watch.md` — auto-merge and land own CI waits; one-shot `--json` reads.
 - `do-not.md` — project invariants that never bend regardless of green checks.
 - CLAUDE.md → `AGENTS.md` "Validate before committing".

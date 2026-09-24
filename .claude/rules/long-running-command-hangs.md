@@ -53,8 +53,8 @@ red herrings — lives in `docs/rules-evidence/long-running-command-hangs.md`.
    separate `backgrounded mise run` guard still denies `&`-detached or `nohup`
    mise tasks; `&&` and `2>&1` remain allowed.
 
-   **CI/remote waits** are owned by `mise run ship`/`land`, which watch
-   GitHub-side checks themselves (see `gh-cli-watch.md`).
+   **CI/remote waits**: `ship` arms auto-merge (GitHub waits on `ci-gate`),
+   and `land` waits on main CI after the merge (see `gh-cli-watch.md`).
 
    For `mise run lint`, the symlink
    **`~/.local/state/dotfiles/hk-lint-<hash>.log`** names only the most recent
@@ -101,7 +101,7 @@ network- or IO-bound command an agent or human launches in this repo.
 ## See also
 
 - `python/src/dotfiles_setup/lint.py` — the guarded hk runner.
-- `gh-cli-watch.md` — sibling rule: ship/land own CI waits; never sleep-poll.
+- `gh-cli-watch.md` — sibling rule: auto-merge and land own CI waits; never sleep-poll.
 - `ci-local-parity.md` — every CI lint step has a local hk equivalent.
 - Memory: `feedback_long_running_tail_logs`, `feedback_pipe_kills_exit_code`.
 - CLAUDE.md → `AGENTS.md` "Validate before committing" — prefer `mise run lint`.
