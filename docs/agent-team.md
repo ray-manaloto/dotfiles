@@ -416,7 +416,8 @@ and **thinking cannot be disabled on Fable 5**, so its per-token spend is govern
 
 **Mechanically, Codex is always `Bash` shelling out.** There is no MCP transport and no
 in-harness binding; both installed plugins declare `tools: Bash, …` and run a subprocess. The
-`fable-orchestrator` lane's real command (`run-lane.sh:63-66`):
+`fable-orchestrator` lane's real command (`run-lane.sh:63-66`; the plugin was removed
+2026-09-24, #1310 — kept here as the record of what it ran):
 
 ```
 codex exec --model "${MODEL:-gpt-5.6-sol}" -c model_reasoning_effort=high $FAST \

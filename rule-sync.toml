@@ -23,22 +23,20 @@
 
 [shared]
 # Plugins that must be ENABLED (value `true`, not merely present as a key) in
-# both repos' .claude/settings.json. These two are the orchestration lanes the
-# doctrine names; without them the routing docs describe a flow that cannot run.
+# both repos' .claude/settings.json. antigravity is the one orchestration lane
+# still delivered as a plugin; fable-orchestrator was removed (#1310) and its
+# capabilities now live in each repo's own agents and routing skill.
 plugins = [
-    "fable-orchestrator@fable-orchestrator",
     "antigravity@antigravity-for-claude-code",
 ]
 
 # Whole lines that must appear in both repos' .claude/CLAUDE.md, matched
-# exactly modulo whitespace. The first is THE trigger whose absence opened
-# #354 — the plugin's own setup wizard states the mode line "is inert without
-# the trigger", so the second line without the first is a lane that is
-# declared and never invoked. Substring matching would accept a doc that
-# merely quotes them, which is the state the repo was actually in.
+# exactly modulo whitespace. This is THE trigger whose absence opened #354; it
+# now names each repo's own routing-doctrine skill instead of the removed
+# plugin's (#1310). Substring matching would accept a doc that merely quotes
+# it, which is the state the repo was actually in.
 lines = [
-    "- Without being reminded, on ANY session model: non-trivial implementation runs the fable-orchestrator architect-as-orchestrator flow — invoke the fable-orchestrator:orchestration skill before delegating and follow it as authoritative for routing, verification, review tiers, and advisor consults.",
-    "- fable-orchestrator: implementation lane = codex",
+    "- Without being reminded, on ANY session model: non-trivial implementation runs the architect-as-orchestrator flow — invoke this repo's routing-doctrine skill (`codex-sdlc-team` in dotfiles, `orchestrator-routing` in knowledge-base) before delegating and follow it as authoritative for routing, the spec contract, review tiers, and advisor escalation.",
 ]
 
 # Rule files (`.claude/rules/<name>.md`, matched by STEM) that must exist in
@@ -79,4 +77,14 @@ rules = [
     "verify-before-advancing",
     "zero-bash-logic",
     "zero-skip-policy",
+]
+
+# Agent files (`.claude/agents/<name>.md`, matched by STEM) that must exist in
+# both repos (#1312). These are the repo-owned replacements for the removed
+# plugin's Claude-side agents (#1310): the escalation-only Fable advisor and the
+# pre-dispatch premise checker. Presence by stem, like `rules`: each repo writes
+# its own body with its own grounding commands.
+agents = [
+    "claude-advisor",
+    "premise-verifier",
 ]

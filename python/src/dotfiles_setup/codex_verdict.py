@@ -47,9 +47,10 @@ completed-with-no-message path. A usage limit cannot be induced on demand. It
 does not change this module, because both outcomes already escalate — but a
 future reader must not mistake the inference for a measurement.
 
-Supervision is NOT in scope (#575 R4 assigns start/wait/reap to the
-``fable-orchestrator`` plugin's ``run-lane.sh``, whose ``EXIT: <code>`` marker
-this module reads as its settled signal). #580 adds the typed verdict and the
+Supervision is NOT in scope (#575 R4 assigned start/wait/reap to the
+fable-orchestrator plugin's ``run-lane.sh``, whose ``EXIT: <code>`` marker this
+module reads as its settled signal; the plugin was removed in #1310 and
+``codex_lane`` writes the same marker). #580 adds the typed verdict and the
 schema flags that script does not pass.
 """
 

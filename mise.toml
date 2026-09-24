@@ -107,8 +107,9 @@ opencode = "1.18.32"
 # claude-flow + ralph-cli removed 2026-07-23: superseded by the cross-vendor
 # orchestrator adoption (#346, fable-orchestrator + antigravity), and unused by
 # CI/hk/scripts. Re-add if needed for interactive use.
-# Cross-vendor executor-lane CLIs for the adopted Fable-5 orchestrator plugins
-# (mar3co/fable-orchestrator in `codex` mode + yuting0624/antigravity-for-claude-code).
+# Cross-vendor executor-lane CLIs: codex (this repo's own codex-* lanes; the
+# fable-orchestrator plugin that once drove it was removed in #1310) and
+# yuting0624/antigravity-for-claude-code.
 # Canonical mise registry short names (https://mise.jdx.dev/registry.html):
 # `antigravity-cli`=aqua:google-antigravity/antigravity-cli (Google's current
 # agentic CLI — Gemini 3.x; ships `antigravity` + the `agy` symlink the

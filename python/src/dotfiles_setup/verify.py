@@ -36,9 +36,19 @@ def load_manifest(path: Path) -> list[dict[str, Any]]:
 
 
 def _missing_paths(entry: dict[str, Any]) -> list[str]:
-    """Return the entry's declared paths that do not exist on disk."""
+    """Return the entry's declared paths that do not exist on disk.
+
+    A ``path_globs`` pattern that matches nothing counts as missing: a glob that
+    silently matches zero files is a contract scanning nothing.
+    """
     root = _project_root()
-    return [raw for raw in entry.get("paths", []) if not (root / raw).exists()]
+    missing = [raw for raw in entry.get("paths", []) if not (root / raw).exists()]
+    missing.extend(
+        pattern
+        for pattern in entry.get("path_globs", [])
+        if not any(root.glob(pattern))
+    )
+    return missing
 
 
 def run_suite(
@@ -124,7 +134,17 @@ def _resolve_paths(entry: dict[str, Any]) -> list[Path]:
         List of existing Path objects.
     """
     root = _project_root()
-    return [p for p in (root / raw for raw in entry.get("paths", [])) if p.exists()]
+    paths = [p for p in (root / raw for raw in entry.get("paths", [])) if p.exists()]
+    # `path_globs` (#1316): a contract over a whole surface (every agent file,
+    # every skill) must cover the file someone adds tomorrow, which a hand-kept
+    # `paths` list cannot. Sorted and de-duplicated for a stable report.
+    globbed = {
+        match
+        for pattern in entry.get("path_globs", [])
+        for match in root.glob(pattern)
+        if match.is_file()
+    }
+    return paths + sorted(globbed - set(paths))
 
 
 # ---------------------------------------------------------------------------

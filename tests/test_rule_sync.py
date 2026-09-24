@@ -24,8 +24,8 @@ from dotfiles_setup import rule_sync
 
 _ROOT = Path(__file__).parent.parent
 
-_PLUGIN = "fable-orchestrator@fable-orchestrator"
-_TRIGGER = "- fable-orchestrator: implementation lane = codex"
+_PLUGIN = "antigravity@antigravity-for-claude-code"
+_TRIGGER = "- orchestrator: implementation lane = codex"
 
 
 def _repo(root: Path, *, plugins: dict[str, bool], claude_md: str = "") -> Path:

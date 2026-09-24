@@ -128,6 +128,7 @@ fable-orchestrator (project)  Plugin not cached at …/cache/fable-orchestrator/
 antigravity (project)         Plugin not cached at …/cache/antigravity-for-claude-code/antigravity/0.21.1
 ```
 
+(Historical: fable-orchestrator was removed from both repos on 2026-09-24, #1310.)
 These have consequences — the session's agent roster lost
 `fable-orchestrator:{codex-implementer,codex-reviewer,fable-advisor,grok-*}` and
 `antigravity:antigravity-delegate`. But **the cache is correct**: both directories
