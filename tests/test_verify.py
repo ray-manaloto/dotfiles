@@ -177,11 +177,12 @@ def test_bare_tokens_are_a_union_across_paths() -> None:
 # or it is not that declaration, so `require_lines` binds the whole line and
 # normalises only whitespace.
 
-_MODE_LINE = "- fable-orchestrator: implementation lane = codex"
+#: A whole line that really is in `.claude/CLAUDE.md` (the lane-table heading).
+_REAL_LINE = "### There is no `grok` here — codex lanes only, stop asking"
 
 _TRIGGER = (
     "- When the session model is Fable, without being reminded: non-trivial "
-    "implementation runs the fable-orchestrator architect-as-orchestrator flow"
+    "implementation runs the architect-as-orchestrator flow"
 )
 
 
@@ -269,6 +270,38 @@ def test_require_lines_passes_when_every_path_carries_it(tmp_path: Path) -> None
     assert verify.require_lines([one, two], [_TRIGGER])["status"] == "passed"
 
 
+def test_path_globs_resolve_and_feed_the_handler(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`path_globs` (#1316) covers every matching file, including a new one."""
+    (tmp_path / "agents").mkdir()
+    (tmp_path / "agents" / "a.md").write_text("clean\n")
+    planted = "uses fable-orchestrator:codex-reviewer\n"
+    (tmp_path / "agents" / "b.md").write_text(planted)
+    monkeypatch.setattr(verify, "_project_root", lambda: tmp_path)
+    entry = _entry(
+        handler="forbid_tokens",
+        path_globs=["agents/*.md"],
+        tokens=["fable-orchestrator:"],
+        strip_comments=False,
+    )
+    result = verify.run_suite(entry)
+    assert result["status"] == "failed"
+    assert "b.md" in result["reason"]
+    (tmp_path / "agents" / "b.md").write_text("clean\n")
+    assert verify.run_suite(entry)["status"] == "passed"
+
+
+def test_a_path_glob_matching_nothing_is_a_missing_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A glob that matches zero files is a contract scanning nothing — fail it."""
+    monkeypatch.setattr(verify, "_project_root", lambda: tmp_path)
+    result = verify.run_suite(_entry(path_globs=["agents/*.md"]), handlers=_ALWAYS_PASS)
+    assert result["status"] == "failed"
+    assert "agents/*.md" in result["reason"]
+
+
 def test_require_lines_fails_on_an_empty_path_list() -> None:
     """No files is not "nothing to check" — it is a contract pointing at air."""
     with pytest.raises(verify.VerificationError):
@@ -281,7 +314,7 @@ def test_per_path_lines_binds_a_line_to_its_file() -> None:
         _entry(
             handler="require_lines",
             paths=[_REAL],
-            per_path_lines={_REAL: [_MODE_LINE]},
+            per_path_lines={_REAL: [_REAL_LINE]},
         )
     )
     assert result["status"] == "failed"
@@ -295,7 +328,7 @@ def test_require_lines_is_wired_into_the_handler_map() -> None:
         _entry(
             handler="require_lines",
             paths=[".claude/CLAUDE.md"],
-            lines=[_MODE_LINE],
+            lines=[_REAL_LINE],
         )
     )
     assert result["status"] == "passed"

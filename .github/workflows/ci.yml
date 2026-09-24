@@ -66,6 +66,10 @@ env:
   # KEY/VALUE directly, so this needs no `git config` step and applies to every
   # git invocation in the workflow. It MUST be repeated per workflow file: env
   # does NOT cross workflow_call, and it must be set before checkout runs.
+  # Root mise.toml disables npm codex so the Mac runs the native install (2026-09-23);
+  # CI has no native codex, and pytest shells out to `codex`, so re-enable the npm pin
+  # here. An empty value overrides the config setting (probed: empty -> 0.154.0).
+  MISE_DISABLE_TOOLS: ""
   GIT_CONFIG_COUNT: "1"
   GIT_CONFIG_KEY_0: init.defaultBranch
   GIT_CONFIG_VALUE_0: main

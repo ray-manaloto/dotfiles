@@ -25,9 +25,10 @@ Declared in `.codex/agents/codex-sdlc-*.toml`. ⚠️ The **filenames** carry a
 mise run sdlc-team -- request.json    # typed request in, typed dispatch out
 ```
 
-The request names a spec file and a mode (`review` -> read-only,
-`implement` -> workspace-write); everything else has a deterministic default.
-The task owns prompt construction, sandbox selection, the Codex argv, detached
+The request names a spec file and a mode (`review` or `implement`, which shape the
+PROMPT only — no `-s` is passed, so lanes run under the machine's `danger-full-access`
+and `review` is ASKED not to write); everything else has a deterministic default.
+The task owns prompt construction, the Codex argv, detached
 launch, timeout supervision and every artifact path — so none of it is retyped
 or remembered. It returns immediately with an `SdlcTeamDispatch` (supervisor
 pid, resolved argv, prompt/output/log/receipt paths); a detached supervisor
@@ -44,9 +45,9 @@ regardless.
 ⚠️ **The trailing `-` is why the task exists.** Omit it from a hand-rolled call
 and codex never reads the prompt; it hangs forever. The task always supplies it.
 
-⚠️ **Under `-s read-only` every repo gate fails for sandbox reasons** (uv cache,
-mise state, DNS). That is sandbox noise, not a finding. Tell a read-only lane
-NOT to run gates and run them yourself.
+⚠️ **A review lane is ASKED, not PREVENTED, from writing** — the task passes no `-s`
+(Ray 2026-09-15: it overrode the machine sandbox and cut the network). Put every
+prohibition in the spec, and still run the gates yourself rather than trusting a lane's.
 
 ⚠️ **The lane owns the checkout while it runs.** Do not edit files it may touch,
 and name its allowlist in the spec — `.claude/rules/agent-report-persistence.md`

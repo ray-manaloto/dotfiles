@@ -550,11 +550,12 @@ local allSteps = new Mapping<String, Config.Step> {
     // with ci.yml + `mise run lint-docs`. Known false positives (CC-HK-025)
     // are scoped out in .agnix.toml. settings.json is in the glob so a hook
     // config change triggers agnix locally (it was .md-only, missing the file
-    // agnix actually flagged).
+    // agnix actually flagged). `**/*.md` because `agnix .` scans every
+    // markdown file: a `tests/TEST-INDEX.md` warning (2026-09-24, d4b0b5c4)
+    // passed pre-commit under the narrower glob and failed `mise run lint`.
     check = "agnix . --strict"
     glob = List(
-      "CLAUDE.md",
-      "AGENTS.md",
+      "**/*.md",
       ".claude/**/*.md",
       ".claude/settings.json",
       ".agnix.toml",

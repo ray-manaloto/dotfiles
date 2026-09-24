@@ -47,6 +47,8 @@ Durable; never silently dropped. Gated by `mise run verify-local`.
 | **surface** | A diff path matching `SURFACE_PATTERNS` (`pr.py`) — forces ship's hard `sync-full` gate (~25 min). |
 | **sync** | `mise run sync` — converge the local container onto the CI-built `:dev`. |
 | **the gate matrix** | `mise run lint` + pytest + `dotfiles-setup verify run`, plus conditional rows (`pin-actions`, `lint-docs`, `verify-local`). See `.claude/rules/verify-before-advancing.md`. |
+| **advisor** | A read-only second opinion at a commitment boundary. The default is a `codex-*-advisor` lane; it returns a verdict and the deciding risk, and never builds. |
+| **escalation** | Consulting `claude-advisor` (Fable) under one of the three triggers in `.claude/token-routing.md`; the caller falls back to an Opus subagent when Fable is unavailable. |
 
 ## Enforcement vocabulary
 

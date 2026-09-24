@@ -71,7 +71,7 @@ DOC_PATHSPECS = (
     # byte-exactly to `@AGENTS.md` (claude_md_import_stub) and every subdir
     # CLAUDE.md is the same one-line stub, so `**/CLAUDE.md` would add only
     # stubs. `.claude/CLAUDE.md` is stub-EXEMPT precisely so Claude-specific
-    # config can live there — including the fable-orchestrator trigger whose
+    # config can live there — including the orchestration trigger whose
     # absence went undetected for an unknown number of sessions (#354). An
     # uncovered file is exactly where the next stale ref hides.
     ".claude/CLAUDE.md",

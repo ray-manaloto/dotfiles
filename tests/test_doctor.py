@@ -1194,7 +1194,10 @@ def test_every_check_function_is_actually_registered() -> None:
     # config authored against a stale schema validates clean and then fails at
     # runtime — and codex drops an invalid `.codex/agents/*.toml` SILENTLY, with no
     # error, which is how six specialist agents existed on disk and none loaded.
-    assert len(doctor.CHECKS) == 13, "every specified check must be wired"
+    # + `removed-plugins` (2026-09-24, #1317): a plugin removed on purpose, such
+    # as fable-orchestrator or claudex-loop, is installed, enabled or hook-trusted
+    # again on the Claude or codex side, which no repo gate can see.
+    assert len(doctor.CHECKS) == 14, "every specified check must be wired"
 
 
 def test_the_shipped_baseline_parses_and_declares_what_the_checks_read() -> None:

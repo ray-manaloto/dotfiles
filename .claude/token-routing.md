@@ -4,13 +4,27 @@ Relocated out of the Claude-specific project config (#994) to keep that file
 inside agnix's recommended token budget (CC-MEM-009); its permanent posture was
 ratified by the 2026-09-10 `/grilling` pass.
 
-**Advisor consults permanently route to a `codex-*-advisor` subagent, not
-`fable-orchestrator:fable-advisor`** — its reasoning runs at `xhigh` via the
-`codex` CLI. The same permanent routing applies to the `adversarial-critic`,
-`staleness-auditor` and `claude-code-expert` roles in place of their
-Claude-backed originals (#884). The originals remain intact for explicit
-selection; token availability does not change the default route.
+**Advisor consults permanently route to a `codex-*-advisor` subagent** — its
+reasoning runs at `xhigh` via the `codex` CLI. The same permanent routing applies
+to the `adversarial-critic`, `staleness-auditor` and `claude-code-expert` roles in
+place of their Claude-backed originals (#884). The originals remain intact for
+explicit selection; token availability does not change the default route.
 Decision: 2026-09-10 `/grilling` ruling 10.
+
+## Escalation to `claude-advisor` — the single source (#1294)
+
+`claude-advisor` (`model: fable`, `effort: xhigh`, no memory; read-only by its
+instructions — its Bash is limited to read-only probes, not by the tool list) is
+consulted ONLY when one of these fires:
+
+1. the codex advisor errored, timed out, or returned an empty `-o` file;
+2. the same problem resisted two attempts after a codex verdict;
+3. Ray names it.
+
+**Opus fallback, done by the caller:** when Fable is unavailable, re-dispatch the
+same brief to an Opus subagent at the same effort, and say in the output that it
+fell back. No agent silently becomes a different model. Agent files and the
+`codex-sdlc-team` doctrine link here instead of restating these rules.
 
 ## Two model families, and the name carries the choice (2026-09-11)
 

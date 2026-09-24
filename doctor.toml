@@ -281,3 +281,11 @@ enabled = true
 # Run `mise run codex-schema-check` to validate; doctor runs the same currency
 # check.
 enabled = true
+
+[removed_plugins]
+# Plugins removed on purpose (#1310, #1317). The doctor fails if any of these is
+# installed, enabled, registered as a marketplace or hook-trusted again — on the
+# Claude side (user/project/local settings, ~/.claude/plugins state) or the codex
+# side (~/.codex/config.toml keys; values are never read out). Taking a name off
+# this list is how a plugin comes back: a reviewed diff, not a quiet reinstall.
+names = ["fable-orchestrator", "claudex-loop"]

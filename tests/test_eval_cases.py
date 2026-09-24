@@ -65,19 +65,19 @@ def test_the_expected_cases_are_declared() -> None:
         "tier1.shared-engine-resolves",
         "tier1.cc-subcommand-dispatches",
         "tier1.graph-answers",
-        "tier1.lane-health",
         "tier2.guard-fixtures",
     }
 
 
-def test_only_the_doctor_case_is_live() -> None:
-    """`doctor.sh` has NO offline mode — it is the live half, entirely.
+def test_no_case_is_live() -> None:
+    """Every case is offline and gated (#1311).
 
-    It takes no flags and fires a real API call per installed CLI, so it can
-    never join the free gated tier. If another case is ever marked live, the
+    The only live case was the fable-orchestrator plugin's ``doctor.sh``, which
+    pointed at a 1.14.0 cache path that no longer existed and could only skip.
+    It was removed with the plugin. If a case is ever marked live again, the
     offline gate gets cheaper by doing less, which is the wrong direction.
     """
-    assert [c.name for c in _cases() if c.live] == ["tier1.lane-health"]
+    assert [c.name for c in _cases() if c.live] == []
 
 
 def test_grok_is_declared_and_the_case_still_passes() -> None:

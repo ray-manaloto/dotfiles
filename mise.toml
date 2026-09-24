@@ -107,8 +107,9 @@ opencode = "1.18.32"
 # claude-flow + ralph-cli removed 2026-07-23: superseded by the cross-vendor
 # orchestrator adoption (#346, fable-orchestrator + antigravity), and unused by
 # CI/hk/scripts. Re-add if needed for interactive use.
-# Cross-vendor executor-lane CLIs for the adopted Fable-5 orchestrator plugins
-# (mar3co/fable-orchestrator in `codex` mode + yuting0624/antigravity-for-claude-code).
+# Cross-vendor executor-lane CLIs: codex (this repo's own codex-* lanes; the
+# fable-orchestrator plugin that once drove it was removed in #1310) and
+# yuting0624/antigravity-for-claude-code.
 # Canonical mise registry short names (https://mise.jdx.dev/registry.html):
 # `antigravity-cli`=aqua:google-antigravity/antigravity-cli (Google's current
 # agentic CLI — Gemini 3.x; ships `antigravity` + the `agy` symlink the
@@ -162,6 +163,12 @@ npm.package_manager = "bun"
 # 2026.7.0 — verified via `mise settings ls --all`; env_cache is already the
 # default true, so neither is set here.)
 pin = true
+# Host codex runs the NATIVE install (Ray, 2026-09-23: "direct change tonight"). The shared
+# npm pin (0.154.0) lacks gpt-6-sol/gpt-6-luna and mismatches the self-updating 0.156.x
+# app-server daemon. Disabled on the host only: CI re-enables it with MISE_DISABLE_TOOLS=""
+# (ci.yml env), and the devcontainer ignores this file, so the image keeps npm codex until
+# Phase 10 step 2b. Evidence: docs/research/kb/reports/agents/codex-native-installer-status-2026-09-23.md
+disable_tools = ["npm:@openai/codex"]
 
 [settings.status]
 show_tools = true
@@ -1310,7 +1317,7 @@ description = "Assert the declared cross-repo shared set (rule-sync.toml) holds 
 run = "uv run --project python dotfiles-setup rule-sync"
 
 [tasks.eval]
-description = "Eval harness, tiers 1+2 (offline, gated; `-- --live` adds the lane doctor)"
+description = "Eval harness, tiers 1+2 (offline, gated)"
 # Tier 0 is suites.toml (`orchestration.*` / `eval.*`) — is it DECLARED? Tier 1
 # — does it RESOLVE? Tier 2 — does the wired guard DECIDE correctly? All three
 # are different questions: a lane can be named in doctrine, in both repos, with
@@ -1321,10 +1328,10 @@ description = "Eval harness, tiers 1+2 (offline, gated; `-- --live` adds the lan
 # share this command, while tier 0 stays in `dotfiles-setup verify run`. Folding
 # tier 0 in here would run ~103 contracts twice per ship.
 #
-# Offline by default so it joins the ship gates for free. `--live` shells out to
-# the fable-orchestrator plugin's doctor.sh, which has NO offline mode and spends
-# one real API call per installed lane. Runner is the SHARED kb_setup.evals;
-# this repo's cases are dotfiles_setup.eval_cases.
+# Offline, so it joins the ship gates for free. The former `--live` lane doctor
+# (a plugin script pinned to a cache path that no longer existed) was retired
+# with fable-orchestrator (#1311). Runner is the SHARED kb_setup.evals; this
+# repo's cases are dotfiles_setup.eval_cases.
 run = "uv run --project python dotfiles-setup eval"
 
 [tasks.hk-audit]

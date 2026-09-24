@@ -1867,7 +1867,7 @@ tokens = [
 
 [[suite]]
 name = "workflow.codex-lane-planning-isolation"
-description = "D2/D3 of the pwf refactor: a codex lane must never inherit the coordinator's planning-with-files state. The hooks fire in any process that inherits the session environment, so an un-scrubbed `codex exec` is handed `task_plan.md` and can write it back — which is the observed #1 pain (lane returns landing in the wrong file) with the coordinator's own plan as the target. Two layers, deliberately unequal. The MECHANICAL one is `codex_lane.LANE_ENV_OVERRIDES` merged into the spawn's `env=`, asserted here at the CALL SITE and not just at the constant, because the defect class is wiring rather than logic: `subprocess.run` without `env=` leaves a constant-reading test perfectly green (#895's lesson). The PROSE one is the `PLANNING_DISABLED=1` prefix on the hand-dispatched invocation in each `.claude/agents/codex-*.md`, which is the fallback shape agent-report-persistence.md 1b calls out as weak — it is here only because a Claude delegate inherits the session's hooks and cannot be scrubbed from the parent. The file-role contract itself (task_plan.md = coordinator ONLY; findings.md and progress.md = anyone) lives in that same rule so it rides every ad-hoc brief. Measured on plugin 3.14.0 against an attested root plan, both arms rc=0: PLANNING_DISABLED unset -> 1100 bytes of injected plan context, set -> 0 bytes; the guard is `hooks/claude-hook.sh:10` for the dispatcher and `scripts/inject-plan.sh:77` for direct calls. The tests are named here rather than assumed: the positive one spawns a REAL child and asks it what it inherited (mutation-proven — removing `env=` fails it; replacing the merge with a bare dict, which would strip PATH and break every live lane, fails its second assertion), and the control arm proves that same probe reports the unset state, so its pass is not a probe that can only pass. Upstream context: the two defects that make plan attachment untrustworthy in the first place are OthmanAdi/planning-with-files#237 (a valid-shape PLAN_ID naming no directory silently attests and injects a DIFFERENT plan at rc=0) and #238 (a slug with no .mode bypasses the root .mode, so mandatory attestation becomes an agent-chosen flag)."
+description = "D2/D3 of the pwf refactor: a codex lane must never inherit the coordinator's planning-with-files state. The hooks fire in any process that inherits the session environment, so an un-scrubbed `codex exec` is handed `task_plan.md` and can write it back — which is the observed #1 pain (lane returns landing in the wrong file) with the coordinator's own plan as the target. Two layers, deliberately unequal. The MECHANICAL one is `codex_lane.LANE_ENV_OVERRIDES` merged into the spawn's `env=`, asserted here at the CALL SITE and not just at the constant, because the defect class is wiring rather than logic: `subprocess.run` without `env=` leaves a constant-reading test perfectly green (#895's lesson). The PROSE one is the `PLANNING_DISABLED=1` prefix on the hand-dispatched invocation in each of the six `.claude/agents/codex-sol-*.md` wrappers (bound here; the six astra twins are generated from them and bound by `codex-lane-mirror --check`), which is the fallback shape agent-report-persistence.md 1b calls out as weak — it is here only because a Claude delegate inherits the session's hooks and cannot be scrubbed from the parent. The file-role contract itself (task_plan.md = coordinator ONLY; findings.md and progress.md = anyone) lives in that same rule so it rides every ad-hoc brief. Measured on plugin 3.14.0 against an attested root plan, both arms rc=0: PLANNING_DISABLED unset -> 1100 bytes of injected plan context, set -> 0 bytes; the guard is `hooks/claude-hook.sh:10` for the dispatcher and `scripts/inject-plan.sh:77` for direct calls. The tests are named here rather than assumed: the positive one spawns a REAL child and asks it what it inherited (mutation-proven — removing `env=` fails it; replacing the merge with a bare dict, which would strip PATH and break every live lane, fails its second assertion), and the control arm proves that same probe reports the unset state, so its pass is not a probe that can only pass. Upstream context: the two defects that make plan attachment untrustworthy in the first place are OthmanAdi/planning-with-files#237 (a valid-shape PLAN_ID naming no directory silently attests and injects a DIFFERENT plan at rc=0) and #238 (a slug with no .mode bypasses the root .mode, so mandatory attestation becomes an agent-chosen flag)."
 category = "workflow"
 check_type = "static"
 handler = "require_tokens"
@@ -1881,6 +1881,7 @@ paths = [
     ".claude/agents/codex-sol-adversarial-critic.md",
     ".claude/agents/codex-sol-claude-code-expert.md",
     ".claude/agents/codex-sol-staleness-auditor.md",
+    ".claude/agents/codex-sol-implementer.md",
 ]
 per_path_tokens = { "python/src/dotfiles_setup/codex_lane.py" = [
     'LANE_ENV_OVERRIDES = {"PLANNING_DISABLED": "1"}',
@@ -1892,20 +1893,22 @@ per_path_tokens = { "python/src/dotfiles_setup/codex_lane.py" = [
     "| Phases, checkboxes, current phase, distilled decisions | `task_plan.md` | **coordinator ONLY** |",
     "codex_lane.LANE_ENV_OVERRIDES",
 ], ".claude/agents/codex-sol-advisor.md" = [
-    "PLANNING_DISABLED=1 codex exec",
+    "PLANNING_DISABLED=1 mise exec -- codex exec",
 ], ".claude/agents/codex-sol-operator.md" = [
-    "PLANNING_DISABLED=1 codex exec",
+    "PLANNING_DISABLED=1 mise exec -- codex exec",
 ], ".claude/agents/codex-sol-adversarial-critic.md" = [
-    "PLANNING_DISABLED=1 codex exec",
+    "PLANNING_DISABLED=1 mise exec -- codex exec",
 ], ".claude/agents/codex-sol-claude-code-expert.md" = [
-    "PLANNING_DISABLED=1 codex exec",
+    "PLANNING_DISABLED=1 mise exec -- codex exec",
 ], ".claude/agents/codex-sol-staleness-auditor.md" = [
-    "PLANNING_DISABLED=1 codex exec",
+    "PLANNING_DISABLED=1 mise exec -- codex exec",
+], ".claude/agents/codex-sol-implementer.md" = [
+    "PLANNING_DISABLED=1 mise exec -- codex exec",
 ] }
 tokens = [
     "env={**os.environ, **LANE_ENV_OVERRIDES},",
     "def test_the_planning_disabled_arm_is_armed(",
-    "PLANNING_DISABLED=1 codex exec",
+    "PLANNING_DISABLED=1 mise exec -- codex exec",
 ]
 
 [[suite]]
@@ -2387,29 +2390,19 @@ per_path_tokens = { ".github/workflows/autofix.yml" = ["GIT_CONFIG_KEY_0: init.d
 
 [[suite]]
 name = "orchestration.trigger-armed"
-description = "THE bug that opened #354. `.claude/CLAUDE.md` must carry the trigger line as a WHOLE LINE. The line is deliberately UN-gated (2026-08-27), matching knowledge-base: default `/model` here is Opus 5, so the old Fable-gated wording was false in every session and the flow stayed dormant. Until 2026-07-24 only the mode line was present, and the fable-orchestrator plugin's own setup wizard states the mode line 'is inert without the trigger' — so the repo declared an implementation lane and never invoked it, for an unknown number of sessions, with nothing red anywhere. Uses require_lines, not require_tokens, deliberately: a substring is satisfied by a doc that merely QUOTES the trigger while narrating it, which is a state this repo has actually been in. Whitespace is normalised so re-indentation is not a failure; wording is not, so a paraphrase is."
+description = "THE bug that opened #354: `.claude/CLAUDE.md` must carry the orchestration trigger as a WHOLE LINE. Deliberately UN-gated (2026-08-27): default `/model` here is Opus 5, so a Fable-gated trigger was false in every session and the flow stayed dormant. Since #1310 the trigger names this repo's own routing-doctrine skill (`codex-sdlc-team`) instead of the removed fable-orchestrator plugin; the same line is rule-synced with knowledge-base."
 category = "orchestration"
 check_type = "static"
 handler = "require_lines"
 paths_required = true
 paths = [".claude/CLAUDE.md"]
 lines = [
-    "- Without being reminded, on ANY session model: non-trivial implementation runs the fable-orchestrator architect-as-orchestrator flow — invoke the fable-orchestrator:orchestration skill before delegating and follow it as authoritative for routing, verification, review tiers, and advisor consults.",
+    "- Without being reminded, on ANY session model: non-trivial implementation runs the architect-as-orchestrator flow — invoke this repo's routing-doctrine skill (`codex-sdlc-team` in dotfiles, `orchestrator-routing` in knowledge-base) before delegating and follow it as authoritative for routing, the spec contract, review tiers, and advisor escalation.",
 ]
 
 [[suite]]
-name = "orchestration.mode-line-declared"
-description = "The implementation-lane mode line must be declared as a whole line. It is the half that WAS present while the trigger was missing, so it is pinned separately: a future edit that drops the trigger and keeps the mode line reproduces the original bug exactly, and two contracts fail differently where one would just say 'orchestration broken'. `grok` is not installed on this Mac, so codex is the only viable fixed mode — a change here is a real routing change, not a wording tweak."
-category = "orchestration"
-check_type = "static"
-handler = "require_lines"
-paths_required = true
-paths = [".claude/CLAUDE.md"]
-lines = ["- fable-orchestrator: implementation lane = codex"]
-
-[[suite]]
 name = "orchestration.codex-only-lanes"
-description = "There is no `grok` CLI on this Mac, so every fable-orchestrator lane must resolve to codex or to Claude. The fact was already stated before 2026-09-01 — but only as a trailing sentence about the *implementation lane mode*, and `orchestration.mode-line-declared` above pins only that one line. A session followed it for implementation and still proposed `grok-reviewer` for the cold pass, because the plugin skill's review-tier table names grok as the cross-family reviewer for a codex diff and nothing here overrode it for the OTHER lanes. So this binds the lanes the mode line does not reach: the directive heading, the implementation row, and the cold-review row that answers the question the skill's fallback chain leaves open (with grok gone Claude IS the third family, so an Opus cold pass on a codex diff is the full gate, not a degraded one). require_lines, not require_tokens, for the same reason as the two contracts above: a substring is satisfied by a doc that merely QUOTES the routing while narrating it. Whitespace is normalised so re-indentation is not a failure; wording is not, so a paraphrase is — and a paraphrase of a routing table IS a routing change."
+description = "There is no `grok` CLI on this Mac, so every lane must resolve to codex or to Claude. A session once followed the implementation routing and still proposed a grok reviewer for the cold pass, because the (since removed, #1310) orchestration plugin's review-tier table named grok as the cross-family reviewer for a codex diff. So this binds the directive heading, the implementation row, the cold-review row (with grok gone Claude IS the third family, so an Opus cold pass on a codex diff is the full gate), and the premise-verification row naming the repo-owned `premise-verifier`. require_lines, not require_tokens: a substring is satisfied by a doc that merely QUOTES the routing while narrating it. Whitespace is normalised; wording is not, and a paraphrase of a routing table IS a routing change."
 category = "orchestration"
 check_type = "static"
 handler = "require_lines"
@@ -2419,31 +2412,56 @@ lines = [
     "### There is no `grok` here — codex lanes only, stop asking",
     "| Implementation | `codex-{sol,astra}-implementer`, effort `xhigh` — OURS, at full access |",
     "| Cold review of a codex diff | an Opus subagent, diff-only (`Agent`, `model: \"opus\"`) |",
+    "| Premise verification | `premise-verifier` (Claude, read-only) |",
 ]
 
 [[suite]]
 name = "orchestration.plugins-enabled"
-description = "The two orchestration plugins must be ENABLED — value `true`, not merely present as a key. That distinction is the whole contract: `\"fable-orchestrator@fable-orchestrator\": false` satisfies any check that asks whether the plugin is listed, while the lane it declares cannot run. The trigger and mode lines above describe a flow that routes through these plugins, so with them off the docs describe a flow that is not available. Bound per_path (#299) so no rule doc's incidental mention of a plugin name can satisfy the contract for settings.json."
+description = "The orchestration plugin must be ENABLED — value `true`, not merely present as a key: `\"antigravity@antigravity-for-claude-code\": false` satisfies any check that asks whether the plugin is listed, while the lane it declares cannot run. fable-orchestrator was removed (#1310); `orchestration.no-plugin-references` forbids it coming back."
 category = "orchestration"
 check_type = "static"
 handler = "require_tokens"
 paths_required = true
 paths = [".claude/settings.json"]
 per_path_tokens = { ".claude/settings.json" = [
-    "\"fable-orchestrator@fable-orchestrator\": true",
     "\"antigravity@antigravity-for-claude-code\": true",
 ] }
 
 [[suite]]
-name = "orchestration.config-placement"
-description = "Script-read config must live where the SCRIPT reads; model-read config where the MODEL reads. Latent trap found 2026-07-24: the fable-orchestrator plugin's `scripts/doctor.sh` parses `fable-orchestrator: codex fast mode = …` from $HOME/.claude/CLAUDE.md and ./CLAUDE.md — NOT from .claude/CLAUDE.md, which is where `claude_md_import_stub` forces our orchestrator config to live (the root CLAUDE.md is locked byte-exactly to `@AGENTS.md`). Nothing is broken today because we do not set fast mode; the moment someone writes it into .claude/CLAUDE.md it is silently ignored, which is an inert declaration by construction. Control-armed: no plugin script parses `implementation lane` at all (grep across the plugin returns only docs and agent descriptions, while the control term `fast mode` returns 4 hits in doctor.sh), so the mode line IS model-read and its placement is correct."
+name = "orchestration.owned-agents"
+description = "The repo-owned replacements for fable-orchestrator's two Claude-side agents must exist with their pinned models (#1310/#1314). `claude-advisor` is the escalation-only Fable advisor (triggers in `.claude/token-routing.md`); `premise-verifier` is the MIT port of the plugin's pre-dispatch premise checker. Deleting either file, or re-modelling it, silently changes what an escalation or a premise check runs on, so both the file and its `model:` line are pinned as WHOLE lines (a substring would accept `model: opus-4`)."
+category = "orchestration"
+check_type = "static"
+handler = "require_lines"
+paths_required = true
+paths = [".claude/agents/claude-advisor.md", ".claude/agents/premise-verifier.md"]
+per_path_lines = { ".claude/agents/claude-advisor.md" = [
+    "name: claude-advisor",
+    "model: fable",
+    "effort: xhigh",
+], ".claude/agents/premise-verifier.md" = [
+    "name: premise-verifier",
+    "model: opus",
+] }
+
+[[suite]]
+name = "orchestration.no-plugin-references"
+description = "fable-orchestrator was removed from both repos (#1310): its upstream is 404, its only copy was a plugin cache that can be garbage-collected, and knowledge-base's tool-review workflow broke on exactly that. No live instruction or config surface may name one of its agents or skills (`fable-orchestrator:`) or enable it (`fable-orchestrator@`). `path_globs` covers every agent file, workflow, codex agent and skill, including ones added later. Historical records (reports, specs, receipts) are deliberately out of scope."
 category = "orchestration"
 check_type = "static"
 handler = "forbid_tokens"
 paths_required = true
-paths = [".claude/CLAUDE.md"]
 strip_comments = false
-tokens = ["codex fast mode"]
+paths = [".claude/CLAUDE.md", ".claude/settings.json", ".claude/token-routing.md", "rule-sync.toml"]
+path_globs = [
+    ".claude/agents/*.md",
+    ".claude/rules/*.md",
+    ".claude/workflows/*.js",
+    ".codex/agents/*.toml",
+    ".claude/skills/*/SKILL.md",
+    ".agents/skills/*/SKILL.md",
+]
+tokens = ["fable-orchestrator:", "fable-orchestrator@"]
 
 [[suite]]
 name = "eval.mise-task-refs-resolve"
@@ -2499,7 +2517,7 @@ tokens = ['def find_unresolved_skill_refs(']
 
 [[suite]]
 name = "eval.cross-repo-rule-sync"
-description = "dotfiles and knowledge-base must not silently diverge on the doctrine they BOTH document. This is the #354 defect class one level up: a declaration made in two places and observed in neither, invisible from inside either repo because each is internally consistent. The gated set is narrow by decision (Ray, 2026-07-24) — the two orchestration plugins plus the trigger/mode lines — and everything else is printed as an advisory divergence block, because a narrow gate is only honest when the difference it declines to gate stays visible (measured at the time of writing: 7 plugins, 23 skills and 22 rules exist in dotfiles and not in knowledge-base). The gate cannot be an hk step: hk runs on a checkout of THIS repo alone, so contract-preflight checks knowledge-base out inside the workspace and points KB_REPO_PATH at it. Absence of that checkout is a hard FAIL in CI and a loud SKIP locally — a gate that goes quiet when its own wiring disappears is the inert trigger reproduced one more time."
+description = "dotfiles and knowledge-base must not silently diverge on the doctrine they BOTH document. This is the #354 defect class one level up: a declaration made in two places and observed in neither, invisible from inside either repo because each is internally consistent. The gated set is narrow by decision (Ray, 2026-07-24) — the orchestration plugin, the trigger line, the shared rules and (since #1312/#1316) the shared agents — and everything else is printed as an advisory divergence block, because a narrow gate is only honest when the difference it declines to gate stays visible (measured at the time of writing: 7 plugins, 23 skills and 22 rules exist in dotfiles and not in knowledge-base). The gate cannot be an hk step: hk runs on a checkout of THIS repo alone, so contract-preflight checks knowledge-base out inside the workspace and points KB_REPO_PATH at it. Absence of that checkout is a hard FAIL in CI and a loud SKIP locally — a gate that goes quiet when its own wiring disappears is the inert trigger reproduced one more time."
 category = "eval"
 check_type = "static"
 handler = "require_tokens"
@@ -2514,7 +2532,7 @@ paths = [
 ]
 per_path_tokens = { "rule-sync.toml" = [
     "[shared]",
-    'fable-orchestrator@fable-orchestrator"',
+    "agents = [",
 ], "python/src/dotfiles_setup/rule_sync.py" = [
     'def find_rule_sync_gaps(',
     'def divergence_report(',

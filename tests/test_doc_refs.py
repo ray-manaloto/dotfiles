@@ -65,7 +65,7 @@ def test_scope_covers_every_doc_with_real_content() -> None:
     with real content (the root one is locked byte-exactly to `@AGENTS.md` by
     `claude_md_import_stub`, and every subdir one is that same stub), it is
     stub-EXEMPT so Claude-specific config lives there, and it is where the
-    fable-orchestrator trigger sits — the declaration whose absence went
+    orchestration trigger sits — the declaration whose absence went
     undetected and opened #354. It was outside `DOC_PATHSPECS` until
     2026-07-24.
     """

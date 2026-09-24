@@ -996,19 +996,13 @@ def _add_consistency_subcommands(subparsers: _SubParsers) -> None:
         help="knowledge-base repo root; defaults to $KB_REPO_PATH, then the "
         "sibling directory beside this repo",
     )
-    eval_parser = subparsers.add_parser(
+    subparsers.add_parser(
         "eval",
         help="Eval harness, tiers 1+2 (#354): tier 0 asks whether a thing is "
         "DECLARED, tier 1 whether it RESOLVES (lanes, the shared engine, the "
         "graph), tier 2 whether the wired PreToolUse guard DECIDES correctly. "
         "Offline and gated; every gated case must carry a control arm that "
         "fails, or the runner refuses to count it",
-    )
-    eval_parser.add_argument(
-        "--live",
-        action="store_true",
-        help="also run the fable-orchestrator plugin's doctor.sh, which has no "
-        "offline mode and spends one real API call per installed lane CLI",
     )
 
 
@@ -2646,13 +2640,13 @@ def handle_rule_sync(args: argparse.Namespace, project_root: Path) -> None:
     sys.exit(rc)
 
 
-def handle_eval(args: argparse.Namespace, project_root: Path) -> None:
+def handle_eval(project_root: Path) -> None:
     """Handle eval: run this repo's tier-1 cases through the SHARED runner.
 
     The runner is ``kb_setup.evals`` — one implementation, both repos, consumed
     as the SHA-pinned ``kb-setup`` dependency. Only the cases are ours.
     """
-    rc, report = evals.run(eval_cases_for(project_root), live=args.live)
+    rc, report = evals.run(eval_cases_for(project_root), live=False)
     sys.stdout.write(report + "\n")
     sys.exit(rc)
 
@@ -2912,7 +2906,7 @@ def _build_command_handlers(
         "ghcr-cleanup": lambda: handle_ghcr_cleanup(args),
         "check-doc-refs": lambda: handle_check_doc_refs(project_root),
         "rule-sync": lambda: handle_rule_sync(args, project_root),
-        "eval": lambda: handle_eval(args, project_root),
+        "eval": lambda: handle_eval(project_root),
         "gcc-sha": lambda: sys.exit(gcc_sha_main(project_root, check=args.check)),
         "apt-repo": lambda: sys.exit(handle_apt_repo(args)),
         "apt-pins": lambda: sys.exit(

@@ -1,6 +1,6 @@
 ---
 name: adversarial-review
-description: "Write and bound an adversarial review round — the brief, the stop condition, and the escape hatch. Use when commissioning a cold or adversarial review of a diff, branch or PR; when writing the brief for a review agent (codex-reviewer, grok-reviewer, a Codex critic); when a review has returned DO NOT SHIP and you are about to run another round; or when deciding whether a review loop should end. A review's productivity is a property of its BRIEF, not of its reviewer — an unbounded \"what is broken?\" brief cannot terminate, and permission to stop is not a stop condition."
+description: "Write and bound an adversarial review round — the brief, the stop condition, and the escape hatch. Use when commissioning a cold or adversarial review of a diff, branch or PR; when writing the brief for a review agent (a codex review lens, cold-reviewer, a Codex critic); when a review has returned DO NOT SHIP and you are about to run another round; or when deciding whether a review loop should end. A review's productivity is a property of its BRIEF, not of its reviewer — an unbounded \"what is broken?\" brief cannot terminate, and permission to stop is not a stop condition."
 user-invocable: true
 ---
 
@@ -323,7 +323,7 @@ Five checks, in order. Any "no" means fix the brief, not the reviewer.
   structure is fine, and the loop will not run twice.
 - **A gate failure with a named cause** (lint, a failing test, CI) — that is
   triage, not adversarial review.
-- **Design review before code exists** — use `fable-advisor` / a plan critique;
+- **Design review before code exists** — use an advisor lane (`codex-sol-advisor`) or a plan critique;
   there is no diff to enumerate over.
 
 ## See also

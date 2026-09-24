@@ -35,64 +35,53 @@ each enabled plugin, and `~/.claude.json`'s user-global *and* per-project blocks
 **changing your setup means changing `doctor.toml` in a reviewed diff**: adding
 to `[fnox].env_true` widens a credential's blast radius.
 
-⚠️ **Both registrations live HERE, never in the root `CLAUDE.md`** — the
+⚠️ **Project registrations live HERE, never in the root `CLAUDE.md`** — the
 `claude_md_import_stub` gate locks that file to byte-exactly `@AGENTS.md`, and
-re-running `graphify install` or the fable setup wizard re-appends there; revert
-that hunk. Full detail: `docs/claude-plugin-config-hygiene.md`.
+re-running `graphify install` re-appends there; revert that hunk. Full detail: `docs/claude-plugin-config-hygiene.md`.
 
-## Cross-vendor orchestration (Fable-5 architect + executor lanes)
+## Cross-vendor orchestration (architect + executor lanes)
 
-- Without being reminded, on ANY session model: non-trivial implementation runs the fable-orchestrator architect-as-orchestrator flow — invoke the fable-orchestrator:orchestration skill before delegating and follow it as authoritative for routing, verification, review tiers, and advisor consults.
-- fable-orchestrator: implementation lane = codex
-- fable-orchestrator: codex effort = xhigh
+- Without being reminded, on ANY session model: non-trivial implementation runs the architect-as-orchestrator flow — invoke this repo's routing-doctrine skill (`codex-sdlc-team` in dotfiles, `orchestrator-routing` in knowledge-base) before delegating and follow it as authoritative for routing, the spec contract, review tiers, and advisor escalation.
 
-The first line is the **trigger**, **deliberately UN-gated**, matching
-knowledge-base. The plugin ships it Fable-gated — but default `/model` here is
-**Opus 5**, so the gated line was false every session and the flow stayed
-dormant. So `/fable-orchestrator:setup` reads an un-gated trigger as a shape to
-upgrade away from and offers to re-gate it — **decline**. It also writes to the
-root `CLAUDE.md`, which the stub gate rejects: config belongs in THIS file.
+The trigger is **deliberately UN-gated** (default `/model` is Opus 5) and is
+rule-synced byte-for-byte with knowledge-base. It replaced the fable-orchestrator
+plugin's trigger when that plugin was removed (#1310); the doctrine now lives in
+the `codex-sdlc-team` skill, versioned and gated here.
 
 ### There is no `grok` here — codex lanes only, stop asking
 
-`grok` is NOT installed (control-armed 2026-09-01: `command -v grok` absent while
-`codex` resolves). So every fable-orchestrator lane resolves to codex or to
-Claude, never grok. Do not propose, dispatch, or "fall back to"
-`grok-implementer`, `grok-reviewer` or `grok-researcher`, and do not ask which
-lane to use — the answer is fixed:
+`grok` is NOT installed (2026-09-01), so every lane resolves to codex or to
+Claude and nothing can fall back to grok. Route by this fixed table:
 
 | Lane | Use |
 |---|---|
 | Implementation | `codex-{sol,astra}-implementer`, effort `xhigh` — OURS, at full access |
 | Cold review of a codex diff | an Opus subagent, diff-only (`Agent`, `model: "opus"`) |
+| Cold review of a Claude-authored diff | a read-only codex review lens — the exact command lives once, in the `codex-sdlc-team` skill § Review tiers |
 | Advisory / critique / audit / harness | `codex-{sol,astra}-{advisor,adversarial-critic,staleness-auditor,claude-code-expert}` |
-| Premise verification | `fable-orchestrator:premise-verifier` (Claude, read-only) |
+| Premise verification | `premise-verifier` (Claude, read-only) |
 | Research | a read-only `Explore`/`Agent` lane |
 | Multi-domain SDLC review | codex-side team — [[codex-sdlc-team]] |
 
 New roster: `gate-runner`, `cold-reviewer`, `graphify-operator`, `graphify-researcher`,
-`spec-scribe`, `pwf-scribe`, `issue-filer`. Saved workflows: `/gated-implementation`,
-`/graphify-refresh`.
+`spec-scribe`, `pwf-scribe`, `issue-filer`, `claude-advisor`, `premise-verifier`.
+Saved workflows: `/gated-implementation`, `/graphify-refresh`.
 
 Two model families per role: `codex-sol-*` (authored) and `codex-astra-*`
 (generated — `mise run codex-lane-mirror`). Neither is a default.
 
-⚠️ **No `codex-*` lane is the cold-review lens for a codex diff** —
-same model family as the implementer, so it inherits its blind spots. The
-orchestration skill requires a family the implementer isn't; with grok gone,
-Claude IS that third family, so an Opus cold pass on a codex diff is the full
-gate, not a degraded one. The "degraded, announce it" caveat applies only to
-Claude-authored diffs, where Opus would be same-family.
+⚠️ **No `codex-*` lane is the cold-review lens for a codex diff** — same model
+family as the implementer, so it inherits its blind spots. With grok gone,
+Claude IS the other family, so an Opus cold pass on a codex diff is the full
+gate, not a degraded one.
 
-⚠️ Permanent advisor-consult routing: see @token-routing.md.
+⚠️ Permanent advisor-consult routing and escalation: see @token-routing.md.
 
-Adopted plugins (enabled in `.claude/settings.json`): `fable-orchestrator@fable-orchestrator`
-(Fable-5 architect + `codex` implementer lane, GPT-5.6 Sol) and
-`antigravity@antigravity-for-claude-code` (Google Antigravity/Gemini 3.x via `agy`). CLIs pinned
-host-only in `mise.toml` (`codex`, `antigravity-cli`); auth is per-user. The Claude architect plans
-and **verifies evidence** before "done" — only execution is delegated; terminal fallback is Claude
-Opus. The authoritative routing/fallback doctrine (and its KB-graph grounding) is the
-`orchestrator-routing` skill in the **knowledge-base** repo.
+Adopted plugin (enabled in `.claude/settings.json`): `antigravity@antigravity-for-claude-code`
+(Google Antigravity/Gemini 3.x via `agy`). `antigravity-cli` is pinned in `mise.toml`; codex runs
+the native install on the host (`disable_tools`) and the shared npm pin in the image/CI; auth is per-user. The Claude architect plans and **verifies evidence**
+before "done" — only execution is delegated; terminal fallback is Claude Opus. knowledge-base
+carries the same doctrine in its `orchestrator-routing` skill.
 
 ## DAG topology pins (#567)
 
