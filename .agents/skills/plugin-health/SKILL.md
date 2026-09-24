@@ -64,6 +64,8 @@ correct output for that state is nothing.
 
 ## See also
 
+- `plugin-removal` — checked inventory, dry-run removal plan, verification and
+  per-repository PR workflow for intentionally removing a plugin.
 - `.claude/rules/probes-need-a-control-arm.md` — why the doctor entry runs the
   real check instead of returning `[]`.
 - `python/src/dotfiles_setup/plugin_health.py` — the library.

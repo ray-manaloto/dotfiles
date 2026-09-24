@@ -67,7 +67,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from dotfiles_setup import claude_doctor, codex_schema
+from dotfiles_setup import claude_doctor, codex_schema, removed_plugins
 from dotfiles_setup.dependency_currency import (
     check_dependency_currency as dependency_currency_findings,
 )
@@ -1324,6 +1324,37 @@ def check_codex_schema(setup: Setup) -> list[str]:
     return findings
 
 
+#: Reported when the baseline names no removed plugin at all.
+_REMOVED_PLUGINS_UNWATCHED = (
+    "removed-plugins: `doctor.toml` has no [removed_plugins].names, so no "
+    "removed plugin is being watched"
+)
+
+
+def check_removed_plugins(setup: Setup) -> list[str]:
+    """Report a removed plugin that reappears on the Claude or codex side."""
+    if setup.home is None:
+        return []
+    section = _str_keys(setup.baseline.get("removed_plugins"))
+    names = section.get("names")
+    if not isinstance(names, list) or not names:
+        return [_REMOVED_PLUGINS_UNWATCHED]
+    found = removed_plugins.find_reappearances(
+        [str(name) for name in names],
+        home=setup.home,
+        settings_sources={
+            "~/.claude/settings.json": setup.user_settings,
+            ".claude/settings.json": setup.settings,
+            ".claude/settings.local.json": setup.local_settings,
+        },
+    )
+    return [
+        f"removed plugin reappeared: {line} — remove it, or take it out of "
+        "`doctor.toml` [removed_plugins] in a reviewed diff"
+        for line in found
+    ]
+
+
 CHECKS: tuple[tuple[str, Callable[[Setup], list[str]]], ...] = (
     ("mcp-env-opt-in", check_mcp_env_opt_in),
     ("mcp-scope", check_mcp_scope),
@@ -1338,6 +1369,7 @@ CHECKS: tuple[tuple[str, Callable[[Setup], list[str]]], ...] = (
     ("graphify-skill-surface", check_graphify_skill_surface),
     ("claude-doctor", check_claude_doctor),
     ("codex-schema", check_codex_schema),
+    ("removed-plugins", check_removed_plugins),
 )
 
 #: Only run with ``--live``: each entry spawns subprocesses.

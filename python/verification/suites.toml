@@ -2057,6 +2057,22 @@ per_path_tokens = { "doctor.toml" = [
 ] }
 
 [[suite]]
+name = "workflow.plugin-removal-wiring"
+description = "Plugin removal stays wired from the judgment-bearing wrapper skill through the two thin mise tasks and strict CLI registrations to the inventory and apply call sites. Every token was preflighted with `mise run token-check` and binds exactly one site, so a surviving sibling declaration cannot stand in for deleted wiring."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    ".claude/skills/plugin-removal/SKILL.md",
+    "mise.toml",
+    "python/src/dotfiles_setup/main.py",
+    "python/src/dotfiles_setup/plugin_inventory.py",
+    "python/src/dotfiles_setup/plugin_remove.py",
+]
+per_path_tokens = { ".claude/skills/plugin-removal/SKILL.md" = ['mise run plugin-remove -- <name@marketplace> --apply', 'Invoke `plugin-inventory`'], "mise.toml" = ['[tasks.plugin-inventory]', '[tasks.plugin-remove]', "dotfiles-setup plugin-inventory'", "dotfiles-setup plugin-remove'"], "python/src/dotfiles_setup/main.py" = ['inventory_parser = subparsers.add_parser(', 'removal_parser = subparsers.add_parser(', 'plugin_inventory_main(', 'plugin_remove_main('], "python/src/dotfiles_setup/plugin_inventory.py" = ['result = inventory(', 'claude_rows, claude_error = claude_cli_rows('], "python/src/dotfiles_setup/plugin_remove.py" = ['removal_plan = plan(inv, repo_root=repo_root)', 'results = apply(removal_plan, home=home, repo_root=repo_root)'] }
+
+[[suite]]
 name = "workflow.token-audit-wiring"
 description = "Contract-token uniqueness gate (#394 step 4). The sweep anchored 164 tokens so a prefix-preserving rename could not hide inside them — and then the three holes that were LIVE all survived their anchor, because each token matched somewhere other than the site it meant: `permissionDecision` was satisfied by the test file's own assertion (bare tokens are a union), `selfcheck` by the `elif command ==` dispatch branch after the subparser registration was deleted, `--output` by a sibling parser's identical flag. A word-boundary matcher would have caught none of them, which is why the audit recommended a UNIQUENESS signal instead: a per_path_tokens entry should match its file exactly once, because one match cannot be satisfied by a stand-in. Genuine multiplicity — a lockfile section per package, a doc naming its own task, a reused test fixture — is allowlisted with a reason; a NEW ambiguity fails, and so does a stale entry. #397 added the second rule the first one needs to be reachable: the audit reads ONLY per_path_tokens, so a bare `tokens` list was exempt from it — and the build/ci/arch tail was 105 such tokens. With a single path the two forms mean the same thing, so `find_unaudited` refuses the bare one; converting the tail then surfaced 39 ambiguities of which 33 were LIVE, and 11 of those were held green by a COMMENT alone — a stand-in shape the seams never produced. Asserts the chain: hk step, CLI subcommand, module (both checks + the call site wiring the second into find_violations), allowlist, tests (both directions of each rule)."
 category = "workflow"

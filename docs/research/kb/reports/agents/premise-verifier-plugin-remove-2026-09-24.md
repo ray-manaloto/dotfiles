@@ -1,0 +1,82 @@
+Read-only lane: I had no write tools, so nothing was persisted. Please save this report verbatim. I also couldn't run the graphify mandate (no Bash), so every fact below comes from reading files directly.
+
+```
+PREMISE REPORT
+ROWS: 13 checked — 5 CONFIRMED (0 provenance corrected) / 0 REFUTED / 7 UNVERIFIABLE / 1 ASSUMED (1 checkable)
+```
+
+| Row | Verdict | Evidence |
+|---|---|---|
+| P1 | UNVERIFIABLE | I can't run git, and the blob isn't on disk. Grepping for `_Unreadable\|find_reappearances` finds only the spec, an unrelated `_UnreadableSourceError` (`rule_registry.py:272`) and one report. |
+| P2 | UNVERIFIABLE (historical) / CONFIRMED (current) | Current `doctor.py`: `settings` is at **243** (not 244), `local_settings` 244, `user_settings` 250, `home: Path \| None` 253. CHECKS is at 1327-1341. |
+| P3 | CONFIRMED | `plugin_health.py:39` `PLUGIN_LIST_TIMEOUT = 10`; `subprocess.run(..., timeout=timeout)` at 141-148. |
+| P4 | CONFIRMED | `main.py:1710-1720` and `2876-2878`. Both are no-argv precedents; see MISSING. |
+| P5 | CONFIRMED | `mise.toml:1676-1678`. |
+| P6 | UNVERIFIABLE | A measurement. The docs back the shape: `--json` prints one object on the **last line only** (`$CC/plugins-reference.md:1021-1027`), and it can't be combined with `--prune` (1066). |
+| P7 | UNVERIFIABLE | I couldn't run `--help`. Docs show `codex plugin remove --json` (`codex/cli__reference.md:239`) and a `marketplace` subcommand (242-246). The exact argv sits in an unrendered ConfigTable. |
+| P8 | UNVERIFIABLE | Session measurement. |
+| P9 | UNVERIFIABLE | Glob doesn't list sockets. A glob over `~/.codex/{ipc,app-server-daemon}` timed out. The daemon dir listed only pid/lock/log files. |
+| P10 | CONFIRMED | 10 files contain `"ponytail@ponytail": true`. dotfiles has 5: `dotfiles.worktrees/agentsview-{managed,native}-service`, `.claude/worktrees/agent-a6e…` and `agent-a82…`, and `~/.codex/worktrees/3f4c/dotfiles`. KB has 5 under `knowledge-base.worktrees/`. |
+| P11 | UNVERIFIABLE | Session measurement. |
+| P12 | CONFIRMED | `pyproject.toml:123-139` bans; TID251 at 94-97 and 106. |
+| P13 | ASSUMED (checkable) | Should be a cited row. `.git/worktrees/*/gitdir` shows worktrees outside any tree walk: `~/.codex/worktrees`, `/private/tmp/...scratchpad`. |
+
+MISSING:
+- **The §5 fable grep can't fail for new files.** `git diff --name-only origin/main` leaves out untracked files, and every created file stays untracked because the commit is the caller's. The runbook path (`…/fable-orchestrator-removal-session-2026-09-24.md`) contains the banned string, so a skill that cites it breaks Ray's ruling. Fix both: add `git ls-files -o --exclude-standard` to the grep, and tell the skill not to cite that path.
+- **3 KB worktrees are prunable.** Their gitdirs point at missing `/private/tmp/...scratchpad/wt-{lychee,dag-gate,round-close}`. Under the "probe that can't answer = error" rule they would force rc 2, which contradicts §5's "rc 0". The spec has to say whether a missing worktree is skipped or treated as an error.
+- **CLI argv.** `main()` uses strict `parse_args` (`main.py:3085`), and the passthrough only applies to plan-attest (`plan_attest.py:104`). The subparsers must declare the positional arg plus `--apply` and `--json`, then rebuild argv. Precedent: `instructions-report` (`main.py:2929-2937`).
+- **codec.** `codec.encode` handles dataclasses and `Path` (`codec.py:212,345`). `plugin_health` uses stdlib `json` only to PARSE external payloads (180-193) and outputs through `codec.encode` (378-403). "Stdlib json as plugin_health does" misdescribes that precedent.
+- **`codex plugin list --json`** already gives an `installed` array with `pluginId` (`cli__reference.md:235-238`). Exact-selector matching can use that structure instead of parsing text rows.
+- **Hook-trust keys.** `~/.codex/config.toml` has 47 `[hooks.state.` headers (counted only, no values read). 22 are `"name@mkt:`-shaped and 25 are keyed by absolute path; none mention ponytail. The spec only covers the first shape.
+- **Settings loading.** `collect` loads project, user and `settings.local.json` (`doctor.py:423-431`), and `home` may be `None`, so the restored check has to skip in that case.
+- **Other checks that hold:** `.agent/state/` is gitignored (`.gitignore:41,124`). `doctor.toml` has no `[removed_plugins]` block today, and sections are read ad hoc with `_str_keys(baseline.get(...))` (`doctor.py:255-265`). The current `CHECKS` count is 13 (`tests/test_doctor.py:1197`).
+- **Undefined `root` for `discover_repos`.** It isn't specified. Nested worktrees under `.claude/worktrees/` would be counted twice unless worktree-list results are deduplicated.
+
+```
+VERDICT: correct the spec first — §5's fable grep cannot see untracked created files, and the prunable-worktree policy decides whether the "rc 0" expectation can hold.
+```
+
+Non-blocking residuals:
+- **P1/P2 historical:** running the restore's `git show` settles them.
+- **P6-P9, P11:** the docs corroborate them, and the §5 real runs re-measure them.
+- **P13:** the on-disk gitdirs support it.
+
+---
+
+## Revision 2 (changed rows)
+
+No row is refuted. One new item needs fixing before dispatch: the codex match key.
+
+**PREMISE REPORT (revision 2, changed rows only)**
+ROWS: 4 checked. 3 CONFIRMED (2 of them provenance corrected), 0 REFUTED, 1 UNVERIFIABLE, 0 ASSUMED.
+
+| Row | Verdict | Evidence |
+|---|---|---|
+| P2 | CONFIRMED (current part); UNVERIFIABLE (1c4977eb part) | `doctor.py:243,244,250,253` and `collect` at 423-431 all match. |
+| P13 | CONFIRMED (provenance corrected) | Kind should be L/A, not P, and the "premise-verifier" source should come out. Checked in `.git/worktrees/*/gitdir`: 5 dotfiles and 9 KB worktrees. The 3 KB ones live under `/private/tmp/claude-501/-Users-…-knowledge-base/`, which doesn't exist, so the "3 stale" claim holds. |
+| P14 | UNVERIFIABLE (context) | `codex/cli__reference.md:234-240` says what the row claims. But the docs aren't tied to host codex 0.156.x, and they never say what `pluginId` looks like. |
+| P15 | CONFIRMED (provenance corrected) | Recounted the table headers in `~/.codex/config.toml` (headers only, no values read): 22 are `"name@mkt:`-shaped and 25 are absolute paths. |
+
+**The fixes you made:**
+- **Fable-string scope and skill citation (§1:27-32):** fine. Stale leftover: §4:185 still says "any created/modified file", which contradicts the exemption for specs and reports.
+- **`discover_repos`:** `~/dev/github/<owner>/<repo>` at depth 2 finds dotfiles and KB. The `dotfiles.worktrees/*`, `.claude/worktrees/*` and `~/.codex/worktrees/3f4c` copies are only reachable through the worktree list, so dedupe by realpath is needed and specified.
+  - I grepped every depth-2 repo's `.claude/settings*.json` for `ponytail@` and got 0 hits. The control grep for `enabledPlugins` over the same files got 9 hits, so the probe works.
+- **`stale_worktrees`:** consistent with §5's "10 worktree_settings, 3 stale".
+- **argv precedent:** `main.py:3085` and `2929-2937` match.
+- **codec output:** `codec.py:212,345` and `plugin_health.py:180-193,378-403` match.
+- **`home` is None:** §4:178 depends on 1c4977eb, so I can't verify it.
+- **§5 grep:** now includes untracked files. It still has no control arm; running it once on a scratch file that contains the string would prove it can fail.
+
+MISSING:
+- **`pluginId` format is unknown.** The docs list `pluginId`, `name` and `marketplaceName` as separate fields but never say `pluginId == "name@mkt"`. The only support is indirect: the 81 `[plugins."name@mkt"]` tables in `config.toml`.
+  - If the assumption is wrong, `codex_cli_rows` always reports "absent". Neither check would catch it: the unit tests use faked output built on the same assumption, and the §5 real run only looks at ponytail, which isn't installed in codex.
+  - Fix: match on `name` and `marketplaceName` together, or add a live positive check against a plugin that is installed in codex.
+- **Path-keyed hook-trust tables:** all 25 are `/Users/…/.codex/hooks…` project-hook paths, and 0 sit under `plugins/cache`. The cache layout itself is `~/.codex/plugins/cache/<mkt>/<name>/<ver>/` (confirmed). So the new path-keyed deletion never matches anything in current data. That's harmless because it only deletes under the cache dir, but its unit test must build its own fixture.
+
+VERDICT: **correct the spec first.** Pin `codex_cli_rows` to (`name`, `marketplaceName`) or add a live positive check, because as written a wrong `pluginId` guess passes every check and hides every codex install.
+
+Non-blocking leftovers:
+- the historical parts of P1/P2 and §4:178 get settled when the restore runs `git show`;
+- the wording at §4:185;
+- the §5 grep's missing control arm;
+- the P14 doc version, which the §5 real run measures.

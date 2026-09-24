@@ -144,6 +144,8 @@ from dotfiles_setup.platform_target import (
     resolve_platform,
 )
 from dotfiles_setup.plugin_health import plugin_health_e2e_main, plugin_health_main
+from dotfiles_setup.plugin_inventory import plugin_inventory_main
+from dotfiles_setup.plugin_remove import plugin_remove_main
 from dotfiles_setup.pr import automerge_main, land_main, ship_main
 from dotfiles_setup.process_env import command_after_separator, run_git_isolated
 from dotfiles_setup.reap import (
@@ -1718,6 +1720,19 @@ def _add_plugin_health_subcommands(subparsers: _SubParsers) -> None:
         "plugin-health-types-refresh",
         help="Regenerate plugin-health declaration file from pinned Claude Code",
     )
+    inventory_parser = subparsers.add_parser(
+        "plugin-inventory",
+        help="Inventory one exact plugin selector across harnesses and repositories",
+    )
+    inventory_parser.add_argument("plugin")
+    inventory_parser.add_argument("--json", action="store_true")
+    removal_parser = subparsers.add_parser(
+        "plugin-remove",
+        help="Plan one plugin removal; mutate only with --apply",
+    )
+    removal_parser.add_argument("plugin")
+    removal_parser.add_argument("--apply", action="store_true")
+    removal_parser.add_argument("--json", action="store_true")
 
 
 def _add_schema_vendor_subcommands(subparsers: _SubParsers) -> None:
@@ -2875,6 +2890,18 @@ def _build_command_handlers(
         "pin-parity": lambda: sys.exit(pin_parity_main(project_root)),
         "plugin-health": lambda: sys.exit(
             plugin_health_main(project_root=project_root)
+        ),
+        "plugin-inventory": lambda: sys.exit(
+            plugin_inventory_main([args.plugin, *(["--json"] if args.json else [])])
+        ),
+        "plugin-remove": lambda: sys.exit(
+            plugin_remove_main(
+                [
+                    args.plugin,
+                    *(["--apply"] if args.apply else []),
+                    *(["--json"] if args.json else []),
+                ]
+            )
         ),
         "plugin-health-types-refresh": lambda: sys.exit(fnhook_types_refresh_main()),
         "plugin-health-e2e": lambda: sys.exit(
