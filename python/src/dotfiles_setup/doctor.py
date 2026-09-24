@@ -67,7 +67,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from dotfiles_setup import claude_doctor, codex_schema
+from dotfiles_setup import claude_doctor, codex_schema, removed_plugins
 from dotfiles_setup.dependency_currency import (
     check_dependency_currency as dependency_currency_findings,
 )
@@ -248,6 +248,9 @@ class Setup:
     #: `~/.claude/settings.json`. Held so checks can reproduce the
     #: user-then-project precedence `enabled_plugin_ids` applies.
     user_settings: dict[str, object] = field(default_factory=dict)
+    #: The home directory the Claude/codex user state was read from. ``None`` in
+    #: fixtures that never touch user state; checks that need it skip then.
+    home: Path | None = None
 
     def fnox_baseline(self) -> dict[str, object]:
         """The ``[fnox]`` section of the baseline; ``{}`` when it is absent."""
@@ -431,6 +434,7 @@ def collect(
         listing=collect_listing(
             repo_root, home, enabled_plugin_ids(user_settings, settings)
         ),
+        home=home,
     )
 
 
@@ -1320,6 +1324,33 @@ def check_codex_schema(setup: Setup) -> list[str]:
     return findings
 
 
+def check_removed_plugins(setup: Setup) -> list[str]:
+    """A removed plugin is back on the Claude or codex side (#1317).
+
+    Offline: reads settings, `~/.claude/plugins` state and `~/.codex/config.toml`
+    keys. The names come from `doctor.toml` `[removed_plugins].names`, so
+    removing another plugin later is a reviewed baseline edit.
+    """
+    section = _str_keys(setup.baseline.get("removed_plugins"))
+    names = section.get("names")
+    if setup.home is None or not isinstance(names, list) or not names:
+        return []
+    found = removed_plugins.find_reappearances(
+        [str(n) for n in names],
+        home=setup.home,
+        settings_sources={
+            "~/.claude/settings.json": setup.user_settings,
+            ".claude/settings.json": setup.settings,
+            ".claude/settings.local.json": setup.local_settings,
+        },
+    )
+    return [
+        f"removed plugin reappeared: {line} — remove it, or take it out of "
+        "`doctor.toml` [removed_plugins] in a reviewed diff"
+        for line in found
+    ]
+
+
 CHECKS: tuple[tuple[str, Callable[[Setup], list[str]]], ...] = (
     ("mcp-env-opt-in", check_mcp_env_opt_in),
     ("mcp-scope", check_mcp_scope),
@@ -1334,6 +1365,7 @@ CHECKS: tuple[tuple[str, Callable[[Setup], list[str]]], ...] = (
     ("graphify-skill-surface", check_graphify_skill_surface),
     ("claude-doctor", check_claude_doctor),
     ("codex-schema", check_codex_schema),
+    ("removed-plugins", check_removed_plugins),
 )
 
 #: Only run with ``--live``: each entry spawns subprocesses.
