@@ -87,7 +87,7 @@ exists to catch, and it is invisible unless the dismissal is written down.
 
 ## Adversarial review
 
-**Lens:** codex-reviewer | grok-reviewer | /mattpocock-skills:code-review | none
+**Lens:** cold-reviewer | codex review lens | /mattpocock-skills:code-review | none
 **Verdict:** clean | needs-attention | not-run
 **Findings:** <n> — <where the full report is persisted>
 **Disposition:** <accepted / refuted, and where the reasoning lives>

@@ -258,8 +258,8 @@ def _roster_fixture(tmp_path: Path, agent_type: str, quote: str = "'") -> list[s
 
 def test_roster_rejects_a_plugin_namespaced_agent(tmp_path: Path) -> None:
     """FAIL arm: the exact shape of the knowledge-base runtime break."""
-    assert _roster_fixture(tmp_path, "fable-orchestrator:codex-reviewer") == [
-        "w.js: fable-orchestrator:codex-reviewer"
+    assert _roster_fixture(tmp_path, "example-plugin:codex-reviewer") == [
+        "w.js: example-plugin:codex-reviewer"
     ]
 
 
@@ -267,9 +267,9 @@ def test_roster_rejects_a_double_quoted_plugin_agent(tmp_path: Path) -> None:
     """FAIL arm: the quoting a single-quote-only pattern would have missed."""
     for n, quote in enumerate(('"', "`")):
         found = _roster_fixture(
-            tmp_path / str(n), "fable-orchestrator:codex-reviewer", quote
+            tmp_path / str(n), "example-plugin:codex-reviewer", quote
         )
-        assert found == ["w.js: fable-orchestrator:codex-reviewer"], quote
+        assert found == ["w.js: example-plugin:codex-reviewer"], quote
 
 
 def test_roster_rejects_an_undeclared_agent(tmp_path: Path) -> None:

@@ -7,11 +7,10 @@ color: yellow
 ---
 
 <!--
-Ported from fable-orchestrator 1.21.0 (mar3co/fable-orchestrator, commit
+Ported from mar3co's MIT-licensed orchestration plugin, v1.21.0 (commit
 78f9cb566cd99597e4436d42c7b832f8109a0e7a), agents/premise-verifier.md. The body
 below is the upstream text; the only edits are a shortened frontmatter
-description and one blank line removed by the markdown formatter. Repo-owned since dotfiles#1314 so pre-dispatch premise checks survive
-the plugin's removal (#1310).
+description and one blank line removed by the markdown formatter. Repo-owned since dotfiles#1314.
 
 MIT License
 

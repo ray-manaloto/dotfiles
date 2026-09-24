@@ -101,3 +101,17 @@ sweeps. The rule therefore names both locations and does not add the setting.
 plugin, and machine-local citations were dead for other clones. The refactored
 location table still rejects ad-hoc paths and requires promotion of every
 artifact a rule, evaluation, or later session will cite.
+
+## Moved from the rule (2026-09-24 prompt audit)
+
+Verbatim text removed from `.claude/rules/agent-artifact-conventions.md` by the prompt audit (`docs/research/kb/reports/prompt-audit-2026-09-24.md`); kept here so the history survives.
+
+> > **Renamed from `.omc/` (2026-07-25).** That name belonged to a plugin that
+> > was not enabled. `.agent/` was control-armed before adoption; archaeology is
+> > in `docs/rules-evidence/agent-artifact-conventions.md`.
+>
+>
+>    ⚠️ Earlier wording here claimed this budget is *shared with MCP tools*. The
+>    corpus does not say that: `$CC/env-vars.md:466` scopes it to "skill metadata
+>    shown to the Skill tool", and `$CC/skills.md:1050-1058` describes a
+>    skill-listing budget throughout. Corrected rather than re-anchored.

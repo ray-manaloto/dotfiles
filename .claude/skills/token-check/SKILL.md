@@ -1,6 +1,6 @@
 ---
 name: token-check
-description: Prove a candidate contract token binds exactly one site BEFORE writing the contract, via `mise run token-check -- <file> "<token>"...`. Use whenever adding or editing a `[[suite]]` in `python/verification/suites.toml`, choosing `per_path_tokens` for a new gate, or reacting to a `contract_token_uniqueness` / `token-audit` finding. Run it while picking the tokens, not after — a token matching more than once can be satisfied by a stand-in, so the contract silently asserts less than it claims, and that is how a deleted registration stayed green.
+description: Prove a candidate contract token binds exactly one site BEFORE writing the contract, via `mise run token-check -- <file> "<token>"...`. Use whenever adding or editing a `[[suite]]` in `python/verification/suites.toml`, choosing `per_path_tokens` for a new gate, or reacting to a `contract_token_uniqueness` / `token-audit` finding. Run it while picking the tokens, not after — a token matching more than once can be satisfied by a stand-in, so the contract silently asserts less than it claims.
 user-invocable: true
 ---
 
@@ -53,7 +53,7 @@ the path is the one the contract will name.
 ## When multiplicity is right
 
 `--expect N` exists because some bindings legitimately match twice — the
-`AMBIGUITY_ALLOWED` map in `token_audit.py` documents 18, each with a reason
+`AMBIGUITY_ALLOWED` map in `token_audit.py` documents each allowed case with a reason
 (one clause computing a hash and a sibling clause re-checking it, for instance;
 both clauses *are* the contract). Reach for it when the second site is part of
 what you are asserting, not to quiet a token you would rather not rewrite.

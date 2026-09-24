@@ -1,46 +1,35 @@
 # Secrets in the Shell Environment
 
-⚠️ **REVERSED 2026-08-02 by Ray, deliberately.** All credentials are now
-`env = true` (**56 sanctioned as of 2026-08-29**, with ONE deliberate carve-out:
+All credentials are `env = true` by Ray's decision (2026-08-02; the sanctioned
+set is `doctor.toml`'s `[fnox].env_true`), with ONE deliberate carve-out:
 `CLAUDE_CODE_OAUTH_TOKEN` is `env = "exec"` — it overrides `/login` in every new
 session and silently rebills to the old org, and it does NOT authenticate the
-Anthropic SDKs; see PR #811) — available in every terminal and inherited by every child process,
-including Claude Code, its subagents and any MCP server they spawn. The stated
-requirement was *"in sync and available to all terminals and ai/llm agents"*.
-This file is no longer "keep secrets out of the shell"; it is **the record of why
-that posture existed, what the reversal costs, and which parts still bind.**
+Anthropic SDKs; see PR #811. Every terminal and every child process — Claude
+Code, its subagents, any MCP server they spawn — inherits them. The stated
+requirement is *"in sync and available to all terminals and ai/llm agents"*.
 
-**Most of this rule survives the reversal, and rule 7 matters MORE.** What changed
-is one axis — where credentials live. What did not change: an environment dump is
-still unscannable and must never be committed (rule 1, gated by `no_env_dump`), a
-probe must still never print a value (rule 7, **partly** gated by `secret_value_substitution`),
-a non-secret must still not be marked secret (rule 3), and a clean scanner still
-means "ask what it can see" (rule 4). With 50 credentials in every child instead
-of 4, the blast radius of breaking any of those is **12.5× larger**, not smaller.
+So nothing confines a credential to a process, and rules 1, 4 and 7 below are
+the only line between every credential and a transcript or a commit: an
+environment dump is unscannable and must never be committed (rule 1, gated by
+`no_env_dump`), a probe must never print a value (rule 7, **partly** gated by
+`secret_value_substitution`), a non-secret must not be marked secret (rule 3),
+and a clean scanner means "ask what it can see" (rule 4).
 
 ⚠️ **A keychain credential can hang a background process forever — and that hang
 is NOT a locked keychain.** `security show-keychain-info` **prompts
-unconditionally**, so its hang proves nothing; believing it cost ~2 hours on
-2026-08-02. Arm it instead: **fnox reads a keychain secret in 0.03s**, which a
-locked keychain cannot do. What actually blocks is an *authorization* dialog for
-an item a non-GUI process may not read — and nothing can answer that dialog.
-Measured: `gh` and `doppler` both kept their tokens in the keychain and hung
-forever from background processes (**190 stuck processes**, load 13.5). The
-discriminating arm is the same command with an isolated config dir, which returns
-in **0.45s**. Both entries were deleted (`security delete-generic-password -s
-'gh:github.com'` / `-s 'doppler-cli'`) and both then fell through to their ENV
-token.
+unconditionally**, so its hang proves nothing; fnox reading a keychain secret
+in 0.03s is the arm that rules a lock out. What blocks is an *authorization*
+dialog for an item a non-GUI process may not read — nothing can answer it. The
+discriminating arm is the same command with an isolated config dir.
 
-⚠️ **BOTH ENTRIES ARE BACK — measured 2026-09-12, so the paragraph above is
-HISTORY, not current state.** `security find-generic-password -s` returns rc=0
-for `gh:github.com` (created 2026-08-26) and `doppler-cli` (2026-08-04);
-control arm, a bogus service name → rc=44, against 286 keychain entries.
-Something re-created them after the 2026-08-02 deletion. **The hang risk above
-is LIVE again**, which is why a mise `credential_command` must NOT be wired to
-`gh auth token` or `fnox get` (fnox is Doppler-primary for these names and
-shells out to the `doppler` CLI). Deleting them again is an OPERATOR action and
-wants its own triage — find what recreates them first, or it simply recurs.
-Evidence: `docs/research/kb/reports/agents/2026-09-12-gh-token-for-mise.md` §Q5.
+The `gh:github.com` and `doppler-cli` keychain entries are present (recreated
+after a 2026-08-02 deletion; `security find-generic-password -s` rc=0, bogus
+name rc=44, re-measured 2026-09-24), so **the hang risk is live**: never wire a
+mise `credential_command` to `gh auth token` or `fnox get` (fnox is
+Doppler-primary for these names and shells out to the `doppler` CLI).
+Deleting the entries is an OPERATOR action that needs its own triage — find
+what recreates them first. Evidence:
+`docs/research/kb/reports/agents/2026-09-12-gh-token-for-mise.md` §Q5.
 
 ⚠️ **This reaches fnox: its doppler provider SHELLS OUT to the `doppler` CLI**
 (error text `Doppler: command failed` — a subprocess failure). A hung `doppler`
@@ -57,38 +46,28 @@ attempts auto-rolled-back and the declaration was wrongly blamed.
    base64), and compression destroys the patterns scanners match on — measured
    gitleaks 2 → 0, betterleaks 1 → 0 on the same content in two forms. That gap
    is why `no_env_dump` exists and why it is deliberately glob-less.
-2. ⚠️ **REVERSED — secrets now live in the shell by decision.** This rule used to
-   read *"a secret belongs to a process, not to a shell — reach for `fnox exec --`
-   rather than exporting."* That is no longer the posture (2026-08-02). The
-   consequence to internalise: `fnox exec` is no longer a confinement boundary,
-   because the parent shell already has everything. **Rules 1, 4 and 7 are now the
-   only things between 50 credentials and a transcript or a commit** — there is no
-   second line behind them any more.
+2. **No process-level confinement.** Secrets live in the shell by decision, so
+   `fnox exec` is not a confinement boundary — the parent shell already has
+   everything. Rules 1, 4 and 7 have no second line behind them.
 3. **Do not mark a non-secret as a secret.** Redaction is value-based, so a
    short or empty "secret" corrupts every log the tool writes.
 4. **When a scanner reports clean, ask what it can see.** Compression, encoding,
    and a path allowlist each turn "no findings" into "never looked".
-5. **A new SECRET is now the reviewed decision — the old trap inverted.** Under
-   `env = "exec"` the hazard was a *consumer* silently getting an empty `${VAR}`
-   and dropping to an anonymous tier (context7 MCP, 2026-07-29) — so **check a
-   consumer's authenticated identity, never its connection status** still holds
-   whenever anything is exec-only or absent. Under `env = true` that trap is gone
-   and the reviewed decision moves to the other end: **adding a secret to fnox now
-   puts it in every terminal and every agent by default**, so it must be added to
-   `doctor.toml`'s `env_true` set in the same reviewed diff, or the doctor
-   reports drift on the next session and someone "fixes" it back.
+5. **Adding a secret is a reviewed decision.** A secret added to fnox reaches
+   every terminal and every agent by default, so add it to `doctor.toml`'s
+   `env_true` set in the same reviewed diff, or the doctor reports drift next
+   session and someone "fixes" it back. For anything exec-only or absent,
+   **check a consumer's authenticated identity, never its connection status**:
+   an empty `${VAR}` silently drops a consumer to an anonymous tier (context7
+   MCP, 2026-07-29).
 6. **Diagnose by layer, and never run `fnox get` to do it** (it prints a value).
-   ⚠️ **The old first suspect is retired.** A present-under-`fnox exec` /
-   absent-in-shell split used to mean `env = "exec"` working as designed; under
-   `env = true` that outcome is **unreachable — except for the one carve-out
-   above**, so for any OTHER name an absent variable is a REAL failure — never
-   dismiss it. Order the new suspects: (a) a **hung `doppler` CLI**,
+   An absent variable is a REAL failure for every name except the carve-out
+   above — never dismiss it. Suspects, in order: (a) a **hung `doppler` CLI**,
    since fnox shells out to it and any uncached doppler-primary secret resolves
    through that child; (b) a stale **`MISE_ENV_CACHE`** entry, which can serve a
    dead name in ONE directory long after the config is byte-identically restored,
    and which `grep` cannot see because it is encrypted; (c) the declaration itself.
-   The recipes live in `docs/secrets-doppler-fnox-keychain.md` (rewritten to this
-   posture 2026-08-03).
+   The recipes live in `docs/secrets-doppler-fnox-keychain.md`.
 7. **⚠️ A probe's OWN STDOUT is an uncovered surface — print presence, never a
    value.** Every gate above guards a *file write* or a *spawn*; none guards the
    output of a command an agent runs, and that output lands in the session
@@ -99,7 +78,7 @@ attempts auto-rolled-back and the declaration was wrongly blamed.
    format string "just to check". Gap tracked in #474, still OPEN: one shape is
    now gated (below), every other shape is carried by this rule alone.
 
-   ⚠️ **IT RECURRED THE SAME DAY — the safe form is only safe ALONE.**
+   ⚠️ **The safe form is only safe ALONE.**
    `${VAR:+SET}${VAR:-ABSENT}` opens with the form this rule recommends and is a
    **leak**: `:-` and `:=` are *value-emitting* substitutions, so a **set**
    variable prints `SET<the secret>` (an *unset* one prints `ABSENT`, which is why
@@ -110,12 +89,10 @@ attempts auto-rolled-back and the declaration was wrongly blamed.
    credential-named variable (broader than just `:-`/`:=`, `\$\{?` optional) —
    still allows `${(P)k}` indirect expansion; this rule carries every other shape.
 
-   ⚠️ **There is no blast-radius cap any more.** Under `env = true` **all 50** are
-   printable by any probe, wrapped or not; `DOPPLER_TOKEN` is itself in the
-   sanctioned shell set. (This file once claimed "exactly the opt-in set" — already
-   false under `fnox exec`, and the reversal widened it to everything.) The
-   correction runs in the **worse** direction: assume every credential is reachable
-   from any shell. `docs/rules-evidence/secrets-out-of-the-shell-env.md`.
+   ⚠️ **There is no blast-radius cap.** Every credential is printable by any
+   probe, wrapped or not; `DOPPLER_TOKEN` is itself in the sanctioned shell
+   set. Assume every credential is reachable from any shell.
+   `docs/rules-evidence/secrets-out-of-the-shell-env.md`.
 
 8. **⚠️ A FILE can be the credential, and "it's config" is not evidence.** Rule 7
    guards a *variable*; on 2026-09-13 the leak came through a **file**, so nothing

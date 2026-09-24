@@ -47,11 +47,10 @@ completed-with-no-message path. A usage limit cannot be induced on demand. It
 does not change this module, because both outcomes already escalate — but a
 future reader must not mistake the inference for a measurement.
 
-Supervision is NOT in scope (#575 R4 assigned start/wait/reap to the
-fable-orchestrator plugin's ``run-lane.sh``, whose ``EXIT: <code>`` marker this
-module reads as its settled signal; the plugin was removed in #1310 and
-``codex_lane`` writes the same marker). #580 adds the typed verdict and the
-schema flags that script does not pass.
+Supervision is NOT in scope: ``codex_lane`` starts, waits on and reaps a lane,
+and writes the ``EXIT: <code>`` marker this module reads as its settled
+signal. #580 adds the typed verdict and the schema flags that script does not
+pass.
 """
 
 from __future__ import annotations
@@ -341,9 +340,8 @@ def lane_is_settled(run_dir: Path) -> bool:
     occurs in — as a dedicated marker file, or as a line appended to the lane
     log.
 
-    ⚠️ **The log form is the one the real launcher emits, and reading only the
-    marker file was a defect this module shipped with.** Verified against
-    `~/.claude/plugins/marketplaces/fable-orchestrator/scripts/run-lane.sh`:
+    ⚠️ **The log form is the one the lane launcher emits, and reading only the
+    marker file was a defect this module shipped with.** In the launcher,
     each lane runs in a backgrounded subshell that does
     ``echo "EXIT: $?" >> "$LOG"``, and its own header states the contract —
     *"appends 'EXIT: <code>' to LOG when the CLI exits on its own ... No EXIT
@@ -359,7 +357,7 @@ def lane_is_settled(run_dir: Path) -> bool:
     tick as ``file_missing``, which escalates. Treating "no marker" as settled
     would instead read a file mid-write.
 
-    ⚠️ Note the marker's own stated limit, inherited from the launcher: a grok
+    ⚠️ Note the marker's own stated limit, inherited from the launcher: a
     lane that dies on an internal permission cancellation still exits 0. So
     `EXIT: 0` proves the CLI returned, never that it did the work — which is
     exactly why the verdict's CONTENT is validated rather than its presence.

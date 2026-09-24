@@ -48,3 +48,20 @@ machine-consistent table while replacing stale Claude Code claims.
   and evidence note.
 - [ray-manaloto/knowledge-base](https://github.com/ray-manaloto/knowledge-base)
   — budget implementation and pinned documentation corpus.
+
+## Moved from the rule (2026-09-24 prompt audit)
+
+Verbatim text removed from `.claude/rules/md-size-budgets.md` by the prompt audit (`docs/research/kb/reports/prompt-audit-2026-09-24.md`); kept here so the history survives.
+
+> The historical failure was provenance loss:
+>
+> 1. `1f05365` created a 200-line gate with the correct source.
+> 2. `99a8506` (no longer resolvable in this repo) described an unenforced
+>    12,000-character limit, likely copied from
+>    agnix without its vendor bound.
+> 3. `010009d` (also no longer resolvable) changed code to match the prose and
+>    credited Anthropic.
+>
+>    ⚠️ Only `1f05365` still resolves (`git cat-file -t` -> commit; the other two
+>    -> unresolvable, same command, so the probe discriminates). The chain is
+>    preserved as narrative, not as three followable refs.

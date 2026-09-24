@@ -1,22 +1,23 @@
-# gh CLI: Always use `--watch`, Never Hand-Roll Poll Loops
+# gh CLI: Let ship/land Wait on CI; Read State One-Shot
 
-When waiting on a GHA workflow run or PR check completion via the
-`gh` CLI, use the built-in `--watch` flags. Never hand-roll a
-`while ! gh ... | grep ...; do sleep; done` polling loop.
+Waiting on PR checks or a workflow run is owned by `mise run ship` (PR
+checks to bucket-verified green) and `mise run land -- <PR#>` (main CI). For
+a point-in-time read use a one-shot `--json` query. Do not hand-roll a wait:
+the PreToolUse guard denies `gh pr checks --watch`, `gh run watch`, and
+unbounded `while`/`until` + `sleep` loops.
 
 ## Why this rule exists
 
-`gh` has first-class live-monitoring with correct refresh intervals,
-exit codes, and table updates. A hand-rolled loop has none of that: it
-buries the real exit code (the `grep` becomes the shell's exit), races
-on multi-run queues, burns API quota, and shows the operator nothing.
+A hand-rolled loop buries the real exit code (the `grep` becomes the
+shell's exit), races on multi-run queues, burns API quota, and shows the
+operator nothing; the ship/land tasks read `--json` buckets instead.
 
 The canonical break: under `set -o pipefail`, `cmd | grep -q PAT`
 returns **141** when the match *succeeds* — a check that can only fail.
 That is `hk.pkl`'s `no_grep_q_under_pipefail` step.
 
-⚠️ `gh run watch --exit-status` has reported **0 prematurely** — always
-cross-verify with `gh run view <id> --json conclusion`.
+`gh run watch --exit-status` has reported **0 prematurely** — one reason it
+is denied; the API `conclusion` field is the source of truth.
 
 Full rationale, the anti-pattern catalogue, and when Claude Code's
 `Monitor` tool is the right tool instead (per-transition notifications,
@@ -24,29 +25,11 @@ non-GHA systems, event filtering): `docs/rules-evidence/gh-cli-watch.md`.
 
 ## Canonical patterns
 
-### Wait for all PR checks to finish
-
 ```bash
-# In a long-running terminal:
-gh pr checks 123 --watch --interval 30
-
-# In a script that should fail loud on any check failure:
-gh pr checks 123 --watch --fail-fast
-echo "exit=$?"
-```
-
-### Wait for a specific run
-
-```bash
-gh run watch 1234567890 --exit-status
-# Cross-verify per feedback_gh_run_watch.md:
-gh run view 1234567890 --json conclusion --jq '.conclusion'
-```
-
-### Watch the current branch's PR
-
-```bash
-gh pr checks --watch        # auto-detects from current branch
+mise run ship                        # opens the PR and waits for its checks
+mise run land -- 123                 # after merge: waits on main CI, validates
+gh pr checks 123 --json name,bucket  # one-shot read of PR checks
+gh run view 1234567890 --json conclusion --jq '.conclusion'  # one run
 ```
 
 ## Anti-pattern
@@ -64,8 +47,7 @@ the evidence file.
 ## Applies to
 
 All scripts, hooks, skills, agents, and ad-hoc Bash invocations in
-this repo. When `gh` documentation lists a `--watch` flag for any
-subcommand (`pr checks`, `run`, `workflow`, `pr status`), use it.
+this repo.
 
 ## See also
 

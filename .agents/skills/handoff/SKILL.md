@@ -46,10 +46,11 @@ wrong detail costs the next session more than a missing one.
 
 ### 4. Commit + push (this is the cross-surface part)
 Stage the handoff and the doc updates from step 1 (specific paths — never
-`git add .`; `.claude/rules/do-not.md`). Commit + push per
-`.agents/skills/git-branch-commit-push-workflow/SKILL.md` (plain git,
-`git push -u origin {branch}`). Unlike `/clear-prep`, the handoff IS committed,
-because a tracked-but-unpushed handoff still can't cross surfaces.
+`git add .`; `.claude/rules/do-not.md`). Commit on the feature branch (never
+`main` — do-not.md #9) and `git push -u origin {branch}`; use `mise run ship`
+only if the work should also become a PR. Unlike `/clear-prep`, the
+handoff IS committed, because a tracked-but-unpushed handoff still can't cross
+surfaces.
 
 > **Bricked web session caveat:** if Bash/git is blocked (the Codex-web
 > "brick" — see `docs/web-brick-fix-handoff.md`), push the handoff via the
@@ -80,4 +81,3 @@ git pull`, open Codex in the repo, paste that."*
 - `.agents/skills/resume/SKILL.md` — the receiving side.
 - `.agents/skills/clear-prep/SKILL.md` — same-machine `/clear` handoff (`.agent/plans/`).
 - `docs/handoffs/README.md` — the protocol + the handoff template.
-- `.agents/skills/git-branch-commit-push-workflow/SKILL.md` — the commit/push path.

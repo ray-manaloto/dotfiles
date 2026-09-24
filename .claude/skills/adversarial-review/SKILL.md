@@ -1,6 +1,6 @@
 ---
 name: adversarial-review
-description: "Write and bound an adversarial review round — the brief, the stop condition, and the escape hatch. Use when commissioning a cold or adversarial review of a diff, branch or PR; when writing the brief for a review agent (a codex review lens, cold-reviewer, a Claude critic); when a review has returned DO NOT SHIP and you are about to run another round; or when deciding whether a review loop should end. A review's productivity is a property of its BRIEF, not of its reviewer — an unbounded \"what is broken?\" brief cannot terminate, and permission to stop is not a stop condition."
+description: "Write and bound an adversarial review round — the brief, the stop condition, and the escape hatch. Use when commissioning a cold or adversarial review of a diff, branch or PR; when writing the brief for a review agent (a codex review lens, cold-reviewer, a Claude critic); when a review has returned DO NOT SHIP and you are about to run another round; or when deciding whether a review loop should end."
 user-invocable: true
 ---
 
@@ -103,53 +103,24 @@ author-asserted, and an author-asserted cardinality is a claim like any other.
 
 State it in the brief, verbatim, every round.
 
-**Why completion and not emptiness.** Two severity-keyed versions of this rule
-were written and both ship defects, so the class is the problem, not the
-threshold:
+**Why completion and not emptiness.** An emptiness test ("SHIP with 0 HIGH and
+0 MEDIUM ends the loop") asks the reviewer to prove a negative: it ends the
+loop too early on an open-hunting round that happened to return only LOWs, or
+never ends it, because any round doing real work returns something. A
+completion test asks whether a finite question set was answered — the
+finite-co-domain property applied to the stop condition. The full #601 replay
+is in the reflection report under See also.
 
-- *"SHIP with 0 HIGH and 0 MEDIUM ends the loop"* — ends at **v2** (an
-  open-hunting SHIP with 2 LOW). v4-v7 never run: **5 HIGH + 2 MEDIUM ship.**
-- *The same, qualified with "bounded"* — under the ladder reading v2 is bounded
-  by round number, so it ends at v2 too, identically. Under the fixed-record
-  reading it never terminates at all, because **v7 returned 2 MEDIUM** and the
-  predicate is unsatisfiable by any round that did real work.
+⚠️ **The re-open clause has a structural self-trigger.** The enumeration
+question exists to find enumeration errors, so whenever it does its job the
+clause fires and a successful bounded round costs one more round. Scope that
+round to the **delta** (the newly reachable cells), not the whole domain. It
+does not regress infinitely: an enumeration only grows, and it is bounded
+above by the axes the code actually reads.
 
-An emptiness test asks the reviewer to prove a negative. A completion test asks
-whether a finite question set was answered — which is the finite-co-domain
-property above, finally applied to the stop condition instead of contradicting
-it. It is the mechanism that actually terminated #601: v7 answered three
-questions over 32 cells, returned 2 MEDIUM, and the loop ended.
-
-**Replayed, honestly:**
-
-- v1-v6: terminates **nowhere** — none of them had an enumeration to answer.
-- v7: its three questions were answered, so the round ends and the 2 MEDIUMs
-  disposition in-unit, exactly as `8706670` did. **But that disposition CHANGED
-  THE ENUMERATION** (32 cells → 64; `tempos = [_IDLE, _ACTIVE]`), so the re-open
-  clause fires and prescribes a round 8 over the 32 newly-reachable cells. So:
-  **it terminates at v8, having verified the enumeration it ended up with** —
-  not at v7. That is the rule working. Thirty-two cells nobody had verified now
-  existed.
-
-⚠️ **The re-open clause has a structural self-trigger — know it before you use
-it.** The bounded template's enumeration question exists precisely to find
-enumeration errors, so *whenever that question does its job, the clause fires*
-and a successful bounded round always costs one more round by construction.
-Scope that extra round to the **delta** (here: the 32 new `tempo="active"`
-cells, not all 64). It does not regress infinitely — an enumeration only grows,
-and its axis set is bounded above by what the code actually reads, which
-`classifier_axes` derives mechanically.
-
-**Two things this rule does NOT do, stated rather than implied:**
-
-1. **It does not help rounds 1-3** — the waste the #601 post-mortem calls the
-   real failure. v2 is open, so it promotes; v3 is *also* open, so it promotes
-   again, and v3 still runs. The earlier rule's termination at v2 at least
-   stopped before v3 — but it did so **correct by accident**, at a price of
-   5 HIGH + 2 MEDIUM. Buying v4-v7 back for the cost of v3 is a good trade, and
-   it is a trade, not a free win. Nothing here addresses rounds 1-3.
-2. **It is not a round cap.** A cap set low enough to have helped #601 also cuts
-   rounds 4-7, each of which found something real.
+This rule does not rescue early open-hunting rounds (each still runs and
+promotes), and it is not a round cap — a cap low enough to stop that waste
+also cuts later rounds that find real defects.
 
 ## Three questions an enumeration CANNOT replace
 
@@ -181,24 +152,10 @@ v1-v6**, and each of them independently kills a finding that cost a full round.
   | `(project + label dag:needs-human)` | **none** — nothing in this process writes the label | HIGH, round 1 |
   | its own replacement, `never respawned BY THIS TICK` | **none** — `execute_respawn` did not re-check | HIGH, round 4 |
 
-  Four clauses, one string, one minute of checking. Be precise about what this
-  buys: **one finding moves from round 4 to round 1.** The other two were
-  already round-1 findings, so Q-CLAIM saves no rounds on them — it makes them
-  cheaper to find, not earlier. (Round 2 returned **zero** HIGHs; an earlier
-  draft of this table credited two of these to it, which was wrong.) A claim
-  with no enforcing call site is the repo's **third** recorded instance of this
-  failure class.
-
-  ⚠️ **Why this is a brief question and not an eager rule** — the write-time
-  version was proposed and deliberately not adopted (issue #608 §N1), and the
-  asymmetry is worth stating because a sibling change in the same batch DID add
-  clauses to two eager rules. Those clauses each shipped **with an enforcing
-  call site**: `agent-report-persistence.md` rule 5 rides on `session-handoff`'s
-  audit step, and the `clarify-before-acting.md` edit was a factual correction
-  to a matcher that `hook_selfcheck` asserts. The write-time clause audit has
-  **no available enforcing site** — a machine cannot check "does this clause
-  have an enforcing `file:line`", which is the whole point of the failure class.
-  So it goes where something can actually invoke it: a brief.
+  Four clauses, one string, one minute of checking. Q-CLAIM lives in the
+  brief rather than in an eager rule because no machine can check "does this
+  clause have an enforcing `file:line`" — a brief is where something can
+  actually invoke it.
 
 ## The escape hatch — a ticket, not another commit
 
@@ -218,8 +175,6 @@ surface each time. Write the ticket, cite it in the reason string, move on.
 - **Name the exact artifact each control arm measures.** "Run a control" is not
   a discriminating instruction; identify the file, output, fixture, or runtime
   object whose change separates the positive arm from the negative one.
-
-Both are permanent lessons from the 2026-09-10 `/grilling` pass (ruling 12).
 
 ## Templates
 

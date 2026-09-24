@@ -126,7 +126,7 @@ prior_art:                        # GENERATED and RE-VERIFIED. See §1.3.
       resolution: dismissed
       why: "Covers graph ingestion, not chezmoi's config surface."
 review:
-  lens: codex-reviewer | grok-reviewer | mattpocock-skills:code-review | none
+  lens: cold-reviewer | codex review lens | mattpocock-skills:code-review | none
   verdict: clean | needs-attention | not-run
   findings: 29
   disposition: docs/research/kb/reports/agents/codex-adversarial-449-receipt-spec.md

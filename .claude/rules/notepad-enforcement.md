@@ -39,11 +39,6 @@ could displace the report with the reply it forces. See
    preserve agent-specific lessons, but do not replace `findings.md` or the
    tracked verbatim report.
 
-The former guidance named `oh-my-claudecode` notepad MCP tools. That plugin was
-disabled and those tools recorded zero invocations across 941 transcripts.
-They are removed only because the enabled plugin, root file, hooks, and
-read-only fallback now provide an observable replacement.
-
 ## Why
 
 On 2026-04-05, extensive findings were not written down and all had to be

@@ -51,11 +51,6 @@ subagent transcript. Therefore `_SETTINGS_WIRING` in
 registration tests are load-bearing. The required substrings must remain in
 one settings entry; splitting the contract across entries fails selfcheck.
 
-`SubagentStop` additional context reaches the **delegate**, not the
-coordinator. Parent-side injection would require a `PostToolUse` hook on the
-`Agent` tool, which this change does not add. The coordinator must still
-persist a delivered report at receipt.
-
 ## Rules
 
 1. **Persist at receipt, into the tracked destination.** Write a final report

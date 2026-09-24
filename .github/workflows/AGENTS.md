@@ -5,7 +5,7 @@
 
 ## Purpose
 
-GitHub Actions workflows implementing the 4-stage CI pipeline and
+GitHub Actions workflows implementing the CI pipeline and
 post-failure reporting.
 
 ## Key Files
@@ -58,7 +58,7 @@ PR / schedule / workflow_dispatch path (stages 3–6 run inside the reusable
 `build-publish.yml`, invoked by ci.yml's `build-publish` caller — names and
 behavior unchanged):
 
-1. **lint** — mise install, hk pre-commit, agnix agent-doc validation
+1. **lint** — mise install, `hk run check --all`, agnix agent-doc validation
    (`agnix .`; `.agnix.toml` `severity = "Warning"` = non-blocking),
    `mise doctor --json`, `mise.lock` upload + cache. agnix uses the
    `github:agent-sh/agnix` backend (not `npm:agnix`).
@@ -145,8 +145,8 @@ Push-to-main path (after a PR merge):
   (#160 T11). See `.devcontainer/P2996-CACHE.md`.
 - **`uv run --project python`**, not `--directory` (changes cwd, breaks
   relative test paths).
-- **Use `--watch`, never sleep-poll**; `gh run watch --exit-status` is
-  unreliable, cross-verify `--json conclusion`. `.claude/rules/gh-cli-watch.md`.
+- **CI waits belong to `mise run ship`/`land`**; one-shot reads use `--json`
+  (`gh run view <id> --json conclusion`). `.claude/rules/gh-cli-watch.md`.
 - **No `type=gha` cache on `base`/`p2996-cache` targets**: registry tag +
   `Probe cache` IS the durable cache; `mode=max` gha export exceeds the 1h
   Azure SAS TTL (`403` on cold runs). `dev` keeps gha cache.

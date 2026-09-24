@@ -1,6 +1,6 @@
 ---
 name: reap
-description: Clear a pile of wedged processes safely via `mise run reap` — a dry-run-by-default reaper with ancestor-chain protection, an age floor, and TERM-then-KILL escalation. Reach for it whenever a host has accumulated stuck or duplicated processes (hung `git`, `fnox`, shims, orphaned workers), when load, PID or memory pressure needs a bulk cleanup, and above all before hand-rolling a `pkill`, a `ps | grep | awk | xargs kill`, or a throwaway kill script — that improvisation nearly killed a session's own shell and is why this exists. Also use it to measure a pile before deciding anything, since a dry run signals nothing and prints the full plan.
+description: Clear a pile of wedged processes safely via `mise run reap` — a dry-run-by-default reaper with ancestor-chain protection, an age floor, and TERM-then-KILL escalation. Reach for it whenever a host has accumulated stuck or duplicated processes (hung `git`, `fnox`, shims, orphaned workers), when load, PID or memory pressure needs a bulk cleanup, and above all before hand-rolling a `pkill`, a `ps | grep | awk | xargs kill`, or a throwaway kill script — a hand-rolled pattern can match your own shell's ancestor chain. Also use it to measure a pile before deciding anything, since a dry run signals nothing and prints the full plan.
 user-invocable: true
 ---
 

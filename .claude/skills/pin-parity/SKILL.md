@@ -1,6 +1,6 @@
 ---
 name: pin-parity
-description: Check that every pin site for one logical tool carries the same version, via `mise run pin-parity`. Use when bumping a tool that is pinned in more than one file, when `mise run lint`'s `pin_parity` step fails, when a devcontainer bring-up breaks after a dependency PR merged, or when adding a new tool whose version appears outside the mise manifest. Reach for it BEFORE trusting `mise outdated` on such a tool — that command reads the manifest, so a floor file, a pkl `amends` URL, a Dockerfile `ARG` or a vendored schema tag is invisible to it, and every drift on 2026-09-14 lived in exactly that gap.
+description: Check that every pin site for one logical tool carries the same version, via `mise run pin-parity`. Use when bumping a tool that is pinned in more than one file, when `mise run lint`'s `pin_parity` step fails, when a devcontainer bring-up breaks after a dependency PR merged, or when adding a new tool whose version appears outside the mise manifest. Reach for it BEFORE trusting `mise outdated` on such a tool — that command reads the manifest, so a floor file, a pkl `amends` URL, a Dockerfile `ARG` or a vendored schema tag is invisible to it.
 user-invocable: true
 ---
 

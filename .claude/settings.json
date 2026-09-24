@@ -184,7 +184,7 @@
     "claude-code-setup@claude-plugins-official": false,
     "pyright-lsp@claude-plugins-official": false,
     "pyright@claude-code-lsps": false,
-    "explanatory-output-style@claude-plugins-official": true,
+    "explanatory-output-style@claude-plugins-official": false,
     "hookify@claude-plugins-official": false,
     "learning-output-style@claude-plugins-official": true,
     "octo@nyldn-plugins": false,

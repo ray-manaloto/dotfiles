@@ -4,10 +4,6 @@ Agent working artifacts live under **`.agent/`** (gitignored, machine-local).
 Anything that must survive a clone is tracked under `docs/`. Do not create
 ad-hoc directories in either tree.
 
-> **Renamed from `.omc/` (2026-07-25).** That name belonged to a plugin that
-> was not enabled. `.agent/` was control-armed before adoption; archaeology is
-> in `docs/rules-evidence/agent-artifact-conventions.md`.
-
 ## Two plan locations, two durability contracts
 
 - Claude Code harness plans stay at the documented default
@@ -91,11 +87,6 @@ that worktree cleanup promoted a report—it only removed the isolated worktree.
    AFTER the budget is applied) and `/doctor`; treat
    `SLASH_COMMAND_TOOL_CHAR_BUDGET` as a diagnostic/user setting, not a project
    workaround. Never rely on every installed skill being listed.
-
-   ⚠️ Earlier wording here claimed this budget is *shared with MCP tools*. The
-   corpus does not say that: `$CC/env-vars.md:466` scopes it to "skill metadata
-   shown to the Skill tool", and `$CC/skills.md:1050-1058` describes a
-   skill-listing budget throughout. Corrected rather than re-anchored.
 7. **Build reusable skills downward:** skill → mise task → Python library. The
    skill contains judgment; the task is the seam; mechanics are parameterized
    library functions. No bash logic. Author through the skill creator and

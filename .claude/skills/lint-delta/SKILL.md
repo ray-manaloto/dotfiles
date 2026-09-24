@@ -1,6 +1,6 @@
 ---
 name: lint-delta
-description: Partition linter violations into yours and the upgrade's by running the previous pinned version against the same tree, via `mise run lint-delta`. Reach for it the moment a ruff, ty or other linter bump turns a green gate red — before fixing anything and before reaching for a suppression — and whenever a Renovate tool-bump PR arrives with a wall of new diagnostics. Newly-enabled rules look exactly like regressions in your own change — one measured bump took a tree from 2 violations to 138 without a line of code changing.
+description: Partition linter violations into yours and the upgrade's by running the previous pinned version against the same tree, via `mise run lint-delta`. Reach for it the moment a ruff, ty or other linter bump turns a green gate red — before fixing anything and before reaching for a suppression — and whenever a Renovate tool-bump PR arrives with a wall of new diagnostics. Newly-enabled rules look exactly like regressions in your own change.
 user-invocable: true
 ---
 

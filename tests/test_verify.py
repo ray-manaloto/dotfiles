@@ -178,7 +178,7 @@ def test_bare_tokens_are_a_union_across_paths() -> None:
 # normalises only whitespace.
 
 #: A whole line that really is in `.claude/CLAUDE.md` (the lane-table heading).
-_REAL_LINE = "### There is no `grok` here — codex lanes only, stop asking"
+_REAL_LINE = "### Lane routing — codex and Claude only"
 
 _TRIGGER = (
     "- When the session model is Fable, without being reminded: non-trivial "
@@ -276,13 +276,13 @@ def test_path_globs_resolve_and_feed_the_handler(
     """`path_globs` (#1316) covers every matching file, including a new one."""
     (tmp_path / "agents").mkdir()
     (tmp_path / "agents" / "a.md").write_text("clean\n")
-    planted = "uses fable-orchestrator:codex-reviewer\n"
+    planted = "uses removed-plugin:codex-reviewer\n"
     (tmp_path / "agents" / "b.md").write_text(planted)
     monkeypatch.setattr(verify, "_project_root", lambda: tmp_path)
     entry = _entry(
         handler="forbid_tokens",
         path_globs=["agents/*.md"],
-        tokens=["fable-orchestrator:"],
+        tokens=["removed-plugin:"],
         strip_comments=False,
     )
     result = verify.run_suite(entry)

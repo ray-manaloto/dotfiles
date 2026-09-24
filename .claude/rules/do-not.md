@@ -6,8 +6,9 @@ in this repo. Control arms and case history for each entry:
 
 1. **Do NOT launch CLion or VS Code from the dock for devcontainer work.**
    macOS GUI processes don't inherit terminal env, so `mise`, `uv`, and
-   `$SSH_AUTH_SOCK` are not available to `initializeCommand`, which then
-   fails to spawn the host-side SSH agent proxy. Terminal only. See
+   `$SSH_AUTH_SOCK` are not available to `initializeCommand`
+   (`uv run … dotfiles-setup docker initialize-host`), which then fails.
+   Terminal only. See
    `.devcontainer/AGENTS.md`.
 
 2. **Do NOT `mise run build` or `docker buildx bake dev-load` locally.**
@@ -50,12 +51,9 @@ in this repo. Control arms and case history for each entry:
    `main`**). Recovery is `git branch <new> && git reset --hard origin/main`;
    uncommitted work carries across a `git checkout -b` untouched.
 
-   ⚠️ **"Don't commit" was too late a gate.** On 2026-08-03 a whole session's
-   work — including two sub-agent reports — accumulated on `main` and nothing
-   said a word, because **hk is a git-hook system and never sees a write**. It
-   would only have fired at the commit. Ray's standing instruction is therefore
-   *"all work should be on a branch that can be on a PR"*, enforced *whenever
-   anything is modified*.
+   The gate is on the *write*, not the commit: hk is a git-hook system and never
+   sees an edit. Ray's standing instruction: *"all work should be on a branch
+   that can be on a PR"*.
 
    Machine-enforced (#400) in four layers, earliest first: the **PreToolUse
    `branch_guard`** denying `Edit`/`Write`/`NotebookEdit` on a repo file while
@@ -78,9 +76,8 @@ in this repo. Control arms and case history for each entry:
 11. **Do NOT reach for MCP to solve one of OUR OWN problems.** For anything this
     project builds, calls, or looks up: the tool's CLI or a plain HTTP **API**
     first, then `mcp2cli`, and native registration only as a documented last
-    resort. A registered server taxes **every** conversation's system prompt
-    with **every** tool's schema, forever — paying that for a call a `curl`
-    already makes is pure loss.
+    resort. Registering a server for a call a `curl` already makes adds a
+    process, a pin, an auth path and a failure mode for nothing.
 
     ✅ **NOT a "do not": a third-party plugin or skill that REQUIRES MCP.**
     Enabling one (bundled servers, `claude mcp add`, a project `.mcp.json`) is

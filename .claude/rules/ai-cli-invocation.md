@@ -67,14 +67,10 @@ Use the pinned `agy`/Antigravity path through `mise exec -- agy`. A stale user
 installation can exist at `~/.local/bin/agy`, so keep the explicit `mise exec`
 form rather than relying on lookup order.
 
-⚠️ **Do not restate this as "a bare `agy` resolves the stale copy" — measured
-2026-09-10, it does not.** Bare `agy --version` -> **1.1.24** (mise's install
-dir precedes `~/.local/bin` on this PATH) while `~/.local/bin/agy --version` ->
-**1.1.12**, so the stale copy is real but is NOT what runs here. `which -a agy`
-is the arm that settles it; PATH order is a property of the machine, not of the
-tool, so assert the explicit form and let the probe speak for the order. For raw
-Gemini, `gemini "prompt"` remains interactive and can hang; `-p`/`--prompt`
-selects headless mode and piped stdin is appended to that prompt.
+`which -a agy` shows which copy PATH order selects on this machine; keep the
+explicit form regardless. For raw Gemini, `gemini "prompt"` remains
+interactive and can hang; `-p`/`--prompt` selects headless mode and piped
+stdin is appended to that prompt.
 
 OpenCode accepts positional messages and `-m provider/model`; its `-p` means
 `--password`, not prompt. Use `--format json` when a caller needs machine-
@@ -91,15 +87,8 @@ Recover background output by `Read`ing the task's output file path — the
 belongs in this file: it is a user/session concern, and no environment variable
 is a reason to invent new argv here.
 
-⚠️ An earlier draft of this section credited Claude Code 2.1.261 with three
-environment variables. Two exist but neither is new nor about background
-output — `SLASH_COMMAND_TOOL_CHAR_BUDGET` is an explicitly *legacy* name for
-the skill-listing budget (`$CC/env-vars.md:466`) and `ENABLE_TOOL_SEARCH`
-governs MCP tool search (`$CC/agent-sdk__tool-search.md:32`). The third,
-`SLASH_COMMAND_TOOL_TOKEN_BUDGET`, **does not exist** — 0 hits across the
-corpus while the other two return hits on the same command. All three are
-absent from the saved 2.1.261 changelog. A plausible-looking variable name is
-the cheapest thing for a lane to invent; grep it before citing it.
+A plausible-looking environment-variable name is the cheapest thing for a lane
+to invent; grep the `$CC/` corpus for it before citing it.
 
 ## Re-probe rule
 

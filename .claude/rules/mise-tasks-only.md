@@ -12,7 +12,7 @@ library, zero-bash-logic) in the same change.
 | `hk run check --all` / `hk run pre-commit --all` | `mise run lint` (read-only ≡ CI, hard timeout + log-tail diagnostics); `mise run fmt` to apply fixes |
 | bare `pytest` | `mise run test`, or `uv run --project python pytest <target>` (doc-level only: the permission engine unwraps runners, so a hook rule would also deny the canonical uv form) |
 | `devcontainer up` / `devcontainer build` | `mise run up` / `mise run dev-rebuild` (env + arch-scoped name resolution) |
-| `docker pull …dotfiles-devcontainer…` | `mise run sync` (buildkit, digest-aware, verifying; classic pull wedges on ~38GB) |
+| `docker pull …dotfiles-devcontainer…` | `mise run sync` (buildkit, digest-aware, verifying; classic pull wedges on the large image) |
 | `gh pr create` (+ push + gates by hand) | `mise run ship` |
 | `gh pr merge` (+ watch + validate by hand) | `mise run land -- <PR#>` (post-merge) |
 | `gh pr merge --auto` on a BOT-opened PR (Renovate / refresh bot) | `mise run automerge -- <PR#>` — arms and exits; a human PR is refused (use `ship`) |
@@ -35,24 +35,20 @@ library, zero-bash-logic) in the same change.
 Diagnostic/read-only commands (`docker ps`, `gh pr view`, `git status`,
 single-test `pytest path::test` via uv) are NOT wrapped and stay direct.
 
-**The `gh pr` redirects are REPO-AWARE (2026-07-23).** Dispatch is by the target
-repo, resolved from an explicit `-R`/`--repo`: dotfiles (or no `-R`, i.e. cwd) →
-`ship`/`land`; knowledge-base → `kb-ship`/`kb-land`; **any other repo → ALLOW**.
-Allowing the rest is deliberate — no canonical task exists for a sibling repo, so
-a deny would redirect to nothing and merely block real work. A real defect, not a
-hypothetical: the rules matched `gh pr merge` unconditionally, so a KB PR was
-denied and pointed at `mise run land` — a *dotfiles* task with no repo parameter,
-watching dotfiles' main CI. KB PRs #1 and #2 were merged by hand. **A guard whose
-redirect target cannot perform the redirected action is not enforcement, it is an
-outage.**
+**The `gh pr` redirects are REPO-AWARE.** Dispatch is by the target repo,
+resolved from an explicit `-R`/`--repo`: dotfiles (or no `-R`, i.e. cwd) →
+`ship`/`land`; knowledge-base → `kb-ship`/`kb-land`; **any other repo →
+ALLOW**, because no canonical task exists there and a deny would redirect to
+nothing. A guard whose redirect target cannot perform the redirected action
+is an outage, not enforcement.
 
-**It recurred along a second axis — PR PROVENANCE (#369).** Only `ship` arms
-auto-merge and a bot PR never runs it; `land` refuses an OPEN PR; `gh pr merge`
-redirected to `land`. #138/#236/#386 sat green, unmergeable. `automerge` is the
-missing verb: **bot-authored PRs ONLY**, armed and exited (required checks run
-against the merge RESULT, so a branch behind main is fine). `ship` gates the tree
-before arming and `automerge` does not, so one verb per provenance means no
-judgement call at the call site.
+**One verb per PR provenance.** Only `ship` arms auto-merge, a bot PR never
+runs it, and `land` refuses an OPEN PR — so `automerge` is the verb for
+**bot-authored PRs ONLY**, armed and exited (required checks run against the
+merge RESULT, so a branch behind main is fine). `ship` gates the tree before
+arming and `automerge` does not, so one verb per provenance means no
+judgement call at the call site. Incident history:
+`docs/rules-evidence/mise-tasks-only.md`.
 
 ## Enforcement layers (deep-research verified, 2026-07-07)
 

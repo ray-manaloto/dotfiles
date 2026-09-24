@@ -1,9 +1,6 @@
 # The codex SDLC Team: Six Specialists codex Itself Orchestrates
 
-This repo has a codex-side subagent team. A fresh Claude session had **no way to
-learn that** before this file existed: a grep for `sdlc` across the whole eager
-instruction surface returned ONE hit, in a comment explaining why a gate skips
-these files. The team was built, verified working, and invisible.
+This repo has a codex-side subagent team, which codex itself orchestrates.
 
 ## The roster
 

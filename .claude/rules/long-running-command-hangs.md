@@ -32,11 +32,13 @@ red herrings — lives in `docs/rules-evidence/long-running-command-hangs.md`.
    `mise run bounded-wait -- --deadline <s> (--file <path> | --cmd '<sh -c>')`.
    Its deadline is mandatory and expiry returns rc=124 with the awaited target.
 
-   **EXCEPTION — Mac-side container ops: background-and-idle gets them
-   REAPED.** `mise run ship`/`land`, `verify-local`, `sync`, and image pulls
-   are killed if the turn goes idle waiting on them. What works is **in-turn
-   polling**: background the command, then keep the turn engaged reading its
-   log:
+   **Mac-side container ops** (`mise run ship`/`land`, `verify-local`,
+   `sync`, image pulls): from the main conversation, launch them with the
+   harness `run_in_background` and a file-captured rc
+   (`… > "$LOG" 2>&1; echo "rc=$?" >> "$LOG"`), then read the `rc=` line
+   when the completion notice arrives — the command keeps running after the
+   turn ends. A foreground subagent's background commands stop at its final
+   response, so a subagent keeps its turn engaged with a bounded poll:
 
    ```bash
    deadline=$((SECONDS+540))
@@ -51,9 +53,8 @@ red herrings — lives in `docs/rules-evidence/long-running-command-hangs.md`.
    separate `backgrounded mise run` guard still denies `&`-detached or `nohup`
    mise tasks; `&&` and `2>&1` remain allowed.
 
-   **Backgrounding stays correct for CI/remote waits** (`gh pr checks --watch`,
-   `gh run watch`) — those run on GitHub's infrastructure and nothing local
-   reaps them. The hazard is specifically local, long, Mac-side work.
+   **CI/remote waits** are owned by `mise run ship`/`land`, which watch
+   GitHub-side checks themselves (see `gh-cli-watch.md`).
 
    For `mise run lint`, the symlink
    **`~/.local/state/dotfiles/hk-lint-<hash>.log`** names only the most recent
@@ -78,23 +79,14 @@ red herrings — lives in `docs/rules-evidence/long-running-command-hangs.md`.
 
 5. **hk specifics.** hk parallelises via per-file read/write locks
    *within* a run; a crashed/killed run can leave stale state under
-   `~/.local/state/hk/`. (The old "clear the pkl config cache" guidance is
-   retired — content-hashed since hk 1.47; `ci-local-parity.md` rule 5.)
+   `~/.local/state/hk/`. The pkl-eval cache is content-hashed, so editing
+   `hk.pkl` needs no cache clearing.
 
-6. **The ruff-error wedge is FIXED (#268), and it was never ruff.** Root
-   cause was **`depends` + `fail_fast = false`** — hk never releases a
-   dependent whose dependency FAILED, so `ruff_format` sat at `waiting
-   for ruff` forever. `hk.pkl`'s `no_hk_depends` step blocks `depends`
-   from coming back.
-
-   Generalisation, learned by publishing the wrong diagnosis twice:
-   **a scary log line adjacent to a hang is not the hang** (`failed to
-   get write locks …` is a benign DEBUG retry; the wedge was one line
-   lower). Confirm a suspect by removing it and re-probing. Both red
-   herrings: `docs/rules-evidence/long-running-command-hangs.md`.
-
-   Durable habit: **when lint hangs, run `uv run --project python ruff
-   check` DIRECTLY** — seconds, and it never lies about your own code.
+6. **A scary log line next to a hang is not the hang.** Confirm a suspect by
+   removing it and re-probing (the #268 wedge was `depends` + `fail_fast =
+   false`, now blocked by `no_hk_depends`; its red herrings are in the evidence
+   file). When lint hangs, run `uv run --project python ruff check` directly —
+   it takes seconds and separates your own code from hk's scheduling.
 
 7. **Find the wedged step by name.** Grep the lint output for a
    `❯ <step>` with no matching `✔ <step>` — that names it directly,
@@ -103,13 +95,13 @@ red herrings — lives in `docs/rules-evidence/long-running-command-hangs.md`.
 ## Applies to
 
 `hk` (use `mise run lint`), `mise install`, `docker buildx`/`devcontainer
-up`, `gh` waits (use `--watch`, see `gh-cli-watch.md`), and any other
+up`, `gh` waits (see `gh-cli-watch.md`), and any other
 network- or IO-bound command an agent or human launches in this repo.
 
 ## See also
 
 - `python/src/dotfiles_setup/lint.py` — the guarded hk runner.
-- `gh-cli-watch.md` — sibling rule: use `--watch`, never sleep-poll.
-- `ci-local-parity.md` — hk pkl-cache clearing after `hk.pkl` edits.
+- `gh-cli-watch.md` — sibling rule: ship/land own CI waits; never sleep-poll.
+- `ci-local-parity.md` — every CI lint step has a local hk equivalent.
 - Memory: `feedback_long_running_tail_logs`, `feedback_pipe_kills_exit_code`.
 - CLAUDE.md → `AGENTS.md` "Validate before committing" — prefer `mise run lint`.

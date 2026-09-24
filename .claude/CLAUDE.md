@@ -1,9 +1,9 @@
 # Claude-specific project config
 
 Claude-only configuration. The root `CLAUDE.md` is byte-exactly `@AGENTS.md`
-(`claude_md_import_stub`) and `AGENTS.md` is at 200/200 lines, so anything that
-is Claude-specific and doesn't fit there lives here. `.claude/**` is exempt from
-the stub and pair checks precisely so this file can exist.
+(`claude_md_import_stub`) and `AGENTS.md` sits at agnix AGM-003's 12,000-char
+cap, so anything Claude-specific that doesn't fit there lives here. `.claude/**`
+is exempt from the stub and pair checks precisely so this file can exist.
 
 ## Agent skills, trackers and domain docs
 
@@ -43,15 +43,13 @@ re-running `graphify install` re-appends there; revert that hunk. Full detail: `
 
 - Without being reminded, on ANY session model: non-trivial implementation runs the architect-as-orchestrator flow — invoke this repo's routing-doctrine skill (`codex-sdlc-team` in dotfiles, `orchestrator-routing` in knowledge-base) before delegating and follow it as authoritative for routing, the spec contract, review tiers, and advisor escalation.
 
-The trigger is **deliberately UN-gated** (default `/model` is Opus 5) and is
-rule-synced byte-for-byte with knowledge-base. It replaced the fable-orchestrator
-plugin's trigger when that plugin was removed (#1310); the doctrine now lives in
-the `codex-sdlc-team` skill, versioned and gated here.
+The trigger is **deliberately UN-gated** (it fires on any session model) and is
+rule-synced byte-for-byte with knowledge-base. The doctrine lives in the
+`codex-sdlc-team` skill, versioned and gated here.
 
-### There is no `grok` here — codex lanes only, stop asking
+### Lane routing — codex and Claude only
 
-`grok` is NOT installed (2026-09-01), so every lane resolves to codex or to
-Claude and nothing can fall back to grok. Route by this fixed table:
+Every lane resolves to codex or to Claude. Route by this fixed table:
 
 | Lane | Use |
 |---|---|
@@ -63,7 +61,7 @@ Claude and nothing can fall back to grok. Route by this fixed table:
 | Research | a read-only `Explore`/`Agent` lane |
 | Multi-domain SDLC review | codex-side team — [[codex-sdlc-team]] |
 
-New roster: `gate-runner`, `cold-reviewer`, `graphify-operator`, `graphify-researcher`,
+Repo-owned agents: `gate-runner`, `cold-reviewer`, `graphify-operator`, `graphify-researcher`,
 `spec-scribe`, `pwf-scribe`, `issue-filer`, `claude-advisor`, `premise-verifier`.
 Saved workflows: `/gated-implementation`, `/graphify-refresh`.
 
@@ -71,9 +69,9 @@ Two model families per role: `codex-sol-*` (authored) and `codex-astra-*`
 (generated — `mise run codex-lane-mirror`). Neither is a default.
 
 ⚠️ **No `codex-*` lane is the cold-review lens for a codex diff** — same model
-family as the implementer, so it inherits its blind spots. With grok gone,
-Claude IS the other family, so an Opus cold pass on a codex diff is the full
-gate, not a degraded one.
+family as the implementer, so it inherits its blind spots. Claude is the
+other family, so an Opus cold pass on a codex diff is the full gate, not a
+degraded one.
 
 ⚠️ Permanent advisor-consult routing and escalation: see @token-routing.md.
 

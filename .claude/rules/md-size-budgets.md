@@ -52,18 +52,11 @@ Twelve thousand is instead **Windsurf's** rule:
 `AGENTS.md` files Windsurf reads. `md_size_budget` does not duplicate it or
 misapply it to Claude-only files.
 
-The historical failure was provenance loss:
-
-1. `1f05365` created a 200-line gate with the correct source.
-2. `99a8506` (no longer resolvable in this repo) described an unenforced
-   12,000-character limit, likely copied from
-   agnix without its vendor bound.
-3. `010009d` (also no longer resolvable) changed code to match the prose and
-   credited Anthropic.
-
-   ⚠️ Only `1f05365` still resolves (`git cat-file -t` -> commit; the other two
-   -> unresolvable, same command, so the probe discriminates). The chain is
-   preserved as narrative, not as three followable refs.
+The historical failure was provenance loss: a correctly sourced 200-line gate
+(`1f05365`) later gained an unenforced 12,000-character limit copied from
+agnix without its vendor bound, and code was then changed to match the prose
+and credit Anthropic. The commit chain belongs in
+`docs/rules-evidence/md-size-budgets.md`.
 
 The initial correction also overreached: a zero-hit search in Anthropic's
 corpus became "not documented anywhere," although the probe never searched

@@ -34,9 +34,9 @@ mise run schema-vendor-refresh               # Re-vendor upstream files (#1026)
 mise run plugin-health / dependency-currency # Doctor LIVE checks (rc=verdict)
 ```
 
-The devloop is `mise run up` → work inside the container → `mise run down`.
-The legacy `dotfiles-setup docker {up,down}` wrapper has been replaced by
-the official `@devcontainers/cli` (pinned in `mise.toml`).
+The devloop is `mise run up` → work inside the container → `mise run down`
+(the official `@devcontainers/cli`, pinned in `mise.toml`) — not the legacy
+`dotfiles-setup docker up`/`down` subcommands.
 
 ## Key Files
 
@@ -79,10 +79,9 @@ Three pkl files with a shared-import pattern:
 - `hk.pkl` — project pre-commit config; imports and spreads `hk-common.pkl` groups
 - `hk-image.pkl` — Docker image checks; imports and spreads `hk-common.pkl` groups
 
-hk 1.49's default pklr backend evaluates the import/spread config
-identically to the pkl CLI (parity probe-verified #160 T12; the
-`HK_PKL_BACKEND=pkl` override is retired). The pkl-eval cache is
-content-hashed since hk 1.47 — no manual cache clearing after edits.
+hk's default pklr backend evaluates the import/spread config identically
+to the pkl CLI, and its pkl-eval cache is content-hashed — edits need no
+manual cache clearing.
 
 ## Testing
 
@@ -91,7 +90,7 @@ Commands are in **Quick Start** above; append a path for a single file
 
 Structured verification via `python/verification/suites.toml` runs as CI
 `contract-preflight`. The `mise run verify` gate is **distinct
-from** `hk run check --all` — some contracts (e.g.,
+from** `mise run lint` — some contracts (e.g.,
 `build.no-stderr-suppression`) only run through the verify CLI. Run both
 locally before pushing Dockerfile changes.
 
@@ -129,7 +128,7 @@ locally before pushing Dockerfile changes.
   directories. See `.claude/rules/agent-artifact-conventions.md`.
 - **Zero-bash logic**: Non-trivial logic (env detection, tool config,
   validation) lives in `python/`. Bash is restricted to thin check/smoke
-  wrappers in `scripts/` (the old `install.sh` bootstrap was retired).
+  wrappers in `scripts/`.
 
 ### Validate before committing
 
@@ -169,7 +168,7 @@ Gated by `mise run verify-local`. Sessions touching `.devcontainer/` or `mise.to
 |----------|-------|---------|
 | `HK_MISE` | `1` | Enable mise integration for hk |
 | `CONTAINER_REGISTRY` | `ghcr.io` | Docker registry (use `CONTAINER_REGISTRY`, not `REGISTRY` — avoids HCL collision) |
-| `DEVCONTAINER_USER` | `${localEnv:USER}` (fallback: `devcontainer`) | Container user (UID 1000); passed through from host `USER` via `devcontainer.json`. Host-user migration is the current state — the legacy `vscode` value has been replaced. |
+| `DEVCONTAINER_USER` | `${localEnv:USER}` (fallback: `devcontainer`) | Container user (UID 1000); passed through from host `USER` via `devcontainer.json`. |
 | `DEVCONTAINER_SSH_PORT` | derived | Host-side port for R1 inbound ssh (container sshd is hardcoded `2222`). **Unset by default (#677)** — derived per workspace+architecture so two clones and two arches never collide; `mise run ssh-port` / `names`. Pin per-clone via `mise.local.toml`. Detail: `.devcontainer/AGENTS.md`. |
 | `DOTFILES_PLATFORM` | pinned in `mise.toml` `[env]` | **The one platform parameter** (#673). Every `--platform` site resolves from it; unset, it falls back to the host's native triple. `no_platform_literals` rejects a literal elsewhere |
 | `DOCKER_DEFAULT_PLATFORM` | `{{ env.DOTFILES_PLATFORM }}` | Task-scoped export of the above — what docker itself reads |
@@ -189,7 +188,4 @@ Benchmarks: `docs/research/trail/findings/docker-benchmarks/`.
 ### Do not
 
 See `.claude/rules/do-not.md` for the authoritative list of project
-invariants (dock launch, local base-image builds, raw docker CLI,
-stderr suppression, bulk `git add`, `gh run watch`, `claude mcp add`,
-docker context switch). Machine-enforced items also live in
-`hk.pkl`.
+invariants; machine-enforced items also live in `hk.pkl`.

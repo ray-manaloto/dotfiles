@@ -138,9 +138,7 @@ wrapper.
 ## Routing doctrine — the architect's side
 
 The session is the **architect**: it owns requirements, decomposition, specs,
-routing, and verification. This section replaced the fable-orchestrator plugin's
-routing skill (#1310, #1315). grok is not installed, so every lane below is
-codex or Anthropic.
+routing, and verification. Every lane below is codex or Anthropic.
 
 | Work | Lane |
 |---|---|
@@ -181,8 +179,7 @@ between the code and the spec stops the lane and comes back as a finding.
   not mechanical.
 - **Behavior-bearing diff**: one cold review BY REF (commit SHA or base branch),
   no intent framing, from a model family different from the AUTHOR's. The
-  caller states the author's family in the review brief (a typed `author_family`
-  input is planned in codex entry-point design D10; it is not built yet):
+  caller states the author's family in the review brief:
   - codex-authored → `cold-reviewer` (an Opus subagent, diff-only).
   - Anthropic-authored → a codex lens:
     `mise exec -- codex exec -s read-only --ignore-rules review --commit <SHA> -c 'sandbox_mode="read-only"'`

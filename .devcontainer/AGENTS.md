@@ -19,7 +19,7 @@ Defines the devcontainer image and runtime lifecycle. Two layers:
 | `Dockerfile` | Multi-stage base image (mise bootstrap, cargo/rustup cookbook paths, build-time self-checks); known cosmetic warnings documented in comment block |
 | `Dockerfile.host-user` | Thin overlay adding the host UID/GID; sets `USER`/`LOGNAME`/`HOME` ENV (`HOME=/home/${DEVCONTAINER_USER}` = the home-volume mount target) |
 | `devcontainer.json` | Devcontainer spec (containers.dev) — lifecycle hooks, features, volumes, dynamic naming |
-| `mise-system.toml` | BASE tool tier (#160 T9) → `/usr/local/share/mise/config.toml`. `[bootstrap.packages]` declares the apt set installed by `mise bootstrap packages apply` (#160 T4); the 20 host↔image shared tools come from the repo `.config/mise/conf.d/shared.toml` COPYd to `conf.d/` and merged (#160 T5) |
+| `mise-system.toml` | BASE tool tier (#160 T9) → `/usr/local/share/mise/config.toml`. `[bootstrap.packages]` declares the apt set installed by `mise bootstrap packages apply` (#160 T4); the host↔image shared tools come from the repo `.config/mise/conf.d/shared.toml` COPYd to `conf.d/` and merged (#160 T5) |
 | `mise-runtime.toml` | RUNTIME tool tier (#160 T9/T10) → `config.runtime.toml`, installed in the `devcontainer-runtime` stage under `MISE_ENV=runtime` (baked ENV). The interactive OVERLAY tier lives in `home/dot_config/mise/config.toml.tmpl`, eager-installed per-user by `on-create.sh` |
 | `mise-system.lock` + `mise-runtime.lock` + `P2996-CACHE.md` | Native mise lockfiles per tier, per tool **per published arch** (`linux-x64` + `linux-arm64` since #698, via `lockfile_platforms`). COPYd to `mise.lock` / `mise.runtime.lock`, consumed by `mise install --system --locked`; base digest feeds base-hash, runtime pair feeds dev-hash. Regenerate via `mise run lock-image`, never a hand-rolled `mise lock` (#650). A `shared.toml` bump ALSO needs `mise run lock-shared` — different file, and `lock-image` never touches it (#790) |
 
@@ -115,8 +115,8 @@ shipped exactly that split-brain.
 ## IDE Workflow
 
 Bringing the container up is **always a terminal action**: `mise run
-up` (start) / `mise run down` (stop). Both spawn / tear down the host
-SSH-agent proxy via `initializeCommand`.
+up` / `mise run down`. `initializeCommand` (`uv run … dotfiles-setup docker
+initialize-host`) needs the terminal's `mise`/`uv` environment.
 
 Attaching an IDE to the running container:
 
@@ -129,8 +129,8 @@ Attaching an IDE to the running container:
 
 > ⚠️ **Never `Reopen in Container` (VS Code) or "create new dev
 > container" (CLion) from a dock-launched IDE.** macOS GUI processes
-> don't inherit terminal env; `initializeCommand` then fails to spawn
-> the host-side SSH agent proxy.
+> don't inherit terminal env, so `initializeCommand` cannot find `uv` and
+> fails.
 
 ## Mise Cookbook Paths
 

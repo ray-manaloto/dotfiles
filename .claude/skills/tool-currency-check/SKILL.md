@@ -48,12 +48,9 @@ uv run --project python kb-setup currency apply --tool graphify        # apply a
 here) with a **broad `mise outdated --bump` sweep** of every other pin — so the
 signal spans all tools, not just the deep set. `--bump` is mandatory (the engine
 passes it): every pin is exact, so bare `mise outdated` can never report
-movement (control-armed 2026-07-20: it said "up to date" while graphify sat at
-0.9.20 vs PyPI 0.9.22). Tools intentionally held back — with a comment in
-`mise.toml` saying why — are decisions, not drift. **Re-read the reason before
-honouring it:** `rtk` was the standing example, held for a github-backend
-lockfile bug; mise #10703 fixed that in 2026.7.0 and the hold was retired
-2026-08-04, so the comment had outlived the constraint by a month.
+movement. Tools intentionally held back — with a comment in `mise.toml` saying
+why — are decisions, not drift. **Re-read the reason before honouring it:** a
+hold's comment routinely outlives the upstream bug it cites.
 
 ## Procedure
 
@@ -63,25 +60,17 @@ lockfile bug; mise #10703 fixed that in 2026.7.0 and the hold was retired
    verdict + release-note review already; the broad table lists the rest.
 
 2. **Cross-file pin parity.** Some versions are pinned in more than one place
-   and must move together. The load-bearing one is **hk**, pinned in the pkl
-   `amends`/`import` URLs of all three pkl files AND in `mise.toml`:
-
-   ```bash
-   grep -rhoE 'hk@[0-9]+\.[0-9]+\.[0-9]+' hk.pkl hk-common.pkl hk-image.pkl | sort -u
-   grep -E '^hk = ' mise.toml
-   ```
-
-   All must be identical. A mismatch is drift (the current 1.44.2-pkl /
-   1.46-mise gap is a real example). Compare against the latest release via
-   `mise outdated hk`.
+   and must move together (hk's pkl URLs + `shared.toml`, chezmoi's floor,
+   mise's Dockerfile `ARG`). Run `mise run pin-parity` — its registry
+   `pin-parity.toml` names every site; `mise outdated` reads only the manifest
+   and cannot see a split.
 
 3. **Custom-code inventory — "does the tool do this natively now?"** For each
    piece of hand-rolled machinery, re-check the tool's current capability:
 
    | Custom code | Tool feature to re-check |
    |---|---|
-   | `python/.../p2996_hash.py` content-hash | mise SBOM / `mise bom` / any toolchain-fingerprint (none as of 2026-07) |
-   | `mise-system-resolved.json` + `mise_snapshot.py` | `mise lock` conda `sha256` (rattler — native; RETIRED in #160 T1) |
+   | `python/.../p2996_hash.py` content-hash | mise SBOM / `mise bom` / any toolchain-fingerprint |
    | `refresh.yml` `p2996-refresh` | Renovate `git-refs` datasource |
    | `renovate.json` customManagers | native mise/dockerfile/devcontainer managers + jdx preset |
 
@@ -103,7 +92,7 @@ lockfile bug; mise #10703 fixed that in 2026.7.0 and the hold was retired
    ```text
    | tool/code | pinned | latest | native-now? | action        |
    |-----------|--------|--------|-------------|---------------|
-   | hk        | 1.44.2 | 1.49.0 | n/a         | bump (3 pkl + mise + lock) |
+   | hk        | x.y.z  | x.y+1.0 | n/a        | bump (every pin-parity site + lock) |
    | mise-snapshot.json | — | — | mise.lock conda sha256 | RETIRE |
    ```
 

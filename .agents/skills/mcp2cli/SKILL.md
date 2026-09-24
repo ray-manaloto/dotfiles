@@ -1,15 +1,15 @@
 ---
 name: mcp2cli
-description: Invoke MCP servers as one-shot CLI commands (no native registration, no schema injection into Codex's context). Use whenever a research or tool-use task wants an MCP server's capabilities without paying the per-conversation context tax of `codex mcp add`.
+description: Invoke MCP servers as one-shot CLI commands, with nothing registered in Codex. Use whenever this repo's own research or tool-use work wants an MCP server's capabilities without registering it via `codex mcp add`.
 ---
 
 # mcp2cli — MCP servers as CLI, no context tax
 
 `mcp2cli` runs an MCP server as a subprocess, calls a single tool, prints
 the result, and exits. Unlike `codex mcp add`, nothing is registered with
-Codex, so **no tool schemas land in Codex's system prompt**. This
-is the **preferred** way to reach an MCP server for a one-off call; native
-registration is allowed when a plugin requires it (relaxed 2026-07-19).
+Codex. This is the **preferred** way for this repo's own work to reach
+an MCP server; native registration is allowed when a third-party plugin
+requires it.
 
 > See `feedback_no_mcp_registration.md` and
 > `.claude/rules/research-doc-sources.md` for the full rationale.
@@ -18,13 +18,11 @@ registration is allowed when a plugin requires it (relaxed 2026-07-19).
 
 Use `mcp2cli` when any of these are true:
 
-- You need a capability an MCP server exposes (GitHub API, Docker, a
-  mintlify per-repo search, etc.) and you would otherwise be tempted to
+- You need a capability an MCP server exposes (GitHub API, a live
+  customer-domain docs MCP, etc.) and you would otherwise be tempted to
   `codex mcp add` it.
 - You want to call an MCP tool from a Bash one-liner (script, hk step,
   mise task, ad-hoc research).
-- You want fuzzy search across a doc site's mintlify-hosted content
-  without pulling HTML by hand.
 
 Do **not** use it for:
 
@@ -36,14 +34,14 @@ Do **not** use it for:
 
 ## Invocation patterns
 
-### Globally-wired shorthands (from `~/CLAUDE.md`)
+### Shorthands
 
 ```bash
 mcp2cli @github <tool> [args...]      # GitHub operations
-mcp2cli @docker <tool> [args...]      # Docker operations
 ```
 
-The `@<name>` form resolves through the user-global `mcp2cli` config.
+The `@<name>` form resolves through the user-global `mcp2cli` config
+(`~/.config/mcp2cli/`); only shorthands defined there exist.
 Shorthands are the preferred call shape when one exists — they hide the
 transport URL and any auth plumbing.
 
@@ -128,47 +126,42 @@ MCP server.
 - **OAuth** — handled by the server's own flow; `mcp2cli` passes through.
 - **File-based config** — per-server credentials file pointed at via
   `--config` or the `@shorthand` entry.
-- **None** — public MCP endpoints (e.g. per-repo mintlify search) need
-  no auth.
+- **None** — public MCP endpoints (e.g. Mintlify's own
+  `https://mintlify.com/docs/mcp`) need no auth.
 
 When adding a new shorthand, prefer env-var or keychain-backed auth over
 checking secrets into the repo.
 
 ## Why `mcp2cli` over `codex mcp add`
 
-Registered MCP servers inject every tool's JSON schema into Codex's
-system prompt for **every turn of every conversation, forever**, even
-conversations that never touch the tool. For a server exposing 10 tools
-with moderate schemas, that is easily several thousand tokens of
-permanent context tax per conversation.
+Not context cost: Codex presents registered MCP tools deferred (names
+only, schemas loaded on demand). The reason is simplicity — a registration
+adds a long-lived server process, a version to pin, an auth path and a failure
+mode for the doctor to police, while `mcp2cli` spawns the server for one call
+and exits, and its output can be trimmed with `--jq`/`--head`.
 
-`mcp2cli` spawns the server as a subprocess for a single tool call. The
-schemas never touch Codex's context, the process exits when done, and
-Codex sees only the tool's textual output (which you can further
-trim with `--jq`/`--head`).
-
-Rule of thumb: **for a one-off call, prefer `mcp2cli` over `codex mcp
-add`** (no per-conversation schema cost). Register natively when a plugin
-or tool requires it for its features — see `feedback_no_mcp_registration.md`.
+Rule of thumb: **for this repo's own calls, prefer `mcp2cli`**. Register
+natively when a third-party plugin or tool requires it for its features —
+see `.claude/rules/research-doc-sources.md` § "MCP: two lanes".
 
 ## Repo wiring
 
-- Pinned in `mise.toml` as `"pipx:mcp2cli" = "2.6.0"` — available on any
-  machine after `mise install`.
+- Pinned in `mise.toml` (`pipx:mcp2cli`) — available on any machine after
+  `mise install`.
 - Global shorthands live in `~/.config/mcp2cli/` (user scope).
-- The preference chain (`curl llms.txt → curl .md → mcp2cli → context7-cli
-  → raw HTML curl`) is codified in `.claude/rules/research-doc-sources.md`.
+- Where `mcp2cli` sits relative to curl, ctx7 and native registration is
+  codified in `.claude/rules/research-doc-sources.md`.
 - `mcp2cli` is the preferred path; native `codex mcp add` is allowed when a
   plugin requires it (the `no_mcp_registration` hk hard-ban was removed
   2026-07-19). Rationale in `feedback_no_mcp_registration.md`.
 
 ## See also
 
-- `.agents/skills/mintlify/SKILL.md` — the mintlify URL surface and the
-  per-repo search tool names.
+- `.agents/skills/mintlify/SKILL.md` — the mintlify URL surface
+  (`curl llms.txt` + `.md`, not MCP).
 - `.claude/rules/research-doc-sources.md` — the full preference chain.
 - `docs/research/mintlify-catalog.md` — list of mintlify-covered repos
   with their probed HTTP status.
-- `feedback_no_mcp_registration.md` (auto-memory) — the constraint and
-  its context-cost reasoning.
+- `feedback_no_mcp_registration.md` (auto-memory) — when native
+  registration is and is not appropriate.
 - Upstream project: <https://github.com/knowsuchagency/mcp2cli>
