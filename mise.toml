@@ -46,7 +46,7 @@ lima = "2.2.0"
 "github:agent-sh/agnix" = "0.54.0"
 "npm:agents-lint" = "0.5.0"
 "pipx:mcp2cli" = "3.7.0"
-"npm:renovate" = "44.111.4"
+"npm:renovate" = "44.112.0"
 biome = "2.5.11"
 # Markdown + Claude-docs linters. Installed now; hk.pkl integration is
 # scheduled for post-devcontainer-work review (see GH issue tracking
@@ -125,7 +125,7 @@ opencode = "1.18.32"
 # `.config/mise/conf.d/shared.toml` (mise-parity: the two per-tier npm
 # declarations pinned the SAME tool under the same key, which the parity
 # test correctly flags as drift risk).
-antigravity-cli = "1.2.9"
+antigravity-cli = "1.2.10"
 
 # Firecrawl CLI — the `firecrawl` binary the firecrawl@firecrawl plugin's skills
 # name in their own `allowed-tools` (`Bash(firecrawl *)`), so without this pin
