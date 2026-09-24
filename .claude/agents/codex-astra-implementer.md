@@ -167,7 +167,7 @@ never a trailing `&` (a hand-detached process is untracked and gets reaped
 when the turn goes idle):
 
 ```bash
-cat "$PROMPT" | PLANNING_DISABLED=1 codex exec \
+cat "$PROMPT" | PLANNING_DISABLED=1 mise exec -- codex exec \
   --sandbox danger-full-access \
   --model gpt-6-astra \
   -c model_reasoning_effort="xhigh" \

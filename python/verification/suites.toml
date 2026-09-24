@@ -1892,20 +1892,20 @@ per_path_tokens = { "python/src/dotfiles_setup/codex_lane.py" = [
     "| Phases, checkboxes, current phase, distilled decisions | `task_plan.md` | **coordinator ONLY** |",
     "codex_lane.LANE_ENV_OVERRIDES",
 ], ".claude/agents/codex-sol-advisor.md" = [
-    "PLANNING_DISABLED=1 codex exec",
+    "PLANNING_DISABLED=1 mise exec -- codex exec",
 ], ".claude/agents/codex-sol-operator.md" = [
-    "PLANNING_DISABLED=1 codex exec",
+    "PLANNING_DISABLED=1 mise exec -- codex exec",
 ], ".claude/agents/codex-sol-adversarial-critic.md" = [
-    "PLANNING_DISABLED=1 codex exec",
+    "PLANNING_DISABLED=1 mise exec -- codex exec",
 ], ".claude/agents/codex-sol-claude-code-expert.md" = [
-    "PLANNING_DISABLED=1 codex exec",
+    "PLANNING_DISABLED=1 mise exec -- codex exec",
 ], ".claude/agents/codex-sol-staleness-auditor.md" = [
-    "PLANNING_DISABLED=1 codex exec",
+    "PLANNING_DISABLED=1 mise exec -- codex exec",
 ] }
 tokens = [
     "env={**os.environ, **LANE_ENV_OVERRIDES},",
     "def test_the_planning_disabled_arm_is_armed(",
-    "PLANNING_DISABLED=1 codex exec",
+    "PLANNING_DISABLED=1 mise exec -- codex exec",
 ]
 
 [[suite]]

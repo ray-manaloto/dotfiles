@@ -102,7 +102,7 @@ the repo paths holding the real record; and the report format below>
 EOF
 echo "lane files: LANE_ID=$LANE_ID PROMPT=$PROMPT OUT=$OUT LOG=$LOG"   # report OUT; later calls re-assign all four from this line
 
-cat "$PROMPT" | PLANNING_DISABLED=1 codex exec \
+cat "$PROMPT" | PLANNING_DISABLED=1 mise exec -- codex exec \
   --sandbox read-only \
   --model gpt-6-astra \
   -c model_reasoning_effort="xhigh" \
