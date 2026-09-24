@@ -118,7 +118,7 @@ environment-dependence finding. A premise-verification pass between them found
 six more blocking defects. Guessing past any one of those would have shipped a
 gate that could only pass.
 
-Your own preflight is mechanical: `command -v codex` must resolve (otherwise
+Your own preflight is mechanical: `mise exec -- codex --version` must succeed (otherwise
 `STATUS: unavailable` — do not install anything), and the dispatch must contain
 a `PREMISES` block (otherwise `STATUS: dissent` naming the missing block).
 
@@ -148,7 +148,7 @@ LOG=".agent/kb/raw/codex-astra-implementer-log-$LANE_ID.txt"
 cat > "$PROMPT" <<'EOF'
 <the seven-part spec, verbatim, including its PREMISES block>
 EOF
-echo "lane files: $PROMPT $OUT $LOG"   # print all three — later slices re-assign them
+echo "lane files: LANE_ID=$LANE_ID PROMPT=$PROMPT OUT=$OUT LOG=$LOG"   # print all four — later slices re-assign them
 ```
 
 The spec reaches codex verbatim: never rewrite, summarise, reorder or
@@ -174,6 +174,11 @@ cat "$PROMPT" | PLANNING_DISABLED=1 mise exec -- codex exec \
   -o "$OUT" - > "$LOG" 2>&1; echo "$?" > "$LOG.rc"
 ```
 
+**`mise exec --` is load-bearing.** On this host it resolves the NATIVE codex (root `mise.toml` disables the npm
+pin), whatever PATH this session captured at start; a bare `codex` can still hit the old npm 0.154.0 install.
+In the devcontainer it resolves the image's npm codex until Phase 10 step 2b. Measured 2026-09-23: bare `codex`
+ran v0.154.0, `mise exec -- codex` ran v0.156.1, same session.
+
 `$LOG.rc` is the ONLY completion signal you trust. The harness's
 own "completed (exit code 0)" task notification has been measured lying (twice
 on 2026-09-16), and you must not end your turn to wait for it: a subagent that
@@ -193,13 +198,13 @@ an inherited value and an explicit one look identical in the log. Pin both.
 ⚠️ `--approve-for-me` is **mutually exclusive** with `--sandbox`. Do not reach
 for it.
 
-⚠️ Flags drift between codex releases. Re-probe `codex exec --help` rather than
+⚠️ Flags drift between codex releases. Re-probe `mise exec -- codex exec --help` rather than
 trusting any written invocation, this one included.
 
 ### 3. Wait in bounded foreground slices until one of the three signals
 
 One slice per Bash call, each under the 600 s cap, until the budget is spent.
-The budget is measured from `$PROMPT`'s mtime (written at launch), so no slice
+The budget is measured from `$PROMPT`'s mtime (written in setup, just before launch), so no slice
 runs past `TIMEOUT` — three full slices and a shorter fourth for the default
 1800 s:
 

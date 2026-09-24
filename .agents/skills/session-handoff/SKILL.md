@@ -144,7 +144,7 @@ are "Briefs M-P" in `docs/research/kb/reports/agents/session-2026-09-23d-agent-b
 |---|---|---|
 | dismissed errors | every non-zero rc, error, WARN, denied call, DRIFT line and repeated mistake: fixed, recorded in `task_plan.md`, or dismissed? | Opus `general-purpose` |
 | missing requests | every user message and AskUserQuestion answer: does it land in `task_plan.md`, an issue, a commit or memory? | Opus `general-purpose` |
-| bugs | cold review of the branch diff by ref (base = merge-base with `main`) | a model family that did NOT write the diff; for a Codex-authored diff, `fable-orchestrator:codex-reviewer` |
+| bugs | cold review of the branch diff by ref (base = merge-base with `main`) | a model family that did NOT write the diff; when the Anthropic orchestrator wrote it, `fable-orchestrator:codex-reviewer` (an OpenAI model) |
 | vagueness | every doc, plan, spec, rule or agent file the session changed, read as a fresh session or a codex lane would: stale, ambiguous, contradictory, unowned | Opus `general-purpose` |
 
 Every finding gets a disposition: **FIX-NOW** (make the change before §2) or **PLAN** (exact `task_plan.md`

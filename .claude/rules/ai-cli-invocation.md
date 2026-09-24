@@ -4,7 +4,8 @@
 > scoped, this rule loaded only after the wrong invocation. Archaeology:
 > `docs/rules-evidence/ai-cli-invocation.md`.
 
-Use the pinned CLI through mise and re-probe its help before copying flags.
+Invoke every AI CLI through `mise exec --` and re-probe its help before copying flags. For codex that
+resolves the host's NATIVE install (root `mise.toml` disables the npm pin), not a stale PATH entry.
 Wrong flags are version-sensitive and may waste a lane before anyone notices.
 Team work goes through `mise run sdlc-team`; single-role lanes use the `codex-{sol,astra}-*`
 wrappers; `mise run codex-lane` is only the DAG review-node producer. The class fix that

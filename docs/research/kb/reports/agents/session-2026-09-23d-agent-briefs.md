@@ -328,3 +328,26 @@ the dotfiles side; T10 upstream asks are drafts for Ray, not filed. For each tic
 what it delivers (end-to-end behaviour), acceptance criteria (verifiable, both arms), and the seam/prior-art test.
 No file paths or code snippets in ticket text (issue template rule); put anchors for implementers in a separate
 "Implementer anchors" appendix per ticket. Read-only except the output file.
+
+## Briefs S1-S4 — `/session-handoff` §1c integrity review, DELTA run (2026-09-23, final handoff)
+
+The full M-P review already covered this session through commit `5e258baf`. This run covers only the DELTA:
+commits `5e258baf..48a1ee12` (the codex wrappers' `mise exec` fix + contract re-bind, M-6 verification, the
+#1351 ticket publication) and the main-transcript turns from Ray's message "have agents review this session and
+ensure the following" onward (session `a6750a24`). Reuse Briefs M, N, O, P verbatim for method, persistence and
+disposition rules (FIX-NOW exact change / PLAN exact task_plan text), with this scope. Also check that each M-P
+finding marked fixed is actually fixed in the tree (cite file:line), and flag any regression. Reports:
+- S1 dismissed errors → `session-audit-delta-dismissed-errors-2026-09-23.md`
+- S2 missing requests (include the 18 published tickets dotfiles #1352-#1360, knowledge-base #802-#810 vs the
+  approved breakdown, and Ray's four to-tickets rulings) → `session-audit-delta-missing-requests-2026-09-23.md`
+- S3 cold codex review of `5e258baf..48a1ee12` → `session-audit-delta-codex-cold-review-2026-09-23.md`
+- S4 vagueness (the 12 wrappers, `suites.toml` contract, `task_plan.md` Current Phase + Phase 11 addendum,
+  the 18 issue bodies, `.agent/plans/session-2026-09-23d.md`) → `session-audit-delta-vagueness-2026-09-23.md`
+
+## Standing note for every future brief in this file (delta review S1-8, 2026-09-24)
+
+The D4 deny is LIVE until dotfiles#1352 (D1) lands: any Bash command whose TEXT names the attest/selector scripts
+(`attest-plan.sh`/`.ps1`, `set-active-plan.sh`) or `mise run plan-attest` / `dotfiles-setup plan-attest` is denied —
+reads (`sed`, `cat`, `grep`) and heredoc writes included. Use the Read/Edit/Write tools for those files.
+"SUPERSEDED" in a brief refers to the RULING, not to the enforcement. Also quote shell separators (`echo '===='`):
+zsh treats an unquoted `====` as `=`-expansion and aborts the command chain.

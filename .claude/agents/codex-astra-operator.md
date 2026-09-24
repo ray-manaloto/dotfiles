@@ -74,6 +74,11 @@ cat "$PROMPT" | PLANNING_DISABLED=1 mise exec -- codex exec \
 
 ```
 
+**`mise exec --` is load-bearing.** On this host it resolves the NATIVE codex (root `mise.toml` disables the npm
+pin), whatever PATH this session captured at start; a bare `codex` can still hit the old npm 0.154.0 install.
+In the devcontainer it resolves the image's npm codex until Phase 10 step 2b. Measured 2026-09-23: bare `codex`
+ran v0.154.0, `mise exec -- codex` ran v0.156.1, same session.
+
 **Run it in TWO Bash calls, never one.** Everything above the `cat "$PROMPT" |`
 line is setup: run it first. Then run the `cat "$PROMPT" | … codex exec …` line
 ALONE with the Bash tool's `run_in_background: true` — never `nohup`, never a
@@ -132,7 +137,7 @@ unlock git writes headless. Do not reach for it.
 
 ⚠️ Flags drift between codex releases. `--full-auto` is documented in
 `.claude/rules/ai-cli-invocation.md` and **does not exist** on codex 0.152.0
-(`error: unexpected argument '--full-auto' found`). Re-probe `codex exec --help`
+(`error: unexpected argument '--full-auto' found`). Re-probe `mise exec -- codex exec --help`
 rather than trusting any written invocation, this one included.
 
 ## The exit code is the whole deliverable — and it is not yours

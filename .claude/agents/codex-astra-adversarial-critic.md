@@ -74,7 +74,7 @@ a shape needs its worked example.
 
 Follow `.claude/rules/ai-cli-invocation.md` **exactly** — it records specific
 wrong invocation forms that hang (`codex -p "prompt"`, `codex exec "prompt"`
-without stdin, `--full-context`). Re-probe `codex exec --help` yourself if a form
+without stdin, `--full-context`). Re-probe `mise exec -- codex exec --help` yourself if a form
 here looks wrong; the CLI is the source of truth, not this file.
 
 Assemble the record first — the proposals verbatim, their motivating defects by
@@ -109,6 +109,11 @@ cat "$PROMPT" | PLANNING_DISABLED=1 mise exec -- codex exec \
   -o "$OUT" - > "$LOG" 2>&1; echo "$?" > "$LOG.rc"
 
 ```
+
+**`mise exec --` is load-bearing.** On this host it resolves the NATIVE codex (root `mise.toml` disables the npm
+pin), whatever PATH this session captured at start; a bare `codex` can still hit the old npm 0.154.0 install.
+In the devcontainer it resolves the image's npm codex until Phase 10 step 2b. Measured 2026-09-23: bare `codex`
+ran v0.154.0, `mise exec -- codex` ran v0.156.1, same session.
 
 **Run it in TWO Bash calls, never one.** Everything above the `cat "$PROMPT" |`
 line is setup: run it first. Then run the `cat "$PROMPT" | … codex exec …` line
