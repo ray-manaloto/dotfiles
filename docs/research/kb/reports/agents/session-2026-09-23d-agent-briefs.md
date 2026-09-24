@@ -312,3 +312,19 @@ the 2026-09-15 "native-installer-placement" report now restored at
 task_plan Phase 4), all prior session decisions via AgentsView, what blocks it (Phase 10 is queued behind Phase 11),
 what breaks on the old version (release notes between installed and latest), and the smallest safe path to move it
 FIRST. Propose exact task_plan text for promoting it.
+
+## Brief R — Fable drafts the `/to-tickets` breakdown of #1351 (general-purpose, `model: fable`)
+
+Output: `docs/research/kb/reports/agents/pwf-migration-tickets-draft-2026-09-23.md`. Ray invoked
+`/mattpocock-skills:to-tickets #1351` and asked that a Fable model do the breakdown. Steps 1-3 of the skill only
+(gather, explore, draft); the coordinator runs step 4 (quiz Ray) and step 5 (publish). Read #1351's full body AND
+comments (`gh issue view 1351 -R ray-manaloto/dotfiles --comments`; the corrections comment is authoritative),
+the design of record `pwf-migration-fable-round3-2026-09-23.md` (T1-T10), `pwf-migration-spec-v2-2026-09-23.md`
+(resolution table, file:line anchors), and `task_plan.md` § Phase 11 addendum (rounds 1-7). Rules: tracer-bullet
+VERTICAL slices (each a complete, verifiable path; sized for one fresh context window; prefactoring first); a wide
+refactor goes expand–contract; every ticket lists its blocking edges; the knowledge-base `kb_setup` work is its
+own repo's tickets (cross-repo blocking edges named explicitly); T1 (retire D4) first; T8 (plan migration) last on
+the dotfiles side; T10 upstream asks are drafts for Ray, not filed. For each ticket give: title, repo, blocked-by,
+what it delivers (end-to-end behaviour), acceptance criteria (verifiable, both arms), and the seam/prior-art test.
+No file paths or code snippets in ticket text (issue template rule); put anchors for implementers in a separate
+"Implementer anchors" appendix per ticket. Read-only except the output file.
