@@ -18,7 +18,9 @@ AGENTS = REPO_ROOT / ".claude" / "agents"
 SYNTAX_ERROR = REPO_ROOT / "tests" / "fixtures" / "workflows_js" / "syntax-error.js"
 
 _NAME_RE = re.compile(r"^name:\s*(\S+)\s*$", re.MULTILINE)
-_AGENT_TYPE_CALL_SITE_RE = re.compile(r"agentType:\s*'([^']+)'")
+#: Any quote style — single, double or a template literal — so a dispatch cannot
+#: dodge the roster gate by its quoting (removal review finding 9).
+_AGENT_TYPE_CALL_SITE_RE = re.compile(r"""agentType:\s*['"`]([^'"`]+)['"`]""")
 
 
 #: Claude Code's built-in subagent types a saved workflow may dispatch without
@@ -242,14 +244,14 @@ def test_saved_workflows_only_dispatch_declared_agents() -> None:
     assert undeclared_agent_types(WORKFLOWS, AGENTS) == []
 
 
-def _roster_fixture(tmp_path: Path, agent_type: str) -> list[str]:
+def _roster_fixture(tmp_path: Path, agent_type: str, quote: str = "'") -> list[str]:
     workflows = tmp_path / "workflows"
     agents = tmp_path / "agents"
     workflows.mkdir(parents=True)
     agents.mkdir(parents=True)
     (agents / "cold-reviewer.md").write_text("---\nname: cold-reviewer\n---\n")
     (workflows / "w.js").write_text(
-        f"await agent('x', {{ agentType: '{agent_type}', label: 'x' }})\n"
+        f"await agent('x', {{ agentType: {quote}{agent_type}{quote}, label: 'x' }})\n"
     )
     return undeclared_agent_types(workflows, agents)
 
@@ -259,6 +261,15 @@ def test_roster_rejects_a_plugin_namespaced_agent(tmp_path: Path) -> None:
     assert _roster_fixture(tmp_path, "fable-orchestrator:codex-reviewer") == [
         "w.js: fable-orchestrator:codex-reviewer"
     ]
+
+
+def test_roster_rejects_a_double_quoted_plugin_agent(tmp_path: Path) -> None:
+    """FAIL arm: the quoting a single-quote-only pattern would have missed."""
+    for n, quote in enumerate(('"', "`")):
+        found = _roster_fixture(
+            tmp_path / str(n), "fable-orchestrator:codex-reviewer", quote
+        )
+        assert found == ["w.js: fable-orchestrator:codex-reviewer"], quote
 
 
 def test_roster_rejects_an_undeclared_agent(tmp_path: Path) -> None:

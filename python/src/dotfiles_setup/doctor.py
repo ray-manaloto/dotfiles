@@ -1324,6 +1324,13 @@ def check_codex_schema(setup: Setup) -> list[str]:
     return findings
 
 
+#: Reported when the baseline names no removed plugin at all.
+_REMOVED_PLUGINS_UNWATCHED = (
+    "removed-plugins: `doctor.toml` has no [removed_plugins].names, so no "
+    "removed plugin is being watched"
+)
+
+
 def check_removed_plugins(setup: Setup) -> list[str]:
     """A removed plugin is back on the Claude or codex side (#1317).
 
@@ -1331,10 +1338,13 @@ def check_removed_plugins(setup: Setup) -> list[str]:
     keys. The names come from `doctor.toml` `[removed_plugins].names`, so
     removing another plugin later is a reviewed baseline edit.
     """
+    if setup.home is None:
+        return []
     section = _str_keys(setup.baseline.get("removed_plugins"))
     names = section.get("names")
-    if setup.home is None or not isinstance(names, list) or not names:
-        return []
+    if not isinstance(names, list) or not names:
+        # A deleted baseline block must not read like a clean home.
+        return [_REMOVED_PLUGINS_UNWATCHED]
     found = removed_plugins.find_reappearances(
         [str(n) for n in names],
         home=setup.home,

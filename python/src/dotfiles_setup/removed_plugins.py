@@ -30,11 +30,32 @@ def _plugin_name(key: str) -> str:
     return key.split("@", 1)[0]
 
 
+class _Unreadable:
+    """A state file that exists but could not be read or parsed.
+
+    A missing file is ordinary (nothing installed); an unreadable one is "never
+    asked", and must surface as a finding rather than read as clean
+    (`probes-need-a-control-arm.md` rule 4).
+    """
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+
+
 def _load_json(path: Path) -> object:
     try:
         return json.loads(path.read_text())
-    except OSError, json.JSONDecodeError:
+    except FileNotFoundError:
         return {}
+    except (OSError, json.JSONDecodeError) as exc:
+        return _Unreadable(type(exc).__name__)
+
+
+def _unchecked(label: str, loaded: object, names: frozenset[str]) -> list[str]:
+    if isinstance(loaded, _Unreadable):
+        wanted = ", ".join(sorted(names))
+        return [f"{label} is unreadable ({loaded.reason}), so {wanted} went unchecked"]
+    return []
 
 
 def _settings_findings(
@@ -43,13 +64,21 @@ def _settings_findings(
     findings: list[str] = []
     for label, settings in settings_sources.items():
         enabled = settings.get("enabledPlugins")
-        if not isinstance(enabled, dict):
-            continue
-        findings.extend(
-            f"{label} enables `{key}`"
-            for key, on in enabled.items()
-            if on is True and _plugin_name(str(key)) in names
-        )
+        if isinstance(enabled, dict):
+            findings.extend(
+                f"{label} enables `{key}`"
+                for key, on in enabled.items()
+                if on is True and _plugin_name(str(key)) in names
+            )
+        # A marketplace declaration re-registers the plugin's source on startup
+        # even while nothing enables it, and neither forbidden token matches it.
+        extra = settings.get("extraKnownMarketplaces")
+        if isinstance(extra, dict):
+            findings.extend(
+                f"{label} declares marketplace `{key}`"
+                for key in extra
+                if str(key) in names
+            )
     return findings
 
 
@@ -57,6 +86,9 @@ def _claude_state_findings(names: frozenset[str], home: Path) -> list[str]:
     findings: list[str] = []
     plugins_dir = home / ".claude" / "plugins"
     installed = _load_json(plugins_dir / "installed_plugins.json")
+    findings.extend(
+        _unchecked("~/.claude/plugins/installed_plugins.json", installed, names)
+    )
     plugins = installed.get("plugins") if isinstance(installed, dict) else None
     if isinstance(plugins, dict):
         for key, entries in plugins.items():
@@ -74,12 +106,21 @@ def _claude_state_findings(names: frozenset[str], home: Path) -> list[str]:
                 f"({', '.join(scopes) or 'no scope recorded'})"
             )
     known = _load_json(plugins_dir / "known_marketplaces.json")
+    findings.extend(
+        _unchecked("~/.claude/plugins/known_marketplaces.json", known, names)
+    )
     if isinstance(known, dict):
         findings.extend(
             f"~/.claude/plugins/known_marketplaces.json registers marketplace `{key}`"
             for key in known
             if str(key) in names
         )
+    # A cached copy stays loadable (`claude --plugin-dir`) after an uninstall.
+    findings.extend(
+        f"~/.claude/plugins/cache/{name} still holds a cached copy"
+        for name in sorted(names)
+        if (plugins_dir / "cache" / name).exists()
+    )
     return findings
 
 
@@ -87,14 +128,16 @@ def _codex_findings(names: frozenset[str], home: Path) -> list[str]:
     path = home / ".codex" / "config.toml"
     try:
         data = tomllib.loads(path.read_text())
-    except OSError:
+    except FileNotFoundError:
         return []
-    except tomllib.TOMLDecodeError:
-        wanted = ", ".join(sorted(names))
-        return [f"~/.codex/config.toml does not parse, so {wanted} went unchecked"]
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        return _unchecked(
+            "~/.codex/config.toml", _Unreadable(type(exc).__name__), names
+        )
     findings: list[str] = []
     #: Names whose codex plugin is present but explicitly `enabled = false` — the
-    #: ruled "disable" for claudex-loop. Its marketplace may then stay registered.
+    #: ruled "disable" for claudex-loop. Its marketplace and any hook trust codex
+    #: keeps after a disable may then stay.
     disabled: set[str] = set()
     plugins = data.get("plugins", {})
     if isinstance(plugins, dict):
@@ -112,7 +155,7 @@ def _codex_findings(names: frozenset[str], home: Path) -> list[str]:
         findings.extend(
             f"~/.codex/config.toml trusts hook `{key}`"
             for key in state
-            if _plugin_name(str(key).split(":", 1)[0]) in names
+            if _plugin_name(str(key).split(":", 1)[0]) in names - disabled
         )
     marketplaces = data.get("marketplaces", {})
     if isinstance(marketplaces, dict):

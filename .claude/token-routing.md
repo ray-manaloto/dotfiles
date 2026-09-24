@@ -13,7 +13,8 @@ Decision: 2026-09-10 `/grilling` ruling 10.
 
 ## Escalation to `claude-advisor` — the single source (#1294)
 
-`claude-advisor` (`model: fable`, `effort: xhigh`, read-only, no memory) is
+`claude-advisor` (`model: fable`, `effort: xhigh`, no memory; read-only by its
+instructions — its Bash is limited to read-only probes, not by the tool list) is
 consulted ONLY when one of these fires:
 
 1. the codex advisor errored, timed out, or returned an empty `-o` file;

@@ -120,7 +120,7 @@ def test_a_marketplace_without_a_disabled_plugin_is_a_finding(tmp_path: Path) ->
 
 
 def test_the_doctor_check_reads_names_from_the_baseline(tmp_path: Path) -> None:
-    """Wiring: the doctor check reports via the baseline, and is silent without it."""
+    """Wiring: the check reports via the baseline; a missing baseline is loud."""
     home = _home(tmp_path)
     (home / ".codex" / "config.toml").write_text(
         '[plugins."claudex-loop@claudex-loop"]\nenabled = true\n'
@@ -147,4 +147,42 @@ def test_the_doctor_check_reads_names_from_the_baseline(tmp_path: Path) -> None:
         environ={},
         home=home,
     )
-    assert doctor.check_removed_plugins(bare) == []
+    unwatched = "has no [removed_plugins].names"
+    assert [unwatched in f for f in doctor.check_removed_plugins(bare)] == [True]
+
+
+def test_a_corrupt_registry_is_unchecked_not_clean(tmp_path: Path) -> None:
+    """A parse failure is "never asked", so it must surface (review finding 7)."""
+    home = _home(tmp_path)
+    (home / ".claude" / "plugins" / "installed_plugins.json").write_text("{trunc")
+    found = _find(home)
+    assert len(found) == 1
+    assert "installed_plugins.json is unreadable (JSONDecodeError)" in found[0]
+
+
+def test_a_settings_marketplace_declaration_is_a_finding(tmp_path: Path) -> None:
+    """`extraKnownMarketplaces` re-registers the source with nothing enabled."""
+    found = _find(
+        _home(tmp_path),
+        {"extraKnownMarketplaces": {"fable-orchestrator": {"source": {}}}},
+    )
+    assert found == ["project declares marketplace `fable-orchestrator`"]
+
+
+def test_a_surviving_cache_copy_is_a_finding(tmp_path: Path) -> None:
+    home = _home(tmp_path)
+    (home / ".claude" / "plugins" / "cache" / "fable-orchestrator").mkdir(parents=True)
+    assert _find(home) == [
+        "~/.claude/plugins/cache/fable-orchestrator still holds a cached copy"
+    ]
+
+
+def test_hook_trust_of_a_disabled_codex_plugin_is_not_a_finding(tmp_path: Path) -> None:
+    """Codex keeps hook trust after a disable; the ruled disable stays quiet."""
+    home = _home(tmp_path)
+    (home / ".codex" / "config.toml").write_text(
+        '[plugins."claudex-loop@claudex-loop"]\nenabled = false\n'
+        '[hooks.state."claudex-loop@claudex-loop:hooks/hooks.json:stop:0:0"]\n'
+        'trusted_hash = "sha256:abc"\n'
+    )
+    assert _find(home) == []

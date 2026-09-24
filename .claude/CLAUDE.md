@@ -57,7 +57,7 @@ Claude and nothing can fall back to grok. Route by this fixed table:
 |---|---|
 | Implementation | `codex-{sol,astra}-implementer`, effort `xhigh` — OURS, at full access |
 | Cold review of a codex diff | an Opus subagent, diff-only (`Agent`, `model: "opus"`) |
-| Cold review of a Claude-authored diff | a codex lens: `mise exec -- codex exec -s read-only --ignore-rules review --commit <SHA>` (skill's review tiers) |
+| Cold review of a Claude-authored diff | a read-only codex review lens — the exact command lives once, in the `codex-sdlc-team` skill § Review tiers |
 | Advisory / critique / audit / harness | `codex-{sol,astra}-{advisor,adversarial-critic,staleness-auditor,claude-code-expert}` |
 | Premise verification | `premise-verifier` (Claude, read-only) |
 | Research | a read-only `Explore`/`Agent` lane |
@@ -78,8 +78,8 @@ gate, not a degraded one.
 ⚠️ Permanent advisor-consult routing and escalation: see @token-routing.md.
 
 Adopted plugin (enabled in `.claude/settings.json`): `antigravity@antigravity-for-claude-code`
-(Google Antigravity/Gemini 3.x via `agy`). CLIs pinned host-only in `mise.toml` (`codex`,
-`antigravity-cli`); auth is per-user. The Claude architect plans and **verifies evidence**
+(Google Antigravity/Gemini 3.x via `agy`). `antigravity-cli` is pinned in `mise.toml`; codex runs
+the native install on the host (`disable_tools`) and the shared npm pin in the image/CI; auth is per-user. The Claude architect plans and **verifies evidence**
 before "done" — only execution is delegated; terminal fallback is Claude Opus. knowledge-base
 carries the same doctrine in its `orchestrator-routing` skill.
 

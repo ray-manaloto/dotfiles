@@ -182,7 +182,7 @@ between the code and the spec stops the lane and comes back as a finding.
 - **Behavior-bearing diff**: one cold review BY REF (commit SHA or base branch),
   no intent framing, from a model family different from the AUTHOR's. The
   caller passes `author_family` explicitly:
-  - codex-authored → `cold-reviewer` (Opus).
+  - codex-authored → `cold-reviewer` (an Opus subagent, diff-only).
   - Anthropic-authored → a codex lens:
     `mise exec -- codex exec -s read-only --ignore-rules review --commit <SHA> -c 'sandbox_mode="read-only"'`
     (`--base <branch>` for a range; pending #1297's write-canary). Do not

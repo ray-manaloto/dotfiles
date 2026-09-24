@@ -178,7 +178,7 @@ def test_bare_tokens_are_a_union_across_paths() -> None:
 # normalises only whitespace.
 
 #: A whole line that really is in `.claude/CLAUDE.md` (the lane-table heading).
-_MODE_LINE = "### There is no `grok` here — codex lanes only, stop asking"
+_REAL_LINE = "### There is no `grok` here — codex lanes only, stop asking"
 
 _TRIGGER = (
     "- When the session model is Fable, without being reminded: non-trivial "
@@ -314,7 +314,7 @@ def test_per_path_lines_binds_a_line_to_its_file() -> None:
         _entry(
             handler="require_lines",
             paths=[_REAL],
-            per_path_lines={_REAL: [_MODE_LINE]},
+            per_path_lines={_REAL: [_REAL_LINE]},
         )
     )
     assert result["status"] == "failed"
@@ -328,7 +328,7 @@ def test_require_lines_is_wired_into_the_handler_map() -> None:
         _entry(
             handler="require_lines",
             paths=[".claude/CLAUDE.md"],
-            lines=[_MODE_LINE],
+            lines=[_REAL_LINE],
         )
     )
     assert result["status"] == "passed"

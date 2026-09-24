@@ -2,7 +2,6 @@
 name: premise-verifier
 description: Cold pre-dispatch premise check of an implementation spec, before any implementer lane runs it. Use when the change emits telemetry/errors/events or touches security, concurrency or migrations, for every corrected or follow-up spec, or whenever the spec's facts need checking. Verifies each PREMISES row against the code (CONFIRMED / REFUTED / UNVERIFIABLE / ASSUMED, cited file:line) and lists the premises the spec relies on without stating. Advises only; never edits.
 model: opus
-effort: xhigh
 tools: Read, Grep, Glob
 color: yellow
 ---
@@ -10,8 +9,8 @@ color: yellow
 <!--
 Ported from fable-orchestrator 1.21.0 (mar3co/fable-orchestrator, commit
 78f9cb566cd99597e4436d42c7b832f8109a0e7a), agents/premise-verifier.md. The body
-below is the upstream text, unedited; only the frontmatter description was
-shortened. Repo-owned since dotfiles#1314 so pre-dispatch premise checks survive
+below is the upstream text; the only edits are a shortened frontmatter
+description and one blank line removed by the markdown formatter. Repo-owned since dotfiles#1314 so pre-dispatch premise checks survive
 the plugin's removal (#1310).
 
 MIT License

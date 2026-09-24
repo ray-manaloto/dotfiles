@@ -2402,7 +2402,7 @@ lines = [
 
 [[suite]]
 name = "orchestration.codex-only-lanes"
-description = "There is no `grok` CLI on this Mac, so every lane must resolve to codex or to Claude. The fact was already stated before 2026-09-01 — but only as a trailing sentence about the *implementation lane mode*, and `orchestration.mode-line-declared` above pins only that one line. A session followed it for implementation and still proposed `grok-reviewer` for the cold pass, because the plugin skill's review-tier table names grok as the cross-family reviewer for a codex diff and nothing here overrode it for the OTHER lanes. So this binds the lanes the mode line does not reach: the directive heading, the implementation row, and the cold-review row that answers the question the skill's fallback chain leaves open (with grok gone Claude IS the third family, so an Opus cold pass on a codex diff is the full gate, not a degraded one). require_lines, not require_tokens, for the same reason as the two contracts above: a substring is satisfied by a doc that merely QUOTES the routing while narrating it. Whitespace is normalised so re-indentation is not a failure; wording is not, so a paraphrase is — and a paraphrase of a routing table IS a routing change."
+description = "There is no `grok` CLI on this Mac, so every lane must resolve to codex or to Claude. A session once followed the implementation routing and still proposed a grok reviewer for the cold pass, because the (since removed, #1310) orchestration plugin's review-tier table named grok as the cross-family reviewer for a codex diff. So this binds the directive heading, the implementation row, the cold-review row (with grok gone Claude IS the third family, so an Opus cold pass on a codex diff is the full gate), and the premise-verification row naming the repo-owned `premise-verifier`. require_lines, not require_tokens: a substring is satisfied by a doc that merely QUOTES the routing while narrating it. Whitespace is normalised; wording is not, and a paraphrase of a routing table IS a routing change."
 category = "orchestration"
 check_type = "static"
 handler = "require_lines"
@@ -2429,13 +2429,13 @@ per_path_tokens = { ".claude/settings.json" = [
 
 [[suite]]
 name = "orchestration.owned-agents"
-description = "The repo-owned replacements for fable-orchestrator's two Claude-side agents must exist with their pinned models (#1310/#1314). `claude-advisor` is the escalation-only Fable advisor (triggers in `.claude/token-routing.md`); `premise-verifier` is the MIT port of the plugin's pre-dispatch premise checker. Deleting either file, or re-modelling it, silently changes what an escalation or a premise check runs on, so both the file and its `model:` line are pinned."
+description = "The repo-owned replacements for fable-orchestrator's two Claude-side agents must exist with their pinned models (#1310/#1314). `claude-advisor` is the escalation-only Fable advisor (triggers in `.claude/token-routing.md`); `premise-verifier` is the MIT port of the plugin's pre-dispatch premise checker. Deleting either file, or re-modelling it, silently changes what an escalation or a premise check runs on, so both the file and its `model:` line are pinned as WHOLE lines (a substring would accept `model: opus-4`)."
 category = "orchestration"
 check_type = "static"
-handler = "require_tokens"
+handler = "require_lines"
 paths_required = true
 paths = [".claude/agents/claude-advisor.md", ".claude/agents/premise-verifier.md"]
-per_path_tokens = { ".claude/agents/claude-advisor.md" = [
+per_path_lines = { ".claude/agents/claude-advisor.md" = [
     "name: claude-advisor",
     "model: fable",
     "effort: xhigh",
@@ -2455,6 +2455,7 @@ strip_comments = false
 paths = [".claude/CLAUDE.md", ".claude/settings.json", ".claude/token-routing.md", "rule-sync.toml"]
 path_globs = [
     ".claude/agents/*.md",
+    ".claude/rules/*.md",
     ".claude/workflows/*.js",
     ".codex/agents/*.toml",
     ".claude/skills/*/SKILL.md",
