@@ -165,7 +165,7 @@ when the turn goes idle):
 
 ```bash
 cat "$PROMPT" | PLANNING_DISABLED=1 codex exec \
-  --ephemeral --sandbox danger-full-access \
+  --sandbox danger-full-access \
   --model gpt-5.6-sol \
   -c model_reasoning_effort="xhigh" \
   -o "$OUT" - > "$LOG" 2>&1; echo "rc=$?" >> "$LOG"

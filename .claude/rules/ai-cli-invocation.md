@@ -12,12 +12,12 @@ direct forms below only when the task genuinely needs a raw CLI call.
 ## Canonical invocation block
 
 ```bash
-# Codex research: stdin prompt, ephemeral state, read-only sandbox
-printf '%s\n' "prompt" | mise exec -- codex exec --ephemeral -s read-only -
+# Codex research: stdin prompt, persisted rollout, read-only sandbox
+printf '%s\n' "prompt" | mise exec -- codex exec -s read-only -
 
-# Codex implementation: workspace writes and explicit reasoning effort
-printf '%s\n' "prompt" | mise exec -- codex exec --ephemeral \
-  -s workspace-write -c model_reasoning_effort='"xhigh"' -
+# Codex implementation: machine sandbox (no -s) and explicit reasoning effort
+printf '%s\n' "prompt" | mise exec -- codex exec \
+  -c model_reasoning_effort='"xhigh"' -
 
 # Gemini/Antigravity pinned lane: headless text output
 printf '%s\n' "prompt" | mise exec -- agy --print --output-format text
@@ -26,14 +26,14 @@ printf '%s\n' "prompt" | mise exec -- agy --print --output-format text
 printf '%s\n' "prompt" | mise exec -- opencode run --format json
 ```
 
-⚠️ **`--ephemeral` blocks subagent spawning — drop it for any lane that
-delegates.** It means "Run without persisting session files to disk", and a
-spawned subagent IS a persisted thread, so under it every spawn dies with
-`collab spawn failed: no thread with id`. Measured 2026-09-16 on one variable:
-3 failures / 0 session files with it, 0 failures / 2 files without — the child
-carrying `"parent_thread_id"`. The blocks above keep it because a research or
-implementation lane does not delegate; `sdlc_team.py` deliberately omits it
-(#1142). It also hides the run from agentsview, which reads those same files.
+⚠️ **Never `--ephemeral`, on ANY lane** (Ray: knowledge-base 2026-09-01, dotfiles 2026-09-15;
+re-applied 2026-09-23 — history in `docs/research/kb/reports/agents/codex-flag-decisions-history-2026-09-23.md`).
+It means "Run without persisting session files to disk": every spawn dies with `collab spawn failed:
+no thread with id` (measured 2026-09-16: 3 failures / 0 session files with it, 0 / 2 without), and
+the run leaves no rollout, so agentsview and any audit of its model, effort or sandbox see nothing.
+A per-lane "keep it where the lane does not delegate" exception was rejected on 2026-09-01 as a
+policy that drifts. Implementation lanes pass no `-s`: the machine's `danger-full-access` is the
+approved posture, and `workspace-write` also cuts the network (#1039, #1142).
 
 This is the only hand-kept argv block. Agent definitions, workflows, and task
 documentation point here or to `mise run codex-lane`; do not duplicate a flag

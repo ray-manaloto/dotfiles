@@ -152,3 +152,113 @@ plan per round 5; (5) keep the merged KB+dotfiles workflow in `kb_setup` with pe
 Output: verdict; target workflow; final ordered ticket list (files, closes-which-defect, upstream drift,
 verification arms); `/session-handoff` + `/session-resume` changes; retired-items table; open questions (if any)
 with recommendations; file:line for every claim; unverified items named. Aim ~1,800-2,500 words.
+
+## Brief G — Fable writes the `/to-spec` spec for the pwf migration (general-purpose, `model: fable`)
+
+Output path: `docs/research/kb/reports/agents/pwf-migration-spec-draft-2026-09-23.md` (the coordinator publishes it
+as a GitHub issue after Ray sees it). Ray invoked `/mattpocock-skills:to-spec` "but use a fable model for it", and
+accepted the coordinator's seam sketch "only if a fable model was used" — so the Fable agent re-derives the seams
+independently (the coordinator's sketch is a CANDIDATE, not a given) and states whether it agrees.
+
+Inputs: design of record `pwf-migration-fable-round3-2026-09-23.md` (T1-T10) and its base
+`pwf-migration-fable-revision-2026-09-23.md`; `pwf-migration-codex-astra-verdict-2026-09-23.md`;
+`pwf-upstream-tracker-review-2026-09-23.md`; `task_plan.md` § "Addendum — pwf current-workflow migration" (all
+rulings, rounds 1-6 — binding); the to-spec template (in the dispatch prompt); `docs/issue-tracker.md`,
+`docs/triage-labels.md`, `CONTEXT.md` + `docs/domain.md` (domain vocabulary); `.claude/rules/*.md` are the ADRs.
+Scope: pwf migration ONLY (pr-loop gets its own spec later). Do not interview; synthesize. Do NOT include file paths
+or code snippets in the spec body (template rule). Write only the output file.
+
+## Brief H — codex-astra review of the Fable `/to-spec` draft (`codex-astra-adversarial-critic`)
+
+Report path: `docs/research/kb/reports/agents/pwf-migration-spec-astra-review-2026-09-23.md`.
+
+Ray: "have a codex astra model agent review this" — the spec draft `pwf-migration-spec-draft-2026-09-23.md` (Seams
+section + spec) before it is published as a `ready-for-agent` issue. Attack it: (1) does every ruling in
+`task_plan.md` § "Addendum — pwf current-workflow migration" (rounds 1-6) appear, correctly; (2) does it faithfully
+carry the design of record `pwf-migration-fable-round3-2026-09-23.md` T1-T10 and every non-D4 finding of
+`pwf-migration-codex-astra-verdict-2026-09-23.md` (C1-C7, §2 A-F, gates/tests list); flag any silent design
+change (e.g. `plan init` warns instead of refusing on a second live slug); (3) are the Seams sound — altitude,
+count, `host_only` + CI fixture twins, prior-art claims (verify the cited test shapes exist); (4) are the
+Implementation/Testing decisions implementable and verifiable, with both arms; (5) template compliance (no file
+paths/code snippets in the spec body); (6) anything an implementing agent would need that is missing. Every finding:
+severity, claim, file:line or spec-section evidence, and a replay/probe with its control arm. Read-only except your
+report. The codex run MUST be awaited to completion: check the `-o` file size and the codex pid before reporting;
+never report "timed out"/"empty" without that evidence (2026-09-23 a wrapper misreported a 24.8 KB verdict as empty).
+Return the codex verdict verbatim.
+
+## Brief I — audit every codex call and its repeated failure modes (Opus, read-only)
+
+Report path: `docs/research/kb/reports/agents/codex-call-audit-2026-09-23.md`.
+
+Ray: "i think using haiku to trigger codex is causing issues — have agents review all the codex calls we ran and
+what were the repeated issues/problems that we can improve on and prevent". Enumerate every codex invocation in
+THIS session (`a6750a24`; subagent transcripts under
+`~/.claude/projects/-Users-rmanaloto-dev-github-ray-manaloto-dotfiles/a6750a24-770a-419d-996e-985bd27de611/subagents/`,
+esp. the two `codex-astra-adversarial-critic` runs) and in prior sessions via AgentsView (ALWAYS `--server
+http://127.0.0.1:8080 --server-token-file '/Users/rmanaloto/Library/Application Support/AgentsView-M1-working-b0ae79c5365e-20260915/archive/native-server-token'`;
+never `health`; plain search with `--in tool_input,tool_result` for `codex exec`, `codex-lane`, `sdlc-team`;
+`--fts` for prose like "timed out", "self-implement"; `--exclude-session a6750a24-770a-419d-996e-985bd27de611` only
+for the history sweep). For each call record: session, caller (which agent + its model), invocation route
+(hand-rolled `codex exec` / `mise run codex-lane` / `mise run sdlc-team` / fable-orchestrator wrapper / codex:rescue),
+wall clock, outcome, and what the caller REPORTED vs what actually happened (e.g. "timed out/empty" while the
+codex pid was alive and the `-o` file later filled). Classify repeated failure modes with counts (wrapper
+impatience/misreport, self-substitution, missing trailing `-`, `--ephemeral` spawn failures, sandbox-noise gates,
+OAuth/MCP refresh errors, prompt files in `/tmp`, orphaned codex processes, two writers), and quantify haiku
+wrappers vs other routes. Also note this session's live facts: codex pid 49038 (Brief H) at ~11 min when the
+wrapper declared a 15-minute timeout; the Brief D codex run finished ~12 min after start with a 24.8 KB verdict.
+Recommend preventions, each tied to a mechanism (task, gate, agent-definition change, model change), not prose.
+Persist incrementally; cite session ids + ordinals; end with `## GitHub repos touched`. Read-only except the report.
+
+## Brief J — why the existing codex skills/tasks were not used (Opus, read-only)
+
+Report path: `docs/research/kb/reports/agents/codex-routing-gap-2026-09-23.md`.
+
+Inventory every repo-owned route to codex and what each guarantees: `mise run codex-lane` (+ `codex_lane.py`),
+`mise run sdlc-team` (+ `sdlc_team.py`, the `codex-sdlc-team` skill and rule), the `codex-{sol,astra}-*` agent
+definitions (model, invocation, how they wait), the fable-orchestrator `codex-implementer`/`codex-reviewer`, the
+`codex:rescue` plugin agent, `.claude/rules/ai-cli-invocation.md`, and the routing text in `.claude/CLAUDE.md` and
+`token-routing.md`. Then answer: why did a coordinator following the repo's own instructions pick the haiku
+wrapper agents tonight (which text routed it there; contradictions between the routing table, the rule that says
+prefer `codex-lane`, and memory `feedback_haiku_lane_wrapper_abandons_codex_and_self_implements`); what the
+`hook_guard` "hand-rolled Codex SDLC dispatcher" rule catches and misses; and the smallest native-first fix
+(e.g. wrapper agents call `mise run codex-lane`/`sdlc-team` and only relay the typed result; wrapper model change;
+routing-table rewrite; a guard or contract that makes the typed route the only one). Check the harness docs in
+`~/dev/github/ray-manaloto/knowledge-base/sources/agent-harness-docs/docs/claude-code/` for background-task
+waiting semantics that make a thin relay safe. Cite file:line; persist incrementally; end with
+`## GitHub repos touched`. Read-only except the report.
+
+## Brief K — history: decisions on codex CLI flags (`--ephemeral` removal and others) (general-purpose, read-only)
+
+Report path: `docs/research/kb/reports/agents/codex-flag-decisions-history-2026-09-23.md`.
+
+Ray: "review history and use /agentsview-finding-history — we should have removed --ephemeral and added/removed
+other flags when running codex cli". Reconstruct every DECISION about `codex exec` flags: `--ephemeral` (removal;
+#1142 and the 2026-09-16 measurement in `.claude/rules/ai-cli-invocation.md`), `-s`/`--sandbox` modes
+(`danger-full-access`, `workspace-write`, `read-only`), `--full-auto` (nonexistent), `--approve-for-me`, `-o`,
+`--output-schema`, `-c model_reasoning_effort`, `--model`, the trailing `-`/stdin, `PLANNING_DISABLED`,
+`--skip-git-repo-check`, `--json`, and anything else ruled. For each: what was decided, when, by whom, why, the
+evidence (session id + ordinal_range @anchor), and whether the CURRENT invocation sites comply — the
+`.claude/agents/codex-{sol,astra}-*.md` definitions, `python/src/dotfiles_setup/codex_lane.py`, `sdlc_team.py`,
+`mise.toml`, the rule's canonical block, the fable-orchestrator plugin wrappers. List every site still passing a
+flag that was ruled out (e.g. `--ephemeral` in the codex-astra/sol critic that ran tonight). AgentsView flags ALWAYS:
+`--server http://127.0.0.1:8080 --server-token-file '/Users/rmanaloto/Library/Application Support/AgentsView-M1-working-b0ae79c5365e-20260915/archive/native-server-token'`;
+never `health`; embeddings are stalled, so `--fts` for prose (2-3 word probes: "ephemeral", "drop ephemeral",
+"collab spawn failed", "sandbox read-only", "reasoning effort") and plain `--in tool_input,tool_result` for flag
+strings; `--scope top` to find origins; `--exclude-session a6750a24-770a-419d-996e-985bd27de611`. Budget 8-12
+probes. Also grep `git log -S--ephemeral` and `gh api '/search/issues?q=repo:ray-manaloto/dotfiles+ephemeral'`.
+Persist incrementally (Searches / Strong Matches / Decision record / Compliance table / Gaps); end with
+`## GitHub repos touched`. Read-only except the report; run no codex command.
+
+## Brief L — Fable revises the spec against the codex-astra verdict (general-purpose, `model: fable`)
+
+Output: overwrite `docs/research/kb/reports/agents/pwf-migration-spec-draft-2026-09-23.md` is NOT allowed (it is a
+verbatim record); write the revision to `docs/research/kb/reports/agents/pwf-migration-spec-v2-2026-09-23.md`,
+plus the publishable issue body (template headings only, NO file paths/code snippets/schemas — F17) at
+`docs/research/kb/reports/agents/pwf-migration-spec-v2-issue-body-2026-09-23.md`. Resolve every finding F1-F17 of
+`pwf-migration-spec-codex-astra-verdict-2026-09-23.md`: for each, state in a leading "## Resolution table" (not in
+the issue body) how the spec now handles it, or why it is rejected with evidence. Rulings in `task_plan.md` §
+"Addendum — pwf current-workflow migration" rounds 1-6 stay binding (do not reopen: close leaves the pointer
+untouched; plan-close model-runnable; kb_setup now; `.planning/.archive/`; PLAN_ID per worktree; upstream trust
+model). Where a finding needs a genuinely NEW Ray decision, list it under "## Questions for Ray" with a
+recommendation instead of deciding. Include the #910 (absorbed) and #1327 (this precedes it) relationships.
+Read-only except the two output files.

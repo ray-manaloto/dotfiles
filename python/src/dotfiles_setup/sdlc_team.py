@@ -744,7 +744,18 @@ def dispatch(request: SdlcTeamRequest, repo_root: Path) -> SdlcTeamDispatch:
             started_at=started_at,
         ),
     )
-    sandbox = "read-only" if request.mode is SdlcMode.REVIEW else "workspace-write"
+    # `-s`/`--sandbox` is deliberately ABSENT (Ray, 2026-09-15, re-applied
+    # 2026-09-23 after its commit `38ed61f2` was stranded on an unmerged branch).
+    # `~/.codex/config.toml` sets `sandbox_mode = "danger-full-access"`, the
+    # operator-approved posture of 2026-09-01 that every other codex call here
+    # already runs under; passing `-s` overrode it DOWNWARD on every dispatch.
+    # Under `workspace-write` codex also defaults `network_access` to false, so
+    # no lane could reach `gh` or `mise` in either mode. `SdlcMode` still governs
+    # the PROMPT contract: `review` is ASKED not to write, not PREVENTED from
+    # writing, so every prohibition belongs in the spec. Pairing matters: this
+    # widens privilege only because `--ephemeral` is also absent (below), so every
+    # lane leaves a rollout that records its sandbox for audit.
+    #
     # `--ephemeral` is deliberately ABSENT, and re-adding it breaks the team.
     #
     # It means "Run without persisting session files to disk" (`codex exec
@@ -769,8 +780,6 @@ def dispatch(request: SdlcTeamRequest, repo_root: Path) -> SdlcTeamDispatch:
     argv = (
         str(Path(codex).resolve()),
         "exec",
-        "-s",
-        sandbox,
         "-c",
         f'model_reasoning_effort="{request.effort}"',
         "-C",

@@ -223,7 +223,8 @@ def test_review_dispatch_is_detached_complete_and_has_no_false_settlement(
         'without, the child carrying "parent_thread_id". It also hides the run '
         "from agentsview, which reads those same files."
     )
-    assert result.argv[result.argv.index("-s") + 1] == "read-only"
+    assert "-s" not in result.argv
+    assert "--sandbox" not in result.argv
     assert result.argv[result.argv.index("-o") + 1] == result.output_file
     assert Path(result.argv[0]).is_absolute()
     assert all(
@@ -262,24 +263,26 @@ def test_review_dispatch_is_detached_complete_and_has_no_false_settlement(
 
 
 @pytest.mark.parametrize(
-    ("mode", "sandbox"),
-    [
-        (sdlc_team.SdlcMode.REVIEW, "read-only"),
-        (sdlc_team.SdlcMode.IMPLEMENT, "workspace-write"),
-    ],
+    "mode",
+    [sdlc_team.SdlcMode.REVIEW, sdlc_team.SdlcMode.IMPLEMENT],
 )
-def test_mode_selects_the_only_compatible_sandbox(
+def test_no_mode_passes_a_sandbox_or_ephemeral_flag(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     mode: sdlc_team.SdlcMode,
-    sandbox: str,
 ) -> None:
-    """Swapping either mapping turns its independent mode cell red."""
+    """Neither mode may override the machine sandbox or discard the rollout.
+
+    Ray ruled 2026-09-15 (stranded commit `38ed61f2`, re-applied 2026-09-23):
+    `-s` overrode `~/.codex/config.toml`'s `danger-full-access` downward and cut
+    the network under `workspace-write`; `--ephemeral` left no rollout to audit.
+    """
     result, _calls = _capture_dispatch(
         tmp_path, monkeypatch, _request(tmp_path, mode=mode)
     )
 
-    assert result.argv[result.argv.index("-s") + 1] == sandbox
+    for flag in ("-s", "--sandbox", "--ephemeral"):
+        assert flag not in result.argv, f"{mode}: {flag} in {result.argv}"
 
 
 def test_explicit_artifact_locations_are_resolved_and_echoed(

@@ -1,6 +1,6 @@
 ---
 name: codex-sol-operator
-model: haiku
+model: sonnet
 description: Runs ONE named `mise run` task that mutates git or host state — `land`, `automerge`, `sync`, `verify-local` — and reports its real exit code. Use when an operational command must run off this session's clock. Runs on codex (gpt-5.6-sol) at full access, because every narrower sandbox blocks git writes.
 tools: Bash, Read, Grep, Glob, Write
 maxTurns: 40
@@ -54,6 +54,7 @@ case "$LANE_ID" in (""|*[!A-Za-z0-9._-]*)
   echo "refusing: CODEX_LANE_ID must match [A-Za-z0-9._-]+, got: $LANE_ID"; exit 1;; esac
 PROMPT=".agent/kb/raw/codex-sol-operator-prompt-$LANE_ID.md"
 OUT=".agent/kb/raw/codex-sol-operator-result-$LANE_ID.md"
+LOG="${OUT%.md}.log"
 # Claim $OUT ATOMICALLY, before codex runs. `codex -o` creates it only on
 # completion, so a mere existence test cannot see a concurrent peer.
 ( set -C; : > "$OUT" ) 2>/dev/null || { echo "refusing: $OUT already claimed"; exit 1; }
@@ -63,13 +64,51 @@ cat > "$PROMPT" <<'EOF'
 EOF
 
 cat "$PROMPT" | PLANNING_DISABLED=1 codex exec \
-  --ephemeral --sandbox danger-full-access \
+  --sandbox danger-full-access \
   --model gpt-5.6-sol \
   -c model_reasoning_effort="xhigh" \
-  -o "$OUT" -
+  -o "$OUT" - > "$LOG" 2>&1; echo "rc=$?" >> "$LOG"
 
 echo "lane output: $OUT"   # report this path — the coordinator cannot guess it
 ```
+
+**Run it in TWO Bash calls, never one.** Everything above the `cat "$PROMPT" |`
+line is setup: run it first. Then run the `cat "$PROMPT" | … codex exec …` line
+ALONE with the Bash tool's `run_in_background: true` — never `nohup`, never a
+trailing `&`, never in the foreground (the harness moves a foreground call to the
+background at 120 s anyway, and every wait loop inside it dies with it). Shell
+variables do not survive between calls: re-assign `LANE_ID`, `PROMPT`, `OUT` and
+`LOG` from the printed literals at the top of every later call.
+
+**A SLOW lane is not a FAILED lane** (2026-09-23 audit, `docs/research/kb/reports/agents/codex-call-audit-2026-09-23.md`:
+43% of lanes on this definition's old haiku wrapper never delivered codex's
+answer — they declared "timeout"/"empty" at 4-10 min while codex finished at
+10-22 min, and some wrote the verdict themselves). `codex -o` writes `$OUT` ONLY
+when codex exits, so a 0-byte `$OUT` while codex runs is the normal state, not
+evidence of anything. Exactly three signals end the wait:
+
+1. `$LOG` has its final `rc=<n>` line — codex exited; read `<n>`, then `$OUT`;
+2. no `rc=` line AND no live process for this lane (`pgrep -fl -- "$OUT"`) — it
+   died; report that with the log tail;
+3. the budget is spent — `TIMEOUT:` from the dispatch, default **2400 s** —
+   reap it (`mise run reap -- --pattern "$OUT" --kill`) and report a timeout.
+
+Wait in bounded FOREGROUND slices, one per Bash call, each with the Bash tool's
+`timeout` parameter set to `600000`:
+
+```bash
+grep '^rc=' "$LOG" && exit 0
+TIMEOUT=2400   # or the dispatch's `TIMEOUT:` value
+remaining=$(( TIMEOUT - ( $(date +%s) - $(stat -f %m "$PROMPT") ) ))
+[ "$remaining" -le 0 ] && { echo "budget exhausted"; exit 0; }
+slice=$(( remaining < 540 ? remaining : 540 )); deadline=$((SECONDS+slice))
+while [ $SECONDS -lt $deadline ]; do grep -q '^rc=' "$LOG" && break; sleep 15; done
+grep '^rc=' "$LOG" || { echo "still running at $(date -u +%H:%M:%SZ)"; pgrep -fl -- "$OUT"; ls -l "$OUT"; }
+```
+
+`still running` with a `pgrep` hit means: run the next slice. Never end your turn
+while the lane's process lives, never start a second codex run to "test" it,
+and never write the answer yourself — on any failure signal, say so and stop.
 
 **`PLANNING_DISABLED=1` is load-bearing too.** Without it the lane inherits this
 session's planning-with-files hooks, is handed the coordinator's `task_plan.md`,

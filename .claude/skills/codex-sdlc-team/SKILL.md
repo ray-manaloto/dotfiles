@@ -1,6 +1,6 @@
 ---
 name: codex-sdlc-team
-description: Dispatch this repo's typed codex SDLC subagent team through `mise run sdlc-team`. Use when a change spans several domains and needs routed review or implementation, when an independently configured Codex lane should review a diff, or before editing `.codex/agents/*.toml`. The task owns prompt construction, sandbox selection, detachment, timeout supervision, Codex argv, and artifact paths; callers provide one typed request and receive one typed dispatch result.
+description: Dispatch this repo's typed codex SDLC subagent team through `mise run sdlc-team`. Use when a change spans several domains and needs routed review or implementation, when an independently configured Codex lane should review a diff, or before editing `.codex/agents/*.toml`. The task owns prompt construction, detachment, timeout supervision, Codex argv, and artifact paths; callers provide one typed request and receive one typed dispatch result.
 user-invocable: true
 ---
 
@@ -47,7 +47,8 @@ request is:
 ```
 
 `spec_file` must be absolute and exist at dispatch. `mode` defaults to `review`;
-review selects a read-only sandbox, while `implement` selects workspace-write.
+the mode shapes the prompt only: no `-s` is passed, so every lane runs under the
+machine's `danger-full-access` and `review` is asked (not prevented) not to write.
 `effort` defaults to `xhigh`, `timeout_s: null` means no timeout, and an empty
 `run_id` is generated. Prompt, output, log, and receipt path fields are optional;
 omit them to use deterministic defaults.
@@ -55,8 +56,7 @@ omit them to use deterministic defaults.
 The task code generates the dispatcher address, spec pointer, licensed-dissent
 and test-craft clauses, file allowlist, `COMMIT: caller`, the stop-on-spawn-failure
 clause (never "do the work yourself"), the pinned closing-list format, and
-the prohibition on piping results into a pager. It also selects the sandbox,
-constructs the Codex argv, includes the load-bearing trailing `-`, and launches
+the prohibition on piping results into a pager. It also constructs the Codex argv, includes the load-bearing trailing `-`, and launches
 the detached supervisor. Do not assemble any of those pieces manually.
 
 ## Read the dispatch result
@@ -112,7 +112,7 @@ supervisor writes both through the public lane-result composition at settlement.
 - Read licensed dissent as a finding about the spec. Do not pressure a lane to
   guess through a contradiction.
 - Review mode is intentionally told not to run gates or write its own report;
-  its read-only sandbox cannot do either. The supervisor still captures output,
+  nothing but the prompt enforces that. The supervisor still captures output,
   settlement, and lane receipts.
 - `hook_guard` denies a visible `codex exec` command that references an SDLC
   artifact path and redirects it to `mise run sdlc-team`. The general piped
