@@ -1,6 +1,6 @@
 ---
 name: codex-sdlc-team
-description: Dispatch this repo's typed codex SDLC subagent team through `mise run sdlc-team`. Use when a change spans several domains and needs routed review or implementation, when an independently configured Codex lane should review a diff, or before editing `.codex/agents/*.toml`. The task owns prompt construction, detachment, timeout supervision, Codex argv, and artifact paths; callers provide one typed request and receive one typed dispatch result.
+description: Dispatch this repo's typed codex SDLC subagent team through `mise run sdlc-team`, and hold the architect's routing doctrine (lane table, seven-part spec contract, review tiers, fallback chain) — invoke before delegating any non-trivial implementation. Use when a change spans several domains and needs routed review or implementation, when an independently configured Codex lane should review a diff, or before editing `.codex/agents/*.toml`. The task owns prompt construction, detachment, timeout supervision, Codex argv, and artifact paths; callers provide one typed request and receive one typed dispatch result.
 user-invocable: true
 ---
 
@@ -181,7 +181,8 @@ between the code and the spec stops the lane and comes back as a finding.
   not mechanical.
 - **Behavior-bearing diff**: one cold review BY REF (commit SHA or base branch),
   no intent framing, from a model family different from the AUTHOR's. The
-  caller passes `author_family` explicitly:
+  caller states the author's family in the review brief (a typed `author_family`
+  input is planned in codex entry-point design D10; it is not built yet):
   - codex-authored → `cold-reviewer` (an Opus subagent, diff-only).
   - Anthropic-authored → a codex lens:
     `mise exec -- codex exec -s read-only --ignore-rules review --commit <SHA> -c 'sandbox_mode="read-only"'`

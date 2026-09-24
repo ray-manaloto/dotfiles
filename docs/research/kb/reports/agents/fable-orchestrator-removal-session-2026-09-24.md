@@ -183,9 +183,50 @@ Every rc is file-captured (never a pipe) and was read before advancing.
 | dotfiles `2c8cc745` | lint 0 · pytest 0 (3770) · verify 0 (165/0) · lint-docs 0 · rule-sync 0 · eval 0 · mirrors 0 |
 | dotfiles `d4b0b5c4` | lint 0 before the TEST-INDEX row was added (that row carried an agnix warning, which the pre-commit did not catch; fixed in `1bd184b8`) · pytest 0 (3778) · verify 0 |
 | dotfiles `1bd184b8` | lint 0 · pytest 0 (3783) · verify 0 (165/0) · lint-docs 0 · rule-sync 0 · eval 0 · mirrors 0 |
+KB gate artifacts are named after the commit BEFORE the tree they tested, because every run was on a dirty tree
+(`dirty: true`) (§1c audit F4):
+- `.agent/kb/gates/gates-e8fe42ae….json` = the `76f95cfa` tree, including its first-run test rc=2;
+- `gates-76f95cfa….json` = the `d94b0e82` tree;
+- `gates-d94b0e82….json` = the `0fd45960` code fixes.
+
+The final full run is on the clean, committed `knowledge-base` HEAD (row below). `kb-ship` re-runs the gates anyway.
+
 | knowledge-base `76f95cfa` | kb-gates: lint/brain-audit/eval/graph-size/hk-test/funnel/manifest/catalog/lock-drift/mod-runtime PASS; `mise run test` 0 serially (the first run hit a 120 s MCP-handshake timeout while dotfiles pytest ran concurrently; it passes alone) · lint-docs 0 |
 | knowledge-base `d94b0e82` | kb-gates 11/11 PASS · lint-docs 0 |
 | knowledge-base `0fd45960` | kb-gates 11/11 PASS on the code fixes; after the doc-only follow-ups, lint 0 · lint-docs 0 · md-budget/forbid/roster tests 0 |
+| knowledge-base `4e988717` (§1c fixes; **clean committed tree**) | kb-gates 10/11 PASS. The `test` gate hit rc=2 on the known kb-serve MCP 120 s flake (KB#748, open; data point commented). A serial `mise run test` on the same clean HEAD returned rc=0. |
+
+## Session handoff (step 5) — §1c integrity review
+
+Briefs: `removal-session-audit-briefs-2026-09-24.md`. Reports: `session-audit-{dismissed-errors,missing-requests,vagueness,codex-review}-2026-09-24.md`.
+
+| Finding | Disposition |
+|---|---|
+| codex P2: an artifact review could overwrite a branch `review-<SHA>-cold.md` | FIXED (KB `4e988717`). Artifact mode persists only to `$KB_LANE/review.md` with no receipt; the persistence section is diff-mode only |
+| codex P2: an absolute `laneRoot` was mangled into `$PWD//…` | FIXED (KB `4e988717`) |
+| codex: dotfiles `1bd184b8` / `15662741` | no actionable regressions |
+| M′-F1: the agnix pre-commit glob skipped `tests/**/*.md` | FIXED (`hk.pkl` glob `**/*.md`). Arm: a commit planting `~/.claude/x` in `tests/TEST-INDEX.md` was REFUSED by pre-commit (rc=1, agnix warning); the old glob let the same class through at `d4b0b5c4` |
+| M′-F2: graph stale since `3db81d8e` | PLAN (§ removal section): `graphify-rebuild` after land |
+| M′-F3: scripted edits caused 9 gate failures | PLAN (standing trap) |
+| M′-F4: KB gate artifacts are named after the previous commit | FIXED here (gate-table note), plus a full run on the clean HEAD |
+| M′-F5: `kb-plugin-health` does not exist | no action; `claude plugin list` covered it |
+| N′-F1: `d4b0b5c4` skipped lint-docs/rule-sync | recorded; fixed at `1bd184b8` |
+| N′-F2: step-5 results were not in the committed report | FIXED by this section and its commit |
+| P′-V1: plan-pointer still pointed at Phase 11 | FIXED. A new `## fable-orchestrator removal … ACTIVE, NEXT SESSION` section; Phase 11 is QUEUED; plan-pointer refreshed |
+| P′-V2: plan-attest missing from "Next" | FIXED (step 0) |
+| P′-V3: the codex-sdlc-team description did not say it holds the doctrine | FIXED (+ mirror) |
+| P′-V4: "tokens constrained" rationale in the advisor lanes | FIXED for the advisor (sol + generated astra). The other six descriptions are a PLAN item |
+| P′-V5: KB roster row says every agent declares `effort` | FIXED (row names premise-verifier's exception) |
+| P′-V6: KB fourth escalation trigger? | PLAN, ruling for Ray |
+| P′-V7: `author_family` is not a built field | FIXED wording (planned, D10) |
+| P′-V8: "later ticket" has no number | PLAN: file two tickets |
+| P′-V9: owed items had no owner | FIXED (owner: Ray, after land) |
+| (self-found) the recurring `mise WARN unknown field … pytest-of-…/mise.toml: settings.not_a_real_setting` | known: KB `tests/test_evals.py:581` writes that config and mise tracks the tmpdir (493 of 734 tracked-configs point into pytest tmpdirs). Tracked as knowledge-base#419 (open). Not caused by this change |
+
+AgentsView pass: `mise run session-agentsview-pass` returned rc=0, but it covered the coordinator session `a6750a24` and
+two subagents, not this headless session `94aea797`, which its index had not reached. For this session the pass is
+**UNVERIFIABLE**. Session-orphans: 0 WAIT-LOOP, 0 OTHER (2 HARNESS MCP rows). The only issue edit this session: a
+comment on knowledge-base#748. No other GitHub mutation besides filing #1362.
 
 ## Open questions for Ray (this was a headless run, so none were asked)
 
@@ -222,8 +263,9 @@ Every rc is file-captured (never a pipe) and was read before advancing.
   - one `kb-codex-implementer` trivial dispatch (KB#795).
 - **Close tickets at land time:** #1311-#1317 and KB#793-#797 once merged. #1318 is done in this session (record
   the doctor before/after arms on it). #1319 stays open until the live arms run.
-- **Harness worktrees:** 7 git worktrees of dotfiles/KB on older branches still enable the plugin in their
-  `settings.json`. Sessions there will warn about a missing plugin until those branches rebase on main.
+- **Harness worktrees (owner: Ray, after the dotfiles PR lands):** 7 git worktrees of dotfiles/KB on older
+  branches still enable the plugin in their `settings.json`, so sessions there warn about a missing plugin. Remove
+  or rebase them (`git worktree list`) and delete the two backups below.
 - **Backups kept:**
   - dotfiles `.agent/state/fable-orchestrator-1.21.0-cache-backup-2026-09-24.tgz`;
   - `~/.codex/config.toml.pre-fable-removal-2026-09-24` (mode 600; delete when satisfied).
