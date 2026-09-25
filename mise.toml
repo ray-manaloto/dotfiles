@@ -84,7 +84,7 @@ lefthook = "2.1.14"
 # conda:ffmpeg on platform linux-x64" and bricks lint. os-gating makes linux
 # skip the tool entirely, so no linux URL is demanded.
 "conda:ffmpeg" = { version = "9.0.1", os = ["macos"] }
-aws-cli = { version = "2.37.3", symlink_bins = "true" }
+aws-cli = { version = "2.37.4", symlink_bins = "true" }
 # pipx exists ONLY to serve the `uvx = false` below: that flag routes the
 # install through real pipx, and mise's own error names the fix ("Install
 # pipx first: mise use pipx@latest"). It is installed in setup-mise's FIRST
