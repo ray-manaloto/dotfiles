@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -16,16 +15,16 @@ from typing import TYPE_CHECKING
 from dotfiles_setup.codec import Format, encode
 from dotfiles_setup.plugin_state import (
     PluginLocation,
+    data_id,
     locate,
     marketplace_name,
-    plugin_name,
+    parse_selector,
 )
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
 PROBE_TIMEOUT = 10
-_SELECTOR_ERROR = "plugin selector must be name@marketplace"
 HISTORICAL_PATHSPECS: tuple[str, ...] = (
     ":!docs/research",
     ":!docs/agents/goal-history.md",
@@ -65,6 +64,8 @@ class PluginInventory:
     dependent_plugins: tuple[str, ...] = ()
     auto_dependencies: tuple[str, ...] = ()
     data_collisions: tuple[str, ...] = ()
+    enabled_dependents: tuple[str, ...] = ()
+    enabling_settings: tuple[Path, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -122,20 +123,23 @@ def _run_json(argv: list[str], timeout: int) -> tuple[object | None, str | None]
 
 def _claude_cli_inventory(
     selector: str, *, timeout: int
-) -> tuple[list[str], set[str], str | None]:
+) -> tuple[list[str], dict[str, bool], str | None]:
+    """Rows for ``selector`` plus every listed id mapped to "enabled in any scope"."""
     payload, error = _run_json(["claude", "plugin", "list", "--json"], timeout)
     if error is not None:
-        return [], set(), error
+        return [], {}, error
     if not isinstance(payload, list):
-        return [], set(), "claude plugin list --json returned a non-array payload"
+        return [], {}, "claude plugin list --json returned a non-array payload"
     rows: list[str] = []
-    selectors: set[str] = set()
+    selectors: dict[str, bool] = {}
     for entry in payload:
         if not isinstance(entry, dict):
             continue
         entry_id = entry.get("id")
         if isinstance(entry_id, str) and "@" in entry_id:
-            selectors.add(entry_id)
+            selectors[entry_id] = (
+                selectors.get(entry_id, False) or entry.get("enabled") is True
+            )
         if entry_id != selector:
             continue
         rows.append(
@@ -153,10 +157,10 @@ def claude_cli_rows(name: str, *, timeout: int) -> tuple[list[str], str | None]:
 def _codex_cli_inventory(
     selector: str, *, timeout: int
 ) -> tuple[list[str], set[str], str | None]:
-    if "@" not in selector:
-        return [], set(), f"codex plugin selector must be name@marketplace: {selector}"
-    wanted_name = plugin_name(selector)
-    wanted_marketplace = marketplace_name(selector)
+    try:
+        wanted_name, wanted_marketplace = parse_selector(selector)
+    except ValueError as exc:
+        return [], set(), str(exc)
     payload, error = _run_json(["codex", "plugin", "list", "--json"], timeout)
     if error is not None:
         return [], set(), error
@@ -198,77 +202,154 @@ def codex_cli_rows(name: str, *, timeout: int) -> tuple[list[str], str | None]:
     return rows, error
 
 
-def _data_id(selector: str) -> str:
-    return re.sub(r"[^a-zA-Z0-9_-]", "-", selector)
-
-
-def _manifest_dependencies(path: Path) -> tuple[set[str], str | None]:
-    found: set[str] = set()
-    error: str | None = None
+def _json_file(path: Path) -> tuple[object | None, str | None]:
     try:
-        loaded = json.loads(path.read_text())
+        return json.loads(path.read_text()), None
     except FileNotFoundError:
-        loaded = None
+        return None, None
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        loaded = None
-        error = f"{path} is unreadable ({type(exc).__name__})"
-    if loaded is not None and error is None:
-        if not isinstance(loaded, dict):
-            error = f"{path} is not a JSON object"
-        else:
-            dependencies = loaded.get("dependencies")
-            if isinstance(dependencies, dict):
-                found = {str(key) for key in dependencies}
-            elif isinstance(dependencies, list):
-                found = {str(value) for value in dependencies if isinstance(value, str)}
-            elif dependencies is not None:
-                error = f"{path} dependencies has an unsupported shape"
-    return found, error
+        return None, f"{path} is unreadable ({type(exc).__name__})"
 
 
-def _manifest_paths(home: Path, plugins: dict[object, object]) -> dict[str, set[Path]]:
-    manifests: dict[str, set[Path]] = {}
-    for raw_key, entries in plugins.items():
-        key = str(raw_key)
-        paths: set[Path] = set()
-        if isinstance(entries, list):
-            for entry in entries:
-                raw_install = (
-                    entry.get("installPath") if isinstance(entry, dict) else None
-                )
-                if not isinstance(raw_install, str) or not raw_install:
-                    continue
-                install = Path(raw_install)
-                if not install.is_absolute():
-                    install = home / ".claude" / "plugins" / install
-                paths.add(install / ".claude-plugin" / "plugin.json")
-        manifests[key] = paths
-    return manifests
+def _resolved_dependencies(
+    dependencies: object, declaring_marketplace: str, source: str
+) -> tuple[set[tuple[str, str]], str | None]:
+    """Resolve documented dependency items to ``(name, marketplace)`` pairs.
+
+    ``$CC/plugin-dependencies.md:40-46``: an item is a bare name string or an
+    object ``{name, version?, marketplace?}``; ``name`` resolves in the
+    DECLARING plugin's marketplace unless ``marketplace`` names another one.
+    ``version`` never affects which plugin is meant.
+    """
+    if dependencies is None:
+        return set(), None
+    if not isinstance(dependencies, list):
+        return set(), f"{source} dependencies is not an array"
+    resolved: set[tuple[str, str]] = set()
+    for item in dependencies:
+        if isinstance(item, str) and item:
+            resolved.add((item, declaring_marketplace))
+            continue
+        name = item.get("name") if isinstance(item, dict) else None
+        if not isinstance(name, str) or not name:
+            return resolved, f"{source} has an unsupported dependency item"
+        marketplace = item.get("marketplace")
+        resolved.add(
+            (
+                name,
+                marketplace
+                if isinstance(marketplace, str) and marketplace
+                else declaring_marketplace,
+            )
+        )
+    return resolved, None
 
 
-def _dependency_evidence(
-    manifests: dict[str, set[Path]], selector: str, auto_plugins: set[str]
-) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
-    dependencies_by_plugin: dict[str, set[str]] = {}
+def _manifest_dependencies(
+    path: Path, declaring_marketplace: str
+) -> tuple[set[tuple[str, str]], str | None]:
+    loaded, error = _json_file(path)
+    if error is not None or loaded is None:
+        return set(), error
+    if not isinstance(loaded, dict):
+        return set(), f"{path} is not a JSON object"
+    return _resolved_dependencies(
+        loaded.get("dependencies"), declaring_marketplace, str(path)
+    )
+
+
+def _marketplace_entries(
+    home: Path, marketplace: str, cache: dict[str, tuple[dict[str, object], str | None]]
+) -> tuple[dict[str, object], str | None]:
+    """Map plugin name -> marketplace entry, from the marketplace's own catalog."""
+    if marketplace in cache:
+        return cache[marketplace]
+    known, error = _json_file(home / ".claude" / "plugins" / "known_marketplaces.json")
+    entries: dict[str, object] = {}
+    record = known.get(marketplace) if isinstance(known, dict) else None
+    location = record.get("installLocation") if isinstance(record, dict) else None
+    if error is None and isinstance(location, str) and location:
+        catalog_path = Path(location) / ".claude-plugin" / "marketplace.json"
+        catalog, error = _json_file(catalog_path)
+        plugins = catalog.get("plugins") if isinstance(catalog, dict) else None
+        if isinstance(plugins, list):
+            for plugin in plugins:
+                name = plugin.get("name") if isinstance(plugin, dict) else None
+                if isinstance(name, str):
+                    entries[name] = plugin
+    cache[marketplace] = (entries, error)
+    return entries, error
+
+
+def _plugin_dependencies(
+    home: Path,
+    key: str,
+    entries: object,
+    catalogs: dict[str, tuple[dict[str, object], str | None]],
+) -> tuple[set[tuple[str, str]], list[str]]:
+    """Dependencies declared in ``plugin.json`` OR the marketplace entry."""
+    marketplace = marketplace_name(key)
+    dependencies: set[tuple[str, str]] = set()
     errors: list[str] = []
-    for key, paths in manifests.items():
-        dependencies: set[str] = set()
-        for path in paths:
-            found, error = _manifest_dependencies(path)
+    if isinstance(entries, list):
+        for entry in entries:
+            raw_install = entry.get("installPath") if isinstance(entry, dict) else None
+            if not isinstance(raw_install, str) or not raw_install:
+                continue
+            install = Path(raw_install)
+            if not install.is_absolute():
+                install = home / ".claude" / "plugins" / install
+            found, error = _manifest_dependencies(
+                install / ".claude-plugin" / "plugin.json", marketplace
+            )
             dependencies.update(found)
             if error is not None:
                 errors.append(error)
-        dependencies_by_plugin[key] = dependencies
-    dependents = {
-        key
-        for key, dependencies in dependencies_by_plugin.items()
-        if key != selector and selector in dependencies
-    }
-    auto_dependencies = dependencies_by_plugin.get(selector, set()) & auto_plugins
+    catalog, error = _marketplace_entries(home, marketplace, catalogs)
+    if error is not None:
+        errors.append(error)
+    entry = catalog.get(key.split("@", 1)[0])
+    if isinstance(entry, dict):
+        found, error = _resolved_dependencies(
+            entry.get("dependencies"),
+            marketplace,
+            f"marketplace {marketplace} entry {key}",
+        )
+        dependencies.update(found)
+        if error is not None:
+            errors.append(error)
+    return dependencies, errors
+
+
+def _dependency_evidence(
+    home: Path, plugins: dict[object, object], selector: str, auto_plugins: set[str]
+) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
+    """Installed dependents of ``selector`` and its own auto-installed deps.
+
+    A dependent is any OTHER plugin present in ``installed_plugins.json``
+    (any scope, enabled or not): re-enabling a disabled dependent would break.
+    """
+    target = parse_selector(selector)
+    catalogs: dict[str, tuple[dict[str, object], str | None]] = {}
+    dependents: set[str] = set()
+    own: set[tuple[str, str]] = set()
+    errors: list[str] = []
+    for raw_key, entries in plugins.items():
+        key = str(raw_key)
+        installed = isinstance(entries, list) and bool(entries)
+        if not installed and key != selector:
+            continue
+        dependencies, found_errors = _plugin_dependencies(home, key, entries, catalogs)
+        errors.extend(found_errors)
+        if key == selector:
+            own = dependencies
+        elif target in dependencies:
+            dependents.add(key)
+    auto_dependencies = {f"{name}@{market}" for name, market in own} & auto_plugins
     return (
         tuple(sorted(dependents)),
         tuple(sorted(auto_dependencies)),
-        tuple(errors),
+        tuple(dict.fromkeys(errors)),
     )
 
 
@@ -313,7 +394,7 @@ def _installed_metadata(home: Path, selector: str) -> _InstalledMetadata:
         str(key)
         for key, entries in plugins.items()
         if str(key) != selector
-        and _data_id(str(key)) == _data_id(selector)
+        and data_id(str(key)) == data_id(selector)
         and isinstance(entries, list)
         and bool(entries)
     }
@@ -326,7 +407,7 @@ def _installed_metadata(home: Path, selector: str) -> _InstalledMetadata:
         )
     }
     dependents, auto_dependencies, errors = _dependency_evidence(
-        _manifest_paths(home, plugins), selector, auto_plugins
+        home, plugins, selector, auto_plugins
     )
     return _InstalledMetadata(
         tuple(sorted(marketplace_plugins)),
@@ -504,22 +585,42 @@ def live_references(repo: Path, name: str) -> list[RepoReference]:
     payload = result.stdout
     if not isinstance(payload, bytes):
         payload = payload.encode()
+    return _parse_grep_z(repo, payload)
+
+
+def _parse_grep_z(repo: Path, payload: bytes) -> list[RepoReference]:
+    """Parse ``git grep -z -n`` output in ONE forward pass (linear time).
+
+    Records are ``path NUL line NUL text LF``. A path never contains NUL and a
+    matched line never contains LF, but the TEXT can contain NUL: ``-I`` only
+    inspects a file's first 8000 bytes, so a binary file (measured: a ``.pgm``
+    in a live repo) yields matched lines with embedded NULs. So the cursor finds
+    the two NULs after the path and then the LF, instead of splitting on NUL.
+    Each ``find`` starts at the cursor, so the whole payload is scanned once.
+    """
+    malformed = f"git grep returned malformed output for {repo}"
     found: list[RepoReference] = []
-    while payload:
-        raw_path, path_separator, payload = payload.partition(b"\0")
-        raw_line, line_separator, payload = payload.partition(b"\0")
-        raw_text, record_separator, payload = payload.partition(b"\n")
-        if not path_separator or not line_separator or not record_separator:
-            message = f"git grep returned malformed output for {repo}"
-            raise RuntimeError(message)
-        path = _decoded(raw_path)
-        line_text = _decoded(raw_line)
+    cursor = 0
+    while cursor < len(payload):
+        path_end = payload.find(b"\0", cursor)
+        line_end = payload.find(b"\0", path_end + 1) if path_end >= 0 else -1
+        text_end = payload.find(b"\n", line_end + 1) if line_end >= 0 else -1
+        if text_end < 0:
+            raise RuntimeError(malformed)
         try:
-            line = int(line_text)
+            line = int(_decoded(payload[path_end + 1 : line_end]))
         except ValueError as exc:
             message = f"git grep returned an invalid line number for {repo}"
             raise RuntimeError(message) from exc
-        found.append(RepoReference(repo, path, line, _decoded(raw_text)))
+        found.append(
+            RepoReference(
+                repo,
+                _decoded(payload[cursor:path_end]),
+                line,
+                _decoded(payload[line_end + 1 : text_end]),
+            )
+        )
+        cursor = text_end + 1
     return found
 
 
@@ -536,22 +637,21 @@ def _load_user_settings(home: Path) -> tuple[dict[str, object], str | None]:
     return loaded, None
 
 
-def _matches_settings(path: Path, plugin: str) -> tuple[bool, str | None]:
+def _matches_settings(path: Path, plugin: str) -> tuple[bool, bool, str | None]:
+    """Return (enables-or-declares, enables, error) for one settings file."""
     try:
         loaded = json.loads(path.read_text())
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        return False, f"{path} is unreadable ({type(exc).__name__})"
+        return False, False, f"{path} is unreadable ({type(exc).__name__})"
     if not isinstance(loaded, dict):
-        return False, f"{path} is not a JSON object"
+        return False, False, f"{path} is not a JSON object"
     enabled = loaded.get("enabledPlugins")
     marketplaces = loaded.get("extraKnownMarketplaces")
-    return (
-        (isinstance(enabled, dict) and enabled.get(plugin) is True)
-        or (
-            isinstance(marketplaces, dict) and marketplace_name(plugin) in marketplaces
-        ),
-        None,
+    enables = isinstance(enabled, dict) and enabled.get(plugin) is True
+    declares = (
+        isinstance(marketplaces, dict) and marketplace_name(plugin) in marketplaces
     )
+    return enables or declares, enables, None
 
 
 def _settings_paths(repo: Path) -> tuple[Path, ...]:
@@ -576,9 +676,10 @@ def _settings_paths(repo: Path) -> tuple[Path, ...]:
 
 def _collect_settings(
     plugin: str, topology: _RepoTopology, errors: list[str]
-) -> tuple[list[Path], list[Path]]:
+) -> tuple[list[Path], list[Path], list[Path]]:
     project_settings: list[Path] = []
     worktree_settings: list[Path] = []
+    enabling_settings: list[Path] = []
     for is_worktree, repos in (
         (False, topology.bases),
         (True, topology.worktrees),
@@ -590,13 +691,15 @@ def _collect_settings(
                 errors.append(str(exc))
                 continue
             for path in paths:
-                enabled, error = _matches_settings(path, plugin)
+                matched, enables, error = _matches_settings(path, plugin)
                 if error is not None:
                     errors.append(error)
-                elif enabled:
+                elif matched:
                     target = worktree_settings if is_worktree else project_settings
                     target.append(path)
-    return project_settings, worktree_settings
+                    if enables and not is_worktree:
+                        enabling_settings.append(path)
+    return project_settings, worktree_settings, enabling_settings
 
 
 def _collect_references(
@@ -613,11 +716,7 @@ def _collect_references(
 
 def inventory(plugin: str, *, home: Path, root: Path) -> PluginInventory:
     """Inventory an exact plugin selector without mutating any discovered state."""
-    if "@" not in plugin:
-        message = _SELECTOR_ERROR
-        raise ValueError(message)
-    name = plugin_name(plugin)
-    marketplace = marketplace_name(plugin)
+    name, marketplace = parse_selector(plugin)
     errors: list[str] = []
     user_settings, user_error = _load_user_settings(home)
     if user_error is not None:
@@ -657,7 +756,9 @@ def inventory(plugin: str, *, home: Path, root: Path) -> PluginInventory:
         topology = _RepoTopology((), (), (), (str(exc),))
     errors.extend(topology.errors)
 
-    project_settings, worktree_settings = _collect_settings(plugin, topology, errors)
+    project_settings, worktree_settings, enabling_settings = _collect_settings(
+        plugin, topology, errors
+    )
     references = _collect_references(name, topology, errors)
 
     return PluginInventory(
@@ -675,6 +776,12 @@ def inventory(plugin: str, *, home: Path, root: Path) -> PluginInventory:
         dependent_plugins=metadata.dependent_plugins,
         auto_dependencies=metadata.auto_dependencies,
         data_collisions=metadata.data_collisions,
+        enabled_dependents=tuple(
+            dependent
+            for dependent in metadata.dependent_plugins
+            if claude_ids.get(dependent) is True
+        ),
+        enabling_settings=tuple(sorted(enabling_settings)),
     )
 
 

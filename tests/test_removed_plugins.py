@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 _NAMES = ("example-plugin", "claudex-loop")
-_EXAMPLE = "example-plugin@example-plugin"
+_EXAMPLE = "example-plugin@other-market"
 
 
 def _home(tmp_path: Path) -> Path:
@@ -55,7 +55,7 @@ def test_a_claude_install_and_marketplace_are_findings(tmp_path: Path) -> None:
         json.dumps({"plugins": {_EXAMPLE: [{"projectPath": "/r"}]}})
     )
     (plugins / "known_marketplaces.json").write_text(
-        json.dumps({"example-plugin": {"source": {}}})
+        json.dumps({"example-plugin": {"source": {}}, "other-market": {"source": {}}})
     )
     found = _find(home)
     assert found == [
@@ -164,15 +164,21 @@ def test_a_settings_marketplace_declaration_is_a_finding(tmp_path: Path) -> None
 
 def test_a_surviving_cache_copy_is_a_finding(tmp_path: Path) -> None:
     home = _home(tmp_path)
-    cache = home / ".claude" / "plugins" / "cache" / "example-plugin" / "example-plugin"
+    cache = home / ".claude" / "plugins" / "cache" / "other-market" / "example-plugin"
     cache.mkdir(parents=True)
     assert _find(home) == [f"{cache} still holds a cached copy"]
 
 
 def test_a_surviving_data_directory_is_a_finding(tmp_path: Path) -> None:
+    """A bare watched name is checked at its exact id in each recorded marketplace."""
     home = _home(tmp_path)
-    data = home / ".claude" / "plugins" / "data" / "example-plugin-example-plugin"
+    plugins = home / ".claude" / "plugins"
+    (plugins / "known_marketplaces.json").write_text(
+        json.dumps({"other-market": {"source": {}}})
+    )
+    data = plugins / "data" / "example-plugin-other-market"
     data.mkdir(parents=True)
+    (plugins / "data" / "example-plugin-extra-other-market").mkdir()
 
     assert _find(home) == [f"{data} still holds plugin data"]
 

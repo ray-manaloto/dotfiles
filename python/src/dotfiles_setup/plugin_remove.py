@@ -1,5 +1,22 @@
 # Copyright (c) 2026 Raymond Manaloto
-"""Plan and apply bounded native-first plugin removal steps."""
+"""Plan and apply bounded native-first plugin removal steps.
+
+Two file classes are treated differently (spec r3, N2):
+
+* HARNESS-OWNED files under ``~/.claude/plugins/`` and ``~/.codex/``
+  (``installed_plugins.json``, ``known_marketplaces.json``, codex config): the
+  native CLI is authoritative. They are backed up before a native call but are
+  never minimal-diffed or restored afterwards; the goal state is verified by
+  re-reading them.
+* REPO/USER settings files (``<project>/.claude/settings*.json`` and
+  ``~/.claude/settings.json``): snapshotted in memory, and after the CLI runs
+  the ORIGINAL text minus the key's whole member span is written back, checked
+  for JSON equivalence with the CLI's result, and restored from memory on
+  failure.
+
+Every backup lands under ``<repo_root>/.agent/state/plugin-remove/<UTC stamp>/``
+mirroring the source path (N3), never beside the edited file.
+"""
 
 from __future__ import annotations
 
@@ -28,14 +45,22 @@ from dotfiles_setup.plugin_inventory import (
     inventory,
     marketplace_memberships,
 )
-from dotfiles_setup.plugin_state import marketplace_name, plugin_name
+from dotfiles_setup.plugin_state import (
+    data_id,
+    marketplace_name,
+    parse_selector,
+    plugin_name,
+)
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Sequence
+    from collections.abc import Callable, Iterable, Sequence
 
 APPLY_TIMEOUT = 15
-_HOOK_KEY_INDEX = 2
-_HOOK_PATH_PARTS = 3
+_NEW_FILE_MODE = 0o600
+_JSON_WHITESPACE = " \t\r\n"
+_HOOK_PREFIX = ("hooks", "state")
+_PLUGIN_PREFIX = ("plugins",)
+_SETTINGS_KEY_STEP = "remove-settings-key"
 
 
 @dataclass(frozen=True)
@@ -89,15 +114,151 @@ def _utc_stamp() -> str:
     return datetime.now(UTC).strftime("%Y%m%dT%H%M%S.%fZ")
 
 
-def _safe_selector(selector: str) -> str:
-    return re.sub(r"[^a-zA-Z0-9_-]", "-", selector)
+def _backup_root(repo_root: Path) -> Path:
+    """One timestamped, gitignored directory for a run's backups (N3)."""
+    return repo_root / ".agent" / "state" / "plugin-remove" / _utc_stamp()
 
 
 def _archive_path(repo_root: Path, selector: str) -> Path:
-    name = _safe_selector(selector)
+    return _backup_root(repo_root) / f"plugin-removal-{data_id(selector)}.tar.gz"
+
+
+# --------------------------------------------------------------------------
+# Containment (N1): every deleted path stays inside the plugin's own roots.
+# --------------------------------------------------------------------------
+
+
+def _allowed_roots(selector: str, home: Path) -> tuple[Path, ...]:
+    """The three roots a removal may touch, anchored at the resolved harness bases.
+
+    Only the harness-owned base (``~/.claude/plugins/cache`` etc.) is resolved;
+    the ``<marketplace>/<plugin>`` components are appended literally, so a
+    symlinked marketplace directory cannot move the root along with it.
+    """
+    name, marketplace = parse_selector(selector)
+    claude = home / ".claude" / "plugins"
     return (
-        repo_root / ".agent" / "state" / f"plugin-removal-{name}.{_utc_stamp()}.tar.gz"
+        Path(os.path.realpath(claude / "cache")) / marketplace / name,
+        Path(os.path.realpath(home / ".codex" / "plugins" / "cache"))
+        / marketplace
+        / name,
+        Path(os.path.realpath(claude / "data")) / data_id(selector),
     )
+
+
+def _deletion_location(path: Path) -> Path | None:
+    """Where deleting ``path`` acts: its resolved parent plus its own name.
+
+    The final component is NOT followed: a symlinked top-level source is
+    unlinked, never traversed, so the link's own location is what matters.
+    """
+    absolute = path.absolute()
+    if absolute.name in {"", ".", ".."}:
+        return None
+    return Path(os.path.realpath(absolute.parent)) / absolute.name
+
+
+def _contained(path: Path, selector: str, home: Path) -> bool:
+    location = _deletion_location(path)
+    if location is None:
+        return False
+    return any(
+        location == root or location.is_relative_to(root)
+        for root in _allowed_roots(selector, home)
+    )
+
+
+# --------------------------------------------------------------------------
+# File primitives: atomic write (N7), mirrored backups (N3), snapshots.
+# --------------------------------------------------------------------------
+
+
+def _atomic_write(path: Path, content: bytes) -> None:
+    """Write via temp + fsync + replace, keeping the mode bits and any symlink."""
+    target = Path(os.path.realpath(path)) if path.is_symlink() else path
+    try:
+        mode: int | None = stat.S_IMODE(target.stat().st_mode)
+    except FileNotFoundError:
+        mode = None
+    descriptor, raw_temp = tempfile.mkstemp(
+        prefix=f".{target.name}.", dir=target.parent
+    )
+    temp = Path(raw_temp)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        temp.chmod(_NEW_FILE_MODE if mode is None else mode)
+        temp.replace(target)
+    except BaseException:
+        with suppress(FileNotFoundError):
+            temp.unlink()
+        raise
+
+
+def _mirrored(backup_root: Path, path: Path) -> Path:
+    absolute = path.absolute()
+    return backup_root.joinpath(*absolute.parts[1:])
+
+
+def _backup_bytes(path: Path, content: bytes, backup_root: Path) -> Path:
+    """Exclusively create a mirrored backup; never overwrite an earlier one."""
+    destination = _mirrored(backup_root, path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    candidate = destination
+    for index in range(1, 1000):
+        try:
+            descriptor = os.open(
+                candidate, os.O_WRONLY | os.O_CREAT | os.O_EXCL, _NEW_FILE_MODE
+            )
+        except FileExistsError:
+            candidate = destination.with_name(f"{destination.name}.{index}")
+            continue
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        return candidate
+    message = f"no free backup name for {path}"
+    raise FileExistsError(message)
+
+
+def _snapshots(
+    paths: Iterable[Path], backup_root: Path
+) -> tuple[dict[Path, bytes | None], str | None]:
+    snapshots: dict[Path, bytes | None] = {}
+    try:
+        for path in dict.fromkeys(paths):
+            try:
+                content = path.read_bytes()
+            except FileNotFoundError:
+                snapshots[path] = None
+                continue
+            snapshots[path] = content
+            _backup_bytes(path, content, backup_root)
+    except OSError as exc:
+        return snapshots, f"backup failed before edit: {type(exc).__name__}"
+    return snapshots, None
+
+
+def _restore_snapshots(snapshots: dict[Path, bytes | None]) -> str | None:
+    """Restore REPO/USER settings from memory; never used on harness-owned files."""
+    try:
+        for path, content in snapshots.items():
+            if content is None:
+                with suppress(FileNotFoundError):
+                    path.unlink()
+            else:
+                _atomic_write(path, content)
+    except OSError as exc:
+        return type(exc).__name__
+    return None
+
+
+# --------------------------------------------------------------------------
+# Planning.
+# --------------------------------------------------------------------------
 
 
 def _watchlist(repo_root: Path) -> tuple[frozenset[str], str | None]:
@@ -181,6 +342,37 @@ def _installed_steps(inv: PluginInventory) -> tuple[list[RemovalStep], list[str]
     return steps, blockers
 
 
+def _settings_key_steps(inv: PluginInventory, home: Path) -> list[RemovalStep]:
+    """Row 8: an enabled key with no install record still gets a removal step."""
+    installs = [
+        location
+        for location in inv.locations
+        if location.kind == "installed" and location.key == inv.plugin
+    ]
+    user_installed = any(location.scope == "user" for location in installs)
+    installed_projects = {
+        location.detail for location in installs if location.scope != "user"
+    }
+    targets: list[Path] = []
+    user_settings = home / ".claude" / "settings.json"
+    if not user_installed and any(
+        location.kind == "enabled"
+        and location.where == "~/.claude/settings.json"
+        and location.key == inv.plugin
+        for location in inv.locations
+    ):
+        targets.append(user_settings)
+    targets.extend(
+        path
+        for path in inv.enabling_settings
+        if str(path.parent.parent) not in installed_projects
+    )
+    return [
+        _step(_SETTINGS_KEY_STEP, "settings goal-state edit", str(path))
+        for path in dict.fromkeys(targets)
+    ]
+
+
 def _has_location(inv: PluginInventory, kind: str, *, key: str | None = None) -> bool:
     return any(
         location.kind == kind and (key is None or location.key == key)
@@ -223,7 +415,7 @@ def _marketplace_plan(inv: PluginInventory) -> tuple[list[RemovalStep], list[str
         steps.append(
             _step(
                 "remove-claude-marketplace",
-                f"claude plugin marketplace remove {marketplace}",
+                f"claude plugin marketplace remove {marketplace} --scope <each>",
                 marketplace,
                 _marketplace_projects(inv),
             )
@@ -231,6 +423,14 @@ def _marketplace_plan(inv: PluginInventory) -> tuple[list[RemovalStep], list[str
     if inv.codex_cli:
         steps.append(
             _step("remove-codex-plugin", f"codex plugin remove {plugin}", plugin)
+        )
+    elif _has_location(inv, "codex-plugin", key=plugin):
+        steps.append(
+            _step(
+                "remove-codex-config-plugin",
+                "config.toml text edit + TOML reparse",
+                plugin,
+            )
         )
     if codex_siblings:
         notes.append(
@@ -247,15 +447,31 @@ def _marketplace_plan(inv: PluginInventory) -> tuple[list[RemovalStep], list[str
     return steps, notes
 
 
-def plan(inv: PluginInventory, *, repo_root: Path) -> RemovalPlan:
+def _dependency_blockers(inv: PluginInventory) -> list[str]:
+    enabled = set(inv.enabled_dependents)
+    return [
+        (
+            f"installed plugin depends on target: {dependent} ("
+            + (
+                "enabled in at least one scope"
+                if dependent in enabled
+                else "installed but enabled nowhere; re-enabling it would break"
+            )
+            + ")"
+        )
+        for dependent in inv.dependent_plugins
+    ]
+
+
+def plan(
+    inv: PluginInventory, *, repo_root: Path, home: Path | None = None
+) -> RemovalPlan:
     """Build the ordered native-first removal plan for an inventory."""
     plugin = inv.plugin
-    name = plugin_name(plugin)
+    name, _marketplace = parse_selector(plugin)
+    actual_home = home or Path.home()
     blockers = list(inv.errors)
-    blockers.extend(
-        f"installed plugin depends on target: {dependent}"
-        for dependent in inv.dependent_plugins
-    )
+    blockers.extend(_dependency_blockers(inv))
     blockers.extend(
         f"Claude data directory id collides with installed plugin: {collision}"
         for collision in inv.data_collisions
@@ -272,6 +488,11 @@ def plan(inv: PluginInventory, *, repo_root: Path) -> RemovalPlan:
             if location.kind in {"cache", "data"}
         )
     )
+    blockers.extend(
+        f"removal target escapes the plugin's cache/data roots: {target}"
+        for target in removal_targets
+        if not _contained(Path(target), plugin, actual_home)
+    )
     has_backup_material = bool(removal_targets)
     if has_backup_material:
         archive = _archive_path(repo_root, plugin)
@@ -280,6 +501,7 @@ def plan(inv: PluginInventory, *, repo_root: Path) -> RemovalPlan:
     uninstall_steps, scope_blockers = _installed_steps(inv)
     steps.extend(uninstall_steps)
     blockers.extend(scope_blockers)
+    steps.extend(_settings_key_steps(inv, actual_home))
 
     marketplace_steps, marketplace_notes = _marketplace_plan(inv)
     steps.extend(marketplace_steps)
@@ -305,15 +527,14 @@ def plan(inv: PluginInventory, *, repo_root: Path) -> RemovalPlan:
     return RemovalPlan(plugin, tuple(steps), tuple(blockers), tuple(notes))
 
 
+# --------------------------------------------------------------------------
+# Cache and data backup / removal.
+# --------------------------------------------------------------------------
+
+
 def _absolute_install_path(raw: str, home: Path) -> Path:
     path = Path(raw)
     return path if path.is_absolute() else home / ".claude" / "plugins" / path
-
-
-def _lexically_within(path: Path, root: Path) -> bool:
-    absolute = path.absolute()
-    absolute_root = root.absolute()
-    return absolute == absolute_root or absolute.is_relative_to(absolute_root)
 
 
 def _existing_source(
@@ -330,8 +551,7 @@ def _existing_source(
 
 
 def _removal_sources(selector: str, home: Path) -> tuple[tuple[str, Path], ...]:
-    name = plugin_name(selector)
-    marketplace = marketplace_name(selector)
+    name, marketplace = parse_selector(selector)
     claude_plugins = home / ".claude" / "plugins"
     claude_cache = claude_plugins / "cache"
     sources: dict[Path, tuple[str, Path]] = {}
@@ -351,9 +571,6 @@ def _removal_sources(selector: str, home: Path) -> tuple[tuple[str, Path], ...]:
             if not isinstance(raw_install, str) or not raw_install:
                 continue
             cache_unit = _absolute_install_path(raw_install, home).parent
-            if not _lexically_within(cache_unit, claude_cache):
-                message = f"recorded Claude cache is outside cache root: {cache_unit}"
-                raise ValueError(message)
             _existing_source("claude-cache", cache_unit, sources)
 
     _existing_source("claude-cache", claude_cache / marketplace / name, sources)
@@ -362,8 +579,17 @@ def _removal_sources(selector: str, home: Path) -> tuple[tuple[str, Path], ...]:
         home / ".codex" / "plugins" / "cache" / marketplace / name,
         sources,
     )
-    data_id = _safe_selector(selector)
-    _existing_source("claude-data", claude_plugins / "data" / data_id, sources)
+    _existing_source(
+        "claude-data", claude_plugins / "data" / data_id(selector), sources
+    )
+    escaped = [
+        str(path)
+        for _kind, path in sources.values()
+        if not _contained(path, selector, home)
+    ]
+    if escaped:
+        message = "removal source escapes the plugin's roots: " + ", ".join(escaped)
+        raise ValueError(message)
     return tuple(sources.values())
 
 
@@ -378,7 +604,7 @@ def _manifest_bytes(selector: str, sources: tuple[tuple[str, Path], ...]) -> byt
                 "kind": kind,
                 "path": str(source),
                 "symlinkTarget": link_target,
-                "dereferenced": link_target is not None,
+                "dereferenced": False,
             }
         )
     payload = {
@@ -390,7 +616,12 @@ def _manifest_bytes(selector: str, sources: tuple[tuple[str, Path], ...]) -> byt
 
 
 def backup_cache(selector: str, *, home: Path, dest: Path) -> StepResult:
-    """Back up exact plugin cache and data paths with a manifest."""
+    """Back up exact plugin cache and data paths with a manifest.
+
+    Links are archived AS links (``dereference=False``) and their targets are
+    recorded in the manifest: a link target is an external checkout that is
+    never deleted, so its content needs no backup.
+    """
     step = _step("backup-cache", "tarfile + manifest", str(dest))
     try:
         sources = _removal_sources(selector, home)
@@ -400,8 +631,9 @@ def backup_cache(selector: str, *, home: Path, dest: Path) -> StepResult:
         return StepResult(step, 1, f"no cache or data exists for {selector}")
     try:
         dest.parent.mkdir(parents=True, exist_ok=True)
-        with tarfile.open(dest, "x:gz") as archive:
-            archive.dereference = True
+        dest.touch(mode=_NEW_FILE_MODE, exist_ok=False)
+        with tarfile.open(dest, "w:gz") as archive:
+            archive.dereference = False
             for _kind, source in sources:
                 archive.add(source, arcname=str(source.relative_to(home)))
             manifest = _manifest_bytes(selector, sources)
@@ -413,407 +645,6 @@ def backup_cache(selector: str, *, home: Path, dest: Path) -> StepResult:
         return StepResult(step, 1, f"cache backup failed: {type(exc).__name__}")
     _BACKUPS[(home.resolve(), selector)] = _BackupRecord(dest, sources)
     return StepResult(step, 0, f"backed up {len(sources)} path(s) with manifest")
-
-
-def _native_raw(
-    step: RemovalStep, argv: list[str], *, cwd: Path | None = None
-) -> tuple[StepResult, str]:
-    command = ["mise", "exec", "--", *argv]
-    try:
-        result = subprocess.run(
-            command,
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=APPLY_TIMEOUT,
-            check=False,
-        )
-    except FileNotFoundError:
-        return StepResult(step, 1, "`mise` is not on PATH"), ""
-    except subprocess.TimeoutExpired:
-        return StepResult(step, 1, f"timed out after {APPLY_TIMEOUT}s"), ""
-    except (OSError, UnicodeDecodeError, subprocess.SubprocessError) as exc:
-        return StepResult(step, 1, f"command failed: {type(exc).__name__}"), ""
-    detail = " ".join(result.stderr.strip().split())[:500]
-    return StepResult(step, result.returncode, detail or "ok"), result.stdout
-
-
-def _native(
-    step: RemovalStep, argv: list[str], *, cwd: Path | None = None
-) -> StepResult:
-    result, _stdout = _native_raw(step, argv, cwd=cwd)
-    return result
-
-
-def _atomic_write(path: Path, content: bytes) -> None:
-    descriptor, raw_temp = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
-    temp = Path(raw_temp)
-    try:
-        with os.fdopen(descriptor, "wb") as stream:
-            stream.write(content)
-            stream.flush()
-            os.fsync(stream.fileno())
-        temp.replace(path)
-    except BaseException:
-        with suppress(FileNotFoundError):
-            temp.unlink()
-        raise
-
-
-def _backup_bytes(path: Path, content: bytes) -> Path:
-    backup = path.with_name(f"{path.name}.{_utc_stamp()}.bak")
-    try:
-        backup.lstat()
-    except FileNotFoundError:
-        pass
-    else:
-        message = f"backup already exists: {backup}"
-        raise FileExistsError(message)
-    _atomic_write(backup, content)
-    return backup
-
-
-def _snapshots(
-    paths: Iterable[Path],
-) -> tuple[dict[Path, bytes | None], str | None]:
-    snapshots: dict[Path, bytes | None] = {}
-    try:
-        for path in dict.fromkeys(paths):
-            try:
-                content = path.read_bytes()
-            except FileNotFoundError:
-                snapshots[path] = None
-                continue
-            snapshots[path] = content
-            _backup_bytes(path, content)
-    except OSError as exc:
-        return snapshots, f"backup failed before edit: {type(exc).__name__}"
-    return snapshots, None
-
-
-def _restore_snapshots(snapshots: dict[Path, bytes | None]) -> str | None:
-    try:
-        for path, content in snapshots.items():
-            if content is None:
-                with suppress(FileNotFoundError):
-                    path.unlink()
-            else:
-                _atomic_write(path, content)
-    except OSError as exc:
-        return type(exc).__name__
-    return None
-
-
-def _remove_json_key_line(text: str, key: str) -> str | None:
-    encoded_key = re.escape(json.dumps(key))
-    pattern = re.compile(
-        rf"^(?P<indent>\s*){encoded_key}\s*:\s*[^,\n]+(?P<comma>,?)\s*$"
-    )
-    lines = text.splitlines(keepends=True)
-    matches = [
-        index for index, line in enumerate(lines) if pattern.match(line.rstrip("\r\n"))
-    ]
-    if len(matches) != 1:
-        return None
-    index = matches[0]
-    matched = pattern.match(lines[index].rstrip("\r\n"))
-    if matched is None:
-        return None
-    had_comma = bool(matched.group("comma"))
-    del lines[index]
-    if not had_comma:
-        for previous in range(index - 1, -1, -1):
-            body = lines[previous].rstrip("\r\n")
-            if not body.strip():
-                continue
-            newline = lines[previous][len(body) :]
-            if body.rstrip().endswith(","):
-                trimmed = body.rstrip()
-                lines[previous] = trimmed[:-1] + body[len(trimmed) :] + newline
-            break
-    return "".join(lines)
-
-
-def _without_json_key(value: object, section: str | None, key: str) -> object:
-    changed = copy.deepcopy(value)
-    if not isinstance(changed, dict):
-        return changed
-    table: object = changed if section is None else changed.get(section)
-    if isinstance(table, dict):
-        table.pop(key, None)
-    return changed
-
-
-def _json_value(content: bytes, label: str) -> tuple[object | None, str | None]:
-    try:
-        return json.loads(content), None
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        return None, f"{label}: {type(exc).__name__}"
-
-
-def _optional_bytes(path: Path) -> tuple[bytes | None, str | None]:
-    try:
-        return path.read_bytes(), None
-    except FileNotFoundError:
-        return None, None
-    except OSError as exc:
-        return None, f"{path} unreadable after CLI: {type(exc).__name__}"
-
-
-def _apply_missing_json_goal(
-    path: Path, current: bytes | None, section: str | None, key: str
-) -> str | None:
-    if current is None:
-        return None
-    current_value, error = _json_value(current, str(path))
-    if error is not None:
-        return error
-    stripped = _without_json_key(current_value, section, key)
-    if isinstance(stripped, dict) and section in stripped and stripped[section] == {}:
-        stripped.pop(section)
-    if stripped:
-        return f"{path} changed beyond the requested key"
-    try:
-        path.unlink()
-    except OSError as exc:
-        return f"{path} cleanup failed: {type(exc).__name__}"
-    return None
-
-
-def _minimal_goal_bytes(
-    path: Path,
-    original: bytes,
-    original_value: object,
-    expected: object,
-    goal: tuple[str | None, str],
-) -> tuple[bytes | None, str | None]:
-    section, key = goal
-    table = (
-        original_value
-        if section is None
-        else (original_value.get(section) if isinstance(original_value, dict) else None)
-    )
-    if not isinstance(table, dict) or key not in table:
-        return original, None
-    minimal = _remove_json_key_line(original.decode(), key)
-    if minimal is None:
-        return None, f"{path} has no unique line for {key}"
-    minimal_bytes = minimal.encode()
-    minimal_value, error = _json_value(minimal_bytes, str(path))
-    if error is not None or minimal_value != expected:
-        return None, f"{path} minimal edit does not match the goal state"
-    return minimal_bytes, None
-
-
-def _verified_current_goal(
-    path: Path,
-    original_value: object,
-    current: bytes | None,
-    section: str | None,
-    key: str,
-) -> tuple[object | None, str | None]:
-    if current is None:
-        return None, f"{path} was removed by the CLI"
-    current_value, error = _json_value(current, str(path))
-    if error is not None:
-        return None, error
-    expected = _without_json_key(original_value, section, key)
-    current_without_key = _without_json_key(current_value, section, key)
-    original_has_section = (
-        isinstance(original_value, dict) and section in original_value
-    )
-    if (
-        section is not None
-        and not original_has_section
-        and isinstance(current_without_key, dict)
-        and current_without_key.get(section) == {}
-    ):
-        current_without_key.pop(section)
-    if current_without_key != expected:
-        return None, f"{path} changed beyond the requested key"
-    return expected, None
-
-
-def _apply_existing_json_goal(
-    path: Path,
-    original: bytes,
-    current: bytes | None,
-    section: str | None,
-    key: str,
-) -> str | None:
-    original_value, error = _json_value(original, str(path))
-    if error is not None:
-        return error
-    expected, error = _verified_current_goal(
-        path, original_value, current, section, key
-    )
-    if error is not None:
-        return error
-    if expected is None:
-        return f"{path} has no verifiable goal state"
-    minimal_bytes, error = _minimal_goal_bytes(
-        path, original, original_value, expected, (section, key)
-    )
-    if error is not None or minimal_bytes is None:
-        return error
-    try:
-        _atomic_write(path, minimal_bytes)
-    except OSError as exc:
-        return f"{path} goal write failed: {type(exc).__name__}"
-    return None
-
-
-def _apply_json_goal(
-    path: Path,
-    original: bytes | None,
-    *,
-    section: str | None,
-    key: str,
-) -> str | None:
-    current, error = _optional_bytes(path)
-    if error is not None:
-        return error
-    if original is None:
-        return _apply_missing_json_goal(path, current, section, key)
-    return _apply_existing_json_goal(path, original, current, section, key)
-
-
-def _last_json_object(stdout: str) -> dict[str, object] | None:
-    for line in reversed(stdout.splitlines()):
-        try:
-            loaded = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(loaded, dict):
-            return loaded
-    return None
-
-
-def _scope_absent(
-    plugin: str, scope: str, project: Path | None, registry: Path
-) -> tuple[bool, str | None]:
-    try:
-        loaded = json.loads(registry.read_text())
-    except FileNotFoundError:
-        return True, None
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        return False, f"installed registry unreadable: {type(exc).__name__}"
-    plugins = loaded.get("plugins") if isinstance(loaded, dict) else None
-    entries = plugins.get(plugin, []) if isinstance(plugins, dict) else []
-    if not isinstance(entries, list):
-        return False, "installed registry entry has an invalid shape"
-    for entry in entries:
-        if not isinstance(entry, dict) or entry.get("scope") != scope:
-            continue
-        if project is None or entry.get("projectPath") == str(project):
-            return False, None
-    return True, None
-
-
-def _prepare_uninstall(
-    plugin: str,
-    scope: str,
-    home: Path,
-    project: Path | None,
-) -> tuple[RemovalStep, list[Path], dict[Path, bytes | None]] | StepResult:
-    target = str(project) if project is not None else "user"
-    step = _step(
-        f"uninstall-{scope}-scope",
-        (f"claude plugin uninstall {plugin} --scope {scope} --keep-data --json"),
-        target,
-    )
-    if scope == "user":
-        settings = [home / ".claude" / "settings.json"]
-    elif project is None:
-        return StepResult(step, 1, f"{scope} scope requires a project path")
-    else:
-        settings = [
-            project / ".claude" / "settings.json",
-            project / ".claude" / "settings.local.json",
-        ]
-    registry = home / ".claude" / "plugins" / "installed_plugins.json"
-    snapshots, backup_error = _snapshots([registry, *settings])
-    if backup_error is not None:
-        return StepResult(step, 1, backup_error)
-    return step, settings, snapshots
-
-
-def _uninstall_scope(
-    plugin: str,
-    scope: str,
-    *,
-    home: Path,
-    project: Path | None = None,
-) -> StepResult:
-    preparation = _prepare_uninstall(plugin, scope, home, project)
-    if isinstance(preparation, StepResult):
-        return preparation
-    step, settings, snapshots = preparation
-    registry = home / ".claude" / "plugins" / "installed_plugins.json"
-    result, stdout = _native_raw(
-        step,
-        [
-            "claude",
-            "plugin",
-            "uninstall",
-            plugin,
-            "--scope",
-            scope,
-            "--keep-data",
-            "--json",
-        ],
-        cwd=project,
-    )
-    if result.rc != 0:
-        restore_error = _restore_snapshots(snapshots)
-        detail = result.detail
-        if restore_error is not None:
-            detail += f"; restore failed: {restore_error}"
-        return StepResult(step, result.rc, detail)
-    payload = _last_json_object(stdout)
-    if payload is None or payload.get("outcome") != "ok":
-        _restore_snapshots(snapshots)
-        return StepResult(step, 1, "CLI returned no successful JSON result")
-    for path in settings:
-        goal_error = _apply_json_goal(
-            path,
-            snapshots[path],
-            section="enabledPlugins",
-            key=plugin,
-        )
-        if goal_error is not None:
-            restore_error = _restore_snapshots(snapshots)
-            if restore_error is not None:
-                goal_error += f"; restore failed: {restore_error}"
-            return StepResult(step, 1, goal_error)
-    absent, error = _scope_absent(plugin, scope, project, registry)
-    if error is not None or not absent:
-        _restore_snapshots(snapshots)
-        return StepResult(step, 1, error or "installed scope survived uninstall")
-    return StepResult(step, 0, f"removed {scope} scope and verified goal state")
-
-
-def uninstall_project_scope(plugin: str, project: Path) -> StepResult:
-    """Use Claude's CLI while preserving one-key diffs in both settings files."""
-    return _uninstall_scope(plugin, "project", home=project, project=project)
-
-
-def remove_local_override(plugin: str, project: Path) -> StepResult:
-    """Delete one exact key from a project's gitignored local settings."""
-    step = _step("remove-local-override", "text edit", str(project))
-    path = project / ".claude" / "settings.local.json"
-    snapshots, backup_error = _snapshots([path])
-    if backup_error is not None:
-        return StepResult(step, 1, backup_error)
-    error = _apply_json_goal(
-        path, snapshots[path], section="enabledPlugins", key=plugin
-    )
-    if error is not None:
-        restore_error = _restore_snapshots(snapshots)
-        if restore_error is not None:
-            error += f"; restore failed: {restore_error}"
-        return StepResult(step, 1, error)
-    return StepResult(step, 0, "removed one local settings key")
 
 
 def _selector_installed(plugin: str, home: Path) -> tuple[bool, str | None]:
@@ -835,14 +666,18 @@ def _selector_installed(plugin: str, home: Path) -> tuple[bool, str | None]:
     return bool(entries), None
 
 
-def _delete_backup_sources(record: _BackupRecord) -> int:
+def _delete_backup_sources(record: _BackupRecord, selector: str, home: Path) -> int:
+    """Delete exactly the recorded set, re-checking containment per path (TOCTOU)."""
     removed = 0
     for _kind, path in record.sources:
+        if not _contained(path, selector, home):
+            message = f"removal path escaped the plugin's roots before delete: {path}"
+            raise PermissionError(message)
         try:
             mode = path.lstat().st_mode
         except FileNotFoundError:
             continue
-        if path.is_symlink() or not stat.S_ISDIR(mode):
+        if stat.S_ISLNK(mode) or not stat.S_ISDIR(mode):
             path.unlink()
         else:
             shutil.rmtree(path)
@@ -881,90 +716,701 @@ def remove_orphan_cache(
     if installed:
         return StepResult(step, 1, "refusing cache removal while plugin is installed")
     try:
-        removed = _delete_backup_sources(record)
+        removed = _delete_backup_sources(record, selector, home)
         if prune_claude_marketplace:
             _prune_marketplace_cache(selector, home)
     except OSError as exc:
-        return StepResult(step, 1, f"cache removal failed: {type(exc).__name__}")
+        return StepResult(step, 1, f"cache removal failed: {exc}")
     return StepResult(step, 0, f"removed {removed} backed-up path(s)")
 
 
-def _marketplace_settings_paths(home: Path, step: RemovalStep) -> tuple[Path, ...]:
-    paths = {home / ".claude" / "settings.json"}
-    for raw_project in step.context:
-        project = Path(raw_project)
-        paths.add(project / ".claude" / "settings.json")
-        paths.add(project / ".claude" / "settings.local.json")
-    return tuple(sorted(paths))
+# --------------------------------------------------------------------------
+# Native CLI plumbing.
+# --------------------------------------------------------------------------
 
 
-def _remove_claude_marketplace_step(
-    marketplace: str, *, home: Path, step: RemovalStep
-) -> StepResult:
-    settings = _marketplace_settings_paths(home, step)
-    known = home / ".claude" / "plugins" / "known_marketplaces.json"
-    registry = home / ".claude" / "plugins" / "installed_plugins.json"
-    snapshots, backup_error = _snapshots([known, registry, *settings])
-    if backup_error is not None:
-        return StepResult(step, 1, backup_error)
-    result = _native(step, ["claude", "plugin", "marketplace", "remove", marketplace])
-    if result.rc != 0:
-        _restore_snapshots(snapshots)
-        return result
-    goal_paths = [
-        (known, None),
-        *((path, "extraKnownMarketplaces") for path in settings),
-    ]
-    for path, section in goal_paths:
-        error = _apply_json_goal(
-            path, snapshots[path], section=section, key=marketplace
+def _native_raw(
+    step: RemovalStep, argv: list[str], *, cwd: Path | None = None
+) -> tuple[StepResult, str]:
+    command = ["mise", "exec", "--", *argv]
+    try:
+        result = subprocess.run(
+            command,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=APPLY_TIMEOUT,
+            check=False,
         )
+    except FileNotFoundError:
+        return StepResult(step, 1, "`mise` is not on PATH"), ""
+    except subprocess.TimeoutExpired:
+        return StepResult(step, 1, f"timed out after {APPLY_TIMEOUT}s"), ""
+    except (OSError, UnicodeDecodeError, subprocess.SubprocessError) as exc:
+        return StepResult(step, 1, f"command failed: {type(exc).__name__}"), ""
+    detail = " ".join(result.stderr.strip().split())[:500]
+    return StepResult(step, result.returncode, detail or "ok"), result.stdout
+
+
+def _native(
+    step: RemovalStep, argv: list[str], *, cwd: Path | None = None
+) -> StepResult:
+    result, _stdout = _native_raw(step, argv, cwd=cwd)
+    return result
+
+
+# --------------------------------------------------------------------------
+# JSON goal state: original text minus the key's whole member span (N2).
+# --------------------------------------------------------------------------
+
+
+def _skip_json_space(text: str, index: int) -> int:
+    while index < len(text) and text[index] in _JSON_WHITESPACE:
+        index += 1
+    return index
+
+
+def _json_string_end(text: str, index: int) -> int:
+    index += 1
+    while index < len(text):
+        character = text[index]
+        if character == "\\":
+            index += 2
+            continue
+        if character == '"':
+            return index + 1
+        index += 1
+    message = "unterminated JSON string"
+    raise ValueError(message)
+
+
+def _json_value_end(text: str, index: int) -> int:
+    if index >= len(text):
+        message = "missing JSON value"
+        raise ValueError(message)
+    if text[index] == '"':
+        return _json_string_end(text, index)
+    if text[index] in "{[":
+        depth = 0
+        while index < len(text):
+            character = text[index]
+            if character == '"':
+                index = _json_string_end(text, index)
+                continue
+            if character in "{[":
+                depth += 1
+            elif character in "}]":
+                depth -= 1
+                if depth == 0:
+                    return index + 1
+            index += 1
+        message = "unbalanced JSON value"
+        raise ValueError(message)
+    while index < len(text) and text[index] not in ",}]" + _JSON_WHITESPACE:
+        index += 1
+    return index
+
+
+@dataclass(frozen=True)
+class _Member:
+    key: str
+    key_start: int
+    value_start: int
+    value_end: int
+
+
+def _object_members(text: str, opening: int) -> tuple[list[_Member], int]:
+    """Members of the object whose ``{`` is at ``opening``, plus its ``}`` index."""
+    if text[opening] != "{":
+        message = "expected a JSON object"
+        raise ValueError(message)
+    members: list[_Member] = []
+    index = _skip_json_space(text, opening + 1)
+    if index < len(text) and text[index] == "}":
+        return members, index
+    while index < len(text):
+        if text[index] != '"':
+            message = "expected a JSON member key"
+            raise ValueError(message)
+        key_end = _json_string_end(text, index)
+        key = json.loads(text[index:key_end])
+        colon = _skip_json_space(text, key_end)
+        if colon >= len(text) or text[colon] != ":":
+            message = "expected ':' after a JSON key"
+            raise ValueError(message)
+        value_start = _skip_json_space(text, colon + 1)
+        value_end = _json_value_end(text, value_start)
+        members.append(_Member(str(key), index, value_start, value_end))
+        after = _skip_json_space(text, value_end)
+        if after < len(text) and text[after] == ",":
+            index = _skip_json_space(text, after + 1)
+            continue
+        if after < len(text) and text[after] == "}":
+            return members, after
+        break
+    message = "malformed JSON object"
+    raise ValueError(message)
+
+
+def _without_member(text: str, opening: int, key: str) -> str | None:
+    members, closing = _object_members(text, opening)
+    indexes = [index for index, member in enumerate(members) if member.key == key]
+    if len(indexes) != 1:
+        return None
+    index = indexes[0]
+    member = members[index]
+    if len(members) == 1:
+        return text[: opening + 1] + text[closing:]
+    if index < len(members) - 1:
+        return text[: member.key_start] + text[members[index + 1].key_start :]
+    return text[: members[index - 1].value_end] + text[member.value_end :]
+
+
+def _remove_json_member_span(text: str, section: str | None, key: str) -> str | None:
+    """Delete ``key``'s WHOLE member span (brace-matched, string-aware)."""
+    try:
+        top = _skip_json_space(text, 0)
+        if section is None:
+            return _without_member(text, top, key)
+        members, _closing = _object_members(text, top)
+        owners = [member for member in members if member.key == section]
+        if len(owners) != 1 or text[owners[0].value_start] != "{":
+            return None
+        return _without_member(text, owners[0].value_start, key)
+    except ValueError, IndexError:
+        return None
+
+
+def _without_json_key(value: object, section: str | None, key: str) -> object:
+    changed = copy.deepcopy(value)
+    if not isinstance(changed, dict):
+        return changed
+    table: object = changed if section is None else changed.get(section)
+    if isinstance(table, dict):
+        table.pop(key, None)
+    return changed
+
+
+def _normalized(value: object, section: str | None) -> object:
+    """Treat an absent section and an empty one as the same goal state."""
+    if section is not None and isinstance(value, dict) and value.get(section) == {}:
+        trimmed = dict(value)
+        trimmed.pop(section)
+        return trimmed
+    return value
+
+
+def _json_value(content: bytes, label: str) -> tuple[object | None, str | None]:
+    try:
+        return json.loads(content), None
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        return None, f"{label}: {type(exc).__name__}"
+
+
+def _optional_bytes(path: Path) -> tuple[bytes | None, str | None]:
+    try:
+        return path.read_bytes(), None
+    except FileNotFoundError:
+        return None, None
+    except OSError as exc:
+        return None, f"{path} unreadable after CLI: {type(exc).__name__}"
+
+
+def _apply_missing_json_goal(
+    path: Path, current: bytes | None, section: str | None, key: str
+) -> str | None:
+    if current is None:
+        return None
+    current_value, error = _json_value(current, str(path))
+    if error is not None:
+        return error
+    stripped = _normalized(_without_json_key(current_value, section, key), section)
+    if stripped:
+        return f"{path} changed beyond the requested key"
+    try:
+        path.unlink()
+    except OSError as exc:
+        return f"{path} cleanup failed: {type(exc).__name__}"
+    return None
+
+
+def _goal_text(
+    original_text: str,
+    original_value: object,
+    current_goal: object,
+    goal: tuple[str | None, str],
+) -> tuple[str | None, str | None]:
+    """The original text minus the key's span, JSON-equal to the CLI's result."""
+    section, key = goal
+    table = (
+        original_value
+        if section is None
+        else (original_value.get(section) if isinstance(original_value, dict) else None)
+    )
+    if not isinstance(table, dict) or key not in table:
+        return original_text, None
+    minimal = _remove_json_member_span(original_text, section, key)
+    if minimal is None:
+        return None, f"no unique member span for {key}"
+    try:
+        minimal_value = json.loads(minimal)
+    except json.JSONDecodeError:
+        return None, "minimal edit is not valid JSON"
+    if (
+        section is not None
+        and isinstance(minimal_value, dict)
+        and minimal_value.get(section) == {}
+        and isinstance(current_goal, dict)
+        and section not in current_goal
+    ):
+        dropped = _remove_json_member_span(minimal, None, section)
+        if dropped is not None:
+            minimal = dropped
+            minimal_value = _without_json_key(minimal_value, None, section)
+    if _normalized(minimal_value, section) != _normalized(current_goal, section):
+        return None, "minimal edit does not match the CLI's result"
+    return minimal, None
+
+
+def _existing_goal_text(
+    path: Path,
+    original: bytes,
+    current: bytes | None,
+    goal: tuple[str | None, str],
+) -> tuple[str | None, str | None]:
+    section, key = goal
+    if current is None:
+        return None, f"{path} was removed by the CLI"
+    original_value, error = _json_value(original, str(path))
+    current_value, current_error = _json_value(current, str(path))
+    if error is not None or current_error is not None:
+        return None, error or current_error
+    current_goal = _without_json_key(current_value, section, key)
+    expected = _without_json_key(original_value, section, key)
+    if _normalized(current_goal, section) != _normalized(expected, section):
+        return None, f"{path} changed beyond the requested key"
+    text, error = _goal_text(original.decode(), original_value, current_goal, goal)
+    if error is not None or text is None:
+        return None, f"{path} {error}"
+    return text, None
+
+
+def _apply_existing_json_goal(
+    path: Path,
+    original: bytes,
+    current: bytes | None,
+    section: str | None,
+    key: str,
+) -> str | None:
+    text, error = _existing_goal_text(path, original, current, (section, key))
+    if error is not None or text is None:
+        return error
+    if text.encode() == current:
+        return None
+    try:
+        _atomic_write(path, text.encode())
+    except OSError as exc:
+        return f"{path} goal write failed: {type(exc).__name__}"
+    return None
+
+
+def _apply_json_goal(
+    path: Path,
+    original: bytes | None,
+    *,
+    section: str | None,
+    key: str,
+) -> str | None:
+    current, error = _optional_bytes(path)
+    if error is not None:
+        return error
+    if original is None:
+        return _apply_missing_json_goal(path, current, section, key)
+    return _apply_existing_json_goal(path, original, current, section, key)
+
+
+def _last_json_object(stdout: str) -> dict[str, object] | None:
+    for line in reversed(stdout.splitlines()):
+        try:
+            loaded = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(loaded, dict):
+            return loaded
+    return None
+
+
+# --------------------------------------------------------------------------
+# Uninstall (settings = class b; the registry = class a, never restored).
+# --------------------------------------------------------------------------
+
+
+def _scope_absent(
+    plugin: str, scope: str, project: Path | None, registry: Path
+) -> tuple[bool, str | None]:
+    try:
+        loaded = json.loads(registry.read_text())
+    except FileNotFoundError:
+        return True, None
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        return False, f"installed registry unreadable: {type(exc).__name__}"
+    plugins = loaded.get("plugins") if isinstance(loaded, dict) else None
+    entries = plugins.get(plugin, []) if isinstance(plugins, dict) else []
+    if not isinstance(entries, list):
+        return False, "installed registry entry has an invalid shape"
+    for entry in entries:
+        if not isinstance(entry, dict) or entry.get("scope") != scope:
+            continue
+        if project is None or entry.get("projectPath") == str(project):
+            return False, None
+    return True, None
+
+
+def _scope_settings(scope: str, home: Path, project: Path | None) -> list[Path]:
+    if scope == "user":
+        return [home / ".claude" / "settings.json"]
+    if project is None:
+        return []
+    return [
+        project / ".claude" / "settings.json",
+        project / ".claude" / "settings.local.json",
+    ]
+
+
+def _settings_goals(
+    snapshots: dict[Path, bytes | None], *, section: str, key: str
+) -> str | None:
+    """Apply the goal state to every snapshotted settings file; restore on failure."""
+    for path, original in snapshots.items():
+        error = _apply_json_goal(path, original, section=section, key=key)
         if error is not None:
             restore_error = _restore_snapshots(snapshots)
             if restore_error is not None:
                 error += f"; restore failed: {restore_error}"
-            return StepResult(step, 1, error)
-    return StepResult(step, 0, "removed marketplace and verified declarations")
+            return error
+    return None
 
 
-def remove_claude_marketplace(marketplace: str) -> StepResult:
-    """Remove a Claude marketplace through the native CLI."""
+def _cli_uninstall(
+    step: RemovalStep,
+    argv: list[str],
+    project: Path | None,
+    snapshots: dict[Path, bytes | None],
+) -> StepResult | None:
+    result, stdout = _native_raw(step, argv, cwd=project)
+    if result.rc != 0:
+        restore_error = _restore_snapshots(snapshots)
+        detail = result.detail
+        if restore_error is not None:
+            detail += f"; restore failed: {restore_error}"
+        return StepResult(step, result.rc, detail)
+    payload = _last_json_object(stdout)
+    if payload is None or payload.get("outcome") != "ok":
+        _restore_snapshots(snapshots)
+        return StepResult(step, 1, "CLI returned no successful JSON result")
+    return None
+
+
+def _uninstall_scope(
+    plugin: str,
+    scope: str,
+    *,
+    home: Path,
+    backup_root: Path,
+    project: Path | None = None,
+) -> StepResult:
+    target = str(project) if project is not None else "user"
+    argv = ["claude", "plugin", "uninstall", plugin, "--scope", scope]
+    argv += ["--keep-data", "--json"]
+    step = _step(f"uninstall-{scope}-scope", " ".join(argv), target)
+    settings = _scope_settings(scope, home, project)
+    if not settings:
+        return StepResult(step, 1, f"{scope} scope requires a project path")
+    registry = home / ".claude" / "plugins" / "installed_plugins.json"
+    _harness, harness_error = _snapshots([registry], backup_root)
+    snapshots, backup_error = _snapshots(settings, backup_root)
+    if harness_error is not None or backup_error is not None:
+        return StepResult(step, 1, harness_error or backup_error or "backup failed")
+    failure = _cli_uninstall(step, argv, project, snapshots)
+    if failure is not None:
+        return failure
+    goal_error = _settings_goals(snapshots, section="enabledPlugins", key=plugin)
+    if goal_error is not None:
+        return StepResult(step, 1, goal_error)
+    absent, error = _scope_absent(plugin, scope, project, registry)
+    if error is not None or not absent:
+        return StepResult(
+            step, 1, error or "installed scope survived uninstall (registry re-read)"
+        )
+    return StepResult(step, 0, f"removed {scope} scope and verified goal state")
+
+
+def uninstall_project_scope(
+    plugin: str,
+    project: Path,
+    *,
+    home: Path | None = None,
+    repo_root: Path | None = None,
+) -> StepResult:
+    """Use Claude's CLI while preserving one-key diffs in both settings files.
+
+    The registry post-condition reads the REAL home's ``installed_plugins.json``
+    (N5): a project has no registry of its own.
+    """
+    return _uninstall_scope(
+        plugin,
+        "project",
+        home=home or Path.home(),
+        backup_root=_backup_root(repo_root or Path.cwd()),
+        project=project,
+    )
+
+
+def remove_settings_key(plugin: str, path: Path, *, backup_root: Path) -> StepResult:
+    """Delete one exact ``enabledPlugins`` key from a settings file, minimal diff."""
+    step = _step(_SETTINGS_KEY_STEP, "settings goal-state edit", str(path))
+    snapshots, backup_error = _snapshots([path], backup_root)
+    if backup_error is not None:
+        return StepResult(step, 1, backup_error)
+    error = _apply_json_goal(
+        path, snapshots[path], section="enabledPlugins", key=plugin
+    )
+    if error is not None:
+        restore_error = _restore_snapshots(snapshots)
+        if restore_error is not None:
+            error += f"; restore failed: {restore_error}"
+        return StepResult(step, 1, error)
+    try:
+        remaining = json.loads(path.read_text()) if path.exists() else {}
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        return StepResult(step, 1, f"{path} unreadable after edit: {exc}")
+    enabled = remaining.get("enabledPlugins") if isinstance(remaining, dict) else None
+    if isinstance(enabled, dict) and plugin in enabled:
+        _restore_snapshots(snapshots)
+        return StepResult(step, 1, f"{path} still names {plugin}")
+    return StepResult(step, 0, "removed one settings key")
+
+
+def remove_local_override(
+    plugin: str, project: Path, *, repo_root: Path | None = None
+) -> StepResult:
+    """Delete one exact key from a project's gitignored local settings."""
+    result = remove_settings_key(
+        plugin,
+        project / ".claude" / "settings.local.json",
+        backup_root=_backup_root(repo_root or Path.cwd()),
+    )
+    step = _step("remove-local-override", "text edit", str(project))
+    return StepResult(step, result.rc, result.detail)
+
+
+# --------------------------------------------------------------------------
+# Claude marketplace removal, one native call per declared scope (N2).
+# --------------------------------------------------------------------------
+
+
+def _declares(path: Path, marketplace: str) -> tuple[bool, str | None]:
+    try:
+        loaded = json.loads(path.read_text())
+    except FileNotFoundError:
+        return False, None
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        return False, f"{path} unreadable ({type(exc).__name__})"
+    declared = (
+        loaded.get("extraKnownMarketplaces") if isinstance(loaded, dict) else None
+    )
+    return isinstance(declared, dict) and marketplace in declared, None
+
+
+def _registered(known: Path, marketplace: str) -> tuple[bool, str | None]:
+    try:
+        loaded = json.loads(known.read_text())
+    except FileNotFoundError:
+        return False, None
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        return False, f"known_marketplaces.json unreadable ({type(exc).__name__})"
+    return isinstance(loaded, dict) and marketplace in loaded, None
+
+
+def _marketplace_scopes(
+    marketplace: str, *, home: Path, repo_root: Path, step: RemovalStep
+) -> tuple[list[tuple[str, Path, Path]], str | None]:
+    """(scope, cwd, settings file) for every scope whose settings declare it."""
+    calls: list[tuple[str, Path, Path]] = []
+    for raw_project in step.context:
+        project = Path(raw_project)
+        for scope, name in (
+            ("project", "settings.json"),
+            ("local", "settings.local.json"),
+        ):
+            path = project / ".claude" / name
+            declared, error = _declares(path, marketplace)
+            if error is not None:
+                return [], error
+            if declared:
+                calls.append((scope, project, path))
+    user_settings = home / ".claude" / "settings.json"
+    declared, error = _declares(user_settings, marketplace)
+    if error is not None:
+        return [], error
+    if declared:
+        calls.append(("user", repo_root, user_settings))
+    return calls, None
+
+
+def _scoped_marketplace_removal(
+    step: RemovalStep,
+    marketplace: str,
+    call: tuple[str, Path, Path],
+    backup_root: Path,
+) -> StepResult | None:
+    scope, cwd, path = call
+    snapshots, backup_error = _snapshots([path], backup_root)
+    if backup_error is not None:
+        return StepResult(step, 1, backup_error)
+    result = _native(
+        step,
+        ["claude", "plugin", "marketplace", "remove", marketplace, "--scope", scope],
+        cwd=cwd,
+    )
+    if result.rc != 0:
+        _restore_snapshots(snapshots)
+        return StepResult(step, result.rc, f"--scope {scope} in {cwd}: {result.detail}")
+    error = _apply_json_goal(
+        path, snapshots[path], section="extraKnownMarketplaces", key=marketplace
+    )
+    if error is not None:
+        restore_error = _restore_snapshots(snapshots)
+        if restore_error is not None:
+            error += f"; restore failed: {restore_error}"
+        return StepResult(step, 1, error)
+    return None
+
+
+def _harness_registration_goal(
+    step: RemovalStep,
+    marketplace: str,
+    context: tuple[Path, Path, Path],
+    *,
+    user_called: bool,
+) -> StepResult | None:
+    """Re-read the harness-owned registry; drop a leftover user registration."""
+    known, repo_root, backup_root = context
+    registered, error = _registered(known, marketplace)
+    if error is None and registered and not user_called:
+        user_settings = known.parent.parent / "settings.json"
+        failure = _scoped_marketplace_removal(
+            step, marketplace, ("user", repo_root, user_settings), backup_root
+        )
+        if failure is not None:
+            return failure
+        registered, error = _registered(known, marketplace)
+    if error is not None:
+        return StepResult(step, 1, error)
+    if registered:
+        detail = f"known_marketplaces.json still registers {marketplace}"
+        return StepResult(step, 1, detail + " after native removal")
+    return None
+
+
+def _remove_claude_marketplace_step(
+    marketplace: str,
+    *,
+    home: Path,
+    step: RemovalStep,
+    repo_root: Path,
+    backup_root: Path,
+) -> StepResult:
+    plugins_dir = home / ".claude" / "plugins"
+    known = plugins_dir / "known_marketplaces.json"
+    _harness, harness_error = _snapshots(
+        [known, plugins_dir / "installed_plugins.json"], backup_root
+    )
+    calls, error = _marketplace_scopes(
+        marketplace, home=home, repo_root=repo_root, step=step
+    )
+    if harness_error is not None or error is not None:
+        return StepResult(step, 1, harness_error or error or "preparation failed")
+    for call in calls:
+        failure = _scoped_marketplace_removal(step, marketplace, call, backup_root)
+        if failure is not None:
+            return failure
+    failure = _harness_registration_goal(
+        step,
+        marketplace,
+        (known, repo_root, backup_root),
+        user_called=any(call[0] == "user" for call in calls),
+    )
+    if failure is not None:
+        return failure
+    scopes = ", ".join(sorted({call[0] for call in calls})) or "user"
+    return StepResult(
+        step, 0, f"removed marketplace ({scopes}) and verified every declaration"
+    )
+
+
+def remove_claude_marketplace(
+    marketplace: str, *, repo_root: Path | None = None
+) -> StepResult:
+    """Remove a Claude marketplace from its user declaration through the CLI."""
     step = _step(
         "remove-claude-marketplace",
-        f"claude plugin marketplace remove {marketplace}",
+        f"claude plugin marketplace remove {marketplace} --scope <each>",
         marketplace,
     )
-    return _remove_claude_marketplace_step(marketplace, home=Path.home(), step=step)
+    root = repo_root or Path.cwd()
+    return _remove_claude_marketplace_step(
+        marketplace,
+        home=Path.home(),
+        step=step,
+        repo_root=root,
+        backup_root=_backup_root(root),
+    )
 
 
-def remove_codex_plugin(plugin: str, *, home: Path | None = None) -> StepResult:
+# --------------------------------------------------------------------------
+# codex: native calls on a harness-owned config (backed up, never restored).
+# --------------------------------------------------------------------------
+
+
+def _codex_table(
+    config: Path, table: str
+) -> tuple[dict[str, object] | None, str | None]:
+    try:
+        parsed = tomllib.loads(config.read_text())
+    except FileNotFoundError:
+        return {}, None
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
+        return None, f"codex config unreadable: {type(exc).__name__}"
+    value = parsed.get(table)
+    return (value if isinstance(value, dict) else {}), None
+
+
+def remove_codex_plugin(
+    plugin: str, *, home: Path | None = None, repo_root: Path | None = None
+) -> StepResult:
     """Remove an installed codex plugin through the native CLI."""
     step = _step("remove-codex-plugin", f"codex plugin remove {plugin}", plugin)
     actual_home = home or Path.home()
     config = actual_home / ".codex" / "config.toml"
-    snapshots, backup_error = _snapshots([config])
+    _snapshot, backup_error = _snapshots(
+        [config], _backup_root(repo_root or Path.cwd())
+    )
     if backup_error is not None:
         return StepResult(step, 1, backup_error)
     result = _native(step, ["codex", "plugin", "remove", plugin])
     if result.rc != 0:
-        _restore_snapshots(snapshots)
         return result
-    try:
-        parsed = tomllib.loads(config.read_text())
-    except FileNotFoundError:
-        parsed = {}
-    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
-        _restore_snapshots(snapshots)
-        return StepResult(step, 1, f"codex config unreadable: {type(exc).__name__}")
-    plugins = parsed.get("plugins") if isinstance(parsed, dict) else None
-    if isinstance(plugins, dict) and plugin in plugins:
-        _restore_snapshots(snapshots)
+    plugins, error = _codex_table(config, "plugins")
+    if plugins is None:
+        return StepResult(step, 1, error or "codex config unreadable")
+    if plugin in plugins:
         return StepResult(step, 1, "codex plugin survived native removal")
     return StepResult(step, 0, "codex plugin absent after native removal")
 
 
 def remove_codex_marketplace(
-    marketplace: str, *, home: Path | None = None
+    marketplace: str, *, home: Path | None = None, repo_root: Path | None = None
 ) -> StepResult:
     """Remove a codex marketplace through the native CLI."""
     step = _step(
@@ -974,25 +1420,25 @@ def remove_codex_marketplace(
     )
     actual_home = home or Path.home()
     config = actual_home / ".codex" / "config.toml"
-    snapshots, backup_error = _snapshots([config])
+    _snapshot, backup_error = _snapshots(
+        [config], _backup_root(repo_root or Path.cwd())
+    )
     if backup_error is not None:
         return StepResult(step, 1, backup_error)
     result = _native(step, ["codex", "plugin", "marketplace", "remove", marketplace])
     if result.rc != 0:
-        _restore_snapshots(snapshots)
         return result
-    try:
-        parsed = tomllib.loads(config.read_text())
-    except FileNotFoundError:
-        parsed = {}
-    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
-        _restore_snapshots(snapshots)
-        return StepResult(step, 1, f"codex config unreadable: {type(exc).__name__}")
-    marketplaces = parsed.get("marketplaces") if isinstance(parsed, dict) else None
-    if isinstance(marketplaces, dict) and marketplace in marketplaces:
-        _restore_snapshots(snapshots)
+    marketplaces, error = _codex_table(config, "marketplaces")
+    if marketplaces is None:
+        return StepResult(step, 1, error or "codex config unreadable")
+    if marketplace in marketplaces:
         return StepResult(step, 1, "codex marketplace survived native removal")
     return StepResult(step, 0, "codex marketplace absent after native removal")
+
+
+# --------------------------------------------------------------------------
+# codex config text edits with no native command (hook trust, stray plugin).
+# --------------------------------------------------------------------------
 
 
 def _trusted_hook_key(key: str, plugin: str, home: Path) -> bool:
@@ -1006,7 +1452,8 @@ def _trusted_hook_key(key: str, plugin: str, home: Path) -> bool:
         / marketplace_name(plugin)
         / plugin_name(plugin)
     )
-    return _lexically_within(Path(key), cache_dir)
+    absolute = Path(key).absolute()
+    return absolute == cache_dir or absolute.is_relative_to(cache_dir)
 
 
 def _single_key_path(value: object) -> tuple[str, ...]:
@@ -1039,137 +1486,162 @@ def _assignment_parts(line: str) -> tuple[str, ...] | None:
         return None
 
 
-def _hook_state(parsed: object) -> dict[str, object]:
-    hooks = parsed.get("hooks") if isinstance(parsed, dict) else None
-    state = hooks.get("state") if isinstance(hooks, dict) else None
-    return state if isinstance(state, dict) else {}
+def _table_keys(parsed: object, prefix: tuple[str, ...]) -> dict[str, object]:
+    current: object = parsed
+    for part in prefix:
+        current = current.get(part) if isinstance(current, dict) else None
+    return current if isinstance(current, dict) else {}
 
 
-def _header_hook_key(parts: tuple[str, ...] | None) -> str | None:
-    if (
-        parts is not None
-        and len(parts) >= _HOOK_PATH_PARTS
-        and parts[:_HOOK_KEY_INDEX] == ("hooks", "state")
-    ):
-        return parts[_HOOK_KEY_INDEX]
+def _entry_key(full: tuple[str, ...], prefix: tuple[str, ...]) -> str | None:
+    if len(full) > len(prefix) and full[: len(prefix)] == prefix:
+        return full[len(prefix)]
     return None
 
 
-def _assignment_hook_key(
-    parts: tuple[str, ...] | None, current_header: tuple[str, ...]
-) -> str | None:
-    if parts is None:
-        return None
-    if current_header == ("hooks", "state") and len(parts) == 1:
-        return parts[0]
-    if len(parts) >= _HOOK_PATH_PARTS and parts[:_HOOK_KEY_INDEX] == ("hooks", "state"):
-        return parts[_HOOK_KEY_INDEX]
-    return None
+def _without_toml_entries(
+    text: str, prefix: tuple[str, ...], targets: set[str]
+) -> tuple[str, int]:
+    """Drop every header table and assignment whose key path is prefix + target.
 
-
-def _without_hook_tables(text: str, plugin: str, home: Path) -> tuple[str, int, bool]:
-    try:
-        parsed = tomllib.loads(text)
-    except tomllib.TOMLDecodeError:
-        return text, 0, False
-    targets = {
-        str(key)
-        for key in _hook_state(parsed)
-        if _trusted_hook_key(str(key), plugin, home)
-    }
-    if not targets:
-        return text, 0, True
-    lines = text.splitlines(keepends=True)
+    The full key path is the enclosing header plus the assignment's own dotted
+    key, so ``[hooks]`` + ``state."k" = {...}`` resolves exactly like
+    ``[hooks.state]`` + ``"k" = {...}`` and a root ``hooks.state."k" = ...``.
+    """
     kept: list[str] = []
     removed = 0
-    dropping_target: str | None = None
+    dropping = False
     current_header: tuple[str, ...] = ()
-    for line in lines:
+    for line in text.splitlines(keepends=True):
         header = _header_parts(line)
         if header is not None:
             current_header = header
-            candidate = _header_hook_key(header)
-            dropping_target = candidate if candidate in targets else None
-            if dropping_target is not None:
+            dropping = _entry_key(header, prefix) in targets
+            if dropping:
                 removed += 1
                 continue
-        if dropping_target is not None:
+        if dropping:
             continue
-        candidate = _assignment_hook_key(_assignment_parts(line), current_header)
-        if candidate in targets:
+        parts = _assignment_parts(line)
+        if (
+            parts is not None
+            and _entry_key((*current_header, *parts), prefix) in targets
+        ):
             removed += 1
             continue
         kept.append(line)
-    return "".join(kept), removed, True
+    return "".join(kept), removed
 
 
-def _hook_rollback_result(
+def _rollback(
     step: RemovalStep, path: Path, original: bytes, reason: str
 ) -> StepResult:
     try:
         _atomic_write(path, original)
     except OSError as exc:
         return StepResult(
-            step,
-            1,
-            f"hook-trust edit and restore failed: {type(exc).__name__}",
+            step, 1, f"config edit and restore failed: {type(exc).__name__}"
         )
-    return StepResult(step, 1, f"hook-trust edit rolled back: {reason}")
+    return StepResult(step, 1, f"config edit rolled back: {reason}")
 
 
-def _write_hook_edit(
-    step: RemovalStep,
-    path: Path,
-    original: bytes,
-    edit: tuple[str, str, Path],
-) -> StepResult | None:
-    changed, plugin, home = edit
-    try:
-        _atomic_write(path, changed.encode())
-        reparsed = tomllib.loads(path.read_text())
-    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
-        return _hook_rollback_result(step, path, original, type(exc).__name__)
-    remaining = [
-        str(key)
-        for key in _hook_state(reparsed)
-        if _trusted_hook_key(str(key), plugin, home)
-    ]
-    if remaining:
-        return _hook_rollback_result(step, path, original, "hook trust remains")
-    return None
-
-
-def _read_hook_config(step: RemovalStep, path: Path) -> tuple[bytes, str] | StepResult:
+def _read_codex_config(
+    step: RemovalStep, path: Path
+) -> tuple[bytes, str, dict[str, object]] | StepResult:
     try:
         original = path.read_bytes()
-        return original, original.decode()
+        original_text = original.decode()
+        parsed = tomllib.loads(original_text)
     except FileNotFoundError:
         return StepResult(step, 0, "codex config absent")
     except (OSError, UnicodeDecodeError) as exc:
         return StepResult(step, 1, f"codex config unreadable: {type(exc).__name__}")
+    except tomllib.TOMLDecodeError:
+        return StepResult(step, 1, "codex config is invalid TOML")
+    return original, original_text, parsed
 
 
-def remove_codex_hook_trust(plugin: str, *, home: Path) -> StepResult:
+def _commit_codex_edit(
+    step: RemovalStep,
+    path: Path,
+    edit: tuple[bytes, str, Path],
+    selection: tuple[tuple[str, ...], Callable[[str], bool]],
+) -> StepResult | None:
+    """Write the edit, re-parse it, and roll back from memory if anything remains."""
+    original, changed, backup_root = edit
+    prefix, matches = selection
+    try:
+        _backup_bytes(path, original, backup_root)
+    except OSError as exc:
+        return StepResult(step, 1, f"config backup failed: {type(exc).__name__}")
+    try:
+        _atomic_write(path, changed.encode())
+        reparsed = tomllib.loads(path.read_text())
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
+        return _rollback(step, path, original, type(exc).__name__)
+    if any(matches(str(key)) for key in _table_keys(reparsed, prefix)):
+        return _rollback(step, path, original, "matching entries remain")
+    return None
+
+
+def _edit_codex_config(
+    step: RemovalStep,
+    home: Path,
+    backup_root: Path,
+    selection: tuple[tuple[str, ...], Callable[[str], bool]],
+) -> StepResult:
+    """Remove matching entries under ``prefix``; verify by re-parse, else roll back."""
+    prefix, matches = selection
+    path = home / ".codex" / "config.toml"
+    loaded = _read_codex_config(step, path)
+    if isinstance(loaded, StepResult):
+        return loaded
+    original, original_text, parsed = loaded
+    targets = {str(key) for key in _table_keys(parsed, prefix) if matches(str(key))}
+    if not targets:
+        return StepResult(step, 0, "no matching entries")
+    changed, count = _without_toml_entries(original_text, prefix, targets)
+    if count == 0:
+        return StepResult(
+            step, 1, "entries remain in a form the text editor cannot remove"
+        )
+    failure = _commit_codex_edit(
+        step, path, (original, changed, backup_root), selection
+    )
+    return failure or StepResult(step, 0, f"removed {count} entry(s)")
+
+
+def remove_codex_hook_trust(
+    plugin: str, *, home: Path, repo_root: Path | None = None
+) -> StepResult:
     """Delete selector and cache-path hook forms atomically, with rollback."""
     step = _step("remove-codex-hook-trust", "text edit + TOML reparse", plugin)
-    path = home / ".codex" / "config.toml"
-    read_result = _read_hook_config(step, path)
-    if isinstance(read_result, StepResult):
-        return read_result
-    original, original_text = read_result
-    changed, count, parsed = _without_hook_tables(original_text, plugin, home)
-    if not parsed:
-        return StepResult(step, 1, "codex config is invalid TOML")
-    if count == 0:
-        return StepResult(step, 0, "no matching hook-trust entries")
-    try:
-        _backup_bytes(path, original)
-    except OSError as exc:
-        return StepResult(step, 1, f"hook-trust backup failed: {type(exc).__name__}")
-    failure = _write_hook_edit(step, path, original, (changed, plugin, home))
-    if failure is not None:
-        return failure
-    return StepResult(step, 0, f"removed {count} hook-trust entry(s)")
+    return _edit_codex_config(
+        step,
+        home,
+        _backup_root(repo_root or Path.cwd()),
+        (_HOOK_PREFIX, lambda key: _trusted_hook_key(key, plugin, home)),
+    )
+
+
+def remove_codex_config_plugin(
+    plugin: str, *, home: Path, repo_root: Path | None = None
+) -> StepResult:
+    """Row 8: drop a ``[plugins."<sel>"]`` table the codex CLI does not list."""
+    step = _step(
+        "remove-codex-config-plugin", "config.toml text edit + TOML reparse", plugin
+    )
+    return _edit_codex_config(
+        step,
+        home,
+        _backup_root(repo_root or Path.cwd()),
+        (_PLUGIN_PREFIX, lambda key: key == plugin),
+    )
+
+
+# --------------------------------------------------------------------------
+# doctor.toml watchlist: insert into the existing array text (N6).
+# --------------------------------------------------------------------------
 
 
 def _array_span(text: str, start: int) -> tuple[int, int] | None:
@@ -1214,6 +1686,60 @@ def _quote_scan(
     return quote, False, True
 
 
+def _last_array_element(
+    text: str, opening: int, closing: int
+) -> tuple[int | None, bool]:
+    """End of the last array element, and whether a comma follows it."""
+    last_end: int | None = None
+    comma_after = False
+    index = opening + 1
+    while index < closing:
+        character = text[index]
+        if character == "#":
+            newline = text.find("\n", index)
+            index = closing if newline < 0 else newline
+            continue
+        if character in {'"', "'"}:
+            end = index + 1
+            while end < closing and (
+                text[end] != character or (character == '"' and text[end - 1] == "\\")
+            ):
+                end += 1
+            last_end, comma_after, index = end + 1, False, end + 1
+            continue
+        if character == ",":
+            comma_after = True
+        elif character not in " \t\r\n":
+            end = index
+            while end < closing and text[end] not in ",# \t\r\n":
+                end += 1
+            last_end, comma_after, index = end, False, end
+            continue
+        index += 1
+    return last_end, comma_after
+
+
+def _insert_array_item(text: str, span: tuple[int, int], item: str) -> str:
+    opening, closing_end = span
+    closing = closing_end - 1
+    last_end, comma_after = _last_array_element(text, opening, closing)
+    if last_end is None:
+        return text[: opening + 1] + item + text[opening + 1 :]
+    if "\n" not in text[last_end:closing]:
+        return text[:last_end] + ", " + item + text[last_end:]
+    line_start = text.rfind("\n", 0, last_end) + 1
+    indent_match = re.match(r"[ \t]*", text[line_start:])
+    indent = indent_match.group() if indent_match else ""
+    if not comma_after:
+        text = text[:last_end] + "," + text[last_end:]
+        closing += 1
+    close_line = text.rfind("\n", 0, closing) + 1
+    addition = f"{indent}{item}{',' if comma_after else ''}\n"
+    if text[close_line:closing].strip():
+        return text[:closing] + "\n" + addition + text[closing:]
+    return text[:close_line] + addition + text[close_line:]
+
+
 def _watchlist_section_change(
     original: str, existing: object, name: str
 ) -> tuple[str | None, str | None]:
@@ -1229,8 +1755,7 @@ def _watchlist_section_change(
     span = _array_span(original, start)
     if span is None:
         return None, "removed_plugins names array is incomplete"
-    replacement = json.dumps([*existing, name])
-    return original[: span[0]] + replacement + original[span[1] :], None
+    return _insert_array_item(original, span, json.dumps(name)), None
 
 
 def _watchlist_change(
@@ -1249,15 +1774,22 @@ def _watchlist_change(
 
 
 def _write_watchlist(
-    step: RemovalStep, path: Path, original: bytes, changed: str, name: str
+    step: RemovalStep,
+    path: Path,
+    original: bytes,
+    changed: str,
+    context: tuple[str, list[object], Path],
 ) -> StepResult:
+    name, existing, backup_root = context
     try:
         checked = tomllib.loads(changed)
         section = checked.get("removed_plugins")
         names = section.get("names") if isinstance(section, dict) else None
         if not isinstance(names, list) or name not in names:
             return StepResult(step, 1, "watchlist verification did not find the name")
-        _backup_bytes(path, original)
+        if names != [*existing, name]:
+            return StepResult(step, 1, "watchlist verification found other changes")
+        _backup_bytes(path, original, backup_root)
         _atomic_write(path, changed.encode())
     except (OSError, tomllib.TOMLDecodeError) as exc:
         try:
@@ -1268,8 +1800,10 @@ def _write_watchlist(
     return StepResult(step, 0, "watchlist updated and verified")
 
 
-def add_to_watchlist(name: str, *, repo_root: Path) -> StepResult:
-    """Append one bare name to ``doctor.toml`` and verify it landed."""
+def add_to_watchlist(
+    name: str, *, repo_root: Path, backup_root: Path | None = None
+) -> StepResult:
+    """Insert one bare name into ``doctor.toml``'s array text and verify it landed."""
     step = _step("add-to-watchlist", "doctor.toml text edit", name)
     path = repo_root / "doctor.toml"
     try:
@@ -1282,7 +1816,33 @@ def add_to_watchlist(name: str, *, repo_root: Path) -> StepResult:
     if changed is None:
         rc = 0 if change_error == "already watched" else 1
         return StepResult(step, rc, change_error or "watchlist change failed")
-    return _write_watchlist(step, path, original, changed, name)
+    section = parsed.get("removed_plugins")
+    existing = section.get("names") if isinstance(section, dict) else None
+    return _write_watchlist(
+        step,
+        path,
+        original,
+        changed,
+        (
+            name,
+            list(existing) if isinstance(existing, list) else [],
+            backup_root or _backup_root(repo_root),
+        ),
+    )
+
+
+# --------------------------------------------------------------------------
+# Apply.
+# --------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _RunContext:
+    plugin: str
+    home: Path
+    repo_root: Path
+    backup_root: Path
+    prune_claude_marketplace: bool
 
 
 def _fresh_marketplace_guard(
@@ -1300,9 +1860,7 @@ def _fresh_marketplace_guard(
     return None
 
 
-def _run_uninstall_step(
-    step: RemovalStep, plugin: str, *, home: Path
-) -> StepResult | None:
+def _run_uninstall_step(step: RemovalStep, run: _RunContext) -> StepResult | None:
     scope_by_step = {
         "uninstall-user-scope": "user",
         "uninstall-project-scope": "project",
@@ -1312,57 +1870,81 @@ def _run_uninstall_step(
     if scope is None:
         return None
     project = None if scope == "user" else Path(step.target)
-    return _uninstall_scope(plugin, scope, home=home, project=project)
+    return _uninstall_scope(
+        run.plugin,
+        scope,
+        home=run.home,
+        backup_root=run.backup_root,
+        project=project,
+    )
 
 
-def _run_marketplace_step(
-    step: RemovalStep, plugin: str, *, home: Path
-) -> StepResult | None:
-    marketplace = marketplace_name(plugin)
+def _run_marketplace_step(step: RemovalStep, run: _RunContext) -> StepResult | None:
+    marketplace = marketplace_name(run.plugin)
     if step.name == "remove-claude-marketplace":
-        guard = _fresh_marketplace_guard(step, plugin, home=home)
+        guard = _fresh_marketplace_guard(step, run.plugin, home=run.home)
         return guard or _remove_claude_marketplace_step(
-            marketplace, home=home, step=step
+            marketplace,
+            home=run.home,
+            step=step,
+            repo_root=run.repo_root,
+            backup_root=run.backup_root,
         )
     if step.name == "remove-codex-marketplace":
-        guard = _fresh_marketplace_guard(step, plugin, home=home)
-        return guard or remove_codex_marketplace(marketplace, home=home)
+        guard = _fresh_marketplace_guard(step, run.plugin, home=run.home)
+        return guard or remove_codex_marketplace(
+            marketplace, home=run.home, repo_root=run.repo_root
+        )
     return None
 
 
-def _run_step(
-    step: RemovalStep,
-    plugin: str,
-    *,
-    home: Path,
-    repo_root: Path,
-    prune_claude_marketplace: bool,
-) -> StepResult:
-    name = plugin_name(plugin)
-    result = _run_uninstall_step(step, plugin, home=home)
+_EDIT_HANDLERS: dict[str, Callable[[RemovalStep, _RunContext], StepResult]] = {
+    "backup-cache": lambda step, run: backup_cache(
+        run.plugin, home=run.home, dest=Path(step.target)
+    ),
+    "remove-local-override": lambda step, run: remove_settings_key(
+        run.plugin,
+        Path(step.target) / ".claude" / "settings.local.json",
+        backup_root=run.backup_root,
+    ),
+    _SETTINGS_KEY_STEP: lambda step, run: remove_settings_key(
+        run.plugin, Path(step.target), backup_root=run.backup_root
+    ),
+    "remove-codex-plugin": lambda _step, run: remove_codex_plugin(
+        run.plugin, home=run.home, repo_root=run.repo_root
+    ),
+    "remove-codex-config-plugin": lambda _step, run: remove_codex_config_plugin(
+        run.plugin, home=run.home, repo_root=run.repo_root
+    ),
+    "remove-codex-hook-trust": lambda _step, run: remove_codex_hook_trust(
+        run.plugin, home=run.home, repo_root=run.repo_root
+    ),
+    "remove-orphan-cache": lambda _step, run: remove_orphan_cache(
+        run.plugin,
+        home=run.home,
+        prune_claude_marketplace=run.prune_claude_marketplace,
+    ),
+    "add-to-watchlist": lambda _step, run: add_to_watchlist(
+        plugin_name(run.plugin),
+        repo_root=run.repo_root,
+        backup_root=run.backup_root,
+    ),
+}
+
+
+def _run_edit_step(step: RemovalStep, run: _RunContext) -> StepResult | None:
+    handler = _EDIT_HANDLERS.get(step.name)
+    return None if handler is None else handler(step, run)
+
+
+def _run_step(step: RemovalStep, run: _RunContext) -> StepResult:
+    result = (
+        _run_uninstall_step(step, run)
+        or _run_marketplace_step(step, run)
+        or _run_edit_step(step, run)
+    )
     if result is None:
-        result = _run_marketplace_step(step, plugin, home=home)
-    if result is not None:
-        return StepResult(step, result.rc, result.detail)
-    match step.name:
-        case "backup-cache":
-            result = backup_cache(plugin, home=home, dest=Path(step.target))
-        case "remove-local-override":
-            result = remove_local_override(plugin, Path(step.target))
-        case "remove-codex-plugin":
-            result = remove_codex_plugin(plugin, home=home)
-        case "remove-codex-hook-trust":
-            result = remove_codex_hook_trust(plugin, home=home)
-        case "remove-orphan-cache":
-            result = remove_orphan_cache(
-                plugin,
-                home=home,
-                prune_claude_marketplace=prune_claude_marketplace,
-            )
-        case "add-to-watchlist":
-            result = add_to_watchlist(name, repo_root=repo_root)
-        case _:
-            return StepResult(step, 1, f"unknown removal step: {step.name}")
+        return StepResult(step, 1, f"unknown removal step: {step.name}")
     return StepResult(step, result.rc, result.detail)
 
 
@@ -1371,16 +1953,22 @@ def apply(plan: RemovalPlan, *, home: Path, repo_root: Path) -> list[StepResult]
     if plan.blockers:
         blocked = _step("blocked", "resolve blockers", plan.plugin)
         return [StepResult(blocked, 2, plan.blockers[0])]
+    parse_selector(plan.plugin)
+    backup_step = next(
+        (step for step in plan.steps if step.name == "backup-cache"), None
+    )
+    backup_root = (
+        Path(backup_step.target).parent
+        if backup_step is not None
+        else _backup_root(repo_root)
+    )
     results: list[StepResult] = []
     claude_marketplace_removed = False
     for step in plan.steps:
-        result = _run_step(
-            step,
-            plan.plugin,
-            home=home,
-            repo_root=repo_root,
-            prune_claude_marketplace=claude_marketplace_removed,
+        run = _RunContext(
+            plan.plugin, home, repo_root, backup_root, claude_marketplace_removed
         )
+        result = _run_step(step, run)
         results.append(result)
         if result.rc != 0:
             break
@@ -1409,6 +1997,10 @@ def plugin_remove_main(argv: Sequence[str]) -> int:
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
+    try:
+        parse_selector(args.plugin)
+    except ValueError as exc:
+        parser.error(str(exc))
     home = Path.home()
     repo_root = Path.cwd()
     try:

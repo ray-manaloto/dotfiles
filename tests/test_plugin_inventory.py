@@ -5,14 +5,12 @@ from __future__ import annotations
 
 import json
 import subprocess
+import time
 from pathlib import Path
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
 
-from dotfiles_setup import plugin_inventory
-
-if TYPE_CHECKING:
-    import pytest
+import pytest
+from dotfiles_setup import plugin_inventory, plugin_remove
 
 _PLUGIN = "ponytail@ponytail"
 
@@ -203,10 +201,10 @@ def test_inventory_reads_marketplace_declarations_and_planning_evidence(
     ):
         (install / ".claude-plugin").mkdir(parents=True)
     (target_install / ".claude-plugin" / "plugin.json").write_text(
-        json.dumps({"dependencies": {"dep@deps": "1.0.0"}})
+        json.dumps({"dependencies": [{"name": "dep", "marketplace": "deps"}]})
     )
     (sibling_install / ".claude-plugin" / "plugin.json").write_text(
-        json.dumps({"dependencies": {"a-b@c": "1.0.0"}})
+        json.dumps({"dependencies": ["a-b"]})
     )
     (dependency_install / ".claude-plugin" / "plugin.json").write_text("{}")
     (collision_install / ".claude-plugin" / "plugin.json").write_text("{}")
@@ -250,6 +248,8 @@ def test_inventory_reads_marketplace_declarations_and_planning_evidence(
     settings = repo / ".claude" / "settings.json"
     settings.parent.mkdir()
     settings.write_text(json.dumps({"extraKnownMarketplaces": {"c": {"source": {}}}}))
+    local = repo / ".claude" / "settings.local.json"
+    local.write_text(json.dumps({"enabledPlugins": {"a-b@c": True}}))
 
     def run(argv: list[str], **kwargs: object) -> SimpleNamespace:
         del kwargs
@@ -288,10 +288,12 @@ def test_inventory_reads_marketplace_declarations_and_planning_evidence(
 
     result = plugin_inventory.inventory("a-b@c", home=home, root=root)
 
-    assert result.project_settings == (settings,)
+    assert result.project_settings == (settings, local)
+    assert result.enabling_settings == (local,)
     assert result.claude_marketplace_plugins == ("a-b@c", "beta@c")
     assert result.codex_marketplace_plugins == ("gamma@c",)
     assert result.dependent_plugins == ("beta@c",)
+    assert result.enabled_dependents == ("beta@c",)
     assert result.auto_dependencies == ("dep@deps",)
     assert result.data_collisions == ("a@b-c",)
 
@@ -318,3 +320,206 @@ def test_live_references_uses_binary_exclusion_and_replacement_decode(
     assert "-z" in seen[0]
     assert len(found) == 1
     assert found[0].text == "�ponytail\x0b\x0cpayload"
+
+
+def test_parse_is_linear_for_a_large_grep_payload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """N9: the old re-slicing parse took 5.2s at 40k records (O(n^2))."""
+    records = 60_000
+    payload = b"docs/some file.md\x0012\x00a line naming ponytail\n" * records
+
+    def run(argv: list[str], **kwargs: object) -> SimpleNamespace:
+        del argv, kwargs
+        return SimpleNamespace(stdout=payload, stderr=b"", returncode=0)
+
+    monkeypatch.setattr(plugin_inventory.subprocess, "run", run)
+    started = time.perf_counter()
+
+    found = plugin_inventory.live_references(tmp_path, "ponytail")
+
+    assert time.perf_counter() - started < 3
+    assert len(found) == records
+    assert (found[-1].path, found[-1].line, found[-1].text) == (
+        "docs/some file.md",
+        12,
+        "a line naming ponytail",
+    )
+
+
+def test_grep_parse_tolerates_nul_in_text_and_rejects_truncation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    payloads = [
+        b"a.md\x001\x00one\nb dir/c.md\x0022\x00two\x00\x00bytes\nd.pgm\x003\x00z\n",
+        b"a.md\x001\x00one\nb.md\x002\x00two",
+    ]
+
+    def run(argv: list[str], **kwargs: object) -> SimpleNamespace:
+        del argv, kwargs
+        return SimpleNamespace(stdout=payloads.pop(0), stderr=b"", returncode=0)
+
+    monkeypatch.setattr(plugin_inventory.subprocess, "run", run)
+
+    found = plugin_inventory.live_references(tmp_path, "x")
+
+    assert [(item.path, item.line, item.text) for item in found] == [
+        ("a.md", 1, "one"),
+        ("b dir/c.md", 22, "two\x00\x00bytes"),
+        ("d.pgm", 3, "z"),
+    ]
+    with pytest.raises(RuntimeError, match="malformed"):
+        plugin_inventory.live_references(tmp_path, "x")
+
+
+@pytest.mark.parametrize("selector", ["honcho@", "@honcho", "a@b@c", "x@y/z"])
+def test_inventory_rejects_a_malformed_selector_before_any_probe(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, selector: str
+) -> None:
+    calls: list[list[str]] = []
+
+    def run(argv: list[str], **kwargs: object) -> SimpleNamespace:
+        del kwargs
+        calls.append(argv)
+        return _result()
+
+    monkeypatch.setattr(plugin_inventory.subprocess, "run", run)
+
+    with pytest.raises(ValueError, match="exactly <plugin>@<marketplace>"):
+        plugin_inventory.inventory(selector, home=tmp_path, root=tmp_path / "gh")
+    assert calls == []
+
+
+def _installed(home: Path, selector: str, dependencies: object | None) -> dict:
+    name, marketplace = selector.split("@")
+    install = home / ".claude" / "plugins" / "cache" / marketplace / name / "1.0.0"
+    manifest: dict[str, object] = {"name": name}
+    if dependencies is not None:
+        manifest["dependencies"] = dependencies
+    (install / ".claude-plugin").mkdir(parents=True)
+    (install / ".claude-plugin" / "plugin.json").write_text(
+        json.dumps(manifest, indent=2)
+    )
+    return {"scope": "user", "installPath": str(install)}
+
+
+def _dependency_home(
+    tmp_path: Path, plugins: dict[str, object | None], catalog: dict[str, object]
+) -> Path:
+    home = tmp_path / "home"
+    registry = {
+        selector: [_installed(home, selector, dependencies)]
+        for selector, dependencies in plugins.items()
+    }
+    plugins_dir = home / ".claude" / "plugins"
+    (plugins_dir / "installed_plugins.json").write_text(
+        json.dumps({"version": 2, "plugins": registry})
+    )
+    known: dict[str, object] = {}
+    for marketplace, entries in catalog.items():
+        location = plugins_dir / "marketplaces" / marketplace
+        (location / ".claude-plugin").mkdir(parents=True)
+        (location / ".claude-plugin" / "marketplace.json").write_text(
+            json.dumps({"name": marketplace, "plugins": entries})
+        )
+        known[marketplace] = {"source": {}, "installLocation": str(location)}
+    (plugins_dir / "known_marketplaces.json").write_text(json.dumps(known))
+    return home
+
+
+def _cli(enabled: dict[str, bool]) -> object:
+    def run(argv: list[str], **kwargs: object) -> SimpleNamespace:
+        del kwargs
+        if argv[:6] == ["mise", "exec", "--", "claude", "plugin", "list"]:
+            rows = [
+                {"id": key, "scope": "user", "enabled": value}
+                for key, value in enabled.items()
+            ]
+            return _result(stdout=json.dumps(rows))
+        if argv[:6] == ["mise", "exec", "--", "codex", "plugin", "list"]:
+            return _result(stdout=json.dumps({"installed": []}))
+        raise AssertionError(argv)
+
+    return run
+
+
+def test_the_live_dependency_shape_blocks_removal_even_when_disabled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """N8: aggregated-research's object deps; installed but disabled still blocks."""
+    live = [
+        {"name": "firecrawl", "marketplace": "firecrawl"},
+        {"name": "exa", "marketplace": "exa"},
+        {"name": "context7", "marketplace": "context7-marketplace"},
+        {"name": "last30days", "marketplace": "last30days-skill"},
+    ]
+    home = _dependency_home(
+        tmp_path,
+        {"aggregated-research@ray-manaloto": live, "exa@exa": None},
+        {},
+    )
+    monkeypatch.setattr(
+        plugin_inventory.subprocess,
+        "run",
+        _cli({"aggregated-research@ray-manaloto": False, "exa@exa": True}),
+    )
+
+    result = plugin_inventory.inventory("exa@exa", home=home, root=tmp_path / "gh")
+    removal_plan = plugin_remove.plan(result, repo_root=tmp_path, home=home)
+
+    assert result.dependent_plugins == ("aggregated-research@ray-manaloto",)
+    assert result.enabled_dependents == ()
+    assert (
+        "installed plugin depends on target: aggregated-research@ray-manaloto "
+        "(installed but enabled nowhere; re-enabling it would break)"
+    ) in removal_plan.blockers
+
+
+def test_dependency_names_resolve_in_the_declaring_marketplace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A bare name or a marketplace-less object means the DECLARER's marketplace."""
+    home = _dependency_home(
+        tmp_path,
+        {
+            "target@market": None,
+            "target@elsewhere": None,
+            "bare@market": ["target"],
+            "versioned@market": [{"name": "target", "version": "~1.0"}],
+            "crosses@other": [{"name": "target", "marketplace": "market"}],
+            "names-elsewhere@market": [{"name": "target", "marketplace": "elsewhere"}],
+            "unrelated@other": ["target"],
+            "catalogued@market": None,
+        },
+        {"market": [{"name": "catalogued", "dependencies": ["target"]}]},
+    )
+    monkeypatch.setattr(plugin_inventory.subprocess, "run", _cli({}))
+
+    result = plugin_inventory.inventory(
+        "target@market", home=home, root=tmp_path / "gh"
+    )
+
+    assert result.errors == ()
+    assert result.dependent_plugins == (
+        "bare@market",
+        "catalogued@market",
+        "crosses@other",
+        "versioned@market",
+    )
+
+
+def test_an_unsupported_dependency_shape_is_a_loud_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = _dependency_home(
+        tmp_path,
+        {"target@market": None, "odd@market": {"target@market": "1.0.0"}},
+        {},
+    )
+    monkeypatch.setattr(plugin_inventory.subprocess, "run", _cli({}))
+
+    result = plugin_inventory.inventory(
+        "target@market", home=home, root=tmp_path / "gh"
+    )
+
+    assert any("dependencies is not an array" in error for error in result.errors)

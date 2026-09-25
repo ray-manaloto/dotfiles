@@ -120,3 +120,39 @@ Files read:
 - `/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/python/src/dotfiles_setup/doctor.py`
 - `/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base/sources/agent-harness-docs/docs/claude-code/{plugins-reference,plugin-marketplaces,plugin-dependencies,changelog}.md`
 - `/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base/sources/agent-harness-docs/docs/codex/cli__reference.md`
+
+---
+
+## r3 addendum premise report
+
+**Read-only lane.** I have no write tools, so none of this is persisted. Please save it verbatim to `docs/research/kb/reports/agents/`.
+
+```
+PREMISE REPORT
+ROWS: 6 checked — 5 CONFIRMED (1 provenance corrected) / 1 REFUTED / 0 UNVERIFIABLE / 0 ASSUMED
+T1 — CONFIRMED — plugin_inventory.py:616 `if "@" not in plugin:`; plugin_state.py:53,58 split/partition with no further validation.
+T2 — CONFIRMED — plugin.json:7-12, an array of 4 `{name, marketplace}` objects. It is pretty-printed, not compact, but the keys and structure are the same.
+T3 — CONFIRMED — dry-exa@exa.json `"blockers":[]`, .rc `rc=0`. The plan includes remove-claude-marketplace.
+T4 — CONFIRMED (provenance corrected) — the row's source is the reviewer report. I read the code myself: plugin_remove.py:510 regex `[^,\n]+` matches only the opener line `"exa": {`. The result is invalid JSON, so :603 errors and :923 restores snapshots after a CLI call that succeeded. Live known_marketplaces.json:2-10 entries are 9-line nested objects.
+T5 — REFUTED — plugin-dependencies.md:44: `name` "Resolves within the same marketplace as the declaring plugin". An item with no marketplace field does NOT match every marketplace, so N8's "(if marketplace is present)" rule matches too much. :35 also shows a legal `{name, version}` object with no marketplace field.
+T6 — CONFIRMED — .gitignore:41 `.agent/state/`, :124 `.agent/`.
+MISSING:
+- "Enabled" is undefined, and §5 contradicts N8 on the live machine. aggregated-research@ray-manaloto is set to false in ~/.claude/settings.json:37 and KB settings.local.json:19, and true in KB settings.json:213. Local overrides project, so it is disabled everywhere, and the §5 `exa@exa` expectation of rc=1 cannot hold under N8's "installed, enabled" rule. The architect must define which scope counts as enabled, or drop "enabled".
+- Dependencies can also be declared in the marketplace entry (plugin-dependencies.md:9), not only in plugin.json. N8 reads only the manifest.
+- The native CLI edits files N2 treats as repo/user settings. plugin-marketplaces.md:1320 says that without `--scope`, "the declaration is removed from every editable scope". plugin_remove.py:910 passes no `--scope` and no `cwd`, so the CLI edits the process cwd's tracked `.claude/settings.json` (and local) itself. It does not edit the knowledge-base project's settings. I could not check (it needs a run) whether the CLI rewrites the whole file with its own formatting. The architect must choose between scoped CLI calls per scope and project cwd, or accepting the CLI's rewrite. Separately, removing a marketplace from its last scope uninstalls its plugins (:1322-1324).
+- The N2 test fixture uses the wrong shape. Settings `extraKnownMarketplaces` entries contain only `{"source":{…}}` (.claude/settings.json:204-216). `installLocation`/`lastUpdated` is the harness-owned known_marketplaces shape.
+- The data directory id can collide between plugins. plugins-reference:744 maps `@` and `.` to `-`, so `foo@bar-baz` and `foo-bar@baz` both become `foo-bar-baz`. The N1 selector regex allows `.`. N4's "exact id" check can therefore delete another plugin's data. The architect should add a collision check against the other installed selectors.
+- Realpath check vs link mode:
+  - Deletion stays safe. The code (838-850) unlinks a symlinked source and runs rmtree on a real directory. rmtree unlinks inner links without following them, so link-mode entries (plugin-marketplaces.md:634) and symlinked dev-checkout versions (plugins-reference:804) are unlinked, not traversed.
+  - A containment check only on the top-level path is sound, including against a symlinked `cache/<m>` parent directory. It must run at delete time: sources are captured at :396 and deleted at :884 (a time-of-check/time-of-use gap).
+  - A realpath check applied to every entry would wrongly block every link-mode plugin.
+  - The backup sets `archive.dereference = True` (:404), which follows those links and archives external directories of unbounded size.
+  - Unverified: whether `shutil.rmtree.avoids_symlink_attacks` is True on this macOS Python.
+VERDICT: correct the spec first — T5's matching rule is refuted; "enabled" is undefined and §5's live expectation contradicts it; the native CLI's edits to every settings scope are unstated in N2.
+```
+
+Relevant paths:
+- /Users/rmanaloto/dev/github/ray-manaloto/dotfiles/python/src/dotfiles_setup/plugin_remove.py
+- /Users/rmanaloto/dev/github/ray-manaloto/dotfiles/python/src/dotfiles_setup/plugin_inventory.py
+- /Users/rmanaloto/dev/github/ray-manaloto/knowledge-base/sources/agent-harness-docs/docs/claude-code/plugin-dependencies.md
+- /Users/rmanaloto/dev/github/ray-manaloto/knowledge-base/sources/agent-harness-docs/docs/claude-code/plugin-marketplaces.md

@@ -48,6 +48,35 @@ class _Unreadable:
     reason: str
 
 
+_SELECTOR_HALF = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+
+
+def parse_selector(sel: str) -> tuple[str, str]:
+    """Split an exact ``plugin@marketplace`` selector, rejecting any other shape.
+
+    Both halves must be non-empty and match ``^[A-Za-z0-9][A-Za-z0-9._-]*$``, so
+    an empty half (``honcho@``, ``@honcho``), a second ``@``, and any path
+    separator or ``..`` component are refused before a path is ever built.
+    """
+    plugin, separator, marketplace = sel.partition("@")
+    if (
+        not separator
+        or _SELECTOR_HALF.fullmatch(plugin) is None
+        or _SELECTOR_HALF.fullmatch(marketplace) is None
+    ):
+        message = (
+            f"plugin selector must be exactly <plugin>@<marketplace> with both "
+            f"halves matching ^[A-Za-z0-9][A-Za-z0-9._-]*$: {sel!r}"
+        )
+        raise ValueError(message)
+    return plugin, marketplace
+
+
+def data_id(selector: str) -> str:
+    """Return the documented ``~/.claude/plugins/data/{id}`` name for a selector."""
+    return re.sub(r"[^a-zA-Z0-9_-]", "-", selector)
+
+
 def plugin_name(key: str) -> str:
     """Return the bare plugin name from a ``name@marketplace`` selector."""
     return key.split("@", 1)[0]
@@ -183,10 +212,6 @@ def _install_path(raw: object, plugins_dir: Path) -> Path | None:
     return path if path.is_absolute() else plugins_dir / path
 
 
-def _data_id(selector: str) -> str:
-    return re.sub(r"[^a-zA-Z0-9_-]", "-", selector)
-
-
 def _orphan_claude_cache_locations(
     wanted: tuple[tuple[str, str], ...], plugins_dir: Path, seen: set[Path]
 ) -> list[PluginLocation]:
@@ -302,10 +327,10 @@ def _installed_claude_locations(
                         marketplace=marketplace,
                     )
                 )
-        data_id = _data_id(key)
-        if data_id not in seen_data:
-            seen_data.add(data_id)
-            data_path = plugins_dir / "data" / data_id
+        identifier = data_id(key)
+        if identifier not in seen_data:
+            seen_data.add(identifier)
+            data_path = plugins_dir / "data" / identifier
             found.extend(
                 _stat_location(
                     "claude", "data", data_path, key, marketplace=marketplace
@@ -314,50 +339,62 @@ def _installed_claude_locations(
     return found, seen_cache, seen_data
 
 
+def _child_directory_names(root: Path) -> set[str]:
+    """Names of real child directories; an unreadable root is reported elsewhere."""
+    try:
+        with os.scandir(root) as entries:
+            return {
+                entry.name for entry in entries if entry.is_dir(follow_symlinks=False)
+            }
+    except OSError:
+        return set()
+
+
+def _recorded_marketplaces(home: Path, installed: object, known: object) -> set[str]:
+    """Every marketplace name the harnesses' own records mention."""
+    names: set[str] = set()
+    plugins = installed.get("plugins") if isinstance(installed, dict) else None
+    if isinstance(plugins, dict):
+        names.update(marketplace_name(str(key)) for key in plugins)
+    if isinstance(known, dict):
+        names.update(str(key) for key in known)
+    names.update(_child_directory_names(home / ".claude" / "plugins" / "cache"))
+    names.update(_child_directory_names(home / ".codex" / "plugins" / "cache"))
+    names.discard("")
+    return names
+
+
 def _claude_data_locations(
     wanted: tuple[tuple[str, str], ...],
     plugins_dir: Path,
     seen_data: set[str],
+    marketplaces: set[str],
 ) -> list[PluginLocation]:
+    """Exact documented data ids only (``plugins-reference.md:744``).
+
+    A bare watched name has no marketplace half, so its candidates are the
+    exact ids ``data_id(name@m)`` for every marketplace ``m`` the harness
+    records mention -- never a prefix match, which reported ``clangd-lsp``'s
+    data under the name ``clangd``.
+    """
     found: list[PluginLocation] = []
     for name, marketplace in wanted:
-        if marketplace:
-            selector = f"{name}@{marketplace}"
-            data_id = _data_id(selector)
-            if data_id not in seen_data:
-                found.extend(
-                    _stat_location(
-                        "claude",
-                        "data",
-                        plugins_dir / "data" / data_id,
-                        selector,
-                        marketplace=marketplace,
-                    )
-                )
-            continue
-        data_root = plugins_dir / "data"
-        try:
-            with os.scandir(data_root) as entries:
-                candidates = tuple(
-                    Path(entry.path)
-                    for entry in entries
-                    if entry.name.startswith(f"{_data_id(name)}-")
-                )
-        except FileNotFoundError:
-            candidates = ()
-        except OSError as exc:
-            found.append(
-                PluginLocation(
+        candidates = (marketplace,) if marketplace else tuple(sorted(marketplaces))
+        for candidate in candidates:
+            selector = f"{name}@{candidate}"
+            identifier = data_id(selector)
+            if identifier in seen_data:
+                continue
+            seen_data.add(identifier)
+            found.extend(
+                _stat_location(
                     "claude",
-                    "unreadable",
-                    "~/.claude/plugins/data",
-                    name,
-                    type(exc).__name__,
+                    "data",
+                    plugins_dir / "data" / identifier,
+                    selector,
+                    marketplace=candidate,
                 )
             )
-            candidates = ()
-        for candidate in candidates:
-            found.extend(_stat_location("claude", "data", candidate, name))
     return found
 
 
@@ -390,7 +427,14 @@ def claude_state_locations(names: Iterable[str], home: Path) -> list[PluginLocat
             if str(key) in wanted_marketplaces
         )
     found.extend(_orphan_claude_cache_locations(wanted, plugins_dir, seen_cache))
-    found.extend(_claude_data_locations(wanted, plugins_dir, seen_data))
+    found.extend(
+        _claude_data_locations(
+            wanted,
+            plugins_dir,
+            seen_data,
+            _recorded_marketplaces(home, installed, known),
+        )
+    )
     return found
 
 

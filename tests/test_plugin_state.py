@@ -6,11 +6,13 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+import pytest
 from dotfiles_setup.plugin_state import (
     claude_state_locations,
     codex_config_locations,
     locate,
     marketplace_name,
+    parse_selector,
     plugin_name,
 )
 
@@ -179,3 +181,84 @@ def test_disabled_codex_plugin_still_reports_all_inventory_state(
     }
     plugin = next(item for item in locations if item.kind == "codex-plugin")
     assert plugin.detail == "enabled=false"
+
+
+@pytest.mark.parametrize(
+    "selector",
+    [
+        "honcho@",
+        "@honcho",
+        "a@b@c",
+        "../x@y",
+        "x@y/z",
+        "x@..",
+        ".x@y",
+        "honcho",
+        "",
+        "a b@c",
+    ],
+)
+def test_parse_selector_rejects_every_malformed_shape(selector: str) -> None:
+    with pytest.raises(ValueError, match="exactly <plugin>@<marketplace>"):
+        parse_selector(selector)
+
+
+def test_parse_selector_accepts_the_documented_character_set() -> None:
+    assert parse_selector("alpha@market") == ("alpha", "market")
+    assert parse_selector("a1.b-c_d@m.k-2") == ("a1.b-c_d", "m.k-2")
+
+
+def test_claude_cache_comes_from_the_install_path_and_marketplace_half(
+    tmp_path: Path,
+) -> None:
+    """Row 1: the reader names ``cache/<marketplace>/<plugin>``, not ``cache/<n>``."""
+    home = _home(tmp_path)
+    claude = home / ".claude" / "plugins"
+    version = claude / "cache" / _MARKETPLACE / _NAME / "1.0.0"
+    version.mkdir(parents=True)
+    (claude / "cache" / _NAME / "decoy").mkdir(parents=True)
+    (claude / "installed_plugins.json").write_text(
+        json.dumps(
+            {"plugins": {_PLUGIN: [{"scope": "user", "installPath": str(version)}]}}
+        )
+    )
+
+    installed = claude_state_locations([_PLUGIN], home)
+    (claude / "installed_plugins.json").write_text(json.dumps({"plugins": {}}))
+    orphaned = claude_state_locations([_PLUGIN], home)
+
+    expected = [str(claude / "cache" / _MARKETPLACE / _NAME)]
+    assert [item.where for item in installed if item.kind == "cache"] == expected
+    assert [item.where for item in orphaned if item.kind == "cache"] == expected
+
+
+def test_bare_name_data_matches_exact_ids_never_a_prefix(tmp_path: Path) -> None:
+    """N4: ``clangd`` must not claim ``clangd-lsp``'s data directory."""
+    home = _home(tmp_path)
+    claude = home / ".claude" / "plugins"
+    (claude / "cache" / "claude-code-lsps" / "clangd").mkdir(parents=True)
+    (claude / "cache" / "claude-plugins-official" / "clangd-lsp").mkdir(parents=True)
+    exact = claude / "data" / "clangd-claude-code-lsps"
+    exact.mkdir(parents=True)
+    (claude / "data" / "clangd-lsp-claude-plugins-official").mkdir()
+    (claude / "installed_plugins.json").write_text(
+        json.dumps({"plugins": {"clangd@claude-code-lsps": [{"scope": "user"}]}})
+    )
+
+    locations = claude_state_locations(["clangd"], home)
+
+    assert [item.where for item in locations if item.kind == "data"] == [str(exact)]
+
+
+def test_an_undecodable_registry_is_unreadable_not_a_crash(tmp_path: Path) -> None:
+    """Row 15: invalid UTF-8 is a probe that could not answer, never absence."""
+    home = _home(tmp_path)
+    (home / ".claude" / "plugins" / "installed_plugins.json").write_bytes(
+        b'{"plugins": {"\xff": []}}'
+    )
+
+    locations = claude_state_locations([_PLUGIN], home)
+
+    assert [(item.kind, item.detail) for item in locations] == [
+        ("unreadable", "UnicodeDecodeError")
+    ]
