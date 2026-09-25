@@ -281,3 +281,11 @@ enabled = true
 # Run `mise run codex-schema-check` to validate; doctor runs the same currency
 # check.
 enabled = true
+
+[removed_plugins]
+# Plugins removed on purpose. The doctor reports any watched name that becomes
+# installed, enabled, registered as a marketplace, cached or hook-trusted again.
+# A codex plugin explicitly configured with enabled = false is a deliberate
+# disable and is exempt; inventory still reports all of its residual state.
+# Removing a name from this list is the reviewed path for allowing it back.
+names = ["ponytail", "claudex-loop"]

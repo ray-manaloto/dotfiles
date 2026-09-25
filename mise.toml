@@ -1677,6 +1677,14 @@ run = 'uv run --project python dotfiles-setup reap'
 description = "Check plugin/skill setup health: verify declared plugins are actually installed and enabled"
 run = 'uv run --project python dotfiles-setup plugin-health'
 
+[tasks.plugin-inventory]
+description = "Read-only inventory of one Claude/codex plugin across harness and repo state"
+run = 'uv run --project python dotfiles-setup plugin-inventory'
+
+[tasks.plugin-remove]
+description = "Plan one native-first plugin removal; dry-run unless --apply is explicit"
+run = 'uv run --project python dotfiles-setup plugin-remove'
+
 [tasks.plugin-health-types-refresh]
 description = "Regenerate plugin-health TypeScript declarations"
 run = 'uv run --project python dotfiles-setup plugin-health-types-refresh'
