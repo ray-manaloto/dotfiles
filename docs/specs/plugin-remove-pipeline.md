@@ -1,7 +1,8 @@
 # Spec: plugin-removal pipeline (skill → task → python) + restored removed-plugins watch
 
 Status: ratified by Ray 2026-09-24 (session dotfiles-20260924.000). Implementer:
-`codex-sol-implementer`, effort `xhigh`. COMMIT: caller.
+`codex-sol-implementer`, effort `xhigh`. COMMIT: caller. Amended by `plugin-remove-pipeline-r2.md`
+and `-r3.md` (later wins). Shipped as #1373.
 
 ## 1. Objective
 

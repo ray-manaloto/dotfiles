@@ -4,8 +4,8 @@ Base spec: `docs/specs/plugin-remove-pipeline.md` (still authoritative where not
 overridden here). Base commit under correction: `9c624360`. Review:
 `docs/research/kb/reports/agents/cold-reviewer-plugin-remove-2026-09-24.md`
 (6 HIGH / 7 MEDIUM / 9 LOW; architect re-verified H1, H2 and H6 live).
-Implementer: `codex-sol-implementer`, `xhigh`. COMMIT: caller. This is the LAST
-respec round on this diff.
+Implementer: `codex-sol-implementer`, `xhigh`. COMMIT: caller. Planned as the last respec round;
+Ray approved one more (r3, 2026-09-25).
 
 ## 1. Objective
 

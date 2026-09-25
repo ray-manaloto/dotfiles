@@ -24,8 +24,9 @@ in this repo. Control arms and case history for each entry:
 5. **Do NOT bulk `git add .`** — previous sessions have left phantom
    state files under `.agent/state/**` that should not be staged.
 
-6. **Do NOT trust `gh run watch --exit-status`.** Verify with
-   `gh pr checks <n> --json` or `gh run list --json`.
+6. **Do NOT run `gh run watch` or `gh pr checks --watch`** — guard-denied;
+   `--exit-status` has reported 0 prematurely. Read state one-shot:
+   `gh run view <id> --json conclusion` / `gh pr checks <n> --json name,bucket`.
 
 7. **Do NOT switch `docker context` away from `desktop-linux`.** The
    SSH path is Docker-Desktop-only; silent drift caused session

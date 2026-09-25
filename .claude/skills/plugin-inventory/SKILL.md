@@ -28,13 +28,18 @@ Use `--json` when another tool will consume the typed report.
 - `project_settings` are mutable repository settings. `worktree_settings` and
   `stale_worktrees` are report-only because other worktrees belong to other
   branches.
-- `references` excludes historical documentation paths. Judge every remaining
-  hit in context and re-derive any nearby count before editing it.
+- `references` are `git grep` hits in every repository under `~/dev/github`,
+  excluding `HISTORICAL_PATHSPECS` in `python/src/dotfiles_setup/plugin_inventory.py`
+  (docs/research, docs/specs, docs/receipts, docs/rules-evidence, docs/direction,
+  docs/artifacts, and goal-history). Everything else — including tests and
+  `doctor.toml` — is reported and must be judged (see `plugin-removal` step 2);
+  re-derive any nearby count before editing it.
 - `errors` means the inventory is incomplete. Resolve every error before
   concluding the plugin is absent.
 - Marketplace membership, dependency, auto-dependency and data-ID collision
   fields are planning evidence. They guard cascading marketplace removal and
   lossy data-directory names.
 
-The implementation contract is
-`docs/specs/plugin-remove-pipeline.md`; the command performs no mutation.
+The contract is `docs/specs/plugin-remove-pipeline.md` as amended by `-r2.md`
+and `-r3.md` (later files win); the code is authoritative where they differ. The
+command performs no mutation.

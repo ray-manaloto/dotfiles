@@ -123,3 +123,6 @@ Applied and shipped on branch `docs/prompt-audit-2026-09-24` (the validated patc
 - [OthmanAdi/planning-with-files](https://github.com/OthmanAdi/planning-with-files) — plugin hooks (installed cache).
 - [anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official) — output-style plugin payloads (installed cache).
 - [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) — codex plugin Stop hook (installed cache).
+
+> **2026-09-25 correction:** F-A3 was applied after all — #1368 retired grok from `DECLARED_LANES` and re-keyed
+> `FALLBACK_TOKENS` to "terminal fallback is Claude Opus" (`eval_cases.py:42-49`). The withdrawal note above is historical.
