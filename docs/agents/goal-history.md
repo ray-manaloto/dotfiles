@@ -1632,3 +1632,30 @@ flowchart LR
     C --> D["/implement: 2a tickets -> #1351 (#1352, kb#802 first) -> class fix -> #1327 -> rest"]
     D --> E["Phase 10 step 0 (#1310)"]
 ```
+
+## 2026-09-25 — prompt audit, ponytail removal and the plugin-removal pipeline landed; step 0 ordered first
+
+- **Iteration ID:** `dotfiles-goal-20260925-035`
+- **Prior goal digest:** `sha256:711f7e97ef6be6f6f54b8386dd098840055b0ddf4b06259ed26635fc51a8518a`
+- **Current goal digest:** `sha256:aa06d9422b6850be58333e47dcecd69a4d9a864b0225f24dc5d0069d1c0233dc`
+- **Changed requirement:** Order (Ray, 2026-09-25): 2026-09-25 step 0 (/doctor, one /claude-api subcommand) -> fable-orchestrator remainder -> 2026-09-24/25 session remainder -> Phase 11 -> Phase 10. Landed since 034: dotfiles#1363, #1368, #1373; knowledge-base#811, #812. Ray's standing build protocol (wrapper skills -> smaller skills -> mise tasks -> python functions, no scripts; start from the prior runbook) is recorded in memory and queued as a rule (session remainder item 8).
+- **Reason:** Ray's rulings in session `3dcf5ff5` (AskUserQuestion, 2026-09-24/25): apply + ship + land the prompt audit; remove grok/fable-orchestrator live references; remove ponytail globally; build the plugin-removal pipeline from the fable runbook; one extra respec round; handoff ordering.
+- **Evidence:**
+  - `docs/research/kb/reports/prompt-audit-2026-09-24.md` + lanes A-D; `docs/specs/plugin-remove-pipeline*.md`; the plugin-remove premise, cold-review (2 rounds), antigravity review and implementer reports under `docs/research/kb/reports/agents/`.
+  - `land` rc=0 for #1368 and #1373 (main CI attempt 2 green after a network-only `pkl` failure); `kb-land` rc=0 for #812.
+  - Session audits `session-audit-{dismissed-errors,missing-requests,vagueness}-2026-09-25.md`.
+- **Affected tickets:** #1368, #1370, #1372, #1373, knowledge-base #812; #1319 and #1362 remain open.
+- **Disposition:** `DELIVERED` (#1368, #1373, KB#812); step-0 order `ACCEPTED`.
+- **Topology and ownership:** One writer, the Claude architect session. Delegates: Opus `general-purpose` audit lanes (A-D, session audits, r3 fallback implementer), `premise-verifier` (3 rounds), `codex-sol-implementer` (2 rounds; codex then hit its usage limit until 2026-09-30), Opus `cold-reviewer` (2 rounds), antigravity (Gemini 3.1 Pro) cold review.
+
+### Current goal
+
+> Run the 2026-09-25 step 0 of task_plan.md first: the built-in /doctor with every finding recorded verbatim and dispositioned, then choose and run one /claude-api subcommand from measured evidence (knowledge-base imports the anthropic SDK; dotfiles does not). Then finish the fable-orchestrator removal remainder (#1319 live arms, V6/V8, the F2 graph rebuild, the claudex-loop ruling), then the 2026-09-24/25 session remainder, then Phase 11 in its ruled order, then Phase 10. Design changes go through /to-spec, /to-tickets and /implement; done means land rc=0. Keep task_plan.md as the sole task authority.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    S0["step 0: /doctor + /claude-api"] --> F["fable remainder"] --> R["2026-09-24/25 session remainder"]
+    R --> P11["Phase 11"] --> P10["Phase 10"]
+```

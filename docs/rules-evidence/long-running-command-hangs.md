@@ -110,7 +110,7 @@ DIRECTLY.** Seconds, and it never lies about your own code.
 hk parallelises via per-file read/write locks *within* a run, and a crashed or
 killed run can leave stale state under `~/.local/state/hk/`. The old "clear
 `~/Library/Caches/hk/configs/` after editing hk.pkl" guidance is **retired** —
-the cache has been content-hashed since hk 1.47 (`ci-local-parity.md` rule 5).
+the cache has been content-hashed since hk 1.47 (formerly `ci-local-parity.md` rule 5, retired in #1368).
 
 ## GitHub repos touched
 

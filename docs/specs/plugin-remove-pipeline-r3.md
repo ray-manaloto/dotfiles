@@ -5,7 +5,8 @@ overridden). Code under correction: `48732d05`. Review:
 `docs/research/kb/reports/agents/cold-reviewer-plugin-remove-r2-2026-09-24.md`
 (22 round-1 dispositions: 13 FIXED / 8 PARTIAL / 1 NOT FIXED→#1370; 9 NEW:
 N1-N9). Ray ruled 2026-09-25: one more respec round rather than shipping with
-`--apply` gated. Implementer `codex-sol-implementer`, `xhigh`, COMMIT caller.
+`--apply` gated. Implementer `codex-sol-implementer`, `xhigh`, COMMIT caller. Executed by an
+Opus fallback lane (codex usage limit); deviations D1, D2 ratified — see the #1373 commit body.
 
 ## 1. Objective
 
