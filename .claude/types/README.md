@@ -51,7 +51,7 @@ detected after stripping the environment-dependent parts.
 
 ## Metadata
 
-**Upstream version:** 2.1.278
+**Upstream version:** 2.1.283
 **Upstream file:** `mods/types/claude-code.d.ts` in the `anthropics/claude-code` repo
 **Note:** Upstream's types lag the release, and by more than one version — so the
 header inside the vendored file deliberately disagrees with the version above.
@@ -61,8 +61,10 @@ byte-identical file (405,845 B) whose header still reads "Written by Claude Code
 is why `pin-parity.toml` registers this line but not the `.d.ts` headers.
 
 The lag is not permanent: measured 2026-09-18, the v2.1.277 tag serves a new
-file (499,059 B) whose header reads "Written by Claude Code 2.1.277", so at
-this pin the header and the version above happen to agree. Do not rely on it.
+file (499,059 B) whose header reads "Written by Claude Code 2.1.277". Measured
+2026-09-25, the v2.1.283 tag serves a changed file (+54 lines) whose header
+still reads 2.1.277 — the content moves even when the header does not, so
+never infer "unchanged" from the header.
 
 ⚠️ **This line is a PIN, not prose.** `pin-parity.toml`'s `claude-code` entry
 reads it and requires it to equal `schemas/sources.toml`'s `version`, so edit
