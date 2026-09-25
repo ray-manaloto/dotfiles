@@ -2070,7 +2070,7 @@ paths = [
     "python/src/dotfiles_setup/plugin_inventory.py",
     "python/src/dotfiles_setup/plugin_remove.py",
 ]
-per_path_tokens = { ".claude/skills/plugin-removal/SKILL.md" = ['mise run plugin-remove -- <name@marketplace> --apply', 'Invoke `plugin-inventory`'], "mise.toml" = ['[tasks.plugin-inventory]', '[tasks.plugin-remove]', "dotfiles-setup plugin-inventory'", "dotfiles-setup plugin-remove'"], "python/src/dotfiles_setup/main.py" = ['inventory_parser = subparsers.add_parser(', 'removal_parser = subparsers.add_parser(', 'plugin_inventory_main(', 'plugin_remove_main('], "python/src/dotfiles_setup/plugin_inventory.py" = ['result = inventory(', 'claude_rows, claude_error = claude_cli_rows('], "python/src/dotfiles_setup/plugin_remove.py" = ['removal_plan = plan(inv, repo_root=repo_root)', 'results = apply(removal_plan, home=home, repo_root=repo_root)'] }
+per_path_tokens = { ".claude/skills/plugin-removal/SKILL.md" = ['mise run plugin-remove -- <name@marketplace> --apply', 'Invoke `plugin-inventory`'], "mise.toml" = ['[tasks.plugin-inventory]', '[tasks.plugin-remove]', "dotfiles-setup plugin-inventory'", "dotfiles-setup plugin-remove'"], "python/src/dotfiles_setup/main.py" = ['inventory_parser = subparsers.add_parser(', 'removal_parser = subparsers.add_parser(', 'plugin_inventory_main(', 'plugin_remove_main('], "python/src/dotfiles_setup/plugin_inventory.py" = ['result = inventory(', '    claude_rows, claude_ids, claude_error = _claude_cli_inventory('], "python/src/dotfiles_setup/plugin_remove.py" = ['removal_plan = plan(inv, repo_root=repo_root)', 'results = apply(removal_plan, home=home, repo_root=repo_root)'] }
 
 [[suite]]
 name = "workflow.token-audit-wiring"

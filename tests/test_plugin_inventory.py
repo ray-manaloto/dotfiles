@@ -126,9 +126,9 @@ def test_discover_repos_adds_existing_worktrees_and_skips_prunable_ones(
         del kwargs
         if argv[:4] == ["git", "-C", str(repo), "worktree"]:
             return _result(stdout=output)
-        if argv[:3] == ["claude", "plugin", "list"]:
+        if argv[:6] == ["mise", "exec", "--", "claude", "plugin", "list"]:
             return _result(stdout="[]")
-        if argv[:3] == ["codex", "plugin", "list"]:
+        if argv[:6] == ["mise", "exec", "--", "codex", "plugin", "list"]:
             return _result(stdout=json.dumps({"installed": [], "available": []}))
         if len(argv) > 3 and argv[3] == "grep":
             grepped.append(Path(argv[2]))
@@ -183,4 +183,138 @@ def test_cli_probe_errors_are_not_reported_as_absence(
     rows, error = plugin_inventory.claude_cli_rows(_PLUGIN, timeout=1)
 
     assert rows == []
-    assert error == "claude plugin list --json exited 7: claude failed"
+    assert error == "mise exec -- claude plugin list --json exited 7: mise failed"
+
+
+def test_inventory_reads_marketplace_declarations_and_planning_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "home"
+    plugins_dir = home / ".claude" / "plugins"
+    target_install = plugins_dir / "cache" / "c" / "a-b" / "1.0.0"
+    sibling_install = plugins_dir / "cache" / "c" / "beta" / "1.0.0"
+    dependency_install = plugins_dir / "cache" / "deps" / "dep" / "1.0.0"
+    collision_install = plugins_dir / "cache" / "b-c" / "a" / "1.0.0"
+    for install in (
+        target_install,
+        sibling_install,
+        dependency_install,
+        collision_install,
+    ):
+        (install / ".claude-plugin").mkdir(parents=True)
+    (target_install / ".claude-plugin" / "plugin.json").write_text(
+        json.dumps({"dependencies": {"dep@deps": "1.0.0"}})
+    )
+    (sibling_install / ".claude-plugin" / "plugin.json").write_text(
+        json.dumps({"dependencies": {"a-b@c": "1.0.0"}})
+    )
+    (dependency_install / ".claude-plugin" / "plugin.json").write_text("{}")
+    (collision_install / ".claude-plugin" / "plugin.json").write_text("{}")
+    (plugins_dir / "installed_plugins.json").write_text(
+        json.dumps(
+            {
+                "plugins": {
+                    "a-b@c": [
+                        {
+                            "scope": "user",
+                            "installPath": str(target_install),
+                        }
+                    ],
+                    "beta@c": [
+                        {
+                            "scope": "user",
+                            "installPath": str(sibling_install),
+                        }
+                    ],
+                    "dep@deps": [
+                        {
+                            "scope": "user",
+                            "auto": True,
+                            "installPath": str(dependency_install),
+                        }
+                    ],
+                    "a@b-c": [
+                        {
+                            "scope": "user",
+                            "installPath": str(collision_install),
+                        }
+                    ],
+                    "ghost@c": [],
+                }
+            }
+        )
+    )
+    root = tmp_path / "github"
+    repo = root / "owner" / "repo"
+    (repo / ".git").mkdir(parents=True)
+    settings = repo / ".claude" / "settings.json"
+    settings.parent.mkdir()
+    settings.write_text(json.dumps({"extraKnownMarketplaces": {"c": {"source": {}}}}))
+
+    def run(argv: list[str], **kwargs: object) -> SimpleNamespace:
+        del kwargs
+        if argv[:4] == ["git", "-C", str(repo), "worktree"]:
+            return _result(stdout=f"worktree {repo}\nHEAD abc\n")
+        if argv[:6] == ["mise", "exec", "--", "claude", "plugin", "list"]:
+            return _result(
+                stdout=json.dumps(
+                    [
+                        {"id": "a-b@c", "scope": "user", "enabled": True},
+                        {"id": "beta@c", "scope": "user", "enabled": True},
+                    ]
+                )
+            )
+        if argv[:6] == ["mise", "exec", "--", "codex", "plugin", "list"]:
+            return _result(
+                stdout=json.dumps(
+                    {
+                        "installed": [
+                            {
+                                "pluginId": "gamma@c",
+                                "name": "gamma",
+                                "marketplaceName": "c",
+                                "installed": True,
+                                "enabled": False,
+                            }
+                        ]
+                    }
+                )
+            )
+        if len(argv) > 3 and argv[3] == "grep":
+            return _result(returncode=1)
+        raise AssertionError(argv)
+
+    monkeypatch.setattr(plugin_inventory.subprocess, "run", run)
+
+    result = plugin_inventory.inventory("a-b@c", home=home, root=root)
+
+    assert result.project_settings == (settings,)
+    assert result.claude_marketplace_plugins == ("a-b@c", "beta@c")
+    assert result.codex_marketplace_plugins == ("gamma@c",)
+    assert result.dependent_plugins == ("beta@c",)
+    assert result.auto_dependencies == ("dep@deps",)
+    assert result.data_collisions == ("a@b-c",)
+
+
+def test_live_references_uses_binary_exclusion_and_replacement_decode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[list[str]] = []
+
+    def run(argv: list[str], **kwargs: object) -> SimpleNamespace:
+        del kwargs
+        seen.append(argv)
+        return SimpleNamespace(
+            stdout=b"note.md\x004\x00\xffponytail\x0b\x0cpayload\n",
+            stderr=b"",
+            returncode=0,
+        )
+
+    monkeypatch.setattr(plugin_inventory.subprocess, "run", run)
+
+    found = plugin_inventory.live_references(tmp_path, "ponytail")
+
+    assert "-I" in seen[0]
+    assert "-z" in seen[0]
+    assert len(found) == 1
+    assert found[0].text == "�ponytail\x0b\x0cpayload"

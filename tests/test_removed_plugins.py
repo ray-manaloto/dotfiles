@@ -164,10 +164,17 @@ def test_a_settings_marketplace_declaration_is_a_finding(tmp_path: Path) -> None
 
 def test_a_surviving_cache_copy_is_a_finding(tmp_path: Path) -> None:
     home = _home(tmp_path)
-    (home / ".claude" / "plugins" / "cache" / "example-plugin").mkdir(parents=True)
-    assert _find(home) == [
-        "~/.claude/plugins/cache/example-plugin still holds a cached copy"
-    ]
+    cache = home / ".claude" / "plugins" / "cache" / "example-plugin" / "example-plugin"
+    cache.mkdir(parents=True)
+    assert _find(home) == [f"{cache} still holds a cached copy"]
+
+
+def test_a_surviving_data_directory_is_a_finding(tmp_path: Path) -> None:
+    home = _home(tmp_path)
+    data = home / ".claude" / "plugins" / "data" / "example-plugin-example-plugin"
+    data.mkdir(parents=True)
+
+    assert _find(home) == [f"{data} still holds plugin data"]
 
 
 def test_hook_trust_of_a_disabled_codex_plugin_is_not_a_finding(
@@ -194,3 +201,24 @@ def test_the_doctor_check_skips_when_home_is_unavailable(tmp_path: Path) -> None
         home=None,
     )
     assert doctor.check_removed_plugins(setup) == []
+
+
+def test_the_doctor_labels_unreadable_state_as_could_not_check(tmp_path: Path) -> None:
+    home = _home(tmp_path)
+    (home / ".claude" / "plugins" / "installed_plugins.json").write_text("{trunc")
+    setup = doctor.Setup(
+        repo_root=tmp_path,
+        baseline={"removed_plugins": {"names": ["example-plugin"]}},
+        servers=(),
+        settings={},
+        local_settings={},
+        fnox=doctor.FnoxState(exists=False),
+        environ={},
+        home=home,
+    )
+
+    found = doctor.check_removed_plugins(setup)
+
+    assert len(found) == 1
+    assert found[0].startswith("removed plugin could not check:")
+    assert "reappeared" not in found[0]

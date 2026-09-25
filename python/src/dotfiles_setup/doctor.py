@@ -1348,11 +1348,16 @@ def check_removed_plugins(setup: Setup) -> list[str]:
             ".claude/settings.local.json": setup.local_settings,
         },
     )
-    return [
-        f"removed plugin reappeared: {line} — remove it, or take it out of "
-        "`doctor.toml` [removed_plugins] in a reviewed diff"
-        for line in found
-    ]
+    findings: list[str] = []
+    for line in found:
+        if " is unreadable (" in line:
+            findings.append(f"removed plugin could not check: {line}")
+        else:
+            findings.append(
+                f"removed plugin reappeared: {line} — remove it, or take it out of "
+                "`doctor.toml` [removed_plugins] in a reviewed diff"
+            )
+    return findings
 
 
 CHECKS: tuple[tuple[str, Callable[[Setup], list[str]]], ...] = (

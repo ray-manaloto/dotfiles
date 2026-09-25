@@ -23,6 +23,7 @@ def _message(location: PluginLocation) -> str:
             "declared-marketplace": f"declares marketplace `{location.key}`",
             "known-marketplace": f"registers marketplace `{location.key}`",
             "cache": "still holds a cached copy",
+            "data": "still holds plugin data",
             "codex-plugin": f"enables plugin `{location.key}`",
             "codex-marketplace": f"registers marketplace `{location.key}`",
             "codex-hook-trust": f"trusts hook `{location.key}`",
@@ -38,7 +39,35 @@ def find_reappearances(
     settings_sources: Mapping[str, Mapping[str, object]],
 ) -> list[str]:
     """Every place a removed plugin is installed, enabled, or registered."""
+    locations = locate(names, home=home, settings_sources=settings_sources)
+    disabled = {
+        (location.key, location.marketplace)
+        for location in locations
+        if location.harness == "codex"
+        and location.kind == "codex-plugin"
+        and location.detail == "enabled=false"
+    }
+
+    def deliberately_disabled(location: PluginLocation) -> bool:
+        if location.harness != "codex":
+            return False
+        if location.kind == "codex-plugin":
+            selector = location.key
+        elif location.kind == "codex-hook-trust":
+            selector = location.detail
+        elif location.kind == "cache":
+            selector = location.key
+        elif location.kind == "codex-marketplace":
+            return any(
+                marketplace == location.marketplace
+                for _selector, marketplace in disabled
+            )
+        else:
+            return False
+        return (selector, location.marketplace) in disabled
+
     return [
         _message(location)
-        for location in locate(names, home=home, settings_sources=settings_sources)
+        for location in locations
+        if not deliberately_disabled(location)
     ]

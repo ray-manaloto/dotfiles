@@ -15,11 +15,16 @@ Use `--json` when another tool will consume the typed report.
 
 ## Read the result
 
-- `locations` names user-level settings, registries, caches, marketplaces and
-  hook-trust keys. An `unreadable` location means the probe could not answer;
-  treat it as an error, not absence.
-- `claude_cli` and `codex_cli` are exact native-CLI matches. Codex matching uses
-  both selector halves, so a longer plugin name cannot satisfy the requested one.
+- `locations` names user-level settings, scoped install entries, exact
+  marketplace/plugin caches, plugin data, marketplaces and hook-trust keys. An
+  `unreadable` location means the probe could not answer; treat it as an error,
+  not absence.
+- A codex plugin configured with `enabled = false` is still inventory state:
+  its plugin, marketplace, hook-trust and exact cache locations remain visible.
+  Only the removed-plugin doctor policy exempts that deliberate disable.
+- `claude_cli` and `codex_cli` are exact native-CLI matches. Both selector halves
+  must match, so a same-named plugin from another marketplace and a longer name
+  cannot satisfy the requested one.
 - `project_settings` are mutable repository settings. `worktree_settings` and
   `stale_worktrees` are report-only because other worktrees belong to other
   branches.
@@ -27,6 +32,9 @@ Use `--json` when another tool will consume the typed report.
   hit in context and re-derive any nearby count before editing it.
 - `errors` means the inventory is incomplete. Resolve every error before
   concluding the plugin is absent.
+- Marketplace membership, dependency, auto-dependency and data-ID collision
+  fields are planning evidence. They guard cascading marketplace removal and
+  lossy data-directory names.
 
 The implementation contract is
 `docs/specs/plugin-remove-pipeline.md`; the command performs no mutation.

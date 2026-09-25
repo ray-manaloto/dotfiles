@@ -30,12 +30,17 @@ repository workflow around them.
    mise run plugin-remove -- <name@marketplace>
    ```
 
-   Confirm its targets and blockers. After explicit approval to mutate the
+   Confirm every install scope, exact cache/data target, marketplace-guard note,
+   and blocker. A blocked dry run exits 1. After explicit approval to mutate the
    named host and repositories, apply that same plan:
 
    ```bash
    mise run plugin-remove -- <name@marketplace> --apply
    ```
+
+   The apply path backs up cache and data with a manifest before uninstalling,
+   preserves minimal settings diffs, and stops at the first failed
+   post-condition.
 
 4. Invoke `plugin-health`, then verify both guards:
 

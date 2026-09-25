@@ -80,3 +80,43 @@ Non-blocking leftovers:
 - the wording at §4:185;
 - the §5 grep's missing control arm;
 - the P14 doc version, which the §5 real run measures.
+
+---
+
+## r2 addendum premise report
+
+PREMISE REPORT (read-only lane: nothing was written, so please persist this verbatim)
+
+ROWS: 8 checked — 6 CONFIRMED (0 provenance corrected) / 1 REFUTED / 0 UNVERIFIABLE / 1 ASSUMED (0 checkable)
+
+Scope: my tools were Read/Grep/Glob only, so no CLI runs (`--help`, dry runs) and no `graphify-query`. I read `installed_plugins.json` with key and scope-enum greps only, never values.
+
+- **R1 — REFUTED (narrow).** The entry key list is incomplete. Top level is `{version: 2, plugins}` and the scope counts are exact (213/53/2, total 268, over 214 keys). But an unlisted entry key `auto` sits on 4 user-scope entries (`installed_plugins.json:1232,2579,2608,2750`). `gitCommitSha` is optional: present in 255 of 268 entries.
+- **R2 — CONFIRMED.** All 268 `installPath` values match `.../plugins/cache/<a>/<b>/<c>`, and `plugins-reference.md:800` documents the layout. Grep can't check that each segment equals the key's own halves (no backreferences).
+- **R3 — CONFIRMED (docs).** `plugins-reference.md:744`: `data/{id}/` where `{id}` is the plugin id with every character outside `[a-zA-Z0-9_-]` replaced by `-`. I couldn't see the named directory on disk (Glob found no files in it).
+- **R4 — CONFIRMED.** On disk: `cache/exa/exa/3.4.1` and `cache/claude-plugins-official/exa/3.4.1`.
+- **R5 — CONFIRMED (code path + disk).** `cache/honcho/` holds `honcho/0.3.2` and `honcho-dev/0.2.4`. `honcho` is a key in `known_marketplaces.json`. `plugin_remove.py:109-150` triggers on the marketplace-level directory. I did not re-run the dry run.
+- **R6 — CONFIRMED.** `plugin_state.py:111` `present = (cache / name).exists()`.
+- **R7 — CONFIRMED against docs.** `plugins-reference.md:1060-1066` lists `--scope user|project|local` and `--keep-data`. `--json` can't be combined with `--prune`. Data is deleted only on uninstall from the last scope (`:1071`).
+- **R8 — ASSUMED, load-bearing.** `changelog.md:4754` says `/plugin uninstall` "disable[s] project-scoped plugins in `.claude/settings.local.json` instead of modifying `.claude/settings.json`". That is an *added* `false` override, not a deleted line.
+  - `_remove_enabled_line` (`plugin_remove.py:339`) can only delete a line.
+  - The doctor reads each settings file separately (`doctor.py:1345-1349`) and flags `on is True` (`plugin_state.py:92`), so a surviving `true` in `settings.json` would count as a reappearance.
+
+MISSING:
+1. **Marketplace field in `claude plugin list --json`.** The docs promise a "source marketplace" (`plugins-reference.md:1173,1183`) but name no JSON field. Codex documents `marketplaceName` (`codex/cli__reference.md:234-240`). The architect must measure the Claude field or drop that source; `installed_plugins.json` is the only source known to cover every project.
+2. **Marketplace remove cascades.** Without `--scope` it removes the declaration from every editable scope, and removal from the last scope "also uninstalls any plugins you installed from it" (`plugin-marketplaces.md:1320-1323`). It also edits `extraKnownMarketplaces` in project settings, which no minimal-diff step covers.
+3. **Local scope records `projectPath`.** Both local entries have `projectPath` right after `scope` (control: the same pattern for user scope gives 0). There is no rule for a `projectPath` directory that no longer exists as a CLI working directory; add one (blocker or skip).
+4. **Data dirs can be shared.** The `{id}` mapping is lossy: `a-b@c` and `a@b-c` both map to `a-b-c`, and dots also become `-`. The spec should derive the name with the documented rule and treat a collision as a blocker.
+5. **Dependencies (`auto` entries).** Disabling is refused while an enabled plugin depends on it (`plugin-dependencies.md:177,190`), and auto-installed dependencies outlive their parent (`:203`). The plan and tests don't cover either.
+6. **Harness cache sweep and symlinked entries.** The harness marks uninstalled version directories orphaned and sweeps them about 14 days later (`plugins-reference.md:802-804`). Link-mode cache entries are symlinks (`:798`), so a tar backup captures the link, not the content.
+7. **One key, many entries.** 214 keys carry 268 entries, so the plan must iterate entries, not keys.
+
+VERDICT: correct the spec first. R8's disable-override semantics make the "minimal-line restore" as written unable to handle an added `false` override, and leave the doctor flagging the kept `true` in `settings.json`. MISSING 1 (unknown Claude list field) and 4 (data-dir collision) leave the sibling guard and data backup underspecified. R1 needs a one-line fix (`auto`, optional `gitCommitSha`).
+
+Files read:
+- `/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/docs/specs/plugin-remove-pipeline-r2.md`
+- `/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/python/src/dotfiles_setup/plugin_state.py`
+- `/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/python/src/dotfiles_setup/plugin_remove.py`
+- `/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/python/src/dotfiles_setup/doctor.py`
+- `/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base/sources/agent-harness-docs/docs/claude-code/{plugins-reference,plugin-marketplaces,plugin-dependencies,changelog}.md`
+- `/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base/sources/agent-harness-docs/docs/codex/cli__reference.md`
