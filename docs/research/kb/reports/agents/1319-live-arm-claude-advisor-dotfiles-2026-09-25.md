@@ -1,9 +1,9 @@
 # #1319 live arm — `claude-advisor` (dotfiles), 2026-09-25 — also the F13 / item 23(f) advice
 
 Spawned via the `Agent` tool (`subagent_type: claude-advisor`) from session `dotfiles-20260925.001`
-(`e0054614-0df9-4dff-9b50-af3b534871e1`). Returned: yes. 14 tool uses, 190.6 s. It answered the question Ray still
-owes (task_plan.md remainder 23(f)): should `claude-doctor` call a one-patch lag "BROKEN"? This is advice only;
-the ruling is Ray's.
+(`e0054614-0df9-4dff-9b50-af3b534871e1`). Returned: yes. 14 tool uses, 190.6 s. It answered the question Ray then
+owed (task_plan.md remainder 23(f)): should `claude-doctor` call a one-patch lag "BROKEN"? Ray ruled 2026-09-25 — see
+`docs/receipts/1319.md` Notes.
 
 ## Report (verbatim)
 
@@ -22,6 +22,9 @@ SPLIT-BY-LAG-SIZE: reject — Claude Code moves only the third component (2.1.27
 **Could not verify** — whether `.282→.283` specifically changed the hook API. Probe: `diff <(curl -s …/v2.1.282/mods/types/claude-code.d.ts) <(curl -s …/v2.1.283/…)`.
 
 Prior codex verdict: none — this is Ray's owed ruling, not an escalation.
+
+**Coordinator note (not agent text):** the "Could not verify" probe above was not pursued. Ray's 2026-09-25 ruling keeps
+`running != latest` enforcing whether or not 2.1.282→2.1.283 changed `claude-code.d.ts`, so it bears on no open decision.
 
 ## GitHub repos touched
 
