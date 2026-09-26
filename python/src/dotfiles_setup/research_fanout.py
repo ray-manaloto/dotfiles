@@ -17,10 +17,13 @@ limit.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import http.client as http_client
 import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -39,8 +42,15 @@ _DEFAULT_TIMEOUT = 60.0
 _LAST30DAYS_TIMEOUT = 180.0
 _MAX_SNIPPET = 500
 _MAX_SLUG = 60
+_MIN_RELEASE_TERM_LENGTH = 3
+_MAX_HTTP_RESPONSE_BYTES = 8 * 1024 * 1024
+_HTTP_READ_CHUNK_BYTES = 64 * 1024
+_PROCESS_TERM_GRACE_S = 0.2
 _HTTP_OK = 200
 _HTTP_REDIRECT = 300
+_RELEASE_STOPWORDS = frozenset(
+    {"the", "and", "for", "with", "from", "this", "that", "are", "was", "not", "you"}
+)
 _SOURCE_NAMES = (
     "github-issues",
     "github-discussions",
@@ -158,6 +168,12 @@ class Http(Protocol):
         ...
 
 
+class _ReadableResponse(Protocol):
+    def read(self, amount: int = -1, /) -> bytes:
+        """Read at most ``amount`` response bytes."""
+        ...
+
+
 @dataclass(frozen=True)
 class _Attempt:
     items: tuple[Item, ...]
@@ -205,6 +221,17 @@ class _UsageError(ValueError):
     """A command-line error that maps to exit code 2."""
 
 
+class _CredentialHeaderError(ValueError):
+    """A credential cannot safely be represented in an HTTP header."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(f"invalid credential header for {name}")
+
+
+class _ResponseTooLargeError(ValueError):
+    """An HTTP response exceeded the bounded in-memory body size."""
+
+
 class _Parser(argparse.ArgumentParser):
     def error(self, message: str) -> Never:
         raise _UsageError(message)
@@ -213,14 +240,42 @@ class _Parser(argparse.ArgumentParser):
 def default_runner(
     argv: list[str], *, timeout: float, env: dict[str, str]
 ) -> subprocess.CompletedProcess[bytes]:
-    """Run one child with captured byte streams and an explicit timeout."""
-    return subprocess.run(
+    """Run one bounded process group with captured byte streams."""
+    process = subprocess.Popen(
         argv,
-        capture_output=True,
-        check=False,
-        timeout=timeout,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         env=env,
+        start_new_session=True,
     )
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(process.pid, signal.SIGTERM)
+        try:
+            process.communicate(timeout=_PROCESS_TERM_GRACE_S)
+        except subprocess.TimeoutExpired:
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGKILL)
+            process.communicate()
+        raise
+    return subprocess.CompletedProcess(argv, process.returncode, stdout, stderr)
+
+
+def _read_http_body(response: _ReadableResponse, deadline: _Deadline) -> bytes:
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        deadline.remaining()
+        chunk = response.read(_HTTP_READ_CHUNK_BYTES)
+        deadline.remaining()
+        if not chunk:
+            return b"".join(chunks)
+        total += len(chunk)
+        if total > _MAX_HTTP_RESPONSE_BYTES:
+            raise _ResponseTooLargeError
+        chunks.append(chunk)
 
 
 def default_http(
@@ -232,6 +287,7 @@ def default_http(
     timeout: float,
 ) -> tuple[int, bytes]:
     """Call one fixed HTTPS API and preserve its response bytes."""
+    deadline = _Deadline.after(timeout)
     if endpoint is Endpoint.EXA_SEARCH:
         try:
             with urllib.request.urlopen(
@@ -241,11 +297,11 @@ def default_http(
                     headers=headers,
                     method="POST",
                 ),
-                timeout=timeout,
+                timeout=deadline.remaining(),
             ) as response:
-                return response.status, response.read()
+                return response.status, _read_http_body(response, deadline)
         except urllib.error.HTTPError as exc:
-            return exc.code, exc.read()
+            return exc.code, _read_http_body(exc, deadline)
     if endpoint is Endpoint.FIRECRAWL_DEVELOPER:
         query = urllib.parse.urlencode(params or {})
         try:
@@ -255,11 +311,11 @@ def default_http(
                     headers=headers,
                     method="GET",
                 ),
-                timeout=timeout,
+                timeout=deadline.remaining(),
             ) as response:
-                return response.status, response.read()
+                return response.status, _read_http_body(response, deadline)
         except urllib.error.HTTPError as exc:
-            return exc.code, exc.read()
+            return exc.code, _read_http_body(exc, deadline)
     message = f"unsupported endpoint: {endpoint.value}"
     raise ValueError(message)
 
@@ -276,7 +332,7 @@ def _first_passage(record: dict[str, object]) -> str | None:
 def _record_item(record: object) -> Item | None:
     if not isinstance(record, dict):
         return None
-    url = record.get("url") or record.get("html_url")
+    url = record.get("html_url") or record.get("url")
     if not isinstance(url, str) or not url:
         return None
     title_value = record.get("title") or record.get("name") or url
@@ -352,7 +408,7 @@ def _run_json(
     completed = runner(argv, timeout=deadline.remaining(), env=env)
     raw = completed.stdout or b""
     if completed.returncode != 0:
-        return None, raw, f"exited {completed.returncode}"
+        return None, raw, _subprocess_error(completed, env)
     try:
         return _decode_json(raw), raw, None
     except ValueError:
@@ -361,6 +417,34 @@ def _run_json(
 
 def _gh_env() -> dict[str, str]:
     return child_env.clean_env(keep=frozenset({"GITHUB_TOKEN", "GH_TOKEN"}))
+
+
+def _subprocess_error(
+    completed: subprocess.CompletedProcess[bytes], env: dict[str, str]
+) -> str:
+    stderr = (completed.stderr or b"").decode(errors="replace")
+    credential_values = sorted(
+        (
+            value
+            for name, value in env.items()
+            if value and child_env.is_credential(name)
+        ),
+        key=len,
+        reverse=True,
+    )
+    for value in credential_values:
+        stderr = stderr.replace(value, "[REDACTED]")
+    return f"exited {completed.returncode}: {stderr.strip()[-300:]}"
+
+
+def _credential_header(name: str, value: str) -> str:
+    if "\r" in value or "\n" in value:
+        raise _CredentialHeaderError(name)
+    try:
+        value.encode("latin-1")
+    except UnicodeEncodeError:
+        raise _CredentialHeaderError(name) from None
+    return value
 
 
 def _required_repo(request: FanoutRequest) -> str:
@@ -414,8 +498,10 @@ def _github_discussions(
     )
     if error:
         return _Attempt((), raw, error)
-    if not isinstance(payload, dict) or payload.get("errors"):
-        return _Attempt((), raw, "GraphQL response contained errors")
+    if not isinstance(payload, dict):
+        return _Attempt((), raw, "unexpected response shape")
+    if "errors" in payload:
+        return _Attempt((), raw, "response contained errors")
     data = payload.get("data")
     search = data.get("search") if isinstance(data, dict) else None
     nodes = search.get("nodes") if isinstance(search, dict) else None
@@ -437,7 +523,7 @@ def _github_releases(
 ) -> _Attempt:
     repo = _required_repo(request)
     payload, raw, error = _run_json(
-        ["gh", "api", f"repos/{repo}/releases?per_page={request.limit}"],
+        ["gh", "api", f"repos/{repo}/releases?per_page=100"],
         runner=runner,
         deadline=deadline,
         env=_gh_env(),
@@ -446,27 +532,45 @@ def _github_releases(
         return _Attempt((), raw, error)
     if not isinstance(payload, list):
         return _Attempt((), raw, "unexpected JSON shape")
-    terms = re.findall(r"[a-z0-9]+", query.casefold())
+    terms = tuple(
+        term
+        for term in dict.fromkeys(re.findall(r"[a-z0-9]+", query.casefold()))
+        if len(term) >= _MIN_RELEASE_TERM_LENGTH and term not in _RELEASE_STOPWORDS
+    )
     items: list[Item] = []
-    for record in payload[: request.limit]:
+    for record in payload:
         if not isinstance(record, dict):
             continue
         url = record.get("html_url")
         if not isinstance(url, str) or not url:
             continue
-        tag = str(record.get("tag_name") or record.get("name") or url)
-        body = str(record.get("body") or "").casefold()
-        mentions = any(term in body for term in terms)
+        tag = str(record.get("tag_name") or "")
+        name = str(record.get("name") or "")
+        body = str(record.get("body") or "")
+        if not any(_contains_release_term(value, terms) for value in (tag, name, body)):
+            continue
+        body_mentions = _contains_release_term(body, terms)
         date = record.get("published_at") or record.get("created_at")
         items.append(
             Item(
-                tag,
+                tag or name or url,
                 url,
-                f"release body mentions a query term: {'yes' if mentions else 'no'}",
+                "release body mentions a query term: "
+                f"{'yes' if body_mentions else 'no'}",
                 str(date) if date is not None else None,
             )
         )
+        if len(items) == request.limit:
+            break
     return _Attempt(tuple(items), raw)
+
+
+def _contains_release_term(value: str, terms: tuple[str, ...]) -> bool:
+    folded = value.casefold()
+    return any(
+        re.search(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])", folded) is not None
+        for term in terms
+    )
 
 
 def _github_repo_control(
@@ -523,7 +627,9 @@ def _exa(
             {"query": query, "numResults": request.limit},
             {
                 "Content-Type": "application/json",
-                "x-api-key": os.environ.get("EXA_API_KEY", ""),
+                "x-api-key": _credential_header(
+                    "EXA_API_KEY", os.environ.get("EXA_API_KEY", "")
+                ),
             },
             request.limit,
         ),
@@ -546,7 +652,9 @@ def _firecrawl_developer(
         params["repos"] = request.repo
     headers: dict[str, str] = {}
     if key := os.environ.get("FIRECRAWL_API_KEY"):
-        headers["Authorization"] = f"Bearer {key}"
+        headers["Authorization"] = (
+            f"Bearer {_credential_header('FIRECRAWL_API_KEY', key)}"
+        )
     return _http_json(
         _HttpJsonRequest(
             Endpoint.FIRECRAWL_DEVELOPER,
@@ -632,10 +740,15 @@ def _context7(
     deadline: _Deadline,
 ) -> _Attempt:
     env = child_env.clean_env(keep=frozenset({"CONTEXT7_API_KEY"}))
-    library = runner(["ctx7", "library", query], timeout=deadline.remaining(), env=env)
+    library_name = request.repo.rsplit("/", maxsplit=1)[-1] if request.repo else query
+    library = runner(
+        ["ctx7", "library", library_name],
+        timeout=deadline.remaining(),
+        env=env,
+    )
     library_raw = library.stdout or b""
     if library.returncode != 0:
-        return _Attempt((), library_raw, f"exited {library.returncode}")
+        return _Attempt((), library_raw, _subprocess_error(library, env))
     library_id = _context7_library_id(library_raw)
     if library_id is None:
         return _Attempt((), library_raw)
@@ -646,7 +759,7 @@ def _context7(
     )
     docs_raw = docs.stdout or b""
     if docs.returncode != 0:
-        return _Attempt((), docs_raw, f"exited {docs.returncode}")
+        return _Attempt((), docs_raw, _subprocess_error(docs, env))
     return _Attempt(_context7_items(docs_raw, limit=request.limit), docs_raw)
 
 
@@ -689,6 +802,7 @@ def _last30days_env() -> dict[str, str]:
         }
     )
     env = child_env.clean_env(keep=keep)
+    env.pop("LAST30DAYS_TRUST_PROJECT_CONFIG", None)
     env["LAST30DAYS_CONFIG_DIR"] = ""
     env["LAST30DAYS_SKIP_KEYCHAIN"] = "1"
     return env
@@ -814,7 +928,12 @@ def _empty_control(
             boundaries=boundaries,
             deadline=deadline,
         )
-    except TimeoutError, subprocess.TimeoutExpired, OSError:
+    except (
+        http_client.HTTPException,
+        ValueError,
+        OSError,
+        subprocess.TimeoutExpired,
+    ):
         return Control(query, None), "canary failed"
     count = None if attempt.error else len(attempt.items)
     return Control(query, count), attempt.error
@@ -880,14 +999,24 @@ def _source_result(
                     else "canary returned 0 items"
                 )
         items = attempt.items
+    except _CredentialHeaderError as exc:
+        status = Status.ERROR
+        reason = str(exc)
+        control = None
+        items = ()
+    except _ResponseTooLargeError:
+        status = Status.ERROR
+        reason = "response too large"
+        control = None
+        items = ()
     except TimeoutError, subprocess.TimeoutExpired:
         status = Status.ERROR
         reason = "timed out"
         control = None
         items = ()
-    except OSError:
+    except (http_client.HTTPException, ValueError, OSError) as exc:
         status = Status.ERROR
-        reason = "request failed"
+        reason = "timed out" if _is_timeout_failure(exc) else "request failed"
         control = None
         items = ()
     result = SourceResult(
@@ -900,6 +1029,12 @@ def _source_result(
         None,
     )
     return _Fetch(result, raw)
+
+
+def _is_timeout_failure(exc: BaseException) -> bool:
+    return isinstance(exc, TimeoutError | subprocess.TimeoutExpired) or isinstance(
+        getattr(exc, "reason", None), TimeoutError
+    )
 
 
 def _fan_out_with_raw(
@@ -1018,6 +1153,11 @@ def _persist(
     fetched: list[_Fetch],
 ) -> tuple[Path, list[SourceResult]]:
     out_dir.mkdir(parents=True, exist_ok=True)
+    owned_names = ["manifest.json"]
+    for source in _SOURCE_NAMES:
+        owned_names.extend((f"{source}.json", f"{source}.raw"))
+    for name in owned_names:
+        (out_dir / name).unlink(missing_ok=True)
     results: list[SourceResult] = []
     for outcome in fetched:
         raw_path: Path | None = None

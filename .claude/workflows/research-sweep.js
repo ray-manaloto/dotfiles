@@ -7,7 +7,7 @@ export const meta = {
     { title: 'Triage', detail: 'rank and dedup the trimmed hits, choose what to deep-read (Explore + haiku)' },
     { title: 'Read', detail: 'deep-read the chosen URLs in batches; optional source dive at the release tag' },
     { title: 'Synthesize', detail: 'one Opus pass writes the report (opus, high)' },
-    { title: 'Verify', detail: 'refute the load-bearing claims, then a completeness critic (sonnet)' },
+    { title: 'Verify', detail: 'refute the load-bearing claims + a completeness critic (sonnet), then reconcile them into the report' },
     { title: 'Advise', detail: 'optional codex-sol-advisor second opinion (codex tokens, not Claude)' },
   ],
 }
@@ -137,24 +137,31 @@ if (triage.read.length > READ_MAX) log(`Triage: dropped ${triage.read.length - R
 phase('Read')
 const batches = []
 for (let i = 0; i < toRead.length; i += READ_BATCH) batches.push(toRead.slice(i, i + READ_BATCH))
-const readers = batches.map((batch, i) => () => agent([
+// Each reader keeps its identity: a reader that returns null is a GAP the report must
+// name, never a silent drop (a null filtered away reads as "nothing to say").
+const readers = batches.map((batch, i) => ({ urls: batch.map(u => u.url), run: () => agent([
   `QUESTION: ${A.question}`,
   'Deep-read each URL below and extract claims that bear on the QUESTION, each with a VERBATIM quote and the URL.',
   'GitHub issue/PR/discussion: `gh api` (issue + comments, PR body + review comments; discussions via `gh api graphql`).',
   'Other pages: `firecrawl scrape <url> --format markdown`. Never print environment values.',
   ...batch.map(u => `- ${u.url}  (${u.why})`),
-].join('\n'), { label: `read:${i + 1}/${batches.length}`, phase: 'Read', agentType: 'Explore', model: 'haiku', schema: CLAIMS }))
+].join('\n'), { label: `read:${i + 1}/${batches.length}`, phase: 'Read', agentType: 'Explore', model: 'haiku', schema: CLAIMS }) }))
 if (plan.sourceDive && REPO) {
-  readers.push(() => agent([
+  // general-purpose, not Explore: the dive clones into $TMPDIR and deletes it, and the
+  // built-in Explore agent may not create or delete files. It pays the CLAUDE.md payload
+  // only on the runs that need a clone.
+  readers.push({ urls: [`${REPO} (source at the latest release tag)`], run: () => agent([
     `QUESTION: ${A.question}`,
     `Shallow-clone ${REPO} at its LATEST RELEASE TAG (\`gh api repos/${REPO}/releases/latest --jq .tag_name\`) into $TMPDIR,`,
     'grep for the mechanism the QUESTION is about, and extract claims about what the code does, each with file:line and a',
     'verbatim quote. Also say whether the default branch has changed that code since the tag (a merged-but-unreleased fix).',
     'Delete the clone when done.',
-  ].join('\n'), { label: 'source-dive', phase: 'Read', agentType: 'Explore', model: 'sonnet', effort: 'medium', schema: CLAIMS }))
+  ].join('\n'), { label: 'source-dive', phase: 'Read', model: 'sonnet', effort: 'medium', schema: CLAIMS }) })
 }
-const claims = (await parallel(readers)).filter(Boolean).flatMap(r => r.claims)
-log(`Read: ${claims.length} claim(s) from ${readers.length} reader(s)`)
+const readResults = await parallel(readers.map(r => r.run))
+const claims = readResults.flatMap(r => (r === null ? [] : r.claims))
+const failedReads = readers.flatMap((r, i) => (readResults[i] === null ? r.urls : []))
+log(`Read: ${claims.length} claim(s) from ${readers.length} reader(s); ${failedReads.length} unread`)
 
 phase('Synthesize')
 const synth = await agent([
@@ -162,11 +169,13 @@ const synth = await agent([
   `Write the research report to ${A.reportPath}. Inputs: the claims JSON below, the triage hit list, and the manifests`,
   `(${manifests.join(', ')}). Resolve conflicts explicitly (source code and merged PRs beat issue threads; newer beats`,
   'older; say which you trusted and why). Name every gap from unverifiedEmpty as a gap, never as "nothing found".',
+  'Every FAILED READ below is a gap too: the reader for it failed, so its content is unknown.',
   'Sections: Answer, Evidence (claim | URL or file:line | quote), Conflicts resolved, Gaps, Recommendation,',
   '## GitHub repos touched (per .claude/rules/research-repo-enumeration.md). Return the path and the claims the',
   `Answer depends on (at most ${VERIFY_MAX}).`,
   `CLAIMS:\n${JSON.stringify(claims)}`,
   `TRIAGE:\n${JSON.stringify({ hits: triage.hits, unverifiedEmpty: triage.unverifiedEmpty })}`,
+  `FAILED READS:\n${JSON.stringify(failedReads)}`,
 ].join('\n'), { label: 'synthesize', phase: 'Synthesize', model: 'opus', effort: 'high', schema: SYNTH })
 if (synth === null) return { status: 'synth-null', plan, triage, claims }
 
@@ -186,8 +195,26 @@ const [verdicts, critic] = await parallel([
   ].join('\n'), { label: 'critic', phase: 'Verify', agentType: 'Explore', model: 'sonnet', effort: 'low', schema: CRITIC }),
 ])
 const refuted = verdicts === null ? null : verdicts.verdicts.filter(v => v.refuted)
+const gaps = critic === null ? null : critic.gaps
 if (verdicts === null) log('Verify: refuter returned null — claims are UNVERIFIED, not confirmed')
 else log(`Verify: ${refuted.length}/${verdicts.verdicts.length} load-bearing claim(s) refuted`)
+
+// The report on disk must carry the verification outcome: a refuted claim left in the
+// Answer is worse than no report. Reconcile only when there is something to write
+// (a small edit to an existing file: sonnet at low effort).
+let reconciled = true
+if (verdicts === null || critic === null || refuted.length || gaps.length) {
+  const reconcile = await agent([
+    `Edit the research report at ${synth.reportPath} in place. Add a "## Verification" section listing each`,
+    'load-bearing claim as confirmed, refuted (with the evidence) or unverified. Correct or strike every refuted',
+    'claim wherever the Answer or Recommendation relies on it, and say how the conclusion changes. Append the',
+    'critic gaps to the Gaps section. If the refuter or critic result is null, say that verification did not run.',
+    `VERDICTS: ${JSON.stringify(verdicts)}`,
+    `CRITIC GAPS: ${JSON.stringify(gaps)}`,
+  ].join('\n'), { label: 'reconcile', phase: 'Verify', model: 'sonnet', effort: 'low' })
+  reconciled = reconcile !== null
+  if (!reconciled) log('Verify: reconcile returned null — the report on disk does NOT reflect verification')
+}
 
 let advice = null
 if (A.advisor) {
@@ -198,6 +225,6 @@ if (A.advisor) {
   if (advice === null) log('Advise: codex-sol-advisor returned null (escalation per .claude/token-routing.md item 1)')
 }
 
-// Status: complete | verify-null | plan-null | no-manifests | triage-null | synth-null.
-const status = verdicts === null ? 'verify-null' : 'complete'
-return { status, reportPath: synth.reportPath, plan, triage, claims: claims.length, verdicts, refuted, gaps: critic === null ? null : critic.gaps, advice }
+// Status: complete | verify-null | reconcile-null | plan-null | no-manifests | triage-null | synth-null.
+const status = verdicts === null ? 'verify-null' : !reconciled ? 'reconcile-null' : 'complete'
+return { status, reportPath: synth.reportPath, plan, triage, claims: claims.length, failedReads, verdicts, refuted, gaps, advice }

@@ -1,4 +1,4 @@
-# Spec (rev 3, 2026-09-26: two premise-verifier rounds applied) — `research-fanout`: a no-LLM, multi-source research fetcher for Claude AND codex
+# Spec (rev 4, 2026-09-26: two premise-verifier rounds + review round 1 applied) — `research-fanout`: a no-LLM, multi-source research fetcher for Claude AND codex
 
 Status: RATIFIED by Ray 2026-09-26 (AskUserQuestion, session `dotfiles-20260926.000`): the "hybrid" architecture —
 a Python fetch layer + mise task usable by both harnesses, a saved Claude workflow over it with per-node model/effort,
@@ -65,8 +65,8 @@ Sources (name → transport; all reachable from a plain shell):
 | `github-releases` | `gh api 'repos/<repo>/releases?per_page=<limit>'`; items = tag, date, URL, and whether the release body mentions any query term | `gh`, `--repo` |
 | `exa` | `POST https://api.exa.ai/search`, header `x-api-key` from `EXA_API_KEY`, JSON `{"query", "numResults"}` | `EXA_API_KEY` set |
 | `context7` | `ctx7 library <query>` (text: a numbered list of library IDs), then `ctx7 docs <first-id> <query>` (text: `### ` sections, each carrying a `Source:` URL). Items = one per `### ` section of the docs output (title = heading, url = its `Source:` URL, snippet = the section text); only the FIRST library ID is queried | `ctx7` on PATH |
-| `firecrawl-developer` | `GET https://api.firecrawl.dev/v2/search/developer?query=…&limit=…` (+`repos=<repo>` when given); send `Authorization: Bearer $FIRECRAWL_API_KEY` only if set (the endpoint is keyless) | none |
-| `firecrawl-search` | `firecrawl search <query> --json --limit <limit>` | `firecrawl` on PATH |
+| `firecrawl-developer` | `GET https://api.firecrawl.dev/v2/search/developer?query=…&k=…` (+`repos=<repo>` when given; the count param is `k` — `limit` is a 400, measured 2026-09-26); send `Authorization: Bearer $FIRECRAWL_API_KEY` only if set (the endpoint is keyless) | none |
+| `firecrawl-search` | `firecrawl search <query> --sources web --json --limit <limit>` (the CLI default `web,alexandria` returns the Alexandria tool catalog; results are under `data.web`) | `firecrawl` on PATH |
 | `last30days` | **OPT-IN ONLY** (never in the default set; runs only when named in `--sources`). `python3 <script> "<query>" --emit=json` (+`--github-repo=<repo>` when given); script = env `LAST30DAYS_SCRIPT`, else the highest-version match (compare versions NUMERICALLY, not as strings) of `~/.claude/plugins/cache/last30days-skill/last30days/*/skills/last30days/scripts/last30days.py`, else the same under `~/.codex/plugins/cache/`. Parse its JSON; unparsable → `error` | script found |
 
 Result shapes (frozen dataclasses, serialised with `dataclasses.asdict`):
@@ -190,3 +190,52 @@ its control (`--sources exa` with `EXA_API_KEY` unset → `skipped`), per `.clau
 | 11 | L | last30days `--emit` choices include `json`; `--plan` skips its internal LLM planner | plugin `last30days.py:658`, `:805` |
 | 12 | A | GraphQL `search(type: DISCUSSION)` accepts `repo:` qualifiers — the multisource lane used it (control 0 vs 63); re-probe if it fails | multisource report scorecard |
 | 13 | L | `ctx7 library` prints a numbered ID list; `ctx7 docs` prints `### ` sections each with a `Source:` URL | `.agent/kb/raw/mise-warn-src-ctx7.md:1-105` (premise-verifier) |
+
+## 8. Review round 1 — corrections (rev 4, 2026-09-26)
+
+Sources: codex review lens `docs/research/kb/reports/agents/codex-review-50ba9eec-2026-09-26.md` (C4, C5) and Opus cold
+review `docs/research/kb/reports/agents/cold-review-50ba9eec-2026-09-26.md` (F1–F14). Every item is a confirmed finding
+against commit `50ba9eec`; the caller already fixed the firecrawl `k`/`--sources web` defects (the §3 table is updated
+below) and the workflow findings. Each fix ships WITH a test whose fail arm is stated in a comment. Dissent on any item
+you find false against the code.
+
+Same ALLOWLIST as before: `python/src/dotfiles_setup/research_fanout.py`, `tests/test_research_fanout.py`
+(`mise.toml` needs no change). `COMMIT: caller`.
+
+1. **Transport failures never abort the run (C4, F1, F12).** At the transport boundary (primary AND canary calls)
+   catch `http.client.HTTPException` (incl. `IncompleteRead`), `ValueError`, `OSError`, `TimeoutError` →
+   per-source `ERROR`. A socket timeout reports `timed out`, not `request failed`. One broken source must still leave
+   every other source's result AND the manifest on disk. GraphQL: "response contained errors" only when an `errors`
+   key exists; a non-object reply says `unexpected response shape`.
+2. **No credential value in any exception text (F2).** Header values are validated before use; an invalid value
+   (CR/LF, non-latin-1) yields `ERROR` reason `invalid credential header for <NAME>` — the NAME, never the value.
+   Test: a CRLF sentinel in `EXA_API_KEY` appears in NO output stream, file, or reason.
+3. **Deadline covers the whole response (C5).** Read the body in chunks, calling `deadline.remaining()` between
+   chunks, with a hard cap of 8 MiB (`ERROR` `response too large`). A slow trickle past the deadline → `timed out`.
+4. **Process-group kill on timeout (F10).** `default_runner` spawns with `start_new_session=True` and on timeout
+   SIGTERMs then SIGKILLs the process GROUP — precedent `bounded_wait.py:44-60`.
+5. **Diagnosable subprocess errors (F11).** A non-zero exit's reason is `exited N: <last 300 chars of stderr>` with
+   every credential value present in the child env replaced by `[REDACTED]` before truncation.
+6. **Web URLs for GitHub items (F3).** Prefer `html_url` over `url` in `_record_item`. Fixtures use the REAL REST
+   search item shape (both `url` = api link and `html_url` = web link present).
+7. **context7 resolves the right library (F4).** `ctx7 library <name>` uses the repo's NAME part when `--repo` is
+   given (`mise` for `jdx/mise`), else the query; `ctx7 docs <id> <query>` still uses the query.
+8. **No stale files in a reused out dir (F5).** Before writing, delete from the out dir exactly these names if
+   present: `manifest.json` and `<source>.json` / `<source>.raw` for EVERY known source (not only the requested
+   ones). Nothing else is deleted.
+9. **Releases filtered by the query (F6).** Fetch up to 100 recent releases; keep those whose tag, name or body
+   contains a query TERM as a whole word, case-insensitive, where terms are the query's words of ≥3 characters minus
+   the stopwords `the and for with from this that are was not you`. Emit at most `--limit` matches. None →
+   the repo-exists canary decides `empty_verified` / `empty_unverified` (as before).
+10. **Credential scrubbing is tested for EVERY child (F7).** For `gh`, `firecrawl`, `ctx7`, `last30days`: assert a
+    non-kept credential sentinel (e.g. `AWS_SECRET_ACCESS_KEY`) is absent from the env the runner received, and each
+    kept name is present.
+11. **Hermetic tests (F8, F9).** The last30days default-set test sets `HOME` to `tmp_path` and `LAST30DAYS_SCRIPT` to
+    a fake so it fails on a clean runner if the opt-in rule breaks. Add a test for each path F9 names: exit 1 when all
+    results are `empty_unverified`; GitHub query construction (`repo:<r>+<q>`); the `gh` presence check; the shared
+    deadline; the releases repo-exists check; `per_page`; slug truncation to 60; GraphQL `errors`; the mention flag.
+
+Out of scope (ticket, not this change): `LAST30DAYS_TRUST_PROJECT_CONFIG` passes the scrub — drop it from last30days'
+child env in THIS change only if it is a one-line removal; otherwise leave it and say so.
+
+§5 verification is unchanged; run all of it and report real exit codes.

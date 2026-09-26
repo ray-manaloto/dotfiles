@@ -14,6 +14,12 @@ ba41c3748e298012 = "ba41c3748e298012"
 # entry. One SHA, one line, no collateral.
 f6ba0ae = "f6ba0ae"
 
+# `50ba9eec` is the research-fanout commit the 2026-09-26 cold review and codex
+# review lens were run against; its SHA names both verbatim review reports and is
+# cited in docs/specs/research-fanout.md §8. Same shape and same reasoning as
+# `f6ba0ae` above: one exact SHA, no blanket `ba`.
+50ba9eec = "50ba9eec"
+
 # `fpr` is gpg's --with-colons RECORD TYPE for a fingerprint line, not a
 # misspelling of "for"/"far"/"fps" (#251). The Dockerfile's apt.llvm.org key
 # check parses that exact format:

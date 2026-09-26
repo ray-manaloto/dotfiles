@@ -81,6 +81,7 @@ KNOWN_LABEL_PREFIXES = {
     "source-dive",
     "refute",
     "critic",
+    "reconcile",
     "codex-sol-advisor",
 }
 
@@ -218,6 +219,9 @@ const agent = async (_prompt, options = {}) => {
       reportPath: args.reportPath,
       loadBearing: [{ claim: 'c', source: 's' }],
     }
+  }
+  if (label === 'refute') {
+    return { verdicts: [{ claim: 'c', refuted: true, evidence: 'e' }] }
   }
   return schemaValue(options.schema)
 }
@@ -369,6 +373,7 @@ def _custom_stub_source(
         "const events = []\n"
         "const phase = (title) => events.push({ kind: 'phase', title })\n"
         "const log = (message) => events.push({ kind: 'log', message })\n"
+        "const parallel = async (tasks) => Promise.all(tasks.map((task) => task()))\n"
         "const agent = async (_prompt, options = {}) => {\n"
         "  const label = options.label || 'general-purpose'\n"
         "  calls.push({ label, agentType: options.agentType || 'general-purpose' })\n"
@@ -502,10 +507,11 @@ _SWEEP_ROUTING = {
     "plan+fetch": ("general-purpose", "sonnet", "medium"),
     "triage": ("Explore", "haiku", ""),
     "read": ("Explore", "haiku", ""),
-    "source-dive": ("Explore", "sonnet", "medium"),
+    "source-dive": ("general-purpose", "sonnet", "medium"),
     "synthesize": ("general-purpose", "opus", "high"),
     "refute": ("general-purpose", "sonnet", "medium"),
     "critic": ("Explore", "sonnet", "low"),
+    "reconcile": ("general-purpose", "sonnet", "low"),
     "codex-sol-advisor": ("codex-sol-advisor", "", ""),
 }
 
@@ -544,3 +550,79 @@ def test_research_sweep_rejects_a_relative_report_path(tmp_path: Path) -> None:
     result = _bun_run_wrapped(wrapped, tmp_path / "sweep-relative.js")
     assert result.returncode != 0
     assert "reportPath must be an absolute path" in result.stderr
+
+
+_SWEEP_HAPPY_BODY = """
+  if (label === 'plan+fetch') {
+    return { runs: [{ query: 'q', sources: ['exa'], manifest: '/tmp/m.json', rc: 0 }],
+      sourceDive: false }
+  }
+  if (label === 'triage') {
+    return {
+      read: [{ url: 'https://gone.test', why: 'w' }],
+      hits: [],
+      unverifiedEmpty: [],
+    }
+  }
+  if (label.startsWith('read')) return null
+  if (label === 'synthesize') {
+    events.push({ kind: 'synth-prompt', prompt: _prompt })
+    return { reportPath: args.reportPath, loadBearing: [] }
+  }
+  if (label === 'refute') return { verdicts: [] }
+  if (label === 'critic') return { gaps: [] }
+  return RECONCILE
+"""
+
+
+def _sweep_run(tmp_path: Path, reconcile: str, name: str) -> dict[str, object]:
+    body = _SWEEP_HAPPY_BODY.replace("RECONCILE", reconcile)
+    wrapped = _custom_stub_source(
+        RESEARCH_SWEEP.read_text(encoding="utf-8"), {**ARGS, "advisor": False}, body
+    )
+    result = _bun_run_wrapped(wrapped, tmp_path / name)
+    assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    return cast("dict[str, object]", json.loads(result.stdout.splitlines()[-1]))
+
+
+def test_research_sweep_failed_reader_becomes_a_named_gap(tmp_path: Path) -> None:
+    """A null reader is reported, not dropped (codex review of 50ba9eec, finding 3).
+
+    FAIL arm: restore `.filter(Boolean)` over the reader results and
+    `failedReads` disappears from the result and the synthesis prompt.
+    """
+    payload = _sweep_run(tmp_path, "'ok'", "sweep-null-reader.js")
+    run_result = cast("dict[str, object]", payload["result"])
+    events = cast("list[dict[str, str]]", payload["events"])
+    synth_prompt = next(e["prompt"] for e in events if e["kind"] == "synth-prompt")
+
+    assert run_result["failedReads"] == ["https://gone.test"]
+    assert "FAILED READS:" in synth_prompt
+    assert "https://gone.test" in synth_prompt
+    # Nothing refuted and no gaps: reconcile is skipped and the run completes.
+    labels = [c["label"] for c in cast("list[dict[str, str]]", payload["calls"])]
+    assert "reconcile" not in labels
+    assert run_result["status"] == "complete"
+
+
+def test_research_sweep_unreconciled_report_is_not_complete(tmp_path: Path) -> None:
+    """A refuted claim that never reaches the report must not return `complete`.
+
+    FAIL arm: drop the reconcile node (or its null check) and status reads
+    `complete` while the report on disk still asserts the refuted claim.
+    """
+    wrapped = _custom_stub_source(
+        RESEARCH_SWEEP.read_text(encoding="utf-8"),
+        {**ARGS, "advisor": False},
+        _SWEEP_HAPPY_BODY.replace(
+            "if (label === 'refute') return { verdicts: [] }",
+            "if (label === 'refute') return { verdicts: "
+            "[{ claim: 'c', refuted: true, evidence: 'e' }] }",
+        ).replace("RECONCILE", "null"),
+    )
+    result = _bun_run_wrapped(wrapped, tmp_path / "sweep-reconcile-null-2.js")
+    assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    run_result = cast(
+        "dict[str, object]", json.loads(result.stdout.splitlines()[-1])["result"]
+    )
+    assert run_result["status"] == "reconcile-null"
