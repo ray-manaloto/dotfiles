@@ -20,6 +20,12 @@ f6ba0ae = "f6ba0ae"
 # `f6ba0ae` above: one exact SHA, no blanket `ba`.
 50ba9eec = "50ba9eec"
 
+# `HOMEs` is the plural of the env var `HOME` ("under both HOMEs": a real HOME and an
+# empty one) in the verbatim cold review of the research-fanout fixes. Verbatim
+# reports are not normalized (agent-report-persistence.md rule 4), so the exact
+# token is allowlisted rather than the report edited.
+HOMEs = "HOMEs"
+
 # `fpr` is gpg's --with-colons RECORD TYPE for a fingerprint line, not a
 # misspelling of "for"/"far"/"fps" (#251). The Dockerfile's apt.llvm.org key
 # check parses that exact format:
