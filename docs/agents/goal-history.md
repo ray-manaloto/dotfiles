@@ -1659,3 +1659,30 @@ flowchart LR
     S0["step 0: /doctor + /claude-api"] --> F["fable remainder"] --> R["2026-09-24/25 session remainder"]
     R --> P11["Phase 11"] --> P10["Phase 10"]
 ```
+
+## 2026-09-25 — (session b) step 0 done: built-in /doctor (#1378) and /claude-api migrate on knowledge-base (#814); fable-remainder rulings
+
+- **Iteration ID:** `dotfiles-goal-20260925-036`
+- **Prior goal digest:** `sha256:aa06d9422b6850be58333e47dcecd69a4d9a864b0225f24dc5d0069d1c0233dc`
+- **Current goal digest:** `sha256:dcb7512b4e53bcfe5782292faefe34cf29e2d8ffbb116094685fcf9435e73d95`
+- **Changed requirement:** Step 0 is DONE and leaves the order. The fable-orchestrator remainder is now active, with four rulings (Ray, 2026-09-25b, AskUserQuestion): V6 subsumed by claude-advisor trigger 2; KB#794 closed on the skill-level default; `kb-tool-review` artifact mode kept, proven by one live run; claudex-loop removed fully. Ray also directed that every antigravity tier run Gemini 3.8 in both repos (applied host-side: user settings `env.CLAUDE_PLUGIN_OPTION_TIER_PRO` + `pluginConfigs`).
+- **Reason:** Ray's rulings in session `1df2b6a7` (AskUserQuestion): upgrade claude first, clean up everything at the /doctor gate, ship, migrate knowledge-base registry-only, re-baseline via fnox, bump KB antigravity-cli, kb-land, and the four fable-remainder rulings.
+- **Evidence:**
+  - `docs/research/kb/reports/agents/claude-doctor-2026-09-25.md` (19 findings); `land` rc=0 for #1378.
+  - knowledge-base #814 `kb-land` rc=0; its cold review `.agent/kb/review/reports/review-b131fa50…-cold.md` (machine-local) and receipt `b131fa508a19`.
+  - Session audits `session-audit-{dismissed-errors,missing-requests,bugs,vagueness}-2026-09-25b.md`; briefs `session-2026-09-25b-agent-briefs.md`.
+- **Affected tickets:** #1378, #283 (re-measurement comment), knowledge-base #814, #794 (to close), #1319 (open).
+- **Disposition:** `DELIVERED` (step 0: #1378, KB#814); fable-remainder rulings `ACCEPTED`.
+- **Topology and ownership:** One writer, the Claude architect session. Delegates: Opus `general-purpose` session-audit lanes (M, N, P); antigravity `agy-delegate` cold reviews (Gemini 3.1 Pro for KB#814, Gemini 3.8 Flash for #1378). codex was unavailable (usage limit until 2026-09-30).
+
+### Current goal
+
+> Finish the fable-orchestrator removal remainder in task_plan.md under Ray's 2026-09-25b rulings: F2 graph rebuild with graphify-health rc=0, V8's two tickets, claudex-loop full removal through the plugin-removal skill, KB#794 closed with its reason, V6 rewritten as a pointer to claude-advisor trigger 2, and #1319's live arms including one real kb-tool-review Review-phase run once codex is available again. Then the 2026-09-24/25 session remainder, then Phase 11 in its ruled order, then Phase 10. Design changes go through /to-spec, /to-tickets and /implement; done means land rc=0. Keep task_plan.md as the sole task authority.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    F["fable remainder (ACTIVE)"] --> R["2026-09-24/25 session remainder"]
+    R --> P11["Phase 11"] --> P10["Phase 10"]
+```

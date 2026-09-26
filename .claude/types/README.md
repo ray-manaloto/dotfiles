@@ -67,8 +67,11 @@ still reads 2.1.277 — the content moves even when the header does not, so
 never infer "unchanged" from the header.
 
 ⚠️ **This line is a PIN, not prose.** `pin-parity.toml`'s `claude-code` entry
-reads it and requires it to equal `schemas/sources.toml`'s `version`, so edit
-the two together (or let `mise run schema-vendor-refresh` do it).
+requires it to equal `schemas/sources.toml`'s `version`. To bump: hand-edit BOTH
+to the new version (plus the `source` tag in `sources.toml`), then run
+`mise run schema-vendor-refresh`, which re-downloads at that tag and rewrites
+`sha256`. The refresh never bumps claude-code on its own — for this tool
+`sources.toml` is the pin.
 
 Do not edit the generated declarations by hand. Run `mise run schema-vendor-refresh`
 after a pin bump or if the sha256 check fails.
