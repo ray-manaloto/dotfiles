@@ -1,0 +1,192 @@
+# Spec (rev 3, 2026-09-26: two premise-verifier rounds applied) — `research-fanout`: a no-LLM, multi-source research fetcher for Claude AND codex
+
+Status: RATIFIED by Ray 2026-09-26 (AskUserQuestion, session `dotfiles-20260926.000`): the "hybrid" architecture —
+a Python fetch layer + mise task usable by both harnesses, a saved Claude workflow over it with per-node model/effort,
+and a mirrored skill. Ray was shown that knowledge-base#509 `aggregated-research` / `kb_setup.research` overlaps and
+chose a NEW dotfiles module anyway (re-ruled the same day). This spec covers ONLY the fetch layer + mise task; the
+workflow and skill are authored separately by the architect.
+
+Evidence: `docs/research/kb/reports/agents/mise-warn-multisource-2026-09-26.md` (per-source scorecard: invocations,
+latency, codex reachability) and `docs/research/kb/reports/agents/research-skill-inventory-2026-09-26.md`.
+
+## 1. Objective
+
+One command fans a research question out to many sources concurrently, with **no LLM in the loop**, and writes one
+raw JSON file per source plus a manifest. It replaces an agent spending Opus tokens on fetching. Every empty result
+carries a **control arm** (a canary query against the same source) so "0 results" is distinguishable from "source
+broken" (`.claude/rules/probes-need-a-control-arm.md`). Both harnesses call it: Claude through the workflow,
+codex directly.
+
+## 2. Files
+
+Create:
+- `python/src/dotfiles_setup/research_fanout.py` — the library + `main(argv, repo_root) -> int`.
+- `tests/test_research_fanout.py`.
+
+Modify:
+- `mise.toml` — add `[tasks.research-fanout]`, a thin caller invoking the module DIRECTLY (precedent
+  `[tasks.session-review-gate]`, `mise.toml:1619-1621`): `run = 'uv run --project python python -m dotfiles_setup.research_fanout'`,
+  with a one-line description and a `# Thin caller; python/src/dotfiles_setup/research_fanout.py.` comment.
+  **Do NOT register a `dotfiles-setup` subcommand:** `main.py` parses with `parse_args` (`main.py:3112`), and a
+  pass-through whose first token is a flag (`--list-sources`) is rejected — `plan_attest.py:95-110` documents why that
+  case needed a special separator. `python -m` bypasses the parent parser entirely (rev 2, premise-verifier finding).
+  The module ends with `if __name__ == "__main__": raise SystemExit(main(sys.argv[1:], _repo_root()))` where
+  `_repo_root()` reads `MISE_PROJECT_ROOT` and falls back to `Path.cwd()` (precedent `session_gate.py:272`; the task's
+  default `dir` is `{{ config_root }}`, `schemas/mise.json:3415`).
+
+Touch nothing else. No new `.sh` file (`bash_logic_budget`). No new Python dependency: HTTP via `urllib.request`
+(stdlib); subprocesses via `subprocess.run` with an explicit `timeout`.
+
+## 3. Interfaces
+
+CLI (`mise run research-fanout -- …`):
+
+```
+research-fanout QUERY [--repo OWNER/REPO] [--sources S1,S2,...] [--out DIR] [--limit N] [--timeout SECS] [--list-sources]
+```
+
+- `QUERY` (required unless `--list-sources`): the research question / search terms.
+- `--repo`: scopes the GitHub sources and the firecrawl developer index. Without it, GitHub sources return
+  `skipped` with reason `needs --repo`.
+- `--sources`: comma list; default = every source whose prerequisites are present. Unknown name → exit 2.
+- `--out`: default `<repo_root>/.agent/kb/raw/research-fanout/<slug>/`, slug = lowercase alnum-and-hyphen of QUERY,
+  ≤60 chars.
+- `--limit`: max items per source (default 10). `--timeout`: per-source wall clock; when given it applies to EVERY
+  source; when omitted, 60 s per source and 180 s for last30days.
+- `--list-sources`: print one line per source: name, transport, prerequisite, present/absent (presence only — never a
+  value). Exit 0.
+
+Sources (name → transport; all reachable from a plain shell):
+
+| name | transport | prerequisite |
+|---|---|---|
+| `github-issues` | `gh api '/search/issues?q=repo:<repo>+<query>&per_page=<limit>'` (issues AND PRs; NOT `gh search issues`) | `gh` on PATH, `--repo` |
+| `github-discussions` | `gh api graphql` — `search(type: DISCUSSION, query: "repo:<repo> <query>")` | `gh`, `--repo` |
+| `github-releases` | `gh api 'repos/<repo>/releases?per_page=<limit>'`; items = tag, date, URL, and whether the release body mentions any query term | `gh`, `--repo` |
+| `exa` | `POST https://api.exa.ai/search`, header `x-api-key` from `EXA_API_KEY`, JSON `{"query", "numResults"}` | `EXA_API_KEY` set |
+| `context7` | `ctx7 library <query>` (text: a numbered list of library IDs), then `ctx7 docs <first-id> <query>` (text: `### ` sections, each carrying a `Source:` URL). Items = one per `### ` section of the docs output (title = heading, url = its `Source:` URL, snippet = the section text); only the FIRST library ID is queried | `ctx7` on PATH |
+| `firecrawl-developer` | `GET https://api.firecrawl.dev/v2/search/developer?query=…&limit=…` (+`repos=<repo>` when given); send `Authorization: Bearer $FIRECRAWL_API_KEY` only if set (the endpoint is keyless) | none |
+| `firecrawl-search` | `firecrawl search <query> --json --limit <limit>` | `firecrawl` on PATH |
+| `last30days` | **OPT-IN ONLY** (never in the default set; runs only when named in `--sources`). `python3 <script> "<query>" --emit=json` (+`--github-repo=<repo>` when given); script = env `LAST30DAYS_SCRIPT`, else the highest-version match (compare versions NUMERICALLY, not as strings) of `~/.claude/plugins/cache/last30days-skill/last30days/*/skills/last30days/scripts/last30days.py`, else the same under `~/.codex/plugins/cache/`. Parse its JSON; unparsable → `error` | script found |
+
+Result shapes (frozen dataclasses, serialised with `dataclasses.asdict`):
+
+```python
+class Status(Enum): OK, EMPTY_VERIFIED, EMPTY_UNVERIFIED, ERROR, SKIPPED   # values: lowercase names
+
+@dataclass(frozen=True)
+class Item: title: str; url: str; snippet: str; date: str | None      # snippet ≤ 500 chars
+
+@dataclass(frozen=True)
+class Control: query: str; count: int | None                            # None = the canary itself errored
+
+@dataclass(frozen=True)
+class SourceResult:
+    source: str; status: Status; items: tuple[Item, ...]; elapsed_s: float
+    reason: str | None          # why ERROR / SKIPPED / EMPTY_UNVERIFIED — never contains a credential value
+    control: Control | None     # set iff the primary query returned 0 items
+    raw_file: str | None        # path of <source>.raw (the untrimmed response), when one exists
+```
+
+- Control arm: when a source returns 0 items, run its canary once (github-issues/-discussions: the repo's NAME part, e.g.
+  `mise` for `jdx/mise`, on the same repo; github-releases: none needed — an empty release list for an existing repo is
+  `empty_verified` only if `gh api repos/<repo>` returns 200; exa/firecrawl-*/context7: `python`; last30days: none → `EMPTY_UNVERIFIED` with reason `no canary`).
+  canary count > 0 → `EMPTY_VERIFIED`; canary 0 or error → `EMPTY_UNVERIFIED`. The firecrawl-developer canary keeps the
+  `repos=` filter when `--repo` was given (and then uses the repo's name as its query), so the canary tests the same
+  scoped index the primary query hit.
+- Output: `<out>/<source>.json` (the SourceResult), `<out>/<source>.raw` (the untrimmed response bytes as received —
+  JSON for the HTTP/`gh` sources, text for `ctx7`; no extension claim about the format),
+  `<out>/manifest.json` = `{"query", "repo", "sources": [SourceResult...], "out_dir"}`.
+- stdout: the manifest path, then one line per source: `<source>  <status>  <n> items  <elapsed>s  [<reason>]`.
+- Exit: 0 if ≥1 source is `ok` or `empty_verified`; 1 if every requested source is error/skipped/empty_unverified;
+  2 for usage errors.
+- Library entry: `def fan_out(request: FanoutRequest, *, runner: Runner = default_runner, http: Http = default_http) -> list[SourceResult]`
+  where `FanoutRequest` is a frozen dataclass `(query: str, repo: str | None, sources: tuple[str, ...], limit: int,
+  timeout: float | None)` — bundled because ruff `select=["ALL"]` keeps PLR0913's default max of 5 args
+  (`pyproject.toml:63-86`) and inline suppressions are banned (precedent: `WaitRequest`, `bounded_wait.py:27`, used at `main.py:2844`).
+  `runner`/`http` are injectable seams (Protocols) so tests never touch the network.
+  **The `Http` seam takes an `Endpoint` enum, never a URL** — `Endpoint.EXA_SEARCH`, `Endpoint.FIRECRAWL_DEVELOPER` —
+  plus query params / JSON body, headers and timeout, and returns `(status: int, body: bytes)`. `default_http` maps each
+  member to its own `urllib.request.Request(...)` call site whose URL is a literal or f-string beginning `https://`
+  (`f"https://api.firecrawl.dev/v2/search/developer?{urlencode(params)}"`), so ruff S310 sees a literal at every
+  `urlopen` site (rev 3: a URL-taking seam would put a variable at the call site and trip §4's STOP).
+  `def main(argv: list[str], repo_root: Path, *, runner: Runner = default_runner, http: Http = default_http) -> int`
+  — the same seams, so the exit-code tests run through `main` with fakes (never by patching this module,
+  `tests/AGENTS.md:94`). Sources run concurrently (`concurrent.futures.ThreadPoolExecutor`).
+
+## 4. Constraints and invariants
+
+- **URLs are literals.** Every `urllib.request` URL is a literal or f-string beginning with `https://` (ruff S310
+  audits dynamic URLs; there is no repo precedent for `urllib` — `gcc_sha.py:129` shells out to `curl`). If ruff still
+  flags S310, STOP and report (dissent) — no suppression, no per-file ignore.
+- **Credentials never reach output.** No credential value in stdout, stderr, any written file, or `reason`. Pass keys
+  only in HTTP headers / the child env. Subprocess envs: `child_env.clean_env(keep=frozenset({...}))`
+  (`child_env.py:77`) keeping ONLY the names that child needs (`gh`: `GITHUB_TOKEN`, `GH_TOKEN`; `firecrawl`:
+  `FIRECRAWL_API_KEY`; `ctx7`: `CONTEXT7_API_KEY`; last30days: `GITHUB_TOKEN` (the only name it reads, plugin
+  `lib/github.py:53`; without it it falls back to `gh auth token`, `:59`, the keychain route
+  `secrets-out-of-the-shell-env.md` warns about), `SCRAPECREATORS_API_KEY`,
+  `EXA_API_KEY`, `PARALLEL_API_KEY`, `BRAVE_API_KEY` — and deliberately NOT the LLM-provider keys (`XAI_API_KEY`,
+  `PERPLEXITY_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_API_KEY`), which switch on its
+  internal planner/reranker (`providers.py:271-279`, `planner.py:375-377` in the plugin). Its child env ALSO sets
+  `LAST30DAYS_CONFIG_DIR=""` (disables `~/.config/last30days/.env`, plugin `lib/env.py:31-35`) and
+  `LAST30DAYS_SKIP_KEYCHAIN=1` (disables its macOS Keychain lookup of 23 keys incl. `XAI_API_KEY`/`OPENAI_API_KEY`,
+  `env.py:60`, `:346-419`). KNOWN LIMIT, state it in the module docstring: its `pass` password-store source
+  (`env.py:422-458`) has no documented off-switch, so an LLM key stored there can still enable its planner — that is
+  why last30days is opt-in and why §1's "no LLM" holds only for the default source set.
+  A test must assert a sentinel secret value never appears in any written file or captured output.
+- A 0-result is never reported as `ok`. A timeout, non-2xx, non-zero rc, or unparsable JSON is `ERROR` with a reason,
+  never `EMPTY_*` (`probes-need-a-control-arm.md` rule 4).
+- Every subprocess and HTTP call has an explicit timeout. No shelling out through `sh -c`; argv lists only.
+- The module must not import from `kb_setup` (Ray's ruling: independent module).
+- Follow repo Python standards: `ruff` + `ty` clean, Google docstrings, no inline suppressions (`no_lint_skip`),
+  module docstring explaining the WHY (see `session_state.py:1-13` for tone).
+- Do not run `mise run research-fanout` against live sources from tests. Live runs are the architect's verification.
+- Do not touch `.claude/`, `.agents/`, `.github/`, `docs/`, or any file not listed in §2.
+
+## 5. Verification
+
+```bash
+uv run --project python pytest tests/test_research_fanout.py -q     # rc=0
+uv run --project python ruff check python/src/dotfiles_setup/research_fanout.py tests/test_research_fanout.py
+uv run --project python ty check python/src/dotfiles_setup/research_fanout.py
+mise run research-fanout -- --list-sources                           # rc=0, one line per source
+mise run lint                                                        # rc=0
+```
+
+Tests (fake `runner`/`http`) must include, each with its fail arm noted in a comment:
+- empty primary + non-empty canary → `empty_verified`; empty primary + empty canary → `empty_unverified`;
+- non-2xx / timeout / bad JSON / rc≠0 → `error`, never `empty_*`;
+- missing prerequisite → `skipped` with reason; `github-*` without `--repo` → `skipped`;
+- the secret-sentinel test (set `EXA_API_KEY=SENTINEL-…` in the fake env; assert it appears in the outgoing header
+  and NOWHERE in written files / stdout / reasons);
+- exit-code table (0 / 1 / 2);
+- unknown `--sources` name → exit 2;
+- concurrency: two sources whose fakes each sleep T finish in < 2T.
+
+- `main([...], repo_root, runner=fake, http=fake)` with `--list-sources` returns 0 and names every source;
+- last30days is absent from the default source set and present only when named.
+
+The architect then runs the live integration arm (`mise run research-fanout -- "tracked configs" --repo jdx/mise`) and
+its control (`--sources exa` with `EXA_API_KEY` unset → `skipped`), per `.claude/rules/real-integration-evidence.md`.
+
+## 6. Commit
+
+`caller`. Leave changes uncommitted; report changed paths and each §5 command's real exit code.
+
+## 7. PREMISES
+
+| # | Kind | Claim | Source (read this session) |
+|---|---|---|---|
+| 1 | P | `python -m` task precedent (bypasses `main.py`'s `parse_args`, `:3112`); repo root via `MISE_PROJECT_ROOT` | `mise.toml:1619-1621`, `session_gate.py:272` |
+| 2 | P | Module `main(args, repo_root) -> int` precedent | `python/src/dotfiles_setup/session_state.py:290` |
+| 3 | P | Thin mise task precedent | `mise.toml:996-999` |
+| 4 | I | `clean_env(base=None, *, keep: frozenset[str]) -> dict[str, str]` | `python/src/dotfiles_setup/child_env.py:77-92` |
+| 5 | L | Python floor `>=3.14` | `python/pyproject.toml:5` |
+| 6 | L | CLIs present: `firecrawl` 1.24.6, `ctx7` 0.5.12, `gh` 2.101.0 (user-global only) | `mise.toml:139`, `mise.toml:66`, `~/.config/mise/config.toml:131` |
+| 7 | L | last30days script paths (3.21.1/3.24.0/3.25.0 Claude cache; 3.25.0 codex cache) | `ls` this session |
+| 8 | E | exa `POST /search` with `x-api-key` → 200; no key → 402 | inventory report §1 (live probe, control armed) |
+| 9 | E | firecrawl `GET /v2/search/developer` keyless → 200; bogus path → 404 | inventory report §1 |
+| 10 | E | `gh api /search/issues` returns issues+PRs; `gh search issues --repo` issues only | inventory report §4 |
+| 11 | L | last30days `--emit` choices include `json`; `--plan` skips its internal LLM planner | plugin `last30days.py:658`, `:805` |
+| 12 | A | GraphQL `search(type: DISCUSSION)` accepts `repo:` qualifiers — the multisource lane used it (control 0 vs 63); re-probe if it fails | multisource report scorecard |
+| 13 | L | `ctx7 library` prints a numbered ID list; `ctx7 docs` prints `### ` sections each with a `Source:` URL | `.agent/kb/raw/mise-warn-src-ctx7.md:1-105` (premise-verifier) |

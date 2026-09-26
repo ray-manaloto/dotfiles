@@ -861,6 +861,11 @@ description = "PR dashboard; with a PR number, its graph-impact deep dive"
 # Pass flags through: mise run graphify-prs -- 822 --base main
 run = 'uv run --project python dotfiles-setup graphify prs'
 
+[tasks.research-fanout]
+description = "Fetch raw research evidence concurrently from configured sources"
+# Thin caller; python/src/dotfiles_setup/research_fanout.py.
+run = 'uv run --project python python -m dotfiles_setup.research_fanout'
+
 [tasks.bakeoff]
 description = "Run the graphify extraction bake-off (writes OUTSIDE the repo)"
 # Thin caller (zero-bash-logic); logic in

@@ -75,6 +75,13 @@ KNOWN_LABEL_PREFIXES = {
     "graphify-researcher",
     "graphify-operator",
     "codex-sol-staleness-auditor",
+    "plan+fetch",
+    "triage",
+    "read",
+    "source-dive",
+    "refute",
+    "critic",
+    "codex-sol-advisor",
 }
 
 ARGS = {
@@ -120,6 +127,10 @@ ARGS = {
     "reportToml": str(REPO_ROOT / ".agent" / "report.toml"),
     "maxRounds": 1,
     "reuseFindings": False,
+    "question": "is the fixture fixed upstream",
+    "repo": "example/repo",
+    "reportPath": str(REPO_ROOT / ".agent" / "research-sweep.md"),
+    "advisor": True,
 }
 
 _STUBS = r"""
@@ -163,7 +174,12 @@ const agent = async (_prompt, options = {}) => {
     )
   }
   const label = options.label || 'general-purpose'
-  calls.push({ label, agentType: options.agentType || 'general-purpose' })
+  calls.push({
+    label,
+    agentType: options.agentType || 'general-purpose',
+    model: options.model || '',
+    effort: options.effort || '',
+  })
   if (label === 'codex-sol-implementer') return 'CODEX REPORT\nCOMMIT: abcdef1234567'
   if (label === 'gate-runner') {
     return {
@@ -180,6 +196,27 @@ const agent = async (_prompt, options = {}) => {
         log: `/tmp/task-${index}.log`,
         delta: '0/0/0',
       })),
+    }
+  }
+  // research-sweep: non-empty stage outputs so the dry run reaches every phase,
+  // not just the first node (an empty plan returns 'no-manifests' after one call).
+  if (label === 'plan+fetch') {
+    return {
+      runs: [{ query: 'q', sources: ['exa'], manifest: '/tmp/m.json', rc: 0 }],
+      sourceDive: true,
+    }
+  }
+  if (label === 'triage') {
+    return {
+      read: [{ url: 'https://example.test', why: 'w' }],
+      hits: [],
+      unverifiedEmpty: [],
+    }
+  }
+  if (label === 'synthesize') {
+    return {
+      reportPath: args.reportPath,
+      loadBearing: [{ claim: 'c', source: 's' }],
     }
   }
   return schemaValue(options.schema)
@@ -453,3 +490,57 @@ def test_n15_gates_null_takes_precedence_over_review_null(tmp_path: Path) -> Non
     assert run_result["gates"] is None
     assert run_result["review"] is None
     assert run_result["status"] == "gates-null"
+
+
+RESEARCH_SWEEP = WORKFLOWS / "research-sweep.js"
+
+# The cost routing IS the design of research-sweep (see the comment block at the
+# top of the script): bulk reading on haiku as Explore (no CLAUDE.md payload),
+# judgment on ONE opus node, the advisor on codex. A "tidy-up" that drops a model
+# pin silently moves a node onto the inherited session model — this pins it.
+_SWEEP_ROUTING = {
+    "plan+fetch": ("general-purpose", "sonnet", "medium"),
+    "triage": ("Explore", "haiku", ""),
+    "read": ("Explore", "haiku", ""),
+    "source-dive": ("Explore", "sonnet", "medium"),
+    "synthesize": ("general-purpose", "opus", "high"),
+    "refute": ("general-purpose", "sonnet", "medium"),
+    "critic": ("Explore", "sonnet", "low"),
+    "codex-sol-advisor": ("codex-sol-advisor", "", ""),
+}
+
+
+def test_research_sweep_reaches_every_phase_with_pinned_routing(tmp_path: Path) -> None:
+    """Every research-sweep node runs once, on the model/effort its design names.
+
+    FAIL arm: change `model: 'opus'` on the synthesize node (or delete any node's
+    `model:`) and the routing assertion names that node.
+    """
+    result = _bun_run(RESEARCH_SWEEP.read_text(encoding="utf-8"), tmp_path / "sweep.js")
+    assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    payload = cast("dict[str, object]", json.loads(result.stdout.splitlines()[-1]))
+    run_result = cast("dict[str, object]", payload["result"])
+    calls = cast("list[dict[str, str]]", payload["calls"])
+    routing = {
+        call["label"].split(":", 1)[0]: (
+            call["agentType"],
+            call["model"],
+            call["effort"],
+        )
+        for call in calls
+    }
+
+    assert run_result["status"] == "complete"
+    assert routing == _SWEEP_ROUTING
+
+
+def test_research_sweep_rejects_a_relative_report_path(tmp_path: Path) -> None:
+    """A relative reportPath would land wherever the synthesizer's cwd is."""
+    wrapped = _custom_stub_source(
+        RESEARCH_SWEEP.read_text(encoding="utf-8"),
+        {**ARGS, "reportPath": "relative.md"},
+        "  return null",
+    )
+    result = _bun_run_wrapped(wrapped, tmp_path / "sweep-relative.js")
+    assert result.returncode != 0
+    assert "reportPath must be an absolute path" in result.stderr
