@@ -5,17 +5,24 @@ from __future__ import annotations
 
 import http.client
 import json
+import os
 import signal
+import socketserver
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Self
+from typing import TYPE_CHECKING, Any, Self
 
 import pytest
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
@@ -93,6 +100,7 @@ class ChunkedResponse:
     chunks: list[bytes]
     delay: float = 0.0
     status: int = 200
+    headers: dict[str, str] = field(default_factory=dict)
 
     def __enter__(self) -> Self:
         """Return this response for the context-manager protocol."""
@@ -101,11 +109,61 @@ class ChunkedResponse:
     def __exit__(self, *_args: object) -> None:
         """Leave the response without suppressing exceptions."""
 
-    def read(self, _amount: int = -1) -> bytes:
-        """Return the next scripted response chunk."""
-        if self.delay:
-            time.sleep(self.delay)
-        return self.chunks.pop(0) if self.chunks else b""
+    def read(self, amount: int = -1) -> bytes:
+        """Accumulate scripted chunks like a buffered HTTP response."""
+        body = bytearray()
+        while self.chunks and (amount < 0 or len(body) < amount):
+            if self.delay:
+                time.sleep(self.delay)
+            chunk = self.chunks.pop(0)
+            remaining = amount - len(body) if amount >= 0 else len(chunk)
+            body.extend(chunk[:remaining])
+            if len(chunk) > remaining:
+                self.chunks.insert(0, chunk[remaining:])
+        return bytes(body)
+
+    def close(self) -> None:
+        """Close the in-memory response."""
+
+
+@contextmanager
+def _local_http_body(
+    body: bytes, *, declared_length: int | None = None, delay: float = 0.0
+) -> Iterator[str]:
+    """Serve one response over a real loopback socket."""
+
+    class Handler(socketserver.BaseRequestHandler):
+        def handle(self) -> None:
+            self.request.recv(4096)
+            length = len(body) if declared_length is None else declared_length
+            headers = (
+                "HTTP/1.1 200 OK\r\n"
+                f"Content-Length: {length}\r\n"
+                "Connection: close\r\n\r\n"
+            ).encode()
+            try:
+                self.request.sendall(headers)
+                for byte in body:
+                    self.request.sendall(bytes((byte,)))
+                    if delay:
+                        time.sleep(delay)
+            except OSError:
+                return
+
+    class Server(socketserver.ThreadingTCPServer):
+        allow_reuse_address = True
+        daemon_threads = True
+
+    with Server(("127.0.0.1", 0), Handler) as server:
+        host = server.server_address[0]
+        port = server.server_address[1]
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            yield f"http://{host}:{port}/"
+        finally:
+            server.shutdown()
+            thread.join(timeout=1.0)
 
 
 def _install_path_tools(
@@ -317,22 +375,54 @@ def test_canary_transport_failure_does_not_escape(
     assert result.control.count is None
 
 
-def test_default_http_deadline_covers_streaming_body(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize("source", ["exa", "firecrawl-developer"])
+def test_default_http_deadline_covers_real_streaming_body(
+    monkeypatch: pytest.MonkeyPatch, source: str
 ) -> None:
-    """FAIL arm: one unbounded response.read accepts a slow trickle forever."""
+    """FAIL arm: a per-read timeout accepts a real slow trickle indefinitely."""
     monkeypatch.setenv("EXA_API_KEY", "test-key")
-    response = ChunkedResponse([b'{"results":', b"[]", b"}"], delay=0.02)
-    monkeypatch.setattr(urllib.request, "urlopen", lambda *_args, **_kwargs: response)
+    original_urlopen = urllib.request.urlopen
+    body = b'{"results":[{"title":"slow","url":"https://slow.test"}]}'
+    with _local_http_body(body, delay=0.03) as url:
 
-    [result] = fan_out(
-        FanoutRequest("topic", None, ("exa",), 10, 0.03),
-        runner=_unused_runner,
-        http=default_http,
-    )
+        def local_urlopen(_request: object, *, timeout: float) -> object:
+            return original_urlopen(url, timeout=timeout)
+
+        monkeypatch.setattr(urllib.request, "urlopen", local_urlopen)
+        started = time.monotonic()
+        [result] = fan_out(
+            FanoutRequest("topic", None, (source,), 10, 0.15),
+            runner=_unused_runner,
+            http=default_http,
+        )
+        elapsed = time.monotonic() - started
 
     assert result.status is Status.ERROR
     assert result.reason == "timed out"
+    assert elapsed <= 1.15
+
+
+def test_default_http_rejects_short_content_length(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FAIL arm: decoding a short body misreports transport truncation as JSON."""
+    monkeypatch.setenv("EXA_API_KEY", "test-key")
+    original_urlopen = urllib.request.urlopen
+    body = b'{"results":[]}'
+    with _local_http_body(body, declared_length=len(body) + 10) as url:
+
+        def local_urlopen(_request: object, *, timeout: float) -> object:
+            return original_urlopen(url, timeout=timeout)
+
+        monkeypatch.setattr(urllib.request, "urlopen", local_urlopen)
+        [result] = fan_out(
+            FanoutRequest("topic", None, ("exa",), 10, 1.0),
+            runner=_unused_runner,
+            http=default_http,
+        )
+
+    assert result.status is Status.ERROR
+    assert result.reason == "incomplete response"
 
 
 def test_default_http_rejects_response_over_eight_mib(
@@ -452,44 +542,164 @@ def test_nonzero_subprocess_is_error(
     assert result.status not in {Status.EMPTY_VERIFIED, Status.EMPTY_UNVERIFIED}
 
 
-def test_default_runner_terminates_process_group_on_timeout(
+def test_multiline_stderr_keeps_summary_to_one_line_per_source(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """FAIL arm: preserving stderr newlines splits one source across lines."""
+    _install_path_tools(tmp_path, monkeypatch, "firecrawl")
+    runner = ScriptedRunner(
+        [_completed(["firecrawl"], 7, stderr=b"first line\nsecond line\nthird")]
+    )
+
+    rc = main(
+        [
+            "topic",
+            "--sources",
+            "firecrawl-search",
+            "--out",
+            str(tmp_path / "out"),
+        ],
+        tmp_path,
+        runner=runner,
+        http=FakeHttp({}),
+    )
+    lines = capsys.readouterr().out.splitlines()
+
+    assert rc == 1
+    assert len(lines) == 2
+    assert "first line | second line | third" in lines[1]
+
+
+def test_default_runner_bounds_drain_when_detached_descendant_holds_pipe(
+    tmp_path: Path,
+) -> None:
+    """FAIL arm: an unbounded final communicate waits for the detached child."""
+    pid_file = tmp_path / "detached.pid"
+    descendant = "import time; time.sleep(30)"
+    parent = (
+        "import pathlib, subprocess, sys, time; "
+        "child = subprocess.Popen([sys.executable, '-c', sys.argv[2]], "
+        "stdout=sys.stdout, stderr=sys.stderr, start_new_session=True); "
+        "pathlib.Path(sys.argv[1]).write_text(str(child.pid)); "
+        "time.sleep(30)"
+    )
+    detached_pid: int | None = None
+    started = time.monotonic()
+    try:
+        with pytest.raises(subprocess.TimeoutExpired):
+            default_runner(
+                [sys.executable, "-c", parent, str(pid_file), descendant],
+                timeout=0.2,
+                env={},
+            )
+        elapsed = time.monotonic() - started
+        detached_pid = int(pid_file.read_text())
+
+        assert elapsed <= 3.2
+    finally:
+        if detached_pid is not None:
+            with suppress(ProcessLookupError):
+                os.kill(detached_pid, signal.SIGKILL)
+
+
+def test_default_runner_tolerates_killpg_failures_and_reaps(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """FAIL arm: subprocess.run(timeout=...) cannot signal grandchildren."""
-    popen_options: dict[str, object] = {}
-    signals: list[tuple[int, signal.Signals]] = []
+    """FAIL arm: PermissionError from either group signal escapes cleanup."""
+    signals: list[signal.Signals] = []
 
     class TimeoutProcess:
+        args = ("tool",)
         pid = 4321
-        returncode = -signal.SIGKILL
+        returncode: int | None = None
+        stdout = None
+        stderr = None
         communicates = 0
 
         def communicate(self, *, timeout: float | None = None) -> tuple[bytes, bytes]:
             self.communicates += 1
-            if self.communicates < 3:
-                assert timeout is not None
-                raise subprocess.TimeoutExpired(["tool"], timeout)
+            assert timeout is not None
+            if self.communicates == 1:
+                raise subprocess.TimeoutExpired(self.args, timeout)
+            self.returncode = -signal.SIGKILL
             return b"", b""
 
-    def fake_popen(argv: list[str], **options: object) -> TimeoutProcess:
+        def kill(self) -> None:
+            self.returncode = -signal.SIGKILL
+
+        def wait(self, *, timeout: float | None = None) -> int:
+            assert timeout is not None
+            assert self.returncode is not None
+            return self.returncode
+
+    process = TimeoutProcess()
+
+    def fake_popen(argv: list[str], **_options: object) -> TimeoutProcess:
         assert argv == ["tool"]
-        popen_options.update(options)
-        return TimeoutProcess()
+        return process
+
+    def denied_killpg(_pid: int, sent_signal: signal.Signals) -> None:
+        signals.append(sent_signal)
+        if sent_signal is signal.SIGTERM:
+            raise ProcessLookupError
+        raise PermissionError
 
     monkeypatch.setattr(subprocess, "Popen", fake_popen)
-    monkeypatch.setattr(
-        "dotfiles_setup.research_fanout.os.killpg",
-        lambda pid, sent_signal: signals.append((pid, sent_signal)),
-    )
+    monkeypatch.setattr("dotfiles_setup.research_fanout.os.killpg", denied_killpg)
 
     with pytest.raises(subprocess.TimeoutExpired):
-        default_runner(["tool"], timeout=1.0, env={})
+        default_runner(["tool"], timeout=0.0, env={})
 
-    assert popen_options["start_new_session"] is True
-    assert signals == [
-        (4321, signal.SIGTERM),
-        (4321, signal.SIGKILL),
-    ]
+    assert signals == [signal.SIGTERM, signal.SIGKILL]
+    assert process.returncode == -signal.SIGKILL
+
+
+def test_main_ctrl_c_terminates_real_child_and_returns_130(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """FAIL arm: executor shutdown waits for the isolated child after Ctrl-C."""
+    pid_file = tmp_path / "child.pid"
+    script = tmp_path / "last30days.py"
+    script.write_text(
+        "import os, time\n"
+        "from pathlib import Path\n"
+        f"Path({str(pid_file)!r}).write_text(str(os.getpid()))\n"
+        "time.sleep(30)\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("LAST30DAYS_SCRIPT", str(script))
+
+    def interrupt_when_child_runs() -> None:
+        deadline = time.monotonic() + 3.0
+        while not pid_file.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        os.kill(os.getpid(), signal.SIGINT)
+
+    interruptor = threading.Thread(target=interrupt_when_child_runs)
+    started = time.monotonic()
+    interruptor.start()
+    try:
+        rc = main(
+            ["topic", "--sources", "last30days", "--timeout", "10"],
+            tmp_path,
+            runner=default_runner,
+            http=FakeHttp({}),
+        )
+        elapsed = time.monotonic() - started
+        assert pid_file.is_file()
+        child_pid = int(pid_file.read_text())
+
+        assert rc == 130
+        assert elapsed <= 3.0
+        with pytest.raises(ProcessLookupError):
+            os.kill(child_pid, 0)
+    finally:
+        interruptor.join(timeout=1.0)
+        if pid_file.is_file():
+            with suppress(ProcessLookupError):
+                os.kill(int(pid_file.read_text()), signal.SIGKILL)
 
 
 def test_missing_prerequisite_and_repo_are_skipped(
@@ -716,7 +926,7 @@ def test_github_release_repo_control_failure_is_unverified(
 def test_github_releases_filter_whole_words_and_stopwords(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """FAIL arm: substring/unfiltered logic admits the two irrelevant releases."""
+    """FAIL arm: ANY-term matching admits releases missing a required term."""
     _install_path_tools(tmp_path, monkeypatch, "gh")
     payload = [
         {
@@ -750,10 +960,10 @@ def test_github_releases_filter_whole_words_and_stopwords(
             "html_url": "https://release.test/body",
         },
         {
-            "tag_name": "v6",
-            "name": "Routine",
-            "body": "config fourth",
-            "html_url": "https://release.test/over-limit",
+            "tag_name": "tracked-v6",
+            "name": "Config support",
+            "body": "",
+            "html_url": "https://release.test/split-fields",
         },
     ]
     runner = ScriptedRunner([_completed(["gh"], 0, json.dumps(payload).encode())])
@@ -772,16 +982,75 @@ def test_github_releases_filter_whole_words_and_stopwords(
 
     assert result.status is Status.OK
     assert [item.url for item in result.items] == [
-        "https://release.test/tag",
-        "https://release.test/name",
         "https://release.test/body",
+        "https://release.test/split-fields",
     ]
     assert [item.snippet for item in result.items] == [
-        "release body mentions a query term: no",
-        "release body mentions a query term: no",
         "release body mentions a query term: yes",
+        "release body mentions a query term: no",
     ]
     assert runner.calls[0][0][-1] == "repos/owner/project/releases?per_page=100"
+
+
+def test_github_releases_ignore_terms_shorter_than_three_letters(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """FAIL arm: retaining the two-letter term makes the matching release vanish."""
+    _install_path_tools(tmp_path, monkeypatch, "gh")
+    payload = [
+        {
+            "tag_name": "v1",
+            "name": "Fix shipped",
+            "body": "",
+            "html_url": "https://release.test/fix",
+        }
+    ]
+    runner = ScriptedRunner([_completed(["gh"], 0, json.dumps(payload).encode())])
+
+    [result] = fan_out(
+        FanoutRequest("is fix", "owner/project", ("github-releases",), 10, 5.0),
+        runner=runner,
+        http=FakeHttp({}),
+    )
+
+    assert result.status is Status.OK
+    assert [item.url for item in result.items] == ["https://release.test/fix"]
+
+
+def test_github_releases_require_every_retained_query_term(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """FAIL arm: ANY-term matching accepts `fixed` without `python`."""
+    _install_path_tools(tmp_path, monkeypatch, "gh")
+    releases = [
+        {
+            "tag_name": "v1",
+            "name": "Fixed release",
+            "body": "The issue is fixed.",
+            "html_url": "https://release.test/fixed",
+        }
+    ]
+    runner = ScriptedRunner(
+        [
+            _completed(["gh"], 0, json.dumps(releases).encode()),
+            _completed(["gh"], 0, b'{"name":"project"}'),
+        ]
+    )
+
+    [result] = fan_out(
+        FanoutRequest(
+            "is python fixed",
+            "owner/project",
+            ("github-releases",),
+            10,
+            5.0,
+        ),
+        runner=runner,
+        http=FakeHttp({}),
+    )
+
+    assert result.status is Status.EMPTY_VERIFIED
+    assert result.items == ()
 
 
 def test_context7_uses_first_library_and_parses_sections(
@@ -851,6 +1120,84 @@ def test_context7_uses_repo_name_for_library_resolution(
         "/jdx/mise",
         "tracked configs",
     ]
+
+
+def test_context7_canary_resolves_python_independently_of_repo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """FAIL arm: reusing the repo library does not test context7's Python path."""
+    _install_path_tools(tmp_path, monkeypatch, "ctx7")
+    runner = ScriptedRunner(
+        [
+            _completed(
+                ["ctx7"],
+                0,
+                b"1. Mise\nContext7-compatible library ID: /jdx/mise\n",
+            ),
+            _completed(["ctx7"], 0, b"no matching sections"),
+            _completed(
+                ["ctx7"],
+                0,
+                b"1. Python\nContext7-compatible library ID: /python/cpython\n",
+            ),
+            _completed(
+                ["ctx7"],
+                0,
+                b"### Python\nSource: https://python.test/docs\nLanguage docs.\n",
+            ),
+        ]
+    )
+
+    [result] = fan_out(
+        FanoutRequest("missing topic", "jdx/mise", ("context7",), 10, 5.0),
+        runner=runner,
+        http=FakeHttp({}),
+    )
+
+    assert result.status is Status.EMPTY_VERIFIED
+    assert result.control is not None
+    assert result.control.query == "python"
+    assert runner.calls[2][0] == ["ctx7", "library", "python"]
+    assert runner.calls[3][0] == [
+        "ctx7",
+        "docs",
+        "/python/cpython",
+        "python",
+    ]
+
+
+@pytest.mark.parametrize("failure_site", ["library", "docs"])
+def test_context7_reports_both_subprocess_error_sites(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure_site: str,
+) -> None:
+    """FAIL arm: either context7 failure site can lose its stderr diagnostic."""
+    _install_path_tools(tmp_path, monkeypatch, "ctx7")
+    library = _completed(
+        ["ctx7"],
+        0 if failure_site == "docs" else 6,
+        b"1. Python\nContext7-compatible library ID: /python/cpython\n",
+        b"library failed",
+    )
+    responses = [library]
+    if failure_site == "docs":
+        responses.append(_completed(["ctx7"], 7, stderr=b"docs failed"))
+    runner = ScriptedRunner(responses)
+
+    [result] = fan_out(
+        FanoutRequest("topic", None, ("context7",), 10, 5.0),
+        runner=runner,
+        http=FakeHttp({}),
+    )
+
+    expected = (
+        "exited 6: library failed"
+        if failure_site == "library"
+        else "exited 7: docs failed"
+    )
+    assert result.status is Status.ERROR
+    assert result.reason == expected
 
 
 @pytest.mark.parametrize(
@@ -1135,20 +1482,29 @@ def test_secret_value_reaches_header_but_no_output(
         "SENTINEL-invalid-header-\N{SNOWMAN}",
     ],
 )
+@pytest.mark.parametrize(
+    "header_case",
+    [
+        ("exa", "EXA_API_KEY"),
+        ("firecrawl-developer", "FIRECRAWL_API_KEY"),
+    ],
+)
 def test_invalid_credential_header_never_leaks_value(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     credential: str,
+    header_case: tuple[str, str],
 ) -> None:
-    """FAIL arm: letting urllib reject the header prints the credential value."""
+    """FAIL arm: bypassing either header validator leaks the credential value."""
+    source, credential_name = header_case
     sentinel = "SENTINEL-invalid-header"
-    monkeypatch.setenv("EXA_API_KEY", credential)
+    monkeypatch.setenv(credential_name, credential)
     http = FakeHttp({})
     out = tmp_path / "out"
 
     rc = main(
-        ["topic", "--sources", "exa", "--out", str(out)],
+        ["topic", "--sources", source, "--out", str(out)],
         tmp_path,
         runner=_unused_runner,
         http=http,
@@ -1159,7 +1515,7 @@ def test_invalid_credential_header_never_leaks_value(
     assert rc == 1
     assert http.calls == []
     assert manifest["sources"][0]["reason"] == (
-        "invalid credential header for EXA_API_KEY"
+        f"invalid credential header for {credential_name}"
     )
     assert sentinel not in captured.out
     assert sentinel not in captured.err

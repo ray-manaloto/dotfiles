@@ -1,4 +1,4 @@
-# Spec (rev 4, 2026-09-26: two premise-verifier rounds + review round 1 applied) — `research-fanout`: a no-LLM, multi-source research fetcher for Claude AND codex
+# Spec (rev 5, 2026-09-26: premise rounds + review rounds 1-2 applied; round 3 authorized by Ray) — `research-fanout`: a no-LLM, multi-source research fetcher for Claude AND codex
 
 Status: RATIFIED by Ray 2026-09-26 (AskUserQuestion, session `dotfiles-20260926.000`): the "hybrid" architecture —
 a Python fetch layer + mise task usable by both harnesses, a saved Claude workflow over it with per-node model/effort,
@@ -62,9 +62,9 @@ Sources (name → transport; all reachable from a plain shell):
 |---|---|---|
 | `github-issues` | `gh api '/search/issues?q=repo:<repo>+<query>&per_page=<limit>'` (issues AND PRs; NOT `gh search issues`) | `gh` on PATH, `--repo` |
 | `github-discussions` | `gh api graphql` — `search(type: DISCUSSION, query: "repo:<repo> <query>")` | `gh`, `--repo` |
-| `github-releases` | `gh api 'repos/<repo>/releases?per_page=<limit>'`; items = tag, date, URL, and whether the release body mentions any query term | `gh`, `--repo` |
+| `github-releases` | `gh api 'repos/<repo>/releases?per_page=100'`; items = the releases whose tag/name/body contain EVERY query term as a whole word (§8.9 terms; ALL-terms per §9.9), at most `--limit` | `gh`, `--repo` |
 | `exa` | `POST https://api.exa.ai/search`, header `x-api-key` from `EXA_API_KEY`, JSON `{"query", "numResults"}` | `EXA_API_KEY` set |
-| `context7` | `ctx7 library <query>` (text: a numbered list of library IDs), then `ctx7 docs <first-id> <query>` (text: `### ` sections, each carrying a `Source:` URL). Items = one per `### ` section of the docs output (title = heading, url = its `Source:` URL, snippet = the section text); only the FIRST library ID is queried | `ctx7` on PATH |
+| `context7` | `ctx7 library <name>` where name = the `--repo` NAME part when given, else the query (text: a numbered list of library IDs), then `ctx7 docs <first-id> <query>` (text: `### ` sections, each carrying a `Source:` URL). Items = one per `### ` section of the docs output (title = heading, url = its `Source:` URL, snippet = the section text); only the FIRST library ID is queried | `ctx7` on PATH |
 | `firecrawl-developer` | `GET https://api.firecrawl.dev/v2/search/developer?query=…&k=…` (+`repos=<repo>` when given; the count param is `k` — `limit` is a 400, measured 2026-09-26); send `Authorization: Bearer $FIRECRAWL_API_KEY` only if set (the endpoint is keyless) | none |
 | `firecrawl-search` | `firecrawl search <query> --sources web --json --limit <limit>` (the CLI default `web,alexandria` returns the Alexandria tool catalog; results are under `data.web`) | `firecrawl` on PATH |
 | `last30days` | **OPT-IN ONLY** (never in the default set; runs only when named in `--sources`). `python3 <script> "<query>" --emit=json` (+`--github-repo=<repo>` when given); script = env `LAST30DAYS_SCRIPT`, else the highest-version match (compare versions NUMERICALLY, not as strings) of `~/.claude/plugins/cache/last30days-skill/last30days/*/skills/last30days/scripts/last30days.py`, else the same under `~/.codex/plugins/cache/`. Parse its JSON; unparsable → `error` | script found |
@@ -239,3 +239,38 @@ Out of scope (ticket, not this change): `LAST30DAYS_TRUST_PROJECT_CONFIG` passes
 child env in THIS change only if it is a one-line removal; otherwise leave it and say so.
 
 §5 verification is unchanged; run all of it and report real exit codes.
+
+## 9. Review round 2 — corrections (rev 5, 2026-09-26; a THIRD round, authorized by Ray via AskUserQuestion)
+
+Sources: `docs/research/kb/reports/agents/cold-review-0a908d9e-round2-2026-09-26.md` (N1–N6, C2/F4/F6 PARTIAL) and
+`docs/research/kb/reports/agents/codex-review-0a908d9e-round2-2026-09-26.md` (unbounded drain, Ctrl-C). Scope is
+LIMITED to `default_runner`, `_read_http_body`, the context7 canary, the releases filter, the stderr tail, and the
+tests below — do not refactor anything else. Same ALLOWLIST (`research_fanout.py`, `tests/test_research_fanout.py`),
+`COMMIT: caller`. Every item ships with a test whose fail arm is stated in a comment; where the defect only shows with
+a REAL process or socket (items 1, 4), the test MUST use a real one (a local `socketserver` / a real child process),
+because the round-2 review showed the fake `Popen`/response cannot produce these cases.
+
+1. **Bounded cleanup after the group kill (N1, codex P2-1).** After SIGKILL of the group, drain with a bounded wait
+   (≤ 2 s); if a descendant outside the group still holds the pipes, close them and return. The source reports
+   `timed out`. Budget: the runner returns within `timeout + 3 s` even when a detached descendant keeps stdout open.
+2. **`killpg` failures are tolerated (N2).** Suppress `ProcessLookupError` and `PermissionError` around each
+   `killpg`; the child is always reaped; the reason stays `timed out`.
+3. **Ctrl-C reaches the children (codex P2-2).** Track live child processes; on `KeyboardInterrupt` in the fan-out,
+   kill every live child GROUP (same TERM→KILL sequence, bounded) before the executor shuts down, then exit 130
+   from `main`. Test the cancellation path by raising `KeyboardInterrupt` while a real child is running.
+4. **The deadline bounds the whole body read (C2).** Total wall clock for one HTTP source ≤ `timeout + 1 s` even for a
+   body trickled one byte at a time. Prefer public APIs; if the only route needs a private attribute, dissent rather
+   than use it.
+5. **Short bodies are errors (N3).** When `Content-Length` is present and fewer bytes arrive → `ERROR`
+   `incomplete response`, never `invalid JSON`.
+6. **The context7 canary tests context7, not the repo's library (N4).** The canary runs `ctx7 library python` then
+   `ctx7 docs <id> python`, independent of `--repo`, and records exactly the query it ran.
+7. **Missing tests (N5).** Add a failing-arm test for: firecrawl credential-header validation; the ≥3-letter term
+   rule; both context7 error sites; the firecrawl branch of the body reader.
+8. **One line per source on stdout (N6).** Collapse newlines in the stderr tail (`\n` → ` | `) before it enters a
+   reason.
+9. **Releases need ALL terms (F6; Ray ruling 2026-09-26: "All terms must match").** A release is kept only when every
+   term appears as a whole word. `"is python fixed"` against a repo whose releases never say "python" → empty.
+10. F4 without `--repo` stays as specified (query → `ctx7 library`); no change.
+
+§5 verification unchanged; report real exit codes and per-item done / dissent.

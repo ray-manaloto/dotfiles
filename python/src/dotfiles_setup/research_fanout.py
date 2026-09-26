@@ -21,11 +21,13 @@ import contextlib
 import http.client as http_client
 import json
 import os
+import queue
 import re
 import shutil
 import signal
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -34,9 +36,12 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, replace
 from enum import Enum
 from pathlib import Path
-from typing import Never, Protocol
+from typing import TYPE_CHECKING, Never, Protocol
 
 from dotfiles_setup import child_env
+
+if TYPE_CHECKING:
+    from email.message import Message
 
 _DEFAULT_TIMEOUT = 60.0
 _LAST30DAYS_TIMEOUT = 180.0
@@ -44,8 +49,9 @@ _MAX_SNIPPET = 500
 _MAX_SLUG = 60
 _MIN_RELEASE_TERM_LENGTH = 3
 _MAX_HTTP_RESPONSE_BYTES = 8 * 1024 * 1024
-_HTTP_READ_CHUNK_BYTES = 64 * 1024
 _PROCESS_TERM_GRACE_S = 0.2
+_PROCESS_KILL_DRAIN_S = 2.0
+_PROCESS_CANCEL_POLL_S = 0.1
 _HTTP_OK = 200
 _HTTP_REDIRECT = 300
 _RELEASE_STOPWORDS = frozenset(
@@ -77,6 +83,9 @@ _SOURCE_DETAILS = {
     "firecrawl-search": ("firecrawl CLI", "firecrawl on PATH"),
     "last30days": ("python3 script", "last30days script found"),
 }
+_LIVE_PROCESSES: set[subprocess.Popen[bytes]] = set()
+_LIVE_PROCESSES_LOCK = threading.Lock()
+_CANCEL_CHILDREN = threading.Event()
 
 
 class Status(Enum):
@@ -169,8 +178,17 @@ class Http(Protocol):
 
 
 class _ReadableResponse(Protocol):
+    @property
+    def headers(self) -> Message[str, str]:
+        """Return the parsed response headers."""
+        ...
+
     def read(self, amount: int = -1, /) -> bytes:
         """Read at most ``amount`` response bytes."""
+        ...
+
+    def close(self) -> None:
+        """Close the response stream."""
         ...
 
 
@@ -228,13 +246,91 @@ class _CredentialHeaderError(ValueError):
         super().__init__(f"invalid credential header for {name}")
 
 
-class _ResponseTooLargeError(ValueError):
+class _HttpBodyError(ValueError):
+    """An HTTP body failed a bounded-read invariant."""
+
+    reason: str
+
+
+class _ResponseTooLargeError(_HttpBodyError):
     """An HTTP response exceeded the bounded in-memory body size."""
+
+    reason = "response too large"
+
+
+class _IncompleteResponseError(_HttpBodyError):
+    """An HTTP body ended before its declared content length."""
+
+    reason = "incomplete response"
+
+
+class _ProcessCancelledError(RuntimeError):
+    """A live child was stopped because the fan-out was interrupted."""
 
 
 class _Parser(argparse.ArgumentParser):
     def error(self, message: str) -> Never:
         raise _UsageError(message)
+
+
+def _signal_process_group(
+    process: subprocess.Popen[bytes], sent_signal: signal.Signals
+) -> None:
+    with contextlib.suppress(ProcessLookupError, PermissionError):
+        os.killpg(process.pid, sent_signal)
+
+
+def _close_process_pipes(process: subprocess.Popen[bytes]) -> None:
+    for pipe in (process.stdout, process.stderr):
+        if pipe is not None:
+            with contextlib.suppress(OSError):
+                pipe.close()
+
+
+def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
+    """Stop a process group, bound pipe draining, and reap the direct child."""
+    _signal_process_group(process, signal.SIGTERM)
+    try:
+        process.communicate(timeout=_PROCESS_TERM_GRACE_S)
+    except subprocess.TimeoutExpired:
+        _signal_process_group(process, signal.SIGKILL)
+    else:
+        return
+    try:
+        process.communicate(timeout=_PROCESS_KILL_DRAIN_S)
+    except subprocess.TimeoutExpired:
+        _close_process_pipes(process)
+    else:
+        return
+    if process.returncode is None:
+        with contextlib.suppress(ProcessLookupError):
+            process.kill()
+        process.wait(timeout=_PROCESS_TERM_GRACE_S)
+
+
+def _communicate_until(
+    process: subprocess.Popen[bytes], timeout: float
+) -> tuple[bytes, bytes]:
+    expires_at = time.monotonic() + timeout
+    while True:
+        if _CANCEL_CHILDREN.is_set():
+            raise _ProcessCancelledError
+        remaining = expires_at - time.monotonic()
+        if remaining <= 0:
+            raise subprocess.TimeoutExpired(process.args, timeout)
+        try:
+            return process.communicate(timeout=min(remaining, _PROCESS_CANCEL_POLL_S))
+        except subprocess.TimeoutExpired:
+            if time.monotonic() >= expires_at:
+                raise
+
+
+def _cancel_live_processes() -> None:
+    _CANCEL_CHILDREN.set()
+    with _LIVE_PROCESSES_LOCK:
+        processes = tuple(_LIVE_PROCESSES)
+    for process in processes:
+        _signal_process_group(process, signal.SIGTERM)
 
 
 def default_runner(
@@ -248,34 +344,60 @@ def default_runner(
         env=env,
         start_new_session=True,
     )
+    with _LIVE_PROCESSES_LOCK:
+        _LIVE_PROCESSES.add(process)
     try:
-        stdout, stderr = process.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        with contextlib.suppress(ProcessLookupError):
-            os.killpg(process.pid, signal.SIGTERM)
         try:
-            process.communicate(timeout=_PROCESS_TERM_GRACE_S)
-        except subprocess.TimeoutExpired:
-            with contextlib.suppress(ProcessLookupError):
-                os.killpg(process.pid, signal.SIGKILL)
-            process.communicate()
-        raise
-    return subprocess.CompletedProcess(argv, process.returncode, stdout, stderr)
+            stdout, stderr = _communicate_until(process, timeout)
+        except (
+            subprocess.TimeoutExpired,
+            _ProcessCancelledError,
+            KeyboardInterrupt,
+        ):
+            _terminate_process_group(process)
+            raise
+        return subprocess.CompletedProcess(argv, process.returncode, stdout, stderr)
+    finally:
+        with _LIVE_PROCESSES_LOCK:
+            _LIVE_PROCESSES.discard(process)
 
 
 def _read_http_body(response: _ReadableResponse, deadline: _Deadline) -> bytes:
-    chunks: list[bytes] = []
-    total = 0
-    while True:
-        deadline.remaining()
-        chunk = response.read(_HTTP_READ_CHUNK_BYTES)
-        deadline.remaining()
-        if not chunk:
-            return b"".join(chunks)
-        total += len(chunk)
-        if total > _MAX_HTTP_RESPONSE_BYTES:
-            raise _ResponseTooLargeError
-        chunks.append(chunk)
+    outcomes: queue.Queue[bytes | Exception] = queue.Queue()
+
+    def read_body() -> None:
+        try:
+            content_length = response.headers.get("Content-Length")
+            expected = int(content_length) if content_length is not None else None
+            if expected is not None and expected > _MAX_HTTP_RESPONSE_BYTES:
+                raise _ResponseTooLargeError
+            try:
+                body = response.read(_MAX_HTTP_RESPONSE_BYTES + 1)
+            except http_client.IncompleteRead as exc:
+                if expected is not None:
+                    raise _IncompleteResponseError from exc
+                raise
+            if len(body) > _MAX_HTTP_RESPONSE_BYTES:
+                raise _ResponseTooLargeError
+            if expected is not None and len(body) < expected:
+                raise _IncompleteResponseError
+            outcomes.put(body)
+        except (http_client.HTTPException, ValueError, OSError, AttributeError) as exc:
+            outcomes.put(exc)
+
+    worker = threading.Thread(target=read_body, daemon=True)
+    worker.start()
+    try:
+        outcome = outcomes.get(timeout=deadline.remaining())
+    except queue.Empty as exc:
+        threading.Thread(target=response.close, daemon=True).start()
+        raise TimeoutError from exc
+    worker.join(timeout=deadline.remaining())
+    response.close()
+    deadline.remaining()
+    if isinstance(outcome, Exception):
+        raise outcome
+    return outcome
 
 
 def default_http(
@@ -290,7 +412,7 @@ def default_http(
     deadline = _Deadline.after(timeout)
     if endpoint is Endpoint.EXA_SEARCH:
         try:
-            with urllib.request.urlopen(
+            response = urllib.request.urlopen(
                 urllib.request.Request(
                     "https://api.exa.ai/search",
                     data=json.dumps(body or {}).encode(),
@@ -298,22 +420,22 @@ def default_http(
                     method="POST",
                 ),
                 timeout=deadline.remaining(),
-            ) as response:
-                return response.status, _read_http_body(response, deadline)
+            )
+            return response.status, _read_http_body(response, deadline)
         except urllib.error.HTTPError as exc:
             return exc.code, _read_http_body(exc, deadline)
     if endpoint is Endpoint.FIRECRAWL_DEVELOPER:
         query = urllib.parse.urlencode(params or {})
         try:
-            with urllib.request.urlopen(
+            response = urllib.request.urlopen(
                 urllib.request.Request(
                     f"https://api.firecrawl.dev/v2/search/developer?{query}",
                     headers=headers,
                     method="GET",
                 ),
                 timeout=deadline.remaining(),
-            ) as response:
-                return response.status, _read_http_body(response, deadline)
+            )
+            return response.status, _read_http_body(response, deadline)
         except urllib.error.HTTPError as exc:
             return exc.code, _read_http_body(exc, deadline)
     message = f"unsupported endpoint: {endpoint.value}"
@@ -434,6 +556,8 @@ def _subprocess_error(
     )
     for value in credential_values:
         stderr = stderr.replace(value, "[REDACTED]")
+    stderr = stderr.replace("\r\n", "\n").replace("\r", "\n")
+    stderr = stderr.replace("\n", " | ")
     return f"exited {completed.returncode}: {stderr.strip()[-300:]}"
 
 
@@ -547,9 +671,13 @@ def _github_releases(
         tag = str(record.get("tag_name") or "")
         name = str(record.get("name") or "")
         body = str(record.get("body") or "")
-        if not any(_contains_release_term(value, terms) for value in (tag, name, body)):
+        values = (tag, name, body)
+        if not terms or not all(
+            any(_contains_release_term(value, term) for value in values)
+            for term in terms
+        ):
             continue
-        body_mentions = _contains_release_term(body, terms)
+        body_mentions = any(_contains_release_term(body, term) for term in terms)
         date = record.get("published_at") or record.get("created_at")
         items.append(
             Item(
@@ -565,12 +693,9 @@ def _github_releases(
     return _Attempt(tuple(items), raw)
 
 
-def _contains_release_term(value: str, terms: tuple[str, ...]) -> bool:
+def _contains_release_term(value: str, term: str) -> bool:
     folded = value.casefold()
-    return any(
-        re.search(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])", folded) is not None
-        for term in terms
-    )
+    return re.search(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])", folded) is not None
 
 
 def _github_repo_control(
@@ -921,10 +1046,13 @@ def _empty_control(
                 request, runner=boundaries.runner, deadline=deadline
             )
             return Control(query, count), error
+        control_request = (
+            replace(request, repo=None) if source == "context7" else request
+        )
         attempt = _primary_attempt(
             source,
             query,
-            request,
+            control_request,
             boundaries=boundaries,
             deadline=deadline,
         )
@@ -1004,9 +1132,9 @@ def _source_result(
         reason = str(exc)
         control = None
         items = ()
-    except _ResponseTooLargeError:
+    except _HttpBodyError as exc:
         status = Status.ERROR
-        reason = "response too large"
+        reason = exc.reason
         control = None
         items = ()
     except TimeoutError, subprocess.TimeoutExpired:
@@ -1045,18 +1173,27 @@ def _fan_out_with_raw(
 ) -> list[_Fetch]:
     if not request.sources:
         return []
-    with ThreadPoolExecutor(max_workers=len(request.sources)) as executor:
-        futures = [
-            executor.submit(
-                _source_result,
-                source,
-                request,
-                runner=runner,
-                http=http,
-            )
-            for source in request.sources
-        ]
-        return [future.result() for future in futures]
+    try:
+        with ThreadPoolExecutor(max_workers=len(request.sources)) as executor:
+            futures = [
+                executor.submit(
+                    _source_result,
+                    source,
+                    request,
+                    runner=runner,
+                    http=http,
+                )
+                for source in request.sources
+            ]
+            try:
+                return [future.result() for future in futures]
+            except KeyboardInterrupt:
+                _cancel_live_processes()
+                for future in futures:
+                    future.cancel()
+                raise
+    finally:
+        _CANCEL_CHILDREN.clear()
 
 
 def fan_out(
@@ -1217,7 +1354,10 @@ def main(
     if not out_dir.is_absolute():
         out_dir = repo_root / out_dir
     request = FanoutRequest(args.query, args.repo, sources, args.limit, args.timeout)
-    fetched = _fan_out_with_raw(request, runner=runner, http=http)
+    try:
+        fetched = _fan_out_with_raw(request, runner=runner, http=http)
+    except KeyboardInterrupt:
+        return 130
     try:
         manifest_path, results = _persist(out_dir, args.query, args.repo, fetched)
     except OSError as exc:
