@@ -75,6 +75,14 @@ KNOWN_LABEL_PREFIXES = {
     "graphify-researcher",
     "graphify-operator",
     "codex-sol-staleness-auditor",
+    "plan+fetch",
+    "triage",
+    "read",
+    "source-dive",
+    "refute",
+    "critic",
+    "reconcile",
+    "codex-sol-advisor",
 }
 
 ARGS = {
@@ -120,6 +128,10 @@ ARGS = {
     "reportToml": str(REPO_ROOT / ".agent" / "report.toml"),
     "maxRounds": 1,
     "reuseFindings": False,
+    "question": "is the fixture fixed upstream",
+    "repo": "example/repo",
+    "reportPath": str(REPO_ROOT / ".agent" / "research-sweep.md"),
+    "advisor": True,
 }
 
 _STUBS = r"""
@@ -163,7 +175,12 @@ const agent = async (_prompt, options = {}) => {
     )
   }
   const label = options.label || 'general-purpose'
-  calls.push({ label, agentType: options.agentType || 'general-purpose' })
+  calls.push({
+    label,
+    agentType: options.agentType || 'general-purpose',
+    model: options.model || '',
+    effort: options.effort || '',
+  })
   if (label === 'codex-sol-implementer') return 'CODEX REPORT\nCOMMIT: abcdef1234567'
   if (label === 'gate-runner') {
     return {
@@ -181,6 +198,30 @@ const agent = async (_prompt, options = {}) => {
         delta: '0/0/0',
       })),
     }
+  }
+  // research-sweep: non-empty stage outputs so the dry run reaches every phase,
+  // not just the first node (an empty plan returns 'no-manifests' after one call).
+  if (label === 'plan+fetch') {
+    return {
+      runs: [{ query: 'q', sources: ['exa'], manifest: '/tmp/m.json', rc: 0 }],
+      sourceDive: true,
+    }
+  }
+  if (label === 'triage') {
+    return {
+      read: [{ url: 'https://example.test', why: 'w' }],
+      hits: [],
+      unverifiedEmpty: [],
+    }
+  }
+  if (label === 'synthesize') {
+    return {
+      reportPath: args.reportPath,
+      loadBearing: [{ claim: 'c', source: 's' }],
+    }
+  }
+  if (label === 'refute') {
+    return { verdicts: [{ claim: 'c', refuted: true, evidence: 'e' }] }
   }
   return schemaValue(options.schema)
 }
@@ -332,6 +373,7 @@ def _custom_stub_source(
         "const events = []\n"
         "const phase = (title) => events.push({ kind: 'phase', title })\n"
         "const log = (message) => events.push({ kind: 'log', message })\n"
+        "const parallel = async (tasks) => Promise.all(tasks.map((task) => task()))\n"
         "const agent = async (_prompt, options = {}) => {\n"
         "  const label = options.label || 'general-purpose'\n"
         "  calls.push({ label, agentType: options.agentType || 'general-purpose' })\n"
@@ -453,3 +495,134 @@ def test_n15_gates_null_takes_precedence_over_review_null(tmp_path: Path) -> Non
     assert run_result["gates"] is None
     assert run_result["review"] is None
     assert run_result["status"] == "gates-null"
+
+
+RESEARCH_SWEEP = WORKFLOWS / "research-sweep.js"
+
+# The cost routing IS the design of research-sweep (see the comment block at the
+# top of the script): bulk reading on haiku as Explore (no CLAUDE.md payload),
+# judgment on ONE opus node, the advisor on codex. A "tidy-up" that drops a model
+# pin silently moves a node onto the inherited session model — this pins it.
+_SWEEP_ROUTING = {
+    "plan+fetch": ("general-purpose", "sonnet", "medium"),
+    "triage": ("Explore", "haiku", ""),
+    "read": ("Explore", "haiku", ""),
+    "source-dive": ("general-purpose", "sonnet", "medium"),
+    "synthesize": ("general-purpose", "opus", "high"),
+    "refute": ("general-purpose", "sonnet", "medium"),
+    "critic": ("Explore", "sonnet", "low"),
+    "reconcile": ("general-purpose", "sonnet", "low"),
+    "codex-sol-advisor": ("codex-sol-advisor", "", ""),
+}
+
+
+def test_research_sweep_reaches_every_phase_with_pinned_routing(tmp_path: Path) -> None:
+    """Every research-sweep node runs once, on the model/effort its design names.
+
+    FAIL arm: change `model: 'opus'` on the synthesize node (or delete any node's
+    `model:`) and the routing assertion names that node.
+    """
+    result = _bun_run(RESEARCH_SWEEP.read_text(encoding="utf-8"), tmp_path / "sweep.js")
+    assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    payload = cast("dict[str, object]", json.loads(result.stdout.splitlines()[-1]))
+    run_result = cast("dict[str, object]", payload["result"])
+    calls = cast("list[dict[str, str]]", payload["calls"])
+    routing = {
+        call["label"].split(":", 1)[0]: (
+            call["agentType"],
+            call["model"],
+            call["effort"],
+        )
+        for call in calls
+    }
+
+    assert run_result["status"] == "complete"
+    assert routing == _SWEEP_ROUTING
+
+
+def test_research_sweep_rejects_a_relative_report_path(tmp_path: Path) -> None:
+    """A relative reportPath would land wherever the synthesizer's cwd is."""
+    wrapped = _custom_stub_source(
+        RESEARCH_SWEEP.read_text(encoding="utf-8"),
+        {**ARGS, "reportPath": "relative.md"},
+        "  return null",
+    )
+    result = _bun_run_wrapped(wrapped, tmp_path / "sweep-relative.js")
+    assert result.returncode != 0
+    assert "reportPath must be an absolute path" in result.stderr
+
+
+_SWEEP_HAPPY_BODY = """
+  if (label === 'plan+fetch') {
+    return { runs: [{ query: 'q', sources: ['exa'], manifest: '/tmp/m.json', rc: 0 }],
+      sourceDive: false }
+  }
+  if (label === 'triage') {
+    return {
+      read: [{ url: 'https://gone.test', why: 'w' }],
+      hits: [],
+      unverifiedEmpty: [],
+    }
+  }
+  if (label.startsWith('read')) return null
+  if (label === 'synthesize') {
+    events.push({ kind: 'synth-prompt', prompt: _prompt })
+    return { reportPath: args.reportPath, loadBearing: [] }
+  }
+  if (label === 'refute') return { verdicts: [] }
+  if (label === 'critic') return { gaps: [] }
+  return RECONCILE
+"""
+
+
+def _sweep_run(tmp_path: Path, reconcile: str, name: str) -> dict[str, object]:
+    body = _SWEEP_HAPPY_BODY.replace("RECONCILE", reconcile)
+    wrapped = _custom_stub_source(
+        RESEARCH_SWEEP.read_text(encoding="utf-8"), {**ARGS, "advisor": False}, body
+    )
+    result = _bun_run_wrapped(wrapped, tmp_path / name)
+    assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    return cast("dict[str, object]", json.loads(result.stdout.splitlines()[-1]))
+
+
+def test_research_sweep_failed_reader_becomes_a_named_gap(tmp_path: Path) -> None:
+    """A null reader is reported, not dropped (codex review of 50ba9eec, finding 3).
+
+    FAIL arm: restore `.filter(Boolean)` over the reader results and
+    `failedReads` disappears from the result and the synthesis prompt.
+    """
+    payload = _sweep_run(tmp_path, "'ok'", "sweep-null-reader.js")
+    run_result = cast("dict[str, object]", payload["result"])
+    events = cast("list[dict[str, str]]", payload["events"])
+    synth_prompt = next(e["prompt"] for e in events if e["kind"] == "synth-prompt")
+
+    assert run_result["failedReads"] == ["https://gone.test"]
+    assert "FAILED READS:" in synth_prompt
+    assert "https://gone.test" in synth_prompt
+    # Nothing refuted and no gaps: reconcile is skipped and the run completes.
+    labels = [c["label"] for c in cast("list[dict[str, str]]", payload["calls"])]
+    assert "reconcile" not in labels
+    assert run_result["status"] == "complete"
+
+
+def test_research_sweep_unreconciled_report_is_not_complete(tmp_path: Path) -> None:
+    """A refuted claim that never reaches the report must not return `complete`.
+
+    FAIL arm: drop the reconcile node (or its null check) and status reads
+    `complete` while the report on disk still asserts the refuted claim.
+    """
+    wrapped = _custom_stub_source(
+        RESEARCH_SWEEP.read_text(encoding="utf-8"),
+        {**ARGS, "advisor": False},
+        _SWEEP_HAPPY_BODY.replace(
+            "if (label === 'refute') return { verdicts: [] }",
+            "if (label === 'refute') return { verdicts: "
+            "[{ claim: 'c', refuted: true, evidence: 'e' }] }",
+        ).replace("RECONCILE", "null"),
+    )
+    result = _bun_run_wrapped(wrapped, tmp_path / "sweep-reconcile-null-2.js")
+    assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    run_result = cast(
+        "dict[str, object]", json.loads(result.stdout.splitlines()[-1])["result"]
+    )
+    assert run_result["status"] == "reconcile-null"
