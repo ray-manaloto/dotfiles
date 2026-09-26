@@ -22,6 +22,25 @@ import pytest
 import yaml
 
 
+@pytest.fixture(autouse=True)
+def isolated_mise_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Keep every test's mise registry in its own disposable state directory.
+
+    Without this, a test that runs the real `mise` against a throwaway
+    `mise.toml` registers it in the HOST's `tracked-configs`, and every later
+    host `mise` command re-parses it (#1169/#1248). Same fixture as
+    knowledge-base#818.
+
+    The directory is a SIBLING of `tmp_path`, not inside it: `git` resolves
+    through a mise shim here, so any Git call creates the state dir, and inside
+    `tmp_path` it would read as drift in tests that prove a tmp dir is empty or
+    a fixture repo is clean.
+    """
+    state_dir = tmp_path.parent / f"{tmp_path.name}.mise-state"
+    monkeypatch.setenv("MISE_STATE_DIR", str(state_dir))
+    return state_dir
+
+
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """Skip `host_only` tests when running on a CI runner ($CI is set)."""
     # `== "true"`, matching rule_sync.py:223 rather than plain truthiness:
