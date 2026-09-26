@@ -114,3 +114,13 @@ The whole clause was removed rather than corrected.
 cheapest thing for a lane to invent, and it survives review because it *reads*
 like the two real names beside it. Grep a variable before citing it; the cost is
 one command.
+
+## agy `--print` form — re-probed 2026-09-25 (agy 1.2.11, `mise exec -- agy`)
+
+| Form | rc | Result |
+|---|---|---|
+| `printf 'Reply PONG\n' \| agy --print --output-format text` (old canonical) | 2 | `Error: --print took "--output-format" as its prompt` |
+| `agy --output-format text --print-timeout 1m --print "$(cat p.txt)"` (new canonical) | 0 | `PONG` |
+| `--print -` with stdin | 0 | no answer: `-` taken as the literal prompt (session-audit-dismissed-errors-2026-09-25b.md F5) |
+
+Bare `agy` (no `--model`) runs Gemini 3.8 Flash (High): `~/.gemini/antigravity-cli/cli.log` "Propagating selected model override … Gemini 3.8 Flash (High)".

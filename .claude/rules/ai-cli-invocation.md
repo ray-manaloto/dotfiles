@@ -22,8 +22,8 @@ printf '%s\n' "prompt" | mise exec -- codex exec -s read-only -
 printf '%s\n' "prompt" | mise exec -- codex exec \
   -c model_reasoning_effort='"xhigh"' -
 
-# Gemini/Antigravity pinned lane: headless text output
-printf '%s\n' "prompt" | mise exec -- agy --print --output-format text
+# Gemini/Antigravity pinned lane: --print TAKES the prompt as its value (agy 1.2.x); stdin is not read
+mise exec -- agy --output-format text --print "$(cat "$PROMPT_FILE")"
 
 # OpenCode research: stdin prompt and structured event output
 printf '%s\n' "prompt" | mise exec -- opencode run --format json
@@ -66,6 +66,9 @@ contract.
 Use the pinned `agy`/Antigravity path through `mise exec -- agy`. A stale user
 installation can exist at `~/.local/bin/agy`, so keep the explicit `mise exec`
 form rather than relying on lookup order.
+
+`agy --print --output-format …` fails rc=2 (`--print took "--output-format" as its prompt`); a stdin-only
+prompt is rejected (`flag needs an argument: -print`), and `--print -` takes `-` as the prompt (re-probed 2026-09-25, agy 1.2.11).
 
 `which -a agy` shows which copy PATH order selects on this machine; keep the
 explicit form regardless. For raw Gemini, `gemini "prompt"` remains
