@@ -372,7 +372,7 @@ export const register: Register = (on) => {
     }
     const lead =
       cachedReport.verdict === "invalid"
-        ? "claude-doctor: your Claude Code install is BROKEN."
+        ? "claude-doctor: your Claude Code install failed a required check — repair it before continuing."
         : cachedReport.verdict === "drift"
           ? "claude-doctor: the repository's Claude Code pin is stale."
           : "claude-doctor: could not determine whether your install is current (this is NOT 'it is fine').";

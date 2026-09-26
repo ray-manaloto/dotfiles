@@ -477,7 +477,7 @@ for (const malformedEligibility of malformedEligibilityValues) {
     };
     const services = makeServices(root);
     const context = await start(services, malformed);
-    assert.match(JSON.stringify(context.additionalContext), /BROKEN/);
+    assert.match(JSON.stringify(context.additionalContext), /failed a required check/);
     assertDenied(await call(services, event), finding);
     arms += 1;
   }
@@ -695,7 +695,7 @@ for (const malformed of [null, 42, "ok", true, []]) {
   const context = await start(services, drift());
   const rendered = JSON.stringify(context.additionalContext);
   assert.match(rendered, /schemas\/sources\.toml pins claude-code/);
-  assert.doesNotMatch(rendered, /BROKEN/);
+  assert.doesNotMatch(rendered, /failed a required check/);
   assert.doesNotMatch(rendered, /could not determine/);
   const before = services.spawned();
   assert.equal((await call(services, { tool: "Bash", command: "git status" })).allow, true);
@@ -714,7 +714,7 @@ for (const malformed of [null, 42, "ok", true, []]) {
   const rendered = JSON.stringify(context.additionalContext);
   assert.match(rendered, /schemas\/sources\.toml pins claude-code/);
   assert.match(rendered, /could not determine/);
-  assert.doesNotMatch(rendered, /BROKEN/);
+  assert.doesNotMatch(rendered, /failed a required check/);
   arms += 1;
 }
 
@@ -738,7 +738,7 @@ for (const malformed of [null, 42, "ok", true, []]) {
   const context = (await start(services, noted)) as Record<string, unknown>;
   const rendered = JSON.stringify(context.additionalContext);
   assert.match(rendered, /doctor\.toml could not be read/);
-  assert.doesNotMatch(rendered, /BROKEN|could not determine|check could not run/);
+  assert.doesNotMatch(rendered, /failed a required check|could not determine|check could not run/);
   assert.equal((await call(services, { tool: "Bash", command: "git status" })).allow, true);
   arms += 1;
 }
