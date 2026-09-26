@@ -1686,3 +1686,30 @@ flowchart LR
     F["fable remainder (ACTIVE)"] --> R["2026-09-24/25 session remainder"]
     R --> P11["Phase 11"] --> P10["Phase 10"]
 ```
+
+## 2026-09-25 — (session c) fable remainder: #1319 Claude-only arms, claudex-loop removed, V8 filed, KB#794 closed, 23(f) reword shipped
+
+- **Iteration ID:** `dotfiles-goal-20260925-037`
+- **Prior goal digest:** `sha256:dcb7512b4e53bcfe5782292faefe34cf29e2d8ffbb116094685fcf9435e73d95`
+- **Current goal digest:** `sha256:c3719e52eaff8a43afe96d0d32c28449e6f4750f7afc050384ddfa45e7392539`
+- **Changed requirement:** Delivered items leave the goal (S2-F6, the four Claude-only #1319 arms, claudex-loop, V8's two tickets, KB#794, 23(f)); the #1319 remainder is restated to match the issue (verify/rule-sync/plugin-health re-runs, live-path grep, #1293 comment). Rulings (Ray, AskUserQuestion, 2026-09-25c): pwf upstream ask A filed, B dropped; 23(f) keep enforcing, reword only; claudex-loop `--apply` approved; V8 filed as drafted; #750 owns Phase 2 (KB#794 AC1); file #1386/#1387; file #1388 (zsh guard) and build it next session; regenerate the codex schema.
+- **Reason:** Ray's session `e0054614` rulings above, plus the §1c audits' FIX-NOW/PLAN dispositions.
+- **Evidence:**
+  - dotfiles #1380 and #1382 `land` rc=0; knowledge-base #815 `kb-land` rc=0 (cold:antigravity NO FINDINGS; codex out).
+  - `docs/receipts/1319.md`; `1319-live-arm-*-2026-09-25.md`; `plugin-remove --apply` rc=0, inventory 3→0.
+  - Session audits `session-audit-{dismissed-errors,missing-requests,bugs,vagueness}-2026-09-25c.md`; briefs `session-2026-09-25c-agent-briefs.md`.
+- **Affected tickets:** #1319 (open), #1318 (closed), knowledge-base #794 (closed), knowledge-base #750 (scope extended), #1383, #1384, #1386, #1387, #1388 (filed), #1169 (comment), OthmanAdi/planning-with-files#296 (filed).
+- **Disposition:** `DELIVERED` (the items above); #1319 `PARTIAL`.
+- **Topology and ownership:** One writer, the Claude architect session. Delegates: `premise-verifier` and `claude-advisor` (dotfiles `Agent` spawns; knowledge-base via one headless `claude -p`); Opus `general-purpose` audit lanes M, N, P; antigravity `agy-delegate` cold reviews (Gemini 3.8 Flash). codex was unavailable (usage limit until 2026-09-30).
+
+### Current goal
+
+> Finish the fable-orchestrator removal remainder in task_plan.md: #1319's remaining arms (the verify/rule-sync/plugin-health re-runs and live-path grep now; the kb-tool-review Review-phase run after codex returns on 2026-09-30; the sdlc-team dispatch after #1362; then the #1293 comment and closing #1319 and #1310), the F2 graph rebuild with graphify-health rc=0, and the V6 knowledge-base CLAUDE.md pointer. Then the 2026-09-24/25 session remainder (including items 24-26 and filed #1386/#1387/#1388), then Phase 11 in its ruled order, then Phase 10. Design changes go through /to-spec, /to-tickets and /implement; done means land rc=0. Keep task_plan.md as the sole task authority.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    F["fable remainder (ACTIVE): #1319 rest, F2, V6"] --> R["2026-09-24/25 session remainder"]
+    R --> P11["Phase 11"] --> P10["Phase 10"]
+```

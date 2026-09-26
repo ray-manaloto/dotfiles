@@ -55,12 +55,16 @@ they differ. This wrapper owns the judgment and repository workflow around it.
 4. Invoke `plugin-health`, then verify both guards:
 
    ```bash
-   mise run plugin-health            # rc is the verdict
-   mise run doctor -- --strict       # rc=1 on ANY drift, incl. removed-plugins
+   mise run plugin-health            # rc is the verdict; must exit 0
+   DOTFILES_AMBIENT_PATH="$PATH" mise run doctor -- --strict
    ```
 
-   Both must exit 0. `mise run doctor` without `--strict` always exits 0 and
-   proves nothing.
+   `plugin-health` must exit 0. `doctor --strict` exits 1 on ANY drift, so its
+   rc is not the verdict: require **zero** `DRIFT doctor[removed-plugins]`
+   lines, record the rc, and name every other DRIFT line as pre-existing or
+   new. Without `DOTFILES_AMBIENT_PATH` the path-drift and claude-doctor checks
+   are BLIND under `mise run`; bare `mise run doctor` always exits 0 and proves
+   nothing.
 
    Re-run `plugin-inventory`; every location and native-CLI match must now be
    absent, with no probe errors.

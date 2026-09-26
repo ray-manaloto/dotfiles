@@ -22,6 +22,16 @@ Spawned via the `Agent` tool (`subagent_type: premise-verifier`) from session `d
 
 VERDICT: 3 CONFIRMED, 1 REFUTED, 0 other
 
+## Premises sent (verbatim, from the `Agent` call's prompt)
+
+```text
+PREMISES:
+P1. `mise.toml` defines a task named `plugin-health`.
+P2. `.claude/agents/premise-verifier.md` restricts this agent's tools to Read, Grep and Glob.
+P3. `mise.toml` defines a task named `zq-absent-arm-4417`. (This is a deliberate control arm and is expected to be REFUTED.)
+P4. `python/src/dotfiles_setup/plan_attest.py` defines a function `resolve_attest_script`.
+```
+
 ## GitHub repos touched
 
 - [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — the premises were checked against this repo
