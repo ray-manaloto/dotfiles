@@ -330,8 +330,9 @@ ACTION_RUNS_GIT_LOCALLY: dict[str, bool] = {
     # API — it still pushes locally, and we do not set the flag.)
     "peter-evans/create-pull-request": True,
     # REMOTE — THE TRAP. `autofix.yml`/autofix is the only job that installs the
-    # FULL toolchain, so hk IS present, the postinstall SUCCEEDS and the git
-    # hooks ARE written; it also sets a `git config` identity and runs
+    # FULL toolchain, so hk IS present (the postinstall no longer writes git
+    # hooks since jdx/hk#1376, but a runner could still get them another way);
+    # it also sets a `git config` identity and runs
     # `hk run pre-commit --all` twice on purpose. Every surface signal says
     # "writes to git". It does not: this action uploads a DIFF to autofix.ci and
     # THEIR GitHub App makes the commit off-runner — the vendor's own action.yml
@@ -807,7 +808,8 @@ def job_writes_to_git(
       ``ci.yml`` / ``promote`` holds write scope and never touches git, so
       permissions discriminate nothing here.)
     - ``autofix.yml`` / ``autofix`` sets a ``git config`` identity, installs the
-      FULL toolchain — hk present, postinstall successful, hooks written — and
+      FULL toolchain — hk present (hooks are no longer written by the
+      postinstall, jdx/hk#1376) — and
       runs ``hk run pre-commit`` twice, yet the commit is made off-runner by
       autofix.ci's App. A predicate keyed on "configures git identity" or "hk is
       installed" flags it wrongly.

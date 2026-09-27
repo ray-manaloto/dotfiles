@@ -21,6 +21,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+
 
 @pytest.fixture(autouse=True)
 def isolated_git_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
@@ -30,9 +32,18 @@ def isolated_git_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path
     `hook.hk-*` into `~/.gitconfig`) otherwise runs inside every throwaway repo.
     The file is a SIBLING of `tmp_path`, like `isolated_mise_state`'s dir, so
     tests that assert a tmp dir's exact contents are unaffected.
+
+    It carries the ONE scoped `safe.directory` entry the chezmoi-managed global
+    gitconfig renders for this checkout (#1183, `home/dot_gitconfig.tmpl`):
+    replacing the global file without it re-opens `dubious ownership` for every
+    test that runs git against the real repo under the devcontainer's virtiofs
+    uid-0 flicker (smoke tier 2 runs this suite in-container).
     """
     gitconfig = tmp_path.parent / f"{tmp_path.name}.gitconfig"
-    gitconfig.write_text("[user]\n\tname = T\n\temail = t@example.com\n")
+    gitconfig.write_text(
+        "[user]\n\tname = T\n\temail = t@example.com\n"
+        f"[safe]\n\tdirectory = {_REPO_ROOT}\n"
+    )
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(gitconfig))
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
     return gitconfig

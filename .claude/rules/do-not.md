@@ -60,7 +60,9 @@ in this repo. Control arms and case history for each entry:
    `branch_guard`** denying `Edit`/`Write`/`NotebookEdit` on a repo file while
    on the default branch (git-ignored paths and anything outside the repo stay
    allowed, so `.agent/`, `mise.local.toml` and the scratchpad are unaffected);
-   hk's `no_commit_to_branch` in the **pre-commit** hook; the PreToolUse guard
+   hk's `no_commit_to_branch` in the **pre-commit** hook (present only once
+   `hk install --global --mise` has run for this machine — the doctor's
+   `hk-hooks` check reports when it has not); the PreToolUse guard
    denying `--no-verify` / `git commit -n` / a `HK_SKIP_HOOKS=` prefix (**no git
    hook can catch those** — git skips the hook before it exists as a process);
    and a repository **ruleset requiring a PR for `main`** — the only layer an
