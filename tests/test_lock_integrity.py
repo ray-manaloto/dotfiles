@@ -267,3 +267,44 @@ def test_only_the_image_lockfiles_get_the_family_bound() -> None:
     # Every bounded path must be a declared lockfile, or the bound applies to
     # nothing and the asymmetry is decorative.
     assert set(lock_integrity.LOCKFILES) >= set(lock_integrity.IMAGE_LOCKFILES)
+
+
+# --- absolute check: asset-backend entries must carry platforms (#1398) -----
+
+
+def _entry(name: str, backend: str, platforms: tuple[str, ...]) -> str:
+    out = [f"[[tools.{name}]]", 'version = "1.0.0"', f'backend = "{backend}"', ""]
+    for platform in platforms:
+        out += [f'[tools.{name}."platforms.{platform}"]', 'checksum = "x"', ""]
+    return "\n".join(out)
+
+
+def test_a_platformless_packslip_entry_is_reported() -> None:
+    """The #1398 shape: version + backend, no platform table."""
+    found = lock_integrity.platformless_asset_entries(
+        _entry("hk", "packslip:github.com/jdx/hk", ())
+    )
+    assert len(found) == 1
+    assert "hk@1.0.0" in found[0]
+
+
+def test_asset_entries_with_platforms_and_package_backends_pass() -> None:
+    """CONTROL ARMS: a platformed aqua entry, and platform-less npm/pipx/core."""
+    body = "\n".join(
+        [
+            _entry("act", "aqua:nektos/act", ("linux-x64",)),
+            _entry("prettier", "npm:prettier", ()),
+            _entry("ruff", "pipx:ruff", ()),
+            _entry("node", "core:node", ()),
+        ]
+    )
+    assert lock_integrity.platformless_asset_entries(body) == []
+
+
+def test_the_absolute_check_is_wired_into_check_lockfiles(tmp_path: Path) -> None:
+    """Binds the CALL SITE: an untracked lockfile skips the HEAD diff, not this."""
+    lock = tmp_path / "x.lock"
+    lock.write_text(_entry("hk", "packslip:github.com/jdx/hk", ()))
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    findings = lock_integrity.check_lockfiles(tmp_path, ("x.lock",))
+    assert any("no platform entries" in finding for finding in findings)
