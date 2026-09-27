@@ -29,7 +29,7 @@ def isolated_mise_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path
     Without this, a test that runs the real `mise` against a throwaway
     `mise.toml` registers it in the HOST's `tracked-configs`, and every later
     host `mise` command re-parses it (#1169/#1248). Same fixture as
-    knowledge-base#818.
+    knowledge-base#818 + #819 (the trust-store share).
 
     The directory is a SIBLING of `tmp_path`, not inside it: `git` resolves
     through a mise shim here, so any Git call creates the state dir, and inside

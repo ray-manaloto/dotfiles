@@ -1,9 +1,19 @@
-# Spec (rev 5, 2026-09-26: premise rounds + review rounds 1-2 applied; round 3 authorized by Ray) — `research-fanout`: a no-LLM, multi-source research fetcher for Claude AND codex
+# Spec (rev 5, 2026-09-26: premise rounds + two review rounds; §8 = implementation round 2, §9 = implementation round 3, the last one Ray authorized) — `research-fanout`: a no-LLM, multi-source research fetcher for Claude AND codex
 
-Status: RATIFIED by Ray 2026-09-26 (AskUserQuestion, session `dotfiles-20260926.000`): the "hybrid" architecture —
+Status: SHIPPED in #1391 (squash `e5ac3324`, 2026-09-26). Rev 5 is the as-built contract; §8 and §9 are the
+review-round work orders that were applied and are kept as history — they are NOT open work. Residue: #1390.
+
+Roles: "architect" = the Claude session that dispatched this spec (session `dotfiles-20260926.000`); "caller" = the
+same session in its commit role (`COMMIT: caller` means the implementer leaves the tree uncommitted); the implementer
+is the `codex-sol-implementer` lane. The §5 live integration arm WAS run: 7/7 sources `ok` for
+`"tracked configs" --repo jdx/mise`, and `EXA_API_KEY` unset → `skipped`, rc=1 (commit bodies of #1391).
+
+Originally RATIFIED by Ray 2026-09-26 (AskUserQuestion, session `dotfiles-20260926.000`): the "hybrid" architecture —
 a Python fetch layer + mise task usable by both harnesses, a saved Claude workflow over it with per-node model/effort,
 and a mirrored skill. Ray was shown that knowledge-base#509 `aggregated-research` / `kb_setup.research` overlaps and
-chose a NEW dotfiles module anyway (re-ruled the same day). This spec covers ONLY the fetch layer + mise task; the
+chose a NEW dotfiles module anyway (re-ruled the same day). Why not `kb_setup.research`: no reason beyond the
+ruling itself was stated — the AskUserQuestion answer was the option "New dotfiles research-fanout" after the
+overlap and its cost ("duplicates `kb_setup.research`; two implementations to maintain") were shown. This spec covers ONLY the fetch layer + mise task; the
 workflow and skill are authored separately by the architect.
 
 Evidence: `docs/research/kb/reports/agents/mise-warn-multisource-2026-09-26.md` (per-source scorecard: invocations,
@@ -46,8 +56,9 @@ research-fanout QUERY [--repo OWNER/REPO] [--sources S1,S2,...] [--out DIR] [--l
 ```
 
 - `QUERY` (required unless `--list-sources`): the research question / search terms.
-- `--repo`: scopes the GitHub sources and the firecrawl developer index. Without it, GitHub sources return
-  `skipped` with reason `needs --repo`.
+- `--repo`: scopes the GitHub sources and the firecrawl developer index. Without it, GitHub sources are left OUT of
+  the default set entirely (no line, no file); when NAMED in `--sources` they return `skipped` with reason
+  `needs --repo`. The same holds for every prerequisite-gated source (e.g. exa without `EXA_API_KEY`).
 - `--sources`: comma list; default = every source whose prerequisites are present. Unknown name → exit 2.
 - `--out`: default `<repo_root>/.agent/kb/raw/research-fanout/<slug>/`, slug = lowercase alnum-and-hyphen of QUERY,
   ≤60 chars.
@@ -90,7 +101,7 @@ class SourceResult:
 
 - Control arm: when a source returns 0 items, run its canary once (github-issues/-discussions: the repo's NAME part, e.g.
   `mise` for `jdx/mise`, on the same repo; github-releases: none needed — an empty release list for an existing repo is
-  `empty_verified` only if `gh api repos/<repo>` returns 200; exa/firecrawl-*/context7: `python`; last30days: none → `EMPTY_UNVERIFIED` with reason `no canary`).
+  `empty_verified` only if `gh api repos/<repo>` returns 200; exa, firecrawl-search: `python`; firecrawl-developer: the repo's NAME part with the `repos=` filter kept when `--repo` is given, else `python`; context7: `ctx7 library python` then `ctx7 docs <id> python`, independent of `--repo` (§9.6); last30days: none → `EMPTY_UNVERIFIED` with reason `no canary`).
   canary count > 0 → `EMPTY_VERIFIED`; canary 0 or error → `EMPTY_UNVERIFIED`. The firecrawl-developer canary keeps the
   `repos=` filter when `--repo` was given (and then uses the repo's name as its query), so the canary tests the same
   scoped index the primary query hit.
@@ -98,8 +109,9 @@ class SourceResult:
   JSON for the HTTP/`gh` sources, text for `ctx7`; no extension claim about the format),
   `<out>/manifest.json` = `{"query", "repo", "sources": [SourceResult...], "out_dir"}`.
 - stdout: the manifest path, then one line per source: `<source>  <status>  <n> items  <elapsed>s  [<reason>]`.
-- Exit: 0 if ≥1 source is `ok` or `empty_verified`; 1 if every requested source is error/skipped/empty_unverified;
-  2 for usage errors.
+- Exit: 0 if ≥1 source is `ok` or `empty_verified`; 1 if every requested source is error/skipped/empty_unverified,
+  if NO source was selected, or if the output could not be written; 2 for usage errors; 130 on Ctrl-C (children's
+  process groups are killed first, §9.3). A relative `--out` resolves against the repo root (`MISE_PROJECT_ROOT`).
 - Library entry: `def fan_out(request: FanoutRequest, *, runner: Runner = default_runner, http: Http = default_http) -> list[SourceResult]`
   where `FanoutRequest` is a frozen dataclass `(query: str, repo: str | None, sources: tuple[str, ...], limit: int,
   timeout: float | None)` — bundled because ruff `select=["ALL"]` keeps PLR0913's default max of 5 args
@@ -187,7 +199,7 @@ its control (`--sources exa` with `EXA_API_KEY` unset → `skipped`), per `.clau
 | 8 | E | exa `POST /search` with `x-api-key` → 200; no key → 402 | inventory report §1 (live probe, control armed) |
 | 9 | E | firecrawl `GET /v2/search/developer` keyless → 200; bogus path → 404 | inventory report §1 |
 | 10 | E | `gh api /search/issues` returns issues+PRs; `gh search issues --repo` issues only | inventory report §4 |
-| 11 | L | last30days `--emit` choices include `json`; `--plan` skips its internal LLM planner | plugin `last30days.py:658`, `:805` |
+| 11 | L | last30days `--emit` choices include `json`. (`--plan`, which skips its internal LLM planner, was evaluated and is NOT passed: the fetcher builds no query plan; the LLM keys are scrubbed and last30days is opt-in instead.) | plugin `last30days.py:658`, `:805` |
 | 12 | A | GraphQL `search(type: DISCUSSION)` accepts `repo:` qualifiers — the multisource lane used it (control 0 vs 63); re-probe if it fails | multisource report scorecard |
 | 13 | L | `ctx7 library` prints a numbered ID list; `ctx7 docs` prints `### ` sections each with a `Source:` URL | `.agent/kb/raw/mise-warn-src-ctx7.md:1-105` (premise-verifier) |
 
@@ -195,7 +207,8 @@ its control (`--sources exa` with `EXA_API_KEY` unset → `skipped`), per `.clau
 
 Sources: codex review lens `docs/research/kb/reports/agents/codex-review-50ba9eec-2026-09-26.md` (C4, C5) and Opus cold
 review `docs/research/kb/reports/agents/cold-review-50ba9eec-2026-09-26.md` (F1–F14). Every item is a confirmed finding
-against commit `50ba9eec`; the caller already fixed the firecrawl `k`/`--sources web` defects (the §3 table is updated
+against commit `50ba9eec` (a pre-squash commit on branch `feat/research-fanout`, squashed into `e5ac3324`, #1391 —
+NOT reachable from main); the caller already fixed the firecrawl `k`/`--sources web` defects (the §3 table is updated
 below) and the workflow findings. Each fix ships WITH a test whose fail arm is stated in a comment. Dissent on any item
 you find false against the code.
 
@@ -224,7 +237,7 @@ Same ALLOWLIST as before: `python/src/dotfiles_setup/research_fanout.py`, `tests
    present: `manifest.json` and `<source>.json` / `<source>.raw` for EVERY known source (not only the requested
    ones). Nothing else is deleted.
 9. **Releases filtered by the query (F6).** Fetch up to 100 recent releases; keep those whose tag, name or body
-   contains a query TERM as a whole word, case-insensitive, where terms are the query's words of ≥3 characters minus
+   contains a query TERM as a whole word (**superseded by §9.9: ALL terms must match**), case-insensitive, where terms are the query's words of ≥3 characters minus
    the stopwords `the and for with from this that are was not you`. Emit at most `--limit` matches. None →
    the repo-exists canary decides `empty_verified` / `empty_unverified` (as before).
 10. **Credential scrubbing is tested for EVERY child (F7).** For `gh`, `firecrawl`, `ctx7`, `last30days`: assert a

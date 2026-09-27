@@ -3,6 +3,14 @@
 # checksums; one (`ba41c3748e298012`) begins with "ba", which typos misreads as
 # a misspelling of "by"/"be". Allowlist the exact hash identifier so genuine
 # typos elsewhere are still caught.
+[default]
+# Short hex SHAs in prose (7-24 chars) are split into "words" and read as typos
+# (`ba` in `50ba9eec` -> "by", `afe` in `28afe3f5` -> "safe"); full 32/40-char
+# hashes already pass. Measured 2026-09-26 (session-audit-dismissed-errors F4):
+# without this, 3 errors incl. a planted real typo; with it, only the planted typo.
+# Replaces per-SHA allowlist entries for commit hashes.
+extend-ignore-re = ["\\b[0-9a-f]{7,40}\\b"]
+
 [default.extend-identifiers]
 ba41c3748e298012 = "ba41c3748e298012"
 
@@ -14,16 +22,11 @@ ba41c3748e298012 = "ba41c3748e298012"
 # entry. One SHA, one line, no collateral.
 f6ba0ae = "f6ba0ae"
 
-# `50ba9eec` is the research-fanout commit the 2026-09-26 cold review and codex
-# review lens were run against; its SHA names both verbatim review reports and is
-# cited in docs/specs/research-fanout.md §8. Same shape and same reasoning as
-# `f6ba0ae` above: one exact SHA, no blanket `ba`.
-50ba9eec = "50ba9eec"
 
 # `HOMEs` is the plural of the env var `HOME` ("under both HOMEs": a real HOME and an
 # empty one) in the verbatim cold review of the research-fanout fixes. Verbatim
 # reports are not normalized (agent-report-persistence.md rule 4), so the exact
-# token is allowlisted rather than the report edited.
+# token is allowlisted (repo-wide, exact identifier) rather than the report edited.
 HOMEs = "HOMEs"
 
 # `fpr` is gpg's --with-colons RECORD TYPE for a fingerprint line, not a
