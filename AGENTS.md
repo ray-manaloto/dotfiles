@@ -149,9 +149,8 @@ Before advancing to the next task or claiming done, EVERY applicable check must 
   **Never `uv run --directory python`** — the latter changes cwd and
   breaks relative test paths.
 - **hk for hooks**: `mise run lint` for the read-only lint gate (≡ CI;
-  guard redirects raw hk); `mise run fmt` to auto-fix. Always `git add`
-  BEFORE `mise run fmt` — `fix=true` can strand unstaged edits when new
-  files are present.
+  guard redirects raw hk); `mise run fmt` to auto-fix. hk 2 `fix` does
+  NOT stage its fixes (measured 2026-09-27): `git add` AFTER `mise run fmt`.
 
 ### Devcontainer success criteria (durable, do NOT silently drop)
 Gated by `mise run verify-local`. Sessions touching `.devcontainer/` or `mise.toml [tasks.up]` MUST preserve all three. Mechanism: `.devcontainer/AGENTS.md`. Research: `docs/research/runs/research-20260407-ssh-devcontainer/report.md`.

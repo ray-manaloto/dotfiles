@@ -24,8 +24,14 @@ import yaml
 
 @pytest.fixture(autouse=True)
 def isolated_git_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Keep tests independent of the developer's global and system Git config."""
-    gitconfig = tmp_path / "gitconfig"
+    """Keep tests independent of the developer's global and system Git config.
+
+    A machine-level hook (hk v2's recommended `hk install --global` writes
+    `hook.hk-*` into `~/.gitconfig`) otherwise runs inside every throwaway repo.
+    The file is a SIBLING of `tmp_path`, like `isolated_mise_state`'s dir, so
+    tests that assert a tmp dir's exact contents are unaffected.
+    """
+    gitconfig = tmp_path.parent / f"{tmp_path.name}.gitconfig"
     gitconfig.write_text("[user]\n\tname = T\n\temail = t@example.com\n")
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(gitconfig))
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
