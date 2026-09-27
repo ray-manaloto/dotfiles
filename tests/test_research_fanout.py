@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import http.client
 import json
 import os
@@ -34,7 +35,167 @@ from dotfiles_setup.research_fanout import (
     default_runner,
     fan_out,
     main,
+    validate_strict_five,
 )
+
+
+def _strict_manifest(tmp_path: Path) -> Path:
+    sources = (
+        "github-issues",
+        "github-discussions",
+        "github-releases",
+        "exa",
+        "context7",
+        "firecrawl-developer",
+        "firecrawl-search",
+        "last30days",
+    )
+    rows = []
+    for source in sources:
+        raw = tmp_path / f"{source}.raw"
+        payload: object = {
+            "github-issues": {"items": [{"html_url": "https://example.test"}]},
+            "github-discussions": {
+                "data": {"search": {"nodes": [{"url": "https://example.test"}]}}
+            },
+            "github-releases": [{"html_url": "https://example.test"}],
+            "exa": {
+                "requestId": "test-request",
+                "results": [{"url": "https://example.test"}],
+            },
+            "firecrawl-developer": {
+                "success": True,
+                "results": [{"url": "https://example.test"}],
+            },
+            "firecrawl-search": {
+                "success": True,
+                "data": {"web": [{"url": "https://example.test"}]},
+            },
+            "last30days": {"schema_version": "1.3", "source_status": {"reddit": "ok"}},
+        }.get(source, "Context7 result")
+        raw_bytes = (
+            json.dumps(payload).encode() if source != "context7" else b"Context7 result"
+        )
+        raw.write_bytes(raw_bytes)
+        rows.append(
+            {
+                "source": source,
+                "status": "ok",
+                "items": [{"url": "https://example.test"}],
+                "control": None,
+                "raw_file": str(raw),
+                "raw_sha256": hashlib.sha256(raw_bytes).hexdigest(),
+            }
+        )
+    path = tmp_path / "manifest.json"
+    path.write_text(
+        json.dumps(
+            {
+                "strict_five": True,
+                "policy_version": "strict-five-v1",
+                "request_id": "turn-1",
+                "query": "Codex hooks",
+                "repo": "openai/codex",
+                "sources": rows,
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_strict_five_requires_every_source_and_bound_raw_evidence(
+    tmp_path: Path,
+) -> None:
+    path = _strict_manifest(tmp_path)
+    assert validate_strict_five(path, "turn-1") == (
+        True,
+        "all required sources completed",
+    )
+    assert validate_strict_five(path, "turn-2")[0] is False
+    rows = json.loads(path.read_text(encoding="utf-8"))
+    rows["sources"][0]["status"] = "skipped"
+    path.write_text(json.dumps(rows), encoding="utf-8")
+    assert validate_strict_five(path, "turn-1")[0] is False
+    rows["sources"][0]["status"] = "ok"
+    path.write_text(json.dumps(rows), encoding="utf-8")
+    (tmp_path / "exa.raw").write_text("altered", encoding="utf-8")
+    assert validate_strict_five(path, "turn-1")[0] is False
+
+
+def test_strict_five_rejects_missing_hash_bad_response_and_empty_control(
+    tmp_path: Path,
+) -> None:
+    path = _strict_manifest(tmp_path)
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    exa = next(row for row in manifest["sources"] if row["source"] == "exa")
+    exa.pop("raw_sha256")
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    assert validate_strict_five(path, "turn-1")[0] is False
+    assert "raw_sha256" not in json.loads(path.read_text())["sources"][3]
+
+    raw = tmp_path / "exa.raw"
+    raw.write_bytes(b"HTTP 401 Unauthorized")
+    exa["raw_sha256"] = hashlib.sha256(raw.read_bytes()).hexdigest()
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    assert validate_strict_five(path, "turn-1")[0] is False
+
+    raw.write_text('{"requestId":"test-request","results":[]}', encoding="utf-8")
+    exa["raw_sha256"] = hashlib.sha256(raw.read_bytes()).hexdigest()
+    releases = next(
+        row for row in manifest["sources"] if row["source"] == "github-releases"
+    )
+    releases["status"] = "empty_verified"
+    releases["items"] = []
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    assert validate_strict_five(path, "turn-1") == (
+        False,
+        "github-releases empty result lacks a positive control",
+    )
+
+
+def test_strict_five_rejects_non_object_manifest(tmp_path: Path) -> None:
+    path = tmp_path / "manifest.json"
+    path.write_text("[]", encoding="utf-8")
+    assert validate_strict_five(path, "turn-1") == (
+        False,
+        "malformed research manifest",
+    )
+
+
+def test_strict_five_rejects_degraded_last30days(tmp_path: Path) -> None:
+    path = _strict_manifest(tmp_path)
+    raw = tmp_path / "last30days.raw"
+    raw.write_text(
+        json.dumps({"schema_version": "1.3", "source_status": {"reddit": "error"}}),
+        encoding="utf-8",
+    )
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    last30days = next(
+        row for row in manifest["sources"] if row["source"] == "last30days"
+    )
+    last30days["raw_sha256"] = hashlib.sha256(raw.read_bytes()).hexdigest()
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    assert validate_strict_five(path, "turn-1") == (
+        False,
+        "last30days schema or internal source failure",
+    )
+
+
+def test_strict_five_rejects_malformed_discussions_search(tmp_path: Path) -> None:
+    path = _strict_manifest(tmp_path)
+    raw = tmp_path / "github-discussions.raw"
+    raw.write_text('{"data":{}}', encoding="utf-8")
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    discussions = next(
+        row for row in manifest["sources"] if row["source"] == "github-discussions"
+    )
+    discussions["raw_sha256"] = hashlib.sha256(raw.read_bytes()).hexdigest()
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    assert validate_strict_five(path, "turn-1") == (
+        False,
+        "github-discussions raw evidence is not a successful response",
+    )
 
 
 def _completed(
@@ -713,7 +874,7 @@ def test_missing_prerequisite_and_repo_are_skipped(
     )
 
     assert [(result.source, result.status, result.reason) for result in results] == [
-        ("exa", Status.SKIPPED, "needs EXA_API_KEY"),
+        ("exa", Status.SKIPPED, "EXA_API_KEY not inherited; run through fnox exec"),
         ("github-issues", Status.SKIPPED, "needs --repo"),
     ]
 
@@ -1205,6 +1366,7 @@ def test_context7_reports_both_subprocess_error_sites(
     [
         ({"errors": []}, "response contained errors"),
         ([], "unexpected response shape"),
+        ({"data": {}}, "unexpected discussions search shape"),
     ],
 )
 def test_github_discussions_rejects_graphql_error_shapes(
@@ -1473,6 +1635,10 @@ def test_secret_value_reaches_header_but_no_output(
     assert sentinel not in captured.err
     assert all(sentinel not in path.read_text() for path in out.iterdir())
     assert (out / "exa.raw").read_bytes() == expected_raw
+    manifest = json.loads((out / "manifest.json").read_text())
+    assert (
+        manifest["sources"][0]["raw_sha256"] == hashlib.sha256(expected_raw).hexdigest()
+    )
 
 
 @pytest.mark.parametrize(

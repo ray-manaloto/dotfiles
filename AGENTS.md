@@ -109,6 +109,8 @@ locally before pushing Dockerfile changes.
 - **CI-local parity**: Every CI lint step has a local hk equivalent; every
   hk tool is in `mise.toml`. See `.claude/rules/ci-local-parity.md`.
 - **Research before fixing**: Check docs, changelogs, and issues; don't guess at CI failures.
+- **Research coverage**: Use all five research sources via native `fnox exec`;
+  see `python/src/dotfiles_setup/AGENTS.md` for the receipt contract.
 - Follow `.claude/rules/graphify-first.md` and `.claude/rules/real-integration-evidence.md`.
 - **Bound long-running commands**: Run the lint gate via `mise run lint`
   (hk under a hard timeout; hk has none) — never wait blind or capture via

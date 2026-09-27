@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import hashlib
 import http.client as http_client
 import json
 import os
@@ -34,6 +35,7 @@ import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, replace
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Never, Protocol
@@ -77,7 +79,7 @@ _SOURCE_DETAILS = {
     "github-issues": ("gh api REST", "gh on PATH + --repo"),
     "github-discussions": ("gh api graphql", "gh on PATH + --repo"),
     "github-releases": ("gh api REST", "gh on PATH + --repo"),
-    "exa": ("HTTPS POST", "EXA_API_KEY set"),
+    "exa": ("HTTPS POST", "EXA_API_KEY in process environment"),
     "context7": ("ctx7 CLI", "ctx7 on PATH"),
     "firecrawl-developer": ("HTTPS GET", "none"),
     "firecrawl-search": ("firecrawl CLI", "firecrawl on PATH"),
@@ -134,6 +136,7 @@ class SourceResult:
     reason: str | None
     control: Control | None
     raw_file: str | None
+    raw_sha256: str | None = None
 
 
 @dataclass(frozen=True)
@@ -145,6 +148,7 @@ class FanoutRequest:
     sources: tuple[str, ...]
     limit: int
     timeout: float | None
+    last30days_plan: Path | None = None
 
 
 class Runner(Protocol):
@@ -629,10 +633,11 @@ def _github_discussions(
     data = payload.get("data")
     search = data.get("search") if isinstance(data, dict) else None
     nodes = search.get("nodes") if isinstance(search, dict) else None
-    records = nodes if isinstance(nodes, list) else []
+    if not isinstance(nodes, list):
+        return _Attempt((), raw, "unexpected discussions search shape")
     items = tuple(
         item
-        for record in records[: request.limit]
+        for record in nodes[: request.limit]
         if (item := _record_item(record)) is not None
     )
     return _Attempt(items, raw)
@@ -944,6 +949,8 @@ def _last30days(
     if script is None:
         return _Attempt((), b"", "script disappeared")
     argv = ["python3", str(script), query, "--emit=json"]
+    if request.last30days_plan is not None:
+        argv.extend(("--plan", str(request.last30days_plan), "--web-backend=exa"))
     if request.repo:
         argv.append(f"--github-repo={request.repo}")
     payload, raw, error = _run_json(
@@ -965,7 +972,10 @@ def _prerequisite_reason(source: str, request: FanoutRequest) -> str | None:
         elif shutil.which("gh") is None:
             reason = "needs gh"
     elif source == "exa" and not os.environ.get("EXA_API_KEY"):
-        reason = "needs EXA_API_KEY"
+        # A noninteractive shell does not run the fnox prompt hook. Absence
+        # here means "not inherited", never "the user has no Exa key".
+        # Run this task through native `fnox exec` to inject it into the child.
+        reason = "EXA_API_KEY not inherited; run through fnox exec"
     elif source == "context7" and shutil.which("ctx7") is None:
         reason = "needs ctx7"
     elif source == "firecrawl-search" and shutil.which("firecrawl") is None:
@@ -1218,6 +1228,9 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--limit", type=int, default=10)
     parser.add_argument("--timeout", type=float)
     parser.add_argument("--list-sources", action="store_true")
+    parser.add_argument("--strict-five", action="store_true")
+    parser.add_argument("--request-id")
+    parser.add_argument("--last30days-plan", type=Path)
     return parser
 
 
@@ -1262,6 +1275,25 @@ def _validate_args(args: argparse.Namespace) -> None:
     if args.timeout is not None and args.timeout <= 0:
         message = "--timeout must be greater than zero"
         raise _UsageError(message)
+    if args.strict_five:
+        if not args.repo or not args.request_id or args.last30days_plan is None:
+            message = (
+                "--strict-five requires --repo, --request-id, and --last30days-plan"
+            )
+            raise _UsageError(message)
+        if args.sources is not None and set(args.sources.split(",")) != set(
+            _SOURCE_NAMES
+        ):
+            message = "--strict-five requires every named source"
+            raise _UsageError(message)
+        try:
+            plan = json.loads(args.last30days_plan.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            message = "--last30days-plan must be readable JSON"
+            raise _UsageError(message) from exc
+        if not isinstance(plan, dict) or not plan.get("subqueries"):
+            message = "--last30days-plan needs subqueries"
+            raise _UsageError(message)
 
 
 def _slug(query: str) -> str:
@@ -1285,9 +1317,11 @@ def _write_json(path: Path, payload: object) -> None:
 
 def _persist(
     out_dir: Path,
-    query: str,
-    repo: str | None,
+    request: FanoutRequest,
     fetched: list[_Fetch],
+    *,
+    request_id: str | None = None,
+    strict_five: bool = False,
 ) -> tuple[Path, list[SourceResult]]:
     out_dir.mkdir(parents=True, exist_ok=True)
     owned_names = ["manifest.json"]
@@ -1304,6 +1338,11 @@ def _persist(
         result = replace(
             outcome.result,
             raw_file=str(raw_path) if raw_path is not None else None,
+            raw_sha256=(
+                hashlib.sha256(outcome.raw).hexdigest()
+                if outcome.raw is not None
+                else None
+            ),
         )
         _write_json(out_dir / f"{result.source}.json", asdict(result))
         results.append(result)
@@ -1311,13 +1350,149 @@ def _persist(
     _write_json(
         manifest_path,
         {
-            "query": query,
-            "repo": repo,
+            "query": request.query,
+            "repo": request.repo,
+            "request_id": request_id,
+            "strict_five": strict_five,
+            "policy_version": "strict-five-v1" if strict_five else None,
+            "generated_at": datetime.now(UTC).isoformat(),
             "sources": [asdict(result) for result in results],
             "out_dir": str(out_dir),
         },
     )
     return manifest_path, results
+
+
+def _validate_row_status(row: dict[str, object]) -> str | None:
+    source = row["source"]
+    status = row["status"]
+    if status not in {Status.OK.value, Status.EMPTY_VERIFIED.value}:
+        return f"{source} did not complete"
+    items = row.get("items")
+    if not isinstance(items, list):
+        return f"{source} has no normalized result list"
+    if status == Status.OK.value and not items:
+        return f"{source} has no results despite ok status"
+    if status == Status.EMPTY_VERIFIED.value:
+        control = row.get("control")
+        if (
+            items
+            or not isinstance(control, dict)
+            or not isinstance(control.get("query"), str)
+            or not control["query"]
+            or not isinstance(control.get("count"), int)
+            or control["count"] <= 0
+        ):
+            return f"{source} empty result lacks a positive control"
+    return None
+
+
+def _valid_json_response(source: str, payload: object, status: object) -> bool:
+    if source == "github-releases":
+        return isinstance(payload, list)
+    if not isinstance(payload, dict):
+        return False
+    list_key = {
+        "github-issues": "items",
+        "exa": "results",
+        "firecrawl-developer": "results",
+    }.get(source)
+    if source == "firecrawl-search":
+        data = payload.get("data")
+        web = data.get("web") if isinstance(data, dict) else None
+        valid = isinstance(web, list) and (status != Status.OK.value or bool(web))
+    elif list_key is not None:
+        raw_items = payload.get(list_key)
+        valid = isinstance(raw_items, list) and (
+            status != Status.OK.value or bool(raw_items)
+        )
+    else:
+        data = payload.get("data")
+        search = data.get("search") if isinstance(data, dict) else None
+        valid = (
+            source == "github-discussions"
+            and isinstance(search, dict)
+            and isinstance(search.get("nodes"), list)
+            and not payload.get("errors")
+        )
+    if source == "exa":
+        valid = valid and bool(payload.get("requestId"))
+    if source in {"firecrawl-developer", "firecrawl-search"}:
+        valid = valid and payload.get("success") is True
+    return valid
+
+
+def _valid_last30days_response(payload: object) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    source_status = payload.get("source_status")
+    return bool(
+        payload.get("schema_version")
+        and isinstance(source_status, dict)
+        and source_status
+        and all(status == "ok" for status in source_status.values())
+    )
+
+
+def _validate_raw_response(source: str, raw: bytes, status: object) -> str | None:
+    if source == "context7":
+        return None
+    payload = json.loads(raw)
+    if source == "last30days":
+        if not _valid_last30days_response(payload):
+            return "last30days schema or internal source failure"
+    elif not _valid_json_response(source, payload, status):
+        return f"{source} raw evidence is not a successful response"
+    return None
+
+
+def _validate_strict_row(row: dict[str, object], manifest_path: Path) -> str | None:
+    source = row["source"]
+    if not isinstance(source, str):
+        return "research source name is malformed"
+    if reason := _validate_row_status(row):
+        return reason
+    raw_file = row.get("raw_file")
+    if not isinstance(raw_file, str) or Path(raw_file) != (
+        manifest_path.parent / f"{source}.raw"
+    ):
+        return f"{source} has no bound raw evidence"
+    raw = Path(raw_file).read_bytes()
+    if not raw:
+        return f"{source} raw evidence is empty"
+    if row.get("raw_sha256") != hashlib.sha256(raw).hexdigest():
+        return f"{source} raw evidence hash is missing or changed"
+    return _validate_raw_response(source, raw, row["status"])
+
+
+def validate_strict_five(manifest_path: Path, request_id: str) -> tuple[bool, str]:
+    """Reject partial or reused five-provider evidence after it is persisted."""
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if not isinstance(manifest, dict):
+            return False, "malformed research manifest"
+        if (
+            not manifest.get("strict_five")
+            or manifest.get("policy_version") != "strict-five-v1"
+            or manifest.get("request_id") != request_id
+            or not manifest.get("query")
+            or not manifest.get("repo")
+        ):
+            return False, "request identity or policy mismatch"
+        rows = manifest["sources"]
+        if (
+            not isinstance(rows, list)
+            or len(rows) != len(_SOURCE_NAMES)
+            or any(not isinstance(row, dict) for row in rows)
+            or {row["source"] for row in rows} != set(_SOURCE_NAMES)
+        ):
+            return False, "required source missing or duplicated"
+        for row in rows:
+            if reason := _validate_strict_row(row, manifest_path):
+                return False, reason
+    except OSError, ValueError, KeyError, TypeError, AttributeError:
+        return False, "malformed or unreadable research evidence"
+    return True, "all required sources completed"
 
 
 def _print_summary(manifest_path: Path, results: list[SourceResult]) -> None:
@@ -1353,19 +1528,33 @@ def main(
     )
     if not out_dir.is_absolute():
         out_dir = repo_root / out_dir
-    request = FanoutRequest(args.query, args.repo, sources, args.limit, args.timeout)
+    if args.strict_five:
+        sources = _SOURCE_NAMES
+    request = FanoutRequest(
+        args.query, args.repo, sources, args.limit, args.timeout, args.last30days_plan
+    )
     try:
         fetched = _fan_out_with_raw(request, runner=runner, http=http)
     except KeyboardInterrupt:
         return 130
     try:
-        manifest_path, results = _persist(out_dir, args.query, args.repo, fetched)
+        manifest_path, results = _persist(
+            out_dir,
+            request,
+            fetched,
+            request_id=args.request_id,
+            strict_five=args.strict_five,
+        )
     except OSError as exc:
         sys.stderr.write(
             f"research-fanout: could not write output ({type(exc).__name__})\n"
         )
         return 1
     _print_summary(manifest_path, results)
+    if args.strict_five:
+        passed, reason = validate_strict_five(manifest_path, args.request_id)
+        sys.stdout.write(f"strict-five  {'pass' if passed else 'fail'}  [{reason}]\n")
+        return 0 if passed else 1
     successful = {Status.OK, Status.EMPTY_VERIFIED}
     return 0 if any(result.status in successful for result in results) else 1
 
