@@ -43,13 +43,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      # This job commits AND pushes (below), and `mise install` fires mise.toml's
-      # postinstall (`hk install --mise`) which wires commit-msg + pre-commit +
-      # pre-push on the runner — hk would then run every step, incl. pre-push's
-      # ghcr_publish_prereqs / test, which need `gh auth` and `claude` on PATH.
-      # Latent today only because `install_args: "python uv"` omits hk, so the
-      # postinstall fails (warn-only) and no hook is written; widening install_args
-      # would arm it. Same fix as refresh.yml, which this bit for real.
+      # The repo no longer installs hooks from mise postinstall (jdx/hk#1376),
+      # but keep the skip in case another setup installs them: this job commits
+      # and pushes, and the hooks fail here without `gh auth` and `claude`.
+      # Same defense-in-depth rule as refresh.yml.
       HK_SKIP_HOOKS: pre-commit,pre-push
     steps:
       - name: Mint GitHub App token

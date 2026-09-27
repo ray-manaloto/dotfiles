@@ -83,13 +83,14 @@ class Flag:
     optional_value: bool = False
 
 
-# Transcribed from hk 1.57.0 `hk --help`. Unknown dash-prefixed tokens are
+# Transcribed from hk 2.3.0 `hk --help`. Unknown dash-prefixed tokens are
 # skipped as booleans: a new boolean cannot hide the command, but a new
 # value-taking flag can consume what this parser sees as the command until this
 # table is updated.
 HK_GLOBAL_FLAGS = (
     Flag(("--cd",), takes_value=True),
     Flag(("--format",), takes_value=True),
+    Flag(("--hkrc",), takes_value=True),
     Flag(("-j", "--jobs"), takes_value=True),
     Flag(("-p", "--profile"), takes_value=True),
     Flag(("-s", "--slow")),
@@ -101,7 +102,7 @@ HK_GLOBAL_FLAGS = (
     Flag(("--json",)),
 )
 
-# Transcribed from hk 1.57.0 `hk run --help`. `-W/--why` takes an optional
+# Transcribed from hk 2.3.0 `hk run --help`. `-W/--why` takes an optional
 # value. A following known hook or alias is conservatively treated as the hook,
 # so `hk run -W pc` still reaches `pre-commit`; another bare token is its value.
 # The unknown-flag forward-compatibility rule above applies here too.
@@ -112,6 +113,7 @@ HK_RUN_FLAGS = (
     Flag(("--files0-from",), takes_value=True),
     Flag(("--format",), takes_value=True),
     Flag(("--from-ref",), takes_value=True),
+    Flag(("--junit-xml",), takes_value=True),
     Flag(("--to-ref",), takes_value=True),
     Flag(("--sarif",), takes_value=True),
     Flag(("--skip-step",), takes_value=True),

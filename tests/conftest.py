@@ -23,6 +23,16 @@ import yaml
 
 
 @pytest.fixture(autouse=True)
+def isolated_git_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Keep tests independent of the developer's global and system Git config."""
+    gitconfig = tmp_path / "gitconfig"
+    gitconfig.write_text("[user]\n\tname = T\n\temail = t@example.com\n")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(gitconfig))
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    return gitconfig
+
+
+@pytest.fixture(autouse=True)
 def isolated_mise_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Keep every test's mise registry in its own disposable state directory.
 

@@ -1,13 +1,12 @@
 # Copyright (c) 2026 Raymond Manaloto
 """ADR-0001 enforcement: a CI job that writes to git must skip hk's hooks.
 
-``mise.toml``'s ``[hooks] postinstall = "mise reshim && hk install --mise"``
-runs on **every** ``mise install``, including on GitHub Actions runners, and
-``hk install`` writes the ``commit-msg``/``pre-commit``/``pre-push`` git hooks.
-Any job that then commits or pushes fires them, and two hk steps CANNOT pass on
-a runner (``ghcr_publish_prereqs`` needs a logged-in gh; ``test`` needs
-``claude`` on the login-shell PATH). That is how the daily lock refresh failed
-for six days having never once opened a PR — see
+The repository no longer installs hooks from mise's postinstall; upstream
+removed that recipe in jdx/hk#1376. A runner gets hk hooks only if some other
+setup installs them. The ``HK_SKIP_HOOKS`` guard remains defense in depth:
+if hooks are present, two steps CANNOT pass on a runner
+(``ghcr_publish_prereqs`` needs a logged-in gh; ``test`` needs ``claude`` on
+the login-shell PATH). The historical failure and decision are recorded in
 ``docs/adr/0001-hk-hooks-do-not-run-in-ci.md``.
 
 The accepted decision is ``HK_SKIP_HOOKS: pre-commit,pre-push`` at job level in
@@ -26,13 +25,10 @@ So this check must catch a **new** job, not re-assert the two known ones. A
 contract that pinned ``refresh.yml`` and ``gcc-sha-repair.yml`` by name would
 inherit exactly the weakness the ADR is complaining about.
 
-**Why the warning that prompted this is NOT the bug.** A job with
-``install_args: "python uv"`` logs ``sh: 1: hk: not found`` and a warn-only
-postinstall failure. That is benign — ``mise reshim`` (the part CI needs) still
-runs, and no hook is written, which is the state the ADR *wants*. The hazard is
-that this safety is **incidental**: widen one ``install_args`` and hk appears,
-the postinstall succeeds, and the hooks land. This check does not depend on
-that accident holding.
+The guard deliberately does not assume how hooks arrived. A future runner
+setup, image, or explicit install can make them present without changing the
+workflow that commits, so the defensive skip remains attached to git-writing
+jobs.
 
 The logic lives here rather than in an inline-bash hk step, per
 ``.claude/rules/zero-bash-logic.md``; the ``workflow-hooks`` CLI subcommand and

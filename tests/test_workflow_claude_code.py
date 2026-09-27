@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -77,6 +78,7 @@ _EXPECTED_FLAG_TABLES = {
     "HK_GLOBAL_FLAGS": (
         (("--cd",), True, False),
         (("--format",), True, False),
+        (("--hkrc",), True, False),
         (("-j", "--jobs"), True, False),
         (("-p", "--profile"), True, False),
         (("-s", "--slow"), False, False),
@@ -94,6 +96,7 @@ _EXPECTED_FLAG_TABLES = {
         (("--files0-from",), True, False),
         (("--format",), True, False),
         (("--from-ref",), True, False),
+        (("--junit-xml",), True, False),
         (("--to-ref",), True, False),
         (("--sarif",), True, False),
         (("--skip-step",), True, False),
@@ -316,6 +319,59 @@ def test_pinned_flag_tables_match_the_documented_help(
     )
 
     assert actual == expected
+
+
+def test_junit_xml_value_does_not_hide_the_hook(tmp_path: Path) -> None:
+    """The hk 2 value-taking `--junit-xml` flag must consume its path, not the hook.
+
+    Mutation arm (run by hand, 2026-09-27): deleting the `--junit-xml` entry
+    from `HK_RUN_FLAGS` reads `out.xml` as the hook, so the job is no longer
+    seen as gated and this test fails.
+    """
+    job = _job("hk run --junit-xml out.xml pre-commit", installs=False)
+    root = _tree(tmp_path, {"ci.yml": job})
+
+    assert len(wcc.find_violations(root)) == 1
+
+
+def test_global_git_config_isolated_from_machine_hooks(tmp_path: Path) -> None:
+    """A contaminated explicit config fails; the autouse fixture passes."""
+    repository = tmp_path / "repo"
+    repository.mkdir()
+    subprocess.run(["git", "init", str(repository)], check=True, capture_output=True)
+    (repository / "tracked").write_text("fixture\n")
+    subprocess.run(
+        ["git", "-C", str(repository), "add", "tracked"],
+        check=True,
+        capture_output=True,
+    )
+
+    contaminated = tmp_path / "contaminated.gitconfig"
+    contaminated.write_text(
+        "[user]\n"
+        "\tname = T\n"
+        "\temail = t@example.com\n"
+        '[hook "probe-pre-commit"]\n'
+        "\tcommand = exit 1\n"
+        "\tevent = pre-commit\n"
+    )
+    control_env = {**os.environ, "GIT_CONFIG_GLOBAL": str(contaminated)}
+    control = subprocess.run(
+        ["git", "-C", str(repository), "commit", "-m", "control"],
+        env=control_env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert control.returncode != 0
+
+    isolated = subprocess.run(
+        ["git", "-C", str(repository), "commit", "-m", "isolated"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert isolated.returncode == 0, isolated.stderr
 
 
 @pytest.mark.parametrize("command", _DERIVED_FLAG_COMMANDS)
