@@ -283,16 +283,15 @@ plan pointer. Also confirm gate results against recorded exit codes, not memory.
 
 ## 6. Emit the resume prompt — exact output
 
-Print exactly this single line and nothing else (an owed attest prompt, below, is the one thing that may precede it):
+Print exactly this single line and nothing else:
 
 ```text
 Run /session-resume
 ```
 
-If an attestation is owed (the plan changed and the model may not attest), put the `! mise run plan-attest` prompt
-**before** that line, and only after `mise run session-orphans` shows no live wait loops or lanes and no background
-agent, codex lane or harness task is still running, so the attestation covers the final plan bytes. Any later plan
-edit makes it stale again.
+If the plan changed, run `mise run plan-attest` yourself before printing that line, and only after
+`mise run session-orphans` shows no live wait loops or lanes and no background agent, codex lane or harness task is
+still running, so the attestation covers the final plan bytes. Any later plan edit makes it stale again.
 
 ## Checklist (all true before you're done)
 
@@ -303,7 +302,7 @@ edit makes it stale again.
 - [ ] `mise run session-orphans` reports no unallowed `OTHER` descendants and no live wait loops.
 - [ ] `mise run session-agentsview-pass` completed; findings dispositioned or daemon marked `UNVERIFIABLE`.
 - [ ] §1c session-integrity review ran (four reports persisted); every finding is FIX-NOW done or a PLAN line in `task_plan.md`.
-- [ ] Any owed `! mise run plan-attest` is printed only after every background task, agent and codex lane finished.
+- [ ] `mise run plan-attest` ran (if the plan changed) only after every background task, agent and codex lane finished.
 - [ ] Session-LOCAL background tasks/agents + scheduled wakeups inventoried; stale ones cancelled or noted.
 - [ ] Session-INDEPENDENT autonomous processes (running GHA runs, Renovate PRs) inventoried in the handoff — NOT waited/blocked on; `main` noted as bot-advanced.
 - [ ] Every doc affected by this session's changes updated; cross-refs grep-clean.

@@ -18,9 +18,9 @@ GitHub Issues via `gh` (`docs/issue-tracker.md`); triage labels:
 `mise run ship` (your branch), `mise run automerge -- <PR#>` (bot PR, #369),
 `mise run land -- <PR#>` (post-merge).
 
-**Attestation is OPERATOR-ONLY; all model routes denied**, `/plan-attest` too —
-use `! mise run plan-attest` (`-- --show` reads, bare WRITES). Why:
-`python/src/dotfiles_setup/plan_attest.py`.
+**Attestation is agent-runnable** (Ray, 2026-09-26): after editing `task_plan.md`,
+run `mise run plan-attest` (bare WRITES; `-- --show` reads). Switching the ACTIVE
+plan (the plugin's set-active-plan script) stays denied. Why: `python/src/dotfiles_setup/plan_attest.py`.
 
 ## graphify + project doctor
 

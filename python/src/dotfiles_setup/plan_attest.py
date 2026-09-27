@@ -1,36 +1,25 @@
 # Copyright (c) 2026 Raymond Manaloto
-"""The operator's path to planning-with-files attestation.
+"""The one path to planning-with-files attestation: ``mise run plan-attest``.
 
-Attestation is a HUMAN approval boundary: the hash says a person read the plan
-and blessed those exact bytes. The plugin tries to enforce that with
-``disable-model-invocation: true`` on its ``/plan-attest`` command, and on this
-host that is decorative — the command's own body is
-``sh ${CLAUDE_PLUGIN_ROOT}/scripts/attest-plan.sh``, so the flag stops the model
-*invoking the command* while leaving the *script* one plain Bash call away. An
-agent crossed exactly that line on 2026-09-02 by self-attesting.
+Attestation locks the hash of ``task_plan.md``'s current bytes, so pwf injects
+the plan only while it matches. From 2026-09-02 to 2026-09-26 it was an
+OPERATOR-only boundary, every model route (this task, the ``dotfiles-setup``
+CLI, the raw ``attest-plan.sh``/``.ps1`` and ``/plan-attest``) denied in
+``.claude/settings.json``, after an agent self-attested a tampered plan. Ray
+reversed that on 2026-09-26 ("fix the settings change so we can automate it",
+choosing "fully open, all routes" over a diff-printing wrapper): every plan
+edit had left the plan un-injected until a human typed the command. The cost is
+stated, not hidden — an agent (or a lane that edits the plan) can now bless
+bytes no human read. What stays denied is ``set-active-plan.sh``, which picks
+WHICH plan is active: that is the 2026-09-22c wrong-plan class, a different
+boundary (``hook_selfcheck.check_plan_switch_deny``).
 
-The real layer is a ``permissions.deny`` rule in ``.claude/settings.json``
-covering the scripts AND this task — hard bans belong in permission rules rather
-than the PreToolUse hook, which fails open on its own errors (#343,
-``.claude/rules/mise-tasks-only.md`` § Enforcement layers). That deny is
-deliberately total: it also denies ``/plan-attest`` and this task when the MODEL
-runs them, because the choice is binary. ``disable-model-invocation`` never
-distinguished "the operator directed this" from "the agent decided the operator
-would have", and the agent that would decide that wrong is the one already
-holding the keyboard.
-
-So this module exists to give the human back a path that does not require typing
-a version-pinned cache path::
-
-    ! mise run plan-attest
+This wrapper exists so nobody types a version-pinned plugin cache path.
 
 ⚠️ **The bare form WRITES.** ``plan-attest`` with no arguments locks the plan's
-current bytes; ``--show`` is the read-only form. This is not hypothetical
-hygiene — smoke-testing this very wrapper with no arguments attested a tampered
-plan over the operator's hash while the module was being written, without
-invoking ``/plan-attest`` at all. That is the whole D4 argument reproduced by
-accident, and it is why the deny rule below covers this task too rather than
-trusting anyone's intent. Verify with ``--show``, never bare.
+current bytes; ``--show`` is the read-only form. Attest only after the last
+writer of the plan has finished (a background lane still editing it makes the
+attestation stale on its next write).
 
 ⚠️ **That read-only form was UNREACHABLE for eleven days** (2026-09-02 to
 2026-09-13). The CLI declares this passthrough as an ``nargs="*"`` positional,
@@ -38,15 +27,9 @@ and argparse claims any dash-prefixed token as an unknown *option* rather than a
 value for it, so ``plan-attest --show`` died at ``unrecognized arguments:
 --show`` while the BARE form — the one that WRITES — ran fine. The documented
 recipe said ``-- --show``, which cannot help: ``mise run`` consumes one ``--`` of
-its own, so the operator's ``mise run plan-attest -- --show`` arrived here as a
-bare ``--show`` regardless. Every doc site was therefore wrong at the call site
-while being right about the declaration. :func:`insert_passthrough_separator`
-fixes it in the one place that binds both.
-
-The leading ``!`` is shell mode: it is not a tool call, so no permission rule and
-no PreToolUse hook sees it. That property is read from the harness docs
-(``$CC/interactive-mode.md:316-325``) rather than probed, because an agent cannot
-type ``!`` — the operator arms it in one line.
+its own, so ``mise run plan-attest -- --show`` arrived here as a bare ``--show``
+regardless. :func:`insert_passthrough_separator` fixes it in the one place that
+binds both.
 
 The plugin root is resolved through :func:`listing_budget.plugin_root`, the
 resolver this repo already has and already argued for (highest numeric version,
@@ -74,8 +57,7 @@ logger = logging.getLogger(__name__)
 PLUGIN_ID = "planning-with-files@planning-with-files"
 
 # Relative to the resolved plugin root. `.sh` rather than `.ps1`: this repo is
-# macOS/Linux, and the PowerShell twin is denied alongside it in settings.json
-# so a future Windows clone cannot route around the ban.
+# macOS/Linux.
 ATTEST_SCRIPT = Path("scripts") / "attest-plan.sh"
 
 

@@ -1004,7 +1004,7 @@ description = "Paste-ready session snapshot: branch/tree/commits/PR: mise run se
 run = 'uv run --project python dotfiles-setup session-state'
 
 [tasks.plan-attest]
-description = "OPERATOR ONLY: attest the planning-with-files plan. Run it as `! mise run plan-attest` — settings.json denies the model every other route, INCLUDING this task. Bare form WRITES; `-- --show` is read-only."
+description = "Attest the planning-with-files plan (agent-runnable since 2026-09-26). Bare form WRITES; `-- --show` is read-only."
 # Thin caller; python/src/dotfiles_setup/plan_attest.py.
 run = 'uv run --project python dotfiles-setup plan-attest'
 

@@ -1539,9 +1539,7 @@ def _add_session_subcommands(
     )
     plan_attest_parser = subparsers.add_parser(
         "plan-attest",
-        help="Attest the planning-with-files plan (OPERATOR ONLY: run it as "
-        "`! mise run plan-attest`; settings.json denies the model every "
-        "other route)",
+        help="Attest the planning-with-files plan; the bare form WRITES, --show reads",
     )
     plan_attest_parser.add_argument(
         "args",
