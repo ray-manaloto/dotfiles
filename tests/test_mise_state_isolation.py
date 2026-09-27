@@ -120,6 +120,15 @@ def test_real_mise_registers_the_scratch_config(tmp_path: Path) -> None:
     assert child_config in child_mapping.values()
 
 
+_ENV_ALLOWLIST = ("PATH", "HOME", "TMPDIR", "LANG", "USER", "LOGNAME")
+
+
+def _minimal_env(**extra: str) -> dict[str, str]:
+    """Only what mise and a child pytest need — no CI-detection variables."""
+    base = {k: v for k, v in os.environ.items() if k in _ENV_ALLOWLIST}
+    return {**base, **extra}
+
+
 def test_child_pytest_keeps_ambient_mise_trust(tmp_path: Path) -> None:
     """Isolating tracking must not isolate TRUST (codex review of ccbf62c1).
 
@@ -138,11 +147,19 @@ def test_child_pytest_keeps_ambient_mise_trust(tmp_path: Path) -> None:
     project = tmp_path / "project"
     project.mkdir()
     (project / "mise.toml").write_text('[env]\nTRUST_PROBE = "1"\n', encoding="utf-8")
-    no_trust_root = {"MISE_TRUSTED_CONFIG_PATHS": str(tmp_path / "no-trust-root")}
+    # mise trusts EVERY config when `ci_info::is_ci()` is true (jdx/mise
+    # src/config/config_file/mod.rs:635-637 @v2026.9.14) — CI, GITHUB_ACTIONS,
+    # BUILD_NUMBER and more each trigger it, and MISE_PARANOID does not stop it
+    # (measured). On a runner this test would then pass with the symlink
+    # removed (codex review round 2 of this fix). So the subprocesses get an ALLOWLISTED
+    # environment rather than a denylist of CI variables that would rot.
+    no_trust_root = _minimal_env(
+        MISE_TRUSTED_CONFIG_PATHS=str(tmp_path / "no-trust-root")
+    )
     trust = subprocess.run(
         ["mise", "trust", str(project / "mise.toml")],
         cwd=project,
-        env={**os.environ, **no_trust_root, "MISE_STATE_DIR": str(outer_state)},
+        env={**no_trust_root, "MISE_STATE_DIR": str(outer_state)},
         capture_output=True,
         text=True,
         check=False,
@@ -187,7 +204,7 @@ def test_trusted_config_still_loads() -> None:
             str(scratch_test),
         ],
         cwd=_REPO_ROOT / "tests",
-        env={**os.environ, **no_trust_root, "MISE_STATE_DIR": str(outer_state)},
+        env={**no_trust_root, "MISE_STATE_DIR": str(outer_state)},
         capture_output=True,
         text=True,
         check=False,
