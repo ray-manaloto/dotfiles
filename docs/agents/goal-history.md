@@ -1713,3 +1713,30 @@ flowchart LR
     F["fable remainder (ACTIVE): #1319 rest, F2, V6"] --> R["2026-09-24/25 session remainder"]
     R --> P11["Phase 11"] --> P10["Phase 10"]
 ```
+
+## 2026-09-26 — out-of-order, user-directed: mise WARN root-caused and fixed in both repos; research-fanout + research-sweep shipped
+
+- **Iteration ID:** `dotfiles-goal-20260926-038`
+- **Prior goal digest:** `sha256:c3719e52eaff8a43afe96d0d32c28449e6f4750f7afc050384ddfa45e7392539`
+- **Current goal digest:** `sha256:3797decd4d23b8b2d4d6bd0836cd4a8e476149a336665b187dd42dd712028ba4`
+- **Changed requirement:** Only a stale fact: codex is available again (2026-09-26 probe), so the kb-tool-review arm no longer waits for 2026-09-30. The active order is otherwise unchanged. This session's work ran OUTSIDE it at Ray's direction (`/codex-sdlc-team` request): research + fix of the mise tracked-configs WARN, and a reusable multi-source research skill. Rulings (Ray, AskUserQuestion): HYBRID architecture; a NEW dotfiles module despite the knowledge-base#509 overlap; a third review round past the two-round cap; releases match ALL terms; knowledge-base half first; restore the KB venv and file its cause.
+- **Reason:** Ray's session `e3a385c8` (dotfiles-20260926.000) requests and rulings above.
+- **Evidence:**
+  - dotfiles #1389, #1391 (`e5ac3324`), #1392 (`ffd13b0d`) `land` rc=0; knowledge-base #818 (`39fb2340`), #819 (`6a4e4b2f`) `kb-land` rc=0.
+  - Host registry: 1537 → 1537 across a full suite; after Ray's `mise prune --configs`, 1539 → 211, dangling 0, `mise ls --all-sources` warns 0.
+  - Reports `docs/research/kb/reports/agents/*-2026-09-26.md`; briefs `session-2026-09-26-agent-briefs.md`; spec `docs/specs/research-fanout.md` rev 5.
+- **Affected tickets:** #1169, #1248, knowledge-base #419 (closed); #1390, knowledge-base #816, #817 (filed); #1172 (recurrence comment).
+- **Disposition:** `DELIVERED` (the session work above); the active fable remainder is untouched (#1319 still `PARTIAL`).
+- **Topology and ownership:** One writer, the Claude architect session. Delegates: the codex SDLC team (review mode, 3 specialists), `codex-sol-implementer` ×4, Opus `cold-reviewer` ×3, `premise-verifier` ×2, Opus/general research lanes ×2, read-only codex review lenses, antigravity (`agy`) and `kb-codex --review` cold lanes on knowledge-base, Opus audit lanes M, N, P.
+
+### Current goal
+
+> Finish the fable-orchestrator removal remainder in task_plan.md: #1319's remaining arms (the verify/rule-sync/plugin-health re-runs and live-path grep now; the kb-tool-review Review-phase run (codex is available again since 2026-09-26); the sdlc-team dispatch after #1362; then the #1293 comment and closing #1319 and #1310), the F2 graph rebuild with graphify-health rc=0, and the V6 knowledge-base CLAUDE.md pointer. Then the 2026-09-24/25 session remainder (including items 24-26 and filed #1386/#1387/#1388), then Phase 11 in its ruled order, then Phase 10. Design changes go through /to-spec, /to-tickets and /implement; done means land rc=0. Keep task_plan.md as the sole task authority.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    F["fable remainder (ACTIVE): #1319 rest, F2, V6"] --> R["2026-09-24/25 session remainder"]
+    R --> P11["Phase 11"] --> P10["Phase 10"]
+```

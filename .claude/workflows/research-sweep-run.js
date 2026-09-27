@@ -1,5 +1,5 @@
 export const meta = {
-  name: 'research-sweep',
+  name: 'research-sweep-run',
   description: 'Fan a research question out to many sources via `mise run research-fanout`, deep-read the best hits cheaply, synthesize once on Opus, and refute the load-bearing claims.',
   whenToUse: 'When a question needs evidence from several sources (GitHub issues/PRs/discussions/releases, exa, context7, firecrawl, last30days) and one context should not spend frontier tokens on fetching and reading.',
   phases: [
@@ -14,13 +14,16 @@ export const meta = {
 
 // Model/effort routing — the cost reasoning lives here so it is reviewed with the code.
 // 1. Every workflow agent inherits this repo's CLAUDE.md + eager rules (~150 KB, measured
-//    2026-09-26) UNLESS its agentType is a built-in that omits them (Explore). So agent
+//    2026-09-26 as `cat AGENTS.md .claude/CLAUDE.md .claude/rules/*.md | wc -c` = 152,855) UNLESS its agentType is a built-in that omits them (Explore). So agent
 //    COUNT dominates the cost of cheap steps: bulk reading runs as Explore on haiku, in
 //    batches, never one agent per item.
 // 2. Fetching is not reasoning: `mise run research-fanout` does it with no model at all.
 // 3. Judgment is concentrated in ONE node (Synthesize, opus/high). Verification needs care
 //    but not breadth: sonnet. Fable is never used here — escalation is `.claude/token-routing.md`'s.
 // 4. The advisor runs on codex (codex-sol-advisor), spending codex tokens, not Claude's.
+// 5. The critic is Explore on SONNET, not haiku: it reads one report and needs judgment, but
+//    still skips the CLAUDE.md payload. The source dive is general-purpose because Explore may
+//    not create or delete files (it clones into $TMPDIR).
 
 const A = args || {}
 if (typeof A.question !== 'string' || !A.question.trim()) throw new Error('args.question is required')
@@ -107,7 +110,10 @@ const CRITIC = {
 phase('Plan')
 const plan = await agent([
   `QUESTION: ${A.question}`,
-  REPO ? `REPO: ${REPO}` : 'REPO: (none — GitHub sources will be skipped unless you infer one with evidence)',
+  REPO ? `REPO: ${REPO}` : 'REPO: (none — do NOT pick github-* sources; if the question clearly names one project, say so in rationale so the caller can re-run with args.repo)',
+  'LOCAL CORPORA FIRST (.claude/rules/research-doc-sources.md): for Claude Code / codex / cursor behaviour grep',
+  '~/dev/github/ray-manaloto/knowledge-base/sources/agent-harness-docs/docs/<tool>/; for a library in',
+  'docs/research/mintlify-catalog.md grep docs/research/mintlify-cache/. Fan out only for what those do not answer.',
   `AVAILABLE SOURCES: ${SOURCES.join(', ')} (see \`mise run research-fanout -- --list-sources\`).`,
   'Choose only the sources that fit the question: API/library behaviour -> github-* + firecrawl-developer + context7;',
   'recent community sentiment -> last30days + exa; general web -> exa + firecrawl-search. Write 1-3 query variants',

@@ -497,7 +497,7 @@ def test_n15_gates_null_takes_precedence_over_review_null(tmp_path: Path) -> Non
     assert run_result["status"] == "gates-null"
 
 
-RESEARCH_SWEEP = WORKFLOWS / "research-sweep.js"
+RESEARCH_SWEEP = WORKFLOWS / "research-sweep-run.js"
 
 # The cost routing IS the design of research-sweep (see the comment block at the
 # top of the script): bulk reading on haiku as Explore (no CLAUDE.md payload),
