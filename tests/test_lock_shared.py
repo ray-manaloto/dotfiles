@@ -159,7 +159,10 @@ def test_an_incapable_host_routes_by_default(monkeypatch: pytest.MonkeyPatch) ->
     assert "image-lock" not in argv
     assert "--no-container" not in argv
     assert "--remote-env" in argv
-    assert argv[-3:] == ["mise", "lock", "uv"]
+    # `uv` is exact-pinned in the shared fragment, so it is locked as
+    # `uv@<pin>` (mise 2026.9.8 packslip quirk, #1398).
+    assert argv[-3:-1] == ["mise", "lock"]
+    assert argv[-1].startswith("uv@")
 
     # Round 2's HIGH 1: the value must un-ignore ONLY the shared fragment —
     # a wholesale clear (round 1's `MISE_IGNORED_CONFIG_PATHS=`) re-admits the
@@ -276,7 +279,9 @@ def test_a_capable_host_locks_each_tool_then_verifies_coverage(
     assert lock_shared.lock_shared_main(REPO_ROOT, ["uv"], container=False) == 0
     assert len(calls) == 1
     argv, cwd, env = calls[0]
-    assert argv == ["mise", "lock", "uv"]
+    assert argv[:2] == ["mise", "lock"]
+    assert argv[2].startswith("uv@")
+    assert len(argv) == 3
     assert cwd == REPO_ROOT
     assert verified == [REPO_ROOT]
 
@@ -570,3 +575,38 @@ def test_shared_lock_platforms_reads_the_real_committed_lockfile() -> None:
     platforms = lock_shared.shared_lock_platforms(REPO_ROOT)
     assert "linux-x64" in platforms
     assert len(platforms) > len(mise_lock_platforms())
+
+
+# --- mise 2026.9.8 packslip quirk (#1398) ------------------------------------
+#
+# The image's and CI's pinned mise (2026.9.8) runs `mise lock <bare-name>` for a
+# packslip-backend tool as a silent no-op (rc 0, no entry). Measured in the
+# devcontainer 2026-09-27 on `hk = "2.3.0"`: bare `hk` -> 0 lines, `hk@2.3.0`
+# -> the entry with its platform. So an exact pin must be named with its version.
+
+
+def _shared_fragment(tmp_path: Path, body: str) -> Path:
+    fragment = tmp_path / ".config" / "mise" / "conf.d" / "shared.toml"
+    fragment.parent.mkdir(parents=True)
+    fragment.write_text(body)
+    return tmp_path
+
+
+def test_an_exact_pin_is_locked_with_its_version(tmp_path: Path) -> None:
+    root = _shared_fragment(tmp_path, '[tools]\nhk = "2.3.0"\n')
+    assert lock_shared.lock_target(root, "hk") == "hk@2.3.0"
+
+
+def test_latest_and_table_pins_keep_the_bare_name(tmp_path: Path) -> None:
+    """CONTROL ARMS: no exact version to name, so no `@` spec is invented."""
+    root = _shared_fragment(
+        tmp_path,
+        '[tools]\nbiome = "latest"\n"aqua:x/y" = { version = "1.0.0" }\n',
+    )
+    assert lock_shared.lock_target(root, "biome") == "biome"
+    assert lock_shared.lock_target(root, "aqua:x/y") == "aqua:x/y"
+
+
+def test_the_live_shared_pin_for_hk_is_versioned() -> None:
+    """The real fragment: the tool that shipped an empty entry is now named."""
+    assert lock_shared.lock_target(REPO_ROOT, "hk").startswith("hk@")

@@ -1,14 +1,14 @@
-amends "package://github.com/jdx/hk/releases/download/v1.57.0/hk@1.57.0#/Config.pkl"
+amends "package://github.com/jdx/hk/releases/download/v2.3.0/hk@2.3.0#/Config.pkl"
 
 // #154: builtin linters MUST be assigned from Builtins (`= Builtins.name`), not
 // declared as a bare `["name"] {}` block — a bare block is a fresh empty Step
 // (check=null) that hk silently skips (never ran locally or in CI). Extend a
 // builtin with overrides via `["name"] = (Builtins.name) { glob = ... }`.
 // See feedback_hk_builtins_need_assignment.
-import "package://github.com/jdx/hk/releases/download/v1.57.0/hk@1.57.0#/Builtins.pkl"
+import "package://github.com/jdx/hk/releases/download/v2.3.0/hk@2.3.0#/Builtins.pkl"
 // Named Config import for the Mapping<String, Config.Step> type annotation on
 // allSteps (the `amends` clause does not bind a module name).
-import "package://github.com/jdx/hk/releases/download/v1.57.0/hk@1.57.0#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v2.3.0/hk@2.3.0#/Config.pkl"
 
 import "hk-common.pkl" as common
 
@@ -16,7 +16,7 @@ import "hk-common.pkl" as common
 // refuses this config instead of silently misreading 1.49 features. The
 // cross-file pin parity (3 pkl URLs == shared.toml binary pin) is enforced by
 // the pin_parity step below (check-H), which covers every multi-site tool.
-min_hk_version = "1.49.0"
+min_hk_version = "2.3.0"
 
 // Zero-skip policy: fail_fast=false to report ALL issues, not just the first
 fail_fast = false
@@ -336,8 +336,9 @@ local allSteps = new Mapping<String, Config.Step> {
 
   // The global `exclude` (hk-common.pkl excludePaths) removes docs/research/kb/
   // and docs/research/runs/ from EVERY step's `{{files}}`, and it is applied
-  // before any step runs (hk 1.57 hook.rs:1740-1776), so a step cannot opt back
-  // in. That exclusion protects verbatim agent records from fixers. It also
+  // before any step runs (measured on hk 1.57, hook.rs:1740-1776), so a step
+  // cannot opt back in. This is historical rationale, not a v2 source claim.
+  // That exclusion protects verbatim agent records from fixers. It also
   // left them unscanned for secrets, although they are exactly where probe
   // output is committed. So this step ignores `{{files}}` and scans both trees
   // by PATH, the same pattern as `no_env_dump`. `-c` is explicit because a
@@ -403,8 +404,9 @@ local allSteps = new Mapping<String, Config.Step> {
   ["zizmor"] = Builtins.zizmor
   //
   // --- ADR-0001 enforcement: a CI job that commits or pushes must skip hk's
-  //     git hooks. `mise.toml`'s postinstall runs `hk install --mise` on the
-  //     runner, so a job that then commits/pushes fires hooks that CANNOT
+  //     git hooks. The repo no longer installs hooks from mise postinstall
+  //     (jdx/hk#1376); a runner gets them only if some other setup installs
+  //     them. Keep HK_SKIP_HOOKS as defense in depth because those hooks CANNOT
   //     pass there (ghcr_publish_prereqs needs a logged-in gh; test needs
   //     `claude` on the login-shell PATH). The ADR's Consequences section
   //     named this as its OPEN gap — "the two known cases are fixed by name

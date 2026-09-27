@@ -67,7 +67,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from dotfiles_setup import claude_doctor, codex_schema, removed_plugins
+from dotfiles_setup import claude_doctor, codex_schema, hk_hooks, removed_plugins
 from dotfiles_setup.dependency_currency import (
     check_dependency_currency as dependency_currency_findings,
 )
@@ -1360,6 +1360,40 @@ def check_removed_plugins(setup: Setup) -> list[str]:
     return findings
 
 
+def check_hk_hooks(setup: Setup) -> list[str]:
+    """Every required hk hook event is installed for this checkout, any scope.
+
+    The repo stopped installing hooks from mise's postinstall (jdx/hk#1376), so
+    a fresh clone has none until `hk install --global --mise` runs once per
+    machine — and `do-not.md` #9 counts hk's pre-commit as an enforcement layer.
+    """
+    section = _str_keys(setup.baseline.get("hk_hooks"))
+    required = section.get("required")
+    if not isinstance(required, list) or not required:
+        return [
+            (
+                "hk-hooks: `doctor.toml` has no [hk_hooks].required, so no hook "
+                "event is being checked"
+            )
+        ]
+    try:
+        missing = hk_hooks.missing_events(
+            setup.repo_root, [str(event) for event in required]
+        )
+    except hk_hooks.HookConfigUnreadableError as exc:
+        return [f"hk-hooks: could not read git hook config: {exc}"]
+    if not missing:
+        return []
+    return [
+        (
+            f"hk-hooks: no hk git hook for {', '.join(missing)} — run "
+            "`hk install --global --mise` from this checkout (upstream's "
+            "recommended setup, jdx/hk#1376); until then these hooks do not run "
+            "on commit/push"
+        )
+    ]
+
+
 CHECKS: tuple[tuple[str, Callable[[Setup], list[str]]], ...] = (
     ("mcp-env-opt-in", check_mcp_env_opt_in),
     ("mcp-scope", check_mcp_scope),
@@ -1375,6 +1409,7 @@ CHECKS: tuple[tuple[str, Callable[[Setup], list[str]]], ...] = (
     ("claude-doctor", check_claude_doctor),
     ("codex-schema", check_codex_schema),
     ("removed-plugins", check_removed_plugins),
+    ("hk-hooks", check_hk_hooks),
 )
 
 #: Only run with ``--live``: each entry spawns subprocesses.

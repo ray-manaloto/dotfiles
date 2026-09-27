@@ -132,6 +132,7 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
+import tomllib
 from typing import TYPE_CHECKING
 
 from dotfiles_setup.devcontainer_names import resolve_names
@@ -236,6 +237,25 @@ def _workspace_mise_toml(repo_root: Path) -> str:
     return f"/workspaces/{basename}/mise.toml"
 
 
+def lock_target(repo_root: Path, tool: str) -> str:
+    """``tool@version`` when the shared fragment pins an exact version string.
+
+    mise 2026.9.8 (the image's and CI's pinned mise) runs `mise lock <bare>` for
+    a packslip-backend tool as a silent no-op: rc 0, NO entry written. Measured
+    in the devcontainer 2026-09-27 against `hk = "2.3.0"`: `mise lock hk` -> 0
+    lines; `mise lock hk@2.3.0` -> the entry with its platform; no argument ->
+    the same. The host's 2026.9.14 locks the bare name correctly, so this is a
+    version-specific quirk — and it shipped #1398 with an empty hk entry.
+    A table pin or `latest` keeps the bare name (there is no exact version to
+    name, and a non-exact `@` spec would change what gets resolved).
+    """
+    pinned = tomllib.loads((repo_root / SHARED_FRAGMENT).read_text()).get("tools", {})
+    value = pinned.get(tool)
+    if isinstance(value, str) and value and value != "latest":
+        return f"{tool}@{value}"
+    return tool
+
+
 def _lock_command(
     repo_root: Path, tool: str, *, route: bool, platforms: tuple[str, ...] = ()
 ) -> tuple[list[str], dict[str, str] | None]:
@@ -270,11 +290,11 @@ def _lock_command(
             f"{GITHUB_ATTESTATIONS_VAR}=true",
             "mise",
             "lock",
-            tool,
+            lock_target(repo_root, tool),
         ]
         return argv, None
     env = {**os.environ, IGNORED_CONFIG_PATHS_VAR: str(repo_root / "mise.toml")}
-    return ["mise", "lock", tool], env
+    return ["mise", "lock", lock_target(repo_root, tool)], env
 
 
 def _lock_each(repo_root: Path, tools: list[str], *, route: bool) -> int:

@@ -289,3 +289,13 @@ enabled = true
 # disable and is exempt; inventory still reports all of its residual state.
 # Removing a name from this list is the reviewed path for allowing it back.
 names = ["ponytail", "claudex-loop"]
+
+[hk_hooks]
+# The hk git hook events this repo's hk.pkl defines, which must be installed for
+# this checkout from SOME scope (global `hk install --global --mise`, or local).
+# The repo no longer installs hooks from mise's postinstall (jdx/hk#1376 removed
+# that recipe upstream: it mutates .git/config during installs and races), so a
+# fresh clone reports here until the once-per-machine install runs FROM THIS
+# CHECKOUT (the global event set is the cwd config's hooks, so pre-push is
+# included only then). Changing this list is a reviewed diff.
+required = ["pre-commit", "commit-msg", "pre-push"]

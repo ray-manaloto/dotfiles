@@ -103,6 +103,44 @@ def conda_platforms(lock_text: str) -> set[str]:
     return {m.group("platform") for m in _CONDA_PLATFORM_RE.finditer(lock_text)}
 
 
+#: Backends that install a downloaded release ASSET, so every locked version
+#: MUST carry at least one `platforms.<p>` entry — `mise install --locked` has
+#: no URL to fetch otherwise. npm/pipx/core/cargo/go resolve through their own
+#: package managers and are legitimately platform-less (measured on main
+#: 2026-09-27: every zero-platform entry across the four lockfiles is one of
+#: those). #1398's bare `packslip:github.com/jdx/hk` entry is the failure this
+#: exists for: mise 2026.9.8's `mise lock <bare-name>` wrote the version and
+#: nothing else, and CI's locked install failed "No lockfile URL found".
+ASSET_BACKENDS = frozenset({"aqua", "github", "gitlab", "ubi", "packslip", "http"})
+
+_TOOL_ENTRY_RE = re.compile(
+    r'^\[\[tools\.(?P<name>"[^"]+"|[^\]]+)\]\]\nversion = "(?P<version>[^"]*)"\n'
+    r'backend = "(?P<backend>[^"]*)"',
+    re.MULTILINE,
+)
+
+
+def platformless_asset_entries(lock_text: str) -> list[str]:
+    """Asset-backend tool entries that carry NO platform entry at all.
+
+    Absolute, not relative to ``HEAD``: :func:`regressions` compares two
+    versions of a file, so the repo's own "delete the tool's block, then
+    re-lock it" recipe leaves it nothing to compare, and a re-lock that writes
+    an empty entry passes it. This check needs no baseline.
+    """
+    platforms = tool_platforms(lock_text)
+    empty: list[str] = []
+    for match in _TOOL_ENTRY_RE.finditer(lock_text):
+        name = match.group("name").strip('"')
+        backend = match.group("backend").split(":", 1)[0]
+        if backend in ASSET_BACKENDS and not platforms.get(name):
+            empty.append(
+                f"tool {name}@{match.group('version')} ({match.group('backend')}): "
+                "no platform entries — a locked install has no URL to fetch"
+            )
+    return empty
+
+
 def _os_family(platform: str) -> str:
     """The OS half of a mise platform name (``linux-x64-musl`` -> ``linux``)."""
     return platform.split("-", 1)[0]
@@ -188,6 +226,10 @@ def check_lockfiles(
         path = repo_root / rel_path
         if not path.exists():
             continue
+        findings.extend(
+            f"{rel_path}: {finding}"
+            for finding in platformless_asset_entries(path.read_text())
+        )
         committed = committed_text(repo_root, rel_path)
         if committed is None:
             # Untracked at HEAD (a brand-new lockfile) — nothing to regress
