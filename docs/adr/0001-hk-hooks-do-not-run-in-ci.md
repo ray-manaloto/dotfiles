@@ -2,6 +2,10 @@
 
 **Status:** accepted · **Date:** 2026-07-15 · **PRs:** #274 (wrong), #275 (correct)
 
+> **2026-09-27 (#1403):** the postinstall below no longer runs `hk install` (upstream removed that recipe,
+> jdx/hk#1376); a runner gets hk hooks only if some other setup installs them. The decision stands as defence in depth
+> and the hk step named below still gates it.
+
 ## Context
 
 `mise.toml`'s `[hooks] postinstall = "mise reshim && hk install --mise"` runs on **every**

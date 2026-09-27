@@ -117,6 +117,16 @@ def test_gate_matrix_bootstrap_packages_add_apt_pin_gate() -> None:
     assert "verify-apt-pins" in names
 
 
+def test_gate_matrix_any_base_input_adds_apt_pin_gate() -> None:
+    """A shared.toml-only diff must run the apt-pin probe.
+
+    It still forces a cold base build that re-resolves every apt pin
+    (#1398/#1400; #962).
+    """
+    names = [g.name for g in pr.gate_matrix([".config/mise/conf.d/shared.toml"])]
+    assert "verify-apt-pins" in names
+
+
 def test_gate_matrix_unrelated_surface_omits_apt_pin_gate() -> None:
     # Control arm: the gate costs a ~60s container probe, so an unrelated
     # change must not pay it. Without this, the test above is satisfied by a

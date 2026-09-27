@@ -289,9 +289,11 @@ Print exactly this single line and nothing else:
 Run /session-resume
 ```
 
-If the plan changed, run `mise run plan-attest` yourself before printing that line, and only after
-`mise run session-orphans` shows no live wait loops or lanes and no background agent, codex lane or harness task is
-still running, so the attestation covers the final plan bytes. Any later plan edit makes it stale again.
+If `mise run plan-attest -- --show` reports that `task_plan.md` no longer matches its attestation, run
+`mise run plan-attest` yourself before printing that line — but only once `mise run session-orphans` shows no live
+wait loops or lanes and no background agent, codex lane or harness task is still running. If any is still running,
+wait for it or stop it first; never attest bytes a live writer can still change. Any later plan edit makes the
+attestation stale again.
 
 ## Checklist (all true before you're done)
 

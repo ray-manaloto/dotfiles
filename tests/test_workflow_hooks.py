@@ -31,7 +31,8 @@ by a mutation that was run and observed to fail.
 
 The two negatives among the real cases are as load-bearing as the positives.
 `autofix.yml`/autofix is the trap: it is the only job that installs the full
-toolchain, so hk IS present and the git hooks ARE written, it sets a `git
+toolchain, so hk IS present (git hooks are no longer written by the mise postinstall
+since #1403, but could be installed another way), it sets a `git
 config` identity, and it runs `hk run pre-commit --all` twice on purpose — and
 it still does not write to git, because `autofix-ci/action` uploads a diff and
 autofix.ci's own GitHub App makes the commit off-runner. Any predicate keyed on

@@ -21,7 +21,9 @@ Verify what hk checked locally matches what CI will see:
 
 1. `git diff --name-only` — should show no unstaged changes for hk-checked files
 2. `git diff --cached --name-only` — should show all intended changes
-3. New files must be `git add`-ed before hk runs, or hk won't check them
+3. hk 2.3 checks untracked files too (`--all` selects "tracked and eligible untracked", measured 2026-09-27), so an
+   untracked file you do NOT mean to commit is linted locally but absent in CI — stage exactly what you intend to
+   commit and delete or ignore the rest before `mise run lint`
 
 ## hk's file counts are taken AFTER the global exclude
 

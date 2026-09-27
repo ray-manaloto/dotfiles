@@ -167,15 +167,14 @@ CI_PUSH_PATHS: tuple[str, ...] = (
 # pins get resolved AGAINST — so a base bump can invalidate every pin without
 # touching a pin line.
 #
-# Both are also BASE_INPUT_PATTERNS, i.e. exactly the changes for which ship
-# DEFERS container validation to CI. That is why this gate earns its place:
-# it is the ~60s local probe standing in for the deferred container gate, and
-# an unresolvable pin otherwise surfaces only after a ~37min CI base build
+# Widened to EVERY base input (2026-09-27): any BASE_INPUT_PATTERNS change
+# forces a cold CI base build, and a cold build re-resolves every apt pin,
+# whichever file triggered it. #1398/#1400 changed only shared.toml and the
+# image locks, skipped this probe, and lost ~2.5h each to a superseded
+# curl/libsqlite3-dev pin (#962 had named this gap on 2026-09-03). It is the
+# ~60s local probe standing in for the deferred container gate
 # (.claude/rules/local-devcontainer-first.md).
-_APT_PIN_PATTERNS = (
-    ".devcontainer/mise-system.toml",
-    ".devcontainer/Dockerfile",
-)
+_APT_PIN_PATTERNS = BASE_INPUT_PATTERNS
 
 # Conditional gates from verify-before-advancing's check matrix.
 _GHA_PATTERNS = (".github/*", ".github/**/*")

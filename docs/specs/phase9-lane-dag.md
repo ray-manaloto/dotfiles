@@ -13,7 +13,7 @@ it. Feature scope for the entry point is the ratified matrix:
 
 ```mermaid
 flowchart TD
-  RAY["Ray<br/>rulings, user-level changes,<br/>plan-attest"]:::ray
+  RAY["Ray<br/>rulings, user-level changes"]:::ray
   ARCH["Architect (this session)<br/>Claude Fable 5.1<br/>specs, routing, refutation"]:::claude
 
   subgraph PRE["Preconditions (the only code in Phase 9)"]
@@ -78,7 +78,7 @@ flowchart TD
 
 | Role | Agent | Model | Effort | Writes |
 |---|---|---|---|---|
-| Operator | Ray | — | — | user-level skills, codex plugin enablement, `plan-attest` |
+| Operator | Ray | — | — | user-level skills, codex plugin enablement (plan attestation is agent-runnable since #1395) |
 | Architect | the coordinating Claude session | Claude Fable 5.1 | session | `task_plan.md`, specs, rulings |
 | History | read-only Claude agents | Claude Sonnet | default | reports only |
 | Router | `sdlc-dispatcher` | required on the input model | required | nothing |

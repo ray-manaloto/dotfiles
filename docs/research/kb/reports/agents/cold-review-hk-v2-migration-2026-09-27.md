@@ -5,7 +5,7 @@
 - Commits: `5a3077c2` (hk 2.3.0 + editorconfig-checker 4.0.2 migration), `70b70c6d` (tests git-isolation, AGENTS.md fmt rule)
 - Scope: `git diff origin/main...HEAD -- . ':(exclude)docs/research/**' ':(exclude)*.lock' ':(exclude)docs/hk-builtins-audit.md'` — 15 files, +223/-60
 - Reviewer: cold-reviewer (Opus), diff-only, no intent supplied. Memory consulted: `repo_gate_locations`, `gha_gate_review_patterns`, `mutation_harness`, `contract_token_and_mirror_replay`.
-- Status: IN PROGRESS
+- Status: PARTIAL — the reviewer stopped at its 60-turn limit and was not resumed (Q-sections unfinished). Findings F1-F4 were all fixed in `302f93d4`. The full re-review of the shipped squash is `cold-review-1403-squash-2026-09-27.md`. (Annotation added 2026-09-27 by the coordinator per session-audit-dismissed-errors F6; the findings above are verbatim.)
 
 ## Findings
 
