@@ -747,33 +747,27 @@ def check_script_syntax(project_root: Path) -> list[str]:
     return failures
 
 
-# D4: every route to the plugin's attestation scripts. The value is the base
-# command; both the bare and the argument-carrying rule must be present, because
-# a trailing `*` also matches the bare command ONLY when it is the rule's sole
-# wildcard — and these all carry a leading one. Without the bare form the
-# argument-less invocation, which is the one that WRITES the attestation, stays
-# allowed while the ban looks complete.
-_ATTEST_DENY_BASES: tuple[str, ...] = (
-    "*attest-plan.sh",
-    "*attest-plan.ps1",
-    "*set-active-plan.sh",
-    "mise run plan-attest",
-    "*dotfiles-setup plan-attest",
-)
+# Every route to the plugin's plan-SWITCH script. Attestation itself was opened
+# to agents on 2026-09-26 (Ray: "fix the settings change so we can automate
+# it"); switching WHICH plan is active stays denied — that is the 2026-09-22c
+# wrong-plan class, a different boundary. Both the bare and the
+# argument-carrying rule must be present, because a trailing `*` also matches
+# the bare command ONLY when it is the rule's sole wildcard — and this one
+# carries a leading one.
+_PLAN_SWITCH_DENY_BASES: tuple[str, ...] = ("*set-active-plan.sh",)
 
 
-def check_plan_attest_deny(settings_path: Path) -> list[str]:
-    """The attestation boundary is a permission DENY, not a hook.
+def check_plan_switch_deny(settings_path: Path) -> list[str]:
+    """The plan-switch boundary is a permission DENY, not a hook.
 
     ⚠️ **This is a presence check, and that is the honest limit of it.** The
     permission engine belongs to the harness; nothing here can invoke it, so
     unlike :func:`check_pretooluse_endtoend` this cannot drive a real deny. It
     proves the rules have not been silently removed or half-written — it does
     not prove the harness still honours them. The live arms were run by hand
-    when the rules landed (2026-09-02): the script bare, the script with args,
-    `mise run plan-attest` and the `dotfiles-setup` CLI beneath it all returned
-    "has been denied", while `shasum -a 256 task_plan.md` and an unrelated mise
-    task still ran.
+    when the rules landed (2026-09-02) — then covering attestation too — and
+    returned "has been denied" while `shasum -a 256 task_plan.md` and an
+    unrelated mise task still ran.
 
     Why a permission rule rather than the PreToolUse guard: hard bans must never
     fail open, and the guard does exactly that on its own errors (#343,
@@ -785,11 +779,14 @@ def check_plan_attest_deny(settings_path: Path) -> list[str]:
         return [f"could not read {settings_path}: {exc}"]
     deny = set(settings.get("permissions", {}).get("deny", ()))
     required = [
-        f"Bash({base}{suffix})" for base in _ATTEST_DENY_BASES for suffix in ("", " *")
+        f"Bash({base}{suffix})"
+        for base in _PLAN_SWITCH_DENY_BASES
+        for suffix in ("", " *")
     ]
     return [
-        f"settings.json permissions.deny is missing {rule!r} — attestation is "
-        "a human boundary and both the bare and the argument form must be denied"
+        f"settings.json permissions.deny is missing {rule!r} — switching the "
+        "active plan is a boundary and both the bare and the argument form must "
+        "be denied"
         for rule in required
         if rule not in deny
     ]
@@ -808,7 +805,7 @@ def hook_selfcheck_main(project_root: Path) -> int:
             "subagent-contract-endtoend",
             lambda: check_subagent_contract_endtoend(project_root),
         ),
-        ("plan-attest-deny", lambda: check_plan_attest_deny(settings_path)),
+        ("plan-switch-deny", lambda: check_plan_switch_deny(settings_path)),
     )
     ok = True
     for name, run in checks:

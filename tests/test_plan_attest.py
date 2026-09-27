@@ -1,12 +1,11 @@
 # Copyright (c) 2026 Raymond Manaloto
-"""The operator's attestation path, and the ban on every other one.
+"""The attestation wrapper, attestation being OPEN to agents, and the plan-switch ban.
 
-The boundary these guard is a HUMAN one, and it has now been crossed twice by
-agents on this host: once by a session self-attesting through a plain Bash call
-(2026-09-02), and once by the session BUILDING the ban, which smoke-tested the
-new wrapper with no arguments and locked a tampered plan over the operator's
-hash. Both times `/plan-attest`'s `disable-model-invocation: true` was set and
-irrelevant — it stops the command, never the script.
+Attestation was an operator-only boundary from 2026-09-02 until Ray opened it
+on 2026-09-26 ("fully open, all routes"). These tests pin BOTH halves of that
+decision: no attest route may be quietly re-denied (which would silently strand
+every plan edit un-injected again), and `set-active-plan.sh` — a different
+boundary, choosing WHICH plan is active — stays denied.
 """
 
 from __future__ import annotations
@@ -17,8 +16,8 @@ from pathlib import Path
 
 import pytest
 from dotfiles_setup.hook_selfcheck import (
-    _ATTEST_DENY_BASES,
-    check_plan_attest_deny,
+    _PLAN_SWITCH_DENY_BASES,
+    check_plan_switch_deny,
 )
 from dotfiles_setup.main import main, setup_parser
 from dotfiles_setup.plan_attest import (
@@ -80,21 +79,52 @@ def test_a_present_plugin_missing_its_script_says_so_differently(
 
 # --------------------------------------------------- the deny rules themselves
 
+#: Substrings that identify an ATTESTATION route in a permission rule.
+_ATTEST_ROUTE_MARKERS = ("attest-plan", "plan-attest")
 
-def test_the_live_settings_deny_every_attestation_route() -> None:
+
+def _attest_denies(settings: dict) -> list[str]:
+    return [
+        rule
+        for rule in settings.get("permissions", {}).get("deny", ())
+        if any(marker in rule for marker in _ATTEST_ROUTE_MARKERS)
+    ]
+
+
+def test_attestation_is_not_denied_to_agents() -> None:
+    """Ray, 2026-09-26: attestation is agent-runnable on every route.
+
+    A deny that creeps back would strand every plan edit un-injected until a
+    human noticed — the exact cost the reversal removed.
+    """
+    assert _attest_denies(json.loads(SETTINGS.read_text())) == []
+
+
+def test_the_attest_probe_sees_a_reintroduced_deny() -> None:
+    """CONTROL ARM: the probe above must be able to fail.
+
+    Re-adding the realistic regression — the bare mise-task rule that was the
+    first one written — must be reported.
+    """
+    settings = json.loads(SETTINGS.read_text())
+    settings["permissions"]["deny"].append("Bash(mise run plan-attest)")
+    assert _attest_denies(settings) == ["Bash(mise run plan-attest)"]
+
+
+def test_the_live_settings_deny_the_plan_switch_route() -> None:
     """The real file, not a fixture: this is the gate, so it must hold HERE."""
-    assert check_plan_attest_deny(SETTINGS) == []
+    assert check_plan_switch_deny(SETTINGS) == []
 
 
-@pytest.mark.parametrize("base", _ATTEST_DENY_BASES)
+@pytest.mark.parametrize("base", _PLAN_SWITCH_DENY_BASES)
 def test_both_forms_are_denied_for_every_route(base: str) -> None:
-    """The bare form is the one that WRITES, and it needs its own rule.
+    """The bare form needs its own rule.
 
     A trailing `*` also matches the bare command only when it is the rule's
     sole wildcard (`$CC/permissions.md` wildcard table: `Bash(* --help *)`
-    matches `npm --help x` but NOT `npm --help`). Every rule here carries a
-    leading `*` or is a bare-command prefix, so `Bash(<base> *)` alone would
-    leave the argument-less invocation allowed while the ban looked complete.
+    matches `npm --help x` but NOT `npm --help`). The rule here carries a
+    leading `*`, so `Bash(<base> *)` alone would leave the argument-less
+    invocation allowed while the ban looked complete.
     """
     deny = set(json.loads(SETTINGS.read_text())["permissions"]["deny"])
     assert f"Bash({base})" in deny
@@ -105,17 +135,16 @@ def test_the_deny_check_notices_a_half_written_ban(tmp_path: Path) -> None:
     """The control arm: dropping ONLY the bare form must fail the check.
 
     That is the realistic regression — someone tidying the rules who believes a
-    trailing `*` subsumes the bare command. A mutation that removed both forms
-    would prove far less, since any presence check catches that
-    (`probes-need-a-control-arm.md` rule 2: mutate realistically).
+    trailing `*` subsumes the bare command (`probes-need-a-control-arm.md`
+    rule 2: mutate realistically).
     """
     settings = json.loads(SETTINGS.read_text())
-    settings["permissions"]["deny"].remove("Bash(*attest-plan.sh)")
+    settings["permissions"]["deny"].remove("Bash(*set-active-plan.sh)")
     half = tmp_path / "settings.json"
     half.write_text(json.dumps(settings))
-    failures = check_plan_attest_deny(half)
+    failures = check_plan_switch_deny(half)
     assert len(failures) == 1
-    assert "Bash(*attest-plan.sh)" in failures[0]
+    assert "Bash(*set-active-plan.sh)" in failures[0]
 
 
 def test_an_unreadable_settings_file_fails_rather_than_passing(
@@ -123,7 +152,7 @@ def test_an_unreadable_settings_file_fails_rather_than_passing(
 ) -> None:
     """A check that returns clean when it cannot read is a check that can only pass."""
     missing = tmp_path / "nope.json"
-    assert check_plan_attest_deny(missing) != []
+    assert check_plan_switch_deny(missing) != []
 
 
 # --- The read-only form must actually reach the script (2026-09-13) ----------
