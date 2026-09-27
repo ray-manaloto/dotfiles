@@ -223,23 +223,33 @@ def test_validate_plugin_does_not_route_through_mise() -> None:
 
 
 def test_mise_child_does_not_register_a_temporary_config_in_host_state(
-    tmp_path: Path,
+    tmp_path: Path, isolated_mise_state: Path
 ) -> None:
-    host_registry = Path.home() / ".local/state/mise/tracked-configs"
-    before = set(host_registry.iterdir()) if host_registry.is_dir() else set()
+    """`default_runner` must isolate on its OWN, not lean on the test fixture.
+
+    The autouse `isolated_mise_state` dir is this test's stand-in for the
+    ambient registry. FAIL arm: drop `mise_child_env` from `default_runner`
+    and the link lands in the ambient stand-in instead of the explicit dir.
+    """
     project = tmp_path / "project"
     project.mkdir()
     (project / "mise.toml").write_text('[tools]\npython = "3.14"\n')
+    explicit = tmp_path / "isolated-state"
 
     result = fnhook_gates.default_runner(
         ["mise", "config", "ls"],
         cwd=project,
-        mise_state_dir=tmp_path / "isolated-state",
+        mise_state_dir=explicit,
     )
 
-    after = set(host_registry.iterdir()) if host_registry.is_dir() else set()
     assert result.rc == 0, result.stderr
-    assert after == before
+    explicit_links = explicit / "tracked-configs"
+    assert explicit_links.is_dir()
+    assert str((project / "mise.toml").resolve()) in {
+        str(entry.resolve()) for entry in explicit_links.iterdir()
+    }
+    ambient_links = isolated_mise_state / "tracked-configs"
+    assert not ambient_links.exists() or not any(ambient_links.iterdir())
 
 
 def test_claude_code_pin_reads_sources_toml() -> None:
