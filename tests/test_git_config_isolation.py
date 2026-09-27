@@ -89,5 +89,5 @@ def test_the_fixture_keeps_this_checkout_a_safe_directory() -> None:
         check=True,
         capture_output=True,
         text=True,
-    ).stdout.split()
+    ).stdout.splitlines()
     assert str(root) in listed

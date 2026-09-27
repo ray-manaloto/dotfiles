@@ -1377,10 +1377,11 @@ def check_hk_hooks(setup: Setup) -> list[str]:
             )
         ]
     try:
-        installed = hk_hooks.installed_hk_events(setup.repo_root)
+        missing = hk_hooks.missing_events(
+            setup.repo_root, [str(event) for event in required]
+        )
     except hk_hooks.HookConfigUnreadableError as exc:
         return [f"hk-hooks: could not read git hook config: {exc}"]
-    missing = hk_hooks.missing_events([str(event) for event in required], installed)
     if not missing:
         return []
     return [

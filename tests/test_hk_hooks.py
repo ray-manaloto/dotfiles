@@ -94,12 +94,56 @@ def test_a_global_install_counts_and_a_missing_pre_push_is_named(
 def test_a_non_hk_hook_does_not_count(tmp_path: Path) -> None:
     """Another hook manager's `hook.<name>` entry is not an hk hook."""
     root = _repo(tmp_path)
+    for key, value in (
+        ("hook.lefthook-pre-push.event", "pre-push"),
+        ("hook.lefthook-pre-push.command", "lefthook run pre-push"),
+    ):
+        subprocess.run(["git", "-C", str(root), "config", key, value], check=True)
+
+    assert hk_hooks.event_has_hk_hook(root, "pre-push") is False
+
+
+def test_a_disabled_global_hook_is_reported_missing(tmp_path: Path) -> None:
+    """`hook.<name>.enabled = false` means it will not run (codex review, P2)."""
+    root = _repo(tmp_path)
+    for event in _ALL:
+        _add_hook(root, event, scope="--global")
     subprocess.run(
-        ["git", "-C", str(root), "config", "hook.lefthook-pre-push.event", "pre-push"],
+        ["git", "-C", str(root), "config", "hook.hk-pre-commit.enabled", "false"],
         check=True,
     )
 
-    assert hk_hooks.installed_hk_events(root) == set()
+    findings = doctor.check_hk_hooks(_setup(root))
+
+    assert len(findings) == 1
+    assert "for pre-commit —" in findings[0]
+
+
+def _legacy_shim(root: Path, event: str, body: str, *, executable: bool) -> None:
+    script = root / ".git" / "hooks" / event
+    script.write_text(f"#!/bin/sh\n{body}\n")
+    script.chmod(0o755 if executable else 0o644)
+
+
+def test_a_legacy_hk_shim_counts(tmp_path: Path) -> None:
+    """`hk install --legacy` (auto on Git < 2.54) writes hookdir scripts (P2)."""
+    root = _repo(tmp_path)
+    for event in _ALL:
+        _legacy_shim(root, event, f'exec hk run {event} "$@"', executable=True)
+
+    assert doctor.check_hk_hooks(_setup(root)) == []
+
+
+def test_a_foreign_or_non_executable_hookdir_script_does_not_count(
+    tmp_path: Path,
+) -> None:
+    """CONTROL ARMS for the shim case: not hk's, or git will not run it."""
+    root = _repo(tmp_path)
+    _legacy_shim(root, "pre-commit", "exec lefthook run pre-commit", executable=True)
+    _legacy_shim(root, "pre-push", 'exec hk run pre-push "$@"', executable=False)
+
+    assert hk_hooks.event_has_hk_hook(root, "pre-commit") is False
+    assert hk_hooks.event_has_hk_hook(root, "pre-push") is False
 
 
 def test_an_unreadable_config_is_reported_not_read_as_missing(tmp_path: Path) -> None:
@@ -107,7 +151,7 @@ def test_an_unreadable_config_is_reported_not_read_as_missing(tmp_path: Path) ->
     not_a_repo = tmp_path / "missing-dir"
 
     with pytest.raises(hk_hooks.HookConfigUnreadableError):
-        hk_hooks.installed_hk_events(not_a_repo)
+        hk_hooks.event_has_hk_hook(not_a_repo, "pre-commit")
     findings = doctor.check_hk_hooks(_setup(not_a_repo))
     assert findings
     assert "could not read git hook config" in findings[0]

@@ -1,5 +1,5 @@
 # Copyright (c) 2026 Raymond Manaloto
-"""Which hk git hook events are installed for a checkout, from ANY scope.
+"""Which hk git hook events will actually RUN for a checkout, from any scope.
 
 Since the hk 2 migration this repo no longer installs hooks from mise's
 ``postinstall``: upstream removed that recipe because it mutates
@@ -10,11 +10,14 @@ machine, while ``.claude/rules/do-not.md`` #9 counts hk's pre-commit
 ``no_commit_to_branch`` as one of its enforcement layers. The doctor check
 built on this module makes that gap loud instead of silent.
 
-Git 2.54 config-based hooks are ``hook.<name>.command`` + ``hook.<name>.event``
-pairs; hk names its entries ``hk-<event>``. ``git config --get-regexp`` run in
-the checkout reads the merged system/global/local view, so a global install
-and a per-repo install both count, which is exactly the question: "will hk run
-on this event here?"
+The question is answered by git itself, ``git hook list <event>`` (Git 2.54),
+not by parsing config keys: it reports the EFFECTIVE hooks, so a hook disabled
+with ``hook.<name>.enabled = false`` prints as ``disabled<TAB><name>`` and a
+legacy ``.git/hooks/<event>`` script prints as ``hook from hookdir``. A raw
+``hook.hk-*.event`` read counted the disabled one and missed the legacy one
+(codex review of 302f93d4). Measured on git 2.54.0: no hook -> rc 1 with
+"no hooks found"; configured -> ``hk-<event>``; disabled -> ``disabled<TAB>…``;
+executable hookdir script -> ``hook from hookdir``; non-executable -> rc 1.
 """
 
 from __future__ import annotations
@@ -26,48 +29,55 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
     from pathlib import Path
 
-#: The prefix hk gives its config-based hook entries (`hk install` source).
-HK_HOOK_PREFIX = "hook.hk-"
+#: What `git hook list` prints for an executable legacy `.git/hooks/<event>`.
+HOOKDIR_ENTRY = "hook from hookdir"
+#: A legacy hookdir script counts as hk's only if it invokes hk this way.
+HK_SHIM_MARKER = "hk run"
 
 
 class HookConfigUnreadableError(RuntimeError):
-    """`git config` could not answer, so absence cannot be concluded."""
+    """Git could not answer, so absence cannot be concluded."""
 
 
-def installed_hk_events(repo_root: Path) -> set[str]:
-    """Return the hook events that have an hk entry in the merged git config.
-
-    Raises:
-        HookConfigUnreadableError: git failed for a reason other than "no
-            matching key", so an empty answer would be a false "missing".
-    """
-    result = subprocess.run(
-        [
-            "git",
-            "-C",
-            str(repo_root),
-            "config",
-            "--get-regexp",
-            r"^hook\.hk-.*\.event$",
-        ],
+def _git(repo_root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "-C", str(repo_root), *args],
         check=False,
         capture_output=True,
         text=True,
     )
-    # rc 1 is git's documented "no key matched"; anything else is an error.
-    if result.returncode == 1 and not result.stdout:
-        return set()
-    if result.returncode != 0:
-        detail = result.stderr.strip() or f"rc={result.returncode}"
+
+
+def _hookdir_script_is_hk(repo_root: Path, event: str) -> bool:
+    located = _git(repo_root, "rev-parse", "--git-path", f"hooks/{event}")
+    if located.returncode != 0:
+        return False
+    script = repo_root / located.stdout.strip()
+    try:
+        return HK_SHIM_MARKER in script.read_text(errors="replace")
+    except OSError:
+        return False
+
+
+def event_has_hk_hook(repo_root: Path, event: str) -> bool:
+    """Whether an ENABLED hk hook will run for ``event`` in this checkout.
+
+    Raises:
+        HookConfigUnreadableError: git failed for a reason other than "no
+            hooks found", so a negative answer would be a false "missing".
+    """
+    listed = _git(repo_root, "hook", "list", event)
+    if listed.returncode == 1 and "no hooks found" in listed.stderr:
+        return False
+    if listed.returncode != 0:
+        detail = listed.stderr.strip() or f"rc={listed.returncode}"
         raise HookConfigUnreadableError(detail)
-    events: set[str] = set()
-    for line in result.stdout.splitlines():
-        key, _, value = line.partition(" ")
-        if key.startswith(HK_HOOK_PREFIX) and value:
-            events.add(value.strip())
-    return events
+    entries = listed.stdout.splitlines()
+    if f"hk-{event}" in entries:
+        return True
+    return HOOKDIR_ENTRY in entries and _hookdir_script_is_hk(repo_root, event)
 
 
-def missing_events(required: Iterable[str], installed: set[str]) -> list[str]:
-    """Required events with no hk entry, in the order they were declared."""
-    return [event for event in required if event not in installed]
+def missing_events(repo_root: Path, required: Iterable[str]) -> list[str]:
+    """Required events with no enabled hk hook, in the order declared."""
+    return [event for event in required if not event_has_hk_hook(repo_root, event)]
