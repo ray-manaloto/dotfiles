@@ -288,7 +288,8 @@ caller applies them.
   `PATH` — see `graphify-first.md`) returns a scoped subgraph. It does not
   cover the offline docs or the binary — those are grepped directly. Treat a
   graph answer as one route, never as the second.
-- **Never print a credential value.** Every fnox secret is in every shell by design.
+- **Never print a credential value.** Every fnox secret except the
+  `CLAUDE_CODE_OAUTH_TOKEN` carve-out is in every shell by design.
   `${VAR:-x}` and `${VAR:=x}` **emit the value** when set, so `${VAR:+SET}${VAR:-ABSENT}`
   prints the secret. Use `[ -n "$VAR" ]`. Your stdout lands in the transcript.
 - **`[redacted]` inside a number in `mise run` output is value-based redaction**,

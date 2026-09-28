@@ -89,7 +89,7 @@ lost.
 The document you are critiquing is usually being edited by the caller while you
 work. Re-read every proposal your top verdicts depend on, right before you write
 them up, and say in the verdict that you did. A claim read *before* the caller's
-edit landed is the usual source of a false, urgent-sounding finding.
+edit landed can produce a false, urgent-sounding finding.
 
 ### 4. Refute, do not confirm — and disagree with the caller
 
@@ -144,8 +144,8 @@ An agent told "critique X" tends to praise X with caveats. So:
   the knowledge-base repo's `agent-harness-docs` tree under `docs/claude-code`.
   Cite as `` `$CC/hooks.md:1394` ``. `.claude/agents/claude-code-expert.md`
   carries the settled ledger — read it before re-deriving.
-- **Never print a credential value.** Every fnox secret is in every shell by
-  design; `${VAR:-x}` and `${VAR:=x}` **emit the value** when set. Use
+- **Never print a credential value.** Every fnox secret except the
+  `CLAUDE_CODE_OAUTH_TOKEN` carve-out is in every shell by design; `${VAR:-x}` and `${VAR:=x}` **emit the value** when set. Use
   `[ -n "$VAR" ]`. Your stdout lands in the transcript and no gate covers it.
 - **`[redacted]` inside a number in `mise run` output is value-based redaction**,
   not data (a 1-char redacted value once masked every `1`). Read that number

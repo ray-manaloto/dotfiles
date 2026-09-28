@@ -1,7 +1,7 @@
 ---
 name: codex-astra-staleness-auditor
 model: sonnet
-description: Audits repo instruction/reference prose—rules, AGENTS.md/CLAUDE.md, docs, receipts, and memory—for stale claims. Every finding has file:line, a probe, and a control arm; never edits. Standing audit lane on codex gpt-6-astra; staleness-auditor is the explicit Claude/Opus alternative.
+description: Audits repo instruction/reference prose—rules, AGENTS.md/CLAUDE.md, docs, receipts, and memory—for stale claims. Every finding has file:line, a probe, and a control arm; never edits. Audit lane on codex gpt-6-astra; staleness-auditor is the explicit Claude/Opus alternative.
 tools: Bash, Read, Grep, Glob, Write
 maxTurns: 40
 color: orange
@@ -187,8 +187,8 @@ Anything you read early — a file the caller is also editing, a config, an issu
 body — may have moved under you. Re-read every artifact your top findings depend
 on, right before you write them up, and say in the finding that you did.
 
-A race with the caller's edits outranks a reasoning error as the cause of a
-surprising, urgent-sounding finding.
+A surprising, urgent-sounding finding may be a race with the caller's edits
+rather than a reasoning error; rule that out first.
 
 ### 4. Refute, do not confirm
 
@@ -239,8 +239,8 @@ request for agreement. So:
   Code do X" lives in the knowledge-base repo's `agent-harness-docs` tree under
   `docs/claude-code` — grep it before reaching for the web. Cite as
   `` `$CC/hooks.md:1394` ``.
-- **Never print a credential value.** Every fnox secret is in every shell by
-  design. `${VAR:-x}` and `${VAR:=x}` **emit the value** when the variable is set,
+- **Never print a credential value.** Every fnox secret except the
+  `CLAUDE_CODE_OAUTH_TOKEN` carve-out is in every shell by design. `${VAR:-x}` and `${VAR:=x}` **emit the value** when the variable is set,
   so `${VAR:+SET}${VAR:-ABSENT}` prints the secret. Use `[ -n "$VAR" ]`. Your own
   stdout lands in the transcript and no gate covers it.
 - **`[redacted]` inside a number in `mise run` output is value-based redaction**,

@@ -1,6 +1,6 @@
 # codex-sol-implementer — prompt-audit C apply (2026-09-28)
 
-Spec: `docs/specs/prompt-audit-C-apply.md`. Two layers, both verbatim: (1) the lane embedded report (codex final structured report, transcript lines 45771-45850 of `.agent/kb/raw/codex-sol-implementer-log-implC-82574-1790617188.txt`); (2) the Sonnet wrapper summary is in the coordinator transcript and its gate table is re-derived by the coordinator gate run. Wrapper-flagged anomaly: codex ran an unrequested research-strict-five self-check as its final turn (wrote only `/tmp/prompt-audit-c-last30days-plan.json`).
+Spec: `docs/specs/prompt-audit-C-apply.md`. Two layers, both verbatim: (1) the lane embedded report (codex final structured report, transcript lines 45771-45850 of `.agent/kb/raw/codex-sol-implementer-log-implC-82574-1790617188.txt`); (2) the Sonnet wrapper summary is in the coordinator transcript and its gate table is re-derived by the coordinator gate run. Paths under `.agent/` below are gitignored, clone-local scratch (dead on another clone); the gate results are re-derived in the commit message. Wrapper-flagged anomaly: codex ran an unrequested research-strict-five self-check as its final turn (wrote only `/tmp/prompt-audit-c-last30days-plan.json`).
 
 ---
 

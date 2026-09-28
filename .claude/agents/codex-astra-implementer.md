@@ -27,8 +27,9 @@ are the prompt, result and log files named in the invocation below.
 The failure this prevents (measured 2026-09-16): a wrapper that judged codex too
 slow began editing the files codex was still editing — two writers on one
 checkout, a weakened test, a dismissed red lint, an attempted `--no-verify`, and
-no report, with codex still running. Evidence: the spawn-reconciliation report
-of 2026-09-16 under `docs/research/kb/reports/agents/`.
+no report, with codex still running. Record: `codex-call-audit-2026-09-23.md`
+under `docs/research/kb/reports/agents/` (the two-writer detail is inherited
+there, not re-derived).
 
 **A SLOW lane is not a FAILED lane.** Codex at `xhigh` on a real spec takes
 tens of minutes; 50 minutes has been observed. Exactly three signals mean the

@@ -22,7 +22,8 @@ repository mise tasks own Graphify operations.
 
 Before the first task, read the `- <N> nodes · <N> edges · <N> communities`
 line under `## Summary` in `graphify-out/GRAPH_REPORT.md` when it exists and
-record the counts. Run each command with stdout
+record the counts (for communities, the total — not the "shown" figure in
+parentheses). Run each command with stdout
 and stderr redirected to its own log, then append `rc=$?` to that same file and
 read the rc back from the file. Never pipe into `tail` or `head`.
 
