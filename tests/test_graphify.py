@@ -13,6 +13,7 @@ it:
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import shutil
 import subprocess
@@ -833,9 +834,9 @@ def test_rewrite_hook_nudge_rewrites_bare_query_and_update() -> None:
 
     graphify's own nudge copy is hardcoded (graphify/cli.py) and names the
     bare binary — exactly what graphify-first.md forbids on this machine
-    (two graphify versions on PATH). `graphify explain`/`graphify path`
-    mentions are untouched: this repo has no mise task for them, so
-    rewriting would point at something that doesn't exist.
+    (two graphify versions on PATH). The MANDATORY nudges are replaced whole
+    by a factual sentence naming only mise tasks, so `graphify explain`/
+    `graphify path` (no mise task) and the imperative framing both disappear.
     """
     search_nudge = (
         '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":'
@@ -846,6 +847,8 @@ def test_rewrite_hook_nudge_rewrites_bare_query_and_update() -> None:
     rewritten = rewrite_hook_nudge(search_nudge)
     assert '`mise run graphify-query -- \\"<question>\\"`' in rewritten
     assert "`graphify query" not in rewritten
+    assert "MANDATORY" not in rewritten
+    assert "You MUST" not in rewritten
     # Structure (everything but the rewritten substring) is untouched.
     assert rewritten.startswith('{"hookSpecificOutput":{"hookEventName":"PreToolUse"')
 
@@ -858,8 +861,9 @@ def test_rewrite_hook_nudge_rewrites_bare_query_and_update() -> None:
     )
     rewritten_read = rewrite_hook_nudge(read_nudge)
     assert '`mise run graphify-query -- \\"<question>\\"`' in rewritten_read
-    assert "`graphify explain" in rewritten_read  # untouched — no task for it
-    assert "`graphify path" in rewritten_read  # untouched — no task for it
+    assert "`graphify explain" not in rewritten_read  # no mise task exists for it
+    assert "`graphify path" not in rewritten_read  # no mise task exists for it
+    assert "MANDATORY" not in rewritten_read
 
     stale_nudge = (
         '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":'
@@ -883,8 +887,10 @@ def test_hook_guard_main_rewrites_and_prints(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
-        _ = cwd
+    def fake_run(
+        args: list[str], *, cwd: Path, stdin: str | None = None
+    ) -> subprocess.CompletedProcess[str]:
+        _ = cwd, stdin
         assert args == ["graphify", "hook-guard", "search"]
         return subprocess.CompletedProcess(
             args,
@@ -894,6 +900,7 @@ def test_hook_guard_main_rewrites_and_prints(
         )
 
     monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
+    monkeypatch.setattr("sys.stdin", io.StringIO(""))
 
     rc = hook_guard_main(tmp_path, "search")
 
@@ -901,16 +908,52 @@ def test_hook_guard_main_rewrites_and_prints(
     assert "`mise run graphify-query --" in capsys.readouterr().out
 
 
+def test_hook_guard_main_nudges_once_per_session(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Same session + agent + kind: first call prints, second is silent."""
+    seen: list[str | None] = []
+
+    def fake_run(
+        args: list[str], *, cwd: Path, stdin: str | None = None
+    ) -> subprocess.CompletedProcess[str]:
+        _ = cwd
+        seen.append(stdin)
+        return subprocess.CompletedProcess(args, 0, stdout="NUDGE\n", stderr="")
+
+    monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
+    outs = []
+    for kind, payload in (
+        ("search", '{"session_id":"s1","tool_name":"Grep"}'),
+        ("search", '{"session_id":"s1","tool_name":"Grep"}'),
+        ("read", '{"session_id":"s1","tool_name":"Read"}'),
+        ("search", '{"session_id":"s1","agent_id":"a2","tool_name":"Grep"}'),
+        ("search", '{"tool_name":"Grep"}'),
+        ("search", '{"tool_name":"Grep"}'),
+    ):
+        monkeypatch.setattr("sys.stdin", io.StringIO(payload))
+        hook_guard_main(tmp_path, kind)
+        outs.append(capsys.readouterr().out)
+    # repeat is silent; another kind, another agent, and no session all print
+    assert outs == ["NUDGE\n", "", "NUDGE\n", "NUDGE\n", "NUDGE\n", "NUDGE\n"]
+    assert seen[0] == '{"session_id":"s1","tool_name":"Grep"}'  # reaches graphify
+
+
 def test_hook_guard_main_fails_open_on_nonzero_rc(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
-        _ = cwd, args
+    def fake_run(
+        args: list[str], *, cwd: Path, stdin: str | None = None
+    ) -> subprocess.CompletedProcess[str]:
+        _ = cwd, args, stdin
         return subprocess.CompletedProcess(args, 1, stdout="", stderr="boom")
 
     monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
+    monkeypatch.setattr("sys.stdin", io.StringIO(""))
 
     assert hook_guard_main(tmp_path, "read") == 0
     assert capsys.readouterr().out == ""
@@ -919,12 +962,15 @@ def test_hook_guard_main_fails_open_on_nonzero_rc(
 def test_hook_guard_main_fails_open_on_missing_binary(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
-        _ = cwd, args
+    def fake_run(
+        args: list[str], *, cwd: Path, stdin: str | None = None
+    ) -> subprocess.CompletedProcess[str]:
+        _ = cwd, args, stdin
         message = "graphify not found"
         raise FileNotFoundError(message)
 
     monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
+    monkeypatch.setattr("sys.stdin", io.StringIO(""))
 
     assert hook_guard_main(tmp_path, "search") == 0
 
