@@ -55,7 +55,7 @@ means here — not a claim of exhaustive Bake-input coverage.
 | condition | verdict |
 |---|---|
 | candidate digest differs from the expected marker's | STALE — never retag |
-| stale, but `:dev` holds every marker | ALREADY_CURRENT — no retag, no failure |
+| stale, but every moving tag holds the marker | ALREADY_CURRENT — no retag |
 | expected marker tag does not exist | UNPROVABLE — never retag |
 | malformed shape, wrong platform, auth/network failure | **raised**, not staleness |
 | candidate and every per-arch marker match | ELIGIBLE — retag |
@@ -75,8 +75,9 @@ ALREADY_CURRENT is the row a PR merged BEHIND an image-input commit lands in
 auto-merge, so `:pr-1421` held the pre-refresh bytes and was correctly STALE —
 but the refresh's own promote had already put the marker's digest on `:dev`.
 Hard-failing there reds main over an image that is exactly right; retagging
-would regress it. So a STALE candidate is re-judged against `:dev` itself, and
-only a match on EVERY architecture downgrades it. A partial match stays STALE:
+would regress it. So a STALE candidate is re-judged against every tag the retag
+step moves (`:dev`, `:latest`, each `:dev-<arch>`), and only a match on EVERY
+tag and architecture downgrades it. A partial match stays STALE:
 `:dev` current on one arch and behind on another is not a state to bless.
 """
 
@@ -85,7 +86,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import subprocess
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from dotfiles_setup.image_manifest import (
     EXPECTED_OS,
@@ -98,7 +99,7 @@ from dotfiles_setup.p2996_hash import compute_repo_dev_hash
 from dotfiles_setup.platform_target import published_targets
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
     from pathlib import Path
 
     from dotfiles_setup.image_manifest import ResolvedTag
@@ -182,55 +183,92 @@ def _resolve_marker(ref: str, *, inspector: Inspector) -> ResolvedTag:
         raise
 
 
-def _current_holds_markers(
-    current_ref: str,
-    *,
-    repo_root: Path,
-    targets: Sequence[PublishTarget],
-    inspector: Inspector,
-    clang_p2996_ref: str | None,
-) -> tuple[bool, tuple[str, ...]]:
-    """Whether `current_ref` already carries every per-arch marker digest.
-
-    A missing `:dev`, a missing marker or a missing/duplicate arch entry is
-    "no" — never "yes by default". Any other registry failure propagates, as
-    everywhere else in this module.
-    """
+def _read_index_entries(
+    ref: str, *, inspector: Inspector
+) -> list[Mapping[str, Any]] | None:
+    """`ref`'s real index entries, or None when the tag does not exist."""
     try:
-        current_doc = json.loads(inspector.raw(current_ref))
+        doc = json.loads(inspector.raw(ref))
     except subprocess.CalledProcessError as exc:
         stderr = exc.stderr if isinstance(exc.stderr, str) else ""
         if any(pattern in stderr.lower() for pattern in _MISS_PATTERNS):
-            return False, (f"{current_ref} does not exist",)
+            return None
         raise
-    current_entries = real_platform_entries(current_doc)
-    image = _image_base(current_ref)
-    lines: list[str] = []
-    for target in targets:
-        expected_hash = compute_repo_dev_hash(
-            repo_root, platform=target.platform, clang_p2996_ref=clang_p2996_ref
-        )
-        expected_marker = marker_ref(image, expected_hash)
+    return real_platform_entries(doc)
+
+
+def _marker_digests(
+    markers: Sequence[tuple[str, str]], *, inspector: Inspector
+) -> dict[str, str] | str:
+    """``{arch: marker digest}``, or the line naming the first missing marker.
+
+    Raises:
+        ValueError: a marker resolves to the wrong platform — the same hard
+            failure :func:`check_promote_eligibility` raises.
+    """
+    expected: dict[str, str] = {}
+    for arch, marker_tag in markers:
         try:
-            marker = _resolve_marker(expected_marker, inspector=inspector)
+            marker = _resolve_marker(marker_tag, inspector=inspector)
         except ManifestNotFoundError:
-            return False, (*lines, f"{target.arch}: {expected_marker} does not exist")
-        digests = [
-            entry["digest"]
-            for entry in current_entries
-            if entry["platform"].get("os") == EXPECTED_OS
-            and entry["platform"].get("architecture") == target.arch
-        ]
-        if digests != [marker.digest]:
-            line = (
-                f"{target.arch}: {current_ref} is {digests or 'absent'}, not "
-                f"{expected_marker} -> {marker.digest}"
+            return f"{arch}: {marker_tag} does not exist"
+        expected_platform = f"{EXPECTED_OS}/{arch}"
+        if marker.platform != expected_platform:
+            msg = (
+                f"FAIL: marker {marker_tag} resolves to {marker.platform}, not "
+                f"{expected_platform} (hard failure, not a staleness verdict)"
             )
-            return False, (*lines, line)
-        lines.append(
-            f"{target.arch}: {current_ref} already == {expected_marker} -> "
-            f"{marker.digest}"
-        )
+            raise ValueError(msg)
+        expected[arch] = marker.digest
+    return expected
+
+
+def _moving_tags_hold_markers(
+    image: str,
+    *,
+    markers: Sequence[tuple[str, str]],
+    inspector: Inspector,
+) -> tuple[bool, tuple[str, ...]]:
+    """Whether EVERY tag the retag step moves already carries the markers.
+
+    `markers` is ``(arch, marker ref)`` per published architecture. The retag
+    step moves `:dev`, `:latest` and each `:dev-<arch>`, so all of them must
+    already hold the marker digest — a promote that died after moving `:dev`
+    but before `:latest` or a per-arch tag must NOT read as current. A missing
+    tag, marker or arch entry is "no", never "yes by default"; a marker on the
+    wrong platform raises, exactly as in :func:`check_promote_eligibility`.
+    """
+    expected = _marker_digests(markers, inspector=inspector)
+    if isinstance(expected, str):
+        return False, (expected,)
+    lines: list[str] = []
+    for tag in ("dev", "latest"):
+        ref = f"{image}:{tag}"
+        entries = _read_index_entries(ref, inspector=inspector)
+        if entries is None:
+            return False, (*lines, f"{ref} does not exist")
+        for arch, digest in expected.items():
+            found = [
+                entry["digest"]
+                for entry in entries
+                if entry["platform"].get("os") == EXPECTED_OS
+                and entry["platform"].get("architecture") == arch
+            ]
+            if found != [digest]:
+                return False, (
+                    *lines,
+                    f"{arch}: {ref} is {found or 'absent'}, not {digest}",
+                )
+        lines.append(f"{ref} already holds every marker digest")
+    for arch, digest in expected.items():
+        ref = f"{image}:dev-{arch}"
+        try:
+            resolved = _resolve_marker(ref, inspector=inspector)
+        except ManifestNotFoundError:
+            return False, (*lines, f"{ref} does not exist")
+        if resolved.digest != digest:
+            return False, (*lines, f"{ref} is {resolved.digest}, not {digest}")
+        lines.append(f"{ref} already == {digest}")
     return True, tuple(lines)
 
 
@@ -333,15 +371,18 @@ def promote_verdict(
 ) -> PromoteVerdict:
     """:func:`check_promote_eligibility`, with STALE re-judged against `:dev`.
 
-    Only a STALE verdict consults :func:`dev_ref` of `candidate_ref`: when that
-    moving tag already carries EVERY architecture's marker digest the verdict
-    becomes ``already_current`` (still ``eligible=False`` — nothing to retag).
+    Only a STALE verdict consults the moving tags (`:dev`, `:latest`, each
+    `:dev-<arch>` — everything the retag step would move): when ALL of them
+    already carry EVERY architecture's marker digest the verdict becomes
+    ``already_current`` (still ``eligible=False`` — nothing to retag).
     Otherwise STALE stands, with the reason `:dev` did not qualify appended.
     ELIGIBLE and UNPROVABLE pass through untouched.
 
     Raises:
-        subprocess.CalledProcessError: a registry read of `:dev` failed for a
-            reason other than "this tag does not exist" — as for every read.
+        subprocess.CalledProcessError: a registry read of a moving tag failed
+            for a reason other than "this tag does not exist" — as for every
+            read.
+        ValueError: a marker resolves to the wrong platform.
     """
     resolved_targets = tuple(targets) if targets is not None else published_targets()
     verdict = check_promote_eligibility(
@@ -353,12 +394,22 @@ def promote_verdict(
     )
     if verdict.status != "stale":
         return verdict
-    held, current_lines = _current_holds_markers(
-        dev_ref(candidate_ref),
-        repo_root=repo_root,
-        targets=resolved_targets,
-        inspector=inspector,
-        clang_p2996_ref=clang_p2996_ref,
+    markers = tuple(
+        (
+            target.arch,
+            marker_ref(
+                _image_base(candidate_ref),
+                compute_repo_dev_hash(
+                    repo_root,
+                    platform=target.platform,
+                    clang_p2996_ref=clang_p2996_ref,
+                ),
+            ),
+        )
+        for target in resolved_targets
+    )
+    held, current_lines = _moving_tags_hold_markers(
+        _image_base(candidate_ref), markers=markers, inspector=inspector
     )
     if held:
         return PromoteVerdict(

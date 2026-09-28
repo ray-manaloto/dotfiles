@@ -351,6 +351,22 @@ def test_registry_auth_failure_is_a_hard_failure_not_a_verdict(repo: Path) -> No
 # ---------------------------------------------------------------------------
 
 DEV_REF = f"{IMAGE}:dev"
+LATEST_REF = f"{IMAGE}:latest"
+
+
+def _moving_tags(
+    raw: dict[str, str | BaseException], digests: Mapping[str, str]
+) -> dict[str, str | BaseException]:
+    """Seed `:latest` and every `:dev-<arch>` to `digests` (`:dev` is the caller's).
+
+    The retag step moves all three kinds of tag, so an already-current verdict
+    must see every one of them.
+    """
+    entries = [_entry(digest, arch) for arch, digest in digests.items()]
+    raw[LATEST_REF] = _index(*entries)
+    for arch, digest in digests.items():
+        raw[f"{IMAGE}:dev-{arch}"] = _index(_entry(digest, arch))
+    return raw
 
 
 def _stale_behind_raw(
@@ -369,7 +385,7 @@ def _stale_behind_raw(
         if dev_entries is None
         else _index(*dev_entries)
     )
-    return raw
+    return _moving_tags(raw, {"amd64": AMD64_FRESH_DIGEST})
 
 
 def test_stale_candidate_with_current_dev_is_already_current(repo: Path) -> None:
@@ -417,7 +433,7 @@ def test_partial_current_dev_stays_stale(repo: Path) -> None:
     arm64_marker = marker_ref(
         IMAGE, compute_repo_dev_hash(repo, platform=ARM64_TARGET.platform)
     )
-    raw = {
+    raw: dict[str, str | BaseException] = {
         CANDIDATE_REF: _index(
             _entry(AMD64_STALE_DIGEST, "amd64"), _entry(ARM64_STALE_DIGEST, "arm64")
         ),
@@ -427,6 +443,7 @@ def test_partial_current_dev_stays_stale(repo: Path) -> None:
             _entry(AMD64_FRESH_DIGEST, "amd64"), _entry(ARM64_STALE_DIGEST, "arm64")
         ),
     }
+    _moving_tags(raw, {"amd64": AMD64_FRESH_DIGEST, "arm64": ARM64_FRESH_DIGEST})
     verdict = promote_verdict(
         repo_root=repo,
         candidate_ref=CANDIDATE_REF,
@@ -434,6 +451,51 @@ def test_partial_current_dev_stays_stale(repo: Path) -> None:
         targets=(AMD64_TARGET, ARM64_TARGET),
     )
     assert verdict.status == "stale"
+
+
+@pytest.mark.parametrize("lagging", [LATEST_REF, f"{IMAGE}:dev-amd64"])
+def test_a_lagging_moving_tag_keeps_it_stale(repo: Path, lagging: str) -> None:
+    """A promote that died after moving `:dev` must not read as current."""
+    raw = _stale_behind_raw(repo, dev_entries=(_entry(AMD64_FRESH_DIGEST, "amd64"),))
+    raw[lagging] = _index(_entry(AMD64_STALE_DIGEST, "amd64"))
+    verdict = promote_verdict(
+        repo_root=repo,
+        candidate_ref=CANDIDATE_REF,
+        inspector=_inspector(raw),
+        targets=(AMD64_TARGET,),
+    )
+    assert verdict.status == "stale"
+    assert lagging in verdict.lines[-1]
+
+
+def test_wrong_platform_marker_on_the_moving_tag_path_raises(repo: Path) -> None:
+    """Markers first resolved on this path get the same platform check."""
+    amd64_marker = marker_ref(
+        IMAGE, compute_repo_dev_hash(repo, platform=AMD64_TARGET.platform)
+    )
+    arm64_marker = marker_ref(
+        IMAGE, compute_repo_dev_hash(repo, platform=ARM64_TARGET.platform)
+    )
+    raw: dict[str, str | BaseException] = {
+        # amd64 stale, so the eligibility loop stops before arm64's marker
+        CANDIDATE_REF: _index(
+            _entry(AMD64_STALE_DIGEST, "amd64"), _entry(ARM64_FRESH_DIGEST, "arm64")
+        ),
+        amd64_marker: _index(_entry(AMD64_FRESH_DIGEST, "amd64")),
+        # arm64's marker is an amd64 image: a shape breach, never a verdict
+        arm64_marker: _index(_entry(ARM64_FRESH_DIGEST, "amd64")),
+        DEV_REF: _index(
+            _entry(AMD64_FRESH_DIGEST, "amd64"), _entry(ARM64_FRESH_DIGEST, "arm64")
+        ),
+    }
+    _moving_tags(raw, {"amd64": AMD64_FRESH_DIGEST, "arm64": ARM64_FRESH_DIGEST})
+    with pytest.raises(ValueError, match="arm64"):
+        promote_verdict(
+            repo_root=repo,
+            candidate_ref=CANDIDATE_REF,
+            inspector=_inspector(raw),
+            targets=(AMD64_TARGET, ARM64_TARGET),
+        )
 
 
 def test_dev_registry_auth_failure_propagates(repo: Path) -> None:
@@ -489,7 +551,7 @@ def test_public_cli_consults_dev_after_a_stale_verdict(
     arm64_marker = marker_ref(
         IMAGE, compute_repo_dev_hash(repo, platform=ARM64_TARGET.platform)
     )
-    raw = {
+    raw: dict[str, str | BaseException] = {
         CANDIDATE_REF: _index(
             _entry(AMD64_STALE_DIGEST, "amd64"), _entry(ARM64_FRESH_DIGEST, "arm64")
         ),
@@ -499,6 +561,7 @@ def test_public_cli_consults_dev_after_a_stale_verdict(
             _entry(dev_digests[0], "amd64"), _entry(dev_digests[1], "arm64")
         ),
     }
+    _moving_tags(raw, {"amd64": AMD64_FRESH_DIGEST, "arm64": ARM64_FRESH_DIGEST})
     monkeypatch.setattr(
         "dotfiles_setup.image.docker_inspector", lambda: _inspector(raw)
     )
