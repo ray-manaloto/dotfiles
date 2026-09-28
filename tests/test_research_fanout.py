@@ -747,18 +747,22 @@ def test_default_runner_bounds_drain_when_detached_descendant_holds_pipe(
         "time.sleep(30)"
     )
     detached_pid: int | None = None
+    # The parent must start, spawn and record the child BEFORE the timeout
+    # fires; 0.2s lost that race 3 of 6 times in the amd64 devcontainer
+    # (Python starts slower there), so the timeout, not the bound, was flaky.
+    timeout = 2.0
     started = time.monotonic()
     try:
         with pytest.raises(subprocess.TimeoutExpired):
             default_runner(
                 [sys.executable, "-c", parent, str(pid_file), descendant],
-                timeout=0.2,
+                timeout=timeout,
                 env={},
             )
         elapsed = time.monotonic() - started
         detached_pid = int(pid_file.read_text())
 
-        assert elapsed <= 3.2
+        assert elapsed <= timeout + 3.0
     finally:
         if detached_pid is not None:
             with suppress(ProcessLookupError):
