@@ -335,7 +335,21 @@ _PRINTS_SECRET = re.compile(
 # and an escaped one (`echo \====`) has no whitespace before its first `=`.
 # Scoped to the printing builtins on purpose: `[ "$a" == "$b" ]` trips the same
 # expansion, but a separator-shaped rule must not start denying comparisons.
-_ZSH_EQUALS_WORD = re.compile(_CMD + r"(?:echo|printf|print)\b[^;&|\n]*?(?<=\s)={2,}")
+#
+# Its anchor is WIDER than `_CMD`: a separator inside `for …; do echo ====;
+# done`, `then`/`else`, `{ … }` or `( … )` aborts just the same, and `_CMD` sees
+# none of those as command position. The scan stops at `#` (a comment, where
+# zsh expands nothing) and never crosses `$((` (arithmetic, where `==` is an
+# operator): both ran rc=0 under `zsh -c` and were denied by the first cut.
+# Residue, accepted: a `#` mid-word or an arithmetic span BEFORE the separator
+# hides it. Measured by the /code-review of 1068c6b (#1388).
+# The whitespace before `==` must not be backslash-escaped: `echo x\ ====` is
+# ONE word, `x ====`, and zsh prints it rc=0 (codex review lens, 1068c6b).
+_ZSH_EQUALS_POS = r"(?:^|[;&|\n({]\s*|\b(?:do|then|else)\s+)" + _WRAPPER
+_ZSH_EQUALS_WORD = re.compile(
+    _ZSH_EQUALS_POS
+    + r"(?:echo|printf|print)\b(?:(?!\$\(\()[^;&|\n#])*?(?<=[^\\]\s)={2,}"
+)
 # The hook-suppression rules landed 2026-07-27 with `no_commit_to_branch` (#400).
 # They are the ONLY layer that can see a bypass: git decides not to run a hook
 # BEFORE the hook exists as a process, so no pre-commit or pre-push hook can

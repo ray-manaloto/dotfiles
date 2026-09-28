@@ -1126,6 +1126,15 @@ def test_safe_credential_handling_is_allowed(command: str) -> None:
         "print -r -- ====",
         "printf '%s\\n' x ====",
         "echo done && echo ==== && ls",
+        # compound commands: `_CMD` alone missed every one (/code-review, 1068c6b)
+        "for f in a; do echo ====; done",
+        "if true; then echo ====; fi",
+        "if false; then :; else echo ====; fi",
+        "{ echo ====; }",
+        "(echo ====)",
+        "echo $(echo ====)",
+        # escaped space, then a REAL one: the second word is `====`
+        "echo x\\  ====",
     ],
 )
 def test_unquoted_zsh_equals_separator_is_denied(command: str) -> None:
@@ -1152,6 +1161,11 @@ def test_unquoted_zsh_equals_separator_is_denied(command: str) -> None:
         # comparisons trip the same expansion but are out of scope by design
         '[ "$a" == "$b" ]',
         "grep -n '====' notes.md",
+        # zsh runs both rc=0 — the first cut denied them (/code-review, 1068c6b)
+        "echo $(( 1 == 1 ))",
+        "echo ok  # a == b",
+        # an escaped space is not a word boundary (codex review lens, 1068c6b)
+        "echo x\\ ====",
     ],
 )
 def test_quoted_or_non_separator_equals_is_allowed(command: str) -> None:
