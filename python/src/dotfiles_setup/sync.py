@@ -77,7 +77,11 @@ from typing import TYPE_CHECKING, Literal
 from dotfiles_setup import child_env
 from dotfiles_setup.container import verify_latest
 from dotfiles_setup.devcontainer_names import resolve_names
-from dotfiles_setup.platform_target import published_targets, resolve_platform
+from dotfiles_setup.platform_target import (
+    platform_arch,
+    published_targets,
+    resolve_platform,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -128,6 +132,10 @@ class SyncStatus:
     synced_state: SyncRecord | None = None
     arch: str = ""
     workspace_hash: str = ""
+    #: Whether THIS architecture's platform is present under the local tag
+    #: (:func:`local_platforms`). Defaults True so a status built without the
+    #: probe keeps the digest-only semantics.
+    platform_present: bool = True
 
     @property
     def stale(self) -> bool:
@@ -144,9 +152,20 @@ class SyncStatus:
         A missing local tag counts as stale. An unreachable registry
         (``None``) does NOT: sync must not tear down a working container
         on a network blip.
+
+        A local tag that is current for another architecture but does not
+        carry THIS one is stale too (measured 2026-09-28: the first
+        ``MISE_ENV=arm64 mise run sync`` on a host whose ``:dev`` was current
+        for amd64 skipped :func:`refresh_local_tag`, built the arm64 overlay
+        straight from the registry, and left arm64's ``--pull=never``
+        ``verify-image`` with nothing to run — rc=125, "does not provide the
+        specified platform"). Staleness routes it through the refresh, whose
+        platform UNION keeps the other architecture's layers.
         """
         if self.registry_digest is None:
             return False
+        if not self.platform_present:
+            return True
         if self.registry_digest in self.local_digests:
             return False
         return not (
@@ -624,6 +643,23 @@ def local_platforms(image_ref: str) -> frozenset[str]:
     return frozenset(present)
 
 
+def platform_present(image_ref: str) -> bool:
+    """Whether this architecture's platform is under the local ``image_ref``.
+
+    Compared by ARCHITECTURE, not by the literal triple: a
+    ``DOTFILES_PLATFORM`` override that omits the microarchitecture level names
+    the same image as the published triple, and a literal comparison would mark
+    the tag stale forever — every sync a rebuild. A platform with no recognisable
+    architecture is "absent", so the refresh path reports it rather than
+    ``observe`` crashing.
+    """
+    try:
+        wanted = platform_arch(resolve_platform())
+    except ValueError:
+        return False
+    return wanted in {platform_arch(p) for p in local_platforms(image_ref)}
+
+
 def refresh_local_tag(image_ref: str) -> bool:
     """Re-anchor the local tag onto the registry's current manifest.
 
@@ -709,6 +745,7 @@ def observe(workspace: Path, image_ref: str) -> SyncStatus:
         synced_state=read_sync_record(image_ref),
         arch=names.arch,
         workspace_hash=names.hash,
+        platform_present=platform_present(image_ref),
     )
 
 
