@@ -143,6 +143,24 @@ def test_observe_probes_this_arch_platform_under_the_local_tag(
     assert not sync.observe(_WORKSPACE, _REF).stale
 
 
+@pytest.mark.parametrize(
+    ("resolved", "present"),
+    [
+        ("linux/amd64", True),  # short spelling of the published amd64 triple
+        ("linux/amd64/v2", True),
+        ("linux/arm64", False),
+        ("not-a-platform", False),  # unparsable: absent, never a crash
+    ],
+)
+def test_platform_present_compares_by_architecture(
+    monkeypatch: pytest.MonkeyPatch, resolved: str, *, present: bool
+) -> None:
+    amd64 = published_targets()[0].platform
+    monkeypatch.setattr(sync, "local_platforms", lambda _ref: frozenset({amd64}))
+    monkeypatch.setattr(sync, "resolve_platform", lambda: resolved)
+    assert sync.platform_present(_REF) is present
+
+
 # Review finding [0]: buildkit refresh mints a new local manifest digest,
 # so convergence is witnessed by the sync record, not RepoDigests.
 def test_sync_record_witnesses_refresh_convergence() -> None:

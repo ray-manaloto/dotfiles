@@ -607,7 +607,9 @@ echo "post-restart installed tool count: $POST_COUNT"
 #     A tool requested as `latest` is keyed by NAME only (#1172, Ray
 #     2026-09-28): an upstream release between the two snapshots is currency,
 #     not persistence loss. The gate still fails when such a tool VANISHES.
-PARITY_KEY='to_entries[] | .key as $k | .value[] | "\($k)\t\(if .requested_version == "latest" then "latest" else .version end)"'
+#     Only ACTIVE installs count: a bump leaves the old version installed but
+#     inactive (requested_version null), and that leftover is not the tool set.
+PARITY_KEY='to_entries[] | .key as $k | .value[] | select(.active) | "\($k)\t\(if .requested_version == "latest" then "latest" else .version end)"'
 jq -r "$PARITY_KEY" "$SNAPSHOT" | sort -u > /tmp/mise-persistence-pre.tsv
 jq -r "$PARITY_KEY" "$AFTER"    | sort -u > /tmp/mise-persistence-post.tsv
 if ! diff -u /tmp/mise-persistence-pre.tsv /tmp/mise-persistence-post.tsv; then

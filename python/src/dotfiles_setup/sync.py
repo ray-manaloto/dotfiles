@@ -77,7 +77,11 @@ from typing import TYPE_CHECKING, Literal
 from dotfiles_setup import child_env
 from dotfiles_setup.container import verify_latest
 from dotfiles_setup.devcontainer_names import resolve_names
-from dotfiles_setup.platform_target import published_targets, resolve_platform
+from dotfiles_setup.platform_target import (
+    platform_arch,
+    published_targets,
+    resolve_platform,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -639,6 +643,23 @@ def local_platforms(image_ref: str) -> frozenset[str]:
     return frozenset(present)
 
 
+def platform_present(image_ref: str) -> bool:
+    """Whether this architecture's platform is under the local ``image_ref``.
+
+    Compared by ARCHITECTURE, not by the literal triple: a
+    ``DOTFILES_PLATFORM`` override that omits the microarchitecture level names
+    the same image as the published triple, and a literal comparison would mark
+    the tag stale forever — every sync a rebuild. A platform with no recognisable
+    architecture is "absent", so the refresh path reports it rather than
+    ``observe`` crashing.
+    """
+    try:
+        wanted = platform_arch(resolve_platform())
+    except ValueError:
+        return False
+    return wanted in {platform_arch(p) for p in local_platforms(image_ref)}
+
+
 def refresh_local_tag(image_ref: str) -> bool:
     """Re-anchor the local tag onto the registry's current manifest.
 
@@ -724,7 +745,7 @@ def observe(workspace: Path, image_ref: str) -> SyncStatus:
         synced_state=read_sync_record(image_ref),
         arch=names.arch,
         workspace_hash=names.hash,
-        platform_present=resolve_platform() in local_platforms(image_ref),
+        platform_present=platform_present(image_ref),
     )
 
 
