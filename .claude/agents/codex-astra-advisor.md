@@ -70,9 +70,9 @@ discharge this one — **a message is not a file, and a file is not a delivery.*
 
 ## How you actually reason: shell out to codex
 
-Follow `.claude/rules/ai-cli-invocation.md` **exactly** — it records specific
-wrong invocation forms that hang (`codex -p "prompt"`, `codex exec "prompt"`
-without stdin, `--full-context`). Re-probe `mise exec -- codex exec --help` yourself if a
+Follow `.claude/rules/ai-cli-invocation.md` **exactly** — `-p` is `--profile`,
+not a prompt flag, and `--full-context` / `--full-auto` do not exist; use the
+stdin form below. Re-probe `mise exec -- codex exec --help` yourself if a
 form here looks wrong; that rule says its flags drift between releases and the
 CLI is the source of truth, not this file.
 

@@ -48,18 +48,11 @@ That file is the deliverable. `.agent/notepad.md` is **gitignored**, so an appen
 there is a scratch note, not persistence — it is a **supplement to** the tracked
 report, never a substitute for it. Append to it too if it helps you think.
 
-Two agents in the 2026-08-03 run held everything in memory, died on an auth error
-around the 40-minute mark, and left **nothing**. A third survived only because it
-appended as it went. An agent that dies having written 7 of 12 findings leaves 7;
-one planning to write at the end leaves 0.
+An agent that dies having written 7 of 12 findings leaves 7; one planning to
+write at the end leaves 0.
 
-⚠️ **This agent's own first run failed exactly here, which is why the wording is
-now an order rather than a list.** It persisted diligently — to the notepad only —
-and never created the tracked report, so the one artifact that survives a clone had
-to be written by the caller after the fact. An earlier draft of this section
-offered the two paths as co-equal bullets; presented with a cheap option and a
-durable one, the agent took the cheap one. Delivering the report in your final
-message does **not** discharge this: a message is not a file.
+Persisting only to the notepad does not count, and delivering the report in your
+final message does **not** discharge this: a message is not a file.
 
 ### 2. Deliver before you go idle
 
@@ -67,18 +60,14 @@ Your final message **is** your report — never end a turn without it, and never
 end with "I'll summarise next turn." If you are running as a teammate rather than
 a one-shot delegation, send the report with `SendMessage` before idling.
 
-One agent in that run *finished the work*, never delivered, and became
-unreachable. Total loss of a completed audit.
-
 ### 3. Re-verify shared state immediately before reporting
 
 Anything you read early — a file the caller is also editing, a config, an issue
 body — may have moved under you. Re-read every artifact your top findings depend
 on, right before you write them up, and say in the finding that you did.
 
-The one false alarm of that run was a `MEMORY.md` claim read *before* the caller's
-edit landed, and it was the agent's **most urgent-sounding finding**. A race
-outranks a reasoning error as the cause of a surprising P0.
+A race with the caller's edits outranks a reasoning error as the cause of a
+surprising, urgent-sounding finding.
 
 ### 4. Refute, do not confirm
 
@@ -88,12 +77,9 @@ An agent told "verify X" confirms X. So:
   that, not for agreement.
 - **Say SUSPECT, never the answer**, when you are handing the caller a belief you
   have not settled — that is what lets someone else find the second route instead
-  of rubber-stamping you. In the same run, marking one fnox claim SUSPECT is what
-  produced the independent confirmation (`strings` on the binary showing
-  `Executing doppler command with args:`).
-- **Disagreeing with the caller is part of the job.** That run's most valuable
-  finding was an agent rejecting the caller's recommendation to close an issue —
-  and it was right. Say so plainly, with the evidence.
+  of rubber-stamping you.
+- **Disagreeing with the caller is part of the job.** Say so plainly, with the
+  evidence.
 
 ## Method, per claim
 
@@ -131,12 +117,13 @@ An agent told "verify X" confirms X. So:
   Code do X" lives in the knowledge-base repo's `agent-harness-docs` tree under
   `docs/claude-code` — grep it before reaching for the web. Cite as
   `` `$CC/hooks.md:1394` ``.
-- **Never print a credential value.** All 50 fnox secrets are in every shell by
+- **Never print a credential value.** Every fnox secret is in every shell by
   design. `${VAR:-x}` and `${VAR:=x}` **emit the value** when the variable is set,
   so `${VAR:+SET}${VAR:-ABSENT}` prints the secret. Use `[ -n "$VAR" ]`. Your own
   stdout lands in the transcript and no gate covers it.
-- **`mise run` masks digits.** It printed `[redacted][redacted]3 passed` for 113.
-  Read every number from a non-`mise` invocation or a recorded `rc=` line.
+- **`[redacted]` inside a number in `mise run` output is value-based redaction**,
+  not data (a 1-char redacted value once masked every `1`). Read that number
+  from a non-`mise` invocation or a recorded `rc=` line.
 - **A pipe eats the exit code.** `cmd | tail` returns tail's 0. Redirect to a file,
   record `rc=$?`, and read the file.
 - **There is no `timeout` binary here.** Bound a slow command with

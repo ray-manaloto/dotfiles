@@ -34,7 +34,7 @@ mise run graphify-query -- "<question>"           # scoped subgraph, cite its pa
 
 ## What you return
 
-Under ~300 words, in this order:
+Only what the caller needs to decide, in this order:
 
 1. **Verdict** — first line, unhedged. A sound plan gets one line.
 2. **Deciding risk** — the single risk that would change the decision.

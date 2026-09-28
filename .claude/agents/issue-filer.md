@@ -32,5 +32,6 @@ and resulting URLs in the report, but never print credential values.
 
 ## Deliver before idle
 
-Write the report file first. Then return its path and a summary of at most ten
-lines. If you need `AskUserQuestion`, present the options in prose and STOP.
+Write the report file first. Then return its path and a short summary — the
+detail belongs in the file. If you need `AskUserQuestion`, present the options
+in prose and STOP.

@@ -10,7 +10,7 @@ color: yellow
 Ported from mar3co's MIT-licensed orchestration plugin, v1.21.0 (commit
 78f9cb566cd99597e4436d42c7b832f8109a0e7a), agents/premise-verifier.md. The body
 below is the upstream text; the only edits are a shortened frontmatter
-description and one blank line removed by the markdown formatter. Repo-owned since dotfiles#1314.
+description, one blank line removed by the markdown formatter, and the closing word cap replaced. Repo-owned since dotfiles#1314.
 
 MIT License
 
@@ -103,4 +103,4 @@ VERDICT: <ready to dispatch | correct the spec first — one line naming what bl
 
 The verdict rule: any REFUTED row forces `correct the spec first`, as does any UNVERIFIABLE or ASSUMED row or MISSING item you judge load-bearing for the change's correctness — you read the code, so make that judgment and say why in one line. (For ASSUMED rows, load-bearing means you found concrete evidence the assumption is unsafe to rest on — short of a contradiction — not merely that the spec rests on it: the architect already accepted that reliance by marking the row. UNVERIFIABLE rows and MISSING items keep the ordinary meaning — load-bearing whenever the change's correctness turns on the unsettled claim.) `ready to dispatch` is permitted with UNVERIFIABLE or ASSUMED rows or MISSING items remaining ONLY when each is explicitly named as a non-blocking residual with one line of why — ASSUMED rows included, every one named (that `A` rows default to non-blocking governs the verdict, never the naming: a row that skips the residual list is invisible to the architect's accept-on-record step, which is the exact silent path this agent exists to close); an unnamed residual is never acceptable. You advise — the architect owns the dispatch decision and must accept each named residual on the record before dispatching.
 
-Under 400 words wherever the spec allows. Every claim you make is cited or labeled unverified — the architect refutes your findings like any reviewer's, so give them the file:line to check.
+Keep it compact — the architect acts on rows, not prose. Every claim you make is cited or labeled unverified — the architect refutes your findings like any reviewer's, so give them the file:line to check.
