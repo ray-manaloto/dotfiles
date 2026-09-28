@@ -24,7 +24,7 @@ from dotfiles_setup.image_manifest import (
     parse_matrix,
     verify_arch_tags,
 )
-from dotfiles_setup.image_promote import check_promote_eligibility
+from dotfiles_setup.image_promote import promote_verdict
 from dotfiles_setup.p2996_hash import _extract_bake_variable
 from dotfiles_setup.platform_target import (
     host_platform,
@@ -2290,7 +2290,9 @@ def _handle_verify_promote_eligibility(cmd: ImageCommand) -> int:
     never captures anything but `key=value` pairs.
 
     Exit codes:
-        0 — ELIGIBLE: retag is safe.
+        0 — ELIGIBLE: retag is safe. Also ALREADY_CURRENT: the candidate is
+            stale but `:dev` already holds the smoke-validated content, so
+            ``eligible=false`` (no retag) is the correct, successful outcome.
         1 — STALE or UNPROVABLE: never retag; the reason is on stderr.
     A hard failure (malformed OCI shape, wrong platform, registry
     auth/network error) is NOT caught here — it propagates as an uncaught
@@ -2298,7 +2300,7 @@ def _handle_verify_promote_eligibility(cmd: ImageCommand) -> int:
     verdict above. See :mod:`dotfiles_setup.image_promote`'s module
     docstring for the full four-way classification.
     """
-    verdict = check_promote_eligibility(
+    verdict = promote_verdict(
         repo_root=_project_root(),
         candidate_ref=cmd.image_ref,
         inspector=docker_inspector(),
@@ -2307,7 +2309,7 @@ def _handle_verify_promote_eligibility(cmd: ImageCommand) -> int:
         sys.stderr.write(f"{line}\n")
     sys.stdout.write(f"eligible={'true' if verdict.eligible else 'false'}\n")
     sys.stdout.write(f"status={verdict.status}\n")
-    return 0 if verdict.eligible else 1
+    return 0 if verdict.eligible or verdict.status == "already_current" else 1
 
 
 def main(cmd: ImageCommand) -> int:
