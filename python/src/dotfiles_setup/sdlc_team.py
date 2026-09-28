@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Final
 from urllib.parse import quote
 
-from dotfiles_setup import codec, lane_result
+from dotfiles_setup import codec, codex_lane, lane_result
 
 __all__ = [
     "SDLC_RUNS_DIR",
@@ -689,6 +689,27 @@ def _decode_payload(value: str) -> _SupervisorPayload:
     return codec.decode(base64.urlsafe_b64decode(value.encode()), _SupervisorPayload)
 
 
+def _codex_launcher() -> tuple[str, ...] | None:
+    """Return the argv prefix ending in ``codex exec``, or None if unlaunchable.
+
+    #1362: resolving ``shutil.which("codex")`` followed the mise shim symlink to
+    the ``mise`` binary itself, so argv became ``mise exec -c …``; mise read
+    ``-c`` as its own "run through a shell" flag and codex never ran.
+    ``.claude/rules/ai-cli-invocation.md`` mandates ``mise exec -- codex exec``,
+    which resolves the host's native codex from the current config rather than
+    whatever the supervisor's inherited PATH happens to list first.
+    """
+    mise = shutil.which("mise")
+    # codex must be on PATH too, so its absence stays the early CLI_MISSING
+    # diagnostic rather than a codex rc surfacing only in the settlement.
+    if mise is None or shutil.which("codex") is None:
+        return None
+    # `which` returns a RELATIVE path for a relative PATH entry, and the
+    # supervisor runs from the workdir, so anchor it to the caller's cwd now.
+    # `absolute()`, never `resolve()`: following symlinks is the #1362 bug.
+    return (str(Path(mise).absolute()), "exec", "--", "codex", "exec")
+
+
 def dispatch(request: SdlcTeamRequest, repo_root: Path) -> SdlcTeamDispatch:
     """Start a detached timeout-owning supervisor and return immediately."""
     run_id = request.run_id or uuid.uuid4().hex
@@ -721,8 +742,8 @@ def dispatch(request: SdlcTeamRequest, repo_root: Path) -> SdlcTeamDispatch:
         )
         return result
 
-    codex = shutil.which("codex")
-    if codex is None:
+    launcher = _codex_launcher()
+    if launcher is None:
         result, _ = _resolved_dispatch(
             request,
             repo_root,
@@ -730,7 +751,7 @@ def dispatch(request: SdlcTeamRequest, repo_root: Path) -> SdlcTeamDispatch:
                 run_id=run_id,
                 status=SdlcStatus.CLI_MISSING,
                 started_at=started_at,
-                errors=("codex executable was not found on PATH",),
+                errors=("`mise` and `codex` must both be on PATH to launch codex",),
             ),
         )
         return result
@@ -778,8 +799,7 @@ def dispatch(request: SdlcTeamRequest, repo_root: Path) -> SdlcTeamDispatch:
     # Dropping it also makes a lane visible to agentsview, which reads exactly
     # these session files; under `--ephemeral` no lane could ever be audited.
     argv = (
-        str(Path(codex).resolve()),
-        "exec",
+        *launcher,
         "-c",
         f'model_reasoning_effort="{request.effort}"',
         "-C",
@@ -967,9 +987,13 @@ def _supervise(payload: _SupervisorPayload) -> int:
         log_file = Path(payload.log_file)
         log_file.parent.mkdir(parents=True, exist_ok=True)
         with Path(payload.prompt_file).open("rb") as prompt, log_file.open("wb") as log:
+            # The same isolation every other codex lane gets (codex_lane.py):
+            # without it the lane loads planning-with-files and can inject or
+            # write this repo's task_plan.md.
             process = subprocess.Popen(
                 payload.argv,
                 cwd=payload.workdir,
+                env={**os.environ, **codex_lane.LANE_ENV_OVERRIDES},
                 stdin=prompt,
                 stdout=log,
                 stderr=subprocess.STDOUT,

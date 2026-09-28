@@ -101,6 +101,7 @@ def _run_supervisor(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     fixture: _SupervisorFixture,
+    popen_kwargs: list[dict[str, object]] | None = None,
 ) -> tuple[int, sdlc_team.SdlcTeamSettlement, lane_result.LaneResult]:
     """Run the real supervisor composition around an isolated fake Codex process."""
     tmp_path.mkdir(parents=True, exist_ok=True)
@@ -124,6 +125,8 @@ def _run_supervisor(
     child_process = _CompletedChild()
 
     def fake_popen(*_args: object, **kwargs: object) -> _CompletedChild:
+        if popen_kwargs is not None:
+            popen_kwargs.append(kwargs)
         stdout = cast("BinaryIO", kwargs["stdout"])
         stdout.write(fixture.log_text.encode())
         stdout.flush()
@@ -343,12 +346,22 @@ def test_missing_spec_launches_no_process_and_returns_resolved_paths(
     assert Path(result.receipt_json).is_absolute()
 
 
+@pytest.mark.parametrize("missing", ["mise", "codex", "both"])
 def test_missing_codex_launches_no_process(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, missing: str
 ) -> None:
-    """Collapsing CLI_MISSING into a launch error loses this diagnostic arm."""
+    """Collapsing CLI_MISSING into a launch error loses this diagnostic arm.
+
+    The launcher is `mise exec -- codex exec` (#1362), so either binary's
+    absence must stop the dispatch before any process starts.
+    """
     request = _request(tmp_path)
-    monkeypatch.setattr(sdlc_team.shutil, "which", lambda _name: None)
+    absent = {"mise", "codex"} if missing == "both" else {missing}
+    monkeypatch.setattr(
+        sdlc_team.shutil,
+        "which",
+        lambda name: None if name in absent else f"/usr/bin/{name}",
+    )
 
     def forbidden_popen(*_args: object, **_kwargs: object) -> _DetachedProcess:
         raise AssertionError
@@ -359,6 +372,62 @@ def test_missing_codex_launches_no_process(
     assert result.status is sdlc_team.SdlcStatus.CLI_MISSING
     assert result.pid is None
     assert result.argv == ()
+    assert result.errors == (
+        "`mise` and `codex` must both be on PATH to launch codex",
+    ), "a missing mise must not be reported as a missing codex"
+
+
+def test_codex_behind_a_mise_shim_still_receives_its_own_flags(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#1362: resolving the shim made argv `mise exec -c …`, so codex never ran.
+
+    The layout is the real one on this Mac: `shims/codex` is a symlink to the
+    `mise` binary. Resolving that symlink is exactly the regression.
+    """
+    bin_dir = tmp_path / "bin"
+    shims = tmp_path / "shims"
+    bin_dir.mkdir()
+    shims.mkdir()
+    mise = bin_dir / "mise"
+    mise.write_text("#!/bin/sh\nexit 0\n")
+    mise.chmod(0o755)
+    (shims / "codex").symlink_to(mise)
+    found = {"mise": str(mise), "codex": str(shims / "codex")}
+    calls: list[tuple[str, ...]] = []
+
+    def fake_popen(command: tuple[str, ...], **_kwargs: object) -> _DetachedProcess:
+        calls.append(command)
+        return _DetachedProcess()
+
+    monkeypatch.setattr(sdlc_team.shutil, "which", found.get)
+    monkeypatch.setattr(sdlc_team.subprocess, "Popen", fake_popen)
+    result = sdlc_team.dispatch(_request(tmp_path), tmp_path)
+
+    assert result.status is sdlc_team.SdlcStatus.DISPATCHED
+    prefix = result.argv[: result.argv.index("-c")]
+    assert Path(prefix[-2]).name == "codex", prefix
+    assert prefix[-1] == "exec", prefix
+    assert prefix == (str(mise), "exec", "--", "codex", "exec"), (
+        "without `--`, mise parses codex's flags as its own"
+    )
+
+
+def test_relative_path_entry_is_anchored_before_the_supervisor_changes_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`which` honours a relative PATH entry; the supervisor runs elsewhere."""
+    caller_cwd = tmp_path / "caller"
+    caller_cwd.mkdir()
+    monkeypatch.chdir(caller_cwd)
+    monkeypatch.setattr(sdlc_team.shutil, "which", lambda name: str(Path("bin") / name))
+    monkeypatch.setattr(
+        sdlc_team.subprocess, "Popen", lambda *_a, **_k: _DetachedProcess()
+    )
+
+    result = sdlc_team.dispatch(_request(tmp_path), tmp_path)
+
+    assert result.argv[0] == str(caller_cwd / "bin" / "mise")
 
 
 def test_reused_run_id_removes_stale_settlement_before_launch(
@@ -503,6 +572,25 @@ def test_supervisor_fails_when_claimed_specialist_has_no_child_session(
     )
     assert settlement.specialists_claimed == ("sdlc-python-specialist",)
     assert settlement.specialists_observed == ()
+
+
+def test_supervisor_launches_codex_with_planning_disabled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Without the lane overrides, the codex lane loads planning-with-files.
+
+    The inherited value is seeded to "0" so a reversed merge order fails too.
+    """
+    monkeypatch.setenv("PLANNING_DISABLED", "0")
+    popen_kwargs: list[dict[str, object]] = []
+
+    _run_supervisor(
+        tmp_path, monkeypatch, _SupervisorFixture(report="", log_text=""), popen_kwargs
+    )
+
+    env = cast("dict[str, str]", popen_kwargs[0]["env"])
+    assert env["PLANNING_DISABLED"] == "1"
+    assert env["PATH"] == os.environ["PATH"]
 
 
 def test_supervisor_completes_when_claim_and_child_role_match(
