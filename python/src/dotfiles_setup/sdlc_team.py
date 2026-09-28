@@ -704,7 +704,10 @@ def _codex_launcher() -> tuple[str, ...] | None:
     # diagnostic rather than a codex rc surfacing only in the settlement.
     if mise is None or shutil.which("codex") is None:
         return None
-    return (mise, "exec", "--", "codex", "exec")
+    # `which` returns a RELATIVE path for a relative PATH entry, and the
+    # supervisor runs from the workdir, so anchor it to the caller's cwd now.
+    # `absolute()`, never `resolve()`: following symlinks is the #1362 bug.
+    return (str(Path(mise).absolute()), "exec", "--", "codex", "exec")
 
 
 def dispatch(request: SdlcTeamRequest, repo_root: Path) -> SdlcTeamDispatch:
@@ -748,7 +751,7 @@ def dispatch(request: SdlcTeamRequest, repo_root: Path) -> SdlcTeamDispatch:
                 run_id=run_id,
                 status=SdlcStatus.CLI_MISSING,
                 started_at=started_at,
-                errors=("codex executable was not found on PATH",),
+                errors=("`mise` and `codex` must both be on PATH to launch codex",),
             ),
         )
         return result

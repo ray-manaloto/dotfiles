@@ -372,6 +372,9 @@ def test_missing_codex_launches_no_process(
     assert result.status is sdlc_team.SdlcStatus.CLI_MISSING
     assert result.pid is None
     assert result.argv == ()
+    assert result.errors == (
+        "`mise` and `codex` must both be on PATH to launch codex",
+    ), "a missing mise must not be reported as a missing codex"
 
 
 def test_codex_behind_a_mise_shim_still_receives_its_own_flags(
@@ -405,6 +408,26 @@ def test_codex_behind_a_mise_shim_still_receives_its_own_flags(
     prefix = result.argv[: result.argv.index("-c")]
     assert Path(prefix[-2]).name == "codex", prefix
     assert prefix[-1] == "exec", prefix
+    assert prefix == (str(mise), "exec", "--", "codex", "exec"), (
+        "without `--`, mise parses codex's flags as its own"
+    )
+
+
+def test_relative_path_entry_is_anchored_before_the_supervisor_changes_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`which` honours a relative PATH entry; the supervisor runs elsewhere."""
+    caller_cwd = tmp_path / "caller"
+    caller_cwd.mkdir()
+    monkeypatch.chdir(caller_cwd)
+    monkeypatch.setattr(sdlc_team.shutil, "which", lambda name: str(Path("bin") / name))
+    monkeypatch.setattr(
+        sdlc_team.subprocess, "Popen", lambda *_a, **_k: _DetachedProcess()
+    )
+
+    result = sdlc_team.dispatch(_request(tmp_path), tmp_path)
+
+    assert result.argv[0] == str(caller_cwd / "bin" / "mise")
 
 
 def test_reused_run_id_removes_stale_settlement_before_launch(
@@ -554,8 +577,11 @@ def test_supervisor_fails_when_claimed_specialist_has_no_child_session(
 def test_supervisor_launches_codex_with_planning_disabled(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Without the lane overrides, the codex lane loads planning-with-files."""
-    monkeypatch.delenv("PLANNING_DISABLED", raising=False)
+    """Without the lane overrides, the codex lane loads planning-with-files.
+
+    The inherited value is seeded to "0" so a reversed merge order fails too.
+    """
+    monkeypatch.setenv("PLANNING_DISABLED", "0")
     popen_kwargs: list[dict[str, object]] = []
 
     _run_supervisor(
