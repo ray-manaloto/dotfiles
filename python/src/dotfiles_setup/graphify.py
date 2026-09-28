@@ -860,6 +860,26 @@ _GRAPH_NUDGE = (
 )
 
 
+def _general_nudge(text: str) -> dict[str, object] | None:
+    """The parsed payload when `text` is one of graphify's two ``MANDATORY:`` nudges.
+
+    Only that general, advisory nudge is replaced and deduplicated. Anything
+    else — the per-file stale nudge, and above all a payload carrying a
+    ``permissionDecision`` (graphify's opt-in strict-mode deny) — is not it.
+    """
+    try:
+        payload = json.loads(text)
+    except ValueError:
+        return None
+    hook = payload.get("hookSpecificOutput") if isinstance(payload, dict) else None
+    if not isinstance(hook, dict) or "permissionDecision" in hook:
+        return None
+    context = hook.get("additionalContext")
+    if isinstance(context, str) and context.startswith("MANDATORY:"):
+        return payload
+    return None
+
+
 def rewrite_hook_nudge(text: str) -> str:
     """Rewrite graphify's own PreToolUse nudge text to this repo's wording.
 
@@ -871,18 +891,11 @@ def rewrite_hook_nudge(text: str) -> str:
     regardless of graph health. Any other payload (the stale-file nudge) gets
     plain substitution of the bare ``query``/``update`` commands.
     """
-    try:
-        payload = json.loads(text)
-    except ValueError:
-        payload = None
-    hook = payload.get("hookSpecificOutput") if isinstance(payload, dict) else None
-    context = hook.get("additionalContext") if isinstance(hook, dict) else None
-    if (
-        isinstance(hook, dict)
-        and isinstance(context, str)
-        and context.startswith("MANDATORY:")
-    ):
-        hook["additionalContext"] = _GRAPH_NUDGE
+    payload = _general_nudge(text)
+    if payload is not None:
+        hook = payload["hookSpecificOutput"]
+        if isinstance(hook, dict):
+            hook["additionalContext"] = _GRAPH_NUDGE
         return json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n"
     return text.replace("`graphify query", "`mise run graphify-query --").replace(
         "`graphify update`", "`mise run graphify-rebuild`"
@@ -905,10 +918,14 @@ def hook_guard_main(project_root: Path, kind: str) -> int:
     that script's header. ``$1``/``kind`` is ``search`` (Bash|Grep matcher)
     or ``read`` (Read|Glob), graphify's own vocabulary.
 
-    The nudge is delivered once per session, per agent and kind (the
-    ``mise_config_context.already_seen`` marker): a repeated identical nudge
-    on every search/read is re-insertion, not information. The hook payload
-    is read here and handed to graphify on stdin, since reading it consumes it.
+    The general nudge is delivered once per session and agent (the
+    ``mise_config_context.already_seen`` marker): after the rewrite the search
+    and read variants are the same sentence, and repeating it on every
+    search/read is re-insertion, not information. Only that nudge is
+    deduplicated — the per-file stale nudge carries information specific to the
+    file, and a ``permissionDecision`` payload is a decision, never a reminder,
+    so both always pass through. The hook payload is read here and handed to
+    graphify on stdin, since reading it consumes it.
     """
     try:
         raw = sys.stdin.read()
@@ -928,8 +945,10 @@ def hook_guard_main(project_root: Path, kind: str) -> int:
         event = {}
     session_id = str(event.get("session_id", ""))
     agent_id = str(event.get("agent_id", ""))
-    if session_id and already_seen(
-        project_root, f"graphify-{kind}-{session_id}", agent_id
+    if (
+        session_id
+        and _general_nudge(result.stdout) is not None
+        and already_seen(project_root, f"graphify-nudge-{session_id}", agent_id)
     ):
         return 0
     sys.stdout.write(rewrite_hook_nudge(result.stdout))

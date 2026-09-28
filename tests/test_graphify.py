@@ -908,37 +908,107 @@ def test_hook_guard_main_rewrites_and_prints(
     assert "`mise run graphify-query --" in capsys.readouterr().out
 
 
+_MANDATORY = (
+    '{"hookSpecificOutput":{"hookEventName":"PreToolUse",'
+    '"additionalContext":"MANDATORY: graphify-out/graph.json exists. You MUST run '
+    '`graphify query \\"q\\"` first."}}\n'
+)
+_STALE = (
+    '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":'
+    '"graphify-out/graph.json exists but may be STALE for this file. Run '
+    '`graphify update`."}}\n'
+)
+_DENY = (
+    '{"hookSpecificOutput":{"hookEventName":"PreToolUse",'
+    '"permissionDecision":"deny","permissionDecisionReason":"MANDATORY: x"}}\n'
+)
+#: A deny that ALSO carries a MANDATORY context: the permissionDecision
+#: exclusion itself is what must let it through (graphify's real deny has no
+#: additionalContext, so _DENY alone would pass without the exclusion).
+_DENY_WITH_CONTEXT = (
+    '{"hookSpecificOutput":{"hookEventName":"PreToolUse",'
+    '"permissionDecision":"deny","permissionDecisionReason":"x",'
+    '"additionalContext":"MANDATORY: graphify-out/graph.json exists."}}\n'
+)
+
+
+def _drive_hook(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    calls: list[tuple[str, str, str]],
+) -> list[str]:
+    """Run hook_guard_main once per (kind, stdin payload, graphify stdout)."""
+    outs: list[str] = []
+    for kind, payload, stdout in calls:
+
+        def fake_run(
+            args: list[str],
+            *,
+            cwd: Path,
+            stdin: str | None = None,
+            _stdout: str = stdout,
+            _payload: str = payload,
+        ) -> subprocess.CompletedProcess[str]:
+            _ = cwd
+            assert stdin == _payload  # the hook payload reaches graphify
+            return subprocess.CompletedProcess(args, 0, stdout=_stdout, stderr="")
+
+        monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
+        monkeypatch.setattr("sys.stdin", io.StringIO(payload))
+        hook_guard_main(tmp_path, kind)
+        outs.append(capsys.readouterr().out)
+    return outs
+
+
 def test_hook_guard_main_nudges_once_per_session(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Same session + agent + kind: first call prints, second is silent."""
-    seen: list[str | None] = []
+    """The general nudge: once per session+agent, across search AND read."""
+    s1 = '{"session_id":"s1"}'
+    outs = _drive_hook(
+        monkeypatch,
+        tmp_path,
+        capsys,
+        [
+            ("search", s1, _MANDATORY),
+            ("search", s1, _MANDATORY),
+            ("read", s1, _MANDATORY),  # same sentence after the rewrite
+            ("search", '{"session_id":"s1","agent_id":"a2"}', _MANDATORY),
+            ("search", "{}", _MANDATORY),  # no session: always emit
+            ("search", "{}", _MANDATORY),
+        ],
+    )
+    printed = [bool(out) for out in outs]
+    assert printed == [True, False, False, True, True, True]
+    assert "mise run graphify-health" in outs[0]
 
-    def fake_run(
-        args: list[str], *, cwd: Path, stdin: str | None = None
-    ) -> subprocess.CompletedProcess[str]:
-        _ = cwd
-        seen.append(stdin)
-        return subprocess.CompletedProcess(args, 0, stdout="NUDGE\n", stderr="")
 
-    monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
-    outs = []
-    for kind, payload in (
-        ("search", '{"session_id":"s1","tool_name":"Grep"}'),
-        ("search", '{"session_id":"s1","tool_name":"Grep"}'),
-        ("read", '{"session_id":"s1","tool_name":"Read"}'),
-        ("search", '{"session_id":"s1","agent_id":"a2","tool_name":"Grep"}'),
-        ("search", '{"tool_name":"Grep"}'),
-        ("search", '{"tool_name":"Grep"}'),
-    ):
-        monkeypatch.setattr("sys.stdin", io.StringIO(payload))
-        hook_guard_main(tmp_path, kind)
-        outs.append(capsys.readouterr().out)
-    # repeat is silent; another kind, another agent, and no session all print
-    assert outs == ["NUDGE\n", "", "NUDGE\n", "NUDGE\n", "NUDGE\n", "NUDGE\n"]
-    assert seen[0] == '{"session_id":"s1","tool_name":"Grep"}'  # reaches graphify
+def test_hook_guard_main_never_dedups_stale_or_deny(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A per-file stale notice and a strict-mode deny always pass through."""
+    s1 = '{"session_id":"s1"}'
+    outs = _drive_hook(
+        monkeypatch,
+        tmp_path,
+        capsys,
+        [
+            ("read", s1, _MANDATORY),  # takes the session's one general slot
+            ("read", s1, _STALE),
+            ("read", s1, _STALE),
+            ("read", s1, _DENY),
+            ("read", s1, _DENY_WITH_CONTEXT),
+        ],
+    )
+    assert all(outs), outs
+    assert '"permissionDecision":"deny"' in outs[4]
+    assert "mise run graphify-rebuild" in outs[1]
+    assert '"permissionDecision":"deny"' in outs[3]
 
 
 def test_hook_guard_main_fails_open_on_nonzero_rc(
