@@ -101,7 +101,6 @@ def _run_supervisor(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     fixture: _SupervisorFixture,
-    popen_kwargs: list[dict[str, object]] | None = None,
 ) -> tuple[int, sdlc_team.SdlcTeamSettlement, lane_result.LaneResult]:
     """Run the real supervisor composition around an isolated fake Codex process."""
     tmp_path.mkdir(parents=True, exist_ok=True)
@@ -125,8 +124,6 @@ def _run_supervisor(
     child_process = _CompletedChild()
 
     def fake_popen(*_args: object, **kwargs: object) -> _CompletedChild:
-        if popen_kwargs is not None:
-            popen_kwargs.append(kwargs)
         stdout = cast("BinaryIO", kwargs["stdout"])
         stdout.write(fixture.log_text.encode())
         stdout.flush()
@@ -572,25 +569,6 @@ def test_supervisor_fails_when_claimed_specialist_has_no_child_session(
     )
     assert settlement.specialists_claimed == ("sdlc-python-specialist",)
     assert settlement.specialists_observed == ()
-
-
-def test_supervisor_launches_codex_with_planning_disabled(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Without the lane overrides, the codex lane loads planning-with-files.
-
-    The inherited value is seeded to "0" so a reversed merge order fails too.
-    """
-    monkeypatch.setenv("PLANNING_DISABLED", "0")
-    popen_kwargs: list[dict[str, object]] = []
-
-    _run_supervisor(
-        tmp_path, monkeypatch, _SupervisorFixture(report="", log_text=""), popen_kwargs
-    )
-
-    env = cast("dict[str, str]", popen_kwargs[0]["env"])
-    assert env["PLANNING_DISABLED"] == "1"
-    assert env["PATH"] == os.environ["PATH"]
 
 
 def test_supervisor_completes_when_claim_and_child_role_match(

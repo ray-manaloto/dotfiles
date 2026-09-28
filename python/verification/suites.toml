@@ -2999,3 +2999,12 @@ paths = [
     ".claude/types/plugin-health.d.ts",
 ]
 per_path_tokens = { "mise.toml" = ["run = 'uv run --project python dotfiles-setup plugin-health'", "run = 'uv run --project python dotfiles-setup plugin-health-types-refresh'"], "python/src/dotfiles_setup/main.py" = ['"plugin-health": lambda', '"plugin-health-types-refresh": lambda', 'from dotfiles_setup.plugin_health import'], "python/src/dotfiles_setup/doctor.py" = ['("plugin-health", check_plugin_health)', 'import check_plugin_health as plugin_health_findings', 'def check_plugin_health(setup: Setup)'], "python/src/dotfiles_setup/plugin_health.py" = ['class PluginHealthCode(', 'class PluginRow:', 'class PluginHealthReport:', 'def read_rows(', 'def evaluate(', 'def check_plugin_health(', 'def _declared_from_settings(', 'def _run_plugin_list(', 'def _row_from_wire(', 'def plugin_health_main(', 'def plugin_health_e2e_main('], "tests/test_plugin_health.py" = ['def test_declared_not_installed_drift', 'def test_declared_disabled_here_drift', 'def test_firecrawl_regression_guard_silence', 'def test_all_declared_installed_and_enabled_ok', 'def test_declared_from_settings_agrees_with_the_doctor_implementation'], ".claude/skills/plugin-health/hooks/hooks.json" = ['"./plugin-health.ts"'], ".claude/skills/plugin-health/hooks/plugin-health.ts" = ['async function readPluginHealth', 'on("classic.SessionStart"'], ".claude/types/plugin-health.d.ts" = ['enum PluginHealthCode', 'E2E_TIMEOUT = 6'] }
+
+[[suite]]
+name = "workflow.sdlc-team-no-planning-scrub"
+description = "#1357 (D6) contract arm, Ray's round-5 ruling (task_plan 2026-09-23): sdlc-team worker lanes SEE the attested plan, so the dispatcher must never scrub planning-with-files from the codex child. #1412 added exactly that scrub (`PLANNING_DISABLED=1` via `codex_lane.LANE_ENV_OVERRIDES`) on a question that did not cite the ruling; Ray ruled 2026-09-28 to revert it and land this contract so it cannot be 'fixed' back. The advisory codex lane's own scrub is untouched (`workflow.codex-lane-planning-isolation`)."
+category = "workflow"
+check_type = "static"
+handler = "regex_forbid"
+paths = ["python/src/dotfiles_setup/sdlc_team.py"]
+pattern = 'PLANNING_DISABLED|LANE_ENV_OVERRIDES'

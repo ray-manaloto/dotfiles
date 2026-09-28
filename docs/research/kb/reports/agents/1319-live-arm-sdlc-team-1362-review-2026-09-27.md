@@ -50,3 +50,5 @@ Specialists spawned:
 ## GitHub repos touched
 
 _None._
+
+> Coordinator annotation 2026-09-28: the "Env precedence: ACCEPTED" line above concerned a `PLANNING_DISABLED` override that contradicted Ray's round-5 ruling (task_plan `:652`, #1357). Ray ruled on 2026-09-28 to revert the override and its test; contract `workflow.sdlc-team-no-planning-scrub` now forbids it (session-audit-dismissed-errors-2026-09-28 F0).
