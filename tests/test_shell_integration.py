@@ -51,9 +51,11 @@ def _run_guard(
     so `command -v gpgconf` resolves deterministically regardless of
     whether the host actually has gpgconf installed.
     """
-    bash = shutil.which("bash")
+    # The mise bash shim needs a configured version and is not hermetic under
+    # the restricted PATH below; invoke the system shell used by the smoke test.
+    bash = "/bin/bash"
     grep = shutil.which("grep")
-    assert bash, "bash is required to run this test"
+    assert Path(bash).is_file(), "system bash is required to run this test"
     assert grep, "grep is required to run this test"
 
     with tempfile.TemporaryDirectory() as tmp:

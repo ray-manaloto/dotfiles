@@ -11,6 +11,8 @@ REPO_ROOT = Path(__file__).parent.parent.absolute()
 GITCONFIG_TEMPLATE = REPO_ROOT / "home" / "dot_gitconfig.tmpl"
 SMOKE_SCRIPT = REPO_ROOT / "scripts" / "devcontainer-smoke.sh"
 PREFLIGHT_MARKER = "[preflight] git workspace safe.directory"
+# The mise bash shim rebuilds PATH and can hide the uv stub used below.
+SYSTEM_BASH = "/bin/bash"
 
 
 def _committed_workspace(tmp_path: Path) -> Path:
@@ -99,7 +101,7 @@ def test_smoke_refuses_dubious_ownership_before_tier_one(
     unsafe_gitconfig.write_text("")
 
     result = subprocess.run(
-        ["bash", str(SMOKE_SCRIPT)],
+        [SYSTEM_BASH, str(SMOKE_SCRIPT)],
         env=_smoke_env(workspace, unsafe_gitconfig),
         check=False,
         capture_output=True,
@@ -129,7 +131,7 @@ def test_rendered_safe_directory_clears_ownership_preflight(
     uv_stub.chmod(0o755)
 
     result = subprocess.run(
-        ["bash", str(SMOKE_SCRIPT)],
+        [SYSTEM_BASH, str(SMOKE_SCRIPT)],
         env={
             **_smoke_env(workspace, rendered_gitconfig),
             "PATH": f"{stub_bin}{os.pathsep}{os.environ['PATH']}",
