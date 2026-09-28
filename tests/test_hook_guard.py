@@ -1103,3 +1103,57 @@ def test_printing_a_credential_is_denied(command: str) -> None:
 )
 def test_safe_credential_handling_is_allowed(command: str) -> None:
     assert hook_guard.decide(command) is None, command
+
+
+# --- zsh_equals_separator (#1388; landed 2026-09-28) ------------------------
+#
+# The Bash tool runs zsh, which `=`-expands an unquoted word starting with `=`.
+# `echo ====` aborts the chain it sits in. Both directions are pinned because
+# the fix the reason recommends (quote it) is one character away from the bug.
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "echo ====",
+        # the #1388 shape: an irreversible step's rc was hidden behind this
+        (
+            'mise run x > apply.log; echo "rc=$?" >> apply.log; '
+            "echo ===APPLY; cat apply.log"
+        ),
+        # the 2026-09-28 session-resume shape, verbatim in form
+        "cat a.log; echo ======; cat b.log",
+        "print -r -- ====",
+        "printf '%s\\n' x ====",
+        "echo done && echo ==== && ls",
+    ],
+)
+def test_unquoted_zsh_equals_separator_is_denied(command: str) -> None:
+    rule = hook_guard.match(command)
+    assert rule is not None, command
+    assert rule.name == "zsh_equals_separator"
+    assert rule.since == "2026-09-28"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "echo '===='",
+        'echo "x ==== y"',
+        "printf '%s\\n' '====='",
+        # escaped: zsh does not expand it, and no whitespace precedes the `=`
+        "echo \\====",
+        # not at word start, so no expansion
+        "echo rc=0 a==b",
+        # a single `=` word prints `=` in zsh; only 2+ is a lookup of `=…`
+        "echo =",
+        # a quoted mention of the rule's own reason (mise-tasks-only § Extending)
+        'git commit -m "guard: deny echo ==== (zsh =-expansion)"',
+        # comparisons trip the same expansion but are out of scope by design
+        '[ "$a" == "$b" ]',
+        "grep -n '====' notes.md",
+    ],
+)
+def test_quoted_or_non_separator_equals_is_allowed(command: str) -> None:
+    rule = hook_guard.match(command)
+    assert rule is None or rule.name != "zsh_equals_separator", (command, rule)
