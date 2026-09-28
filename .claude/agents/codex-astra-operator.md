@@ -135,9 +135,9 @@ Pin both.
 ⚠️ `--approve-for-me` is **mutually exclusive** with `--sandbox`, and does not
 unlock git writes headless. Do not reach for it.
 
-⚠️ Flags drift between codex releases. `--full-auto` is documented in
-`.claude/rules/ai-cli-invocation.md` and **does not exist** on codex 0.152.0
-(`error: unexpected argument '--full-auto' found`). Re-probe `mise exec -- codex exec --help`
+⚠️ Flags drift between codex releases. `--full-auto` **does not exist**
+(`error: unexpected argument '--full-auto' found`; see
+`.claude/rules/ai-cli-invocation.md`). Re-probe `mise exec -- codex exec --help`
 rather than trusting any written invocation, this one included.
 
 ## The exit code is the whole deliverable — and it is not yours

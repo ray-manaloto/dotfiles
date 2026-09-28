@@ -20,13 +20,15 @@ graphify-upgrade`, `mise run bakeoff`, and tasks added later as data. Never
 insert, omit, reorder, or rename a task. Never invoke a bare `graphify` binary;
 repository mise tasks own Graphify operations.
 
-Before the first task, read line 8 of `graphify-out/GRAPH_REPORT.md` when it
-exists and record the node/edge/community counts. Run each command with stdout
+Before the first task, read the `- <N> nodes · <N> edges · <N> communities`
+line under `## Summary` in `graphify-out/GRAPH_REPORT.md` when it exists and
+record the counts (for communities, the total — not the "shown" figure in
+parentheses). Run each command with stdout
 and stderr redirected to its own log, then append `rc=$?` to that same file and
 read the rc back from the file. Never pipe into `tail` or `head`.
 
 Compare the recorded rc with `expectRc` (default 0). Stop at the first
-unexpected rc. After each successful or expected task, re-read line 8 and
+unexpected rc. After each successful or expected task, re-read that line and
 report the node/edge/community delta from the before snapshot; if the report is
 absent or unparsable, say so rather than manufacturing zeroes. Never fix a
 failure or edit tracked source.

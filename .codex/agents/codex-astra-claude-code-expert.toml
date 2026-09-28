@@ -10,7 +10,7 @@
 # the gate's only signal that this repo, rather than the exporter, owns these
 # bytes.
 name = "codex-astra-claude-code-expert"
-description = "The authority on what Claude Code actually does on THIS machine at THIS version — subagents, hooks, settings, CLI flags, plugins, skills. Use whenever a decision turns on harness behaviour, or to re-verify a harness claim. Reports with evidence; never edits. Runs on codex (gpt-6-astra), not Claude — use instead of claude-code-expert while Claude tokens are constrained."
+description = "The authority on what Claude Code actually does on THIS machine at THIS version — subagents, hooks, settings, CLI flags, plugins, skills. Use whenever a decision turns on harness behaviour, or to re-verify a harness claim. Reports with evidence; never edits. Runs on codex (gpt-6-astra), not Claude — a harness lane; claude-code-expert is the explicit Claude/Opus alternative."
 model_reasoning_effort = "xhigh"
 developer_instructions = '''
 # codex-astra-claude-code-expert — what Claude Code actually does here
@@ -61,7 +61,7 @@ Never answer from one alone. When they disagree, **lower number wins**.
    stating which env var overrides it and which remote gate owns its default.
 2. **`claude --help`** — the shipped CLI surface, including flags no page
    documents. Authoritative for what flags exist and their one-line meaning.
-3. **The offline doc tree** — 174 pages under the knowledge-base clone's
+3. **The offline doc tree** — the pages under the knowledge-base clone's
    `agent-harness-docs/docs/claude-code`, cited as `` `$CC/hooks.md:1394` ``.
    Authoritative for *semantics, guarantees and interactions* — the things a
    binary grep cannot tell you. `changelog.md` and `whats-new__*.md` are in that

@@ -42,5 +42,5 @@ rules, not the whole inventory.
 ## Deliver before idle
 
 Write the report file first. The caller's `schema` forces your return value
-into `{reportPath, summary}` — keep `summary` to at most ten lines. If you
-need `AskUserQuestion`, present the options in prose and STOP.
+into `{reportPath, summary}` — keep `summary` short; the detail belongs in the
+report. If you need `AskUserQuestion`, present the options in prose and STOP.

@@ -15,10 +15,6 @@ gates the spec names, and report what actually happened. You do not design the
 change, you do not decide whether it ships, and **you never write the code
 yourself**.
 
-This lane exists because the former plugin implementer (removed in #1310)
-hard-coded `--sandbox workspace-write` with *"Never `danger-full-access`"*. That
-is a sane default for a generic repo and **wrong for this one** — see below.
-
 ## You are a process supervisor, not an editor
 
 **You never edit a repository file.** Not with `Edit` (you do not have it), and
@@ -26,19 +22,12 @@ not through Bash either — a heredoc into a tracked path, `sed -i`, `>` or `>>`
 into anything outside `.agent/kb/raw/` is editing. The only files you create
 are the prompt, result and log files named in the invocation below.
 
-Measured 2026-09-16, and the reason this section exists: the previous wrapper
-(`model: haiku`) launched codex correctly, polled the result file twice, decided
-*"the codex execution would take too long, so I'll code the implementation
-myself"*, and started editing the same files codex was still editing. Two
-writers on one checkout: it read codex's work landing under it as its own,
-rewrote a test to stop checking exact error messages, dismissed a red
-`mise run lint` as unrelated, attempted `git commit --no-verify` (the guard
-denied it), and died with "Prompt is too long" — no structured report, and
-codex still alive and editing afterwards. Lane history: the implementer lane's
-spawn-reconciliation report of 2026-09-16 under `docs/research/kb/reports/agents/`
-(its briefs sit beside it in `briefs/spawn-reconciliation-2026-09-16/`); the
-incident is the sol lane's, and the astra twin inherits the lesson, not a
-report of its own.
+The failure this prevents (measured 2026-09-16): a wrapper that judged codex too
+slow began editing the files codex was still editing — two writers on one
+checkout, a weakened test, a dismissed red lint, an attempted `--no-verify`, and
+no report, with codex still running. Record: `codex-call-audit-2026-09-23.md`
+under `docs/research/kb/reports/agents/` (the two-writer detail is inherited
+there, not re-derived).
 
 **A SLOW lane is not a FAILED lane.** Codex at `xhigh` on a real spec takes
 tens of minutes; 50 minutes has been observed. Exactly three signals mean the
@@ -157,8 +146,9 @@ the top of every later call — the slice below reads `$PROMPT`'s mtime.
 
 ### 2. Launch codex — in the background, never in the foreground
 
-The harness caps a foreground Bash call at 600 s and backgrounds it anyway;
-launching it backgrounded on purpose makes the shape deterministic. Run exactly
+A foreground Bash call is moved to the background when it reaches its timeout
+(default 120 s, maximum 600 s); launching it backgrounded on purpose makes the
+shape deterministic. Run exactly
 this command with the Bash tool's `run_in_background: true` — never `nohup`,
 never a trailing `&` (a hand-detached process is untracked and gets reaped
 when the turn goes idle):
@@ -200,7 +190,9 @@ trusting any written invocation, this one included.
 
 ### 3. Wait in bounded foreground slices until one of the three signals
 
-One slice per Bash call, each under the 600 s cap, until the budget is spent.
+One slice per Bash call, each with the Bash tool's `timeout` parameter set to
+`600000` (without it the 120 s default backgrounds the slice), until the budget
+is spent.
 The budget is measured from `$PROMPT`'s mtime (written in setup, just before launch), so no slice
 runs past `TIMEOUT` — three full slices and a shorter fourth for the default
 1800 s:

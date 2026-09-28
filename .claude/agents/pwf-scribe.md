@@ -26,5 +26,6 @@ the conflict in the delta instead of resolving it yourself.
 
 ## Deliver before idle
 
-Write the report file first. Then return its path and a summary of at most ten
-lines. If you need `AskUserQuestion`, present the options in prose and STOP.
+Write the files first. Then return the paths you wrote and a short summary — the
+detail belongs in the files. If you need `AskUserQuestion`, present the options
+in prose and STOP.

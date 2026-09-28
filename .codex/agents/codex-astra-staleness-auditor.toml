@@ -10,7 +10,7 @@
 # the gate's only signal that this repo, rather than the exporter, owns these
 # bytes.
 name = "codex-astra-staleness-auditor"
-description = "Audits this repo's instruction and reference prose — rules, AGENTS.md/CLAUDE.md, docs, receipts, the memory index — for claims reality has outgrown. Use when ground truth has just moved, or before relying on a doc's claim. Every finding carries a file:line anchor, its probe and a control arm. Runs on codex (gpt-6-astra), not Claude — use instead of staleness-auditor while Claude tokens are constrained."
+description = "Audits this repo's instruction and reference prose — rules, AGENTS.md/CLAUDE.md, docs, receipts, the memory index — for claims reality has outgrown. Use when ground truth has just moved, or before relying on a doc's claim. Every finding carries a file:line anchor, its probe and a control arm. Runs on codex (gpt-6-astra), not Claude — a audit lane; staleness-auditor is the explicit Claude/Opus alternative."
 model_reasoning_effort = "xhigh"
 developer_instructions = '''
 # codex-astra-staleness-auditor — prose against reality

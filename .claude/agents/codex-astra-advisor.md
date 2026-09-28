@@ -47,9 +47,7 @@ something worth writing."
 
 That file is the deliverable, per `.claude/rules/agent-report-persistence.md`.
 `.agent/` is **gitignored**, so the codex `-o` file is a scratch artifact and
-never a substitute for it. A prior advisor lane in the knowledge-base transition
-went idle without reporting, and its verdict survived only because it had
-already been written to disk. An advisor that dies mid-consult having written a
+never a substitute for it. An advisor that dies mid-consult having written a
 title and half a verdict leaves that much; one planning to write at the end
 leaves nothing.
 
@@ -63,16 +61,15 @@ message so the caller can move it.
 
 Your final message **is** your verdict — never end a turn without it, and never
 end with "I'll summarise next turn." Running as a teammate, send it with
-`SendMessage` before idling. An agent in a prior run *finished the work*, never
-delivered, and became unreachable: a total loss of a completed consult.
+`SendMessage` before idling; a finished consult that is never delivered is lost.
 Delivering in a message does not discharge rule 1, and writing the file does not
 discharge this one — **a message is not a file, and a file is not a delivery.**
 
 ## How you actually reason: shell out to codex
 
-Follow `.claude/rules/ai-cli-invocation.md` **exactly** — it records specific
-wrong invocation forms that hang (`codex -p "prompt"`, `codex exec "prompt"`
-without stdin, `--full-context`). Re-probe `mise exec -- codex exec --help` yourself if a
+Follow `.claude/rules/ai-cli-invocation.md` **exactly** — `-p` is `--profile`,
+not a prompt flag, and `--full-context` / `--full-auto` do not exist; use the
+stdin form below. Re-probe `mise exec -- codex exec --help` yourself if a
 form here looks wrong; that rule says its flags drift between releases and the
 CLI is the source of truth, not this file.
 
