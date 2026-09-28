@@ -157,6 +157,10 @@ _V7 = "2026-08-02"
 _V8 = "2026-09-15"
 # Deadline-bound wait enforcement landed with the helper it redirects to.
 _V9 = "2026-09-16"
+# The zsh `=`-expansion separator rule (#1388) landed 2026-09-28, after the
+# shape had aborted commands in four consecutive sessions — three of them in
+# subagents, which memory cannot reach.
+_V10 = "2026-09-28"
 
 
 def _compile_wait_loop_candidate(command_boundary: str) -> re.Pattern[str]:
@@ -322,6 +326,29 @@ _PRINT_POS = r"(?:^|[;&|\n]\s*|-c\s*['\"]\s*)"
 # is never right, because stdout is the transcript.
 _PRINTS_SECRET = re.compile(
     _PRINT_POS + r"(?:echo|printf|print)\b[^;&|\n]*\$\{?" + _CREDENTIAL_NAME
+)
+# zsh `=`-expands an UNQUOTED word that starts with `=` into the path of the
+# command it names, so `echo ====` looks up a command called `===`, fails with
+# `(eval):1: === not found`, returns rc=1 and aborts the rest of an `&&` chain.
+# The Bash tool runs zsh here. Matched against the quoted-blind view, so a
+# quoted separator (`echo '===='`, `echo "x ==== y"`) is redacted and allowed,
+# and an escaped one (`echo \====`) has no whitespace before its first `=`.
+# Scoped to the printing builtins on purpose: `[ "$a" == "$b" ]` trips the same
+# expansion, but a separator-shaped rule must not start denying comparisons.
+#
+# Its anchor is WIDER than `_CMD`: a separator inside `for …; do echo ====;
+# done`, `then`/`else`, `{ … }` or `( … )` aborts just the same, and `_CMD` sees
+# none of those as command position. The scan stops at `#` (a comment, where
+# zsh expands nothing) and never crosses `$((` (arithmetic, where `==` is an
+# operator): both ran rc=0 under `zsh -c` and were denied by the first cut.
+# Residue, accepted: a `#` mid-word or an arithmetic span BEFORE the separator
+# hides it. Measured by the /code-review of 1068c6b (#1388).
+# The whitespace before `==` must not be backslash-escaped: `echo x\ ====` is
+# ONE word, `x ====`, and zsh prints it rc=0 (codex review lens, 1068c6b).
+_ZSH_EQUALS_POS = r"(?:^|[;&|\n({]\s*|\b(?:do|then|else)\s+)" + _WRAPPER
+_ZSH_EQUALS_WORD = re.compile(
+    _ZSH_EQUALS_POS
+    + r"(?:echo|printf|print)\b(?:(?!\$\(\()[^;&|\n#])*?(?<=[^\\]\s)={2,}"
 )
 # The hook-suppression rules landed 2026-07-27 with `no_commit_to_branch` (#400).
 # They are the ONLY layer that can see a bypass: git decides not to run a hook
@@ -701,6 +728,17 @@ _RULES: tuple[Rule, ...] = (
         "Passing a credential to a consumer is fine; printing it is not. See "
         ".claude/rules/secrets-out-of-the-shell-env.md rule 7.",
         _V7,
+    ),
+    Rule(
+        "zsh_equals_separator",
+        _ZSH_EQUALS_WORD,
+        "Quote the separator. zsh `=`-expands an unquoted word starting with "
+        "`=`, so `echo ====` looks up a command named `===`, fails with "
+        "`(eval):1: === not found`, returns rc=1 and skips everything after it "
+        "in an `&&` chain — including the `cat` that would have shown a prior "
+        "step's rc (#1388). Write `echo '===='` or `echo '--- APPLY ---'`.",
+        _V10,
+        quoted_blind=True,
     ),
 )
 
