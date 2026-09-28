@@ -70,7 +70,7 @@ The dispatch statuses are:
 
 - `dispatched` — the detached supervisor owns the run.
 - `spec_missing` — no process launched; `pid` is null and `argv` is empty.
-- `cli_missing` — Codex was unavailable and no lane launched.
+- `cli_missing` — `mise` or `codex` was not on PATH (the launcher is `mise exec -- codex exec`), and no lane launched.
 - `invalid_request` — request decoding or validation failed.
 
 `pid` is the supervisor, not the Codex process. The supervisor starts Codex in a

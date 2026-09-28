@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Final
 from urllib.parse import quote
 
-from dotfiles_setup import codec, codex_lane, lane_result
+from dotfiles_setup import codec, lane_result
 
 __all__ = [
     "SDLC_RUNS_DIR",
@@ -695,9 +695,11 @@ def _codex_launcher() -> tuple[str, ...] | None:
     #1362: resolving ``shutil.which("codex")`` followed the mise shim symlink to
     the ``mise`` binary itself, so argv became ``mise exec -c …``; mise read
     ``-c`` as its own "run through a shell" flag and codex never ran.
-    ``.claude/rules/ai-cli-invocation.md`` mandates ``mise exec -- codex exec``,
-    which resolves the host's native codex from the current config rather than
-    whatever the supervisor's inherited PATH happens to list first.
+    ``.claude/rules/ai-cli-invocation.md`` mandates ``mise exec -- codex exec``:
+    mise applies the workdir's config (which disables the npm codex pin,
+    ``mise.toml`` ``disable_tools``), and the codex shim then falls through to
+    the host's native install on PATH. The ``--`` keeps mise from reading
+    codex's flags as its own.
     """
     mise = shutil.which("mise")
     # codex must be on PATH too, so its absence stays the early CLI_MISSING
@@ -987,13 +989,9 @@ def _supervise(payload: _SupervisorPayload) -> int:
         log_file = Path(payload.log_file)
         log_file.parent.mkdir(parents=True, exist_ok=True)
         with Path(payload.prompt_file).open("rb") as prompt, log_file.open("wb") as log:
-            # The same isolation every other codex lane gets (codex_lane.py):
-            # without it the lane loads planning-with-files and can inject or
-            # write this repo's task_plan.md.
             process = subprocess.Popen(
                 payload.argv,
                 cwd=payload.workdir,
-                env={**os.environ, **codex_lane.LANE_ENV_OVERRIDES},
                 stdin=prompt,
                 stdout=log,
                 stderr=subprocess.STDOUT,

@@ -73,3 +73,8 @@ Caveats: (1) the "landed with `mise run kb-land`" evidence is `kb-land -- 811` r
 
 - [ray-manaloto/knowledge-base](https://github.com/ray-manaloto/knowledge-base) — issues #793/#795/#796/#797, PRs #811/#815/#820, origin/main tree `d8a205da` and pre-change `e8fe42ae`
 - [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — issues #1310/#1319/#1383, `docs/receipts/1319.md`, `rule-sync.toml`, `.claude/CLAUDE.md`, the ship-session-results/removal-review reports, `mise run rule-sync`
+
+## Coordinator disposition (2026-09-28)
+
+- KB#793, #796, #797 closed 05:30Z with comments derived from the proposed texts; KB#795 closed 05:30:48Z as delivered-with-waiver (Ray, 2026-09-28), not left for #1383. Each issue now has 1 comment. The report's "state=OPEN"/"0 comments" lines are as of its fetch, before the closes.
+- Spot-checked by the coordinator with control arms: `kb-advisor` over the live surfaces → 0 files vs `claude-advisor` → 7; `kb-tool-review.js:197` dispatches `kb-codex-astra-reviewer`.

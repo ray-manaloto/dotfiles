@@ -1817,3 +1817,40 @@ flowchart LR
     F["fable remainder: DONE 2026-09-28"] --> R["2026-09-24/25 remainder + S27 items (ACTIVE)"]
     R --> P11["Phase 11"] --> P10["Phase 10"]
 ```
+
+## 2026-09-28 — handoff audits: the #1412 planning scrub reverted; S27 items gate Phase 11
+
+- **Iteration ID:** `dotfiles-goal-20260928-041`
+- **Prior goal digest:** `sha256:171efe3a7c4bd9fc4624292a73f6b9e544d51979b8db42b0003301f8a21869d9`
+- **Current goal digest:** `sha256:a131b1eb7866abfcf13eaf15dc4f6db13524e0ed1e40791dd47793c70bf9f25b`
+- **Changed requirement:**
+  - S27-1..17 and the new S28-0..4 gate Phase 11. Ray ruled this on 2026-09-28, resolving the plan/goal contradiction found by vagueness audit F20.
+  - The goal now names remainder items 1-31, not "24-26" (F16).
+  - The #1412 `PLANNING_DISABLED` scrub on sdlc-team lanes is reverted. Ray ruled on 2026-09-28 that his round-5 design stands (`task_plan.md:652`, #1357). Contract `workflow.sdlc-team-no-planning-scrub` now forbids the scrub.
+- **Reason:** the `/session-handoff` §1c audits of session `52723a40` (dismissed-errors F0, vagueness F15/F16/F20) and Ray's AskUserQuestion rulings.
+- **Evidence:**
+  - Reports `docs/research/kb/reports/agents/session-audit-{dismissed-errors,missing-requests,vagueness,bugs}-2026-09-28.md`.
+  - Contract arms for `workflow.sdlc-team-no-planning-scrub`: rc=0 on the reverted code, rc=1 with the scrub re-added.
+- **Affected tickets:**
+  - Advanced: #1357 (its contract arm only).
+  - Tracked in `task_plan.md` for filing: remainder items 30 and 31, and S28-2.
+- **Disposition:** `ACCEPTED` (plan and goal re-aligned; the revert ships with this handoff PR).
+- **Topology and ownership:** One writer, the Claude architect session.
+  - Delegates:
+    - three Opus audit lanes (M, N, P);
+    - a read-only codex cold lens (bugs).
+  - Ownership handoff, recorded late (it belongs to iteration 040):
+    - The worktree `dotfiles.worktrees/research-five-source-gate` belongs to the #1409/#1415 research-skill session and had `main` checked out.
+    - Ray ruled on 2026-09-27 to detach its HEAD at `2d763acb`, so the primary checkout could take `main` for `land`.
+    - Its owner re-attaches with `git -C <path> switch <branch>`. HEAD is unchanged and no commits were lost (plan S28-1).
+
+### Current goal
+
+> Finish the 2026-09-24/25 session remainder in task_plan.md (every open item, 1-31, and filed #1386/#1387/#1388) and the owed items S27-1..17 and S28-0..4 (knowledge-base #823 waits on KB#824); they gate Phase 11 (Ray, 2026-09-28). Then Phase 11 in its ruled order, then Phase 10. Design changes go through /to-spec, /to-tickets and /implement; done means land rc=0. Keep task_plan.md as the sole task authority.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    R["2026-09-24/25 remainder 1-31 + S27 + S28 (ACTIVE)"] --> P11["Phase 11"] --> P10["Phase 10"]
+```
