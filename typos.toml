@@ -1,27 +1,14 @@
 #:schema ./schemas/typos.json
-# typos config (#154). The mintlify catalog validation log records real sha256
-# checksums; one (`ba41c3748e298012`) begins with "ba", which typos misreads as
-# a misspelling of "by"/"be". Allowlist the exact hash identifier so genuine
-# typos elsewhere are still caught.
+# typos config (#154). Hex digests and commit SHAs (7-40 lowercase hex chars)
+# are ignored by the [default] regex below; do not add per-SHA entries.
 [default]
-# Short hex SHAs in prose (7-24 chars) are split into "words" and read as typos
-# (`ba` in `50ba9eec` -> "by", `afe` in `28afe3f5` -> "safe"); full 32/40-char
-# hashes already pass. Measured 2026-09-26 (session-audit-dismissed-errors F4):
+# Short hex SHAs in prose (7-40 chars) are split into "words" and read as typos
+# (`ba` in `50ba9eec` -> "by", `afe` in `28afe3f5` -> "safe"). Measured 2026-09-26 (session-audit-dismissed-errors F4):
 # without this, 3 errors incl. a planted real typo; with it, only the planted typo.
 # Replaces per-SHA allowlist entries for commit hashes.
 extend-ignore-re = ["\\b[0-9a-f]{7,40}\\b"]
 
 [default.extend-identifiers]
-ba41c3748e298012 = "ba41c3748e298012"
-
-# `f6ba0ae` is a commit SHA cited as evidence in docs/agents/goal-history.md,
-# whose `ba` segment typos reads as a misspelling of "by"/"be" -- the same shape
-# as the `ba41c374...` checksum above. Allowlisted as an EXACT identifier rather
-# than allowing bare `ba`: goal-history.md is prose-heavy and append-only, so a
-# `[type]` block permitting `ba` there would silence a real typo in every future
-# entry. One SHA, one line, no collateral.
-f6ba0ae = "f6ba0ae"
-
 
 # `HOMEs` is the plural of the env var `HOME` ("under both HOMEs": a real HOME and an
 # empty one) in the verbatim cold review of the research-fanout fixes. Verbatim

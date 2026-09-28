@@ -26,6 +26,13 @@ def _repo(tmp_path: Path) -> Path:
 
 
 def _add_hook(root: Path, event: str, *, scope: str) -> None:
+    # Belt and braces for `--global`: refuse unless GIT_CONFIG_GLOBAL points into
+    # a pytest tmp tree, so this module cannot rewrite the developer's real
+    # ~/.gitconfig even when run without conftest's `isolated_git_config`
+    # (cold review of 42a699c8, N5: a `--noconftest` run did exactly that).
+    if scope == "--global":
+        target = os.environ.get("GIT_CONFIG_GLOBAL", "")
+        assert "pytest-of-" in target, f"refusing a --global write to {target!r}"
     subprocess.run(
         ["git", "-C", str(root), "config", scope, f"hook.hk-{event}.event", event],
         check=True,

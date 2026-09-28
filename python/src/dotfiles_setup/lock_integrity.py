@@ -105,13 +105,16 @@ def conda_platforms(lock_text: str) -> set[str]:
 
 #: Backends that install a downloaded release ASSET, so every locked version
 #: MUST carry at least one `platforms.<p>` entry — `mise install --locked` has
-#: no URL to fetch otherwise. npm/pipx/core/cargo/go resolve through their own
-#: package managers and are legitimately platform-less (measured on main
-#: 2026-09-27: every zero-platform entry across the four lockfiles is one of
-#: those). #1398's bare `packslip:github.com/jdx/hk` entry is the failure this
-#: exists for: mise 2026.9.8's `mise lock <bare-name>` wrote the version and
-#: nothing else, and CI's locked install failed "No lockfile URL found".
-ASSET_BACKENDS = frozenset({"aqua", "github", "gitlab", "ubi", "packslip", "http"})
+#: no URL to fetch otherwise. conda is included: all 21 conda entries across the
+#: committed lockfiles carry platform tables (cold review of 42a699c8, N1).
+#: npm/pipx/pypi/cargo/go resolve through their own package managers and may be
+#: platform-less; `core` is mixed (10 of 11 platformed) so it is not asserted.
+#: #1398's bare `packslip:github.com/jdx/hk` entry (version + backend only) is
+#: the failure this exists for; CI's locked install failed "No lockfile URL
+#: found".
+ASSET_BACKENDS = frozenset(
+    {"aqua", "conda", "github", "gitlab", "ubi", "packslip", "http"}
+)
 
 _TOOL_ENTRY_RE = re.compile(
     r'^\[\[tools\.(?P<name>"[^"]+"|[^\]]+)\]\]\nversion = "(?P<version>[^"]*)"\n'

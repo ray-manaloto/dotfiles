@@ -241,7 +241,9 @@ def lock_target(repo_root: Path, tool: str) -> str:
     """``tool@version`` when the shared fragment pins an exact version string.
 
     mise 2026.9.8 (the image's and CI's pinned mise) runs `mise lock <bare>` for
-    a packslip-backend tool as a silent no-op: rc 0, NO entry written. Measured
+    a packslip-backend tool as a silent no-op: rc 0, no platform entries — into
+    an empty lockfile it writes nothing at all; #1398 shipped a version-only
+    entry (version + backend, no platforms) in the shared lock. Measured
     in the devcontainer 2026-09-27 against `hk = "2.3.0"`: `mise lock hk` -> 0
     lines; `mise lock hk@2.3.0` -> the entry with its platform; no argument ->
     the same. The host's 2026.9.14 locks the bare name correctly, so this is a

@@ -1740,3 +1740,38 @@ flowchart LR
     F["fable remainder (ACTIVE): #1319 rest, F2, V6"] --> R["2026-09-24/25 session remainder"]
     R --> P11["Phase 11"] --> P10["Phase 10"]
 ```
+
+## 2026-09-27 — out-of-order, user-directed: hk 2.3.0 migration landed; attestation opened to agents; #1319 arms advanced
+
+- **Iteration ID:** `dotfiles-goal-20260927-039`
+- **Prior goal digest:** `sha256:3797decd4d23b8b2d4d6bd0836cd4a8e476149a336665b187dd42dd712028ba4`
+- **Current goal digest:** `sha256:88b7350ca51c3f49b4637cf7f574ea2ec4da010574845e196bce5b7088c9d451`
+- **Changed requirement:** Stale facts only: F2 (graphify fresh), V6 (knowledge-base #820) and the #1319 re-run and kb-tool-review arms are DONE. The active order is otherwise unchanged. The session's other work ran OUTSIDE the order at Ray's direction. Rulings (Ray, AskUserQuestion): plan attestation made agent-runnable, "Fully open, all routes"; the agent kept set-active-plan denied on its own judgment — ruling owed, S27-8; hk upgraded to the latest (2.3.0) following upstream's v2 migration guide, editorconfig-checker "Move to ec 4.x now"; the global `hk install --global --mise` adopted as upstream's golden path, after Ray required cited due diligence before calling it wrong; a doctor `hk-hooks` check for fresh clones; knowledge-base #823 left open behind KB#824.
+- **Reason:** Ray's session `1f389314` (dotfiles-20260926.001) requests and rulings above.
+- **Evidence:**
+  - dotfiles #1393, #1394, #1395 (`ba8ae96e`), #1396 (`453aa39b`), #1403 (`42a699c8`): `land` rc=0, incl. verify-local.
+  - knowledge-base #820 (`c7c121cc`): `kb-land` rc=0.
+  - Reports `docs/research/kb/reports/agents/*-2026-09-27.md`; briefs `session-2026-09-27-agent-briefs.md`; spec `docs/specs/hk-v2-migration-dotfiles.md` rev 3.
+- **Affected tickets:**
+  - Filed: #1397, #1405, knowledge-base #824.
+  - Closed: #1398, #1400, #1090, #1308, #1103.
+  - Blocked: knowledge-base #823.
+- **Disposition:** `DELIVERED` (the session work above); the active fable remainder advanced (#1319 still `PARTIAL`: the sdlc-team arm waits on #1362).
+- **Topology and ownership:** One writer, the Claude architect session. Delegates:
+  - `codex-sol-implementer` (licensed dissent, then a capacity outage) and `codex-astra-implementer` (licensed dissent twice);
+  - `premise-verifier` and Opus `cold-reviewer` ×2;
+  - read-only codex review lenses ×3 and `kb-codex --review` ×2;
+  - a general research agent ×1, and a headless `claude -p` knowledge-base `kb-tool-review` workflow ×2;
+  - Opus audit lanes M, N, O and P.
+
+### Current goal
+
+> Finish the fable-orchestrator removal remainder in task_plan.md: #1319's remaining arms (the sdlc-team dispatch after #1362, then the #1293 comment and closing #1319 and #1310; the re-run arms, the kb-tool-review Review-phase arm, F2 and V6 are DONE). Then the 2026-09-24/25 session remainder (including items 24-26 and filed #1386/#1387/#1388) and the 2026-09-27 owed items S27-1..17 (knowledge-base #823 waits on KB#824), then Phase 11 in its ruled order, then Phase 10. Design changes go through /to-spec, /to-tickets and /implement; done means land rc=0. Keep task_plan.md as the sole task authority.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    F["fable remainder (ACTIVE): #1319 sdlc-team arm (#1362), #1293, close #1319/#1310"] --> R["2026-09-24/25 remainder + S27 items"]
+    R --> P11["Phase 11"] --> P10["Phase 10"]
+```
