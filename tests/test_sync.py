@@ -107,6 +107,42 @@ def test_unreachable_registry_is_not_stale() -> None:
     assert not _status(registry=None, local=_DIGEST_OLD).stale
 
 
+def test_tag_current_for_another_arch_is_stale_for_this_one() -> None:
+    """Digest-current, but this arch's platform is absent under the local tag.
+
+    The 2026-09-28 first arm64 bring-up: local :dev current for amd64, so the
+    digest checks pass — yet arm64's --pull=never verify has nothing to run.
+    """
+    current = _status()
+    assert not current.stale  # control: the digest paths alone say current
+    assert dataclasses.replace(current, platform_present=False).stale
+
+
+def test_absent_platform_does_not_outrank_an_unreachable_registry() -> None:
+    # The refresh it would trigger needs the registry anyway.
+    status = dataclasses.replace(_status(registry=None), platform_present=False)
+    assert not status.stale
+
+
+def test_observe_probes_this_arch_platform_under_the_local_tag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The wiring: observe() asks local_platforms for resolve_platform()."""
+    amd64, arm64 = (target.platform for target in published_targets())
+    monkeypatch.setattr(sync, "resolve_names", lambda **_k: _NAMES)
+    monkeypatch.setattr(sync, "registry_digest", lambda _ref: _DIGEST_NEW)
+    monkeypatch.setattr(sync, "local_digests", lambda _ref: (_DIGEST_NEW,))
+    monkeypatch.setattr(sync, "local_image_id", lambda _ref: "img-1")
+    monkeypatch.setattr(sync, "container_state", lambda _n: "running")
+    monkeypatch.setattr(sync, "container_image_id", lambda _n: None)
+    monkeypatch.setattr(sync, "read_sync_record", lambda _ref: None)
+    monkeypatch.setattr(sync, "local_platforms", lambda _ref: frozenset({amd64}))
+    monkeypatch.setattr(sync, "resolve_platform", lambda: arm64)
+    assert sync.observe(_WORKSPACE, _REF).stale
+    monkeypatch.setattr(sync, "resolve_platform", lambda: amd64)
+    assert not sync.observe(_WORKSPACE, _REF).stale
+
+
 # Review finding [0]: buildkit refresh mints a new local manifest digest,
 # so convergence is witnessed by the sync record, not RepoDigests.
 def test_sync_record_witnesses_refresh_convergence() -> None:

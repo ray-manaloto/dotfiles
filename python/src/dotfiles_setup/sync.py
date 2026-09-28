@@ -128,6 +128,10 @@ class SyncStatus:
     synced_state: SyncRecord | None = None
     arch: str = ""
     workspace_hash: str = ""
+    #: Whether THIS architecture's platform is present under the local tag
+    #: (:func:`local_platforms`). Defaults True so a status built without the
+    #: probe keeps the digest-only semantics.
+    platform_present: bool = True
 
     @property
     def stale(self) -> bool:
@@ -144,9 +148,20 @@ class SyncStatus:
         A missing local tag counts as stale. An unreachable registry
         (``None``) does NOT: sync must not tear down a working container
         on a network blip.
+
+        A local tag that is current for another architecture but does not
+        carry THIS one is stale too (measured 2026-09-28: the first
+        ``MISE_ENV=arm64 mise run sync`` on a host whose ``:dev`` was current
+        for amd64 skipped :func:`refresh_local_tag`, built the arm64 overlay
+        straight from the registry, and left arm64's ``--pull=never``
+        ``verify-image`` with nothing to run — rc=125, "does not provide the
+        specified platform"). Staleness routes it through the refresh, whose
+        platform UNION keeps the other architecture's layers.
         """
         if self.registry_digest is None:
             return False
+        if not self.platform_present:
+            return True
         if self.registry_digest in self.local_digests:
             return False
         return not (
@@ -709,6 +724,7 @@ def observe(workspace: Path, image_ref: str) -> SyncStatus:
         synced_state=read_sync_record(image_ref),
         arch=names.arch,
         workspace_hash=names.hash,
+        platform_present=resolve_platform() in local_platforms(image_ref),
     )
 
 

@@ -42,8 +42,9 @@
 #   DOTFILES_PLATFORM = "linux/arm64/v8"
 #   DEVCONTAINER_SSH_PORT = ""
 #
-# The local :dev tag holds one platform at a time: after the other arch's
-# `up`, run `mise run sync` in an arch's env before its `verify-local`.
+# The local :dev tag keeps every platform `mise run sync` has refreshed onto
+# it (a union), so run `mise run sync` once in an arch's env before its first
+# `verify-local`; sync treats a missing platform as stale.
 
 [env]
 # DEVCONTAINER_SSH_PORT = "4444"   # leave unset to derive per workspace+arch
