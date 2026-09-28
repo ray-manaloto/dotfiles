@@ -13,6 +13,7 @@ it:
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import shutil
 import subprocess
@@ -833,9 +834,9 @@ def test_rewrite_hook_nudge_rewrites_bare_query_and_update() -> None:
 
     graphify's own nudge copy is hardcoded (graphify/cli.py) and names the
     bare binary — exactly what graphify-first.md forbids on this machine
-    (two graphify versions on PATH). `graphify explain`/`graphify path`
-    mentions are untouched: this repo has no mise task for them, so
-    rewriting would point at something that doesn't exist.
+    (two graphify versions on PATH). The MANDATORY nudges are replaced whole
+    by a factual sentence naming only mise tasks, so `graphify explain`/
+    `graphify path` (no mise task) and the imperative framing both disappear.
     """
     search_nudge = (
         '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":'
@@ -846,6 +847,8 @@ def test_rewrite_hook_nudge_rewrites_bare_query_and_update() -> None:
     rewritten = rewrite_hook_nudge(search_nudge)
     assert '`mise run graphify-query -- \\"<question>\\"`' in rewritten
     assert "`graphify query" not in rewritten
+    assert "MANDATORY" not in rewritten
+    assert "You MUST" not in rewritten
     # Structure (everything but the rewritten substring) is untouched.
     assert rewritten.startswith('{"hookSpecificOutput":{"hookEventName":"PreToolUse"')
 
@@ -858,8 +861,9 @@ def test_rewrite_hook_nudge_rewrites_bare_query_and_update() -> None:
     )
     rewritten_read = rewrite_hook_nudge(read_nudge)
     assert '`mise run graphify-query -- \\"<question>\\"`' in rewritten_read
-    assert "`graphify explain" in rewritten_read  # untouched — no task for it
-    assert "`graphify path" in rewritten_read  # untouched — no task for it
+    assert "`graphify explain" not in rewritten_read  # no mise task exists for it
+    assert "`graphify path" not in rewritten_read  # no mise task exists for it
+    assert "MANDATORY" not in rewritten_read
 
     stale_nudge = (
         '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":'
@@ -883,8 +887,10 @@ def test_hook_guard_main_rewrites_and_prints(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
-        _ = cwd
+    def fake_run(
+        args: list[str], *, cwd: Path, stdin: str | None = None
+    ) -> subprocess.CompletedProcess[str]:
+        _ = cwd, stdin
         assert args == ["graphify", "hook-guard", "search"]
         return subprocess.CompletedProcess(
             args,
@@ -894,6 +900,7 @@ def test_hook_guard_main_rewrites_and_prints(
         )
 
     monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
+    monkeypatch.setattr("sys.stdin", io.StringIO(""))
 
     rc = hook_guard_main(tmp_path, "search")
 
@@ -901,16 +908,122 @@ def test_hook_guard_main_rewrites_and_prints(
     assert "`mise run graphify-query --" in capsys.readouterr().out
 
 
+_MANDATORY = (
+    '{"hookSpecificOutput":{"hookEventName":"PreToolUse",'
+    '"additionalContext":"MANDATORY: graphify-out/graph.json exists. You MUST run '
+    '`graphify query \\"q\\"` first."}}\n'
+)
+_STALE = (
+    '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":'
+    '"graphify-out/graph.json exists but may be STALE for this file. Run '
+    '`graphify update`."}}\n'
+)
+_DENY = (
+    '{"hookSpecificOutput":{"hookEventName":"PreToolUse",'
+    '"permissionDecision":"deny","permissionDecisionReason":"MANDATORY: x"}}\n'
+)
+#: A deny that ALSO carries a MANDATORY context: the permissionDecision
+#: exclusion itself is what must let it through (graphify's real deny has no
+#: additionalContext, so _DENY alone would pass without the exclusion).
+_DENY_WITH_CONTEXT = (
+    '{"hookSpecificOutput":{"hookEventName":"PreToolUse",'
+    '"permissionDecision":"deny","permissionDecisionReason":"x",'
+    '"additionalContext":"MANDATORY: graphify-out/graph.json exists."}}\n'
+)
+
+
+def _drive_hook(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    calls: list[tuple[str, str, str]],
+) -> list[str]:
+    """Run hook_guard_main once per (kind, stdin payload, graphify stdout)."""
+    outs: list[str] = []
+    for kind, payload, stdout in calls:
+
+        def fake_run(
+            args: list[str],
+            *,
+            cwd: Path,
+            stdin: str | None = None,
+            _stdout: str = stdout,
+            _payload: str = payload,
+        ) -> subprocess.CompletedProcess[str]:
+            _ = cwd
+            assert stdin == _payload  # the hook payload reaches graphify
+            return subprocess.CompletedProcess(args, 0, stdout=_stdout, stderr="")
+
+        monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
+        monkeypatch.setattr("sys.stdin", io.StringIO(payload))
+        hook_guard_main(tmp_path, kind)
+        outs.append(capsys.readouterr().out)
+    return outs
+
+
+def test_hook_guard_main_nudges_once_per_session(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The general nudge: once per session+agent, across search AND read."""
+    s1 = '{"session_id":"s1"}'
+    outs = _drive_hook(
+        monkeypatch,
+        tmp_path,
+        capsys,
+        [
+            ("search", s1, _MANDATORY),
+            ("search", s1, _MANDATORY),
+            ("read", s1, _MANDATORY),  # same sentence after the rewrite
+            ("search", '{"session_id":"s1","agent_id":"a2"}', _MANDATORY),
+            ("search", "{}", _MANDATORY),  # no session: always emit
+            ("search", "{}", _MANDATORY),
+        ],
+    )
+    printed = [bool(out) for out in outs]
+    assert printed == [True, False, False, True, True, True]
+    assert "mise run graphify-health" in outs[0]
+
+
+def test_hook_guard_main_never_dedups_stale_or_deny(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A per-file stale notice and a strict-mode deny always pass through."""
+    s1 = '{"session_id":"s1"}'
+    outs = _drive_hook(
+        monkeypatch,
+        tmp_path,
+        capsys,
+        [
+            ("read", s1, _MANDATORY),  # takes the session's one general slot
+            ("read", s1, _STALE),
+            ("read", s1, _STALE),
+            ("read", s1, _DENY),
+            ("read", s1, _DENY_WITH_CONTEXT),
+        ],
+    )
+    assert all(outs), outs
+    assert '"permissionDecision":"deny"' in outs[4]
+    assert "mise run graphify-rebuild" in outs[1]
+    assert '"permissionDecision":"deny"' in outs[3]
+
+
 def test_hook_guard_main_fails_open_on_nonzero_rc(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
-        _ = cwd, args
+    def fake_run(
+        args: list[str], *, cwd: Path, stdin: str | None = None
+    ) -> subprocess.CompletedProcess[str]:
+        _ = cwd, args, stdin
         return subprocess.CompletedProcess(args, 1, stdout="", stderr="boom")
 
     monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
+    monkeypatch.setattr("sys.stdin", io.StringIO(""))
 
     assert hook_guard_main(tmp_path, "read") == 0
     assert capsys.readouterr().out == ""
@@ -919,12 +1032,15 @@ def test_hook_guard_main_fails_open_on_nonzero_rc(
 def test_hook_guard_main_fails_open_on_missing_binary(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    def fake_run(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
-        _ = cwd, args
+    def fake_run(
+        args: list[str], *, cwd: Path, stdin: str | None = None
+    ) -> subprocess.CompletedProcess[str]:
+        _ = cwd, args, stdin
         message = "graphify not found"
         raise FileNotFoundError(message)
 
     monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
+    monkeypatch.setattr("sys.stdin", io.StringIO(""))
 
     assert hook_guard_main(tmp_path, "search") == 0
 
