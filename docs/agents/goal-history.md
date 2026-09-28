@@ -1775,3 +1775,45 @@ flowchart LR
     F["fable remainder (ACTIVE): #1319 sdlc-team arm (#1362), #1293, close #1319/#1310"] --> R["2026-09-24/25 remainder + S27 items"]
     R --> P11["Phase 11"] --> P10["Phase 10"]
 ```
+
+## 2026-09-28 — fable-orchestrator removal DONE: #1362 fixed, the last #1319 arm run, Phase 10 step 0 closed
+
+- **Iteration ID:** `dotfiles-goal-20260928-040`
+- **Prior goal digest:** `sha256:88b7350ca51c3f49b4637cf7f574ea2ec4da010574845e196bce5b7088c9d451`
+- **Current goal digest:** `sha256:171efe3a7c4bd9fc4624292a73f6b9e544d51979b8db42b0003301f8a21869d9`
+- **Changed requirement:** The fable-orchestrator removal remainder is DONE, so the active phase advances to the 2026-09-24/25 session remainder as already ordered. Rulings (Ray, AskUserQuestion `/grilling` Q1-Q10 plus two follow-ups):
+  - The codex launcher is `mise exec -- codex exec`; CLI_MISSING requires both mise and codex.
+  - `PLANNING_DISABLED` is fixed in the same PR.
+  - #1411 lands first.
+  - The live dispatch runs before ship, in review mode on the fix itself.
+  - The reviews are a codex cold lens plus `/code-review`.
+  - `kb-codex-implementer` is not run (#1383 retires it).
+  - The main-holding worktree's HEAD is detached.
+  - The KB children are verified before #1310 closes; KB#795 closes with its waiver.
+- **Reason:** Ray's session `52723a40` (dotfiles-20260927.000) requests and rulings above.
+- **Evidence:**
+  - dotfiles #1411 (`d453020f`) and #1412 (`6c9576f0`): `land` rc=0, including dev-rebuild and smoke tiers 1-3.
+  - Settlement of sdlc-team run `1319-arm-1362-review`: `completed`, codex 0.157.1, rc 0.
+  - Receipt `docs/receipts/1319.md`.
+  - Reports `docs/research/kb/reports/agents/{1319-live-arm-sdlc-team-1362-review,cold-lens-1362,code-review-1362}-2026-09-27.md` and `kb-1310-children-verification-2026-09-28.md`.
+- **Affected tickets:**
+  - Closed: #1362, #1319, #1310, knowledge-base #793, #795, #796, #797.
+  - Commented: #1293.
+- **Disposition:** `DELIVERED`.
+- **Topology and ownership:** One writer, the Claude architect session. Delegates:
+  - the codex SDLC team (review mode, 1 specialist);
+  - a read-only codex cold lens;
+  - the bundled `/code-review` fork;
+  - one general-purpose read-only verification agent (knowledge-base children).
+
+### Current goal
+
+> Finish the 2026-09-24/25 session remainder in task_plan.md (including items 24-26 and filed #1386/#1387/#1388) and the 2026-09-27 owed items S27-1..17 (knowledge-base #823 waits on KB#824); the fable-orchestrator removal remainder is DONE (Phase 10 step 0 closed 2026-09-28). Then Phase 11 in its ruled order, then Phase 10. Design changes go through /to-spec, /to-tickets and /implement; done means land rc=0. Keep task_plan.md as the sole task authority.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    F["fable remainder: DONE 2026-09-28"] --> R["2026-09-24/25 remainder + S27 items (ACTIVE)"]
+    R --> P11["Phase 11"] --> P10["Phase 10"]
+```
