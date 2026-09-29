@@ -1,0 +1,1 @@
+[Skip to content](https://jdx.dev/categories/#main)

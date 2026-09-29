@@ -1,0 +1,598 @@
+# DotState
+
+<a href="https://app.stele-ai.dev/explore/dotstate">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://app.stele-ai.dev/badge/dotstate?label=AI+Memory+by&message=stele&style=for-the-badge&color=blue&theme=dark&logo=stele">
+    <img src="https://app.stele-ai.dev/badge/dotstate?label=AI+Memory+by&message=stele&style=for-the-badge&color=blue&theme=light&logo=stele" alt="AI Memory by stele">
+  </picture>
+</a>
+
+**A modern, secure, and user-friendly dotfile manager built with Rust**
+
+DotState is a terminal-based tool that helps you manage your dotfiles effortlessly. Whether you're syncing your configuration across multiple machines or setting up a new development environment, DotState makes it simple, safe, and fast.
+
+<img width="1130" height="868" alt="gruvbox-dark" src="https://github.com/user-attachments/assets/c5aa8e6f-98fd-4a1d-afc1-3d6525e047a9" />
+
+
+
+## Demo
+
+https://github.com/user-attachments/assets/9be0df5e-87ce-4b61-ae0f-1c8ffe94cb36
+
+## Why DotState?
+
+Managing dotfiles can be a pain. You want your `.zshrc`, `.vimrc`, and other config files synced across machines, but traditional solutions are either too complex, insecure, or require too much manual work.
+
+**DotState solves this by being:**
+
+- 🦀 **Built with Rust** - Fast, memory-safe, and reliable
+- 🔒 **Secure by design** - No shell injection vulnerabilities, safe file operations
+- 🎨 **Beautiful TUI** - Intuitive interface that doesn't require learning Git
+- ⚡ **Lightning fast** - Non-blocking operations, instant feedback
+- 🛡️ **Safe** - Automatic backups before any file operations
+- 🔄 **Git-powered** - Store dotfiles in GitHub, GitLab, Bitbucket, or any git host
+
+## What Makes DotState Different?
+
+### Traditional Dotfile Managers
+
+- Require Git knowledge
+- Manual symlink management
+- No built-in backup system
+- Complex setup process
+
+### DotState
+
+- **Zero Git knowledge required** - We handle everything
+- **Automatic symlink management** - Files are linked automatically
+- **Built-in backups** - Your files are safe before any operation
+- **One-command setup** - Get started in seconds
+- **Profile support** - Separate configs for work, personal, Mac, Linux, etc.
+- **Profile inheritance** - Extend a parent profile and override only what differs
+- **Package management** - Track and install CLI tools per profile
+- **Beautiful TUI** - Visual interface with mouse support
+
+## Features
+
+### 🎯 Core Features
+
+- **Profile Management**: Create separate profiles for different contexts (work, personal, Mac, Linux, etc.)
+- **Profile Inheritance**: Have a profile extend another — child files override parent files, so you only define what's different
+- **Common Files Support**: Share dotfiles (like `.gitconfig` or `.tmux.conf`) across all profiles automatically.
+- **Flexible Git Sync**: Automatic sync with GitHub, GitLab, Bitbucket, or any git host
+- **Two Setup Modes**: Let DotState create a GitHub repo for you, or use your own repository
+- **Smart File Detection**: Automatically finds common dotfiles in your home directory
+- **Safe Operations**: Automatic backups before any file modification
+- **Symlink Management**: Automatic creation and management of symlinks
+- **Custom Files**: Add any file or directory, not just dotfiles
+
+### 📦 Package Management
+
+- **CLI Tool Tracking**: Define and track CLI tools and dependencies per profile
+- **Multi-Manager Support**: Works with Homebrew, Cargo, npm, pip, and more
+- **Installation Flow**: Check what's missing and install with one command
+- **Custom Packages**: Support for custom installation scripts
+
+### 🎨 User Experience
+
+- **Beautiful TUI**: Modern terminal interface built with Ratatui
+- **Mouse Support**: Click to navigate and interact
+- **Real-time Feedback**: See what's happening as it happens
+- **Error Recovery**: Clear error messages with actionable guidance
+- **CLI & TUI**: Full-featured CLI for automation, beautiful TUI for interactive use
+- **Customizable Keymaps**: Configurable keyboard shortcuts with preset support (Standard, Vim, Emacs) and custom overrides
+
+### 🔒 Security
+
+- **No Shell Injection**: Direct command execution, no shell interpretation
+- **Safe File Operations**: Validates paths, prevents dangerous operations
+- **Secure GitHub Integration**: Token-based authentication
+- **Backup System**: Automatic backups before any destructive operation
+
+## Installation
+
+### Prebuilt from website (Recommended)
+
+[Installation Guide](https://dotstate.serkan.dev/#installation)
+
+```bash
+curl -fsSL https://dotstate.serkan.dev/install.sh | bash
+```
+
+### Using Cargo
+
+```bash
+cargo install dotstate
+```
+
+### Using Homebrew
+
+```bash
+brew tap serkanyersen/dotstate
+brew install dotstate
+```
+
+Or use the direct install:
+
+```bash
+brew install serkanyersen/dotstate/dotstate
+```
+
+## Quick Start
+
+1. **Launch DotState**:
+
+   ```bash
+   dotstate
+   ```
+
+2. **First-time Setup**:
+   - Choose how to set up your repository:
+     - **Option A: Create for me (GitHub)** - DotState creates a repo on GitHub
+       - Enter your GitHub token (create one at [github.com/settings/tokens](https://github.com/settings/tokens))
+       - **Tip**: You can also set the `DOTSTATE_GITHUB_TOKEN` environment variable
+       - Choose repository name and visibility (private/public)
+     - **Option B: Use my own repository** - Bring your own git repo
+       - Create a repo on any git host (GitHub, GitLab, Bitbucket, etc.)
+       - Clone it locally and set up your credentials
+       - Point DotState to your local repo path
+
+3. **Add Your Files**:
+   - Navigate to "Manage Files"
+   - Select files to sync (they're automatically added)
+   - Files are moved to the repo and symlinked automatically
+
+4. **Sync with Remote**:
+   - Go to "Sync with Remote"
+   - Your files are committed, pulled, and pushed automatically
+
+That's it! Your dotfiles are now synced and ready to use on any machine.
+
+## CLI Usage
+
+DotState also provides a powerful CLI for automation:
+
+```bash
+# List all synced files
+dotstate list
+
+# Add a file to sync
+dotstate add ~/.myconfig
+
+# Sync with remote (commit, pull, push)
+dotstate sync
+
+# Sync with custom commit message
+dotstate sync -m "My custom commit message"
+
+# Activate symlinks (useful after cloning on a new machine)
+dotstate activate
+
+# Deactivate symlinks (restore original files)
+dotstate deactivate
+
+# Show the current profile
+dotstate profile
+
+# List all profiles
+dotstate profile list
+
+# Switch to another profile
+dotstate profile switch work
+
+# Package management
+dotstate packages list                    # List packages with status
+dotstate packages add -n ripgrep -m brew -b rg  # Add a package
+dotstate packages check                   # Check what's installed
+dotstate packages install                 # Install missing packages
+
+# Check for updates and upgrade
+dotstate upgrade
+
+# Show help
+dotstate help
+```
+
+### Using DotState with AI agents
+
+DotState ships a built-in agent skill that teaches coding agents (Claude Code and others) its concepts and commands:
+
+```bash
+# Print the skill (SKILL.md) to stdout
+dotstate --skill
+
+# Install it globally for Claude Code (~/.claude/skills/dotstate/SKILL.md)
+dotstate --skill --install
+```
+
+The skill is embedded in the binary, so re-run `--install` after upgrading to pick up changes. `add` and `remove` accept `--yes` to skip the confirmation prompt in scripts.
+
+### Omarchy
+
+On [Omarchy](https://omarchy.org), register DotState as a launcher app that opens in a centered floating window:
+
+```bash
+dotstate omarchy --install    # launcher entry, icon, and floating window rule
+dotstate omarchy --uninstall  # remove them again
+```
+
+It works on Omarchy 3 (`hyprland.conf`) and Omarchy 4 (`hyprland.lua`). The window rule goes into a marked block in your Hyprland user config, so re-running is safe and uninstall leaves the file as it was.
+
+## Shell Completions
+
+Generate completions for your shell:
+
+```bash
+# Bash
+source <(dotstate completions bash)
+
+# Fish
+dotstate completions fish | source
+
+# Zsh
+source <(dotstate completions zsh)
+```
+
+Using oh-my-zsh, antigen, or prezto? These frameworks require the fpath approach:
+
+```
+  mkdir -p ~/.zsh/completions
+  dotstate completions zsh > ~/.zsh/completions/_dotstate
+```
+
+Then add `fpath=(~/.zsh/completions $fpath)` to your .zshrc before your framework loads.
+
+## How It Works
+
+1. **Storage**: Your dotfiles are stored in a Git repository (default: `~/.config/dotstate/storage`)
+2. **Symlinks**: Original files are replaced with symlinks pointing to the repo
+3. **Profiles**: Different profiles can have different sets of files
+4. **Inheritance**: Profiles can inherit from a parent — child files override parent files, common files have the lowest priority
+5. **Common Files**: Files that are shared across all profiles are stored in the `common` section and linked regardless of the active profile
+6. **Sync**: Changes are committed and synced with GitHub automatically
+
+## Working with Profiles
+
+Profiles are how DotState organizes your dotfiles for different machines or contexts. Each profile has its own set of files, while **Common Files** are shared across all profiles automatically.
+
+```
+               ┌────────────────────┐
+               │ Common Files       │
+               ├────────────────────┤
+               │ .tmux.conf         │
+               │ .gitconfig         │       ┌────────────────────┐
+               │ .vimrc             │       │ Server             │
+               │                    │       ├────────────────────┤
+               │                    ├──────►│ .bashrc            │
+               │                    │       │ .profile           │
+               └─┬─────────────────┬┘       │ .config.toml       │
+                 │                 │        └────────────────────┘
+                 │                 │
+                 ▼                 ▼
+┌────────────────────┐           ┌────────────────────┐
+│ Personal           │           │ Work               │
+├────────────────────┤           ├────────────────────┤
+│ .zshrc             │           │ .zshrc             │
+│ .sshconfig         │  Copy     │ .sshconfig         │
+│ ...                ├──────────►│ ...                │
+│                    │           │ workfile.sh        │
+└────────────────────┘           └────────────────────┘
+```
+
+### Creating Profiles
+
+In the TUI, go to **Manage Profiles** and press `C` to create a new profile. You can:
+
+- **Start blank** for a completely new setup
+- **Inherit from an existing profile** to create a live link — the child automatically gets all parent files and packages, and you only override what's different
+- **Copy from an existing profile** to carry over files and packages as a one-time snapshot — great for setting up a similar machine quickly
+
+**Inherit vs Copy:** Inheritance is a live relationship — changes to the parent are reflected in the child. Copy is a one-time fork — after creation, the two profiles are independent.
+
+### Profile Inheritance
+
+A profile can inherit from one parent. When activated, DotState resolves files from the full chain:
+
+1. **Child's own files** (highest priority)
+2. **Parent's files** (inherited unless overridden)
+3. **Grandparent's files**, etc.
+4. **Common files** (lowest priority)
+
+```
+          base
+           │  .zshrc, .vimrc, .tmux.conf
+           │
+         work (inherits base)
+           │  .zshrc (overrides base's)
+           │  .ssh/config (own)
+           │
+       work-laptop (inherits work)
+              .ssh/config (overrides work's)
+```
+
+In this example, `work-laptop` gets: its own `.ssh/config`, work's `.zshrc`, and base's `.vimrc` and `.tmux.conf`.
+
+Cycles are detected and rejected. Profiles that are inherited by others cannot be deleted until the inheritance is removed.
+
+### Switching Profiles
+
+Select a profile and press `Enter` to switch. DotState will remove symlinks for the old profile and create symlinks for the new one automatically (including inherited files). Common files stay linked regardless of which profile is active. If activation fails, the old profile is automatically restored.
+
+### Common Files
+
+You decide which files are shared. Move any file to **Common** and it will be symlinked in every profile. Common files stay linked when you switch profiles. To move a file between profile-specific and common:
+
+1. Go to **Manage Files**
+2. Select a file
+3. Press `M` to move it to Common (or back to the active profile)
+
+### Use Cases
+
+- **Multi-machine**: Use a `Personal` profile on your laptop, `Work` on your work machine, and `Server` for headless setups. Keep shared configs (`.gitconfig`, `.tmux.conf`) in Common.
+- **Same computer, different contexts**: Create profiles like `day`, `night`, or `focus` with different terminal themes and defaults, and switch between them instantly.
+- **Layered configs with inheritance**: Create a `base` profile with your core setup, then have `work` and `personal` inherit from it — each only overrides what's different (like `.zshrc` or `.ssh/config`). Changes to `base` automatically flow to all children.
+- **Quick duplication**: When setting up a second machine, create a new profile by copying from an existing one, then tweak what's different.
+
+## Configuration
+
+### Repository Setup Modes
+
+DotState supports two repository setup modes:
+
+#### GitHub Mode (Automatic)
+
+Let DotState create and manage a GitHub repository for you. Requires a GitHub Personal Access Token.
+
+**GitHub Token Options:**
+
+DotState supports both **Classic tokens** and **Fine-grained tokens** (recommended).
+
+<details>
+<summary><strong>Option 1: Fine-grained Token (Recommended)</strong></summary>
+
+Fine-grained tokens offer better security through granular permissions. Create one at [github.com/settings/personal-access-tokens](https://github.com/settings/personal-access-tokens/new).
+
+**Required permissions:**
+
+| Permission         | Access Level | Purpose                                   |
+| ------------------ | ------------ | ----------------------------------------- |
+| **Administration** | Read & write | Create your `dotstate-storage` repository |
+| **Contents**       | Read & write | Sync your dotfiles to/from the repository |
+
+> **Note:** Metadata (read-only) is automatically included by GitHub for all fine-grained tokens.
+
+**Repository access:**
+
+- For initial setup, select **"All repositories"** so DotState can create and find your storage repo
+- After setup, you can regenerate a token restricted to only your `dotstate-storage` repository
+
+</details>
+
+<details>
+<summary><strong>Option 2: Classic Token</strong></summary>
+
+Create a classic token at [github.com/settings/tokens](https://github.com/settings/tokens).
+
+**Required scope:** `repo` (Full control of private repositories)
+
+</details>
+
+**Token Configuration:**
+
+1. **Environment Variable** (Recommended for automation):
+
+   ```bash
+   export DOTSTATE_GITHUB_TOKEN=ghp_your_token_here
+   # or for fine-grained tokens:
+   export DOTSTATE_GITHUB_TOKEN=github_pat_your_token_here
+   ```
+
+   The environment variable takes precedence over the config file token.
+
+2. **Config File**: The token can be stored in the config file (set during first-time setup).
+
+#### Local Mode (Bring Your Own Repo)
+
+Use any existing git repository from any host (GitHub, GitLab, Bitbucket, self-hosted, etc.).
+
+**Setup:**
+
+1. Create a repository on your preferred git host
+2. Clone it locally: `git clone <url> ~/.config/dotstate/storage`
+3. Ensure you can push: `git push origin main`
+4. In DotState, choose "Use my own repository" and enter the path
+
+**Benefits of Local Mode:**
+
+- Works with any git host
+- Uses your existing SSH keys or git credentials
+- No GitHub token required
+
+### Update Notifications
+
+DotState automatically checks for updates and shows a notification in the main menu when a new version is available. You can also check manually:
+
+```bash
+# Check for updates interactively
+dotstate upgrade
+
+# Just check without prompting
+dotstate upgrade --check
+```
+
+**Configuration:**
+Update checks can be configured in `~/.config/dotstate/config.toml`:
+
+```toml
+[updates]
+check_enabled = true       # Set to false to disable update checks
+check_interval_hours = 24  # How often to check (default: 24 hours)
+```
+
+### Theme Configuration
+
+DotState supports both light and dark themes that automatically adapt to your terminal background. The theme affects all UI elements including colors, borders, text, and syntax highlighting in file previews.
+
+**Changing the Theme:**
+
+Edit `~/.config/dotstate/config.toml` and set the `theme` option:
+
+```toml
+theme = "dark"              # Default dark theme
+theme = "light"             # For light terminal backgrounds
+theme = "midnight"          # Deep dark blue theme
+theme = "solarized-dark"    # Solarized Dark
+theme = "solarized-light"   # Solarized Light
+theme = "gruvbox-dark"      # Gruvbox Dark (warm, retro)
+theme = "gruvbox-light"     # Gruvbox Light
+theme = "catppuccin-mocha"  # Catppuccin Mocha (pastel dark)
+theme = "catppuccin-latte"  # Catppuccin Latte (pastel light)
+theme = "tokyonight-dark"   # Tokyo Night (city-lights dark)
+theme = "tokyonight-light"  # Tokyo Night Light
+theme = "nocolor"           # Disable all UI colors (same as NO_COLOR=1 / --no-colors)
+```
+
+**Theme Features:**
+
+- **Automatic Syntax Highlighting**: File preview syntax highlighting automatically matches your selected theme
+- **Consistent Colors**: All UI elements (headers, footers, borders, lists, text) use theme-appropriate colors
+- **Terminal Compatibility**: Works with both light and dark terminal themes
+- **No Colors Mode**: Use `--no-colors` CLI flag or `NO_COLOR=1` to disable all colors:
+  ```bash
+  dotstate --no-colors
+  ```
+  Or:
+  ```bash
+  NO_COLOR=1 dotstate
+  ```
+
+**What Changes with Theme:**
+
+- Text colors (dark text on light backgrounds, light text on dark backgrounds)
+- Border colors (adjusted for visibility)
+- Highlight colors (selection indicators, focused elements)
+- Syntax highlighting themes in file previews
+- Status colors (success, warning, error indicators)
+
+### Keymap Configuration
+
+DotState supports customizable keyboard shortcuts with preset keymaps (Standard, Vim, Emacs) and custom key binding overrides. The keymap system allows you to use your preferred keyboard layout and override any action with any key combination.
+
+**Available Presets:**
+
+- **Standard**: Arrow keys (↑↓), Enter, Esc, standard navigation
+- **Vim**: Vim-style navigation (hjkl for movement, q to quit, etc.)
+- **Emacs**: Emacs-style navigation (Ctrl+N/P for up/down, Ctrl+G to quit, etc.)
+
+**Changing the Preset:**
+
+Edit `~/.config/dotstate/config.toml` and set the `preset` option in the `[keymap]` section:
+
+```toml
+[keymap]
+preset = "vim"  # Options: "standard", "vim", "emacs"
+```
+
+**Custom Key Binding Overrides:**
+
+You can override any key binding with custom keys. Overrides take precedence over preset bindings and shadow preset bindings for the same action.
+
+Example configuration:
+
+```toml
+[keymap]
+preset = "vim"
+
+# Override 'x' to quit instead of 'q'
+[[keymap.overrides]]
+key = "x"
+action = "quit"
+
+# Override 'w' to move up instead of 'k'
+[[keymap.overrides]]
+key = "w"
+action = "move_up"
+
+# Use Ctrl+H for help
+[[keymap.overrides]]
+key = "ctrl+h"
+action = "help"
+```
+
+**Available Actions (all in snake_case):**
+
+- **Navigation**: `move_up`, `move_down`, `move_left`, `move_right`, `page_up`, `page_down`, `go_to_top`, `go_to_end`, `home`, `end`
+- **Selection**: `confirm`, `cancel`, `toggle_select`, `select_all`, `deselect_all`
+- **Global**: `quit`, `help`
+- **Actions**: `delete`, `edit`, `create`, `search`, `refresh`, `sync`, `check_status`, `install`
+- **Text editing**: `backspace`, `delete_char`
+- **Navigation**: `next_tab`, `prev_tab`
+- **Scroll**: `scroll_up`, `scroll_down`
+- **Prompts**: `yes`, `no`
+- **Forms**: `save`, `toggle_backup`
+
+**Key Format Examples:**
+
+- Single keys: `"j"`, `"k"`, `"q"`, `"x"`
+- Special keys: `"up"`, `"down"`, `"enter"`, `"esc"`, `"tab"`, `"space"`
+- Function keys: `"f1"`, `"f2"`, etc.
+- Modifier combinations: `"ctrl+n"`, `"ctrl+shift+j"`, `"ctrl+h"`
+
+**How Overrides Work:**
+
+- Overrides take precedence over preset bindings
+- When you override an action (e.g., `move_up`), all preset bindings for that action are shadowed/removed
+- If you override `move_up` with `"w"`, the original preset key (e.g., `"k"` in vim preset) will no longer work for that action
+- Display functions (footer hints) automatically reflect your actual key bindings, including overrides
+
+**Example:**
+
+See `examples/keymap_override_example.toml` for a complete example configuration file.
+
+## Security Considerations
+
+- **No Shell Injection**: All commands use direct execution, not shell interpretation
+- **Path Validation**: Dangerous paths (like home directory root) are blocked
+- **Git Repository Detection**: Prevents nested Git repositories
+- **Backup System**: Automatic backups before any file operation
+- **Token Security**: GitHub tokens can be provided via `DOTSTATE_GITHUB_TOKEN` environment variable (recommended) or stored in config files with secure permissions
+
+## Requirements
+
+- **Rust**: Latest stable version (for building from source)
+- **Git**: For repository operations
+- **Git Account**: GitHub, GitLab, Bitbucket, or any git host (optional, for cloud sync)
+- **(Recommended) Nerd Fonts**: For the best visual experience, we recommend using a [Nerd Font](https://www.nerdfonts.com/) to see all icons correctly.
+
+## Project Status
+
+DotState is actively developed and ready for use. The core features are stable, and we're continuously improving based on user feedback.
+
+## Contributing
+
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## License
+
+MIT License - see [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+Built with:
+
+- [Ratatui](https://github.com/ratatui-org/ratatui) - Beautiful TUI framework
+- [git2](https://github.com/rust-lang/git2-rs) - Git operations
+- [clap](https://github.com/clap-rs/clap) - CLI parsing
+
+Badges:
+
+<a title="This tool is Tool of The Week on Terminal Trove, The $HOME of all things in the terminal" href="https://terminaltrove.com/dotstate/"><img width="180" src="https://cdn.terminaltrove.com/media/badges/tool_of_the_week/svg/terminal_trove_tool_of_the_week_green_on_dark_grey_bg.svg" alt="Terminal Trove Tool of The Week" /></a>
+
+## Support
+
+- **Issues**: [GitHub Issues](https://github.com/serkanyersen/dotstate/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/serkanyersen/dotstate/discussions)
+
+---
+
+**Made with ❤️ and Rust**

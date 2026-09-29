@@ -1,0 +1,59 @@
+[Skip to content](https://mise.jdx.dev/bootstrap/user.html#VPContent)
+
+On this page
+
+# User Login Shell [​](https://mise.jdx.dev/bootstrap/user.html\#user-login-shell)
+
+mise can declare the current user's login shell in `[bootstrap.user]` and apply it with `mise bootstrap user apply` or as part of [`mise bootstrap`](https://mise.jdx.dev/bootstrap.html):
+
+toml
+
+```
+[bootstrap.user]
+login_shell = "/bin/zsh"
+```
+
+Install the shell before applying this declaration and verify that the path exists. This setting changes the account's login shell; it does not install a shell, configure [mise activation](https://mise.jdx.dev/bootstrap/shell.html), or replace the current shell process.
+
+When the configured shell is not listed in `/etc/shells`, mise appends it first. When the configured shell differs from the user's account entry, mise runs:
+
+sh
+
+```
+chsh -s /bin/zsh
+```
+
+Top-level `mise bootstrap` also ends with a reminder to start a new login session when it changes, or would change, the login shell.
+
+## Semantics [​](https://mise.jdx.dev/bootstrap/user.html\#semantics)
+
+`[bootstrap.user].login_shell` follows the same manual, idempotent model as [bootstrap packages](https://mise.jdx.dev/bootstrap/packages/):
+
+- **Most local wins** — a project config can override a global `login_shell`; unlike package/file lists, there is only one desired value.
+- **Manual application only** — mise never changes your login shell implicitly. Only `mise bootstrap user apply` and [`mise bootstrap`](https://mise.jdx.dev/bootstrap.html) apply it.
+- **Listed shell** — on many platforms, the shell must appear in `/etc/shells` before `chsh` accepts it. mise adds the configured path to that file when it is missing.
+- **Unix-only** — on non-Unix platforms, or when `chsh` is not available, `mise bootstrap user status` reports the entry as skipped and bootstrap ignores it.
+- **Absolute path required** — relative shell names are skipped with a warning. Use the full path, such as `/bin/zsh` or `/opt/homebrew/bin/fish`.
+
+`/etc/shells` is usually root-owned. If the file is not writable, mise uses the same sudo behavior as system packages: it can prompt in an interactive terminal, uses passwordless sudo in non-interactive contexts, and honors `system_packages.sudo = false`.
+
+When `mise` itself is started under `sudo`, login shell status and `chsh` target `SUDO_USER` rather than root. Plain root sessions, such as containers, still target root.
+
+## Commands [​](https://mise.jdx.dev/bootstrap/user.html\#commands)
+
+sh
+
+```
+mise bootstrap user status            # shows login shell state
+mise bootstrap user status --missing  # exit 1 if the shell differs or is not listed
+
+mise bootstrap user apply           # updates /etc/shells and runs chsh -s
+mise bootstrap user apply --dry-run # print the commands instead
+mise bootstrap user apply --yes     # skip the confirmation prompt
+```
+
+sponsors
+
+[![Entire](https://jdx.dev/sponsors/entire-lockup.svg)](https://entire.io/)[![Omacom Foundation](https://jdx.dev/sponsors/omacom-foundation.svg)](https://omarchy.org/patrons/)[![CodeRabbit](https://jdx.dev/sponsors/coderabbit.svg)](https://coderabbit.link/mise)
+
+[View all sponsors](https://jdx.dev/sponsors.html)

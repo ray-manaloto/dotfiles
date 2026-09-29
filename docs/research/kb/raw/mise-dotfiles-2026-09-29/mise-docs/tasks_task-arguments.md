@@ -1,0 +1,921 @@
+[Skip to content](https://mise.jdx.dev/tasks/task-arguments.html#VPContent)
+
+On this page
+
+# Task Arguments [​](https://mise.jdx.dev/tasks/task-arguments.html\#task-arguments)
+
+Define arguments when a task needs named inputs, validation, help, or completions. Without a usage specification, mise forwards extra command-line arguments to the underlying command; see [argument forwarding](https://mise.jdx.dev/tasks/running-tasks.html).
+
+## Recommended Methods [​](https://mise.jdx.dev/tasks/task-arguments.html\#recommended-methods)
+
+### 1\. Usage Field (Preferred) [​](https://mise.jdx.dev/tasks/task-arguments.html\#usage-field)
+
+Use `usage` in TOML tasks and `#USAGE` comments in file tasks. Both define the same argument specification, which mise uses for parsing, help, and completion.
+
+See [Complete Usage Specification Reference](https://mise.jdx.dev/tasks/task-arguments.html#complete-usage-specification-reference) for more details.
+
+#### Quick Example [​](https://mise.jdx.dev/tasks/task-arguments.html\#quick-example)
+
+mise.toml
+
+mise-toml
+
+```
+[tasks.deploy]
+description = "Deploy application"
+usage = '''
+arg "<environment>" help="Target environment" {
+  choices "dev" "staging" "prod"
+}
+flag "-v --verbose" help="Enable verbose output"
+flag "--region <region>" help="AWS region" default="us-east-1" env="AWS_REGION"
+'''
+
+run = '''
+#!/usr/bin/env bash
+if [ "${usage_verbose:-false}" = "true" ]; then
+  echo "Verbose mode enabled"
+fi
+printf 'Selected environment: %s; region: %s\n' "${usage_environment?}" "${usage_region?}"
+'''
+```
+
+Arguments defined in the usage field are automatically available as environment variables prefixed with `usage_`:
+
+shell
+
+```
+# Execute with arguments
+$ mise run deploy staging --verbose --region us-west-2
+
+# Inside the task, these are available as:
+# $usage_environment = "staging"
+# $usage_verbose = "true"
+# $usage_region = "us-west-2"
+```
+
+Inherited `usage_*` values are cleared for normal task execution, including tasks without a usage spec. Tasks with `raw_args = true` retain inherited `usage_*` values. To intentionally inherit a value in a normally parsed task, use a separately named environment variable, optionally with `env=`:
+
+mise.toml
+
+mise-toml
+
+```
+[tasks.deploy]
+usage = 'arg "[environment]" env="DEPLOY_ENV"'
+run = 'echo "Deploying to ${usage_environment:-default}"'
+```
+
+shell
+
+```
+DEPLOY_ENV=staging mise run deploy
+```
+
+In addition to environment variables, **usage values are available inside Tera templates in task run scripts** via a `usage` map:
+
+mise.toml
+
+mise-toml
+
+```
+[tasks.deploy]
+description = "Deploy application"
+usage = '''
+arg "<environment>" help="Target environment"
+flag "-v --verbose" help="Enable verbose output"
+flag "--region <region>" help="AWS region" default="us-east-1"
+'''
+run = '''
+echo "Deploying to {{ usage.environment }} in {{ usage.region }}"
+{% if usage.verbose %}
+  echo "Verbose mode enabled"
+{% endif %}
+'''
+```
+
+The `usage` map uses **snake\_case argument/flag names as keys** (like the `usage_` environment variables). Names with `-` are converted to `_`, so a flag like `--dry-run` becomes available as `{{ usage.dry_run }}` and `$usage_dry_run`. Variadic arguments/flags are exposed as arrays and can be used with Tera's `for` loops and filters like `length`. The `usage` map is **separate from** the deprecated Tera template functions (`arg()`, `option()`, `flag()`) described later on this page. Do not mix the two approaches in the same task.
+
+`{{usage.*}}` templates can also be used in `depends`, `depends_post`, and `wait_for` to forward arguments to dependency tasks. See [Passing parent task arguments to dependencies](https://mise.jdx.dev/tasks/task-configuration.html#passing-parent-task-arguments-to-dependencies) for details.
+
+**Help output example:**
+
+shellsession
+
+```
+$ mise run deploy --help
+Deploy application
+
+Usage: deploy <environment> [OPTIONS]
+
+Arguments:
+  <environment>  Target environment [possible values: dev, staging, prod]
+
+Options:
+  -v, --verbose          Enable verbose output
+      --region <region>  AWS region [env: AWS_REGION] [default: us-east-1]
+  -h, --help            Print help
+```
+
+### 2\. File Task Headers [​](https://mise.jdx.dev/tasks/task-arguments.html\#file-task-headers)
+
+For file tasks, put argument declarations in `#USAGE` comments. `#MISE` comments configure task properties as TOML. This example assumes Bash and an existing `scripts/deploy.sh` in the project:
+
+.mise/tasks/deploy
+
+bash
+
+```
+#!/usr/bin/env bash
+#MISE description="Deploy application"
+#USAGE arg "<environment>" help="Deployment environment" {
+#USAGE   choices "dev" "staging" "prod"
+#USAGE }
+#USAGE flag "--dry-run" help="Preview changes without deploying"
+#USAGE flag "--region <region>" help="AWS region" default="us-east-1" env="AWS_REGION"
+
+ENVIRONMENT="${usage_environment?}"
+REGION="${usage_region?}"
+DRY_RUN="${usage_dry_run:-false}"
+
+if [[ "$DRY_RUN" == "true" ]]; then
+  echo "DRY RUN: Would deploy to $ENVIRONMENT in $REGION"
+else
+  echo "Deploying to $ENVIRONMENT in $REGION..."
+  ./scripts/deploy.sh "$ENVIRONMENT" "$REGION"
+fi
+```
+
+Syntax Options
+
+Use `#MISE key=value` for task properties and `#USAGE` for the usage specification. `# [MISE]` and `# [USAGE]` are also accepted as workarounds for formatters.
+
+#### Mounting Generated Specs [​](https://mise.jdx.dev/tasks/task-arguments.html\#mounting-generated-specs)
+
+File tasks that wrap another CLI can mount a usage spec generated by that CLI:
+
+.mise/tasks/run-release
+
+bash
+
+```
+#!/usr/bin/env bash
+#USAGE mount "mise run run-release -- --usage-spec"
+
+exec ./target/release/mycli "$@"
+```
+
+The mount command runs when shell completion asks for the task spec, so it must work outside the task's final process. Calling the task itself, as shown above, lets mise apply task configuration before forwarding `--usage-spec`.
+
+## Complete Usage Specification Reference [​](https://mise.jdx.dev/tasks/task-arguments.html\#complete-usage-specification-reference)
+
+### Positional Arguments (`arg`) [​](https://mise.jdx.dev/tasks/task-arguments.html\#positional-arguments-arg)
+
+Positional arguments are defined with `arg` and must be provided in order.
+
+#### Basic Syntax [​](https://mise.jdx.dev/tasks/task-arguments.html\#basic-syntax)
+
+kdl
+
+```
+arg "<name>" help="Description"               // Required positional arg
+arg "[name]" help="Description"               // Optional positional arg
+arg "<file>"                                  // Completed as filename
+arg "<dir>"                                   // Completed as directory
+```
+
+#### With Defaults [​](https://mise.jdx.dev/tasks/task-arguments.html\#with-defaults)
+
+kdl
+
+```
+arg "<file>" default="config.toml"            // Default value if not provided
+arg "[output]" default="out.txt"              // Optional with default
+```
+
+#### Variadic Arguments [​](https://mise.jdx.dev/tasks/task-arguments.html\#variadic-arguments)
+
+kdl
+
+```
+arg "[files]" var=#true                        // 0 or more files
+arg "<files>" var=#true                        // 1 or more files (required)
+arg "<files>" var=#true var_min=2              // At least 2 files required
+arg "<files>" var=#true var_max=5              // Maximum 5 files allowed
+arg "<files>" var=#true var_min=1 var_max=3    // Between 1 and 3 files
+```
+
+Handling Variadic Args with Spaces in Bash
+
+Variadic arguments are passed as a shell-escaped string. To handle arguments containing spaces as a bash array, wrap the variable in parentheses:
+
+bash
+
+```
+# Convert to bash array:
+eval "files=($usage_files)"
+
+# Use as array:
+for f in "${files[@]}"; do
+  echo "Processing: $f"
+done
+
+# Or pass to commands:
+touch "${files[@]}"
+```
+
+#### Environment Variable Backing [​](https://mise.jdx.dev/tasks/task-arguments.html\#environment-variable-backing)
+
+kdl
+
+```
+arg "<token>" env="API_TOKEN"                 // Can be set via $API_TOKEN
+arg "<host>" env="API_HOST" default="localhost"
+```
+
+Priority order: CLI argument > Environment variable > Default value
+
+#### Choices (Enum Values) [​](https://mise.jdx.dev/tasks/task-arguments.html\#choices-enum-values)
+
+kdl
+
+```
+arg "<level>" {
+  choices "debug" "info" "warn" "error"
+}
+arg "<shell>" {
+  choices "bash" "zsh" "fish"
+  help "Shell type"
+}
+```
+
+#### Advanced Features [​](https://mise.jdx.dev/tasks/task-arguments.html\#advanced-features)
+
+kdl
+
+```
+arg "<file>" long_help="Extended help text shown with --help"
+
+// Hidden from help output
+arg "<file>" hide=#true
+```
+
+#### Double-Dash Behavior [​](https://mise.jdx.dev/tasks/task-arguments.html\#double-dash-behavior)
+
+kdl
+
+```
+// Must use: mycli -- file.txt
+arg "<file>" double_dash="required"
+
+// Both work: mycli file.txt or mycli -- file.txt
+arg "<file>" double_dash="optional"
+
+// After first arg, behaves as if -- was used
+arg "<files>" double_dash="automatic"
+
+// Keep double dashes as values in a variadic argument
+arg "<args>..." double_dash="preserve"
+```
+
+### Flags (`flag`) [​](https://mise.jdx.dev/tasks/task-arguments.html\#flags-flag)
+
+Flags can be boolean or accept values.
+
+#### Boolean Flags [​](https://mise.jdx.dev/tasks/task-arguments.html\#boolean-flags)
+
+kdl
+
+```
+flag "-f --force"
+flag "-v --verbose" help="Enable verbose mode"
+flag "--dry-run" help="Preview without executing"
+```
+
+#### Short-Only or Long-Only [​](https://mise.jdx.dev/tasks/task-arguments.html\#short-only-or-long-only)
+
+kdl
+
+```
+flag "-f"                                     // Short flag only
+flag "--force"                                // Long flag only
+```
+
+#### Flag With Values [​](https://mise.jdx.dev/tasks/task-arguments.html\#flag-with-values)
+
+kdl
+
+```
+flag "-o --output <file>" help="Output file"
+flag "--port <port>" help="Server port"
+flag "--color <when>" {
+  choices "auto" "always" "never"
+}
+```
+
+#### Flag With Defaults [​](https://mise.jdx.dev/tasks/task-arguments.html\#flag-with-defaults)
+
+kdl
+
+```
+flag "--force" default=#true
+flag "--format <format>" help="Output format" default="json"
+flag "--port <port>" help="Server port" default="8080"
+flag "--color <when>" {
+  choices "auto" "always" "never"
+  default "auto"
+}
+```
+
+#### Count Flags [​](https://mise.jdx.dev/tasks/task-arguments.html\#count-flags)
+
+kdl
+
+```
+// Can be repeated: -vvv
+// $usage_verbose = number of times used (e.g., 3)
+flag "-v --verbose" count=#true
+```
+
+#### Negation [​](https://mise.jdx.dev/tasks/task-arguments.html\#negation)
+
+kdl
+
+```
+flag "--color" negate="--no-color" default=#true
+// Default: $usage_color = "true"
+// With --no-color: $usage_color = "false"
+```
+
+#### Global Flags [​](https://mise.jdx.dev/tasks/task-arguments.html\#global-flags)
+
+kdl
+
+```
+// Available on all subcommands (if using cmd structure)
+flag "-v --verbose" global=#true
+```
+
+#### Flag Advanced Features [​](https://mise.jdx.dev/tasks/task-arguments.html\#flag-advanced-features)
+
+kdl
+
+```
+flag "--verbose" long_help="Extended help text"
+flag "--debug" hide=#true                      // Hidden from help
+```
+
+### Completion (`complete`) [​](https://mise.jdx.dev/tasks/task-arguments.html\#completion-complete)
+
+Custom completion can be defined for any argument or flag by name:
+
+kdl
+
+```
+arg "<plugin>"
+complete "plugin" run="mise plugins ls"       // Complete with command output
+```
+
+#### With Descriptions [​](https://mise.jdx.dev/tasks/task-arguments.html\#with-descriptions)
+
+kdl
+
+```
+complete "plugin" run="mycli plugins list" descriptions=#true
+```
+
+Output format (split on `:` into value and description):
+
+```
+nodejs:JavaScript runtime
+python:Python language
+ruby:Ruby language
+```
+
+### Long Help Text [​](https://mise.jdx.dev/tasks/task-arguments.html\#long-help-text)
+
+For detailed help text, use the multi-line format:
+
+mise-toml
+
+```
+[tasks.complex]
+usage = '''
+arg "<input>" {
+  help "Input file to process"
+  long_help """
+  The input file should be in JSON or YAML format.
+
+  Supported schemas:
+  - schema-v1: Legacy format
+  - schema-v2: Current format (recommended)
+  - schema-v3: Experimental format
+
+  Example:
+    mise run complex data.json
+  """
+}
+flag "--format <fmt>" {
+  help "Output format"
+  long_help """
+  Supported output formats:
+  - json: JSON output (default)
+  - yaml: YAML output
+  - toml: TOML output
+  """
+  choices "json" "yaml" "toml"
+  default "json"
+}
+'''
+run = 'process-data "${usage_input?}" --format "${usage_format?}"'
+```
+
+### Hide Arguments [​](https://mise.jdx.dev/tasks/task-arguments.html\#hide-arguments)
+
+Hide arguments from help output (useful for deprecated or internal options):
+
+kdl
+
+```
+arg "<legacy_arg>" hide=#true
+flag "--internal-debug" hide=#true
+```
+
+### Combining Features Example [​](https://mise.jdx.dev/tasks/task-arguments.html\#combining-features-example)
+
+This is an application-specific example: it assumes `npm test`, `mycli`, and shell functions named `deploy_service` and `deploy_all` are available. The smaller [quick example](https://mise.jdx.dev/tasks/task-arguments.html#quick-example) can be run without those application components.
+
+mise.toml
+
+mise-toml
+
+```
+[tasks.deploy]
+description = "Deploy application to cloud"
+usage = '''
+// Positional arguments
+arg "<environment>" {
+  help "Deployment environment"
+  choices "dev" "staging" "prod"
+}
+
+arg "[services]" {
+  help "Services to deploy (default: all)"
+  var #true
+  var_min 0
+}
+
+// Flags
+flag "-v --verbose" {
+  help "Enable verbose logging"
+  count #true
+  default 0
+}
+
+flag "--dry-run" help="Show what would be deployed without doing it"
+
+flag "--region <region>" {
+  help "Cloud region"
+  env "AWS_REGION"
+  default "us-east-1"
+  choices "us-east-1" "us-west-2" "eu-west-1"
+}
+
+flag "--skip-tests" help="Skip running tests before deploy"
+
+flag "--force" help="Force deployment even with warnings"
+
+// Custom completions
+complete "services" run="mycli list-services"
+'''
+
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Handle verbosity
+if [[ "${usage_verbose?}" -ge 2 ]]; then
+  set -x
+elif [[ "${usage_verbose?}" -ge 1 ]]; then
+  export VERBOSE=1
+fi
+
+# Validate environment
+ENVIRONMENT="${usage_environment?}"
+REGION="${usage_region?}"
+DRY_RUN="${usage_dry_run:-false}"
+SKIP_TESTS="${usage_skip_tests:-false}"
+FORCE="${usage_force:-false}"
+
+echo "Deploying to $ENVIRONMENT in $REGION"
+
+# Run tests unless skipped
+if [[ "$SKIP_TESTS" != "true" ]]; then
+  echo "Running tests..."
+  npm test
+fi
+
+# Deploy services
+if [[ -n "${usage_services?}" ]]; then
+  echo "Deploying services: ${usage_services?}"
+  eval "services=(${usage_services?})"
+  for service in "${services[@]}"; do
+    deploy_service "$service" "$ENVIRONMENT" "$REGION" "$DRY_RUN"
+  done
+else
+  echo "Deploying all services"
+  deploy_all "$ENVIRONMENT" "$REGION" "$DRY_RUN"
+fi
+'''
+```
+
+## Sharing Flags Between Tasks [​](https://mise.jdx.dev/tasks/task-arguments.html\#shared-flags)
+
+Define shared flags once in a `.usage.kdl` file to keep their names, help text, and validation consistent across tasks. An `include` loads the file, and `use` adds a named _flagset_ to the task's arguments.
+
+For example, save this flagset in your project root:
+
+shared.usage.kdl
+
+kdl
+
+```
+flagset "common" {
+  flag "--env <env>" help="Target environment" {
+    arg "<env>" {
+      choices "dev" "staging" "prod"
+    }
+  }
+  flag "--dry-run" help="Print what would happen"
+}
+```
+
+### Include Shared Flags in a Task [​](https://mise.jdx.dev/tasks/task-arguments.html\#include-shared-flags-in-a-task)
+
+In a file task, include the file from a `#USAGE` comment. Use `$MISE_CONFIG_ROOT` to locate it relative to the task's configuration root:
+
+mise-tasks/deploy
+
+bash
+
+```
+#!/usr/bin/env bash
+#USAGE include file="$MISE_CONFIG_ROOT/shared.usage.kdl"
+#USAGE use "common"
+#USAGE flag "--replicas <n>" help="How many to run"
+echo "env=${usage_env?} replicas=${usage_replicas?}"
+```
+
+For a TOML task, build the include path with the `{{ config_root }}` template variable instead:
+
+mise.toml
+
+toml
+
+```
+[tasks.deploy]
+usage = """
+include file="{{ config_root }}/shared.usage.kdl"
+use "common"
+flag "--replicas <n>" help="How many to run"
+"""
+run = 'echo "env=${usage_env?} replicas=${usage_replicas?}"'
+```
+
+Choose either task definition. Both accept `--env`, `--dry-run`, and `--replicas`, and reject values outside the choices for `--env`:
+
+shell
+
+```
+mise run deploy --env staging --replicas 3
+mise run deploy --help
+```
+
+Shared flags appear in `--help` where the `use` node is written. Including a flag defines its interface; the task's script must implement its behavior. These examples only print the selected environment and replica count.
+
+### Include Paths in File Tasks [​](https://mise.jdx.dev/tasks/task-arguments.html\#include-paths-in-file-tasks)
+
+Relative paths resolve from the directory containing the task file, regardless of the directory where you run mise. For `mise-tasks/deploy`, this includes `shared.usage.kdl` from the project root:
+
+bash
+
+```
+#USAGE include file="../shared.usage.kdl"
+```
+
+Include paths also support `$NAME` and `${NAME}` references to environment variables, with `$$` for a literal dollar sign. mise makes these variables available when parsing a file task's usage specification:
+
+- Variables inherited when mise starts.
+- `MISE_CONFIG_ROOT` and `MISE_PROJECT_ROOT`, when the corresponding roots are available.
+- `MISE_TASK_DIR` and `MISE_TASK_FILE`, for the task's directory and file path.
+
+These paths resolve consistently for execution, help, task listing, and validation. File-task `#USAGE` comments are not rendered as Tera templates: use `$MISE_CONFIG_ROOT`, for example, rather than `{{ config_root }}`.
+
+Include variables must be available before the task runs
+
+Task and project `env` directives are applied after usage parsing, so they cannot supply variables for include paths. If an include references an undefined variable, mise reports an invalid usage specification. The task remains loadable, but its usage-defined argument parsing, help, and validation are unavailable.
+
+To share tools, environment variables, or dependencies between tasks in the same project, see [task templates](https://mise.jdx.dev/tasks/templates.html).
+
+## Bash Variable Expansion for Usage Variables [​](https://mise.jdx.dev/tasks/task-arguments.html\#bash-variable-expansion)
+
+When accessing usage-defined variables in bash scripts, use parameter expansion syntax to help [shellcheck](https://www.shellcheck.net/) understand these variables and to provide default values for boolean flags.
+
+### Common Patterns [​](https://mise.jdx.dev/tasks/task-arguments.html\#common-patterns)
+
+| Syntax | Behavior | Use Case | Example |
+| --- | --- | --- | --- |
+| `${var?}` | Error if unset | Required args or flags with defaults in usage spec | `${usage_profile?}` |
+| `${var:?}` | Error if unset or empty | When you need to ensure non-empty values | `${usage_target:?}` |
+| `${var:-default}` | Use default if unset or empty | Boolean flags without `default=` in usage spec | `${usage_clean:-false}` |
+| `${var:=default}` | Set and use default if unset or empty | When you want to set the variable for later use | `${usage_dir:=.}` |
+| `${var:+value}` | Use value if set and non-empty | Optional string values | `${usage_output:+has-output}` |
+
+### Guidelines for Usage Variables [​](https://mise.jdx.dev/tasks/task-arguments.html\#guidelines-for-usage-variables)
+
+#### Args and Flags with Defaults [​](https://mise.jdx.dev/tasks/task-arguments.html\#args-and-flags-with-defaults)
+
+Use `${usage_var?}`, since usage guarantees they are set:
+
+bash
+
+```
+# --profile has default="dev" in usage spec
+cargo build --profile "${usage_profile?}"
+```
+
+#### Boolean Flags without Defaults [​](https://mise.jdx.dev/tasks/task-arguments.html\#boolean-flags-without-defaults)
+
+Use `${usage_var:-false}` to provide a default value:
+
+bash
+
+```
+# --clean flag has no default in usage spec
+if [ "${usage_clean:-false}" = "true" ]; then
+  cargo clean
+fi
+```
+
+#### Required Arguments [​](https://mise.jdx.dev/tasks/task-arguments.html\#required-arguments)
+
+Use `${usage_var:?}` to ensure non-empty values:
+
+bash
+
+```
+# <target> is a required positional argument
+cargo build --target "${usage_target:?}"
+```
+
+#### Conditional Flags [​](https://mise.jdx.dev/tasks/task-arguments.html\#conditional-flags)
+
+Compare boolean values explicitly. The non-empty string `"false"` still satisfies `${var:+value}`, so that expansion does not test whether a flag is enabled:
+
+bash
+
+```
+args=()
+if [ "${usage_verbose:-false}" = "true" ]; then
+  args+=(--verbose)
+fi
+mycli deploy "${args[@]}"
+```
+
+This example requires Bash. `${var:+value}` is useful for optional string values, not for interpreting `true` and `false`.
+
+These expansions help [shellcheck](https://www.shellcheck.net/) understand your script and prevent warnings about potentially unset variables, while preserving proper error handling.
+
+## Deprecated Method [​](https://mise.jdx.dev/tasks/task-arguments.html\#deprecated-method)
+
+### Tera Template Functions deprecated [​](https://mise.jdx.dev/tasks/task-arguments.html\#tera-templates)
+
+Deprecated - Removal in 2027.5.0
+
+The Tera template method for defining task arguments is **deprecated** and will be **removed in mise 2027.5.0**.
+
+**Why it's being removed:**
+
+- **Two-pass parsing issues**: Template functions return empty strings during spec collection, causing unexpected behavior when they are used as normal template values
+- **Complex escaping rules**: Shell escaping rules are confusing and error-prone
+- **Inconsistent behavior**: Behaves differently in TOML and file tasks
+- **Poor user experience**: Mixes argument definitions with script logic
+
+**Migration required:** Migrate to the [usage field](https://mise.jdx.dev/tasks/task-arguments.html#usage-field) method before 2027.5.0.
+
+**Opt-out setting:** To disable the two-pass parsing behavior now, before removal, set:
+
+toml
+
+```
+# ~/.config/mise/config.toml
+[settings]
+task.disable_spec_from_run_scripts = true
+```
+
+Or via environment variable: `MISE_TASK_DISABLE_SPEC_FROM_RUN_SCRIPTS=1`
+
+When enabled, mise uses only the `usage` field for spec generation and ignores any `arg()`, `option()`, or `flag()` functions in run scripts. See [Settings](https://mise.jdx.dev/configuration/settings.html) for more details.
+
+Click to see deprecated Tera template syntax (not recommended)
+
+Previously, you could define arguments inline in run scripts using Tera template functions:
+
+mise.toml
+
+mise-toml
+
+```
+# ❌ DEPRECATED - Do not use
+[tasks.test]
+run = 'cargo test {{arg(name="file", default="all")}}'
+```
+
+mise.toml
+
+mise-toml
+
+```
+# ❌ DEPRECATED - Do not use
+[tasks.build]
+run = [\
+    'cargo build {{option(name="profile", default="dev")}}',\
+    './scripts/package.sh {{flag(name="verbose")}}'\
+]
+```
+
+**Problems with this approach:**
+
+1. **Empty strings during parsing**: During spec collection (first pass), template functions return empty strings, so you can't use them in templates like:
+
+toml
+
+```
+# This doesn't work as expected!
+run = 'echo "File: {{arg(name="file")}}" > {{arg(name="file")}}.log'
+# First pass: 'echo "File: " > .log' (invalid!)
+```
+
+2. **Escaping complexity**: Different shell types require different escaping:
+
+toml
+
+```
+# Escaping behavior varies by shell
+run = 'cmd {{arg(name="file")}}' # May or may not be properly escaped
+```
+
+3. **No help generation**: Does not generate proper `--help` output
+
+
+### Migration Guide [​](https://mise.jdx.dev/tasks/task-arguments.html\#migration-guide)
+
+Here's how to migrate from Tera templates to the usage field:
+
+#### Example 1: Simple Arguments [​](https://mise.jdx.dev/tasks/task-arguments.html\#example-1-simple-arguments)
+
+UsageDeprecated
+
+mise-toml
+
+```
+[tasks.test]
+usage = 'arg "<file>" help="Test file" default="all"'
+run = 'cargo test "${usage_file?}"'
+```
+
+mise-toml
+
+```
+[tasks.test]
+run = '''
+cargo test {{arg(
+  name="file",
+  default="all",
+  help="Test file"
+)}}
+'''
+```
+
+#### Example 2: Multiple Arguments with Flags [​](https://mise.jdx.dev/tasks/task-arguments.html\#example-2-multiple-arguments-with-flags)
+
+UsageDeprecated
+
+mise-toml
+
+```
+[tasks.build]
+usage = '''
+arg "<profile>" default="dev"
+flag "-v --verbose"
+'''
+run = '''
+args=()
+if [ "${usage_verbose:-false}" = "true" ]; then
+  args+=(--verbose)
+fi
+cargo build --profile "${usage_profile?}"
+./package.sh "${args[@]}"
+'''
+```
+
+mise-toml
+
+```
+[tasks.build]
+run = [\
+  'cargo build --profile {{arg(name="profile", default="dev")}}',\
+  './package.sh {{flag(name="verbose")}}'\
+]
+```
+
+#### Example 3: Options with Choices [​](https://mise.jdx.dev/tasks/task-arguments.html\#example-3-options-with-choices)
+
+UsageDeprecated
+
+mise-toml
+
+```
+[tasks.deploy]
+usage = '''
+flag "--env <env>" {
+  choices "dev" "prod"
+}
+flag "--force"
+'''
+run = '''
+#!/usr/bin/env bash
+args=(--env "${usage_env?}")
+if [ "${usage_force:-false}" = "true" ]; then
+  args+=(--force)
+fi
+deploy "${args[@]}"
+'''
+```
+
+mise-toml
+
+```
+[tasks.deploy]
+run = '''
+deploy {{option(
+  name="env",
+  choices=["dev", "prod"]
+)}} {{flag(name="force")}}
+'''
+```
+
+#### Example 4: Variadic Arguments [​](https://mise.jdx.dev/tasks/task-arguments.html\#example-4-variadic-arguments)
+
+UsageDeprecated
+
+mise-toml
+
+```
+[tasks.lint]
+usage = 'arg "<files>" var=#true'
+run = '''
+#!/usr/bin/env bash
+eval "files=(${usage_files?})"
+eslint "${files[@]}"
+'''
+```
+
+mise-toml
+
+```
+[tasks.lint]
+run = 'eslint {{arg(name="files", var=true)}}'
+```
+
+Handling Arguments with Spaces
+
+If your variadic arguments may contain spaces, convert the variable to a bash array:
+
+mise-toml
+
+```
+[tasks.process]
+usage = 'arg "<files>" var=#true'
+run = '''
+#!/usr/bin/env bash
+eval "files=($usage_files)"
+for f in "${files[@]}"; do
+  process "$f"
+done
+'''
+```
+
+## See Also [​](https://mise.jdx.dev/tasks/task-arguments.html\#see-also)
+
+- [Task Configuration](https://mise.jdx.dev/tasks/task-configuration.html) \- Complete task configuration reference
+- [TOML Tasks](https://mise.jdx.dev/tasks/toml-tasks.html) \- TOML task syntax
+- [File Tasks](https://mise.jdx.dev/tasks/file-tasks.html) \- File-based task syntax
+- [Running Tasks](https://mise.jdx.dev/tasks/running-tasks.html) \- How to execute tasks
+- [Usage Spec Documentation](https://usage.jdx.dev/spec/) \- Complete usage specification reference
+
+sponsors
+
+[![Entire](https://jdx.dev/sponsors/entire-lockup.svg)](https://entire.io/)[![Omacom Foundation](https://jdx.dev/sponsors/omacom-foundation.svg)](https://omarchy.org/patrons/)[![CodeRabbit](https://jdx.dev/sponsors/coderabbit.svg)](https://coderabbit.link/mise)
+
+[View all sponsors](https://jdx.dev/sponsors.html)

@@ -95,3 +95,12 @@ description = "mise docs mirror: illustrative my_password example in environment
 paths = [
   '''^docs/research/kb/raw/mise-dotfiles-2026-09-29/mise-docs/environments\.md$''',
 ]
+
+# Omarchy mirror (2026-09-29b, Ray-approved, AskUserQuestion): plain prose ("credentials, <word>
+# rules, packages ...") in a mirrored community README trips generic-api-key. Read and judged.
+[[allowlists]]
+description = "mise docs mirror: prose false positive in the oma-mise community README."
+targetRules = ["generic-api-key"]
+paths = [
+  '''^docs/research/kb/raw/mise-dotfiles-2026-09-29/omarchy/community/FilipHarald_oma-mise__README\.md$''',
+]
