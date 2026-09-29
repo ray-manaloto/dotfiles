@@ -82,6 +82,8 @@ KNOWN_LABEL_PREFIXES = {
     "refute",
     "critic",
     "reconcile",
+    "adjudicate",
+    "read-link",
     "codex-sol-advisor",
 }
 
@@ -505,13 +507,16 @@ RESEARCH_SWEEP = WORKFLOWS / "research-sweep-run.js"
 # pin silently moves a node onto the inherited session model — this pins it.
 _SWEEP_ROUTING = {
     "plan+fetch": ("general-purpose", "sonnet", "medium"),
-    "triage": ("Explore", "haiku", ""),
+    # tuned 2026-09-29b: triage gates every later read, so it left haiku
+    "triage": ("Explore", "sonnet", "low"),
     "read": ("Explore", "haiku", ""),
     "source-dive": ("general-purpose", "sonnet", "medium"),
     "synthesize": ("general-purpose", "opus", "high"),
     "refute": ("general-purpose", "sonnet", "medium"),
-    "critic": ("Explore", "sonnet", "low"),
-    "reconcile": ("general-purpose", "sonnet", "low"),
+    "critic": ("Explore", "sonnet", "medium"),
+    # one tier above the refuters; runs only because the fixture refutes a claim
+    "adjudicate": ("general-purpose", "opus", "high"),
+    "reconcile": ("general-purpose", "sonnet", "medium"),
     "codex-sol-advisor": ("codex-sol-advisor", "", ""),
 }
 
@@ -538,6 +543,9 @@ def test_research_sweep_reaches_every_phase_with_pinned_routing(tmp_path: Path) 
 
     assert run_result["status"] == "complete"
     assert routing == _SWEEP_ROUTING
+    # The returned provenance names every dispatched node (one refuter per claim).
+    provenance = cast("list[dict[str, str]]", run_result["routing"])
+    assert [p["node"] for p in provenance] == [c["label"] for c in calls]
 
 
 def test_research_sweep_rejects_a_relative_report_path(tmp_path: Path) -> None:
@@ -615,10 +623,18 @@ def test_research_sweep_unreconciled_report_is_not_complete(tmp_path: Path) -> N
         RESEARCH_SWEEP.read_text(encoding="utf-8"),
         {**ARGS, "advisor": False},
         _SWEEP_HAPPY_BODY.replace(
+            "return { reportPath: args.reportPath, loadBearing: [] }",
+            "return { reportPath: args.reportPath,"
+            " loadBearing: [{ claim: 'c', source: 's' }] }",
+        )
+        .replace(
             "if (label === 'refute') return { verdicts: [] }",
-            "if (label === 'refute') return { verdicts: "
-            "[{ claim: 'c', refuted: true, evidence: 'e' }] }",
-        ).replace("RECONCILE", "null"),
+            "if (label.startsWith('refute'))"
+            " return { claim: 'c', refuted: true, evidence: 'e' }\n"
+            "  if (label === 'adjudicate')"
+            " return { verdicts: [{ claim: 'c', refuted: true, evidence: 'e' }] }",
+        )
+        .replace("RECONCILE", "null"),
     )
     result = _bun_run_wrapped(wrapped, tmp_path / "sweep-reconcile-null-2.js")
     assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
@@ -626,3 +642,143 @@ def test_research_sweep_unreconciled_report_is_not_complete(tmp_path: Path) -> N
         "dict[str, object]", json.loads(result.stdout.splitlines()[-1])["result"]
     )
     assert run_result["status"] == "reconcile-null"
+
+
+def _sweep_custom(
+    tmp_path: Path, name: str, body: str, extra_args: Mapping[str, object] | None = None
+) -> dict[str, object]:
+    wrapped = _custom_stub_source(
+        RESEARCH_SWEEP.read_text(encoding="utf-8"),
+        {**ARGS, "advisor": False, **(extra_args or {})},
+        body,
+    )
+    result = _bun_run_wrapped(wrapped, tmp_path / name)
+    assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    return cast("dict[str, object]", json.loads(result.stdout.splitlines()[-1]))
+
+
+_SWEEP_TUNING_BODY = """
+  if (label === 'plan+fetch') {
+    return { runs: [{ query: 'q', sources: ['exa'], manifest: '/tmp/m.json', rc: 0 }],
+      sourceDive: false }
+  }
+  if (label === 'triage') {
+    events.push({ kind: 'triage-prompt', prompt: _prompt })
+    return { read: [
+      { url: 'https://caller.test/a', why: 'dup of a caller link' },
+      { url: 'https://t1.test', why: 'w' }, { url: 'https://t2.test', why: 'w' },
+    ], hits: [], unverifiedEmpty: [] }
+  }
+  if (label.startsWith('read')) {
+    events.push({ kind: 'read', label, prompt: _prompt })
+    return { claims: [] }
+  }
+  if (label === 'synthesize') {
+    return { reportPath: args.reportPath, loadBearing: [
+      { claim: 'A ships X', source: 's1' },
+      { claim: 'B does not use X', source: 's2', absence: true },
+    ] }
+  }
+  if (label.startsWith('refute')) {
+    events.push({ kind: 'refute', label, prompt: _prompt })
+    return REFUTE
+  }
+  if (label === 'critic') return { gaps: [] }
+  if (label === 'adjudicate') return ADJUDICATE
+  return 'ok'
+"""
+
+
+def test_research_sweep_caller_links_bypass_triage_and_cap(tmp_path: Path) -> None:
+    """Caller links are always read (sonnet), never ranked away or double-read.
+
+    FAIL arm: feed LINKS through triage/READ_MAX instead of their own readers and
+    `https://caller.test/b` is never read (readMax=1 keeps only one triaged URL).
+    """
+    body = _SWEEP_TUNING_BODY.replace(
+        "REFUTE", "{ claim: 'c', refuted: false, evidence: 'e' }"
+    ).replace("ADJUDICATE", "null")
+    payload = _sweep_custom(
+        tmp_path,
+        "sweep-links.js",
+        body,
+        {"links": ["https://caller.test/a", "https://caller.test/b"], "readMax": 1},
+    )
+    events = cast("list[dict[str, str]]", payload["events"])
+    reads = [e for e in events if e["kind"] == "read"]
+    link_reads = [e for e in reads if e["label"].startswith("read-link")]
+    triaged_reads = [e for e in reads if not e["label"].startswith("read-link")]
+
+    assert len(link_reads) == 1
+    assert "https://caller.test/a" in link_reads[0]["prompt"]
+    assert "https://caller.test/b" in link_reads[0]["prompt"]
+    # the caller link triage also picked is not read twice, and readMax=1 applies
+    # only to the triaged remainder
+    assert len(triaged_reads) == 1
+    assert "https://caller.test/a" not in triaged_reads[0]["prompt"]
+    assert "https://t1.test" in triaged_reads[0]["prompt"]
+    triage_prompt = next(e["prompt"] for e in events if e["kind"] == "triage-prompt")
+    assert "https://caller.test/b" in triage_prompt
+
+
+def test_research_sweep_refutes_each_claim_independently(tmp_path: Path) -> None:
+    """One refuter per load-bearing claim; an absence claim gets the two-route brief.
+
+    FAIL arm: go back to one refuter for all claims and there is one `refute`
+    call, not two; drop the absence branch and neither prompt says SECOND.
+    """
+    body = _SWEEP_TUNING_BODY.replace(
+        "REFUTE", "{ claim: 'c', refuted: false, evidence: 'e' }"
+    ).replace("ADJUDICATE", "null")
+    payload = _sweep_custom(tmp_path, "sweep-per-claim.js", body)
+    events = cast("list[dict[str, str]]", payload["events"])
+    refutes = [e for e in events if e["kind"] == "refute"]
+    labels = [c["label"] for c in cast("list[dict[str, str]]", payload["calls"])]
+
+    assert [e["label"] for e in refutes] == ["refute:1/2", "refute:2/2"]
+    assert "SECOND, independent route" not in refutes[0]["prompt"]
+    assert "SECOND, independent route" in refutes[1]["prompt"]
+    # nothing flagged: the adjudicator never runs and nothing needs reconciling
+    assert "adjudicate" not in labels
+    assert "reconcile" not in labels
+    assert cast("dict[str, object]", payload["result"])["status"] == "complete"
+
+
+def test_research_sweep_adjudicator_can_overturn_a_refutation(tmp_path: Path) -> None:
+    """A refuter's 'refuted' is confirmed one tier up before it rewrites the report.
+
+    FAIL arm: use the refuters' flags directly as `refuted` and the overturned
+    claims come back as refuted.
+    """
+    body = _SWEEP_TUNING_BODY.replace(
+        "REFUTE", "{ claim: 'c', refuted: true, evidence: 'e' }"
+    ).replace(
+        "ADJUDICATE",
+        "{ verdicts: [{ claim: 'A ships X', refuted: false, evidence: 'overturned' },"
+        " { claim: 'B does not use X', refuted: false, evidence: 'overturned' }] }",
+    )
+    payload = _sweep_custom(tmp_path, "sweep-adjudicate.js", body)
+    run_result = cast("dict[str, object]", payload["result"])
+    labels = [c["label"] for c in cast("list[dict[str, str]]", payload["calls"])]
+
+    assert "adjudicate" in labels
+    assert run_result["refuted"] == []
+    # flagged claims still get a Verification section via reconcile
+    assert "reconcile" in labels
+    assert run_result["status"] == "complete"
+
+
+def test_research_sweep_null_refuters_are_unverified_not_confirmed(
+    tmp_path: Path,
+) -> None:
+    """Every refuter null -> verify-null; a null is never read as 'confirmed'.
+
+    FAIL arm: treat a null verdict as refuted=false and status reads `complete`.
+    """
+    body = _SWEEP_TUNING_BODY.replace("REFUTE", "null").replace("ADJUDICATE", "null")
+    payload = _sweep_custom(tmp_path, "sweep-null-refuters.js", body)
+    run_result = cast("dict[str, object]", payload["result"])
+    verdicts = cast("list[dict[str, object]]", run_result["verdicts"])
+
+    assert [v["refuted"] for v in verdicts] == [None, None]
+    assert run_result["status"] == "verify-null"

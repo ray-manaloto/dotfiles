@@ -38,8 +38,14 @@ this repo use this skill and do not import `kb_setup.research`
 
   `question` and an ABSOLUTE `reportPath` are required (the workflow throws
   otherwise). `advisor: true` adds a `codex-sol-advisor` second opinion, spent
-  on codex tokens. Optional: `readMax` (URLs deep-read, default 6) and
-  `verifyMax` (claims refuted, default 5).
+  on codex tokens. Optional: `readMax` (triaged URLs deep-read, default 6),
+  `verifyMax` (claims refuted, default 5), `links` (URLs the user named —
+  ALWAYS read, on sonnet, outside the triage cap) and `relatedRepos` (other
+  projects the question is about — searched in BOTH directions, since a
+  relationship searched from one side only is a gap). Pass every link the user
+  gives in `links`; a user link left to triage can be ranked away. The run
+  returns `routing` (node → agent type/model/effort), which the report's
+  Provenance section carries — cite it when asked which agents researched what.
 
 - **No Workflow tool** (a codex lane, a headless run), or no sweep was asked
   for → run the in-lane steps below yourself. The fetch step needs network and `mise`;
@@ -96,6 +102,17 @@ this repo use this skill and do not import `kb_setup.research`
    confirmed, refuted, or explicitly unverified.
 
 ## Traps
+
+- **Absence claims are the easiest to get wrong.** "X does not use Y" must be
+  confirmed by a second, independent route with a control term, and kept apart
+  from "X's docs propose Y" and "a third party documents Y for X" (2026-09-29b:
+  a one-route probe produced a true-but-misleading Omarchy headline). The
+  workflow marks these `absence` and refutes them twice; do the same in-lane.
+- **GitHub code search** (config-pattern questions): `gh api -X GET search/code
+  -f q='QUERY'` — no `OR`/parentheses/`**` (HTTP 422), 10 requests/min (a 403 is
+  a rate limit, not zero), and the tokenizer drops punctuation, so re-fetch and
+  grep each hit. One query per alternative, then union; arm with a query that
+  must hit (recipe: the 2026-09-29b lane G GitHub-examples report).
 
 - `gh search issues --repo` returns issues only; the fan-out uses
   `gh api /search/issues`, which returns issues AND pull requests.
