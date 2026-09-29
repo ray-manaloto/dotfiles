@@ -38,7 +38,13 @@ jobs:
     # Excludes our own commit-back author (autofix-ci has its own loop
     # guard, but the explicit list documents the contract) and the two
     # update bots whose PRs are already reviewed-and-formatted.
-    if: ${{ github.actor != 'github-actions[bot]' && github.actor != 'renovate[bot]' && github.actor != 'dependabot[bot]' }}
+    # The PR AUTHOR is checked too (#1435): on a Renovate PR the repair bots
+    # (gcc-sha-repair, image-lock-pr) push as dotfiles-refresh-bot-org[bot],
+    # so an actor-only guard ran autofix there (run 34839072436 on #1063) and
+    # its autofix-ci[bot] commit — not in renovate.json's gitIgnoredAuthors —
+    # froze the PR; after a Renovate rebuild the actor is renovate[bot] again,
+    # so the fix would be lost anyway. Bot PRs never get autofix commits.
+    if: ${{ github.actor != 'github-actions[bot]' && github.actor != 'renovate[bot]' && github.actor != 'dependabot[bot]' && github.event.pull_request.user.login != 'renovate[bot]' && github.event.pull_request.user.login != 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

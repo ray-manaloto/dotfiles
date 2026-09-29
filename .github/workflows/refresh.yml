@@ -426,6 +426,20 @@ jobs:
         # to rebase a MODIFIED branch). Both the slug and the numeric id are
         # derived (never hardcoded) per actions/create-github-app-token's own
         # documented committer-identity recipe.
+        # SUPERSEDED 2026-09-29 (#1435, Ray, option B′): "never rebase a
+        # modified branch" froze #947 and #1063 FOREVER on their first repair
+        # commit (both on gcc-sha-repair's commit; this job's address has not
+        # yet committed on any PR). renovate.json now lists this address AND
+        # gcc-sha-repair's in `gitIgnoredAuthors`, with `rebaseWhen:
+        # "conflicted"` pinned locally, incl. the `pin` update type (the
+        # livelock the old reasoning feared needed `behind-base-branch`).
+        # Accepted risk: Renovate's docs caution `conflicted` + automerge can
+        # merge two updates never tested together; ci-gate on main is the net.
+        # A Renovate rebuild drops the repair; this job re-runs on that
+        # `synchronize` and re-commits it — provided the lock-containment check
+        # passes (#963's fix, #1445). The ignore list HARD-CODES this App's slug
+        # and numeric id (the identity below is derived at run time), so an App
+        # rename/reinstall must update renovate.json too, or the freeze returns.
         if: steps.drift-check.outcome == 'failure' && steps.confine-check.outputs.changed == 'true'
         env:
           APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
