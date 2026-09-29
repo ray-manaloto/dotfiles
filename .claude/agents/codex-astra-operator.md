@@ -136,7 +136,7 @@ Pin both.
 unlock git writes headless. Do not reach for it.
 
 ⚠️ Flags drift between codex releases. `--full-auto` **did not exist** when probed
-at codex 0.152.0 and 0.158.0 (`error: unexpected argument '--full-auto' found`; see
+at codex 0.152.1 and 0.158.0 (`error: unexpected argument '--full-auto' found`; see
 `.claude/rules/ai-cli-invocation.md`). Re-probe `mise exec -- codex exec --help`
 rather than trusting any written invocation, this one included.
 
