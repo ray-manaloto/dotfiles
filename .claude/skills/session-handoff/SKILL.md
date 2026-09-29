@@ -113,9 +113,10 @@ the handoff.
 
 ### 1c. Session-integrity review — nothing dismissed, missing, broken or vague (Ray, 2026-09-23)
 
-Before writing the handoff, run four read-only reviews of THIS session, in parallel, each persisting its
+Before writing the handoff, run seven read-only reviews of THIS session, in parallel, each persisting its
 report under `docs/research/kb/reports/agents/session-audit-<kind>-<date>.md`. Their briefs from the first run
-are "Briefs M-P" in `docs/research/kb/reports/agents/session-2026-09-23d-agent-briefs.md`; reuse them.
+are "Briefs M-P" in `docs/research/kb/reports/agents/session-2026-09-23d-agent-briefs.md` and "Briefs Q-S"
+in `docs/research/kb/reports/agents/session-handoff-briefs-q-s-2026-09-28.md`; reuse them.
 
 | Review | Question | Lane |
 |---|---|---|
@@ -123,6 +124,9 @@ are "Briefs M-P" in `docs/research/kb/reports/agents/session-2026-09-23d-agent-b
 | missing requests | every user message and AskUserQuestion answer: does it land in `task_plan.md`, an issue, a commit or memory? | Opus `general-purpose` |
 | bugs | cold review of the branch diff by ref (base = merge-base with `main`) | a model family different from the diff's AUTHOR (not the orchestrator): an Anthropic-authored diff gets the read-only codex review lens, a codex-authored diff gets an Opus `cold-reviewer`; the exact command lives in `.claude/skills/codex-sdlc-team/SKILL.md` § Review tiers. |
 | vagueness | every doc, plan, spec, rule or agent file the session changed, read as a fresh session or a codex lane would: stale, ambiguous, contradictory, unowned | Opus `general-purpose` |
+| process compliance | for every PR shipped or landed this session: did it get each step its diff class requires — gates with recorded `rc=`, `/code-review`, the cross-family lens (`codex-sdlc-team` § Review tiers), `/mattpocock-skills:code-review` when spec'd, and the repo `verify` skill when it touched session tooling, the guard or the devcontainer? A step skipped is a finding even if the PR is green | Opus `general-purpose` |
+| repeat offenders | every mistake that happened twice, or once while a memory, rule or skill already warned against it: memory did not prevent it, so the disposition is a MACHINE check (guard rule, test, gate), a PLAN row for one, or a Ray ruling that it stays prose — never "noted in memory" again | Opus `general-purpose` |
+| retrieval misses | every fact the session re-derived from logs, transcripts, source or a failed first attempt that a skill, rule, task `--help` or memory should have handed it (a task name, a flag, a payload shape): name the file that should carry it and add it there | Opus `general-purpose` |
 
 Every finding gets a disposition: **FIX-NOW** (make the change before §2) or **PLAN** (exact `task_plan.md`
 text; mark it "needs `/grilling` → `/to-spec` → `/to-tickets`" when a design decision is open, and ask Ray
@@ -303,7 +307,7 @@ attestation stale again.
 - [ ] `mise run plan-pointer` refreshed the tracked plan digest.
 - [ ] `mise run session-orphans` reports no unallowed `OTHER` descendants and no live wait loops.
 - [ ] `mise run session-agentsview-pass` completed; findings dispositioned or daemon marked `UNVERIFIABLE`.
-- [ ] §1c session-integrity review ran (four reports persisted); every finding is FIX-NOW done or a PLAN line in `task_plan.md`.
+- [ ] §1c session-integrity review ran (seven reports persisted); every finding is FIX-NOW done or a PLAN line in `task_plan.md`; every repeat offender has a machine check, a PLAN row for one, or Ray's ruling.
 - [ ] `mise run plan-attest` ran (if the plan changed) only after every background task, agent and codex lane finished.
 - [ ] Session-LOCAL background tasks/agents + scheduled wakeups inventoried; stale ones cancelled or noted.
 - [ ] Session-INDEPENDENT autonomous processes (running GHA runs, Renovate PRs) inventoried in the handoff — NOT waited/blocked on; `main` noted as bot-advanced.

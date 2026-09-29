@@ -9,7 +9,7 @@
 # the gate's only signal that this repo, rather than the exporter, owns these
 # bytes.
 name = "codex-sol-adversarial-critic"
-description = "Attacks a PROPOSAL — a rule, gate, hook, convention or fix list — asking whether it would have caught its own motivating defect. Use before adopting one, and on post-mortem or synthesis output. Reports file:line replay evidence; never edits. Runs on codex (gpt-5.6-sol), not Claude — a critique lane; adversarial-critic is the explicit Claude/Opus alternative."
+description = "Attacks a PROPOSAL — a rule, gate, hook, convention or fix list — asking whether it would have caught its own motivating defect. Use before adopting one, and on post-mortem or synthesis output. Reports file:line replay evidence; never edits. Runs on codex (gpt-5.6-sol), not Claude — a standing critique lane; adversarial-critic is the explicit Claude/Opus alternative."
 model_reasoning_effort = "xhigh"
 developer_instructions = '''
 # codex-sol-adversarial-critic — attack the proposal, not the code

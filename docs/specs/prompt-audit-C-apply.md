@@ -98,3 +98,13 @@ Control arm for the greps: `grep -rlF 'codex-lane-mirror' .claude/agents .codex/
 | P6 | L | `600000` is absent from `codex-sol-implementer.md` and present in the other five sol wrappers | report C probe record; `grep` this session lists 10 files, implementer not among them |
 | P7 | P | Bash default timeout 120 s; a timed-out call moves to background | `$CC/env-vars.md:185`, `$CC/agent-sdk__typescript.md:3423` (per report C) |
 | P8 | A | The C5 routing rewording matches Ray's standing-lane doctrine | `.claude/CLAUDE.md` lane table (codex lanes are standing, not contingent) |
+
+## Amendments after review (2026-09-28)
+
+Shipped in #1426 beyond §2, each approved by the Opus cold review (`cold-review-prompt-audit-C-2026-09-28.md`): the
+`174 pages` fix in the sol TOML body, the two incident stories in `codex-sol-advisor.md` (F5), and F2-F4/F7-F9. The
+post-merge `/mattpocock-skills:code-review` (`mattpocock-review-{standards,spec}-1426-2026-09-28.md`) then required:
+no dated story or unsourced "measured" claim in `codex-sol-implementer`; no volatile token figure; a version condition
+on the operator's `--full-auto` fact; descriptions read "a standing <role> lane" (C5's point, without implying a
+default between sol and astra); the redaction anecdote dropped. Open: the six-copy duplication of the shared safety
+bullets (Standards 4) — a single-source refactor, planned separately.

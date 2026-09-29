@@ -85,8 +85,8 @@ Never answer from one alone. When they disagree, **lower number wins**.
 
 A fourth exists and is a last resort: a **live probe** on this machine — actually
 spawn the agent, fire the hook, run the flag. It is the only thing that settles
-semantics the docs leave undefined, and it costs real tokens (~78-85 k per agent
-spawned). Reach for it when the answer decides an architecture, and say that you did.
+semantics the docs leave undefined, and it costs real tokens for every agent spawned.
+Reach for it when the answer decides an architecture, and say that you did.
 
 **Existence is not semantics.** A token in the binary proves the string ships. It
 does not prove the feature is reachable, enabled, or behaves as its name suggests.
@@ -293,7 +293,7 @@ caller applies them.
   `${VAR:-x}` and `${VAR:=x}` **emit the value** when set, so `${VAR:+SET}${VAR:-ABSENT}`
   prints the secret. Use `[ -n "$VAR" ]`. Your stdout lands in the transcript.
 - **`[redacted]` inside a number in `mise run` output is value-based redaction**,
-  not data (a 1-char redacted value once masked every `1`). Read that number
+  not data. Read that number
   from a non-`mise` invocation or a recorded `rc=` line.
 - **A pipe eats the exit code.** `cmd | tail` returns tail's 0. Redirect to a file,
   record `rc=$?`, read the file.

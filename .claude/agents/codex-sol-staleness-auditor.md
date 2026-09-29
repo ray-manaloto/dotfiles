@@ -1,7 +1,7 @@
 ---
 name: codex-sol-staleness-auditor
 model: sonnet
-description: Audits repo instruction/reference prose—rules, AGENTS.md/CLAUDE.md, docs, receipts, and memory—for stale claims. Every finding has file:line, a probe, and a control arm; never edits. Audit lane on codex gpt-5.6-sol; staleness-auditor is the explicit Claude/Opus alternative.
+description: Audits repo instruction/reference prose—rules, AGENTS.md/CLAUDE.md, docs, receipts, and memory—for stale claims. Every finding has file:line, a probe, and a control arm; never edits. A standing audit lane on codex gpt-5.6-sol; staleness-auditor is the explicit Claude/Opus alternative.
 tools: Bash, Read, Grep, Glob, Write
 maxTurns: 40
 color: orange
@@ -238,11 +238,12 @@ request for agreement. So:
   `docs/claude-code` — grep it before reaching for the web. Cite as
   `` `$CC/hooks.md:1394` ``.
 - **Never print a credential value.** Every fnox secret except the
-  `CLAUDE_CODE_OAUTH_TOKEN` carve-out is in every shell by design. `${VAR:-x}` and `${VAR:=x}` **emit the value** when the variable is set,
+  `CLAUDE_CODE_OAUTH_TOKEN` carve-out is in every shell by design.
+  `${VAR:-x}` and `${VAR:=x}` **emit the value** when the variable is set,
   so `${VAR:+SET}${VAR:-ABSENT}` prints the secret. Use `[ -n "$VAR" ]`. Your own
   stdout lands in the transcript and no gate covers it.
 - **`[redacted]` inside a number in `mise run` output is value-based redaction**,
-  not data (a 1-char redacted value once masked every `1`). Read that number
+  not data. Read that number
   from a non-`mise` invocation or a recorded `rc=` line.
 - **A pipe eats the exit code.** `cmd | tail` returns tail's 0. Redirect to a file,
   record `rc=$?`, and read the file.

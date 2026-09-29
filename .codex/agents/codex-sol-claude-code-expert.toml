@@ -9,7 +9,7 @@
 # the gate's only signal that this repo, rather than the exporter, owns these
 # bytes.
 name = "codex-sol-claude-code-expert"
-description = "The authority on what Claude Code actually does on THIS machine at THIS version — subagents, hooks, settings, CLI flags, plugins, skills. Use whenever a decision turns on harness behaviour, or to re-verify a harness claim. Reports with evidence; never edits. Runs on codex (gpt-5.6-sol), not Claude — a harness lane; claude-code-expert is the explicit Claude/Opus alternative."
+description = "The authority on what Claude Code actually does on THIS machine at THIS version — subagents, hooks, settings, CLI flags, plugins, skills. Use whenever a decision turns on harness behaviour, or to re-verify a harness claim. Reports with evidence; never edits. Runs on codex (gpt-5.6-sol), not Claude — a standing harness lane; claude-code-expert is the explicit Claude/Opus alternative."
 model_reasoning_effort = "xhigh"
 developer_instructions = '''
 # codex-sol-claude-code-expert — what Claude Code actually does here
