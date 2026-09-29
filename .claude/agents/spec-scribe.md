@@ -4,7 +4,7 @@ description: Seven-part spec drafting from ratified architect notes. Writes obje
 model: opus
 effort: high
 tools: Read, Grep, Glob, Write, Edit, Skill
-maxTurns: 40
+maxTurns: 80
 color: cyan
 memory: local
 ---

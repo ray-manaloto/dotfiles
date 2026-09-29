@@ -1890,3 +1890,41 @@ flowchart LR
 flowchart LR
     F["S28b-0 FIX-NOW"] --> P["S28b-1 p2996"] --> G["S28b-2 ship-gate grilling"] --> Z["S28b-3 shell probe"] --> M["S28b-4 machine checks"] --> R["remainder + S27/S28"] --> P11["Phase 11"] --> P10["Phase 10"]
 ```
+
+## 2026-09-29 — session dcb0b106: plan pointer removed; S28b-0/1 landed; #963 and #1435 fixed and proven live
+
+- **Iteration ID:** `dotfiles-goal-20260929-043`
+- **Prior goal digest:** `sha256:9ff159df37d21ff1a8e412fbe58729a70e4beda82ddb5f586daa6f18c933efd6`
+- **Current goal digest:** `sha256:10d5655fe5027e396daf7a5918fdc3e6575c3a4dd9d16cecad8308e1bf3ed49b`
+- **Changed requirement:**
+  - The tracked plan pointer is gone (Ray, overriding #1351 story 4); plan integrity is planning-with-files' own
+    attestation, and the handoff ends attest → handoff-check → a fresh-session `/session-resume` round-trip.
+  - task_plan.md moves to pwf's native layout (Ray: research first); a validation review adds fast pre-gates.
+  - Renovate: clang-p2996 has one literal and its own daily PR; our repair bots are ignored authors with
+    `rebaseWhen: conflicted` pinned.
+- **Reason:** `/session-resume` hit `stale_plan_pointer` (3 of 6 resumes had a real DISAGREEMENT); Ray's rulings this
+  session; the seven 2026-09-29 §1c audits.
+- **Evidence:**
+  - Landed with `land` rc=0: #1437 (`de214a64`), #1439 (`8454778c`), #1441 (`efc04995`, smoke: clang ref f17c8d6c matches
+    the pin), #1445 (`e3b5e796`), #1447 (`6ef594cd`), #1450 (`8b11c2c0`).
+  - Live proof on #1449: checkbox rebase → renovate force-push → gcc repair `0fb16b53` + image-lock-pr `e4c81b24`, no
+    Edited/Blocked (runs 36592518660, 36592628273). Closed #1435, #963, #1063.
+  - Reports: `session-audit-*-2026-09-29.md` (seven), `research-p2996-ref-tracking`, `research-1435-repair-bot-rebase`,
+    `diagnose-963-lock-perturbation`, `research-pwf-native-restructure` (all 2026-09-29), per-commit review reports.
+- **Affected tickets:** closed #963, #1435, #1063; advanced #1434 (open until the first clang PR), #1351/#1354 (amended),
+  KB#806 (amended).
+- **Disposition:** `ACCEPTED`.
+- **Topology and ownership:** One writer, the Claude architect. Delegates: two `codex-sol-implementer` runs (S28b-0,
+  S28b-1), spec-scribe ×2, Opus research/diagnosis/cold-review/audit lanes, codex review lenses until the codex usage
+  limit (2026-09-29, back 2026-10-03), then Opus fallback reviews stated as such, `/code-review` forks.
+
+### Current goal
+
+> Next session, in order (Ray, 2026-09-29): S29-0 restructure task_plan.md into planning-with-files' native layout, research first (prior rulings, latest plugin version, settings and env vars); S29-1 review every validation for fast checks, starting with lint --changed; S29-2 the repeat-offender machine checks (rc-grep gate, zsh glob guard, mutation-arm, codex-lens task); S29-3 make land read PR checks and vendor the starship schema; S29-4 the ship-gate /grilling once codex returns (2026-10-03), then S28b-3/4 and the queued remainder before Phase 11 and Phase 10. Done means land rc=0 with the gates run through mise run gate, /code-review, the cross-family lens (stated fallback when codex is unavailable), the mattpocock pair for spec'd diffs and the repo verify skill for surface changes; the handoff ends with a fresh-session round-trip that reports no DISAGREEMENT. Keep task_plan.md as the sole task authority.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    R["S29-0 native pwf restructure"] --> V["S29-1 validation review"] --> M["S29-2 machine checks"] --> L["S29-3 land reads PR checks"] --> G["S29-4 ship-gate grilling"] --> Q["S28b-3/4 + remainder"] --> P11["Phase 11"] --> P10["Phase 10"]
+```

@@ -1,5 +1,7 @@
 # S28b-0 — §1c audit FIX-NOW sweep
 
+**EXECUTED 2026-09-29** in PR #1439 (squash `8454778c`); the OPEN rows below are the pre-implementation triage record. Do not re-dispatch.
+
 Status: RATIFIED by the architect 2026-09-28c after Ray's rulings (AskUserQuestion). Drafted by `spec-scribe`;
 revised by the architect. Revisions vs the draft: the plan pointer was DELETED by PR #1437 (Ray: "let's get rid of
 plan pointer"), so T12/H9 (final gate) and T15 (pointer refresh) are DONE there and removed here; H10's control arm

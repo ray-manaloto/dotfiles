@@ -36,13 +36,17 @@ sources instead of inventing a directive. If `task_plan.md` is also absent,
 say task authority is unavailable; issues and commits are context, not a
 substitute plan:
 
-Plan integrity is planning-with-files' own attestation (`.plan-attestation`),
-which is gitignored like `task_plan.md`, so a fresh clone cannot verify it.
-
 ```bash
 git log --oneline -8
 gh issue list --state open --limit 10
 ```
+
+Plan integrity is planning-with-files' own attestation (`.plan-attestation`),
+which is gitignored like `task_plan.md`, so a fresh clone cannot verify it.
+
+To answer "why did an earlier session do X" or "review previous sessions", use the
+user-level AgentsView finding-history skill first (`agentsview session search`); hand-parse `~/.claude/projects/*.jsonl`
+only for a session the archive has not indexed yet.
 
 ### 2. Read the real state
 

@@ -24,6 +24,9 @@ Case history: `docs/rules-evidence/verify-before-advancing.md`.
   wrapper; never raw `hk` — see `long-running-command-hangs.md`).
 - `uv run --project python pytest tests/ -x -q` — all tests pass.
 - `dotfiles-setup verify run` — `0 failed`.
+- Run each as `mise run gate -- run <lint|pytest|verify|lint-docs|pin-actions>`: its rc IS the gate's (0 pass,
+  1 fail, 124 timeout, 127 tool missing, 2 unknown name) and the typed result lands in `.agent/gate-results/`.
+  Never hand-batch `for g in …`, and never gate a commit on `grep '^rc='` — it succeeds whenever rc lines EXIST.
 
 **Conditional (only when that surface changed):**
 
