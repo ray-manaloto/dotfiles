@@ -662,7 +662,8 @@ if [ -n "$P2996_REF_STRICT" ]; then
     echo "FAIL: clang-p2996 ref $ACTUAL_P2996_REF != pinned $EXPECTED_P2996_REF"
     exit 1
   fi
-  echo "OK: clang-p2996 ref $ACTUAL_P2996_REF matches pinned CLANG_P2996_REF"
+  echo "OK: clang-p2996 ref $ACTUAL_P2996_REF matches pinned CLANG_P2996_REF "\
+"(build==pin only; upstream freshness is tracked by Renovate, not checked here)"
 else
   echo "OK: clang-p2996 real build @ $ACTUAL_P2996_REF (non-SHA override; skip)"
 fi

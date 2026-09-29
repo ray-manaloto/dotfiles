@@ -96,9 +96,10 @@ variable "BUILDER_IMAGE" {
 }
 
 # Pinned commit SHA for Bloomberg's clang-p2996 fork (C++ P2996 reflection).
+# This is the single SHA literal; Renovate and `mise run p2996-refresh` update it.
 # Changing this value invalidates the BuildKit cache for the clang-builder stage.
 variable "CLANG_P2996_REF" {
-  default = "7220baffd57ea5b0f8cf59bee494dd5b7cc2b748"
+  default = "f17c8d6c7bfef5e02ccadcf33517fd2a53b51b6e"
 }
 
 // Default tags for local builds; overridden by docker/metadata-action

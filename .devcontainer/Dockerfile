@@ -418,12 +418,14 @@ FROM ${BUILDER_IMAGE} AS clang-builder-cold
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG CLANG_P2996_REPO=https://github.com/bloomberg/clang-p2996.git
-# Reconciled to match docker-bake.hcl's CLANG_P2996_REF default (#160 T3) —
-# CI's bake passes that value as a build arg (overriding this default), and
-# p2996_hash.py reads it from bake, so this default was stale drift. The
-# git-refs Renovate manager rewrites BOTH files in lockstep now that they
-# hold the same SHA.
-ARG CLANG_P2996_REF=f349a2d801fbde1f2796dcc003db3d57b3f84515
+# NO default, on purpose (S28b-1, #1434): docker-bake.hcl's
+# `variable "CLANG_P2996_REF"` is the ONLY literal. Every build of this file
+# goes through bake, which passes it as a build arg (dev + p2996-cache targets).
+# Renovate's git-refs manager bumps that one literal in its own PR, and p2996_hash.py
+# reads it from there. A default here was a second, silently-stale copy
+# (#904 bumped only this line). Gated by tests/test_p2996_single_literal.py and
+# the build.clang-p2996-reflection suite.
+ARG CLANG_P2996_REF
 
 # Self-contained compile toolchain (#160 T11): gcc/g++ via build-essential,
 # cmake + ninja from apt (26.04 ships cmake ≥3.28, well past LLVM's 3.20
@@ -460,7 +462,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # check (image.py) is unaffected.
 WORKDIR /build/clang-p2996
 
-RUN git init . && \
+RUN test -n "${CLANG_P2996_REF}" || { echo "FAIL: CLANG_P2996_REF unset; build via docker bake"; exit 1; } && \
+    git init . && \
     git remote add origin "${CLANG_P2996_REPO}" && \
     git fetch --depth 1 origin "${CLANG_P2996_REF}" && \
     git checkout FETCH_HEAD

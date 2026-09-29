@@ -18,10 +18,10 @@ name: Refresh lockfiles
 # release since the last refresh).
 #
 # The predecessor snapshot-refresh job (mise-system-resolved.json) was
-# retired with the snapshot itself (#160 T1); p2996-refresh was retired
-# (#169) on the belief that a Renovate git-refs manager bumps
-# CLANG_P2996_REF in docker-bake.hcl + Dockerfile in lockstep. FALSE: its
-# regex matches only the Dockerfile ARG, never bake's HCL default (#1434).
+# retired with the snapshot itself (#160 T1); p2996-refresh was retired in
+# #169. S28b-1 fixed its defective successor (#1434): Renovate's scoped
+# git-refs manager now bumps the single docker-bake.hcl pin in its own PR.
+# Do not re-wire a second scheduled writer here.
 #
 # The job mints a GitHub App token (actions/create-github-app-token) for
 # the PR push so the PR's normal `pull_request` CI fires on its own

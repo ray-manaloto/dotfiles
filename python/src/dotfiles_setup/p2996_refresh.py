@@ -1,5 +1,5 @@
 # Copyright (c) 2026 Raymond Manaloto
-"""Auto-bump `CLANG_P2996_REF` to the latest `bloomberg/clang-p2996` HEAD.
+"""Manually bump `CLANG_P2996_REF` to the latest `bloomberg/clang-p2996` HEAD.
 
 clang-p2996 publishes **no releases or tags**; its default branch is ~a
 year stale and the active P2996 work lives on the **`p2996`** branch. So
@@ -13,9 +13,11 @@ content-addressed cache key in `p2996_hash.py`, so:
 - SHA unchanged -> same hash -> `:p2996-<hash>` cache **hit** -> no rebuild.
 - SHA changed   -> new hash  -> cache **miss** -> exactly one rebuild.
 
-The scheduled `.github/workflows/refresh.yml` (`p2996-refresh` job) runs
-this, then opens a PR via `peter-evans/create-pull-request` when the file
-actually changed.
+Renovate's git-refs customManager is the automatic path: it opens its own
+daily PR (S28b-1, #1434). This module is the manual/emergency path, run via
+`mise run p2996-refresh`. The scheduled `refresh.yml` `p2996-refresh` job was
+retired in #169; do not re-wire it alongside Renovate, because that would put
+two writers on one pin.
 
 See `.devcontainer/P2996-CACHE.md` and issue #100 for the full design.
 """

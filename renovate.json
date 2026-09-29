@@ -89,6 +89,19 @@
         "github:agent-sh/agnix"
       ],
       "extractVersion": "^v?(?<version>.+)$"
+    },
+    {
+      "description": "clang-p2996 (#1434/#1435, S28b-1): its OWN daily PR, pulled OUT of `image-build inputs` (packageRules[0] matches docker-bake.hcl by file name, which is what put the compiler into #1063). Each bump is a cold p2996 compile, so a once-a-day window bounds cost. minimumReleaseAge is INERT here: the git-refs datasource emits no releaseTimestamp, and this repo's timestamp-optional behaviour then proceeds immediately, so `schedule` is the only soak lever. Auto-merge is GitHub-native and waits on the required `ci-gate`, which needs build-publish; docker-bake.hcl is in ci.yml's build path filter, so build-publish cannot skip for this PR.",
+      "matchDepNames": [
+        "bloomberg/clang-p2996"
+      ],
+      "groupName": null,
+      "schedule": [
+        "before 6am"
+      ],
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": true
     }
   ],
   "ignoreDeps": [
@@ -123,13 +136,12 @@
     },
     {
       "customType": "regex",
-      "description": "clang-p2996 pinned git SHA (tagless p2996 branch HEAD). git-refs datasource; no preset handles a git digest.",
+      "description": "clang-p2996 pinned git SHA (tagless p2996 branch HEAD) — the SINGLE literal, docker-bake.hcl's `variable \"CLANG_P2996_REF\"` default (S28b-1, #1434). The .devcontainer/Dockerfile ARG deliberately has NO default. The previous matchString `CLANG_P2996_REF[\"= ]+…` could not cross the HCL block's brace/newline/`default =`, so it extracted 0 deps from bake and bumped only the Dockerfile copy (#904). `\\s` crosses newlines under RE2 with the regex manager's `g`-only flags. git-refs emits no releaseTimestamp, so minimumReleaseAge is inert for this dep (timestamp-optional proceeds immediately); its cadence comes from the packageRule's `schedule`. Gated by tests/test_p2996_single_literal.py.",
       "managerFilePatterns": [
-        "/docker-bake\\.hcl$/",
-        "/\\.devcontainer/Dockerfile$/"
+        "/(^|/)docker-bake\\.hcl$/"
       ],
       "matchStrings": [
-        "CLANG_P2996_REF[\"= ]+(?<currentDigest>[a-f0-9]{40})"
+        "variable \"CLANG_P2996_REF\"\\s*\\{\\s*default\\s*=\\s*\"(?<currentDigest>[a-f0-9]{40})\""
       ],
       "depNameTemplate": "bloomberg/clang-p2996",
       "packageNameTemplate": "https://github.com/bloomberg/clang-p2996",
