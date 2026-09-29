@@ -135,7 +135,6 @@ from dotfiles_setup.plan_attest import (
     insert_passthrough_separator,
     plan_attest_main,
 )
-from dotfiles_setup.plan_pointer import main as plan_pointer_main
 from dotfiles_setup.platform_target import (
     PLATFORM_FIELDS,
     platform_literals_main,
@@ -1557,10 +1556,6 @@ def _add_session_subcommands(
         default=None,
         help="Specific handoff path (default: newest .agent/plans/session-*.md)",
     )
-    subparsers.add_parser(
-        "plan-pointer",
-        help="Refresh the tracked digest pointer to the active NEXT SESSION phase",
-    )
     orphan_parser = subparsers.add_parser(
         "session-orphans",
         help="Audit descendants of this Claude session; optionally reap wait loops",
@@ -2827,7 +2822,6 @@ def _build_command_handlers(
                 [args.path] if args.path is not None else [], project_root
             )
         ),
-        "plan-pointer": lambda: sys.exit(plan_pointer_main(project_root)),
         "session-orphans": lambda: sys.exit(
             session_orphans_main(
                 OrphanRequest(

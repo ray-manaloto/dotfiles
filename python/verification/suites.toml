@@ -1705,34 +1705,6 @@ per_path_tokens = { "mise.toml" = [
 ] }
 
 [[suite]]
-name = "workflow.plan-pointer-wiring"
-description = "The session-handoff plan pointer must stay wired end-to-end: mise exposes the thin caller, main.py registers and dispatches the subcommand, the Python entry point and its public CLI test exist, and the session-handoff skill invokes the task. Per-path tokens make every executable and documented link independently necessary."
-category = "workflow"
-check_type = "static"
-handler = "require_tokens"
-paths_required = true
-paths = [
-    "mise.toml",
-    "python/src/dotfiles_setup/main.py",
-    "python/src/dotfiles_setup/plan_pointer.py",
-    "tests/test_plan_pointer.py",
-    ".claude/skills/session-handoff/SKILL.md",
-]
-per_path_tokens = { "mise.toml" = [
-    "[tasks.plan-pointer]",
-    "dotfiles-setup plan-pointer'",
-], "python/src/dotfiles_setup/main.py" = [
-    '"plan-pointer",',
-    '"plan-pointer": lambda: sys.exit(',
-], "python/src/dotfiles_setup/plan_pointer.py" = [
-    "def main(",
-], "tests/test_plan_pointer.py" = [
-    "def test_public_cli_registers_plan_pointer(",
-], ".claude/skills/session-handoff/SKILL.md" = [
-    "mise run plan-pointer\n```",
-] }
-
-[[suite]]
 name = "workflow.session-agentsview-pass-wiring"
 description = "The session-handoff AgentsView census must stay wired end-to-end: mise exposes the thin caller, main.py registers and dispatches the subcommand, the Python entry point and its public CLI test exist, and the session-handoff skill invokes the task. Per-path tokens make every executable and documented link independently necessary."
 category = "workflow"

@@ -36,8 +36,8 @@ sources instead of inventing a directive. If `task_plan.md` is also absent,
 say task authority is unavailable; issues and commits are context, not a
 substitute plan:
 
-The tracked plan pointer is a same-clone continuity check; a fresh clone cannot
-verify its digest because `task_plan.md` is gitignored.
+Plan integrity is planning-with-files' own attestation (`.plan-attestation`),
+which is gitignored like `task_plan.md`, so a fresh clone cannot verify it.
 
 ```bash
 git log --oneline -8
@@ -54,7 +54,7 @@ mise run session-state
 
 A failed GitHub lookup is `UNVERIFIABLE`, never `none`.
 
-When the handoff makes citation-heavy claims, also run:
+Always also run:
 
 ```bash
 mise run handoff-check
@@ -62,7 +62,8 @@ mise run handoff-check
 
 With a specifically named handoff, pass the same path after `--`.
 `handoff-check` verifies paths, line ranges, mise task names, absence of a
-second task carrier, the active-plan shape, and the tracked plan pointer; it
+second task carrier, the active-plan shape, and that `task_plan.md` still matches
+its planning-with-files attestation (`unattested_plan` otherwise); it
 does not prove the handoff covered every non-task obligation.
 
 ### 3. Reconcile and report disagreements first

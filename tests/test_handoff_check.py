@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import subprocess
 import sys
 from pathlib import Path
@@ -11,7 +12,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
-from dotfiles_setup import handoff_check, plan_pointer
+from dotfiles_setup import handoff_check
 from dotfiles_setup import main as cli_main
 
 _COMMAND_TIMEOUT = 30
@@ -126,29 +127,124 @@ def test_plan_without_next_session_heading_is_missing_active_plan(
     ]
 
 
-def test_pointer_stale_after_plan_bytes_change(tmp_path: Path) -> None:
-    repo = _repo(tmp_path)
-    plan = repo / "task_plan.md"
-    plan.write_text("# Plan\n\n## Phase 7 — NEXT SESSION\n")
-    assert plan_pointer.write(repo) == 0
-    plan.write_text("# Plan\n\n## Phase 8 — NEXT SESSION\n")
+def _attested(repo: Path, extra: str = "") -> handoff_check.Attestation:
+    """Write an attestation the way `plan-attest` does; return its --show view."""
+    digest = hashlib.sha256((repo / "task_plan.md").read_bytes()).hexdigest()
+    (repo / ".plan-attestation").write_text(digest + "\n" + extra)
+    return handoff_check.Attestation("./task_plan.md", "./.plan-attestation")
 
-    findings = handoff_check.check(repo, "State only.\n")
+
+def _plan(repo: Path, phase: int = 7) -> None:
+    (repo / "task_plan.md").write_text(f"# Plan\n\n## Phase {phase} — NEXT SESSION\n")
+
+
+def test_attested_plan_has_no_plan_finding(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    _plan(repo)
+    state = _attested(repo)
+
+    assert handoff_check.check(repo, "State only.\n", show=lambda _: state) == []
+
+
+def test_plan_edited_after_attestation_is_unattested(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    _plan(repo)
+    state = _attested(repo)
+    _plan(repo, phase=8)
+
+    findings = handoff_check.check(repo, "State only.\n", show=lambda _: state)
 
     assert [item.verdict for item in findings] == [
-        handoff_check.Verdict.STALE_PLAN_POINTER
+        handoff_check.Verdict.UNATTESTED_PLAN
+    ]
+    assert "does not match its attestation" in findings[0].detail
+
+
+@pytest.mark.parametrize("extra", ["extra\n", "\x1c"])
+def test_trailing_content_after_the_digest_is_unattested(
+    tmp_path: Path, extra: str
+) -> None:
+    """The hook strips only C-locale whitespace and NUL, then compares the whole file.
+
+    U+001C is whitespace to Python's ``str.split`` but not to ``tr [:space:]``,
+    so a checker using ``split`` would pass what the hook rejects.
+    """
+    repo = _repo(tmp_path)
+    _plan(repo)
+    state = _attested(repo, extra=extra)
+
+    findings = handoff_check.check(repo, "State only.\n", show=lambda _: state)
+
+    assert [item.verdict for item in findings] == [
+        handoff_check.Verdict.UNATTESTED_PLAN
     ]
 
 
-def test_plan_without_pointer_is_reported(tmp_path: Path) -> None:
+def test_native_whitespace_around_the_digest_is_accepted(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
-    (repo / "task_plan.md").write_text("# Plan\n\n## Phase 7 — NEXT SESSION\n")
+    _plan(repo)
+    state = _attested(repo, extra=" \t\r\x0b\x0c\x00\n")
 
-    findings = handoff_check.check(repo, "State only.\n")
+    assert handoff_check.check(repo, "State only.\n", show=lambda _: state) == []
+
+
+def test_slug_selection_is_rejected_even_when_the_slug_is_attested(
+    tmp_path: Path,
+) -> None:
+    """The root plan is the task authority; a slug the plugin resolves is a finding."""
+    repo = _repo(tmp_path)
+    _plan(repo)
+    slug = repo / ".planning" / "ticket"
+    slug.mkdir(parents=True)
+    (slug / "task_plan.md").write_text("# Ticket plan\n")
+    (slug / ".attestation").write_text(
+        hashlib.sha256((slug / "task_plan.md").read_bytes()).hexdigest() + "\n"
+    )
+    state = handoff_check.Attestation(
+        "./.planning/ticket/task_plan.md", "./.planning/ticket/.attestation"
+    )
+
+    findings = handoff_check.check(repo, "State only.\n", show=lambda _: state)
 
     assert [item.verdict for item in findings] == [
-        handoff_check.Verdict.MISSING_PLAN_POINTER
+        handoff_check.Verdict.UNATTESTED_PLAN
     ]
+    assert "not the root task_plan.md" in findings[0].detail
+
+
+@pytest.mark.parametrize(
+    ("state", "fragment"),
+    [
+        (handoff_check.Attestation(None, None), "has no attestation"),
+        (
+            handoff_check.Attestation(None, None, "plugin absent"),
+            "cannot read the planning-with-files attestation: plugin absent",
+        ),
+    ],
+)
+def test_missing_or_unreadable_attestation_is_unattested(
+    tmp_path: Path, state: handoff_check.Attestation, fragment: str
+) -> None:
+    repo = _repo(tmp_path)
+    _plan(repo)
+
+    findings = handoff_check.check(repo, "State only.\n", show=lambda _: state)
+
+    assert [item.verdict for item in findings] == [
+        handoff_check.Verdict.UNATTESTED_PLAN
+    ]
+    assert fragment in findings[0].detail
+
+
+def test_parse_show_reads_the_plugin_output() -> None:
+    shown = (
+        f"Plan: ./task_plan.md\nAttestation: ./.plan-attestation\nSHA-256: {'a' * 64}\n"
+    )
+    assert handoff_check.parse_show(shown) == handoff_check.Attestation(
+        "./task_plan.md", "./.plan-attestation"
+    )
+    missing = "[plan-attest] No attestation set for ./task_plan.md.\n"
+    assert handoff_check.parse_show(missing) == handoff_check.Attestation(None, None)
 
 
 def test_fresh_clone_without_plan_has_no_active_plan_finding(tmp_path: Path) -> None:

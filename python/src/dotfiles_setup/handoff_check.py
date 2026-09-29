@@ -9,15 +9,18 @@ prove that a handoff is complete or reconcile claims across handoff versions.
 from __future__ import annotations
 
 import hashlib
-import json
 import re
 import subprocess
 import sys
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from dotfiles_setup.plan_pointer import POINTER_PATH, active_phase
+from dotfiles_setup.plan_attest import PluginNotInstalledError, resolve_attest_script
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 _MISE_TIMEOUT = 30
 _HANDOFF_RE = re.compile(
@@ -37,6 +40,67 @@ _TASK_CARRIER_HEADING = re.compile(
     r"(?:[ \t]*:)?(?:[ \t]+.*)?$"
 )
 _TASK_CARRIER_LINE = re.compile(r"(?im)^[ \t]*(?:next:|next[ -]task[ \t]*:)[ \t]*.*$")
+_ACTIVE_HEADING = re.compile(r"(?im)^##\s+(?P<heading>[^\n]*NEXT SESSION[^\n]*)\s*$")
+# planning-with-files' own attestation replaced the retired tracked pointer
+# (Ray, 2026-09-28c). WHICH plan and attestation file are live is the plugin's
+# decision (--target, $PLAN_ID, .planning/.active_plan, newest slug, then the
+# root plan), so this gate asks the plugin's own `attest-plan.sh --show` rather
+# than re-deriving that order: the answer is then the plan the hook injects.
+# The root plan is this repo's sole task authority, so a selection that resolves
+# anywhere else is itself a finding. The digest is read from the attestation
+# FILE and whitespace-stripped whole, exactly as the plugin's inject-plan.sh
+# compares it — a matching first line with trailing junk is still tampered.
+_SHOW_PLAN = re.compile(r"(?m)^Plan: (?P<value>.+)$")
+_SHOW_FILE = re.compile(r"(?m)^Attestation: (?P<value>.+)$")
+# inject-plan.sh's `tr -d '\r\n[:space:]'` (C locale), as the plugin's own
+# inject-plan.py spells it (`_WS_BYTES`, plus NUL). NOT Python's str.split():
+# that also drops U+001C-U+001F, so a digest followed by one would pass here
+# while the hook reports the plan tampered.
+_NATIVE_WS = frozenset(b" \t\n\r\x0b\x0c\x00")
+
+
+def _strip_native_ws(data: bytes) -> bytes:
+    """Drop exactly the bytes the plugin's hook drops before comparing digests."""
+    return bytes(b for b in data if b not in _NATIVE_WS)
+
+
+@dataclass(frozen=True)
+class Attestation:
+    """What the plugin reports: the resolved plan and its attestation file."""
+
+    plan: str | None
+    attestation: str | None
+    error: str | None = None
+
+
+def parse_show(output: str) -> Attestation:
+    """Parse ``attest-plan.sh --show``; missing fields mean "not attested"."""
+    plan = _SHOW_PLAN.search(output)
+    attestation = _SHOW_FILE.search(output)
+    return Attestation(
+        plan.group("value").strip() if plan else None,
+        attestation.group("value").strip() if attestation else None,
+    )
+
+
+def show_attestation(repo_root: Path) -> Attestation:
+    """Ask the installed pwf plugin which plan is attested, and with what digest."""
+    try:
+        script = resolve_attest_script(Path.home())
+    except PluginNotInstalledError as exc:
+        return Attestation(None, None, str(exc))
+    try:
+        completed = subprocess.run(
+            ["sh", str(script), "--show"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=_MISE_TIMEOUT,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return Attestation(None, None, f"attest-plan.sh --show failed: {exc}")
+    return parse_show(completed.stdout)
 
 
 class Verdict(Enum):
@@ -49,8 +113,7 @@ class Verdict(Enum):
     FORBIDDEN_TASK_CARRIER = "forbidden_task_carrier"
     UNCLOSED_FENCE = "unclosed_fence"
     MISSING_ACTIVE_PLAN = "missing_active_plan"
-    MISSING_PLAN_POINTER = "missing_plan_pointer"
-    STALE_PLAN_POINTER = "stale_plan_pointer"
+    UNATTESTED_PLAN = "unattested_plan"
 
 
 @dataclass(frozen=True)
@@ -212,14 +275,21 @@ def _task_carrier_findings(text: str) -> list[Finding]:
     return findings
 
 
-def _plan_findings(repo_root: Path) -> list[Finding]:
-    """Require an active plan phase and verify the tracked digest pointer."""
+def active_phase(text: str) -> str | None:
+    """Return the last level-two heading containing ``NEXT SESSION``."""
+    matches = list(_ACTIVE_HEADING.finditer(text))
+    return matches[-1].group("heading").strip() if matches else None
+
+
+def _plan_findings(
+    repo_root: Path, show: Callable[[Path], Attestation]
+) -> list[Finding]:
+    """Require an active plan phase and a current planning-with-files attestation."""
     plan_path = repo_root / "task_plan.md"
     if not plan_path.is_file():
         return []
     plan_bytes = plan_path.read_bytes()
-    heading = active_phase(plan_bytes.decode(errors="replace"))
-    if heading is None:
+    if active_phase(plan_bytes.decode(errors="replace")) is None:
         return [
             Finding(
                 Verdict.MISSING_ACTIVE_PLAN,
@@ -228,42 +298,46 @@ def _plan_findings(repo_root: Path) -> list[Finding]:
             )
         ]
 
-    pointer_path = repo_root / POINTER_PATH
-    if not pointer_path.is_file():
-        return [
-            Finding(
-                Verdict.MISSING_PLAN_POINTER,
-                POINTER_PATH,
-                "task_plan.md exists but its tracked digest pointer is absent",
-            )
-        ]
-    expected_sha = hashlib.sha256(plan_bytes).hexdigest()
-    try:
-        pointer = json.loads(pointer_path.read_text())
-    except (OSError, json.JSONDecodeError) as exc:
-        return [
-            Finding(
-                Verdict.STALE_PLAN_POINTER,
-                POINTER_PATH,
-                f"pointer is unreadable or invalid: {exc}",
-            )
-        ]
-    if not isinstance(pointer, dict):
-        detail = "pointer is not a JSON object"
-    elif pointer.get("plan_sha256") != expected_sha:
-        detail = "plan_sha256 disagrees with task_plan.md"
-    elif pointer.get("active_phase") != heading:
-        detail = "active_phase disagrees with the last NEXT SESSION heading"
+    state = show(repo_root)
+    if state.error is not None:
+        detail = f"cannot read the planning-with-files attestation: {state.error}"
+    elif state.plan is None or state.attestation is None:
+        detail = "the active plan has no attestation"
+    elif (repo_root / state.plan).resolve() != plan_path.resolve():
+        detail = (
+            f"planning-with-files resolves {state.plan}, not the root task_plan.md "
+            "that is the task authority; clear the slug selection"
+        )
     else:
-        return []
-    return [Finding(Verdict.STALE_PLAN_POINTER, POINTER_PATH, detail)]
+        try:
+            raw = (repo_root / state.attestation).read_bytes()
+            attested = _strip_native_ws(raw).decode(errors="replace")
+        except OSError as exc:
+            attested = None
+            detail = f"{state.attestation} is unreadable: {exc}"
+        else:
+            detail = "task_plan.md does not match its attestation (edited after it)"
+        if attested == hashlib.sha256(plan_bytes).hexdigest():
+            return []
+    return [
+        Finding(
+            Verdict.UNATTESTED_PLAN,
+            state.plan or "task_plan.md",
+            f"{detail}; run `mise run plan-attest` once no writer is live",
+        )
+    ]
 
 
-def check(repo_root: Path, text: str) -> list[Finding]:
+def check(
+    repo_root: Path,
+    text: str,
+    *,
+    show: Callable[[Path], Attestation] = show_attestation,
+) -> list[Finding]:
     """Return only non-OK citation, task-carrier, and active-plan findings."""
     return [
         *_task_carrier_findings(text),
-        *_plan_findings(repo_root),
+        *_plan_findings(repo_root, show),
         *_path_findings(repo_root, text),
         *_task_findings(repo_root, text),
     ]
