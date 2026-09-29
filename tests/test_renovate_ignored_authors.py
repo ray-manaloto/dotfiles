@@ -8,10 +8,13 @@ in `gitIgnoredAuthors` (the list REPLACES the preset's, so github-actions is
 re-listed), and `rebaseWhen` is pinned to `conflicted` locally, including the
 `pin` update type whose own default is `behind-base-branch`.
 
-What this can and cannot check offline: it enumerates EVERY `git config
-user.email` in the workflows and composite actions (no hand-kept list of
-workflows) and expands the App placeholders with `_SLUG` / `_BOT_ID`. Those two
-are constants verified live when written (`gh api /users/<slug>[bot]` ->
+What this can and cannot check offline: it enumerates every identity set by
+`git config [--global|--local] user.email`, `git -c user.email=` or
+`GIT_{AUTHOR,COMMITTER}_EMAIL` in the workflows and composite actions (no
+hand-kept list), and FAILS on such a line it cannot parse (e.g. a `$VAR`).
+Identities passed as action inputs (`committer:`/`author:`) are out of reach.
+It expands the App placeholders with `_SLUG` / `_BOT_ID`; those two are
+constants verified live when written (`gh api /users/<slug>[bot]` ->
 298071151, 2026-09-29); an App rename or reinstall is NOT visible offline, which
 is why the refresh.yml identity comment says to update renovate.json with it.
 """
@@ -26,8 +29,16 @@ REPO_ROOT = Path(__file__).parent.parent
 _SLUG = "dotfiles-refresh-bot-org"
 _BOT_ID = "298071151"
 _EMAIL = re.compile(
-    r"""^(?!\s*#).*?(?:git\s+config\s+(?:--global\s+)?user\.email|GIT_(?:AUTHOR|COMMITTER)_EMAIL\s*[:=])\s*"?(?P<email>[^"\s]+@[^"\s]+)"?""",
+    r"""^(?!\s*#).*?(?:git\s+config\s+(?:--(?:global|local)\s+)?user\.email|"""
+    r"""-c\s+user\.email=|GIT_(?:AUTHOR|COMMITTER)_EMAIL\s*[:=])"""
+    r"""\s*"?(?P<email>[^"\s]+@[^"\s]+)"?""",
     re.MULTILINE,
+)
+# Any non-comment line that SETS an identity by one of these spellings. A line
+# matching this but not `_EMAIL` (e.g. `user.email "$EMAIL"`) is unparsable
+# here and FAILS the gate rather than being skipped.
+_IDENTITY_LINE = re.compile(
+    r"^(?!\s*#).*(?:user\.email|GIT_(?:AUTHOR|COMMITTER)_EMAIL).*$", re.MULTILINE
 )
 
 
@@ -45,7 +56,10 @@ def _identities(text: str) -> list[str]:
 
 def _workflow_texts() -> dict[str, str]:
     github = REPO_ROOT / ".github"
-    paths = [*github.glob("workflows/*.yml"), *github.glob("actions/*/action.yml")]
+    paths = [
+        *github.glob("workflows/*.y*ml"),
+        *github.glob("actions/*/action.y*ml"),
+    ]
     return {str(path.relative_to(REPO_ROOT)): path.read_text() for path in paths}
 
 
@@ -72,16 +86,34 @@ def test_every_workflow_commit_identity_is_an_ignored_author() -> None:
     assert {(path, email) for path, email in found if email not in ignored} == set()
 
 
+def test_no_identity_line_escapes_the_parser() -> None:
+    """Fail closed: an identity line the scan cannot read is a finding, not a skip."""
+    unparsed = [
+        (path, line.strip())
+        for path, text in _workflow_texts().items()
+        for line in _IDENTITY_LINE.findall(text)
+        if not _EMAIL.search(line)
+    ]
+    assert unparsed == []
+
+
 def test_identity_scan_catches_every_spelling() -> None:
     """Control arm: a NEW or overriding identity must be found, comments not."""
     text = (
         '          git config user.email "${APP_SLUG}[bot]@users.noreply.github.com"\n'
         '          git config --global user.email "new-bot[bot]@example.com"\n'
         "          GIT_COMMITTER_EMAIL: other[bot]@example.com\n"
+        "          git -c user.email=inline[bot]@example.com commit -m x\n"
+        '          git config --local user.email "local[bot]@example.com"\n'
         '          # git config user.email "commented@example.com"\n'
     )
     assert _identities(text) == [
         f"{_SLUG}[bot]@users.noreply.github.com",
         "new-bot[bot]@example.com",
         "other[bot]@example.com",
+        "inline[bot]@example.com",
+        "local[bot]@example.com",
     ]
+    variable = '          git config user.email "$EMAIL"\n'
+    assert _identities(variable) == []
+    assert _IDENTITY_LINE.findall(variable)  # ...so the fail-closed test sees it
