@@ -9,15 +9,12 @@ prove that a handoff is complete or reconcile claims across handoff versions.
 from __future__ import annotations
 
 import hashlib
-import json
 import re
 import subprocess
 import sys
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-
-from dotfiles_setup.plan_pointer import POINTER_PATH, active_phase
 
 _MISE_TIMEOUT = 30
 _HANDOFF_RE = re.compile(
@@ -37,6 +34,12 @@ _TASK_CARRIER_HEADING = re.compile(
     r"(?:[ \t]*:)?(?:[ \t]+.*)?$"
 )
 _TASK_CARRIER_LINE = re.compile(r"(?im)^[ \t]*(?:next:|next[ -]task[ \t]*:)[ \t]*.*$")
+_ACTIVE_HEADING = re.compile(r"(?im)^##\s+(?P<heading>[^\n]*NEXT SESSION[^\n]*)\s*$")
+# planning-with-files' own attestation (root/legacy mode): one SHA-256 line
+# written by `mise run plan-attest`. It replaces the retired tracked pointer
+# (Ray, 2026-09-28c) — the plugin's hook already reports PLAN TAMPERED from
+# this same file, so the handoff gate reads the native artifact, not a copy.
+ATTESTATION_PATH = ".plan-attestation"
 
 
 class Verdict(Enum):
@@ -49,8 +52,7 @@ class Verdict(Enum):
     FORBIDDEN_TASK_CARRIER = "forbidden_task_carrier"
     UNCLOSED_FENCE = "unclosed_fence"
     MISSING_ACTIVE_PLAN = "missing_active_plan"
-    MISSING_PLAN_POINTER = "missing_plan_pointer"
-    STALE_PLAN_POINTER = "stale_plan_pointer"
+    UNATTESTED_PLAN = "unattested_plan"
 
 
 @dataclass(frozen=True)
@@ -212,14 +214,19 @@ def _task_carrier_findings(text: str) -> list[Finding]:
     return findings
 
 
+def active_phase(text: str) -> str | None:
+    """Return the last level-two heading containing ``NEXT SESSION``."""
+    matches = list(_ACTIVE_HEADING.finditer(text))
+    return matches[-1].group("heading").strip() if matches else None
+
+
 def _plan_findings(repo_root: Path) -> list[Finding]:
-    """Require an active plan phase and verify the tracked digest pointer."""
+    """Require an active plan phase and a current planning-with-files attestation."""
     plan_path = repo_root / "task_plan.md"
     if not plan_path.is_file():
         return []
     plan_bytes = plan_path.read_bytes()
-    heading = active_phase(plan_bytes.decode(errors="replace"))
-    if heading is None:
+    if active_phase(plan_bytes.decode(errors="replace")) is None:
         return [
             Finding(
                 Verdict.MISSING_ACTIVE_PLAN,
@@ -228,35 +235,25 @@ def _plan_findings(repo_root: Path) -> list[Finding]:
             )
         ]
 
-    pointer_path = repo_root / POINTER_PATH
-    if not pointer_path.is_file():
-        return [
-            Finding(
-                Verdict.MISSING_PLAN_POINTER,
-                POINTER_PATH,
-                "task_plan.md exists but its tracked digest pointer is absent",
-            )
-        ]
-    expected_sha = hashlib.sha256(plan_bytes).hexdigest()
+    attestation = repo_root / ATTESTATION_PATH
     try:
-        pointer = json.loads(pointer_path.read_text())
-    except (OSError, json.JSONDecodeError) as exc:
-        return [
-            Finding(
-                Verdict.STALE_PLAN_POINTER,
-                POINTER_PATH,
-                f"pointer is unreadable or invalid: {exc}",
-            )
-        ]
-    if not isinstance(pointer, dict):
-        detail = "pointer is not a JSON object"
-    elif pointer.get("plan_sha256") != expected_sha:
-        detail = "plan_sha256 disagrees with task_plan.md"
-    elif pointer.get("active_phase") != heading:
-        detail = "active_phase disagrees with the last NEXT SESSION heading"
-    else:
+        attested = attestation.read_text().strip()
+    except OSError:
+        attested = ""
+    if attested == hashlib.sha256(plan_bytes).hexdigest():
         return []
-    return [Finding(Verdict.STALE_PLAN_POINTER, POINTER_PATH, detail)]
+    detail = (
+        "task_plan.md changed after its last attestation"
+        if attested
+        else "task_plan.md has no readable attestation"
+    )
+    return [
+        Finding(
+            Verdict.UNATTESTED_PLAN,
+            ATTESTATION_PATH,
+            f"{detail}; run `mise run plan-attest` once no writer is live",
+        )
+    ]
 
 
 def check(repo_root: Path, text: str) -> list[Finding]:

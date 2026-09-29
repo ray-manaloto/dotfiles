@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import subprocess
 import sys
 from pathlib import Path
@@ -11,7 +12,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
-from dotfiles_setup import handoff_check, plan_pointer
+from dotfiles_setup import handoff_check
 from dotfiles_setup import main as cli_main
 
 _COMMAND_TIMEOUT = 30
@@ -126,29 +127,46 @@ def test_plan_without_next_session_heading_is_missing_active_plan(
     ]
 
 
-def test_pointer_stale_after_plan_bytes_change(tmp_path: Path) -> None:
+def _attest(repo: Path) -> None:
+    plan = repo / "task_plan.md"
+    (repo / handoff_check.ATTESTATION_PATH).write_text(
+        hashlib.sha256(plan.read_bytes()).hexdigest() + "\n"
+    )
+
+
+def test_attested_plan_has_no_plan_finding(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    (repo / "task_plan.md").write_text("# Plan\n\n## Phase 7 — NEXT SESSION\n")
+    _attest(repo)
+
+    assert handoff_check.check(repo, "State only.\n") == []
+
+
+def test_plan_edited_after_attestation_is_unattested(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
     plan = repo / "task_plan.md"
     plan.write_text("# Plan\n\n## Phase 7 — NEXT SESSION\n")
-    assert plan_pointer.write(repo) == 0
+    _attest(repo)
     plan.write_text("# Plan\n\n## Phase 8 — NEXT SESSION\n")
 
     findings = handoff_check.check(repo, "State only.\n")
 
     assert [item.verdict for item in findings] == [
-        handoff_check.Verdict.STALE_PLAN_POINTER
+        handoff_check.Verdict.UNATTESTED_PLAN
     ]
+    assert "changed after its last attestation" in findings[0].detail
 
 
-def test_plan_without_pointer_is_reported(tmp_path: Path) -> None:
+def test_plan_without_attestation_is_unattested(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
     (repo / "task_plan.md").write_text("# Plan\n\n## Phase 7 — NEXT SESSION\n")
 
     findings = handoff_check.check(repo, "State only.\n")
 
     assert [item.verdict for item in findings] == [
-        handoff_check.Verdict.MISSING_PLAN_POINTER
+        handoff_check.Verdict.UNATTESTED_PLAN
     ]
+    assert "no readable attestation" in findings[0].detail
 
 
 def test_fresh_clone_without_plan_has_no_active_plan_finding(tmp_path: Path) -> None:

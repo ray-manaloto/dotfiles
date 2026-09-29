@@ -43,15 +43,6 @@ Note: current branch, staged/unstaged/untracked files, open PR + its CI state
 (`gh pr checks <n> --json name,state`), and any in-flight process or owed
 evidence from the prior `.agent/plans/session-*.md`.
 
-Refresh the tracked identity of the authoritative plan after step 0:
-
-```bash
-mise run plan-pointer
-```
-
-This writes only the plan SHA-256, active phase heading, and timestamp to
-`docs/agents/plan-pointer.json`; it never copies the phase body.
-
 Also inventory **session runtime state**: in-flight background tasks/agents
 and any scheduled wakeups or crons created this session. Stop what should not
 outlive the session; note anything intentionally left running in the handoff.
@@ -215,8 +206,8 @@ Write `.agent/plans/session-<YYYY-MM-DD>[-letter].md`
 (`.claude/rules/agent-artifact-conventions.md` — handoffs are plans). The
 handoff must be self-sufficient for recovery evidence while leaving task
 authority in `task_plan.md`. Include **State at handoff** (branch/PR/merge
-state, gate results), **what shipped**, the plan path and SHA-256 from
-`docs/agents/plan-pointer.json`, evidence/preload pointers, owed non-task
+state, gate results), **what shipped**, the plan path (`task_plan.md`),
+evidence/preload pointers, owed non-task
 obligations, open decisions, and **gotchas**. Do not copy a plan phase,
 directive, or task description. If a prior handoff exists for today, append a
 letter suffix rather than overwriting.
@@ -272,39 +263,45 @@ invocation safe: memory writes are the whole point of the feature and are
 covered by the same approval that enabled auto-invocation; commits and
 issue edits are outward-facing and get a review pass instead.)
 
-## 5. Self-verify the handoff — claims must match reality
+## 5. Final gate — after the LAST write, including any ship repair loop
 
 The handoff is written by paraphrase; wrong details cost the next session
-more than missing ones. Run the single checker against the exact handoff:
+more than missing ones. Nothing writes `task_plan.md` or the handoff once this
+step starts; a later write — a ship repair loop included — restarts it.
 
-```bash
-mise run handoff-check -- .agent/plans/session-<YYYY-MM-DD>[-letter].md
-```
+1. Once `mise run session-orphans` shows no live wait loops or lanes and no
+   background agent, codex lane or harness task is still running (wait for or
+   stop them first; never attest bytes a live writer can still change), run
+   `mise run plan-attest` if `mise run plan-attest -- --show` no longer matches
+   `task_plan.md`. This is planning-with-files' own attestation — the plan's
+   only integrity record.
+2. Run the single checker against the exact handoff, as the LAST command:
 
-Resolve every finding. The checker validates cited paths/lines and mise tasks,
-forbids a second task carrier, requires an active plan, and verifies the tracked
-plan pointer. Also confirm gate results against recorded exit codes, not memory.
+   ```bash
+   mise run handoff-check -- .agent/plans/session-<YYYY-MM-DD>[-letter].md
+   ```
+
+   It validates cited paths/lines and mise tasks, forbids a second task
+   carrier, requires an active plan, and fails `unattested_plan` when
+   `task_plan.md` changed after its attestation. Also confirm gate results
+   against recorded exit codes, not memory.
+
+On any finding, fix it and restart at step 1.
 
 ## 6. Emit the resume prompt — exact output
 
-Print exactly this single line and nothing else:
+Only after step 5's `handoff-check` returned rc=0, print exactly this single
+line and nothing else:
 
 ```text
 Run /session-resume
 ```
-
-If `mise run plan-attest -- --show` reports that `task_plan.md` no longer matches its attestation, run
-`mise run plan-attest` yourself before printing that line — but only once `mise run session-orphans` shows no live
-wait loops or lanes and no background agent, codex lane or harness task is still running. If any is still running,
-wait for it or stop it first; never attest bytes a live writer can still change. Any later plan edit makes the
-attestation stale again.
 
 ## Checklist (all true before you're done)
 
 - [ ] **Active-plan ambiguity driven to zero; every ruling recorded in `task_plan.md` only.**
 - [ ] **No-context-lost self-check passed: plan + MEMORY.md + handoff + research artifacts reconstruct the full working context.**
 - [ ] Working state snapshotted; open PR/CI state known.
-- [ ] `mise run plan-pointer` refreshed the tracked plan digest.
 - [ ] `mise run session-orphans` reports no unallowed `OTHER` descendants and no live wait loops.
 - [ ] `mise run session-agentsview-pass` completed; findings dispositioned or daemon marked `UNVERIFIABLE`.
 - [ ] §1c session-integrity review ran (seven reports persisted); every finding is FIX-NOW done or a PLAN line in `task_plan.md`; every repeat offender has a machine check, a PLAN row for one, or Ray's ruling.
@@ -317,9 +314,9 @@ attestation stale again.
 - [ ] Every findings-bearing agent's brief AND report persisted verbatim under `docs/research/kb/reports/agents/`; coverage audited.
 - [ ] Every report has handoff + governing rule/skill pointers, or is explicitly recorded as deliberately orphaned.
 - [ ] Durable memory written + `MEMORY.md` pointer added.
-- [ ] Local handoff written under `.agent/plans/` and `mise run handoff-check` returned zero findings.
+- [ ] Local handoff written under `.agent/plans/` and `mise run handoff-check` returned zero findings as the LAST command (§5, after every write).
 - [ ] Relevant local gate green; doc commit made (if appropriate).
-- [ ] Resume prompt printed for the user to paste after `/clear`.
+- [ ] Resume prompt printed only after that rc=0, for the user to paste after `/clear`.
 
 ## See also
 
