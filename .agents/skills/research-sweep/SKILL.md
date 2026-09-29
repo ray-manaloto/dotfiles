@@ -23,7 +23,8 @@ this repo use this skill and do not import `kb_setup.research`
 
 - **The Workflow tool is available AND the user asked for a sweep (or approved
   one you proposed)** → run the saved workflow and stop here. It fans out to
-  about 5-7 agents including one Opus/high synthesis, so a single-source
+  about 9-15 agents (one Opus/high synthesis, plus an Opus/high adjudicator
+  only when a claim is flagged), so a single-source
   question belongs on the in-lane steps instead. The workflow owns the per-node
   model and effort routing (the reasoning is commented at the top of
   `.claude/workflows/research-sweep-run.js` — that file is the single source of
@@ -38,8 +39,14 @@ this repo use this skill and do not import `kb_setup.research`
 
   `question` and an ABSOLUTE `reportPath` are required (the workflow throws
   otherwise). `advisor: true` adds a `codex-sol-advisor` second opinion, spent
-  on codex tokens. Optional: `readMax` (URLs deep-read, default 6) and
-  `verifyMax` (claims refuted, default 5).
+  on codex tokens. Optional: `readMax` (triaged URLs deep-read, default 6),
+  `verifyMax` (claims refuted, default 5), `links` (URLs the user named —
+  ALWAYS read, on sonnet, outside the triage cap) and `relatedRepos` (other
+  projects the question is about — searched in BOTH directions, since a
+  relationship searched from one side only is a gap). Pass every link the user
+  gives in `links`; a user link left to triage can be ranked away. The run
+  returns `routing` (node → agent type/model/effort), which the report's
+  Provenance section carries — cite it when asked which agents researched what.
 
 - **No Workflow tool** (a codex lane, a headless run), or no sweep was asked
   for → run the in-lane steps below yourself. The fetch step needs network and `mise`;
@@ -96,6 +103,25 @@ this repo use this skill and do not import `kb_setup.research`
    confirmed, refuted, or explicitly unverified.
 
 ## Traps
+
+- **Absence claims are the easiest to get wrong.** "X does not use Y" must be
+  confirmed by a second, independent route with a control term, and kept apart
+  from "X's docs propose Y" and "a third party documents Y for X" (2026-09-29b:
+  a one-route probe produced a true-but-misleading Omarchy headline). The
+  workflow marks these `absence` and briefs their refuter to confirm them by a
+  second route of a different kind; every refuter also judges
+  misleading-by-omission, and a flagged claim is adjudicated one tier up.
+  Status values: `complete`, `partial-verify` (some refuters null),
+  `links-only` (plan/fan-out/triage failed; only caller links were read),
+  `verify-null`, `reconcile-null`, `plan-null`, `no-manifests`,
+  `triage-null`, `synth-null`. Anything but `complete` is degraded; even
+  `complete` verifies only the first `verifyMax` load-bearing claims and
+  says so in the report's Verification section.
+- **GitHub code search** (config-pattern questions): `gh api -X GET search/code
+  -f q='QUERY'` — no `OR`/parentheses/`**` (HTTP 422), 10 requests/min (a 403 is
+  a rate limit, not zero), and the tokenizer drops punctuation, so re-fetch and
+  grep each hit. One query per alternative, then union; arm with a query that
+  must hit (recipe: the 2026-09-29b lane G GitHub-examples report).
 
 - `gh search issues --repo` returns issues only; the fan-out uses
   `gh api /search/issues`, which returns issues AND pull requests.
