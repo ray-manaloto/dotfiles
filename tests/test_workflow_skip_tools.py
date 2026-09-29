@@ -21,6 +21,20 @@ WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 _MISE_RUN = re.compile(r"\bmise\s+run\b(?P<rest>[^\n]*)")
 
 
+def _skips_tools(rest: str) -> bool:
+    """True only when --skip-tools is one of `mise run`'s OWN flags.
+
+    A flag after the task name (or after `--`) belongs to the task, so mise
+    still auto-installs; only the leading dash-tokens are `mise run` options.
+    """
+    for word in rest.split():
+        if not word.startswith("-") or word == "--":
+            return False
+        if word == "--skip-tools":
+            return True
+    return False
+
+
 def _partial_install_mise_runs(workflow: dict) -> list[tuple[str, str]]:
     """Return (job, command) for each bare `mise run` in a subset-install job."""
     found: list[tuple[str, str]] = []
@@ -35,7 +49,7 @@ def _partial_install_mise_runs(workflow: dict) -> list[tuple[str, str]]:
                 if line.lstrip().startswith("#"):
                     continue
                 match = _MISE_RUN.search(line)
-                if match and "--skip-tools" not in match.group("rest").split():
+                if match and not _skips_tools(match.group("rest")):
                     found.append((job_name, line.strip()))
     return found
 
@@ -62,11 +76,24 @@ def test_probe_flags_a_bare_mise_run_in_a_partial_install_job() -> None:
             }
         }
     }
+    misplaced = {
+        "jobs": {
+            "j": {
+                "steps": [
+                    {"with": {"install_args": "python uv"}},
+                    {"run": "mise run lock-image --skip-tools"},
+                    {"run": "mise run lock-image -- --skip-tools"},
+                ]
+            }
+        }
+    }
     full = {"jobs": {"j": {"steps": [{"run": "mise run lint"}]}}}
     assert _partial_install_mise_runs(bare) == [
         ("j", "mise run lock-image -- --no-container")
     ]
     assert _partial_install_mise_runs(fixed) == []
+    # After the task name the flag is the TASK's, so mise still auto-installs.
+    assert len(_partial_install_mise_runs(misplaced)) == 2
     assert _partial_install_mise_runs(full) == []
 
 

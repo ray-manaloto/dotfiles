@@ -515,13 +515,18 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install mise (python + uv)
+      - name: Install mise (python + uv + hk)
         uses: $/.github/actions/setup-mise
         with:
-          install_args: "python uv"
+          # hk: schema_vendor._hygiene_normalize shells out to `hk util` on
+          # every fetched schema; with --skip-tools below nothing else
+          # installs it. A --locked subset install writes nothing to mise.lock.
+          install_args: "python uv hk"
       - name: Refresh vendored schemas
-        # --skip-tools: same #963 class as image-lock-pr — python+uv only, so a
-        # bare `mise run` would install every root tool and rewrite mise.lock.
+        # --skip-tools: same #963 class as image-lock-pr — a subset install, so
+        # a bare `mise run` would install every other root tool UNLOCKED and
+        # rewrite mise.lock. Anything the task shells out to must be in
+        # install_args above.
         run: mise run --skip-tools schema-vendor-refresh
       - name: Open PR if any schema drifted
         uses: $/.github/actions/open-refresh-pr
@@ -545,7 +550,8 @@ jobs:
 
             Trigger: ${{ github.event_name }}.
           branch: chore/schema-refresh
-          # EVERY vendored file sources.toml records (#1443 staged only
+          # EVERY vendored file sources.toml records, plus codex-agent.json,
+          # which refresh re-derives from codex-config.json (#1443 staged only
           # sources.toml, so codex-config.json's new sha256 landed without its
           # bytes and `mise run verify`'s config.schema-vendor-drift broke on
           # main). Keep in lockstep with the `file =` entries there.
@@ -554,6 +560,7 @@ jobs:
             schemas/ruff.json
             schemas/typos.json
             schemas/codex-config.json
+            schemas/codex-agent.json
             .claude/types/claude-code.d.ts
             schemas/sources.toml
           labels: dependencies

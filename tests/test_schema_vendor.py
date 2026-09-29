@@ -4,10 +4,12 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from typing import TYPE_CHECKING
 
 import pytest
 from dotfiles_setup import schema_vendor
+from dotfiles_setup.codex_schema import derive_agent_schema
 from dotfiles_setup.schema_vendor import (
     SchemaEntry,
     _read_setup_mise_pin,
@@ -418,3 +420,57 @@ def test_refresh_lands_hygiene_clean_bytes_so_lint_and_check_drift_agree(
     # on one file. This is the assertion that fails if the normalize step is
     # removed from `refresh`.
     assert check_drift(tmp_path) == []
+
+
+def test_refresh_rederives_the_codex_agent_schema_with_its_source(
+    tmp_path: Path,
+) -> None:
+    """A codex config-schema refresh must carry the DERIVED agent schema along.
+
+    Refreshing only `codex-config.json` left `codex-agent.json` stale, so every
+    bot refresh PR failed `test_committed_agent_schema_matches_the_derivation`
+    (codex review of 613d822a).
+    """
+    _seed_repo(tmp_path)
+    shared = tmp_path / ".config/mise/conf.d/shared.toml"
+    shared.write_text(
+        shared.read_text() + '"npm:@openai/codex" = { version = "0.154.0" }\n'
+    )
+    old_config = b'{"type": "object", "properties": {"model": {"type": "string"}}}\n'
+    (tmp_path / "schemas/codex-config.json").write_bytes(old_config)
+    (tmp_path / "schemas/codex-agent.json").write_text("{}\n")
+    sources = tmp_path / "schemas/sources.toml"
+    sources.write_text(
+        sources.read_text() + "\n[[schema]]\n"
+        'tool = "codex"\n'
+        'file = "schemas/codex-config.json"\n'
+        'version = "0.154.0"\n'
+        'source = "https://example.invalid/config-schema.json"\n'
+        'pin_source = ".config/mise/conf.d/shared.toml"\n'
+        f'sha256 = "{hashlib.sha256(old_config).hexdigest()}"\n'
+    )
+    new_config = {
+        "type": "object",
+        "properties": {"model": {"type": "string"}, "new_key": {"type": "boolean"}},
+    }
+
+    def fetcher(url: str) -> bytes:
+        if "config-schema" in url:
+            return json.dumps(new_config).encode()
+        return _SCHEMA_BYTES
+
+    assert refresh(tmp_path, fetcher=fetcher) == ["codex"]
+    derived = json.loads((tmp_path / "schemas/codex-agent.json").read_text())
+    assert derived == derive_agent_schema(new_config)
+    assert "new_key" in derived["properties"]
+
+
+def test_refresh_leaves_the_agent_schema_alone_when_codex_did_not_change(
+    tmp_path: Path,
+) -> None:
+    """Control arm: no codex refresh, no derived-schema write."""
+    _seed_repo(tmp_path)
+    marker = tmp_path / "schemas/codex-agent.json"
+    marker.write_text("untouched\n")
+    assert refresh(tmp_path, fetcher=lambda _url: _SCHEMA_BYTES) == []
+    assert marker.read_text() == "untouched\n"

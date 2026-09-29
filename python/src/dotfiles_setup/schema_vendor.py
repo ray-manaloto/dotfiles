@@ -35,6 +35,7 @@ the code). Two entry points:
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import re
 import subprocess
@@ -46,6 +47,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from dotfiles_setup import _project_root
+from dotfiles_setup.codex_schema import agent_schema_path, derive_agent_schema
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -456,7 +458,27 @@ def refresh(
         (project_root / SOURCES_PATH).write_text(
             _render_sources_toml(new_entries), encoding="utf-8"
         )
+    if "codex" in changed:
+        _rederive_codex_agent_schema(project_root)
     return changed
+
+
+def _rederive_codex_agent_schema(project_root: Path) -> None:
+    """Rewrite ``schemas/codex-agent.json`` from the just-refreshed config schema.
+
+    The agent schema is DERIVED from ``schemas/codex-config.json``
+    (``codex_schema.derive_agent_schema``, pure — no codex binary), and
+    ``test_committed_agent_schema_matches_the_derivation`` pins the two
+    together. Refreshing only the source left every bot refresh PR red on that
+    test (codex review of 613d822a), so the derivation rides along here and
+    ``refresh.yml``'s schema-refresh job stages it.
+    """
+    config = json.loads(
+        (project_root / "schemas" / "codex-config.json").read_text(encoding="utf-8")
+    )
+    agent_schema_path(project_root).write_text(
+        json.dumps(derive_agent_schema(config), indent=2) + "\n", encoding="utf-8"
+    )
 
 
 def check_main(argv: list[str] | None = None) -> int:
