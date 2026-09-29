@@ -15,6 +15,9 @@
   "prConcurrentLimit": 20,
   "prHourlyLimit": 0,
   "rebaseWhen": "conflicted",
+  "pin": {
+    "rebaseWhen": "conflicted"
+  },
   "gitIgnoredAuthors": [
     "41898282+github-actions[bot]@users.noreply.github.com",
     "dotfiles-refresh-bot-org[bot]@users.noreply.github.com",
