@@ -416,7 +416,7 @@ jobs:
           fi
           echo "changed=true" >> "$GITHUB_OUTPUT"
       - name: Configure git identity
-        # The App's own bot identity, deliberately NOT `github-actions[bot]`:
+        # HISTORY (pre-#1435): the App's own bot identity, deliberately NOT `github-actions[bot]`:
         # this repo's renovate.json inherits `github>jdx/renovate-config`,
         # whose preset already puts `github-actions[bot]`'s address in
         # `gitIgnoredAuthors`. A commit under that identity would make
@@ -428,8 +428,8 @@ jobs:
         # documented committer-identity recipe.
         # SUPERSEDED 2026-09-29 (#1435, Ray, option B′): "never rebase a
         # modified branch" froze #947 and #1063 FOREVER on their first repair
-        # commit (both on gcc-sha-repair's commit; this job's address has not
-        # yet committed on any PR). renovate.json now lists this address AND
+        # commit (both on gcc-sha-repair's commit; this job's first repair
+        # commit was e4c81b24 on #1449, after the fix). renovate.json now lists this address AND
         # gcc-sha-repair's in `gitIgnoredAuthors`, with `rebaseWhen:
         # "conflicted"` pinned locally, incl. the `pin` update type (the
         # livelock the old reasoning feared needed `behind-base-branch`).

@@ -186,7 +186,10 @@ between the code and the spec stops the lane and comes back as a finding.
   - Anthropic-authored → a codex lens:
     `mise exec -- codex exec -s read-only --ignore-rules review --commit <SHA> -c 'sandbox_mode="read-only"'`
     (`--base <branch>` for a range; pending #1297's write-canary). Do not
-    promise `--output-schema`: `exec review` ignores it (#1296).
+    promise `--output-schema`: `exec review` ignores it (#1296). `<SHA>` is the
+    literal SHA your `git commit` printed after its own rc=0 — never
+    `$(git rev-parse HEAD)` in a job that can start before the commit lands or
+    outlive a hook-refused commit (2026-09-29: two lenses reviewed the wrong commit).
 - **Every behavior-bearing diff** also gets the bundled `/code-review`; **every
   spec'd diff** also gets `/mattpocock-skills:code-review` (Standards + Spec).
 - **Security / auth / concurrency / migration paths**: add an Opus subagent read

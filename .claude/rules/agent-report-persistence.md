@@ -56,7 +56,8 @@ one settings entry; splitting the contract across entries fails selfcheck.
 1. **Persist at receipt, into the tracked destination.** Write a final report
    verbatim to `docs/research/kb/reports/agents/<agent-name>.md` in the same
    turn, before acting on it. Put fetched raw sources in
-   `.agent/kb/raw/<slug>.md`.
+   `.agent/kb/raw/<slug>.md`. The notification's `<output-file>` is the subagent
+   transcript; the report is its LAST non-blank assistant text block.
 
    > **ONE path.** `docs/research/kb/` is tracked and clone-durable. Existing
    > artifacts stay where they are; new findings-bearing reports go there.

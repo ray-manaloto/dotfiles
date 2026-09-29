@@ -107,7 +107,7 @@ the handoff.
 Before writing the handoff, run seven read-only reviews of THIS session, in parallel; a lane writes nothing but
 its own report. Each lane CREATES one new file at
 `docs/research/kb/reports/agents/session-audit-<kind>-<date>[letter].md`, using this session's handoff letter
-(`.agent/plans/session-<date>[-letter].md`); when the un-suffixed path is already tracked the letter is
+(`.agent/plans/session-<date>[letter].md` — the same letter, no dash); when the un-suffixed path is already tracked the letter is
 mandatory. Never `Write` over an existing report — a second same-day session overwrote two tracked audits on
 2026-09-28.
 
@@ -207,7 +207,7 @@ Write or update a `project_*` (or `feedback_*`) file under
 `~/.claude/projects/-Users-rmanaloto-dev-github-ray-manaloto-dotfiles/memory/`
 with frontmatter (`name`, `description`, `metadata.type`). Record: what
 shipped, locked decisions, evidence pointers, and any non-obvious gotcha.
-Memory may cite the plan path and digest but must not restate its task text.
+Memory may cite the plan path but must not restate its task text.
 Convert relative dates to absolute. Add a one-line
 pointer to `MEMORY.md` (`- [Title](file.md) — hook`). Update an existing
 file rather than duplicating; delete memories proven wrong.
@@ -298,12 +298,19 @@ step starts; a later write — a ship repair loop included — restarts it.
    `task_plan.md` changed after its attestation. Also confirm gate results
    against recorded exit codes, not memory.
 
+3. The VERY LAST step (Ray, 2026-09-29) — a fresh headless session resumes from
+   exactly what you are leaving: run the `fresh session-resume` recipe in
+   `.claude/skills/verify/SKILL.md` (§ "handoff → resume round-trip", clean arm).
+   Pass only when its extracted report is non-empty and carries no
+   `DISAGREEMENT`; a DISAGREEMENT is a finding (it catches drift handoff-check
+   cannot: an unpushed branch, a claim the repo contradicts).
+
 On any finding, fix it and restart at step 1.
 
 ## 6. Emit the resume prompt — exact output
 
-Only after step 5's `handoff-check` returned rc=0, print exactly this single
-line and nothing else:
+Only after step 5's `handoff-check` returned rc=0 AND the step-3 round-trip
+report carried no DISAGREEMENT, print exactly this single line and nothing else:
 
 ```text
 Run /session-resume
@@ -326,7 +333,7 @@ Run /session-resume
 - [ ] Every findings-bearing agent's brief AND report persisted verbatim under `docs/research/kb/reports/agents/`; coverage audited.
 - [ ] Every report has handoff + governing rule/skill pointers, or is explicitly recorded as deliberately orphaned.
 - [ ] Durable memory written + `MEMORY.md` pointer added.
-- [ ] Local handoff written under `.agent/plans/` and `mise run handoff-check` returned zero findings as the LAST command (§5, after every write).
+- [ ] Local handoff written under `.agent/plans/`; `mise run handoff-check` rc=0 after every write, then the fresh-session round-trip (§5 step 3, the very last step) reported no DISAGREEMENT.
 - [ ] Relevant local gate green; doc commit made (if appropriate).
 - [ ] Resume prompt printed only after that rc=0, for the user to paste after `/clear`.
 

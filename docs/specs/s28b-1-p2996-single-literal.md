@@ -1,6 +1,6 @@
 # Spec S28b-1: clang-p2996 has ONE pinned literal, its own Renovate PR, and a gate
 
-**Status: RATIFIED 2026-09-29 (drafted by spec-scribe; rulings at the end). Implemented in a8e8e8d9.** Branch
+**Status: RATIFIED 2026-09-29 (drafted by spec-scribe; rulings at the end). Implemented in PR #1441, squash-merged as `efc04995` (branch commit `a8e8e8d9`).** Branch
 `fix/s28b-1-p2996-single-literal` off main `8454778c`. Issues #1434, #1435. Research:
 `docs/research/kb/reports/agents/research-p2996-ref-tracking-2026-09-29.md` (**R** below) and
 `docs/research/kb/reports/agents/sdlc-team-p2996-ref-currency-2026-09-28.md` (**S**).

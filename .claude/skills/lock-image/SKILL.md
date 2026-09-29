@@ -79,7 +79,8 @@ the error rather than raising `--passes`.
 
 Per-platform lock entries are TOML tables `[tools.<tool>."platforms.linux-x64"]` /
 `[tools.<tool>."platforms.linux-arm64"]` (e.g. `.devcontainer/mise-system.lock`); count coverage with
-`grep -c '^\[tools\..*"platforms\.linux-arm64"\]' <lock>`.
+`grep -c '^\[tools\..*"platforms\.linux-arm64"\]' <lock>`. In Python (`tomllib`) that is the dotted
+key `entry["platforms.linux-x64"]`, not `entry["platforms"]["linux-x64"]`.
 
 Success prints the mise version and the platform count, and means the coverage
 check passed against `HEAD` — not merely that the file was written. Two exits

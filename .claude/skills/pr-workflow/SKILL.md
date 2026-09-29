@@ -21,7 +21,7 @@ Picking between them is a lookup, not a judgement call.
 
 ```bash
 mise run ship                      # gates → push → PR open/update → enable native auto-merge, return
-mise run ship -- --title "..."     # override the PR title (default: gh --fill)
+mise run ship -- --title "..."     # override the PR title; the BODY is always --fill (commit messages, pr.py:524)
 mise run automerge -- <PR#>        # BOT PR only: arm native auto-merge and exit (no local gates)
 mise run land -- <PR#>             # (after it auto-merges) confirm merged → main CI → local verify
 ```

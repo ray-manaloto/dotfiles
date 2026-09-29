@@ -14,7 +14,10 @@ inputs:
       {platform}-{install_args_hash}-{file_hash}, so each job's subset
       ("python uv", "hk uv", or all) caches independently — passing this
       through preserves the per-args cache isolation the duplicated blocks
-      had before extraction.
+      had before extraction. With a subset, run tasks as `mise run
+      --skip-tools <task>` (#963: a bare `mise run` installs every missing
+      root tool UNLOCKED and writes TOFU checksums into mise.lock), and list
+      every tool the task shells out to (schema-vendor-refresh needs hk).
     required: false
     default: ""
 

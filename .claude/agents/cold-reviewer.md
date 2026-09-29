@@ -4,7 +4,7 @@ description: Cold diff review by ref. Resolves a commit SHA or base branch witho
 model: opus
 effort: xhigh
 tools: Bash, Read, Grep, Glob, Write, Edit, Skill
-maxTurns: 60
+maxTurns: 100
 color: blue
 memory: local
 skills:
