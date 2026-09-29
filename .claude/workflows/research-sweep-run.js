@@ -7,7 +7,7 @@ export const meta = {
     { title: 'Triage', detail: 'rank and dedup the hits, choose what to deep-read; caller links always read (Explore + sonnet, low)' },
     { title: 'Read', detail: 'caller links (sonnet) + triaged URLs (haiku) in batches; optional source dive at the release tag' },
     { title: 'Synthesize', detail: 'one Opus pass writes the report (opus, high)' },
-    { title: 'Verify', detail: 'one independent refuter per load-bearing claim (sonnet), a completeness critic, an Opus adjudicator for any refutation, then reconcile' },
+    { title: 'Verify', detail: 'one independent refuter per load-bearing claim (sonnet), a completeness critic, an Opus adjudicator for any refuted or misleading flag, then reconcile' },
     { title: 'Advise', detail: 'optional codex-sol-advisor second opinion (codex tokens, not Claude)' },
   ],
 }
@@ -40,8 +40,8 @@ export const meta = {
 //    also judge MISLEADING-BY-OMISSION: the 2026-09-29b Omarchy headline was TRUE (of shipped
 //    code) and misleading (it omitted a documented workflow), so "is it false?" alone cannot
 //    catch that class. A misleading claim is flagged exactly like a refuted one.
-// 9. ADJUDICATE (opus/high, one tier above the refuters) runs only when a refuter says
-//    "refuted": a refutation rewrites the report, so it is confirmed before reconcile acts on it
+// 9. ADJUDICATE (opus/high, one tier above the refuters) runs only when a refuter flags a claim
+//    (refuted OR misleading): a refutation rewrites the report, so it is confirmed before reconcile acts on it
 //    (memory feedback_refuted_research_rerun_one_tier_up). No refutation -> the node never runs.
 // 10. The critic moved to medium effort and checks cross-repo directions and caller links.
 // 11. Every node's routing is returned as `routing` and written to the report's Provenance, so a
@@ -59,7 +59,7 @@ const RELATED = Array.isArray(A.relatedRepos) ? A.relatedRepos.filter(r => typeo
 const nameOf = r => r.split('/').pop()
 // URLs the caller names: always deep-read, never ranked away.
 // Normalized (no #fragment, no trailing slash) so one page is never read twice.
-const norm = u => u.replace(/#.*$/, '').replace(/\/+$/, '')
+const norm = u => { const [path, ...frag] = u.split('#'); return path.replace(/\/+$/, '') + (frag.length ? '#' + frag.join('#') : '') }
 const LINKS = Array.isArray(A.links) ? [...new Set(A.links.filter(u => typeof u === 'string' && u).map(norm))] : []
 const READ_MAX = Number.isInteger(A.readMax) ? A.readMax : 6        // triaged URLs deep-read
 const READ_BATCH = 3                                                // URLs per reader agent
@@ -203,7 +203,11 @@ const plan = await run('plan', 'plan+fetch', 'Plan', [
 if (plan === null && !LINKS.length) return { status: 'plan-null', routing }
 const manifests = plan === null ? [] : plan.runs.filter(r => r.manifest).map(r => r.manifest)
 if (!manifests.length && !LINKS.length) return { status: 'no-manifests', plan, routing }
-if (plan === null || !manifests.length) log('Plan: no fanout results — continuing on the caller links alone (a named gap)')
+const stageGaps = []
+if (plan === null || !manifests.length) {
+  stageGaps.push(plan === null ? 'planner returned null — no fan-out ran' : 'fan-out produced no manifests')
+  log('Plan: no fanout results — continuing on the caller links alone (a named gap)')
+}
 else log(`Plan: ${plan.runs.length} fanout run(s); ${(plan.codeSearch || []).length} code search(es); sourceDive=${plan.sourceDive}`)
 const codeSearch = plan === null ? [] : plan.codeSearch || []
 
@@ -221,7 +225,10 @@ const triageOut = !manifests.length ? EMPTY_TRIAGE : await run('triage', 'triage
   LINKS.length ? `Do NOT choose these (the caller's links, read separately): ${LINKS.join(' ')}` : '',
 ].filter(Boolean).join('\n'), { schema: TRIAGE })
 if (triageOut === null && !LINKS.length) return { status: 'triage-null', plan, routing }
-if (triageOut === null) log('Triage: null — continuing on the caller links alone (a named gap)')
+if (triageOut === null) {
+  stageGaps.push('triage returned null — no fan-out hit was read')
+  log('Triage: null — continuing on the caller links alone (a named gap)')
+}
 const triage = triageOut || EMPTY_TRIAGE
 const linkSet = new Set(LINKS)
 const triaged = triage.read.filter(u => !linkSet.has(norm(u.url)))
@@ -290,6 +297,7 @@ const synth = await run('synthesize', 'synthesize', 'Synthesize', [
   `TRIAGE:\n${JSON.stringify({ hits: triage.hits, unverifiedEmpty: triage.unverifiedEmpty })}`,
   `CODE SEARCH:\n${JSON.stringify(codeSearch)}`,
   `FAILED READS:\n${JSON.stringify(failedReads)}`,
+  stageGaps.length ? `FAILED STAGES (each is a Gap; say the evidence base is only the caller links): ${JSON.stringify(stageGaps)}` : '',
   // This node's own row is added by run() only when it is called, i.e. after this prompt is built.
   `ROUTING (so far; add a row for this synthesize node — ${JSON.stringify(ROUTE.synthesize)}):\n${JSON.stringify(routing)}`,
 ].filter(Boolean).join('\n'), { schema: SYNTH })
@@ -333,7 +341,8 @@ if (flagged.length) {
     'Independent refuters flagged the claims below as REFUTED and/or MISLEADING. Re-check each against its primary',
     'source yourself and decide: upheld (the claim really is wrong or misleading) or overturned (the refuter erred).',
     'Weigh the claim\'s own evidence against the refuter\'s; an absence verdict needs a control arm. Return EXACTLY one',
-    'verdict per flagged claim, IN THE SAME ORDER, with index = its position: refuted=true means UPHELD.',
+    'verdict per flagged claim, IN THE SAME ORDER, with index = its 0-based position: refuted=true upholds a',
+    'falsity flag, misleading=true upholds a misleading-by-omission flag; both false = overturned.',
     `REPORT: ${synth.reportPath}`,
     `FLAGGED: ${JSON.stringify(flagged.map((v, index) => ({ index, ...v })))}`,
   ].join('\n'), { schema: { type: 'object', required: ['verdicts'], properties: { verdicts: { type: 'array', items: { ...VERDICT, required: [...VERDICT.required, 'index'], properties: { ...VERDICT.properties, index: { type: 'number' } } } } } } })
@@ -345,7 +354,7 @@ if (flagged.length) {
     // Matched back by index onto the ORIGINAL claim text; a claim the adjudicator skipped stays UPHELD.
     refuted = flagged
       .map((v, i) => ({ v, a: byIndex.get(i) }))
-      .filter(({ a }) => !a || a.refuted)
+      .filter(({ a }) => !a || a.refuted || a.misleading)
       .map(({ v, a }) => ({ ...v, adjudicated: a ? a.evidence : 'not adjudicated — upheld by default' }))
   }
 }
@@ -369,6 +378,7 @@ let reconciled = true
     `UPHELD: ${JSON.stringify(refuted)}`,
     `ADJUDICATION: ${JSON.stringify(adjudication)}`,
     `CRITIC GAPS: ${JSON.stringify(gaps)}`,
+    `FAILED STAGES: ${JSON.stringify(stageGaps)}`,
     `ROUTING: ${JSON.stringify(routing.concat([{ node: 'reconcile', agentType: 'general-purpose', ...ROUTE.reconcile }]))}`,
   ].join('\n'))
   reconciled = reconcile !== null
@@ -378,12 +388,13 @@ let reconciled = true
 let advice = null
 if (A.advisor) {
   phase('Advise')
-  advice = await run('advisor', 'codex-sol-advisor', 'Advise', `Second opinion on the recommendation in ${synth.reportPath} (question: ${A.question}). Refuted claims: ${JSON.stringify(refuted)}. Return a verdict and the deciding risk.`)
+  advice = await run('advisor', 'codex-sol-advisor', 'Advise', `Second opinion on the recommendation in ${synth.reportPath} (question: ${A.question}). Claims upheld as refuted or misleading: ${JSON.stringify(refuted)}. Return a verdict and the deciding risk.`)
   if (advice === null) log('Advise: codex-sol-advisor returned null (escalation per .claude/token-routing.md item 1)')
 }
 
 // Status: complete | partial-verify | verify-null | reconcile-null | plan-null | no-manifests |
-// triage-null | synth-null. verify-null = EVERY refuter returned null; partial-verify = SOME did.
+// triage-null | synth-null | links-only. verify-null = EVERY refuter returned null; partial-verify = SOME did;
+// links-only = plan/fan-out/triage failed and only the caller links were read.
 const status = verdicts.length && unverified.length === verdicts.length ? 'verify-null'
-  : !reconciled ? 'reconcile-null' : unverified.length ? 'partial-verify' : 'complete'
-return { status, reportPath: synth.reportPath, plan, triage, claims: claims.length, failedReads, verdicts, adjudication, refuted, gaps, advice, routing }
+  : !reconciled ? 'reconcile-null' : unverified.length ? 'partial-verify' : stageGaps.length ? 'links-only' : 'complete'
+return { status, stageGaps, reportPath: synth.reportPath, plan, triage, claims: claims.length, failedReads, verdicts, adjudication, refuted, gaps, advice, routing }

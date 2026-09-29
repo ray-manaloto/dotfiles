@@ -112,8 +112,11 @@ this repo use this skill and do not import `kb_setup.research`
   second route of a different kind; every refuter also judges
   misleading-by-omission, and a flagged claim is adjudicated one tier up.
   Status values: `complete`, `partial-verify` (some refuters null),
+  `links-only` (plan/fan-out/triage failed; only caller links were read),
   `verify-null`, `reconcile-null`, `plan-null`, `no-manifests`,
-  `triage-null`, `synth-null` — only `complete` means fully verified.
+  `triage-null`, `synth-null`. Anything but `complete` is degraded; even
+  `complete` verifies only the first `verifyMax` load-bearing claims and
+  says so in the report's Verification section.
 - **GitHub code search** (config-pattern questions): `gh api -X GET search/code
   -f q='QUERY'` — no `OR`/parentheses/`**` (HTTP 422), 10 requests/min (a 403 is
   a rate limit, not zero), and the tokenizer drops punctuation, so re-fetch and

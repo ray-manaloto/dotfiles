@@ -224,8 +224,10 @@ const agent = async (_prompt, options = {}) => {
       loadBearing: [{ claim: 'c', source: 's' }],
     }
   }
-  if (label === 'refute') {
-    return { verdicts: [{ claim: 'c', refuted: true, evidence: 'e' }] }
+  if (label.startsWith('refute')) {
+    // flagged, so the routing pin also exercises the adjudicator
+    return { claim: 'c', refuted: true, misleading: false,
+      evidence: 'e', controlArm: 'k' }
   }
   return schemaValue(options.schema)
 }
@@ -516,7 +518,7 @@ _SWEEP_ROUTING = {
     "synthesize": ("general-purpose", "opus", "high"),
     "refute": ("general-purpose", "sonnet", "medium"),
     "critic": ("Explore", "sonnet", "medium"),
-    # one tier above the refuters; runs only because the fixture refutes a claim
+    # one tier above the refuters; runs only because the _STUBS refuter flags a claim
     "adjudicate": ("general-purpose", "opus", "high"),
     "read-link": ("Explore", "sonnet", "low"),
     "reconcile": ("general-purpose", "sonnet", "medium"),
@@ -580,7 +582,7 @@ _SWEEP_HAPPY_BODY = """
     events.push({ kind: 'synth-prompt', prompt: _prompt })
     return { reportPath: args.reportPath, loadBearing: [] }
   }
-  if (label === 'refute') return { verdicts: [] }
+  if (label.startsWith('refute')) return null
   if (label === 'critic') return { gaps: [] }
   return RECONCILE
 """
@@ -633,11 +635,11 @@ def test_research_sweep_unreconciled_report_is_not_complete(tmp_path: Path) -> N
             " loadBearing: [{ claim: 'c', source: 's' }] }",
         )
         .replace(
-            "if (label === 'refute') return { verdicts: [] }",
+            "if (label.startsWith('refute')) return null\n",
             "if (label.startsWith('refute'))"
             " return { claim: 'c', refuted: true, evidence: 'e' }\n"
             "  if (label === 'adjudicate')"
-            " return { verdicts: [{ claim: 'c', refuted: true, evidence: 'e' }] }",
+            " return { verdicts: [{ claim: 'c', refuted: true, evidence: 'e' }] }\n",
         )
         .replace("RECONCILE", "null"),
     )
@@ -719,7 +721,7 @@ def test_research_sweep_caller_links_bypass_triage_and_cap(tmp_path: Path) -> No
             "links": [
                 "https://caller.test/a",
                 "https://caller.test/b",
-                "https://caller.test/a/#x",
+                "https://caller.test/a/",
             ],
             "readMax": 1,
         },
@@ -730,6 +732,8 @@ def test_research_sweep_caller_links_bypass_triage_and_cap(tmp_path: Path) -> No
     triaged_reads = [e for e in reads if not e["label"].startswith("read-link")]
 
     assert len(link_reads) == 1
+    # the trailing-slash duplicate of /a is read ONCE
+    assert link_reads[0]["prompt"].count("- https://caller.test/a") == 1
     assert "https://caller.test/a" in link_reads[0]["prompt"]
     assert "https://caller.test/b" in link_reads[0]["prompt"]
     # the caller link triage also picked is not read twice, and readMax=1 applies
@@ -878,7 +882,10 @@ def test_research_sweep_caller_links_survive_a_null_plan(tmp_path: Path) -> None
     labels = [c["label"] for c in cast("list[dict[str, str]]", payload["calls"])]
     assert any(e["kind"] == "read" and "https://l.test" in e["prompt"] for e in events)
     assert "triage" not in labels
-    assert cast("dict[str, object]", payload["result"])["status"] == "complete"
+    # the failed stage is a named gap in synthesis and in the status (review N2)
+    run_result = cast("dict[str, object]", payload["result"])
+    assert run_result["status"] == "links-only"
+    assert run_result["stageGaps"] == ["planner returned null — no fan-out ran"]
 
 
 def test_research_sweep_some_null_refuters_is_partial_verify(tmp_path: Path) -> None:
@@ -889,3 +896,43 @@ def test_research_sweep_some_null_refuters_is_partial_verify(tmp_path: Path) -> 
     ).replace("ADJUDICATE", "null")
     payload = _sweep_custom(tmp_path, "sweep-partial.js", body, {"links": []})
     assert cast("dict[str, object]", payload["result"])["status"] == "partial-verify"
+
+
+def test_research_sweep_adjudicator_can_uphold_misleading(tmp_path: Path) -> None:
+    """An adjudicator verdict {refuted: false, misleading: true} UPHOLDS (review N1).
+
+    FAIL arm: join on `a.refuted` alone and the misleading claim is overturned —
+    the Omarchy failure class the misleading verdict exists for.
+    """
+    misleading = (
+        "{ claim: 'c', refuted: false, misleading: true,"
+        " omitted: 'documented workflow', evidence: 'e', controlArm: 'k' }"
+    )
+    adjudicate = (
+        "{ verdicts: [{ index: 0, claim: 'c', refuted: false, misleading: true,"
+        " evidence: 'upheld', controlArm: 'k' }, { index: 1, claim: 'c',"
+        " refuted: false, misleading: false, evidence: 'overturned',"
+        " controlArm: 'k' }] }"
+    )
+    payload = _flagged_run(tmp_path, "sweep-adj-misleading.js", misleading, adjudicate)
+    result = cast("dict[str, object]", payload["result"])
+    refuted = cast("list[dict[str, str]]", result["refuted"])
+    assert [r["adjudicated"] for r in refuted] == ["upheld"]
+
+
+def test_research_sweep_keeps_a_section_fragment(tmp_path: Path) -> None:
+    """A caller link's #anchor names the section to read; it is kept (review N3)."""
+    body = _SWEEP_TUNING_BODY.replace("REFUTE", _OK_VERDICT).replace(
+        "ADJUDICATE", "null"
+    )
+    payload = _sweep_custom(
+        tmp_path,
+        "sweep-fragment.js",
+        body,
+        {"links": ["https://p.test/post/#on-omarchy"]},
+    )
+    events = cast("list[dict[str, str]]", payload["events"])
+    link_read = next(
+        e for e in events if e["kind"] == "read" and e["label"].startswith("read-link")
+    )
+    assert "https://p.test/post#on-omarchy" in link_read["prompt"]
