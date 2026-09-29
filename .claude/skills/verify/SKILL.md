@@ -35,11 +35,27 @@ probe writes to a file and reads the recorded `rc` — never a piped tail.
 
 ## Recipe addition (2026-09-28c, handoff → resume round-trip)
 
-Set `S` to your scratchpad directory and `LOG="$S/resume.log"` first.
+Run after `/session-handoff`, in a fresh headless session. Never `--bare` — it skips skills (`$CC/headless.md:37`); a
+`/skill` in a `-p` prompt expands (`:312`). `S` is your scratchpad directory.
 
-| surface | drive it | expect |
+```bash
+LOG="$S/resume.log"
+claude -p "/session-resume" --output-format stream-json --verbose \
+  --allowedTools "Read,Glob,Grep,Bash(mise run session-state),Bash(mise run handoff-check *),Bash(mise run handoff-check),Bash(git log *),Bash(gh issue list *)" \
+  > "$LOG" 2>&1; echo "rc=$?" >> "$LOG"
+# The report: a SendUserMessage call in brief mode, assistant text otherwise. Never grep plain stdout (only the
+# last line) or the raw stream (the injected skill text itself says DISAGREEMENT) — both measured 2026-09-28c.
+jq -rR 'fromjson? | select(.type=="assistant") | .message.content[]?
+  | if .type=="tool_use" and .name=="SendUserMessage" then .input.message
+    elif .type=="text" then .text else empty end' "$LOG" > "$S/report.txt"
+test -s "$S/report.txt" || echo "EMPTY REPORT — the extraction saw nothing; this arm proves nothing"
+grep -c DISAGREEMENT "$S/report.txt"; grep -c unattested_plan "$S/report.txt"
+```
+
+| arm | set-up | expect |
 |---|---|---|
-| fresh session-resume | after `/session-handoff`: `claude -p "/session-resume" --output-format stream-json --verbose --allowedTools "Read,Glob,Grep,Bash(mise run session-state),Bash(mise run handoff-check *),Bash(mise run handoff-check),Bash(git log *),Bash(gh issue list *)" > "$LOG" 2>&1; echo "rc=$?" >> "$LOG"` — never `--bare` (it skips skills; `$CC/headless.md:37`); a `/skill` in a `-p` prompt expands (`:312`) · control arm: `cp .plan-attestation "$S/att.bak"`, append `junk` to `.plan-attestation`, re-run, then `cp "$S/att.bak" .plan-attestation` (never `git checkout --`; the file is gitignored) | read the report, not stdout or the raw stream — in brief mode it travels as a `SendUserMessage` tool call (plain `-p` stdout is only the last line), and the raw stream also carries the injected skill text, which itself says `DISAGREEMENT` (both measured 2026-09-28c): `jq -rR 'fromjson? | select(.type=="assistant") | .message.content[]? | select(.type=="tool_use" and .name=="SendUserMessage") | .input.message' "$LOG" > "$S/report.txt"`. clean: `rc=0` and `grep -c DISAGREEMENT "$S/report.txt"` = 0; control (measured: 1 and 1): the report carries `DISAGREEMENT` and `unattested_plan`; after the restore `mise run handoff-check` is rc=0 and `cmp` shows the attestation byte-identical |
+| clean | none | `rc=0`, non-empty report, `DISAGREEMENT` count 0 |
+| control | `cp .plan-attestation "$S/att.bak"`, append `junk` to `.plan-attestation`, run, then `cp "$S/att.bak" .plan-attestation` (never `git checkout --`; the file is gitignored) | non-empty report carrying `DISAGREEMENT` and `unattested_plan` (measured 1 and 1); after the restore `mise run handoff-check` is rc=0 and `cmp` shows the attestation byte-identical |
 
 ## Gotchas
 
