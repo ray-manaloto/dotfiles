@@ -11,6 +11,11 @@ the current goal text and a Mermaid workflow. Use `NONE (bootstrap)` only when
 no prior tracked iteration exists. A digest identifies exact goal text; it does
 not prove that the goal was completed.
 
+Each iteration opens with the heading `## YYYY-MM-DD — <title>`: a bare date, a space, an em dash. Session review
+splits entries on `^## \d{4}-\d{2}-\d{2} — ` (`_GOAL_HISTORY_ENTRY` in `python/src/dotfiles_setup/session_review.py`),
+so `## 2026-09-28b — …` merges that iteration into the previous one and the validator fails it (duplicate fields);
+put a session letter in the title.
+
 Session review enforces append-only bytes against the fixed `origin/main`
 merge-base, every first-parent branch revision in order, and the current
 working tree. A branch cannot authorize its own rewrite by naming a different

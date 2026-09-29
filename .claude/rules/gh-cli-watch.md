@@ -33,6 +33,7 @@ mise run bounded-wait -- --deadline 3600 \
   --cmd 'test "$(gh pr view 123 --json state --jq .state)" = MERGED'
 mise run land -- 123                 # after merge: waits on main CI, validates
 gh pr checks 123 --json name,bucket  # one-shot read of PR checks
+gh issue view 123 --json title,body,comments  # never --comments: exclusive with --json, and non-TTY it prints ONLY comments
 gh run view 1234567890 --json conclusion --jq '.conclusion'  # one run
 ```
 

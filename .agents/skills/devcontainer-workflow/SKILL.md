@@ -54,10 +54,9 @@ architecture lives in a sibling gitignored profile, mise.arm64.local.toml
 `[env] DOTFILES_PLATFORM = "linux/arm64/v8"` and `DEVCONTAINER_SSH_PORT = ""`
 (blank = derive; a pinned port would collide with the first arch).
 
-One wart survives: the local `:dev` tag holds ONE platform, so right after
-the other arch's `up`, `mise run verify-local` fails at `verify-image`
-(`--pull=never`, wrong arch) until `mise run sync` in that arch's env
-re-points the tag (layers are local, so it takes seconds).
+The local `:dev` tag keeps every platform `mise run sync` has refreshed onto it (a union, #1429). Run
+`mise run sync` once in an arch's env before that arch's first `verify-local`: sync treats a tag that lacks this
+arch's platform as stale and refreshes it without dropping the other arch's layers.
 
 Container name, home volume and SSH port are all **arch-scoped** (#677), so
 the two coexist in one clone without colliding — the port is derived from

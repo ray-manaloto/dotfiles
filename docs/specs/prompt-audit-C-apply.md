@@ -77,10 +77,11 @@ mise run verify
 mise run lint-docs
 ```
 Plus, each must print 0 for `.claude/agents` and `.codex/agents`:
-`grep -rlF 'Claude tokens are constrained'`, `grep -rlF 'All 50'`, `grep -rlF 'read line 8 of'`,
-`grep -rlF 'caps a foreground Bash call at 600'`, `grep -rlF '2026-08-03 run'`, `grep -rlF '174 pages'`,
-`grep -rlF 'masks digits'`.
-Control arm for the greps: `grep -rlF 'codex-lane-mirror' .claude/agents .codex/agents python` must print >0.
+`git grep -lF 'Claude tokens are constrained' -- .claude/agents .codex/agents`, `git grep -lF 'All 50' -- .claude/agents .codex/agents`, `git grep -lF 'read line 8 of' -- .claude/agents .codex/agents`,
+`git grep -lF 'caps a foreground Bash call at 600' -- .claude/agents .codex/agents`, `git grep -lF '2026-08-03 run' -- .claude/agents .codex/agents`, `git grep -lF '174 pages' -- .claude/agents .codex/agents`,
+`git grep -lF 'masks digits' -- .claude/agents .codex/agents`.
+Control arm for the greps: `git grep -lF 'codex-lane-mirror' -- .claude/agents .codex/agents` must print >0.
+TRACKED files only; the gitignored Codex-app exports are #1425 and still hit a plain `grep -r`.
 
 ## 6. Commit
 
@@ -107,4 +108,4 @@ post-merge `/mattpocock-skills:code-review` (`mattpocock-review-{standards,spec}
 no dated story or unsourced "measured" claim in `codex-sol-implementer`; no volatile token figure; a version condition
 on the operator's `--full-auto` fact; descriptions read "a standing <role> lane" (C5's point, without implying a
 default between sol and astra); the redaction anecdote dropped. Open: the six-copy duplication of the shared safety
-bullets (Standards 4) — a single-source refactor, planned separately.
+bullets (Standards 4) — a single-source refactor, planned separately (R5 ruling, `docs/research/kb/reports/agents/session-audit-repeat-offenders-2026-09-28.md`).

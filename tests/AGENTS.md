@@ -110,6 +110,7 @@ substitutes a value and needs no patching at all.
 - **Subprocess usage:** `test_audit.py` and `test_shell_integration.py`
   shell out. Use absolute paths (`Path(__file__).parent.parent.absolute()`)
   so tests pass regardless of pytest invocation cwd.
+- Beyond base-OS tools every environment has (`git`, `sh`/`bash`) and the runners themselves (`mise`, `uv`), a test may shell out only to a tool pinned in `.config/mise/conf.d/shared.toml` (host, image and CI all install it, e.g. `jq`); any other binary gives a Mac-only pass.
 - **Parametrize over hardcoding:** `test_bootstrap.py` and
   `test_shell_integration.py` use `@pytest.mark.parametrize` over tool
   name lists. Add new tools to those lists rather than copying tests.

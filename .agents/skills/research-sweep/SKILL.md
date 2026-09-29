@@ -99,6 +99,8 @@ this repo use this skill and do not import `kb_setup.research`
 
 - `gh search issues --repo` returns issues only; the fan-out uses
   `gh api /search/issues`, which returns issues AND pull requests.
+- A workflow run's `subagents/workflows/<wf>/journal.jsonl` has no model field; the model each node ran on is
+  `message.model` in that directory's `agent-*.jsonl`.
 - The firecrawl developer index can lag GitHub by at least hours (one
   measurement: jdx/mise#13674, merged and missing from it on 2026-09-26), so
   `github-issues` can find what it misses.

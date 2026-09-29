@@ -71,7 +71,7 @@ hold's comment routinely outlives the upstream bug it cites.
    | Custom code | Tool feature to re-check |
    |---|---|
    | `python/.../p2996_hash.py` content-hash | mise SBOM / `mise bom` / any toolchain-fingerprint |
-   | `refresh.yml` `p2996-refresh` | Renovate `git-refs` datasource |
+   | `refresh.yml` `p2996-refresh` | Renovate `git-refs` datasource — Dockerfile `ARG` only; bake's default is untracked (#1434) |
    | `renovate.json` customManagers | native mise/dockerfile/devcontainer managers + jdx preset |
 
 4. **Release-note scan (cache-first).** For each outdated / custom-wrapped tool,

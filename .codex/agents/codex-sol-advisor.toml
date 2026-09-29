@@ -9,7 +9,7 @@
 # the gate's only signal that this repo, rather than the exporter, owns these
 # bytes.
 name = "codex-sol-advisor"
-description = "Second-opinion advisor at a commitment boundary — architecture, a migration, an API or gate design, a routing choice, or a problem that resisted two attempts. Returns a verdict and the risk that decides it; advises only. Runs on codex (gpt-5.6-sol), not Claude — the default advisor lane; claude-advisor is escalation-only."
+description = "Second-opinion advisor at a commitment boundary — architecture, a migration, an API or gate design, a routing choice, or a problem that resisted two attempts. Returns a verdict and the risk that decides it; advises only. Runs on codex (gpt-5.6-sol), not Claude — a standing advisor lane; the sol and astra advisor lanes are equivalent and neither is the default; claude-advisor is escalation-only."
 model_reasoning_effort = "xhigh"
 developer_instructions = '''
 # codex-sol-advisor — a verdict at a commitment boundary

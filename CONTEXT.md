@@ -33,9 +33,9 @@ Durable; never silently dropped. Gated by `mise run verify-local`.
 
 | Term | Means |
 |---|---|
-| **R1 inbound** | `ssh ${USER}@localhost -p 4444` opens a shell, no password. |
+| **R1 inbound** | `ssh ${USER}@localhost -p $(mise run ssh-port)` opens a shell, no password (port derived per workspace+arch, #677). |
 | **R2 outbound** | `ssh -T git@github.com` **inside** the container authenticates — via Docker Desktop's `/run/host-services/ssh-auth.sock`. |
-| **R3 arch** | The container reports the architecture requested: `x86_64`/`amd64` by default, `aarch64`/`arm64` under `MISE_ENV=arm64`. Never the host's by passthrough. |
+| **R3 arch** | The container reports the architecture requested: `x86_64`/`amd64` by default, `aarch64`/`arm64` under `MISE_ENV=arm64` with the gitignored `mise.arm64.local.toml` profile. It must come from the request, never from host passthrough (on an arm64 Mac, arm64 matches the host only because it was requested). |
 
 ## Workflow vocabulary
 
