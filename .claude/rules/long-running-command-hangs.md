@@ -48,7 +48,10 @@ red herrings — lives in `docs/rules-evidence/long-running-command-hangs.md`.
    Preserve that `deadline`. The wait-loop guard accepts a bound only when the
    loop condition compares `SECONDS`, `deadline`/`DEADLINE`/`end`, or
    `date +%s`, or when command position wraps the loop with `timeout <n>` or
-   `mise run bounded-wait`. A comment, `--connect-timeout`, path containing
+   `mise run bounded-wait`. ⚠️ On this Mac host `timeout` is an unversioned mise
+   shim that exits 1 ("No version is set for shim: timeout"): bound host commands
+   with `bounded-wait` or a `SECONDS` deadline; `timeout <n>` only in-container or
+   in CI. A comment, `--connect-timeout`, path containing
    `timeout`, or out-of-condition deadline assignment is not a bound. The
    separate `backgrounded mise run` guard still denies `&`-detached or `nohup`
    mise tasks; `&&` and `2>&1` remain allowed.

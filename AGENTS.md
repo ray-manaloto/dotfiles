@@ -163,7 +163,7 @@ Gated by `mise run verify-local`. Sessions touching `.devcontainer/` or `mise.to
 |---|---|---|
 | **R1 inbound** | `ssh ${USER}@localhost -p $(mise run ssh-port)` opens a shell, no password | `mise run verify-ssh-inbound` |
 | **R2 outbound** | `ssh -T git@github.com` inside container → "successfully authenticated" | smoke tier 3 |
-| **R3 arch** | container reports the requested arch (`x86_64`/`amd64` default; `aarch64`/`arm64` via `MISE_ENV=arm64`) on `uname -m`, `arch`, manifest | `mise run verify-arch` |
+| **R3 arch** | container reports the requested arch (`x86_64`/`amd64` default; `aarch64`/`arm64` via `MISE_ENV=arm64` + its local profile) on `uname -m`, `arch`, manifest | `mise run verify-arch` |
 
 ### Environment variables
 

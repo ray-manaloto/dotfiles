@@ -297,8 +297,9 @@ caller applies them.
   from a non-`mise` invocation or a recorded `rc=` line.
 - **A pipe eats the exit code.** `cmd | tail` returns tail's 0. Redirect to a file,
   record `rc=$?`, read the file.
-- **There is no `timeout` binary here.** Bound a slow command with `python3` and
-  `subprocess(timeout=N)`.
+- **`timeout` is not usable here.** On this Mac it resolves to a version-less mise
+  shim that exits 1 (`No version is set for shim`). Bound a slow command with
+  `python3` and `subprocess(timeout=N)`.
 - **`strings` on a 270 MB binary is slow and lossy.** For context around a match,
   byte-scan with `python3` and a regex.
 - ⚠️ **`strings | grep -Fc` counts LINES, not occurrences** — it read 12 where the true

@@ -36,6 +36,11 @@ manifest digest (`docker buildx imagetools inspect`, no pull). Comparing
 the local *tag* matters: after PR #169's promote, registry `:dev` moved
 while the local `:dev` tag silently kept the pre-merge digest.
 
+Since #1429 the local tag is also stale when THIS arch's platform is absent under it. `--check` prints
+`check: current` (rc 0), `check: STALE — sync would rebuild` or
+`check: OUTDATED — sync would rebuild this architecture's container` (rc 1), or
+`check: UNKNOWN — registry unreachable` (rc 2).
+
 | stale? | container | action |
 |---|---|---|
 | yes (or `--force`) | any | buildkit tag refresh + `dev-rebuild` |
@@ -45,6 +50,10 @@ while the local `:dev` tag silently kept the pre-merge digest.
 Then the verification gate: default = `verify_latest` (bind-mount
 currency + smoke tiers 1-3, incl. tier-1 image-identity base-currency);
 `--full` = the whole `mise run verify-local` chain.
+
+Sync record: `~/.local/state/dotfiles/sync-<image ref, every char outside [A-Za-z0-9._-] → _>.json`, keys
+`registry_digest`, `local_image_id`, `containers` = `{"<workspace-hash>:<arch>": "<overlay image id>"}`; written by
+`write_sync_record` after a converge (#1432: recorded ids can outlive their images).
 
 ## Interpreting failures
 

@@ -29,7 +29,7 @@ editing the same files puts two writers on one checkout while codex is still
 running, and neither result can be trusted.
 
 **A SLOW lane is not a FAILED lane.** Codex at `xhigh` on a real spec takes
-tens of minutes; 50 minutes has been observed. Exactly three signals mean the
+tens of minutes. Exactly three signals mean the
 run is over:
 
 1. `$LOG.rc` exists and is non-empty — codex exited; read its number, then `$OUT`

@@ -81,6 +81,10 @@ Success prints the mise version and the platform count, and means the coverage
 check passed against `HEAD` — not merely that the file was written. Two exits
 worth distinguishing:
 
+Per-platform lock entries are TOML tables `[tools.<tool>."platforms.linux-x64"]` /
+`[tools.<tool>."platforms.linux-arm64"]` (e.g. `.devcontainer/mise-system.lock`); count coverage with
+`grep -c '^\[tools\..*"platforms\.linux-arm64"\]' <lock>`.
+
 - **`LOST platform coverage`** — the regen truncated. The file on disk is
   untouched; nothing landed. Almost always the wrong host, so re-run without
   `--no-container`.

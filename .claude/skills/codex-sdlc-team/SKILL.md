@@ -16,6 +16,8 @@ summary is `.claude/rules/codex-sdlc-team.md`.
 - A change spans several domains and needs each one checked by its specialist.
 - An independently configured Codex lane should review a diff.
 - A `.codex/agents/*.toml` file is about to be written or edited.
+  `.codex/agents/` also holds gitignored Codex-app exports of `.claude/agents` definitions (#1425): `git grep`
+  cannot see them, so sweep a phrase with `grep -rF` over the directory.
 
 **When it does not:** a single-file change, work that depends on conversation
 context the lane cannot see, or work whose correctness criteria are not yet

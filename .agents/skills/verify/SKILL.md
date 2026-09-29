@@ -23,15 +23,21 @@ probe writes to a file and reads the recorded `rc` — never a piped tail.
 | session-review report | `mise run session-review` | rc=1 while codex turns are open; the `VERDICT:` block sits after the automation lanes (line ~56), not line 1 |
 | renovate validator | `env -i HOME=$HOME PATH=$HOME/.local/bin:$HOME/.local/share/mise/shims:/usr/bin:/bin uv run --project python dotfiles-setup renovate-validate` | rc=0 `RE2 engine confirmed live` — `~/.local/bin` (the `mise` binary) MUST be on that PATH |
 
-## Recipe additions (2026-09-28, sessions #1421/#1423/#1427/#1429)
+## Recipe additions (2026-09-28, PRs #1421/#1423/#1427/#1429)
 
 | surface | drive it | expect |
 |---|---|---|
 | guard: zsh `=`-separator | `jq -cn --arg c '<CMD>' '{tool_name:"Bash",tool_input:{command:$c}}' \| bash scripts/pretooluse-guard.sh` for `echo ====`, `for f in a; do echo ====; done`, `(echo ====)` · and `echo '===='`, `echo $(( 1 == 1 ))`, `echo x\ ====` | the first three deny (`zsh_equals_separator`); the last three print nothing |
-| graphify PreToolUse nudge | `printf '{"session_id":"<fresh>","tool_name":"Grep","tool_input":{"pattern":"x"},"cwd":"%s"}' "$PWD" \| CLAUDE_PROJECT_DIR=$PWD bash scripts/graphify-hook-guard.sh search`, twice · then `… graphify-hook-guard.sh read` (READ mode — `search` ignores `file_path`) with a `Read` payload whose `tool_input.file_path` is a file edited since the graph build | first call ~314 bytes, factual, no `MANDATORY`; repeat 0 bytes; the stale-file Read still prints its notice with `mise run graphify-rebuild` |
+| graphify PreToolUse nudge | `printf '{"session_id":"<a new uuidgen UUID>","tool_name":"Grep","tool_input":{"pattern":"x"},"cwd":"%s"}' "$PWD" \| CLAUDE_PROJECT_DIR=$PWD bash scripts/graphify-hook-guard.sh search`, twice · then, with the SAME `session_id`, `… graphify-hook-guard.sh read` (READ mode — `search` ignores `file_path`) with a `Read` payload whose `tool_input.file_path` is a file edited since the graph build | first call prints the factual nudge (no `MANDATORY`); repeat 0 bytes; the stale-file Read still prints its notice with `mise run graphify-rebuild` |
 | promote eligibility | `uv run --project python dotfiles-setup image verify-promote-eligibility --image-ref ghcr.io/ray-manaloto/dotfiles-devcontainer:pr-<N>` | stdout `eligible=`/`status=`; `already_current` exits 0 with `eligible=false`; `stale`/`unprovable` exit 1 |
-| dual-arch containers | per arch (`MISE_ENV=arm64` for arm64): `mise run verify-arch`, `mise run verify-ssh-inbound`, `mise run sync -- --check`; `docker image inspect --platform <triple> ghcr.io/ray-manaloto/dotfiles-devcontainer:dev` | `R3 container is <triple> <uname>` on all three signals; R1 rc=0; both published triples present under local `:dev`. Full proof: `MISE_ENV=arm64 mise run verify-local` — never concurrently with the amd64 one (shared `/tmp` paths) |
+| dual-arch containers | per arch (arm64: `MISE_ENV=arm64` plus the gitignored `mise.arm64.local.toml` from `mise.local.toml.example`): `mise run verify-arch`, `mise run verify-ssh-inbound`, `mise run sync -- --check`; `docker image inspect --platform <triple> ghcr.io/ray-manaloto/dotfiles-devcontainer:dev` | `R3 container is <triple> <uname>` on all three signals; R1 rc=0; both published triples present under local `:dev`. Full proof: `MISE_ENV=arm64 mise run verify-local` — never concurrently with the amd64 one (shared `/tmp` paths) |
 | hook selfcheck | `uv run --project python dotfiles-setup hook selfcheck` (it is NOT a mise task; `ship` runs this exact argv) | `hook-selfcheck: OK — all wired host-side hooks pass` |
+
+## Recipe addition (2026-09-28c, handoff → resume round-trip)
+
+| surface | drive it | expect |
+|---|---|---|
+| fresh session-resume | after `/session-handoff`: `claude -p "/session-resume" --allowedTools "Read,Glob,Grep,Bash(mise run session-state),Bash(mise run handoff-check *),Bash(mise run handoff-check),Bash(git log *),Bash(gh issue list *)" > "$LOG" 2>&1; echo "rc=$?" >> "$LOG"` — never `--bare` (it skips skills; `$CC/headless.md:37`); a `/skill` in a `-p` prompt expands (`:312`) · control arm: `cp .plan-attestation "$S/att.bak"`, append `junk` to `.plan-attestation`, re-run, then `cp "$S/att.bak" .plan-attestation` (never `git checkout --`; the file is gitignored) | clean: `rc=0` and no line starting `DISAGREEMENT`; control: a `DISAGREEMENT` line naming `unattested_plan`; after the restore `mise run handoff-check` is rc=0 and `cmp` shows the attestation byte-identical |
 
 ## Gotchas
 
