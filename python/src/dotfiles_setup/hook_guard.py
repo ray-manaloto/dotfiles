@@ -402,11 +402,17 @@ _RUNNER = r"(?:uv\s+run\s+(?:-\S+\s+\S+\s+)*)?"
 _MISE_EXEC = r"mise\s+exec\s+(?:[^\s;&|]+\s+)*?--\s+"
 _LINT_RUNNER = r"(?:uv\s+run\s+(?:-\S+\s+\S+\s+)*|" + _MISE_EXEC + r")?"
 _LINT_TOOL = r"(?:ruff\s+(?:check|format)|ty\s+check)\b"
+# A docs/settings read is a diagnostic, not a gate: `ruff format --help | head`,
+# `ruff check --show-settings | head` (4 real denials in history, cold review
+# 87f905ec finding 2). Scoped to the segment before the pipe.
+_LINT_DIAGNOSTIC = r"(?![^;&|\n]*\s(?:--help|-h|--show-settings|--show-files)\b)"
 # `claude plugin[s] uninstall|remove` and `claude plugin[s] marketplace
 # remove|rm` (the aliases `claude plugin --help` lists, probed 2026-09-29), with
 # the binary spelled bare, as a path (`~/.local/bin/claude`), or as a variable
-# holding it (`$C`, `"${CLAUDE}"`) — the 2026-09-29b shapes. Read-only and
-# additive verbs (`list`, `install`, `update`, `details`, `validate`,
+# holding it (`$C`, `"${CLAUDE}"`) — the 2026-09-29b shapes. `codex plugin
+# remove` and `codex plugin marketplace remove` are covered too: `plugin-remove`
+# handles codex (`plugin_remove.py:425,443`), and a raw one ran on 2026-09-24.
+# Read-only and additive verbs (`list`, `install`, `update`, `details`, `validate`,
 # `marketplace list|update`) never match, and a `--help`/`-h` anywhere in the
 # segment is a docs read, not a removal.
 _CLAUDE_BIN = r"(?:(?:[^\s;&|]*/)?claude|\"?\$\{?\w+\}?\"?)"
@@ -415,8 +421,10 @@ _RAW_PLUGIN_REMOVAL = re.compile(
     + r"(?:"
     + _MISE_EXEC
     + r")?"
+    + r"(?:"
     + _CLAUDE_BIN
-    + r"\s+plugins?\s+(?:uninstall|remove|marketplace\s+(?:remove|rm))\b"
+    + r"\s+plugins?\s+(?:uninstall|remove|marketplace\s+(?:remove|rm))"
+    + r"|(?:[^\s;&|]*/)?codex\s+plugin\s+(?:remove|marketplace\s+remove))\b"
     + r"(?![^;&|\n]*\s(?:--help|-h)\b)"
 )
 _CODEX_EXEC = r"(?:mise\s+exec\s+--\s+)?codex\s+exec\b"
@@ -673,6 +681,7 @@ _RULES: tuple[Rule, ...] = (
             _CMD
             + _LINT_RUNNER
             + _LINT_TOOL
+            + _LINT_DIAGNOSTIC
             + r"(?:[^;&\n]|(?<=>)&)*\|\s*(?:tail|head)\b"
         ),
         "Do not pipe `ruff`/`ty` into `tail`/`head` — bash returns the PIPE's "

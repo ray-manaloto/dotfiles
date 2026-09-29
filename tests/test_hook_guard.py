@@ -1197,6 +1197,10 @@ def test_quoted_or_non_separator_equals_is_allowed(command: str) -> None:
         "claude plugin marketplace remove some-market",
         "mise exec -- claude plugin uninstall foo@bar",
         "cd /tmp && claude plugin uninstall foo@bar",
+        # codex (cold review 87f905ec finding 3; a raw one ran 2026-09-24)
+        "codex plugin remove foo@bar",
+        "mise exec -- codex plugin remove foo@bar",
+        "codex plugin marketplace remove some-market",
     ],
 )
 def test_raw_plugin_removal_is_denied(command: str) -> None:
@@ -1225,6 +1229,9 @@ def test_raw_plugin_removal_is_denied(command: str) -> None:
         "mise run plugin-remove -- foo@bar",
         "mise run plugin-remove -- foo@bar --apply",
         "mise run plugin-inventory -- foo@bar",
+        "codex plugin list",
+        "codex plugin add foo@bar",
+        "codex plugin remove --help",
         # quoted mentions (mise-tasks-only § Extending)
         'echo "claude plugin uninstall x"',
         'rg "plugin uninstall" docs/',
@@ -1279,6 +1286,11 @@ def test_lint_tool_piped_to_pager_is_denied(command: str) -> None:
         'echo "ruff check | tail"',
         # not rc-bearing
         "ruff --version | head -1",
+        # docs/settings reads (cold review 87f905ec finding 2; real history)
+        "ty check --help | head -40",
+        "ruff format --help | head -30",
+        "ruff check --show-settings | head -50",
+        "uv run --project python ruff check --show-files | head",
         "ruff check . --output-format json | jq length",
     ],
 )
