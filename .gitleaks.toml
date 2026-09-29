@@ -76,3 +76,22 @@ description = "betterleaks generic-credential-uri placeholder in one archived re
 paths = [
   '''^docs/research/runs/research-20260709-r2-secrets/agents/ssh-r2-model\.md$''',
 ]
+
+# Offline mise docs mirror (2026-09-29b, Ray-approved suppression, AskUserQuestion):
+# the upstream mise.jdx.dev docs contain mise's PUBLIC minisign release-signing key
+# (`ARG MISE_MINISIGN_KEY=...` in the Docker cookbook) and an illustrative
+# `PASSWORD = "my_password"` example. Both were read and judged; neither is a secret.
+[[allowlists]]
+description = "mise docs mirror: public minisign key in the Docker cookbook."
+targetRules = ["generic-api-key"]
+paths = [
+  '''^docs/research/kb/raw/mise-dotfiles-2026-09-29/mise-docs/mise-cookbook_docker\.md$''',
+]
+
+# betterleaks-only rule `generic-password`; gitleaks refuses an unknown `targetRules`
+# (see the generic-credential-uri entry above), so this single file is path-only.
+[[allowlists]]
+description = "mise docs mirror: illustrative my_password example in environments.md."
+paths = [
+  '''^docs/research/kb/raw/mise-dotfiles-2026-09-29/mise-docs/environments\.md$''',
+]

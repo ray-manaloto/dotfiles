@@ -1171,3 +1171,132 @@ def test_unquoted_zsh_equals_separator_is_denied(command: str) -> None:
 def test_quoted_or_non_separator_equals_is_allowed(command: str) -> None:
     rule = hook_guard.match(command)
     assert rule is None or rule.name != "zsh_equals_separator", (command, rule)
+
+
+# --- raw plugin removal (2026-09-29b audit F2; landed 2026-09-29) -----------
+#
+# The 2026-09-29b session removed a plugin and its marketplace with the raw CLI
+# through `C=~/.local/bin/claude; $C plugin …`, skipping the inventory, backup
+# and doctor `[removed_plugins]` guard. The aliases are the ones
+# `claude plugin --help` lists: `uninstall|remove`, `marketplace remove|rm`.
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "claude plugin uninstall foo@bar",
+        # the 2026-09-29b shape, verbatim in form: a variable holding the binary
+        "C=~/.local/bin/claude; $C plugin uninstall a@b -s user --json",
+        "$C plugin marketplace remove chrome-devtools-plugins",
+        '"${CLAUDE}" plugin uninstall a@b',
+        "~/.local/bin/claude plugin uninstall foo@bar --scope project",
+        "/opt/homebrew/bin/claude plugin uninstall foo@bar",
+        "claude plugin remove foo@bar",
+        "claude plugins uninstall foo@bar",
+        "claude plugin marketplace rm some-market",
+        "claude plugin marketplace remove some-market",
+        "mise exec -- claude plugin uninstall foo@bar",
+        "cd /tmp && claude plugin uninstall foo@bar",
+        # codex (cold review 87f905ec finding 3; a raw one ran 2026-09-24)
+        "codex plugin remove foo@bar",
+        "mise exec -- codex plugin remove foo@bar",
+        "codex plugin marketplace remove some-market",
+    ],
+)
+def test_raw_plugin_removal_is_denied(command: str) -> None:
+    rule = hook_guard.match(command)
+    assert rule is not None, command
+    assert rule.name == "raw plugin removal"
+    assert rule.since == "2026-09-29"
+    assert "mise run plugin-remove" in rule.reason
+    assert "mise run plugin-inventory" in rule.reason
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "claude plugin list --json",
+        "claude plugin update foo@bar",
+        "claude plugin install foo@bar",
+        "claude plugin details foo@bar",
+        "claude plugin validate .",
+        "claude plugin marketplace list",
+        "claude plugin marketplace update",
+        # a docs read of the removal verb (the audit's L193 shape)
+        "claude plugin uninstall --help",
+        "$C plugin marketplace remove -h",
+        # the sanctioned route itself
+        "mise run plugin-remove -- foo@bar",
+        "mise run plugin-remove -- foo@bar --apply",
+        "mise run plugin-inventory -- foo@bar",
+        "codex plugin list",
+        "codex plugin add foo@bar",
+        "codex plugin remove --help",
+        # quoted mentions (mise-tasks-only § Extending)
+        'echo "claude plugin uninstall x"',
+        'rg "plugin uninstall" docs/',
+        "grep -rn 'marketplace remove' .claude/skills/ | head",
+        'git commit -m "guard: deny claude plugin uninstall"',
+    ],
+)
+def test_plugin_reads_and_sanctioned_removal_are_allowed(command: str) -> None:
+    rule = hook_guard.match(command)
+    assert rule is None or rule.name != "raw plugin removal", (command, rule)
+
+
+# --- lint tool piped to head/tail (2026-09-29b audit F3; landed 2026-09-29) --
+#
+# The `_V3` gate-pipe rule's `_GATE` never listed ruff/ty, so `ruff … | tail`
+# masked a real rc=1 in 5 sessions. A sibling Rule with its own date, not a
+# widened `_GATE`.
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "ruff check . | tail",
+        "uv run --project python ruff format --check f.py 2>&1 | tail -3",
+        "mise exec ruff -- ruff check f | head",
+        "ty check | tail",
+        # the two 2026-09-29b commands, verbatim
+        "mise exec ruff -- ruff check scripts/update_claude.py 2>&1 | tail -3",
+        "mise exec ruff -- ruff format --check scripts/update_claude.py 2>&1|tail -2",
+        "uv run ruff check python/ | grep E | head -5",
+        "mise exec -- ty check python/src | tail -20",
+    ],
+)
+def test_lint_tool_piped_to_pager_is_denied(command: str) -> None:
+    rule = hook_guard.match(command)
+    assert rule is not None, command
+    assert rule.name == "lint tool piped to head/tail"
+    assert rule.since == "2026-09-29"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        # the prescribed replacement
+        'ruff check x > /tmp/o.log 2>&1; echo "rc=$?" >> /tmp/o.log',
+        "ruff check x > /tmp/o.log 2>&1; echo rc=$?",
+        "ruff check . && git log | head -5",
+        "ruff check .; docker ps | tail -3",
+        # ruff/ty as a search term or prose, not at command position
+        "rg ruff | head",
+        "rg 'ruff check' docs | head",
+        'echo "ruff check | tail"',
+        # not rc-bearing
+        "ruff --version | head -1",
+        # docs/settings reads (cold review 87f905ec finding 2; real history)
+        "ty check --help | head -40",
+        "ruff format --help | head -30",
+        "ruff check --show-settings | head -50",
+        "uv run --project python ruff check --show-files | head",
+        "ruff check . --output-format json | jq length",
+    ],
+)
+def test_lint_tool_without_pager_is_allowed(command: str) -> None:
+    rule = hook_guard.match(command)
+    assert rule is None or rule.name != "lint tool piped to head/tail", (
+        command,
+        rule,
+    )

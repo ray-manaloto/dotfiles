@@ -99,6 +99,57 @@ def test_command_poll_has_the_remaining_deadline_as_its_own_timeout() -> None:
     assert observed == [7]
 
 
+def test_device_node_file_target_is_refused(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # `/dev/null` exists from the start, so a wait on it could only succeed —
+    # the 2026-09-29b shape (session-audit-dismissed-errors F-1).
+    clock = FakeClock()
+    rc = bounded_wait.wait(
+        bounded_wait.WaitRequest(deadline_s=5, file=Path("/dev/null"), interval_s=1),
+        monotonic=clock.monotonic,
+        sleeper=clock.sleep,
+    )
+
+    assert rc == 2
+    assert "/dev/null" in caplog.text
+    assert "not a regular file or directory" in caplog.text
+
+
+def test_fifo_file_target_is_refused(tmp_path: Path) -> None:
+    fifo = tmp_path / "pipe"
+    os.mkfifo(fifo)
+    assert (
+        bounded_wait.wait(
+            bounded_wait.WaitRequest(deadline_s=5, file=fifo, interval_s=1),
+            sleeper=lambda _s: None,
+        )
+        == 2
+    )
+
+
+def test_existing_regular_file_target_succeeds(tmp_path: Path) -> None:
+    ready = tmp_path / "ready"
+    ready.write_text("ready")
+    assert (
+        bounded_wait.wait(
+            bounded_wait.WaitRequest(deadline_s=5, file=ready, interval_s=1),
+            sleeper=lambda _s: None,
+        )
+        == 0
+    )
+
+
+def test_existing_directory_target_succeeds(tmp_path: Path) -> None:
+    assert (
+        bounded_wait.wait(
+            bounded_wait.WaitRequest(deadline_s=5, file=tmp_path, interval_s=1),
+            sleeper=lambda _s: None,
+        )
+        == 0
+    )
+
+
 def test_interval_below_one_second_is_rejected() -> None:
     assert (
         bounded_wait.wait(
