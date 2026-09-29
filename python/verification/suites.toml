@@ -427,6 +427,7 @@ paths = [".devcontainer/Dockerfile"]
 per_path_tokens = { ".devcontainer/Dockerfile" = [
     "-DCMAKE_INSTALL_PREFIX=/opt/clang-p2996",
     "\nARG CLANG_P2996_REF\n",
+    'RUN test -n "${CLANG_P2996_REF}" || { echo "FAIL: CLANG_P2996_REF is empty',
     "COPY --from=clang-builder",
 ] }
 

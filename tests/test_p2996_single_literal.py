@@ -11,15 +11,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
-from dotfiles_setup.p2996_hash import _extract_bake_variable
+from dotfiles_setup.p2996_refresh import read_pinned_ref
 
 REPO_ROOT = Path(__file__).parent.parent.absolute()
 
 
 def _bake_ref() -> str:
-    ref = _extract_bake_variable(
-        (REPO_ROOT / "docker-bake.hcl").read_text(), "CLANG_P2996_REF"
-    )
+    ref = read_pinned_ref(REPO_ROOT)
     assert re.fullmatch(r"[0-9a-f]{40}", ref)
     return ref
 
@@ -61,10 +59,8 @@ def _tracked_nondoc_files() -> list[str]:
             or relative.endswith(".md")
         ):
             continue
-        try:
-            (REPO_ROOT / relative).read_text(errors="ignore")
-        except OSError:
-            continue
+        # No OSError escape hatch: a tracked file this gate cannot read is a
+        # file it cannot vouch for, so it fails loudly instead of skipping.
         tracked.append(relative)
     return tracked
 
@@ -79,8 +75,21 @@ def test_bake_default_is_the_only_tracked_copy_of_the_sha() -> None:
     assert matches == ["docker-bake.hcl"]
 
 
+_ASSIGNMENT = re.compile(r'CLANG_P2996_REF\s*[=:]\s*"?[0-9a-f]{40}')
+
+
+def test_assignment_probe_catches_the_904_shape() -> None:
+    """Control arm for the scan below: it must flag a second, different SHA copy."""
+    sha = "b" * 40
+    assert _ASSIGNMENT.search("ARG " + "CLANG_P2996_REF=" + sha)
+    assert _ASSIGNMENT.search("CLANG_P2996_REF" + ': "' + sha + '"')
+    assert not _ASSIGNMENT.search(
+        'variable "CLANG_P2996_REF" { default = "' + sha + '" }'
+    )
+
+
 def test_no_file_assigns_a_sha_literal_to_clang_p2996_ref() -> None:
-    assignment = re.compile(r'CLANG_P2996_REF\s*[=:]\s*"?[0-9a-f]{40}')
+    assignment = _ASSIGNMENT
     matches = [
         relative
         for relative in _tracked_nondoc_files()
@@ -92,7 +101,9 @@ def test_no_file_assigns_a_sha_literal_to_clang_p2996_ref() -> None:
 def test_dockerfile_arg_has_no_default() -> None:
     dockerfile = (REPO_ROOT / ".devcontainer" / "Dockerfile").read_text()
     declarations = re.findall(r"^ARG CLANG_P2996_REF\b.*$", dockerfile, re.MULTILINE)
-    assert declarations == ["ARG CLANG_P2996_REF"]
+    # Re-declaring the bare ARG in a later stage is legitimate; a default is not.
+    assert declarations
+    assert set(declarations) == {"ARG CLANG_P2996_REF"}
 
 
 def test_renovate_extracts_exactly_the_bake_pin() -> None:
@@ -138,7 +149,7 @@ def test_clang_package_rule_leaves_the_image_group_after_it() -> None:
     digest_index = next(
         index
         for index, rule in enumerate(rules)
-        if rule.get("matchUpdateTypes") == ["minor", "patch", "digest"]
+        if "digest" in rule.get("matchUpdateTypes", []) and rule.get("automerge")
     )
     clang_index = next(
         index
@@ -148,9 +159,15 @@ def test_clang_package_rule_leaves_the_image_group_after_it() -> None:
     rule = rules[clang_index]
     assert clang_index > image_index
     assert clang_index > digest_index
+    # LAST, so no later rule can re-group or re-schedule it (later rules win).
+    assert clang_index == len(rules) - 1
+    assert rule.get("enabled", True) is True
     assert "groupName" in rule
     assert rule["groupName"] is None
     assert rule["schedule"] == ["before 6am"]
+    # Renovate defaults updateNotScheduled to true, which re-pushes an OPEN
+    # PR outside the window and cancels an in-flight multi-hour compile.
+    assert rule["updateNotScheduled"] is False
     assert rule["automerge"] is True
     assert rule["automergeType"] == "pr"
     assert rule["platformAutomerge"] is True

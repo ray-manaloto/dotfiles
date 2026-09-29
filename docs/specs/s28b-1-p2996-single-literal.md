@@ -1,6 +1,6 @@
 # Spec S28b-1: clang-p2996 has ONE pinned literal, its own Renovate PR, and a gate
 
-**Status: DRAFT (spec-scribe, 2026-09-29). Not ratified. Stop for the architect before dispatch.** Branch
+**Status: RATIFIED 2026-09-29 (drafted by spec-scribe; rulings at the end). Implemented in a8e8e8d9.** Branch
 `fix/s28b-1-p2996-single-literal` off main `8454778c`. Issues #1434, #1435. Research:
 `docs/research/kb/reports/agents/research-p2996-ref-tracking-2026-09-29.md` (**R** below) and
 `docs/research/kb/reports/agents/sdlc-team-p2996-ref-currency-2026-09-28.md` (**S**).
@@ -210,7 +210,7 @@ The cheapest native signal already exists:
   `p2996` head.
 - `mise run renovate-status` (`mise.toml:971-972`, "Report Mend-hosted Renovate install + privileges + open update PRs")
   already lists open update PRs.
-- The Dependency Dashboard issue, if the extended preset enables it (**unverified**), shows the same thing on GitHub.
+- ~~The Dependency Dashboard~~ — the extended preset sets `dependencyDashboard: false` (cold-review F10), so there is no dashboard signal.
 
 So the recommended lag check is: after a day, `renovate-status` shows no clang PR, or shows one that is green or merging.
 A clang PR open for more than about 2 days is the alarm. No new checker is built. If Ray later wants this in the
@@ -246,7 +246,7 @@ SessionStart doctor, it would be a `doctor.toml` row over `renovate-status`. Tha
 - **I2 Every build goes through bake.** Research R Q4 (`A`, R:171-188) lists every build entry point, and all of them
   are bake. Bake passes the arg in `dev` (`docker-bake.hcl:136-140`) and `p2996-cache` (`:237-240`). The `base` target
   (`:204-206`) never enters `clang-builder-cold`. Without bake, `git fetch --depth 1 origin "${CLANG_P2996_REF}"`
-  (`Dockerfile:465`) receives an empty ref. R:196 says this fails loudly (`A`, not re-derived). Q1 asks about an explicit
+  (`Dockerfile:465`) receives an empty ref. R:196 said this fails loudly — REFUTED by the cold review (`cold-review-a8e8e8d9-2026-09-29.md` F1): `git fetch origin ""` succeeds and fetches the default branch, so the Q1 guard is load-bearing and is now bound by the `build.clang-p2996-reflection` suite. Q1 asks about an explicit
   guard.
 - **I3 Cost is accepted.** `p2996_section_digest` (`p2996_hash.py:432-443`) hashes the Dockerfile's p2996 section, so
   editing F1 busts `:p2996-<hash>` by itself. The pin bump would bust it anyway. Expect **one** cold p2996 compile in
@@ -372,7 +372,7 @@ it has no Bash and cannot run the command.
 | P32 | A | `main` requires only the `ci-gate` status check | R:146-148 (`gh api …/protection`, research lane) |
 | P33 | A | Preset timezone America/Chicago | R:19-21 (live preset fetch by the research lane) |
 | P34 | A | Cold p2996 compile about 80–120 min | S:143 (repository estimate, unmeasured) |
-| P35 | A | Empty `CLANG_P2996_REF` makes `git fetch` fail loudly | R:196; not probed by anyone. That is why Q1 exists |
+| P35 | A→REFUTED | Empty `CLANG_P2996_REF` makes `git fetch` fail loudly | REFUTED by cold-review F1 (it fetches the default branch); the guard is load-bearing and token-bound |
 | P36 | L | The current upstream head prefix `f17c8d6c7bfe` (per R and S) appears today only in `docs/**` files, so a bump to it cannot make test 1 fail because of an existing tracked non-doc copy | Grep `f17c8d6c7bfe` excluding worktrees/graphify-out: 3 files, all under `docs/`. The head itself must be re-resolved (I6) |
 
 

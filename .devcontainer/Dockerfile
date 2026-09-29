@@ -462,7 +462,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # check (image.py) is unaffected.
 WORKDIR /build/clang-p2996
 
-RUN test -n "${CLANG_P2996_REF}" || { echo "FAIL: CLANG_P2996_REF unset; build via docker bake"; exit 1; } && \
+RUN test -n "${CLANG_P2996_REF}" || { echo "FAIL: CLANG_P2996_REF is empty; build via docker bake and never export an empty override"; exit 1; } && \
     git init . && \
     git remote add origin "${CLANG_P2996_REPO}" && \
     git fetch --depth 1 origin "${CLANG_P2996_REF}" && \

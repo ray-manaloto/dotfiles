@@ -15,7 +15,9 @@ content-addressed cache key in `p2996_hash.py`, so:
 
 Renovate's git-refs customManager is the automatic path: it opens its own
 daily PR (S28b-1, #1434). This module is the manual/emergency path, run via
-`mise run p2996-refresh`. The scheduled `refresh.yml` `p2996-refresh` job was
+`mise run p2996-refresh`, kept by Ray's ruling (2026-09-29) as a local escape
+hatch for when the Mend-hosted Renovate app lags or is down — it needs only
+`git ls-remote`, no Renovate run. The scheduled `refresh.yml` `p2996-refresh` job was
 retired in #169; do not re-wire it alongside Renovate, because that would put
 two writers on one pin.
 
