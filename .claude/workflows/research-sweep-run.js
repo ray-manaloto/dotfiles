@@ -18,8 +18,9 @@ export const meta = {
 //    COUNT dominates the cost of cheap steps: bulk reading runs as Explore on haiku, in
 //    batches, never one agent per item.
 // 2. Fetching is not reasoning: `mise run research-fanout` does it with no model at all.
-// 3. Judgment is concentrated in ONE node (Synthesize, opus/high). Fable is never used here —
-//    escalation is `.claude/token-routing.md`'s.
+// 3. Judgment is concentrated in Synthesize (opus/high), plus an Adjudicate node (opus/high) that
+//    runs ONLY when a refuter flags a claim. Fable is never used here — escalation is
+//    `.claude/token-routing.md`'s. A typical run is ~9-15 agents (was ~7-10 before 2026-09-29b).
 // 4. The advisor runs on codex (codex-sol-advisor), spending codex tokens, not Claude's.
 // 5. The critic is Explore on SONNET: it reads one report and needs judgment, but still skips
 //    the CLAUDE.md payload. The source dive is general-purpose because Explore may not create
@@ -29,12 +30,16 @@ export const meta = {
 // superseded mise-dotfiles-omarchy-2026-09-29.md):
 // 6. TRIAGE moved haiku -> sonnet/low: it decides what is ever read, so a cheap ranking miss
 //    propagates to every later node; it is still ONE Explore agent.
-// 7. Caller-supplied LINKS bypass triage and its READ_MAX cap and are read on sonnet/low: a link
+// 7. Caller-supplied LINKS bypass triage and its READ_MAX cap — and survive a null plan/triage
+//    (the run continues on the links alone) — and are read on sonnet/low: a link
 //    the user named is never a ranking decision, and the one missed section that caused the
 //    2026-09-29b Omarchy headline lived in a page that WAS fetched but never read closely.
 // 8. REFUTE is one agent PER load-bearing claim (independence: one refuter reasoning about five
-//    claims anchors on its first verdict) and must cross-check an ABSENCE claim by a second,
-//    independent route with a control arm (.claude/rules/probes-need-a-control-arm.md).
+//    claims anchors on its first verdict), must cross-check an ABSENCE claim by a second,
+//    independent route with a control arm (.claude/rules/probes-need-a-control-arm.md), and must
+//    also judge MISLEADING-BY-OMISSION: the 2026-09-29b Omarchy headline was TRUE (of shipped
+//    code) and misleading (it omitted a documented workflow), so "is it false?" alone cannot
+//    catch that class. A misleading claim is flagged exactly like a refuted one.
 // 9. ADJUDICATE (opus/high, one tier above the refuters) runs only when a refuter says
 //    "refuted": a refutation rewrites the report, so it is confirmed before reconcile acts on it
 //    (memory feedback_refuted_research_rerun_one_tier_up). No refutation -> the node never runs.
@@ -49,8 +54,13 @@ const REPO = typeof A.repo === 'string' ? A.repo : ''
 // Other projects the question is ABOUT, beside REPO: searched in both directions
 // (REPO's tracker for each name, each repo's tracker for REPO's name).
 const RELATED = Array.isArray(A.relatedRepos) ? A.relatedRepos.filter(r => typeof r === 'string' && r) : []
+// Search terms are project NAMES, not owner/repo slugs: `repo:jdx/mise omarchy` found 17 hits
+// where `repo:jdx/mise omacom/omarchy` found 3 (cold review 94f4e161 row 8).
+const nameOf = r => r.split('/').pop()
 // URLs the caller names: always deep-read, never ranked away.
-const LINKS = Array.isArray(A.links) ? A.links.filter(u => typeof u === 'string' && u) : []
+// Normalized (no #fragment, no trailing slash) so one page is never read twice.
+const norm = u => u.replace(/#.*$/, '').replace(/\/+$/, '')
+const LINKS = Array.isArray(A.links) ? [...new Set(A.links.filter(u => typeof u === 'string' && u).map(norm))] : []
 const READ_MAX = Number.isInteger(A.readMax) ? A.readMax : 6        // triaged URLs deep-read
 const READ_BATCH = 3                                                // URLs per reader agent
 const VERIFY_MAX = Number.isInteger(A.verifyMax) ? A.verifyMax : 5  // claims refuted
@@ -147,8 +157,12 @@ const SYNTH = {
 }
 const VERDICT = {
   type: 'object',
-  required: ['claim', 'refuted', 'evidence'],
-  properties: { claim: { type: 'string' }, refuted: { type: 'boolean' }, evidence: { type: 'string' }, controlArm: { type: 'string' } },
+  required: ['claim', 'refuted', 'misleading', 'evidence', 'controlArm'],
+  properties: {
+    claim: { type: 'string' }, refuted: { type: 'boolean' },
+    misleading: { type: 'boolean' }, omitted: { type: 'string' },
+    evidence: { type: 'string' }, controlArm: { type: 'string' },
+  },
 }
 const CRITIC = {
   type: 'object',
@@ -172,9 +186,11 @@ const plan = await run('plan', 'plan+fetch', 'Plan', [
   `  mise run research-fanout -- "<query>" ${REPO ? `--repo ${REPO} ` : ''}--sources <comma list>`,
   'and record the manifest path it prints and its real exit code.',
   RELATED.length ? [
-    'CROSS-REFERENCE BOTH DIRECTIONS: for each related repo R, also run research-fanout with `--repo R` and a query',
-    `naming ${REPO || 'the main project'}, and one with ${REPO ? `\`--repo ${REPO}\`` : 'the main repo'} naming R. A relationship`,
-    'searched from one side only is a gap, not a finding.',
+    'CROSS-REFERENCE BOTH DIRECTIONS (queries use project NAMES, never owner/repo slugs):',
+    ...RELATED.map(r => REPO
+      ? `  - \`--repo ${r}\` with a query naming "${nameOf(REPO)}", AND \`--repo ${REPO}\` with a query naming "${nameOf(r)}"`
+      : `  - \`--repo ${r}\` with the question's own terms (no main REPO was given)`),
+    'A relationship searched from one side only is a gap, not a finding.',
   ].join('\n') : '',
   'GITHUB CODE SEARCH (for "how do real projects configure X" questions only): `gh api -X GET search/code -f q=\'<q>\'`.',
   'REST syntax: no OR, no parentheses, no `**`; use `filename:`/`path:`/`repo:`/`org:` and run one query per',
@@ -184,16 +200,19 @@ const plan = await run('plan', 'plan+fetch', 'Plan', [
   'Set sourceDive=true only when REPO is set AND the question is about what the code DOES (behaviour, a flag, a bug),',
   'where reading source at the release tag beats issues.',
 ].filter(Boolean).join('\n'), { schema: PLAN })
-if (plan === null) return { status: 'plan-null', routing }
-const manifests = plan.runs.filter(r => r.manifest).map(r => r.manifest)
-if (!manifests.length) return { status: 'no-manifests', plan, routing }
-log(`Plan: ${plan.runs.length} fanout run(s); ${(plan.codeSearch || []).length} code search(es); sourceDive=${plan.sourceDive}`)
+if (plan === null && !LINKS.length) return { status: 'plan-null', routing }
+const manifests = plan === null ? [] : plan.runs.filter(r => r.manifest).map(r => r.manifest)
+if (!manifests.length && !LINKS.length) return { status: 'no-manifests', plan, routing }
+if (plan === null || !manifests.length) log('Plan: no fanout results — continuing on the caller links alone (a named gap)')
+else log(`Plan: ${plan.runs.length} fanout run(s); ${(plan.codeSearch || []).length} code search(es); sourceDive=${plan.sourceDive}`)
+const codeSearch = plan === null ? [] : plan.codeSearch || []
 
 phase('Triage')
-const triage = await run('triage', 'triage', 'Triage', [
+const EMPTY_TRIAGE = { read: [], hits: [], unverifiedEmpty: [] }
+const triageOut = !manifests.length ? EMPTY_TRIAGE : await run('triage', 'triage', 'Triage', [
   `QUESTION: ${A.question}`,
   `Read these research-fanout manifests and every <source>.json beside them:\n${manifests.join('\n')}`,
-  plan.codeSearch && plan.codeSearch.length ? `Code-search hits (already verified by the planner): ${JSON.stringify(plan.codeSearch)}` : '',
+  codeSearch.length ? `Code-search hits (already verified by the planner): ${JSON.stringify(codeSearch)}` : '',
   'Dedup hits across sources by URL (record which sources found each). Rank by likely value for the QUESTION:',
   'primary sources (source code, merged PRs, maintainer answers, release notes) above secondary ones (blogs, forums).',
   `Choose at most ${READ_MAX} URLs worth deep-reading, each with a one-line reason. Prefer a mix: at least one primary`,
@@ -201,9 +220,11 @@ const triage = await run('triage', 'triage', 'Triage', [
   'unverifiedEmpty — those are gaps, not "no results".',
   LINKS.length ? `Do NOT choose these (the caller's links, read separately): ${LINKS.join(' ')}` : '',
 ].filter(Boolean).join('\n'), { schema: TRIAGE })
-if (triage === null) return { status: 'triage-null', plan, routing }
+if (triageOut === null && !LINKS.length) return { status: 'triage-null', plan, routing }
+if (triageOut === null) log('Triage: null — continuing on the caller links alone (a named gap)')
+const triage = triageOut || EMPTY_TRIAGE
 const linkSet = new Set(LINKS)
-const triaged = triage.read.filter(u => !linkSet.has(u.url))
+const triaged = triage.read.filter(u => !linkSet.has(norm(u.url)))
 const toRead = triaged.slice(0, READ_MAX)
 if (triaged.length > READ_MAX) log(`Triage: dropped ${triaged.length - READ_MAX} URL(s) over readMax: ${triaged.slice(READ_MAX).map(u => u.url).join(' ')}`)
 
@@ -233,7 +254,7 @@ batches.forEach((batch, i) => readers.push({ urls: batch.map(u => u.url), run: (
   `QUESTION: ${A.question}`, ...READ_RULES,
   ...batch.map(u => `- ${u.url}  (${u.why})`),
 ].join('\n'), { schema: CLAIMS }) }))
-if (plan.sourceDive && REPO) {
+if (plan && plan.sourceDive && REPO) {
   // general-purpose, not Explore: the dive clones into $TMPDIR and deletes it, and the
   // built-in Explore agent may not create or delete files. It pays the CLAUDE.md payload
   // only on the runs that need a clone.
@@ -267,9 +288,10 @@ const synth = await run('synthesize', 'synthesize', 'Synthesize', [
   LINKS.length ? `CALLER LINKS (each must be cited or named as unread): ${LINKS.join(' ')}` : '',
   `CLAIMS:\n${JSON.stringify(claims)}`,
   `TRIAGE:\n${JSON.stringify({ hits: triage.hits, unverifiedEmpty: triage.unverifiedEmpty })}`,
-  `CODE SEARCH:\n${JSON.stringify(plan.codeSearch || [])}`,
+  `CODE SEARCH:\n${JSON.stringify(codeSearch)}`,
   `FAILED READS:\n${JSON.stringify(failedReads)}`,
-  `ROUTING:\n${JSON.stringify(routing)}`,
+  // This node's own row is added by run() only when it is called, i.e. after this prompt is built.
+  `ROUTING (so far; add a row for this synthesize node — ${JSON.stringify(ROUTE.synthesize)}):\n${JSON.stringify(routing)}`,
 ].filter(Boolean).join('\n'), { schema: SYNTH })
 if (synth === null) return { status: 'synth-null', plan, triage, claims, routing }
 
@@ -280,7 +302,12 @@ const refuteOne = (c, i) => () => run('refute', `refute:${i + 1}/${loadBearing.l
   'Try to REFUTE this claim by re-probing its PRIMARY source yourself (open the URL / read the file at the cited ref).',
   'Default to refuted=true if you cannot confirm it. Every negative needs a control arm',
   '(.claude/rules/probes-need-a-control-arm.md); record it in controlArm.',
-  c.absence ? 'This is an ABSENCE claim: confirm it by a SECOND, independent route (e.g. code search AND a clone grep AND `git log -S`, or the other project\'s tracker), each with its own control term.' : '',
+  'Then judge MISLEADING-BY-OMISSION separately: even if the claim is true, would a reader draw a wrong conclusion',
+  'because it omits something the sources say — e.g. it is true of shipped CODE but omits a documented or proposed',
+  'workflow, or true of one project but omits what a related project documents about it? Set misleading=true and name',
+  'the omission in omitted. Check the OTHER side of every relationship the claim touches (the related project\'s docs,',
+  'issues and discussions), not only the source the claim cites.',
+  c.absence ? 'This is an ABSENCE claim: confirm it by a SECOND route of a DIFFERENT KIND from the cited one (if it cites code, search the docs/trackers that could describe the thing; if it cites docs, search the code and its history with `git log -S`), each with its own control term.' : '',
   `CLAIM: ${c.claim}`, `SOURCE: ${c.source}`,
 ].filter(Boolean).join('\n'), { schema: VERDICT })
 const [verdictList, critic] = await Promise.all([
@@ -296,39 +323,53 @@ const [verdictList, critic] = await Promise.all([
 // A refuter that returned null leaves its claim UNVERIFIED, never confirmed.
 const verdicts = loadBearing.map((c, i) => verdictList[i] || { claim: c.claim, refuted: null, evidence: 'refuter returned null — UNVERIFIED' })
 const unverified = verdicts.filter(v => v.refuted === null)
-const flagged = verdicts.filter(v => v.refuted === true)
+const flagged = verdicts.filter(v => v.refuted === true || v.misleading === true)
 
 // One tier up before a refutation is allowed to rewrite the report.
 let refuted = flagged
 let adjudication = null
 if (flagged.length) {
   adjudication = await run('adjudicate', 'adjudicate', 'Verify', [
-    'Independent refuters flagged the claims below as REFUTED. Re-check each against its primary source yourself and',
-    'decide: upheld (the claim really is wrong) or overturned (the refuter erred). Weigh the claim\'s own evidence against',
-    'the refuter\'s; an absence verdict needs a control arm. Return one verdict per claim: refuted=true means UPHELD.',
+    'Independent refuters flagged the claims below as REFUTED and/or MISLEADING. Re-check each against its primary',
+    'source yourself and decide: upheld (the claim really is wrong or misleading) or overturned (the refuter erred).',
+    'Weigh the claim\'s own evidence against the refuter\'s; an absence verdict needs a control arm. Return EXACTLY one',
+    'verdict per flagged claim, IN THE SAME ORDER, with index = its position: refuted=true means UPHELD.',
     `REPORT: ${synth.reportPath}`,
-    `FLAGGED: ${JSON.stringify(flagged)}`,
-  ].join('\n'), { schema: { type: 'object', required: ['verdicts'], properties: { verdicts: { type: 'array', items: VERDICT } } } })
-  if (adjudication === null) log('Verify: adjudicator returned null — refutations stand UNCONFIRMED')
-  else refuted = adjudication.verdicts.filter(v => v.refuted)
+    `FLAGGED: ${JSON.stringify(flagged.map((v, index) => ({ index, ...v })))}`,
+  ].join('\n'), { schema: { type: 'object', required: ['verdicts'], properties: { verdicts: { type: 'array', items: { ...VERDICT, required: [...VERDICT.required, 'index'], properties: { ...VERDICT.properties, index: { type: 'number' } } } } } } })
+  if (adjudication === null) {
+    // Fail safe: an unconfirmed flag still rewrites the report (the pre-2026-09-29b behaviour).
+    log('Verify: adjudicator returned null — every flagged claim is treated as UPHELD')
+  } else {
+    const byIndex = new Map(adjudication.verdicts.map(v => [v.index, v]))
+    // Matched back by index onto the ORIGINAL claim text; a claim the adjudicator skipped stays UPHELD.
+    refuted = flagged
+      .map((v, i) => ({ v, a: byIndex.get(i) }))
+      .filter(({ a }) => !a || a.refuted)
+      .map(({ v, a }) => ({ ...v, adjudicated: a ? a.evidence : 'not adjudicated — upheld by default' }))
+  }
 }
 const gaps = critic === null ? null : critic.gaps
+const overCap = synth.loadBearing.slice(VERIFY_MAX).map(c => ({ claim: c.claim, refuted: null, evidence: `over verifyMax=${VERIFY_MAX} — UNVERIFIED` }))
 log(`Verify: ${flagged.length} flagged, ${refuted.length} upheld, ${unverified.length} unverified of ${verdicts.length} load-bearing claim(s)`)
 
 // The report on disk must carry the verification outcome: a refuted claim left in the
-// Answer is worse than no report. Reconcile only when there is something to write.
+// Answer is worse than no report. Reconcile ALWAYS runs (one sonnet call): an all-confirmed
+// run still needs its Verification section and the Verify rows of the Provenance table.
 let reconciled = true
-if (critic === null || unverified.length || flagged.length || gaps.length) {
+{
   const reconcile = await run('reconcile', 'reconcile', 'Verify', [
     `Edit the research report at ${synth.reportPath} in place. Add a "## Verification" section listing each`,
-    'load-bearing claim as confirmed, refuted-and-upheld (with the evidence), refuted-but-overturned by the adjudicator,',
-    'or unverified. Correct or strike every UPHELD refuted claim wherever the Answer or Recommendation relies on it, and',
-    'say how the conclusion changes. Append the critic gaps to the Gaps section. If the critic or adjudicator result is',
-    'null, say that step did not run. Keep the Provenance table and add the Verify nodes to it.',
-    `VERDICTS: ${JSON.stringify(verdicts)}`,
+    'load-bearing claim as confirmed, UPHELD as refuted or misleading (with the evidence), overturned by the',
+    'adjudicator, or unverified. Correct or strike every UPHELD refuted claim wherever the Answer or Recommendation',
+    'relies on it; QUALIFY every UPHELD misleading claim with its omission; say how the conclusion changes. Append the',
+    'critic gaps to the Gaps section. If the critic or adjudicator result is null, say that step did not run. Replace',
+    'the Provenance table with the full ROUTING below (every node that ran, incl. this reconcile node).',
+    `VERDICTS: ${JSON.stringify(verdicts.concat(overCap))}`,
+    `UPHELD: ${JSON.stringify(refuted)}`,
     `ADJUDICATION: ${JSON.stringify(adjudication)}`,
     `CRITIC GAPS: ${JSON.stringify(gaps)}`,
-    `ROUTING: ${JSON.stringify(routing)}`,
+    `ROUTING: ${JSON.stringify(routing.concat([{ node: 'reconcile', agentType: 'general-purpose', ...ROUTE.reconcile }]))}`,
   ].join('\n'))
   reconciled = reconcile !== null
   if (!reconciled) log('Verify: reconcile returned null — the report on disk does NOT reflect verification')
@@ -341,7 +382,8 @@ if (A.advisor) {
   if (advice === null) log('Advise: codex-sol-advisor returned null (escalation per .claude/token-routing.md item 1)')
 }
 
-// Status: complete | verify-null | reconcile-null | plan-null | no-manifests | triage-null | synth-null.
-// verify-null now means EVERY refuter returned null (nothing was verified at all).
-const status = verdicts.length && unverified.length === verdicts.length ? 'verify-null' : !reconciled ? 'reconcile-null' : 'complete'
+// Status: complete | partial-verify | verify-null | reconcile-null | plan-null | no-manifests |
+// triage-null | synth-null. verify-null = EVERY refuter returned null; partial-verify = SOME did.
+const status = verdicts.length && unverified.length === verdicts.length ? 'verify-null'
+  : !reconciled ? 'reconcile-null' : unverified.length ? 'partial-verify' : 'complete'
 return { status, reportPath: synth.reportPath, plan, triage, claims: claims.length, failedReads, verdicts, adjudication, refuted, gaps, advice, routing }

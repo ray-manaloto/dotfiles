@@ -23,7 +23,8 @@ this repo use this skill and do not import `kb_setup.research`
 
 - **The Workflow tool is available AND the user asked for a sweep (or approved
   one you proposed)** → run the saved workflow and stop here. It fans out to
-  about 5-7 agents including one Opus/high synthesis, so a single-source
+  about 9-15 agents (one Opus/high synthesis, plus an Opus/high adjudicator
+  only when a claim is flagged), so a single-source
   question belongs on the in-lane steps instead. The workflow owns the per-node
   model and effort routing (the reasoning is commented at the top of
   `.claude/workflows/research-sweep-run.js` — that file is the single source of
@@ -107,7 +108,12 @@ this repo use this skill and do not import `kb_setup.research`
   confirmed by a second, independent route with a control term, and kept apart
   from "X's docs propose Y" and "a third party documents Y for X" (2026-09-29b:
   a one-route probe produced a true-but-misleading Omarchy headline). The
-  workflow marks these `absence` and refutes them twice; do the same in-lane.
+  workflow marks these `absence` and briefs their refuter to confirm them by a
+  second route of a different kind; every refuter also judges
+  misleading-by-omission, and a flagged claim is adjudicated one tier up.
+  Status values: `complete`, `partial-verify` (some refuters null),
+  `verify-null`, `reconcile-null`, `plan-null`, `no-manifests`,
+  `triage-null`, `synth-null` — only `complete` means fully verified.
 - **GitHub code search** (config-pattern questions): `gh api -X GET search/code
   -f q='QUERY'` — no `OR`/parentheses/`**` (HTTP 422), 10 requests/min (a 403 is
   a rate limit, not zero), and the tokenizer drops punctuation, so re-fetch and
