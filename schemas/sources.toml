@@ -2,9 +2,11 @@
 # `dotfiles_setup.schema_vendor` — both the offline drift check (wired into
 # `mise run verify`) and the network-using `schema-vendor refresh` command
 # that `refresh.yml`'s `schema-refresh` job runs in CI. Never hand-edit the
-# `version`/`source`/`sha256` fields; run
-# `mise run schema-vendor-refresh` and let it rewrite this file alongside
-# the vendored JSON.
+# `source`/`sha256` fields, nor `version` for a tool with a resolver in
+# `schema_vendor._PIN_RESOLVERS`; run `mise run schema-vendor-refresh` and let
+# it rewrite this file alongside the vendored JSON. `claude-code` has no
+# resolver, so its `version` IS its pin: hand-edit `version` + the `source` tag,
+# then run the refresh, which re-downloads at that tag and rewrites `sha256`.
 #
 # `pin_source` names where `schema_vendor.current_pin()` reads the tool's
 # CURRENT version from — informational here, the resolver itself is code.

@@ -356,7 +356,15 @@ jobs:
           # identically and no token helps (2026-09-10; #964).
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MISE_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: mise run lock-image -- --no-container
+        # --skip-tools (#963): this job installs only python+uv, so a bare
+        # `mise run` first installs the ~51 missing root tools, UNLOCKED, and
+        # each fresh install of an aqua `type: http` tool with no published
+        # checksum (aws-cli, docker-cli) writes its blake3 into the tracked
+        # root mise.lock — tripping the containment guard below. The task
+        # needs only uv/python (image_lock.py runs its own pinned mise in a
+        # stage dir). Measured: `mise run --skip-tools t` leaves the lock
+        # untouched; bare `mise run t` adds the checksum line.
+        run: mise run --skip-tools lock-image -- --no-container
       - name: Re-check image-lock drift after regeneration
         # Second terminator (#887 INV-2): this must now PASS unconditionally
         # — a failure here fails the job and skips every step below, so
@@ -507,12 +515,19 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install mise (python + uv)
+      - name: Install mise (python + uv + hk)
         uses: $/.github/actions/setup-mise
         with:
-          install_args: "python uv"
+          # hk: schema_vendor._hygiene_normalize shells out to `hk util` on
+          # every fetched schema; with --skip-tools below nothing else
+          # installs it. A --locked subset install writes nothing to mise.lock.
+          install_args: "python uv hk"
       - name: Refresh vendored schemas
-        run: mise run schema-vendor-refresh
+        # --skip-tools: same #963 class as image-lock-pr — a subset install, so
+        # a bare `mise run` would install every other root tool UNLOCKED and
+        # rewrite mise.lock. Anything the task shells out to must be in
+        # install_args above.
+        run: mise run --skip-tools schema-vendor-refresh
       - name: Open PR if any schema drifted
         uses: $/.github/actions/open-refresh-pr
         with:
@@ -535,10 +550,18 @@ jobs:
 
             Trigger: ${{ github.event_name }}.
           branch: chore/schema-refresh
+          # EVERY vendored file sources.toml records, plus codex-agent.json,
+          # which refresh re-derives from codex-config.json (#1443 staged only
+          # sources.toml, so codex-config.json's new sha256 landed without its
+          # bytes and `mise run verify`'s config.schema-vendor-drift broke on
+          # main). Keep in lockstep with the `file =` entries there.
           paths: |
             schemas/mise.json
             schemas/ruff.json
             schemas/typos.json
+            schemas/codex-config.json
+            schemas/codex-agent.json
+            .claude/types/claude-code.d.ts
             schemas/sources.toml
           labels: dependencies
           summary-heading: Schema refresh

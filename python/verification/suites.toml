@@ -846,7 +846,7 @@ per_path_tokens = { ".github/workflows/refresh.yml" = [
     "lock-refresh:\n    # Never on pull_request",
     "tool-currency:\n    # Never on pull_request",
     "id: drift-check\n        continue-on-error: true\n        run: |\n          uv run --project python pytest \\\n            tests/test_lock_coverage.py::test_system_lock_versions_match_pins \\\n            tests/test_lock_coverage.py::test_runtime_lock_versions_match_pins \\\n            tests/test_lock_coverage.py::test_system_lock_covers_merged_config \\\n            tests/test_lock_coverage.py::test_runtime_lock_covers_runtime_config \\\n            tests/test_lock_coverage.py::test_image_locks_carry_no_provenance -q",
-    "run: mise run lock-image -- --no-container",
+    "run: mise run --skip-tools lock-image -- --no-container",
     "enforces it on any new job.\n      HK_SKIP_HOOKS: pre-commit,pre-push",
     "#887 INV-9.\n        id: app-token\n        uses: actions/create-github-app-token@",
     "run: echo \"id=$(gh api \"/users/${APP_SLUG}[bot]\" --jq .id)\" >> \"$GITHUB_OUTPUT\"",
