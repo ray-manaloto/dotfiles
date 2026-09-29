@@ -89,4 +89,19 @@ jobs:
           git config user.email "${APP_SLUG}[bot]@users.noreply.github.com"
           git add .devcontainer/Dockerfile
           git commit -m "chore(image): repair GCC_LATEST_DEB_SHA256 for bumped gcc-latest .deb (#249)"
-          git push "https://x-access-token:${APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:${GITHUB_REF_NAME}"
+          # Rebase-and-retry (#1435 cold-review F7): image-lock-pr pushes to the
+          # same Renovate branch after every rebuild. A plain push that loses
+          # that race is rejected ("fetch first") and NEVER retried — the lock
+          # commit does not touch the Dockerfile, so this job is not
+          # re-triggered and the sha stays stale (seen live on #1449, run
+          # 36585903632 attempt 2). The two jobs touch disjoint files, so a
+          # rebase onto the other commit is conflict-free.
+          remote="https://x-access-token:${APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          for attempt in 1 2 3; do
+            if git push "$remote" "HEAD:${GITHUB_REF_NAME}"; then
+              exit 0
+            fi
+            echo "push attempt ${attempt} rejected; rebasing onto the branch tip"
+            git pull --rebase "$remote" "${GITHUB_REF_NAME}"
+          done
+          exit 1
