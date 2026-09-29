@@ -161,6 +161,12 @@ _V9 = "2026-09-16"
 # shape had aborted commands in four consecutive sessions — three of them in
 # subagents, which memory cannot reach.
 _V10 = "2026-09-28"
+# Two 2026-09-29b repeat offenders (session-audit-repeat-offenders F2, F3): a
+# raw `claude plugin uninstall`/`marketplace remove` that skipped the dry-run,
+# backup and doctor `[removed_plugins]` guard `plugin-remove` writes, and
+# ruff/ty piped into a pager — a NEW shape beside the _V3 gate-pipe rule, so
+# its own date rather than a widened `_GATE` (see _V1B).
+_V11 = "2026-09-29"
 
 
 def _compile_wait_loop_candidate(command_boundary: str) -> re.Pattern[str]:
@@ -390,6 +396,29 @@ _GATE = (
 # `uv run --project python pytest …` — the canonical runner prefix, which
 # `_WRAPPER` does not model (it covers env/exec/nohup/time/timeout/xargs).
 _RUNNER = r"(?:uv\s+run\s+(?:-\S+\s+\S+\s+)*)?"
+# ruff/ty are reached bare, through `uv run [--project python]`, or through
+# `mise exec [<tool>…] --`. Only `check`/`format` are rc-bearing: `ruff
+# --version | head` is a diagnostic and stays allowed.
+_MISE_EXEC = r"mise\s+exec\s+(?:[^\s;&|]+\s+)*?--\s+"
+_LINT_RUNNER = r"(?:uv\s+run\s+(?:-\S+\s+\S+\s+)*|" + _MISE_EXEC + r")?"
+_LINT_TOOL = r"(?:ruff\s+(?:check|format)|ty\s+check)\b"
+# `claude plugin[s] uninstall|remove` and `claude plugin[s] marketplace
+# remove|rm` (the aliases `claude plugin --help` lists, probed 2026-09-29), with
+# the binary spelled bare, as a path (`~/.local/bin/claude`), or as a variable
+# holding it (`$C`, `"${CLAUDE}"`) — the 2026-09-29b shapes. Read-only and
+# additive verbs (`list`, `install`, `update`, `details`, `validate`,
+# `marketplace list|update`) never match, and a `--help`/`-h` anywhere in the
+# segment is a docs read, not a removal.
+_CLAUDE_BIN = r"(?:(?:[^\s;&|]*/)?claude|\"?\$\{?\w+\}?\"?)"
+_RAW_PLUGIN_REMOVAL = re.compile(
+    _CMD
+    + r"(?:"
+    + _MISE_EXEC
+    + r")?"
+    + _CLAUDE_BIN
+    + r"\s+plugins?\s+(?:uninstall|remove|marketplace\s+(?:remove|rm))\b"
+    + r"(?![^;&|\n]*\s(?:--help|-h)\b)"
+)
 _CODEX_EXEC = r"(?:mise\s+exec\s+--\s+)?codex\s+exec\b"
 _SDLC_ARTIFACT_PATH = (
     r"(?:\.codex/agents/codex-sdlc-[^\s;&|\n]*"
@@ -633,6 +662,26 @@ _RULES: tuple[Rule, ...] = (
         "(evidence discipline).",
         _V3,
     ),
+    # The same masking, one layer down: `ruff check`/`ruff format`/`ty check`
+    # run directly are what `mise run lint` runs, and their rc is the answer
+    # too. A sibling Rule rather than new `_GATE` alternatives, because one
+    # Rule carries one `since` and this coverage is new on _V11. Same segment
+    # span as above; `_LINT_RUNNER` adds `mise exec [<tool>] --` to `_RUNNER`.
+    Rule(
+        "lint tool piped to head/tail",
+        re.compile(
+            _CMD
+            + _LINT_RUNNER
+            + _LINT_TOOL
+            + r"(?:[^;&\n]|(?<=>)&)*\|\s*(?:tail|head)\b"
+        ),
+        "Do not pipe `ruff`/`ty` into `tail`/`head` — bash returns the PIPE's "
+        "exit code (tail's 0), so a lint failure reads as a pass. Redirect to a "
+        'file and read the recorded rc: `<cmd> > /tmp/out.log 2>&1; echo "rc=$?"'
+        " >> /tmp/out.log`, or run the whole gate with `mise run gate -- run "
+        "lint`. See .claude/rules/long-running-command-hangs.md rule 3.",
+        _V11,
+    ),
     # The `&` sibling of the `nohup mise run` rule above: same orphaning, same
     # redirect. Measured twice on 2026-07-21 — a bare `&` was reaped at ~2min
     # and a 10-minute foreground bound killed a bake-off at rc=143. The harness
@@ -739,6 +788,23 @@ _RULES: tuple[Rule, ...] = (
         "step's rc (#1388). Write `echo '===='` or `echo '--- APPLY ---'`.",
         _V10,
         quoted_blind=True,
+    ),
+    # A raw removal skips everything the removal path exists for: the
+    # cross-harness inventory, the dry-run plan, the backup, and the doctor's
+    # `[removed_plugins]` guard that stops a later session re-enabling it —
+    # and `claude plugin uninstall` re-serialises settings.json as a side
+    # effect. Only a Bash call can match: `plugin_remove` shells out through
+    # subprocess, which no PreToolUse hook sees.
+    Rule(
+        "raw plugin removal",
+        _RAW_PLUGIN_REMOVAL,
+        "Do not remove a plugin or marketplace with a raw `claude plugin "
+        "uninstall|remove` / `claude plugin marketplace remove|rm`. Run `mise "
+        "run plugin-inventory -- <selector>`, then `mise run plugin-remove -- "
+        "<selector>` (dry-run plan; `--apply` to mutate) — it backs up state, "
+        "uses the native CLI for you, and writes the doctor `[removed_plugins]` "
+        "guard. See the `plugin-removal` skill.",
+        _V11,
     ),
 )
 

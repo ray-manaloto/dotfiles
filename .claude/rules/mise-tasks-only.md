@@ -20,6 +20,8 @@ library, zero-bash-logic) in the same change.
 | `gh pr merge -R …/knowledge-base` | `mise run kb-land -- <PR#>` (in the KB repo) |
 | `nohup … mise run <task>` / `mise run <task> &` (hand-detaching a task) | the harness background run — stays tracked, one clean completion (no orphaned process, no hand-rolled log monitor); a `&`-detached Mac-side task gets REAPED when the turn goes idle |
 | `<gate> 2>&1 \| tail -40` (piping a gate command into a pager) | `<gate> > /tmp/out.log 2>&1; echo "rc=$?" >> /tmp/out.log`, then read the file — a pipe returns `tail`'s exit code, masking a failed or killed gate |
+| `ruff check\|format …` / `ty check …` `\| tail` (bare, `uv run`, or `mise exec … --`) | the same file-captured rc, or `mise run gate -- run lint` — a separate rule from the gate one because it landed later (2026-09-29) |
+| `claude plugin uninstall\|remove` / `claude plugin marketplace remove\|rm` (incl. `$C plugin …`) | `mise run plugin-inventory -- <selector>`, then `mise run plugin-remove -- <selector>` (dry-run; `--apply` mutates) — backs up, then writes the doctor `[removed_plugins]` guard (`plugin-removal` skill) |
 | `gh run watch <id>` (hand-rolled CI wait) | `mise run land -- <PR#>` (watches main CI via --json buckets); one-shot: `gh run view <id> --json conclusion` |
 | `gh pr checks … --watch` (hand-rolled CI wait) | `mise run ship` arms auto-merge and returns; wait for the merge with `mise run bounded-wait -- --deadline <s> --cmd 'test "$(gh pr view <n> --json state --jq .state)" = MERGED'`, then `mise run land -- <n>`; one-shot read: `gh pr checks <n> --json name,bucket` |
 | autofix artifact recovery by hand | `mise run autofix-apply -- <run-id>` |

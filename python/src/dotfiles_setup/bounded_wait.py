@@ -81,6 +81,21 @@ def wait(
     if (request.file is None) == (request.command is None):
         logger.error("bounded-wait: exactly one of --file and --cmd is required")
         return 2
+    # `exists()` is true at once for a device node, FIFO or socket
+    # (`--file /dev/null`), so such a wait could only succeed — a check with
+    # one face (2026-09-29b, session-audit-dismissed-errors F-1). A path that
+    # does not exist yet is the normal case and stays valid.
+    if (
+        request.file is not None
+        and request.file.exists()
+        and not (request.file.is_file() or request.file.is_dir())
+    ):
+        logger.error(
+            "bounded-wait: --file %s exists but is not a regular file or "
+            "directory; it is satisfied instantly, so the wait could only succeed",
+            request.file,
+        )
+        return 2
 
     expires_at = monotonic() + request.deadline_s
     while True:

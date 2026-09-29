@@ -24,13 +24,13 @@ red herrings — lives in `docs/rules-evidence/long-running-command-hangs.md`.
    wrapped in an out-of-process hard timeout, because **hk has none of
    its own**. On expiry it kills hk's whole process group and prints the
    debug-log tail. Default 600s; override with `--timeout <secs>` or
-   `DOTFILES_LINT_TIMEOUT=<secs>`. Source:
-   `python/src/dotfiles_setup/lint.py`.
+   `DOTFILES_LINT_TIMEOUT=<secs>` (source: `lint.py`, See also).
 
 2. **For any command expected to exceed ~30s, never wait blind.** For a file or
-   command condition, use the sanctioned helper:
-   `mise run bounded-wait -- --deadline <s> (--file <path> | --cmd '<sh -c>')`.
-   Its deadline is mandatory and expiry returns rc=124 with the awaited target.
+   command condition use `mise run bounded-wait -- --deadline <s> (--file <path> | --cmd '<sh -c>')`.
+   Its deadline is mandatory and expiry returns rc=124 with the awaited target;
+   a `--file` that already exists as a device, FIFO or socket (`/dev/null`) is
+   refused with rc=2, because that wait could only succeed.
 
    **Mac-side container ops** (`mise run ship`/`land`, `verify-local`,
    `sync`, image pulls): from the main conversation, launch them with the
@@ -68,11 +68,11 @@ red herrings — lives in `docs/rules-evidence/long-running-command-hangs.md`.
 3. **Preserve real exit codes — never `cmd 2>&1 | tail -N` to capture.**
    *Machine-enforced since 2026-07-21* — the PreToolUse guard denies a
    pipe-to-`tail`/`head` on a **gate** command (`hook_guard` rule `gate command
-   piped to head/tail`). Non-gate diagnostics (`git log | head`) are untouched.
-   Bash returns the *last* pipeline command's exit code (tail's `0`),
-   silently swallowing the upstream failure or kill. Redirect to a file
-   (`cmd > /tmp/out.log 2>&1; echo "rc=$?" >> /tmp/out.log`) and read the
-   file + the recorded `rc`. Trust file content, not a piped tail.
+   piped to head/tail`), and since 2026-09-29 on a direct `ruff`/`ty` run (`lint
+   tool piped to head/tail`). Non-gate diagnostics (`git log | head`) pass. Bash
+   returns the *last* pipeline command's exit code (tail's `0`), swallowing the
+   upstream failure or kill. Redirect to a file (`cmd > /tmp/out.log 2>&1; echo
+   "rc=$?" >> /tmp/out.log`) and read the file + the recorded `rc`.
 
 4. **A stalled process is a hang — kill it, don't keep waiting.** A
    process sitting at 0% CPU with no children for minutes is wedged
