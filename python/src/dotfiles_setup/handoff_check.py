@@ -52,6 +52,16 @@ _ACTIVE_HEADING = re.compile(r"(?im)^##\s+(?P<heading>[^\n]*NEXT SESSION[^\n]*)\
 # compares it — a matching first line with trailing junk is still tampered.
 _SHOW_PLAN = re.compile(r"(?m)^Plan: (?P<value>.+)$")
 _SHOW_FILE = re.compile(r"(?m)^Attestation: (?P<value>.+)$")
+# inject-plan.sh's `tr -d '\r\n[:space:]'` (C locale), as the plugin's own
+# inject-plan.py spells it (`_WS_BYTES`, plus NUL). NOT Python's str.split():
+# that also drops U+001C-U+001F, so a digest followed by one would pass here
+# while the hook reports the plan tampered.
+_NATIVE_WS = frozenset(b" \t\n\r\x0b\x0c\x00")
+
+
+def _strip_native_ws(data: bytes) -> bytes:
+    """Drop exactly the bytes the plugin's hook drops before comparing digests."""
+    return bytes(b for b in data if b not in _NATIVE_WS)
 
 
 @dataclass(frozen=True)
@@ -300,7 +310,8 @@ def _plan_findings(
         )
     else:
         try:
-            attested = "".join((repo_root / state.attestation).read_text().split())
+            raw = (repo_root / state.attestation).read_bytes()
+            attested = _strip_native_ws(raw).decode(errors="replace")
         except OSError as exc:
             attested = None
             detail = f"{state.attestation} is unreadable: {exc}"

@@ -160,17 +160,32 @@ def test_plan_edited_after_attestation_is_unattested(tmp_path: Path) -> None:
     assert "does not match its attestation" in findings[0].detail
 
 
-def test_trailing_content_after_the_digest_is_unattested(tmp_path: Path) -> None:
-    """inject-plan.sh compares the whole stripped file, so junk after it is tamper."""
+@pytest.mark.parametrize("extra", ["extra\n", "\x1c"])
+def test_trailing_content_after_the_digest_is_unattested(
+    tmp_path: Path, extra: str
+) -> None:
+    """The hook strips only C-locale whitespace and NUL, then compares the whole file.
+
+    U+001C is whitespace to Python's ``str.split`` but not to ``tr [:space:]``,
+    so a checker using ``split`` would pass what the hook rejects.
+    """
     repo = _repo(tmp_path)
     _plan(repo)
-    state = _attested(repo, extra="extra\n")
+    state = _attested(repo, extra=extra)
 
     findings = handoff_check.check(repo, "State only.\n", show=lambda _: state)
 
     assert [item.verdict for item in findings] == [
         handoff_check.Verdict.UNATTESTED_PLAN
     ]
+
+
+def test_native_whitespace_around_the_digest_is_accepted(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    _plan(repo)
+    state = _attested(repo, extra=" \t\r\x0b\x0c\x00\n")
+
+    assert handoff_check.check(repo, "State only.\n", show=lambda _: state) == []
 
 
 def test_slug_selection_is_rejected_even_when_the_slug_is_attested(
