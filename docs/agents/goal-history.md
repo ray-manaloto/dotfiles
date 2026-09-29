@@ -1928,3 +1928,44 @@ flowchart LR
 flowchart LR
     R["S29-0 native pwf restructure"] --> V["S29-1 validation review"] --> M["S29-2 machine checks"] --> L["S29-3 land reads PR checks"] --> G["S29-4 ship-gate grilling"] --> Q["S28b-3/4 + remainder"] --> P11["Phase 11"] --> P10["Phase 10"]
 ```
+
+## 2026-09-29 — session 5545fa41 (09-29b): update:claude fixed; mise-native dotfiles program opened; #1452 landed
+
+- **Iteration ID:** `dotfiles-goal-20260929-044`
+- **Prior goal digest:** `sha256:10d5655fe5027e396daf7a5918fdc3e6575c3a4dd9d16cecad8308e1bf3ed49b`
+- **Current goal digest:** `sha256:8ca5e36dde30d364502d71a6d385ccbaa8c5a457a55f1396361a1f48582d5deb`
+- **Changed requirement:**
+  - Order: S29-0 (pwf) now precedes S29-00 (#1449) (Ray, AskUserQuestion).
+  - New program S29-M: move this Mac's `~/.config/mise`, the devcontainer images and running devcontainers onto
+    mise-native dotfiles/bootstrap WITH history tracking, retiring chezmoi; plus a runtime-source selector
+    (dir / git SHA / worktree), real update testing, dependency consolidation into the global config, and a
+    15-minute launchd schedule with human + JSONL nanosecond logs.
+  - New S29-K: three skills from this session's work, built next session. S29-R: `/ultrareview` reserved for the
+    S29-M cutovers, user-invoked only.
+- **Reason:** Ray's messages and AskUserQuestion answers in session 5545fa41.
+- **Evidence:**
+  - User-global `update:claude` fixed out of repo: real guard runs clean rc=0, forced-fail rc=1, recovery rc=0.
+  - PR #1452 merged `63fa0a84` (machine checks: raw plugin removal, lint-tool pipes, bounded-wait device targets);
+    land rc=1 was untracked-mirror leaks, standalone smoke rc=0. PR #1454 (research-sweep tuning) auto-merge armed.
+  - Reports: `session-audit-*-2026-09-29b.md` (seven + delta), `mise-native-dotfiles-replacing-chezmoi-2026-09-29.md`,
+    `mise-dotfiles-{github-examples,firecrawl-mirror,omarchy}-2026-09-29.md`, `omarchy-mise-crossref-2026-09-29.md`,
+    `omarchy-mise-dotfiles-crossref-sweep-2026-09-29.md`, cold reviews of 87f905ec/ef172a80/94f4e161/2d9d49d8,
+    `claude-code-review-mirror-2026-09-29.md`; plan `docs/specs/mise-native-dotfiles-plan.md`.
+- **Affected tickets:** none closed; #1449 still red (S29-00).
+- **Disposition:** `ACCEPTED`.
+- **Topology and ownership:** One writer, the Claude architect. Delegates: Opus implementers in isolated worktrees
+  (codex usage-limited until 2026-10-03, stated fallback), Opus cold-reviewers (two rounds on the workflow tuning),
+  Sonnet/Opus research lanes, the research-sweep workflow (×3), a Fable planner, Opus §1c audit lanes. Codex
+  cross-family review is owed on every Claude-authored commit (S29-D).
+
+### Current goal
+
+> Next session, in order (Ray, 2026-09-29b): S29-0 restructure task_plan.md into planning-with-files' native layout (pwf 3.21.0 confirmed), then S29-00 fix red #1449, then S29-K build the three skills from this session's work (GitHub pattern search, firecrawl self-corrections, mise-dotfiles migration research as a living source list) with skill-creator + writing-for-agents; in parallel keep S29-M (mise-native dotfiles for this Mac's ~/.config/mise, the devcontainer images and running devcontainers, with history tracking; retire chezmoi) moving in reviewed pieces from docs/specs/mise-native-dotfiles-plan.md, reserving /ultrareview (user-invoked, 3 free runs) for its big cutovers. Done means land rc=0 with the gates run through mise run gate, /code-review, the cross-family lens (stated fallback while codex is unavailable), the repo verify skill for guard/devcontainer changes, and a handoff that ends in a fresh-session round-trip with no DISAGREEMENT. Keep task_plan.md as the sole task authority.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    P["S29-0 native pwf restructure"] --> F["S29-00 fix #1449"] --> K["S29-K three skills"] --> M["S29-M mise dotfiles, in reviewed pieces"] --> U["S29-R /ultrareview at big cutovers"]
+    K --> R["S29-1..4 queued remainder"]
+```

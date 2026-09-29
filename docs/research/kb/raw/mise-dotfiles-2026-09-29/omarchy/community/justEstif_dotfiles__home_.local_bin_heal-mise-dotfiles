@@ -1,0 +1,38 @@
+<!-- source: https://github.com/justEstif/dotfiles/blob/HEAD/home/.local/bin/heal-mise-dotfiles ; fetched 2026-09-29 via gh api contents (lane X) -->
+#!/bin/bash
+# heal-mise-dotfiles — repair symlinks broken by tools that rewrite configs.
+#
+# omarchy's `font set` / `display text size` (and anything using `sed -i`)
+# atomically replace files, which severs mise dotfiles symlinks. This script
+# converges any drifted target: content is synced INTO the repo source first
+# (mise dotfiles add), then the symlink is restored. Run manually, from the
+# omarchy font-set hook, or via the fish_prompt fast-path.
+#
+# Repo changes stay uncommitted — review with git -C ~/dotfiles status.
+
+set -u
+
+status_output="$(mise dotfiles status 2>/dev/null)" || exit 0
+
+healed=0
+# Drift lines look like:
+#   ~/.config/ghostty/config   symlink  ~/dotfiles/home/.config/ghostty/config   differs (exists but is not a symlink)
+while IFS=$'\t' read -r target mode source drift; do
+  [[ $drift == differs* ]] || continue
+
+  # Sync the real file's content into the repo source (no-op if identical).
+  mise dotfiles add -g -- "$target" >/dev/null 2>&1 || {
+    echo "heal-mise-dotfiles: dotfiles add failed for $target" >&2
+    continue
+  }
+
+  # Replace the real file with the symlink.
+  expanded="${target/#\~/$HOME}"
+  if [[ -f $expanded && -n $source ]]; then
+    rm -- "$expanded" && ln -s "${source/#\~/$HOME}" "$expanded" \
+      && echo "heal-mise-dotfiles: relinked $target" >&2 \
+      && healed=$((healed + 1))
+  fi
+done < <(awk -F'  +' 'NF >= 4 && $4 ~ /^differs/ { print $1 "\t" $2 "\t" $3 "\t" $4 }' <<<"$status_output")
+
+exit 0

@@ -1,0 +1,472 @@
+[Skip to content](https://mise.jdx.dev/bootstrap.html#VPContent)
+
+On this page
+
+# Bootstrap [​](https://mise.jdx.dev/bootstrap.html\#bootstrap)
+
+`mise bootstrap` applies the machine setup declared in your mise configuration: packages, files, services, repositories, shell setup, tools, and a final task. Use it for workstation or server setup that needs more than installing `[tools]`. Run it explicitly when you want to apply that configuration.
+
+Start with the parts your machine needs, preview them, and add more resources as the configuration grows. Each section has its own status and apply commands. For SSH targets, see [remote bootstrap](https://mise.jdx.dev/bootstrap/remote.html).
+
+## Example [​](https://mise.jdx.dev/bootstrap.html\#example)
+
+This small `mise.toml` configures zsh activation, installs Node.js, and verifies it in a final task. Choose the [shell entries](https://mise.jdx.dev/bootstrap/shell.html) for the shell you actually use:
+
+toml
+
+```
+[bootstrap.mise_shell_activate]
+zprofile = "shims"
+zshrc = "activate"
+
+[tools]
+node = "24"
+
+[tasks.bootstrap]
+run = "node --version"
+```
+
+Review the configuration before trusting it, then preview and apply it:
+
+sh
+
+```
+mise trust
+mise bootstrap --dry-run
+mise bootstrap
+mise bootstrap status
+```
+
+`--yes` skips confirmation prompts for an unattended apply. A dry run inspects state and prints proposed actions; hooks and the final task are not executed. Open a new shell after activation files change.
+
+## Starting from a repository [​](https://mise.jdx.dev/bootstrap.html\#starting-from-a-repository)
+
+Choose the command that matches what your repository contains:
+
+| Repository contents | Command | Where the files go |
+| --- | --- | --- |
+| A bootstrap project with `mise.toml` and source files | `mise bootstrap --from <url>` | A separate checkout, then targets defined by the project |
+| Global mise configuration such as `config.toml`, `conf.d/`, and `tasks/` | `mise bootstrap --adopt <url>` | Your global mise configuration directory |
+| Tracked dotfiles shared through `mise dot origin set` | `mise bootstrap --adopt <url>` | Each tracked file's path on this machine |
+
+For a walkthrough of sharing tracked dotfiles, see [Set up a machine](https://mise.jdx.dev/bootstrap/setup.html).
+
+### A bootstrap project [​](https://mise.jdx.dev/bootstrap.html\#a-bootstrap-project)
+
+Use `--from` to clone a project and apply its `mise.toml`:
+
+sh
+
+```
+mise bootstrap --from git@github.com:example/dotfiles.git
+```
+
+The checkout defaults to `$MISE_DATA_DIR/bootstrap-repo`. Use `--from-dir` to choose another location. mise trusts the repository you supply for this invocation, so review it before running the command.
+
+To select a mise environment, pass `-E`, for example `mise -E work bootstrap --from <url>`. The cloned project then loads the matching configuration, such as `mise.work.toml`.
+
+An existing checkout must have the requested URL as its `origin`. mise uses the current checkout unless you pass `--update` to pull newer commits first. That pull only accepts a fast-forward. With `--dry-run`, mise reports a missing checkout and leaves it uncloned.
+
+### Global mise configuration [​](https://mise.jdx.dev/bootstrap.html\#global-mise-configuration)
+
+Use `--adopt` when the repository contains your global mise configuration:
+
+sh
+
+```
+mise bootstrap --adopt example/mise-config
+```
+
+mise clones it into `$MISE_CONFIG_DIR`, normally `~/.config/mise`, and runs bootstrap using that configuration. Files such as `config.toml`, `config.work.toml`, `conf.d/`, and `tasks/` stay available to future mise commands. Pass `-E work` to select `config.work.toml`.
+
+If you set `$MISE_GLOBAL_CONFIG_FILE`, mise clones into that file's parent directory and loads the selected file. An existing non-empty destination must be a Git checkout with the requested URL as its `origin`. Pass `--update` to fast-forward it before bootstrap.
+
+### Shared dotfile history [​](https://mise.jdx.dev/bootstrap.html\#shared-dotfile-history)
+
+A **setup repository** holds the dotfile history you share through `mise dot origin set`. On another machine, run:
+
+sh
+
+```
+mise bootstrap --adopt you/setup
+```
+
+mise recognizes the repository's `.mise-history/format.toml` marker and:
+
+1. Fetches the latest branch into its history store.
+2. Restores the tracked files to their paths on this machine.
+3. Remembers the origin for future synchronization.
+4. Runs bootstrap using the restored mise configuration.
+
+Track the mise configuration and any template sources on the first machine before sharing them. They let bootstrap recreate tools and services and render templates on the next machine. Tracked files can still be restored when the repository contains no global mise configuration.
+
+Put machine setup that files alone do not cover, such as installing shell plugins or fixing permissions, in the shared configuration's [`[tasks.bootstrap]`](https://mise.jdx.dev/bootstrap.html#what-goes-where). Adoption runs it from the restored configuration. Later, `mise dot pull` and the watcher restore shared changes without running setup; run `mise bootstrap` to apply them, which runs the task again. `[history.reload]` commands react to restored files, but mise reads them before the restore, so a reload table that arrives in the same update, including the first adoption, does not run for it.
+
+If an existing file differs, mise asks you to resolve the conflict before restoring files or running the remaining bootstrap steps. Use `--dry-run` to preview the plan. See [history](https://mise.jdx.dev/history.html#sharing-across-machines) for synchronization and recovery details.
+
+This workflow stores Git history separately from `$MISE_CONFIG_DIR`; it leaves any existing checkout there as a checkout. If that directory is a Git checkout, its origin must match the requested repository.
+
+Setup repositories always fetch their latest branch. `--update` controls the subsequent bootstrap's package metadata and declared repository updates.
+
+## How it runs [​](https://mise.jdx.dev/bootstrap.html\#how-it-runs)
+
+`mise bootstrap` runs the steps below in order.
+
+Before making changes, mise resolves any required [`[bootstrap.secrets]`](https://mise.jdx.dev/bootstrap/secrets.html) used by the files phase. This preflight prevents a missing input from leaving a partially provisioned host.
+
+01. `mise bootstrap accounts apply` converges [`[bootstrap.users]` and `[bootstrap.groups]`](https://mise.jdx.dev/bootstrap/accounts.html).
+02. `mise bootstrap plugins apply` installs package manager plugins declared in [`[bootstrap.plugins]`](https://mise.jdx.dev/bootstrap/packages/plugins.html). Files and directories with [`phase = "pre-packages"`](https://mise.jdx.dev/bootstrap/files.html#files-before-packages) are then applied, before the `pre-packages` hook.
+03. Built-in managers install missing [`[bootstrap.packages]`](https://mise.jdx.dev/bootstrap/packages/).
+04. `mise bootstrap files apply` converges the remaining [`[bootstrap.files]` and `[bootstrap.directories]`](https://mise.jdx.dev/bootstrap/files.html) (the default `"post-packages"` phase).
+05. [`[bootstrap.services]`](https://mise.jdx.dev/bootstrap/services.html) converges existing Linux systemd system units and user services on Linux, macOS, and Windows. User services with `requires_tools = true` wait until after tool installation.
+06. `mise bootstrap firewall apply` converges host firewall policy and rules from [`[bootstrap.linux.firewall]`](https://mise.jdx.dev/bootstrap/firewall.html).
+07. `mise bootstrap compose apply` converges [`[bootstrap.compose]`](https://mise.jdx.dev/bootstrap/compose.html) projects.
+08. `mise bootstrap repos apply` clones or updates [`[bootstrap.repos]`](https://mise.jdx.dev/bootstrap/repos.html).
+09. `mise dot apply` applies [`[dotfiles]`](https://mise.jdx.dev/dotfiles.html).
+10. `mise bootstrap mise-shell-activate apply` configures shell activation from [`[bootstrap.mise_shell_activate]`](https://mise.jdx.dev/bootstrap/shell.html).
+11. `mise bootstrap macos defaults apply` writes [`[bootstrap.macos.defaults]`](https://mise.jdx.dev/bootstrap/macos-defaults.html).
+12. `mise bootstrap macos launchd-agents apply` writes and loads [`[bootstrap.macos.launchd.agents]`](https://mise.jdx.dev/bootstrap/launchd.html).
+13. `mise bootstrap linux systemd-units apply` converges [`[bootstrap.linux.systemd.units]`](https://mise.jdx.dev/bootstrap/systemd.html) by writing unit files, enabling/disabling them, and starting/stopping them as configured.
+14. `mise bootstrap user apply` applies [`[bootstrap.user]`](https://mise.jdx.dev/bootstrap/user.html).
+15. `mise install` installs missing `[tools]`.
+16. Plugin package managers apply after their host tools are available, followed by user services with `requires_tools = true`.
+17. `mise run bootstrap` runs a task named `bootstrap`, if one exists.
+18. `[bootstrap.hooks.final]` runs after the bootstrap task, if configured.
+
+Every mutating run — the full `mise bootstrap`, each `mise bootstrap <part> apply`, and the commands that change dotfiles or bootstrap config in place (`dotfiles add`, `unapply`, `edit`, `packages use`, `import`, brew `tap`) — records a pair of [history checkpoints](https://mise.jdx.dev/history.html): the tracked files before and after the run, plus a journal of what the run changed. Dry runs record nothing.
+
+Use `mise bootstrap --skip <part>` to skip specific parts. Supported parts are `accounts`, `plugins`, `packages`, `files`, `services`, `firewall`, `compose`, `repos`, `dotfiles`, `mise-shell-activate`, `macos-defaults`, `macos-launchd-agents`, `linux-systemd-units`, `user`, `tools`, `task`, and `final-hook`. The old shorter names `shell`, `defaults`, `launchd`, and `systemd` are still accepted as aliases. The flag can be repeated or comma-separated, for example `mise bootstrap --skip tools,task`.
+
+Use `mise bootstrap --only <part>` to run only specific parts. It supports the same part names and can be repeated or comma-separated, for example `mise bootstrap --only dotfiles,tools`. `--only` and `--skip` are mutually exclusive.
+
+Use `mise bootstrap --update` to refresh system package manager metadata before installing packages (apk: `--update-cache`, apt: `apt-get update`, scoop: `scoop update`, winget: `winget source update`) and update declared repositories. Check the [repo update rules](https://mise.jdx.dev/bootstrap/repos.html) for clean-worktree and fast-forward requirements.
+
+Hook phases can also run before and after the built-in steps: `pre-packages`, `post-packages`, `pre-repos`, `post-repos`, `pre-dotfiles`, `post-dotfiles`, `pre-defaults`, `post-defaults`, `pre-user`, `post-user`, `pre-tools`, and `post-tools`. Hook commands support [Tera templates](https://mise.jdx.dev/templates.html) using the declaring config's context, including values such as `{{ config_root }}`, `{{ xdg_config_home }}`, and `{{ vars.name }}`.
+
+The declarative steps compare the requested state with the host and apply needed changes. Hooks and the `bootstrap` task run on every selected apply, so make them safe to repeat. Bootstrap is a sequence, not a transaction: if a later phase fails, earlier successful changes remain. Fix the reported failure and run bootstrap again.
+
+## Previewing changes [​](https://mise.jdx.dev/bootstrap.html\#previewing-changes)
+
+Use `mise bootstrap --dry-run` to preview the selected phases. To narrow an apply while developing a configuration, for example:
+
+sh
+
+```
+mise bootstrap --only dotfiles,tools --dry-run
+mise bootstrap --only dotfiles,tools
+```
+
+Select every prerequisite your changes need. `--only services` does not install the packages or unit files that supply those services.
+
+For a structured resource plan, use `mise bootstrap plan`. The provisioning planner reports accounts, system packages, privileged files and directories, system services, firewall policy and rules, and Compose projects in dependency order. Other declarative bootstrap parts will join the same graph as they adopt the resource model.
+
+sh
+
+```
+mise bootstrap plan
+mise bootstrap plan --json
+mise bootstrap plan --detailed-exitcode
+```
+
+With `--detailed-exitcode`, the command exits 0 when nothing would change, 2 when the plan contains changes, and 1 when planning fails or any resource has an `unknown` state. Unknown resources do not count as changes, but they block a successful convergence result. A package is unknown when its manager is unavailable on the current platform or cannot install the requested version. This matches apply behavior: unsupported pins remain visible for manual resolution instead of being reported as changes mise would skip.
+
+When `mise bootstrap` applies or would apply something that needs user follow-up, it prints a final `bootstrap: follow-up` section after a successful run. Dry runs use `bootstrap: follow-up if applied`. If a later bootstrap phase fails after earlier phases already produced follow-up items, mise prints those items before returning the error. The section is omitted when there is nothing actionable to report.
+
+By default, bootstrap refuses dotfile conflicts rather than replacing local files. Use `mise bootstrap --force-dotfiles` when you explicitly want the dotfiles phase to replace conflicting whole-file dotfile targets.
+
+## Inspecting state [​](https://mise.jdx.dev/bootstrap.html\#inspecting-state)
+
+Use `mise bootstrap status` to inspect the declarative bootstrap state in one place. It reports every declarative part — secrets, accounts, files and directories, services, firewall, Compose projects, packages, repos, dotfiles, shell activation, macOS defaults, LaunchAgents, systemd units, and login shell — plus `[tools]` and any system dependencies that installed tools require:
+
+sh
+
+```
+mise bootstrap status
+mise bootstrap status --json
+mise bootstrap status --missing
+mise bootstrap packages status
+mise bootstrap repos status
+mise dot status
+mise dot apply --dry-run
+mise dot apply --dry-run --verbose
+mise bootstrap mise-shell-activate status
+mise bootstrap macos defaults status
+mise bootstrap macos launchd-agents status
+mise bootstrap linux systemd-units status
+mise bootstrap firewall status
+mise bootstrap user status
+```
+
+Use `mise dot history` to see the checkpoints bootstrap has recorded — a pair per mutating run, with the tracked files before and after. See [History](https://mise.jdx.dev/history.html).
+
+sh
+
+```
+mise dot history
+mise dot history show latest
+mise dot history diff 11 12
+```
+
+`mise bootstrap status --missing` checks the whole declarative bootstrap surface in one command. The narrower `mise bootstrap packages status --missing` and `mise dot status --missing` commands are useful when you only want to check one part without installing anything.
+
+## What goes where [​](https://mise.jdx.dev/bootstrap.html\#what-goes-where)
+
+| Config | Use for |
+| --- | --- |
+| [`[bootstrap.secrets]`](https://mise.jdx.dev/bootstrap/secrets.html) | Names of secret inputs consumed by managed file templates |
+| [`[bootstrap.users]`, `[bootstrap.groups]`](https://mise.jdx.dev/bootstrap/accounts.html) | Linux service accounts and groups |
+| [`[bootstrap.files]`, `[bootstrap.directories]`](https://mise.jdx.dev/bootstrap/files.html) | Managed system paths, content, ownership, and permissions |
+| [`[bootstrap.services]`](https://mise.jdx.dev/bootstrap/services.html) | User services on Linux, macOS, and Windows; existing Linux system services |
+| [`[bootstrap.compose]`](https://mise.jdx.dev/bootstrap/compose.html) | Docker Compose project lifecycle |
+| [`[bootstrap.plugins]`](https://mise.jdx.dev/bootstrap/packages/plugins.html) | Package manager plugins |
+| [`[bootstrap.packages]`](https://mise.jdx.dev/bootstrap/packages/) | OS packages from apk, apt, dnf, pacman, brew, flatpak, mas, scoop, winget |
+| [`[bootstrap.repos]`](https://mise.jdx.dev/bootstrap/repos.html) | Git repos cloned before dotfiles are applied |
+| [`[dotfiles]`](https://mise.jdx.dev/dotfiles.html) | Tracking dotfiles, creating files from sources, and editing blocks or lines |
+| [`[bootstrap.mise_shell_activate]`](https://mise.jdx.dev/bootstrap/shell.html) | mise activation snippets in shell startup files |
+| [`[bootstrap.macos.*]`](https://mise.jdx.dev/bootstrap/macos-defaults.html) | Curated macOS preferences for Dock/Finder/keyboard/trackpad |
+| [`[bootstrap.macos.defaults]`](https://mise.jdx.dev/bootstrap/macos-defaults.html) | macOS user preferences written through `defaults write` |
+| [`[bootstrap.macos.launchd.agents]`](https://mise.jdx.dev/bootstrap/launchd.html) | macOS user LaunchAgents written and loaded with `launchctl` |
+| [`[bootstrap.linux.systemd.units]`](https://mise.jdx.dev/bootstrap/systemd.html) | Linux systemd user services managed with `systemctl --user` |
+| [`[bootstrap.linux.firewall]`](https://mise.jdx.dev/bootstrap/firewall.html) | Linux host firewall policy and managed rules |
+| [`[bootstrap.user]`](https://mise.jdx.dev/bootstrap/user.html) | Current-user settings such as `login_shell` |
+| `[bootstrap.hooks]` | Commands that run at named bootstrap phases |
+| `[tools]` | Versioned dev tools managed by mise |
+| `[tasks.bootstrap]` | Anything custom that should run after tools are installed |
+
+Use declarative sections when mise can inspect and converge the state. Use `[tasks.bootstrap]` for imperative setup that does not fit those sections, such as checking authentication or seeding local data. The task runs again on every bootstrap, so guard operations that should happen only once. On machines that share a [setup repository](https://mise.jdx.dev/bootstrap.html#shared-dotfile-history), the task runs when a machine adopts it and on each `mise bootstrap` after a shared update.
+
+## Modules [​](https://mise.jdx.dev/bootstrap.html\#modules)
+
+Use [config environments](https://mise.jdx.dev/configuration/environments.html) to group optional machine setup by application or role. Each environment file can declare its packages, dotfiles, and services together. These files act as modules using mise's existing configuration system.
+
+### Define a module [​](https://mise.jdx.dev/bootstrap.html\#define-a-module)
+
+Keep shared setup in `~/.config/mise/config.toml` and put optional setup in `config.<name>.toml` alongside it. For example, this SSH module targets a Linux machine using apt and a systemd user session. It installs the client, links an existing SSH config from your dotfiles checkout, and runs an agent:
+
+~/.config/mise/config.ssh.toml
+
+toml
+
+```
+[bootstrap.packages]
+"apt:openssh-client" = "latest"
+
+[dotfiles]
+"~/.ssh/config" = "~/src/dotfiles/ssh/config"
+
+[bootstrap.services.ssh-agent]
+scope = "user"
+command = "ssh-agent -D -a %t/ssh-agent.socket"
+```
+
+Create the source file at `~/src/dotfiles/ssh/config` before applying this module. To use the agent from your shell, set `SSH_AUTH_SOCK` to `$XDG_RUNTIME_DIR/ssh-agent.socket`.
+
+For a [bootstrap project](https://mise.jdx.dev/bootstrap.html#a-bootstrap-project), use `mise.toml` and `mise.ssh.toml` in the project directory instead.
+
+### Select and preview modules [​](https://mise.jdx.dev/bootstrap.html\#select-and-preview-modules)
+
+Choose a machine's default modules in [`miserc.toml`](https://mise.jdx.dev/configuration/environments.html#setting-mise-env-in-miserc-toml). For example, after defining `config.ssh.toml` and `config.gpg.toml`:
+
+~/.config/mise/miserc.toml
+
+toml
+
+```
+env = ["ssh", "gpg"]
+```
+
+The base `config.toml` still loads. Preview the combined setup, then apply it:
+
+sh
+
+```
+mise bootstrap --dry-run
+mise bootstrap
+```
+
+To select modules for a single invocation, use `mise -E ssh,gpg bootstrap`. For [remote bootstrap](https://mise.jdx.dev/bootstrap/remote.html), set each host's `mise_env` list in the inventory. One repository can then describe machines with different combinations of modules.
+
+### How modules combine [​](https://mise.jdx.dev/bootstrap.html\#how-modules-combine)
+
+Declarations with different keys contribute to the same run. Within the same directory, the environment listed later takes precedence when both declare the same key. For example, with `env = ["ssh", "gpg"]`, a service declared in both files uses the definition from `config.gpg.toml`.
+
+Use `mise config` to inspect the loaded files. `mise bootstrap plan --json` includes `origin.config` and `origin.environment` for each managed file and service, so you can trace those resources back to their declarations.
+
+If setup should always load, use the base config or a [`conf.d`](https://mise.jdx.dev/configuration/environments.html#conf-d-environments) fragment without an environment suffix, such as `conf.d/ssh.toml`.
+
+To keep a piece of setup together with its source files, use a [`conf.d` folder](https://mise.jdx.dev/configuration.html#conf-d-folders). Relative dotfile sources resolve inside the folder, and `mise.<env>.toml` files in it load only for that environment:
+
+text
+
+```
+~/.config/mise/conf.d/ssh/
+├── mise.toml          # always loaded; "~/.ssh/config" = "ssh_config"
+├── mise.linux.toml    # when the linux environment is active
+└── ssh_config
+```
+
+### Remove a module's resources [​](https://mise.jdx.dev/bootstrap.html\#remove-a-module-s-resources)
+
+Removing a module from `env` stops loading its declarations but leaves its resources on the machine. Use [`mise bootstrap unapply`](https://mise.jdx.dev/cli/bootstrap/unapply.html) to remove its managed files, directories, user services, and dotfile entries and edits.
+
+First, remove the module from `env` in `miserc.toml` so the next bootstrap will not apply it again. Keep the module's configuration file on disk, then preview and confirm the removal:
+
+sh
+
+```
+mise bootstrap unapply ssh --dry-run
+mise bootstrap unapply ssh
+```
+
+The command temporarily selects `ssh` alongside your remaining environments to read its declarations. You can also remove several modules in one run:
+
+sh
+
+```
+mise bootstrap unapply ssh gpg --dry-run
+mise bootstrap unapply ssh gpg
+```
+
+Unapply asks for confirmation before removing resources. Use `--yes` to approve removal without a prompt. The global `--yes` flag, `MISE_YES`, and mise's `yes` setting also apply; mise enables that setting in CI.
+
+#### How removal is planned [​](https://mise.jdx.dev/bootstrap.html\#how-removal-is-planned)
+
+Mise compares the current configuration with and without the named environments. It uses the declarations still on disk, not a record of earlier bootstrap runs. Keep those declarations until cleanup is complete: deleting a module's file first leaves mise without the information it needs to remove its resources.
+
+- Resources still declared present by the base configuration or another selected module are kept. A `state = "absent"` declaration does not protect a resource.
+- Targets that no longer match their declarations are skipped with a reason. Review the output before using `--force` to remove changed targets.
+- Directories are removed only if they will be empty after the planned removals. Unreadable directories and managed paths with an unexpected type are kept, even with `--force`.
+
+Source files and configuration entries are preserved. Unapply does not restore resources previously removed by a `state = "absent"` declaration.
+
+#### Resources that need separate cleanup [​](https://mise.jdx.dev/bootstrap.html\#resources-that-need-separate-cleanup)
+
+Unapply reports package, repository, and Compose declarations with guidance for removing them separately:
+
+- **Packages:** follow the manager-specific [pruning guidance](https://mise.jdx.dev/bootstrap/packages/#import-and-prune). Preview the plan; pruning is not limited to packages from one module.
+- **Compose projects:** set `state = "absent"` and apply the change while the module is selected, for example with `mise -E ssh bootstrap --only compose`.
+- **Repositories:** remove the checkout declared in [`[bootstrap.repos]`](https://mise.jdx.dev/bootstrap/repos.html) when you no longer need it.
+
+Other bootstrap sections, including system services, are outside unapply's scope. Use their resource-specific removal procedures.
+
+## Templates [​](https://mise.jdx.dev/bootstrap.html\#templates)
+
+Not every part of `mise.toml` is a [Tera template](https://mise.jdx.dev/templates.html). Inside `[bootstrap]`, these are rendered:
+
+| Where | What is rendered |
+| --- | --- |
+| [`[bootstrap.linux.systemd.units]`](https://mise.jdx.dev/bootstrap/systemd.html) | every string value in a unit |
+| [`[bootstrap.macos.launchd.agents]`](https://mise.jdx.dev/bootstrap/launchd.html) | every string value in an agent |
+| `[bootstrap.hooks]` | the hook command |
+| [`[bootstrap.files]`](https://mise.jdx.dev/bootstrap/files.html) | file content, only with `template = true` |
+| [`[dotfiles]`](https://mise.jdx.dev/dotfiles.html) | file content, only with `mode = "template"` or `template = "tera"` |
+
+Everything else — section keys, package specs, repo paths, macOS defaults, and the remaining `[bootstrap]` values — is used exactly as written.
+
+Rendering uses the template context of the config file that declared the entry, so `{{ config_root }}` is the directory of _that_ config, not the directory you run `mise bootstrap` from. A managed file's content template additionally gets `{{ target }}` and `{{ secret(name="...") }}`.
+
+Values with no template syntax skip the renderer entirely, so a literal `%h`, `%i`, or `$HOME` in a unit or agent reaches the generated file unchanged by templating. Any `~` expansion a section documents still happens afterwards.
+
+`{{ exec(...) }}` is available in `[bootstrap.hooks]` and in file content templates, but not in unit or agent values: those render identically for `status`, `plan`, `--dry-run`, and `apply`, so a read-only command must never shell out.
+
+## Hooks [​](https://mise.jdx.dev/bootstrap.html\#hooks)
+
+Hooks run only during explicit `mise bootstrap` invocations. A hook can be specified as a command string, an array of command strings, or a table with a `run` field. They use the same default inline shell setting as tasks, stop the bootstrap if they fail, and print the command instead of running it during `mise bootstrap --dry-run`. Hooks run in the current process environment; use `mise exec -- ...` inside a hook, or use `[tasks.bootstrap]`, when the command needs tools from `[tools]` on PATH.
+
+The following hooks assume `node`, `python`, and `gh` are declared in `[tools]`.
+
+toml
+
+```
+[bootstrap.hooks.post-tools]
+run = [\
+  "mise exec -- node --version",\
+  "mise exec -- python --version",\
+]
+
+[bootstrap.hooks.final]
+run = "mise exec -- gh auth status"
+```
+
+As shorthand, a hook phase can also be set directly:
+
+toml
+
+```
+[bootstrap.hooks]
+post-defaults = "killall Dock || true"
+```
+
+Hooks merge across the config hierarchy from global to local, so shared config can define broad machine setup while a project adds its own phase commands. The `pre-dotfiles` and `post-dotfiles` phases also wrap `mise dot apply`.
+
+## Common workflows [​](https://mise.jdx.dev/bootstrap.html\#common-workflows)
+
+For a walkthrough from your first tracked file to a second machine sharing its changes, see [Set up a machine](https://mise.jdx.dev/bootstrap/setup.html).
+
+### New machine [​](https://mise.jdx.dev/bootstrap.html\#new-machine)
+
+sh
+
+```
+mise trust
+mise bootstrap --yes
+```
+
+### Add a package [​](https://mise.jdx.dev/bootstrap.html\#add-a-package)
+
+sh
+
+```
+mise bootstrap packages use apk:zlib-dev apt:libssl-dev winget:BurntSushi.ripgrep.MSVC
+```
+
+This writes `[bootstrap.packages]` and installs what is missing.
+
+### Capture an edited dotfile [​](https://mise.jdx.dev/bootstrap.html\#capture-an-edited-dotfile)
+
+For a file you already manage in `copy` mode, save edits back to its source:
+
+sh
+
+```
+$EDITOR ~/.zshrc
+mise dot add ~/.zshrc
+```
+
+`add` updates the managed source. For a file mise does not yet manage, it creates a source under `dotfiles.root`, writes a configuration entry, and applies it. See [capturing changes](https://mise.jdx.dev/dotfiles.html#capturing-changes).
+
+For a file you edit in place and want to save in history, use `mise dot track ~/.zshrc`, then set up [automatic saves](https://mise.jdx.dev/history.html#automatic-saves).
+
+### Edit a managed dotfile [​](https://mise.jdx.dev/bootstrap.html\#edit-a-managed-dotfile)
+
+sh
+
+```
+mise dot edit ~/.zshrc
+mise dot apply ~/.zshrc
+```
+
+For symlinked dotfiles, `edit` opens the managed source, so it works with the default `symlink` mode.
+
+## Advanced: self-managing config [​](https://mise.jdx.dev/bootstrap.html\#advanced-self-managing-config)
+
+You can manage the dotfiles repository and the mise global config as dotfiles:
+
+toml
+
+```
+[settings]
+dotfiles.root = "~/.dotfiles"
+
+[dotfiles]
+"~/.dotfiles" = "~/src/dotfiles"
+"~/.config/mise/config.toml" = "~/src/dotfiles/mise/config.toml"
+```
+
+The repo/source must exist before the first apply. Use the real repo path for sources needed during the first run; `~/.dotfiles` does not exist until mise creates that symlink. Replacing the active global config affects future mise invocations, so use this pattern carefully.
+
+sponsors
+
+[![Entire](https://jdx.dev/sponsors/entire-lockup.svg)](https://entire.io/)[![Omacom Foundation](https://jdx.dev/sponsors/omacom-foundation.svg)](https://omarchy.org/patrons/)[![CodeRabbit](https://jdx.dev/sponsors/coderabbit.svg)](https://coderabbit.link/mise)
+
+[View all sponsors](https://jdx.dev/sponsors.html)

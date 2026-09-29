@@ -1,0 +1,43 @@
+<!-- source: https://github.com/bruhmux/dotfiles/blob/HEAD/config/config.toml ; fetched 2026-09-29 via gh api contents (lane X) -->
+[tools]
+codex = "latest"
+gemini = { version = "latest", allow_builds = ["@github/keytar", "node-pty"] }
+gh = "latest"
+node = "26.7.0"
+opencode = "latest"
+pi = "latest"
+pnpm = "latest"
+
+[settings.upgrade]
+auto_prune = false
+
+[dotfiles]
+"~/.config/atuin" = {}
+"~/.config/fish" = {}
+"~/.config/foot" = {}
+"~/.config/gh" = {}
+"~/.config/gh-dash" = {}
+"~/.config/ghostty" = {}
+"~/.config/hypr" = {}
+"~/.config/nvim" = {}
+"~/.config/starship.toml" = {}
+"~/.config/tmux" = {}
+"~/.config/yazi" = {}
+"~/.config/zed" = {}
+"~/.config/mise" = {}
+"~/.dotfiles/.config/atuin" = { mode = "track" }
+"~/.dotfiles/.config/fish" = { mode = "track" }
+"~/.dotfiles/.config/foot" = { mode = "track" }
+"~/.dotfiles/.config/gh" = { mode = "track" }
+"~/.dotfiles/.config/gh-dash" = { mode = "track" }
+"~/.dotfiles/.config/ghostty" = { mode = "track" }
+"~/.dotfiles/.config/hypr" = { mode = "track" }
+"~/.dotfiles/.config/mise" = { mode = "track" }
+"~/.dotfiles/.config/nvim" = { mode = "track" }
+"~/.dotfiles/.config/starship.toml" = { mode = "track" }
+"~/.dotfiles/.config/tmux" = { mode = "track" }
+"~/.dotfiles/.config/yazi" = { mode = "track" }
+"~/.dotfiles/.config/zed" = { mode = "track" }
+
+[bootstrap.services.mise-history]
+builtin = "history-watch"

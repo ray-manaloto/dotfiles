@@ -1,0 +1,762 @@
+[Skip to content](https://mise.jdx.dev/dotfiles.html#VPContent)
+
+On this page
+
+# Dotfiles [​](https://mise.jdx.dev/dotfiles.html\#dotfiles)
+
+Dotfiles are configuration files such as `~/.zshrc` and `~/.gitconfig`. Keep editing them with your usual editor; mise can save changes in the background so you can return to an earlier version. With synchronization enabled on your machines, an edit on your laptop can reach your desktop, and edits on the desktop flow back.
+
+Start by [tracking a file you already use](https://mise.jdx.dev/dotfiles.html#tracking-files-in-place). If you want mise to copy or link files into place, start with [one managed file](https://mise.jdx.dev/dotfiles.html#start-with-one-managed-file).
+
+For an introduction to this workflow, read [Dotfiles That Save Themselves](https://jdx.dev/posts/2026-09-07-dotfiles-that-save-themselves/).
+
+## Tracking files in place [​](https://mise.jdx.dev/dotfiles.html\#tracking-files-in-place)
+
+Start saving the history of a file you already have. For example, if you use zsh:
+
+sh
+
+```
+mise dot track ~/.zshrc
+```
+
+mise leaves the file where it is and saves a **checkpoint**, a version you can inspect or restore later. It also adds this entry to your global mise configuration (`~/.config/mise/config.toml` by default):
+
+toml
+
+```
+[dotfiles]
+"~/.zshrc" = { mode = "track" }
+```
+
+Tracking a directory saves everything under it, so preview a large one first. `mise dot track --dry-run <dir>` (or `mise dot paths --preview <dir>`) prints how many files and bytes it expands to and what is left out, and writes nothing:
+
+sh
+
+```
+$ mise dot track --dry-run ~/.codex
+~/.codex: 22,972 files, 1.2 GiB
+```
+
+The confirmation prompt shows the same count and size, and mise warns when a tree is larger than 5,000 files or 256 MiB. Trim a directory with a scoped exclusion before tracking it, for example `mise dot exclude '~/.codex/sessions/**'`.
+
+### Save edits automatically [​](https://mise.jdx.dev/dotfiles.html\#save-edits-automatically)
+
+Add the watcher service to the same global configuration file:
+
+toml
+
+```
+[bootstrap.services.mise-history]
+builtin = "history-watch"
+```
+
+Install and start it, then check that it is running:
+
+sh
+
+```
+mise bootstrap services apply
+mise dot status
+```
+
+`status` shows the file as `tracked` and the watcher as running. Edit the file normally from now on. The watcher saves changes to local Git history. See [automatic saves](https://mise.jdx.dev/history.html#automatic-saves) for service details.
+
+To save by hand, skip the service and run `mise dot save ~/.zshrc` after editing.
+
+### Try restoring a change [​](https://mise.jdx.dev/dotfiles.html\#try-restoring-a-change)
+
+Add an alias to `~/.zshrc` in your editor:
+
+sh
+
+```
+alias ll='ls -lah'
+```
+
+Save a checkpoint now so you can try restoring it without waiting for the watcher, then inspect the file's history:
+
+sh
+
+```
+mise dot save ~/.zshrc
+mise dot history --path ~/.zshrc
+```
+
+If that was your only edit, rolling back removes the new alias. Preview the restore, then apply it:
+
+sh
+
+```
+mise dot rollback ~/.zshrc --dry-run
+mise dot rollback ~/.zshrc
+```
+
+Rollback restores the latest saved version that differs from the current file. It saves the current contents first, so you can reverse the rollback with `mise dot undo`. See [rolling back](https://mise.jdx.dev/history.html#rolling-back) to choose a particular checkpoint.
+
+### Share with another machine [​](https://mise.jdx.dev/dotfiles.html\#share-with-another-machine)
+
+History is stored locally in Git until you configure a remote repository, called an **origin**. Connect your own repository and enable automatic synchronization to share saved edits in both directions. The watcher needs Git credentials on each machine. Follow [sharing across machines](https://mise.jdx.dev/history.html#sharing-across-machines) to connect the repository, or [set up another machine](https://mise.jdx.dev/bootstrap/setup.html) to bring your configuration to a new computer.
+
+With tracking, your live files stay in place. Saved checkpoints travel through the Git remote; incoming changes are applied to the tracked files on the other machine.
+
+Tracked dotfiles across two machinesEach machine saves and restores a live regular file through local Git history. Saved history is pushed and fetched through a private Git remote.Push / fetchPush / fetchDesktopApply / restoreSaveLocal Git historySaved checkpoints~/.zshrcLive regular fileLaptopSaveApply / restore~/.zshrcLive regular fileLocal Git historySaved checkpointsPrivate Git remoteowgd4
+
+Automatic saves require the watcher service. Automatic two-way synchronization also requires `history.sync = "sync"`, an origin, and Git credentials on each machine. Changes propagate on the watcher intervals; conflicts or unsaved edits can pause synchronization. See [sync modes](https://mise.jdx.dev/history.html#choose-a-sync-mode) and [conflict handling](https://mise.jdx.dev/history.html#resolve-a-conflict).
+
+Use a private repository: synchronization sends earlier checkpoints too, so temporary edits can become part of the shared history. Configure [encryption](https://mise.jdx.dev/history.html#encrypted-shared-files) before first saving files that need it.
+
+## Start with one managed file [​](https://mise.jdx.dev/dotfiles.html\#start-with-one-managed-file)
+
+mise can also create configuration files from a **source** file that you maintain. The **target** is the path where an application reads the configuration.
+
+Create `dotfiles/example.conf` next to your `mise.toml` with this content:
+
+ini
+
+```
+enabled = true
+```
+
+Add the following to `mise.toml`. Choose an unused target path for this example:
+
+toml
+
+```
+[dotfiles]
+"~/.config/mise-dotfiles-example.conf" = { source = "dotfiles/example.conf", mode = "copy" }
+```
+
+Preview the copy, apply it, and check the result:
+
+sh
+
+```
+mise dot apply --dry-run
+mise dot apply
+mise dot status
+```
+
+The target now contains `enabled = true`, and `status` reports it as `applied`. For future changes, edit `dotfiles/example.conf` and run `apply` again.
+
+WARNING
+
+In `copy` mode, applying overwrites changes made directly to the target. Use [`add` to save those changes back to the source](https://mise.jdx.dev/dotfiles.html#capturing-changes) before applying again.
+
+To start from an existing file, run `mise dot add <target>`. This saves the file under `dotfiles.root` (`~/.dotfiles` by default), adds a configuration entry, and applies it using `dotfiles.default_mode`. That setting defaults to `symlink`, which makes the original path a link to the saved source. Select another mode with `--mode`, such as `--mode copy` to keep a regular file at the target. Use `--no-apply` to review the source and configuration before changing the original file.
+
+`apply` also runs as part of [`mise bootstrap`](https://mise.jdx.dev/bootstrap.html), with the configured `pre-dotfiles` and `post-dotfiles` hooks. `mise install` and `mise bootstrap packages` leave dotfiles alone. After `mise dot apply` or the dotfiles phase of `mise bootstrap` writes a target, it runs the matching [`[history.reload]` commands](https://mise.jdx.dev/history.html#reload-an-application-after-restoring-files), for example to reload the application that reads it.
+
+To save history for a source or target you manage this way, [track that path](https://mise.jdx.dev/dotfiles.html#tracking-files-in-place) too.
+
+## Modes [​](https://mise.jdx.dev/dotfiles.html\#modes)
+
+Choose how mise creates a target from its source:
+
+| Mode | What happens when you apply | Use when |
+| --- | --- | --- |
+| `symlink` | Create one link to a file or entire directory; the default. | Edits through the target should change the source. |
+| `symlink-each` | Create directories and link each file within them. | The target directory also holds files you want mise to leave alone. |
+| `copy` | Copy a file or directory, overwriting matching files. | The application needs a regular file or writes its own configuration. |
+| `template` | Render a source file with the [template engine](https://mise.jdx.dev/templates.html). | The output depends on machine-specific variables. |
+| `absent` | Remove a file or symlink at the target; takes no source. | A file you no longer use should not exist on any machine. |
+
+For example, to link a directory:
+
+toml
+
+```
+[dotfiles]
+"~/.config/nvim" = { source = "dotfiles/nvim", mode = "symlink" }
+```
+
+`symlink-each` requires a directory source. When you delete or exclude a source file, the next apply removes its link. Other files in the target directory stay in place. mise records these links under `$MISE_STATE_DIR/dotfiles`; keep that directory so later applies can update or remove previously created links.
+
+Directory copies keep existing target files when you delete or exclude their sources. Review and remove those leftover copies yourself.
+
+### Relative symlinks [​](https://mise.jdx.dev/dotfiles.html\#relative)
+
+By default, links point at their source by an absolute path. Set [`dotfiles.relative_symlinks`](https://mise.jdx.dev/configuration/settings.html#dotfiles.relative_symlinks) to link by a path relative to the link's directory instead, as GNU Stow does. Relative links keep working when the home directory is mounted at a different path on another machine, for example over NFS, or when the whole tree moves:
+
+toml
+
+```
+[settings]
+dotfiles.relative_symlinks = true
+
+[dotfiles]
+"~/.config/foo" = { source = "~/dotfiles/foo", mode = "symlink" } # ~/.config/foo -> ../dotfiles/foo
+"~/.bashrc" = { source = "~/dotfiles/bashrc", relative = false }  # stays absolute
+```
+
+An entry's `relative` key overrides the setting. `relative = true` requires `symlink` or `symlink-each`. When relative links are on, the next apply re-points absolute links to the same source. Turning them off leaves relative links that already reach the source in place. Windows ignores the option, because directory links there are junctions, which cannot be relative.
+
+### Removing files [​](https://mise.jdx.dev/dotfiles.html\#absent)
+
+Use `mode = "absent"` to remove a file you no longer want on your machines, such as the configuration of a tool you replaced:
+
+toml
+
+```
+[dotfiles]
+"~/.oldrc" = { mode = "absent" }
+```
+
+`mise dot apply` deletes `~/.oldrc` if it exists and does nothing once it is gone. The entry is the instruction, so mise removes a regular file or a symlink without comparing its content. It removes a symlink itself, never the file or directory the link points to.
+
+An `absent` entry never removes a directory, or anything else that is not a regular file or symlink, such as a socket or FIFO. For those targets, `status` and `apply` report an error naming the path, even with `--force`. Remove it yourself. The one exception is a parent directory mise created when an earlier entry wrote this target: once the file is gone and the directory is empty, it goes too, as [for templates](https://mise.jdx.dev/dotfiles.html#remove-empty).
+
+An `absent` entry takes no `source`, `content`, `exclude`, `manifest`, `permissions`, `encrypt`, `remove_empty`, `relative`, or block and line edit keys. No other entry can place a file beneath an `absent` target, and an edit entry cannot change the file it removes.
+
+An `absent` target names exactly one path, so it cannot contain `*`, `?`, or `[`. To remove a file whose name contains those characters, declare `state = "absent"` under [`[bootstrap.files]`](https://mise.jdx.dev/bootstrap/files.html#removing-resources).\
+\
+`mise dot status` shows the entry as `absent` once the target is gone, and as `would remove` while a file or symlink is still there. `mise dot apply --dry-run` prints `rm <target>`.\
+\
+When a [tracked](https://mise.jdx.dev/dotfiles.html#tracking-files-in-place) path is removed, the removal is recorded like any other apply, so `mise dot undo` restores the file. `mise dot unapply` leaves the target alone, because mise did not create the file. `mise oci build` adds an OCI whiteout for an `absent` target, so a file the base image has there is hidden.\
+\
+[Destination variants](https://mise.jdx.dev/dotfiles.html#platform-specific-destinations) work with `absent`, so you can remove a file on some machines only:\
+\
+toml\
+\
+```\
+[dotfiles."~/.bash_profile"]\
+mode = "absent"\
+variants = [{ os = "macos" }]\
+```\
+\
+Machines that match no variant skip the entry.\
+\
+### Platform-specific destinations [​](https://mise.jdx.dev/dotfiles.html\#platform-specific-destinations)\
+\
+Use `variants` to deploy one source to different paths on different machines:\
+\
+toml\
+\
+```\
+[dotfiles."vscode/settings.json"]\
+source = "dotfiles/vscode/settings.json"\
+mode = "copy"\
+variants = [\
+  { os = "macos", target = "~/Library/Application Support/Code/User/settings.json" },\
+  { os = "linux", target = "~/.config/Code/User/settings.json" },\
+  { os = "windows", target = "~/AppData/Roaming/Code/User/settings.json" },\
+]\
+```\
+\
+Destination variants work with `copy`, `symlink`, `symlink-each`, `template`, and [`absent`](https://mise.jdx.dev/dotfiles.html#absent). They share the [tracking variant selectors](https://mise.jdx.dev/dotfiles.html#variants): `os` (optionally with an architecture), `profile` (a mise environment selected with `-E` or `MISE_ENV`), and `default = true`. The most specific matching variant wins; ties are reported as invalid, and no match without a default skips the entry.\
+\
+A variant's `target` overrides the table key. When every variant supplies a `target`, the key can be a logical name, as above. Otherwise the key must be an absolute or home-relative target path. Every destination must be absolute or start with `~/`.\
+\
+When every variant supplies a `target`, you can omit `source` and use a safe relative entry key as its path under `dotfiles.root`:\
+\
+toml\
+\
+```\
+[settings]\
+dotfiles.root = "~/.dotfiles"\
+\
+[dotfiles."vscode/settings.json"]\
+mode = "copy"\
+variants = [\
+  { os = "macos", target = "~/Library/Application Support/Code/User/settings.json" },\
+  { os = "linux", target = "~/.config/Code/User/settings.json" },\
+]\
+```\
+\
+This reads `~/.dotfiles/vscode/settings.json` on both machines. The relative key cannot contain `..`. An explicit `source` stays the same across machines and, when relative, resolves from the directory containing the config file. If any variant omits `target`, an explicit source is required and that variant uses the table key as its destination:\
+\
+toml\
+\
+```\
+[dotfiles."~/.config/example/settings.json"]\
+source = "dotfiles/example/settings.json"\
+mode = "symlink"\
+variants = [\
+  { profile = "work", target = "~/.config/example-work/settings.json" },\
+  { default = true },\
+]\
+```\
+\
+A later configuration file can replace a destination-variant declaration by using the same key, even when it selects a different destination. Invalid or non-matching local declarations leave the inherited entry active.\
+\
+Commands such as `status`, `diff`, `apply`, and `unapply` use the selected destination. Changing the selected destination does not remove a file previously deployed elsewhere. Tracking variants continue to select separate history streams at the same path and do not accept `target` overrides.\
+\
+### Templates [​](https://mise.jdx.dev/dotfiles.html\#templates)\
+\
+toml\
+\
+```\
+[dotfiles]\
+"~/.gitconfig" = { source = "dotfiles/gitconfig.tera", mode = "template" }\
+```\
+\
+Templates can use `env`, `vars`, `exec()`, and the rest of the [template context](https://mise.jdx.dev/templates.html). They can also consume a declared [bootstrap secret input](https://mise.jdx.dev/bootstrap/secrets.html) with `{{ secret(name="logical_name") }}`. Use `--prompt-secrets` with a dotfiles command to securely prompt for missing values. Applying a template writes its rendered content and gives the target the source file's permissions, or the ones [`permissions`](https://mise.jdx.dev/dotfiles.html#permissions) sets. A later apply also repairs changed permissions.\
+\
+`status`, `diff`, and `apply` render templates to check their output. This executes any `exec()` calls in those templates, using your trusted config. Secret values are redacted from diffs and other command output. `mise oci build` rejects templates that call `secret()` and renders without the `env` context, `get_env()`, `exec()`, or `read_file()`. Values exposed by those interfaces could otherwise remain recoverable from a persistent image layer. With `--dry-run`, mise skips rendering dotfile templates and labels them `(if changed)`. Other configuration expressions can still run during a dry run, so use it with trusted configuration.\
+\
+#### Removing a target when a template renders empty [​](https://mise.jdx.dev/dotfiles.html\#remove-empty)\
+\
+A template normally writes its output even when that output is empty. With `remove_empty = true`, an output that is empty or contains only whitespace removes the target instead. This lets one template decide whether a file exists at all, for example a work-only config:\
+\
+toml\
+\
+```\
+[dotfiles]\
+"~/.config/app/work.toml" = { source = "work.toml.tera", mode = "template", remove_empty = true }\
+```\
+\
+jinja\
+\
+```\
+{% if env.WORK == "1" %}\
+[proxy]\
+url = "http://proxy.example.com"\
+{% endif %}\
+```\
+\
+With `WORK=1`, `mise dot apply` writes the file. Without it, the template renders empty and the next apply removes the file. Setting the variable again recreates it. `status` and `diff` show a pending removal before any apply.\
+\
+mise removes a target only when it can tell the file is its own. The target must be empty or whitespace-only, or it must still hold exactly the content mise last wrote there. Otherwise, apply reports a conflict and keeps the file, as it does for other [conflicts](https://mise.jdx.dev/dotfiles.html#conflicts). Use `mise dot apply --force` to remove it anyway. mise never removes a directory at the target without `--force`, and a target it cannot read (for example one written with `permissions = "0200"`) is also a conflict, because mise cannot confirm the content is its own.\
+\
+Parent directories that mise created for the target are removed with it once they are empty. In the example, if `~/.config/app` did not exist before the first apply, removing `work.toml` also removes `app`. Directories that already existed, directories that still hold other files, and directories another entry needs are kept. Only directories physically inside your home directory are removed: your home directory itself and anything outside it are kept. That covers `/opt/app` for a target `/opt/app/app.toml`, and `~/.config/app` when `~/.config` is a symlink to a directory outside your home.\
+\
+mise stores a digest of what it last wrote to each template target, and the directories it created, in `$MISE_STATE_DIR/dotfiles/`. It records this for every template, so turning on `remove_empty` later still allows a safe removal. An apply that finds a target already byte-for-byte identical to the render also records it, so that file counts as written by mise: removing it loses nothing the template cannot produce again, and any later edit makes it a conflict. Because the record is local, a machine that has never applied the template treats an existing target with other non-empty content as a conflict. `mise dot rollback` and `mise dot undo` bring back a removed file when [history](https://mise.jdx.dev/dotfiles.html#tracking-files-in-place) tracks it.\
+\
+`remove_empty` is valid only with `mode = "template"`. With it set, `mise oci build` leaves the file out of the image when the template renders empty. It also adds an OCI whiteout for that path, so a file the base image has there is hidden too.\
+\
+See [Windows](https://mise.jdx.dev/dotfiles.html#windows) for differences in link behavior on that platform.\
+\
+## Whole-file entries [​](https://mise.jdx.dev/dotfiles.html\#whole-file-entries)\
+\
+Each entry in `[dotfiles]` uses the target path as its key. Use an absolute path or one starting with `~/`. A source can be a file or a directory.\
+\
+When you omit `source`, mise looks under `dotfiles.root`, which defaults to `~/.dotfiles`. It uses the same path relative to your home directory: `~/.zshrc` gets its source from `~/.dotfiles/.zshrc`, and `~/.config/foo.toml` gets it from `~/.dotfiles/.config/foo.toml`. For targets outside your home directory, specify `source` or inline `content`.\
+\
+These entries use an inferred source and an explicit source, respectively:\
+\
+toml\
+\
+```\
+[dotfiles]\
+"~/.zshrc" = { mode = "symlink" }\
+"~/.ssh/config" = { source = "ssh/config", mode = "copy" }\
+```\
+\
+Relative source paths start from the directory containing the configuration file. For example, `source = "ssh/config"` in `~/.config/mise/config.toml` refers to `~/.config/mise/ssh/config`.\
+\
+You can also write a source as a string, such as `"~/.config/nvim" = "dotfiles/nvim"`. This uses `dotfiles.default_mode`. When `add` writes an entry, it leaves out the source if it can infer it, and leaves out the built-in `symlink` mode. A mode you select with `--mode` is always written explicitly.\
+\
+### Inline content [​](https://mise.jdx.dev/dotfiles.html\#inline-content)\
+\
+Use `content` to declare a literal whole file inline instead of keeping a separate source file. On Unix, the resulting file has permissions `0600`, so only its owner can read and write it, unless [`permissions`](https://mise.jdx.dev/dotfiles.html#permissions) sets others:\
+\
+toml\
+\
+```\
+[dotfiles]\
+"~/.config/example.conf" = { content = "enabled = true\n" }\
+```\
+\
+Use `content` on its own. It cannot be combined with `source`, `mode`, `exclude`, `manifest`, or the edit options `block`, `line`, `template`, and `comment`.\
+\
+### Permissions [​](https://mise.jdx.dev/dotfiles.html\#permissions)\
+\
+Set `permissions` to an octal string to give the target those permissions instead of the ones it would otherwise get. It works with `copy` and `template` entries that have a file source, and with inline `content`:\
+\
+toml\
+\
+```\
+[dotfiles]\
+"~/.netrc" = { source = "netrc.tera", mode = "template", permissions = "0600" }\
+```\
+\
+`mise dot status` reports a target whose permissions have changed since, and the next apply sets them again.\
+\
+On its own, `permissions` manages only the permissions of a file or directory that already exists. mise never creates it, never changes its content, and never infers a source for it from `dotfiles.root`:\
+\
+toml\
+\
+```\
+[dotfiles]\
+"~/.ssh" = { permissions = "0700" }\
+"~/.ssh/config" = { permissions = "0600" }\
+```\
+\
+When the target does not exist, there is nothing to adjust: apply warns and skips it, and status counts it as applied with the reason `target absent; permissions not applied`, so `mise dot status --missing` does not fail. A directory that another entry creates in the same apply still gets its permissions. When the target is a symlink, mise does not follow it: status reports it and apply skips it with a warning, and a link swapped in while mise runs is refused rather than followed. `mise dot edit` does not create a missing target. Unapply never removes a target whose permissions are all mise manages.\
+\
+A declared mode may deny even the owner read access, such as `0200`. mise then checks only the target's permissions, because it cannot read the content back.\
+\
+`permissions` cannot be combined with `symlink` or `symlink-each`, which have no permissions of their own, with `track`, whose history records the file's mode, or with a directory source. A permissions-only target cannot contain wildcards. On Windows, `permissions` is ignored with a warning.\
+\
+### Matching multiple source files [​](https://mise.jdx.dev/dotfiles.html\#matching-multiple-source-files)\
+\
+Source paths may contain glob wildcards like `*`, `**`, `?`, or `[ab]`. When a wildcard source matches multiple paths, the target path must contain matching wildcards so each source expands to a unique target:\
+\
+toml\
+\
+```\
+[dotfiles]\
+"~/.config/*.toml" = "dotfiles/config/*.toml"\
+"~/.local/share/app/**/*.json" = { source = "dotfiles/app/**/*.json", mode = "copy" }\
+"~/.config/app?.toml" = "dotfiles/config/app?.toml"\
+"~/.config/theme-[ab].toml" = "dotfiles/config/theme-[ab].toml"\
+```\
+\
+## Excluding files [​](https://mise.jdx.dev/dotfiles.html\#excluding-files)\
+\
+Modes that walk a source directory — `symlink-each`, and `copy` with a directory source — take an `exclude` list of glob patterns, as does a [tracked directory](https://mise.jdx.dev/dotfiles.html#files-directories-and-symlinks) (relative to the tracked path). This is the way to point an entry at a directory you don't fully own, such as the one holding `mise.toml` itself:\
+\
+toml\
+\
+```\
+[dotfiles]\
+"~" = { source = ".", mode = "symlink-each", exclude = ["mise.toml", "*.md", ".git"] }\
+```\
+\
+A pattern without `/` matches any single path component, so `"mise.toml"` skips that file wherever it appears in the tree and `"*.md"` skips every markdown file. A pattern containing `/` is anchored to the source root: `"nvim/spell"` skips only that path. A leading `/` anchors a pattern the same way, as in `.gitignore`, so `"/cache"` skips only a top-level `cache` and `"/nvim/spell"` is the same as `"nvim/spell"`. Either kind matching a directory skips everything under it. Use `**` to match across directories: `"nvim/**/*.bak"` skips `nvim/init.bak` and `nvim/after/init.bak`.\
+\
+Deprecated: `*` crossing `/` in exclusions\
+\
+In an exclusion containing `/`, `*` still matches across directories, so `"nvim/*.bak"` also skips `nvim/after/init.bak`. mise warns when a pattern skips a path only for that reason. Write `**` instead: `*` will stop at `/` in exclusions, as it already does in `.gitignore`, [include lists](https://mise.jdx.dev/dotfiles.html#select-files-within-a-tracked-directory), and patterns with a leading `/`.\
+\
+For `symlink-each`, excluding a previously managed file removes its recorded link on the next apply, just as deleting the source would. Directory `copy` is additive: exclusions prevent future copying but leave existing target files in place.\
+\
+## Git-tracked directories [​](https://mise.jdx.dev/dotfiles.html\#git-tracked-directories)\
+\
+Set `manifest = "git"` on a directory-walking entry to manage only files in Git's index. This supports repositories that use `gitignore *` and opt files in with `git add -f`, without listing every path again in mise:\
+\
+toml\
+\
+```\
+[dotfiles]\
+"~" = { source = ".", mode = "symlink-each", manifest = "git" }\
+```\
+\
+mise runs `git ls-files` from the source directory. Ignored and untracked files are left alone, while removing a file from the index removes a mise-owned `symlink-each` link on the next apply. `exclude` can be combined with the Git manifest for an additional filter. Git manifests require a directory source and either `symlink-each` or `copy` mode.\
+\
+When environment-specific configs select different `symlink-each` sources for the same target, applying the new environment reconciles links recorded for the previous source. This makes `mise bootstrap -E home` and `mise bootstrap -E work` usable as profile switches: links unique to the old profile are removed, shared paths are repointed, and unmanaged neighbors are preserved.\
+\
+## Visible source names [​](https://mise.jdx.dev/dotfiles.html\#dot-prefix)\
+\
+Set `dot_prefix = true` on a directory-walking entry to keep the files in your dotfiles repository visible. Like GNU Stow's `--dotfiles` option, every path component named `dot-<name>` deploys as `.<name>`, and other names deploy unchanged:\
+\
+toml\
+\
+```\
+[dotfiles]\
+"~" = { source = "home", mode = "symlink-each", dot_prefix = true, exclude = ["README.md"] }\
+```\
+\
+| Source | Target |\
+| --- | --- |\
+| `home/dot-bashrc` | `~/.bashrc` |\
+| `home/dot-config/foo/config.toml` | `~/.config/foo/config.toml` |\
+| `home/bin/dot-helper` | `~/bin/.helper` |\
+| `home/.editorconfig` | `~/.editorconfig` |\
+\
+`exclude` and `manifest = "git"` still work with source names, such as `dot-bashrc`. If two source paths deploy to the same target, such as `dot-bashrc` and `.bashrc`, apply fails and reports both paths. `dot_prefix` requires a directory source and `symlink-each` or `copy` mode. `mise dot add` refuses to capture into a `dot_prefix` entry because it would copy target names into the source; edit the source directly instead.\
+\
+## Edit entries [​](https://mise.jdx.dev/dotfiles.html\#edit-entries)\
+\
+Edit entries manage one piece of a file: the `mise activate` block in your shell rc, an entry in `/etc/hosts`, or a small snippet in a config file. They are keyed by target path plus an id naming each edit within the file:\
+\
+toml\
+\
+```\
+[dotfiles]\
+"~/.zshrc/activate" = { block = 'eval "$(mise activate zsh)"' }\
+"~/.zshrc/aliases" = { block = '''\
+alias ll='ls -l'\
+alias la='ls -la'\
+''' }\
+"/etc/hosts/dev" = { line = "127.0.0.1 dev.local" }\
+"/etc/zshrc/zdotdir" = { line = 'ZDOTDIR=$HOME/.config/zsh/', position = "prepend" }\
+"~/.gitconfig/identity" = { source = "snippets/git-identity.tmpl", template = "tera" }\
+```\
+\
+For edit entries, `source` is paired with `template = "tera"` to make the entry unambiguously an edit. A table with only `source` is a whole-file entry using `dotfiles.default_mode`.\
+\
+A `block` is delimited by marker comments in the target file, named by the entry's id:\
+\
+sh\
+\
+```\
+# >>> mise:activate >>> managed by mise - do not edit between markers\
+eval "$(mise activate zsh)"\
+# <<< mise:activate <<<\
+```\
+\
+Applying replaces the content between the markers. If the block is missing, mise appends it. Everything else in the file stays as it is.\
+\
+Ids may contain letters, digits, `_`, `-`, and `.`. The marker comment prefix is inferred from the file extension (`#` for shell/config files, `--` for Lua, `//` for C-like languages, `;` for INI, `"` for vim) and can be overridden with `comment = "..."`. Files that can't hold line comments at all (strict JSON, XML) aren't a fit for blocks — use a whole-file entry instead.\
+\
+A `line` inserts the given text if that exact line is missing. By default, mise appends it; set `position = "prepend"` to insert it at the beginning. Running apply again leaves an existing match wherever it is. Other bytes, including line endings, stay unchanged. The value must be a single line; use a block for multi-line content.\
+\
+## How configuration is applied [​](https://mise.jdx.dev/dotfiles.html\#semantics)\
+\
+- Entries merge across the [config hierarchy](https://mise.jdx.dev/configuration.html). Whole-file entries merge by target path; edit entries merge by `(path, id)`. Tracking uses only system and global configuration.\
+- `mise dot add` applies the entries it captures unless you pass `--no-apply`. Use `mise dot apply` or [`mise bootstrap`](https://mise.jdx.dev/bootstrap.html) to apply the rest.\
+- Applying skips targets that already match. Templates may still execute while mise checks their output. Copy and template entries overwrite changed targets.\
+- mise warns and skips entries with unknown modes or operations.\
+\
+## Conflicts [​](https://mise.jdx.dev/dotfiles.html\#conflicts)\
+\
+For symlink entries, mise refuses to replace conflicting existing paths: a real file or directory where a symlink should go, or a directory where a file should go, is an error listing the conflicting paths. Pass `mise dot apply --force` to replace them.\
+\
+Replacing a real file or directory with a symlink requires `--force`, even when its contents and permissions match the source. To adopt an existing file, use `mise dot add`: it moves the file to its source path before creating the link. When the source is on another filesystem, mise copies it while preserving symlinks and permissions.\
+\
+A `copy` or `template` entry overwrites the target's content without `--force`. Existing symlinks can also be repointed. Inspect the diff before changing which source a target uses.\
+\
+Blocks and lines can be applied without `--force`. mise reports an error if a block's markers are corrupted or an edit's target is a symlink. For a symlink, point the edit at the real file you want to change.\
+\
+Removing an entry from config leaves its file, block, or line in place. To remove them too, run `mise dot unapply` before deleting the entry from your config. To remove a file from machines that already applied an old entry, or one that no entry created, replace the entry with [`mode = "absent"`](https://mise.jdx.dev/dotfiles.html#absent), or with a `state = "absent"` declaration under [`[bootstrap.files]`](https://mise.jdx.dev/bootstrap/files.html#removing-resources).\
+\
+## Unapplying [​](https://mise.jdx.dev/dotfiles.html\#unapplying)\
+\
+`mise dot unapply` removes configured targets without removing their `[dotfiles]` entries or source files. It uses the current config, filesystem, and recorded `symlink-each` state to determine what the entry owns:\
+\
+- `symlink` targets are removed only while they still point to the configured source.\
+- `symlink-each` removes exact source-to-target links, including dangling links for deleted source files. Other links and files under the target survive.\
+- File copies and rendered templates are removed only while their content still matches. Modified targets require `--force`.\
+- Directory copies are removed file by file. Unmanaged neighbors always survive, and directories are removed only when empty.\
+- Targets with only [`permissions`](https://mise.jdx.dev/dotfiles.html#permissions) are never removed.\
+- Marker-delimited blocks are removed with their markers. Plain line edits have no ownership marker and require `--force`.\
+- `absent` entries are skipped. mise does not recreate the file they removed.\
+\
+When a `symlink`, `copy`, `template`, or inline `content` target is removed, the parent directories mise created for it go too, once they are empty. Directories that existed before mise wrote the target, or that hold other files, are kept, as are directories another remaining entry needs. Only directories physically inside your home directory are removed, never the home directory itself or anything outside it, including through a symlinked parent. mise records the directories it creates in `$MISE_STATE_DIR/dotfiles/`, so targets written by an older version remove none.\
+\
+If you deleted a source file from a copied directory, unapply cannot identify its old copy. Remove that leftover file yourself. Use `--dry-run` to preview removals first. Template dry-runs skip rendering and template function calls.\
+\
+## Commands [​](https://mise.jdx.dev/dotfiles.html\#commands)\
+\
+sh\
+\
+```\
+mise dot status            # show tracked files and the state of managed files\
+mise dot status --missing  # exit 1 if anything is out of sync\
+mise dot diff              # show changes needed to apply\
+mise dot diff ~/.zshrc     # show changes for one target\
+\
+mise dot apply                     # apply files and edits\
+mise dot apply --dry-run           # print what would be done\
+mise dot apply --dry-run --verbose # include diff-like details\
+mise dot apply --yes               # skip the confirmation prompt\
+mise dot apply --force             # also replace conflicting files\
+\
+mise dot unapply             # remove identifiable managed targets\
+mise dot unapply --dry-run   # preview removals\
+mise dot unapply --force     # also remove modified/ambiguous targets\
+\
+mise dot track ~/.zshrc     # track a live file where it is\
+mise dot untrack ~/.zshrc   # stop tracking it; the file stays\
+mise dot add ~/.zshrc       # capture a live file into dotfiles.root\
+mise dot add --changed      # capture all changed copy-mode files\
+mise dot edit ~/.zshrc      # edit the source, the tracked file, or the owning config\
+mise dot edit --apply ~/.zshrc\
+\
+mise dot save                    # checkpoint the tracked files now\
+mise dot history                 # browse checkpoints; `history show`, `history diff`\
+mise dot paths                   # list tracked paths and their save settings\
+```\
+\
+`mise dot status` reports each entry as `tracked`, `applied`, `missing`, `differs` with a reason, or `source missing`, followed by the history state: what is tracked, the latest checkpoint, unfinished operations, and whether edits are saved automatically.\
+\
+Use `status --missing` in scripts to exit with status 1 when any selected entry is out of sync. It displays the same list as `status`.\
+\
+Every `apply`, `add`, `unapply`, and `edit --apply` records a pair of [history checkpoints](https://mise.jdx.dev/history.html) — the tracked files before and after the change. mise also records which paths the operation touched. Run `mise dot history` to browse these checkpoints.\
+\
+### JSON output [​](https://mise.jdx.dev/dotfiles.html\#json-output)\
+\
+`mise dot status --json` uses `source_missing` for the `source missing` state. A `differs` entry also carries a human-readable `reason`, and so does a permissions-only entry whose target does not exist. An entry that sets `permissions` includes them as an octal string. An `absent` entry has `"mode": "absent"` and `"source": null`. Its state is `applied` once the target is gone and `differs` while a file or symlink is still there, with a `reason` such as `present; will be removed`, or a template that renders empty and will be removed. Each entry also includes an `origin` object describing where its configuration came from: the config file, its `config_root`, any mise environment in the config filename, and the resolved source path.\
+\
+Paths are strings when they are valid UTF-8. On Unix, paths containing non-UTF-8 bytes use `mise:path-bytes:<base64url>`.\
+\
+## Capturing changes [​](https://mise.jdx.dev/dotfiles.html\#capturing-changes)\
+\
+If you edit a copied dotfile in place and want to store those changes back in your dotfiles, run `mise dot add` again:\
+\
+sh\
+\
+```\
+$EDITOR ~/.config/starship.toml\
+mise dot add ~/.config/starship.toml\
+```\
+\
+Use `mise dot add --changed` to update the sources of all changed regular files managed in `copy` mode. Each selected file's configuration must be trusted. The command skips directory copies, symlinks, templates, and inline content.\
+\
+For an unmanaged target, `add` creates a `[dotfiles]` entry and seeds the source under `dotfiles.root`. For an already-managed target, it updates the existing source from the live target.\
+\
+## Tracking options [​](https://mise.jdx.dev/dotfiles.html\#tracking-options)\
+\
+### Preview before tracking [​](https://mise.jdx.dev/dotfiles.html\#preview-before-tracking)\
+\
+Preview a directory before tracking it:\
+\
+sh\
+\
+```\
+mise dot track --dry-run ~/.config/nvim\
+mise dot paths --preview ~/.config/nvim\
+```\
+\
+Both commands report the file count and size without changing configuration or saving a checkpoint. `paths --preview` also lists the files. Check the omissions and nested repositories, then exclude unwanted subtrees, for example with `mise dot exclude '~/.config/nvim/plugged/**'`.\
+\
+Tracking shows the count and size before confirmation and warns above 5,000 files or 256 MiB. These warnings do not prevent tracking. A scan that reaches its limit is reported as incomplete.\
+\
+### Saving and encryption [​](https://mise.jdx.dev/dotfiles.html\#policies)\
+\
+| Field | Default | Meaning |\
+| --- | --- | --- |\
+| `autosave` | `true` | Let the history watcher save edits automatically. With `false`, save the path with `mise dot save <path>`. |\
+| `encrypt` | `false` | Encrypt contents before saving them to Git, using `[history.encryption].recipients`. The file you edit stays unencrypted. |\
+\
+For a file you want to save manually:\
+\
+sh\
+\
+```\
+mise dot track ~/.config/app/state.json --no-autosave\
+mise dot save ~/.config/app/state.json\
+```\
+\
+The first command saves the initial version. Later edits wait for an explicit save. See [saving](https://mise.jdx.dev/history.html#saving) for how commands that modify tracked files save their before and after versions.\
+\
+To encrypt a file from its first checkpoint:\
+\
+sh\
+\
+```\
+mise dot track ~/.config/app/credentials --encrypt\
+```\
+\
+Configure `[history.encryption].recipients` first. See [choose recipients](https://mise.jdx.dev/history.html#choose-recipients) for generating keys and [encrypted shared files](https://mise.jdx.dev/history.html#encrypted-shared-files) for the limits of encrypting a file that already has plaintext history. Run encrypted enrollment as a standalone command, not from inside `mise dot capture`, so mise can verify its initial encrypted baseline before keeping the declaration.\
+\
+Saving and sharing have separate settings. With manual synchronization, mise continues making local commits. Your next push sends all accumulated commits to the origin. Sharing applies to the entire history; to keep a file out of it, leave it untracked. Untracking or excluding a file keeps its previously committed versions in history.\
+\
+### Files, directories, and symlinks [​](https://mise.jdx.dev/dotfiles.html\#files-directories-and-symlinks)\
+\
+Track exact file or directory paths under your home directory or mise configuration directory. Glob patterns are supported by [history exclusions](https://mise.jdx.dev/history.html#explicit-tracking-and-exclusions), but cannot be used as tracking entries. Tracking a directory includes files added beneath it later, subject to those exclusions.\
+\
+Start with individual configuration files so you can choose what to save. Leave logs, caches, databases, and application session state out of history. Built-in credential rules can omit files even when their parent directory is tracked. `mise dot save`, `mise dot track`, and `mise dot status` report these omissions; `mise dot paths` lists the affected files and reasons. See [credential filtering](https://mise.jdx.dev/history.html#credential-filtering-and-omissions) for the filename rules and [encrypted tracking](https://mise.jdx.dev/history.html#encrypted-shared-files) to save credentials. Files ending in `.local.toml` are never captured.\
+\
+Tracking a symlink saves the link itself. Track its target separately to save the target's contents. If a parent directory is a symlink, track that link and use the real directory path to track files beneath it.\
+\
+Repositories found inside a tracked directory are skipped and reported. To save a repository's working files, track its root as a separate entry; `.git` is always excluded. See [nested repositories](https://mise.jdx.dev/history.html#nested-repositories).\
+\
+Your home directory and mise configuration directory can themselves be symlinks. mise maps these roots to the corresponding directories on each machine when sharing history.\
+\
+Add an explicit tracking entry for each file or directory you want to save, including the mise configuration directory or `dotfiles.root`. Track entries cannot contain `source`, `content`, or `manifest`. `mise dot paths` reports such combinations as invalid and leaves them out of history. The `track` command exits non-zero if the entry it writes is not active.\
+\
+### Select files within a tracked directory [​](https://mise.jdx.dev/dotfiles.html\#select-files-within-a-tracked-directory)\
+\
+Use per-entry exclusions to omit files beneath one directory:\
+\
+toml\
+\
+```\
+[dotfiles]\
+"~/.codex" = { mode = "track", exclude = ["sessions", "*.log"] }\
+```\
+\
+The patterns are relative to `~/.codex`. `sessions` excludes directories with that name and their contents; `*.log` excludes matching files at any depth. Patterns containing `/` are anchored to the tracked directory, and a leading `/` anchors any pattern to it: `/cache` excludes only `~/.codex/cache`, not a `cache` directory deeper down. Use `**` to match across directories, as in `logs/**/*.log`; a `*` that matches across `/` is [deprecated](https://mise.jdx.dev/dotfiles.html#excluding-files). Global `[history] exclude` rules also apply and cannot override the entry's exclusions with `!glob`.\
+\
+If you only want a few files, use an include list instead:\
+\
+toml\
+\
+```\
+[dotfiles]\
+"~/.codex" = { mode = "track", include = ["config.toml", "rules/**"] }\
+```\
+\
+Includes follow the same pattern rules, except that `*` never crosses a `/`, as in `.gitignore`: `rules/*.md` selects the markdown files directly in `rules`, and `rules/**/*.md` also selects those in its subdirectories. A leading `/` is optional, so `/rules/*.md` selects the same files. No `include` field considers the whole directory; `include = []` selects nothing. Explicit exclusions always win. Includes also select credential-named files, so use `encrypt = true` for private contents. See [choosing files](https://mise.jdx.dev/history.html#choose-which-files-a-directory-saves) for matching rules, previews, and compatibility requirements.\
+\
+These lists travel with the shared setup and are recorded in checkpoints, so rollback knows which files were outside their coverage. Upgrade every machine sharing the setup before using this field. See [history selection rules](https://mise.jdx.dev/history.html#explicit-tracking-and-exclusions) for details.\
+\
+### Stop tracking a file [​](https://mise.jdx.dev/dotfiles.html\#stop-tracking-a-file)\
+\
+sh\
+\
+```\
+mise dot untrack ~/.zshrc\
+```\
+\
+The file stays in place. Its earlier checkpoints remain in Git, but future checkpoints leave it out.\
+\
+### Different contents on different machines [​](https://mise.jdx.dev/dotfiles.html\#variants)\
+\
+A **variant** lets a tracked file have different contents on different machines, using the same path on each one. For example, keep separate versions of `~/.zshrc` for macOS and Linux:\
+\
+toml\
+\
+```\
+[dotfiles]\
+"~/.zshrc" = { mode = "track", variants = [{ os = "macos" }, { os = "linux" }] }\
+```\
+\
+Add this to your global configuration, or use `mise dot track ~/.zshrc --os macos` to add one variant. The `os` selector accepts an optional `/arch`, as in bootstrap packages. Use `os = "unix"` to share one version between Linux and macOS and skip the path on Windows:\
+\
+toml\
+\
+```\
+[dotfiles]\
+"~/.zshrc" = { mode = "track", variants = [{ os = "unix" }] }\
+```\
+\
+Use `profile` to select a [mise environment](https://mise.jdx.dev/configuration/environments.html):\
+\
+toml\
+\
+```\
+[dotfiles]\
+"~/.gitconfig-work" = { mode = "track", variants = [{ profile = "work" }, { default = true }] }\
+```\
+\
+When several variants match, mise scores each one: `profile` adds four points, `os` adds two (the `unix` family adds one), and an architecture adds two more. The highest score wins. On a Mac, `os = "macos"` therefore beats `os = "unix"`, and a profile-only variant ties with an OS-and-architecture variant. If the highest score is tied, mise reports the ambiguity and skips the path until you fix it.\
+\
+When nothing matches, mise uses the variant marked `default = true`. Without a default, it skips saving and applying the path on that machine. Checkpoints preserve the versions saved by other machines.\
+\
+### Tracking files that mise also manages [​](https://mise.jdx.dev/dotfiles.html\#ownership)\
+\
+You can save the history of a file that mise copies, links, templates, or edits. For example, tracking `~/.zshrc` also saves changes made by a managed activation block or `mise bootstrap mise-shell-activate`.\
+\
+When you track an already-managed file, mise keeps its existing entry and adds the tracking entry to `conf.d/dotfiles-tracking.toml`. Untracking removes only that tracking entry. A tracked directory can also contain managed files or template sources; their copy, link, or template settings continue to apply. Conflicting entries that try to create the same target are still rejected.\
+\
+Tracking entries belong in system or global configuration. mise warns and ignores `mode = "track"` in project configuration. To turn off an entry inherited from another configuration file, set `enabled = false` in a later configuration layer. `untrack` does this for system entries.\
+\
+## Self-managing mise config [​](https://mise.jdx.dev/dotfiles.html\#self-managing-mise-config)\
+\
+You can manage the mise config and the dotfiles root as dotfiles too:\
+\
+toml\
+\
+```\
+[settings]\
+dotfiles.root = "~/.dotfiles"\
+\
+[dotfiles]\
+"~/.dotfiles" = "~/src/dotfiles"\
+"~/.config/mise/config.toml" = "~/src/dotfiles/mise/config.toml"\
+```\
+\
+This is a bootstrap pattern: clone the real repo (for example `~/src/dotfiles`) before the first `mise dot apply` or `mise bootstrap`. Use the real repo path for sources needed during the first run; `~/.dotfiles` does not exist until mise creates that symlink. Replacing `~/.config/mise/config.toml` affects future mise invocations, so make sure the source contains a valid config before applying it.\
+\
+## Root-owned files [​](https://mise.jdx.dev/dotfiles.html\#root-owned-files)\
+\
+Dotfiles write as the current user — there is no sudo here. Managing `/etc/hosts` works when running as root (containers, CI); otherwise mise fails with an ordinary permission error.\
+\
+## Windows [​](https://mise.jdx.dev/dotfiles.html\#windows)\
+\
+`symlink` creates a real file symlink on Windows when it can. Windows allows that without elevation once Developer Mode is on — the same privilege [`windows_shim_mode`](https://mise.jdx.dev/configuration/settings.html#windows_shim_mode) relies on for its `symlink` option — and mise falls back to copying the file when the privilege is not available, so entries keep applying either way. `mise dot status` reads whichever form is on disk.\
+\
+`symlink-each` still copies files on Windows. Directory symlinks use junctions.\
+\
+## Command names [​](https://mise.jdx.dev/dotfiles.html\#command-names)\
+\
+The documentation uses the short `mise dot` alias. The descriptive `mise dotfiles` spelling and `mise bootstrap dotfiles` namespace provide the same commands.\
+\
+sponsors\
+\
+[![Entire](https://jdx.dev/sponsors/entire-lockup.svg)](https://entire.io/)[![Omacom Foundation](https://jdx.dev/sponsors/omacom-foundation.svg)](https://omarchy.org/patrons/)[![CodeRabbit](https://jdx.dev/sponsors/coderabbit.svg)](https://coderabbit.link/mise)\
+\
+[View all sponsors](https://jdx.dev/sponsors.html)

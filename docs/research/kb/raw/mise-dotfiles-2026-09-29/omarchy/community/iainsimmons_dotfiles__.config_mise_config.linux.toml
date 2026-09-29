@@ -1,0 +1,30 @@
+<!-- source: https://github.com/iainsimmons/dotfiles/blob/HEAD/.config/mise/config.linux.toml ; fetched 2026-09-29 via gh api contents (lane X) -->
+# Linux-only dotfiles and host packages (auto-loaded via auto_env on linux).
+# Cross-platform equivalents live in config.toml / config.macos.toml.
+
+[dotfiles]
+"~/.config/hypr" = { mode = "symlink-each", exclude = ["monitors.lua"] }   # real dir; per-file links (Omarchy quattro layout)
+"~/.config/hyprmoncfg" = { mode = "copy" }     # hyprmoncfg rewrites profiles in place — keep real files
+"~/.config/uwsm" = { mode = "symlink-each" }
+"~/.config/walker" = {}
+
+[bootstrap.packages]
+"pacman:fish" = "latest"
+"pacman:kitty" = "latest"
+"pacman:tmux" = "latest"
+"pacman:tree-sitter-cli" = "latest"
+"pacman:yazi" = "latest"
+"pacman:eza" = "latest"
+"pacman:fx" = "latest"
+"pacman:gum" = "latest"
+"pacman:7zip" = "latest"
+"pacman:diff-so-fancy" = "latest"
+"pacman:fastfetch" = "latest"
+"pacman:uwsm" = "latest"
+"pacman:walker" = "latest"
+"aur:ov" = "latest"
+"aur:hyprmoncfg" = "latest"
+"aur:helium-browser-bin" = "latest"
+"aur:vesktop-bin" = "latest"
+"aur:bibata-cursor-theme-bin" = "latest"
+"aur:pnpm-bin" = "latest"

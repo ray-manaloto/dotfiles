@@ -1,0 +1,123 @@
+[Skip to content](https://mise.jdx.dev/dev-tools/backends/conda.html#VPContent)
+
+On this page
+
+# Conda Backend [​](https://mise.jdx.dev/dev-tools/backends/conda.html\#conda-backend)
+
+The `conda` backend installs command-line packages and their transitive dependencies from [conda-forge](https://conda-forge.org/) or another Anaconda channel. It solves dependencies and downloads packages directly, so conda, mamba, and micromamba do not need to be installed.
+
+Each package is installed into its own isolated conda prefix. When a package needs that prefix activated — it ships `etc/conda/activate.d` scripts, its prefix contains executables from its dependencies, or one of its commands is a script — mise starts its commands through a launcher that sets `CONDA_PREFIX`, makes the prefix's executable directories available, and applies the activation scripts. This lets a command use its packaged runtime dependencies without adding dependency commands to your interactive shell's `PATH`.
+
+A package with none of those — a single-binary tool such as `conda:ripgrep` — has nothing to activate, so on Unix its commands are symlinked directly. They start without an extra shell process, and without `CONDA_PREFIX` or the prefix's executable directories being set for the command and whatever it spawns.
+
+The code for this is inside the mise repository at [`./src/backend/conda.rs`](https://github.com/jdx/mise/blob/main/src/backend/conda.rs).
+
+## Dependencies [​](https://mise.jdx.dev/dev-tools/backends/conda.html\#dependencies)
+
+No separate conda package manager is required. The selected packages must still support your operating system, architecture, and native runtime environment.
+
+## Usage [​](https://mise.jdx.dev/dev-tools/backends/conda.html\#usage)
+
+Install ruff in the current project and verify its executable:
+
+sh
+
+```
+mise use conda:ruff
+mise exec -- ruff --version
+```
+
+This writes the following to `mise.toml`. Add `-g` for global configuration.
+
+toml
+
+```
+[tools]
+"conda:ruff" = "latest"
+```
+
+### Specifying a Version [​](https://mise.jdx.dev/dev-tools/backends/conda.html\#specifying-a-version)
+
+List versions with `mise ls-remote conda:ruff`, then select one with `mise use conda:ruff@VERSION`. Replace `VERSION` with a listed release.
+
+### Using a Different Channel [​](https://mise.jdx.dev/dev-tools/backends/conda.html\#using-a-different-channel)
+
+The default channel is `conda-forge`. For a package published in your team's channel, replace these placeholders with its package and channel names:
+
+toml
+
+```
+[tools]
+"conda:my-tool" = { version = "latest", channel = "my-team" }
+```
+
+The solver uses the selected channel for the package and its dependencies. The complete dependency set must be available there; this is not a multi-channel conda environment specification.
+
+## Platform Support [​](https://mise.jdx.dev/dev-tools/backends/conda.html\#platform-support)
+
+The conda backend automatically selects the appropriate package for your platform:
+
+| Platform | Conda Subdir |
+| --- | --- |
+| Linux x64 | linux-64 |
+| Linux ARM64 | linux-aarch64 |
+| macOS x64 | osx-64 |
+| macOS ARM64 | osx-arm64 |
+| Windows x64 | win-64 |
+
+The solver considers both the platform subdirectory and `noarch`. A `noarch` package may still depend on platform-specific packages, so it does not guarantee that an installation works on every host.
+
+## Settings [​](https://mise.jdx.dev/dev-tools/backends/conda.html\#settings)
+
+Set these with `mise settings set [VARIABLE]=[VALUE]` or by setting the environment variable listed.
+
+### `conda.channel`
+
+- Type: `string`
+- Env: `MISE_CONDA_CHANNEL`
+- Default: `conda-forge`
+
+Default conda channel when installing packages with the conda backend.
+Override per-package with `conda:package[channel=bioconda]`.
+
+The most common channels are:
+
+- `conda-forge` \- Community-maintained packages (default)
+- `bioconda` \- Bioinformatics packages
+- `nvidia` \- NVIDIA CUDA packages
+
+## Tool Options [​](https://mise.jdx.dev/dev-tools/backends/conda.html\#tool-options)
+
+The following [tool-options](https://mise.jdx.dev/dev-tools/#tool-options) are available for the `conda` backend—these go in `[tools]` in `mise.toml`.
+
+### `channel` [​](https://mise.jdx.dev/dev-tools/backends/conda.html\#channel)
+
+Override the conda channel for a specific package:
+
+toml
+
+```
+[tools]
+"conda:my-tool" = { version = "latest", channel = "my-team" }
+```
+
+## Common Channels [​](https://mise.jdx.dev/dev-tools/backends/conda.html\#common-channels)
+
+- `conda-forge` \- Community-maintained packages (default)
+- `bioconda` \- Bioinformatics packages
+- `nvidia` \- NVIDIA CUDA packages
+
+## Limitations [​](https://mise.jdx.dev/dev-tools/backends/conda.html\#limitations)
+
+- mise solves and installs transitive dependencies in an isolated prefix for each tool. It does not import or maintain a general-purpose `environment.yml`.
+- Only commands belonging to the requested package are exposed to your shell. For a package that is started through a launcher, its dependencies' executables stay reachable from inside that command but never reach your shell.
+- The solver uses one channel per tool. Packages from channels such as bioconda may require dependencies from another channel that this configuration cannot supply.
+- Native requirements such as a compatible libc or GPU driver still belong to the host.
+
+If a command cannot be found, check whether the requested package actually provides a CLI. If solving fails, check package availability, the selected channel, and the platform reported in the error before changing versions.
+
+sponsors
+
+[![Entire](https://jdx.dev/sponsors/entire-lockup.svg)](https://entire.io/)[![Omacom Foundation](https://jdx.dev/sponsors/omacom-foundation.svg)](https://omarchy.org/patrons/)[![CodeRabbit](https://jdx.dev/sponsors/coderabbit.svg)](https://coderabbit.link/mise)
+
+[View all sponsors](https://jdx.dev/sponsors.html)
