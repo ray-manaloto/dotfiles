@@ -18,7 +18,7 @@ editorconfig-checker = "4.0.2" # provides `editorconfig-checker` — hk editorco
 # scanner in the image would cost a cold rebuild for no gain — the scanning that
 # matters happens at the commit boundary. Measured before adopting: 0 findings
 # over the whole 31.5 MB tree in 199 ms.
-"aqua:betterleaks/betterleaks" = "1.8.1"
+"aqua:betterleaks/betterleaks" = "1.9.0"
 "npm:@devcontainers/cli" = "0.89.0"
 # Host/CI-only build gate for Claude Code function-hook modules (#1026). Stays
 # out of shared.toml because hk-image.pkl never runs the gate and tsc does not
