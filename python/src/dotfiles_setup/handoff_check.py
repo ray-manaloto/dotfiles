@@ -15,6 +15,12 @@ import sys
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+from dotfiles_setup.plan_attest import PluginNotInstalledError, resolve_attest_script
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 _MISE_TIMEOUT = 30
 _HANDOFF_RE = re.compile(
@@ -35,11 +41,52 @@ _TASK_CARRIER_HEADING = re.compile(
 )
 _TASK_CARRIER_LINE = re.compile(r"(?im)^[ \t]*(?:next:|next[ -]task[ \t]*:)[ \t]*.*$")
 _ACTIVE_HEADING = re.compile(r"(?im)^##\s+(?P<heading>[^\n]*NEXT SESSION[^\n]*)\s*$")
-# planning-with-files' own attestation (root/legacy mode): one SHA-256 line
-# written by `mise run plan-attest`. It replaces the retired tracked pointer
-# (Ray, 2026-09-28c) — the plugin's hook already reports PLAN TAMPERED from
-# this same file, so the handoff gate reads the native artifact, not a copy.
-ATTESTATION_PATH = ".plan-attestation"
+# planning-with-files' own attestation replaced the retired tracked pointer
+# (Ray, 2026-09-28c). WHICH plan and attestation file are live is the plugin's
+# decision (--target, $PLAN_ID, .planning/.active_plan, newest slug, then the
+# root plan), so this gate asks the plugin's own `attest-plan.sh --show` rather
+# than re-deriving that order: the answer is then the plan the hook injects.
+_SHOW_PLAN = re.compile(r"(?m)^Plan: (?P<plan>.+)$")
+_SHOW_SHA = re.compile(r"(?m)^SHA-256: (?P<sha>[0-9a-f]{64})$")
+
+
+@dataclass(frozen=True)
+class Attestation:
+    """What the plugin reports: the resolved plan and its attested digest."""
+
+    plan: str | None
+    sha256: str | None
+    error: str | None = None
+
+
+def parse_show(output: str) -> Attestation:
+    """Parse ``attest-plan.sh --show``; missing fields mean "not attested"."""
+    plan = _SHOW_PLAN.search(output)
+    sha = _SHOW_SHA.search(output)
+    return Attestation(
+        plan.group("plan").strip() if plan else None,
+        sha.group("sha") if sha else None,
+    )
+
+
+def show_attestation(repo_root: Path) -> Attestation:
+    """Ask the installed pwf plugin which plan is attested, and with what digest."""
+    try:
+        script = resolve_attest_script(Path.home())
+    except PluginNotInstalledError as exc:
+        return Attestation(None, None, str(exc))
+    try:
+        completed = subprocess.run(
+            ["sh", str(script), "--show"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=_MISE_TIMEOUT,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return Attestation(None, None, f"attest-plan.sh --show failed: {exc}")
+    return parse_show(completed.stdout)
 
 
 class Verdict(Enum):
@@ -220,7 +267,9 @@ def active_phase(text: str) -> str | None:
     return matches[-1].group("heading").strip() if matches else None
 
 
-def _plan_findings(repo_root: Path) -> list[Finding]:
+def _plan_findings(
+    repo_root: Path, show: Callable[[Path], Attestation]
+) -> list[Finding]:
     """Require an active plan phase and a current planning-with-files attestation."""
     plan_path = repo_root / "task_plan.md"
     if not plan_path.is_file():
@@ -235,32 +284,41 @@ def _plan_findings(repo_root: Path) -> list[Finding]:
             )
         ]
 
-    attestation = repo_root / ATTESTATION_PATH
-    try:
-        attested = attestation.read_text().strip()
-    except OSError:
-        attested = ""
-    if attested == hashlib.sha256(plan_bytes).hexdigest():
-        return []
-    detail = (
-        "task_plan.md changed after its last attestation"
-        if attested
-        else "task_plan.md has no readable attestation"
-    )
+    state = show(repo_root)
+    if state.error is not None:
+        detail = f"cannot read the planning-with-files attestation: {state.error}"
+    elif state.plan is None or state.sha256 is None:
+        detail = "the active plan has no attestation"
+    else:
+        attested_plan = repo_root / state.plan
+        try:
+            current = hashlib.sha256(attested_plan.read_bytes()).hexdigest()
+        except OSError as exc:
+            current = None
+            detail = f"{state.plan} is unreadable: {exc}"
+        else:
+            detail = f"{state.plan} changed after its last attestation"
+        if current == state.sha256:
+            return []
     return [
         Finding(
             Verdict.UNATTESTED_PLAN,
-            ATTESTATION_PATH,
+            state.plan or "task_plan.md",
             f"{detail}; run `mise run plan-attest` once no writer is live",
         )
     ]
 
 
-def check(repo_root: Path, text: str) -> list[Finding]:
+def check(
+    repo_root: Path,
+    text: str,
+    *,
+    show: Callable[[Path], Attestation] = show_attestation,
+) -> list[Finding]:
     """Return only non-OK citation, task-carrier, and active-plan findings."""
     return [
         *_task_carrier_findings(text),
-        *_plan_findings(repo_root),
+        *_plan_findings(repo_root, show),
         *_path_findings(repo_root, text),
         *_task_findings(repo_root, text),
     ]

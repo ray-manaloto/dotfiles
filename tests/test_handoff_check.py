@@ -127,29 +127,28 @@ def test_plan_without_next_session_heading_is_missing_active_plan(
     ]
 
 
-def _attest(repo: Path) -> None:
-    plan = repo / "task_plan.md"
-    (repo / handoff_check.ATTESTATION_PATH).write_text(
-        hashlib.sha256(plan.read_bytes()).hexdigest() + "\n"
-    )
+def _attested(repo: Path) -> handoff_check.Attestation:
+    """What the plugin's --show would report right after `plan-attest`."""
+    digest = hashlib.sha256((repo / "task_plan.md").read_bytes()).hexdigest()
+    return handoff_check.Attestation("./task_plan.md", digest)
 
 
 def test_attested_plan_has_no_plan_finding(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
     (repo / "task_plan.md").write_text("# Plan\n\n## Phase 7 — NEXT SESSION\n")
-    _attest(repo)
+    state = _attested(repo)
 
-    assert handoff_check.check(repo, "State only.\n") == []
+    assert handoff_check.check(repo, "State only.\n", show=lambda _: state) == []
 
 
 def test_plan_edited_after_attestation_is_unattested(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
     plan = repo / "task_plan.md"
     plan.write_text("# Plan\n\n## Phase 7 — NEXT SESSION\n")
-    _attest(repo)
+    state = _attested(repo)
     plan.write_text("# Plan\n\n## Phase 8 — NEXT SESSION\n")
 
-    findings = handoff_check.check(repo, "State only.\n")
+    findings = handoff_check.check(repo, "State only.\n", show=lambda _: state)
 
     assert [item.verdict for item in findings] == [
         handoff_check.Verdict.UNATTESTED_PLAN
@@ -157,16 +156,58 @@ def test_plan_edited_after_attestation_is_unattested(tmp_path: Path) -> None:
     assert "changed after its last attestation" in findings[0].detail
 
 
-def test_plan_without_attestation_is_unattested(tmp_path: Path) -> None:
+def test_slug_plan_attestation_is_checked_against_the_slug_plan(
+    tmp_path: Path,
+) -> None:
+    """The plugin may resolve a .planning/<slug> plan; its bytes are what count."""
+    repo = _repo(tmp_path)
+    (repo / "task_plan.md").write_text("# Plan\n\n## Phase 7 — NEXT SESSION\n")
+    slug = repo / ".planning" / "ticket"
+    slug.mkdir(parents=True)
+    (slug / "task_plan.md").write_text("# Ticket plan\n")
+    digest = hashlib.sha256((slug / "task_plan.md").read_bytes()).hexdigest()
+    state = handoff_check.Attestation("./.planning/ticket/task_plan.md", digest)
+
+    assert handoff_check.check(repo, "State only.\n", show=lambda _: state) == []
+    (slug / "task_plan.md").write_text("# Ticket plan, edited\n")
+    findings = handoff_check.check(repo, "State only.\n", show=lambda _: state)
+    assert [item.citation for item in findings] == ["./.planning/ticket/task_plan.md"]
+
+
+@pytest.mark.parametrize(
+    ("state", "fragment"),
+    [
+        (handoff_check.Attestation(None, None), "has no attestation"),
+        (
+            handoff_check.Attestation(None, None, "plugin absent"),
+            "cannot read the planning-with-files attestation: plugin absent",
+        ),
+    ],
+)
+def test_missing_or_unreadable_attestation_is_unattested(
+    tmp_path: Path, state: handoff_check.Attestation, fragment: str
+) -> None:
     repo = _repo(tmp_path)
     (repo / "task_plan.md").write_text("# Plan\n\n## Phase 7 — NEXT SESSION\n")
 
-    findings = handoff_check.check(repo, "State only.\n")
+    findings = handoff_check.check(repo, "State only.\n", show=lambda _: state)
 
     assert [item.verdict for item in findings] == [
         handoff_check.Verdict.UNATTESTED_PLAN
     ]
-    assert "no readable attestation" in findings[0].detail
+    assert fragment in findings[0].detail
+
+
+def test_parse_show_reads_the_plugin_output() -> None:
+    digest = "a" * 64
+    shown = (
+        f"Plan: ./task_plan.md\nAttestation: ./.plan-attestation\nSHA-256: {digest}\n"
+    )
+    assert handoff_check.parse_show(shown) == handoff_check.Attestation(
+        "./task_plan.md", digest
+    )
+    missing = "[plan-attest] No attestation set for ./task_plan.md.\n"
+    assert handoff_check.parse_show(missing) == handoff_check.Attestation(None, None)
 
 
 def test_fresh_clone_without_plan_has_no_active_plan_finding(tmp_path: Path) -> None:
