@@ -1536,6 +1536,12 @@ def _add_session_subcommands(
         action="store_true",
         help="Skip the GitHub lookup for a fast, network-free snapshot",
     )
+    session_state_parser.add_argument(
+        "--since",
+        default=None,
+        help="List PRs merged at or after this ISO-8601 time "
+        "(default: newest handoff's mtime, else 24h ago)",
+    )
     plan_attest_parser = subparsers.add_parser(
         "plan-attest",
         help="Attest the planning-with-files plan; the bare form WRITES, --show reads",
@@ -2814,7 +2820,13 @@ def _build_command_handlers(
         "docker": lambda: handle_docker(args, project_root, config=config),
         "pr": lambda: handle_pr(args, project_root),
         "session-state": lambda: sys.exit(
-            session_state_main(["--no-pr"] if args.no_pr else [], project_root)
+            session_state_main(
+                [
+                    *(["--no-pr"] if args.no_pr else []),
+                    *(["--since", args.since] if args.since is not None else []),
+                ],
+                project_root,
+            )
         ),
         "plan-attest": lambda: sys.exit(plan_attest_main(args.args)),
         "handoff-check": lambda: sys.exit(

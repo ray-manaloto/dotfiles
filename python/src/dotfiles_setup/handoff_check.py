@@ -2,8 +2,14 @@
 """Validate the mechanically checkable citations in a session handoff.
 
 This is intentionally a small, read-only linter.  It checks repo-relative
-``file:line`` citations and ``mise run <task>`` names; it does not attempt to
-prove that a handoff is complete or reconcile claims across handoff versions.
+``file:line`` citations, ``mise run <task>`` names, and PR/issue state claims
+("#1449 auto-merge armed") in the handoff and the active section of
+``task_plan.md`` against live GitHub facts.  It does not attempt to prove that
+a handoff is complete or reconcile claims across handoff versions.
+
+A claim is judged when the check runs, not when it was written: a handoff that
+was true at write time fails at resume once GitHub moves.  That is the drift it
+exists to catch.  A GitHub lookup that fails is a finding, never a pass.
 """
 
 from __future__ import annotations
@@ -12,11 +18,13 @@ import hashlib
 import re
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from dotfiles_setup import pr_facts
 from dotfiles_setup.plan_attest import PluginNotInstalledError, resolve_attest_script
 
 if TYPE_CHECKING:
@@ -41,6 +49,12 @@ _TASK_CARRIER_HEADING = re.compile(
 )
 _TASK_CARRIER_LINE = re.compile(r"(?im)^[ \t]*(?:next:|next[ -]task[ \t]*:)[ \t]*.*$")
 _ACTIVE_HEADING = re.compile(r"(?im)^##\s+(?P<heading>[^\n]*NEXT SESSION[^\n]*)\s*$")
+_LEVEL_TWO_HEADING = re.compile(r"(?m)^##\s")
+_FENCE_MARKER = re.compile(r"^\s*(?P<fence>`{3,}|~{3,})")
+_INLINE_CODE = re.compile(r"(`+).*?\1")
+_STRIKETHROUGH = re.compile(r"~~.*?~~")
+_CLAIM_REFERENCE = re.compile(r"(?<![\w#/])#(?P<n>\d+)\b")
+CLAIMS_DEADLINE_S = 300.0
 # planning-with-files' own attestation replaced the retired tracked pointer
 # (Ray, 2026-09-28c). WHICH plan and attestation file are live is the plugin's
 # decision (--target, $PLAN_ID, .planning/.active_plan, newest slug, then the
@@ -114,6 +128,8 @@ class Verdict(Enum):
     UNCLOSED_FENCE = "unclosed_fence"
     MISSING_ACTIVE_PLAN = "missing_active_plan"
     UNATTESTED_PLAN = "unattested_plan"
+    PR_CLAIM_MISMATCH = "pr_claim_mismatch"
+    PR_CLAIM_UNVERIFIABLE = "pr_claim_unverifiable"
 
 
 @dataclass(frozen=True)
@@ -229,13 +245,13 @@ def _task_findings(repo_root: Path, text: str) -> list[Finding]:
     ]
 
 
-def _task_carrier_findings(text: str) -> list[Finding]:
-    """Reject the first handoff line that attempts to carry the next task."""
+def _visible_lines(text: str) -> tuple[list[str], str | None]:
+    """Blank fenced code blocks; return the lines and any unclosed fence token."""
     visible: list[str] = []
     fence: tuple[str, int] | None = None
     fence_citation = ""
     for line in text.splitlines(keepends=True):
-        marker = re.match(r"^\s*(?P<fence>`{3,}|~{3,})", line)
+        marker = _FENCE_MARKER.match(line)
         if marker is not None:
             token = marker.group("fence")
             if fence is None:
@@ -248,6 +264,12 @@ def _task_carrier_findings(text: str) -> list[Finding]:
             visible.append(line)
         else:
             visible.append("\n" if line.endswith("\n") else "")
+    return visible, (fence_citation if fence is not None else None)
+
+
+def _task_carrier_findings(text: str) -> list[Finding]:
+    """Reject the first handoff line that attempts to carry the next task."""
+    visible, unclosed_fence = _visible_lines(text)
     check_text = "".join(visible)
     matches = [
         *_TASK_CARRIER_HEADING.finditer(check_text),
@@ -264,11 +286,11 @@ def _task_carrier_findings(text: str) -> list[Finding]:
                 "evidence",
             )
         )
-    if fence is not None:
+    if unclosed_fence is not None:
         findings.append(
             Finding(
                 Verdict.UNCLOSED_FENCE,
-                fence_citation,
+                unclosed_fence,
                 "fenced code block reaches end of file without a closing fence",
             )
         )
@@ -279,6 +301,138 @@ def active_phase(text: str) -> str | None:
     """Return the last level-two heading containing ``NEXT SESSION``."""
     matches = list(_ACTIVE_HEADING.finditer(text))
     return matches[-1].group("heading").strip() if matches else None
+
+
+def _active_section_span(plan_text: str) -> tuple[int, str] | None:
+    """Return (lines before the section, section text) for the active phase."""
+    matches = list(_ACTIVE_HEADING.finditer(plan_text))
+    if not matches:
+        return None
+    start = matches[-1].start()
+    heading_end = plan_text.find("\n", start)
+    body_start = len(plan_text) if heading_end == -1 else heading_end + 1
+    following = _LEVEL_TWO_HEADING.search(plan_text, body_start)
+    end = len(plan_text) if following is None else following.start()
+    return plan_text.count("\n", 0, start), plan_text[start:end]
+
+
+def active_section(plan_text: str) -> str | None:
+    """Return the active phase from its heading to the next ``##`` heading or EOF.
+
+    ``###`` headings stay inside the section; None when no heading is active.
+    """
+    span = _active_section_span(plan_text)
+    return None if span is None else span[1]
+
+
+class ClaimWord(Enum):
+    """The PR/issue state words a handoff or plan may assert."""
+
+    OPEN = "OPEN"
+    MERGED = "MERGED"
+    CLOSED = "CLOSED"
+    RED = "RED"
+    GREEN = "green"
+    LANDED = "landed"
+    AUTO_MERGE_ARMED = "auto-merge armed"
+    AUTO_MERGE = "auto-merge"
+
+
+# Applied in order; each hit is masked before the next pattern runs, so
+# "auto-merge armed" never also yields a bare "auto-merge".
+_CLAIM_PATTERNS: tuple[tuple[re.Pattern[str], ClaimWord], ...] = (
+    (
+        re.compile(r"(?i)\b(?:auto-merge\s+armed|armed\s+auto-merge)\b"),
+        ClaimWord.AUTO_MERGE_ARMED,
+    ),
+    (re.compile(r"(?i)\bauto-merge\b(?![\w-])"), ClaimWord.AUTO_MERGE),
+    (re.compile(r"\bOPEN\b"), ClaimWord.OPEN),
+    (re.compile(r"\bMERGED\b"), ClaimWord.MERGED),
+    (re.compile(r"\bCLOSED\b"), ClaimWord.CLOSED),
+    (re.compile(r"\bRED\b"), ClaimWord.RED),
+    (re.compile(r"(?i)\blanded\b"), ClaimWord.LANDED),
+    (re.compile(r"(?i)\bgreen\b"), ClaimWord.GREEN),
+)
+
+
+@dataclass(frozen=True)
+class Claim:
+    """One state word asserted about one number at one source line."""
+
+    number: int
+    word: ClaimWord
+    source: str
+    line: int
+
+
+def _blank(match: re.Match[str]) -> str:
+    """Replace a span with spaces so later patterns cannot see it."""
+    return " " * len(match.group(0))
+
+
+def _window_words(window: str) -> list[ClaimWord]:
+    """Return each distinct claim word in one reference window."""
+    words: list[ClaimWord] = []
+    for pattern, word in _CLAIM_PATTERNS:
+        window, hits = pattern.subn(_blank, window)
+        if hits and word not in words:
+            words.append(word)
+    return words
+
+
+def extract_claims(text: str, *, source: str, line_offset: int = 0) -> list[Claim]:
+    """Extract state claims from visible text: no fences, code spans, or strikethrough.
+
+    A reference is ``#<digits>`` not preceded by a word character, ``#`` or
+    ``/`` (so ``KB#814`` and ``owner/repo#12`` are not references).  Its window
+    is the rest of its line up to the next reference on that line.
+    """
+    visible, _unclosed = _visible_lines(text)
+    claims: list[Claim] = []
+    for index, raw in enumerate(visible):
+        line = _STRIKETHROUGH.sub(_blank, _INLINE_CODE.sub(_blank, raw.rstrip("\n")))
+        references = list(_CLAIM_REFERENCE.finditer(line))
+        for position, reference in enumerate(references):
+            window_end = (
+                references[position + 1].start()
+                if position + 1 < len(references)
+                else len(line)
+            )
+            claims.extend(
+                Claim(int(reference.group("n")), word, source, line_offset + index + 1)
+                for word in _window_words(line[reference.end() : window_end])
+            )
+    return claims
+
+
+def claim_holds(word: ClaimWord, facts: pr_facts.PrFacts) -> bool | None:
+    """Judge one claim against live facts; None when the word does not apply.
+
+    ``landed`` checks only that the PR is MERGED: the post-merge ``mise run
+    land`` validation is not recorded on GitHub, so this is a necessary
+    condition, not proof of a land.  ``autoMergeRequest`` persists after a
+    merge, so both auto-merge words also require the PR to be OPEN, and the
+    bare word (which predicts a merge) also requires no failing check.
+    """
+    if facts.kind is pr_facts.ItemKind.ISSUE:
+        if word in {ClaimWord.OPEN, ClaimWord.CLOSED}:
+            return facts.state == word.value
+        return None
+    checks = facts.checks
+    armed = facts.state == "OPEN" and facts.auto_merge
+    verdicts = {
+        ClaimWord.OPEN: facts.state == "OPEN",
+        ClaimWord.MERGED: facts.state == "MERGED",
+        ClaimWord.CLOSED: facts.state == "CLOSED",
+        ClaimWord.LANDED: facts.state == "MERGED",
+        ClaimWord.AUTO_MERGE_ARMED: armed,
+        ClaimWord.AUTO_MERGE: armed and checks.failing == 0,
+        ClaimWord.RED: checks.failing >= 1,
+        ClaimWord.GREEN: (
+            checks.total >= 1 and checks.failing == 0 and checks.pending == 0
+        ),
+    }
+    return verdicts[word]
 
 
 def _plan_findings(
@@ -328,25 +482,140 @@ def _plan_findings(
     ]
 
 
-def check(
+def _describe(facts: pr_facts.PrFacts) -> str:
+    """Render the live facts a mismatch is judged against."""
+    if facts.kind is pr_facts.ItemKind.ISSUE:
+        return f"GitHub reports issue #{facts.number} state={facts.state}"
+    checks = facts.checks
+    return (
+        f"GitHub reports PR #{facts.number} state={facts.state} "
+        f"auto-merge={'yes' if facts.auto_merge else 'no'} checks "
+        f"fail:{checks.failing} pending:{checks.pending} pass:{checks.passed}"
+    )
+
+
+def _plan_claims(repo_root: Path) -> list[Claim]:
+    """Claims in the active section of task_plan.md, with file line numbers."""
+    plan_path = repo_root / "task_plan.md"
+    if not plan_path.is_file():
+        return []
+    span = _active_section_span(plan_path.read_text(errors="replace"))
+    if span is None:
+        return []
+    line_offset, section = span
+    return extract_claims(section, source="task_plan.md", line_offset=line_offset)
+
+
+def _claim_findings(
+    repo_root: Path,
+    claims: list[Claim],
+    facts: Callable[[Path, int], pr_facts.PrFacts | str],
+    deadline_s: float,
+) -> tuple[list[Finding], int]:
+    """Judge every claim, fetching each number once within one total deadline."""
+    per_number: dict[int, int] = {}
+    for claim in claims:
+        per_number[claim.number] = per_number.get(claim.number, 0) + 1
+
+    started = time.monotonic()
+    answers: dict[int, pr_facts.PrFacts | str] = {}
+    findings: list[Finding] = []
+    checked = 0
+    for claim in claims:
+        if claim.number not in answers:
+            if time.monotonic() - started >= deadline_s:
+                answers[claim.number] = (
+                    f"claim-check deadline ({deadline_s:g} s) expired before lookup"
+                )
+                findings.append(
+                    Finding(
+                        Verdict.PR_CLAIM_UNVERIFIABLE,
+                        f"#{claim.number}",
+                        str(answers[claim.number]),
+                    )
+                )
+                continue
+            answers[claim.number] = facts(repo_root, claim.number)
+            answer = answers[claim.number]
+            if isinstance(answer, str):
+                findings.append(
+                    Finding(
+                        Verdict.PR_CLAIM_UNVERIFIABLE,
+                        f"#{claim.number}",
+                        f"GitHub lookup failed ({answer}) — "
+                        f"{per_number[claim.number]} claim(s) unchecked; "
+                        "a failed lookup is never a pass",
+                    )
+                )
+        answer = answers[claim.number]
+        if isinstance(answer, str):
+            continue
+        holds = claim_holds(claim.word, answer)
+        if holds is None:
+            continue
+        checked += 1
+        if not holds:
+            findings.append(
+                Finding(
+                    Verdict.PR_CLAIM_MISMATCH,
+                    f"#{claim.number} {claim.word.value} ({claim.source}:{claim.line})",
+                    _describe(answer),
+                )
+            )
+    return findings, checked
+
+
+def check_with_claims(
     repo_root: Path,
     text: str,
     *,
     show: Callable[[Path], Attestation] = show_attestation,
-) -> list[Finding]:
-    """Return only non-OK citation, task-carrier, and active-plan findings."""
-    return [
+    facts: Callable[[Path, int], pr_facts.PrFacts | str] | None = None,
+    source: str = "handoff",
+) -> tuple[list[Finding], int]:
+    """Return every non-OK finding plus the number of PR claims judged.
+
+    ``CLAIMS_DEADLINE_S`` bounds all claim lookups together and is read at call
+    time; each single ``gh`` call is still bounded by ``pr_facts.GH_TIMEOUT``.
+    """
+    findings = [
         *_task_carrier_findings(text),
         *_plan_findings(repo_root, show),
         *_path_findings(repo_root, text),
         *_task_findings(repo_root, text),
     ]
+    claims = [
+        *extract_claims(text, source=source),
+        *_plan_claims(repo_root),
+    ]
+    claim_findings, checked = _claim_findings(
+        repo_root,
+        claims,
+        pr_facts.fetch_facts if facts is None else facts,
+        CLAIMS_DEADLINE_S,
+    )
+    return [*findings, *claim_findings], checked
 
 
-def render(findings: list[Finding], *, source: str) -> str:
+def check(
+    repo_root: Path,
+    text: str,
+    *,
+    show: Callable[[Path], Attestation] = show_attestation,
+    facts: Callable[[Path, int], pr_facts.PrFacts | str] | None = None,
+    source: str = "handoff",
+) -> list[Finding]:
+    """Return only non-OK citation, task-carrier, active-plan, and claim findings."""
+    return check_with_claims(repo_root, text, show=show, facts=facts, source=source)[0]
+
+
+def render(findings: list[Finding], *, source: str, claims_checked: int = 0) -> str:
     """Render the findings list, including an explicit clean result."""
     if not findings:
-        return f"handoff-check: OK — {source} citations resolve"
+        return (
+            f"handoff-check: OK — {source} citations resolve; "
+            f"{claims_checked} PR claim(s) match GitHub"
+        )
     lines = [f"handoff-check: {len(findings)} finding(s) in {source}"]
     lines.extend(
         f"- {finding.verdict.value}: `{finding.citation}` — {finding.detail}"
@@ -379,11 +648,13 @@ def main(args: list[str], repo_root: Path) -> int:
         sys.stderr.write(f"handoff-check: handoff not found: {source}\n")
         return 1
     try:
-        findings = check(repo_root, handoff.read_text(errors="replace"))
+        findings, claims_checked = check_with_claims(
+            repo_root, handoff.read_text(errors="replace"), source=source
+        )
     except (RuntimeError, OSError) as exc:
         sys.stderr.write(f"handoff-check: {exc}\n")
         return 1
-    rendered = render(findings, source=source)
+    rendered = render(findings, source=source, claims_checked=claims_checked)
     if not (repo_root / "task_plan.md").is_file():
         rendered += (
             "\nhandoff-check: info — task_plan.md absent (fresh clone); "

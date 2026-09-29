@@ -30,18 +30,16 @@ If that set has a gap, fix it before emitting the resume prompt.
 
 ## 1. Snapshot the working state
 
-Gather, don't guess:
+Gather, don't guess — one generated snapshot, never hand-copied PR state:
 
 ```bash
-git status --short
-git branch --show-current
-git log --oneline -8
-gh pr list --head "$(git branch --show-current)" --json number,title,state 2>/dev/null
+mise run session-state
 ```
 
-Note: current branch, staged/unstaged/untracked files, open PR + its CI state
-(`gh pr checks <n> --json name,state`), and any in-flight process or owed
-evidence from the prior `.agent/plans/session-*.md`.
+It prints branch, tree, recent commits, the branch PR, every open PR (state,
+auto-merge, checks) and the PRs merged since the previous handoff, in the same
+claim words `handoff-check` verifies against GitHub (S29-H). Also note any
+in-flight process or owed evidence from the prior `.agent/plans/session-*.md`.
 
 Also inventory **session runtime state**: in-flight background tasks/agents
 and any scheduled wakeups or crons created this session. Stop what should not
@@ -217,8 +215,9 @@ file rather than duplicating; delete memories proven wrong.
 Write `.agent/plans/session-<YYYY-MM-DD>[-letter].md`
 (`.claude/rules/agent-artifact-conventions.md` — handoffs are plans). The
 handoff must be self-sufficient for recovery evidence while leaving task
-authority in `task_plan.md`. Include **State at handoff** (branch/PR/merge
-state, gate results), **what shipped**, the plan path (`task_plan.md`),
+authority in `task_plan.md`. Include **State at handoff** — paste the
+`mise run session-state` output verbatim, generated after the last merge or
+ship, then add gate results; never hand-write a PR's state — plus **what shipped**, the plan path (`task_plan.md`),
 evidence/preload pointers, owed non-task
 obligations, open decisions, and **gotchas**. Do not copy a plan phase,
 directive, or task description. If a prior handoff exists for today, append a
@@ -294,8 +293,14 @@ step starts; a later write — a ship repair loop included — restarts it.
    ```
 
    It validates cited paths/lines and mise tasks, forbids a second task
-   carrier, requires an active plan, and fails `unattested_plan` when
-   `task_plan.md` changed after its attestation. Also confirm gate results
+   carrier, requires an active plan, fails `unattested_plan` when
+   `task_plan.md` changed after its attestation, and compares every
+   `#NNNN` state claim (OPEN / MERGED / CLOSED / auto-merge / landed / RED /
+   green) in the handoff and the plan's active section with GitHub —
+   `pr_claim_mismatch`, or `pr_claim_unverifiable` when the lookup fails
+   (never a pass). Claims are judged at CHECK time, so the check needs
+   network, and a handoff true when written fails later once GitHub moves —
+   that is the drift detection, not a false alarm. Also confirm gate results
    against recorded exit codes, not memory.
 
 3. The VERY LAST step (Ray, 2026-09-29) — a fresh headless session resumes from
@@ -306,6 +311,15 @@ step starts; a later write — a ship repair loop included — restarts it.
    cannot: an unpushed branch, a claim the repo contradicts).
 
 On any finding, fix it and restart at step 1.
+
+**A round-trip DISAGREEMENT is a missing machine check, not a text edit**
+(Ray, 2026-09-29b-late). Research its root cause and prevention (native
+feature first), build the deterministic check that fails on it, arm it on the
+real stale text (FAIL before the fix, PASS after), file a ticket if the check
+cannot ship in this session — and only then correct the text. The round-trip
+stays the last-line detector, never the gate. Fixtures: 2026-09-29 (#1449 read
+"auto-merge" while RED) and 2026-09-29b (#1454 read "auto-merge armed" after it
+merged; hand-fixed, then re-run — the violation this rule exists for).
 
 ## 6. Emit the resume prompt — exact output
 

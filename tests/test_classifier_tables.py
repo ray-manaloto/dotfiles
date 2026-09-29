@@ -864,6 +864,7 @@ def test_classifier_shaped_finds_the_three_real_classifiers() -> None:
         "branch_guard.py:classify",
         "codex_verdict.py:edge_for",
         "gate_result.py:_status_for",
+        "pr_facts.py:classify_check",
     }
     session_review_classifiers = {
         "session_ledger.py:status",

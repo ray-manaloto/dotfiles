@@ -67,8 +67,11 @@ mise run handoff-check
 With a specifically named handoff, pass the same path after `--`.
 `handoff-check` verifies paths, line ranges, mise task names, absence of a
 second task carrier, the active-plan shape, and that `task_plan.md` still matches
-its planning-with-files attestation (`unattested_plan` otherwise); it
-does not prove the handoff covered every non-task obligation.
+its planning-with-files attestation (`unattested_plan` otherwise), and that
+every `#NNNN` state claim in the handoff and the plan's active section matches
+GitHub (`pr_claim_mismatch` / `pr_claim_unverifiable`). A claim finding is a
+DISAGREEMENT to report first. It does not prove the handoff covered every
+non-task obligation.
 
 ### 3. Reconcile and report disagreements first
 
