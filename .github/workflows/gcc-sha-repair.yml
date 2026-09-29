@@ -79,44 +79,38 @@ jobs:
         env:
           APP_TOKEN: ${{ steps.app-token.outputs.token }}
           APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+        # Retry by RECOMPUTING, never rebasing (#1435 cold-review F7; three
+        # /code-review rounds on d92c1318/bef133bc): image-lock-pr pushes to the
+        # same Renovate branch after every rebuild, and Renovate may rewrite the
+        # branch. A plain push that lost the race was never retried (the lock
+        # commit does not touch the Dockerfile, so nothing re-triggers this job
+        # — seen live on #1449, run 36585903632 attempt 2), and rebasing a
+        # depth-1 checkout either replayed stale commits or gave up on a
+        # rewrite whose Dockerfile was unchanged. So on rejection: fetch the
+        # real tip, reset to it, and re-run the repair AGAINST IT — correct for
+        # a fast-forward race, a rewrite, and repeated retries alike.
         run: |
           set -euo pipefail
-          if git diff --quiet -- .devcontainer/Dockerfile; then
-            echo "gcc-latest sha already correct — nothing to repair."
-            exit 0
-          fi
           git config user.name "${APP_SLUG}[bot]"
           git config user.email "${APP_SLUG}[bot]@users.noreply.github.com"
-          git add .devcontainer/Dockerfile
-          git commit -m "chore(image): repair GCC_LATEST_DEB_SHA256 for bumped gcc-latest .deb (#249)"
-          # Rebase-and-retry (#1435 cold-review F7): image-lock-pr pushes to the
-          # same Renovate branch after every rebuild. A plain push that loses
-          # that race is rejected ("fetch first") and NEVER retried — the lock
-          # commit does not touch the Dockerfile, so this job is not
-          # re-triggered and the sha stays stale (seen live on #1449, run
-          # 36585903632 attempt 2). The two jobs touch disjoint files, so a
-          # rebase onto the other commit is conflict-free.
-          # Only a FAST-FORWARD race is rebased: if the branch was rewritten
-          # (Renovate rebuild / force-push) the checked-out ${GITHUB_SHA} is no
-          # longer its ancestor, and a rebase of this shallow clone would
-          # replay that stale base too (/code-review of d92c1318) — the rewrite
-          # changed the Dockerfile, so its own push run repairs it; exit 0.
-          # `rebase --onto FETCH_HEAD ${GITHUB_SHA}` replays ONLY the repair.
           remote="https://x-access-token:${APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           for attempt in 1 2 3; do
+            if git diff --quiet -- .devcontainer/Dockerfile; then
+              echo "gcc-latest sha already correct on this tip — nothing to repair."
+              exit 0
+            fi
+            git add .devcontainer/Dockerfile
+            git commit -m "chore(image): repair GCC_LATEST_DEB_SHA256 for bumped gcc-latest .deb (#249)"
             if git push "$remote" "HEAD:${GITHUB_REF_NAME}"; then
               exit 0
             fi
             if [ "$attempt" -eq 3 ]; then
               break
             fi
-            git fetch --deepen=50 "$remote" "${GITHUB_REF_NAME}"
-            if ! git merge-base --is-ancestor "${GITHUB_SHA}" FETCH_HEAD; then
-              echo "branch was rewritten under this job; its own push run repairs it"
-              exit 0
-            fi
-            echo "push attempt ${attempt} rejected; rebasing the repair onto the tip"
-            git rebase --onto FETCH_HEAD "${GITHUB_SHA}"
+            echo "push attempt ${attempt} rejected; recomputing the repair on the current tip"
+            git fetch --depth 1 "$remote" "${GITHUB_REF_NAME}"
+            git reset --hard FETCH_HEAD
+            uv run --project python dotfiles-setup gcc-sha
           done
           echo "push rejected ${attempt} times" >&2
           exit 1
