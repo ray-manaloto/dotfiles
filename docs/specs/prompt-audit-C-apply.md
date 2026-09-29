@@ -108,4 +108,4 @@ post-merge `/mattpocock-skills:code-review` (`mattpocock-review-{standards,spec}
 no dated story or unsourced "measured" claim in `codex-sol-implementer`; no volatile token figure; a version condition
 on the operator's `--full-auto` fact; descriptions read "a standing <role> lane" (C5's point, without implying a
 default between sol and astra); the redaction anecdote dropped. Open: the six-copy duplication of the shared safety
-bullets (Standards 4) — a single-source refactor, planned separately (task_plan.md S28b-4, R5 ruling).
+bullets (Standards 4) — a single-source refactor, planned separately (R5 ruling, `docs/research/kb/reports/agents/session-audit-repeat-offenders-2026-09-28.md`).

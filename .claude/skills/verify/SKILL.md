@@ -35,6 +35,8 @@ probe writes to a file and reads the recorded `rc` — never a piped tail.
 
 ## Recipe addition (2026-09-28c, handoff → resume round-trip)
 
+Set `S` to your scratchpad directory and `LOG="$S/resume.log"` first.
+
 | surface | drive it | expect |
 |---|---|---|
 | fresh session-resume | after `/session-handoff`: `claude -p "/session-resume" --allowedTools "Read,Glob,Grep,Bash(mise run session-state),Bash(mise run handoff-check *),Bash(mise run handoff-check),Bash(git log *),Bash(gh issue list *)" > "$LOG" 2>&1; echo "rc=$?" >> "$LOG"` — never `--bare` (it skips skills; `$CC/headless.md:37`); a `/skill` in a `-p` prompt expands (`:312`) · control arm: `cp .plan-attestation "$S/att.bak"`, append `junk` to `.plan-attestation`, re-run, then `cp "$S/att.bak" .plan-attestation` (never `git checkout --`; the file is gitignored) | clean: `rc=0` and no line starting `DISAGREEMENT`; control: a `DISAGREEMENT` line naming `unattested_plan`; after the restore `mise run handoff-check` is rc=0 and `cmp` shows the attestation byte-identical |

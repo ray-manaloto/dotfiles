@@ -112,7 +112,8 @@ mandatory. Never `Write` over an existing report — a second same-day session o
 2026-09-28.
 
 Method briefs: `### Brief M`..`### Brief P` in `docs/research/kb/reports/agents/session-2026-09-23d-agent-briefs.md`
-(that file's Briefs Q, R and S1-S4 are UNRELATED — ignore them), and the process-compliance, repeat-offenders and
+(that file's Briefs Q, R, S1-S4 and T serve other purposes — Q and R unrelated work, S1-S4 and T a
+§1c delta re-run — so do not use them for these seven), and the process-compliance, repeat-offenders and
 retrieval-misses briefs in `docs/research/kb/reports/agents/session-handoff-briefs-q-s-2026-09-28.md`. Name a brief
 by its review (the table's first column), never by letter. Reuse their METHOD only: substitute this session's id
 and transcript path, its commit range (see the bugs row), today's date plus letter in the report path, and this
@@ -124,7 +125,7 @@ report ends with `## GitHub repos touched`.
 |---|---|---|
 | dismissed errors | every non-zero rc, error, WARN, denied call, DRIFT line and repeated mistake: fixed, recorded in `task_plan.md`, or dismissed? | Opus `general-purpose` |
 | missing requests | every user message and AskUserQuestion answer: does it land in `task_plan.md`, an issue, a commit or memory? | Opus `general-purpose` |
-| bugs | cold review, by ref, of every commit this session authored: each squash SHA that landed on `main` this session plus the handoff branch's diff against its merge-base with `main`; skip a squash SHA only when the process-compliance review shows it already had the cross-family lens on that exact SHA | a model family different from the diff's AUTHOR (not the orchestrator): an Anthropic-authored diff gets the read-only codex review lens, a codex-authored diff gets an Opus `cold-reviewer`; the exact command lives in `.claude/skills/codex-sdlc-team/SKILL.md` § Review tiers. |
+| bugs | cold review, by ref, of every commit this session authored: each squash SHA that landed on `main` this session plus the handoff branch's diff against its merge-base with `main` | per SHA, a model family different from THAT diff's author (not the orchestrator): an Anthropic-authored diff gets the read-only codex review lens, a codex-authored diff gets an Opus `cold-reviewer`; a mixed range gets both; the exact command lives in `.claude/skills/codex-sdlc-team/SKILL.md` § Review tiers. |
 | vagueness | every doc, plan, spec, rule or agent file the session changed, read as a fresh session or a codex lane would: stale, ambiguous, contradictory, unowned | Opus `general-purpose` |
 | process compliance | for every PR shipped or landed this session: did it get each step its diff class requires — gates with recorded `rc=`, `/code-review`, the cross-family lens (`codex-sdlc-team` § Review tiers), `/mattpocock-skills:code-review` when spec'd, and the repo `verify` skill when it touched session tooling, the guard or the devcontainer? A step skipped is a finding even if the PR is green | Opus `general-purpose` |
 | repeat offenders | every mistake that happened twice, or once while a memory, rule or skill already warned against it: memory did not prevent it, so the disposition is a proposed MACHINE check (guard rule, test, gate — file plus rule/test text; the lane does not build it), a PLAN row for one, or a Ray ruling that it stays prose — never "noted in memory" again | Opus `general-purpose` |

@@ -2,6 +2,9 @@
 
 Not the Briefs Q, R or S1-S4 of `session-2026-09-23d-agent-briefs.md` — address these by review name.
 
+_Amended 2026-09-28c (S28b-0, Ray's ruling): headings, report-path letter rule and the common finding contract were
+added after the 2026-09-28b lanes ran; `git show de214a64:<this path>` is the text those lanes received._
+
 Companion to "Briefs M-P" (`session-2026-09-23d-agent-briefs.md`). Each lane is read-only except its own report file,
 persisted incrementally to `docs/research/kb/reports/agents/session-audit-<kind>-<date>[letter].md` (this session's
 handoff letter; never Write over an existing report). Sources for all three: the session transcript (native

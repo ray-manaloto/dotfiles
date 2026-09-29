@@ -1,6 +1,6 @@
 # Review spec: why `CLANG_P2996_REF` is not the latest p2996 commit, and how to keep it current
 
-**Status: EXECUTED 2026-09-28** — report `docs/research/kb/reports/agents/sdlc-team-p2996-ref-currency-2026-09-28.md`; Ray's rulings and the fix PR live in `task_plan.md` (S28b-1). Do not re-dispatch.
+**Status: EXECUTED 2026-09-28** — report `docs/research/kb/reports/agents/sdlc-team-p2996-ref-currency-2026-09-28.md`; Ray's rulings: #1434 and #1435 (fix PR tracked there). Do not re-dispatch.
 
 Mode: **review** (read-only; no file edits except each specialist's own report, which the task captures). Requested
 by Ray 2026-09-28 after `land` logged `OK: clang-p2996 ref 7220baffd57ea5b0f8cf59bee494dd5b7cc2b748 matches pinned
@@ -32,7 +32,7 @@ proves it (both arms, `.claude/rules/probes-need-a-control-arm.md`).
 
 - Research native tool behavior before proposing custom code (Renovate `git-refs` + `currentDigest`, grouping,
   `automerge`, `minimumReleaseAge`, schedules; Dependabot has no git-refs support — confirm or refute).
-- ~~A p2996 bump triggers a base-image rebuild (~2.5 h cold in CI)~~ — refuted by the review: it invalidates the compiler and final-image tiers only; weigh cadence against that cost.
+- ~~A p2996 bump triggers a base-image rebuild (~2.5 h cold in CI)~~ — refuted by the review: it invalidates the compiler and final-image tiers only (~80–120 min cold, `sdlc-team-p2996-ref-currency-2026-09-28.md:141`); weigh cadence against that cost.
 - Read-only: no commits, no `gh pr` mutations, no Renovate triggers.
 
 ## 5. Verification (evidence the review must print)

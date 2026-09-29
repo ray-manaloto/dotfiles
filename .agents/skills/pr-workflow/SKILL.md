@@ -61,8 +61,8 @@ mise run land -- <PR#>             # (after it auto-merges) confirm merged → m
    March-2026 422 enable regression. ship prints the `mise run land`
    follow-up for post-merge Mac validation.
    Its success line is `ship: OK — PR #N open, local gates green, AUTO-MERGE enabled.` (`pr.py:612`); land's is
-   `land: OK — PR #N merged, main green, Mac synced` (`pr.py:910`). Capture N with
-   `grep -oE 'PR #[0-9]+' <log> | tail -1`.
+   `land: OK — PR #N merged, main green, Mac synced` (`pr.py:910`). Capture N from the success line only:
+   `sed -n 's/^ship: OK — PR #\([0-9]*\) .*/\1/p' <log>` (a bare `PR #[0-9]+` grep also matches FAIL lines).
 
 ## What automerge does
 
