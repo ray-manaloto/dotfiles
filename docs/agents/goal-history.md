@@ -1854,3 +1854,39 @@ flowchart LR
 flowchart LR
     R["2026-09-24/25 remainder 1-31 + S27 + S28 (ACTIVE)"] --> P11["Phase 11"] --> P10["Phase 10"]
 ```
+
+## 2026-09-28 — second session (cc5eebbf): six PRs landed; both devcontainers verified; post-change review/verify and p2996 currency ruled
+
+- **Iteration ID:** `dotfiles-goal-20260928-042`
+- **Prior goal digest:** `sha256:a131b1eb7866abfcf13eaf15dc4f6db13524e0ed1e40791dd47793c70bf9f25b`
+- **Current goal digest:** `sha256:9ff159df37d21ff1a8e412fbe58729a70e4beda82ddb5f586daa6f18c933efd6`
+- **Changed requirement:**
+  - A next-session order (S28b-0..5) now precedes the remainder: the §1c FIX-NOW list, the clang-p2996 fix, the
+    ship-gate grilling, the `CLAUDE_CODE_SHELL=bash` probe, the repeat-offender machine checks.
+  - "Done" now names the post-change steps explicitly (Ray: `/verify` and the mattpocock review had been skipped until
+    he asked); a report-driven diff counts as spec'd (ruled).
+- **Reason:** Ray's AskUserQuestion rulings of 2026-09-28b and the seven-review `/session-handoff` §1c (first live run).
+- **Evidence:**
+  - Landed with `land` rc=0: #1421 (zsh `====` guard), #1423 (promote `already_current`), #1426 (prompt-audit C),
+    #1427 (graphify nudge), #1429 (dual-arch: arm64 + amd64 `verify-local` rc=0 side by side), #1433 (verify recipe,
+    §1c seven reviews, mattpocock fixes).
+  - Filed: #1422 (closed), #1425, #1432, #1434, #1435. Closed: #678, #1172.
+  - Reports: `research-post-change-review-verify-automation-2026-09-28.md` (N-F1 live trial PASS),
+    `sdlc-team-p2996-ref-currency-2026-09-28.md`, and the seven `session-audit-*-2026-09-28(b).md`.
+- **Affected tickets:** advanced #1388 (`====` half), #1434, #1435; closed #678, #1172, #1422.
+- **Disposition:** `ACCEPTED`.
+- **Topology and ownership:** One writer, the Claude architect session. Delegates: `codex-sol-implementer` (item 1),
+  the codex SDLC team (p2996 review, 4 specialists observed), the `research-sweep-run` workflow (8 nodes), Opus
+  cold/audit lanes, codex review lenses, `/code-review` forks. Incident: three §1c lanes overwrote tracked same-day
+  audits (restored from HEAD; S28b-4 R10).
+
+### Current goal
+
+> Next session, in order (Ray, 2026-09-28b): S28b-0 apply the seven 2026-09-28b §1c audits' FIX-NOW list; S28b-1 the clang-p2996 currency fix (#1434/#1435: research first, one SHA literal, own daily Renovate PR); S28b-2 the ship-gate /grilling; S28b-3 the CLAUDE_CODE_SHELL=bash probe with every zsh-dependent assumption enumerated and armed; S28b-4 the repeat-offender machine checks. Then the 2026-09-24/25 remainder from item 3 and S27-1..17/S28-0..4, which gate Phase 11, then Phase 10. Design changes go through /to-spec, /to-tickets and /implement; done means land rc=0 with /code-review, the cross-family lens, the mattpocock pair for spec'd diffs and the repo verify skill for surface changes. Keep task_plan.md as the sole task authority.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    F["S28b-0 FIX-NOW"] --> P["S28b-1 p2996"] --> G["S28b-2 ship-gate grilling"] --> Z["S28b-3 shell probe"] --> M["S28b-4 machine checks"] --> R["remainder + S27/S28"] --> P11["Phase 11"] --> P10["Phase 10"]
+```
