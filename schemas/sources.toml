@@ -2,11 +2,9 @@
 # `dotfiles_setup.schema_vendor` — both the offline drift check (wired into
 # `mise run verify`) and the network-using `schema-vendor refresh` command
 # that `refresh.yml`'s `schema-refresh` job runs in CI. Never hand-edit the
-# `source`/`sha256` fields, nor `version` for a tool with a resolver in
-# `schema_vendor._PIN_RESOLVERS`; run `mise run schema-vendor-refresh` and let
-# it rewrite this file alongside the vendored JSON. `claude-code` has no
-# resolver, so its `version` IS its pin: hand-edit `version` + the `source` tag,
-# then run the refresh, which re-downloads at that tag and rewrites `sha256`.
+# `version`/`source`/`sha256` fields; run
+# `mise run schema-vendor-refresh` and let it rewrite this file alongside
+# the vendored JSON.
 #
 # `pin_source` names where `schema_vendor.current_pin()` reads the tool's
 # CURRENT version from — informational here, the resolver itself is code.
@@ -45,7 +43,7 @@ file = "schemas/codex-config.json"
 version = "0.154.0"
 source = "https://learn.chatgpt.com/docs/config-schema.json"
 pin_source = ".config/mise/conf.d/shared.toml"
-sha256 = "fd50895993b21db082099413a8a26ba2368fefa5c31cba2ed9ac2bac93938065"
+sha256 = "081cb753645b032672749011fe4dbb45e74927ea588abe0f44120c094850bbc1"
 
 [[schema]]
 tool = "claude-code"
