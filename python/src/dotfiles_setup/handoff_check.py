@@ -46,26 +46,30 @@ _ACTIVE_HEADING = re.compile(r"(?im)^##\s+(?P<heading>[^\n]*NEXT SESSION[^\n]*)\
 # decision (--target, $PLAN_ID, .planning/.active_plan, newest slug, then the
 # root plan), so this gate asks the plugin's own `attest-plan.sh --show` rather
 # than re-deriving that order: the answer is then the plan the hook injects.
-_SHOW_PLAN = re.compile(r"(?m)^Plan: (?P<plan>.+)$")
-_SHOW_SHA = re.compile(r"(?m)^SHA-256: (?P<sha>[0-9a-f]{64})$")
+# The root plan is this repo's sole task authority, so a selection that resolves
+# anywhere else is itself a finding. The digest is read from the attestation
+# FILE and whitespace-stripped whole, exactly as the plugin's inject-plan.sh
+# compares it — a matching first line with trailing junk is still tampered.
+_SHOW_PLAN = re.compile(r"(?m)^Plan: (?P<value>.+)$")
+_SHOW_FILE = re.compile(r"(?m)^Attestation: (?P<value>.+)$")
 
 
 @dataclass(frozen=True)
 class Attestation:
-    """What the plugin reports: the resolved plan and its attested digest."""
+    """What the plugin reports: the resolved plan and its attestation file."""
 
     plan: str | None
-    sha256: str | None
+    attestation: str | None
     error: str | None = None
 
 
 def parse_show(output: str) -> Attestation:
     """Parse ``attest-plan.sh --show``; missing fields mean "not attested"."""
     plan = _SHOW_PLAN.search(output)
-    sha = _SHOW_SHA.search(output)
+    attestation = _SHOW_FILE.search(output)
     return Attestation(
-        plan.group("plan").strip() if plan else None,
-        sha.group("sha") if sha else None,
+        plan.group("value").strip() if plan else None,
+        attestation.group("value").strip() if attestation else None,
     )
 
 
@@ -287,18 +291,22 @@ def _plan_findings(
     state = show(repo_root)
     if state.error is not None:
         detail = f"cannot read the planning-with-files attestation: {state.error}"
-    elif state.plan is None or state.sha256 is None:
+    elif state.plan is None or state.attestation is None:
         detail = "the active plan has no attestation"
+    elif (repo_root / state.plan).resolve() != plan_path.resolve():
+        detail = (
+            f"planning-with-files resolves {state.plan}, not the root task_plan.md "
+            "that is the task authority; clear the slug selection"
+        )
     else:
-        attested_plan = repo_root / state.plan
         try:
-            current = hashlib.sha256(attested_plan.read_bytes()).hexdigest()
+            attested = "".join((repo_root / state.attestation).read_text().split())
         except OSError as exc:
-            current = None
-            detail = f"{state.plan} is unreadable: {exc}"
+            attested = None
+            detail = f"{state.attestation} is unreadable: {exc}"
         else:
-            detail = f"{state.plan} changed after its last attestation"
-        if current == state.sha256:
+            detail = "task_plan.md does not match its attestation (edited after it)"
+        if attested == hashlib.sha256(plan_bytes).hexdigest():
             return []
     return [
         Finding(

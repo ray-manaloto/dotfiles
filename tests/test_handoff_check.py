@@ -127,15 +127,20 @@ def test_plan_without_next_session_heading_is_missing_active_plan(
     ]
 
 
-def _attested(repo: Path) -> handoff_check.Attestation:
-    """What the plugin's --show would report right after `plan-attest`."""
+def _attested(repo: Path, extra: str = "") -> handoff_check.Attestation:
+    """Write an attestation the way `plan-attest` does; return its --show view."""
     digest = hashlib.sha256((repo / "task_plan.md").read_bytes()).hexdigest()
-    return handoff_check.Attestation("./task_plan.md", digest)
+    (repo / ".plan-attestation").write_text(digest + "\n" + extra)
+    return handoff_check.Attestation("./task_plan.md", "./.plan-attestation")
+
+
+def _plan(repo: Path, phase: int = 7) -> None:
+    (repo / "task_plan.md").write_text(f"# Plan\n\n## Phase {phase} — NEXT SESSION\n")
 
 
 def test_attested_plan_has_no_plan_finding(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
-    (repo / "task_plan.md").write_text("# Plan\n\n## Phase 7 — NEXT SESSION\n")
+    _plan(repo)
     state = _attested(repo)
 
     assert handoff_check.check(repo, "State only.\n", show=lambda _: state) == []
@@ -143,35 +148,53 @@ def test_attested_plan_has_no_plan_finding(tmp_path: Path) -> None:
 
 def test_plan_edited_after_attestation_is_unattested(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
-    plan = repo / "task_plan.md"
-    plan.write_text("# Plan\n\n## Phase 7 — NEXT SESSION\n")
+    _plan(repo)
     state = _attested(repo)
-    plan.write_text("# Plan\n\n## Phase 8 — NEXT SESSION\n")
+    _plan(repo, phase=8)
 
     findings = handoff_check.check(repo, "State only.\n", show=lambda _: state)
 
     assert [item.verdict for item in findings] == [
         handoff_check.Verdict.UNATTESTED_PLAN
     ]
-    assert "changed after its last attestation" in findings[0].detail
+    assert "does not match its attestation" in findings[0].detail
 
 
-def test_slug_plan_attestation_is_checked_against_the_slug_plan(
+def test_trailing_content_after_the_digest_is_unattested(tmp_path: Path) -> None:
+    """inject-plan.sh compares the whole stripped file, so junk after it is tamper."""
+    repo = _repo(tmp_path)
+    _plan(repo)
+    state = _attested(repo, extra="extra\n")
+
+    findings = handoff_check.check(repo, "State only.\n", show=lambda _: state)
+
+    assert [item.verdict for item in findings] == [
+        handoff_check.Verdict.UNATTESTED_PLAN
+    ]
+
+
+def test_slug_selection_is_rejected_even_when_the_slug_is_attested(
     tmp_path: Path,
 ) -> None:
-    """The plugin may resolve a .planning/<slug> plan; its bytes are what count."""
+    """The root plan is the task authority; a slug the plugin resolves is a finding."""
     repo = _repo(tmp_path)
-    (repo / "task_plan.md").write_text("# Plan\n\n## Phase 7 — NEXT SESSION\n")
+    _plan(repo)
     slug = repo / ".planning" / "ticket"
     slug.mkdir(parents=True)
     (slug / "task_plan.md").write_text("# Ticket plan\n")
-    digest = hashlib.sha256((slug / "task_plan.md").read_bytes()).hexdigest()
-    state = handoff_check.Attestation("./.planning/ticket/task_plan.md", digest)
+    (slug / ".attestation").write_text(
+        hashlib.sha256((slug / "task_plan.md").read_bytes()).hexdigest() + "\n"
+    )
+    state = handoff_check.Attestation(
+        "./.planning/ticket/task_plan.md", "./.planning/ticket/.attestation"
+    )
 
-    assert handoff_check.check(repo, "State only.\n", show=lambda _: state) == []
-    (slug / "task_plan.md").write_text("# Ticket plan, edited\n")
     findings = handoff_check.check(repo, "State only.\n", show=lambda _: state)
-    assert [item.citation for item in findings] == ["./.planning/ticket/task_plan.md"]
+
+    assert [item.verdict for item in findings] == [
+        handoff_check.Verdict.UNATTESTED_PLAN
+    ]
+    assert "not the root task_plan.md" in findings[0].detail
 
 
 @pytest.mark.parametrize(
@@ -188,7 +211,7 @@ def test_missing_or_unreadable_attestation_is_unattested(
     tmp_path: Path, state: handoff_check.Attestation, fragment: str
 ) -> None:
     repo = _repo(tmp_path)
-    (repo / "task_plan.md").write_text("# Plan\n\n## Phase 7 — NEXT SESSION\n")
+    _plan(repo)
 
     findings = handoff_check.check(repo, "State only.\n", show=lambda _: state)
 
@@ -199,12 +222,11 @@ def test_missing_or_unreadable_attestation_is_unattested(
 
 
 def test_parse_show_reads_the_plugin_output() -> None:
-    digest = "a" * 64
     shown = (
-        f"Plan: ./task_plan.md\nAttestation: ./.plan-attestation\nSHA-256: {digest}\n"
+        f"Plan: ./task_plan.md\nAttestation: ./.plan-attestation\nSHA-256: {'a' * 64}\n"
     )
     assert handoff_check.parse_show(shown) == handoff_check.Attestation(
-        "./task_plan.md", digest
+        "./task_plan.md", "./.plan-attestation"
     )
     missing = "[plan-attest] No attestation set for ./task_plan.md.\n"
     assert handoff_check.parse_show(missing) == handoff_check.Attestation(None, None)
