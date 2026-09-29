@@ -1,11 +1,11 @@
 name: CI
 on:
   schedule:
-    # Staggered 2h after refresh.yml's 00:00 refresh so a same-day pin bump
-    # (snapshot / CLANG_P2996_REF), once merged, is what this nightly
-    # rebuild+publish picks up. This job rebuilds+publishes on the *pinned*
-    # ref (catches base-image CVEs / floating-tool drift); refresh.yml
-    # *changes* the pins. Distinct, complementary roles — see
+    # Staggered 2h after refresh.yml's 00:00 lock refresh so a same-day pin
+    # bump (lockfiles via refresh.yml; CLANG_P2996_REF via its own Renovate
+    # PR, #1434), once merged, is what this nightly rebuild+publish picks up.
+    # This job rebuilds+publishes on the *pinned* ref (catches base-image
+    # CVEs / floating-tool drift); refresh.yml and Renovate *change* pins. Distinct, complementary roles — see
     # `.github/workflows/AGENTS.md` § Cron schedules.
     - cron: "0 2 * * *" # Daily 02:00 America/Chicago
       timezone: "America/Chicago"
