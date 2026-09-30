@@ -32,15 +32,18 @@
 #
 # DO NOT check in mise.local.toml; it is gitignored by design.
 
-# Second architecture in the SAME clone: a sibling profile,
-# mise.arm64.local.toml (also gitignored), selected with
-# `MISE_ENV=arm64 mise run up`. A shell `DOTFILES_PLATFORM=...` does NOT beat
-# a pin in this file (mise config wins over the ambient env), and the port
-# must be blank there or both architectures collide on it:
+# Second architecture in the SAME clone: the arm64 profile is TRACKED as
+# mise.arm64.toml (pins the arm64 platform, blanks the port so both
+# architectures never collide) and selected with `MISE_ENV=arm64 mise run up`.
+# Nothing to copy for it. A mise.arm64.local.toml (gitignored) is only for a
+# per-clone override of that profile, e.g. a stable arm64 port:
 #
 #   [env]
-#   DOTFILES_PLATFORM = "linux/arm64/v8"
-#   DEVCONTAINER_SSH_PORT = ""
+#   DEVCONTAINER_SSH_PORT = "4445"
+#
+# A shell `DOTFILES_PLATFORM=...` does NOT beat a pin in a mise config (mise
+# config wins over the ambient env). `mise run doctor` asserts what the profile
+# really resolves to, so a pin here that breaks it is reported.
 #
 # The local :dev tag keeps every platform `mise run sync` has refreshed onto
 # it (a union), so run `mise run sync` once in an arch's env before its first

@@ -1,0 +1,7 @@
+# Selected by `MISE_ENV=arm64` (e.g. `MISE_ENV=arm64 mise run up`): the second devcontainer architecture in the
+# same clone. The port is blank so the arm64 container derives its own and never collides with amd64's pin.
+# Measured on mise 2026.9.18: this file OVERRIDES mise.local.toml under -E arm64, contrary to upstream's
+# environments.md — the doctor asserts the resolved values, so a change in either direction is caught.
+[env]
+DOTFILES_PLATFORM = "linux/arm64/v8"
+DEVCONTAINER_SSH_PORT = ""

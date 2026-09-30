@@ -1,0 +1,4 @@
+# Early-init mise settings (read before config discovery). Pin auto_env explicitly: mise enables platform
+# environments by default from 2027.6.0 and warns from 2026.12.0 (upstream docs/configuration/environments.md
+# "Rollout"). false = today's behaviour; revisit if a real host-vs-container variable difference appears.
+auto_env = false

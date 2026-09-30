@@ -283,6 +283,72 @@ def test_excluded_trees_may_name_a_platform(tmp_path: Path, excluded: str) -> No
     assert platform_target.find_violations(tmp_path) == []
 
 
+def _tracked_repo(tmp_path: Path, files: dict[str, str]) -> Path:
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    for rel_path, text in files.items():
+        (tmp_path / rel_path).write_text(text)
+    subprocess.run(["git", "-C", str(tmp_path), "add", "-A"], check=True)
+    return tmp_path
+
+
+def test_the_tracked_arm64_profile_names_only_its_own_arch() -> None:
+    """The shipped `mise.arm64.toml` is an arch profile and carries arm64 only."""
+    assert platform_target.arch_profile("mise.arm64.toml") == "arm64"
+    text = (REPO_ROOT / "mise.arm64.toml").read_text()
+    assert f'{platform_target.PLATFORM_ENV_VAR} = "{ARM64_TRIPLE}"' in text
+
+
+def test_an_arch_profile_may_name_its_own_arch(tmp_path: Path) -> None:
+    """Control arm: the profile's own arch is the one permitted literal."""
+    repo = _tracked_repo(
+        tmp_path, {"mise.arm64.toml": f'[env]\nDOTFILES_PLATFORM = "{ARM64_TRIPLE}"\n'}
+    )
+    assert platform_target.find_violations(repo) == []
+
+
+def test_an_arch_profile_naming_another_arch_is_caught(tmp_path: Path) -> None:
+    """FAIL arm: `MISE_ENV=arm64` would bring up amd64 — the split-brain."""
+    repo = _tracked_repo(
+        tmp_path, {"mise.arm64.toml": f'[env]\nDOTFILES_PLATFORM = "{AMD64_TRIPLE}"\n'}
+    )
+    violations = platform_target.find_violations(repo)
+    assert [(v.path, v.literal) for v in violations] == [
+        ("mise.arm64.toml", AMD64_TRIPLE)
+    ]
+    rendered = violations[0].render()
+    assert "mise.arm64.toml" in rendered
+    assert AMD64_TRIPLE in rendered
+    assert "arm64 arch profile" in rendered
+
+
+@pytest.mark.parametrize("rel_path", ["mise.riscv.toml", "mise.local.toml"])
+def test_a_non_arch_profile_is_scanned_as_usual(tmp_path: Path, rel_path: str) -> None:
+    """Only PUBLISHED_ARCHES names make a profile; anything else is a plain site."""
+    repo = _tracked_repo(
+        tmp_path, {rel_path: f'[env]\nDOTFILES_PLATFORM = "{ARM64_TRIPLE}"\n'}
+    )
+    assert platform_target.arch_profile(rel_path) is None
+    violations = platform_target.find_violations(repo)
+    assert [(v.path, v.expected_arch) for v in violations] == [(rel_path, None)]
+
+
+def test_an_arch_profile_does_not_join_the_default_agreement(tmp_path: Path) -> None:
+    """The two defaults agree; an arm64 profile beside them is not drift."""
+    (tmp_path / "mise.toml").write_text(
+        "[env]\n"
+        f"{platform_target.PLATFORM_ENV_VAR} = "
+        f"\"{{{{ env.DOTFILES_PLATFORM | default(value='{AMD64_TRIPLE}') }}}}\"\n"
+    )
+    (tmp_path / "docker-bake.hcl").write_text(
+        f'variable "PLATFORM" {{\n  default = "{AMD64_TRIPLE}"\n}}\n'
+    )
+    (tmp_path / "mise.arm64.toml").write_text(
+        f'[env]\nDOTFILES_PLATFORM = "{ARM64_TRIPLE}"\n'
+    )
+    assert platform_target.find_default_drift(tmp_path) is None
+    assert "mise.arm64.toml" not in platform_target.DEFAULT_LITERAL_SITES
+
+
 def test_default_drift_between_the_two_permitted_sites(tmp_path: Path) -> None:
     """FAIL arm: bake and mise disagreeing is the split-brain, restated."""
     (tmp_path / "mise.toml").write_text(
@@ -699,3 +765,17 @@ def test_a_commented_out_arch_pin_is_not_a_violation(tmp_path: Path) -> None:
     )
 
     assert platform_target.find_pinned_image_arch(tmp_path) is None
+
+
+@pytest.mark.parametrize(
+    "literal", ["linux/arm64", "linux/aarch64/v8", "linux/arm64/v9"]
+)
+def test_an_arch_profile_must_carry_the_exact_published_triple(
+    tmp_path: Path, literal: str
+) -> None:
+    """Same arch word, wrong spelling: `sync` accepts only the published triple."""
+    repo = _tracked_repo(
+        tmp_path, {"mise.arm64.toml": f'[env]\nDOTFILES_PLATFORM = "{literal}"\n'}
+    )
+    violations = platform_target.find_violations(repo)
+    assert [(v.path, v.literal) for v in violations] == [("mise.arm64.toml", literal)]
