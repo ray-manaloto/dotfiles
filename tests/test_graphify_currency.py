@@ -222,9 +222,27 @@ def test_release_receipt_ends_in_exactly_one_newline(tmp_path: Path) -> None:
         NEWER, f"v{NEWER}", PUBLISHED, "Notes.\r\n\n\n"
     )
     (receipt,) = graphify_currency.write_release_receipts(tmp_path, [note])
-    text = receipt.read_text(encoding="utf-8")
-    assert text.endswith("Notes.\n")
-    assert not text.endswith("\n\n")
+    raw = receipt.read_bytes()
+    assert raw.endswith(b"Notes.\n")
+    assert not raw.endswith(b"\n\n")
+    assert b"\r" not in raw
+
+
+@pytest.mark.parametrize(
+    ("body", "tail"),
+    [
+        ("", b"(empty release body)\n"),
+        ("a\r\nb   \n", b"a\nb\n"),
+        ("keep  inner  spacing\n\n", b"keep  inner  spacing\n"),
+    ],
+)
+def test_release_receipt_normalizes_only_line_endings_and_the_tail(
+    tmp_path: Path, body: str, tail: bytes
+) -> None:
+    """Empty bodies are named; CRLF and trailing whitespace go; inner text stays."""
+    note = graphify_currency.ReleaseNote(NEWER, f"v{NEWER}", PUBLISHED, body)
+    (receipt,) = graphify_currency.write_release_receipts(tmp_path, [note])
+    assert receipt.read_bytes().endswith(b"verbatim)\n\n" + tail)
 
 
 def test_upgrade_lock_runs_native_uv_commands_sequentially(tmp_path: Path) -> None:

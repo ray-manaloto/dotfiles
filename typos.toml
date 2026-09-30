@@ -39,11 +39,6 @@ sherif = "sherif"
 # against the binary.
 gae = "gae"
 
-# `cpy` is the COBOL copybook file extension (`.cpy`), quoted verbatim in the
-# Graphify 0.9.66 release receipt's list of new extractor extensions. Receipts
-# are verbatim vendor text (graphify-currency skill), so the token is
-# allowlisted rather than the receipt edited.
-cpy = "cpy"
 
 # `CPY001` is ruff's rule code for a missing copyright notice
 # (flake8-copyright), not a misspelling of "COPY"/"CPU". It reaches this repo
@@ -82,3 +77,15 @@ extend-glob = ["ruff.json"]
 
 [type.vendored-ruff-schema.extend-words]
 CPY = "CPY"
+
+# `cpy` is the COBOL copybook extension (`.cpy`) in the Graphify 0.9.66 release
+# receipt, which is verbatim vendor text. Scoped like `CPY` above — NOT
+# project-wide, because `cpy` is a real typo for "copy" elsewhere (cold review
+# of 6ef572d4 F3: a Dockerfile `RUN cpy` must still fail). `extend-glob`
+# matches basenames, so this binds every `0.9.*.md` (only graphify receipts
+# are named that way).
+[type.graphify-receipt]
+extend-glob = ["0.9.*.md"]
+
+[type.graphify-receipt.extend-words]
+cpy = "cpy"

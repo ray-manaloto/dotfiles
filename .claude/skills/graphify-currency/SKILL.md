@@ -109,9 +109,11 @@ exact file with the same PATH. This is deliberately different from the project
 venv's Graphify used by `uv run --project python`.
 
 The rebuild subprocess removes every known LLM-provider credential/backend
-selector and forces the project venv to the front of PATH (the scrub list is
-re-derived from the installed package by a test, so a bump that reads a new
-name fails there). Graphify 0.9.65 was measured ignoring `--no-label` on
+selector and forces the project venv to the front of PATH. The scrub list is
+fixed; two tests hold it against the installed package (Graphify's own
+`backend_detection_env_vars()` and a double-quoted-name scan), and neither can
+see a user-level custom provider. Every graphify child also sets
+`GRAPHIFY_NO_AUTO_REFRESH=1` (and so does root `mise.toml` `[env]`). Graphify 0.9.65 was measured ignoring `--no-label` on
 `update`, so no such flag is passed. Residual:
 PATH must remain available for Graphify/git, and a future vendor update could
 still discover the keyless `claude` CLI fallback. The environment scrub reduces

@@ -333,11 +333,11 @@ def write_release_receipts(
             f"- Published at: `{note.published_at}`\n\n"
             "## Release notes (verbatim)\n\n"
         )
-        # GitHub release bodies often end in blank lines; hk's end-of-file
-        # fixer rejects more than one trailing newline, so every receipt of the
-        # 0.9.66-0.9.72 bump failed lint. Only TRAILING newlines are dropped —
-        # the body text itself stays verbatim.
-        body = note.body.rstrip("\r\n")
+        # GitHub release bodies often end in blank lines; hk's end-of-file and
+        # trailing-whitespace fixers reject them, so every receipt of the
+        # 0.9.66-0.9.72 bump failed lint. Only line endings (CRLF -> LF) and
+        # TRAILING whitespace change; an empty body is named, never blank.
+        body = note.body.replace("\r\n", "\n").rstrip() or "(empty release body)"
         receipt.write_text(f"{header}{body}\n", encoding="utf-8")
         written.append(receipt)
     return tuple(written)
